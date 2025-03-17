@@ -1,6 +1,6 @@
-import { $, alchemize } from "../../src";
-import { StaticSite, Worker } from "../../src/cloudflare";
-import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace";
+import { $, alchemize } from "alchemy";
+import { StaticSite, Worker } from "alchemy/cloudflare";
+import { DurableObjectNamespace } from "../../alchemy/src/cloudflare/durable-object-namespace";
 
 import "dotenv/config";
 

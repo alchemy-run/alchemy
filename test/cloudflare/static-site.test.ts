@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { apply } from "../../src/apply";
-import { createCloudflareApi } from "../../src/cloudflare/api";
-import { StaticSite } from "../../src/cloudflare/static-site";
-import { Worker } from "../../src/cloudflare/worker";
-import { destroy } from "../../src/destroy";
+import { apply } from "../../alchemy/src/apply";
+import { createCloudflareApi } from "../../alchemy/src/cloudflare/api";
+import { StaticSite } from "../../alchemy/src/cloudflare/static-site";
+import { Worker } from "../../alchemy/src/cloudflare/worker";
+import { destroy } from "../../alchemy/src/destroy";
 
 // Check that required environment variables are set
 const apiKey =

@@ -4,9 +4,9 @@ import {
   ResourceNotFoundException,
 } from "@aws-sdk/client-dynamodb";
 import { describe, expect, test } from "bun:test";
-import { apply } from "../../src/apply";
-import { Table } from "../../src/aws/table";
-import { destroy } from "../../src/destroy";
+import { apply } from "../../alchemy/src/apply";
+import { Table } from "../../alchemy/src/aws/table";
+import { destroy } from "../../alchemy/src/destroy";
 
 const dynamo = new DynamoDBClient({});
 

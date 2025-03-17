@@ -4,9 +4,9 @@ import {
   SendMessageCommand,
 } from "@aws-sdk/client-sqs";
 import { describe, expect, test } from "bun:test";
-import { apply } from "../../src/apply";
-import { Queue } from "../../src/aws/queue";
-import { destroy } from "../../src/destroy";
+import { apply } from "../../alchemy/src/apply";
+import { Queue } from "../../alchemy/src/aws/queue";
+import { destroy } from "../../alchemy/src/destroy";
 
 const sqs = new SQSClient({});
 

@@ -1,10 +1,8 @@
+import { Price, Product, WebhookEndpoint } from "alchemy/stripe";
 import { describe, expect, test } from "bun:test";
 import Stripe from "stripe";
-import { apply } from "../../src/apply";
-import { destroy } from "../../src/destroy";
-import { Price } from "../../src/stripe/price";
-import { Product } from "../../src/stripe/product";
-import { WebhookEndpoint } from "../../src/stripe/webhook";
+import { apply } from "../../alchemy/src/apply";
+import { destroy } from "../../alchemy/src/destroy";
 
 const stripeApiKey = process.env.STRIPE_API_KEY;
 if (!stripeApiKey) {

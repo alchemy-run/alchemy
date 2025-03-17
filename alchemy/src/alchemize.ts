@@ -110,7 +110,7 @@ export async function alchemize(options?: AlchemizeOptions) {
   const orphanGraph: Record<string, Set<string>> = {};
   for (const [orphanID, orphanState] of Object.entries(orphanStates)) {
     orphanGraph[orphanID] ??= new Set();
-    for (const dep of orphanState.deps) {
+    for (const dep of orphanState!.deps) {
       (orphanGraph[dep] ??= new Set()).add(orphanID);
     }
   }
@@ -118,7 +118,7 @@ export async function alchemize(options?: AlchemizeOptions) {
   // Start deletion from each orphan that has no dependents (nothing depends on it)
   await Promise.all(
     orphanIDs
-      .filter((id) => orphanGraph[id].size === 0)
+      .filter((id) => orphanGraph[id]!.size === 0)
       .map((id) => deleteOrphan(id)),
   );
 
@@ -145,7 +145,7 @@ export async function alchemize(options?: AlchemizeOptions) {
     deletionPromises.set(orphanID, promise);
 
     try {
-      const orphanState = orphanStates[orphanID];
+      const orphanState = orphanStates[orphanID]!;
 
       // First delete this resource
       const providerType = orphanState.provider;

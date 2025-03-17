@@ -136,13 +136,13 @@ export class Policy extends Resource(
           if (versions.Versions?.length === 5) {
             const oldestVersion = versions.Versions.sort(
               (a, b) => a.CreateDate!.getTime() - b.CreateDate!.getTime(),
-            )[0];
+            )[0]!;
 
             if (!oldestVersion.IsDefaultVersion) {
               await client.send(
                 new DeletePolicyVersionCommand({
                   PolicyArn: policyArn,
-                  VersionId: oldestVersion.VersionId!,
+                  VersionId: oldestVersion.VersionId,
                 }),
               );
             }

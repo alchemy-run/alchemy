@@ -6,12 +6,12 @@ import {
 } from "@aws-sdk/client-lambda";
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
-import { apply } from "../../src/apply";
-import { Function } from "../../src/aws/function";
-import type { PolicyDocument } from "../../src/aws/policy";
-import { Role } from "../../src/aws/role";
-import { destroy } from "../../src/destroy";
-import { Bundle } from "../../src/esbuild";
+import { apply } from "../../alchemy/src/apply";
+import { Function } from "../../alchemy/src/aws/function";
+import type { PolicyDocument } from "../../alchemy/src/aws/policy";
+import { Role } from "../../alchemy/src/aws/role";
+import { destroy } from "../../alchemy/src/destroy";
+import { Bundle } from "../../alchemy/src/esbuild";
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 

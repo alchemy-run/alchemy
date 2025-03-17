@@ -1,0 +1,7 @@
+{
+  "name": "alchemy-test",
+  "private": true,
+  "dependencies": {
+    "alchemy": "workspace:*"
+  }
+}

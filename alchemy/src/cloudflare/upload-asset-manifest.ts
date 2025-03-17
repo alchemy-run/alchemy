@@ -28,7 +28,7 @@ export async function uploadAssetManifest(
   while (index < manifest.length || activePromises.size > 0) {
     // Fill up to MAX_CONCURRENT active uploads
     while (activePromises.size < MAX_CONCURRENT && index < manifest.length) {
-      const item = manifest[index++];
+      const item = manifest[index++]!;
       const promise = uploadItem(item).then((result) => {
         results.push(result);
         activePromises.delete(promise);

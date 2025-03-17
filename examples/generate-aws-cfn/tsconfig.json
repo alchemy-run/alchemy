@@ -2,8 +2,13 @@
   "extends": "../../tsconfig.base.json",
   "include": ["gen.ts", "src/**/*"],
   "compilerOptions": {
-    "composite": true,
+    "noEmit": true,
     "types": ["@types/node"],
     "verbatimModuleSyntax": false
-  }
+  },
+  "references": [
+    {
+      "path": "../../alchemy"
+    }
+  ]
 }

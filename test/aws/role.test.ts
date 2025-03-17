@@ -4,10 +4,10 @@ import {
   NoSuchEntityException,
 } from "@aws-sdk/client-iam";
 import { describe, expect, test } from "bun:test";
-import { apply } from "../../src/apply";
-import type { PolicyDocument } from "../../src/aws/policy";
-import { Role, type RoleProps } from "../../src/aws/role";
-import { destroy } from "../../src/destroy";
+import { apply } from "../../alchemy/src/apply";
+import type { PolicyDocument } from "../../alchemy/src/aws/policy";
+import { Role, type RoleProps } from "../../alchemy/src/aws/role";
+import { destroy } from "../../alchemy/src/destroy";
 
 // Verify role was deleted
 const iam = new IAMClient({});

@@ -1,8 +1,13 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["./**/*.ts"],
+  "include": ["alchemy.config.ts", "src"],
   "compilerOptions": {
-    "composite": true,
-    "resolveJsonModule": true
-  }
+    "resolveJsonModule": true,
+    "noEmit": true
+  },
+  "references": [
+    {
+      "path": "../../alchemy"
+    }
+  ]
 }

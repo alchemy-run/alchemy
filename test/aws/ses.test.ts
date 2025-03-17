@@ -5,9 +5,9 @@ import {
   SESv2Client,
 } from "@aws-sdk/client-sesv2";
 import { describe, expect, test } from "bun:test";
-import { apply } from "../../src/apply";
-import { SES } from "../../src/aws/ses";
-import { destroy } from "../../src/destroy";
+import { apply } from "../../alchemy/src/apply";
+import { SES } from "../../alchemy/src/aws/ses";
+import { destroy } from "../../alchemy/src/destroy";
 
 // Check that required environment variables are set
 const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;

@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { apply } from "../../src/apply";
-import { createCloudflareApi } from "../../src/cloudflare/api";
-import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace";
-import { KVNamespace } from "../../src/cloudflare/kv-namespace";
-import { Worker } from "../../src/cloudflare/worker";
-import { destroy } from "../../src/destroy";
+import { apply } from "../../alchemy/src/apply";
+import { createCloudflareApi } from "../../alchemy/src/cloudflare/api";
+import { DurableObjectNamespace } from "../../alchemy/src/cloudflare/durable-object-namespace";
+import { KVNamespace } from "../../alchemy/src/cloudflare/kv-namespace";
+import { Worker } from "../../alchemy/src/cloudflare/worker";
+import { destroy } from "../../alchemy/src/destroy";
 
 describe("Worker Resource", () => {
   // Use a fixed name for the test worker

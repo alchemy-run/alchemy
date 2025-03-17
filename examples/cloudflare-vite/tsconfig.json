@@ -41,5 +41,10 @@
     "vite-project/src/App.tsx",
     "vite-project/src/main.tsx",
     "vite-project/src/vite-env.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../../alchemy"
+    }
   ]
 }

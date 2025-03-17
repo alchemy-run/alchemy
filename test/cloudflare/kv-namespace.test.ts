@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { apply } from "../../src/apply";
-import { createCloudflareApi } from "../../src/cloudflare/api";
-import { KVNamespace } from "../../src/cloudflare/kv-namespace";
-import { destroy } from "../../src/destroy";
+import { apply } from "../../alchemy/src/apply";
+import { createCloudflareApi } from "../../alchemy/src/cloudflare/api";
+import { KVNamespace } from "../../alchemy/src/cloudflare/kv-namespace";
+import { destroy } from "../../alchemy/src/destroy";
 
 describe("KV Namespace Resource", () => {
   const testId = `test-kv`;

@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.base.json",
+  "include": ["."],
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["bun-types", "@cloudflare/workers-types"]
+  },
+  "references": [
+    {
+      "path": "../alchemy"
+    }
+  ]
+}
+

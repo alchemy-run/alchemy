@@ -158,7 +158,7 @@ export class CloudflareApi {
     if (init.headers) {
       const initHeadersObj = init.headers as Record<string, string>;
       Object.keys(initHeadersObj).forEach((key) => {
-        combinedHeaders[key] = initHeadersObj[key];
+        combinedHeaders[key] = initHeadersObj[key]!;
       });
     }
 
@@ -278,5 +278,5 @@ async function fetchAccountId(): Promise<string> {
   }
 
   // Return the first account ID
-  return accounts[0].id;
+  return accounts[0]!.id;
 }

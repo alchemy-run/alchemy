@@ -1,5 +1,5 @@
 import { test } from "bun:test";
-import { $, type Output } from "../src";
+import { $, type Output } from "../alchemy/src";
 
 test("$ types", () => {
   // no-op

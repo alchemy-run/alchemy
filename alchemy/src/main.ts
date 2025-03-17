@@ -22,6 +22,10 @@ if (values.help || positionals.length === 0) {
 
 const [command, ...restArgs] = positionals;
 
+if (!command) {
+  throw new Error("Expected command name at position 0; instead received `undefined`.")
+}
+
 if (command.toLowerCase() === "destroy") {
   if (restArgs.length === 0) {
     console.error("Error: Please specify at least one stack name to destroy");
