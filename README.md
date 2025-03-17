@@ -38,8 +38,18 @@ Usually, you'll want to create a script where you'll define your resources.
 import { Role } from "alchemy/aws";
 
 const role = new Role("my-role", {
-  name: "my-role",
-  //..
+  roleName: "my-role",
+  assumeRolePolicy: {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        // Or whatever principal you want
+        Principal: { Service: "lambda.amazonaws.com" },
+        Action: "sts:AssumeRole",
+      },
+    ],
+  },
 });
 ```
 
