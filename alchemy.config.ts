@@ -1,7 +1,9 @@
+// @ts-nocheck
 import "dotenv/config";
 import { alchemize } from "./src";
 import { Role, getAccountId } from "./src/aws";
 import { GitHubOIDCProvider } from "./src/aws/oidc";
+import { GitHubSecret } from "./src/github";
 
 const accountId = await getAccountId();
 
@@ -17,6 +19,15 @@ const githubRole = new Role("github-oidc-role", {
           Federated: `arn:aws:iam::${accountId}:oidc-provider/token.actions.githubusercontent.com`,
         },
         Action: "sts:AssumeRoleWithWebIdentity",
+        Condition: {
+          StringEquals: {
+            "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          },
+          StringLike: {
+            "token.actions.githubusercontent.com:sub":
+              "repo:sam-goodwin/alchemy:*",
+          },
+        },
       },
     ],
   },
@@ -24,10 +35,19 @@ const githubRole = new Role("github-oidc-role", {
   managedPolicyArns: ["arn:aws:iam::aws:policy/AdministratorAccess"],
 });
 
+// Set up the GitHub OIDC provider
 const oidc = new GitHubOIDCProvider("github-oidc", {
   owner: "sam-goodwin",
   repository: "alchemy",
   roleArn: githubRole.arn,
+});
+
+const roleArnSecret = new GitHubSecret("aws-role-arn-secret", {
+  owner: "sam-goodwin",
+  repository: "alchemy",
+  name: "AWS_ROLE_ARN",
+  value: githubRole.arn,
+  // token: "your-github-token", // Optional: provide token directly
 });
 
 alchemize({
