@@ -46,6 +46,7 @@ const githubSecrets = {
   AWS_ROLE_ARN: githubRole.arn,
   CLOUDFLARE_API_KEY: process.env.CLOUDFLARE_API_KEY,
   CLOUDFLARE_EMAIL: process.env.CLOUDFLARE_EMAIL,
+  STRIPE_API_KEY: process.env.STRIPE_API_KEY,
 };
 
 for (const [name, value] of Object.entries(githubSecrets)) {
