@@ -388,7 +388,7 @@ async function prepareWorkerMetadata(
 
       meta.bindings.push({
         type: "durable_object_namespace",
-        name: binding.bindingName,
+        name: bindingName,
         class_name: className,
         script_name: binding.scriptName,
         environment: binding.environment,

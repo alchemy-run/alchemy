@@ -5,7 +5,6 @@ import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-name
 import "dotenv/config";
 
 const counter = new DurableObjectNamespace("COUNTER", {
-  bindingName: "COUNTER",
   className: "Counter",
   sqlite: true,
 });
@@ -13,7 +12,9 @@ const counter = new DurableObjectNamespace("COUNTER", {
 const api = new Worker("api", {
   name: "alchemy-example-vite-api",
   entrypoint: "./src/index.ts",
-  bindings: [counter],
+  bindings: {
+    COUNTER: counter,
+  },
 });
 
 const website = new StaticSite("Website", {

@@ -390,7 +390,6 @@ describe("Worker Resource", () => {
       const counterNamespace = new DurableObjectNamespace(
         "test-counter-namespace",
         {
-          bindingName: "COUNTER",
           className: "Counter",
           scriptName: doBindingTestName,
         },
@@ -493,7 +492,6 @@ describe("Worker Resource", () => {
       const counterNamespace = new DurableObjectNamespace(
         "test-counter-namespace",
         {
-          bindingName: "COUNTER",
           className: "Counter",
           scriptName: multiBindingsTestName,
         },
@@ -672,7 +670,6 @@ describe("Worker Resource", () => {
       const counterNamespace = new DurableObjectNamespace(
         "test-counter-namespace",
         {
-          bindingName: "COUNTER",
           className: "Counter",
           scriptName: doMigrationTestName,
         },
@@ -696,7 +693,6 @@ describe("Worker Resource", () => {
       const updatedNamespace = new DurableObjectNamespace(
         "test-counter-namespace",
         {
-          bindingName: "COUNTER",
           className: "CounterV2",
           scriptName: doMigrationTestName,
         },
