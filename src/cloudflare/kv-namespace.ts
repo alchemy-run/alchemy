@@ -1,3 +1,4 @@
+import type { Resolved } from "../output";
 import { type Context, Resource } from "../resource";
 import { createCloudflareApi } from "./api";
 
@@ -51,6 +52,7 @@ export interface KVPair {
  * Output returned after KV Namespace creation/update
  */
 export interface KVNamespaceOutput extends KVNamespaceProps {
+  type: "kv_namespace";
   /**
    * The ID of the namespace
    */
@@ -65,6 +67,14 @@ export interface KVNamespaceOutput extends KVNamespaceProps {
    * Time at which the namespace was last modified
    */
   modifiedAt: number;
+}
+
+export function isKVNamespace(
+  resource: any,
+): resource is Resolved<KVNamespace> {
+  return (
+    resource && typeof resource === "object" && resource.type === "kv_namespace"
+  );
 }
 
 export class KVNamespace extends Resource(
@@ -182,6 +192,7 @@ export class KVNamespace extends Resource(
 
       // Construct the output
       const output: KVNamespaceOutput = {
+        type: "kv_namespace",
         id: namespaceId,
         title: props.title,
         values: props.values,

@@ -1,4 +1,4 @@
-import type { WorkerBinding } from "./bindings";
+import type { Resolved } from "../output";
 
 export interface DurableObjectNamespaceInput {
   bindingName: string;
@@ -10,9 +10,10 @@ export interface DurableObjectNamespaceInput {
 }
 
 export function isDurableObjectNamespace(
-  binding: WorkerBinding,
-): binding is DurableObjectNamespace {
+  binding: any,
+): binding is Resolved<DurableObjectNamespace> {
   return (
+    typeof binding === "object" &&
     binding.type === "durable_object_namespace" &&
     typeof (binding as any).bindingName === "string"
   );

@@ -7,7 +7,7 @@ import type { BundleProps } from "../esbuild";
 import type { Input } from "../input";
 import { type Context, Resource } from "../resource";
 import { createCloudflareApi } from "./api";
-import type { WorkerBindingSpec } from "./bindings";
+import type { Bindings } from "./bindings";
 import { generateAssetManifest } from "./generate-asset-manifest";
 import { KVNamespace } from "./kv-namespace";
 import { uploadAssetManifest } from "./upload-asset-manifest";
@@ -276,12 +276,12 @@ export class StaticSite extends Resource(
     const api = await createCloudflareApi();
 
     // Step 1: Create or get the KV namespace for assets
-    const namespace = new KVNamespace("assets", {
+    const kv = new KVNamespace("assets", {
       title: `${siteName}-assets`,
     });
 
     const [{ id: kvNamespaceId }, assetManifest] = await Promise.all([
-      apply(namespace, {
+      apply(kv, {
         quiet: ctx.quiet,
       }),
       generateAssetManifest(props.dir),
@@ -291,39 +291,20 @@ export class StaticSite extends Resource(
     await uploadAssetManifest(api, kvNamespaceId, assetManifest);
 
     // Prepare the bindings for the worker
-    const bindings: Input<WorkerBindingSpec>[] = [
-      {
-        name: "ASSETS",
-        type: "kv_namespace",
-        namespace_id: kvNamespaceId,
-      },
-      {
-        name: "INDEX_PAGE",
-        type: "plain_text",
-        text: indexPage,
-      },
-    ];
-
-    // Add error page binding if specified
-    if (props.errorPage) {
-      bindings.push({
-        name: "ERROR_PAGE",
-        type: "plain_text",
-        text: props.errorPage,
-      });
-    }
+    const bindings: Input<Bindings> = {
+      ASSETS: kv,
+      INDEX_PAGE: indexPage,
+      // Add error page binding if specified
+      ...(props.errorPage ? { ERROR_PAGE: props.errorPage } : {}),
+    };
 
     const routes: Record<string, string> = {};
     // Create backend worker if configured
     if (props.routes) {
-      for (const [path, entrypoint] of Object.entries(props.routes)) {
+      for (const [path, worker] of Object.entries(props.routes)) {
         // @ts-ignore - TODO: need to use Resolved<Worker> to get the string ...
-        routes[path] = entrypoint.id;
-        bindings.push({
-          type: "service",
-          name: `ROUTE_${entrypoint.id}`,
-          service: entrypoint.id,
-        });
+        routes[path] = worker.id;
+        bindings[`ROUTE_${worker.id}`] = worker;
       }
     }
 
@@ -366,7 +347,7 @@ export class StaticSite extends Resource(
         },
       },
       // place a dependency on the namespace
-      namespace.id,
+      kv.id,
     );
 
     // Get current timestamp

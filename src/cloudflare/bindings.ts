@@ -4,11 +4,17 @@
  * https://developers.cloudflare.com/api/resources/workers/subresources/scripts/methods/update/
  */
 import type { DurableObjectNamespace } from "./durable-object-namespace";
+import type { KVNamespace } from "./kv-namespace";
+import type { Worker } from "./worker";
+
+export type Bindings = {
+  [bindingName: string]: Binding;
+};
 
 /**
- * Union type for all Worker binding types (Alchemy abstraction)
+ * L2 Binding Resources.
  */
-export type WorkerBinding = WorkerBindingSpec | DurableObjectNamespace;
+export type Binding = DurableObjectNamespace | KVNamespace | Worker | string;
 
 /**
  * Union type for all Worker binding types (API spec)
