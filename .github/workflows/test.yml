@@ -1,17 +1,23 @@
 name: Tests
 
-# Workflow disabled
 on:
-  # TODO(sam): re-enable this once we have AWS OIDC set up
-  # push:
-  #   branches: [ main ]
-  # pull_request:
-  #   branches: [ main ]
-  workflow_dispatch: # Only manual triggers allowed
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+# Ensure only one workflow runs at a time
+concurrency:
+  group: "tests"
+  cancel-in-progress: false
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       
@@ -22,6 +28,14 @@ jobs:
           
       - name: Install dependencies
         run: bun install
-        
+      
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-west-2' }}
+          
       - name: Run tests
-        run: bun test 
+        run: bun test --timeout 120000
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION || 'us-west-2' }}

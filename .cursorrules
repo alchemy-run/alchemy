@@ -220,12 +220,8 @@ export class {{ResourceName}} extends Resource(
         }
       }
 
-      // Return minimal output for deleted state
-      return {
-        ...props,
-        id: "",
-        createdAt: 0
-      };
+      // Return void (a deleted resource has no content)
+      return;
     } else {
       try {
         let response;
