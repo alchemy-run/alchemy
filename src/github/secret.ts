@@ -100,7 +100,7 @@ export class GitHubSecret extends Resource(
           });
         } catch (error: any) {
           // Ignore 404 errors (secret already deleted)
-          if (error.status !== 404) {
+          if (error.status === 404) {
             console.log("Secret doesn't exist, ignoring");
           } else {
             throw error;

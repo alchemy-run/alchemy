@@ -42,13 +42,20 @@ const oidc = new GitHubOIDCProvider("github-oidc", {
   roleArn: githubRole.arn,
 });
 
-const roleArnSecret = new GitHubSecret("aws-role-arn-secret", {
-  owner: "sam-goodwin",
-  repository: "alchemy",
-  name: "AWS_ROLE_ARN",
-  value: githubRole.arn,
-  // token: "your-github-token", // Optional: provide token directly
-});
+const githubSecrets = {
+  AWS_ROLE_ARN: githubRole.arn,
+  CLOUDFLARE_API_KEY: process.env.CLOUDFLARE_API_KEY,
+  CLOUDFLARE_EMAIL: process.env.CLOUDFLARE_EMAIL,
+};
+
+for (const [name, value] of Object.entries(githubSecrets)) {
+  new GitHubSecret(`github-secret-${name}`, {
+    owner: "sam-goodwin",
+    repository: "alchemy",
+    name,
+    value,
+  });
+}
 
 alchemize({
   mode: process.argv.includes("--destroy") ? "destroy" : "up",
