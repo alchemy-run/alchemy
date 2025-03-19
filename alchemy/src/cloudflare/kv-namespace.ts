@@ -1,5 +1,6 @@
 import type { Resolved } from "../output";
 import { type Context, Resource } from "../resource";
+import { withExponentialBackoff } from "../utils/retry";
 import { createCloudflareApi } from "./api";
 
 /**
@@ -170,18 +171,41 @@ export class KVNamespace extends Resource(
             return item;
           });
 
-          const bulkResponse = await api.put(
-            `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}/bulk`,
-            bulkPayload,
-          );
+          try {
+            await withExponentialBackoff(
+              async () => {
+                const bulkResponse = await api.put(
+                  `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}/bulk`,
+                  bulkPayload,
+                );
 
-          if (!bulkResponse.ok) {
-            const errorData: any = await bulkResponse.json().catch(() => ({
-              errors: [{ message: bulkResponse.statusText }],
-            }));
-            console.warn(
-              `Error writing KV batch: ${errorData.errors?.[0]?.message || bulkResponse.statusText}`,
+                if (!bulkResponse.ok) {
+                  const errorData: any = await bulkResponse
+                    .json()
+                    .catch(() => ({
+                      errors: [{ message: bulkResponse.statusText }],
+                    }));
+                  const errorMessage =
+                    errorData.errors?.[0]?.message || bulkResponse.statusText;
+
+                  // Throw error to trigger retry
+                  throw new Error(`Error writing KV batch: ${errorMessage}`);
+                }
+
+                return bulkResponse;
+              },
+              (error) => {
+                // Retry on "namespace not found" errors as they're likely propagation delays
+                return (
+                  error.message?.includes("namespace not found") ||
+                  error.message?.includes("not found")
+                );
+              },
+              5, // 5 retry attempts
+              1000, // Start with 1 second delay
             );
+          } catch (error: any) {
+            console.warn(error.message);
           }
         }
       }
