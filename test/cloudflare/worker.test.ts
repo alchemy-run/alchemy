@@ -432,7 +432,7 @@ describe("Worker Resource", () => {
   test("create and delete worker with KV Namespace binding", async () => {
     // Create a KV namespace with initial values
     const testKv = new KVNamespace("test-kv-namespace", {
-      title: "Test KV Namespace",
+      title: `${BRANCH_PREFIX} Test KV Namespace`,
       values: [
         {
           key: "testKey",
@@ -496,7 +496,7 @@ describe("Worker Resource", () => {
 
       // Create a KV namespace
       const testKv = new KVNamespace("test-kv-namespace", {
-        title: "Test KV Namespace",
+        title: `${BRANCH_PREFIX} Test KV Namespace`,
         values: [
           {
             key: "testKey",
