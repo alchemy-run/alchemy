@@ -198,6 +198,7 @@ export class KVNamespace extends Resource(
                 // Retry on "namespace not found" errors as they're likely propagation delays
                 console.warn(
                   "kv-namespace-error",
+                  namespaceId,
                   error.message?.includes("not found"),
                   error.message,
                 );
