@@ -48,7 +48,7 @@ describe("StaticSite Resource", () => {
   });
 
   test("create, update, and delete static site", async () => {
-    const siteName = testId;
+    const siteName = `${BRANCH_PREFIX}-${testId}`;
     const site = new StaticSite(siteName, {
       name: siteName,
       dir: tempDir,
@@ -122,7 +122,7 @@ describe("StaticSite Resource", () => {
       `,
     );
 
-    const siteName = `${testId}-with-backend`;
+    const siteName = `${BRANCH_PREFIX}-${testId}-with-backend`;
 
     const backend = new Worker(`${siteName}-backend`, {
       name: `${siteName}-backend`,

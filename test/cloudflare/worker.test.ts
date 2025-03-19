@@ -211,7 +211,7 @@ describe("Worker Resource", () => {
   test("create, update, and delete worker (CJS format)", async () => {
     // Create a worker with an explicit name
     const worker = new Worker(testName, {
-      name: testName, // Explicitly provide the name
+      name: `${BRANCH_PREFIX}-${testName}`, // Explicitly provide the name with BRANCH_PREFIX
       script: workerScript,
       format: "cjs",
     });
@@ -219,7 +219,7 @@ describe("Worker Resource", () => {
     // Apply to create the worker
     const output = await apply(worker);
     expect(output.id).toBeTruthy();
-    expect(output.name).toEqual(testName);
+    expect(output.name).toEqual(`${BRANCH_PREFIX}-${testName}`);
     expect(output.format).toEqual("cjs");
 
     // Update the worker with a new script
@@ -230,7 +230,7 @@ describe("Worker Resource", () => {
     `;
 
     const updatedWorker = new Worker(testName, {
-      name: testName, // Explicitly provide the name
+      name: `${BRANCH_PREFIX}-${testName}`, // Explicitly provide the name with BRANCH_PREFIX
       script: updatedScript,
       format: "cjs",
     });
@@ -254,7 +254,7 @@ describe("Worker Resource", () => {
   test("create, update, and delete worker (ESM format)", async () => {
     // Create a worker with ESM format
     const worker = new Worker(esmTestName, {
-      name: esmTestName,
+      name: `${BRANCH_PREFIX}-${esmTestName}`,
       script: esmWorkerScript,
       format: "esm", // Explicitly using ESM
     });
@@ -262,7 +262,7 @@ describe("Worker Resource", () => {
     // Apply to create the worker
     const output = await apply(worker);
     expect(output.id).toBeTruthy();
-    expect(output.name).toEqual(esmTestName);
+    expect(output.name).toEqual(`${BRANCH_PREFIX}-${esmTestName}`);
     expect(output.format).toEqual("esm");
 
     // Update the worker with a new ESM script
@@ -275,7 +275,7 @@ describe("Worker Resource", () => {
     `;
 
     const updatedWorker = new Worker(esmTestName, {
-      name: esmTestName,
+      name: `${BRANCH_PREFIX}-${esmTestName}`,
       script: updatedEsmScript,
       format: "esm",
     });
