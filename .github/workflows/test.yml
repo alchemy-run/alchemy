@@ -9,7 +9,7 @@ on:
 
 # Ensure only one workflow runs at a time
 concurrency:
-  group: "tests"
+  group: "tests-${{ github.ref }}"
   cancel-in-progress: false
 
 jobs:
