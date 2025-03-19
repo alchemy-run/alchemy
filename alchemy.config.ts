@@ -1,14 +1,10 @@
-// @ts-nocheck
-import { exec } from "child_process";
 import "dotenv/config";
-import { promisify } from "util";
+
 import { alchemize } from "./src";
 import { Role, getAccountId } from "./src/aws";
 import { GitHubOIDCProvider } from "./src/aws/oidc";
 import { GitHubSecret } from "./src/github";
 import { getGitHubTokenFromCLI } from "./src/github/client";
-
-const execAsync = promisify(exec);
 
 const accountId = await getAccountId();
 
