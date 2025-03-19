@@ -1,5 +1,4 @@
 import {
-  AlreadyExistsException,
   CreateConfigurationSetCommand,
   CreateEmailIdentityCommand,
   DeleteConfigurationSetCommand,
@@ -8,6 +7,11 @@ import {
   GetConfigurationSetCommand,
   GetEmailIdentityCommand,
   NotFoundException,
+  PutConfigurationSetDeliveryOptionsCommand,
+  PutConfigurationSetReputationOptionsCommand,
+  PutConfigurationSetSendingOptionsCommand,
+  PutConfigurationSetSuppressionOptionsCommand,
+  PutConfigurationSetTrackingOptionsCommand,
   PutEmailIdentityDkimAttributesCommand,
   type ReputationOptions,
   SESv2Client,
@@ -103,7 +107,7 @@ export interface SESOutput extends SESProps {
  */
 export class SES extends Resource(
   "aws::SES",
-  async (ctx: Context<SESOutput>, props: SESProps): Promise<SESOutput> => {
+  async (ctx: Context<SESOutput>, props: SESProps) => {
     // Create SES client
     const client = new SESv2Client({});
 
@@ -138,10 +142,7 @@ export class SES extends Resource(
       }
 
       // Return empty output for delete
-      return {
-        ...props,
-        id,
-      };
+      return;
     }
 
     // Created resources
@@ -154,66 +155,68 @@ export class SES extends Resource(
     if (props.configurationSetName) {
       try {
         // Check if configuration set exists
-        let getConfigResult;
+        let configSetExists = false;
         try {
-          getConfigResult = await client.send(
+          await client.send(
             new GetConfigurationSetCommand({
               ConfigurationSetName: props.configurationSetName,
             }),
           );
+          configSetExists = true;
         } catch (error) {
           if (error instanceof NotFoundException) {
-            getConfigResult = null;
+            configSetExists = false;
           } else {
             throw error;
           }
         }
 
-        if (getConfigResult) {
-          // For updating configuration set, we need to use individual commands
-          // since there's no unified UpdateConfigurationSetCommand
-
+        if (configSetExists) {
+          // Update existing configuration set using appropriate update commands
           if (props.sendingOptions) {
             await client.send(
-              new CreateConfigurationSetCommand({
+              new PutConfigurationSetSendingOptionsCommand({
                 ConfigurationSetName: props.configurationSetName,
-                SendingOptions: props.sendingOptions,
+                SendingEnabled: props.sendingOptions.SendingEnabled,
               }),
             );
           }
 
           if (props.reputationOptions) {
             await client.send(
-              new CreateConfigurationSetCommand({
+              new PutConfigurationSetReputationOptionsCommand({
                 ConfigurationSetName: props.configurationSetName,
-                ReputationOptions: props.reputationOptions,
+                ReputationMetricsEnabled:
+                  props.reputationOptions.ReputationMetricsEnabled,
               }),
             );
           }
 
           if (props.trackingOptions) {
             await client.send(
-              new CreateConfigurationSetCommand({
+              new PutConfigurationSetTrackingOptionsCommand({
                 ConfigurationSetName: props.configurationSetName,
-                TrackingOptions: props.trackingOptions,
+                CustomRedirectDomain:
+                  props.trackingOptions.CustomRedirectDomain,
               }),
             );
           }
 
           if (props.suppressionOptions) {
             await client.send(
-              new CreateConfigurationSetCommand({
+              new PutConfigurationSetSuppressionOptionsCommand({
                 ConfigurationSetName: props.configurationSetName,
-                SuppressionOptions: props.suppressionOptions,
+                SuppressedReasons: props.suppressionOptions.SuppressedReasons,
               }),
             );
           }
 
           if (props.deliveryOptions) {
             await client.send(
-              new CreateConfigurationSetCommand({
+              new PutConfigurationSetDeliveryOptionsCommand({
                 ConfigurationSetName: props.configurationSetName,
-                DeliveryOptions: props.deliveryOptions,
+                TlsPolicy: props.deliveryOptions.TlsPolicy,
+                SendingPoolName: props.deliveryOptions.SendingPoolName,
               }),
             );
           }
@@ -241,14 +244,7 @@ export class SES extends Resource(
           configurationSetArn = `arn:aws:ses:${process.env.AWS_REGION}:${process.env.AWS_ACCOUNT_ID}:configuration-set/${props.configurationSetName}`;
         }
       } catch (error: any) {
-        if (error instanceof AlreadyExistsException) {
-          // If it already exists but we couldn't get it (permissions issue), continue
-          console.warn(
-            `Configuration set ${props.configurationSetName} already exists but cannot be retrieved`,
-          );
-        } else {
-          throw error;
-        }
+        throw error;
       }
     }
 
