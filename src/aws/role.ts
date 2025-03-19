@@ -1,10 +1,13 @@
 import {
+  AttachRolePolicyCommand,
   CreateRoleCommand,
   DeleteRoleCommand,
   DeleteRolePolicyCommand,
+  DetachRolePolicyCommand,
   EntityAlreadyExistsException,
   GetRoleCommand,
   IAMClient,
+  ListAttachedRolePoliciesCommand,
   NoSuchEntityException,
   PutRolePolicyCommand,
   type Tag,
@@ -56,6 +59,32 @@ export class Role extends Resource(
               }),
             ),
           );
+        }
+      }
+
+      // We need to detach managed policies before deleting the role
+      // First, get all attached policies
+      try {
+        const attachedPoliciesResponse = await client.send(
+          new ListAttachedRolePoliciesCommand({
+            RoleName: props.roleName,
+          }),
+        );
+
+        // Detach all managed policies
+        const attachedPolicies =
+          attachedPoliciesResponse.AttachedPolicies || [];
+        for (const policy of attachedPolicies) {
+          await client.send(
+            new DetachRolePolicyCommand({
+              RoleName: props.roleName,
+              PolicyArn: policy.PolicyArn!,
+            }),
+          );
+        }
+      } catch (error: any) {
+        if (error.name !== NoSuchEntityException.name) {
+          throw error;
         }
       }
 
@@ -224,6 +253,46 @@ export class Role extends Resource(
             RoleName: props.roleName,
             PolicyName: policy.policyName,
             PolicyDocument: JSON.stringify(policy.policyDocument),
+          }),
+        );
+      }
+    }
+
+    // Handle managed policy attachments
+    // Get currently attached policies
+    const attachedPoliciesResponse = await client.send(
+      new ListAttachedRolePoliciesCommand({
+        RoleName: props.roleName,
+      }),
+    );
+
+    const currentAttachedPolicies =
+      attachedPoliciesResponse.AttachedPolicies || [];
+    const currentPolicyArns = currentAttachedPolicies.map((p) => p.PolicyArn!);
+
+    // If we're updating, use an empty array as default when managedPolicyArns is undefined
+    // to ensure we detach all managed policies
+    const desiredPolicyArns = props.managedPolicyArns || [];
+
+    // Detach policies that are no longer needed
+    for (const policyArn of currentPolicyArns) {
+      if (!desiredPolicyArns.includes(policyArn)) {
+        await client.send(
+          new DetachRolePolicyCommand({
+            RoleName: props.roleName,
+            PolicyArn: policyArn,
+          }),
+        );
+      }
+    }
+
+    // Attach new policies that weren't attached before
+    for (const policyArn of desiredPolicyArns) {
+      if (!currentPolicyArns.includes(policyArn)) {
+        await client.send(
+          new AttachRolePolicyCommand({
+            RoleName: props.roleName,
+            PolicyArn: policyArn,
           }),
         );
       }
