@@ -1,0 +1,11 @@
+{
+  "name": "aws-app",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "bun run index.ts"
+  },
+  "dependencies": {
+    "alchemy": "workspace:*"
+  }
+}

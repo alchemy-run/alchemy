@@ -1,9 +1,0 @@
-{
-  "extends": "../../tsconfig.base.json",
-  "include": ["gen.ts", "src/**/*"],
-  "compilerOptions": {
-    "composite": true,
-    "types": ["@types/node"],
-    "verbatimModuleSyntax": false
-  }
-}

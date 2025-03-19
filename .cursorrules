@@ -11,13 +11,13 @@ We use Bun for testing. Here's how to run tests:
 bun test
 
 # Run tests in a specific file
-bun test test/stripe/price.test.ts
+bun test alchemy/test/stripe/price.test.ts
 
 # Run a specific test in a specific file
-bun test --test-name-pattern="create and update price" test/stripe/price.test.ts
+bun test --test-name-pattern="create and update price" alchemy/test/stripe/price.test.ts
 ```
 
-For resource tests, create a dedicated test file for each resource type following the pattern `test/service-name/resource-name.test.ts`.
+For resource tests, create a dedicated test file for each resource type following the pattern `alchemy/test/service-name/resource-name.test.ts`.
 
 # Creating a New Service Resource
 
@@ -28,10 +28,10 @@ This guide provides step-by-step instructions for creating a new resource for a 
 Create a new file in the service directory with kebab-case naming:
 
 ```
-src/{{service-name}}/{{resource-name}}.ts
+alchemy/src/{{service-name}}/{{resource-name}}.ts
 ```
 
-Example: `src/stripe/price.ts`
+Example: `alchemy/src/stripe/price.ts`
 
 ## Step 2: Define Resource Interfaces
 
@@ -281,7 +281,7 @@ export class {{ResourceName}} extends Resource(
 Create or update the service index file to export the new resource:
 
 ```typescript
-// src/{{service-name}}/index.ts
+// alchemy/src/{{service-name}}/index.ts
 export * from "./{{resource-name}}";
 ```
 
@@ -310,12 +310,12 @@ Add the service SDK as a peer dependency if not already present:
 Create a test file that uses direct API interaction for verification:
 
 ```typescript
-// test/{{service-name}}/{{resource-name}}.test.ts
+// alchemy/test/{{service-name}}/{{resource-name}}.test.ts
 import { describe, test, expect } from "bun:test";
-import { {{ResourceName}} } from "../../src/{{service-name}}/{{resource-name}}";
-import { apply } from "../../src/apply";
-import { destroy } from "../../src/destroy";
-import { {{ServiceName}}Api } from "../../src/{{service-name}}/api";
+import { {{ResourceName}} } from "../../alchemy/src/{{service-name}}/{{resource-name}}";
+import { apply } from "../../alchemy/src/apply";
+import { destroy } from "../../alchemy/src/destroy";
+import { {{ServiceName}}Api } from "../../alchemy/src/{{service-name}}/api";
 import { BRANCH_PREFIX } from "../util";
 
 // Check that required environment variables are set

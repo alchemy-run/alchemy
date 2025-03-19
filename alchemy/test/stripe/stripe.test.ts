@@ -28,6 +28,8 @@ describe("Stripe Resources", () => {
     let productOutput;
     let price;
     let webhook;
+    let priceOutput;
+    let webhookOutput;
 
     try {
       // Apply the product first to get its ID
@@ -50,7 +52,7 @@ describe("Stripe Resources", () => {
       });
 
       // Apply the price
-      const priceOutput = await apply(price);
+      priceOutput = await apply(price);
       expect(priceOutput.id).toBeTruthy();
       expect(priceOutput.unitAmount).toBe(1500);
       expect(priceOutput.recurring?.interval).toBe("month");
@@ -70,7 +72,7 @@ describe("Stripe Resources", () => {
       });
 
       // Apply the webhook
-      const webhookOutput = await apply(webhook);
+      webhookOutput = await apply(webhook);
       expect(webhookOutput.id).toBeTruthy();
       expect(webhookOutput.url).toBe("https://example.com/alchemy-webhook");
       expect(webhookOutput.secret).toBeTruthy();
@@ -105,12 +107,12 @@ describe("Stripe Resources", () => {
         await assertProductDeactivated(productOutput.id);
       }
 
-      if (price?.output?.id) {
-        await assertPriceDeactivated(price.output.id);
+      if (priceOutput?.id) {
+        await assertPriceDeactivated(priceOutput.id);
       }
 
-      if (webhook?.output?.id) {
-        await assertWebhookDeleted(webhook.output.id);
+      if (webhookOutput?.id) {
+        await assertWebhookDeleted(webhookOutput.id);
       }
     }
   });

@@ -86,6 +86,8 @@ export class KVNamespace extends Resource(
     if (ctx.event === "delete") {
       // For delete operations, we need to check if the namespace ID exists in the output
       const namespaceId = ctx.output?.id;
+      console.log("Deleting KV namespace", namespaceId);
+      console.log("ctx.output", ctx);
 
       if (namespaceId) {
         // Delete KV namespace
@@ -97,9 +99,8 @@ export class KVNamespace extends Resource(
           const errorData: any = await deleteResponse.json().catch(() => ({
             errors: [{ message: deleteResponse.statusText }],
           }));
-          console.error(
-            "Error deleting KV namespace:",
-            errorData.errors?.[0]?.message || deleteResponse.statusText,
+          throw new Error(
+            `Error deleting KV namespace '${props.title}': ${errorData.errors?.[0]?.message || deleteResponse.statusText}`,
           );
         }
       }

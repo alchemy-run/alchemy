@@ -154,6 +154,11 @@ export class Worker extends Resource(
 
     const oldBindings = await ctx.get<Bindings>("bindings");
 
+    // Wait for any KV namespaces to be ready before proceeding
+    if (props.bindings) {
+      await waitForKVNamespaces(api, props.bindings);
+    }
+
     const scriptMetadata = await prepareWorkerMetadata(ctx, oldBindings, props);
 
     // Get the script content - either from props.script, or by bundling
@@ -693,4 +698,69 @@ async function getWorkerBindings(
   const data: any = await response.json();
 
   return data.result;
+}
+
+/**
+ * Wait for KV namespaces to be ready before using them as bindings
+ * This addresses eventual consistency issues in the Cloudflare API
+ *
+ * @param api Cloudflare API client
+ * @param bindings Worker bindings
+ */
+async function waitForKVNamespaces(api: CloudflareApi, bindings: Bindings) {
+  const kvBindings = Object.entries(bindings).filter(([_, binding]) =>
+    isKVNamespace(binding),
+  );
+
+  if (kvBindings.length === 0) {
+    return;
+  }
+
+  console.log(
+    `Waiting for ${kvBindings.length} KV namespace(s) to be ready...`,
+  );
+
+  for (const [name, binding] of kvBindings) {
+    if (!isKVNamespace(binding)) continue;
+
+    const namespaceId = binding.id;
+    let ready = false;
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    while (!ready && attempts < maxAttempts) {
+      attempts++;
+      // Try to get the namespace by ID to verify it exists
+      const response = await api.get(
+        `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}`,
+      );
+
+      if (response.ok) {
+        ready = true;
+        console.log(`KV namespace ${name} (${namespaceId}) is now ready`);
+        break;
+      } else if (response.status === 404) {
+        // Namespace not found yet, wait and retry
+        console.log(
+          `KV namespace ${name} (${namespaceId}) not ready yet (attempt ${attempts}/${maxAttempts})`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      } else {
+        // Unexpected error
+        const errorData: any = await response
+          .json()
+          .catch(() => ({ errors: [{ message: response.statusText }] }));
+        console.warn(
+          `Error checking KV namespace ${name}: ${errorData.errors?.[0]?.message || response.statusText}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+
+    if (!ready) {
+      console.warn(
+        `KV namespace ${name} (${namespaceId}) not ready after ${maxAttempts} attempts. Proceeding anyway...`,
+      );
+    }
+  }
 }

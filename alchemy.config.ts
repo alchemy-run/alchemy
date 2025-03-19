@@ -1,10 +1,10 @@
 import "dotenv/config";
 
-import { alchemize } from "./src";
-import { Role, getAccountId } from "./src/aws";
-import { GitHubOIDCProvider } from "./src/aws/oidc";
-import { GitHubSecret } from "./src/github";
-import { getGitHubTokenFromCLI } from "./src/github/client";
+import { alchemize } from "./alchemy/src";
+import { Role, getAccountId } from "./alchemy/src/aws";
+import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
+import { GitHubSecret } from "./alchemy/src/github";
+import { getGitHubTokenFromCLI } from "./alchemy/src/github/client";
 
 const accountId = await getAccountId();
 

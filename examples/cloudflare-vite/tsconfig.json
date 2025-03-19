@@ -3,5 +3,6 @@
   "compilerOptions": {
     "types": ["@types/node", "@cloudflare/workers-types"]
   },
-  "include": ["vite/*.ts", "src/**/*.ts", "src/**/*.tsx"]
+  "include": ["alchemy.config.ts", "vite/*.ts", "src/**/*.ts", "src/**/*.tsx"],
+  "references": [{ "path": "../../alchemy/tsconfig.json" }]
 }
