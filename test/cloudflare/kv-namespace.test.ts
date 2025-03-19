@@ -11,7 +11,7 @@ describe("KV Namespace Resource", () => {
   test("create, update, and delete KV namespace", async () => {
     // Create a KV namespace
     const kvNamespace = new KVNamespace(testId, {
-      title: `Test Namespace ${testId}`,
+      title: `${BRANCH_PREFIX}-Test Namespace ${testId}`,
       values: [
         {
           key: "test-key-1",
@@ -27,7 +27,7 @@ describe("KV Namespace Resource", () => {
     // Apply to create the KV namespace
     const output = await apply(kvNamespace);
     expect(output.id).toBeTruthy();
-    expect(output.title).toEqual(`Test Namespace ${testId}`);
+    expect(output.title).toEqual(`${BRANCH_PREFIX}-Test Namespace ${testId}`);
 
     // Verify KV values were set by reading them back
     await verifyKVValue(output.id, "test-key-1", "test-value-1");
@@ -36,7 +36,7 @@ describe("KV Namespace Resource", () => {
 
     // Update the KV namespace with new values
     const updatedKVNamespace = new KVNamespace(testId, {
-      title: `Test Namespace ${testId}`,
+      title: `${BRANCH_PREFIX}-Test Namespace ${testId}`,
       values: [
         {
           key: "test-key-1",
