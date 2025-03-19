@@ -43,17 +43,27 @@ export class Table extends Resource(
     const client = new DynamoDBClient({});
 
     if (ctx.event === "delete") {
-      await ignore(ResourceNotFoundException.name, () =>
-        client.send(
-          new DeleteTableCommand({
-            TableName: props.tableName,
-          }),
-        ),
+      await withExponentialBackoff(
+        async () => {
+          await ignore(ResourceNotFoundException.name, () =>
+            client.send(
+              new DeleteTableCommand({
+                TableName: props.tableName,
+              }),
+            ),
+          );
+        },
+        (error) => error instanceof ResourceInUseException,
+        10, // Max attempts
+        200, // Initial delay in ms
       );
 
       // Wait for table to be deleted
       let tableDeleted = false;
-      while (!tableDeleted) {
+      let retryCount = 0;
+      const maxRetries = 60; // Wait up to 60 seconds
+
+      while (!tableDeleted && retryCount < maxRetries) {
         try {
           await client.send(
             new DescribeTableCommand({
@@ -61,7 +71,10 @@ export class Table extends Resource(
             }),
           );
           // If we get here, table still exists
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          retryCount++;
+          // Increasing delay for each retry with some jitter
+          const delay = Math.min(1000 * (1 + 0.1 * Math.random()), 5000);
+          await new Promise((resolve) => setTimeout(resolve, delay));
         } catch (error) {
           if (error instanceof ResourceNotFoundException) {
             tableDeleted = true;
@@ -69,6 +82,12 @@ export class Table extends Resource(
             throw error;
           }
         }
+      }
+
+      if (!tableDeleted) {
+        throw new Error(
+          `Timed out waiting for table ${props.tableName} to be deleted`,
+        );
       }
 
       return;

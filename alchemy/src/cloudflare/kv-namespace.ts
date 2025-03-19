@@ -92,7 +92,8 @@ export class KVNamespace extends Resource(
           `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}`,
         );
 
-        if (!deleteResponse.ok && deleteResponse.status !== 404) {
+        if (!deleteResponse.ok) {
+          // && deleteResponse.status !== 404
           const errorData: any = await deleteResponse.json().catch(() => ({
             errors: [{ message: deleteResponse.statusText }],
           }));
