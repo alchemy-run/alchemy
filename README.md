@@ -19,9 +19,8 @@ Unlike similar tools like Pulumi, Terraform, and CloudFormation, Alchemy is impl
 
 # Examples
 
-- LLM-based code generation of all 200+ AWS CloudFormation resources: [examples/generate-aws-cfn/gen.ts](./examples/generate-aws-cfn/gen.ts)
-- Deploy an AWS Lambda Function with a DynamoDB Table and IAM Role: [examples/deploy-aws/app.ts](./examples/deploy-aws/)
-- Generate a TODO application from a Markdown document: [examples/markdown-program/index.md](./examples/markdown-program/)
+- CloudFlare ViteJS Website + API Backend with Durable Objects: [examples/cloudflare-vite/](./examples/cloudflare-vite/)
+- Deploy an AWS Lambda Function with a DynamoDB Table and IAM Role: [examples/aws-app/](./examples/aws-app/)
 
 # Getting Started
 
@@ -115,7 +114,7 @@ A Resource provider is just a function with a globally unique name, e.g. `dynamo
 E.g. below we show what a simple `dynamo::Table` provider might look like.
 
 > [!NOTE]
-> See [table.ts](./alchemy/src/components/aws/table.ts) for the full implementation.
+> See [table.ts](./alchemy/src/aws/table.ts) for the full implementation.
 
 ```ts
 interface TableInputs {
