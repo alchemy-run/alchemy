@@ -318,14 +318,6 @@ import { destroy } from "../../alchemy/src/destroy";
 import { {{ServiceName}}Api } from "../../alchemy/src/{{service-name}}/api";
 import { BRANCH_PREFIX } from "../util";
 
-// Check that required environment variables are set
-const apiKey = process.env.{{SERVICE_API_KEY}};
-const accountId = process.env.{{SERVICE_ACCOUNT_ID}};
-
-if (!apiKey || !accountId) {
-  console.warn("Skipping tests: {{SERVICE_API_KEY}} and {{SERVICE_ACCOUNT_ID}} are required");
-}
-
 describe("{{ResourceName}} Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
   const testId = `${BRANCH_PREFIX}-test-resource`;
