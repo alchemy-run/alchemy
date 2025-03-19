@@ -7,6 +7,14 @@ import { Worker } from "../../src/cloudflare/worker";
 import { destroy } from "../../src/destroy";
 import { BRANCH_PREFIX } from "../util";
 
+async function assertWorkerDoesNotExist(workerName: string) {
+  const api = await createCloudflareApi();
+  const response = await api.get(
+    `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+  );
+  expect(response.status).toEqual(404);
+}
+
 describe("Worker Resource", () => {
   // Use a fixed name for the test worker
   const testName = `${BRANCH_PREFIX}-test-worker`;
@@ -421,11 +429,7 @@ describe("Worker Resource", () => {
       await destroy(cleanupWorker);
 
       // Verify the worker was deleted
-      const api = await createCloudflareApi();
-      const response = await api.get(
-        `/accounts/${api.accountId}/workers/scripts/${doBindingTestName}`,
-      );
-      expect(response.status).toEqual(404);
+      await assertWorkerDoesNotExist(doBindingTestName);
     }
   });
 
@@ -450,25 +454,20 @@ describe("Worker Resource", () => {
         TEST_KV: testKv,
       },
     });
-
-    // Apply to create the worker
-    const output = await apply(worker);
-    expect(output.id).toBeTruthy();
-    expect(output.name).toEqual(kvBindingTestName);
-    expect(output.bindings).toBeDefined();
-
-    // Delete the worker
-    await destroy(worker);
-
-    // Also clean up the KV namespace
-    await destroy(testKv);
-
-    // Verify the worker was deleted
-    const api = await createCloudflareApi();
-    const response = await api.get(
-      `/accounts/${api.accountId}/workers/scripts/${kvBindingTestName}`,
-    );
-    expect(response.status).toEqual(404);
+    try {
+      // Apply to create the worker
+      const output = await apply(worker);
+      expect(output.id).toBeTruthy();
+      expect(output.name).toEqual(kvBindingTestName);
+      expect(output.bindings).toBeDefined();
+    } finally {
+      // Delete the worker
+      await destroy(worker);
+      // Also clean up the KV namespace
+      await destroy(testKv);
+      // Verify the worker was deleted
+      await assertWorkerDoesNotExist(kvBindingTestName);
+    }
   });
 
   test("create and delete worker with multiple bindings", async () => {
@@ -530,13 +529,8 @@ describe("Worker Resource", () => {
         format: "esm",
       });
       await destroy(cleanupWorker);
-
       // Verify the worker was deleted
-      const api = await createCloudflareApi();
-      const response = await api.get(
-        `/accounts/${api.accountId}/workers/scripts/${multiBindingsTestName}`,
-      );
-      expect(response.status).toEqual(404);
+      await assertWorkerDoesNotExist(multiBindingsTestName);
     }
   });
 
@@ -635,11 +629,7 @@ describe("Worker Resource", () => {
         await destroy(worker);
 
         // Verify the worker was deleted
-        const api = await createCloudflareApi();
-        const response = await api.get(
-          `/accounts/${api.accountId}/workers/scripts/${envVarsTestName}`,
-        );
-        expect(response.status).toEqual(404);
+        await assertWorkerDoesNotExist(envVarsTestName);
       }
     }
   });
