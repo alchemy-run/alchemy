@@ -25,14 +25,20 @@ export async function getGitHubTokenFromCLI(): Promise<string | null> {
 /**
  * Get GitHub authentication token with the following priority:
  * 1. Explicit token provided in props
- * 2. GITHUB_TOKEN environment variable
- * 3. GitHub CLI token (if gh is installed and authenticated)
+ * 2. GITHUB_ACCESS_TOKEN environment variable (for actions with admin permissions)
+ * 3. GITHUB_TOKEN environment variable
+ * 4. GitHub CLI token (if gh is installed and authenticated)
  *
  * @param token Optional token to use
  * @returns The resolved token or null if not available
  */
 export async function getGitHubToken(token?: string): Promise<string | null> {
-  return token || process.env.GITHUB_TOKEN || (await getGitHubTokenFromCLI());
+  return (
+    token ||
+    process.env.GITHUB_ACCESS_TOKEN ||
+    process.env.GITHUB_TOKEN ||
+    (await getGitHubTokenFromCLI())
+  );
 }
 
 /**

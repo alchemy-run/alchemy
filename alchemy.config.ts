@@ -1,9 +1,14 @@
 // @ts-nocheck
+import { exec } from "child_process";
 import "dotenv/config";
+import { promisify } from "util";
 import { alchemize } from "./src";
 import { Role, getAccountId } from "./src/aws";
 import { GitHubOIDCProvider } from "./src/aws/oidc";
 import { GitHubSecret } from "./src/github";
+import { getGitHubTokenFromCLI } from "./src/github/client";
+
+const execAsync = promisify(exec);
 
 const accountId = await getAccountId();
 
@@ -42,20 +47,25 @@ const oidc = new GitHubOIDCProvider("github-oidc", {
   roleArn: githubRole.arn,
 });
 
+// Get GitHub token with full repo access from CLI (if available)
+
 const githubSecrets = {
   AWS_ROLE_ARN: githubRole.arn,
   CLOUDFLARE_API_KEY: process.env.CLOUDFLARE_API_KEY,
   CLOUDFLARE_EMAIL: process.env.CLOUDFLARE_EMAIL,
   STRIPE_API_KEY: process.env.STRIPE_API_KEY,
+  ADMIN_GITHUB_ACCESS_TOKEN: await getGitHubTokenFromCLI(),
 };
 
 for (const [name, value] of Object.entries(githubSecrets)) {
-  new GitHubSecret(`github-secret-${name}`, {
-    owner: "sam-goodwin",
-    repository: "alchemy",
-    name,
-    value,
-  });
+  if (value) {
+    new GitHubSecret(`github-secret-${name}`, {
+      owner: "sam-goodwin",
+      repository: "alchemy",
+      name,
+      value,
+    });
+  }
 }
 
 alchemize({
