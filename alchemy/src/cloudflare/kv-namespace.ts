@@ -196,10 +196,12 @@ export class KVNamespace extends Resource(
               },
               (error) => {
                 // Retry on "namespace not found" errors as they're likely propagation delays
-                return (
-                  error.message?.includes("namespace not found") ||
-                  error.message?.includes("not found")
+                console.warn(
+                  "kv-namespace-error",
+                  error.message?.includes("not found"),
+                  error.message,
                 );
+                return error.message?.includes("not found");
               },
               5, // 5 retry attempts
               1000, // Start with 1 second delay
