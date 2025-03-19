@@ -30,16 +30,6 @@ jobs:
       - name: Install dependencies
         run: bun install
       
-      # TODO: replace this with something permanent (like S3/R2)
-      - name: Restore .alchemy cache
-        uses: actions/cache@v3
-        with:
-          path: .alchemy
-          key: alchemy-cache-${{ github.ref_name }}
-          restore-keys: |
-            alchemy-cache-${{ github.ref_name }}
-            alchemy-cache-
-      
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
