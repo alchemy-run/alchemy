@@ -6,6 +6,7 @@ import { type Context, Resource } from "../resource";
 import { withExponentialBackoff } from "../utils/retry";
 import { type CloudflareApi, createCloudflareApi } from "./api";
 import type { Bindings, WorkerBindingSpec } from "./bindings";
+import { isBucket } from "./bucket";
 import type { DurableObjectNamespace } from "./durable-object-namespace";
 import { isDurableObjectNamespace } from "./durable-object-namespace";
 import { isKVNamespace } from "./kv-namespace";
@@ -438,6 +439,12 @@ async function prepareWorkerMetadata(
           to: className,
         });
       }
+    } else if (isBucket(binding)) {
+      meta.bindings.push({
+        type: "r2_bucket",
+        name: bindingName,
+        bucket_name: binding.name || binding.id,
+      });
     } else {
       // @ts-expect-error - we should never reach here
       throw new Error(`Unsupported binding type: ${binding.type}`);

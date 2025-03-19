@@ -323,6 +323,18 @@ export class StaticSite extends Resource(
         },
       },
     };
+
+    // Determine the entrypoint file - check for .ts first, fallback to .js
+    let entrypointFile = "static-site-router.js";
+    try {
+      const tsFile = path.resolve(__dirname, "static-site-router.ts");
+      await fs.access(tsFile);
+      // If we reach here, the TypeScript file exists
+      entrypointFile = "static-site-router.ts";
+    } catch (error) {
+      // TypeScript file doesn't exist, use JavaScript (default)
+    }
+
     const worker = new Worker(
       "worker",
       {
@@ -333,7 +345,7 @@ export class StaticSite extends Resource(
         ...(props.workerScript
           ? { script: props.workerScript }
           : {
-              entrypoint: path.resolve(__dirname, "static-site-router.ts"),
+              entrypoint: path.resolve(__dirname, entrypointFile),
               bundle: bundleOptions,
             }),
         bindings,

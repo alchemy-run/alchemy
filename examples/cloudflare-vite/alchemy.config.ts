@@ -1,5 +1,10 @@
 import { $, alchemize } from "alchemy";
-import { DurableObjectNamespace, StaticSite, Worker } from "alchemy/cloudflare";
+import {
+  Bucket,
+  DurableObjectNamespace,
+  StaticSite,
+  Worker,
+} from "alchemy/cloudflare";
 
 import "dotenv/config";
 
@@ -8,11 +13,18 @@ const counter = new DurableObjectNamespace("COUNTER", {
   sqlite: true,
 });
 
+// Create an R2 bucket
+const storage = new Bucket("storage", {
+  name: "alchemy-example-storage",
+  allowPublicAccess: false,
+});
+
 const api = new Worker("api", {
   name: "alchemy-example-vite-api",
   entrypoint: "./src/index.ts",
   bindings: {
     COUNTER: counter,
+    STORAGE: storage, // Bind the R2 bucket to the worker
   },
 });
 

@@ -5,6 +5,7 @@
   "type": "module",
   "module": "./lib/index.js",
   "scripts": {
+    "build": "tsc -b",
     "check": "tsc -b ./tsconfig.json",
     "publish:npm": "bun run --filter alchemy publish:npm"
   },

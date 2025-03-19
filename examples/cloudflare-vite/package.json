@@ -21,6 +21,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "alchemy": "workspace:*",
     "cloudflare": "^4.2.0",
+    "dotenv": "^16.4.7",
     "eslint": "^9.21.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.19",

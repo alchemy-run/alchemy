@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { apply } from "../../src/apply";
 import { createCloudflareApi } from "../../src/cloudflare/api";
+import { Bucket } from "../../src/cloudflare/bucket";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace";
 import { KVNamespace } from "../../src/cloudflare/kv-namespace";
 import { Worker } from "../../src/cloudflare/worker";
@@ -24,6 +25,7 @@ describe("Worker Resource", () => {
   const kvBindingTestName = `${BRANCH_PREFIX}-test-worker-kv-binding`;
   const multiBindingsTestName = `${BRANCH_PREFIX}-test-worker-multi-bindings`;
   const envVarsTestName = `${BRANCH_PREFIX}-test-worker-env-vars`;
+  const r2BindingTestName = `${BRANCH_PREFIX}-test-worker-r2-binding`;
 
   // Add a new test name for DO migration
   const doMigrationTestName = `${BRANCH_PREFIX}-test-worker-do-migration`;
@@ -84,6 +86,27 @@ describe("Worker Resource", () => {
         }
         
         return new Response('Hello with KV Namespace!', { status: 200 });
+      }
+    };
+  `;
+
+  // Sample ESM worker script with R2 bucket
+  const r2WorkerScript = `
+    export default {
+      async fetch(request, env, ctx) {
+        // Use the R2 binding
+        if (request.url.includes('/r2-info')) {
+          // Just confirm we have access to the binding
+          return new Response(JSON.stringify({
+            hasR2: !!env.STORAGE,
+            bucketName: env.STORAGE.name || 'unknown'
+          }), { 
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        
+        return new Response('Hello with R2 Bucket!', { status: 200 });
       }
     };
   `;
@@ -799,6 +822,61 @@ describe("Worker Resource", () => {
         );
         expect(response.status).toEqual(404);
       }
+    }
+  });
+
+  test("create and delete worker with R2 bucket binding", async () => {
+    const workerName = `${r2BindingTestName}-r2-1`;
+
+    // Create a test R2 bucket
+    const testBucket = new Bucket("test-bucket", {
+      name: `${BRANCH_PREFIX.toLowerCase()}-test-r2-bucket`,
+      allowPublicAccess: false,
+    });
+
+    // Create a worker with the R2 bucket binding
+    const worker = new Worker(r2BindingTestName, {
+      name: workerName,
+      script: r2WorkerScript,
+      format: "esm",
+      url: true, // Enable workers.dev URL to test the worker
+      bindings: {
+        STORAGE: testBucket,
+      },
+    });
+
+    try {
+      // Apply to create the worker
+      const output = await apply(worker);
+      expect(output.id).toBeTruthy();
+      expect(output.name).toEqual(workerName);
+      expect(output.bindings).toBeDefined();
+      expect(output.bindings.STORAGE).toBeDefined();
+
+      // Wait for the worker to be available
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      if (output.url) {
+        // Test that the R2 binding is accessible in the worker
+        const response = await fetch(`${output.url}/r2-info`);
+        expect(response.status).toEqual(200);
+        const data = (await response.json()) as {
+          hasR2: boolean;
+          bucketName: string;
+        };
+        expect(data.hasR2).toEqual(true);
+      }
+    } finally {
+      try {
+        // Delete the worker first
+        await destroy(worker);
+      } finally {
+        // Then clean up the bucket
+        await destroy(testBucket);
+      }
+
+      // Verify the worker was deleted
+      await assertWorkerDoesNotExist(workerName);
     }
   });
 });
