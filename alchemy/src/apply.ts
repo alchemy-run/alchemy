@@ -83,7 +83,7 @@ export async function evaluate<T>(
       );
       resolve!(new Evaluated(result, [resourceID, ...deps]));
     } catch (error) {
-      // console.error(error);
+      console.error(error);
       reject!(error);
     }
     return promise;

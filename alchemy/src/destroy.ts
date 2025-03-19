@@ -73,15 +73,20 @@ export async function destroy<T>(
     console.log(args[0]);
     throw new Error("Not implemented: must handle destroy a Output chain");
   }
-  await resourceProvider.delete(
-    stage,
-    scope,
-    resourceID,
-    resourceState,
-    resourceState.inputs as [],
-    options ?? {
-      quiet: false,
-    },
-  );
+  try {
+    await resourceProvider.delete(
+      stage,
+      scope,
+      resourceID,
+      resourceState,
+      resourceState.inputs as [],
+      options ?? {
+        quiet: false,
+      },
+    );
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
   await stateStore.delete(resourceID);
 }
