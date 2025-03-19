@@ -9,6 +9,7 @@ import { apply } from "../../src/apply";
 import type { PolicyDocument } from "../../src/aws/policy";
 import { Role, type RoleProps } from "../../src/aws/role";
 import { destroy } from "../../src/destroy";
+import { BRANCH_PREFIX } from "../util";
 
 // Verify role was deleted
 const iam = new IAMClient({});
@@ -44,8 +45,8 @@ describe("AWS Resources", () => {
     };
 
     test("create role", async () => {
-      const role = new Role("alchemy-test-create-role", {
-        roleName: "alchemy-test-create-role",
+      const role = new Role(`${BRANCH_PREFIX}-test-create-role`, {
+        roleName: `${BRANCH_PREFIX}-test-create-role`,
         assumeRolePolicy,
         description: "Test role for IAC",
         tags: {
@@ -61,22 +62,24 @@ describe("AWS Resources", () => {
 
       try {
         const output = await apply(role);
-        expect(output.id).toBe("alchemy-test-create-role");
+        expect(output.id).toBe(`${BRANCH_PREFIX}-test-create-role`);
         expect(output.arn).toMatch(
-          /^arn:aws:iam::\d+:role\/alchemy-test-create-role$/,
+          new RegExp(
+            `^arn:aws:iam::\\d+:role/${BRANCH_PREFIX.replace(/\//g, "\\/")}-test-create-role$`,
+          ),
         );
         expect(output.uniqueId).toBeTruthy();
         expect(output.roleId).toBeTruthy();
         expect(output.createDate).toBeInstanceOf(Date);
       } finally {
         await destroy(role);
-        await assertRoleNotExists("alchemy-test-create-role");
+        await assertRoleNotExists(`${BRANCH_PREFIX}-test-create-role`);
       }
     });
 
     test("update role", async () => {
       const roleProps: RoleProps = {
-        roleName: "alchemy-test-update-role",
+        roleName: `${BRANCH_PREFIX}-test-update-role`,
         assumeRolePolicy,
         description: "Updated test role for IAC",
         maxSessionDuration: 7200,
@@ -104,11 +107,11 @@ describe("AWS Resources", () => {
           },
         ],
       };
-      let role = new Role("alchemy-test-update-role", roleProps);
+      let role = new Role(`${BRANCH_PREFIX}-test-update-role`, roleProps);
 
       try {
         let output = await apply(role);
-        expect(output.id).toBe("alchemy-test-update-role");
+        expect(output.id).toBe(`${BRANCH_PREFIX}-test-update-role`);
         expect(output.description).toBe("Updated test role for IAC");
         expect(output.maxSessionDuration).toBe(7200);
         expect(output.tags).toEqual({
@@ -116,7 +119,7 @@ describe("AWS Resources", () => {
           Updated: "true",
         });
 
-        role = new Role("alchemy-test-update-role", {
+        role = new Role(`${BRANCH_PREFIX}-test-update-role`, {
           ...roleProps,
           description: "Updated test role for IAC",
           policies: [
@@ -139,14 +142,14 @@ describe("AWS Resources", () => {
         ]);
       } finally {
         await destroy(role);
-        await assertRoleNotExists("alchemy-test-update-role");
+        await assertRoleNotExists(`${BRANCH_PREFIX}-test-update-role`);
       }
     });
 
     test("create role with managed policies", async () => {
       const managedPolicyArn = "arn:aws:iam::aws:policy/ReadOnlyAccess";
-      const roleId = "alchemy-test-managed-policy-role";
-      const roleName = "alchemy-test-managed-policy-role";
+      const roleId = `${BRANCH_PREFIX}-test-managed-policy-role`;
+      const roleName = `${BRANCH_PREFIX}-test-managed-policy-role`;
 
       // Create an initial role
       const role = new Role(roleId, {
@@ -163,7 +166,9 @@ describe("AWS Resources", () => {
         const output = await apply(role);
         expect(output.id).toBe(roleName);
         expect(output.arn).toMatch(
-          /^arn:aws:iam::\d+:role\/alchemy-test-managed-policy-role$/,
+          new RegExp(
+            `^arn:aws:iam::\\d+:role/${BRANCH_PREFIX.replace(/\//g, "\\/")}-test-managed-policy-role$`,
+          ),
         );
 
         // Verify managed policy is attached
@@ -221,10 +226,10 @@ describe("AWS Resources", () => {
 
     test("remove managed policies when not specified in update", async () => {
       const managedPolicyArn = "arn:aws:iam::aws:policy/ReadOnlyAccess";
-      const roleName = "alchemy-test-remove-policies-role";
+      const roleName = `${BRANCH_PREFIX}-test-remove-policies-role`;
 
       // Create role with managed policy
-      const role = new Role("alchemy-test-remove-policies", {
+      const role = new Role(`${BRANCH_PREFIX}-test-remove-policies`, {
         roleName,
         assumeRolePolicy,
         description: "Test role with managed policies",
@@ -252,7 +257,7 @@ describe("AWS Resources", () => {
         );
 
         // Update role WITHOUT specifying managedPolicyArns (undefined)
-        const updatedRole = new Role("alchemy-test-remove-policies", {
+        const updatedRole = new Role(`${BRANCH_PREFIX}-test-remove-policies`, {
           roleName,
           assumeRolePolicy,
           description: "Test role with managed policies removed",

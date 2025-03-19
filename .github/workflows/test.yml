@@ -49,6 +49,7 @@ jobs:
       - name: Run tests
         run: bun test --timeout 120000
         env:
+          BRANCH_PREFIX: ${{ github.ref_name }}
           AWS_REGION: us-west-2
           CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
           CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}

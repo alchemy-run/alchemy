@@ -8,14 +8,30 @@ import {
 import { Resource } from "../resource";
 
 export interface QueueProps {
+  /**
+   * Name of the queue
+   * For FIFO queues, the name must end with the .fifo suffix
+   */
   queueName: string;
+
+  /**
+   * Whether this is a FIFO queue.
+   * If true, the queueName must end with .fifo suffix
+   */
   fifo?: boolean;
+
   visibilityTimeout?: number;
   messageRetentionPeriod?: number;
   maximumMessageSize?: number;
   delaySeconds?: number;
   receiveMessageWaitTimeSeconds?: number;
+
+  /**
+   * Enables content-based deduplication for FIFO queues.
+   * Only applicable when fifo is true.
+   */
   contentBasedDeduplication?: boolean;
+
   deduplicationScope?: "messageGroup" | "queue";
   fifoThroughputLimit?: "perQueue" | "perMessageGroupId";
   tags?: Record<string, string>;
@@ -31,7 +47,13 @@ export class Queue extends Resource(
   "sqs::Queue",
   async (ctx, props: QueueProps) => {
     const client = new SQSClient({});
-    const queueName = props.fifo ? `${props.queueName}.fifo` : props.queueName;
+    // Don't automatically add .fifo suffix - user must include it in queueName
+    const queueName = props.queueName;
+
+    // Validate that FIFO queues have .fifo suffix
+    if (props.fifo && !queueName.endsWith(".fifo")) {
+      throw new Error("FIFO queue names must end with .fifo suffix");
+    }
 
     if (ctx.event === "delete") {
       try {

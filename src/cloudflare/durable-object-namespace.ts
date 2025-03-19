@@ -12,9 +12,7 @@ export function isDurableObjectNamespace(
   binding: any,
 ): binding is Resolved<DurableObjectNamespace> {
   return (
-    typeof binding === "object" &&
-    binding.type === "durable_object_namespace" &&
-    typeof (binding as any).bindingName === "string"
+    typeof binding === "object" && binding.type === "durable_object_namespace"
   );
 }
 

@@ -316,6 +316,7 @@ import { {{ResourceName}} } from "../../src/{{service-name}}/{{resource-name}}";
 import { apply } from "../../src/apply";
 import { destroy } from "../../src/destroy";
 import { {{ServiceName}}Api } from "../../src/{{service-name}}/api";
+import { BRANCH_PREFIX } from "../util";
 
 // Check that required environment variables are set
 const apiKey = process.env.{{SERVICE_API_KEY}};
@@ -326,7 +327,8 @@ if (!apiKey || !accountId) {
 }
 
 describe("{{ResourceName}} Resource", () => {
-  const testId = `test-resource-${Date.now()}`;
+  // Use BRANCH_PREFIX for deterministic, non-colliding resource names
+  const testId = `${BRANCH_PREFIX}-test-resource`;
 
   test("create, update, and delete resource", async () => {
     if (!apiKey || !accountId) {
@@ -339,42 +341,49 @@ describe("{{ResourceName}} Resource", () => {
       description: "This is a test resource"
     });
 
-    // Apply to create the resource
-    const output = await apply(resource);
-    expect(output.id).toBeTruthy();
-    expect(output.name).toEqual(`Test Resource ${testId}`);
+    try {
+      // Apply to create the resource
+      const output = await apply(resource);
+      expect(output.id).toBeTruthy();
+      expect(output.name).toEqual(`Test Resource ${testId}`);
 
-    // Verify resource was created by querying the API directly
-    const api = new {{ServiceName}}Api();
-    const getResponse = await api.get(`/accounts/${api.accountId}/resources/${output.id}`);
-    expect(getResponse.status).toEqual(200);
+      // Verify resource was created by querying the API directly
+      const api = new {{ServiceName}}Api();
+      const getResponse = await api.get(`/accounts/${api.accountId}/resources/${output.id}`);
+      expect(getResponse.status).toEqual(200);
 
-    const responseData = await getResponse.json();
-    expect(responseData.result.name).toEqual(`Test Resource ${testId}`);
+      const responseData = await getResponse.json();
+      expect(responseData.result.name).toEqual(`Test Resource ${testId}`);
 
-    // Update the resource
-    const updatedResource = new {{ResourceName}}(testId, {
-      name: `Updated Resource ${testId}`,
-      description: "This is an updated test resource"
-    });
+      // Update the resource
+      const updatedResource = new {{ResourceName}}(testId, {
+        name: `Updated Resource ${testId}`,
+        description: "This is an updated test resource"
+      });
 
-    const updateOutput = await apply(updatedResource);
-    expect(updateOutput.id).toEqual(output.id);
+      const updateOutput = await apply(updatedResource);
+      expect(updateOutput.id).toEqual(output.id);
 
-    // Verify resource was updated
-    const getUpdatedResponse = await api.get(`/accounts/${api.accountId}/resources/${output.id}`);
-    const updatedData = await getUpdatedResponse.json();
-    expect(updatedData.result.name).toEqual(`Updated Resource ${testId}`);
+      // Verify resource was updated
+      const getUpdatedResponse = await api.get(`/accounts/${api.accountId}/resources/${output.id}`);
+      const updatedData = await getUpdatedResponse.json();
+      expect(updatedData.result.name).toEqual(`Updated Resource ${testId}`);
+    } finally {
+      // Always clean up, even if test assertions fail
+      await destroy(resource).catch(e =>
+        console.error("Error cleaning up resource:", e)
+      );
 
-    // Delete the resource
-    await destroy(resource);
-
-    // Verify resource was deleted
-    const getDeletedResponse = await api.get(`/accounts/${api.accountId}/resources/${output.id}`);
-    expect(getDeletedResponse.status).toEqual(404);
+      // Verify resource was deleted (this runs after destroy)
+      const api = new {{ServiceName}}Api();
+      const getDeletedResponse = await api.get(`/accounts/${api.accountId}/resources/${output.id}`);
+      expect(getDeletedResponse.status).toEqual(404);
+    }
   });
 });
 ```
+
+> **Important:** Always use try-finally blocks to ensure resources are properly cleaned up, even if test assertions fail. For tests with multiple resources, clean up in reverse order of creation (most recently created resources first).
 
 ## API Design Principles
 

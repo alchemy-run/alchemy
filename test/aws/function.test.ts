@@ -12,6 +12,7 @@ import type { PolicyDocument } from "../../src/aws/policy";
 import { Role } from "../../src/aws/role";
 import { destroy } from "../../src/destroy";
 import { Bundle } from "../../src/esbuild";
+import { BRANCH_PREFIX } from "../util";
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
@@ -49,8 +50,10 @@ describe("AWS Resources", () => {
         ],
       };
 
-      const role = new Role("alchemy-test-lambda-role", {
-        roleName: "alchemy-test-lambda-role",
+      // Define resources that need to be cleaned up
+      const roleName = `${BRANCH_PREFIX}-alchemy-test-lambda-role`;
+      const role = new Role(roleName, {
+        roleName,
         assumeRolePolicy,
         description: "Test role for Lambda function",
         policies: [
@@ -64,10 +67,8 @@ describe("AWS Resources", () => {
         },
       });
 
-      const roleOutput = await apply(role);
-
-      // Bundle the handler code
-      const bundle = new Bundle("test-lambda-bundle", {
+      const bundleName = `${BRANCH_PREFIX}-test-lambda-bundle`;
+      const bundle = new Bundle(bundleName, {
         entryPoint: path.join(__dirname, "..", "handler.ts"),
         outdir: ".out",
         format: "cjs",
@@ -75,70 +76,92 @@ describe("AWS Resources", () => {
         target: "node18",
       });
 
-      const bundleOutput = await apply(bundle);
+      const functionName = `${BRANCH_PREFIX}-alchemy-test-function`;
+      let func: Function | null = null;
 
-      // Create the Lambda function
-      const func = new Function("alchemy-test-function", {
-        functionName: "alchemy-test-function",
-        zipPath: bundleOutput.path,
-        roleArn: roleOutput.arn,
-        handler: "handler.handler",
-        runtime: "nodejs20.x",
-        tags: {
-          Environment: "test",
-        },
-      });
+      try {
+        // Apply the role first
+        const roleOutput = await apply(role);
 
-      const output = await apply(func);
-      expect(output.id).toBe("alchemy-test-function");
-      expect(output.arn).toMatch(
-        /^arn:aws:lambda:[a-z0-9-]+:\d+:function:alchemy-test-function$/,
-      );
-      expect(output.state).toBe("Active");
-      expect(output.lastUpdateStatus).toBe("Successful");
-      expect(output.invokeArn).toMatch(
-        /^arn:aws:apigateway:[a-z0-9-]+:lambda:path\/2015-03-31\/functions\/arn:aws:lambda:[a-z0-9-]+:\d+:function:alchemy-test-function\/invocations$/,
-      );
+        // Bundle the handler code
+        const bundleOutput = await apply(bundle);
 
-      // Immediately apply again to test stabilization logic
-      const secondOutput = await apply(func);
-      expect(secondOutput.state).toBe("Active");
-      expect(secondOutput.lastUpdateStatus).toBe("Successful");
+        // Create the Lambda function
+        func = new Function(functionName, {
+          functionName,
+          zipPath: bundleOutput.path,
+          roleArn: roleOutput.arn,
+          handler: "handler.handler",
+          runtime: "nodejs20.x",
+          tags: {
+            Environment: "test",
+          },
+        });
 
-      // Invoke the function
-      const testEvent = { test: "event" };
-      const invokeResponse = await lambda.send(
-        new InvokeCommand({
-          FunctionName: output.functionName,
-          Payload: JSON.stringify(testEvent),
-        }),
-      );
+        const output = await apply(func);
+        expect(output.id).toBe(functionName);
+        expect(output.arn).toMatch(
+          new RegExp(
+            `^arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}$`,
+          ),
+        );
+        expect(output.state).toBe("Active");
+        expect(output.lastUpdateStatus).toBe("Successful");
+        expect(output.invokeArn).toMatch(
+          new RegExp(
+            `^arn:aws:apigateway:[a-z0-9-]+:lambda:path\\/2015-03-31\\/functions\\/arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}\\/invocations$`,
+          ),
+        );
 
-      // Parse the response
-      const responsePayload = new TextDecoder().decode(invokeResponse.Payload);
-      const response = JSON.parse(responsePayload);
-      expect(response.statusCode).toBe(200);
+        // Immediately apply again to test stabilization logic
+        const secondOutput = await apply(func);
+        expect(secondOutput.state).toBe("Active");
+        expect(secondOutput.lastUpdateStatus).toBe("Successful");
 
-      const body = JSON.parse(response.body);
-      expect(body.message).toBe("Hello from bundled handler!");
-      expect(body.event).toEqual(testEvent);
+        // Invoke the function
+        const testEvent = { test: "event" };
+        const invokeResponse = await lambda.send(
+          new InvokeCommand({
+            FunctionName: output.functionName,
+            Payload: JSON.stringify(testEvent),
+          }),
+        );
 
-      // Clean up
-      await destroy(func);
-      await destroy(bundle);
-      await destroy(role);
+        // Parse the response
+        const responsePayload = new TextDecoder().decode(
+          invokeResponse.Payload,
+        );
+        const response = JSON.parse(responsePayload);
+        expect(response.statusCode).toBe(200);
 
-      await assertFunctionNotExists("alchemy-test-function");
+        const body = JSON.parse(response.body);
+        expect(body.message).toBe("Hello from bundled handler!");
+        expect(body.event).toEqual(testEvent);
+      } finally {
+        // Clean up resources in reverse order of creation
+        if (func) {
+          await destroy(func).catch((e) =>
+            console.error("Error cleaning up function:", e),
+          );
+        }
+        await destroy(bundle).catch((e) =>
+          console.error("Error cleaning up bundle:", e),
+        );
+        await destroy(role).catch((e) =>
+          console.error("Error cleaning up role:", e),
+        );
+
+        // Verify function was properly deleted after cleanup
+        if (func) {
+          await expect(
+            lambda.send(
+              new GetFunctionCommand({
+                FunctionName: functionName,
+              }),
+            ),
+          ).rejects.toThrow(ResourceNotFoundException);
+        }
+      }
     });
   });
 });
-
-async function assertFunctionNotExists(functionName: string) {
-  await expect(
-    lambda.send(
-      new GetFunctionCommand({
-        FunctionName: functionName,
-      }),
-    ),
-  ).rejects.toThrow(ResourceNotFoundException);
-}

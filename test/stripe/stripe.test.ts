@@ -5,6 +5,7 @@ import { destroy } from "../../src/destroy";
 import { Price } from "../../src/stripe/price";
 import { Product } from "../../src/stripe/product";
 import { WebhookEndpoint } from "../../src/stripe/webhook";
+import { BRANCH_PREFIX } from "../util";
 
 const stripeApiKey = process.env.STRIPE_API_KEY;
 if (!stripeApiKey) {
@@ -17,72 +18,101 @@ const stripe = new Stripe(stripeApiKey);
 describe("Stripe Resources", () => {
   test("create and destroy stripe resources", async () => {
     // Create a test product
-    const product = new Product("alchemy-test-product", {
-      name: "Alchemy Test Product",
+    const productName = `${BRANCH_PREFIX} Alchemy Test Product`;
+    const product = new Product(`${BRANCH_PREFIX}-alchemy-test-product`, {
+      name: productName,
       description: "A product created by Alchemy tests",
     });
 
-    // Apply the product first to get its ID
-    const productOutput = await apply(product);
-    expect(productOutput.id).toBeTruthy();
-    expect(productOutput.name).toBe("Alchemy Test Product");
+    // Resources that we'll need to clean up
+    let productOutput;
+    let price;
+    let webhook;
 
-    // Verify with Stripe API
-    const stripeProduct = await stripe.products.retrieve(productOutput.id);
-    expect(stripeProduct.name).toBe("Alchemy Test Product");
+    try {
+      // Apply the product first to get its ID
+      productOutput = await apply(product);
+      expect(productOutput.id).toBeTruthy();
+      expect(productOutput.name).toBe(productName);
 
-    // Create a price for the product
-    const price = new Price("alchemy-test-price", {
-      product: productOutput.id,
-      currency: "usd",
-      unitAmount: 1500, // $15.00
-      recurring: {
-        interval: "month",
-      },
-    });
+      // Verify with Stripe API
+      const stripeProduct = await stripe.products.retrieve(productOutput.id);
+      expect(stripeProduct.name).toBe(productName);
 
-    // Apply the price
-    const priceOutput = await apply(price);
-    expect(priceOutput.id).toBeTruthy();
-    expect(priceOutput.unitAmount).toBe(1500);
-    expect(priceOutput.recurring?.interval).toBe("month");
+      // Create a price for the product
+      price = new Price(`${BRANCH_PREFIX}-alchemy-test-price`, {
+        product: productOutput.id,
+        currency: "usd",
+        unitAmount: 1500, // $15.00
+        recurring: {
+          interval: "month",
+        },
+      });
 
-    // Verify with Stripe API
-    const stripePrice = await stripe.prices.retrieve(priceOutput.id);
-    expect(stripePrice.unit_amount).toBe(1500);
+      // Apply the price
+      const priceOutput = await apply(price);
+      expect(priceOutput.id).toBeTruthy();
+      expect(priceOutput.unitAmount).toBe(1500);
+      expect(priceOutput.recurring?.interval).toBe("month");
 
-    // Create a webhook endpoint
-    const webhook = new WebhookEndpoint("alchemy-test-webhook", {
-      url: "https://example.com/alchemy-webhook",
-      enabledEvents: [
-        "checkout.session.completed",
-        "customer.subscription.created",
-      ],
-      description: "Webhook for Alchemy tests",
-    });
+      // Verify with Stripe API
+      const stripePrice = await stripe.prices.retrieve(priceOutput.id);
+      expect(stripePrice.unit_amount).toBe(1500);
 
-    // Apply the webhook
-    const webhookOutput = await apply(webhook);
-    expect(webhookOutput.id).toBeTruthy();
-    expect(webhookOutput.url).toBe("https://example.com/alchemy-webhook");
-    expect(webhookOutput.secret).toBeTruthy();
+      // Create a webhook endpoint
+      webhook = new WebhookEndpoint(`${BRANCH_PREFIX}-alchemy-test-webhook`, {
+        url: "https://example.com/alchemy-webhook",
+        enabledEvents: [
+          "checkout.session.completed",
+          "customer.subscription.created",
+        ],
+        description: "Webhook for Alchemy tests",
+      });
 
-    // Verify with Stripe API
-    const stripeWebhook = await stripe.webhookEndpoints.retrieve(
-      webhookOutput.id,
-    );
-    expect(stripeWebhook.url).toBe("https://example.com/alchemy-webhook");
+      // Apply the webhook
+      const webhookOutput = await apply(webhook);
+      expect(webhookOutput.id).toBeTruthy();
+      expect(webhookOutput.url).toBe("https://example.com/alchemy-webhook");
+      expect(webhookOutput.secret).toBeTruthy();
 
-    // Clean up resources
-    console.log("Cleaning up Stripe resources...");
-    await destroy(webhook);
-    await destroy(price);
-    await destroy(product);
+      // Verify with Stripe API
+      const stripeWebhook = await stripe.webhookEndpoints.retrieve(
+        webhookOutput.id,
+      );
+      expect(stripeWebhook.url).toBe("https://example.com/alchemy-webhook");
+    } finally {
+      // Clean up resources in reverse order of creation
+      console.log("Cleaning up Stripe resources...");
 
-    // Verify clean up
-    await assertProductDeactivated(productOutput.id);
-    await assertPriceDeactivated(priceOutput.id);
-    await assertWebhookDeleted(webhookOutput.id);
+      if (webhook) {
+        await destroy(webhook).catch((e) =>
+          console.error("Error cleaning up webhook:", e),
+        );
+      }
+
+      if (price) {
+        await destroy(price).catch((e) =>
+          console.error("Error cleaning up price:", e),
+        );
+      }
+
+      await destroy(product).catch((e) =>
+        console.error("Error cleaning up product:", e),
+      );
+
+      // Verify clean up
+      if (productOutput?.id) {
+        await assertProductDeactivated(productOutput.id);
+      }
+
+      if (price?.output?.id) {
+        await assertPriceDeactivated(price.output.id);
+      }
+
+      if (webhook?.output?.id) {
+        await assertWebhookDeleted(webhook.output.id);
+      }
+    }
   });
 });
 

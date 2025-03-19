@@ -6,6 +6,7 @@ import { destroy } from "../src/destroy";
 import { File } from "../src/fs";
 import { type Context, Resource } from "../src/resource";
 import { Scope, getScope, rootScope, withScope } from "../src/scope";
+import { BRANCH_PREFIX } from "./util";
 
 describe("Scope", () => {
   it("should maintain scope context and track resources", async () => {
@@ -53,8 +54,9 @@ describe("Scope", () => {
       },
     ) {}
 
+    const roleName = `${BRANCH_PREFIX}-alchemy-test-scope-role`;
     const service = new ServiceResources("test-service", {
-      roleName: "alchemy-test-scope-role",
+      roleName,
     });
 
     // Apply the parent resource which should create the role

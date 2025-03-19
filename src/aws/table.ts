@@ -9,6 +9,7 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { ignore } from "../error";
 import { type Context, Resource } from "../resource";
+import { withExponentialBackoff } from "../utils/retry";
 
 export interface TableProps {
   tableName: string;
@@ -38,7 +39,7 @@ export class Table extends Resource(
   async (
     ctx: Context<TableOutput>,
     props: TableProps,
-  ): Promise<TableOutput> => {
+  ): Promise<TableOutput | void> => {
     const client = new DynamoDBClient({});
 
     if (ctx.event === "delete") {
@@ -70,103 +71,133 @@ export class Table extends Resource(
         }
       }
 
-      return {
-        ...props,
-        id: props.tableName,
-        arn: `arn:aws:dynamodb:${client.config.region}:${process.env.AWS_ACCOUNT_ID}:table/${props.tableName}`,
-        tableId: "",
-      };
+      return;
     } else {
-      try {
-        const attributeDefinitions = [
-          {
-            AttributeName: props.partitionKey.name,
-            AttributeType: props.partitionKey.type,
-          },
-        ];
+      // Setup for table creation
+      const attributeDefinitions = [
+        {
+          AttributeName: props.partitionKey.name,
+          AttributeType: props.partitionKey.type,
+        },
+      ];
 
-        const keySchema: KeySchemaElement[] = [
-          {
-            AttributeName: props.partitionKey.name,
-            KeyType: "HASH",
-          },
-        ];
+      const keySchema: KeySchemaElement[] = [
+        {
+          AttributeName: props.partitionKey.name,
+          KeyType: "HASH",
+        },
+      ];
 
-        if (props.sortKey) {
-          attributeDefinitions.push({
-            AttributeName: props.sortKey.name,
-            AttributeType: props.sortKey.type,
-          });
-          keySchema.push({
-            AttributeName: props.sortKey.name,
-            KeyType: "RANGE",
-          });
-        }
+      if (props.sortKey) {
+        attributeDefinitions.push({
+          AttributeName: props.sortKey.name,
+          AttributeType: props.sortKey.type,
+        });
+        keySchema.push({
+          AttributeName: props.sortKey.name,
+          KeyType: "RANGE",
+        });
+      }
 
-        await client.send(
-          new CreateTableCommand({
-            TableName: props.tableName,
-            AttributeDefinitions: attributeDefinitions,
-            KeySchema: keySchema,
-            BillingMode: props.billingMode || "PAY_PER_REQUEST",
-            ProvisionedThroughput:
-              props.billingMode === "PROVISIONED"
-                ? {
-                    ReadCapacityUnits: props.readCapacity || 5,
-                    WriteCapacityUnits: props.writeCapacity || 5,
-                  }
-                : undefined,
-            Tags: props.tags
-              ? Object.entries(props.tags).map(([Key, Value]) => ({
-                  Key,
-                  Value,
-                }))
-              : undefined,
-          }),
-        );
+      // Attempt to create the table with exponential backoff for ResourceInUseException
+      await withExponentialBackoff(
+        async () => {
+          try {
+            // First check if table already exists
+            const describeResponse = await client.send(
+              new DescribeTableCommand({
+                TableName: props.tableName,
+              }),
+            );
 
-        // Wait for table to be active
-        let tableActive = false;
-        let tableDescription;
-        while (!tableActive) {
+            // If table exists and is ACTIVE, no need to create it
+            if (describeResponse.Table?.TableStatus === "ACTIVE") {
+              return;
+            }
+
+            // If table exists but not ACTIVE, wait for it in the polling loop below
+            if (describeResponse.Table) {
+              return;
+            }
+          } catch (error) {
+            if (error instanceof ResourceNotFoundException) {
+              // Table doesn't exist, try to create it
+              await client.send(
+                new CreateTableCommand({
+                  TableName: props.tableName,
+                  AttributeDefinitions: attributeDefinitions,
+                  KeySchema: keySchema,
+                  BillingMode: props.billingMode || "PAY_PER_REQUEST",
+                  ProvisionedThroughput:
+                    props.billingMode === "PROVISIONED"
+                      ? {
+                          ReadCapacityUnits: props.readCapacity || 5,
+                          WriteCapacityUnits: props.writeCapacity || 5,
+                        }
+                      : undefined,
+                  Tags: props.tags
+                    ? Object.entries(props.tags).map(([Key, Value]) => ({
+                        Key,
+                        Value,
+                      }))
+                    : undefined,
+                }),
+              );
+            } else {
+              throw error;
+            }
+          }
+        },
+        (error) => error instanceof ResourceInUseException,
+        10, // Max attempts
+        200, // Initial delay in ms
+      );
+
+      // Wait for table to be active with timeout
+      let tableActive = false;
+      let tableDescription;
+      let retryCount = 0;
+      const maxRetries = 60; // Wait up to 60 seconds
+
+      while (!tableActive && retryCount < maxRetries) {
+        try {
           const response = await client.send(
             new DescribeTableCommand({
               TableName: props.tableName,
             }),
           );
+
           tableActive = response.Table?.TableStatus === "ACTIVE";
           if (tableActive) {
             tableDescription = response.Table;
           } else {
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            retryCount++;
+            // Increasing delay for each retry with some jitter
+            const delay = Math.min(1000 * (1 + 0.1 * Math.random()), 5000);
+            await new Promise((resolve) => setTimeout(resolve, delay));
           }
+        } catch (error) {
+          retryCount++;
+          if (!(error instanceof ResourceNotFoundException)) {
+            throw error;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
-
-        return {
-          ...props,
-          id: props.tableName,
-          arn: tableDescription!.TableArn!,
-          streamArn: tableDescription!.LatestStreamArn,
-          tableId: tableDescription!.TableId!,
-        };
-      } catch (error) {
-        if (error instanceof ResourceInUseException) {
-          // Table already exists, get its details
-          const response = await client.send(
-            new DescribeTableCommand({
-              TableName: props.tableName,
-            }),
-          );
-          return {
-            ...props,
-            id: props.tableName,
-            arn: response.Table!.TableArn!,
-            streamArn: response.Table!.LatestStreamArn,
-            tableId: response.Table!.TableId!,
-          };
-        }
-        throw error;
       }
+
+      if (!tableActive) {
+        throw new Error(
+          `Timed out waiting for table ${props.tableName} to become active`,
+        );
+      }
+
+      return {
+        ...props,
+        id: props.tableName,
+        arn: tableDescription!.TableArn!,
+        streamArn: tableDescription!.LatestStreamArn,
+        tableId: tableDescription!.TableId!,
+      };
     }
   },
 ) {}

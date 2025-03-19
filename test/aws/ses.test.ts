@@ -8,6 +8,7 @@ import { describe, expect, test } from "bun:test";
 import { apply } from "../../src/apply";
 import { SES } from "../../src/aws/ses";
 import { destroy } from "../../src/destroy";
+import { BRANCH_PREFIX } from "../util";
 
 // Check that required environment variables are set
 const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
@@ -21,7 +22,7 @@ if (!awsAccessKeyId || !awsSecretAccessKey || !awsRegion) {
 }
 
 describe("SES Resource", () => {
-  const testId = `test-ses-${Date.now()}`;
+  const testId = `${BRANCH_PREFIX}-test-ses`;
 
   test("create, update, and delete configuration set", async () => {
     if (!awsAccessKeyId || !awsSecretAccessKey || !awsRegion) {

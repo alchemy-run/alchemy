@@ -3,6 +3,7 @@ import { apply } from "../../src/apply";
 import { destroy } from "../../src/destroy";
 import { createGitHubClient } from "../../src/github/client";
 import { GitHubSecret } from "../../src/github/secret";
+import { BRANCH_PREFIX } from "../util";
 
 // Optional environment variable overrides
 const owner = process.env.GITHUB_OWNER || "sam-goodwin";
@@ -10,14 +11,14 @@ const repository = process.env.GITHUB_REPO || "alchemy";
 
 describe("GitHubSecret Resource", () => {
   // Use a fixed resource ID
-  const testId = "github-secret-test";
+  const testId = `${BRANCH_PREFIX}-github-secret-test`;
 
   test("create, update, and delete secret", async () => {
     // Create an authenticated client for testing - will use the same auth as the resource
     const octokit = await createGitHubClient();
 
     // Use a hardcoded secret name instead of timestamps for repeatability
-    const secretName = "TEST_SECRET_1";
+    const secretName = `${BRANCH_PREFIX.toUpperCase()}_TEST_SECRET_1`;
     const secretValue = "this-is-a-test-secret-value";
     const updatedSecretValue = "this-is-an-updated-test-secret-value";
 

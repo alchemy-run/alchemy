@@ -5,19 +5,20 @@ import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-name
 import { KVNamespace } from "../../src/cloudflare/kv-namespace";
 import { Worker } from "../../src/cloudflare/worker";
 import { destroy } from "../../src/destroy";
+import { BRANCH_PREFIX } from "../util";
 
 describe("Worker Resource", () => {
   // Use a fixed name for the test worker
-  const testName = "test-worker";
-  const esmTestName = "test-worker-esm";
-  const formatConversionTestName = "test-worker-format-conversion";
-  const doBindingTestName = "test-worker-do-binding";
-  const kvBindingTestName = "test-worker-kv-binding";
-  const multiBindingsTestName = "test-worker-multi-bindings";
-  const envVarsTestName = "test-worker-env-vars";
+  const testName = `${BRANCH_PREFIX}-test-worker`;
+  const esmTestName = `${BRANCH_PREFIX}-test-worker-esm`;
+  const formatConversionTestName = `${BRANCH_PREFIX}-test-worker-format-conversion`;
+  const doBindingTestName = `${BRANCH_PREFIX}-test-worker-do-binding`;
+  const kvBindingTestName = `${BRANCH_PREFIX}-test-worker-kv-binding`;
+  const multiBindingsTestName = `${BRANCH_PREFIX}-test-worker-multi-bindings`;
+  const envVarsTestName = `${BRANCH_PREFIX}-test-worker-env-vars`;
 
   // Add a new test name for DO migration
-  const doMigrationTestName = "test-worker-do-migration";
+  const doMigrationTestName = `${BRANCH_PREFIX}-test-worker-do-migration`;
 
   // Sample worker script (CJS style)
   const workerScript = `
@@ -340,7 +341,7 @@ describe("Worker Resource", () => {
 
   test("fails when creating a worker with a duplicate name", async () => {
     // Define fixed names for this test
-    const duplicateTestName = "test-worker-duplicate";
+    const duplicateTestName = `${BRANCH_PREFIX}-test-worker-duplicate`;
 
     // First, create a worker successfully
     const firstWorker = new Worker(duplicateTestName, {
@@ -412,23 +413,19 @@ describe("Worker Resource", () => {
       expect(output.bindings).toBeDefined();
     } finally {
       // Clean up by deleting the worker
-      try {
-        const cleanupWorker = new Worker(doBindingTestName, {
-          name: doBindingTestName,
-          script: durableObjectWorkerScript,
-          format: "esm",
-        });
-        await destroy(cleanupWorker);
+      const cleanupWorker = new Worker(doBindingTestName, {
+        name: doBindingTestName,
+        script: durableObjectWorkerScript,
+        format: "esm",
+      });
+      await destroy(cleanupWorker);
 
-        // Verify the worker was deleted
-        const api = await createCloudflareApi();
-        const response = await api.get(
-          `/accounts/${api.accountId}/workers/scripts/${doBindingTestName}`,
-        );
-        expect(response.status).toEqual(404);
-      } catch (err) {
-        console.log(`Error during cleanup: ${err}`);
-      }
+      // Verify the worker was deleted
+      const api = await createCloudflareApi();
+      const response = await api.get(
+        `/accounts/${api.accountId}/workers/scripts/${doBindingTestName}`,
+      );
+      expect(response.status).toEqual(404);
     }
   });
 
@@ -527,23 +524,19 @@ describe("Worker Resource", () => {
       expect(output.bindings).toBeDefined();
     } finally {
       // Clean up by deleting the worker
-      try {
-        const cleanupWorker = new Worker(multiBindingsTestName, {
-          name: multiBindingsTestName,
-          script: multiBindingsWorkerScript,
-          format: "esm",
-        });
-        await destroy(cleanupWorker);
+      const cleanupWorker = new Worker(multiBindingsTestName, {
+        name: multiBindingsTestName,
+        script: multiBindingsWorkerScript,
+        format: "esm",
+      });
+      await destroy(cleanupWorker);
 
-        // Verify the worker was deleted
-        const api = await createCloudflareApi();
-        const response = await api.get(
-          `/accounts/${api.accountId}/workers/scripts/${multiBindingsTestName}`,
-        );
-        expect(response.status).toEqual(404);
-      } catch (err) {
-        console.log(`Error during cleanup: ${err}`);
-      }
+      // Verify the worker was deleted
+      const api = await createCloudflareApi();
+      const response = await api.get(
+        `/accounts/${api.accountId}/workers/scripts/${multiBindingsTestName}`,
+      );
+      expect(response.status).toEqual(404);
     }
   });
 
