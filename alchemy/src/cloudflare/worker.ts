@@ -325,7 +325,7 @@ async function putWorker(
           .json()
           .catch(() => ({ errors: [{ message: uploadResponse.statusText }] }));
 
-        const errorMessage = `Error uploading worker script '${workerName}': ${uploadResponse.status} ${errorData.errors?.[0]?.message || uploadResponse.statusText}`;
+        const errorMessage = `Error (HTTP ${uploadResponse.status}) uploading worker script '${workerName}': ${errorData.errors?.[0]?.message || uploadResponse.statusText}`;
 
         if (
           uploadResponse.status === 400 &&
@@ -339,7 +339,7 @@ async function putWorker(
       return formData;
     },
     (err) => err instanceof NotFoundError,
-    5,
+    10,
     100,
   );
 }
