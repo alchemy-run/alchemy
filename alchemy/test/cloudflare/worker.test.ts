@@ -472,10 +472,13 @@ describe("Worker Resource", () => {
       expect(output.name).toEqual(workerName);
       expect(output.bindings).toBeDefined();
     } finally {
-      // Delete the worker
-      await destroy(worker);
-      // Also clean up the KV namespace
-      await destroy(testKv);
+      try {
+        // Delete the worker
+        await destroy(worker);
+      } finally {
+        // Also clean up the KV namespace
+        await destroy(testKv);
+      }
       // Verify the worker was deleted
       await assertWorkerDoesNotExist(workerName);
     }
@@ -541,8 +544,11 @@ describe("Worker Resource", () => {
         script: multiBindingsWorkerScript,
         format: "esm",
       });
-      await destroy(cleanupWorker);
-      await destroy(testKv);
+      try {
+        await destroy(cleanupWorker);
+      } finally {
+        await destroy(testKv);
+      }
 
       // Verify the worker was deleted
       await assertWorkerDoesNotExist(workerName);
