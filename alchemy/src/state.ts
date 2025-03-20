@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ignore } from "./error";
+import { deserialize, serialize } from "./serde";
 
 export interface State {
   status:
@@ -79,7 +80,7 @@ export class FileSystemStateStore implements StateStore {
         await this.getPath(key),
         "utf8",
       );
-      return JSON.parse(content) as State;
+      return (await deserialize(JSON.parse(content))) as State;
     } catch (error: any) {
       if (error.code === "ENOENT") {
         return undefined;
@@ -91,7 +92,7 @@ export class FileSystemStateStore implements StateStore {
   async set(key: string, value: State): Promise<void> {
     return fs.promises.writeFile(
       await this.getPath(key),
-      JSON.stringify(value, null, 2),
+      JSON.stringify(await serialize(value), null, 2),
     );
   }
 

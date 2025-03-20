@@ -12,4 +12,5 @@ export {
   type DeleteContext,
   type UpdateContext,
 } from "./resource";
+export * from "./secret";
 export type { FileSystemStateStore as StateStore } from "./state";

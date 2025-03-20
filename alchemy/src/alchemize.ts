@@ -2,6 +2,7 @@ import { evaluate } from "./apply";
 import { destroy } from "./destroy";
 import { defaultStage, defaultStateStore, providers } from "./global";
 import { type Scope, getScope } from "./scope";
+import { setSecretPassphrase } from "./secret";
 import type { StateStoreType } from "./state";
 
 export interface AlchemizeOptions {
@@ -37,6 +38,11 @@ export interface AlchemizeOptions {
    * @default false
    */
   quiet?: boolean;
+
+  /**
+   * A passphrase to use to encrypt/decrypt secrets.
+   */
+  password?: string;
 }
 
 /**
@@ -52,6 +58,9 @@ export async function alchemize(options?: AlchemizeOptions) {
     scope.getScopePath(stage),
   );
   const callbacks = scope.callbacks;
+  if (options?.password) {
+    setSecretPassphrase(options.password);
+  }
 
   if (nodes.size > 0) {
     await stateStore.init?.();

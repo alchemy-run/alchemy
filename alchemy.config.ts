@@ -1,10 +1,9 @@
 import "dotenv/config";
 
-import { alchemize } from "./alchemy/src";
+import { alchemize, secret } from "./alchemy/src";
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
 import { GitHubSecret } from "./alchemy/src/github";
-import { getGitHubTokenFromCLI } from "./alchemy/src/github/client";
 
 const accountId = await getAccountId();
 
@@ -36,21 +35,17 @@ const githubRole = new Role("github-oidc-role", {
   managedPolicyArns: ["arn:aws:iam::aws:policy/AdministratorAccess"],
 });
 
-// Set up the GitHub OIDC provider
-const oidc = new GitHubOIDCProvider("github-oidc", {
+new GitHubOIDCProvider("github-oidc", {
   owner: "sam-goodwin",
   repository: "alchemy",
   roleArn: githubRole.arn,
 });
-
-// Get GitHub token with full repo access from CLI (if available)
 
 const githubSecrets = {
   AWS_ROLE_ARN: githubRole.arn,
   CLOUDFLARE_API_KEY: process.env.CLOUDFLARE_API_KEY,
   CLOUDFLARE_EMAIL: process.env.CLOUDFLARE_EMAIL,
   STRIPE_API_KEY: process.env.STRIPE_API_KEY,
-  ADMIN_GITHUB_ACCESS_TOKEN: await getGitHubTokenFromCLI(),
 };
 
 for (const [name, value] of Object.entries(githubSecrets)) {
@@ -59,13 +54,15 @@ for (const [name, value] of Object.entries(githubSecrets)) {
       owner: "sam-goodwin",
       repository: "alchemy",
       name,
-      value,
+      value: secret(value),
     });
   }
 }
 
 alchemize({
-  mode: process.argv.includes("--destroy") ? "destroy" : "up",
-  // quiet: process.argv.includes("--verbose") ? false : true,
   stage: "github:alchemy",
+  mode: process.argv.includes("--destroy") ? "destroy" : "up",
+  // pass the password in (you can get it from anywhere, e.g. stdin)
+  password: process.env.SECRET_PASSPHRASE,
+  quiet: process.argv.includes("--verbose") ? false : true,
 });

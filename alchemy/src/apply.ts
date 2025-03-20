@@ -8,6 +8,7 @@ import {
   isResource,
 } from "./resource";
 import { type Scope as IScope, getScope } from "./scope";
+import { Secret } from "./secret";
 import type { StateStore } from "./state";
 
 export interface ApplyOptions {
@@ -109,6 +110,8 @@ export async function evaluate<T>(
       evaluatedItems.flatMap((e) => e.deps),
     );
   } else if (output instanceof Date) {
+    return new Evaluated(output as T);
+  } else if (output instanceof Secret) {
     return new Evaluated(output as T);
   } else if (output && typeof output === "object") {
     const entries = Object.entries(output);

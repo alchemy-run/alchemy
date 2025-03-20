@@ -1,7 +1,7 @@
 import sodium from "libsodium-wrappers";
 import { type Context, Resource } from "../resource";
+import type { Secret } from "../secret";
 import { createGitHubClient, verifyGitHubAuth } from "./client";
-
 /**
  * Properties for creating or updating a GitHub Secret
  */
@@ -24,7 +24,7 @@ export interface GitHubSecretProps {
   /**
    * Secret value (will be stored securely on GitHub)
    */
-  value: string;
+  value: Secret;
 
   /**
    * Optional GitHub API token (overrides environment variable)
@@ -45,31 +45,6 @@ export interface GitHubSecretOutput extends Omit<GitHubSecretProps, "value"> {
    * Time at which the object was created/updated
    */
   updatedAt: string;
-}
-
-/**
- * Encrypt a value for GitHub using libsodium
- * Based on GitHub's documentation for encrypting secrets
- *
- * @param value - The secret value to encrypt
- * @param publicKey - The base64-encoded public key from GitHub
- * @returns The base64-encoded encrypted value
- */
-async function encryptValue(value: string, publicKey: string): Promise<string> {
-  // Initialize libsodium
-  await sodium.ready;
-
-  // Convert the public key from base64 to binary
-  const binKey = sodium.from_base64(publicKey, sodium.base64_variants.ORIGINAL);
-
-  // Convert the message to a Uint8Array
-  const binMessage = sodium.from_string(value);
-
-  // Encrypt the message with the public key using libsodium's sealed box
-  const encryptedBin = sodium.crypto_box_seal(binMessage, binKey);
-
-  // Convert the encrypted message to base64
-  return sodium.to_base64(encryptedBin, sodium.base64_variants.ORIGINAL);
 }
 
 /**
@@ -121,7 +96,10 @@ export class GitHubSecret extends Resource(
         );
 
         // Encrypt the secret value using libsodium
-        const encryptedValue = await encryptValue(props.value, publicKey.key);
+        const encryptedValue = await encryptString(
+          props.value.unencrypted,
+          publicKey.key,
+        );
 
         // Create or update the secret with the encrypted value and key_id
         const response = await octokit.rest.actions.createOrUpdateRepoSecret({
@@ -131,11 +109,6 @@ export class GitHubSecret extends Resource(
           encrypted_value: encryptedValue,
           key_id: publicKey.key_id,
         });
-
-        // Log success
-        if (!ctx.quiet) {
-          console.log(`Successfully created/updated secret: ${props.name}`);
-        }
 
         // GitHub doesn't return the secret details on create/update, so we need to construct it
         const output: GitHubSecretOutput = {
@@ -170,3 +143,31 @@ export class GitHubSecret extends Resource(
     }
   },
 ) {}
+
+/**
+ * Encrypt a value for GitHub using libsodium
+ * Based on GitHub's documentation for encrypting secrets
+ *
+ * @param value - The secret value to encrypt
+ * @param publicKey - The base64-encoded public key from GitHub
+ * @returns The base64-encoded encrypted value
+ */
+async function encryptString(
+  value: string,
+  publicKey: string,
+): Promise<string> {
+  // Initialize libsodium
+  await sodium.ready;
+
+  // Convert the public key from base64 to binary
+  const binKey = sodium.from_base64(publicKey, sodium.base64_variants.ORIGINAL);
+
+  // Convert the message to a Uint8Array
+  const binMessage = sodium.from_string(value);
+
+  // Encrypt the message with the public key using libsodium's sealed box
+  const encryptedBin = sodium.crypto_box_seal(binMessage, binKey);
+
+  // Convert the encrypted message to base64
+  return sodium.to_base64(encryptedBin, sodium.base64_variants.ORIGINAL);
+}

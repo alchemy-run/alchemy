@@ -1,3 +1,5 @@
+import type { Secret } from "./secret";
+
 export function isOutput<T>(value: any): value is Output<T> {
   return (
     value && typeof value === "object" && typeof value.apply === "function"
@@ -45,15 +47,17 @@ export class OutputChain<T, U> {
 
 export type Resolved<O> = O extends Output<infer U>
   ? U
-  : O extends null
-    ? O
-    : O extends any[]
-      ? ResolveN<O>
-      : O extends object
-        ? {
-            [k in keyof O]: Resolved<O[k]>;
-          }
-        : O;
+  : O extends Secret
+    ? Secret
+    : O extends null
+      ? O
+      : O extends any[]
+        ? ResolveN<O>
+        : O extends object
+          ? {
+              [k in keyof O]: Resolved<O[k]>;
+            }
+          : O;
 
 type ResolveN<O extends any[]> = O extends [infer First, ...infer Rest]
   ? [Resolved<First>, ...ResolveN<Rest>]
