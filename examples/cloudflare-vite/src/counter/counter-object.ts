@@ -1,13 +1,11 @@
-import { DurableObject } from "cloudflare:workers";
-
-export type CounterEnv = {};
+import { DurableObject, env } from "cloudflare:workers";
 
 // Define the Durable Object class for an atomic counter
 export class Counter extends DurableObject {
   private state: DurableObjectState;
   private value = 0;
 
-  constructor(state: DurableObjectState, env: CounterEnv) {
+  constructor(state: DurableObjectState) {
     super(state, env);
 
     this.state = state;

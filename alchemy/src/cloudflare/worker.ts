@@ -1,11 +1,13 @@
 import * as fs from "fs/promises";
 import { apply } from "../apply";
 import { Bundle, type BundleProps } from "../esbuild";
+import type { Input } from "../input";
 import type { Resolved } from "../output";
 import { type Context, Resource } from "../resource";
 import { withExponentialBackoff } from "../utils/retry";
 import { type CloudflareApi, createCloudflareApi } from "./api";
 import type { Bindings, WorkerBindingSpec } from "./bindings";
+import type { Bound } from "./bound";
 import { isBucket } from "./bucket";
 import type { DurableObjectNamespace } from "./durable-object-namespace";
 import { isDurableObjectNamespace } from "./durable-object-namespace";
@@ -15,7 +17,7 @@ import type { SingleStepMigration } from "./worker-migration";
 /**
  * Properties for creating or updating a Worker
  */
-export interface WorkerProps {
+export interface WorkerProps<B extends Bindings = Bindings> {
   /**
    * The worker script content (JavaScript or WASM)
    * One of script, entryPoint, or bundle must be provided
@@ -58,7 +60,7 @@ export interface WorkerProps {
   /**
    * Bindings to attach to the worker
    */
-  bindings?: Bindings;
+  bindings?: B;
 
   /**
    * Environment variables to attach to the worker
@@ -97,7 +99,8 @@ export interface WorkerProps {
 /**
  * Output returned after Worker creation/update
  */
-export interface WorkerOutput extends Omit<WorkerProps, "url"> {
+export interface WorkerOutput<B extends Bindings = Bindings>
+  extends Omit<WorkerProps<B>, "url"> {
   type: "service";
 
   /**
@@ -124,83 +127,91 @@ export interface WorkerOutput extends Omit<WorkerProps, "url"> {
   /**
    * The bindings that were created
    */
-  bindings: Bindings;
+  bindings: B;
 }
 
 export function isWorker(resource: any): resource is Resolved<Worker> {
   return resource && typeof resource === "object" && resource.type === "worker";
 }
 
-export class Worker extends Resource(
+export class Worker<B extends Bindings = Bindings> extends Resource(
   "cloudflare::Worker",
   {
     alwaysUpdate: true,
   },
-  async (ctx: Context<WorkerOutput>, props: WorkerProps) => {
-    // Create Cloudflare API client with automatic account discovery
-    const api = await createCloudflareApi();
+  applyWorker,
+) {
+  public declare readonly Env: {
+    [bindingName in keyof B]: Bound<B[bindingName]>;
+  };
+  constructor(id: string, input: Input<WorkerProps<B>>) {
+    super(id, input as any);
+  }
+}
 
-    // Use the provided name
-    const workerName = props.name;
+async function applyWorker(ctx: Context<WorkerOutput>, props: WorkerProps) {
+  // Create Cloudflare API client with automatic account discovery
+  const api = await createCloudflareApi();
 
-    // Validate input - we need either script, entryPoint, or bundle
-    if (!props.script && !props.entrypoint) {
-      throw new Error("One of script or entryPoint must be provided");
-    }
+  // Use the provided name
+  const workerName = props.name;
 
-    if (ctx.event === "delete") {
-      return deleteWorker(ctx, api, workerName);
-    } else if (ctx.event === "create") {
-      await assertWorkerDoesNotExist(ctx, api, workerName);
-    }
+  // Validate input - we need either script, entryPoint, or bundle
+  if (!props.script && !props.entrypoint) {
+    throw new Error("One of script or entryPoint must be provided");
+  }
 
-    const oldBindings = await ctx.get<Bindings>("bindings");
+  if (ctx.event === "delete") {
+    return deleteWorker(ctx, api, workerName);
+  } else if (ctx.event === "create") {
+    await assertWorkerDoesNotExist(ctx, api, workerName);
+  }
 
-    const scriptMetadata = await prepareWorkerMetadata(ctx, oldBindings, props);
+  const oldBindings = await ctx.get<Bindings>("bindings");
 
-    // Get the script content - either from props.script, or by bundling
-    const scriptContent =
-      props.script ?? (await bundleWorkerScript(ctx, props));
+  const scriptMetadata = await prepareWorkerMetadata(ctx, oldBindings, props);
 
-    // Upload the worker script
-    await putWorker(ctx, api, workerName, scriptContent, scriptMetadata);
+  // Get the script content - either from props.script, or by bundling
+  const scriptContent = props.script ?? (await bundleWorkerScript(ctx, props));
 
-    // TODO: it is less than ideal that this can fail, resulting in state problem
-    await ctx.set("bindings", props.bindings);
+  // Upload the worker script
+  await putWorker(ctx, api, workerName, scriptContent, scriptMetadata);
 
-    // Handle routes if requested
-    await setupRoutes(api, workerName, props.routes || []);
+  // TODO: it is less than ideal that this can fail, resulting in state problem
+  await ctx.set("bindings", props.bindings);
 
-    // Handle worker URL if requested
-    const workerUrl = await configureURL(
-      ctx,
-      api,
-      workerName,
-      props.url ?? false,
-    );
+  // Handle routes if requested
+  await setupRoutes(api, workerName, props.routes || []);
 
-    // Get current timestamp
-    const now = Date.now();
+  // Handle worker URL if requested
+  const workerUrl = await configureURL(
+    ctx,
+    api,
+    workerName,
+    props.url ?? false,
+  );
 
-    // Construct the output
-    const output: WorkerOutput = {
-      type: "service",
-      id: workerName,
-      name: workerName,
-      script: scriptContent,
-      format: props.format || "esm", // Include format in the output
-      routes: props.routes || [],
-      bindings: props.bindings ?? {},
-      env: props.env,
-      observability: scriptMetadata.observability,
-      createdAt: now,
-      updatedAt: now,
-      url: workerUrl,
-    };
+  // Get current timestamp
+  const now = Date.now();
 
-    return output;
-  },
-) {}
+  // Construct the output
+  const output: WorkerOutput = {
+    type: "service",
+    id: workerName,
+    name: workerName,
+    script: scriptContent,
+    format: props.format || "esm", // Include format in the output
+    routes: props.routes || [],
+    bindings: props.bindings ?? {},
+    env: props.env,
+    observability: scriptMetadata.observability,
+    createdAt: now,
+    updatedAt: now,
+    url: workerUrl,
+  };
+
+  return output;
+}
 
 async function deleteWorker(
   ctx: Context<WorkerOutput>,

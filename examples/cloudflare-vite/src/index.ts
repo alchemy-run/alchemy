@@ -1,4 +1,4 @@
-export { Counter } from "./objects/counter";
+export { Counter } from "./counter/counter-object";
 
 // Worker script that uses the Counter Durable Object
 export default {

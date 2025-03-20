@@ -1,8 +1,14 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["@types/node", "@cloudflare/workers-types"]
+    "types": ["@cloudflare/workers-types"]
   },
-  "include": ["alchemy.config.ts", "vite/*.ts", "src/**/*.ts", "src/**/*.tsx"],
+  "include": [
+    "alchemy.config.ts",
+    "vite/*.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/env.d.ts"
+  ],
   "references": [{ "path": "../../alchemy/tsconfig.json" }]
 }

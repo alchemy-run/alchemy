@@ -2,6 +2,7 @@ import { $, alchemize } from "alchemy";
 import {
   Bucket,
   DurableObjectNamespace,
+  KVNamespace,
   StaticSite,
   Worker,
 } from "alchemy/cloudflare";
@@ -13,18 +14,23 @@ const counter = new DurableObjectNamespace("COUNTER", {
   sqlite: true,
 });
 
+const authStore = new KVNamespace("AUTH_STORE", {
+  title: "alchemy-example-auth-store",
+});
+
 // Create an R2 bucket
 const storage = new Bucket("storage", {
   name: "alchemy-example-storage",
   allowPublicAccess: false,
 });
 
-const api = new Worker("api", {
+export const api = new Worker("api", {
   name: "alchemy-example-vite-api",
   entrypoint: "./src/index.ts",
   bindings: {
     COUNTER: counter,
     STORAGE: storage, // Bind the R2 bucket to the worker
+    AUTH_STORE: authStore,
   },
 });
 
