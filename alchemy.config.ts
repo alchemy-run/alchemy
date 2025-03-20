@@ -1,5 +1,3 @@
-import "dotenv/config";
-
 import { alchemize, secret } from "./alchemy/src";
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";

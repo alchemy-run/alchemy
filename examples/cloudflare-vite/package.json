@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "deploy": "bun run alchemy.config.ts",
+    "deploy": "bun run --env-file .env alchemy.config.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },

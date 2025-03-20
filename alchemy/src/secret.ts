@@ -4,15 +4,23 @@ import { type Output, isOutput } from "./output";
 
 const passphraseContext = new AsyncLocalStorage<string>();
 
-export function secret<S extends Input<string>>(
+export function secret<S extends Input<string> | undefined>(
   unencrypted: S,
-): S extends Output<string> ? Output<Secret> : Secret {
+): S extends undefined
+  ? never
+  : S extends Output<string>
+    ? Output<Secret>
+    : Secret {
+  if (unencrypted === undefined) {
+    throw new Error("Secret cannot be undefined");
+  }
   return (
     isOutput(unencrypted) ? unencrypted.apply(secret) : new Secret(unencrypted)
   ) as any;
 }
 
 export class Secret {
+  public readonly type = "secret";
   constructor(readonly unencrypted: string) {}
 }
 

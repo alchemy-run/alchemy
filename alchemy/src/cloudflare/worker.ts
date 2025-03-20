@@ -4,6 +4,7 @@ import { Bundle, type BundleProps } from "../esbuild";
 import type { Input } from "../input";
 import type { Resolved } from "../output";
 import { type Context, Resource } from "../resource";
+import { Secret } from "../secret";
 import { withExponentialBackoff } from "../utils/retry";
 import { type CloudflareApi, createCloudflareApi } from "./api";
 import type { Bindings, WorkerBindingSpec } from "./bindings";
@@ -455,6 +456,12 @@ async function prepareWorkerMetadata(
         type: "r2_bucket",
         name: bindingName,
         bucket_name: binding.name || binding.id,
+      });
+    } else if (binding instanceof Secret) {
+      meta.bindings.push({
+        type: "secret_text",
+        name: bindingName,
+        text: binding.unencrypted,
       });
     } else {
       // @ts-expect-error - we should never reach here

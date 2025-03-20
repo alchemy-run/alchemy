@@ -1,4 +1,4 @@
-import { $, alchemize } from "alchemy";
+import { $, alchemize, secret } from "alchemy";
 import {
   DurableObjectNamespace,
   KVNamespace,
@@ -6,8 +6,6 @@ import {
   StaticSite,
   Worker,
 } from "alchemy/cloudflare";
-
-import "dotenv/config";
 
 const counter = new DurableObjectNamespace("COUNTER", {
   className: "Counter",
@@ -31,6 +29,8 @@ export const api = new Worker("api", {
     COUNTER: counter,
     STORAGE: storage, // Bind the R2 bucket to the worker
     AUTH_STORE: authStore,
+    GITHUB_CLIENT_ID: secret(process.env.GITHUB_CLIENT_ID),
+    GITHUB_CLIENT_SECRET: secret(process.env.GITHUB_CLIENT_SECRET),
   },
 });
 

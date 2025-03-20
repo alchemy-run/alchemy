@@ -3,6 +3,7 @@
  * Based on Cloudflare API documentation:
  * https://developers.cloudflare.com/api/resources/workers/subresources/scripts/methods/update/
  */
+import type { Secret } from "../secret";
 import type { R2Bucket } from "./bucket";
 import type { DurableObjectNamespace } from "./durable-object-namespace";
 import type { KVNamespace } from "./kv-namespace";
@@ -20,6 +21,7 @@ export type Binding =
   | KVNamespace
   | Worker
   | R2Bucket
+  | Secret
   | string;
 
 /**
