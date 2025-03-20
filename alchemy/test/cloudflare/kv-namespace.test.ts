@@ -102,7 +102,35 @@ describe("KV Namespace Resource", () => {
     key: string,
     expectedValue: string,
   ): Promise<void> {
-    const value = await getKVValue(namespaceId, key);
-    expect(value).toEqual(expectedValue);
+    const maxAttempts = 6; // Total attempts: 1 initial + 5 retries
+    const maxWaitTime = 60000; // 60 seconds in milliseconds
+    let attempt = 0;
+    let lastError;
+
+    while (attempt < maxAttempts) {
+      try {
+        const value = await getKVValue(namespaceId, key);
+        expect(value).toEqual(expectedValue);
+        return; // Success, exit the function
+      } catch (error) {
+        lastError = error;
+        attempt++;
+
+        if (attempt >= maxAttempts) break;
+
+        // Calculate exponential backoff time (2^attempt * 1000ms), but cap at maxWaitTime
+        const backoffTime = Math.min(
+          Math.pow(2, attempt) * 1000,
+          maxWaitTime / maxAttempts,
+        );
+        console.log(
+          `KV value verification failed, retrying in ${backoffTime}ms (attempt ${attempt}/${maxAttempts - 1})...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, backoffTime));
+      }
+    }
+
+    // If we've exhausted all attempts, throw the last error
+    throw lastError;
   }
 });

@@ -144,8 +144,8 @@ export class Worker<B extends Bindings = Bindings> extends Resource(
   public declare readonly Env: {
     [bindingName in keyof B]: Bound<B[bindingName]>;
   };
-  constructor(id: string, input: Input<WorkerProps<B>>) {
-    super(id, input as any);
+  constructor(id: string, input: Input<WorkerProps<B>>, ...inputs: any[]) {
+    super(id, input as any, ...inputs);
   }
 }
 
