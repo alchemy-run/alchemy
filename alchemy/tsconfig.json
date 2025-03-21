@@ -1,11 +1,12 @@
 {
+  "extends": "../tsconfig.base.json",
   "include": ["src/**/*"],
   "compilerOptions": {
     "composite": true,
     "types": ["@cloudflare/workers-types", "@types/node"],
     "rootDir": "./src",
     "outDir": "./lib",
-    "noEmit": false,
+    "noEmit": true,
     // Enable latest features
     "lib": ["ESNext", "DOM"],
     "target": "ESNext",
