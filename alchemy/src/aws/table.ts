@@ -8,11 +8,10 @@ import {
   ResourceInUseException,
   ResourceNotFoundException,
 } from "@aws-sdk/client-dynamodb";
-import { destroyed } from "../destroy";
+import type { Context } from "../context";
 import { ignore } from "../error";
-import type { Input } from "../input";
 import { output } from "../output";
-import { type Context, Resource } from "../resource";
+import { Resource } from "../resource";
 import { withExponentialBackoff } from "../utils/retry";
 
 export interface TableProps {
@@ -40,8 +39,8 @@ export interface Table extends Resource<"dynamo::Table">, TableProps {
 
 export const Table = Resource(
   "dynamo::Table",
-  function (this: Context<Table> | void, id: string, props: Input<TableProps>) {
-    return output(id, props, async (props): Promise<Table> => {
+  function (this: Context<Table> | void, id: string, props: TableProps) {
+    return output(id, async (): Promise<Table> => {
       const client = new DynamoDBClient({});
 
       if (this!.event === "delete") {
@@ -94,7 +93,7 @@ export const Table = Resource(
           );
         }
 
-        return destroyed();
+        return this!.destroy();
       } else {
         // Setup for table creation
         const attributeDefinitions = [
@@ -221,7 +220,7 @@ export const Table = Resource(
           arn: tableDescription!.TableArn!,
           streamArn: tableDescription!.LatestStreamArn,
           tableId: tableDescription!.TableId!,
-        };
+        } as Table;
       }
     });
   },

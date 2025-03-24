@@ -205,7 +205,7 @@ export const {{ResourceName}} = Resource(
   "{{service-name}}::{{ResourceName}}",
   async function(this: Context<{{ResourceName}}> | void, id: string, props: {{ResourceName}}Props) {
     // IMPORTANT: We must use the output function to handle the resource lifecycle
-    return output(id, props, async (props) => {
+    return output(id, async () => {
       // Create API client
       const api = new {{ServiceName}}Api();
 
@@ -289,7 +289,7 @@ The `output()` function is required to properly handle the resource lifecycle. I
 
 The implementation should return the resource data for create/update operations, or call `destroyed()` for delete operations.
 
-Do NOT return a direct value from the Resource function - always use `return output(id, props, async (props) => { ... })` to wrap your implementation.
+Do NOT return a direct value from the Resource function - always use `return output(id, async () => { ... })` to wrap your implementation.
 
 ## Step 5: Export from Service Index
 

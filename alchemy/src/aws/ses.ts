@@ -19,10 +19,10 @@ import {
   type SuppressionOptions,
   type TrackingOptions,
 } from "@aws-sdk/client-sesv2";
-import { destroyed } from "../destroy";
+import type { Context } from "../context";
 import { ignore } from "../error";
 import { output } from "../output";
-import { type Context, Resource } from "../resource";
+import { Resource } from "../resource";
 
 /**
  * Properties for configuring AWS SES resources
@@ -110,7 +110,7 @@ export interface SES extends Resource<"aws::SES">, SESProps {
 export const SES = Resource(
   "aws::SES",
   async function (this: Context<SES> | void, id: string, props: SESProps) {
-    return output(id, props, async (props): Promise<SES> => {
+    return output(id, async (): Promise<SES> => {
       // Create SES client
       const client = new SESv2Client({});
 
@@ -145,7 +145,7 @@ export const SES = Resource(
         }
 
         // Return empty output for delete
-        return destroyed();
+        return this!.destroy();
       }
 
       // Created resources

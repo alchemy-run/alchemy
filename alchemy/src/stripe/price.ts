@@ -1,7 +1,6 @@
 import Stripe from "stripe";
-import type { Input } from "../input";
+import type { Context } from "../context";
 import { output } from "../output";
-import type { Context } from "../resource";
 import { Resource } from "../resource";
 
 /**
@@ -129,8 +128,8 @@ export interface Price extends PriceProps {
 
 export const Price = Resource(
   "stripe::Price",
-  function (this: Context<Price> | void, id: string, props: Input<PriceProps>) {
-    return output(id, props, async (props) => {
+  function (this: Context<Price> | void, id: string, props: PriceProps) {
+    return output(id, async () => {
       // Get Stripe API key from context or environment
       const apiKey = process.env.STRIPE_API_KEY;
       if (!apiKey) {

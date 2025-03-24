@@ -1,21 +1,17 @@
 import {
-  AttachRolePolicyCommand,
   CreatePolicyCommand,
   CreatePolicyVersionCommand,
   DeletePolicyCommand,
   DeletePolicyVersionCommand,
-  DetachRolePolicyCommand,
   GetPolicyCommand,
   GetPolicyVersionCommand,
   IAMClient,
   ListPolicyVersionsCommand,
   NoSuchEntityException,
 } from "@aws-sdk/client-iam";
-import { destroyed } from "../destroy";
-import { ignore } from "../error";
-import type { Input } from "../input";
+import type { Context } from "../context";
 import { output } from "../output";
-import { type Context, Resource } from "../resource";
+import { Resource } from "../resource";
 
 // Type-safe policy document types
 export type Effect = "Allow" | "Deny";
@@ -61,9 +57,9 @@ export const Policy = Resource(
   async function (
     this: Context<Policy> | void,
     id: string,
-    props: Input<PolicyProps>,
+    props: PolicyProps,
   ) {
-    return output(id, props, async (props) => {
+    return output(id, async () => {
       const client = new IAMClient({});
       const policyArn = `arn:aws:iam::${process.env.AWS_ACCOUNT_ID}:policy${props.path || "/"}${props.policyName}`;
 
@@ -214,53 +210,6 @@ export const Policy = Resource(
           throw error;
         }
       }
-    });
-  },
-);
-
-// PolicyAttachment resource
-export interface PolicyAttachmentProps {
-  policyArn: string;
-  roleName: string;
-}
-
-export interface PolicyAttachment
-  extends Resource<"iam::PolicyAttachment">,
-    PolicyAttachmentProps {}
-
-export const PolicyAttachment = Resource(
-  "iam::PolicyAttachment",
-  async function (
-    this: Context<PolicyAttachment> | void,
-    id: string,
-    props: Input<PolicyAttachmentProps>,
-  ) {
-    return output(id, props, async (props): Promise<PolicyAttachment> => {
-      const client = new IAMClient({});
-
-      if (this!.event === "delete") {
-        await ignore(NoSuchEntityException.name, () =>
-          client.send(
-            new DetachRolePolicyCommand({
-              PolicyArn: props.policyArn,
-              RoleName: props.roleName,
-            }),
-          ),
-        );
-        return destroyed();
-      } else {
-        await client.send(
-          new AttachRolePolicyCommand({
-            PolicyArn: props.policyArn,
-            RoleName: props.roleName,
-          }),
-        );
-      }
-
-      return {
-        kind: "iam::PolicyAttachment",
-        ...props,
-      };
     });
   },
 );

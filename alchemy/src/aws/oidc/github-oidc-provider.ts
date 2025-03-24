@@ -1,4 +1,3 @@
-import type { Input } from "../../input";
 import { OIDCProvider, type OIDCProviderProps } from "./oidc-provider";
 
 /**
@@ -16,7 +15,7 @@ export interface GitHubOIDCProviderProps
 
 export const GitHubOIDCProvider = async (
   id: string,
-  props: Input<GitHubOIDCProviderProps>,
+  props: GitHubOIDCProviderProps,
 ) => {
   return OIDCProvider(id, {
     owner: props.owner,

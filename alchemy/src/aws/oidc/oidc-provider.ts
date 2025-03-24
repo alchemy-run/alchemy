@@ -7,8 +7,6 @@ import {
   type Tag,
   UpdateAssumeRolePolicyCommand,
 } from "@aws-sdk/client-iam";
-import { destroyed } from "../../destroy";
-import type { Input } from "../../input";
 import { output } from "../../output";
 import { type Context, Resource } from "../../resource";
 import { getAccountId } from "../account-id";
@@ -91,9 +89,9 @@ export const OIDCProvider = Resource(
   async function (
     this: Context<OIDCProvider> | void,
     id: string,
-    props: Input<OIDCProviderProps>,
+    props: OIDCProviderProps,
   ) {
-    return output(id, props, async (props): Promise<OIDCProvider> => {
+    return output(id, async (): Promise<OIDCProvider> => {
       // Initialize AWS SDK client
       const client = new IAMClient({
         region: props.region,
@@ -147,7 +145,7 @@ export const OIDCProvider = Resource(
             console.error("Error during cleanup:", error);
           }
         }
-        return destroyed();
+        return this!.destroy();
       }
 
       try {

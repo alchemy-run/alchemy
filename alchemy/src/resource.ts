@@ -1,8 +1,8 @@
 import { alchemize } from "./alchemize";
 import { type ApplyOptions, apply } from "./apply";
-import type { DestroyOptions } from "./destroy";
+import type { Context } from "./context";
+import { type DestroyOptions, destroyed } from "./destroy";
 import { defaultStateStore, deletions, providers } from "./global";
-import type { Inputs } from "./input";
 import { type Output, OutputChain } from "./output";
 import { type Scope as IScope, getScope, pushScope } from "./scope";
 import type { State, StateStore } from "./state";
@@ -43,42 +43,6 @@ export interface ProviderOptions {
   alwaysUpdate: boolean;
 }
 
-export interface BaseContext {
-  quiet: boolean;
-  stage: string;
-  resourceID: ResourceID;
-  resourceFQN: ResourceFQN;
-  scope: IScope;
-  get<T>(key: string): Promise<T | undefined>;
-  set<T>(key: string, value: T): Promise<void>;
-  delete<T>(key: string): Promise<T | undefined>;
-  /**
-   * Indicate that this resource is being replaced.
-   * This will cause the resource to be deleted at the end of the stack's CREATE phase.
-   */
-  replace(): void;
-}
-
-export interface CreateContext extends BaseContext {
-  event: "create";
-  output?: undefined;
-}
-
-export interface UpdateContext<Outputs> extends BaseContext {
-  event: "update";
-  output: Outputs;
-}
-
-export interface DeleteContext<Outputs> extends BaseContext {
-  event: "delete";
-  output: Outputs;
-}
-
-export type Context<Outputs> =
-  | CreateContext
-  | UpdateContext<Outputs>
-  | DeleteContext<Outputs>;
-
 export interface Resource<Kind extends string> {
   kind: Kind;
 }
@@ -105,7 +69,7 @@ type Provider<
       stage: string,
       resource: any, // TODO: typed
       deps: Set<ResourceID>,
-      inputs: Inputs<Parameters<F>>,
+      inputs: Parameters<F>,
       stateStore: StateStore,
       options: ApplyOptions,
     ): Promise<Awaited<ReturnType<F>> | void>;
@@ -114,7 +78,7 @@ type Provider<
       scope: IScope | undefined,
       resourceID: ResourceID,
       state: State,
-      inputs: Inputs<Parameters<F>>,
+      inputs: Parameters<F>,
       options: DestroyOptions,
     ): Promise<void>;
   };
@@ -307,6 +271,7 @@ export function Resource<
               return value;
             },
             quiet,
+            destroy: destroyed,
           })(...inputs);
 
           if (result === undefined) {
@@ -390,6 +355,7 @@ export function Resource<
         return value;
       },
       quiet: options.quiet ?? false,
+      destroy: destroyed,
     })(resourceID, ...inputs);
 
     if (!options?.quiet) {

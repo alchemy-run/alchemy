@@ -15,11 +15,10 @@ import {
   UpdateAssumeRolePolicyCommand,
   UpdateRoleCommand,
 } from "@aws-sdk/client-iam";
-import { destroyed } from "../destroy";
+import type { Context } from "../context";
 import { ignore } from "../error";
-import type { Input } from "../input";
 import { output } from "../output";
-import { type Context, Resource } from "../resource";
+import { Resource } from "../resource";
 import type { PolicyDocument } from "./policy";
 
 export interface RoleProps {
@@ -50,9 +49,9 @@ export const Role = Resource(
   function (
     this: Context<Role> | void,
     id: string,
-    props: Input<RoleProps>,
+    props: RoleProps,
   ): Promise<Role> {
-    return output(id, props, async (props): Promise<Role> => {
+    return output(id, async (): Promise<Role> => {
       const client = new IAMClient({});
 
       if (this!.event === "delete") {
@@ -103,7 +102,7 @@ export const Role = Resource(
             }),
           ),
         );
-        return destroyed();
+        return this!.destroy();
       }
 
       const assumeRolePolicyDocument = JSON.stringify(props.assumeRolePolicy);

@@ -2,6 +2,7 @@ export * from "./account-id";
 export * from "./bucket";
 export * from "./function";
 export * from "./policy";
+export * from "./policy-attachment";
 export * from "./queue";
 export * from "./role";
 export * from "./ses";

@@ -1,7 +1,6 @@
-import { destroyed } from "../destroy";
-import type { Input } from "../input";
+import type { Context } from "../context";
 import { type Resolved, output } from "../output";
-import { type Context, Resource } from "../resource";
+import { Resource } from "../resource";
 import { createCloudflareApi } from "./api";
 
 /**
@@ -69,12 +68,8 @@ export interface R2Bucket
 
 export const R2Bucket = Resource(
   "cloudflare::R2Bucket",
-  function (
-    this: Context<R2Bucket> | void,
-    id: string,
-    props: Input<BucketProps>,
-  ) {
-    return output(id, props, async (props) => {
+  function (this: Context<R2Bucket> | void, id: string, props: BucketProps) {
+    return output(id, async () => {
       // Create Cloudflare API client with automatic account discovery
       const api = await createCloudflareApi();
 
@@ -105,7 +100,7 @@ export const R2Bucket = Resource(
         }
 
         // Return void (a deleted bucket has no content)
-        return destroyed();
+        return this!.destroy();
       } else {
         /**
          * Cloudflare R2 bucket API response

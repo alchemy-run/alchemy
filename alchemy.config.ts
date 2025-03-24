@@ -54,13 +54,13 @@ const githubSecrets = {
   STRIPE_API_KEY: process.env.STRIPE_API_KEY,
 };
 
-for (const [name, value] of Object.entries(githubSecrets)) {
-  if (value) {
+await Promise.all(
+  Object.entries(githubSecrets).map(([name, value]) =>
     GitHubSecret(`github-secret-${name}`, {
       owner: "sam-goodwin",
       repository: "alchemy",
       name,
       value: secret(value),
-    });
-  }
-}
+    }),
+  ),
+);

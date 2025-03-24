@@ -10,10 +10,10 @@ import {
   PutBucketTaggingCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import { destroyed } from "../destroy";
+import type { Context } from "../context";
 import { ignore } from "../error";
 import { output } from "../output";
-import { type Context, Resource } from "../resource";
+import { Resource } from "../resource";
 
 export interface BucketProps {
   bucketName: string;
@@ -36,7 +36,7 @@ export interface Bucket extends BucketProps {
 export const Bucket = Resource(
   "s3::Bucket",
   function (this: Context<Bucket> | void, id: string, props: BucketProps) {
-    return output(id, props, async (props) => {
+    return output(id, async () => {
       const client = new S3Client({});
 
       if (this!.event === "delete") {
@@ -47,7 +47,7 @@ export const Bucket = Resource(
             }),
           ),
         );
-        return destroyed();
+        return this!.destroy();
       } else {
         try {
           // Check if bucket exists

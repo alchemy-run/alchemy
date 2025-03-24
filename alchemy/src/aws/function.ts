@@ -12,11 +12,10 @@ import {
 } from "@aws-sdk/client-lambda";
 import fs from "node:fs";
 import path from "node:path";
-import { destroyed } from "../destroy";
+import type { Context } from "../context";
 import { ignore } from "../error";
-import type { Input } from "../input";
 import { output } from "../output";
-import { type Context, Resource } from "../resource";
+import { Resource } from "../resource";
 
 async function resolveRegion(client: LambdaClient): Promise<string> {
   const region = client.config.region;
@@ -79,9 +78,9 @@ export const Function = Resource(
   async function (
     this: Context<Function> | void,
     id: string,
-    props: Input<FunctionProps>,
+    props: FunctionProps,
   ) {
-    return output(id, props, async (props): Promise<Function> => {
+    return output(id, async (): Promise<Function> => {
       const client = new LambdaClient({});
       const region = await resolveRegion(client);
 
@@ -96,11 +95,11 @@ export const Function = Resource(
           ),
         );
 
-        return destroyed();
+        return this!.destroy();
       } else {
         try {
           // Check if function exists
-          const func = await client.send(
+          await client.send(
             new GetFunctionCommand({
               FunctionName: props.functionName,
             }),

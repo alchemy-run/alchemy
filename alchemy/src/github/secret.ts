@@ -1,6 +1,7 @@
 import sodium from "libsodium-wrappers";
+import type { Context } from "../context";
 import { output } from "../output";
-import { type Context, Resource } from "../resource";
+import { Resource } from "../resource";
 import type { Secret } from "../secret";
 import { createGitHubClient, verifyGitHubAuth } from "./client";
 /**
@@ -58,7 +59,7 @@ export const GitHubSecret = Resource(
     id: string,
     props: GitHubSecretProps,
   ): Promise<GitHubSecretOutput | void> {
-    return output(id, props, async (props) => {
+    return output(id, async () => {
       // Create authenticated Octokit client - will automatically handle token resolution
       /// TODO: use fetch
       const octokit = await createGitHubClient({ token: props.token });

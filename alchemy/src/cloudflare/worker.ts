@@ -1,13 +1,13 @@
 import * as fs from "fs/promises";
-import { destroyed } from "../destroy";
+import type { Context } from "../context";
 import { Bundle, type BundleProps } from "../esbuild";
-import type { Input } from "../input";
 import { type Output, type Resolved, output } from "../output";
-import { type Context, Resource } from "../resource";
+import { Resource } from "../resource";
 import { Secret } from "../secret";
 import { withExponentialBackoff } from "../utils/retry";
 import { type CloudflareApi, createCloudflareApi } from "./api";
 import type { Bindings, WorkerBindingSpec } from "./bindings";
+import type { Bound } from "./bound";
 import { isBucket } from "./bucket";
 import type { DurableObjectNamespace } from "./durable-object-namespace";
 import { isDurableObjectNamespace } from "./durable-object-namespace";
@@ -133,6 +133,10 @@ export interface Worker<B extends Bindings = Bindings>
    * The bindings that were created
    */
   bindings: B;
+
+  Env: {
+    [bindingName in keyof B]: Bound<B[bindingName]>;
+  };
 }
 
 export const Worker = Resource(
@@ -143,7 +147,7 @@ export const Worker = Resource(
   function <B extends Bindings>(
     this: Context<Worker<B>> | void,
     id: string,
-    props: Input<WorkerProps<B>>,
+    props: WorkerProps<B>,
   ) {
     // @ts-expect-error - TODO
     return output(id, props, async (props: WorkerProps<B>) => {
@@ -160,7 +164,7 @@ export const Worker = Resource(
 
       if (this!.event === "delete") {
         await deleteWorker(this!, api, workerName);
-        return destroyed();
+        return this!.destroy();
       } else if (this!.event === "create") {
         await assertWorkerDoesNotExist(this!, api, workerName);
       }
@@ -212,6 +216,8 @@ export const Worker = Resource(
         createdAt: now,
         updatedAt: now,
         url: workerUrl,
+        // phantom property
+        Env: undefined!,
       };
 
       return output;

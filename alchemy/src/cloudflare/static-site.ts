@@ -2,11 +2,10 @@ import { exec } from "child_process";
 import { promises as fs } from "fs";
 import path from "path";
 import { promisify } from "util";
-import { destroyed } from "../destroy";
+import type { Context } from "../context";
 import type { BundleProps } from "../esbuild";
-import type { Input } from "../input";
 import { output } from "../output";
-import { type Context, Resource } from "../resource";
+import { Resource } from "../resource";
 import { createCloudflareApi } from "./api";
 import type { Bindings } from "./bindings";
 import { generateAssetManifest } from "./generate-asset-manifest";
@@ -217,13 +216,13 @@ export const StaticSite = Resource(
   function (
     this: Context<StaticSite> | void,
     id: string,
-    props: Input<StaticSiteProps>,
+    props: StaticSiteProps,
   ) {
-    return output(id, props, async (props) => {
+    return output(id, async () => {
       if (this!.event === "delete") {
         // For delete operations, we'll rely on the Worker delete to clean up
         // Return empty output for deleted state
-        return destroyed();
+        return this!.destroy();
       }
 
       // Validate that a name is provided

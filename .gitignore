@@ -181,3 +181,5 @@ alchemy/README.md
 
 lib/
 .test
+
+node_modules

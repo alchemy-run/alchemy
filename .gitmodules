@@ -1,3 +1,0 @@
-[submodule "3p/terraform-provider-aws"]
-	path = 3p/terraform-provider-aws
-	url = git@github.com:hashicorp/terraform-provider-aws.git

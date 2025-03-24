@@ -1,8 +1,6 @@
 import Stripe from "stripe";
-import { destroyed } from "../destroy";
-import type { Input } from "../input";
+import type { Context } from "../context";
 import { output } from "../output";
-import type { Context } from "../resource";
 import { Resource } from "../resource";
 
 export type EnabledEvent = Stripe.WebhookEndpointUpdateParams.EnabledEvent;
@@ -92,9 +90,9 @@ export const WebhookEndpoint = Resource(
   function (
     this: Context<WebhookEndpoint> | void,
     id: string,
-    props: Input<WebhookEndpointProps>,
+    props: WebhookEndpointProps,
   ) {
-    return output(id, props, async (props) => {
+    return output(id, async () => {
       // Get Stripe API key from context or environment
       const apiKey = process.env.STRIPE_API_KEY;
       if (!apiKey) {
@@ -116,7 +114,7 @@ export const WebhookEndpoint = Resource(
         }
 
         // Return a minimal output for deleted state
-        return destroyed();
+        return this!.destroy();
       } else {
         try {
           let webhook: Stripe.WebhookEndpoint;

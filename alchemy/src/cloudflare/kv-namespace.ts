@@ -1,7 +1,6 @@
-import { destroyed } from "../destroy";
-import type { Input } from "../input";
+import type { Context } from "../context";
 import { output } from "../output";
-import { type Context, Resource } from "../resource";
+import { Resource } from "../resource";
 import { withExponentialBackoff } from "../utils/retry";
 import { createCloudflareApi } from "./api";
 
@@ -85,9 +84,9 @@ export const KVNamespace = Resource(
   function (
     this: Context<KVNamespace> | void,
     id: string,
-    props: Input<KVNamespaceProps>,
+    props: KVNamespaceProps,
   ) {
-    return output(id, props, async (props) => {
+    return output(id, async () => {
       // Create Cloudflare API client with automatic account discovery
       const api = await createCloudflareApi();
 
@@ -111,7 +110,7 @@ export const KVNamespace = Resource(
         }
 
         // Return minimal output for deleted state
-        return destroyed();
+        return this!.destroy();
       } else {
         // For create or update operations
         // If this!.event is "update", we expect this!.output to exist

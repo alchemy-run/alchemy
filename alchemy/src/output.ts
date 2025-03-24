@@ -1,5 +1,3 @@
-import type { Bindings } from "./cloudflare";
-import type { Input } from "./input";
 import type { Resource } from "./resource";
 import type { Secret } from "./secret";
 
@@ -13,11 +11,7 @@ export function isOutput<T>(value: any): value is Output<T> {
   );
 }
 
-export function output<T, P>(
-  id: string,
-  props: P,
-  f: (props: Resolved<P>) => Promise<T>,
-): Output<T> {
+export function output<T>(id: string, f: () => Promise<T>): Output<T> {
   // TODO: wrap `f` and evaluate props
   return f as any;
 }
@@ -65,11 +59,6 @@ export class OutputChain<T, U> {
     return new OutputChain(this, fn);
   }
 }
-
-type A = Resolved<Input<Bindings>>;
-declare const a: A;
-
-const b = a;
 
 export type Resolved<O> = O extends Date
   ? Date

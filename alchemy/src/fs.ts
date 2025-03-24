@@ -2,7 +2,6 @@ import fs from "node:fs";
 import { unlink } from "node:fs/promises";
 import path from "node:path";
 import { ignore } from "./error";
-import type { Input } from "./input";
 import { output } from "./output";
 import { type Context, Resource } from "./resource";
 
@@ -11,10 +10,10 @@ export const File = Resource(
   async function (
     this: Context<string> | void,
     id: string,
-    props: Input<{
+    props: {
       path: string;
       content: string;
-    }>,
+    },
   ) {
     return output(id, async () => {
       if (this!.event === "delete") {
@@ -37,7 +36,7 @@ export const Folder = Resource(
   async function (
     this: Context<string> | void,
     id: string,
-    dirPath: Input<string>,
+    dirPath: string,
   ): Promise<{ path: string }> {
     return output(id, async () => {
       if (this!.event === "delete") {
