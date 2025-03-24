@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { apply } from "../../src/apply";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { R2Bucket } from "../../src/cloudflare/bucket";
 import { destroy } from "../../src/destroy";
@@ -33,18 +32,17 @@ describe("R2 Bucket Resource", () => {
   const testId = `${BRANCH_PREFIX.toLowerCase()}-test-bucket`;
 
   test("create, update, and delete bucket", async () => {
-    let bucketOutput;
     // Create a test bucket
-    const bucket = new R2Bucket(testId, {
-      name: testId,
-      locationHint: "wnam", // West North America
-    });
+    let bucket: R2Bucket | undefined = undefined;
 
     try {
+      bucket = await R2Bucket(testId, {
+        name: testId,
+        locationHint: "wnam", // West North America
+      });
       // Apply to create the bucket
-      bucketOutput = await apply(bucket);
-      expect(bucketOutput.id).toEqual(testId);
-      expect(bucketOutput.name).toEqual(testId);
+      expect(bucket.id).toEqual(testId);
+      expect(bucket.name).toEqual(testId);
 
       // Verify bucket was created by querying the API directly
       const api = await createCloudflareApi();
@@ -58,13 +56,12 @@ describe("R2 Bucket Resource", () => {
       expect(responseData.result.name).toEqual(testId);
 
       // Update the bucket to enable public access
-      const updatedBucket = new R2Bucket(testId, {
+      const updatedBucket = await R2Bucket(testId, {
         name: testId,
         allowPublicAccess: true,
       });
 
-      const updateOutput = await apply(updatedBucket);
-      expect(updateOutput.id).toEqual(testId);
+      expect(updatedBucket.id).toEqual(testId);
 
       // Verify public access was enabled
       const publicAccessResponse = await api.get(
@@ -80,7 +77,7 @@ describe("R2 Bucket Resource", () => {
       );
 
       // Verify bucket was deleted
-      if (bucketOutput) {
+      if (bucket) {
         const api = await createCloudflareApi();
         const getDeletedResponse = await api.get(
           `/accounts/${api.accountId}/r2/buckets/${testId}`,
@@ -92,16 +89,15 @@ describe("R2 Bucket Resource", () => {
 
   test("bucket with jurisdiction", async () => {
     const euBucketName = `${testId}-eu`;
-    const euBucket = new R2Bucket(euBucketName, {
+    const euBucket = await R2Bucket(euBucketName, {
       name: euBucketName,
       jurisdiction: "eu",
     });
 
     try {
       // Create a bucket with EU jurisdiction
-      const bucketOutput = await apply(euBucket);
-      expect(bucketOutput.id).toEqual(euBucketName);
-      expect(bucketOutput.jurisdiction).toEqual("eu");
+      expect(euBucket.id).toEqual(euBucketName);
+      expect(euBucket.jurisdiction).toEqual("eu");
 
       // Verify the jurisdiction setting
       const api = await createCloudflareApi();

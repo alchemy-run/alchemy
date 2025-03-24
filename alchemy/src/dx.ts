@@ -1,13 +1,14 @@
-import type { Context, Input } from ".";
+import type { Context } from ".";
 // import type { Bindings } from "./cloudflare/bindings";
 // import type { Bound } from "./cloudflare/bound";
 
-export type Env = Outputs["worker"]["Env"];
+type Export<T extends (...args: any[]) => any> = Awaited<ReturnType<T>>;
 
-export type Outputs = Awaited<ReturnType<typeof alchemize>>;
+export type Env = Outputs["Env"];
+
+export type Outputs = Export<typeof alchemize>;
 
 export default async function alchemize() {
-  // Option 1 - declare the resource
   const kv = await KVNamespace("my-kv", {
     title: "my-kv",
   });
@@ -16,30 +17,29 @@ export default async function alchemize() {
     bindings: {
       AUTH_STORE: kv,
       MY_BINDING: "my-binding",
+      ID: kv.namespaceId,
     },
   });
 
-  console.log(worker.url);
-
-  return {
-    kv,
-    worker,
-  };
+  return worker;
 }
 
 export type Bindings = {
   [key: string]: any;
 };
 
-type Output<T> = Promise<T> & {
-  [prop in keyof T]: Promise<T[prop]>;
-};
-
 function output<T>(t: () => Promise<T>): Output<T> {
   return t as any;
 }
 
-// helper for semantic syntax highlighting (color as a type/class instead of function/value)
+type Output<T> = Promise<T> & {
+  [prop in keyof T]: Promise<T[prop]>;
+};
+
+type Input<T> = {
+  [key in keyof T]: T[key] | Output<T[key]>;
+};
+
 type IsClass = {
   new (_: never): never;
 };
@@ -47,16 +47,16 @@ type IsClass = {
 type Resource<
   Type extends string,
   F extends (this: Context<any>, id: string, props: Input<any>) => any,
-> = F &
-  IsClass & {
-    type: Type;
-  };
+> = F & {
+  type: Type;
+  new (...params: Parameters<F>): ReturnType<F>;
+};
 
 export function Resource<
   const Type extends string,
-  F extends (this: Context<any>, id: string, props: Input<any>) => any,
+  F extends (this: Context<any>, id: string, props: any) => any,
 >(type: Type, fn: F) {
-  const resource = function (id: string, input: Input<any>) {
+  const resource = function (id: string, input: any) {
     return fn.bind(this)(id, input);
   } as Resource<Type, F>;
   resource.type = type;
@@ -76,9 +76,9 @@ export const Worker = Resource(
   function <const B extends Bindings>(
     this: Context<Worker<B>> | void,
     id: string,
-    input: {
+    input: Input<{
       bindings: B;
-    },
+    }>,
   ): Output<Worker<B>> {
     return output(async () => {
       if (this!.event === "delete") {
@@ -103,9 +103,9 @@ export const KVNamespace = Resource(
   function (
     this: Context<KVNamespace> | void,
     id: string,
-    input: {
+    input: Input<{
       title: string;
-    },
+    }>,
   ): Output<KVNamespace> {
     return output(async () => {
       if (this!.event === "delete") {
@@ -113,7 +113,7 @@ export const KVNamespace = Resource(
       }
 
       return {
-        title: input.title,
+        title: await input.title,
         namespaceId: id,
       };
     });

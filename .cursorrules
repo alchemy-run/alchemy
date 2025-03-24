@@ -60,9 +60,11 @@ export interface {{ResourceName}}Props {
 
 /**
  * Output returned after {{ResourceName}} creation/update
- * Extends the Props interface with additional fields returned by the service
+ * IMPORTANT: The interface name MUST match the exported resource name
+ * For example, if your resource is exported as "Product", this interface
+ * should be named "Product" (not "ProductOutput")
  */
-export interface {{ResourceName}}Output extends {{ResourceName}}Props {
+export interface {{ResourceName}} extends {{ResourceName}}Props {
   /**
    * The ID of the resource
    */
@@ -194,87 +196,100 @@ export class {{ServiceName}}Api {
 }
 ```
 
-## Step 4: Implement the Resource Class
+## Step 4: Implement the Resource
 
-Create the resource class that extends the Resource type, using explicit path construction and HTTP status code checking:
+Create the resource with the non-class pattern using `this` with Context type. The exported const MUST match the output interface name:
 
 ```typescript
-export class {{ResourceName}} extends Resource(
+export const {{ResourceName}} = Resource(
   "{{service-name}}::{{ResourceName}}",
-  async (ctx: Context<{{ResourceName}}Output>, props: {{ResourceName}}Props) => {
-    // Create API client
-    const api = new {{ServiceName}}Api();
+  async function(this: Context<{{ResourceName}}> | void, id: string, props: {{ResourceName}}Props) {
+    // IMPORTANT: We must use the output function to handle the resource lifecycle
+    return output(id, props, async (props) => {
+      // Create API client
+      const api = new {{ServiceName}}Api();
 
-    // Resource ID defaults to resource name if applicable
-    const resourceId = props.id || ctx.resourceID;
+      // Resource ID defaults to resource name if applicable
+      const resourceId = props.id || this!.resourceID;
 
-    if (ctx.event === "delete") {
-      if (ctx.output?.id) {
-        // Delete resource
-        const deleteResponse = await api.delete(`/accounts/${api.accountId}/resources/${ctx.output.id}`);
+      if (this!.event === "delete") {
+        if (this!.output?.id) {
+          // Delete resource
+          const deleteResponse = await api.delete(`/accounts/${api.accountId}/resources/${this!.output.id}`);
 
-        // Check response status directly instead of relying on exceptions
-        if (!deleteResponse.ok && deleteResponse.status !== 404) {
-          const errorData = await deleteResponse.json().catch(() => ({ message: deleteResponse.statusText }));
-          console.error("Error deleting resource:", errorData.message || deleteResponse.statusText);
+          // Check response status directly instead of relying on exceptions
+          if (!deleteResponse.ok && deleteResponse.status !== 404) {
+            const errorData = await deleteResponse.json().catch(() => ({ message: deleteResponse.statusText }));
+            console.error("Error deleting resource:", errorData.message || deleteResponse.statusText);
+          }
+        }
+
+        // Return destroyed (never type - indicates early termination)
+        return destroyed();
+      } else {
+        try {
+          let response;
+
+          if (this!.event === "update" && this!.output?.id) {
+            // Update existing resource
+            response = await api.put(
+              `/accounts/${api.accountId}/resources/${this!.output.id}`,
+              {
+                // Map props to API-expected format
+                name: props.name,
+                description: props.description
+              }
+            );
+          } else {
+            // Create new resource
+            response = await api.post(
+              `/accounts/${api.accountId}/resources`,
+              {
+                // Map props to API-expected format
+                name: props.name,
+                description: props.description
+              }
+            );
+          }
+
+          // Check response status directly
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: response.statusText }));
+            throw new Error(`API error: ${errorData.message || response.statusText}`);
+          }
+
+          // Parse response JSON
+          const data = await response.json();
+          const resource = data.result || data;
+
+          // Map API response to our output format
+          return {
+            id: resource.id,
+            name: resource.name,
+            description: resource.description,
+            createdAt: resource.created_at || Date.now()
+          };
+        } catch (error) {
+          console.error("Error creating/updating resource:", error);
+          throw error;
         }
       }
-
-      // Return void (a deleted resource has no content)
-      return;
-    } else {
-      try {
-        let response;
-
-        if (ctx.event === "update" && ctx.output?.id) {
-          // Update existing resource
-          response = await api.put(
-            `/accounts/${api.accountId}/resources/${ctx.output.id}`,
-            {
-              // Map props to API-expected format
-              name: props.name,
-              description: props.description
-            }
-          );
-        } else {
-          // Create new resource
-          response = await api.post(
-            `/accounts/${api.accountId}/resources`,
-            {
-              // Map props to API-expected format
-              name: props.name,
-              description: props.description
-            }
-          );
-        }
-
-        // Check response status directly
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ message: response.statusText }));
-          throw new Error(`API error: ${errorData.message || response.statusText}`);
-        }
-
-        // Parse response JSON
-        const data = await response.json();
-        const resource = data.result || data;
-
-        // Map API response to our output format
-        const output: {{ResourceName}}Output = {
-          id: resource.id,
-          name: resource.name,
-          description: resource.description,
-          createdAt: resource.created_at || Date.now()
-        };
-
-        return output;
-      } catch (error) {
-        console.error("Error creating/updating resource:", error);
-        throw error;
-      }
-    }
+    });
   },
-) {}
+);
 ```
+
+### Important Note on `output()`
+
+The `output()` function is required to properly handle the resource lifecycle. It takes:
+
+1. The resource ID (string)
+2. The resource props (same props object passed to the Resource function)
+3. An async function that receives the props and contains the implementation logic
+
+The implementation should return the resource data for create/update operations, or call `destroyed()` for delete operations.
+
+Do NOT return a direct value from the Resource function - always use `return output(id, props, async (props) => { ... })` to wrap your implementation.
 
 ## Step 5: Export from Service Index
 
@@ -323,19 +338,15 @@ describe("{{ResourceName}} Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-resource`;
 
   test("create, update, and delete resource", async () => {
-    if (!apiKey || !accountId) {
-      return; // Skip if credentials aren't available
-    }
-
     // Create a test resource
-    const resource = new {{ResourceName}}(testId, {
+    const resource = await {{ResourceName}}(testId, {
       name: `Test Resource ${testId}`,
       description: "This is a test resource"
     });
 
     try {
       // Apply to create the resource
-      const output = await apply(resource);
+      const output = resource;
       expect(output.id).toBeTruthy();
       expect(output.name).toEqual(`Test Resource ${testId}`);
 
@@ -348,12 +359,10 @@ describe("{{ResourceName}} Resource", () => {
       expect(responseData.result.name).toEqual(`Test Resource ${testId}`);
 
       // Update the resource
-      const updatedResource = new {{ResourceName}}(testId, {
+      const updateOutput = await {{ResourceName}}(testId, {
         name: `Updated Resource ${testId}`,
         description: "This is an updated test resource"
       });
-
-      const updateOutput = await apply(updatedResource);
       expect(updateOutput.id).toEqual(output.id);
 
       // Verify resource was updated
@@ -362,9 +371,9 @@ describe("{{ResourceName}} Resource", () => {
       expect(updatedData.result.name).toEqual(`Updated Resource ${testId}`);
     } finally {
       // Always clean up, even if test assertions fail
-      await destroy(resource).catch(e =>
-        console.error("Error cleaning up resource:", e)
-      );
+      await destroy(resource).catch(e => {
+        console.error("Error cleaning up resource:", e);
+      });
 
       // Verify resource was deleted (this runs after destroy)
       const api = new {{ServiceName}}Api();
@@ -376,6 +385,26 @@ describe("{{ResourceName}} Resource", () => {
 ```
 
 > **Important:** Always use try-finally blocks to ensure resources are properly cleaned up, even if test assertions fail. For tests with multiple resources, clean up in reverse order of creation (most recently created resources first).
+
+## Resource Naming Convention
+
+When implementing resources, follow this important naming convention:
+
+1. The output interface must have the same name as the exported resource. For example:
+
+   - If your resource constant is `export const Product = Resource(...)`,
+   - Then your output interface must be named `export interface Product extends ProductProps {...}`
+   - NOT `export interface ProductOutput extends ProductProps {...}`
+
+2. The name of the interface and the exported constant create a pseudo-class construct:
+
+   ```typescript
+   // This naming pattern allows the resource to work correctly with type system
+   export interface Product extends ProductProps {...}
+   export const Product = Resource(...);
+   ```
+
+3. Always use this pattern for consistency across resources.
 
 ## API Design Principles
 

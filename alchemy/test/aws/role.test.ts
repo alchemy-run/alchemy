@@ -5,7 +5,6 @@ import {
   NoSuchEntityException,
 } from "@aws-sdk/client-iam";
 import { describe, expect, test } from "bun:test";
-import { apply } from "../../src/apply";
 import type { PolicyDocument } from "../../src/aws/policy";
 import { Role, type RoleProps } from "../../src/aws/role";
 import { destroy } from "../../src/destroy";
@@ -45,7 +44,7 @@ describe("AWS Resources", () => {
     };
 
     test("create role", async () => {
-      const role = new Role(`${BRANCH_PREFIX}-test-create-role`, {
+      const role = await Role(`${BRANCH_PREFIX}-test-create-role`, {
         roleName: `${BRANCH_PREFIX}-test-create-role`,
         assumeRolePolicy,
         description: "Test role for IAC",
@@ -61,16 +60,15 @@ describe("AWS Resources", () => {
       });
 
       try {
-        const output = await apply(role);
-        expect(output.id).toBe(`${BRANCH_PREFIX}-test-create-role`);
-        expect(output.arn).toMatch(
+        expect(role.id).toBe(`${BRANCH_PREFIX}-test-create-role`);
+        expect(role.arn).toMatch(
           new RegExp(
             `^arn:aws:iam::\\d+:role/${BRANCH_PREFIX.replace(/\//g, "\\/")}-test-create-role$`,
           ),
         );
-        expect(output.uniqueId).toBeTruthy();
-        expect(output.roleId).toBeTruthy();
-        expect(output.createDate).toBeInstanceOf(Date);
+        expect(role.uniqueId).toBeTruthy();
+        expect(role.roleId).toBeTruthy();
+        expect(role.createDate).toBeInstanceOf(Date);
       } finally {
         await destroy(role);
         await assertRoleNotExists(`${BRANCH_PREFIX}-test-create-role`);
@@ -107,19 +105,18 @@ describe("AWS Resources", () => {
           },
         ],
       };
-      let role = new Role(`${BRANCH_PREFIX}-test-update-role`, roleProps);
+      let role = await Role(`${BRANCH_PREFIX}-test-update-role`, roleProps);
 
       try {
-        let output = await apply(role);
-        expect(output.id).toBe(`${BRANCH_PREFIX}-test-update-role`);
-        expect(output.description).toBe("Updated test role for IAC");
-        expect(output.maxSessionDuration).toBe(7200);
-        expect(output.tags).toEqual({
+        expect(role.id).toBe(`${BRANCH_PREFIX}-test-update-role`);
+        expect(role.description).toBe("Updated test role for IAC");
+        expect(role.maxSessionDuration).toBe(7200);
+        expect(role.tags).toEqual({
           Environment: "test",
           Updated: "true",
         });
 
-        role = new Role(`${BRANCH_PREFIX}-test-update-role`, {
+        role = await Role(`${BRANCH_PREFIX}-test-update-role`, {
           ...roleProps,
           description: "Updated test role for IAC",
           policies: [
@@ -131,10 +128,8 @@ describe("AWS Resources", () => {
           ],
         });
 
-        output = await apply(role);
-
-        expect(output.description).toBe("Updated test role for IAC");
-        expect(output.policies).toEqual([
+        expect(role.description).toBe("Updated test role for IAC");
+        expect(role.policies).toEqual([
           {
             policyName: "logs",
             policyDocument: inlinePolicy,
@@ -152,20 +147,19 @@ describe("AWS Resources", () => {
       const roleName = `${BRANCH_PREFIX}-test-managed-policy-role`;
 
       // Create an initial role
-      const role = new Role(roleId, {
-        roleName,
-        assumeRolePolicy,
-        description: "Test role with managed policies",
-        tags: {
-          Environment: "test",
-        },
-        managedPolicyArns: [managedPolicyArn],
-      });
-
+      let role;
       try {
-        const output = await apply(role);
-        expect(output.id).toBe(roleName);
-        expect(output.arn).toMatch(
+        role = await Role(roleId, {
+          roleName,
+          assumeRolePolicy,
+          description: "Test role with managed policies",
+          tags: {
+            Environment: "test",
+          },
+          managedPolicyArns: [managedPolicyArn],
+        });
+        expect(role.id).toBe(roleName);
+        expect(role.arn).toMatch(
           new RegExp(
             `^arn:aws:iam::\\d+:role/${BRANCH_PREFIX.replace(/\//g, "\\/")}-test-managed-policy-role$`,
           ),
@@ -191,18 +185,18 @@ describe("AWS Resources", () => {
 
       // Now test updating with a different policy
       const updatedPolicyArn = "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess";
-      const updatedRole = new Role(roleId, {
-        roleName,
-        assumeRolePolicy,
-        description: "Test role with updated managed policies",
-        tags: {
-          Environment: "test",
-        },
-        managedPolicyArns: [updatedPolicyArn],
-      });
+      let updatedRole;
 
       try {
-        const updatedOutput = await apply(updatedRole);
+        updatedRole = await Role(roleId, {
+          roleName,
+          assumeRolePolicy,
+          description: "Test role with updated managed policies",
+          tags: {
+            Environment: "test",
+          },
+          managedPolicyArns: [updatedPolicyArn],
+        });
 
         // Verify the updated managed policy is attached
         const updatedPoliciesResponse = await iam.send(
@@ -228,20 +222,20 @@ describe("AWS Resources", () => {
       const managedPolicyArn = "arn:aws:iam::aws:policy/ReadOnlyAccess";
       const roleName = `${BRANCH_PREFIX}-test-remove-policies-role`;
 
+      let role;
       // Create role with managed policy
-      const role = new Role(`${BRANCH_PREFIX}-test-remove-policies`, {
-        roleName,
-        assumeRolePolicy,
-        description: "Test role with managed policies",
-        tags: {
-          Environment: "test",
-        },
-        managedPolicyArns: [managedPolicyArn],
-      });
-
       try {
-        const output = await apply(role);
-        expect(output.id).toBe(roleName);
+        role = await Role(`${BRANCH_PREFIX}-test-remove-policies`, {
+          roleName,
+          assumeRolePolicy,
+          description: "Test role with managed policies",
+          tags: {
+            Environment: "test",
+          },
+          managedPolicyArns: [managedPolicyArn],
+        });
+
+        expect(role.id).toBe(roleName);
 
         // Verify managed policy is attached
         let attachedPoliciesResponse = await iam.send(
@@ -257,7 +251,7 @@ describe("AWS Resources", () => {
         );
 
         // Update role WITHOUT specifying managedPolicyArns (undefined)
-        const updatedRole = new Role(`${BRANCH_PREFIX}-test-remove-policies`, {
+        role = await Role(`${BRANCH_PREFIX}-test-remove-policies`, {
           roleName,
           assumeRolePolicy,
           description: "Test role with managed policies removed",
@@ -267,25 +261,19 @@ describe("AWS Resources", () => {
           // No managedPolicyArns specified
         });
 
-        try {
-          await apply(updatedRole);
+        // Verify managed policies have been removed
+        attachedPoliciesResponse = await iam.send(
+          new ListAttachedRolePoliciesCommand({
+            RoleName: roleName,
+          }),
+        );
 
-          // Verify managed policies have been removed
-          attachedPoliciesResponse = await iam.send(
-            new ListAttachedRolePoliciesCommand({
-              RoleName: roleName,
-            }),
-          );
-
-          expect(attachedPoliciesResponse.AttachedPolicies).toBeTruthy();
-          expect(attachedPoliciesResponse.AttachedPolicies?.length).toBe(0);
-        } finally {
-          await destroy(updatedRole);
+        expect(attachedPoliciesResponse.AttachedPolicies).toBeTruthy();
+        expect(attachedPoliciesResponse.AttachedPolicies?.length).toBe(0);
+      } finally {
+        if (role) {
+          await destroy(role);
         }
-      } catch (error) {
-        // Make sure to clean up even if the test fails
-        await destroy(role);
-        throw error;
       }
 
       await assertRoleNotExists(roleName);

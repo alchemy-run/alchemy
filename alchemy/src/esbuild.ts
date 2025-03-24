@@ -2,7 +2,7 @@ import * as esbuild from "esbuild";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { Resource } from "./resource";
+import { type Context, Resource } from "./resource";
 
 export interface BundleProps {
   /**
@@ -47,7 +47,7 @@ export interface BundleProps {
   options?: Partial<esbuild.BuildOptions>;
 }
 
-export interface BundleOutput {
+export interface Bundle {
   /**
    * Path to the bundled file
    */
@@ -58,19 +58,23 @@ export interface BundleOutput {
   hash: string;
 }
 
-export class Bundle extends Resource(
+export const Bundle = Resource(
   "esbuild::Bundle",
   {
     alwaysUpdate: true,
   },
-  async (ctx, props: BundleProps): Promise<BundleOutput> => {
+  async function (
+    this: Context<Bundle> | void,
+    id: string,
+    props: BundleProps,
+  ): Promise<Bundle> {
     // Determine output path
     const outputPath = getOutputPath(props);
 
     // Ensure output directory exists
     await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
 
-    if (ctx.event === "delete") {
+    if (this!.event === "delete") {
       await fs.promises.unlink(outputPath).catch(() => {});
       // Also clean up sourcemap if it exists
       await fs.promises.unlink(outputPath + ".map").catch(() => {});
@@ -83,8 +87,8 @@ export class Bundle extends Resource(
     const hash = crypto.createHash("sha256").update(contents).digest("hex");
 
     // Store metadata in context
-    await ctx.set("metafile", result.metafile);
-    await ctx.set("hash", hash);
+    await this!.set("metafile", result.metafile);
+    await this!.set("hash", hash);
 
     // Return output info
     return {
@@ -92,23 +96,7 @@ export class Bundle extends Resource(
       hash,
     };
   },
-) {
-  /**
-   * Get the metafile from the last build
-   */
-  public async getMetafile(ctx: {
-    get<T>(key: string): Promise<T | undefined>;
-  }) {
-    return ctx.get<esbuild.Metafile>("metafile");
-  }
-
-  /**
-   * Get the hash from the last build
-   */
-  public async getHash(ctx: { get<T>(key: string): Promise<T | undefined> }) {
-    return ctx.get<string>("hash");
-  }
-}
+);
 
 export async function bundle(props: BundleProps) {
   const outputPath = getOutputPath(props);

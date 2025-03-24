@@ -4,7 +4,6 @@ import {
   ResourceNotFoundException,
 } from "@aws-sdk/client-dynamodb";
 import { describe, expect, test } from "bun:test";
-import { apply } from "../../src/apply";
 import { Table } from "../../src/aws/table";
 import { destroy } from "../../src/destroy";
 import { BRANCH_PREFIX } from "../util";
@@ -15,7 +14,7 @@ describe("AWS Resources", () => {
   describe("Table", () => {
     test("create table", async () => {
       const tableName = `${BRANCH_PREFIX}-alchemy-test-create-table`;
-      const table = new Table(tableName, {
+      const table = Table(tableName, {
         tableName,
         partitionKey: {
           name: "id",
@@ -31,7 +30,7 @@ describe("AWS Resources", () => {
       });
 
       try {
-        const output = await apply(table);
+        const output = await table;
         expect(output.id).toBe(tableName);
         expect(output.arn).toMatch(
           new RegExp(`^arn:aws:dynamodb:[a-z0-9-]+:\\d+:table\\/${tableName}$`),

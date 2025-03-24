@@ -1,4 +1,5 @@
 import sodium from "libsodium-wrappers";
+import { output } from "../output";
 import { type Context, Resource } from "../resource";
 import type { Secret } from "../secret";
 import { createGitHubClient, verifyGitHubAuth } from "./client";
@@ -50,99 +51,102 @@ export interface GitHubSecretOutput extends Omit<GitHubSecretProps, "value"> {
 /**
  * Resource for managing GitHub repository secrets
  */
-export class GitHubSecret extends Resource(
+export const GitHubSecret = Resource(
   "github::Secret",
-  async (
-    ctx: Context<GitHubSecretOutput>,
+  async function (
+    this: Context<GitHubSecretOutput> | void,
+    id: string,
     props: GitHubSecretProps,
-  ): Promise<GitHubSecretOutput | void> => {
-    // Create authenticated Octokit client - will automatically handle token resolution
-    const octokit = await createGitHubClient({ token: props.token });
+  ): Promise<GitHubSecretOutput | void> {
+    return output(id, props, async (props) => {
+      // Create authenticated Octokit client - will automatically handle token resolution
+      /// TODO: use fetch
+      const octokit = await createGitHubClient({ token: props.token });
 
-    // Verify authentication and permissions
-    if (!ctx.quiet) {
-      await verifyGitHubAuth(octokit, props.owner, props.repository);
-    }
+      // Verify authentication and permissions
+      if (!this!.quiet) {
+        await verifyGitHubAuth(octokit, props.owner, props.repository);
+      }
 
-    if (ctx.event === "delete") {
-      if (ctx.output?.id) {
+      if (this!.event === "delete") {
+        if (this!.output?.id) {
+          try {
+            // Delete the secret
+            await octokit.rest.actions.deleteRepoSecret({
+              owner: props.owner,
+              repo: props.repository,
+              secret_name: props.name,
+            });
+          } catch (error: any) {
+            // Ignore 404 errors (secret already deleted)
+            if (error.status === 404) {
+              console.log("Secret doesn't exist, ignoring");
+            } else {
+              throw error;
+            }
+          }
+        }
+
+        // Return void (a deleted resource has no content)
+        return undefined;
+      } else {
         try {
-          // Delete the secret
-          await octokit.rest.actions.deleteRepoSecret({
+          // Get the repository's public key for encrypting secrets
+          const { data: publicKey } =
+            await octokit.rest.actions.getRepoPublicKey({
+              owner: props.owner,
+              repo: props.repository,
+            });
+
+          // Encrypt the secret value using libsodium
+          const encryptedValue = await encryptString(
+            props.value.unencrypted,
+            publicKey.key,
+          );
+
+          // Create or update the secret with the encrypted value and key_id
+          const response = await octokit.rest.actions.createOrUpdateRepoSecret({
             owner: props.owner,
             repo: props.repository,
             secret_name: props.name,
+            encrypted_value: encryptedValue,
+            key_id: publicKey.key_id,
           });
-        } catch (error: any) {
-          // Ignore 404 errors (secret already deleted)
-          if (error.status === 404) {
-            console.log("Secret doesn't exist, ignoring");
-          } else {
-            throw error;
-          }
-        }
-      }
 
-      // Return void (a deleted resource has no content)
-      return undefined;
-    } else {
-      try {
-        // Get the repository's public key for encrypting secrets
-        const { data: publicKey } = await octokit.rest.actions.getRepoPublicKey(
-          {
+          // GitHub doesn't return the secret details on create/update, so we need to construct it
+          const output: GitHubSecretOutput = {
+            id: `${props.owner}/${props.repository}/${props.name}`,
             owner: props.owner,
-            repo: props.repository,
-          },
-        );
+            repository: props.repository,
+            name: props.name,
+            token: props.token,
+            updatedAt: new Date().toISOString(),
+          };
 
-        // Encrypt the secret value using libsodium
-        const encryptedValue = await encryptString(
-          props.value.unencrypted,
-          publicKey.key,
-        );
-
-        // Create or update the secret with the encrypted value and key_id
-        const response = await octokit.rest.actions.createOrUpdateRepoSecret({
-          owner: props.owner,
-          repo: props.repository,
-          secret_name: props.name,
-          encrypted_value: encryptedValue,
-          key_id: publicKey.key_id,
-        });
-
-        // GitHub doesn't return the secret details on create/update, so we need to construct it
-        const output: GitHubSecretOutput = {
-          id: `${props.owner}/${props.repository}/${props.name}`,
-          owner: props.owner,
-          repository: props.repository,
-          name: props.name,
-          token: props.token,
-          updatedAt: new Date().toISOString(),
-        };
-
-        return output;
-      } catch (error: any) {
-        if (
-          error.status === 403 &&
-          error.message?.includes("Must have admin rights")
-        ) {
-          console.error(
-            "\n⚠️ Error creating/updating GitHub secret: You must have admin rights to the repository.",
-          );
-          console.error(
-            "Make sure your GitHub token has the required permissions (repo scope for private repos).\n",
-          );
-        } else {
-          console.error(
-            "Error creating/updating GitHub secret:",
-            error.message,
-          );
+          return output;
+        } catch (error: any) {
+          if (
+            error.status === 403 &&
+            error.message?.includes("Must have admin rights")
+          ) {
+            console.error(
+              "\n⚠️ Error creating/updating GitHub secret: You must have admin rights to the repository.",
+            );
+            console.error(
+              "Make sure your GitHub token has the required permissions (repo scope for private repos).\n",
+            );
+          } else {
+            console.error(
+              "Error creating/updating GitHub secret:",
+              error.message,
+            );
+          }
+          throw error;
         }
-        throw error;
       }
-    }
+    });
   },
-) {}
+);
 
 /**
  * Encrypt a value for GitHub using libsodium

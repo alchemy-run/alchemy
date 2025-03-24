@@ -4,5 +4,5 @@
     "types": ["@cloudflare/workers-types"]
   },
   "include": ["vite/*.ts", "src/**/*.ts", "src/**/*.tsx", "src/env.d.ts"],
-  "references": [{ "path": "../../alchemy" }]
+  "references": [{ "path": "../../alchemy/tsconfig.json" }]
 }

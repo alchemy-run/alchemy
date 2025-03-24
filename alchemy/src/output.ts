@@ -1,9 +1,25 @@
+import type { Bindings } from "./cloudflare";
+import type { Input } from "./input";
+import type { Resource } from "./resource";
 import type { Secret } from "./secret";
+
+export function isPromise<T>(value: any): value is Promise<T> {
+  return value && typeof value.then === "function";
+}
 
 export function isOutput<T>(value: any): value is Output<T> {
   return (
     value && typeof value === "object" && typeof value.apply === "function"
   );
+}
+
+export function output<T, P>(
+  id: string,
+  props: P,
+  f: (props: Resolved<P>) => Promise<T>,
+): Output<T> {
+  // TODO: wrap `f` and evaluate props
+  return f as any;
 }
 
 export type Outputs<P extends readonly any[]> = P extends [
@@ -13,9 +29,14 @@ export type Outputs<P extends readonly any[]> = P extends [
   ? [Output<First>, ...Outputs<Rest>]
   : [];
 
-export interface Output<T> {
-  apply<U>(fn: (value: T) => U): Output<U>;
-}
+export type Output<T> = {
+  dependOn<This>(this: This, value: any): This;
+} & Promise<T> &
+  (T extends object
+    ? {
+        [k in keyof T]: Output<T[k]>;
+      }
+    : Promise<T>);
 
 export class OutputChain<T, U> {
   public readonly fn: (value: T) => U;
@@ -45,19 +66,34 @@ export class OutputChain<T, U> {
   }
 }
 
-export type Resolved<O> = O extends Output<infer U>
-  ? U
-  : O extends Secret
-    ? Secret
-    : O extends null
-      ? O
-      : O extends any[]
-        ? ResolveN<O>
-        : O extends object
-          ? {
-              [k in keyof O]: Resolved<O[k]>;
-            }
-          : O;
+type A = Resolved<Input<Bindings>>;
+declare const a: A;
+
+const b = a;
+
+export type Resolved<O> = O extends Date
+  ? Date
+  : O extends Resource<string>
+    ? O
+    : O extends Output<infer U>
+      ? U
+      : O extends Promise<infer U>
+        ? U
+        : O extends Secret
+          ? Secret
+          : O extends null
+            ? O
+            : O extends any[]
+              ? number extends O["length"]
+                ? O extends Array<infer I>
+                  ? Resolved<I>[]
+                  : never
+                : ResolveN<O>
+              : O extends object
+                ? {
+                    [k in keyof O]: Resolved<O[k]>;
+                  }
+                : O;
 
 type ResolveN<O extends any[]> = O extends [infer First, ...infer Rest]
   ? [Resolved<First>, ...ResolveN<Rest>]

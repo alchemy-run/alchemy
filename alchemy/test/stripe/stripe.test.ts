@@ -19,7 +19,7 @@ describe("Stripe Resources", () => {
   test("create and destroy stripe resources", async () => {
     // Create a test product
     const productName = `${BRANCH_PREFIX} Alchemy Test Product`;
-    const product = new Product(`${BRANCH_PREFIX}-alchemy-test-product`, {
+    const product = Product(`${BRANCH_PREFIX}-alchemy-test-product`, {
       name: productName,
       description: "A product created by Alchemy tests",
     });
@@ -42,7 +42,7 @@ describe("Stripe Resources", () => {
       expect(stripeProduct.name).toBe(productName);
 
       // Create a price for the product
-      price = new Price(`${BRANCH_PREFIX}-alchemy-test-price`, {
+      price = Price(`${BRANCH_PREFIX}-alchemy-test-price`, {
         product: productOutput.id,
         currency: "usd",
         unitAmount: 1500, // $15.00
@@ -62,7 +62,7 @@ describe("Stripe Resources", () => {
       expect(stripePrice.unit_amount).toBe(1500);
 
       // Create a webhook endpoint
-      webhook = new WebhookEndpoint(`${BRANCH_PREFIX}-alchemy-test-webhook`, {
+      webhook = WebhookEndpoint(`${BRANCH_PREFIX}-alchemy-test-webhook`, {
         url: "https://example.com/alchemy-webhook",
         enabledEvents: [
           "checkout.session.completed",
@@ -72,7 +72,7 @@ describe("Stripe Resources", () => {
       });
 
       // Apply the webhook
-      webhookOutput = await apply(webhook);
+      webhookOutput = await webhook;
       expect(webhookOutput.id).toBeTruthy();
       expect(webhookOutput.url).toBe("https://example.com/alchemy-webhook");
       expect(webhookOutput.secret).toBeTruthy();

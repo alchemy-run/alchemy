@@ -5,7 +5,6 @@ import {
   SESv2Client,
 } from "@aws-sdk/client-sesv2";
 import { describe, expect, test } from "bun:test";
-import { apply } from "../../src/apply";
 import { SES } from "../../src/aws/ses";
 import { destroy } from "../../src/destroy";
 import { BRANCH_PREFIX } from "../util";
@@ -16,23 +15,23 @@ describe("SES Resource", () => {
   test("create, update, and delete configuration set", async () => {
     // Create a test configuration set
     const configurationSetName = `${testId}-config-set`;
-    const ses = new SES(testId, {
-      configurationSetName,
-      sendingOptions: {
-        SendingEnabled: true,
-      },
-      tags: {
-        Environment: "test",
-        Project: "alchemy",
-      },
-    });
+    let ses;
 
     try {
+      ses = await SES(testId, {
+        configurationSetName,
+        sendingOptions: {
+          SendingEnabled: true,
+        },
+        tags: {
+          Environment: "test",
+          Project: "alchemy",
+        },
+      });
       // Apply to create the configuration set
-      const output = await apply(ses);
-      expect(output.id).toContain(testId);
-      expect(output.configurationSetName).toBe(configurationSetName);
-      expect(output.configurationSetArn).toBeTruthy();
+      expect(ses.id).toContain(testId);
+      expect(ses.configurationSetName).toBe(configurationSetName);
+      expect(ses.configurationSetArn).toBeTruthy();
 
       // Verify configuration set was created by querying the API directly
       const client = new SESv2Client({});
@@ -47,7 +46,7 @@ describe("SES Resource", () => {
       expect(getResponse.SendingOptions?.SendingEnabled).toBe(true);
 
       // Update the configuration set
-      const updatedSes = new SES(testId, {
+      ses = await SES(testId, {
         configurationSetName,
         sendingOptions: {
           SendingEnabled: false,
@@ -59,14 +58,11 @@ describe("SES Resource", () => {
         },
       });
 
-      const updateOutput = await apply(updatedSes);
-      expect(updateOutput.id).toContain(testId);
+      expect(ses.id).toContain(testId);
 
       // Check if ARNs match when they exist
-      if (updateOutput.configurationSetArn && output.configurationSetArn) {
-        expect(updateOutput.configurationSetArn).toBe(
-          output.configurationSetArn,
-        );
+      if (ses.configurationSetArn) {
+        expect(ses.configurationSetArn).toBe(ses.configurationSetArn);
       }
 
       // Verify configuration set was updated
@@ -81,20 +77,7 @@ describe("SES Resource", () => {
     } finally {
       // Clean up
       await destroy(ses);
-
-      // Verify configuration set was deleted
-      const client = new SESv2Client({});
-      try {
-        await client.send(
-          new GetConfigurationSetCommand({
-            ConfigurationSetName: configurationSetName,
-          }),
-        );
-        // Should not reach here
-        expect(true).toBe(false);
-      } catch (error) {
-        expect(error instanceof NotFoundException).toBe(true);
-      }
+      await assertSESDoesNotExist(configurationSetName);
     }
   });
 
@@ -102,34 +85,34 @@ describe("SES Resource", () => {
     // Using a domain for testing is better than an email address
     // since email addresses require actual verification
     const testDomain = `${testId.toLowerCase()}.example.com`;
-    const ses = new SES(`${testId}-domain`, {
-      emailIdentity: testDomain,
-      enableDkim: true,
-      tags: {
-        Environment: "test",
-        Project: "alchemy",
-      },
-    });
+    let ses: SES | undefined;
 
     try {
+      ses = await SES(`${testId}-domain`, {
+        emailIdentity: testDomain,
+        enableDkim: true,
+        tags: {
+          Environment: "test",
+          Project: "alchemy",
+        },
+      });
       // Apply to create the email identity
-      const output = await apply(ses);
-      expect(output.id).toContain(testId);
-      expect(output.emailIdentity).toBe(testDomain);
-      expect(output.emailIdentityArn).toBeTruthy();
+      expect(ses.id).toContain(testId);
+      expect(ses.emailIdentity).toBe(testDomain);
+      expect(ses.emailIdentityArn).toBeTruthy();
 
       // Verification status may be PENDING or VERIFIED depending on the domain
-      expect(output.emailIdentityVerificationStatus).toBeDefined();
+      expect(ses.emailIdentityVerificationStatus).toBeDefined();
 
       // DKIM status may not be immediately available
-      if (output.dkimVerificationStatus) {
+      if (ses.dkimVerificationStatus) {
         expect([
           "PENDING",
           "SUCCESS",
           "FAILED",
           "TEMPORARY_FAILURE",
           "NOT_STARTED",
-        ]).toContain(output.dkimVerificationStatus);
+        ]).toContain(ses.dkimVerificationStatus);
       }
 
       // Verify email identity was created by querying the API directly
@@ -146,20 +129,23 @@ describe("SES Resource", () => {
     } finally {
       // Clean up
       await destroy(ses);
-
-      // Verify email identity was deleted
-      const client = new SESv2Client({});
-      try {
-        await client.send(
-          new GetEmailIdentityCommand({
-            EmailIdentity: testDomain,
-          }),
-        );
-        // Should not reach here
-        expect(true).toBe(false);
-      } catch (error) {
-        expect(error instanceof NotFoundException).toBe(true);
-      }
+      await assertSESDoesNotExist(testDomain);
     }
   });
 });
+
+async function assertSESDoesNotExist(configurationSetName: string) {
+  // Verify configuration set was deleted
+  const client = new SESv2Client({});
+  try {
+    await client.send(
+      new GetConfigurationSetCommand({
+        ConfigurationSetName: configurationSetName,
+      }),
+    );
+    // Should not reach here
+    expect(true).toBe(false);
+  } catch (error) {
+    expect(error instanceof NotFoundException).toBe(true);
+  }
+}

@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Input } from "./input";
-import { type Output, isOutput } from "./output";
+import { type Output, isPromise } from "./output";
 
 const passphraseContext = new AsyncLocalStorage<string>();
 
@@ -15,7 +15,11 @@ export function secret<S extends Input<string> | undefined>(
     throw new Error("Secret cannot be undefined");
   }
   return (
-    isOutput(unencrypted) ? unencrypted.apply(secret) : new Secret(unencrypted)
+    isPromise(unencrypted)
+      ? unencrypted.then((u: any) => {
+          return secret(u);
+        })
+      : new Secret(unencrypted)
   ) as any;
 }
 

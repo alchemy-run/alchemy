@@ -2,39 +2,58 @@ import fs from "node:fs";
 import { unlink } from "node:fs/promises";
 import path from "node:path";
 import { ignore } from "./error";
-import { Resource } from "./resource";
+import type { Input } from "./input";
+import { output } from "./output";
+import { type Context, Resource } from "./resource";
 
-export class File extends Resource(
+export const File = Resource(
   "fs::File",
-  async (ctx, filePath: string, content: string) => {
-    if (ctx.event === "delete") {
-      await ignore("ENOENT", () => fs.promises.unlink(filePath));
-    } else {
-      await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.promises.writeFile(filePath, content);
-    }
-    return filePath;
+  async function (
+    this: Context<string> | void,
+    id: string,
+    props: Input<{
+      path: string;
+      content: string;
+    }>,
+  ) {
+    return output(id, async () => {
+      if (this!.event === "delete") {
+        await ignore("ENOENT", async () =>
+          fs.promises.unlink(await props.path),
+        );
+      } else {
+        await fs.promises.mkdir(path.dirname(await props.path), {
+          recursive: true,
+        });
+        await fs.promises.writeFile(await props.path, await props.content);
+      }
+      return props.path;
+    });
   },
-) {}
+);
 
-export class Folder extends Resource(
+export const Folder = Resource(
   "fs::Folder",
-  async (ctx, dirPath: string): Promise<{ path: string }> => {
-    if (ctx.event === "delete") {
-      // we just do a best effort attempt
-      await ignore(["ENOENT", "ENOTEMPTY"], () => fs.promises.rmdir(dirPath));
-    } else {
-      await ignore("EEXIST", () =>
-        fs.promises.mkdir(dirPath, { recursive: true }),
-      );
-    }
-    return { path: dirPath };
+  async function (
+    this: Context<string> | void,
+    id: string,
+    dirPath: Input<string>,
+  ): Promise<{ path: string }> {
+    return output(id, async () => {
+      if (this!.event === "delete") {
+        // we just do a best effort attempt
+        await ignore(["ENOENT", "ENOTEMPTY"], async () =>
+          fs.promises.rmdir(await dirPath),
+        );
+      } else {
+        await ignore("EEXIST", async () =>
+          fs.promises.mkdir(await dirPath, { recursive: true }),
+        );
+      }
+      return { path: await dirPath };
+    });
   },
-) {
-  public file(filePath: string, content: string) {
-    return new File(path.basename(filePath), filePath, content);
-  }
-}
+);
 
 export async function rm(filePath: string) {
   try {

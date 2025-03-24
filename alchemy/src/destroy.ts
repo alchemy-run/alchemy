@@ -4,6 +4,12 @@ import { Provider, ResourceID, isResource } from "./resource";
 import { type Scope, rootScope } from "./scope";
 import type { State, StateStore } from "./state";
 
+class Destroyed extends Error {}
+
+export function destroyed(): never {
+  throw new Destroyed();
+}
+
 export interface DestroyOptions {
   stage?: string;
   stateStore?: StateStore;
@@ -15,7 +21,7 @@ export interface DestroyOptions {
  * Prune all resources from an Output and "down", i.e. that branches from it.
  */
 export async function destroy<T>(
-  output: Output<T>,
+  output: T,
   options?: DestroyOptions,
 ): Promise<void>;
 

@@ -6,7 +6,6 @@ import {
 } from "@aws-sdk/client-lambda";
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
-import { apply } from "../../src/apply";
 import { Function } from "../../src/aws/function";
 import type { PolicyDocument } from "../../src/aws/policy";
 import { Role } from "../../src/aws/role";
@@ -49,48 +48,42 @@ describe("AWS Resources", () => {
           },
         ],
       };
-
       // Define resources that need to be cleaned up
-      const roleName = `${BRANCH_PREFIX}-alchemy-test-lambda-role`;
-      const role = new Role(roleName, {
-        roleName,
-        assumeRolePolicy,
-        description: "Test role for Lambda function",
-        policies: [
-          {
-            policyName: "logs",
-            policyDocument: logsPolicy,
-          },
-        ],
-        tags: {
-          Environment: "test",
-        },
-      });
-
-      const bundleName = `${BRANCH_PREFIX}-test-lambda-bundle`;
-      const bundle = new Bundle(bundleName, {
-        entryPoint: path.join(__dirname, "..", "handler.ts"),
-        outdir: ".out",
-        format: "cjs",
-        platform: "node",
-        target: "node18",
-      });
-
-      const functionName = `${BRANCH_PREFIX}-alchemy-test-function`;
+      let role: Role | undefined = undefined;
+      let bundle: Bundle | undefined = undefined;
       let func: Function | null = null;
+      const functionName = `${BRANCH_PREFIX}-alchemy-test-function`;
+      const roleName = `${BRANCH_PREFIX}-alchemy-test-lambda-role`;
 
       try {
-        // Apply the role first
-        const roleOutput = await apply(role);
+        bundle = await Bundle(`${BRANCH_PREFIX}-test-lambda-bundle`, {
+          entryPoint: path.join(__dirname, "..", "handler.ts"),
+          outdir: ".out",
+          format: "cjs",
+          platform: "node",
+          target: "node18",
+        });
 
-        // Bundle the handler code
-        const bundleOutput = await apply(bundle);
+        role = await Role(roleName, {
+          roleName,
+          assumeRolePolicy,
+          description: "Test role for Lambda function",
+          policies: [
+            {
+              policyName: "logs",
+              policyDocument: logsPolicy,
+            },
+          ],
+          tags: {
+            Environment: "test",
+          },
+        });
 
         // Create the Lambda function
-        func = new Function(functionName, {
+        func = await Function(functionName, {
           functionName,
-          zipPath: bundleOutput.path,
-          roleArn: roleOutput.arn,
+          zipPath: bundle.path,
+          roleArn: role.arn,
           handler: "handler.handler",
           runtime: "nodejs20.x",
           tags: {
@@ -98,31 +91,29 @@ describe("AWS Resources", () => {
           },
         });
 
-        const output = await apply(func);
-        expect(output.id).toBe(functionName);
-        expect(output.arn).toMatch(
+        expect(func.id).toBe(functionName);
+        expect(func.arn).toMatch(
           new RegExp(
             `^arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}$`,
           ),
         );
-        expect(output.state).toBe("Active");
-        expect(output.lastUpdateStatus).toBe("Successful");
-        expect(output.invokeArn).toMatch(
+        expect(func.state).toBe("Active");
+        expect(func.lastUpdateStatus).toBe("Successful");
+        expect(func.invokeArn).toMatch(
           new RegExp(
             `^arn:aws:apigateway:[a-z0-9-]+:lambda:path\\/2015-03-31\\/functions\\/arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}\\/invocations$`,
           ),
         );
 
         // Immediately apply again to test stabilization logic
-        const secondOutput = await apply(func);
-        expect(secondOutput.state).toBe("Active");
-        expect(secondOutput.lastUpdateStatus).toBe("Successful");
+        expect(func.state).toBe("Active");
+        expect(func.lastUpdateStatus).toBe("Successful");
 
         // Invoke the function
         const testEvent = { test: "event" };
         const invokeResponse = await lambda.send(
           new InvokeCommand({
-            FunctionName: output.functionName,
+            FunctionName: functionName,
             Payload: JSON.stringify(testEvent),
           }),
         );

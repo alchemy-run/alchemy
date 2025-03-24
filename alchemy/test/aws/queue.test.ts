@@ -5,7 +5,6 @@ import {
   SendMessageCommand,
 } from "@aws-sdk/client-sqs";
 import { describe, expect, test } from "bun:test";
-import { apply } from "../../src/apply";
 import { Queue } from "../../src/aws/queue";
 import { destroy } from "../../src/destroy";
 import { BRANCH_PREFIX } from "../util";
@@ -16,27 +15,27 @@ describe("AWS Resources", () => {
   describe("Queue", () => {
     test("create queue", async () => {
       const queueName = `${BRANCH_PREFIX}-alchemy-test-queue`;
-      const queue = new Queue(queueName, {
-        queueName,
-        fifo: false,
-        visibilityTimeout: 30,
-        tags: {
-          Environment: "test",
-        },
-      });
+      let queue: Queue | undefined;
 
       try {
-        const output = await apply(queue);
-        expect(output.id).toBe(queueName);
-        expect(output.url).toMatch(
+        queue = await Queue(queueName, {
+          queueName,
+          fifo: false,
+          visibilityTimeout: 30,
+          tags: {
+            Environment: "test",
+          },
+        });
+        expect(queue.id).toBe(queueName);
+        expect(queue.url).toMatch(
           new RegExp(
             `https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName}$`,
           ),
         );
-        expect(output.arn).toMatch(
+        expect(queue.arn).toMatch(
           new RegExp(`^arn:aws:sqs:[a-z0-9-]+:\\d+:${queueName}$`),
         );
-        expect(output.tags).toEqual({
+        expect(queue.tags).toEqual({
           Environment: "test",
         });
 
@@ -78,26 +77,26 @@ describe("AWS Resources", () => {
       console.log("QUEUE NAME:", queueName);
       console.log("BRANCH_PREFIX:", BRANCH_PREFIX);
 
-      const queue = new Queue(queueName, {
-        queueName,
-        fifo: true,
-        visibilityTimeout: 30,
-        contentBasedDeduplication: true,
-        tags: {
-          Environment: "test",
-        },
-      });
+      let queue: Queue | undefined;
 
       try {
-        const output = await apply(queue);
-        expect(output.id).toBe(queueName);
-        expect(output.url).toMatch(
+        queue = await Queue(queueName, {
+          queueName,
+          fifo: true,
+          visibilityTimeout: 30,
+          contentBasedDeduplication: true,
+          tags: {
+            Environment: "test",
+          },
+        });
+        expect(queue.id).toBe(queueName);
+        expect(queue.url).toMatch(
           new RegExp(
             `https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName.replace(/\./g, "\\.")}$`,
           ),
         );
-        expect(output.fifo).toBe(true);
-        expect(output.contentBasedDeduplication).toBe(true);
+        expect(queue.fifo).toBe(true);
+        expect(queue.contentBasedDeduplication).toBe(true);
 
         // Verify queue exists with proper attributes
         const getQueueUrlResponse = await sqs.send(
@@ -126,19 +125,19 @@ describe("AWS Resources", () => {
     test("create queue, send message, delete, and recreate", async () => {
       // Create initial queue
       const queueName = `${BRANCH_PREFIX}-alchemy-test-queue-recreate`;
-      const queue = new Queue(queueName, {
-        queueName,
-        fifo: false,
-        visibilityTimeout: 30,
-      });
+      let queue: Queue | undefined;
 
       try {
-        const output = await apply(queue);
-        expect(output.id).toBe(queueName);
-        expect(output.arn).toMatch(
+        queue = await Queue(queueName, {
+          queueName,
+          fifo: false,
+          visibilityTimeout: 30,
+        });
+        expect(queue.id).toBe(queueName);
+        expect(queue.arn).toMatch(
           new RegExp(`^arn:aws:sqs:[a-z0-9-]+:\\d+:${queueName}$`),
         );
-        expect(output.url).toMatch(
+        expect(queue.url).toMatch(
           new RegExp(
             `^https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName}$`,
           ),
@@ -147,7 +146,7 @@ describe("AWS Resources", () => {
         // Send a test message
         const messageResponse = await sqs.send(
           new SendMessageCommand({
-            QueueUrl: output.url,
+            QueueUrl: queue.url,
             MessageBody: "Hello from test!",
           }),
         );
@@ -165,23 +164,23 @@ describe("AWS Resources", () => {
           ),
         ).rejects.toThrow("The specified queue does not exist");
 
-        // Immediately try to recreate the queue - this should handle the QueueDeletedRecently error
-        const recreatedQueue = new Queue(queueName, {
-          queueName,
-          visibilityTimeout: 30,
-          messageRetentionPeriod: 345600,
-          tags: {
-            Environment: "test",
-          },
-        });
-
+        let recreatedQueue: Queue | undefined;
         try {
-          const recreatedOutput = await apply(recreatedQueue);
-          expect(recreatedOutput.id).toBe(queueName);
-          expect(recreatedOutput.arn).toMatch(
+          // Immediately try to recreate the queue - this should handle the QueueDeletedRecently error
+          recreatedQueue = await Queue(queueName, {
+            queueName,
+            visibilityTimeout: 30,
+            messageRetentionPeriod: 345600,
+            tags: {
+              Environment: "test",
+            },
+          });
+
+          expect(recreatedQueue.id).toBe(queueName);
+          expect(recreatedQueue.arn).toMatch(
             new RegExp(`^arn:aws:sqs:[a-z0-9-]+:\\d+:${queueName}$`),
           );
-          expect(recreatedOutput.url).toMatch(
+          expect(recreatedQueue.url).toMatch(
             new RegExp(
               `^https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName}$`,
             ),
@@ -191,9 +190,10 @@ describe("AWS Resources", () => {
           await destroy(recreatedQueue);
         }
       } catch (error) {
-        // In case the initial queue creation or tests fail
-        await destroy(queue).catch(() => {}); // Ignore errors on cleanup
         throw error; // Re-throw the original error
+      } finally {
+        // In case the initial queue creation or tests fail
+        await destroy(queue); // Ignore errors on cleanup
       }
     });
   });

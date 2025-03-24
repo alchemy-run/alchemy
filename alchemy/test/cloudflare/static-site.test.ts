@@ -49,7 +49,7 @@ describe("StaticSite Resource", () => {
 
   test("create, update, and delete static site", async () => {
     const siteName = `${BRANCH_PREFIX}-${testId}`;
-    const site = new StaticSite(siteName, {
+    const site = await StaticSite(siteName, {
       name: siteName,
       dir: tempDir,
       bundle: {
@@ -124,29 +124,30 @@ describe("StaticSite Resource", () => {
 
     const siteName = `${BRANCH_PREFIX}-${testId}-with-backend`;
 
-    const backend = new Worker(`${siteName}-backend`, {
+    // Verify site and backend worker were created
+    const api = await createCloudflareApi();
+
+    const backend = await Worker(`${siteName}-backend`, {
       name: `${siteName}-backend`,
       entrypoint: backendScriptPath,
     });
 
-    const site = new StaticSite(siteName, {
-      name: siteName,
-      dir: tempDir,
-      routes: {
-        "/api/*": backend,
-      },
-      bundle: {
-        minify: false,
-      },
-    });
+    let site: StaticSite | undefined;
 
-    // Verify site and backend worker were created
-    const api = await createCloudflareApi();
     try {
-      // Apply to create the site with backend worker
-      const output = await apply(site, {
-        quiet: false,
+      site = await StaticSite(siteName, {
+        name: siteName,
+        dir: tempDir,
+        routes: {
+          "/api/*": backend,
+        },
+        bundle: {
+          minify: false,
+        },
       });
+
+      // Apply to create the site with backend worker
+      const output = site;
 
       // Verify main outputs
       expect(output.id).toBeTruthy();

@@ -1,7 +1,7 @@
 // we don't use node in ./src/**, only here for alchemy to bootstrap CloudFlare
 import "@types/node";
 
-import { $, alchemize, secret } from "alchemy";
+import { alchemize, secret } from "alchemy";
 import {
   DurableObjectNamespace,
   KVNamespace,
@@ -10,22 +10,28 @@ import {
   Worker,
 } from "alchemy/cloudflare";
 
+// TODO: this should be a config
+await alchemize({
+  mode: process.argv.includes("--destroy") ? "destroy" : "up",
+  quiet: process.argv.includes("--verbose") ? false : true,
+});
+
 const counter = new DurableObjectNamespace("COUNTER", {
   className: "Counter",
   sqlite: true,
 });
 
-const authStore = new KVNamespace("AUTH_STORE", {
-  title: "alchemy-example-auth-store",
-});
+const [authStore, storage] = await Promise.all([
+  KVNamespace("AUTH_STORE", {
+    title: "alchemy-example-auth-store",
+  }),
+  R2Bucket("storage", {
+    name: "alchemy-example-storage",
+    allowPublicAccess: false,
+  }),
+]);
 
-// Create an R2 bucket
-const storage = new R2Bucket("storage", {
-  name: "alchemy-example-storage",
-  allowPublicAccess: false,
-});
-
-export const api = new Worker("api", {
+export const api = await Worker("api", {
   name: "alchemy-example-vite-api",
   entrypoint: "./src/index.ts",
   bindings: {
@@ -37,7 +43,7 @@ export const api = new Worker("api", {
   },
 });
 
-const website = new StaticSite("Website", {
+const website = await StaticSite("Website", {
   name: "alchemy-example-vite",
   dir: "./dist",
   build: {
@@ -48,11 +54,11 @@ const website = new StaticSite("Website", {
   },
 });
 
-$(console).log({
+console.log({
   url: website.url,
 });
 
-await alchemize({
-  mode: process.argv.includes("--destroy") ? "destroy" : "up",
-  quiet: process.argv.includes("--verbose") ? false : true,
-});
+// await alchemize({
+//   mode: process.argv.includes("--destroy") ? "destroy" : "up",
+//   quiet: process.argv.includes("--verbose") ? false : true,
+// });

@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 import type { Output } from "./output";
-import type { Provider, Resource, ResourceID } from "./resource";
+import type { Resource, ResourceID } from "./resource";
 
 const scopeStorage = new AsyncLocalStorage<Scope>();
 

@@ -5,7 +5,7 @@ import {
   GetQueueUrlCommand,
   SQSClient,
 } from "@aws-sdk/client-sqs";
-import { Resource } from "../resource";
+import { type Context, Resource } from "../resource";
 
 export interface QueueProps {
   /**
@@ -37,15 +37,15 @@ export interface QueueProps {
   tags?: Record<string, string>;
 }
 
-export interface QueueOutput extends QueueProps {
+export interface Queue extends QueueProps {
   id: string; // Same as queueName
   arn: string;
   url: string;
 }
 
-export class Queue extends Resource(
+export const Queue = Resource(
   "sqs::Queue",
-  async (ctx, props: QueueProps) => {
+  async function (this: Context<Queue> | void, id: string, props: QueueProps) {
     const client = new SQSClient({});
     // Don't automatically add .fifo suffix - user must include it in queueName
     const queueName = props.queueName;
@@ -55,7 +55,7 @@ export class Queue extends Resource(
       throw new Error("FIFO queue names must end with .fifo suffix");
     }
 
-    if (ctx.event === "delete") {
+    if (this!.event === "delete") {
       try {
         // Get queue URL first
         const urlResponse = await client.send(
@@ -241,4 +241,4 @@ export class Queue extends Resource(
       }
     }
   },
-) {}
+);

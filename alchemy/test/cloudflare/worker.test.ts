@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { apply } from "../../src/apply";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { R2Bucket } from "../../src/cloudflare/bucket";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace";
@@ -242,138 +241,149 @@ describe("Worker Resource", () => {
   test("create, update, and delete worker (CJS format)", async () => {
     const workerName = `${BRANCH_PREFIX}-${testName}-cjs-1`;
 
-    // Create a worker with an explicit name
-    const worker = new Worker(testName, {
-      name: workerName,
-      script: workerScript,
-      format: "cjs",
-    });
-
-    // Apply to create the worker
-    const output = await apply(worker);
-    expect(output.id).toBeTruthy();
-    expect(output.name).toEqual(workerName);
-    expect(output.format).toEqual("cjs");
-
-    // Update the worker with a new script
-    const updatedScript = `
-      addEventListener('fetch', event => {
-        event.respondWith(new Response('Hello updated world!', { status: 200 }));
+    let worker: Worker | undefined = undefined;
+    try {
+      // Create a worker with an explicit name
+      worker = await Worker(testName, {
+        name: workerName,
+        script: workerScript,
+        format: "cjs",
       });
-    `;
 
-    const updatedWorker = new Worker(testName, {
-      name: workerName,
-      script: updatedScript,
-      format: "cjs",
-    });
+      // Apply to create the worker
+      const output = worker;
+      expect(output.id).toBeTruthy();
+      expect(output.name).toEqual(workerName);
+      expect(output.format).toEqual("cjs");
 
-    const updateOutput = await apply(updatedWorker);
-    expect(updateOutput.id).toEqual(output.id);
+      // Update the worker with a new script
+      const updatedScript = `
+        addEventListener('fetch', event => {
+          event.respondWith(new Response('Hello updated world!', { status: 200 }));
+        });
+      `;
 
-    // Delete the worker
-    await destroy(worker);
+      const updatedWorker = await Worker(testName, {
+        name: workerName,
+        script: updatedScript,
+        format: "cjs",
+      });
 
-    // Verify the worker was deleted by directly checking with the Cloudflare API
-    const api = await createCloudflareApi();
-    const response = await api.get(
-      `/accounts/${api.accountId}/workers/scripts/${workerName}`,
-    );
+      const updateOutput = updatedWorker;
+      expect(updateOutput.id).toEqual(output.id);
+    } finally {
+      if (worker) {
+        // Delete the worker
+        await destroy(worker);
 
-    // Should be a 404 if properly deleted
-    expect(response.status).toEqual(404);
+        // Verify the worker was deleted by directly checking with the Cloudflare API
+        const api = await createCloudflareApi();
+        const response = await api.get(
+          `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+        );
+
+        // Should be a 404 if properly deleted
+        expect(response.status).toEqual(404);
+      }
+    }
   });
 
   test("create, update, and delete worker (ESM format)", async () => {
     const workerName = `${BRANCH_PREFIX}-${esmTestName}-esm-1`;
 
-    // Create a worker with ESM format
-    const worker = new Worker(esmTestName, {
-      name: workerName,
-      script: esmWorkerScript,
-      format: "esm", // Explicitly using ESM
-    });
+    let worker: Worker | undefined = undefined;
+    try {
+      // Create a worker with ESM format
+      worker = await Worker(esmTestName, {
+        name: workerName,
+        script: esmWorkerScript,
+        format: "esm", // Explicitly using ESM
+      });
 
-    // Apply to create the worker
-    const output = await apply(worker);
-    expect(output.id).toBeTruthy();
-    expect(output.name).toEqual(workerName);
-    expect(output.format).toEqual("esm");
+      // Apply to create the worker
+      const output = worker;
+      expect(output.id).toBeTruthy();
+      expect(output.name).toEqual(workerName);
+      expect(output.format).toEqual("esm");
 
-    // Update the worker with a new ESM script
-    const updatedEsmScript = `
-      export default {
-        async fetch(request, env, ctx) {
-          return new Response('Hello updated ESM world!', { status: 200 });
-        }
-      };
-    `;
+      // Update the worker with a new ESM script
+      const updatedEsmScript = `
+        export default {
+          async fetch(request, env, ctx) {
+            return new Response('Hello updated ESM world!', { status: 200 });
+          }
+        };
+      `;
 
-    const updatedWorker = new Worker(esmTestName, {
-      name: workerName,
-      script: updatedEsmScript,
-      format: "esm",
-    });
+      const updatedWorker = await Worker(esmTestName, {
+        name: workerName,
+        script: updatedEsmScript,
+        format: "esm",
+      });
 
-    const updateOutput = await apply(updatedWorker);
-    expect(updateOutput.id).toEqual(output.id);
+      const updateOutput = updatedWorker;
+      expect(updateOutput.id).toEqual(output.id);
+    } finally {
+      // Delete the worker
+      await destroy(worker);
 
-    // Delete the worker
-    await destroy(worker);
-
-    // Verify the worker was deleted
-    const api = await createCloudflareApi();
-    const response = await api.get(
-      `/accounts/${api.accountId}/workers/scripts/${workerName}`,
-    );
-    expect(response.status).toEqual(404);
+      // Verify the worker was deleted
+      const api = await createCloudflareApi();
+      const response = await api.get(
+        `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+      );
+      expect(response.status).toEqual(404);
+    }
   });
 
   test("convert between ESM and CJS formats", async () => {
     const workerName = `${formatConversionTestName}-convert-1`;
 
-    // First create with ESM format
-    let worker = new Worker(formatConversionTestName, {
-      name: workerName,
-      script: esmWorkerScript,
-      format: "esm",
-    });
+    let worker: Worker | undefined = undefined;
+    try {
+      // First create with ESM format
+      worker = await Worker(formatConversionTestName, {
+        name: workerName,
+        script: esmWorkerScript,
+        format: "esm",
+      });
 
-    // Apply to create the worker with ESM
-    let output = await apply(worker);
-    expect(output.format).toEqual("esm");
+      // Apply to create the worker with ESM
+      let output = worker;
+      expect(output.format).toEqual("esm");
 
-    // Update to CJS format
-    worker = new Worker(formatConversionTestName, {
-      name: workerName,
-      script: workerScript,
-      format: "cjs",
-    });
+      // Update to CJS format
+      worker = await Worker(formatConversionTestName, {
+        name: workerName,
+        script: workerScript,
+        format: "cjs",
+      });
 
-    // Apply to update to CJS
-    output = await apply(worker);
-    expect(output.format).toEqual("cjs");
+      // Apply to update to CJS
+      output = worker;
+      expect(output.format).toEqual("cjs");
 
-    // Update back to ESM format
-    worker = new Worker(formatConversionTestName, {
-      name: workerName,
-      script: esmWorkerScript,
-      format: "esm",
-    });
+      // Update back to ESM format
+      worker = await Worker(formatConversionTestName, {
+        name: workerName,
+        script: esmWorkerScript,
+        format: "esm",
+      });
 
-    // Apply to update back to ESM
-    output = await apply(worker);
-    expect(output.format).toEqual("esm");
+      // Apply to update back to ESM
+      output = worker;
+      expect(output.format).toEqual("esm");
+    } finally {
+      // Clean up
+      await destroy(worker);
 
-    // Clean up
-    await destroy(worker);
-
-    // Verify deletion
-    const api = await createCloudflareApi();
-    const response = await api.get(
-      `/accounts/${api.accountId}/workers/scripts/${workerName}`,
-    );
-    expect(response.status).toEqual(404);
+      // Verify deletion
+      const api = await createCloudflareApi();
+      const response = await api.get(
+        `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+      );
+      expect(response.status).toEqual(404);
+    }
   });
 
   test("fails when creating a worker with a duplicate name", async () => {
@@ -381,30 +391,30 @@ describe("Worker Resource", () => {
     const duplicateTestName = `${BRANCH_PREFIX}-test-worker-duplicate`;
     const workerName = `${duplicateTestName}-dup-1`;
 
-    // First, create a worker successfully
-    const firstWorker = new Worker(duplicateTestName, {
-      name: workerName,
-      script: workerScript,
-      format: "cjs",
-    });
-
-    await apply(firstWorker);
-
-    // Try to create another worker with the same name, which should fail
-    const duplicateWorker = new Worker("different-resource-id", {
-      name: workerName, // Same name as firstWorker
-      script: workerScript,
-      format: "cjs",
-    });
-
+    let firstWorker: Worker | undefined = undefined;
     try {
-      // Expect the apply call to throw an error about duplicate worker
-      await expect(apply(duplicateWorker)).rejects.toThrow(
-        `Worker with name '${workerName}' already exists. Please use a unique name.`,
-      );
-    } finally {
-      await destroy(duplicateWorker);
+      // First, create a worker successfully
+      firstWorker = await Worker(duplicateTestName, {
+        name: workerName,
+        script: workerScript,
+        format: "cjs",
+      });
 
+      // Try to create another worker with the same name, which should fail
+      const duplicateWorker = Worker("different-resource-id", {
+        name: workerName, // Same name as firstWorker
+        script: workerScript,
+        format: "cjs",
+      });
+      try {
+        // Expect the apply call to throw an error about duplicate worker
+        await expect(duplicateWorker).rejects.toThrow(
+          `Worker with name '${workerName}' already exists. Please use a unique name.`,
+        );
+      } finally {
+        await destroy(duplicateWorker);
+      }
+    } finally {
       // Clean up by deleting the first worker
       await destroy(firstWorker);
     }
@@ -413,9 +423,10 @@ describe("Worker Resource", () => {
   test("create and delete worker with Durable Object binding", async () => {
     const workerName = `${doBindingTestName}-do-1`;
 
+    let worker: Worker | undefined = undefined;
     try {
       // First create the worker without the DO binding
-      const initialWorker = new Worker(doBindingTestName, {
+      worker = await Worker(doBindingTestName, {
         name: workerName,
         script: durableObjectWorkerScript,
         format: "esm",
@@ -423,7 +434,7 @@ describe("Worker Resource", () => {
       });
 
       // Apply to create the worker first
-      const initialOutput = await apply(initialWorker);
+      const initialOutput = worker;
       expect(initialOutput.id).toBeTruthy();
       expect(initialOutput.name).toEqual(workerName);
 
@@ -437,7 +448,7 @@ describe("Worker Resource", () => {
       );
 
       // Update the worker with the DO binding
-      const updatedWorker = new Worker(doBindingTestName, {
+      const updatedWorker = await Worker(doBindingTestName, {
         name: workerName,
         script: durableObjectWorkerScript,
         format: "esm",
@@ -447,18 +458,12 @@ describe("Worker Resource", () => {
       });
 
       // Apply the update with the binding
-      const output = await apply(updatedWorker);
+      const output = updatedWorker;
       expect(output.id).toBeTruthy();
       expect(output.name).toEqual(workerName);
       expect(output.bindings).toBeDefined();
     } finally {
-      // Clean up by deleting the worker
-      const cleanupWorker = new Worker(doBindingTestName, {
-        name: workerName,
-        script: durableObjectWorkerScript,
-        format: "esm",
-      });
-      await destroy(cleanupWorker);
+      await destroy(worker);
 
       // Verify the worker was deleted
       await assertWorkerDoesNotExist(workerName);
@@ -468,29 +473,31 @@ describe("Worker Resource", () => {
   test("create and delete worker with KV Namespace binding", async () => {
     const workerName = `${kvBindingTestName}-kv-1`;
 
-    // Create a KV namespace with initial values
-    const testKv = new KVNamespace("test-kv-namespace", {
-      title: `${BRANCH_PREFIX} Test KV Namespace 2`,
-      values: [
-        {
-          key: "testKey",
-          value: "initial-value",
-        },
-      ],
-    });
-
-    // Create a worker with the KV Namespace binding
-    const worker = new Worker(kvBindingTestName, {
-      name: workerName,
-      script: kvWorkerScript,
-      format: "esm",
-      bindings: {
-        TEST_KV: testKv,
-      },
-    });
+    let worker: Worker | undefined = undefined;
+    let testKv: KVNamespace | undefined = undefined;
     try {
+      // Create a KV namespace with initial values
+      testKv = await KVNamespace("test-kv-namespace", {
+        title: `${BRANCH_PREFIX} Test KV Namespace 2`,
+        values: [
+          {
+            key: "testKey",
+            value: "initial-value",
+          },
+        ],
+      });
+
+      // Create a worker with the KV Namespace binding
+      worker = await Worker(kvBindingTestName, {
+        name: workerName,
+        script: kvWorkerScript,
+        format: "esm",
+        bindings: {
+          TEST_KV: testKv,
+        },
+      });
       // Apply to create the worker
-      const output = await apply(worker);
+      const output = worker;
       expect(output.id).toBeTruthy();
       expect(output.name).toEqual(workerName);
       expect(output.bindings).toBeDefined();
@@ -520,7 +527,7 @@ describe("Worker Resource", () => {
     );
 
     // Create a KV namespace
-    const testKv = new KVNamespace("test-kv-namespace", {
+    const testKv = await KVNamespace("test-kv-namespace", {
       title: `${BRANCH_PREFIX} Test KV Namespace 1`,
       values: [
         {
@@ -530,21 +537,23 @@ describe("Worker Resource", () => {
       ],
     });
 
+    let worker: Worker | undefined = undefined;
+
     try {
       // First create the worker without bindings
-      const initialWorker = new Worker(multiBindingsTestName, {
+      worker = await Worker(multiBindingsTestName, {
         name: workerName,
         script: multiBindingsWorkerScript,
         format: "esm",
       });
 
       // Apply to create the worker first
-      const initialOutput = await apply(initialWorker);
+      const initialOutput = worker;
       expect(initialOutput.id).toBeTruthy();
       expect(initialOutput.name).toEqual(workerName);
 
       // Update the worker with all bindings
-      const updatedWorker = new Worker(multiBindingsTestName, {
+      worker = await Worker(multiBindingsTestName, {
         name: workerName,
         script: multiBindingsWorkerScript,
         format: "esm",
@@ -556,19 +565,15 @@ describe("Worker Resource", () => {
       });
 
       // Apply the update
-      const output = await apply(updatedWorker);
+      const output = worker;
       expect(output.id).toBeTruthy();
       expect(output.name).toEqual(workerName);
       expect(output.bindings).toBeDefined();
     } finally {
-      // Clean up by deleting the worker
-      const cleanupWorker = new Worker(multiBindingsTestName, {
-        name: workerName,
-        script: multiBindingsWorkerScript,
-        format: "esm",
-      });
       try {
-        await destroy(cleanupWorker);
+        if (worker) {
+          await destroy(worker);
+        }
       } finally {
         await destroy(testKv);
       }
@@ -584,7 +589,7 @@ describe("Worker Resource", () => {
     let worker: Worker | undefined = undefined;
     try {
       // Create a worker with environment variables
-      worker = new Worker(envVarsTestName, {
+      worker = await Worker(envVarsTestName, {
         name: workerName,
         script: envVarsWorkerScript,
         format: "esm",
@@ -597,7 +602,7 @@ describe("Worker Resource", () => {
       });
 
       // Apply to create the worker
-      const output = await apply(worker);
+      const output = worker;
       expect(output.id).toBeTruthy();
       expect(output.name).toEqual(workerName);
       expect(output.env).toBeDefined();
@@ -623,7 +628,7 @@ describe("Worker Resource", () => {
       }
 
       // Update the worker with different environment variables
-      worker = new Worker(envVarsTestName, {
+      worker = await Worker(envVarsTestName, {
         name: workerName,
         script: envVarsWorkerScript,
         format: "esm",
@@ -636,7 +641,7 @@ describe("Worker Resource", () => {
       });
 
       // Apply the update
-      const updateOutput = await apply(worker);
+      const updateOutput = worker;
       expect(updateOutput.id).toEqual(output.id);
       expect(updateOutput.env?.TEST_API_KEY).toEqual("updated-key-456");
       expect(updateOutput.env?.NODE_ENV).toEqual("production");
@@ -684,14 +689,14 @@ describe("Worker Resource", () => {
     let initialWorker: Worker | undefined = undefined;
     try {
       // First create the worker with the original Counter class
-      initialWorker = new Worker(doMigrationTestName, {
+      initialWorker = await Worker(doMigrationTestName, {
         name: workerName,
         script: doMigrationWorkerScriptV1,
         format: "esm",
       });
 
       // Apply to create the worker first
-      const initialOutput = await apply(initialWorker);
+      const initialOutput = initialWorker;
       expect(initialOutput.id).toBeTruthy();
       expect(initialOutput.name).toEqual(workerName);
 
@@ -705,7 +710,7 @@ describe("Worker Resource", () => {
       );
 
       // Update worker with the original Counter binding
-      const workerWithBinding = new Worker(doMigrationTestName, {
+      const workerWithBinding = await Worker(doMigrationTestName, {
         name: workerName,
         script: doMigrationWorkerScriptV1,
         format: "esm",
@@ -715,7 +720,7 @@ describe("Worker Resource", () => {
       });
 
       // Apply the binding
-      const outputWithBinding = await apply(workerWithBinding);
+      const outputWithBinding = workerWithBinding;
       expect(outputWithBinding.bindings).toBeDefined();
 
       // Now update the namespace to use CounterV2 class
@@ -728,7 +733,7 @@ describe("Worker Resource", () => {
       );
 
       // Update worker with the migrated binding
-      const workerWithMigration = new Worker(doMigrationTestName, {
+      const workerWithMigration = await Worker(doMigrationTestName, {
         name: workerName,
         script: doMigrationWorkerScriptV2,
         format: "esm",
@@ -737,9 +742,7 @@ describe("Worker Resource", () => {
         },
       });
 
-      // Apply the migration
-      const migratedOutput = await apply(workerWithMigration);
-      expect(migratedOutput.bindings).toBeDefined();
+      expect(workerWithMigration.bindings).toBeDefined();
     } finally {
       if (initialWorker) {
         await destroy(initialWorker);
@@ -755,14 +758,14 @@ describe("Worker Resource", () => {
     let worker: Worker | undefined = undefined;
     try {
       // First create a worker with a Durable Object but no env vars
-      worker = new Worker(doWithEnvVarsTestName, {
+      worker = await Worker(doWithEnvVarsTestName, {
         name: workerName,
         script: durableObjectWorkerScript,
         format: "esm",
       });
 
       // Apply to create the worker
-      const initialOutput = await apply(worker);
+      const initialOutput = worker;
       expect(initialOutput.id).toBeTruthy();
       expect(initialOutput.name).toEqual(workerName);
 
@@ -776,7 +779,7 @@ describe("Worker Resource", () => {
       );
 
       // Update the worker with the DO binding
-      worker = new Worker(doWithEnvVarsTestName, {
+      worker = await Worker(doWithEnvVarsTestName, {
         name: workerName,
         script: durableObjectWorkerScript,
         format: "esm",
@@ -786,12 +789,12 @@ describe("Worker Resource", () => {
       });
 
       // Apply the worker with binding
-      const outputWithBinding = await apply(worker);
+      const outputWithBinding = worker;
       expect(outputWithBinding.bindings).toBeDefined();
       expect(outputWithBinding.env).toBeUndefined();
 
       // Now update the worker by adding environment variables
-      worker = new Worker(doWithEnvVarsTestName, {
+      worker = await Worker(doWithEnvVarsTestName, {
         name: workerName,
         script: durableObjectWorkerScript,
         format: "esm",
@@ -805,7 +808,7 @@ describe("Worker Resource", () => {
       });
 
       // Apply the worker with binding and env vars
-      const finalOutput = await apply(worker);
+      const finalOutput = worker;
       expect(finalOutput.bindings).toBeDefined();
       expect(finalOutput.env).toBeDefined();
       expect(finalOutput.env?.API_SECRET).toEqual("test-secret-123");
@@ -829,25 +832,29 @@ describe("Worker Resource", () => {
     const workerName = `${r2BindingTestName}-r2-1`;
 
     // Create a test R2 bucket
-    const testBucket = new R2Bucket("test-bucket", {
-      name: `${BRANCH_PREFIX.toLowerCase()}-test-r2-bucket`,
-      allowPublicAccess: false,
-    });
+    let testBucket: R2Bucket | undefined;
 
-    // Create a worker with the R2 bucket binding
-    const worker = new Worker(r2BindingTestName, {
-      name: workerName,
-      script: r2WorkerScript,
-      format: "esm",
-      url: true, // Enable workers.dev URL to test the worker
-      bindings: {
-        STORAGE: testBucket,
-      },
-    });
+    let worker: Worker | undefined;
 
     try {
+      testBucket = await R2Bucket("test-bucket", {
+        name: `${BRANCH_PREFIX.toLowerCase()}-test-r2-bucket`,
+        allowPublicAccess: false,
+      });
+
+      // Create a worker with the R2 bucket binding
+      worker = await Worker(r2BindingTestName, {
+        name: workerName,
+        script: r2WorkerScript,
+        format: "esm",
+        url: true, // Enable workers.dev URL to test the worker
+        bindings: {
+          STORAGE: testBucket,
+        },
+      });
+
       // Apply to create the worker
-      const output = await apply(worker);
+      const output = worker;
       expect(output.id).toBeTruthy();
       expect(output.name).toEqual(workerName);
       expect(output.bindings).toBeDefined();
