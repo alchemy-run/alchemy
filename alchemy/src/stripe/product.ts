@@ -1,6 +1,5 @@
 import Stripe from "stripe";
 import type { Context } from "../context";
-import { output } from "../output";
 import { Resource } from "../resource";
 
 type ProductType = Stripe.Product.Type;
@@ -68,7 +67,7 @@ export interface ProductProps {
 /**
  * Output from the Stripe product
  */
-export interface Product extends ProductProps {
+export interface Product extends Resource<"stripe::Product">, ProductProps {
   /**
    * The ID of the product
    */
@@ -102,97 +101,92 @@ export interface Product extends ProductProps {
 
 export const Product = Resource(
   "stripe::Product",
-  function (this: Context<Product> | void, id: string, props: ProductProps) {
-    return output(id, async () => {
-      // Get Stripe API key from context or environment
-      const apiKey = process.env.STRIPE_API_KEY;
-      if (!apiKey) {
-        throw new Error("STRIPE_API_KEY environment variable is required");
+  async function (
+    this: Context<Product> | void,
+    id: string,
+    props: ProductProps,
+  ): Promise<Product> {
+    // Get Stripe API key from context or environment
+    const apiKey = process.env.STRIPE_API_KEY;
+    if (!apiKey) {
+      throw new Error("STRIPE_API_KEY environment variable is required");
+    }
+
+    // Initialize Stripe client
+    const stripe = new Stripe(apiKey);
+
+    if (this!.event === "delete") {
+      try {
+        if (this!.event === "delete" && this!.output?.id) {
+          await stripe.products.update(this!.output.id, { active: false });
+        }
+      } catch (error) {
+        // Ignore if the product doesn't exist
+        console.error("Error deactivating product:", error);
       }
 
-      // Initialize Stripe client
-      const stripe = new Stripe(apiKey);
+      // Return a minimal output for deleted state
+      return this!.destroy();
+    } else {
+      try {
+        let product: Stripe.Product;
 
-      if (this!.event === "delete") {
-        try {
-          if (this!.event === "delete" && this!.output?.id) {
-            await stripe.products.update(this!.output.id, { active: false });
-          }
-        } catch (error) {
-          // Ignore if the product doesn't exist
-          console.error("Error deactivating product:", error);
+        if (this!.event === "update" && this!.output?.id) {
+          // Update existing product
+          product = await stripe.products.update(this!.output.id, {
+            name: props.name,
+            description: props.description,
+            active: props.active,
+            images: props.images,
+            url: props.url,
+            statement_descriptor: props.statementDescriptor,
+            metadata: props.metadata,
+            tax_code: props.taxCode,
+          });
+        } else {
+          // Create new product
+          product = await stripe.products.create({
+            name: props.name,
+            description: props.description,
+            active: props.active,
+            images: props.images,
+            url: props.url,
+            shippable: props.shippable,
+            type: props.type as Stripe.ProductCreateParams.Type,
+            unit_label: props.unitLabel,
+            statement_descriptor: props.statementDescriptor,
+            metadata: props.metadata,
+            tax_code: props.taxCode,
+          });
         }
 
-        // Return a minimal output for deleted state
-        return {
-          ...props,
-          id: "",
-          createdAt: 0,
-          updatedAt: 0,
-          livemode: false,
+        // Map Stripe API response to our output format
+        const output: Product = {
+          kind: "stripe::Product",
+          id: product.id,
+          name: product.name,
+          description: product.description || undefined,
+          active: product.active,
+          images: product.images || undefined,
+          url: product.url || undefined,
+          shippable: product.shippable || undefined,
+          type: product.type as ProductType,
+          unitLabel: product.unit_label || undefined,
+          statementDescriptor: product.statement_descriptor || undefined,
+          metadata: product.metadata || undefined,
+          taxCode:
+            typeof product.tax_code === "string" ? product.tax_code : undefined,
+          createdAt: product.created,
+          livemode: product.livemode,
+          updatedAt: product.updated,
+          packageDimensions: product.package_dimensions || undefined,
         };
-      } else {
-        try {
-          let product: Stripe.Product;
 
-          if (this!.event === "update" && this!.output?.id) {
-            // Update existing product
-            product = await stripe.products.update(this!.output.id, {
-              name: props.name,
-              description: props.description,
-              active: props.active,
-              images: props.images,
-              url: props.url,
-              statement_descriptor: props.statementDescriptor,
-              metadata: props.metadata,
-              tax_code: props.taxCode,
-            });
-          } else {
-            // Create new product
-            product = await stripe.products.create({
-              name: props.name,
-              description: props.description,
-              active: props.active,
-              images: props.images,
-              url: props.url,
-              shippable: props.shippable,
-              type: props.type as Stripe.ProductCreateParams.Type,
-              unit_label: props.unitLabel,
-              statement_descriptor: props.statementDescriptor,
-              metadata: props.metadata,
-              tax_code: props.taxCode,
-            });
-          }
-
-          // Map Stripe API response to our output format
-          const output: Product = {
-            id: product.id,
-            name: product.name,
-            description: product.description || undefined,
-            active: product.active,
-            images: product.images || undefined,
-            url: product.url || undefined,
-            shippable: product.shippable || undefined,
-            type: product.type as ProductType,
-            unitLabel: product.unit_label || undefined,
-            statementDescriptor: product.statement_descriptor || undefined,
-            metadata: product.metadata || undefined,
-            taxCode:
-              typeof product.tax_code === "string"
-                ? product.tax_code
-                : undefined,
-            createdAt: product.created,
-            livemode: product.livemode,
-            updatedAt: product.updated,
-            packageDimensions: product.package_dimensions || undefined,
-          };
-
-          return output;
-        } catch (error) {
-          console.error("Error creating/updating product:", error);
-          throw error;
-        }
+        return output;
+      } catch (error) {
+        console.error("Error creating/updating product:", error);
+        throw error;
       }
-    });
+    }
   },
 );

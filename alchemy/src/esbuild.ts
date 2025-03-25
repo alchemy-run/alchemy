@@ -2,8 +2,8 @@ import * as esbuild from "esbuild";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { type Context, Resource } from "./resource";
-
+import type { Context } from "./context";
+import { Resource } from "./resource";
 export interface BundleProps {
   /**
    * Entry point for the bundle
@@ -47,7 +47,7 @@ export interface BundleProps {
   options?: Partial<esbuild.BuildOptions>;
 }
 
-export interface Bundle {
+export interface Bundle extends Resource<"esbuild::Bundle"> {
   /**
    * Path to the bundled file
    */
@@ -78,7 +78,7 @@ export const Bundle = Resource(
       await fs.promises.unlink(outputPath).catch(() => {});
       // Also clean up sourcemap if it exists
       await fs.promises.unlink(outputPath + ".map").catch(() => {});
-      return { path: outputPath, hash: "" };
+      return this!.destroy();
     }
 
     const result = await bundle(props);
@@ -92,6 +92,7 @@ export const Bundle = Resource(
 
     // Return output info
     return {
+      kind: "esbuild::Bundle",
       path: outputPath,
       hash,
     };

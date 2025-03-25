@@ -59,7 +59,7 @@ async function scope(
   ...args:
     | [id?: string]
     | [options: AlchemyOptions]
-    | [id: string, options?: AlchemyOptions]
+    | [id: string | undefined, options?: AlchemyOptions]
 ): Promise<Scope> {
   const [scopeName, options] =
     args.length === 2
@@ -85,11 +85,25 @@ async function scope(
 
 async function run<T>(
   ...args:
-    | [options: AlchemyOptions, fn: (this: Scope, scope: Scope) => Promise<T>]
     | [fn: (this: Scope, scope: Scope) => Promise<T>]
+    | [id: string, fn: (this: Scope, scope: Scope) => Promise<T>]
+    | [options: AlchemyOptions, fn: (this: Scope, scope: Scope) => Promise<T>]
+    | [
+        id: string,
+        options: AlchemyOptions,
+        fn: (this: Scope, scope: Scope) => Promise<T>,
+      ]
 ): Promise<T> {
-  const [options, fn] = args.length === 2 ? args : [undefined, args[0]];
+  const [id, options, fn] =
+    args.length === 3
+      ? [args[0], args[1], args[2]]
+      : args.length === 2
+        ? typeof args[0] === "string"
+          ? [args[0], undefined, args[1]]
+          : [undefined, args[0], args[1]]
+        : [undefined, undefined, args[0]];
   await using scope = await alchemy.scope(
+    id,
     options ??
       {
         // TODO: defaults

@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ignore } from "./error";
+import type { ResourceProps } from "./resource";
 import type { Scope } from "./scope";
 import { deserialize, serialize } from "./serde";
 
-export interface State {
+export interface State<Props extends ResourceProps = ResourceProps> {
   status:
     | `creating`
     | `created`
@@ -14,9 +15,9 @@ export interface State {
     | `deleted`;
   provider: string;
   data: Record<string, any>;
-  deps: string[];
-  inputs: any[];
-  oldInputs?: any[];
+  // deps: string[];
+  props: Props;
+  oldProps?: Props;
   output: any;
 }
 

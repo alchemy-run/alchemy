@@ -33,8 +33,6 @@ export function isResource(value: any): value is Resource<any> {
   return value?.kind !== undefined;
 }
 
-const applied = new Map<Object, any>();
-
 // helper for semantic syntax highlighting (color as a type/class instead of function/value)
 type IsClass = {
   new (_: never): never;
@@ -45,8 +43,8 @@ export type ResourceProps = {
 };
 
 export type Provider<
-  Type extends string,
-  F extends (this: Context<any>, id: string, props: ResourceProps) => any,
+  Type extends string = string,
+  F extends ResourceLifecycleHandler = ResourceLifecycleHandler,
 > = F &
   IsClass & {
     type: Type;
@@ -54,28 +52,30 @@ export type Provider<
     apply(
       scope: Scope,
       resource: any, // TODO: typed
-      inputs: Parameters<F>,
+      props: ResourceProps,
     ): Promise<Awaited<ReturnType<F>> | void>;
-    delete(
-      scope: Scope,
-      resourceID: ResourceID,
-      inputs: Parameters<F>,
-    ): Promise<void>;
+    delete(scope: Scope, resourceID: ResourceID): Promise<void>;
   };
+
+type ResourceLifecycleHandler = (
+  this: Context<any> | void,
+  id: string,
+  props: any,
+) => Promise<Resource<string>>;
 
 export function Resource<
   const Type extends string,
-  F extends (this: Context<any>, id: string, props: ResourceProps) => any,
+  F extends ResourceLifecycleHandler,
 >(type: Type, fn: F): Provider<Type, F>;
 
 export function Resource<
   const Type extends string,
-  F extends (this: Context<any>, id: string, props: ResourceProps) => any,
+  F extends ResourceLifecycleHandler,
 >(type: Type, options: Partial<ProviderOptions>, fn: F): Provider<Type, F>;
 
 export function Resource<
   const Type extends ResourceType,
-  F extends (this: Context<any>, id: string, props: ResourceProps) => any,
+  F extends ResourceLifecycleHandler,
 >(type: Type, ...args: [Partial<ProviderOptions>, F] | [F]): Provider<Type, F> {
   if (PROVIDERS.has(type)) {
     throw new Error(`Resource ${type} already exists`);
@@ -84,7 +84,10 @@ export function Resource<
 
   type Out = Awaited<ReturnType<F>>;
 
-  const provider = ((resourceID: string, props: ResourceProps) => {
+  const provider = ((
+    resourceID: string,
+    props: ResourceProps,
+  ): Promise<Resource<string>> => {
     const scope = Scope.current;
 
     if (scope.resources.has(resourceID)) {
@@ -107,6 +110,8 @@ export function Resource<
     resource.id = resourceID;
     resource.fqn = scope.getScopePath(resourceID) + "/" + resourceID;
     resource.signal = _signal!;
+    // TODO: trigger the signal on the first then
+    // resource.then = (onfulfilled, onrejected) => {
 
     const node = {
       provider,
@@ -120,165 +125,158 @@ export function Resource<
   provider.type = type;
   provider.apply = apply;
   provider.delete = _delete;
+  PROVIDERS.set(type, provider);
+  return provider;
 
   async function apply(
     scope: Scope,
     resource: PendingResource<Out>,
     props: ResourceProps,
   ): Promise<Awaited<Out | void>> {
-    let resourceState: State = (await scope.stateStore.get(resource.id))!;
-    if (resourceState === undefined) {
-      resourceState = {
+    let state: State | undefined = (await scope.stateStore.get(resource.id))!;
+    if (state === undefined) {
+      state = {
         provider: type,
         status: "creating",
         data: {},
         output: undefined,
-        deps: [...deps],
-        inputs: props,
+        // deps: [...deps],
+        props,
       };
-      await scope.stateStore.set(resource.id, resourceState);
+      await scope.stateStore.set(resource.id, state);
     }
 
     // Skip update if inputs haven't changed and resource is in a stable state
-    if (
-      resourceState.status === "created" ||
-      resourceState.status === "updated"
-    ) {
+    if (state.status === "created" || state.status === "updated") {
       if (
-        JSON.stringify(resourceState.inputs) === JSON.stringify(props) &&
+        JSON.stringify(state.props) === JSON.stringify(props) &&
         options?.alwaysUpdate !== true
       ) {
         if (!scope.quiet) {
-          console.log(`Skip:    ${resourceFQN} (no changes)`);
+          console.log(`Skip:    ${resource.fqn} (no changes)`);
         }
-        if (resourceState.output !== undefined) {
-          resource[Provide](resourceState.output);
-        }
-        return resourceState.output;
+        // if (resourceState.output !== undefined) {
+        //   resource[Provide](resourceState.output);
+        // }
+        return state.output;
       }
     }
 
-    const event = resourceState.status === "creating" ? "create" : "update";
-    resourceState.status = event === "create" ? "creating" : "updating";
-    resourceState.oldInputs = resourceState.inputs;
-    resourceState.inputs = props;
+    const event = state.status === "creating" ? "create" : "update";
+    state.status = event === "create" ? "creating" : "updating";
+    state.oldProps = state.props;
+    state.props = props;
 
     if (!scope.quiet) {
       console.log(
-        `${event === "create" ? "Create" : "Update"}:  ${resourceFQN}`,
+        `${event === "create" ? "Create" : "Update"}:  ${resource.fqn}`,
       );
     }
 
-    await scope.stateStore.set(resource.id, resourceState);
+    await scope.stateStore.set(resource.id, state);
 
     let isReplaced = false;
 
-    const quiet = options.quiet ?? false;
-
-    await alchemy.run(async () =>
+    const output = await alchemy.run(resource.id, async (scope) =>
       func.bind({
-        stage,
-        resourceID,
-        resourceFQN,
+        stage: scope.stage,
+        resourceID: resource.id,
+        resourceFQN: resource.fqn,
         event,
-        scope: getScope(),
-        output: resourceState.output,
+        scope,
+        output: state.output,
         replace: () => {
           if (isReplaced) {
             console.warn(
-              `Resource ${type} ${resourceFQN} is already marked as REPLACE`,
+              `Resource ${type} ${resource.fqn} is already marked as REPLACE`,
             );
             return;
           }
           isReplaced = true;
         },
-        get: (key) => resourceState!.data[key],
+        get: (key) => state!.data[key],
         set: async (key, value) => {
-          resourceState!.data[key] = value;
-          await scope.stateStore.set(resource.id, resourceState!);
+          state!.data[key] = value;
+          await scope.stateStore.set(resource.id, state!);
         },
         delete: async (key) => {
-          const value = resourceState!.data[key];
-          delete resourceState!.data[key];
-          await scope.stateStore.set(resource.id, resourceState!);
+          const value = state!.data[key];
+          delete state!.data[key];
+          await scope.stateStore.set(resource.id, state!);
           return value;
         },
-        quiet,
+        quiet: scope.quiet,
         destroy: () => {
           throw new DestroyedSignal();
         },
-      })(resourceID, props),
+      })(resource.id, props),
     );
 
     if (!scope.quiet) {
       console.log(
-        `${event === "create" ? "Created" : "Updated"}: ${resourceFQN}`,
+        `${event === "create" ? "Created" : "Updated"}: ${resource.fqn}`,
       );
     }
-    await stateStore.set(resourceID, {
+
+    await scope.stateStore.set(resource.id, {
       provider: type,
-      data: resourceState.data,
+      data: state.data,
       status: event === "create" ? "created" : "updated",
-      output: evaluated,
-      inputs: props,
-      deps: [...deps],
+      output,
+      props,
+      // deps: [...deps],
     });
-    if (evaluated !== undefined) {
-      resource[Provide](evaluated as Out);
-    }
-    return evaluated as Awaited<Out>;
+    // if (output !== undefined) {
+    //   resource[Provide](output as Out);
+    // }
+    return output as any;
   }
 
-  async function _delete(
-    scope: Scope,
-    resourceID: ResourceID,
-    inputs: Parameters<F>,
-  ) {
-    const { Scope } = await import("./scope");
-    const resourceFQN = `${scope.getScopePath(stage)}/${resourceID}`;
-    const nestedScope = new Scope(resourceID, scope);
-
-    await alchemize({
-      mode: "destroy",
-      stage,
-      scope: nestedScope,
-      // TODO(sam): should use the appropriate state store
-      stateStore: defaultStateStore,
-      quiet: options.quiet,
-    });
+  async function _delete(scope: Scope, resourceID: ResourceID) {
+    const resourceFQN = scope.fqn(resourceID);
 
     if (!scope.quiet) {
       console.log(`Delete:  ${resourceFQN}`);
     }
 
+    const state = (await scope.stateStore.get(resourceID))!;
+
+    if (state === undefined) {
+      console.warn(`Resource ${resourceFQN} not found`);
+      return;
+    }
+
     try {
-      await func.bind({
-        stage,
-        scope,
-        resourceID,
-        resourceFQN,
-        event: "delete",
-        output: state.output,
-        replace() {
-          throw new Error("Cannot replace a resource that is being deleted");
-        },
-        get: (key) => {
-          return state.data[key];
-        },
-        set: async (key, value) => {
-          state.data[key] = value;
-        },
-        delete: async (key) => {
-          const value = state.data[key];
-          delete state.data[key];
-          return value;
-        },
-        quiet: options.quiet ?? false,
-        destroy: () => {
-          throw new DestroyedSignal();
-        },
-      })(resourceID, ...inputs);
+      await alchemy.run(resourceID, async (scope) =>
+        func.bind({
+          stage: scope.stage,
+          scope,
+          resourceID,
+          resourceFQN,
+          event: "delete",
+          output: state.output,
+          replace() {
+            throw new Error("Cannot replace a resource that is being deleted");
+          },
+          get: (key) => {
+            return state.data[key];
+          },
+          set: async (key, value) => {
+            state.data[key] = value;
+          },
+          delete: async (key) => {
+            const value = state.data[key];
+            delete state.data[key];
+            return value;
+          },
+          quiet: scope.quiet,
+          destroy: () => {
+            throw new DestroyedSignal();
+          },
+        })(resourceID, state.oldProps!),
+      );
     } catch (err) {
+      // TODO: should we fail if the DestroyedSignal is not thrown?
       if (err instanceof DestroyedSignal) {
         console.log(`Destroyed: ${resourceFQN}`);
         return;
@@ -290,6 +288,4 @@ export function Resource<
       console.log(`Deleted: ${resourceFQN}`);
     }
   }
-  PROVIDERS.set(type, Resource as any);
-  return Resource as any;
 }

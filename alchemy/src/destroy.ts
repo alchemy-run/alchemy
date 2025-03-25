@@ -81,7 +81,7 @@ export async function destroy<T>(
       scope,
       resourceID,
       resourceState,
-      resourceState.inputs as [],
+      resourceState.props as [],
       options ?? {
         quiet: false,
       },

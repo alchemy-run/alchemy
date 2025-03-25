@@ -1,35 +1,49 @@
 import { describe, expect, it } from "bun:test";
-import { apply } from "../src/apply";
+import { alchemy } from "../src/alchemy";
 import type { PolicyDocument } from "../src/aws/policy";
 import { Role } from "../src/aws/role";
+import type { Context } from "../src/context";
 import { destroy } from "../src/destroy";
 import { File } from "../src/fs";
-import { type Context, Resource } from "../src/resource";
-import { Scope, getScope, rootScope, withScope } from "../src/scope";
+import { Resource } from "../src/resource";
+import { Scope } from "../src/scope";
 import { BRANCH_PREFIX } from "./util";
 
 describe("Scope", () => {
   it("should maintain scope context and track resources", async () => {
-    const testScope = new Scope("test");
+    let file: File | undefined = undefined;
+    try {
+      await alchemy.run(async (scope) => {
+        file = await File("test-file", {
+          path: "test.txt",
+          content: "Hello World",
+        });
+        expect(Scope.current).toEqual(scope);
+        expect(scope.resources.size).toBe(1);
+        expect(scope).toBe(scope);
 
-    await withScope(testScope, async () => {
-      new File("test-file", "test.txt", "Hello World");
-
-      const currentScope = getScope();
-      expect(currentScope).toEqual(testScope);
-    });
-    expect(testScope.nodes.size).toBe(1);
-    expect(testScope).toBe(testScope);
-    expect(testScope).not.toBe(rootScope);
+        return file;
+      });
+    } finally {
+      if (file) {
+        await destroy(file);
+      }
+    }
   });
 
   it("should handle nested resources with AWS Role", async () => {
-    class ServiceResources extends Resource(
+    interface ServiceResources extends Resource<"service-resources"> {
+      roleName: string;
+    }
+    const ServiceResources = Resource(
       "service-resources",
-      async (
-        ctx: Context<{ roleArn: string }>,
-        props: { roleName: string },
-      ) => {
+      async function (
+        this: Context<ServiceResources> | void,
+        id: string,
+        props: {
+          roleName: string;
+        },
+      ) {
         const assumeRolePolicy: PolicyDocument = {
           Version: "2012-10-17",
           Statement: [
@@ -43,24 +57,22 @@ describe("Scope", () => {
           ],
         };
 
-        const role = new Role(`role`, {
+        const role = await Role(`role`, {
           roleName: props.roleName,
           assumeRolePolicy,
         });
 
         return {
+          kind: "service-resources",
           roleArn: role.arn,
         };
       },
-    ) {}
+    );
 
     const roleName = `${BRANCH_PREFIX}-alchemy-test-scope-role`;
-    const service = new ServiceResources("test-service", {
+    const service = await ServiceResources("test-service", {
       roleName,
     });
-
-    // Apply the parent resource which should create the role
-    const output = await apply(service);
 
     // Clean up
     await destroy(service);

@@ -4,7 +4,6 @@ import path from "path";
 import { promisify } from "util";
 import type { Context } from "../context";
 import type { BundleProps } from "../esbuild";
-import { output } from "../output";
 import { Resource } from "../resource";
 import { createCloudflareApi } from "./api";
 import type { Bindings } from "./bindings";
@@ -213,179 +212,172 @@ export const StaticSite = Resource(
   {
     alwaysUpdate: true,
   },
-  function (
+  async function (
     this: Context<StaticSite> | void,
     id: string,
     props: StaticSiteProps,
   ) {
-    return output(id, async () => {
-      if (this!.event === "delete") {
-        // For delete operations, we'll rely on the Worker delete to clean up
-        // Return empty output for deleted state
-        return this!.destroy();
-      }
+    if (this!.event === "delete") {
+      // For delete operations, we'll rely on the Worker delete to clean up
+      // Return empty output for deleted state
+      return this!.destroy();
+    }
 
-      // Validate that a name is provided
-      if (!props.name) {
-        throw new Error(
-          "StaticSite name is required - must be explicitly specified",
-        );
-      }
+    // Validate that a name is provided
+    if (!props.name) {
+      throw new Error(
+        "StaticSite name is required - must be explicitly specified",
+      );
+    }
 
-      // Validate directory exists
-      if (!props.dir) {
-        throw new Error("Directory is required for StaticSite");
-      }
+    // Validate directory exists
+    if (!props.dir) {
+      throw new Error("Directory is required for StaticSite");
+    }
 
+    try {
+      const dirStat = await fs.stat(props.dir);
+      if (!dirStat.isDirectory()) {
+        throw new Error(`"${props.dir}" is not a directory`);
+      }
+    } catch (error: any) {
+      throw new Error(
+        `Directory "${props.dir}" does not exist: ${error.message}`,
+      );
+    }
+
+    // Run build command if provided
+    if (props.build?.command) {
       try {
-        const dirStat = await fs.stat(props.dir);
-        if (!dirStat.isDirectory()) {
-          throw new Error(`"${props.dir}" is not a directory`);
+        if (!this!.quiet) {
+          console.log(props.build.command);
         }
+        const execAsync = promisify(exec);
+        const { stdout, stderr } = await execAsync(props.build.command, {
+          cwd: process.cwd(),
+        });
+
+        if (stdout && !this!.quiet) console.log(stdout);
       } catch (error: any) {
+        // Log detailed error information
+        console.error(`Build command failed with exit code ${error.code}`);
+        if (error.stdout) console.error(`Command stdout: ${error.stdout}`);
+        if (error.stderr) console.error(`Command stderr: ${error.stderr}`);
+
+        // Throw a more descriptive error that includes the exit code and stderr
         throw new Error(
-          `Directory "${props.dir}" does not exist: ${error.message}`,
+          `Build command "${props.build.command}" failed with exit code ${error.code}:\n${error.stderr || error.message}`,
         );
       }
+    }
 
-      // Run build command if provided
-      if (props.build?.command) {
-        try {
-          if (!this!.quiet) {
-            console.log(props.build.command);
-          }
-          const execAsync = promisify(exec);
-          const { stdout, stderr } = await execAsync(props.build.command, {
-            cwd: process.cwd(),
-          });
+    // Use the provided name
+    const siteName = props.name;
+    const indexPage = props.indexPage || "index.html";
 
-          if (stdout && !this!.quiet) console.log(stdout);
-        } catch (error: any) {
-          // Log detailed error information
-          console.error(`Build command failed with exit code ${error.code}`);
-          if (error.stdout) console.error(`Command stdout: ${error.stdout}`);
-          if (error.stderr) console.error(`Command stderr: ${error.stderr}`);
+    // Create Cloudflare API client with automatic account discovery
+    const api = await createCloudflareApi();
 
-          // Throw a more descriptive error that includes the exit code and stderr
-          throw new Error(
-            `Build command "${props.build.command}" failed with exit code ${error.code}:\n${error.stderr || error.message}`,
-          );
-        }
+    // Step 1: Create or get the KV namespace for assets
+    const [kv, assetManifest] = await Promise.all([
+      KVNamespace("assets", {
+        title: `${siteName}-assets`,
+      }),
+      generateAssetManifest(props.dir),
+    ]);
+
+    // Step 3: Upload assets to KV
+    await uploadAssetManifest(api, kv.namespaceId, assetManifest);
+
+    // Prepare the bindings for the worker
+    const bindings: Bindings = {
+      ASSETS: kv,
+      INDEX_PAGE: indexPage,
+      // Add error page binding if specified
+      ...(props.errorPage ? { ERROR_PAGE: props.errorPage } : {}),
+    };
+
+    const routes: Record<string, string> = {};
+    // Create backend worker if configured
+    if (props.routes) {
+      for (const [path, worker] of Object.entries(props.routes)) {
+        // @ts-ignore - TODO: need to use Resolved<Worker> to get the string ...
+        routes[path] = worker.id;
+        bindings[`ROUTE_${worker.id}`] = worker;
       }
+    }
 
-      // Use the provided name
-      const siteName = props.name;
-      const indexPage = props.indexPage || "index.html";
+    // Create asset manifest banner for static site router
+    const assetManifestBanner = `const __ASSET_MANIFEST__ = ${JSON.stringify(
+      Object.fromEntries(assetManifest.map((item) => [item.key, item.hash])),
+    )};\n`;
 
-      // Create Cloudflare API client with automatic account discovery
-      const api = await createCloudflareApi();
-
-      // Step 1: Create or get the KV namespace for assets
-      const [kv, assetManifest] = await Promise.all([
-        KVNamespace("assets", {
-          title: `${siteName}-assets`,
-        }),
-        generateAssetManifest(props.dir),
-      ]);
-
-      // Step 3: Upload assets to KV
-      await uploadAssetManifest(api, kv.namespaceId, assetManifest);
-
-      // Prepare the bindings for the worker
-      const bindings: Bindings = {
-        ASSETS: kv,
-        INDEX_PAGE: indexPage,
-        // Add error page binding if specified
-        ...(props.errorPage ? { ERROR_PAGE: props.errorPage } : {}),
-      };
-
-      const routes: Record<string, string> = {};
-      // Create backend worker if configured
-      if (props.routes) {
-        for (const [path, worker] of Object.entries(props.routes)) {
-          // @ts-ignore - TODO: need to use Resolved<Worker> to get the string ...
-          routes[path] = worker.id;
-          bindings[`ROUTE_${worker.id}`] = worker;
-        }
-      }
-
-      // Create asset manifest banner for static site router
-      const assetManifestBanner = `const __ASSET_MANIFEST__ = ${JSON.stringify(
-        Object.fromEntries(assetManifest.map((item) => [item.key, item.hash])),
-      )};\n`;
-
-      const bundleOptions = {
-        ...props.bundle,
-        options: {
-          ...props.bundle?.options,
-          banner: {
-            js: assetManifestBanner,
-            ...props.bundle?.options?.banner,
-          },
+    const bundleOptions = {
+      ...props.bundle,
+      options: {
+        ...props.bundle?.options,
+        banner: {
+          js: assetManifestBanner,
+          ...props.bundle?.options?.banner,
         },
-      };
+      },
+    };
 
-      // Determine the entrypoint file - check for .ts first, fallback to .js
-      let entrypointFile = "static-site-router.js";
-      try {
-        const tsFile = path.resolve(__dirname, "static-site-router.ts");
-        await fs.access(tsFile);
-        // If we reach here, the TypeScript file exists
-        entrypointFile = "static-site-router.ts";
-      } catch (error) {
-        // TypeScript file doesn't exist, use JavaScript (default)
-      }
+    // Determine the entrypoint file - check for .ts first, fallback to .js
+    let entrypointFile = "static-site-router.js";
+    try {
+      const tsFile = path.resolve(__dirname, "static-site-router.ts");
+      await fs.access(tsFile);
+      // If we reach here, the TypeScript file exists
+      entrypointFile = "static-site-router.ts";
+    } catch (error) {
+      // TypeScript file doesn't exist, use JavaScript (default)
+    }
 
-      const worker = await Worker(
-        "worker",
-        {
-          name: siteName,
-          url: true,
-          format: props.format || "esm",
-          // If a custom worker script is provided, use it, otherwise use the entrypoint from router
-          ...(props.workerScript
-            ? { script: props.workerScript }
-            : {
-                entrypoint: path.resolve(__dirname, entrypointFile),
-                bundle: bundleOptions as any,
-              }),
-          bindings,
-          env: {
-            ...Object.fromEntries(
-              Object.entries(routes).map(([key, value]) => [
-                `__ROUTE_${value}`,
-                key,
-              ]),
-            ),
-          },
-        },
-        // place a dependency on the namespace
-        // kv.id,
-      ).dependOn(kv.namespaceId);
-
-      // Get current timestamp
-      const now = Date.now();
-
-      // Construct the output
-      const output: StaticSite = {
-        kind: "cloudflare::StaticSite",
-        id: siteName,
-        workerId: worker.id,
-        name: siteName,
-        directory: props.dir,
-        format: props.format || "esm",
-        errorPage: props.errorPage,
-        indexPage,
-        assets: assetManifest.map((item) => item.key),
-        createdAt: this!.output?.createdAt || now,
-        updatedAt: now,
-        domain: props.domain,
-        production: props.production !== false,
-        url: worker.url,
-        routes,
-      };
-
-      return output;
+    const worker = await Worker("worker", {
+      name: siteName,
+      url: true,
+      format: props.format || "esm",
+      // If a custom worker script is provided, use it, otherwise use the entrypoint from router
+      ...(props.workerScript
+        ? { script: props.workerScript }
+        : {
+            entrypoint: path.resolve(__dirname, entrypointFile),
+            bundle: bundleOptions as any,
+          }),
+      bindings,
+      env: {
+        ...Object.fromEntries(
+          Object.entries(routes).map(([key, value]) => [
+            `__ROUTE_${value}`,
+            key,
+          ]),
+        ),
+      },
     });
+
+    // Get current timestamp
+    const now = Date.now();
+
+    // Construct the output
+    const output: StaticSite = {
+      kind: "cloudflare::StaticSite",
+      id: siteName,
+      workerId: worker.id,
+      name: siteName,
+      directory: props.dir,
+      format: props.format || "esm",
+      errorPage: props.errorPage,
+      indexPage,
+      assets: assetManifest.map((item) => item.key),
+      createdAt: this!.output?.createdAt || now,
+      updatedAt: now,
+      domain: props.domain,
+      production: props.production !== false,
+      url: worker.url,
+      routes,
+    };
+
+    return output;
   },
 );

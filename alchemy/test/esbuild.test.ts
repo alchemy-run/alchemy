@@ -13,7 +13,7 @@ describe("esbuild", () => {
     const outputFile = path.join(outputDir, "handler.js");
 
     test("bundle and cleanup", async () => {
-      const bundle = new Bundle("test-bundle", {
+      const bundle = await Bundle("test-bundle", {
         entryPoint: path.join(__dirname, "handler.ts"),
         outdir: outputDir,
         format: "esm",

@@ -1,56 +1,71 @@
 import fs from "node:fs";
 import { unlink } from "node:fs/promises";
 import path from "node:path";
+import type { Context } from "./context";
 import { ignore } from "./error";
-import { output } from "./output";
-import { type Context, Resource } from "./resource";
+import { Resource } from "./resource";
+
+export interface File extends Resource<"fs::File"> {
+  path: string;
+  content: string;
+}
 
 export const File = Resource(
   "fs::File",
   async function (
     this: Context<string> | void,
     id: string,
-    props: {
+    {
+      path: filePath,
+      content,
+    }: {
       path: string;
       content: string;
     },
-  ) {
-    return output(id, async () => {
-      if (this!.event === "delete") {
-        await ignore("ENOENT", async () =>
-          fs.promises.unlink(await props.path),
-        );
-      } else {
-        await fs.promises.mkdir(path.dirname(await props.path), {
-          recursive: true,
-        });
-        await fs.promises.writeFile(await props.path, await props.content);
-      }
-      return props.path;
-    });
+  ): Promise<File> {
+    if (this!.event === "delete") {
+      await ignore("ENOENT", async () => fs.promises.unlink(filePath));
+      return this!.destroy();
+    } else {
+      await fs.promises.mkdir(path.dirname(filePath), {
+        recursive: true,
+      });
+      await fs.promises.writeFile(filePath, content);
+    }
+    return {
+      kind: "fs::File",
+      path: filePath,
+      content,
+    };
   },
 );
+
+export interface Folder extends Resource<"fs::Folder"> {
+  path: string;
+}
 
 export const Folder = Resource(
   "fs::Folder",
   async function (
     this: Context<string> | void,
     id: string,
-    dirPath: string,
-  ): Promise<{ path: string }> {
-    return output(id, async () => {
-      if (this!.event === "delete") {
-        // we just do a best effort attempt
-        await ignore(["ENOENT", "ENOTEMPTY"], async () =>
-          fs.promises.rmdir(await dirPath),
-        );
-      } else {
-        await ignore("EEXIST", async () =>
-          fs.promises.mkdir(await dirPath, { recursive: true }),
-        );
-      }
-      return { path: await dirPath };
-    });
+    { path: dirPath }: { path: string },
+  ): Promise<Folder> {
+    if (this!.event === "delete") {
+      // we just do a best effort attempt
+      await ignore(["ENOENT", "ENOTEMPTY"], async () =>
+        fs.promises.rmdir(dirPath),
+      );
+      return this!.destroy();
+    } else {
+      await ignore("EEXIST", async () =>
+        fs.promises.mkdir(dirPath, { recursive: true }),
+      );
+    }
+    return {
+      kind: "fs::Folder",
+      path: dirPath,
+    };
   },
 );
 

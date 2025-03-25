@@ -12,7 +12,6 @@ import {
 } from "@aws-sdk/client-s3";
 import type { Context } from "../context";
 import { ignore } from "../error";
-import { output } from "../output";
 import { Resource } from "../resource";
 
 export interface BucketProps {
@@ -20,7 +19,7 @@ export interface BucketProps {
   tags?: Record<string, string>;
 }
 
-export interface Bucket extends BucketProps {
+export interface Bucket extends Resource<"s3::Bucket">, BucketProps {
   id: string; // Same as bucketName for AWS
   arn: string;
   bucketDomainName: string; // Format: bucket-name.s3.amazonaws.com
@@ -35,33 +34,53 @@ export interface Bucket extends BucketProps {
 
 export const Bucket = Resource(
   "s3::Bucket",
-  function (this: Context<Bucket> | void, id: string, props: BucketProps) {
-    return output(id, async () => {
-      const client = new S3Client({});
+  async function (
+    this: Context<Bucket> | void,
+    id: string,
+    props: BucketProps,
+  ) {
+    const client = new S3Client({});
 
-      if (this!.event === "delete") {
-        await ignore(NoSuchBucket.name, () =>
-          client.send(
-            new DeleteBucketCommand({
-              Bucket: props.bucketName,
-            }),
-          ),
+    if (this!.event === "delete") {
+      await ignore(NoSuchBucket.name, () =>
+        client.send(
+          new DeleteBucketCommand({
+            Bucket: props.bucketName,
+          }),
+        ),
+      );
+      return this!.destroy();
+    } else {
+      try {
+        // Check if bucket exists
+        await client.send(
+          new HeadBucketCommand({
+            Bucket: props.bucketName,
+          }),
         );
-        return this!.destroy();
-      } else {
-        try {
-          // Check if bucket exists
+
+        // Update tags if they changed and bucket exists
+        if (this!.event === "update" && props.tags) {
           await client.send(
-            new HeadBucketCommand({
+            new PutBucketTaggingCommand({
               Bucket: props.bucketName,
+              Tagging: {
+                TagSet: Object.entries(props.tags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              },
             }),
           );
-
-          // Update tags if they changed and bucket exists
-          if (this!.event === "update" && props.tags) {
-            await client.send(
-              new PutBucketTaggingCommand({
-                Bucket: props.bucketName,
+        }
+      } catch (error: any) {
+        if (error.name === "NotFound") {
+          // Create bucket if it doesn't exist
+          await client.send(
+            new CreateBucketCommand({
+              Bucket: props.bucketName,
+              // Add tags during creation if specified
+              ...(props.tags && {
                 Tagging: {
                   TagSet: Object.entries(props.tags).map(([Key, Value]) => ({
                     Key,
@@ -69,78 +88,60 @@ export const Bucket = Resource(
                   })),
                 },
               }),
-            );
-          }
+            }),
+          );
+        } else {
+          throw error;
+        }
+      }
+
+      // Get bucket details
+      const [locationResponse, versioningResponse, aclResponse] =
+        await Promise.all([
+          client.send(
+            new GetBucketLocationCommand({ Bucket: props.bucketName }),
+          ),
+          client.send(
+            new GetBucketVersioningCommand({ Bucket: props.bucketName }),
+          ),
+          client.send(new GetBucketAclCommand({ Bucket: props.bucketName })),
+        ]);
+
+      const region = locationResponse.LocationConstraint || "us-east-1";
+
+      // Get tags if they exist
+      let tags = props.tags;
+      if (!tags) {
+        try {
+          const taggingResponse = await client.send(
+            new GetBucketTaggingCommand({ Bucket: props.bucketName }),
+          );
+          tags = Object.fromEntries(
+            taggingResponse.TagSet?.map(({ Key, Value }) => [Key, Value]) || [],
+          );
         } catch (error: any) {
-          if (error.name === "NotFound") {
-            // Create bucket if it doesn't exist
-            await client.send(
-              new CreateBucketCommand({
-                Bucket: props.bucketName,
-                // Add tags during creation if specified
-                ...(props.tags && {
-                  Tagging: {
-                    TagSet: Object.entries(props.tags).map(([Key, Value]) => ({
-                      Key,
-                      Value,
-                    })),
-                  },
-                }),
-              }),
-            );
-          } else {
+          if (error.name !== "NoSuchTagSet") {
             throw error;
           }
         }
-
-        // Get bucket details
-        const [locationResponse, versioningResponse, aclResponse] =
-          await Promise.all([
-            client.send(
-              new GetBucketLocationCommand({ Bucket: props.bucketName }),
-            ),
-            client.send(
-              new GetBucketVersioningCommand({ Bucket: props.bucketName }),
-            ),
-            client.send(new GetBucketAclCommand({ Bucket: props.bucketName })),
-          ]);
-
-        const region = locationResponse.LocationConstraint || "us-east-1";
-
-        // Get tags if they exist
-        let tags = props.tags;
-        if (!tags) {
-          try {
-            const taggingResponse = await client.send(
-              new GetBucketTaggingCommand({ Bucket: props.bucketName }),
-            );
-            tags = Object.fromEntries(
-              taggingResponse.TagSet?.map(({ Key, Value }) => [Key, Value]) ||
-                [],
-            );
-          } catch (error: any) {
-            if (error.name !== "NoSuchTagSet") {
-              throw error;
-            }
-          }
-        }
-
-        const output: Bucket = {
-          bucketName: props.bucketName,
-          id: props.bucketName,
-          arn: `arn:aws:s3:::${props.bucketName}`,
-          bucketDomainName: `${props.bucketName}.s3.amazonaws.com`,
-          bucketRegionalDomainName: `${props.bucketName}.s3.${region}.amazonaws.com`,
-          region,
-          hostedZoneId: getHostedZoneId(region),
-          versioningEnabled: versioningResponse.Status === "Enabled",
-          acl: aclResponse.Grants?.[0]?.Permission?.toLowerCase(),
-          ...(tags && { tags }),
-        };
-
-        return output;
       }
-    });
+
+      const output: Bucket = {
+        kind: "s3::Bucket",
+        bucketName: props.bucketName,
+        id: props.bucketName,
+        arn: `arn:aws:s3:::${props.bucketName}`,
+        bucketDomainName: `${props.bucketName}.s3.amazonaws.com`,
+        bucketRegionalDomainName: `${props.bucketName}.s3.${region}.amazonaws.com`,
+        region,
+        hostedZoneId: getHostedZoneId(region),
+        versioningEnabled: versioningResponse.Status === "Enabled",
+        acl: aclResponse.Grants?.[0]?.Permission?.toLowerCase(),
+        ...(tags && { tags }),
+      };
+
+      return output;
+    }
   },
 );
 
