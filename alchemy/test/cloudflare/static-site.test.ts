@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { apply } from "../../src/apply";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { StaticSite } from "../../src/cloudflare/static-site";
 import { Worker } from "../../src/cloudflare/worker";
@@ -58,11 +57,9 @@ describe("StaticSite Resource", () => {
     });
 
     try {
-      // Apply to create the site
-      const output = await apply(site);
-      expect(output.id).toBeTruthy();
-      expect(output.workerId).toBeTruthy();
-      expect(output.assets.length).toBeGreaterThan(0);
+      expect(site.id).toBeTruthy();
+      expect(site.workerId).toBeTruthy();
+      expect(site.assets.length).toBeGreaterThan(0);
 
       // Verify with Cloudflare API directly
       const api = await createCloudflareApi();
@@ -72,23 +69,23 @@ describe("StaticSite Resource", () => {
       expect(response.status).toEqual(200);
 
       // Verify the worker URL is provided
-      expect(output.url).toBeTruthy();
+      expect(site.url).toBeTruthy();
 
-      if (output.url) {
+      if (site.url) {
         // Test the worker URL directly
-        const indexResponse = await fetch(output.url);
+        const indexResponse = await fetch(site.url);
         expect(indexResponse.status).toEqual(200);
         expect(indexResponse.headers.get("content-type")).toContain(
           "text/html",
         );
 
         // Test CSS file
-        const cssResponse = await fetch(`${output.url}/styles.css`);
+        const cssResponse = await fetch(`${site.url}/styles.css`);
         expect(cssResponse.status).toEqual(200);
         expect(cssResponse.headers.get("content-type")).toContain("text/css");
 
         // Test JS file in subfolder
-        const jsResponse = await fetch(`${output.url}/js/app.js`);
+        const jsResponse = await fetch(`${site.url}/js/app.js`);
         expect(jsResponse.status).toEqual(200);
         expect(jsResponse.headers.get("content-type")).toContain("javascript");
       }
@@ -146,13 +143,10 @@ describe("StaticSite Resource", () => {
         },
       });
 
-      // Apply to create the site with backend worker
-      const output = site;
-
       // Verify main outputs
-      expect(output.id).toBeTruthy();
-      expect(output.workerId).toBeTruthy();
-      expect(output.assets.length).toBeGreaterThan(0);
+      expect(site.id).toBeTruthy();
+      expect(site.workerId).toBeTruthy();
+      expect(site.assets.length).toBeGreaterThan(0);
 
       // Verify main worker exists
       const getMainResponse = await api.get(
@@ -167,13 +161,13 @@ describe("StaticSite Resource", () => {
       expect(getBackendResponse.status).toEqual(200);
 
       // Verify the worker URL is provided
-      expect(output.url).toBeTruthy();
+      expect(site.url).toBeTruthy();
 
-      if (output.url) {
+      if (site.url) {
         // Test the worker's routing behavior - this path doesn't exist as a static file
         // so it should be routed to the backend worker
         const testPath = "/api/test";
-        const workerResponse = await fetch(`${output.url}${testPath}`);
+        const workerResponse = await fetch(`${site.url}${testPath}`);
 
         // Check status and content type
         // expect(workerResponse.status).toEqual(200);

@@ -185,10 +185,9 @@ describe("AWS Resources", () => {
 
       // Now test updating with a different policy
       const updatedPolicyArn = "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess";
-      let updatedRole;
 
       try {
-        updatedRole = await Role(roleId, {
+        role = await Role(roleId, {
           roleName,
           assumeRolePolicy,
           description: "Test role with updated managed policies",
@@ -199,19 +198,19 @@ describe("AWS Resources", () => {
         });
 
         // Verify the updated managed policy is attached
-        const updatedPoliciesResponse = await iam.send(
+        const updatedPolicies = await iam.send(
           new ListAttachedRolePoliciesCommand({
             RoleName: roleName,
           }),
         );
 
-        expect(updatedPoliciesResponse.AttachedPolicies).toBeTruthy();
-        expect(updatedPoliciesResponse.AttachedPolicies?.length).toBe(1);
-        expect(updatedPoliciesResponse.AttachedPolicies?.[0].PolicyArn).toBe(
+        expect(updatedPolicies.AttachedPolicies).toBeTruthy();
+        expect(updatedPolicies.AttachedPolicies?.length).toBe(1);
+        expect(updatedPolicies.AttachedPolicies?.[0].PolicyArn).toBe(
           updatedPolicyArn,
         );
       } finally {
-        await destroy(updatedRole);
+        await destroy(role);
         // Wait for the role to be deleted before asserting
         await new Promise((resolve) => setTimeout(resolve, 2000));
         await assertRoleNotExists(roleName);
@@ -238,15 +237,15 @@ describe("AWS Resources", () => {
         expect(role.id).toBe(roleName);
 
         // Verify managed policy is attached
-        let attachedPoliciesResponse = await iam.send(
+        let attachedPolicies = await iam.send(
           new ListAttachedRolePoliciesCommand({
             RoleName: roleName,
           }),
         );
 
-        expect(attachedPoliciesResponse.AttachedPolicies).toBeTruthy();
-        expect(attachedPoliciesResponse.AttachedPolicies?.length).toBe(1);
-        expect(attachedPoliciesResponse.AttachedPolicies?.[0].PolicyArn).toBe(
+        expect(attachedPolicies.AttachedPolicies).toBeTruthy();
+        expect(attachedPolicies.AttachedPolicies?.length).toBe(1);
+        expect(attachedPolicies.AttachedPolicies?.[0].PolicyArn).toBe(
           managedPolicyArn,
         );
 
@@ -262,14 +261,14 @@ describe("AWS Resources", () => {
         });
 
         // Verify managed policies have been removed
-        attachedPoliciesResponse = await iam.send(
+        attachedPolicies = await iam.send(
           new ListAttachedRolePoliciesCommand({
             RoleName: roleName,
           }),
         );
 
-        expect(attachedPoliciesResponse.AttachedPolicies).toBeTruthy();
-        expect(attachedPoliciesResponse.AttachedPolicies?.length).toBe(0);
+        expect(attachedPolicies.AttachedPolicies).toBeTruthy();
+        expect(attachedPolicies.AttachedPolicies?.length).toBe(0);
       } finally {
         if (role) {
           await destroy(role);

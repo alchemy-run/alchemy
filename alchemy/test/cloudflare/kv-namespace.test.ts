@@ -8,7 +8,6 @@ describe("KV Namespace Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-kv`;
 
   test("create, update, and delete KV namespace", async () => {
-    // Create a KV namespace
     let kvNamespace;
     try {
       kvNamespace = await KVNamespace(testId, {
@@ -25,7 +24,6 @@ describe("KV Namespace Resource", () => {
         ],
       });
 
-      // Apply to create the KV namespace
       expect(kvNamespace.id).toBeTruthy();
       expect(kvNamespace.title).toEqual(
         `${BRANCH_PREFIX}-Test Namespace ${testId}`,

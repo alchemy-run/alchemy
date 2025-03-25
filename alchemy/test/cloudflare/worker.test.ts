@@ -251,10 +251,9 @@ describe("Worker Resource", () => {
       });
 
       // Apply to create the worker
-      const output = worker;
-      expect(output.id).toBeTruthy();
-      expect(output.name).toEqual(workerName);
-      expect(output.format).toEqual("cjs");
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.format).toEqual("cjs");
 
       // Update the worker with a new script
       const updatedScript = `
@@ -263,14 +262,13 @@ describe("Worker Resource", () => {
         });
       `;
 
-      const updatedWorker = await Worker(testName, {
+      worker = await Worker(testName, {
         name: workerName,
         script: updatedScript,
         format: "cjs",
       });
 
-      const updateOutput = updatedWorker;
-      expect(updateOutput.id).toEqual(output.id);
+      expect(worker.id).toEqual(worker.id);
     } finally {
       if (worker) {
         // Delete the worker
@@ -315,14 +313,13 @@ describe("Worker Resource", () => {
         };
       `;
 
-      const updatedWorker = await Worker(esmTestName, {
+      worker = await Worker(esmTestName, {
         name: workerName,
         script: updatedEsmScript,
         format: "esm",
       });
 
-      const updateOutput = updatedWorker;
-      expect(updateOutput.id).toEqual(output.id);
+      expect(worker.id).toEqual(output.id);
     } finally {
       // Delete the worker
       await destroy(worker);
@@ -448,7 +445,7 @@ describe("Worker Resource", () => {
       );
 
       // Update the worker with the DO binding
-      const updatedWorker = await Worker(doBindingTestName, {
+      worker = await Worker(doBindingTestName, {
         name: workerName,
         script: durableObjectWorkerScript,
         format: "esm",
@@ -457,11 +454,9 @@ describe("Worker Resource", () => {
         },
       });
 
-      // Apply the update with the binding
-      const output = updatedWorker;
-      expect(output.id).toBeTruthy();
-      expect(output.name).toEqual(workerName);
-      expect(output.bindings).toBeDefined();
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
     } finally {
       await destroy(worker);
 
@@ -496,11 +491,9 @@ describe("Worker Resource", () => {
           TEST_KV: testKv,
         },
       });
-      // Apply to create the worker
-      const output = worker;
-      expect(output.id).toBeTruthy();
-      expect(output.name).toEqual(workerName);
-      expect(output.bindings).toBeDefined();
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
     } finally {
       try {
         // Delete the worker
@@ -564,11 +557,9 @@ describe("Worker Resource", () => {
         },
       });
 
-      // Apply the update
-      const output = worker;
-      expect(output.id).toBeTruthy();
-      expect(output.name).toEqual(workerName);
-      expect(output.bindings).toBeDefined();
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
     } finally {
       try {
         if (worker) {
@@ -601,27 +592,25 @@ describe("Worker Resource", () => {
         url: true, // Enable workers.dev URL to test the worker
       });
 
-      // Apply to create the worker
-      const output = worker;
-      expect(output.id).toBeTruthy();
-      expect(output.name).toEqual(workerName);
-      expect(output.env).toBeDefined();
-      expect(output.env?.TEST_API_KEY).toEqual("test-api-key-123");
-      expect(output.env?.NODE_ENV).toEqual("testing");
-      expect(output.url).toBeTruthy();
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.env).toBeDefined();
+      expect(worker.env?.TEST_API_KEY).toEqual("test-api-key-123");
+      expect(worker.env?.NODE_ENV).toEqual("testing");
+      expect(worker.url).toBeTruthy();
 
       // Wait for the worker to be available
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      if (output.url) {
+      if (worker.url) {
         // Test that the environment variables are accessible in the worker
-        const response = await fetch(`${output.url}/env/TEST_API_KEY`);
+        const response = await fetch(`${worker.url}/env/TEST_API_KEY`);
         expect(response.status).toEqual(200);
         const text = await response.text();
         expect(text).toEqual("test-api-key-123");
 
         // Test another environment variable
-        const nodeEnvResponse = await fetch(`${output.url}/env/NODE_ENV`);
+        const nodeEnvResponse = await fetch(`${worker.url}/env/NODE_ENV`);
         expect(nodeEnvResponse.status).toEqual(200);
         const nodeEnvText = await nodeEnvResponse.text();
         expect(nodeEnvText).toEqual("testing");
@@ -640,35 +629,31 @@ describe("Worker Resource", () => {
         url: true,
       });
 
-      // Apply the update
-      const updateOutput = worker;
-      expect(updateOutput.id).toEqual(output.id);
-      expect(updateOutput.env?.TEST_API_KEY).toEqual("updated-key-456");
-      expect(updateOutput.env?.NODE_ENV).toEqual("production");
-      expect(updateOutput.env?.NEW_VAR).toEqual("new-value");
+      expect(worker.id).toEqual(worker.id);
+      expect(worker.env?.TEST_API_KEY).toEqual("updated-key-456");
+      expect(worker.env?.NODE_ENV).toEqual("production");
+      expect(worker.env?.NEW_VAR).toEqual("new-value");
       // APP_DEBUG should no longer be present
-      expect(updateOutput.env?.APP_DEBUG).toBeUndefined();
+      expect(worker.env?.APP_DEBUG).toBeUndefined();
 
       // Wait for the worker update to propagate
       await new Promise((resolve) => setTimeout(resolve, 5000));
 
-      if (updateOutput.url) {
+      if (worker.url) {
         // Test that the updated environment variables are accessible
-        const response = await fetch(`${updateOutput.url}/env/TEST_API_KEY`);
+        const response = await fetch(`${worker.url}/env/TEST_API_KEY`);
         expect(response.status).toEqual(200);
         const text = await response.text();
         expect(text).toEqual("updated-key-456");
 
         // Test new environment variable
-        const newVarResponse = await fetch(`${updateOutput.url}/env/NEW_VAR`);
+        const newVarResponse = await fetch(`${worker.url}/env/NEW_VAR`);
         expect(newVarResponse.status).toEqual(200);
         const newVarText = await newVarResponse.text();
         expect(newVarText).toEqual("new-value");
 
         // Test that the removed environment variable is no longer accessible
-        const removedVarResponse = await fetch(
-          `${updateOutput.url}/env/APP_DEBUG`,
-        );
+        const removedVarResponse = await fetch(`${worker.url}/env/APP_DEBUG`);
         expect(removedVarResponse.status).toEqual(200);
         const removedVarText = await removedVarResponse.text();
         expect(removedVarText).toEqual("undefined");
@@ -686,19 +671,18 @@ describe("Worker Resource", () => {
 
   test("migrate durable object by renaming class", async () => {
     const workerName = `${doMigrationTestName}-migrate-1`;
-    let initialWorker: Worker | undefined = undefined;
+    let worker: Worker | undefined = undefined;
     try {
       // First create the worker with the original Counter class
-      initialWorker = await Worker(doMigrationTestName, {
+      worker = await Worker(doMigrationTestName, {
         name: workerName,
         script: doMigrationWorkerScriptV1,
         format: "esm",
       });
 
       // Apply to create the worker first
-      const initialOutput = initialWorker;
-      expect(initialOutput.id).toBeTruthy();
-      expect(initialOutput.name).toEqual(workerName);
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
 
       // Create a stable DO namespace with the original Counter class
       const counterNamespace = new DurableObjectNamespace(
@@ -710,7 +694,7 @@ describe("Worker Resource", () => {
       );
 
       // Update worker with the original Counter binding
-      const workerWithBinding = await Worker(doMigrationTestName, {
+      worker = await Worker(doMigrationTestName, {
         name: workerName,
         script: doMigrationWorkerScriptV1,
         format: "esm",
@@ -719,9 +703,7 @@ describe("Worker Resource", () => {
         },
       });
 
-      // Apply the binding
-      const outputWithBinding = workerWithBinding;
-      expect(outputWithBinding.bindings).toBeDefined();
+      expect(worker.bindings).toBeDefined();
 
       // Now update the namespace to use CounterV2 class
       const updatedNamespace = new DurableObjectNamespace(
@@ -733,7 +715,7 @@ describe("Worker Resource", () => {
       );
 
       // Update worker with the migrated binding
-      const workerWithMigration = await Worker(doMigrationTestName, {
+      worker = await Worker(doMigrationTestName, {
         name: workerName,
         script: doMigrationWorkerScriptV2,
         format: "esm",
@@ -742,10 +724,10 @@ describe("Worker Resource", () => {
         },
       });
 
-      expect(workerWithMigration.bindings).toBeDefined();
+      expect(worker.bindings).toBeDefined();
     } finally {
-      if (initialWorker) {
-        await destroy(initialWorker);
+      if (worker) {
+        await destroy(worker);
       }
     }
   });
@@ -764,10 +746,8 @@ describe("Worker Resource", () => {
         format: "esm",
       });
 
-      // Apply to create the worker
-      const initialOutput = worker;
-      expect(initialOutput.id).toBeTruthy();
-      expect(initialOutput.name).toEqual(workerName);
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
 
       // Create a Durable Object namespace
       const counterNamespace = new DurableObjectNamespace(
@@ -853,19 +833,17 @@ describe("Worker Resource", () => {
         },
       });
 
-      // Apply to create the worker
-      const output = worker;
-      expect(output.id).toBeTruthy();
-      expect(output.name).toEqual(workerName);
-      expect(output.bindings).toBeDefined();
-      expect(output.bindings.STORAGE).toBeDefined();
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+      expect(worker.bindings.STORAGE).toBeDefined();
 
       // Wait for the worker to be available
       await new Promise((resolve) => setTimeout(resolve, 3000));
 
-      if (output.url) {
+      if (worker.url) {
         // Test that the R2 binding is accessible in the worker
-        const response = await fetch(`${output.url}/r2-info`);
+        const response = await fetch(`${worker.url}/r2-info`);
         expect(response.status).toEqual(200);
         const data = (await response.json()) as {
           hasR2: boolean;

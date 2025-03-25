@@ -40,7 +40,6 @@ describe("R2 Bucket Resource", () => {
         name: testId,
         locationHint: "wnam", // West North America
       });
-      // Apply to create the bucket
       expect(bucket.id).toEqual(testId);
       expect(bucket.name).toEqual(testId);
 
@@ -56,12 +55,12 @@ describe("R2 Bucket Resource", () => {
       expect(responseData.result.name).toEqual(testId);
 
       // Update the bucket to enable public access
-      const updatedBucket = await R2Bucket(testId, {
+      bucket = await R2Bucket(testId, {
         name: testId,
         allowPublicAccess: true,
       });
 
-      expect(updatedBucket.id).toEqual(testId);
+      expect(bucket.id).toEqual(testId);
 
       // Verify public access was enabled
       const publicAccessResponse = await api.get(
@@ -109,9 +108,7 @@ describe("R2 Bucket Resource", () => {
       expect(getResponse.status).toEqual(200);
     } finally {
       // Clean up
-      await destroy(euBucket).catch((e) =>
-        console.error("Error cleaning up EU bucket:", e),
-      );
+      await destroy(euBucket);
     }
   });
 });

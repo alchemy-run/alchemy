@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { apply } from "../../src/apply";
 import { destroy } from "../../src/destroy";
 import { createGitHubClient } from "../../src/github/client";
 import { GitHubSecret } from "../../src/github/secret";
@@ -26,7 +25,7 @@ describe("GitHubSecret Resource", () => {
       const updatedSecretValue = secret("this-is-an-updated-test-secret-value");
 
       // Create a test secret
-      const ghSecret = new GitHubSecret(testId, {
+      const ghSecret = await GitHubSecret(testId, {
         owner,
         repository,
         name: secretName,
@@ -37,11 +36,10 @@ describe("GitHubSecret Resource", () => {
         console.log(`Creating secret: ${secretName}`);
 
         // Apply to create the secret - resource will handle authentication
-        const output = await apply(ghSecret);
-        expect(output.id).toBeTruthy();
-        expect(output.owner).toEqual(owner);
-        expect(output.repository).toEqual(repository);
-        expect(output.name).toEqual(secretName);
+        expect(ghSecret.id).toBeTruthy();
+        expect(ghSecret.owner).toEqual(owner);
+        expect(ghSecret.repository).toEqual(repository);
+        expect(ghSecret.name).toEqual(secretName);
 
         // Try to verify with the API
         try {
@@ -72,15 +70,14 @@ describe("GitHubSecret Resource", () => {
         // Update the secret
         console.log(`Updating secret: ${secretName}`);
 
-        const updatedSecret = new GitHubSecret(testId, {
+        const updatedSecret = await GitHubSecret(testId, {
           owner,
           repository,
           name: secretName,
           value: updatedSecretValue,
         });
 
-        const updateOutput = await apply(updatedSecret);
-        expect(updateOutput.id).toEqual(output.id);
+        expect(updatedSecret.id).toEqual(ghSecret.id);
       } catch (error: any) {
         console.error(`Test error: ${error.message}`);
         throw error;

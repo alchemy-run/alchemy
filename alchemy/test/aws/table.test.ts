@@ -14,7 +14,7 @@ describe("AWS Resources", () => {
   describe("Table", () => {
     test("create table", async () => {
       const tableName = `${BRANCH_PREFIX}-alchemy-test-create-table`;
-      const table = Table(tableName, {
+      const table = await Table(tableName, {
         tableName,
         partitionKey: {
           name: "id",
@@ -30,21 +30,20 @@ describe("AWS Resources", () => {
       });
 
       try {
-        const output = await table;
-        expect(output.id).toBe(tableName);
-        expect(output.arn).toMatch(
+        expect(table.id).toBe(tableName);
+        expect(table.arn).toMatch(
           new RegExp(`^arn:aws:dynamodb:[a-z0-9-]+:\\d+:table\\/${tableName}$`),
         );
-        expect(output.tableId).toBeTruthy();
-        expect(output.partitionKey).toEqual({
+        expect(table.tableId).toBeTruthy();
+        expect(table.partitionKey).toEqual({
           name: "id",
           type: "S",
         });
-        expect(output.sortKey).toEqual({
+        expect(table.sortKey).toEqual({
           name: "timestamp",
           type: "N",
         });
-        expect(output.tags).toEqual({
+        expect(table.tags).toEqual({
           Environment: "test",
         });
 
