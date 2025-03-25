@@ -10,10 +10,6 @@ import {
   Worker,
 } from "alchemy/cloudflare";
 
-await alchemy.run(async () => {});
-
-await alchemy.scope(process.env.STAGE);
-
 await using _ = await alchemy.scope({
   mode: process.argv.includes("--destroy") ? "destroy" : "up",
   quiet: process.argv.includes("--verbose") ? false : true,

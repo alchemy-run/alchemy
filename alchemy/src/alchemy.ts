@@ -1,5 +1,6 @@
 import { DEFAULT_STAGE } from "./global";
 import { Scope } from "./scope";
+import { secret } from "./secret";
 import type { StateStoreType } from "./state";
 
 // export a type so that the `alchemy` "keyword" is green (like a type)
@@ -8,6 +9,7 @@ export type alchemy = typeof alchemy;
 export const alchemy = {
   scope,
   run,
+  secret,
 };
 
 export interface AlchemyOptions {

@@ -1,4 +1,4 @@
-import alchemy, { secret } from "./alchemy/src";
+import alchemy from "./alchemy/src";
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
 import { GitHubSecret } from "./alchemy/src/github";
@@ -59,7 +59,7 @@ await Promise.all([
       owner: "sam-goodwin",
       repository: "alchemy",
       name,
-      value: secret(value),
+      value: alchemy.secret(value),
     }),
   ),
 ]);

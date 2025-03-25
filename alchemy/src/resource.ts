@@ -1,9 +1,10 @@
 import { alchemy } from "./alchemy";
 import type { Context } from "./context";
 import { DestroyedSignal } from "./destroy";
-import { PROVIDERS } from "./global";
 import { Scope } from "./scope";
 import type { State } from "./state";
+
+const PROVIDERS = new Map<ResourceType, Provider<any, any>>();
 
 export type ResourceID = string;
 export type ResourceFQN = string;
