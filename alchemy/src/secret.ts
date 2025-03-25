@@ -1,7 +1,9 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import { isPromise } from "./output";
 
-const passphraseContext = new AsyncLocalStorage<string>();
+export class Secret {
+  public readonly type = "secret";
+  constructor(readonly unencrypted: string) {}
+}
 
 export function secret<S extends string | Promise<string> | undefined>(
   unencrypted: S,
@@ -20,25 +22,4 @@ export function secret<S extends string | Promise<string> | undefined>(
         })
       : new Secret(unencrypted)
   ) as any;
-}
-
-export class Secret {
-  public readonly type = "secret";
-  constructor(readonly unencrypted: string) {}
-}
-
-export function setSecretPassphrase(passphrase: string) {
-  passphraseContext.enterWith(passphrase);
-}
-
-export function getSecretPassphrase(): string {
-  const passphrase = passphraseContext.getStore();
-  if (!passphrase) {
-    throw new Error("No passphrase set");
-  }
-  return passphrase;
-}
-
-export function tryGetSecretPassphrase(): string | undefined {
-  return passphraseContext.getStore();
 }

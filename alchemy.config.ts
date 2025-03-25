@@ -1,9 +1,9 @@
-import { alchemize, secret } from "./alchemy/src";
+import alchemy, { secret } from "./alchemy/src";
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
 import { GitHubSecret } from "./alchemy/src/github";
 
-await alchemize({
+await using _ = await alchemy.scope({
   stage: "github:alchemy",
   mode: process.argv.includes("--destroy") ? "destroy" : "up",
   // pass the password in (you can get it from anywhere, e.g. stdin)
@@ -41,12 +41,6 @@ const githubRole = await Role("github-oidc-role", {
   managedPolicyArns: ["arn:aws:iam::aws:policy/AdministratorAccess"],
 });
 
-await GitHubOIDCProvider("github-oidc", {
-  owner: "sam-goodwin",
-  repository: "alchemy",
-  roleArn: githubRole.arn,
-});
-
 const githubSecrets = {
   AWS_ROLE_ARN: githubRole.arn,
   CLOUDFLARE_API_KEY: process.env.CLOUDFLARE_API_KEY,
@@ -54,8 +48,13 @@ const githubSecrets = {
   STRIPE_API_KEY: process.env.STRIPE_API_KEY,
 };
 
-await Promise.all(
-  Object.entries(githubSecrets).map(([name, value]) =>
+await Promise.all([
+  GitHubOIDCProvider("github-oidc", {
+    owner: "sam-goodwin",
+    repository: "alchemy",
+    roleArn: githubRole.arn,
+  }),
+  ...Object.entries(githubSecrets).map(([name, value]) =>
     GitHubSecret(`github-secret-${name}`, {
       owner: "sam-goodwin",
       repository: "alchemy",
@@ -63,4 +62,4 @@ await Promise.all(
       value: secret(value),
     }),
   ),
-);
+]);

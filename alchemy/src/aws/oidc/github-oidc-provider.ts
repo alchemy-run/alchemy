@@ -12,6 +12,7 @@ export interface GitHubOIDCProviderProps
   owner: string;
   repository: string;
 }
+export type GitHubOIDCProvider = ReturnType<typeof GitHubOIDCProvider>;
 
 export const GitHubOIDCProvider = async (
   id: string,

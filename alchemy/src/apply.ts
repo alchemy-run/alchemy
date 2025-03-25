@@ -1,20 +1,10 @@
-import { defaultStage, defaultStateStore } from "./global";
 import { type Output, OutputChain, type Resolved } from "./output";
-import {
-  Input,
-  Provider,
-  type Resource,
-  ResourceID,
-  isResource,
-} from "./resource";
-import { type Scope as IScope, getScope } from "./scope";
+import { type Resource, ResourceID, isResource } from "./resource";
+import { Scope } from "./scope";
 import { Secret } from "./secret";
-import type { StateStore } from "./state";
 
 export interface ApplyOptions {
-  stage: string;
-  scope: IScope;
-  stateStore: StateStore;
+  scope: Scope;
   quiet?: boolean;
 }
 
@@ -27,13 +17,11 @@ export async function apply<T>(
   output: T,
   options?: Partial<ApplyOptions>,
 ): Promise<Resolved<T>> {
-  const stage = options?.stage ?? defaultStage;
-  const scope = options?.scope ?? getScope();
+  const scope = options?.scope ?? Scope.current;
+  const stage = scope.stage;
   const statePath = scope.getScopePath(stage);
-  const stateStore = options?.stateStore ?? new defaultStateStore(statePath);
-
-  return (
-    await evaluate(output, { stage, scope, stateStore, quiet: options?.quiet })
+  const stateStore = scope.return(
+    await evaluate(output, { stage, scope, stateStore, quiet: options?.quiet }),
   ).value as Resolved<T>;
 }
 

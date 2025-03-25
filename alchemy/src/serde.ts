@@ -1,19 +1,23 @@
 import { decryptWithKey, encryptWithKey } from "./encrypt";
-import { Secret, getSecretPassphrase } from "./secret";
+import type { Scope } from "./scope";
+import { Secret } from "./secret";
 
-export async function serialize(value: any): Promise<any> {
+export async function serialize(scope: Scope, value: any): Promise<any> {
   if (Array.isArray(value)) {
     return Promise.all(value.map(serialize));
   } else if (value instanceof Secret) {
+    if (!scope.password) {
+      throw new Error("Cannot serialize secret without password");
+    }
     return {
-      "@secret": await encryptWithKey(value.unencrypted, getSecretPassphrase()),
+      "@secret": await encryptWithKey(value.unencrypted, scope.password),
     };
   } else if (value && typeof value === "object") {
     return Object.fromEntries(
       await Promise.all(
         Object.entries(value).map(async ([key, value]) => [
           key,
-          await serialize(value),
+          await serialize(scope, value),
         ]),
       ),
     );
@@ -21,22 +25,23 @@ export async function serialize(value: any): Promise<any> {
   return value;
 }
 
-export async function deserialize(value: any): Promise<any> {
+export async function deserialize(scope: Scope, value: any): Promise<any> {
   if (Array.isArray(value)) {
     return await Promise.all(
-      value.map(async (item) => await deserialize(item)),
+      value.map(async (item) => await deserialize(scope, item)),
     );
   } else if (value && typeof value === "object") {
     if (typeof value["@secret"] === "string") {
-      return new Secret(
-        await decryptWithKey(value["@secret"], getSecretPassphrase()),
-      );
+      if (!scope.password) {
+        throw new Error("Cannot deserialize secret without password");
+      }
+      return new Secret(await decryptWithKey(value["@secret"], scope.password));
     } else {
       return Object.fromEntries(
         await Promise.all(
           Object.entries(value).map(async ([key, value]) => [
             key,
-            await deserialize(value),
+            await deserialize(scope, value),
           ]),
         ),
       );

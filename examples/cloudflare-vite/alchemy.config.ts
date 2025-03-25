@@ -1,7 +1,7 @@
 // we don't use node in ./src/**, only here for alchemy to bootstrap CloudFlare
 import "@types/node";
 
-import { alchemize, secret } from "alchemy";
+import alchemy, { secret } from "alchemy";
 import {
   DurableObjectNamespace,
   KVNamespace,
@@ -10,8 +10,11 @@ import {
   Worker,
 } from "alchemy/cloudflare";
 
-// TODO: this should be a config
-await alchemize({
+await alchemy.run(async () => {});
+
+await alchemy.scope(process.env.STAGE);
+
+await using _ = await alchemy.scope({
   mode: process.argv.includes("--destroy") ? "destroy" : "up",
   quiet: process.argv.includes("--verbose") ? false : true,
 });
@@ -43,7 +46,7 @@ export const api = await Worker("api", {
   },
 });
 
-const website = await StaticSite("Website", {
+export const website = await StaticSite("Website", {
   name: "alchemy-example-vite",
   dir: "./dist",
   build: {
@@ -57,8 +60,3 @@ const website = await StaticSite("Website", {
 console.log({
   url: website.url,
 });
-
-// await alchemize({
-//   mode: process.argv.includes("--destroy") ? "destroy" : "up",
-//   quiet: process.argv.includes("--verbose") ? false : true,
-// });

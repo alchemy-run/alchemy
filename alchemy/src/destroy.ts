@@ -1,14 +1,10 @@
-import { defaultStage, defaultStateStore } from "./global";
+import { DEFAULT_STAGE } from "./global";
 import type { Output } from "./output";
 import { Provider, ResourceID, isResource } from "./resource";
 import { type Scope, rootScope } from "./scope";
 import type { State, StateStore } from "./state";
 
-class Destroyed extends Error {}
-
-export function destroyed(): never {
-  throw new Destroyed();
-}
+export class DestroyedSignal extends Error {}
 
 export interface DestroyOptions {
   stage?: string;
@@ -62,7 +58,7 @@ export async function destroy<T>(
     const resource = args[0];
     // stage = args[1]?.stage ?? defaultStage;
     resourceID = resource[ResourceID];
-    stage = args[1]?.stage ?? defaultStage;
+    stage = args[1]?.stage ?? DEFAULT_STAGE;
     scope = args[1]?.scope ?? rootScope;
     const statePath = scope.getScopePath(stage);
     stateStore = args[1]?.stateStore ?? new defaultStateStore(statePath);

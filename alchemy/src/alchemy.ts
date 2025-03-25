@@ -1,0 +1,99 @@
+import { DEFAULT_STAGE } from "./global";
+import { Scope } from "./scope";
+import type { StateStoreType } from "./state";
+
+// export a type so that the `alchemy` "keyword" is green (like a type)
+export type alchemy = typeof alchemy;
+
+export const alchemy = {
+  scope,
+  run,
+};
+
+export interface AlchemyOptions {
+  /**
+   * Determines whether the resources will be created/updated or deleted.
+   *
+   * @default "up"
+   */
+  mode?: "up" | "destroy";
+  /**
+   * Name to scope the resource state under (e.g. `.alchemy/{stage}/..`).
+   *
+   * @default - your POSIX username
+   */
+  stage?: string;
+  /**
+   * If true, will not prune resources that were dropped from the root stack.
+   *
+   * @default true
+   */
+  destroyOrphans?: boolean;
+  /**
+   * A custom state store to use instead of the default file system store.
+   */
+  stateStore?: StateStoreType;
+  /**
+   * A custom scope to use instead of the default root scope.
+   */
+  scope?: Scope;
+  /**
+   * If true, will not print any Create/Update/Delete messages.
+   *
+   * @default false
+   */
+  quiet?: boolean;
+
+  /**
+   * A passphrase to use to encrypt/decrypt secrets.
+   */
+  password?: string;
+}
+
+/**
+ * Enter a new scope synchronously.
+ * @param options
+ * @returns
+ */
+async function scope(
+  ...args:
+    | [id?: string]
+    | [options: AlchemyOptions]
+    | [id: string, options?: AlchemyOptions]
+): Promise<Scope> {
+  const [scopeName, options] =
+    args.length === 2
+      ? args
+      : typeof args[0] === "string"
+        ? [args[0], args[1]]
+        : [DEFAULT_STAGE, args[0]];
+  const parent = Scope.get();
+  const scope = new Scope({
+    ...options,
+    stage: options?.stage ?? DEFAULT_STAGE,
+    scopeName,
+    parent,
+  });
+  scope.enter();
+
+  // if (parent.resources.size == 0) {
+  //   await parent.init();
+  // }
+
+  return scope;
+}
+
+async function run<T>(
+  ...args:
+    | [options: AlchemyOptions, fn: (this: Scope, scope: Scope) => Promise<T>]
+    | [fn: (this: Scope, scope: Scope) => Promise<T>]
+): Promise<T> {
+  const [options, fn] = args.length === 2 ? args : [undefined, args[0]];
+  await using scope = await alchemy.scope(
+    options ??
+      {
+        // TODO: defaults
+      },
+  );
+  return await fn.bind(scope)(scope);
+}

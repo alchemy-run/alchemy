@@ -1,11 +1,9 @@
-import { alchemize } from "./alchemize";
-import { type ApplyOptions, apply } from "./apply";
+import { alchemy } from "./alchemy";
 import type { Context } from "./context";
-import { type DestroyOptions, destroyed } from "./destroy";
-import { defaultStateStore, deletions, providers } from "./global";
-import { type Output, OutputChain } from "./output";
-import { type Scope as IScope, getScope, pushScope } from "./scope";
-import type { State, StateStore } from "./state";
+import { DestroyedSignal } from "./destroy";
+import { PROVIDERS } from "./global";
+import { Scope } from "./scope";
+import type { State } from "./state";
 
 export type ResourceID = string;
 export type ResourceFQN = string;
@@ -13,28 +11,12 @@ export type ResourceType = string;
 
 export const ResourceID = Symbol.for("ResourceID");
 export const ResourceFQN = Symbol.for("ResourceFQN");
-export const ResourceHandle = Symbol.for("ResourceHandle");
-export const Provider = Symbol.for("Provider");
-export const Input = Symbol.for("Input");
-export const Value = Symbol.for("Value");
-export const Apply = Symbol.for("Apply");
-export const Provide = Symbol.for("Provide");
-export const Scope = Symbol.for("Scope");
-export const Options = Symbol.for("Options");
 
-// properties that pierce through the Proxy
-const OrthogonalProperties = [
-  ResourceID,
-  ResourceFQN,
-  ResourceHandle,
-  Provider,
-  Input,
-  Value,
-  Apply,
-  Provide,
-  Scope,
-  Options,
-] as const;
+export type PendingResource<Out = unknown> = Promise<Out> & {
+  id: ResourceID;
+  fqn: ResourceFQN;
+  signal: () => void;
+};
 
 export interface ProviderOptions {
   /**
@@ -43,7 +25,7 @@ export interface ProviderOptions {
   alwaysUpdate: boolean;
 }
 
-export interface Resource<Kind extends string> {
+export interface Resource<Kind extends string = string> {
   kind: Kind;
 }
 
@@ -58,263 +40,199 @@ type IsClass = {
   new (_: never): never;
 };
 
-type Provider<
+export type ResourceProps = {
+  [key: string]: any;
+};
+
+export type Provider<
   Type extends string,
-  F extends (this: Context<any>, id: string, props: any) => any,
+  F extends (this: Context<any>, id: string, props: ResourceProps) => any,
 > = F &
   IsClass & {
     type: Type;
   } & {
-    update(
-      stage: string,
+    apply(
+      scope: Scope,
       resource: any, // TODO: typed
-      deps: Set<ResourceID>,
       inputs: Parameters<F>,
-      stateStore: StateStore,
-      options: ApplyOptions,
     ): Promise<Awaited<ReturnType<F>> | void>;
     delete(
-      stage: string,
-      scope: IScope | undefined,
+      scope: Scope,
       resourceID: ResourceID,
-      state: State,
       inputs: Parameters<F>,
-      options: DestroyOptions,
     ): Promise<void>;
   };
 
 export function Resource<
   const Type extends string,
-  F extends (this: Context<any>, id: string, props: any) => any,
+  F extends (this: Context<any>, id: string, props: ResourceProps) => any,
 >(type: Type, fn: F): Provider<Type, F>;
 
 export function Resource<
   const Type extends string,
-  F extends (this: Context<any>, id: string, props: any) => any,
+  F extends (this: Context<any>, id: string, props: ResourceProps) => any,
 >(type: Type, options: Partial<ProviderOptions>, fn: F): Provider<Type, F>;
 
 export function Resource<
   const Type extends ResourceType,
-  F extends (this: Context<any>, id: string, props: any) => any,
+  F extends (this: Context<any>, id: string, props: ResourceProps) => any,
 >(type: Type, ...args: [Partial<ProviderOptions>, F] | [F]): Provider<Type, F> {
-  if (providers.has(type)) {
+  if (PROVIDERS.has(type)) {
     throw new Error(`Resource ${type} already exists`);
   }
   const [options, func] = args.length === 2 ? args : [undefined, args[0]];
 
   type Out = Awaited<ReturnType<F>>;
 
-  const provider = ((id: string, input: any) => {
-    const scope = getScope();
+  const provider = ((resourceID: string, props: ResourceProps) => {
+    const scope = Scope.current;
 
-    if (scope.nodes.has(id)) {
+    if (scope.resources.has(resourceID)) {
       // TODO(sam): do we want to throw?
       // it's kind of awesome that you can re-create a resource and call apply
       // console.warn(`Resource ${id} already exists in the stack: ${stack.id}`);
     }
 
-    // const resourceFQN = scope.getScopePath(id) + "/" + id;
-    const self = {
-      [ResourceID]: id,
-      [ResourceHandle]: new Object(),
-      // this[ResourceFQN] = resourceFQN;
-      // this[ResourceFQN] = i++;
-      [Provider]: provider,
-      [Input]: input,
-      [Value]: undefined as Out | undefined,
-      [Scope]: scope,
-      [Provide](value: Out) {
-        this[Value] = value;
-      },
-      [Options]: {
-        alwaysUpdate: options?.alwaysUpdate ?? false,
-      },
-    };
+    // use a lazy promise to defer execution until a signal is received
+    let _signal: () => void;
+    const signal = new Promise<void>((resolve) => (_signal = resolve));
 
-    const resource = new Proxy(self, {
-      get(target: any, prop) {
-        if (OrthogonalProperties.includes(prop as any)) {
-          return target[prop];
-        } else if (prop === "apply") {
-          return target[Apply].bind(target);
-        } else {
-          return target[Apply]((value: Out) => value[prop as keyof Out]);
-        }
-      },
-    });
+    const resource = new Promise<Out>((resolve, reject) => {
+      signal.then(() =>
+        apply(scope, resource, props)
+          .then((value) => resolve!(value!))
+          .catch(reject),
+      );
+    }) as PendingResource<Out>;
+    resource.id = resourceID;
+    resource.fqn = scope.getScopePath(resourceID) + "/" + resourceID;
+    resource.signal = _signal!;
 
     const node = {
       provider,
       resource,
     } as const;
 
-    scope.nodes.set(id, node as any);
+    scope.resources.set(resourceID, node as any);
 
     return resource;
   }) as Provider<Type, F>;
   provider.type = type;
-  provider.update = update;
+  provider.apply = apply;
   provider.delete = _delete;
 
-  type Args = any;
-
-  async function update(
-    stage: string,
-    resource: any,
-    deps: Set<ResourceID>,
-    inputs: Args,
-    stateStore: StateStore,
-    options: ApplyOptions,
+  async function apply(
+    scope: Scope,
+    resource: PendingResource<Out>,
+    props: ResourceProps,
   ): Promise<Awaited<Out | void>> {
-    // const stack = resource[ResourceStack];
-    const resourceID = resource[ResourceID];
-    const resourceFQN = `${resource[Scope].getScopePath(stage)}/${resourceID}`;
-    const cacheKey = resource[ResourceHandle];
-    if (!applied.has(cacheKey)) {
-      let res, rej;
-      const promise = new Promise<Awaited<Out | void>>((resolve, reject) => {
-        res = resolve;
-        rej = reject;
-      });
-      applied.set(cacheKey, promise);
-      update().then(res).catch(rej);
-      return promise;
-    }
-    return await applied.get(cacheKey);
-
-    async function update(): Promise<Awaited<Out | void>> {
-      let resourceState: State | undefined = await stateStore.get(resourceID);
-      if (resourceState === undefined) {
-        resourceState = {
-          provider: type,
-          status: "creating",
-          data: {},
-          output: undefined,
-          deps: [...deps],
-          inputs,
-        };
-        await stateStore.set(resourceID, resourceState);
-      }
-
-      // Skip update if inputs haven't changed and resource is in a stable state
-      if (
-        resourceState.status === "created" ||
-        resourceState.status === "updated"
-      ) {
-        if (
-          JSON.stringify(resourceState.inputs) === JSON.stringify(inputs) &&
-          !resource[Options].alwaysUpdate
-        ) {
-          if (!options?.quiet) {
-            console.log(`Skip:    ${resourceFQN} (no changes)`);
-          }
-          if (resourceState.output !== undefined) {
-            resource[Provide](resourceState.output);
-          }
-          return resourceState.output;
-        }
-      }
-
-      const event = resourceState.status === "creating" ? "create" : "update";
-      resourceState.status = event === "create" ? "creating" : "updating";
-      resourceState.oldInputs = resourceState.inputs;
-      resourceState.inputs = inputs;
-
-      if (!options?.quiet) {
-        console.log(
-          `${event === "create" ? "Create" : "Update"}:  ${resourceFQN}`,
-        );
-      }
-
-      await stateStore.set(resourceID, resourceState);
-
-      let isReplaced = false;
-
-      const quiet = options.quiet ?? false;
-
-      const evaluated = await pushScope(
-        resource[Scope],
-        resourceID,
-        async () => {
-          const result = await func.bind({
-            stage,
-            resourceID,
-            resourceFQN,
-            event,
-            scope: getScope(),
-            output: resourceState.output,
-            replace: () => {
-              if (isReplaced) {
-                console.warn(
-                  `Resource ${type} ${resourceFQN} is already marked as REPLACE`,
-                );
-                return;
-              }
-              isReplaced = true;
-              deletions.push({
-                id: resourceID,
-                data: {
-                  ...resourceState!.data,
-                },
-                inputs: inputs,
-              });
-            },
-            get: (key) => resourceState!.data[key],
-            set: async (key, value) => {
-              resourceState!.data[key] = value;
-              await stateStore.set(resourceID, resourceState!);
-            },
-            delete: async (key) => {
-              const value = resourceState!.data[key];
-              delete resourceState!.data[key];
-              await stateStore.set(resourceID, resourceState!);
-              return value;
-            },
-            quiet,
-            destroy: destroyed,
-          })(...inputs);
-
-          if (result === undefined) {
-            return undefined;
-          }
-
-          const evaluated = await apply(result as Out, {
-            stage,
-            scope: getScope(),
-            quiet,
-          });
-
-          return evaluated;
-        },
-      );
-
-      if (!options?.quiet) {
-        console.log(
-          `${event === "create" ? "Created" : "Updated"}: ${resourceFQN}`,
-        );
-      }
-      await stateStore.set(resourceID, {
+    let resourceState: State = (await scope.stateStore.get(resource.id))!;
+    if (resourceState === undefined) {
+      resourceState = {
         provider: type,
-        data: resourceState.data,
-        status: event === "create" ? "created" : "updated",
-        output: evaluated,
-        inputs,
+        status: "creating",
+        data: {},
+        output: undefined,
         deps: [...deps],
-      });
-      if (evaluated !== undefined) {
-        resource[Provide](evaluated as Out);
-      }
-      return evaluated as Awaited<Out>;
+        inputs: props,
+      };
+      await scope.stateStore.set(resource.id, resourceState);
     }
+
+    // Skip update if inputs haven't changed and resource is in a stable state
+    if (
+      resourceState.status === "created" ||
+      resourceState.status === "updated"
+    ) {
+      if (
+        JSON.stringify(resourceState.inputs) === JSON.stringify(props) &&
+        options?.alwaysUpdate !== true
+      ) {
+        if (!scope.quiet) {
+          console.log(`Skip:    ${resourceFQN} (no changes)`);
+        }
+        if (resourceState.output !== undefined) {
+          resource[Provide](resourceState.output);
+        }
+        return resourceState.output;
+      }
+    }
+
+    const event = resourceState.status === "creating" ? "create" : "update";
+    resourceState.status = event === "create" ? "creating" : "updating";
+    resourceState.oldInputs = resourceState.inputs;
+    resourceState.inputs = props;
+
+    if (!scope.quiet) {
+      console.log(
+        `${event === "create" ? "Create" : "Update"}:  ${resourceFQN}`,
+      );
+    }
+
+    await scope.stateStore.set(resource.id, resourceState);
+
+    let isReplaced = false;
+
+    const quiet = options.quiet ?? false;
+
+    await alchemy.run(async () =>
+      func.bind({
+        stage,
+        resourceID,
+        resourceFQN,
+        event,
+        scope: getScope(),
+        output: resourceState.output,
+        replace: () => {
+          if (isReplaced) {
+            console.warn(
+              `Resource ${type} ${resourceFQN} is already marked as REPLACE`,
+            );
+            return;
+          }
+          isReplaced = true;
+        },
+        get: (key) => resourceState!.data[key],
+        set: async (key, value) => {
+          resourceState!.data[key] = value;
+          await scope.stateStore.set(resource.id, resourceState!);
+        },
+        delete: async (key) => {
+          const value = resourceState!.data[key];
+          delete resourceState!.data[key];
+          await scope.stateStore.set(resource.id, resourceState!);
+          return value;
+        },
+        quiet,
+        destroy: () => {
+          throw new DestroyedSignal();
+        },
+      })(resourceID, props),
+    );
+
+    if (!scope.quiet) {
+      console.log(
+        `${event === "create" ? "Created" : "Updated"}: ${resourceFQN}`,
+      );
+    }
+    await stateStore.set(resourceID, {
+      provider: type,
+      data: resourceState.data,
+      status: event === "create" ? "created" : "updated",
+      output: evaluated,
+      inputs: props,
+      deps: [...deps],
+    });
+    if (evaluated !== undefined) {
+      resource[Provide](evaluated as Out);
+    }
+    return evaluated as Awaited<Out>;
   }
 
   async function _delete(
-    stage: string,
-    scope: IScope,
+    scope: Scope,
     resourceID: ResourceID,
-    state: State,
-    inputs: Args,
-    options: DestroyOptions,
+    inputs: Parameters<F>,
   ) {
     const { Scope } = await import("./scope");
     const resourceFQN = `${scope.getScopePath(stage)}/${resourceID}`;
@@ -329,83 +247,49 @@ export function Resource<
       quiet: options.quiet,
     });
 
-    if (!options?.quiet) {
+    if (!scope.quiet) {
       console.log(`Delete:  ${resourceFQN}`);
     }
 
-    await func.bind({
-      stage,
-      scope,
-      resourceID,
-      resourceFQN: resourceFQN,
-      event: "delete",
-      output: state.output,
-      replace() {
-        throw new Error("Cannot replace a resource that is being deleted");
-      },
-      get: (key) => {
-        return state.data[key];
-      },
-      set: async (key, value) => {
-        state.data[key] = value;
-      },
-      delete: async (key) => {
-        const value = state.data[key];
-        delete state.data[key];
-        return value;
-      },
-      quiet: options.quiet ?? false,
-      destroy: destroyed,
-    })(resourceID, ...inputs);
+    try {
+      await func.bind({
+        stage,
+        scope,
+        resourceID,
+        resourceFQN,
+        event: "delete",
+        output: state.output,
+        replace() {
+          throw new Error("Cannot replace a resource that is being deleted");
+        },
+        get: (key) => {
+          return state.data[key];
+        },
+        set: async (key, value) => {
+          state.data[key] = value;
+        },
+        delete: async (key) => {
+          const value = state.data[key];
+          delete state.data[key];
+          return value;
+        },
+        quiet: options.quiet ?? false,
+        destroy: () => {
+          throw new DestroyedSignal();
+        },
+      })(resourceID, ...inputs);
+    } catch (err) {
+      if (err instanceof DestroyedSignal) {
+        console.log(`Destroyed: ${resourceFQN}`);
+        return;
+      }
+      throw err;
+    }
 
-    if (!options?.quiet) {
+    if (!scope.quiet) {
       console.log(`Deleted: ${resourceFQN}`);
     }
   }
-  // return resource as Resource<Type, F>;
-
-  // type Resource = {};
-
-  class Resource2 {
-    static readonly type = type;
-
-    constructor(id: ResourceID, ...input: Inputs<Args>) {}
-
-    public apply<U>(fn: (value: Out) => U): Output<U> {
-      return this[Apply](fn);
-    }
-
-    public [Apply]<U>(fn: (value: Out) => U): Output<U> {
-      return new OutputChain<Out, U>(this as any, fn);
-    }
-
-    private box?: {
-      value: Out;
-    } = undefined;
-
-    public [Provide](value: Out) {
-      if (this.box) {
-        throw new Error(`Output ${this[ResourceID]} already has a value`);
-      }
-      this.box = { value };
-      const subscribers = this.subscribers;
-      this.subscribers = [];
-      subscribers.forEach((fn) => fn(value));
-    }
-
-    private subscribers: ((value: Out) => void)[] = [];
-
-    /**
-     * @internal
-     */
-    public subscribe(fn: (value: Out) => Promise<void>) {
-      if (this.box) {
-        fn(this.box.value);
-      } else {
-        this.subscribers.push(fn);
-      }
-    }
-  }
-  providers.set(type, Resource as any);
+  PROVIDERS.set(type, Resource as any);
   return Resource as any;
 }

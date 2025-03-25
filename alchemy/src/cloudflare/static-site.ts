@@ -289,7 +289,7 @@ export const StaticSite = Resource(
       ]);
 
       // Step 3: Upload assets to KV
-      await uploadAssetManifest(api, kv.id, assetManifest);
+      await uploadAssetManifest(api, kv.namespaceId, assetManifest);
 
       // Prepare the bindings for the worker
       const bindings: Bindings = {
@@ -361,7 +361,7 @@ export const StaticSite = Resource(
         },
         // place a dependency on the namespace
         // kv.id,
-      ).dependOn(kv.id);
+      ).dependOn(kv.namespaceId);
 
       // Get current timestamp
       const now = Date.now();

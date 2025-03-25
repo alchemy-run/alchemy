@@ -1,7 +1,7 @@
 import * as fs from "fs/promises";
 import type { Context } from "../context";
 import { Bundle, type BundleProps } from "../esbuild";
-import { type Output, type Resolved, output } from "../output";
+import type { Resolved } from "../output";
 import { Resource } from "../resource";
 import { Secret } from "../secret";
 import { withExponentialBackoff } from "../utils/retry";
@@ -134,6 +134,7 @@ export interface Worker<B extends Bindings = Bindings>
    */
   bindings: B;
 
+  // phantom property (for typeof myWorker.Env)
   Env: {
     [bindingName in keyof B]: Bound<B[bindingName]>;
   };
@@ -144,84 +145,81 @@ export const Worker = Resource(
   {
     alwaysUpdate: true,
   },
-  function <B extends Bindings>(
+  async function <B extends Bindings>(
     this: Context<Worker<B>> | void,
     id: string,
     props: WorkerProps<B>,
   ) {
-    // @ts-expect-error - TODO
-    return output(id, props, async (props: WorkerProps<B>) => {
-      // Create Cloudflare API client with automatic account discovery
-      const api = await createCloudflareApi();
+    // Create Cloudflare API client with automatic account discovery
+    const api = await createCloudflareApi();
 
-      // Use the provided name
-      const workerName = props.name;
+    // Use the provided name
+    const workerName = props.name;
 
-      // Validate input - we need either script, entryPoint, or bundle
-      if (!props.script && !props.entrypoint) {
-        throw new Error("One of script or entryPoint must be provided");
-      }
+    // Validate input - we need either script, entryPoint, or bundle
+    if (!props.script && !props.entrypoint) {
+      throw new Error("One of script or entryPoint must be provided");
+    }
 
-      if (this!.event === "delete") {
-        await deleteWorker(this!, api, workerName);
-        return this!.destroy();
-      } else if (this!.event === "create") {
-        await assertWorkerDoesNotExist(this!, api, workerName);
-      }
+    if (this!.event === "delete") {
+      await deleteWorker(this!, api, workerName);
+      return this!.destroy();
+    } else if (this!.event === "create") {
+      await assertWorkerDoesNotExist(this!, api, workerName);
+    }
 
-      const oldBindings = await this!.get<Bindings>("bindings");
+    const oldBindings = await this!.get<Bindings>("bindings");
 
-      const scriptMetadata = await prepareWorkerMetadata(
-        this!,
-        oldBindings,
-        props,
-      );
+    const scriptMetadata = await prepareWorkerMetadata(
+      this!,
+      oldBindings,
+      props,
+    );
 
-      // Get the script content - either from props.script, or by bundling
-      const scriptContent =
-        props.script ?? (await bundleWorkerScript(this!, props));
+    // Get the script content - either from props.script, or by bundling
+    const scriptContent =
+      props.script ?? (await bundleWorkerScript(this!, props));
 
-      // Upload the worker script
-      await putWorker(this!, api, workerName, scriptContent, scriptMetadata);
+    // Upload the worker script
+    await putWorker(this!, api, workerName, scriptContent, scriptMetadata);
 
-      // TODO: it is less than ideal that this can fail, resulting in state problem
-      await this!.set("bindings", props.bindings);
+    // TODO: it is less than ideal that this can fail, resulting in state problem
+    await this!.set("bindings", props.bindings);
 
-      // Handle routes if requested
-      await setupRoutes(api, workerName, props.routes || []);
+    // Handle routes if requested
+    await setupRoutes(api, workerName, props.routes || []);
 
-      // Handle worker URL if requested
-      const workerUrl = await configureURL(
-        this!,
-        api,
-        workerName,
-        props.url ?? false,
-      );
+    // Handle worker URL if requested
+    const workerUrl = await configureURL(
+      this!,
+      api,
+      workerName,
+      props.url ?? false,
+    );
 
-      // Get current timestamp
-      const now = Date.now();
+    // Get current timestamp
+    const now = Date.now();
 
-      // Construct the output
-      const output: Worker = {
-        kind: "cloudflare::Worker",
-        type: "service",
-        id: workerName,
-        name: workerName,
-        script: scriptContent,
-        format: props.format || "esm", // Include format in the output
-        routes: props.routes || [],
-        bindings: props.bindings ?? {},
-        env: props.env,
-        observability: scriptMetadata.observability,
-        createdAt: now,
-        updatedAt: now,
-        url: workerUrl,
-        // phantom property
-        Env: undefined!,
-      };
+    // Construct the output
+    const output: Worker = {
+      kind: "cloudflare::Worker",
+      type: "service",
+      id,
+      name: workerName,
+      script: scriptContent,
+      format: props.format || "esm", // Include format in the output
+      routes: props.routes || [],
+      bindings: props.bindings ?? {},
+      env: props.env,
+      observability: scriptMetadata.observability,
+      createdAt: now,
+      updatedAt: now,
+      url: workerUrl,
+      // phantom property
+      Env: undefined!,
+    };
 
-      return output;
-    }) as Output<Worker<B>>;
+    return output;
   },
 );
 
@@ -417,7 +415,7 @@ async function prepareWorkerMetadata(
       meta.bindings.push({
         type: "kv_namespace",
         name: bindingName,
-        namespace_id: binding.id,
+        namespace_id: binding.namespaceId,
       });
     } else if (typeof binding === "string") {
       meta.bindings.push({
