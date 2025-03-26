@@ -36,7 +36,6 @@ export interface RoleProps {
 }
 
 export interface Role extends Resource<"iam::Role">, RoleProps {
-  id: string; // Same as roleName
   arn: string;
   uniqueId: string; // Unique identifier for the role
   roleId: string; // The stable and unique string identifying the role
@@ -46,13 +45,13 @@ export interface Role extends Resource<"iam::Role">, RoleProps {
 export const Role = Resource(
   "iam::Role",
   async function (
-    this: Context<Role> | void,
+    this: Context<Role>,
     id: string,
     props: RoleProps,
   ): Promise<Role> {
     const client = new IAMClient({});
 
-    if (this!.event === "delete") {
+    if (this.event === "delete") {
       // Delete any inline policies first
       if (props.policies) {
         for (const policy of props.policies) {
@@ -100,14 +99,14 @@ export const Role = Resource(
           }),
         ),
       );
-      return this!.destroy();
+      return this.destroy();
     }
 
     const assumeRolePolicyDocument = JSON.stringify(props.assumeRolePolicy);
     let role;
 
     try {
-      if (this!.event === "create") {
+      if (this.event === "create") {
         // Try to create the role
         await client.send(
           new CreateRoleCommand({
@@ -124,11 +123,11 @@ export const Role = Resource(
               })),
               {
                 Key: "alchemy_stage",
-                Value: this!.stage,
+                Value: this.stage,
               },
               {
                 Key: "alchemy_resource",
-                Value: this!.resourceID,
+                Value: this.resourceID,
               },
             ],
           }),
@@ -137,7 +136,7 @@ export const Role = Resource(
     } catch (error: any) {
       if (
         error instanceof EntityAlreadyExistsException &&
-        this!.event === "create"
+        this.event === "create"
       ) {
         // Check if we were the ones who created it
         const existingRole = await client.send(
@@ -155,8 +154,8 @@ export const Role = Resource(
           ) || {};
 
         if (
-          roleTags.alchemy_stage !== this!.stage ||
-          roleTags.alchemy_resource !== this!.resourceID
+          roleTags.alchemy_stage !== this.stage ||
+          roleTags.alchemy_resource !== this.resourceID
         ) {
           throw error;
         }
@@ -199,8 +198,8 @@ export const Role = Resource(
     // Update tags
     const newTags = {
       ...props.tags,
-      alchemy_stage: this!.stage,
-      alchemy_resource: this!.resourceID,
+      alchemy_stage: this.stage,
+      alchemy_resource: this.resourceID,
     };
     const tags: Tag[] = Object.entries(newTags).map(([Key, Value]) => ({
       Key,
@@ -215,7 +214,7 @@ export const Role = Resource(
 
     // Handle policy changes
     const previousPolicies =
-      this!.event === "update" ? this!.output!.policies || [] : [];
+      this.event === "update" ? this.output!.policies || [] : [];
     const currentPolicies = props.policies || [];
 
     // Delete policies that were removed
@@ -300,14 +299,12 @@ export const Role = Resource(
       throw new Error(`Failed to create or update role ${props.roleName}`);
     }
 
-    return {
-      kind: "iam::Role",
+    return this({
       ...props,
-      id: props.roleName,
       arn: role.Role.Arn!,
       uniqueId: role.Role.RoleId!,
       roleId: role.Role.RoleId!,
       createDate: role.Role.CreateDate!,
-    };
+    });
   },
 );

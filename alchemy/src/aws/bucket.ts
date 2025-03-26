@@ -20,7 +20,6 @@ export interface BucketProps {
 }
 
 export interface Bucket extends Resource<"s3::Bucket">, BucketProps {
-  id: string; // Same as bucketName for AWS
   arn: string;
   bucketDomainName: string; // Format: bucket-name.s3.amazonaws.com
   bucketRegionalDomainName?: string; // Format: bucket-name.s3.region.amazonaws.com
@@ -34,14 +33,10 @@ export interface Bucket extends Resource<"s3::Bucket">, BucketProps {
 
 export const Bucket = Resource(
   "s3::Bucket",
-  async function (
-    this: Context<Bucket> | void,
-    id: string,
-    props: BucketProps,
-  ) {
+  async function (this: Context<Bucket>, id: string, props: BucketProps) {
     const client = new S3Client({});
 
-    if (this!.event === "delete") {
+    if (this.event === "delete") {
       await ignore(NoSuchBucket.name, () =>
         client.send(
           new DeleteBucketCommand({
@@ -49,7 +44,7 @@ export const Bucket = Resource(
           }),
         ),
       );
-      return this!.destroy();
+      return this.destroy();
     } else {
       try {
         // Check if bucket exists
@@ -60,7 +55,7 @@ export const Bucket = Resource(
         );
 
         // Update tags if they changed and bucket exists
-        if (this!.event === "update" && props.tags) {
+        if (this.event === "update" && props.tags) {
           await client.send(
             new PutBucketTaggingCommand({
               Bucket: props.bucketName,
@@ -126,10 +121,8 @@ export const Bucket = Resource(
         }
       }
 
-      const output: Bucket = {
-        kind: "s3::Bucket",
+      return this({
         bucketName: props.bucketName,
-        id: props.bucketName,
         arn: `arn:aws:s3:::${props.bucketName}`,
         bucketDomainName: `${props.bucketName}.s3.amazonaws.com`,
         bucketRegionalDomainName: `${props.bucketName}.s3.${region}.amazonaws.com`,
@@ -138,9 +131,7 @@ export const Bucket = Resource(
         versioningEnabled: versioningResponse.Status === "Enabled",
         acl: aclResponse.Grants?.[0]?.Permission?.toLowerCase(),
         ...(tags && { tags }),
-      };
-
-      return output;
+      });
     }
   },
 );

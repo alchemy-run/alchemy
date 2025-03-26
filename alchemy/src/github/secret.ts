@@ -56,7 +56,7 @@ export interface GitHubSecretOutput
 export const GitHubSecret = Resource(
   "github::Secret",
   async function (
-    this: Context<GitHubSecretOutput> | void,
+    this: Context<GitHubSecretOutput>,
     id: string,
     props: GitHubSecretProps,
   ): Promise<GitHubSecretOutput> {
@@ -65,12 +65,12 @@ export const GitHubSecret = Resource(
     const octokit = await createGitHubClient({ token: props.token });
 
     // Verify authentication and permissions
-    if (!this!.quiet) {
+    if (!this.quiet) {
       await verifyGitHubAuth(octokit, props.owner, props.repository);
     }
 
-    if (this!.event === "delete") {
-      if (this!.output?.id) {
+    if (this.event === "delete") {
+      if (this.output?.id) {
         try {
           // Delete the secret
           await octokit.rest.actions.deleteRepoSecret({
@@ -89,7 +89,7 @@ export const GitHubSecret = Resource(
       }
 
       // Return void (a deleted resource has no content)
-      return this!.destroy();
+      return this.destroy();
     } else {
       try {
         // Get the repository's public key for encrypting secrets
@@ -107,7 +107,7 @@ export const GitHubSecret = Resource(
         );
 
         // Create or update the secret with the encrypted value and key_id
-        const response = await octokit.rest.actions.createOrUpdateRepoSecret({
+        await octokit.rest.actions.createOrUpdateRepoSecret({
           owner: props.owner,
           repo: props.repository,
           secret_name: props.name,
@@ -116,17 +116,14 @@ export const GitHubSecret = Resource(
         });
 
         // GitHub doesn't return the secret details on create/update, so we need to construct it
-        const output: GitHubSecretOutput = {
-          kind: "github::Secret",
+        return this({
           id: `${props.owner}/${props.repository}/${props.name}`,
           owner: props.owner,
           repository: props.repository,
           name: props.name,
           token: props.token,
           updatedAt: new Date().toISOString(),
-        };
-
-        return output;
+        });
       } catch (error: any) {
         if (
           error.status === 403 &&

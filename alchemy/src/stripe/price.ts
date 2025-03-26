@@ -128,7 +128,7 @@ export interface Price extends Resource<"stripe::Price">, PriceProps {
 export const Price = Resource(
   "stripe::Price",
   async function (
-    this: Context<Price> | void,
+    this: Context<Price>,
     id: string,
     props: PriceProps,
   ): Promise<Price> {
@@ -141,25 +141,25 @@ export const Price = Resource(
     // Initialize Stripe client
     const stripe = new Stripe(apiKey);
 
-    if (this!.event === "delete") {
+    if (this.event === "delete") {
       try {
-        if (this!.event === "delete" && this!.output?.id) {
+        if (this.event === "delete" && this.output?.id) {
           // Prices can't be deleted, only deactivated
-          await stripe.prices.update(this!.output.id, { active: false });
+          await stripe.prices.update(this.output.id, { active: false });
         }
       } catch (error) {
         // Ignore if the price doesn't exist
         console.error("Error deactivating price:", error);
       }
 
-      return this!.destroy();
+      return this.destroy();
     } else {
       try {
         let price: Stripe.Price;
 
-        if (this!.event === "update" && this!.output?.id) {
+        if (this.event === "update" && this.output?.id) {
           // Update existing price (limited properties can be updated)
-          price = await stripe.prices.update(this!.output.id, {
+          price = await stripe.prices.update(this.output.id, {
             active: props.active,
             metadata: props.metadata,
             nickname: props.nickname,
@@ -210,8 +210,7 @@ export const Price = Resource(
           : undefined;
 
         // Map Stripe API response to our output format
-        const output: Price = {
-          kind: "stripe::Price",
+        return this({
           id: price.id,
           product:
             typeof price.product === "string"
@@ -230,9 +229,7 @@ export const Price = Resource(
           livemode: price.livemode,
           type: price.type as Stripe.Price.Type,
           lookupKey: price.lookup_key || undefined,
-        };
-
-        return output;
+        });
       } catch (error) {
         console.error("Error creating/updating price:", error);
         throw error;

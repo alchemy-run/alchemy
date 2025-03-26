@@ -1,14 +1,12 @@
 import * as fs from "fs/promises";
 import type { Context } from "../context";
 import { Bundle, type BundleProps } from "../esbuild";
-import type { Resolved } from "../output";
 import { Resource } from "../resource";
 import { Secret } from "../secret";
 import { withExponentialBackoff } from "../utils/retry";
 import { type CloudflareApi, createCloudflareApi } from "./api";
 import type { Bindings, WorkerBindingSpec } from "./bindings";
 import type { Bound } from "./bound";
-import { isBucket } from "./bucket";
 import type { DurableObjectNamespace } from "./durable-object-namespace";
 import { isDurableObjectNamespace } from "./durable-object-namespace";
 import { isKVNamespace } from "./kv-namespace";
@@ -96,10 +94,6 @@ export interface WorkerProps<B extends Bindings = Bindings> {
   migrations?: SingleStepMigration;
 }
 
-export function isWorker(resource: any): resource is Resolved<Worker> {
-  return resource && typeof resource === "object" && resource.type === "worker";
-}
-
 /**
  * Output returned after Worker creation/update
  */
@@ -132,7 +126,7 @@ export interface Worker<B extends Bindings = Bindings>
   /**
    * The bindings that were created
    */
-  bindings: B;
+  bindings: B | undefined;
 
   // phantom property (for typeof myWorker.Env)
   Env: {
@@ -145,11 +139,11 @@ export const Worker = Resource(
   {
     alwaysUpdate: true,
   },
-  async function <B extends Bindings>(
-    this: Context<Worker<B>> | void,
+  async function <const B extends Bindings>(
+    this: Context<Worker<NoInfer<B>>>,
     id: string,
     props: WorkerProps<B>,
-  ) {
+  ): Promise<Worker<B>> {
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi();
 
@@ -161,37 +155,36 @@ export const Worker = Resource(
       throw new Error("One of script or entryPoint must be provided");
     }
 
-    if (this!.event === "delete") {
-      await deleteWorker(this!, api, workerName);
-      return this!.destroy();
-    } else if (this!.event === "create") {
-      await assertWorkerDoesNotExist(this!, api, workerName);
+    if (this.event === "delete") {
+      await deleteWorker(this, api, workerName);
+      return this.destroy();
+    } else if (this.event === "create") {
+      await assertWorkerDoesNotExist(this, api, workerName);
     }
 
-    const oldBindings = await this!.get<Bindings>("bindings");
+    const oldBindings = await this.get<Bindings>("bindings");
 
     const scriptMetadata = await prepareWorkerMetadata(
-      this!,
+      this,
       oldBindings,
       props,
     );
 
     // Get the script content - either from props.script, or by bundling
-    const scriptContent =
-      props.script ?? (await bundleWorkerScript(this!, props));
+    const scriptContent = props.script ?? (await bundleWorkerScript(props));
 
     // Upload the worker script
-    await putWorker(this!, api, workerName, scriptContent, scriptMetadata);
+    await putWorker(api, workerName, scriptContent, scriptMetadata);
 
     // TODO: it is less than ideal that this can fail, resulting in state problem
-    await this!.set("bindings", props.bindings);
+    await this.set("bindings", props.bindings);
 
     // Handle routes if requested
     await setupRoutes(api, workerName, props.routes || []);
 
     // Handle worker URL if requested
     const workerUrl = await configureURL(
-      this!,
+      this,
       api,
       workerName,
       props.url ?? false,
@@ -201,15 +194,14 @@ export const Worker = Resource(
     const now = Date.now();
 
     // Construct the output
-    const output: Worker = {
-      kind: "cloudflare::Worker",
+    return this({
       type: "service",
       id,
       name: workerName,
       script: scriptContent,
       format: props.format || "esm", // Include format in the output
       routes: props.routes || [],
-      bindings: props.bindings ?? {},
+      bindings: props.bindings ?? ({} as B),
       env: props.env,
       observability: scriptMetadata.observability,
       createdAt: now,
@@ -217,14 +209,12 @@ export const Worker = Resource(
       url: workerUrl,
       // phantom property
       Env: undefined!,
-    };
-
-    return output;
+    });
   },
 );
 
-async function deleteWorker(
-  ctx: Context<Worker>,
+async function deleteWorker<B extends Bindings>(
+  ctx: Context<Worker<B>>,
   api: CloudflareApi,
   workerName: string,
 ) {
@@ -293,7 +283,6 @@ async function deleteWorker(
 }
 
 async function putWorker(
-  ctx: Context<Worker>,
   api: CloudflareApi,
   workerName: string,
   scriptContent: string,
@@ -369,7 +358,7 @@ async function putWorker(
 class NotFoundError extends Error {
   constructor(message: string) {
     super(message);
-    this!.name = "NotFoundError";
+    this.name = "NotFoundError";
   }
 }
 
@@ -384,8 +373,8 @@ interface WorkerMetadata {
   tags?: string[];
 }
 
-async function prepareWorkerMetadata(
-  ctx: Context<Worker>,
+async function prepareWorkerMetadata<B extends Bindings>(
+  ctx: Context<Worker<B>>,
   oldBindings: Bindings | undefined,
   props: WorkerProps,
 ): Promise<WorkerMetadata> {
@@ -429,7 +418,7 @@ async function prepareWorkerMetadata(
         name: bindingName,
         service: binding.id,
       });
-    } else if (isDurableObjectNamespace(binding)) {
+    } else if (binding.type === "durable_object_namespace") {
       const stableId = binding.id;
       const className = binding.className;
 
@@ -460,11 +449,11 @@ async function prepareWorkerMetadata(
           to: className,
         });
       }
-    } else if (isBucket(binding)) {
+    } else if (binding.type === "r2_bucket") {
       meta.bindings.push({
         type: "r2_bucket",
         name: bindingName,
-        bucket_name: binding.name || binding.id,
+        bucket_name: binding.name,
       });
     } else if (binding instanceof Secret) {
       meta.bindings.push({
@@ -503,8 +492,8 @@ async function prepareWorkerMetadata(
   return meta;
 }
 
-async function assertWorkerDoesNotExist(
-  ctx: Context<Worker>,
+async function assertWorkerDoesNotExist<B extends Bindings>(
+  ctx: Context<Worker<B>>,
   api: CloudflareApi,
   workerName: string,
 ) {
@@ -541,7 +530,7 @@ async function assertWorkerDoesNotExist(
   }
 }
 
-async function bundleWorkerScript(ctx: Context<Worker>, props: WorkerProps) {
+async function bundleWorkerScript<B extends Bindings>(props: WorkerProps) {
   // Get the script content - either from props.script, or by bundling
 
   // Create and use a Bundle resource with worker-optimized configuration
@@ -637,8 +626,8 @@ async function setupRoutes(
   }
 }
 
-async function configureURL(
-  ctx: Context<Worker>,
+async function configureURL<B extends Bindings>(
+  ctx: Context<Worker<B>>,
   api: CloudflareApi,
   workerName: string,
   url: boolean,

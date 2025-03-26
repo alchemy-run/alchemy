@@ -39,7 +39,6 @@ export interface QueueProps {
 }
 
 export interface Queue extends Resource<"sqs::Queue">, QueueProps {
-  id: string; // Same as queueName
   arn: string;
   url: string;
 }
@@ -47,7 +46,7 @@ export interface Queue extends Resource<"sqs::Queue">, QueueProps {
 export const Queue = Resource(
   "sqs::Queue",
   async function (
-    this: Context<Queue> | void,
+    this: Context<Queue>,
     id: string,
     props: QueueProps,
   ): Promise<Queue> {
@@ -60,7 +59,7 @@ export const Queue = Resource(
       throw new Error("FIFO queue names must end with .fifo suffix");
     }
 
-    if (this!.event === "delete") {
+    if (this.event === "delete") {
       try {
         // Get queue URL first
         const urlResponse = await client.send(
@@ -101,7 +100,7 @@ export const Queue = Resource(
         }
       }
 
-      return this!.destroy();
+      return this.destroy();
     } else {
       // Create queue with attributes
       const attributes: Record<string, string> = {};
@@ -164,13 +163,11 @@ export const Queue = Resource(
           }),
         );
 
-        return {
-          kind: "sqs::Queue",
+        return this({
           ...props,
-          id: props.queueName,
           arn: attributesResponse.Attributes!.QueueArn!,
           url: createResponse.QueueUrl!,
-        };
+        });
       } catch (error: any) {
         if (error.name === "QueueAlreadyExists") {
           // Get existing queue URL
@@ -188,13 +185,11 @@ export const Queue = Resource(
             }),
           );
 
-          return {
-            kind: "sqs::Queue",
+          return this({
             ...props,
-            id: props.queueName,
             arn: attributesResponse.Attributes!.QueueArn!,
             url: urlResponse.QueueUrl!,
-          };
+          });
         } else if (error.name === "QueueDeletedRecently") {
           // Queue was recently deleted, wait and retry
           const maxRetries = 3;
@@ -222,13 +217,11 @@ export const Queue = Resource(
                 }),
               );
 
-              return {
-                kind: "sqs::Queue",
+              return this({
                 ...props,
-                id: props.queueName,
                 arn: attributesResponse.Attributes!.QueueArn!,
                 url: createResponse.QueueUrl!,
-              };
+              });
             } catch (retryError: any) {
               if (
                 retryError.name !== "QueueDeletedRecently" ||

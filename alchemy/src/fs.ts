@@ -13,7 +13,7 @@ export interface File extends Resource<"fs::File"> {
 export const File = Resource(
   "fs::File",
   async function (
-    this: Context<string> | void,
+    this: Context<File>,
     id: string,
     {
       path: filePath,
@@ -23,20 +23,19 @@ export const File = Resource(
       content: string;
     },
   ): Promise<File> {
-    if (this!.event === "delete") {
+    if (this.event === "delete") {
       await ignore("ENOENT", async () => fs.promises.unlink(filePath));
-      return this!.destroy();
+      return this.destroy();
     } else {
       await fs.promises.mkdir(path.dirname(filePath), {
         recursive: true,
       });
       await fs.promises.writeFile(filePath, content);
     }
-    return {
-      kind: "fs::File",
+    return this({
       path: filePath,
       content,
-    };
+    });
   },
 );
 
@@ -47,25 +46,24 @@ export interface Folder extends Resource<"fs::Folder"> {
 export const Folder = Resource(
   "fs::Folder",
   async function (
-    this: Context<string> | void,
+    this: Context<Folder>,
     id: string,
     { path: dirPath }: { path: string },
   ): Promise<Folder> {
-    if (this!.event === "delete") {
+    if (this.event === "delete") {
       // we just do a best effort attempt
       await ignore(["ENOENT", "ENOTEMPTY"], async () =>
         fs.promises.rmdir(dirPath),
       );
-      return this!.destroy();
+      return this.destroy();
     } else {
       await ignore("EEXIST", async () =>
         fs.promises.mkdir(dirPath, { recursive: true }),
       );
     }
-    return {
-      kind: "fs::Folder",
+    return this({
       path: dirPath,
-    };
+    });
   },
 );
 

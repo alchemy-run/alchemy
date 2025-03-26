@@ -49,7 +49,6 @@ export interface FunctionProps {
 }
 
 export interface Function extends Resource<"lambda::Function">, FunctionProps {
-  id: string; // Same as functionName
   arn: string;
   lastModified: string;
   version: string;
@@ -74,17 +73,13 @@ export interface Function extends Resource<"lambda::Function">, FunctionProps {
 
 export const Function = Resource(
   "lambda::Function",
-  async function (
-    this: Context<Function> | void,
-    id: string,
-    props: FunctionProps,
-  ) {
+  async function (this: Context<Function>, id: string, props: FunctionProps) {
     const client = new LambdaClient({});
     const region = await resolveRegion(client);
 
     const code = await zipCode(props.zipPath);
 
-    if (this!.event === "delete") {
+    if (this.event === "delete") {
       await ignore(ResourceNotFoundException.name, () =>
         client.send(
           new DeleteFunctionCommand({
@@ -93,7 +88,7 @@ export const Function = Resource(
         ),
       );
 
-      return this!.destroy();
+      return this.destroy();
     } else {
       try {
         // Check if function exists
@@ -103,7 +98,7 @@ export const Function = Resource(
           }),
         );
 
-        if (this!.event === "update") {
+        if (this.event === "update") {
           // Wait for function to stabilize
           await waitForFunctionStabilization(client, props.functionName);
 
@@ -216,10 +211,8 @@ export const Function = Resource(
         ),
       ]);
 
-      const output: Function = {
-        kind: "lambda::Function",
+      return this({
         ...props,
-        id: props.functionName,
         arn: config.FunctionArn!,
         lastModified: config.LastModified!,
         version: config.Version!,
@@ -240,9 +233,7 @@ export const Function = Resource(
         packageType: config.PackageType!,
         signingProfileVersionArn: config.SigningProfileVersionArn,
         signingJobArn: config.SigningJobArn,
-      };
-
-      return output;
+      });
     }
   },
 );

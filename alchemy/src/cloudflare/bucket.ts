@@ -11,7 +11,7 @@ export interface BucketProps {
    * Names can only contain lowercase letters (a-z), numbers (0-9), and hyphens (-)
    * Cannot begin or end with a hyphen
    */
-  name?: string;
+  name: string;
 
   /**
    * Optional location hint for the bucket
@@ -44,11 +44,6 @@ export interface R2Bucket
   type: "r2_bucket";
 
   /**
-   * The ID of the bucket (same as name)
-   */
-  id: string;
-
-  /**
    * Location of the bucket
    */
   location: string;
@@ -62,7 +57,7 @@ export interface R2Bucket
 export const R2Bucket = Resource(
   "cloudflare::R2Bucket",
   async function (
-    this: Context<R2Bucket> | void,
+    this: Context<R2Bucket>,
     id: string,
     props: BucketProps,
   ): Promise<R2Bucket> {
@@ -70,10 +65,10 @@ export const R2Bucket = Resource(
     const api = await createCloudflareApi();
 
     // Resource ID defaults to bucket name if provided
-    const bucketName = props.name || this!.resourceID;
+    const bucketName = props.name || this.resourceID;
 
-    if (this!.event === "delete") {
-      if (this!.output?.id) {
+    if (this.event === "delete") {
+      if (this.output?.name) {
         // Delete R2 bucket
         const headers: Record<string, string> = {};
         if (props.jurisdiction && props.jurisdiction !== "default") {
@@ -81,7 +76,7 @@ export const R2Bucket = Resource(
         }
 
         const deleteResponse = await api.delete(
-          `/accounts/${api.accountId}/r2/buckets/${this!.output.id}`,
+          `/accounts/${api.accountId}/r2/buckets/${this.output.name}`,
           { headers },
         );
 
@@ -96,7 +91,7 @@ export const R2Bucket = Resource(
       }
 
       // Return void (a deleted bucket has no content)
-      return this!.destroy();
+      return this.destroy();
     } else {
       /**
        * Cloudflare R2 bucket API response
@@ -114,7 +109,7 @@ export const R2Bucket = Resource(
       try {
         let bucketOutput: R2Bucket;
 
-        if (this!.event === "update" && this!.output?.id) {
+        if (this.event === "update" && this.output?.name) {
           // Get bucket details to verify it exists
           const headers: Record<string, string> = {};
           if (props.jurisdiction && props.jurisdiction !== "default") {
@@ -136,9 +131,7 @@ export const R2Bucket = Resource(
           }
 
           const result = (await getResponse.json()) as CloudflareBucketResponse;
-          bucketOutput = {
-            kind: "cloudflare::R2Bucket",
-            id: result.result.name,
+          bucketOutput = this({
             name: result.result.name,
             location: result.result.location || "default",
             creationDate: Math.floor(
@@ -146,7 +139,7 @@ export const R2Bucket = Resource(
             ),
             jurisdiction: props.jurisdiction || "default",
             type: "r2_bucket",
-          };
+          });
 
           // Update public access setting if it has changed
           if (props.allowPublicAccess !== undefined) {
@@ -184,9 +177,7 @@ export const R2Bucket = Resource(
 
           const result =
             (await createResponse.json()) as CloudflareBucketResponse;
-          bucketOutput = {
-            kind: "cloudflare::R2Bucket",
-            id: result.result.name,
+          bucketOutput = this({
             name: result.result.name,
             location: result.result.location || "default",
             creationDate: Math.floor(
@@ -194,7 +185,7 @@ export const R2Bucket = Resource(
             ),
             jurisdiction: props.jurisdiction || "default",
             type: "r2_bucket",
-          };
+          });
 
           // Set public access if requested
           if (props.allowPublicAccess) {

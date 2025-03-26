@@ -1,7 +1,7 @@
-import type { ResourceFQN, ResourceID } from "./resource";
+import type { Resource, ResourceFQN, ResourceID } from "./resource";
 import type { Scope } from "./scope";
 
-export interface BaseContext {
+export interface BaseContext<Out extends Resource> {
   quiet: boolean;
   stage: string;
   resourceID: ResourceID;
@@ -25,24 +25,27 @@ export interface BaseContext {
    * "return undefined" so that `await MyResource()` always returns a value.
    */
   destroy(): never;
+
+  create(props: Omit<Out, "Kind" | "ID" | "Scope">): Out;
+  (props: Omit<Out, "Kind" | "ID" | "Scope">): Out;
 }
 
-export interface CreateContext extends BaseContext {
+export interface CreateContext<Out extends Resource> extends BaseContext<Out> {
   event: "create";
   output?: undefined;
 }
 
-export interface UpdateContext<Outputs> extends BaseContext {
+export interface UpdateContext<Out extends Resource> extends BaseContext<Out> {
   event: "update";
-  output: Outputs;
+  output: Out;
 }
 
-export interface DeleteContext<Outputs> extends BaseContext {
+export interface DeleteContext<Out extends Resource> extends BaseContext<Out> {
   event: "delete";
-  output: Outputs;
+  output: Out;
 }
 
-export type Context<Outputs> =
-  | CreateContext
-  | UpdateContext<Outputs>
-  | DeleteContext<Outputs>;
+export type Context<Out extends Resource> =
+  | CreateContext<Out>
+  | UpdateContext<Out>
+  | DeleteContext<Out>;

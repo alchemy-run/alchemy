@@ -30,7 +30,6 @@ export interface TableProps {
 }
 
 export interface Table extends Resource<"dynamo::Table">, TableProps {
-  id: string; // Same as tableName
   arn: string;
   streamArn?: string;
   tableId: string;
@@ -39,13 +38,13 @@ export interface Table extends Resource<"dynamo::Table">, TableProps {
 export const Table = Resource(
   "dynamo::Table",
   async function (
-    this: Context<Table> | void,
+    this: Context<Table>,
     id: string,
     props: TableProps,
   ): Promise<Table> {
     const client = new DynamoDBClient({});
 
-    if (this!.event === "delete") {
+    if (this.event === "delete") {
       await withExponentialBackoff(
         async () => {
           await ignore(ResourceNotFoundException.name, () =>
@@ -95,7 +94,7 @@ export const Table = Resource(
         );
       }
 
-      return this!.destroy();
+      return this.destroy();
     } else {
       // Setup for table creation
       const attributeDefinitions = [
@@ -215,14 +214,12 @@ export const Table = Resource(
         );
       }
 
-      return {
-        kind: "dynamo::Table",
+      return this({
         ...props,
-        id: props.tableName,
         arn: tableDescription!.TableArn!,
         streamArn: tableDescription!.LatestStreamArn,
         tableId: tableDescription!.TableId!,
-      } as Table;
+      });
     }
   },
 );

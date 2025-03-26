@@ -26,7 +26,6 @@ describe("AWS Resources", () => {
             Environment: "test",
           },
         });
-        expect(queue.id).toBe(queueName);
         expect(queue.url).toMatch(
           new RegExp(
             `https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName}$`,
@@ -89,7 +88,6 @@ describe("AWS Resources", () => {
             Environment: "test",
           },
         });
-        expect(queue.id).toBe(queueName);
         expect(queue.url).toMatch(
           new RegExp(
             `https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName.replace(/\./g, "\\.")}$`,
@@ -133,7 +131,6 @@ describe("AWS Resources", () => {
           fifo: false,
           visibilityTimeout: 30,
         });
-        expect(queue.id).toBe(queueName);
         expect(queue.arn).toMatch(
           new RegExp(`^arn:aws:sqs:[a-z0-9-]+:\\d+:${queueName}$`),
         );
@@ -176,7 +173,6 @@ describe("AWS Resources", () => {
             },
           });
 
-          expect(recreatedQueue.id).toBe(queueName);
           expect(recreatedQueue.arn).toMatch(
             new RegExp(`^arn:aws:sqs:[a-z0-9-]+:\\d+:${queueName}$`),
           );

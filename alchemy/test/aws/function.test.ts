@@ -91,7 +91,6 @@ describe("AWS Resources", () => {
           },
         });
 
-        expect(func.id).toBe(functionName);
         expect(func.arn).toMatch(
           new RegExp(
             `^arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}$`,
@@ -129,18 +128,7 @@ describe("AWS Resources", () => {
         expect(body.message).toBe("Hello from bundled handler!");
         expect(body.event).toEqual(testEvent);
       } finally {
-        // Clean up resources in reverse order of creation
-        if (func) {
-          await destroy(func).catch((e) =>
-            console.error("Error cleaning up function:", e),
-          );
-        }
-        await destroy(bundle).catch((e) =>
-          console.error("Error cleaning up bundle:", e),
-        );
-        await destroy(role).catch((e) =>
-          console.error("Error cleaning up role:", e),
-        );
+        await destroy.sequentially(func, bundle, role);
 
         // Verify function was properly deleted after cleanup
         if (func) {

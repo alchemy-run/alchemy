@@ -87,7 +87,7 @@ const TRUST_POLICY_SID = "GitHubOIDCTrust";
 export const OIDCProvider = Resource(
   "aws::OIDCProvider",
   async function (
-    this: Context<OIDCProvider> | void,
+    this: Context<OIDCProvider>,
     id: string,
     props: OIDCProviderProps,
   ) {
@@ -96,8 +96,8 @@ export const OIDCProvider = Resource(
       region: props.region,
     });
 
-    if (this!.event === "delete") {
-      if (this!.output?.providerArn) {
+    if (this.event === "delete") {
+      if (this.output?.providerArn) {
         try {
           // First, remove our trust policy statement from the role
           const getRole = await client.send(
@@ -127,7 +127,7 @@ export const OIDCProvider = Resource(
           // Then delete the OIDC provider if we're the last user
           const provider = await client.send(
             new GetOpenIDConnectProviderCommand({
-              OpenIDConnectProviderArn: this!.output.providerArn,
+              OpenIDConnectProviderArn: this.output.providerArn,
             }),
           );
 
@@ -135,7 +135,7 @@ export const OIDCProvider = Resource(
           if (provider && (!provider.Tags || provider.Tags.length === 0)) {
             await client.send(
               new DeleteOpenIDConnectProviderCommand({
-                OpenIDConnectProviderArn: this!.output.providerArn,
+                OpenIDConnectProviderArn: this.output.providerArn,
               }),
             );
           }
@@ -144,7 +144,7 @@ export const OIDCProvider = Resource(
           console.error("Error during cleanup:", error);
         }
       }
-      return this!.destroy();
+      return this.destroy();
     }
 
     try {
@@ -247,12 +247,11 @@ export const OIDCProvider = Resource(
         }),
       );
 
-      return {
-        kind: "aws::OIDCProvider",
+      return this({
         ...props,
         providerArn,
         createdAt: Date.now(),
-      };
+      });
     } catch (error) {
       console.error("Error configuring OIDC provider:", error);
       throw error;

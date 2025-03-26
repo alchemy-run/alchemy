@@ -1,3 +1,4 @@
+import { destroy } from "./destroy";
 import { DEFAULT_STAGE } from "./global";
 import { Scope } from "./scope";
 import { secret } from "./secret";
@@ -7,8 +8,9 @@ import type { StateStoreType } from "./state";
 export type alchemy = typeof alchemy;
 
 export const alchemy = {
-  scope,
+  destroy,
   run,
+  scope,
   secret,
 };
 

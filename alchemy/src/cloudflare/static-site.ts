@@ -132,11 +132,6 @@ export interface StaticSiteProps {
  */
 export interface StaticSite extends Resource<"cloudflare::StaticSite"> {
   /**
-   * The ID of the site
-   */
-  id: string;
-
-  /**
    * The ID of the worker
    */
   workerId: string;
@@ -213,14 +208,14 @@ export const StaticSite = Resource(
     alwaysUpdate: true,
   },
   async function (
-    this: Context<StaticSite> | void,
+    this: Context<StaticSite>,
     id: string,
     props: StaticSiteProps,
   ) {
-    if (this!.event === "delete") {
+    if (this.event === "delete") {
       // For delete operations, we'll rely on the Worker delete to clean up
       // Return empty output for deleted state
-      return this!.destroy();
+      return this.destroy();
     }
 
     // Validate that a name is provided
@@ -249,7 +244,7 @@ export const StaticSite = Resource(
     // Run build command if provided
     if (props.build?.command) {
       try {
-        if (!this!.quiet) {
+        if (!this.quiet) {
           console.log(props.build.command);
         }
         const execAsync = promisify(exec);
@@ -257,7 +252,7 @@ export const StaticSite = Resource(
           cwd: process.cwd(),
         });
 
-        if (stdout && !this!.quiet) console.log(stdout);
+        if (stdout && !this.quiet) console.log(stdout);
       } catch (error: any) {
         // Log detailed error information
         console.error(`Build command failed with exit code ${error.code}`);
@@ -356,13 +351,9 @@ export const StaticSite = Resource(
       },
     });
 
-    // Get current timestamp
     const now = Date.now();
 
-    // Construct the output
-    const output: StaticSite = {
-      kind: "cloudflare::StaticSite",
-      id: siteName,
+    return this({
       workerId: worker.id,
       name: siteName,
       directory: props.dir,
@@ -370,14 +361,12 @@ export const StaticSite = Resource(
       errorPage: props.errorPage,
       indexPage,
       assets: assetManifest.map((item) => item.key),
-      createdAt: this!.output?.createdAt || now,
+      createdAt: this.output?.createdAt || now,
       updatedAt: now,
       domain: props.domain,
       production: props.production !== false,
       url: worker.url,
       routes,
-    };
-
-    return output;
+    });
   },
 );

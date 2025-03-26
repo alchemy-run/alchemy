@@ -1,94 +1,103 @@
-import { DEFAULT_STAGE } from "./global";
-import type { Output } from "./output";
-import { Provider, ResourceID, isResource } from "./resource";
-import { type Scope, rootScope } from "./scope";
-import type { State, StateStore } from "./state";
+import { alchemy } from "./alchemy";
+import { PROVIDERS, type Provider, type Resource } from "./resource";
 
 export class DestroyedSignal extends Error {}
 
 export interface DestroyOptions {
-  stage?: string;
-  stateStore?: StateStore;
-  scope?: Scope;
   quiet?: boolean;
 }
 
 /**
  * Prune all resources from an Output and "down", i.e. that branches from it.
  */
-export async function destroy<T>(
-  output: T,
+export async function destroy<Type extends string>(
+  resource: Resource<Type> | undefined | null,
   options?: DestroyOptions,
-): Promise<void>;
-
-/**
- * @internal
- */
-export async function destroy<T>(
-  stage: string,
-  scope: Scope,
-  resourceID: ResourceID,
-  resourceState: State,
-  resourceProvider: Provider,
-  stateStore: StateStore,
-  options: DestroyOptions,
-): Promise<void>;
-
-export async function destroy<T>(
-  ...args:
-    | [Output<T>, DestroyOptions?]
-    | [string, Scope, ResourceID, State, Provider, StateStore, DestroyOptions]
 ): Promise<void> {
-  let resourceID: ResourceID;
-  let resourceState: State;
-  let resourceProvider: Provider;
-  let stage: string;
-  let stateStore: StateStore;
-  let scope: Scope | undefined = undefined;
-  let options: DestroyOptions | undefined = undefined;
-  if (args.length === 7) {
-    stage = args[0];
-    scope = args[1];
-    resourceID = args[2];
-    resourceState = args[3];
-    resourceProvider = args[4];
-    stateStore = args[5];
-    options = args[6];
-  } else if (isResource(args[0])) {
-    const resource = args[0];
-    // stage = args[1]?.stage ?? defaultStage;
-    resourceID = resource[ResourceID];
-    stage = args[1]?.stage ?? DEFAULT_STAGE;
-    scope = args[1]?.scope ?? rootScope;
-    const statePath = scope.getScopePath(stage);
-    stateStore = args[1]?.stateStore ?? new defaultStateStore(statePath);
-    // First destroy all dependencies
-    const _resourceState = await stateStore.get(resourceID);
-    if (_resourceState === undefined) {
-      // we have no record of this resource, we must assume it's already deleted
+  if (!resource) {
+    return;
+  }
+
+  const Provider: Provider<Type> | undefined = PROVIDERS.get(resource.Kind);
+  if (!Provider) {
+    throw new Error(
+      `Cannot destroy resource type ${resource.Kind} - no provider found. You may need to import the provider in your alchemy.config.ts.`,
+    );
+  }
+
+  try {
+    const scope = resource.Scope;
+    const resourceID = resource.ID;
+    const resourceFQN = scope.getScopePath(resourceID) + "/" + resourceID;
+
+    if (!scope.quiet) {
+      console.log(`Delete:  ${resourceFQN}`);
+    }
+
+    const state = (await scope.state.get(resourceID))!;
+
+    if (state === undefined) {
+      console.warn(`Resource ${resourceFQN} not found`);
       return;
     }
-    resourceState = _resourceState;
-    resourceProvider = resource[Provider];
-    options = args[1];
-  } else {
-    console.log(args[0]);
-    throw new Error("Not implemented: must handle destroy a Output chain");
-  }
-  try {
-    await resourceProvider.delete(
-      stage,
-      scope,
-      resourceID,
-      resourceState,
-      resourceState.props as [],
-      options ?? {
-        quiet: false,
-      },
-    );
+
+    try {
+      await alchemy.run(resourceID, async (scope) =>
+        Provider.handler.bind({
+          stage: scope.stage,
+          scope,
+          resourceID,
+          resourceFQN,
+          event: "delete",
+          output: state.output,
+          replace() {
+            throw new Error("Cannot replace a resource that is being deleted");
+          },
+          get: (key) => {
+            return state.data[key];
+          },
+          set: async (key, value) => {
+            state.data[key] = value;
+          },
+          delete: async (key) => {
+            const value = state.data[key];
+            delete state.data[key];
+            return value;
+          },
+          quiet: scope.quiet,
+          destroy: () => {
+            throw new DestroyedSignal();
+          },
+        })(resourceID, state.oldProps!),
+      );
+    } catch (err) {
+      // TODO: should we fail if the DestroyedSignal is not thrown?
+      if (err instanceof DestroyedSignal) {
+        console.log(`Destroyed: ${resourceFQN}`);
+        return;
+      }
+      throw err;
+    }
+
+    scope.state.delete(resource.ID);
+
+    if (!scope.quiet) {
+      console.log(`Deleted: ${resourceFQN}`);
+    }
   } catch (error) {
     console.error(error);
     throw error;
   }
-  await stateStore.delete(resourceID);
+}
+
+export namespace destroy {
+  export async function sequentially(
+    ...resources: (Resource<string> | undefined | null)[]
+  ) {
+    for (const resource of resources) {
+      if (resource) {
+        await destroy(resource);
+      }
+    }
+  }
 }

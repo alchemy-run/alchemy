@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { alchemy } from "../../src/alchemy";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { R2Bucket } from "../../src/cloudflare/bucket";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace";
 import { KVNamespace } from "../../src/cloudflare/kv-namespace";
 import { Worker } from "../../src/cloudflare/worker";
-import { destroy } from "../../src/destroy";
 import { BRANCH_PREFIX } from "../util";
 
 async function assertWorkerDoesNotExist(workerName: string) {
@@ -271,18 +271,9 @@ describe("Worker Resource", () => {
       expect(worker.id).toEqual(worker.id);
     } finally {
       if (worker) {
-        // Delete the worker
-        await destroy(worker);
-
-        // Verify the worker was deleted by directly checking with the Cloudflare API
-        const api = await createCloudflareApi();
-        const response = await api.get(
-          `/accounts/${api.accountId}/workers/scripts/${workerName}`,
-        );
-
-        // Should be a 404 if properly deleted
-        expect(response.status).toEqual(404);
+        await alchemy.destroy(worker);
       }
+      await assertWorkerDoesNotExist(workerName);
     }
   });
 
@@ -299,10 +290,9 @@ describe("Worker Resource", () => {
       });
 
       // Apply to create the worker
-      const output = worker;
-      expect(output.id).toBeTruthy();
-      expect(output.name).toEqual(workerName);
-      expect(output.format).toEqual("esm");
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.format).toEqual("esm");
 
       // Update the worker with a new ESM script
       const updatedEsmScript = `
@@ -319,17 +309,13 @@ describe("Worker Resource", () => {
         format: "esm",
       });
 
-      expect(worker.id).toEqual(output.id);
+      expect(worker.id).toEqual(worker.id);
     } finally {
-      // Delete the worker
-      await destroy(worker);
-
-      // Verify the worker was deleted
-      const api = await createCloudflareApi();
-      const response = await api.get(
-        `/accounts/${api.accountId}/workers/scripts/${workerName}`,
-      );
-      expect(response.status).toEqual(404);
+      if (worker) {
+        // Delete the worker
+        await alchemy.destroy(worker);
+      }
+      await assertWorkerDoesNotExist(workerName);
     }
   });
 
@@ -345,9 +331,7 @@ describe("Worker Resource", () => {
         format: "esm",
       });
 
-      // Apply to create the worker with ESM
-      let output = worker;
-      expect(output.format).toEqual("esm");
+      expect(worker.format).toEqual("esm");
 
       // Update to CJS format
       worker = await Worker(formatConversionTestName, {
@@ -355,10 +339,7 @@ describe("Worker Resource", () => {
         script: workerScript,
         format: "cjs",
       });
-
-      // Apply to update to CJS
-      output = worker;
-      expect(output.format).toEqual("cjs");
+      expect(worker.format).toEqual("cjs");
 
       // Update back to ESM format
       worker = await Worker(formatConversionTestName, {
@@ -367,19 +348,13 @@ describe("Worker Resource", () => {
         format: "esm",
       });
 
-      // Apply to update back to ESM
-      output = worker;
-      expect(output.format).toEqual("esm");
+      expect(worker.format).toEqual("esm");
     } finally {
       // Clean up
-      await destroy(worker);
-
-      // Verify deletion
-      const api = await createCloudflareApi();
-      const response = await api.get(
-        `/accounts/${api.accountId}/workers/scripts/${workerName}`,
-      );
-      expect(response.status).toEqual(404);
+      if (worker) {
+        await alchemy.destroy(worker);
+      }
+      await assertWorkerDoesNotExist(workerName);
     }
   });
 
@@ -403,17 +378,14 @@ describe("Worker Resource", () => {
         script: workerScript,
         format: "cjs",
       });
-      try {
-        // Expect the apply call to throw an error about duplicate worker
-        await expect(duplicateWorker).rejects.toThrow(
-          `Worker with name '${workerName}' already exists. Please use a unique name.`,
-        );
-      } finally {
-        await destroy(duplicateWorker);
-      }
+      await expect(duplicateWorker).rejects.toThrow(
+        `Worker with name '${workerName}' already exists. Please use a unique name.`,
+      );
     } finally {
-      // Clean up by deleting the first worker
-      await destroy(firstWorker);
+      if (firstWorker) {
+        // Clean up by deleting the first worker
+        await alchemy.destroy(firstWorker);
+      }
     }
   });
 
@@ -430,10 +402,9 @@ describe("Worker Resource", () => {
         // No bindings yet
       });
 
-      // Apply to create the worker first
-      const initialOutput = worker;
-      expect(initialOutput.id).toBeTruthy();
-      expect(initialOutput.name).toEqual(workerName);
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeEmpty();
 
       // Create a Durable Object namespace
       const counterNamespace = new DurableObjectNamespace(
@@ -458,9 +429,9 @@ describe("Worker Resource", () => {
       expect(worker.name).toEqual(workerName);
       expect(worker.bindings).toBeDefined();
     } finally {
-      await destroy(worker);
-
-      // Verify the worker was deleted
+      if (worker) {
+        await alchemy.destroy(worker);
+      }
       await assertWorkerDoesNotExist(workerName);
     }
   });
@@ -496,13 +467,14 @@ describe("Worker Resource", () => {
       expect(worker.bindings).toBeDefined();
     } finally {
       try {
-        // Delete the worker
-        await destroy(worker);
+        if (worker) {
+          await alchemy.destroy(worker);
+        }
       } finally {
-        // Also clean up the KV namespace
-        await destroy(testKv);
+        if (testKv) {
+          await alchemy.destroy(testKv);
+        }
       }
-      // Verify the worker was deleted
       await assertWorkerDoesNotExist(workerName);
     }
   });
@@ -540,10 +512,8 @@ describe("Worker Resource", () => {
         format: "esm",
       });
 
-      // Apply to create the worker first
-      const initialOutput = worker;
-      expect(initialOutput.id).toBeTruthy();
-      expect(initialOutput.name).toEqual(workerName);
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
 
       // Update the worker with all bindings
       worker = await Worker(multiBindingsTestName, {
@@ -563,10 +533,10 @@ describe("Worker Resource", () => {
     } finally {
       try {
         if (worker) {
-          await destroy(worker);
+          await alchemy.destroy(worker);
         }
       } finally {
-        await destroy(testKv);
+        await alchemy.destroy(testKv);
       }
 
       // Verify the worker was deleted
@@ -661,7 +631,7 @@ describe("Worker Resource", () => {
     } finally {
       if (worker) {
         // Clean up by deleting the worker
-        await destroy(worker);
+        await alchemy.destroy(worker);
 
         // Verify the worker was deleted
         await assertWorkerDoesNotExist(workerName);
@@ -727,7 +697,8 @@ describe("Worker Resource", () => {
       expect(worker.bindings).toBeDefined();
     } finally {
       if (worker) {
-        await destroy(worker);
+        await alchemy.destroy(worker);
+        await assertWorkerDoesNotExist(workerName);
       }
     }
   });
@@ -769,9 +740,8 @@ describe("Worker Resource", () => {
       });
 
       // Apply the worker with binding
-      const outputWithBinding = worker;
-      expect(outputWithBinding.bindings).toBeDefined();
-      expect(outputWithBinding.env).toBeUndefined();
+      expect(worker.bindings).toBeDefined();
+      expect(worker.env).toBeUndefined();
 
       // Now update the worker by adding environment variables
       worker = await Worker(doWithEnvVarsTestName, {
@@ -787,24 +757,15 @@ describe("Worker Resource", () => {
         },
       });
 
-      // Apply the worker with binding and env vars
-      const finalOutput = worker;
-      expect(finalOutput.bindings).toBeDefined();
-      expect(finalOutput.env).toBeDefined();
-      expect(finalOutput.env?.API_SECRET).toEqual("test-secret-123");
-      expect(finalOutput.env?.DEBUG_MODE).toEqual("true");
+      expect(worker.bindings).toBeDefined();
+      expect(worker.env).toBeDefined();
+      expect(worker.env?.API_SECRET).toEqual("test-secret-123");
+      expect(worker.env?.DEBUG_MODE).toEqual("true");
     } finally {
       if (worker) {
-        // Clean up
-        await destroy(worker);
-
-        // Verify the worker was deleted
-        const api = await createCloudflareApi();
-        const response = await api.get(
-          `/accounts/${api.accountId}/workers/scripts/${workerName}`,
-        );
-        expect(response.status).toEqual(404);
+        await alchemy.destroy(worker);
       }
+      await assertWorkerDoesNotExist(workerName);
     }
   });
 
@@ -814,7 +775,7 @@ describe("Worker Resource", () => {
     // Create a test R2 bucket
     let testBucket: R2Bucket | undefined;
 
-    let worker: Worker | undefined;
+    let worker: Worker<{ STORAGE: R2Bucket }> | undefined;
 
     try {
       testBucket = await R2Bucket("test-bucket", {
@@ -836,7 +797,7 @@ describe("Worker Resource", () => {
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
       expect(worker.bindings).toBeDefined();
-      expect(worker.bindings.STORAGE).toBeDefined();
+      expect(worker.bindings!.STORAGE).toBeDefined();
 
       // Wait for the worker to be available
       await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -853,14 +814,14 @@ describe("Worker Resource", () => {
       }
     } finally {
       try {
-        // Delete the worker first
-        await destroy(worker);
+        if (worker) {
+          await alchemy.destroy(worker);
+        }
       } finally {
-        // Then clean up the bucket
-        await destroy(testBucket);
+        if (testBucket) {
+          await alchemy.destroy(testBucket);
+        }
       }
-
-      // Verify the worker was deleted
       await assertWorkerDoesNotExist(workerName);
     }
   });

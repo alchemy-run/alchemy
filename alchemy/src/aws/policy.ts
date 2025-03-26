@@ -42,7 +42,6 @@ export interface PolicyProps {
 }
 
 export interface Policy extends Resource<"iam::Policy">, PolicyProps {
-  id: string; // Same as policyName
   arn: string;
   defaultVersionId: string;
   attachmentCount: number;
@@ -54,14 +53,14 @@ export interface Policy extends Resource<"iam::Policy">, PolicyProps {
 export const Policy = Resource(
   "iam::Policy",
   async function (
-    this: Context<Policy> | void,
+    this: Context<Policy>,
     id: string,
     props: PolicyProps,
   ): Promise<Policy> {
     const client = new IAMClient({});
     const policyArn = `arn:aws:iam::${process.env.AWS_ACCOUNT_ID}:policy${props.path || "/"}${props.policyName}`;
 
-    if (this!.event === "delete") {
+    if (this.event === "delete") {
       try {
         // List and delete all non-default versions first
         const versions = await client.send(
@@ -92,17 +91,7 @@ export const Policy = Resource(
           throw error;
         }
       }
-      return {
-        kind: "iam::Policy",
-        ...props,
-        id: props.policyName,
-        arn: policyArn,
-        defaultVersionId: "v1",
-        attachmentCount: 0,
-        createDate: new Date(),
-        updateDate: new Date(),
-        isAttachable: true,
-      };
+      return this.destroy();
     } else {
       try {
         // Check if policy exists
@@ -167,17 +156,15 @@ export const Policy = Resource(
           }),
         );
 
-        return {
-          kind: "iam::Policy",
+        return this({
           ...props,
-          id: props.policyName,
           arn: policy.Policy!.Arn!,
           defaultVersionId: policy.Policy!.DefaultVersionId!,
           attachmentCount: policy.Policy!.AttachmentCount!,
           createDate: policy.Policy!.CreateDate!,
           updateDate: policy.Policy!.UpdateDate!,
           isAttachable: policy.Policy!.IsAttachable!,
-        };
+        });
       } catch (error: any) {
         if (error.name === "NoSuchEntity") {
           // Create new policy
@@ -196,17 +183,15 @@ export const Policy = Resource(
             }),
           );
 
-          return {
-            kind: "iam::Policy",
+          return this({
             ...props,
-            id: props.policyName,
             arn: newPolicy.Policy!.Arn!,
             defaultVersionId: newPolicy.Policy!.DefaultVersionId!,
             attachmentCount: newPolicy.Policy!.AttachmentCount!,
             createDate: newPolicy.Policy!.CreateDate!,
             updateDate: newPolicy.Policy!.UpdateDate!,
             isAttachable: newPolicy.Policy!.IsAttachable!,
-          };
+          });
         }
         throw error;
       }

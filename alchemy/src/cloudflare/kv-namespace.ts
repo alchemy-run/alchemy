@@ -81,16 +81,16 @@ export interface KVNamespace
 export const KVNamespace = Resource(
   "cloudflare::KVNamespace",
   async function (
-    this: Context<KVNamespace> | void,
+    this: Context<KVNamespace>,
     id: string,
     props: KVNamespaceProps,
   ) {
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi();
 
-    if (this!.event === "delete") {
+    if (this.event === "delete") {
       // For delete operations, we need to check if the namespace ID exists in the output
-      const namespaceId = this!.output?.namespaceId;
+      const namespaceId = this.output?.namespaceId;
       if (namespaceId) {
         // Delete KV namespace
         const deleteResponse = await api.delete(
@@ -108,18 +108,18 @@ export const KVNamespace = Resource(
       }
 
       // Return minimal output for deleted state
-      return this!.destroy();
+      return this.destroy();
     } else {
       // For create or update operations
-      // If this!.event is "update", we expect this!.output to exist
+      // If this.event is "update", we expect this.output to exist
       let namespaceId =
-        this!.event === "update" ? this!.output?.namespaceId || "" : "";
+        this.event === "update" ? this.output?.namespaceId || "" : "";
       let createdAt =
-        this!.event === "update"
-          ? this!.output?.createdAt || Date.now()
+        this.event === "update"
+          ? this.output?.createdAt || Date.now()
           : Date.now();
 
-      if (this!.event === "update" && namespaceId) {
+      if (this.event === "update" && namespaceId) {
         // Can't update a KV namespace title directly, just work with existing ID
       } else {
         // Create new KV namespace
@@ -212,20 +212,14 @@ export const KVNamespace = Resource(
         }
       }
 
-      const now = Date.now();
-
-      // Construct the output
-      const output: KVNamespace = {
-        kind: "cloudflare::KVNamespace",
+      return this({
         type: "kv_namespace",
         namespaceId: namespaceId,
         title: props.title,
         values: props.values,
         createdAt: createdAt,
-        modifiedAt: now,
-      };
-
-      return output;
+        modifiedAt: Date.now(),
+      });
     }
   },
 );

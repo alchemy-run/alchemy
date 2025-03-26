@@ -36,7 +36,7 @@ export class Scope {
   public readonly scopeName: string | null;
   public readonly parent: Scope | undefined;
   public readonly password: string | undefined;
-  public readonly stateStore: StateStore;
+  public readonly state: StateStore;
   public readonly quiet: boolean;
   constructor(options: ScopeOptions) {
     this.stage = options.stage;
@@ -47,7 +47,7 @@ export class Scope {
       throw new Error("Scope name is required when creating a child scope");
     }
     this.password = options.password;
-    this.stateStore = new (options.stateStore ?? FileSystemStateStore)(this);
+    this.state = new (options.stateStore ?? FileSystemStateStore)(this);
   }
 
   public get chain(): string[] {
@@ -63,7 +63,7 @@ export class Scope {
   }
 
   public async init() {
-    await this.stateStore.init?.();
+    await this.state.init?.();
   }
 
   public fqn(resourceID: ResourceID): string {

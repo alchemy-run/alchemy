@@ -1,123 +1,123 @@
-import { type Output, OutputChain, type Resolved } from "./output";
-import { type Resource, ResourceID, isResource } from "./resource";
-import { Scope } from "./scope";
-import { Secret } from "./secret";
+import { alchemy } from "./alchemy";
+import { DestroyedSignal } from "./destroy";
+import {
+  PROVIDERS,
+  type PendingResource,
+  type Provider,
+  type ResourceProps,
+} from "./resource";
+import type { State } from "./state";
 
 export interface ApplyOptions {
-  scope: Scope;
   quiet?: boolean;
+  alwaysUpdate?: boolean;
 }
 
-/**
- * Apply a sub-graph to produce a resource.
- * @param output A sub-graph that produces a resource.
- * @returns The resource properties.
- */
-export async function apply<T>(
-  output: T,
-  options?: Partial<ApplyOptions>,
-): Promise<Resolved<T>> {
-  const scope = options?.scope ?? Scope.current;
-  const stage = scope.stage;
-  const statePath = scope.getScopePath(stage);
-  const stateStore = scope.return(
-    await evaluate(output, { stage, scope, stateStore, quiet: options?.quiet }),
-  ).value as Resolved<T>;
-}
-
-class Evaluated<T> {
-  constructor(
-    public readonly value: T,
-    public readonly deps: string[] = [],
-  ) {}
-}
-
-const cache = new WeakMap<Resource, Promise<Evaluated<any>>>();
-
-export async function evaluate<T>(
-  output: T | Output<T>,
-  options: ApplyOptions,
-): Promise<Evaluated<T>> {
-  const stage = options.stage;
-  const stateStore = options.stateStore;
-  if (isResource(output)) {
-    const resource = output;
-    const resourceID = resource[ResourceID];
-    const evaluated = await Promise.all(
-      resource[Input].map((r) => evaluate<any>(r, options)),
-    );
-
-    if (cache.has(resource)) {
-      return await cache.get(resource)!;
-    }
-    let resolve: (value: Evaluated<any>) => void;
-    let reject: (reason?: any) => void;
-    const promise = new Promise<Evaluated<any>>((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
-    // set this eagerly to avoid double-apply (caused by recursive applies to inputs)
-    cache.set(resource, promise);
-
-    const deps = new Set(evaluated.flatMap((input) => input.deps));
-    const inputs = evaluated.map((input) => input.value);
-    try {
-      const result: T = await resource[Provider].update(
-        stage,
-        resource,
-        deps,
-        inputs as [],
-        stateStore,
-        options,
-      );
-      resolve!(new Evaluated(result, [resourceID, ...deps]));
-    } catch (error) {
-      console.error(error);
-      reject!(error);
-    }
-    return promise;
-  } else if (output instanceof OutputChain) {
-    const inside = output as unknown as {
-      parent: Output<any>;
-      fn: (value: any) => T;
+export async function apply<Out>(
+  resource: PendingResource<Out>,
+  props: ResourceProps,
+  options?: ApplyOptions,
+): Promise<Awaited<Out | void>> {
+  const scope = resource.Scope;
+  const quiet = props.quiet ?? scope.quiet;
+  const resourceFQN = scope.fqn(resource.ID);
+  let state: State | undefined = (await scope.state.get(resource.ID))!;
+  const provider: Provider = PROVIDERS.get(resource.ID);
+  if (state === undefined) {
+    state = {
+      provider: PROVIDERS.get(resource.ID)!,
+      status: "creating",
+      data: {},
+      output: undefined,
+      // deps: [...deps],
+      props,
     };
-    const parent = await evaluate(inside.parent, options);
-    const ret = inside.fn(parent.value);
-    // the ret may be an Output (e.g. in the flatMap case), so we need to evaluate it and include its deps
-    const evaluated = await evaluate(ret, options);
-    return new Evaluated<T>(evaluated.value, [
-      ...parent.deps,
-      ...evaluated.deps,
-    ]);
-  } else if (Array.isArray(output)) {
-    const evaluatedItems = await Promise.all(
-      output.map((item) => evaluate(item, options)),
-    );
-    return new Evaluated(
-      evaluatedItems.map((e) => e.value) as unknown as T,
-      evaluatedItems.flatMap((e) => e.deps),
-    );
-  } else if (output instanceof Date) {
-    return new Evaluated(output as T);
-  } else if (output instanceof Secret) {
-    return new Evaluated(output as T);
-  } else if (output && typeof output === "object") {
-    const entries = Object.entries(output);
-    const evaluatedEntries = await Promise.all(
-      entries.map(
-        async ([key, value]) => [key, await evaluate(value, options)] as const,
-      ),
-    );
-
-    const result = Object.fromEntries(
-      evaluatedEntries.map(([key, evaluated]) => [key, evaluated.value]),
-    ) as unknown as T;
-
-    const deps = evaluatedEntries.flatMap(([_, evaluated]) => evaluated.deps);
-
-    return new Evaluated(result, deps);
+    await scope.state.set(resource.ID, state);
   }
 
-  // Base case: primitive value
-  return new Evaluated<T>(output as T);
+  const alwaysUpdate =
+    options?.alwaysUpdate ?? provider.options?.alwaysUpdate ?? false;
+
+  // Skip update if inputs haven't changed and resource is in a stable state
+  if (state.status === "created" || state.status === "updated") {
+    if (
+      JSON.stringify(state.props) === JSON.stringify(props) &&
+      alwaysUpdate !== true
+    ) {
+      if (!scope.quiet) {
+        console.log(`Skip:    ${resourceFQN} (no changes)`);
+      }
+      // if (resourceState.output !== undefined) {
+      //   resource[Provide](resourceState.output);
+      // }
+      return state.output;
+    }
+  }
+
+  const event = state.status === "creating" ? "create" : "update";
+  state.status = event === "create" ? "creating" : "updating";
+  state.oldProps = state.props;
+  state.props = props;
+
+  if (!scope.quiet) {
+    console.log(`${event === "create" ? "Create" : "Update"}:  ${resourceFQN}`);
+  }
+
+  await scope.state.set(resource.ID, state);
+
+  let isReplaced = false;
+
+  const output = await alchemy.run(resource.ID, async (scope) =>
+    provider.handler.bind({
+      stage: scope.stage,
+      resourceID: resource.ID,
+      resourceFQN: resourceFQN,
+      event,
+      scope,
+      output: state.output,
+      replace: () => {
+        if (isReplaced) {
+          console.warn(
+            `Resource ${resource.Kind} ${resourceFQN} is already marked as REPLACE`,
+          );
+          return;
+        }
+        isReplaced = true;
+      },
+      get: (key) => state!.data[key],
+      set: async (key, value) => {
+        state!.data[key] = value;
+        await scope.state.set(resource.ID, state!);
+      },
+      delete: async (key) => {
+        const value = state!.data[key];
+        delete state!.data[key];
+        await scope.state.set(resource.ID, state!);
+        return value;
+      },
+      quiet: scope.quiet,
+      destroy: () => {
+        throw new DestroyedSignal();
+      },
+    })(resource.ID, props),
+  );
+
+  if (!scope.quiet) {
+    console.log(
+      `${event === "create" ? "Created" : "Updated"}: ${resourceFQN}`,
+    );
+  }
+
+  await scope.state.set(resource.ID, {
+    provider: resourceFQN,
+    data: state.data,
+    status: event === "create" ? "created" : "updated",
+    output,
+    props,
+    // deps: [...deps],
+  });
+  // if (output !== undefined) {
+  //   resource[Provide](output as Out);
+  // }
+  return output as any;
 }

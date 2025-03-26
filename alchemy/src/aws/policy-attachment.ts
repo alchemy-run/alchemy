@@ -21,13 +21,13 @@ export interface PolicyAttachment
 export const PolicyAttachment = Resource(
   "iam::PolicyAttachment",
   async function (
-    this: Context<PolicyAttachment> | void,
+    this: Context<PolicyAttachment>,
     id: string,
     props: PolicyAttachmentProps,
   ) {
     const client = new IAMClient({});
 
-    if (this!.event === "delete") {
+    if (this.event === "delete") {
       await ignore(NoSuchEntityException.name, () =>
         client.send(
           new DetachRolePolicyCommand({
@@ -36,7 +36,7 @@ export const PolicyAttachment = Resource(
           }),
         ),
       );
-      return this!.destroy();
+      return this.destroy();
     } else {
       await client.send(
         new AttachRolePolicyCommand({
@@ -46,9 +46,6 @@ export const PolicyAttachment = Resource(
       );
     }
 
-    return {
-      kind: "iam::PolicyAttachment",
-      ...props,
-    };
+    return this(props);
   },
 );

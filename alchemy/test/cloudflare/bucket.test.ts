@@ -40,7 +40,6 @@ describe("R2 Bucket Resource", () => {
         name: testId,
         locationHint: "wnam", // West North America
       });
-      expect(bucket.id).toEqual(testId);
       expect(bucket.name).toEqual(testId);
 
       // Verify bucket was created by querying the API directly
@@ -60,8 +59,6 @@ describe("R2 Bucket Resource", () => {
         allowPublicAccess: true,
       });
 
-      expect(bucket.id).toEqual(testId);
-
       // Verify public access was enabled
       const publicAccessResponse = await api.get(
         `/accounts/${api.accountId}/r2/buckets/${testId}/domains/managed`,
@@ -71,17 +68,13 @@ describe("R2 Bucket Resource", () => {
       expect(publicAccessData.result.enabled).toEqual(true);
     } finally {
       // Always clean up, even if test assertions fail
-      await destroy(bucket).catch((e) =>
-        console.error("Error cleaning up bucket:", e),
-      );
+      if (bucket) {
+      }
 
       // Verify bucket was deleted
       if (bucket) {
-        const api = await createCloudflareApi();
-        const getDeletedResponse = await api.get(
-          `/accounts/${api.accountId}/r2/buckets/${testId}`,
-        );
-        expect(getDeletedResponse.status).toEqual(404);
+        await destroy(bucket);
+        await assertBucketDeleted(bucket);
       }
     }
   });
@@ -95,7 +88,7 @@ describe("R2 Bucket Resource", () => {
 
     try {
       // Create a bucket with EU jurisdiction
-      expect(euBucket.id).toEqual(euBucketName);
+      expect(euBucket.name).toEqual(euBucketName);
       expect(euBucket.jurisdiction).toEqual("eu");
 
       // Verify the jurisdiction setting
@@ -109,6 +102,15 @@ describe("R2 Bucket Resource", () => {
     } finally {
       // Clean up
       await destroy(euBucket);
+      await assertBucketDeleted(euBucket);
     }
   });
 });
+
+async function assertBucketDeleted(bucket: R2Bucket) {
+  const api = await createCloudflareApi();
+  const getDeletedResponse = await api.get(
+    `/accounts/${api.accountId}/r2/buckets/${bucket.name}`,
+  );
+  expect(getDeletedResponse.status).toEqual(404);
+}

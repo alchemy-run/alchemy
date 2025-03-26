@@ -64,7 +64,7 @@ export const Bundle = Resource(
     alwaysUpdate: true,
   },
   async function (
-    this: Context<Bundle> | void,
+    this: Context<Bundle>,
     id: string,
     props: BundleProps,
   ): Promise<Bundle> {
@@ -74,11 +74,11 @@ export const Bundle = Resource(
     // Ensure output directory exists
     await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
 
-    if (this!.event === "delete") {
+    if (this.event === "delete") {
       await fs.promises.unlink(outputPath).catch(() => {});
       // Also clean up sourcemap if it exists
       await fs.promises.unlink(outputPath + ".map").catch(() => {});
-      return this!.destroy();
+      return this.destroy();
     }
 
     const result = await bundle(props);
@@ -87,15 +87,14 @@ export const Bundle = Resource(
     const hash = crypto.createHash("sha256").update(contents).digest("hex");
 
     // Store metadata in context
-    await this!.set("metafile", result.metafile);
-    await this!.set("hash", hash);
+    await this.set("metafile", result.metafile);
+    await this.set("hash", hash);
 
     // Return output info
-    return {
-      kind: "esbuild::Bundle",
+    return this({
       path: outputPath,
       hash,
-    };
+    });
   },
 );
 

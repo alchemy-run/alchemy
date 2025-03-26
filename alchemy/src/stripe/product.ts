@@ -102,7 +102,7 @@ export interface Product extends Resource<"stripe::Product">, ProductProps {
 export const Product = Resource(
   "stripe::Product",
   async function (
-    this: Context<Product> | void,
+    this: Context<Product>,
     id: string,
     props: ProductProps,
   ): Promise<Product> {
@@ -115,10 +115,10 @@ export const Product = Resource(
     // Initialize Stripe client
     const stripe = new Stripe(apiKey);
 
-    if (this!.event === "delete") {
+    if (this.event === "delete") {
       try {
-        if (this!.event === "delete" && this!.output?.id) {
-          await stripe.products.update(this!.output.id, { active: false });
+        if (this.event === "delete" && this.output?.id) {
+          await stripe.products.update(this.output.id, { active: false });
         }
       } catch (error) {
         // Ignore if the product doesn't exist
@@ -126,14 +126,14 @@ export const Product = Resource(
       }
 
       // Return a minimal output for deleted state
-      return this!.destroy();
+      return this.destroy();
     } else {
       try {
         let product: Stripe.Product;
 
-        if (this!.event === "update" && this!.output?.id) {
+        if (this.event === "update" && this.output?.id) {
           // Update existing product
-          product = await stripe.products.update(this!.output.id, {
+          product = await stripe.products.update(this.output.id, {
             name: props.name,
             description: props.description,
             active: props.active,
@@ -160,9 +160,7 @@ export const Product = Resource(
           });
         }
 
-        // Map Stripe API response to our output format
-        const output: Product = {
-          kind: "stripe::Product",
+        return this({
           id: product.id,
           name: product.name,
           description: product.description || undefined,
@@ -180,9 +178,7 @@ export const Product = Resource(
           livemode: product.livemode,
           updatedAt: product.updated,
           packageDimensions: product.package_dimensions || undefined,
-        };
-
-        return output;
+        });
       } catch (error) {
         console.error("Error creating/updating product:", error);
         throw error;

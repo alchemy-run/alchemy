@@ -38,12 +38,12 @@ describe("Scope", () => {
     const ServiceResources = Resource(
       "service-resources",
       async function (
-        this: Context<ServiceResources> | void,
+        this: Context<ServiceResources>,
         id: string,
         props: {
           roleName: string;
         },
-      ) {
+      ): Promise<ServiceResources> {
         const assumeRolePolicy: PolicyDocument = {
           Version: "2012-10-17",
           Statement: [
@@ -63,8 +63,10 @@ describe("Scope", () => {
         });
 
         return {
-          kind: "service-resources",
-          roleArn: role.arn,
+          Kind: "service-resources",
+          ID: id,
+          Scope: this.scope,
+          roleName: role.roleName,
         };
       },
     );

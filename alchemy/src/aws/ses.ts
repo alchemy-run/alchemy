@@ -78,11 +78,6 @@ export interface SESProps {
  */
 export interface SES extends Resource<"aws::SES">, SESProps {
   /**
-   * Resource ID
-   */
-  id: string;
-
-  /**
    * ARN of the configuration set if created
    */
   configurationSetArn?: string;
@@ -109,7 +104,7 @@ export interface SES extends Resource<"aws::SES">, SESProps {
 export const SES = Resource(
   "aws::SES",
   async function (
-    this: Context<SES> | void,
+    this: Context<SES>,
     id: string,
     props: SESProps,
   ): Promise<SES> {
@@ -118,11 +113,11 @@ export const SES = Resource(
 
     // Resource ID is either based on the configuration set name or email identity
     // const id =
-    //   props.configurationSetName || props.emailIdentity || this!.resourceID;
+    //   props.configurationSetName || props.emailIdentity || this.resourceID;
 
     // Handle deletion
-    if (this!.event === "delete") {
-      const output = this!.output;
+    if (this.event === "delete") {
+      const output = this.output;
 
       // Delete configuration set if it exists
       if (output?.configurationSetName) {
@@ -147,7 +142,7 @@ export const SES = Resource(
       }
 
       // Return empty output for delete
-      return this!.destroy();
+      return this.destroy();
     }
 
     // Created resources
@@ -335,14 +330,12 @@ export const SES = Resource(
     }
 
     // Return the resource output
-    return {
-      kind: "aws::SES",
+    return this({
       ...props,
-      id,
       configurationSetArn,
       emailIdentityArn,
       emailIdentityVerificationStatus,
       dkimVerificationStatus,
-    };
+    });
   },
 );
