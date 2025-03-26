@@ -8,9 +8,7 @@ import { WebhookEndpoint } from "../src/stripe/webhook";
 import "../src/test/bun";
 import { BRANCH_PREFIX } from "./util";
 
-const test = alchemy.test(import.meta, {
-  destroy: false,
-});
+const test = alchemy.test(import.meta);
 
 const stripeApiKey = process.env.STRIPE_API_KEY;
 if (!stripeApiKey) {
@@ -21,7 +19,7 @@ if (!stripeApiKey) {
 const stripe = new Stripe(stripeApiKey);
 
 describe("Stripe Resources", () => {
-  test("create and destroy stripe resources", async () => {
+  test("create and destroy stripe resources", async (scope) => {
     // Create a test product
 
     // Resources that we'll need to clean up
@@ -89,6 +87,8 @@ describe("Stripe Resources", () => {
       }
 
       await destroy(product);
+
+      await destroy(scope);
 
       // Verify clean up
       if (product?.id) {

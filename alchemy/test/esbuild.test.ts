@@ -6,9 +6,7 @@ import { destroy } from "../src/destroy";
 import { Bundle } from "../src/esbuild";
 import "../src/test/bun";
 
-const test = alchemy.test(import.meta, {
-  destroy: false,
-});
+const test = alchemy.test(import.meta);
 
 const out = path.join(".alchemy", ".out");
 const outputFile = path.join(out, "handler.js");
@@ -18,7 +16,7 @@ afterAll(async () => {
 });
 
 test("bundle and cleanup", async (scope) => {
-  const bundle = await Bundle("test-bundle", {
+  const bundle = await Bundle("bundle", {
     entryPoint: path.join(import.meta.dirname, "handler.ts"),
     outdir: out,
     format: "esm",

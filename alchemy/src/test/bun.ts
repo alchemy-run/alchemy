@@ -66,35 +66,29 @@ export function test(
       const name = args[0];
       const _options = typeof args[1] === "object" ? args[1] : undefined;
       const options = {
+        destroy: false,
         ...defaultOptions,
         ..._options,
       };
       const fn = typeof args[1] === "function" ? args[1] : args[2]!;
-      return test(
-        name,
-        {
-          ...defaultOptions,
-          ...options,
-        },
-        async () => {
-          await alchemy.run(
-            path.basename(meta.filename),
-            {
-              parent: testScope,
-            },
-            async (scope) => {
-              try {
-                await fn(scope);
-              } finally {
-                if (options.destroy !== false) {
-                  // TODO: auto-destroy resources
-                  await destroy(scope);
-                }
+      return test(name, options, async () => {
+        await alchemy.run(
+          path.basename(meta.filename),
+          {
+            parent: testScope,
+          },
+          async (scope) => {
+            try {
+              await fn(scope);
+            } finally {
+              if (options.destroy !== false) {
+                // TODO: auto-destroy resources
+                await destroy(scope);
               }
-            },
-          );
-        },
-      );
+            }
+          },
+        );
+      });
     };
   }
 

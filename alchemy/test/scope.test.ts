@@ -5,11 +5,13 @@ import { File } from "../src/fs/file";
 import { Scope } from "../src/scope";
 import "../src/test/bun";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  destroy: true,
+});
 
 describe("Scope", () => {
   test("should maintain scope context and track resources", async (scope) => {
-    await File("test-file", {
+    await File("file", {
       path: "test.txt",
       content: "Hello World",
     });
