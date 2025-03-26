@@ -4,14 +4,18 @@ import {
   LambdaClient,
   ResourceNotFoundException,
 } from "@aws-sdk/client-lambda";
-import { describe, expect, test } from "bun:test";
+import { describe, expect } from "bun:test";
 import path from "node:path";
+import { alchemy } from "../../src/alchemy";
 import { Function } from "../../src/aws/function";
 import type { PolicyDocument } from "../../src/aws/policy";
 import { Role } from "../../src/aws/role";
 import { destroy } from "../../src/destroy";
 import { Bundle } from "../../src/esbuild";
+import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+const test = alchemy.test(import.meta);
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
