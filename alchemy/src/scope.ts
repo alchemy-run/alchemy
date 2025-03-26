@@ -51,6 +51,12 @@ export class Scope {
     this.state = new (options.stateStore ?? FileSystemStateStore)(this);
   }
 
+  private _seq = 0;
+
+  public seq() {
+    return this._seq++;
+  }
+
   public get chain(): string[] {
     if (this.parent) {
       return [...this.parent.chain, this.scopeName!];

@@ -22,7 +22,10 @@ export async function apply<Out extends Resource>(
   const scope = resource.Scope;
   const quiet = props.quiet ?? scope.quiet;
   let state: State | undefined = (await scope.state.get(resource.ID))!;
-  const provider: Provider = PROVIDERS.get(resource.ID);
+  const provider: Provider = PROVIDERS.get(resource.Kind);
+  if (provider === undefined) {
+    throw new Error(`Resource ${resource.Kind} not found`);
+  }
   if (state === undefined) {
     state = {
       provider: PROVIDERS.get(resource.ID)!,

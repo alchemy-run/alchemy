@@ -35,10 +35,12 @@ export type PendingResource<
   ID extends ResourceID = ResourceID,
   FQN extends ResourceFQN = ResourceFQN,
   Scope extends _Scope = _Scope,
+  Seq extends number = number,
 > = Promise<Out> & {
   Kind: Kind;
   ID: ID;
   FQN: FQN;
+  Seq: Seq;
   Scope: Scope;
   signal: () => void;
 };
@@ -49,12 +51,14 @@ export interface Resource<
   ID extends ResourceID = ResourceID,
   FQN extends ResourceFQN = ResourceFQN,
   Scope extends _Scope = _Scope,
+  Seq extends number = number,
 > {
   // use capital letters to avoid collision with conventional camelCase typescript properties
   Kind: Kind;
   ID: ID;
   FQN: FQN;
   Scope: Scope;
+  Seq: Seq;
 }
 
 // helper for semantic syntax highlighting (color as a type/class instead of function/value)
@@ -106,21 +110,45 @@ export function Resource<
       // console.warn(`Resource ${id} already exists in the stack: ${stack.id}`);
     }
 
+    // get a unique sequence number for the resource
+    const seq = scope.seq();
+
     // use a lazy promise to defer execution until a signal is received
     let _signal: () => void;
     const signal = new Promise<void>((resolve) => (_signal = resolve));
 
-    const resource = new Promise<Out>((resolve, reject) => {
-      signal.then(() =>
-        apply(resource, props, options)
-          .then((value) => resolve!(value!))
-          .catch(reject),
-      );
+    const _resource = new Promise<Out>((resolve, reject) => {
+      return signal.then(() => {
+        return apply(resource, props, options).then(
+          (value) => resolve!(value!),
+          reject,
+        );
+      });
     }) as PendingResource<Out>;
-    resource.ID = resourceID;
-    resource.signal = _signal!;
-    // TODO: trigger the signal on the first then
-    // resource.then = (onfulfilled, onrejected) => {
+
+    let isSignaled = false;
+
+    const resource = {
+      Kind: type,
+      ID: resourceID,
+      FQN: scope.fqn(resourceID),
+      Seq: seq,
+      Scope: scope,
+      signal: _signal!,
+      then: (
+        onfulfilled: (value: Out) => void,
+        onrejected: (reason: any) => void,
+      ) => {
+        if (!isSignaled) {
+          isSignaled = true;
+          // kick off the resource lifecycle handler on the first await
+          resource.signal();
+        }
+        return _resource.then(onfulfilled, onrejected);
+      },
+      catch: _resource.catch.bind(_resource),
+      finally: _resource.finally.bind(_resource),
+    } as any as PendingResource<Out>;
     scope.resources.set(resourceID, resource);
     return resource;
   }) as Provider<Type, F>;

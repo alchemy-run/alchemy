@@ -1,5 +1,5 @@
 import { decryptWithKey, encryptWithKey } from "./encrypt";
-import type { Scope } from "./scope";
+import { Scope } from "./scope";
 import { Secret } from "./secret";
 
 export async function serialize(scope: Scope, value: any): Promise<any> {
@@ -12,6 +12,8 @@ export async function serialize(scope: Scope, value: any): Promise<any> {
     return {
       "@secret": await encryptWithKey(value.unencrypted, scope.password),
     };
+  } else if (value instanceof Scope) {
+    return undefined;
   } else if (value && typeof value === "object") {
     return Object.fromEntries(
       await Promise.all(

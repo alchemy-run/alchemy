@@ -1,7 +1,7 @@
 import { alchemy } from "./alchemy";
 import { context } from "./context";
 import { PROVIDERS, type Provider, type Resource } from "./resource";
-import type { Scope } from "./scope";
+import { Scope } from "./scope";
 
 export class DestroyedSignal extends Error {}
 
@@ -13,9 +13,11 @@ export interface DestroyScopeOptions extends DestroyOptions {
   strategy: "sequential" | "parallel";
 }
 
-declare function isScopeArgs(
+function isScopeArgs(
   a: any,
-): a is [scope: Scope, options?: DestroyScopeOptions];
+): a is [scope: Scope, options?: DestroyScopeOptions] {
+  return a[0] instanceof Scope;
+}
 
 /**
  * Prune all resources from an Output and "down", i.e. that branches from it.
@@ -28,6 +30,22 @@ export async function destroy<Type extends string>(
   if (isScopeArgs(args)) {
     const [scope, options] = args;
     const strategy = options?.strategy ?? "sequential";
+
+    if (strategy === "sequential") {
+      const resources = Array.from(scope.resources.values()).sort(
+        (a, b) => a.Seq - b.Seq,
+      );
+
+      for (const resource of resources) {
+        await destroy(resource);
+      }
+    } else {
+      await Promise.all(
+        Array.from(scope.resources.values()).map((resource) =>
+          destroy(resource, options),
+        ),
+      );
+    }
 
     return;
   }
@@ -74,7 +92,7 @@ export async function destroy<Type extends string>(
 
     try {
       await alchemy.run(instance.ID, async () =>
-        Provider.handler.bind(ctx)(instance.ID, state.oldProps!),
+        Provider.handler.bind(ctx)(instance.ID, state.props),
       );
     } catch (err) {
       // TODO: should we fail if the DestroyedSignal is not thrown?

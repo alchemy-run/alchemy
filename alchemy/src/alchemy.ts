@@ -79,12 +79,11 @@ async function scope(
       : typeof args[0] === "string"
         ? [args[0], args[1]]
         : [DEFAULT_STAGE, args[0]];
-  const parent = Scope.get();
   const scope = new Scope({
     ...options,
     stage: options?.stage ?? DEFAULT_STAGE,
     scopeName,
-    parent,
+    parent: Scope.get(),
   });
   scope.enter();
 
