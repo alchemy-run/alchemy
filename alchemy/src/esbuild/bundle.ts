@@ -75,7 +75,6 @@ export const Bundle = Resource(
     await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
 
     if (this.phase === "delete") {
-      console.log("delete bundle", outputPath);
       await fs.promises.unlink(outputPath).catch(() => {});
       // Also clean up sourcemap if it exists
       await fs.promises.unlink(outputPath + ".map").catch(() => {});

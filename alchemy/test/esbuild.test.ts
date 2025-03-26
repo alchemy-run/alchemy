@@ -17,7 +17,7 @@ afterAll(async () => {
   await fs.rmdir(out);
 });
 
-test("bundle and cleanup", async () => {
+test("bundle and cleanup", async (scope) => {
   const bundle = await Bundle("test-bundle", {
     entryPoint: path.join(import.meta.dirname, "handler.ts"),
     outdir: out,
@@ -39,7 +39,8 @@ test("bundle and cleanup", async () => {
     // Destroy the bundle
     await destroy(bundle);
     // Verify the file is deleted
-    console.log("outputFile", outputFile);
     expect(await fs.exists(outputFile)).toBe(false);
+
+    await destroy(scope);
   }
 });

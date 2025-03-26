@@ -47,6 +47,8 @@ export async function destroy<Type extends string>(
       );
     }
 
+    await scope.deinit();
+
     return;
   }
 

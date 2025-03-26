@@ -72,6 +72,10 @@ export class Scope {
     await this.state.init?.();
   }
 
+  public async deinit() {
+    await this.state.deinit?.();
+  }
+
   public fqn(resourceID: ResourceID): string {
     return [...this.chain, resourceID].join("/");
   }
