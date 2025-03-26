@@ -1,9 +1,10 @@
 import { alchemy } from "./alchemy";
-import { DestroyedSignal } from "./destroy";
+import { context } from "./context";
 import {
   PROVIDERS,
   type PendingResource,
   type Provider,
+  type Resource,
   type ResourceProps,
 } from "./resource";
 import type { State } from "./state";
@@ -13,14 +14,13 @@ export interface ApplyOptions {
   alwaysUpdate?: boolean;
 }
 
-export async function apply<Out>(
+export async function apply<Out extends Resource>(
   resource: PendingResource<Out>,
   props: ResourceProps,
   options?: ApplyOptions,
 ): Promise<Awaited<Out | void>> {
   const scope = resource.Scope;
   const quiet = props.quiet ?? scope.quiet;
-  const resourceFQN = scope.fqn(resource.ID);
   let state: State | undefined = (await scope.state.get(resource.ID))!;
   const provider: Provider = PROVIDERS.get(resource.ID);
   if (state === undefined) {
@@ -28,7 +28,7 @@ export async function apply<Out>(
       provider: PROVIDERS.get(resource.ID)!,
       status: "creating",
       data: {},
-      output: undefined,
+      output: undefined!,
       // deps: [...deps],
       props,
     };
@@ -44,13 +44,13 @@ export async function apply<Out>(
       JSON.stringify(state.props) === JSON.stringify(props) &&
       alwaysUpdate !== true
     ) {
-      if (!scope.quiet) {
-        console.log(`Skip:    ${resourceFQN} (no changes)`);
+      if (!quiet) {
+        console.log(`Skip:    ${resource.FQN} (no changes)`);
       }
       // if (resourceState.output !== undefined) {
       //   resource[Provide](resourceState.output);
       // }
-      return state.output;
+      return state.output as Awaited<Out>;
     }
   }
 
@@ -59,57 +59,46 @@ export async function apply<Out>(
   state.oldProps = state.props;
   state.props = props;
 
-  if (!scope.quiet) {
-    console.log(`${event === "create" ? "Create" : "Update"}:  ${resourceFQN}`);
+  if (!quiet) {
+    console.log(
+      `${event === "create" ? "Create" : "Update"}:  ${resource.FQN}`,
+    );
   }
 
   await scope.state.set(resource.ID, state);
 
   let isReplaced = false;
 
-  const output = await alchemy.run(resource.ID, async (scope) =>
-    provider.handler.bind({
-      stage: scope.stage,
-      resourceID: resource.ID,
-      resourceFQN: resourceFQN,
-      event,
-      scope,
-      output: state.output,
-      replace: () => {
-        if (isReplaced) {
-          console.warn(
-            `Resource ${resource.Kind} ${resourceFQN} is already marked as REPLACE`,
-          );
-          return;
-        }
-        isReplaced = true;
-      },
-      get: (key) => state!.data[key],
-      set: async (key, value) => {
-        state!.data[key] = value;
-        await scope.state.set(resource.ID, state!);
-      },
-      delete: async (key) => {
-        const value = state!.data[key];
-        delete state!.data[key];
-        await scope.state.set(resource.ID, state!);
-        return value;
-      },
-      quiet: scope.quiet,
-      destroy: () => {
-        throw new DestroyedSignal();
-      },
-    })(resource.ID, props),
+  const ctx = context({
+    scope,
+    event,
+    kind: resource.Kind,
+    id: resource.ID,
+    fqn: resource.FQN,
+    state,
+    replace: () => {
+      if (isReplaced) {
+        console.warn(
+          `Resource ${resource.Kind} ${resource.FQN} is already marked as REPLACE`,
+        );
+        return;
+      }
+      isReplaced = true;
+    },
+  });
+
+  const output = await alchemy.run(resource.ID, async () =>
+    provider.handler.bind(ctx)(resource.ID, props),
   );
 
-  if (!scope.quiet) {
+  if (!quiet) {
     console.log(
-      `${event === "create" ? "Created" : "Updated"}: ${resourceFQN}`,
+      `${event === "create" ? "Created" : "Updated"}: ${resource.FQN}`,
     );
   }
 
   await scope.state.set(resource.ID, {
-    provider: resourceFQN,
+    provider: resource.Kind,
     data: state.data,
     status: event === "create" ? "created" : "updated",
     output,

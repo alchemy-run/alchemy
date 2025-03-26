@@ -127,7 +127,7 @@ export const Role = Resource(
               },
               {
                 Key: "alchemy_resource",
-                Value: this.resourceID,
+                Value: this.id,
               },
             ],
           }),
@@ -155,7 +155,7 @@ export const Role = Resource(
 
         if (
           roleTags.alchemy_stage !== this.stage ||
-          roleTags.alchemy_resource !== this.resourceID
+          roleTags.alchemy_resource !== this.id
         ) {
           throw error;
         }
@@ -199,7 +199,7 @@ export const Role = Resource(
     const newTags = {
       ...props.tags,
       alchemy_stage: this.stage,
-      alchemy_resource: this.resourceID,
+      alchemy_resource: this.id,
     };
     const tags: Tag[] = Object.entries(newTags).map(([Key, Value]) => ({
       Key,

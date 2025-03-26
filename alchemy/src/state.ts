@@ -1,11 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ignore } from "./error";
-import type { ResourceProps } from "./resource";
+import type { Resource, ResourceProps } from "./resource";
 import type { Scope } from "./scope";
 import { deserialize, serialize } from "./serde";
 
-export interface State<Props extends ResourceProps = ResourceProps> {
+export interface State<
+  Props extends ResourceProps = ResourceProps,
+  Out extends Resource = Resource,
+> {
   status:
     | `creating`
     | `created`
@@ -18,7 +21,7 @@ export interface State<Props extends ResourceProps = ResourceProps> {
   // deps: string[];
   props: Props;
   oldProps?: Props;
-  output: any;
+  output: Out;
 }
 
 export type StateStoreType = new (scope: Scope) => StateStore;

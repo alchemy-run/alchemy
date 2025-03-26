@@ -1,11 +1,39 @@
-import type { Resource, ResourceFQN, ResourceID } from "./resource";
+import { DestroyedSignal } from "./destroy";
+import type {
+  Resource,
+  ResourceFQN,
+  ResourceID,
+  ResourceKind,
+  ResourceProps,
+} from "./resource";
 import type { Scope } from "./scope";
+import type { State } from "./state";
+
+export type Context<Out extends Resource> =
+  | CreateContext<Out>
+  | UpdateContext<Out>
+  | DeleteContext<Out>;
+
+export interface CreateContext<Out extends Resource> extends BaseContext<Out> {
+  event: "create";
+  output?: undefined;
+}
+
+export interface UpdateContext<Out extends Resource> extends BaseContext<Out> {
+  event: "update";
+  output: Out;
+}
+
+export interface DeleteContext<Out extends Resource> extends BaseContext<Out> {
+  event: "delete";
+  output: Out;
+}
 
 export interface BaseContext<Out extends Resource> {
   quiet: boolean;
   stage: string;
-  resourceID: ResourceID;
-  resourceFQN: ResourceFQN;
+  id: ResourceID;
+  fqn: ResourceFQN;
   scope: Scope;
   get<T>(key: string): Promise<T | undefined>;
   set<T>(key: string, value: T): Promise<void>;
@@ -25,27 +53,64 @@ export interface BaseContext<Out extends Resource> {
    * "return undefined" so that `await MyResource()` always returns a value.
    */
   destroy(): never;
-
-  create(props: Omit<Out, "Kind" | "ID" | "Scope">): Out;
-  (props: Omit<Out, "Kind" | "ID" | "Scope">): Out;
+  /**
+   * Create the Resource envelope (with Alchemy + User properties)
+   */
+  create(props: Omit<Out, keyof Resource>): Out;
+  /**
+   * Create the Resource envelope (with Alchemy + User properties)
+   */
+  (props: Omit<Out, keyof Resource>): Out;
 }
 
-export interface CreateContext<Out extends Resource> extends BaseContext<Out> {
-  event: "create";
-  output?: undefined;
+export function context<Props extends ResourceProps, Out extends Resource>({
+  scope,
+  event,
+  kind,
+  id,
+  fqn,
+  state,
+  replace,
+}: {
+  scope: Scope;
+  event: "create" | "update" | "delete";
+  kind: ResourceKind;
+  id: ResourceID;
+  fqn: ResourceFQN;
+  state: State<Props, Out>;
+  replace: () => void;
+}): Context<Out> {
+  function create(props: Omit<Out, "Kind" | "ID" | "Scope">): Out {
+    return {
+      ...props,
+      Kind: kind,
+      ID: id,
+      Scope: scope,
+    } as Out;
+  }
+  return Object.assign(create, {
+    stage: scope.stage,
+    scope,
+    id: id,
+    fqn: fqn,
+    event,
+    output: state.output,
+    replace,
+    get: (key: string) => {
+      return state.data[key];
+    },
+    set: async (key: string, value: any) => {
+      state.data[key] = value;
+    },
+    delete: async (key: string) => {
+      const value = state.data[key];
+      delete state.data[key];
+      return value;
+    },
+    quiet: scope.quiet,
+    destroy: () => {
+      throw new DestroyedSignal();
+    },
+    create,
+  }) as Context<Out>;
 }
-
-export interface UpdateContext<Out extends Resource> extends BaseContext<Out> {
-  event: "update";
-  output: Out;
-}
-
-export interface DeleteContext<Out extends Resource> extends BaseContext<Out> {
-  event: "delete";
-  output: Out;
-}
-
-export type Context<Out extends Resource> =
-  | CreateContext<Out>
-  | UpdateContext<Out>
-  | DeleteContext<Out>;

@@ -1,13 +1,14 @@
-import { alchemize } from "alchemy";
+import alchemy from "alchemy";
 import { Function, Queue, Role, Table } from "alchemy/aws";
 import { Bundle } from "alchemy/esbuild";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-await alchemize({
+await using _ = await alchemy.scope({
   // decide the mode/stage however you want
   mode: process.argv[2] === "destroy" ? "destroy" : "up",
   stage: process.argv[3],
+  quiet: process.argv.includes("--quiet"),
 });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

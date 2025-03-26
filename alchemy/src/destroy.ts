@@ -1,4 +1,5 @@
 import { alchemy } from "./alchemy";
+import { context } from "./context";
 import { PROVIDERS, type Provider, type Resource } from "./resource";
 
 export class DestroyedSignal extends Error {}
@@ -25,64 +26,50 @@ export async function destroy<Type extends string>(
     );
   }
 
-  try {
-    const scope = resource.Scope;
-    const resourceID = resource.ID;
-    const resourceFQN = scope.getScopePath(resourceID) + "/" + resourceID;
+  const scope = resource.Scope;
+  const quiet = options?.quiet ?? scope.quiet;
 
-    if (!scope.quiet) {
-      console.log(`Delete:  ${resourceFQN}`);
+  try {
+    if (!quiet) {
+      console.log(`Delete:  ${resource.FQN}`);
     }
 
-    const state = (await scope.state.get(resourceID))!;
+    const state = (await scope.state.get(resource.ID))!;
 
     if (state === undefined) {
-      console.warn(`Resource ${resourceFQN} not found`);
+      console.warn(`Resource ${resource.FQN} not found`);
       return;
     }
 
+    const ctx = context({
+      scope,
+      event: "delete",
+      kind: resource.Kind,
+      id: resource.ID,
+      fqn: resource.FQN,
+      state,
+      replace: () => {
+        throw new Error("Cannot replace a resource that is being deleted");
+      },
+    });
+
     try {
-      await alchemy.run(resourceID, async (scope) =>
-        Provider.handler.bind({
-          stage: scope.stage,
-          scope,
-          resourceID,
-          resourceFQN,
-          event: "delete",
-          output: state.output,
-          replace() {
-            throw new Error("Cannot replace a resource that is being deleted");
-          },
-          get: (key) => {
-            return state.data[key];
-          },
-          set: async (key, value) => {
-            state.data[key] = value;
-          },
-          delete: async (key) => {
-            const value = state.data[key];
-            delete state.data[key];
-            return value;
-          },
-          quiet: scope.quiet,
-          destroy: () => {
-            throw new DestroyedSignal();
-          },
-        })(resourceID, state.oldProps!),
+      await alchemy.run(resource.ID, async () =>
+        Provider.handler.bind(ctx)(resource.ID, state.oldProps!),
       );
     } catch (err) {
       // TODO: should we fail if the DestroyedSignal is not thrown?
       if (err instanceof DestroyedSignal) {
-        console.log(`Destroyed: ${resourceFQN}`);
+        console.log(`Destroyed: ${resource.FQN}`);
         return;
       }
       throw err;
     }
 
-    scope.state.delete(resource.ID);
+    await scope.state.delete(resource.ID);
 
-    if (!scope.quiet) {
-      console.log(`Deleted: ${resourceFQN}`);
+    if (!quiet) {
+      console.log(`Deleted: ${resource.FQN}`);
     }
   } catch (error) {
     console.error(error);

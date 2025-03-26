@@ -7,8 +7,7 @@ import { withExponentialBackoff } from "../utils/retry";
 import { type CloudflareApi, createCloudflareApi } from "./api";
 import type { Bindings, WorkerBindingSpec } from "./bindings";
 import type { Bound } from "./bound";
-import type { DurableObjectNamespace } from "./durable-object-namespace";
-import { isDurableObjectNamespace } from "./durable-object-namespace";
+import { DurableObjectNamespace } from "./durable-object-namespace";
 import { isKVNamespace } from "./kv-namespace";
 import type { WorkerScriptMetadata } from "./worker-metadata";
 import type { SingleStepMigration } from "./worker-migration";
@@ -384,7 +383,7 @@ async function prepareWorkerMetadata<B extends Bindings>(
     observability: {
       enabled: props.observability?.enabled !== false,
     },
-    tags: [`alchemy:id:${ctx.resourceFQN}`],
+    tags: [`alchemy:id:${ctx.fqn}`],
     migrations: {
       new_classes: props.migrations?.new_classes ?? [],
       deleted_classes: props.migrations?.deleted_classes ?? [],
@@ -434,7 +433,7 @@ async function prepareWorkerMetadata<B extends Bindings>(
       const oldBinding: DurableObjectNamespace | undefined = Object.values(
         oldBindings ?? {},
       )
-        ?.filter(isDurableObjectNamespace)
+        ?.filter((o) => o instanceof DurableObjectNamespace)
         ?.find((b) => b.id === stableId);
 
       if (!oldBinding) {
@@ -514,7 +513,7 @@ async function assertWorkerDoesNotExist<B extends Bindings>(
 
     if (
       metadata.default_environment?.script.tags.includes(
-        `alchemy:id:${ctx.resourceFQN}`,
+        `alchemy:id:${ctx.fqn}`,
       )
     ) {
       return true;

@@ -65,7 +65,7 @@ export const R2Bucket = Resource(
     const api = await createCloudflareApi();
 
     // Resource ID defaults to bucket name if provided
-    const bucketName = props.name || this.resourceID;
+    const bucketName = props.name || this.id;
 
     if (this.event === "delete") {
       if (this.output?.name) {

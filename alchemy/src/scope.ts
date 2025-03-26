@@ -38,6 +38,7 @@ export class Scope {
   public readonly password: string | undefined;
   public readonly state: StateStore;
   public readonly quiet: boolean;
+
   constructor(options: ScopeOptions) {
     this.stage = options.stage;
     this.scopeName = options.scopeName ?? null;

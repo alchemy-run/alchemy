@@ -1,19 +1,9 @@
-import type { Resolved } from "../output";
-
 export interface DurableObjectNamespaceInput {
   className: string;
   scriptName?: string | undefined;
   environment?: string | undefined;
   sqlite?: boolean | undefined;
   namespaceId?: string | undefined;
-}
-
-export function isDurableObjectNamespace(
-  binding: any,
-): binding is Resolved<DurableObjectNamespace> {
-  return (
-    typeof binding === "object" && binding.type === "durable_object_namespace"
-  );
 }
 
 export class DurableObjectNamespace implements DurableObjectNamespaceInput {

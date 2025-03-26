@@ -33,23 +33,27 @@ export type PendingResource<
   Out = unknown,
   Kind extends ResourceKind = ResourceKind,
   ID extends ResourceID = ResourceID,
+  FQN extends ResourceFQN = ResourceFQN,
   Scope extends IScope = IScope,
 > = Promise<Out> & {
   Kind: Kind;
   ID: ID;
+  FQN: FQN;
   Scope: Scope;
   signal: () => void;
 };
 
 export interface Resource<
   // give each name types for syntax highlighting (differentiation)
-  Kind extends string = string,
-  ID extends string = string,
+  Kind extends ResourceKind = ResourceKind,
+  ID extends ResourceID = ResourceID,
+  FQN extends ResourceFQN = ResourceFQN,
   Scope extends IScope = IScope,
 > {
   // use capital letters to avoid collision with conventional camelCase typescript properties
   Kind: Kind;
   ID: ID;
+  FQN: FQN;
   Scope: Scope;
 }
 
