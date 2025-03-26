@@ -4,11 +4,17 @@ import {
   ListAttachedRolePoliciesCommand,
   NoSuchEntityException,
 } from "@aws-sdk/client-iam";
-import { describe, expect, test } from "bun:test";
+import { describe, expect } from "bun:test";
+import { alchemy } from "../../src/alchemy";
 import type { PolicyDocument } from "../../src/aws/policy";
 import { Role, type RoleProps } from "../../src/aws/role";
 import { destroy } from "../../src/destroy";
+import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+const test = alchemy.test(import.meta, {
+  destroy: false,
+});
 
 // Verify role was deleted
 const iam = new IAMClient({});
@@ -43,7 +49,7 @@ describe("AWS Resources", () => {
       ],
     };
 
-    test("create role", async () => {
+    test("create role simple", async () => {
       const role = await Role(`${BRANCH_PREFIX}-test-create-role`, {
         roleName: `${BRANCH_PREFIX}-test-create-role`,
         assumeRolePolicy,
@@ -60,7 +66,7 @@ describe("AWS Resources", () => {
       });
 
       try {
-        expect(role.id).toBe(`${BRANCH_PREFIX}-test-create-role`);
+        expect(role.roleName).toBe(`${BRANCH_PREFIX}-test-create-role`);
         expect(role.arn).toMatch(
           new RegExp(
             `^arn:aws:iam::\\d+:role/${BRANCH_PREFIX.replace(/\//g, "\\/")}-test-create-role$`,
@@ -108,7 +114,7 @@ describe("AWS Resources", () => {
       let role = await Role(`${BRANCH_PREFIX}-test-update-role`, roleProps);
 
       try {
-        expect(role.id).toBe(`${BRANCH_PREFIX}-test-update-role`);
+        expect(role.roleName).toBe(`${BRANCH_PREFIX}-test-update-role`);
         expect(role.description).toBe("Updated test role for IAC");
         expect(role.maxSessionDuration).toBe(7200);
         expect(role.tags).toEqual({
@@ -158,7 +164,7 @@ describe("AWS Resources", () => {
           },
           managedPolicyArns: [managedPolicyArn],
         });
-        expect(role.id).toBe(roleName);
+        expect(role.roleName).toBe(roleName);
         expect(role.arn).toMatch(
           new RegExp(
             `^arn:aws:iam::\\d+:role/${BRANCH_PREFIX.replace(/\//g, "\\/")}-test-managed-policy-role$`,
@@ -234,7 +240,7 @@ describe("AWS Resources", () => {
           managedPolicyArns: [managedPolicyArn],
         });
 
-        expect(role.id).toBe(roleName);
+        expect(role.roleName).toBe(roleName);
 
         // Verify managed policy is attached
         let attachedPolicies = await iam.send(

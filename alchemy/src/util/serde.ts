@@ -4,7 +4,7 @@ import { decryptWithKey, encryptWithKey } from "./encrypt";
 
 export async function serialize(scope: Scope, value: any): Promise<any> {
   if (Array.isArray(value)) {
-    return Promise.all(value.map(serialize));
+    return Promise.all(value.map((value) => serialize(scope, value)));
   } else if (value instanceof Secret) {
     if (!scope.password) {
       throw new Error("Cannot serialize secret without password");

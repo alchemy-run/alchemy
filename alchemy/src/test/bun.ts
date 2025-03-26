@@ -17,18 +17,19 @@ alchemy.test = test;
 export interface TestOptions {
   destroy?: boolean;
   quiet?: boolean;
+  password?: string;
 }
 
 const testScope = await alchemy.scope("test");
 
 type test = {
+  (name: string, fn: (scope: Scope) => Promise<any>, timeout?: number): void;
   (
     name: string,
     options: TestOptions,
-    fn: (scope: Scope) => Promise<void>,
+    fn: (scope: Scope) => Promise<any>,
+    timeout?: number,
   ): void;
-
-  (name: string, fn: (scope: Scope) => Promise<void>): void;
 
   skipIf(condition: boolean): test;
 
@@ -50,8 +51,13 @@ export function test(
 export function test(
   ...args:
     | [meta: ImportMeta, options?: TestOptions]
-    | [name: string, options: TestOptions, fn: (scope: Scope) => Promise<void>]
-    | [name: string, fn: (scope: Scope) => Promise<void>]
+    | [
+        name: string,
+        options: TestOptions,
+        fn: (scope: Scope) => Promise<void>,
+        timeout?: number,
+      ]
+    | [name: string, fn: (scope: Scope) => Promise<void>, timeout?: number]
 ): any {
   if (isImportMeta(args[0])) {
     const meta = args[0];
@@ -87,6 +93,7 @@ export function test(
       const options = {
         destroy: false,
         quiet: false,
+        password: "test-password",
         ...spread(defaultOptions),
         ...spread(_options),
       };
@@ -114,20 +121,28 @@ export function test(
     }
   }
 
-  const options = args.length === 3 ? args[1] : {};
-  const name = args[0];
-  const fn = typeof args[1] === "function" ? args[1] : args[2]!;
+  const options =
+    args.find((arg): arg is TestOptions => typeof arg === "object") ?? {};
+  const name = args.find((arg) => typeof arg === "string") ?? args[0];
+  const fn = args.find(
+    (arg): arg is (scope: Scope) => Promise<void> => typeof arg === "function",
+  )!;
+  const timeout = args.find((arg) => typeof arg === "number") ?? undefined;
 
-  return it(name, async () => {
-    await alchemy.run(name, { parent: testScope }, async (scope) => {
-      try {
-        await fn(scope);
-      } finally {
-        if (options.destroy !== false) {
-          // TODO: auto-destroy resources
-          await destroy(scope);
+  return it(
+    name,
+    async () => {
+      await alchemy.run(name, { parent: testScope }, async (scope) => {
+        try {
+          await fn(scope);
+        } finally {
+          if (options.destroy !== false) {
+            // TODO: auto-destroy resources
+            await destroy(scope);
+          }
         }
-      }
-    });
-  });
+      });
+    },
+    timeout,
+  );
 }
