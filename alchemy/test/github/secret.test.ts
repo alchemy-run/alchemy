@@ -1,9 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect } from "bun:test";
+import { alchemy } from "../../src/alchemy";
 import { destroy } from "../../src/destroy";
 import { createGitHubClient } from "../../src/github/client";
 import { GitHubSecret } from "../../src/github/secret";
 import { secret } from "../../src/secret";
 import { BRANCH_PREFIX } from "../util";
+
+const test = alchemy.test(import.meta);
 
 // Optional environment variable overrides
 const owner = process.env.GITHUB_OWNER || "sam-goodwin";

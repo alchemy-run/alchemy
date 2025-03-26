@@ -10,7 +10,7 @@ import { BRANCH_PREFIX } from "./util";
 
 const test = alchemy.test(import.meta);
 
-const stripeApiKey = process.env.STRIPE_API_KEY;
+const stripeApiKey = import.meta.env.STRIPE_API_KEY;
 if (!stripeApiKey) {
   throw new Error("STRIPE_API_KEY environment variable is required");
 }
@@ -37,8 +37,9 @@ describe("Stripe Resources", () => {
       expect(product.name).toBe(productName);
 
       // Verify with Stripe API
-      const stripeProduct = await stripe.products.retrieve(product.id);
-      expect(stripeProduct.name).toBe(productName);
+      expect((await stripe.products.retrieve(product.id)).name).toBe(
+        productName,
+      );
 
       // Create a price for the product
       price = await Price(`${BRANCH_PREFIX}-price`, {
@@ -55,8 +56,7 @@ describe("Stripe Resources", () => {
       expect(price.recurring?.interval).toBe("month");
 
       // Verify with Stripe API
-      const stripePrice = await stripe.prices.retrieve(price.id);
-      expect(stripePrice.unit_amount).toBe(1500);
+      expect((await stripe.prices.retrieve(price.id)).unit_amount).toBe(1500);
 
       // Create a webhook endpoint
       webhook = await WebhookEndpoint(`${BRANCH_PREFIX}-webhook`, {
@@ -74,20 +74,10 @@ describe("Stripe Resources", () => {
       expect(webhook.secret).toBeTruthy();
 
       // Verify with Stripe API
-      const stripeWebhook = await stripe.webhookEndpoints.retrieve(webhook.id);
-      expect(stripeWebhook.url).toBe("https://example.com/alchemy-webhook");
+      expect((await stripe.webhookEndpoints.retrieve(webhook.id)).url).toBe(
+        "https://example.com/alchemy-webhook",
+      );
     } finally {
-      // Clean up resources in reverse order of creation
-      if (webhook) {
-        await destroy(webhook);
-      }
-
-      if (price) {
-        await destroy(price);
-      }
-
-      await destroy(product);
-
       await destroy(scope);
 
       // Verify clean up

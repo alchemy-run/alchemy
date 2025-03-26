@@ -29,6 +29,8 @@ type test = {
 
   (name: string, fn: (scope: Scope) => Promise<void>): void;
 
+  skipIf(condition: boolean): test;
+
   [Symbol.asyncDispose](): Promise<void>;
 };
 
@@ -54,7 +56,15 @@ export function test(
     const meta = args[0];
     const defaultOptions = args[1];
 
-    return (
+    // test.skipIf = (condition: boolean) => {
+    //   return (name: string, fn: (scope: Scope) => Promise<void>) => {
+    //     return bunTest.skipIf(condition)(name, fn);
+    //   };
+    // };
+
+    return test;
+
+    function test(
       ...args:
         | [
             name: string,
@@ -62,7 +72,7 @@ export function test(
             fn: (scope: Scope) => Promise<void>,
           ]
         | [name: string, fn: (scope: Scope) => Promise<void>]
-    ) => {
+    ) {
       const name = args[0];
       const _options = typeof args[1] === "object" ? args[1] : undefined;
       const options = {
@@ -71,6 +81,8 @@ export function test(
         ..._options,
       };
       const fn = typeof args[1] === "function" ? args[1] : args[2]!;
+      console.log("running", name);
+
       return test(name, options, async () => {
         await alchemy.run(
           path.basename(meta.filename),
@@ -89,7 +101,7 @@ export function test(
           },
         );
       });
-    };
+    }
   }
 
   const options = args.length === 3 ? args[1] : {};

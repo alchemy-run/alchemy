@@ -34,11 +34,7 @@ test("bundle and cleanup", async (scope) => {
     const contents = await fs.readFile(outputFile, "utf-8");
     expect(contents).toContain("Hello from bundled handler");
   } finally {
-    // Destroy the bundle
-    await destroy(bundle);
-    // Verify the file is deleted
-    expect(await fs.exists(outputFile)).toBe(false);
-
     await destroy(scope);
+    expect(await fs.exists(outputFile)).toBe(false);
   }
 });
