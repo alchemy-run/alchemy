@@ -3,10 +3,16 @@ import {
   DynamoDBClient,
   ResourceNotFoundException,
 } from "@aws-sdk/client-dynamodb";
-import { describe, expect, test } from "bun:test";
+import { describe, expect } from "bun:test";
+import { alchemy } from "../../src/alchemy";
 import { Table } from "../../src/aws/table";
 import { destroy } from "../../src/destroy";
+import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+const test = alchemy.test(import.meta, {
+  destroy: false,
+});
 
 const dynamo = new DynamoDBClient({});
 
@@ -30,7 +36,7 @@ describe("AWS Resources", () => {
       });
 
       try {
-        expect(table.id).toBe(tableName);
+        expect(table.tableName).toBe(tableName);
         expect(table.arn).toMatch(
           new RegExp(`^arn:aws:dynamodb:[a-z0-9-]+:\\d+:table\\/${tableName}$`),
         );
