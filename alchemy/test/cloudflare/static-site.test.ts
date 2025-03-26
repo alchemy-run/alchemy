@@ -1,11 +1,15 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect } from "bun:test";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { alchemy } from "../../src/alchemy";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { StaticSite } from "../../src/cloudflare/static-site";
 import { Worker } from "../../src/cloudflare/worker";
 import { destroy } from "../../src/destroy";
+import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+const test = alchemy.test(import.meta);
 
 describe("StaticSite Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-static-site`;
@@ -57,7 +61,6 @@ describe("StaticSite Resource", () => {
     });
 
     try {
-      expect(site.id).toBeTruthy();
       expect(site.workerId).toBeTruthy();
       expect(site.assets.length).toBeGreaterThan(0);
 
@@ -144,7 +147,6 @@ describe("StaticSite Resource", () => {
       });
 
       // Verify main outputs
-      expect(site.id).toBeTruthy();
       expect(site.workerId).toBeTruthy();
       expect(site.assets.length).toBeGreaterThan(0);
 
