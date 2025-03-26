@@ -1,8 +1,10 @@
 import { destroy } from "./destroy";
-import { DEFAULT_STAGE } from "./global";
 import { Scope } from "./scope";
 import { secret } from "./secret";
 import type { StateStoreType } from "./state";
+
+// TODO: support browser
+const DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
 
 // Alchemy is for module augmentation
 export interface Alchemy {
