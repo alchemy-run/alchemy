@@ -6,7 +6,7 @@ import {
 } from "@aws-sdk/client-iam";
 import type { Context } from "../context";
 import { Resource } from "../resource";
-import { ignore } from "../utils/ignore";
+import { ignore } from "../util/ignore";
 
 // PolicyAttachment resource
 export interface PolicyAttachmentProps {

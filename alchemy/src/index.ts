@@ -3,7 +3,7 @@ export * from "./global";
 export * from "./resource";
 export * from "./secret";
 export * from "./state";
-export * from "./utils/ignore";
+export * from "./util/ignore";
 
 import { alchemy } from "./alchemy";
 export default alchemy;

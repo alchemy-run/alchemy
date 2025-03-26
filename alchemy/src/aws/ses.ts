@@ -21,7 +21,7 @@ import {
 } from "@aws-sdk/client-sesv2";
 import type { Context } from "../context";
 import { Resource } from "../resource";
-import { ignore } from "../utils/ignore";
+import { ignore } from "../util/ignore";
 
 /**
  * Properties for configuring AWS SES resources

@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Context } from "../context";
 import { Resource } from "../resource";
-import { ignore } from "../utils/ignore";
+import { ignore } from "../util/ignore";
 
 async function resolveRegion(client: LambdaClient): Promise<string> {
   const region = client.config.region;

@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Resource, ResourceProps } from "./resource";
 import type { Scope } from "./scope";
-import { ignore } from "./utils/ignore";
-import { deserialize, serialize } from "./utils/serde";
+import { ignore } from "./util/ignore";
+import { deserialize, serialize } from "./util/serde";
 
 export interface State<
   Props extends ResourceProps = ResourceProps,

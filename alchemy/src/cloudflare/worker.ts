@@ -3,7 +3,7 @@ import type { Context } from "../context";
 import { Bundle, type BundleProps } from "../esbuild/bundle";
 import { Resource } from "../resource";
 import { Secret } from "../secret";
-import { withExponentialBackoff } from "../utils/retry";
+import { withExponentialBackoff } from "../util/retry";
 import { type CloudflareApi, createCloudflareApi } from "./api";
 import type { Bindings, WorkerBindingSpec } from "./bindings";
 import type { Bound } from "./bound";

@@ -10,8 +10,8 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import type { Context } from "../context";
 import { Resource } from "../resource";
-import { ignore } from "../utils/ignore";
-import { withExponentialBackoff } from "../utils/retry";
+import { ignore } from "../util/ignore";
+import { withExponentialBackoff } from "../util/retry";
 
 export interface TableProps {
   tableName: string;

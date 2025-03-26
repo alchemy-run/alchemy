@@ -12,7 +12,7 @@ import {
 } from "@aws-sdk/client-s3";
 import type { Context } from "../context";
 import { Resource } from "../resource";
-import { ignore } from "../utils/ignore";
+import { ignore } from "../util/ignore";
 
 export interface BucketProps {
   bucketName: string;

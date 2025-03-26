@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { promises as fs } from "fs";
 import { glob } from "glob";
 import path from "path";
-import { getContentType } from "../utils/content-type";
+import { getContentType } from "../util/content-type";
 import type {
   AssetManifest,
   AssetManifestEntry,

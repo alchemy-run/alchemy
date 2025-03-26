@@ -1,6 +1,6 @@
 import type { Context } from "../context";
 import { Resource } from "../resource";
-import { withExponentialBackoff } from "../utils/retry";
+import { withExponentialBackoff } from "../util/retry";
 import { createCloudflareApi } from "./api";
 
 export function isKVNamespace(resource: any): resource is KVNamespace {
