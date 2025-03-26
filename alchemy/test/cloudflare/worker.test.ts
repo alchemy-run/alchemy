@@ -363,22 +363,19 @@ describe("Worker Resource", () => {
     }
   });
 
-  test("fails when creating a worker with a duplicate name", async () => {
-    // Define fixed names for this test
-    const duplicateTestName = `${BRANCH_PREFIX}-test-worker-duplicate`;
-    const workerName = `${duplicateTestName}-dup-1`;
+  test("fails when creating a worker with a duplicate name", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-duplicate`;
 
-    let firstWorker: Worker | undefined = undefined;
     try {
       // First, create a worker successfully
-      firstWorker = await Worker(duplicateTestName, {
+      await Worker(workerName, {
         name: workerName,
         script: workerScript,
         format: "cjs",
       });
 
       // Try to create another worker with the same name, which should fail
-      const duplicateWorker = Worker("different-resource-id", {
+      const duplicateWorker = Worker(`${workerName}-dup`, {
         name: workerName, // Same name as firstWorker
         script: workerScript,
         format: "cjs",
@@ -387,10 +384,7 @@ describe("Worker Resource", () => {
         `Worker with name '${workerName}' already exists. Please use a unique name.`,
       );
     } finally {
-      if (firstWorker) {
-        // Clean up by deleting the first worker
-        await alchemy.destroy(firstWorker);
-      }
+      await alchemy.destroy(scope);
     }
   });
 

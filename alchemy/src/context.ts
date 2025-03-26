@@ -97,10 +97,7 @@ export function context<Props extends ResourceProps, Out extends Resource>({
     phase,
     output: state.output,
     replace,
-    get: (key: string) => {
-      console.log("get", key, state.data[key], state.data);
-      return state.data[key];
-    },
+    get: (key: string) => state.data[key],
     set: async (key: string, value: any) => {
       state.data[key] = value;
     },

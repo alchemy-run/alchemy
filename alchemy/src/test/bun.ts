@@ -16,6 +16,7 @@ alchemy.test = test;
 
 export interface TestOptions {
   destroy?: boolean;
+  quiet?: boolean;
 }
 
 const testScope = await alchemy.scope("test");
@@ -75,10 +76,19 @@ export function test(
     ) {
       const name = args[0];
       const _options = typeof args[1] === "object" ? args[1] : undefined;
+      const spread = (obj: any) =>
+        obj && typeof obj === "object"
+          ? Object.fromEntries(
+              Object.entries(obj).flatMap(([k, v]) =>
+                v !== undefined ? [[k, v]] : [],
+              ),
+            )
+          : {};
       const options = {
         destroy: false,
-        ...defaultOptions,
-        ..._options,
+        quiet: false,
+        ...spread(defaultOptions),
+        ...spread(_options),
       };
       const fn = typeof args[1] === "function" ? args[1] : args[2]!;
 
@@ -87,6 +97,7 @@ export function test(
           path.basename(meta.filename),
           {
             parent: testScope,
+            ...options,
           },
           async (scope) => {
             try {

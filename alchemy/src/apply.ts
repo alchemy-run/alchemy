@@ -19,7 +19,7 @@ export async function apply<Out extends Resource>(
   resource: PendingResource<Out>,
   props: ResourceProps,
   options?: ApplyOptions,
-): Promise<Awaited<Out | void>> {
+): Promise<Awaited<Out>> {
   const scope = resource.Scope;
   const quiet = props.quiet ?? scope.quiet;
   await scope.init();

@@ -110,45 +110,17 @@ export function Resource<
       // console.warn(`Resource ${id} already exists in the stack: ${stack.id}`);
     }
 
-    // get a unique sequence number for the resource
+    // get a sequence number (unique within the scope) for the resource
     const seq = scope.seq();
-
-    // use a lazy promise to defer execution until a signal is received
-    let _signal: () => void;
-    const signal = new Promise<void>((resolve) => (_signal = resolve));
-
-    const _resource = new Promise<Out>((resolve, reject) => {
-      return signal.then(() => {
-        return apply(resource, props, options).then(
-          (value) => resolve!(value!),
-          reject,
-        );
-      });
-    }) as PendingResource<Out>;
-
-    let isSignaled = false;
-
-    const resource = {
+    const meta = {
       Kind: type,
       ID: resourceID,
       FQN: scope.fqn(resourceID),
       Seq: seq,
       Scope: scope,
-      signal: _signal!,
-      then: (
-        onfulfilled: (value: Out) => void,
-        onrejected: (reason: any) => void,
-      ) => {
-        if (!isSignaled) {
-          isSignaled = true;
-          // kick off the resource lifecycle handler on the first await
-          resource.signal();
-        }
-        return _resource.then(onfulfilled, onrejected);
-      },
-      catch: _resource.catch.bind(_resource),
-      finally: _resource.finally.bind(_resource),
     } as any as PendingResource<Out>;
+    const promise = apply(meta, props, options);
+    const resource = Object.assign(promise, meta);
     scope.resources.set(resourceID, resource);
     return resource;
   }) as Provider<Type, F>;
