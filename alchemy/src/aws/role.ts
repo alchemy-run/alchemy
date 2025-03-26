@@ -224,8 +224,6 @@ export const Role = Resource(
           (p: { policyName: string }) => p.policyName === oldPolicy.policyName,
         )
       ) {
-        console.log("previous policies", previousPolicies);
-        console.log("deleting policy", oldPolicy.policyName);
         await ignore(NoSuchEntityException.name, () =>
           client.send(
             new DeleteRolePolicyCommand({
@@ -301,7 +299,6 @@ export const Role = Resource(
       throw new Error(`Failed to create or update role ${props.roleName}`);
     }
 
-    console.log("role.props", props);
     return this({
       ...props,
       arn: role.Role.Arn!,

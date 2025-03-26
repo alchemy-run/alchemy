@@ -4,10 +4,14 @@ import {
   SQSClient,
   SendMessageCommand,
 } from "@aws-sdk/client-sqs";
-import { describe, expect, test } from "bun:test";
+import { describe, expect } from "bun:test";
+import { alchemy } from "../../src/alchemy";
 import { Queue } from "../../src/aws/queue";
 import { destroy } from "../../src/destroy";
+import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+const test = alchemy.test(import.meta);
 
 const sqs = new SQSClient({});
 
@@ -73,8 +77,6 @@ describe("AWS Resources", () => {
     test("create fifo queue", async () => {
       // For FIFO queues, the name must end with .fifo suffix
       const queueName = `${BRANCH_PREFIX}-alchemy-test-fifo-queue.fifo`;
-      console.log("QUEUE NAME:", queueName);
-      console.log("BRANCH_PREFIX:", BRANCH_PREFIX);
 
       let queue: Queue | undefined;
 
