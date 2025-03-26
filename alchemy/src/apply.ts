@@ -25,7 +25,7 @@ export async function apply<Out extends Resource>(
   let state: State | undefined = (await scope.state.get(resource.ID))!;
   const provider: Provider = PROVIDERS.get(resource.Kind);
   if (provider === undefined) {
-    throw new Error(`Resource ${resource.Kind} not found`);
+    throw new Error(`Provider "${resource.Kind}" not found`);
   }
   if (state === undefined) {
     state = {
@@ -49,7 +49,7 @@ export async function apply<Out extends Resource>(
       alwaysUpdate !== true
     ) {
       if (!quiet) {
-        console.log(`Skip:    ${resource.FQN} (no changes)`);
+        console.log(`Skip:    "${resource.FQN}" (no changes)`);
       }
       // if (resourceState.output !== undefined) {
       //   resource[Provide](resourceState.output);
@@ -65,7 +65,7 @@ export async function apply<Out extends Resource>(
 
   if (!quiet) {
     console.log(
-      `${phase === "create" ? "Create" : "Update"}:  ${resource.FQN}`,
+      `${phase === "create" ? "Create" : "Update"}:  "${resource.FQN}"`,
     );
   }
 
@@ -97,7 +97,7 @@ export async function apply<Out extends Resource>(
 
   if (!quiet) {
     console.log(
-      `${phase === "create" ? "Created" : "Updated"}: ${resource.FQN}`,
+      `${phase === "create" ? "Created" : "Updated"}: "${resource.FQN}"`,
     );
   }
 

@@ -1,6 +1,6 @@
 import * as fs from "fs/promises";
 import type { Context } from "../context";
-import { Bundle, type BundleProps } from "../esbuild";
+import { Bundle, type BundleProps } from "../esbuild/bundle";
 import { Resource } from "../resource";
 import { Secret } from "../secret";
 import { withExponentialBackoff } from "../utils/retry";

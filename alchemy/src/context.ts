@@ -85,6 +85,7 @@ export function context<Props extends ResourceProps, Out extends Resource>({
       ...props,
       Kind: kind,
       ID: id,
+      FQN: fqn,
       Scope: scope,
     } as Out;
   }

@@ -1,41 +1,45 @@
-import { describe, expect, test } from "bun:test";
-import fs from "node:fs";
+import { afterAll, expect } from "bun:test";
+import fs from "node:fs/promises";
 import path from "node:path";
-import { apply } from "../src/apply";
+import { alchemy } from "../src/alchemy";
 import { destroy } from "../src/destroy";
 import { Bundle } from "../src/esbuild";
+import "../src/test/bun";
 
-const __dirname = path.dirname(new URL(import.meta.url).pathname);
+const test = alchemy.test(import.meta, {
+  destroy: false,
+});
 
-describe("esbuild", () => {
-  describe("Bundle", () => {
-    const outputDir = ".out";
-    const outputFile = path.join(outputDir, "handler.js");
+const out = path.join(".alchemy", ".out");
+const outputFile = path.join(out, "handler.js");
 
-    test("bundle and cleanup", async () => {
-      const bundle = await Bundle("test-bundle", {
-        entryPoint: path.join(__dirname, "handler.ts"),
-        outdir: outputDir,
-        format: "esm",
-        platform: "node",
-        target: "node18",
-      });
+afterAll(async () => {
+  await fs.rmdir(out);
+});
 
-      // Apply the bundle
-      const output = await apply(bundle);
-      expect(output.path).toBe(outputFile);
-      expect(output.hash).toBeTruthy();
-
-      // Verify the file exists and contains our code
-      expect(fs.existsSync(outputFile)).toBe(true);
-      const contents = await fs.promises.readFile(outputFile, "utf-8");
-      expect(contents).toContain("Hello from bundled handler");
-
-      // Destroy the bundle
-      await destroy(bundle);
-
-      // Verify the file is deleted
-      expect(fs.existsSync(outputFile)).toBe(false);
-    });
+test("bundle and cleanup", async () => {
+  const bundle = await Bundle("test-bundle", {
+    entryPoint: path.join(import.meta.dirname, "handler.ts"),
+    outdir: out,
+    format: "esm",
+    platform: "node",
+    target: "node18",
   });
+
+  try {
+    // Apply the bundle
+    expect(bundle.path).toBe(outputFile);
+    expect(bundle.hash).toBeTruthy();
+
+    // Verify the file exists and contains our code
+    expect(await fs.exists(outputFile)).toBe(true);
+    const contents = await fs.readFile(outputFile, "utf-8");
+    expect(contents).toContain("Hello from bundled handler");
+  } finally {
+    // Destroy the bundle
+    await destroy(bundle);
+    // Verify the file is deleted
+    console.log("outputFile", outputFile);
+    expect(await fs.exists(outputFile)).toBe(false);
+  }
 });

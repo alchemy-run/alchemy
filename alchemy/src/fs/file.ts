@@ -23,11 +23,9 @@ export const File = Resource(
     },
   ): Promise<File> {
     if (this.phase === "delete") {
-      console.log("delete file", filePath);
       await ignore("ENOENT", async () => fs.promises.unlink(filePath));
       return this.destroy();
     } else {
-      console.log("create file", filePath);
       await fs.promises.mkdir(path.dirname(filePath), {
         recursive: true,
       });

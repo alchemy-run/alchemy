@@ -3,7 +3,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { promisify } from "util";
 import type { Context } from "../context";
-import type { BundleProps } from "../esbuild";
+import type { BundleProps } from "../esbuild/bundle";
 import { Resource } from "../resource";
 import { createCloudflareApi } from "./api";
 import type { Bindings } from "./bindings";

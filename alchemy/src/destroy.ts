@@ -68,13 +68,14 @@ export async function destroy<Type extends string>(
 
   try {
     if (!quiet) {
-      console.log(`Delete:  ${instance.FQN}`);
+      // console.log("destroy", instance);
+      console.log(`Delete:  "${instance.FQN}"`);
     }
 
     const state = (await scope.state.get(instance.ID))!;
 
     if (state === undefined) {
-      console.warn(`Resource ${instance.FQN} not found`);
+      console.warn(`Resource "${instance.FQN}" not found`);
       return;
     }
 
@@ -95,9 +96,8 @@ export async function destroy<Type extends string>(
         Provider.handler.bind(ctx)(instance.ID, state.props),
       );
     } catch (err) {
-      // TODO: should we fail if the DestroyedSignal is not thrown?
       if (err instanceof DestroyedSignal) {
-        console.log(`Destroyed: ${instance.FQN}`);
+        // TODO: should we fail if the DestroyedSignal is not thrown?
       } else {
         throw err;
       }
@@ -106,7 +106,7 @@ export async function destroy<Type extends string>(
     await scope.state.delete(instance.ID);
 
     if (!quiet) {
-      console.log(`Deleted: ${instance.FQN}`);
+      console.log(`Deleted: "${instance.FQN}"`);
     }
   } catch (error) {
     console.error(error);

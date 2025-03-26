@@ -2,8 +2,8 @@ import * as esbuild from "esbuild";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { Context } from "./context";
-import { Resource } from "./resource";
+import type { Context } from "../context";
+import { Resource } from "../resource";
 export interface BundleProps {
   /**
    * Entry point for the bundle
@@ -75,6 +75,7 @@ export const Bundle = Resource(
     await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
 
     if (this.phase === "delete") {
+      console.log("delete bundle", outputPath);
       await fs.promises.unlink(outputPath).catch(() => {});
       // Also clean up sourcemap if it exists
       await fs.promises.unlink(outputPath + ".map").catch(() => {});

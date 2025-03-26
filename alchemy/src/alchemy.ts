@@ -46,9 +46,9 @@ export interface AlchemyOptions {
    */
   stateStore?: StateStoreType;
   /**
-   * A custom scope to use instead of the default root scope.
+   * A custom scope to use as a parent.
    */
-  scope?: Scope;
+  parent?: Scope;
   /**
    * If true, will not print any Create/Update/Delete messages.
    *
@@ -72,6 +72,8 @@ async function scope(
     | [id?: string]
     | [options: AlchemyOptions]
     | [id: string | undefined, options?: AlchemyOptions]
+  // TODO: maybe we want to allow await using _ = await alchemy.scope(import.meta)
+  // | [meta: ImportMeta]
 ): Promise<Scope> {
   const [scopeName, options] =
     args.length === 2
@@ -83,7 +85,7 @@ async function scope(
     ...options,
     stage: options?.stage ?? DEFAULT_STAGE,
     scopeName,
-    parent: Scope.get(),
+    parent: options?.parent ?? Scope.get(),
   });
   scope.enter();
 
