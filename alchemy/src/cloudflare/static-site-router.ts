@@ -34,14 +34,12 @@ export default {
       isInit = true;
       for (const [key, value] of Object.entries(env)) {
         if (key.startsWith("ROUTE_")) {
-          console.log(key, value);
           const service = value as Service;
           const patternKey = `__${key}`;
           if (!(patternKey in env)) {
             throw new Error(`Missing pattern key: ${patternKey}`);
           }
           const pattern = (env as any)[`__${key}`];
-          console.log("pattern", pattern);
           // TODO(sam): we should support narrowing down METHOD
           app.all(pattern, (ctx) => service.fetch(ctx.req.raw));
         }
@@ -53,7 +51,6 @@ export default {
 
 // fall back to assuming the request is a static file
 app.notFound(async (ctx) => {
-  console.log("not found");
   const request = ctx.req;
   const env = ctx.env;
   const url = new URL(request.url);

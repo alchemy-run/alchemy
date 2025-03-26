@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import path from "node:path";
 import type { PendingResource, ResourceID } from "./resource";
 import {
   FileSystemStateStore,
@@ -61,7 +60,7 @@ export class Scope {
     if (this.parent) {
       return [...this.parent.chain, this.scopeName!];
     } else {
-      return [this.stage];
+      return [this.stage, this.scopeName!];
     }
   }
 
@@ -75,13 +74,6 @@ export class Scope {
 
   public fqn(resourceID: ResourceID): string {
     return [...this.chain, resourceID].join("/");
-  }
-
-  public getScopePath(root: string): string {
-    // First, compute the parent's scope path
-    const parentPath = this.parent ? this.parent.getScopePath(root) : root;
-    // Then join the current scope name (if any) onto the parent's path
-    return this.scopeName ? path.join(parentPath, this.scopeName) : parentPath;
   }
 
   public async finalize() {

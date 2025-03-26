@@ -98,9 +98,9 @@ export async function destroy<Type extends string>(
       // TODO: should we fail if the DestroyedSignal is not thrown?
       if (err instanceof DestroyedSignal) {
         console.log(`Destroyed: ${instance.FQN}`);
-        return;
+      } else {
+        throw err;
       }
-      throw err;
     }
 
     await scope.state.delete(instance.ID);

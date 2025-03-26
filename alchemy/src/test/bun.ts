@@ -16,10 +16,12 @@ alchemy.test = test;
 export function test(name: string, fn: (scope: Scope) => Promise<void>) {
   return it(name, async () => {
     await alchemy.run(name, async (scope) => {
-      await fn(scope);
-
-      // TODO: auto-destroy resources
-      await destroy(scope);
+      try {
+        await fn(scope);
+      } finally {
+        // TODO: auto-destroy resources
+        await destroy(scope);
+      }
     });
   });
 }

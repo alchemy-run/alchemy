@@ -21,6 +21,7 @@ export async function apply<Out extends Resource>(
 ): Promise<Awaited<Out | void>> {
   const scope = resource.Scope;
   const quiet = props.quiet ?? scope.quiet;
+  await scope.init();
   let state: State | undefined = (await scope.state.get(resource.ID))!;
   const provider: Provider = PROVIDERS.get(resource.Kind);
   if (provider === undefined) {
@@ -57,14 +58,14 @@ export async function apply<Out extends Resource>(
     }
   }
 
-  const event = state.status === "creating" ? "create" : "update";
-  state.status = event === "create" ? "creating" : "updating";
+  const phase = state.status === "creating" ? "create" : "update";
+  state.status = phase === "create" ? "creating" : "updating";
   state.oldProps = state.props;
   state.props = props;
 
   if (!quiet) {
     console.log(
-      `${event === "create" ? "Create" : "Update"}:  ${resource.FQN}`,
+      `${phase === "create" ? "Create" : "Update"}:  ${resource.FQN}`,
     );
   }
 
@@ -74,7 +75,7 @@ export async function apply<Out extends Resource>(
 
   const ctx = context({
     scope,
-    phase: event,
+    phase,
     kind: resource.Kind,
     id: resource.ID,
     fqn: resource.FQN,
@@ -96,14 +97,14 @@ export async function apply<Out extends Resource>(
 
   if (!quiet) {
     console.log(
-      `${event === "create" ? "Created" : "Updated"}: ${resource.FQN}`,
+      `${phase === "create" ? "Created" : "Updated"}: ${resource.FQN}`,
     );
   }
 
   await scope.state.set(resource.ID, {
     provider: resource.Kind,
     data: state.data,
-    status: event === "create" ? "created" : "updated",
+    status: phase === "create" ? "created" : "updated",
     output,
     props,
     // deps: [...deps],

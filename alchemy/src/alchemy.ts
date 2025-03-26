@@ -120,6 +120,5 @@ async function run<T>(
         // TODO: defaults
       },
   );
-
   return await fn.bind(scope)(scope);
 }
