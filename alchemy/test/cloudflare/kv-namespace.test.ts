@@ -1,14 +1,18 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect } from "bun:test";
+import { alchemy } from "../../src/alchemy";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { KVNamespace } from "../../src/cloudflare/kv-namespace";
 import { destroy } from "../../src/destroy";
+import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+const test = alchemy.test(import.meta);
 
 describe("KV Namespace Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-kv`;
 
   test("create, update, and delete KV namespace", async () => {
-    let kvNamespace;
+    let kvNamespace: KVNamespace | undefined;
     try {
       kvNamespace = await KVNamespace(testId, {
         title: `${BRANCH_PREFIX}-Test Namespace ${testId}`,
@@ -24,14 +28,18 @@ describe("KV Namespace Resource", () => {
         ],
       });
 
-      expect(kvNamespace.id).toBeTruthy();
+      expect(kvNamespace.namespaceId).toBeTruthy();
       expect(kvNamespace.title).toEqual(
         `${BRANCH_PREFIX}-Test Namespace ${testId}`,
       );
 
       // Verify KV values were set by reading them back
-      await verifyKVValue(kvNamespace.id, "test-key-1", "test-value-1");
-      const key2Value = await getKVValue(kvNamespace.id, "test-key-2");
+      await verifyKVValue(
+        kvNamespace.namespaceId,
+        "test-key-1",
+        "test-value-1",
+      );
+      const key2Value = await getKVValue(kvNamespace.namespaceId, "test-key-2");
       expect(JSON.parse(key2Value)).toEqual({ hello: "world" });
 
       // Update the KV namespace with new values
@@ -49,15 +57,19 @@ describe("KV Namespace Resource", () => {
         ],
       });
 
-      expect(kvNamespace.id).toEqual(kvNamespace.id);
+      expect(kvNamespace.namespaceId).toEqual(kvNamespace.namespaceId);
 
       // for some reason 1s was not enough ... eventual consistency?
       // TODO(sam): can we read strongly consistent?
       await new Promise((resolve) => setTimeout(resolve, 3000));
 
       // Verify updated values
-      await verifyKVValue(kvNamespace.id, "test-key-1", "updated-value-1");
-      await verifyKVValue(kvNamespace.id, "test-key-3", "new-value-3");
+      await verifyKVValue(
+        kvNamespace.namespaceId,
+        "test-key-1",
+        "updated-value-1",
+      );
+      await verifyKVValue(kvNamespace.namespaceId, "test-key-3", "new-value-3");
     } finally {
       if (kvNamespace) {
         // Delete the KV namespace
@@ -67,7 +79,7 @@ describe("KV Namespace Resource", () => {
           // Verify namespace was deleted
           const api = await createCloudflareApi();
           const response = await api.get(
-            `/accounts/${api.accountId}/storage/kv/namespaces/${kvNamespace.id}`,
+            `/accounts/${api.accountId}/storage/kv/namespaces/${kvNamespace.namespaceId}`,
           );
 
           // Should be a 404 if properly deleted
