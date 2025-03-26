@@ -1,6 +1,6 @@
+import { Scope } from "../scope";
+import { Secret } from "../secret";
 import { decryptWithKey, encryptWithKey } from "./encrypt";
-import { Scope } from "./scope";
-import { Secret } from "./secret";
 
 export async function serialize(scope: Scope, value: any): Promise<any> {
   if (Array.isArray(value)) {

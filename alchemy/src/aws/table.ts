@@ -9,8 +9,8 @@ import {
   ResourceNotFoundException,
 } from "@aws-sdk/client-dynamodb";
 import type { Context } from "../context";
-import { ignore } from "../error";
 import { Resource } from "../resource";
+import { ignore } from "../utils/ignore";
 import { withExponentialBackoff } from "../utils/retry";
 
 export interface TableProps {

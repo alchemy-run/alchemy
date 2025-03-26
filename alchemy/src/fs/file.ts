@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Context } from "../context";
-import { ignore } from "../error";
 import { Resource } from "../resource";
+import { ignore } from "../utils/ignore";
 
 export interface File extends Resource<"fs::File"> {
   path: string;

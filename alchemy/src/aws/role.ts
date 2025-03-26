@@ -16,8 +16,8 @@ import {
   UpdateRoleCommand,
 } from "@aws-sdk/client-iam";
 import type { Context } from "../context";
-import { ignore } from "../error";
 import { Resource } from "../resource";
+import { ignore } from "../utils/ignore";
 import type { PolicyDocument } from "./policy";
 
 export interface RoleProps {

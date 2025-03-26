@@ -11,8 +11,8 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import type { Context } from "../context";
-import { ignore } from "../error";
 import { Resource } from "../resource";
+import { ignore } from "../utils/ignore";
 
 export interface BucketProps {
   bucketName: string;

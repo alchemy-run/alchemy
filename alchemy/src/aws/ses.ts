@@ -20,8 +20,8 @@ import {
   type TrackingOptions,
 } from "@aws-sdk/client-sesv2";
 import type { Context } from "../context";
-import { ignore } from "../error";
 import { Resource } from "../resource";
+import { ignore } from "../utils/ignore";
 
 /**
  * Properties for configuring AWS SES resources
