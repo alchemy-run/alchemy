@@ -1,11 +1,16 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { R2Bucket } from "../../src/cloudflare/bucket";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace";
 import { KVNamespace } from "../../src/cloudflare/kv-namespace";
 import { Worker } from "../../src/cloudflare/worker";
+import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+const test = alchemy.test(import.meta, {
+  destroy: false,
+});
 
 async function assertWorkerDoesNotExist(workerName: string) {
   const api = await createCloudflareApi();

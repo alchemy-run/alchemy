@@ -2,12 +2,16 @@ import * as fs from "fs/promises";
 import type { Context } from "../context";
 import { Bundle, type BundleProps } from "../esbuild/bundle";
 import { Resource } from "../resource";
-import { Secret } from "../secret";
+import { isSecret } from "../secret";
 import { withExponentialBackoff } from "../util/retry";
 import { type CloudflareApi, createCloudflareApi } from "./api";
-import type { Bindings, WorkerBindingSpec } from "./bindings";
+import {
+  type Bindings,
+  type WorkerBindingSpec,
+  isDurableObjectNamespace,
+} from "./bindings";
 import type { Bound } from "./bound";
-import { DurableObjectNamespace } from "./durable-object-namespace";
+import type { DurableObjectNamespace } from "./durable-object-namespace";
 import { isKVNamespace } from "./kv-namespace";
 import type { WorkerScriptMetadata } from "./worker-metadata";
 import type { SingleStepMigration } from "./worker-migration";
@@ -306,8 +310,6 @@ async function putWorker(
         scriptName,
       );
 
-      // console.log("Script Metadata:", JSON.stringify(scriptMetadata, null, 2));
-
       // Add metadata as JSON
       formData.append(
         "metadata",
@@ -433,7 +435,7 @@ async function prepareWorkerMetadata<B extends Bindings>(
       const oldBinding: DurableObjectNamespace | undefined = Object.values(
         oldBindings ?? {},
       )
-        ?.filter((o) => o instanceof DurableObjectNamespace)
+        ?.filter(isDurableObjectNamespace)
         ?.find((b) => b.id === stableId);
 
       if (!oldBinding) {
@@ -454,7 +456,7 @@ async function prepareWorkerMetadata<B extends Bindings>(
         name: bindingName,
         bucket_name: binding.name,
       });
-    } else if (binding instanceof Secret) {
+    } else if (isSecret(binding)) {
       meta.bindings.push({
         type: "secret_text",
         name: bindingName,

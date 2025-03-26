@@ -24,6 +24,14 @@ export type Binding =
   | Secret
   | string;
 
+export function isDurableObjectNamespace(
+  binding: Binding,
+): binding is DurableObjectNamespace {
+  return (
+    typeof binding === "object" && binding.type === "durable_object_namespace"
+  );
+}
+
 /**
  * Union type for all Worker binding types (API spec)
  */

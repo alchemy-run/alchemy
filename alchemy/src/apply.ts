@@ -8,6 +8,7 @@ import {
   type ResourceProps,
 } from "./resource";
 import type { State } from "./state";
+import { serialize } from "./util/serde";
 
 export interface ApplyOptions {
   quiet?: boolean;
@@ -45,7 +46,7 @@ export async function apply<Out extends Resource>(
   // Skip update if inputs haven't changed and resource is in a stable state
   if (state.status === "created" || state.status === "updated") {
     if (
-      JSON.stringify(state.props) === JSON.stringify(props) &&
+      JSON.stringify(state.props) === JSON.stringify(serialize(scope, props)) &&
       alwaysUpdate !== true
     ) {
       if (!quiet) {
