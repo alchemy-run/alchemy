@@ -36,17 +36,19 @@ type test = {
   [Symbol.asyncDispose](): Promise<void>;
 };
 
-function isImportMeta(value: any): value is ImportMeta {
-  return typeof value.dir === "string";
+function isImportMetaArgs(
+  value: Parameters<typeof test>,
+): value is [meta: ImportMeta, options?: TestOptions] {
+  return typeof value[0] !== "string";
 }
 
-export function test(meta: ImportMeta, options?: TestOptions): test;
+// export function test(meta: ImportMeta, options?: TestOptions): test;
 
-export function test(
-  ...args:
-    | [name: string, options: TestOptions, fn: (scope: Scope) => Promise<void>]
-    | [name: string, fn: (scope: Scope) => Promise<void>]
-): Promise<void>;
+// export function test(
+//   ...args:
+//     | [name: string, options: TestOptions, fn: (scope: Scope) => Promise<void>]
+//     | [name: string, fn: (scope: Scope) => Promise<void>]
+// ): Promise<void>;
 
 export function test(
   ...args:
@@ -59,15 +61,17 @@ export function test(
       ]
     | [name: string, fn: (scope: Scope) => Promise<void>, timeout?: number]
 ): any {
-  if (isImportMeta(args[0])) {
+  if (isImportMetaArgs(args)) {
     const meta = args[0];
     const defaultOptions = args[1];
 
-    // test.skipIf = (condition: boolean) => {
-    //   return (name: string, fn: (scope: Scope) => Promise<void>) => {
-    //     return bunTest.skipIf(condition)(name, fn);
-    //   };
-    // };
+    test.skipIf = (condition: boolean) => {
+      if (condition) {
+        // TODO: proxy through to bun:test.skipIf
+        return (...args: any[]) => {};
+      }
+      return test;
+    };
 
     return test;
 
@@ -121,13 +125,21 @@ export function test(
     }
   }
 
+  function find<T>(
+    args: any[],
+    predicate: (arg: any) => arg is T,
+  ): T | undefined {
+    return args.find(predicate);
+  }
+
   const options =
-    args.find((arg): arg is TestOptions => typeof arg === "object") ?? {};
-  const name = args.find((arg) => typeof arg === "string") ?? args[0];
-  const fn = args.find(
+    find(args, (arg): arg is TestOptions => typeof arg === "object") ?? {};
+  const name = args[0];
+  const fn = find(
+    args,
     (arg): arg is (scope: Scope) => Promise<void> => typeof arg === "function",
   )!;
-  const timeout = args.find((arg) => typeof arg === "number") ?? undefined;
+  const timeout = find(args, (arg): arg is number => typeof arg === "number");
 
   return it(
     name,

@@ -4,6 +4,7 @@ import { destroy } from "../../src/destroy";
 import { createGitHubClient } from "../../src/github/client";
 import { GitHubSecret } from "../../src/github/secret";
 import { secret } from "../../src/secret";
+import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
 
 const test = alchemy.test(import.meta);
@@ -36,8 +37,6 @@ describe("GitHubSecret Resource", () => {
       });
 
       try {
-        console.log(`Creating secret: ${secretName}`);
-
         // Apply to create the secret - resource will handle authentication
         expect(ghSecret.id).toBeTruthy();
         expect(ghSecret.owner).toEqual(owner);
@@ -57,10 +56,6 @@ describe("GitHubSecret Resource", () => {
             (s) => s.name === secretName,
           );
           expect(secretInfo).toBeDefined();
-
-          if (secretInfo) {
-            console.log(`Secret created successfully: ${secretName}`);
-          }
         } catch (error: any) {
           // If we get a permission error, log it but don't fail the test
           if (error.status === 403) {
@@ -69,9 +64,6 @@ describe("GitHubSecret Resource", () => {
             throw error;
           }
         }
-
-        // Update the secret
-        console.log(`Updating secret: ${secretName}`);
 
         const updatedSecret = await GitHubSecret(testId, {
           owner,
