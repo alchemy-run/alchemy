@@ -31,7 +31,7 @@ describe("Stripe Resources", () => {
 
     try {
       const productName = `${BRANCH_PREFIX} Alchemy Test Product`;
-      product = await Product(`${BRANCH_PREFIX}-alchemy-test-product`, {
+      product = await Product(`${BRANCH_PREFIX}-product`, {
         name: productName,
         description: "A product created by Alchemy tests",
       });
@@ -43,7 +43,7 @@ describe("Stripe Resources", () => {
       expect(stripeProduct.name).toBe(productName);
 
       // Create a price for the product
-      price = await Price(`${BRANCH_PREFIX}-alchemy-test-price`, {
+      price = await Price(`${BRANCH_PREFIX}-price`, {
         product: product.id,
         currency: "usd",
         unitAmount: 1500, // $15.00
@@ -61,7 +61,7 @@ describe("Stripe Resources", () => {
       expect(stripePrice.unit_amount).toBe(1500);
 
       // Create a webhook endpoint
-      webhook = await WebhookEndpoint(`${BRANCH_PREFIX}-alchemy-test-webhook`, {
+      webhook = await WebhookEndpoint(`${BRANCH_PREFIX}-webhook`, {
         url: "https://example.com/alchemy-webhook",
         enabledEvents: [
           "checkout.session.completed",
