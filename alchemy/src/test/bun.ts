@@ -81,9 +81,8 @@ export function test(
         ..._options,
       };
       const fn = typeof args[1] === "function" ? args[1] : args[2]!;
-      console.log("running", name);
 
-      return test(name, options, async () => {
+      return it(name, async () => {
         await alchemy.run(
           path.basename(meta.filename),
           {
