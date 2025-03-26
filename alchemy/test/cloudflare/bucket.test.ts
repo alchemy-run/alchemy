@@ -1,8 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect } from "bun:test";
+import { alchemy } from "../../src/alchemy";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { R2Bucket } from "../../src/cloudflare/bucket";
 import { destroy } from "../../src/destroy";
+import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+const test = alchemy.test(import.meta);
 
 /**
  * Type definitions for API responses
