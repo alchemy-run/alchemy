@@ -69,7 +69,7 @@ export const GitHubSecret = Resource(
       await verifyGitHubAuth(octokit, props.owner, props.repository);
     }
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       if (this.output?.id) {
         try {
           // Delete the secret

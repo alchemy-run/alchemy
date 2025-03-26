@@ -15,17 +15,17 @@ export type Context<Out extends Resource> =
   | DeleteContext<Out>;
 
 export interface CreateContext<Out extends Resource> extends BaseContext<Out> {
-  event: "create";
+  phase: "create";
   output?: undefined;
 }
 
 export interface UpdateContext<Out extends Resource> extends BaseContext<Out> {
-  event: "update";
+  phase: "update";
   output: Out;
 }
 
 export interface DeleteContext<Out extends Resource> extends BaseContext<Out> {
-  event: "delete";
+  phase: "delete";
   output: Out;
 }
 
@@ -65,7 +65,7 @@ export interface BaseContext<Out extends Resource> {
 
 export function context<Props extends ResourceProps, Out extends Resource>({
   scope,
-  event,
+  phase,
   kind,
   id,
   fqn,
@@ -73,7 +73,7 @@ export function context<Props extends ResourceProps, Out extends Resource>({
   replace,
 }: {
   scope: Scope;
-  event: "create" | "update" | "delete";
+  phase: "create" | "update" | "delete";
   kind: ResourceKind;
   id: ResourceID;
   fqn: ResourceFQN;
@@ -93,7 +93,7 @@ export function context<Props extends ResourceProps, Out extends Resource>({
     scope,
     id: id,
     fqn: fqn,
-    event,
+    phase,
     output: state.output,
     replace,
     get: (key: string) => {

@@ -116,7 +116,7 @@ export const SES = Resource(
     //   props.configurationSetName || props.emailIdentity || this.resourceID;
 
     // Handle deletion
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       const output = this.output;
 
       // Delete configuration set if it exists

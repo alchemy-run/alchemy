@@ -96,7 +96,7 @@ export const OIDCProvider = Resource(
       region: props.region,
     });
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       if (this.output?.providerArn) {
         try {
           // First, remove our trust policy statement from the role

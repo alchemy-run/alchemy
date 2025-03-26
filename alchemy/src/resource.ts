@@ -1,6 +1,6 @@
 import { apply } from "./apply";
 import type { Context } from "./context";
-import { Scope as IScope } from "./scope";
+import { Scope as _Scope } from "./scope";
 
 export const PROVIDERS = new Map<ResourceKind, Provider<string, any>>();
 
@@ -34,7 +34,7 @@ export type PendingResource<
   Kind extends ResourceKind = ResourceKind,
   ID extends ResourceID = ResourceID,
   FQN extends ResourceFQN = ResourceFQN,
-  Scope extends IScope = IScope,
+  Scope extends _Scope = _Scope,
 > = Promise<Out> & {
   Kind: Kind;
   ID: ID;
@@ -48,7 +48,7 @@ export interface Resource<
   Kind extends ResourceKind = ResourceKind,
   ID extends ResourceID = ResourceID,
   FQN extends ResourceFQN = ResourceFQN,
-  Scope extends IScope = IScope,
+  Scope extends _Scope = _Scope,
 > {
   // use capital letters to avoid collision with conventional camelCase typescript properties
   Kind: Kind;
@@ -98,7 +98,7 @@ export function Resource<
     resourceID: string,
     props: ResourceProps,
   ): Promise<Resource<string>> => {
-    const scope = IScope.current;
+    const scope = _Scope.current;
 
     if (scope.resources.has(resourceID)) {
       // TODO(sam): do we want to throw?

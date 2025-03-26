@@ -88,7 +88,7 @@ export const KVNamespace = Resource(
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi();
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       // For delete operations, we need to check if the namespace ID exists in the output
       const namespaceId = this.output?.namespaceId;
       if (namespaceId) {
@@ -111,15 +111,15 @@ export const KVNamespace = Resource(
       return this.destroy();
     } else {
       // For create or update operations
-      // If this.event is "update", we expect this.output to exist
+      // If this.phase is "update", we expect this.output to exist
       let namespaceId =
-        this.event === "update" ? this.output?.namespaceId || "" : "";
+        this.phase === "update" ? this.output?.namespaceId || "" : "";
       let createdAt =
-        this.event === "update"
+        this.phase === "update"
           ? this.output?.createdAt || Date.now()
           : Date.now();
 
-      if (this.event === "update" && namespaceId) {
+      if (this.phase === "update" && namespaceId) {
         // Can't update a KV namespace title directly, just work with existing ID
       } else {
         // Create new KV namespace

@@ -51,7 +51,7 @@ export const Role = Resource(
   ): Promise<Role> {
     const client = new IAMClient({});
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       // Delete any inline policies first
       if (props.policies) {
         for (const policy of props.policies) {
@@ -106,7 +106,7 @@ export const Role = Resource(
     let role;
 
     try {
-      if (this.event === "create") {
+      if (this.phase === "create") {
         // Try to create the role
         await client.send(
           new CreateRoleCommand({
@@ -136,7 +136,7 @@ export const Role = Resource(
     } catch (error: any) {
       if (
         error instanceof EntityAlreadyExistsException &&
-        this.event === "create"
+        this.phase === "create"
       ) {
         // Check if we were the ones who created it
         const existingRole = await client.send(
@@ -214,7 +214,7 @@ export const Role = Resource(
 
     // Handle policy changes
     const previousPolicies =
-      this.event === "update" ? this.output!.policies || [] : [];
+      this.phase === "update" ? this.output!.policies || [] : [];
     const currentPolicies = props.policies || [];
 
     // Delete policies that were removed

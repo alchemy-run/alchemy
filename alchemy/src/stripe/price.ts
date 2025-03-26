@@ -141,9 +141,9 @@ export const Price = Resource(
     // Initialize Stripe client
     const stripe = new Stripe(apiKey);
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       try {
-        if (this.event === "delete" && this.output?.id) {
+        if (this.phase === "delete" && this.output?.id) {
           // Prices can't be deleted, only deactivated
           await stripe.prices.update(this.output.id, { active: false });
         }
@@ -157,7 +157,7 @@ export const Price = Resource(
       try {
         let price: Stripe.Price;
 
-        if (this.event === "update" && this.output?.id) {
+        if (this.phase === "update" && this.output?.id) {
           // Update existing price (limited properties can be updated)
           price = await stripe.prices.update(this.output.id, {
             active: props.active,

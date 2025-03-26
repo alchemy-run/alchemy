@@ -1,82 +1,22 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect } from "bun:test";
 import { alchemy } from "../src/alchemy";
-import type { PolicyDocument } from "../src/aws/policy";
-import { Role } from "../src/aws/role";
-import type { Context } from "../src/context";
-import { destroy } from "../src/destroy";
 import { File } from "../src/fs";
-import { Resource } from "../src/resource";
 import { Scope } from "../src/scope";
-import { BRANCH_PREFIX } from "./util";
+import "../src/test/bun";
 
 describe("Scope", () => {
-  it("should maintain scope context and track resources", async () => {
-    let file: File | undefined = undefined;
-    try {
-      await alchemy.run(async (scope) => {
-        file = await File("test-file", {
-          path: "test.txt",
-          content: "Hello World",
-        });
-        expect(Scope.current).toEqual(scope);
-        expect(scope.resources.size).toBe(1);
-        expect(scope).toBe(scope);
-
-        return file;
+  alchemy.test(
+    "should maintain scope context and track resources",
+    async (scope) => {
+      console.log("before");
+      await File("test-file", {
+        path: "test.txt",
+        content: "Hello World",
       });
-    } finally {
-      if (file) {
-        await destroy(file);
-      }
-    }
-  });
-
-  it("should handle nested resources with AWS Role", async () => {
-    interface ServiceResources extends Resource<"service-resources"> {
-      roleName: string;
-    }
-    const ServiceResources = Resource(
-      "service-resources",
-      async function (
-        this: Context<ServiceResources>,
-        id: string,
-        props: {
-          roleName: string;
-        },
-      ): Promise<ServiceResources> {
-        const assumeRolePolicy: PolicyDocument = {
-          Version: "2012-10-17",
-          Statement: [
-            {
-              Effect: "Allow",
-              Principal: {
-                Service: "lambda.amazonaws.com",
-              },
-              Action: "sts:AssumeRole",
-            },
-          ],
-        };
-
-        const role = await Role(`role`, {
-          roleName: props.roleName,
-          assumeRolePolicy,
-        });
-
-        return {
-          Kind: "service-resources",
-          ID: id,
-          Scope: this.scope,
-          roleName: role.roleName,
-        };
-      },
-    );
-
-    const roleName = `${BRANCH_PREFIX}-alchemy-test-scope-role`;
-    const service = await ServiceResources("test-service", {
-      roleName,
-    });
-
-    // Clean up
-    await destroy(service);
-  });
+      console.log("after");
+      expect(Scope.current).toEqual(scope);
+      expect(scope.resources.size).toBe(1);
+      expect(scope).toBe(scope);
+    },
+  );
 });

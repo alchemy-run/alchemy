@@ -67,7 +67,7 @@ export const R2Bucket = Resource(
     // Resource ID defaults to bucket name if provided
     const bucketName = props.name || this.id;
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       if (this.output?.name) {
         // Delete R2 bucket
         const headers: Record<string, string> = {};
@@ -109,7 +109,7 @@ export const R2Bucket = Resource(
       try {
         let bucketOutput: R2Bucket;
 
-        if (this.event === "update" && this.output?.name) {
+        if (this.phase === "update" && this.output?.name) {
           // Get bucket details to verify it exists
           const headers: Record<string, string> = {};
           if (props.jurisdiction && props.jurisdiction !== "default") {

@@ -15,7 +15,8 @@
     "./esbuild": "./lib/esbuild.js",
     "./fs": "./lib/fs.js",
     "./github": "./lib/github/index.js",
-    "./stripe": "./lib/stripe/index.js"
+    "./stripe": "./lib/stripe/index.js",
+    "./test/bun": "./lib/test/bun.js"
   },
   "peerDependencies": {
     "@ai-sdk/openai": "^1.1.9",

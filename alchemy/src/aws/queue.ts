@@ -59,7 +59,7 @@ export const Queue = Resource(
       throw new Error("FIFO queue names must end with .fifo suffix");
     }
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       try {
         // Get queue URL first
         const urlResponse = await client.send(

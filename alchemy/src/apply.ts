@@ -71,7 +71,7 @@ export async function apply<Out extends Resource>(
 
   const ctx = context({
     scope,
-    event,
+    phase: event,
     kind: resource.Kind,
     id: resource.ID,
     fqn: resource.FQN,

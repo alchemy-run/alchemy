@@ -115,9 +115,9 @@ export const Product = Resource(
     // Initialize Stripe client
     const stripe = new Stripe(apiKey);
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       try {
-        if (this.event === "delete" && this.output?.id) {
+        if (this.phase === "delete" && this.output?.id) {
           await stripe.products.update(this.output.id, { active: false });
         }
       } catch (error) {
@@ -131,7 +131,7 @@ export const Product = Resource(
       try {
         let product: Stripe.Product;
 
-        if (this.event === "update" && this.output?.id) {
+        if (this.phase === "update" && this.output?.id) {
           // Update existing product
           product = await stripe.products.update(this.output.id, {
             name: props.name,

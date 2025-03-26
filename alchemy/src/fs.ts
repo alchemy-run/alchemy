@@ -23,7 +23,7 @@ export const File = Resource(
       content: string;
     },
   ): Promise<File> {
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       await ignore("ENOENT", async () => fs.promises.unlink(filePath));
       return this.destroy();
     } else {
@@ -50,7 +50,7 @@ export const Folder = Resource(
     id: string,
     { path: dirPath }: { path: string },
   ): Promise<Folder> {
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       // we just do a best effort attempt
       await ignore(["ENOENT", "ENOTEMPTY"], async () =>
         fs.promises.rmdir(dirPath),

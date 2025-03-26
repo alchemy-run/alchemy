@@ -154,10 +154,10 @@ export const Worker = Resource(
       throw new Error("One of script or entryPoint must be provided");
     }
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       await deleteWorker(this, api, workerName);
       return this.destroy();
-    } else if (this.event === "create") {
+    } else if (this.phase === "create") {
       await assertWorkerDoesNotExist(this, api, workerName);
     }
 
@@ -665,7 +665,7 @@ async function configureURL<B extends Bindings>(
       // Add a delay when the subdomain is first created.
       // This is to prevent an issue where a negative cache-hit
       // causes the subdomain to be unavailable for 30 seconds.
-      if (ctx.event === "create" || !ctx.output?.url) {
+      if (ctx.phase === "create" || !ctx.output?.url) {
         await new Promise((resolve) => setTimeout(resolve, 3000));
       }
     }

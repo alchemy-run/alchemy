@@ -36,7 +36,7 @@ export const Bucket = Resource(
   async function (this: Context<Bucket>, id: string, props: BucketProps) {
     const client = new S3Client({});
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       await ignore(NoSuchBucket.name, () =>
         client.send(
           new DeleteBucketCommand({
@@ -55,7 +55,7 @@ export const Bucket = Resource(
         );
 
         // Update tags if they changed and bucket exists
-        if (this.event === "update" && props.tags) {
+        if (this.phase === "update" && props.tags) {
           await client.send(
             new PutBucketTaggingCommand({
               Bucket: props.bucketName,

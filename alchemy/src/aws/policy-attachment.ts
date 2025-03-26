@@ -27,7 +27,7 @@ export const PolicyAttachment = Resource(
   ) {
     const client = new IAMClient({});
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       await ignore(NoSuchEntityException.name, () =>
         client.send(
           new DetachRolePolicyCommand({

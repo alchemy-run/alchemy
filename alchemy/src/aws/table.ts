@@ -44,7 +44,7 @@ export const Table = Resource(
   ): Promise<Table> {
     const client = new DynamoDBClient({});
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       await withExponentialBackoff(
         async () => {
           await ignore(ResourceNotFoundException.name, () =>

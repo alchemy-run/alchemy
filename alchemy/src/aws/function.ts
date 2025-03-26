@@ -79,7 +79,7 @@ export const Function = Resource(
 
     const code = await zipCode(props.zipPath);
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       await ignore(ResourceNotFoundException.name, () =>
         client.send(
           new DeleteFunctionCommand({
@@ -98,7 +98,7 @@ export const Function = Resource(
           }),
         );
 
-        if (this.event === "update") {
+        if (this.phase === "update") {
           // Wait for function to stabilize
           await waitForFunctionStabilization(client, props.functionName);
 

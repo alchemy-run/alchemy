@@ -102,10 +102,10 @@ export const WebhookEndpoint = Resource(
     // Initialize Stripe client
     const stripe = new Stripe(apiKey);
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       try {
         // Get the webhook ID from the stored output
-        if (this.event === "delete" && this.output?.id) {
+        if (this.phase === "delete" && this.output?.id) {
           await stripe.webhookEndpoints.del(this.output.id);
         }
       } catch (error) {
@@ -118,7 +118,7 @@ export const WebhookEndpoint = Resource(
       try {
         let webhook: Stripe.WebhookEndpoint;
 
-        if (this.event === "update" && this.output?.id) {
+        if (this.phase === "update" && this.output?.id) {
           // Update existing webhook
           webhook = await stripe.webhookEndpoints.update(this.output.id, {
             url: props.url,
@@ -149,7 +149,7 @@ export const WebhookEndpoint = Resource(
         let secret = "";
         if (webhook.secret) {
           secret = webhook.secret;
-        } else if (this.event === "update" && this.output?.secret) {
+        } else if (this.phase === "update" && this.output?.secret) {
           secret = this.output.secret;
         }
 

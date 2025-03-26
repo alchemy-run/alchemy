@@ -4,10 +4,18 @@ import { Scope } from "./scope";
 import { secret } from "./secret";
 import type { StateStoreType } from "./state";
 
-// export a type so that the `alchemy` "keyword" is green (like a type)
-export type alchemy = typeof alchemy;
+// Alchemy is for module augmentation
+export interface Alchemy {
+  scope: typeof scope;
+  run: typeof run;
+  destroy: typeof destroy;
+  secret: typeof secret;
+}
+// alchemy is to semantically highlight `alchemy` as a type (keyword)
+export type alchemy = Alchemy;
 
-export const alchemy = {
+// @ts-ignore
+export const alchemy: Alchemy = {
   destroy,
   run,
   scope,
@@ -113,5 +121,6 @@ async function run<T>(
         // TODO: defaults
       },
   );
+
   return await fn.bind(scope)(scope);
 }

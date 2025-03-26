@@ -212,7 +212,7 @@ export const StaticSite = Resource(
     id: string,
     props: StaticSiteProps,
   ) {
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       // For delete operations, we'll rely on the Worker delete to clean up
       // Return empty output for deleted state
       return this.destroy();

@@ -60,7 +60,7 @@ export const Policy = Resource(
     const client = new IAMClient({});
     const policyArn = `arn:aws:iam::${process.env.AWS_ACCOUNT_ID}:policy${props.path || "/"}${props.policyName}`;
 
-    if (this.event === "delete") {
+    if (this.phase === "delete") {
       try {
         // List and delete all non-default versions first
         const versions = await client.send(
