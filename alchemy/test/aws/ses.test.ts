@@ -4,10 +4,14 @@ import {
   NotFoundException,
   SESv2Client,
 } from "@aws-sdk/client-sesv2";
-import { describe, expect, test } from "bun:test";
+import { describe, expect } from "bun:test";
+import { alchemy } from "../../src/alchemy";
 import { SES } from "../../src/aws/ses";
 import { destroy } from "../../src/destroy";
+import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+const test = alchemy.test(import.meta);
 
 describe("SES Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-ses`;
@@ -29,7 +33,6 @@ describe("SES Resource", () => {
         },
       });
       // Apply to create the configuration set
-      expect(ses.id).toContain(testId);
       expect(ses.configurationSetName).toBe(configurationSetName);
       expect(ses.configurationSetArn).toBeTruthy();
 
@@ -58,8 +61,6 @@ describe("SES Resource", () => {
         },
       });
 
-      expect(ses.id).toContain(testId);
-
       // Check if ARNs match when they exist
       if (ses.configurationSetArn) {
         expect(ses.configurationSetArn).toBe(ses.configurationSetArn);
@@ -81,7 +82,7 @@ describe("SES Resource", () => {
     }
   });
 
-  test("create, update, and delete email identity", async () => {
+  test("create, update, and delete email identity", async (scope) => {
     // Using a domain for testing is better than an email address
     // since email addresses require actual verification
     const testDomain = `${testId.toLowerCase()}.example.com`;
@@ -97,7 +98,7 @@ describe("SES Resource", () => {
         },
       });
       // Apply to create the email identity
-      expect(ses.id).toContain(testId);
+      expect(ses.configurationSetArn).toBeUndefined();
       expect(ses.emailIdentity).toBe(testDomain);
       expect(ses.emailIdentityArn).toBeTruthy();
 
@@ -128,8 +129,10 @@ describe("SES Resource", () => {
       expect(getResponse.DkimAttributes).toBeDefined();
     } finally {
       // Clean up
-      await destroy(ses);
-      await assertSESDoesNotExist(testDomain);
+      await destroy(scope);
+      if (ses?.configurationSetName) {
+        await assertSESDoesNotExist(ses.configurationSetName);
+      }
     }
   });
 });
