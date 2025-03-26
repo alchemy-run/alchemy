@@ -1,10 +1,16 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect } from "bun:test";
 import Stripe from "stripe";
-import { destroy } from "../../src/destroy";
-import { Price } from "../../src/stripe/price";
-import { Product } from "../../src/stripe/product";
-import { WebhookEndpoint } from "../../src/stripe/webhook";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../src/alchemy";
+import { destroy } from "../src/destroy";
+import { Price } from "../src/stripe/price";
+import { Product } from "../src/stripe/product";
+import { WebhookEndpoint } from "../src/stripe/webhook";
+import "../src/test/bun";
+import { BRANCH_PREFIX } from "./util";
+
+const test = alchemy.test(import.meta, {
+  destroy: false,
+});
 
 const stripeApiKey = process.env.STRIPE_API_KEY;
 if (!stripeApiKey) {
@@ -74,8 +80,6 @@ describe("Stripe Resources", () => {
       expect(stripeWebhook.url).toBe("https://example.com/alchemy-webhook");
     } finally {
       // Clean up resources in reverse order of creation
-      console.log("Cleaning up Stripe resources...");
-
       if (webhook) {
         await destroy(webhook);
       }
