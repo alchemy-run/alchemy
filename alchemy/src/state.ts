@@ -20,6 +20,7 @@ export interface State<
   kind: Kind;
   id: string;
   fqn: string;
+  seq: number;
   data: Record<string, any>;
   // deps: string[];
   props: Props;

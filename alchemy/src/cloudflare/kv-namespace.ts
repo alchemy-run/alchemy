@@ -122,6 +122,8 @@ export const KVNamespace = Resource(
       if (this.phase === "update" && namespaceId) {
         // Can't update a KV namespace title directly, just work with existing ID
       } else {
+        // TODO: if it already exists, then check the tags to see if we own it and continue
+
         // Create new KV namespace
         const createResponse = await api.post(
           `/accounts/${api.accountId}/storage/kv/namespaces`,

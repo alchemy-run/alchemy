@@ -33,6 +33,7 @@ export async function apply<Out extends Resource>(
       kind: resource.Kind,
       id: resource.ID,
       fqn: resource.FQN,
+      seq: resource.Seq,
       status: "creating",
       data: {},
       output: {
@@ -88,6 +89,7 @@ export async function apply<Out extends Resource>(
     kind: resource.Kind,
     id: resource.ID,
     fqn: resource.FQN,
+    seq: resource.Seq,
     state,
     replace: () => {
       if (isReplaced) {
@@ -114,6 +116,7 @@ export async function apply<Out extends Resource>(
     kind: resource.Kind,
     id: resource.ID,
     fqn: resource.FQN,
+    seq: resource.Seq,
     data: state.data,
     status: phase === "create" ? "created" : "updated",
     output,

@@ -73,6 +73,7 @@ export function context<
   kind,
   id,
   fqn,
+  seq,
   state,
   replace,
 }: {
@@ -81,6 +82,7 @@ export function context<
   kind: ResourceKind;
   id: ResourceID;
   fqn: ResourceFQN;
+  seq: number;
   state: State<Kind, Props, Out>;
   replace: () => void;
 }): Context<Out> {
@@ -91,6 +93,7 @@ export function context<
       ID: id,
       FQN: fqn,
       Scope: scope,
+      Seq: seq,
     } as Out;
   }
   return Object.assign(create, {

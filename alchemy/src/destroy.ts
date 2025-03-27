@@ -84,6 +84,7 @@ export async function destroy<Type extends string>(
       kind: instance.Kind,
       id: instance.ID,
       fqn: instance.FQN,
+      seq: instance.Seq,
       state,
       replace: () => {
         throw new Error("Cannot replace a resource that is being deleted");
