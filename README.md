@@ -193,15 +193,14 @@ export const Table = Resource(
 
 <details>
   <summary>Nitty gritty details on this pattern's design and oddities</summary>
-> [!NOTE]
-> I call this pattern the "pseudo class", designed to model a Resource with a CRUD lifecycle implemented with memoized async functions.
->
-> The `this` parameter in this "pseudo class" serves many purposes:
->
-> 1. contains the resource' `phase` (`create`, `update`, `delete`)
-> 2. contains the resource's current state and previous props (`this.props`, `this.fqn`, `this.stage`, `this.scope`)
-> 3. provides a handle to destroy the resource (`this.destroy`)
-> 4. provides a factory for constructing the resource object (`this({..}`) - you can think of this as emulating `super({..})`
+I call this pattern the "pseudo class", designed to model a Resource with a CRUD lifecycle implemented with memoized async functions.
+
+The `this` parameter in this "pseudo class" serves many purposes:
+
+1. contains the resource' `phase` (`create`, `update`, `delete`)
+2. contains the resource's current state and previous props (`this.props`, `this.fqn`, `this.stage`, `this.scope`)
+3. provides a handle to destroy the resource (`this.destroy`)
+4. provides a factory for constructing the resource object (`this({..}`) - you can think of this as emulating `super({..})`
 </details>
 
 > [!TIP]
