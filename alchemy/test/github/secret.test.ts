@@ -19,7 +19,7 @@ describe("GitHubSecret Resource", () => {
 
   test.skipIf(!!process.env.CI)(
     "create, update, and delete secret",
-    async () => {
+    async (scope) => {
       // Create an authenticated client for testing - will use the same auth as the resource
       const octokit = await createGitHubClient();
 
@@ -29,14 +29,15 @@ describe("GitHubSecret Resource", () => {
       const updatedSecretValue = secret("this-is-an-updated-test-secret-value");
 
       // Create a test secret
-      const ghSecret = await GitHubSecret(testId, {
-        owner,
-        repository,
-        name: secretName,
-        value: secretValue,
-      });
 
       try {
+        const ghSecret = await GitHubSecret(testId, {
+          owner,
+          repository,
+          name: secretName,
+          value: secretValue,
+        });
+
         // Apply to create the secret - resource will handle authentication
         expect(ghSecret.id).toBeTruthy();
         expect(ghSecret.owner).toEqual(owner);
@@ -77,7 +78,7 @@ describe("GitHubSecret Resource", () => {
         console.error(`Test error: ${error.message}`);
         throw error;
       } finally {
-        await destroy(ghSecret);
+        await destroy(scope);
       }
     },
   );

@@ -47,7 +47,7 @@ describe("AWS Resources", () => {
       ],
     };
 
-    test("create role simple", async () => {
+    test("create role simple", async (scope) => {
       const role = await Role(`${BRANCH_PREFIX}-test-create-role`, {
         roleName: `${BRANCH_PREFIX}-test-create-role`,
         assumeRolePolicy,
@@ -74,12 +74,12 @@ describe("AWS Resources", () => {
         expect(role.roleId).toBeTruthy();
         expect(role.createDate).toBeInstanceOf(Date);
       } finally {
-        await destroy(role);
+        await destroy(scope);
         await assertRoleNotExists(`${BRANCH_PREFIX}-test-create-role`);
       }
     });
 
-    test("update role", async () => {
+    test("update role", async (scope) => {
       const roleProps: RoleProps = {
         roleName: `${BRANCH_PREFIX}-test-update-role`,
         assumeRolePolicy,
@@ -140,12 +140,12 @@ describe("AWS Resources", () => {
           },
         ]);
       } finally {
-        await destroy(role);
+        await destroy(scope);
         await assertRoleNotExists(`${BRANCH_PREFIX}-test-update-role`);
       }
     });
 
-    test("create role with managed policies", async () => {
+    test("create role with managed policies", async (scope) => {
       const managedPolicyArn = "arn:aws:iam::aws:policy/ReadOnlyAccess";
       const roleId = `${BRANCH_PREFIX}-test-managed-policy-role`;
       const roleName = `${BRANCH_PREFIX}-test-managed-policy-role`;
@@ -182,7 +182,7 @@ describe("AWS Resources", () => {
           managedPolicyArn,
         );
       } finally {
-        await destroy(role);
+        await destroy(scope);
         // Wait for the role to be deleted before continuing
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
@@ -214,14 +214,14 @@ describe("AWS Resources", () => {
           updatedPolicyArn,
         );
       } finally {
-        await destroy(role);
+        await destroy(scope);
         // Wait for the role to be deleted before asserting
         await new Promise((resolve) => setTimeout(resolve, 2000));
         await assertRoleNotExists(roleName);
       }
     }, 15000); // Set timeout to 15 seconds
 
-    test("remove managed policies when not specified in update", async () => {
+    test("remove managed policies when not specified in update", async (scope) => {
       const managedPolicyArn = "arn:aws:iam::aws:policy/ReadOnlyAccess";
       const roleName = `${BRANCH_PREFIX}-test-remove-policies-role`;
 
@@ -274,9 +274,7 @@ describe("AWS Resources", () => {
         expect(attachedPolicies.AttachedPolicies).toBeTruthy();
         expect(attachedPolicies.AttachedPolicies?.length).toBe(0);
       } finally {
-        if (role) {
-          await destroy(role);
-        }
+        await destroy(scope);
       }
 
       await assertRoleNotExists(roleName);

@@ -16,7 +16,7 @@ const test = alchemy.test(import.meta);
 describe("SES Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-ses`;
 
-  test("create, update, and delete configuration set", async () => {
+  test("create, update, and delete configuration set", async (scope) => {
     // Create a test configuration set
     const configurationSetName = `${testId}-config-set`;
     let ses;
@@ -77,7 +77,7 @@ describe("SES Resource", () => {
       expect(getUpdatedResponse.SendingOptions?.SendingEnabled).toBe(false);
     } finally {
       // Clean up
-      await destroy(ses);
+      await destroy(scope);
       await assertSESDoesNotExist(configurationSetName);
     }
   });

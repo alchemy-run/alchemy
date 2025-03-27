@@ -23,7 +23,7 @@ const lambda = new LambdaClient({});
 
 describe("AWS Resources", () => {
   describe("Function", () => {
-    test("create function with bundled code", async () => {
+    test("create function with bundled code", async (scope) => {
       // First create the execution role
       const assumeRolePolicy: PolicyDocument = {
         Version: "2012-10-17",
@@ -132,7 +132,7 @@ describe("AWS Resources", () => {
         expect(body.message).toBe("Hello from bundled handler!");
         expect(body.event).toEqual(testEvent);
       } finally {
-        await destroy.sequentially(func, bundle, role);
+        await destroy(scope);
 
         // Verify function was properly deleted after cleanup
         if (func) {

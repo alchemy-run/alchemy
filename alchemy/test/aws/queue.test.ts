@@ -17,12 +17,11 @@ const sqs = new SQSClient({});
 
 describe("AWS Resources", () => {
   describe("Queue", () => {
-    test("create queue", async () => {
+    test("create queue", async (scope) => {
       const queueName = `${BRANCH_PREFIX}-alchemy-test-queue`;
-      let queue: Queue | undefined;
 
       try {
-        queue = await Queue(queueName, {
+        const queue = await Queue(queueName, {
           queueName,
           fifo: false,
           visibilityTimeout: 30,
@@ -61,7 +60,7 @@ describe("AWS Resources", () => {
         );
       } finally {
         // Always clean up, even if test assertions fail
-        await destroy(queue);
+        await destroy(scope);
 
         // Verify queue is gone (this will throw if queue doesn't exist)
         await expect(
@@ -74,14 +73,12 @@ describe("AWS Resources", () => {
       }
     });
 
-    test("create fifo queue", async () => {
+    test("create fifo queue", async (scope) => {
       // For FIFO queues, the name must end with .fifo suffix
       const queueName = `${BRANCH_PREFIX}-alchemy-test-fifo-queue.fifo`;
 
-      let queue: Queue | undefined;
-
       try {
-        queue = await Queue(queueName, {
+        const queue = await Queue(queueName, {
           queueName,
           fifo: true,
           visibilityTimeout: 30,
@@ -118,17 +115,16 @@ describe("AWS Resources", () => {
         ).toBe("true");
       } finally {
         // Always clean up, even if test assertions fail
-        await destroy(queue);
+        await destroy(scope);
       }
     });
 
-    test("create queue, send message, delete, and recreate", async () => {
+    test("create queue, send message, delete, and recreate", async (scope) => {
       // Create initial queue
       const queueName = `${BRANCH_PREFIX}-alchemy-test-queue-recreate`;
-      let queue: Queue | undefined;
 
       try {
-        queue = await Queue(queueName, {
+        const queue = await Queue(queueName, {
           queueName,
           fifo: false,
           visibilityTimeout: 30,
@@ -163,35 +159,29 @@ describe("AWS Resources", () => {
           ),
         ).rejects.toThrow("The specified queue does not exist");
 
-        let recreatedQueue: Queue | undefined;
-        try {
-          // Immediately try to recreate the queue - this should handle the QueueDeletedRecently error
-          recreatedQueue = await Queue(queueName, {
-            queueName,
-            visibilityTimeout: 30,
-            messageRetentionPeriod: 345600,
-            tags: {
-              Environment: "test",
-            },
-          });
+        // Immediately try to recreate the queue - this should handle the QueueDeletedRecently error
+        const recreatedQueue = await Queue(queueName, {
+          queueName,
+          visibilityTimeout: 30,
+          messageRetentionPeriod: 345600,
+          tags: {
+            Environment: "test",
+          },
+        });
 
-          expect(recreatedQueue.arn).toMatch(
-            new RegExp(`^arn:aws:sqs:[a-z0-9-]+:\\d+:${queueName}$`),
-          );
-          expect(recreatedQueue.url).toMatch(
-            new RegExp(
-              `^https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName}$`,
-            ),
-          );
-        } finally {
-          // Always clean up, even if test assertions fail
-          await destroy(recreatedQueue);
-        }
+        expect(recreatedQueue.arn).toMatch(
+          new RegExp(`^arn:aws:sqs:[a-z0-9-]+:\\d+:${queueName}$`),
+        );
+        expect(recreatedQueue.url).toMatch(
+          new RegExp(
+            `^https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName}$`,
+          ),
+        );
       } catch (error) {
         throw error; // Re-throw the original error
       } finally {
         // In case the initial queue creation or tests fail
-        await destroy(queue); // Ignore errors on cleanup
+        await destroy(scope); // Ignore errors on cleanup
       }
     });
   });

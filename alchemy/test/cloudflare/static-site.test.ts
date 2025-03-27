@@ -113,7 +113,7 @@ describe("StaticSite Resource", () => {
     },
   );
 
-  test("create static site with backend worker", async () => {
+  test("create static site with backend worker", async (scope) => {
     // Create a small backend worker script
     const backendScriptPath = path.join(tempDir, "backend.js");
     await fs.writeFile(
@@ -135,15 +135,13 @@ describe("StaticSite Resource", () => {
     // Verify site and backend worker were created
     const api = await createCloudflareApi();
 
-    const backend = await Worker(`${siteName}-backend`, {
-      name: `${siteName}-backend`,
-      entrypoint: backendScriptPath,
-    });
-
-    let site: StaticSite | undefined;
-
     try {
-      site = await StaticSite(siteName, {
+      const backend = await Worker(`${siteName}-backend`, {
+        name: `${siteName}-backend`,
+        entrypoint: backendScriptPath,
+      });
+
+      const site = await StaticSite(siteName, {
         name: siteName,
         dir: tempDir,
         routes: {
@@ -195,12 +193,8 @@ describe("StaticSite Resource", () => {
       throw error;
     } finally {
       // Clean up
-      await destroy(site, {
-        quiet: false,
-      });
-      await destroy(backend, {
-        quiet: false,
-      });
+      await destroy(scope);
+
       // Verify site was deleted
       const getDeletedResponse = await api.get(
         `/accounts/${api.accountId}/workers/scripts/${siteName}`,
