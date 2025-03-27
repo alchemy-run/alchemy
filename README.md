@@ -37,16 +37,16 @@ Usually, you'll want to create an `alchemy.config.ts` script where you'll define
 > [!TIP]
 > The `alchemy.config.ts` file is just a convention, not a requirement.
 
-Your script should start by creating the Alchemy `app` (aka. "Root Scope", more on [Scopes](#resource-scopes) later):
+Your script should start by creating the Alchemy `app` (aka. "Root Scope", more on [Scopes](#resource-scope-tree) later):
 
 ```ts
 import alchemy from "alchemy";
 
 // async disposables trigger finalization of the stack at the end of the script (after resources are declared)
 await using app = alchemy("my-app", {
-  // namespace for
+  // namespace for stages
   stage: process.env.STAGE ?? "dev",
-  // update or destroy the stack (and exit early)
+  // update or destroy the app
   phase: process.argv.includes("--destroy") ? "destroy" : "up"
   // password for encrypting/decrypting secrets stored in state
   password: process.env.SECRET_PASSPHRASE,
@@ -95,6 +95,8 @@ console.log({
 });
 ```
 
+## Alchemy State
+
 Now, when you run your script:
 
 ```sh
@@ -110,9 +112,7 @@ You'll notice some files show up in `.alchemy/`:
       - my-role.json
 ```
 
-These are called the State files.
-
-Go ahead, click on one and take a look. Here's how my `my-role.json` looks:
+These are called the State files. Go ahead, click on one and take a look. Here's how my `my-role.json` looks:
 
 ```jsonc
 {
@@ -134,14 +134,74 @@ Go ahead, click on one and take a look. Here's how my `my-role.json` looks:
 }
 ```
 
-This is the Role's "Resource State". Alchemy uses this state file to determine when to Create, Update or Skip Resources. For example, if the inputs haven't changed since the last deployment, then it will be skipped. Otherwise, it will be updated.
+This is the Role's "Resource State". Alchemy uses this state file to determine when to Create, Update or Skip Resources.
+
+For example, if the inputs haven't changed since the last deployment, then it will be skipped, otherwise it will be updated.
 
 > [!TIP]
 > Alchemy goes to great effort to be fully transparent. Each Resource's state is just a JSON file, nothing more. You can inspect it, modify it, commit it to your repo, store it in a database, etc.
 
+## Create a Resource Provider
+
+Adding new resources is the whole point of Alchemy, and is therefore very simple.
+
+A Resource provider is just a function with a globally unique name, e.g. `dynamo::Table`, and an implementation of the Create, Update, Delete lifecycle operations.
+
+E.g. below is a skeleton of the `dynamo::Table` provider:
+
+> [!NOTE]
+> See [table.ts](./alchemy/src/aws/table.ts) for the full implementation.
+
+```ts
+// a type to represent the Resource's inputs
+export interface TableInputs {
+  name: string;
+  //..
+}
+
+// declare a type to represent the Resource's properties (aka. attributes)
+export interface Table extends Resource<"dynamo::Table"> {
+  tableArn: string;
+}
+
+export const Table = Resource(
+  "dynamo::Table",
+  async function (
+    this: Context<TableOutput>,
+    id: string,
+    inputs: TableInputs
+  ): Promise<Table> {
+    if (this.phase === "create") {
+      // create logic
+    } else if (this.phase === "update") {
+      // update logic
+    } else if (this.phase === "delete") {
+      // delete logic
+      return this.destroy();
+    }
+    // return the created/updated resource properties
+    return this(output);
+  }
+);
+```
+
+> [!TIP]
+> Use Cursor or an LLM like Claude/OpenAI to generate the implementation of your resource. I think you'll be pleasantly surprised at how well it works, especially if you provide the API reference docs in your context.
+
+That's it! Now you can instantiate tables.
+
+```ts
+const table = await Table("items", {
+  name: "items",
+  //..
+});
+
+table.tableArn; // string
+```
+
 ## Resource Scope Tree
 
-Alchemy manages resources with a named tree of `Scope`s, similar to a file system tree. Each Scope has a name and contains named Resources and other (named) nested Scopes.
+Alchemy manages resources with a named tree of `Scope`s, similar to a file system tree. Each Scope has a name and contains named Resources and other (named) Scopes.
 
 ### Application Scope
 
@@ -261,64 +321,6 @@ await alchemy.run("nested", async (scope) => {
 });
 // create a Scope and bind to the current async context
 using scope = alchemy.scope("nested");
-```
-
-## Creating a Resource Provider
-
-Adding new resources is the whole point of Alchemy, and is therefore very simple.
-
-A Resource provider is just a function with a globally unique name, e.g. `dynamo::Table`, and an implementation of the Create, Update, Delete lifecycle operations.
-
-E.g. below is a skeleton of the `dynamo::Table` provider:
-
-> [!NOTE]
-> See [table.ts](./alchemy/src/aws/table.ts) for the full implementation.
-
-```ts
-// a type to represent the Resource's inputs
-export interface TableInputs {
-  name: string;
-  //..
-}
-
-// declare a type to represent the Resource's properties (aka. attributes)
-export interface Table extends Resource<"dynamo::Table"> {
-  tableArn: string;
-}
-
-export const Table = Resource(
-  "dynamo::Table",
-  async function (
-    this: Context<TableOutput>,
-    id: string,
-    inputs: TableInputs
-  ): Promise<Table> {
-    if (this.phase === "create") {
-      // create logic
-    } else if (this.phase === "update") {
-      // update logic
-    } else if (this.phase === "delete") {
-      // delete logic
-      return this.destroy();
-    }
-    // return the created/updated resource properties
-    return this(output);
-  }
-);
-```
-
-> [!TIP]
-> Use Cursor or an LLM like Claude/OpenAI to generate the implementation of your resource. I think you'll be pleasantly surprised at how well it works, especially if you provide the API reference docs in your context.
-
-That's it! Now you can instantiate tables.
-
-```ts
-const table = await Table("items", {
-  name: "items",
-  //..
-});
-
-table.tableArn; // string
 ```
 
 ## `destroy`
