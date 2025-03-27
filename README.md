@@ -57,9 +57,6 @@ await using app = alchemy("my-app", {
 // (otherwise, declare resources here AFTER the bootstrap)
 ```
 
-> [!NOTE]
-> Alchemy makes use of Async Disposables (the `await using _` syntax) to execute finalization logic at the end of your script. See the [ECMAScript Explicit Resource Management](https://github.com/tc39/proposal-explicit-resource-management) RFC to learn more about Async Disposables.
-
 Now that our app is initialized, we can start creating Resources, e.g. an AWS IAM Role:
 
 ```ts
@@ -103,11 +100,11 @@ bun ./my-app.ts
 
 You'll notice some files show up in `.alchemy/`:
 
-```
+```sh
 .alchemy/
-  - my-app/
-    - prod/
-      - my-role.json
+  my-app/
+    prod/
+      my-role.json
 ```
 
 These are called the State files. Go ahead, click on one and take a look, here's how my `my-role.json` looks:
@@ -132,10 +129,10 @@ These are called the State files. Go ahead, click on one and take a look, here's
 }
 ```
 
-This is the Role's Resource State File. Alchemy uses this to determine when to Create, Update or Skip a Resource.For example, if the inputs haven't changed since the last deployment, then it will be skipped, otherwise it will be updated. If the Resource no longer exists in the program (aka. is an orphan), then it will be deleted.
+This is the Role's state that Alchemy uses to determine when to Create, Update, Delete or Skip:
 
-> [!TIP]
-> If you ever run into a problem with a Resource, this is the file to inspect, edit or delete.
+1. If the inputs haven't changed since the last deployment, then it will be skipped, otherwise it will be updated
+2. If the Resource no longer exists in the program (aka. is an orphan), then it will be deleted.
 
 > [!TIP]
 > Alchemy goes to great effort to be fully transparent. Each Resource's state is just a JSON file, nothing more. You can inspect it, modify it, commit it to your repo, store it in a database, etc.
@@ -146,23 +143,35 @@ Adding new Resources is the whole point of Alchemy, and is therefore very simple
 
 A Resource provider is just a function with a globally unique name, e.g. `dynamo::Table`, and an implementation of the Create, Update, Delete lifecycle operations.
 
-E.g. below is a skeleton of the `dynamo::Table` provider:
+Below is an illustrative example of the `dynamo::Table` provider:
 
 > [!NOTE]
 > See [table.ts](./alchemy/src/aws/table.ts) for the full implementation.
 
+All Resources follow the same templated structure:
+
+1. an interface for the Resource's (Input) Properties
+
 ```ts
-// a type to represent the Resource's inputs
-export interface TableInputs {
+// a type to represent the Resource's input properties
+export interface TableProps {
   name: string;
   //..
 }
+```
 
+2. an interface (or type) for the Resource's (Output) Attributes
+
+```ts
 // declare a type to represent the Resource's properties (aka. attributes)
 export interface Table extends Resource<"dynamo::Table"> {
   tableArn: string;
 }
+```
 
+3. a special "Resource" function defining the Resource's globally unique name and resource lifecycle handler:
+
+```ts
 export const Table = Resource(
   "dynamo::Table",
   async function (
