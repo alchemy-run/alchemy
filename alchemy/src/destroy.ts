@@ -123,7 +123,7 @@ export namespace destroy {
       const sorted = resources.sort((a, b) => b.Seq - a.Seq);
       console.log(
         "destroy",
-        sorted.map((r) => r.ID),
+        sorted.map((r) => r),
       );
       for (const resource of sorted) {
         await destroy(resource);
