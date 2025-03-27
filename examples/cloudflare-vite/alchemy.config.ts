@@ -15,12 +15,12 @@ await using _ = alchemy("cloudflare-vite", {
   quiet: process.argv.includes("--verbose") ? false : true,
 });
 
-const counter = new DurableObjectNamespace("COUNTER", {
+export const counter = new DurableObjectNamespace("COUNTER", {
   className: "Counter",
   sqlite: true,
 });
 
-const [authStore, storage] = await Promise.all([
+export const [authStore, storage] = await Promise.all([
   KVNamespace("AUTH_STORE", {
     title: "alchemy-example-auth-store",
   }),
