@@ -99,6 +99,9 @@ describe("StaticSite Resource", () => {
             "javascript",
           );
         }
+      } catch (err) {
+        console.log("error", err);
+        throw err;
       } finally {
         console.log("DESTROY", Array.from(scope.resources.keys()));
         // Clean up
