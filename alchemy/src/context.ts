@@ -63,7 +63,11 @@ export interface BaseContext<Out extends Resource> {
   (props: Omit<Out, keyof Resource>): Out;
 }
 
-export function context<Props extends ResourceProps, Out extends Resource>({
+export function context<
+  Kind extends string,
+  Props extends ResourceProps,
+  Out extends Resource,
+>({
   scope,
   phase,
   kind,
@@ -77,7 +81,7 @@ export function context<Props extends ResourceProps, Out extends Resource>({
   kind: ResourceKind;
   id: ResourceID;
   fqn: ResourceFQN;
-  state: State<Props, Out>;
+  state: State<Kind, Props, Out>;
   replace: () => void;
 }): Context<Out> {
   function create(props: Omit<Out, "Kind" | "ID" | "Scope">): Out {

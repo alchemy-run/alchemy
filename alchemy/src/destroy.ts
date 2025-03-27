@@ -121,10 +121,10 @@ export namespace destroy {
   export async function all(resources: Resource[], options?: DestroyOptions) {
     if (options?.strategy !== "parallel") {
       const sorted = resources.sort((a, b) => b.Seq - a.Seq);
-      console.log(
-        "destroy",
-        sorted.map((r) => r),
-      );
+      // console.log(
+      //   "destroy",
+      //   sorted.map((r) => r),
+      // );
       for (const resource of sorted) {
         await destroy(resource);
       }

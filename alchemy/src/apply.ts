@@ -30,7 +30,7 @@ export async function apply<Out extends Resource>(
   }
   if (state === undefined) {
     state = {
-      provider: PROVIDERS.get(resource.ID)!,
+      kind: resource.Kind,
       status: "creating",
       data: {},
       output: undefined!,
@@ -103,7 +103,7 @@ export async function apply<Out extends Resource>(
   }
 
   await scope.state.set(resource.ID, {
-    provider: resource.Kind,
+    kind: resource.Kind,
     data: state.data,
     status: phase === "create" ? "created" : "updated",
     output,
