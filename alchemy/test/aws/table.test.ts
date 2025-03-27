@@ -18,7 +18,7 @@ const dynamo = new DynamoDBClient({});
 
 describe("AWS Resources", () => {
   describe("Table", () => {
-    test("create table", async () => {
+    test("create table", async (scope) => {
       const tableName = `${BRANCH_PREFIX}-alchemy-test-create-table`;
       const table = await Table(tableName, {
         tableName,
@@ -62,7 +62,7 @@ describe("AWS Resources", () => {
         expect(describeResponse.Table?.TableStatus).toBe("ACTIVE");
       } finally {
         // Always clean up, even if test assertions fail
-        await destroy(table);
+        await destroy(scope);
 
         // Verify table is fully deleted
         await assertTableNotExists(tableName);
