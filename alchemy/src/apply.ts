@@ -102,6 +102,7 @@ export async function apply<Out extends Resource>(
     );
   }
 
+  console.log(resource.ID, "out:", output);
   await scope.state.set(resource.ID, {
     kind: resource.Kind,
     data: state.data,
