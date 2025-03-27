@@ -31,11 +31,6 @@ export async function destroy<Type extends string>(
     });
     // then detect orphans and destroy them
     const orphans = await scope.state.all();
-    console.log(
-      "orphans",
-      scope.chain.join("/"),
-      JSON.stringify(orphans, null, 2),
-    );
     await destroy.all(
       Object.values(orphans).map((orphan) => {
         console.log("orphan", orphan);
