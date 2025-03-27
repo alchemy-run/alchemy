@@ -3,8 +3,9 @@ name: Tests
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  # TODO: re-enable this
+  # pull_request:
+  #   branches: [ main ]
   workflow_dispatch:
 
 # Ensure only one workflow runs at a time

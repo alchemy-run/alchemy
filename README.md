@@ -146,9 +146,6 @@ Adding new Resources is the whole point of Alchemy, and is therefore very simple
 
 A Resource provider is just a function with a globally unique name, e.g. `dynamo::Table`, and an implementation of the Create, Update, Delete lifecycle operations.
 
-> [!TIP]
-> All Resources in Alchemy are Custom. There is no difference between "first party" and "third party" resource providers.
-
 E.g. below is a skeleton of the `dynamo::Table` provider:
 
 > [!NOTE]
@@ -196,14 +193,15 @@ export const Table = Resource(
 
 <details>
   <summary>Nitty gritty details on this pattern's design and oddities</summary>
-I call this pattern the "pseudo class", designed to model a Resource with a CRUD lifecycle implemented with memoized async functions.
-
-The `this` parameter in this "pseudo class" serves many purposes:
-
-1. contains the resource' `phase` (`create`, `update`, `delete`)
-2. contains the resource's current state and previous props (`this.props`, `this.fqn`, `this.stage`, `this.scope`)
-3. provides a handle to destroy the resource (`this.destroy`)
-4. provides a factory for constructing the resource object (`this({..}`) - you can think of this as emulating `super({..})`
+> [!NOTE]
+> I call this pattern the "pseudo class", designed to model a Resource with a CRUD lifecycle implemented with memoized async functions.
+>
+> The `this` parameter in this "pseudo class" serves many purposes:
+>
+> 1. contains the resource' `phase` (`create`, `update`, `delete`)
+> 2. contains the resource's current state and previous props (`this.props`, `this.fqn`, `this.stage`, `this.scope`)
+> 3. provides a handle to destroy the resource (`this.destroy`)
+> 4. provides a factory for constructing the resource object (`this({..}`) - you can think of this as emulating `super({..})`
 </details>
 
 > [!TIP]
