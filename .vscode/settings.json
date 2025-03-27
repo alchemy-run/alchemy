@@ -49,5 +49,5 @@
     "**/__pycache__": true,
     "**/*.pyc": true
   },
-  "cSpell.words": ["deinit"]
+  "cSpell.words": ["deinit", "Pulumi"]
 }

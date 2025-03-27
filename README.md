@@ -1,10 +1,26 @@
 # Alchemy
 
-Alchemy is a embeddable, zero-dependency, TypeScript-native Infrastructure-as-Code (IaC) library that provides the minimal pieces for modeling Resources that are Created, Updated and Deleted automatically.
+Alchemy is a embeddable, zero-dependency, TypeScript-native Infrastructure-as-Code (IaC) library for modeling Resources that are Created, Updated and Deleted automatically.
 
-Unlike similar tools like Pulumi, Terraform, and CloudFormation, Alchemy is implemented in pure ESM-native TypeScript code with zero dependencies. Resources are simple memoized async functions that can run in any JavaScript runtime, including the browser, serverless and durable workflows.
+Unlike similar tools like Pulumi, Terraform, and CloudFormation, Alchemy is implemented in pure ESM-native TypeScript code with zero dependencies. Resources are simple memoized async functions that can run in any JavaScript runtime, including the browser, serverless functions and durable workflows.
 
-[![Demo](./alchemy.gif)](./alchemy.gif)
+```ts
+import alchemy from "alchemy";
+
+await using _ = alchemy("cloudflare-worker");
+
+export const worker = await Worker("worker", {
+  name: "my-worker",
+  entrypoint: "./src/index.ts",
+  bindings: {
+    COUNTER: counter,
+    STORAGE: storage, // Bind the R2 bucket to the worker
+    AUTH_STORE: authStore,
+    GITHUB_CLIENT_ID: secret(process.env.GITHUB_CLIENT_ID),
+    GITHUB_CLIENT_SECRET: secret(process.env.GITHUB_CLIENT_SECRET),
+  },
+});
+```
 
 # Features
 
@@ -273,11 +289,11 @@ In our `.alchemy/` state, the property will be encrypted instead of plain text:
 
 ## Resource Scope Tree
 
-Alchemy manages resources with a named tree of `Scope`s, similar to a file system tree. Each Scope has a name and contains named Resources and other (named) Scopes.
+Alchemy manages resources with a named tree of `Scope`s, similar to a file system. Each Scope has a name and contains named Resources and other (named) Scopes.
 
 ### Application Scope
 
-The `alchemy` call from before (in your `alchemy.config.ts`) actually initiated the Alchemy Application Scope (aka. "Root Scope"):
+The `alchemy` bootstrap (in your `alchemy.config.ts`) creates and binds to the Alchemy Application Scope (aka. "Root Scope"):
 
 ```ts
 await using app = alchemy("my-app", {
@@ -397,7 +413,9 @@ using scope = alchemy.scope("nested");
 
 ## `destroy`
 
-Any `Resource` or `ResourcePromise` can be "destroyed" individually and programmatically.
+`Scope`, `Resource` and `ResourcePromise` can be "destroyed" individually and programmatically.
+
+### Destroy a Resource
 
 Say, you've got some two resources, a `Role` and a `Function`.
 
@@ -430,7 +448,11 @@ await destroy(func); // will delete just the Function
 await destroy(role); // will delete Role and then Function
 ```
 
-## Destroying the app
+### Destroy a Scope
+
+It is
+
+### Destroy the App
 
 To destroy the whole app (aka. the whole graph), you can call `alchemy` with the `phase: "destroy"` option. This will delete all resources in the specified or default stage.
 
@@ -452,14 +474,16 @@ await using _ = alchemy({
 > });
 > ```
 
+## Test Resources
+
 ## Physical Names
 
 > [!CAUTION]
 > It is up to you to ensure that the physical names of resources don't conflict - alchemy does not (yet) offer any help or opinions here. You must decide on physical names, but you're free to add name generation logic to your resources if you so desire.
 >
 > ```ts
-> class Table extends Resource("dynamo::Table", async (ctx, inputs) => {
->   const tableName = `${ctx.stage}-${inputs.tableName}`;
+> const Table = Resource("dynamo::Table", async function (this, inputs) {
+>   const tableName = `${this.stage}-${inputs.tableName}`;
 >
 >   // ..
 > });
