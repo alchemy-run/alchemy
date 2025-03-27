@@ -72,7 +72,6 @@ export class CloudflareStateStore implements StateStore {
    */
   async get(key: string): Promise<State | undefined> {
     const data = await this.namespace.get(this.getNamespacedKey(key), "json");
-    console.log("get", key, data);
     return data as State | undefined;
   }
 

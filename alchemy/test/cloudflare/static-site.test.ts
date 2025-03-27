@@ -55,6 +55,7 @@ describe("StaticSite Resource", () => {
       // quiet: true,
     },
     async (scope) => {
+      console.log("RUN TEST");
       const siteName = `${BRANCH_PREFIX}-test-static-site`;
 
       try {
@@ -99,6 +100,7 @@ describe("StaticSite Resource", () => {
           );
         }
       } finally {
+        console.log("DESTROY");
         // Clean up
         await destroy(scope);
 
