@@ -89,7 +89,23 @@ export class Scope {
     // TODO
   }
 
+  public async run<T>(fn: (scope: Scope) => Promise<T>): Promise<T> {
+    return scopeStorage.run(this, () => fn(this));
+  }
+
   [Symbol.asyncDispose]() {
     return this.finalize();
+  }
+
+  /**
+   * Returns a string representation of the scope.
+   */
+  toString() {
+    return `Scope(
+  chain=${this.chain.join("/")},
+  resources=[${Array.from(this.resources.values())
+    .map((r) => r.ID)
+    .join(",\n  ")}]
+)`;
   }
 }

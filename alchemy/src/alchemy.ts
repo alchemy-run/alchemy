@@ -69,14 +69,14 @@ export interface AlchemyOptions {
  * @param options
  * @returns
  */
-async function scope(
+function scope(
   ...args:
     | [id?: string]
     | [options: AlchemyOptions]
     | [id: string | undefined, options?: AlchemyOptions]
-  // TODO: maybe we want to allow await using _ = await alchemy.scope(import.meta)
+  // TODO: maybe we want to allow using _ = await alchemy.scope(import.meta)
   // | [meta: ImportMeta]
-): Promise<Scope> {
+): Scope {
   const [scopeName, options] =
     args.length === 2
       ? args
@@ -90,11 +90,6 @@ async function scope(
     parent: options?.parent ?? Scope.get(),
   });
   scope.enter();
-
-  // if (parent.resources.size == 0) {
-  //   await parent.init();
-  // }
-
   return scope;
 }
 
@@ -117,7 +112,7 @@ async function run<T>(
           ? [args[0], undefined, args[1]]
           : [undefined, args[0], args[1]]
         : [undefined, undefined, args[0]];
-  await using scope = await alchemy.scope(
+  await using scope = alchemy.scope(
     id,
     options ??
       {

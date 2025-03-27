@@ -7,15 +7,10 @@ export class DestroyedSignal extends Error {}
 
 export interface DestroyOptions {
   quiet?: boolean;
+  strategy?: "sequential" | "parallel";
 }
 
-export interface DestroyScopeOptions extends DestroyOptions {
-  strategy: "sequential" | "parallel";
-}
-
-function isScopeArgs(
-  a: any,
-): a is [scope: Scope, options?: DestroyScopeOptions] {
+function isScopeArgs(a: any): a is [scope: Scope, options?: DestroyOptions] {
   return a[0] instanceof Scope;
 }
 
@@ -24,31 +19,27 @@ function isScopeArgs(
  */
 export async function destroy<Type extends string>(
   ...args:
-    | [scope: Scope, options?: DestroyScopeOptions]
+    | [scope: Scope, options?: DestroyOptions]
     | [resource: Resource<Type> | undefined | null, options?: DestroyOptions]
 ): Promise<void> {
   if (isScopeArgs(args)) {
     const [scope, options] = args;
     const strategy = options?.strategy ?? "sequential";
-
-    if (strategy === "sequential") {
-      const resources = Array.from(scope.resources.values()).sort(
-        (a, b) => a.Seq - b.Seq,
-      );
-
-      for (const resource of resources) {
-        await destroy(resource);
-      }
-    } else {
-      await Promise.all(
-        Array.from(scope.resources.values()).map((resource) =>
-          destroy(resource, options),
-        ),
-      );
-    }
-
+    // destroy all active resources
+    await destroy.all(Array.from(scope.resources.values()), {
+      strategy,
+    });
+    // then detect orphans and destroy them
+    const orphans = await scope.state.all();
+    await destroy.all(
+      Object.values(orphans).map((orphan) => ({
+        ...orphan.output,
+        Scope: scope,
+      })),
+      options,
+    );
+    // finally, destroy the scope container
     await scope.deinit();
-
     return;
   }
 
@@ -66,11 +57,13 @@ export async function destroy<Type extends string>(
   }
 
   const scope = instance.Scope;
+  if (!scope) {
+    console.warn(`Resource "${instance.FQN}" has no scope`);
+  }
   const quiet = options?.quiet ?? scope.quiet;
 
   try {
     if (!quiet) {
-      // console.log("destroy", instance);
       console.log(`Delete:  "${instance.FQN}"`);
     }
 
@@ -93,10 +86,13 @@ export async function destroy<Type extends string>(
       },
     });
 
+    let nestedScope: Scope | undefined;
     try {
-      await alchemy.run(instance.ID, async () =>
-        Provider.handler.bind(ctx)(instance.ID, state.props),
-      );
+      // BUG: this does not restore persisted scope
+      await alchemy.run(instance.ID, async (scope) => {
+        nestedScope = scope;
+        return Provider.handler.bind(ctx)(instance.ID, state.props);
+      });
     } catch (err) {
       if (err instanceof DestroyedSignal) {
         // TODO: should we fail if the DestroyedSignal is not thrown?
@@ -105,7 +101,11 @@ export async function destroy<Type extends string>(
       }
     }
 
-    await scope.state.delete(instance.ID);
+    if (nestedScope) {
+      await destroy(nestedScope, options);
+    }
+
+    await scope.delete(instance.ID);
 
     if (!quiet) {
       console.log(`Deleted: "${instance.FQN}"`);
@@ -117,6 +117,18 @@ export async function destroy<Type extends string>(
 }
 
 export namespace destroy {
+  export async function all(resources: Resource[], options?: DestroyOptions) {
+    if (options?.strategy !== "parallel") {
+      for (const resource of resources.sort((a, b) => a.Seq - b.Seq)) {
+        await destroy(resource);
+      }
+    } else {
+      await Promise.all(
+        resources.map((resource) => destroy(resource, options)),
+      );
+    }
+  }
+
   export async function sequentially(
     ...resources: (Resource<string> | undefined | null)[]
   ) {

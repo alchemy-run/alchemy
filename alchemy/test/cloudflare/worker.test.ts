@@ -8,9 +8,7 @@ import { Worker } from "../../src/cloudflare/worker";
 import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
 
-const test = alchemy.test(import.meta, {
-  destroy: false,
-});
+const test = alchemy.test(import.meta);
 
 async function assertWorkerDoesNotExist(workerName: string) {
   const api = await createCloudflareApi();
@@ -243,7 +241,7 @@ describe("Worker Resource", () => {
     };
   `;
 
-  test("create, update, and delete worker (CJS format)", async () => {
+  test("create, update, and delete worker (CJS format)", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-${testName}-cjs-1`;
 
     let worker: Worker | undefined = undefined;
@@ -275,14 +273,12 @@ describe("Worker Resource", () => {
 
       expect(worker.id).toEqual(worker.id);
     } finally {
-      if (worker) {
-        await alchemy.destroy(worker);
-      }
+      await alchemy.destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
 
-  test("create, update, and delete worker (ESM format)", async () => {
+  test("create, update, and delete worker (ESM format)", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-${esmTestName}-esm-1`;
 
     let worker: Worker | undefined = undefined;
@@ -316,15 +312,12 @@ describe("Worker Resource", () => {
 
       expect(worker.id).toEqual(worker.id);
     } finally {
-      if (worker) {
-        // Delete the worker
-        await alchemy.destroy(worker);
-      }
+      await alchemy.destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
 
-  test("convert between ESM and CJS formats", async () => {
+  test("convert between ESM and CJS formats", async (scope) => {
     const workerName = `${formatConversionTestName}-convert-1`;
 
     let worker: Worker | undefined = undefined;
@@ -355,10 +348,7 @@ describe("Worker Resource", () => {
 
       expect(worker.format).toEqual("esm");
     } finally {
-      // Clean up
-      if (worker) {
-        await alchemy.destroy(worker);
-      }
+      await alchemy.destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
@@ -388,7 +378,7 @@ describe("Worker Resource", () => {
     }
   });
 
-  test("create and delete worker with Durable Object binding", async () => {
+  test("create and delete worker with Durable Object binding", async (scope) => {
     const workerName = `${doBindingTestName}-do-1`;
 
     let worker: Worker | undefined = undefined;
@@ -428,14 +418,12 @@ describe("Worker Resource", () => {
       expect(worker.name).toEqual(workerName);
       expect(worker.bindings).toBeDefined();
     } finally {
-      if (worker) {
-        await alchemy.destroy(worker);
-      }
+      await alchemy.destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
 
-  test("create and delete worker with KV Namespace binding", async () => {
+  test("create and delete worker with KV Namespace binding", async (scope) => {
     const workerName = `${kvBindingTestName}-kv-1`;
 
     let worker: Worker | undefined = undefined;
@@ -465,20 +453,12 @@ describe("Worker Resource", () => {
       expect(worker.name).toEqual(workerName);
       expect(worker.bindings).toBeDefined();
     } finally {
-      try {
-        if (worker) {
-          await alchemy.destroy(worker);
-        }
-      } finally {
-        if (testKv) {
-          await alchemy.destroy(testKv);
-        }
-      }
+      await alchemy.destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
 
-  test("create and delete worker with multiple bindings", async () => {
+  test("create and delete worker with multiple bindings", async (scope) => {
     const workerName = `${multiBindingsTestName}-multi-1`;
 
     // Create a Durable Object namespace
@@ -530,21 +510,13 @@ describe("Worker Resource", () => {
       expect(worker.name).toEqual(workerName);
       expect(worker.bindings).toBeDefined();
     } finally {
-      try {
-        if (worker) {
-          await alchemy.destroy(worker);
-        }
-      } finally {
-        await alchemy.destroy(testKv);
-      }
-
-      // Verify the worker was deleted
+      await alchemy.destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
 
   // Add a new test for environment variables
-  test("create and test worker with environment variables", async () => {
+  test("create and test worker with environment variables", async (scope) => {
     const workerName = `${envVarsTestName}-env-1`;
     let worker: Worker | undefined = undefined;
     try {
@@ -628,17 +600,13 @@ describe("Worker Resource", () => {
         expect(removedVarText).toEqual("undefined");
       }
     } finally {
-      if (worker) {
-        // Clean up by deleting the worker
-        await alchemy.destroy(worker);
-
-        // Verify the worker was deleted
-        await assertWorkerDoesNotExist(workerName);
-      }
+      await alchemy.destroy(scope);
+      // Verify the worker was deleted
+      await assertWorkerDoesNotExist(workerName);
     }
   });
 
-  test("migrate durable object by renaming class", async () => {
+  test("migrate durable object by renaming class", async (scope) => {
     const workerName = `${doMigrationTestName}-migrate-1`;
     let worker: Worker | undefined = undefined;
     try {
@@ -695,14 +663,12 @@ describe("Worker Resource", () => {
 
       expect(worker.bindings).toBeDefined();
     } finally {
-      if (worker) {
-        await alchemy.destroy(worker);
-        await assertWorkerDoesNotExist(workerName);
-      }
+      await alchemy.destroy(scope);
+      await assertWorkerDoesNotExist(workerName);
     }
   });
 
-  test("add environment variables to worker with durable object", async () => {
+  test("add environment variables to worker with durable object", async (scope) => {
     // Add a new test name for DO with env vars
     const doWithEnvVarsTestName = `${BRANCH_PREFIX}-test-worker-do-with-env`;
     const workerName = `${doWithEnvVarsTestName}-doenv-1`;
@@ -761,14 +727,12 @@ describe("Worker Resource", () => {
       expect(worker.env?.API_SECRET).toEqual("test-secret-123");
       expect(worker.env?.DEBUG_MODE).toEqual("true");
     } finally {
-      if (worker) {
-        await alchemy.destroy(worker);
-      }
+      await alchemy.destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
 
-  test("create and delete worker with R2 bucket binding", async () => {
+  test("create and delete worker with R2 bucket binding", async (scope) => {
     const workerName = `${r2BindingTestName}-r2-1`;
 
     // Create a test R2 bucket
@@ -812,15 +776,7 @@ describe("Worker Resource", () => {
         expect(data.hasR2).toEqual(true);
       }
     } finally {
-      try {
-        if (worker) {
-          await alchemy.destroy(worker);
-        }
-      } finally {
-        if (testBucket) {
-          await alchemy.destroy(testBucket);
-        }
-      }
+      await alchemy.destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });

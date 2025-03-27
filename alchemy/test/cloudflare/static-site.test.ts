@@ -50,60 +50,68 @@ describe("StaticSite Resource", () => {
     }
   });
 
-  test("create, update, and delete static site", async () => {
-    const siteName = `${BRANCH_PREFIX}-${testId}`;
-    const site = await StaticSite(siteName, {
-      name: siteName,
-      dir: tempDir,
-      bundle: {
-        minify: false,
-      },
-    });
+  test(
+    "create, update, and delete static site",
+    {
+      // quiet: true,
+    },
+    async (scope) => {
+      const siteName = `${BRANCH_PREFIX}-${testId}`;
+      const site = await StaticSite(siteName, {
+        name: siteName,
+        dir: tempDir,
+        bundle: {
+          minify: false,
+        },
+      });
 
-    try {
-      expect(site.workerId).toBeTruthy();
-      expect(site.assets.length).toBeGreaterThan(0);
+      try {
+        expect(site.workerId).toBeTruthy();
+        expect(site.assets.length).toBeGreaterThan(0);
 
-      // Verify with Cloudflare API directly
-      const api = await createCloudflareApi();
-      const response = await api.get(
-        `/accounts/${api.accountId}/workers/scripts/${siteName}`,
-      );
-      expect(response.status).toEqual(200);
-
-      // Verify the worker URL is provided
-      expect(site.url).toBeTruthy();
-
-      if (site.url) {
-        // Test the worker URL directly
-        const indexResponse = await fetch(site.url);
-        expect(indexResponse.status).toEqual(200);
-        expect(indexResponse.headers.get("content-type")).toContain(
-          "text/html",
+        // Verify with Cloudflare API directly
+        const api = await createCloudflareApi();
+        const response = await api.get(
+          `/accounts/${api.accountId}/workers/scripts/${siteName}`,
         );
+        expect(response.status).toEqual(200);
 
-        // Test CSS file
-        const cssResponse = await fetch(`${site.url}/styles.css`);
-        expect(cssResponse.status).toEqual(200);
-        expect(cssResponse.headers.get("content-type")).toContain("text/css");
+        // Verify the worker URL is provided
+        expect(site.url).toBeTruthy();
 
-        // Test JS file in subfolder
-        const jsResponse = await fetch(`${site.url}/js/app.js`);
-        expect(jsResponse.status).toEqual(200);
-        expect(jsResponse.headers.get("content-type")).toContain("javascript");
+        if (site.url) {
+          // Test the worker URL directly
+          const indexResponse = await fetch(site.url);
+          expect(indexResponse.status).toEqual(200);
+          expect(indexResponse.headers.get("content-type")).toContain(
+            "text/html",
+          );
+
+          // Test CSS file
+          const cssResponse = await fetch(`${site.url}/styles.css`);
+          expect(cssResponse.status).toEqual(200);
+          expect(cssResponse.headers.get("content-type")).toContain("text/css");
+
+          // Test JS file in subfolder
+          const jsResponse = await fetch(`${site.url}/js/app.js`);
+          expect(jsResponse.status).toEqual(200);
+          expect(jsResponse.headers.get("content-type")).toContain(
+            "javascript",
+          );
+        }
+      } finally {
+        // Clean up
+        await destroy(scope);
+
+        // Verify site was deleted
+        const api = await createCloudflareApi();
+        const response = await api.get(
+          `/accounts/${api.accountId}/workers/scripts/${siteName}`,
+        );
+        expect(response.status).toEqual(404);
       }
-    } finally {
-      // Clean up
-      await destroy(site);
-
-      // Verify site was deleted
-      const api = await createCloudflareApi();
-      const response = await api.get(
-        `/accounts/${api.accountId}/workers/scripts/${siteName}`,
-      );
-      expect(response.status).toEqual(404);
-    }
-  });
+    },
+  );
 
   test("create static site with backend worker", async () => {
     // Create a small backend worker script

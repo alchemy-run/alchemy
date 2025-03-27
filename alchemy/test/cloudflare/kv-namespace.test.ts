@@ -2,7 +2,6 @@ import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { KVNamespace } from "../../src/cloudflare/kv-namespace";
-import { destroy } from "../../src/destroy";
 import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
 
@@ -11,7 +10,7 @@ const test = alchemy.test(import.meta);
 describe("KV Namespace Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-kv`;
 
-  test("create, update, and delete KV namespace", async () => {
+  test("create, update, and delete KV namespace", async (scope) => {
     let kvNamespace: KVNamespace | undefined;
     try {
       kvNamespace = await KVNamespace(testId, {
@@ -71,20 +70,16 @@ describe("KV Namespace Resource", () => {
       );
       await verifyKVValue(kvNamespace.namespaceId, "test-key-3", "new-value-3");
     } finally {
+      await alchemy.destroy(scope);
       if (kvNamespace) {
-        // Delete the KV namespace
-        await destroy(kvNamespace);
+        // Verify namespace was deleted
+        const api = await createCloudflareApi();
+        const response = await api.get(
+          `/accounts/${api.accountId}/storage/kv/namespaces/${kvNamespace.namespaceId}`,
+        );
 
-        if (kvNamespace) {
-          // Verify namespace was deleted
-          const api = await createCloudflareApi();
-          const response = await api.get(
-            `/accounts/${api.accountId}/storage/kv/namespaces/${kvNamespace.namespaceId}`,
-          );
-
-          // Should be a 404 if properly deleted
-          expect(response.status).toEqual(404);
-        }
+        // Should be a 404 if properly deleted
+        expect(response.status).toEqual(404);
       }
     }
   });

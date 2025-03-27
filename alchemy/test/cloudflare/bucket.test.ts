@@ -2,7 +2,6 @@ import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { R2Bucket } from "../../src/cloudflare/bucket";
-import { destroy } from "../../src/destroy";
 import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
 
@@ -35,7 +34,7 @@ describe("R2 Bucket Resource", () => {
   // Bucket names must be lowercase, so transform the prefix
   const testId = `${BRANCH_PREFIX.toLowerCase()}-test-bucket`;
 
-  test("create, update, and delete bucket", async () => {
+  test("create, update, and delete bucket", async (scope) => {
     // Create a test bucket
     let bucket: R2Bucket | undefined = undefined;
 
@@ -71,19 +70,16 @@ describe("R2 Bucket Resource", () => {
         (await publicAccessResponse.json()) as CloudflareResponse<PublicAccessInfo>;
       expect(publicAccessData.result.enabled).toEqual(true);
     } finally {
-      // Always clean up, even if test assertions fail
-      if (bucket) {
-      }
+      await alchemy.destroy(scope);
 
       // Verify bucket was deleted
       if (bucket) {
-        await destroy(bucket);
         await assertBucketDeleted(bucket);
       }
     }
   });
 
-  test("bucket with jurisdiction", async () => {
+  test("bucket with jurisdiction", async (scope) => {
     const euBucketName = `${testId}-eu`;
     const euBucket = await R2Bucket(euBucketName, {
       name: euBucketName,
@@ -104,8 +100,7 @@ describe("R2 Bucket Resource", () => {
       );
       expect(getResponse.status).toEqual(200);
     } finally {
-      // Clean up
-      await destroy(euBucket);
+      await alchemy.destroy(scope);
       await assertBucketDeleted(euBucket);
     }
   });
