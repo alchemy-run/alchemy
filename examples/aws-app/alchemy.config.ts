@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 await using _ = alchemy("aws-app", {
   // decide the mode/stage however you want
-  mode: process.argv[2] === "destroy" ? "destroy" : "up",
+  phase: process.argv[2] === "destroy" ? "destroy" : "up",
   stage: process.argv[3],
   quiet: process.argv.includes("--quiet"),
 });

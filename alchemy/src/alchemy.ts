@@ -42,7 +42,7 @@ export interface AlchemyOptions {
    *
    * @default "up"
    */
-  mode?: "up" | "destroy";
+  phase?: "up" | "destroy";
   /**
    * Name to scope the resource state under (e.g. `.alchemy/{stage}/..`).
    *

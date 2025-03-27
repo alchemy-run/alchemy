@@ -33,9 +33,11 @@ bun add alchemy
 ```
 
 Usually, you'll want to create an `alchemy.config.ts` script where you'll define your initial resources.
-`alchemy.config.ts` is just a convention, not a requirement.
 
-Your Alchemy script should start with the following "bootstrap":
+> [!TIP]
+> The `alchemy.config.ts` file is just a convention, not a requirement.
+
+Your script should start by creating the Alchemy `app` (aka. "Root Scope", more on [Scopes](#resource-scopes) later):
 
 ```ts
 import alchemy from "alchemy";
@@ -44,16 +46,13 @@ import alchemy from "alchemy";
 await using app = alchemy("my-app", {
   // namespace for
   stage: process.env.STAGE ?? "dev",
+  // update or destroy the stack (and exit early)
+  phase: process.argv.includes("--destroy") ? "destroy" : "up"
   // password for encrypting/decrypting secrets stored in state
   password: process.env.SECRET_PASSPHRASE,
   // whether to log Create/Update/Delete events
   quiet: process.argv.includes("--verbose") ? false : true,
 });
-
-if (process.argv.includes("--destroy")) {
-  // destroy the stack and exit early (return `never`)
-  await alchemy.destroy(app);
-}
 
 // (otherwise, declare resources here AFTER the bootstrap)
 ```
@@ -85,8 +84,7 @@ export const role = await Role("my-role", {
 ```
 
 Notice how the `Role` is created by an `await Role(..)` function call.
-In contrast to other IaC frameworks, Alchemy models Resources as memoized async functions.
-They can be executed in any async environment, including the browser, serverless functions or durable workflows.
+In contrast to other IaC frameworks, Alchemy models Resources as memoized async functions that can be executed in any async environment - including the browser, serverless functions and durable workflows.
 
 A nice benefit of async-await is how easy it becomes to access physical properties (otherwise known as "Stack Outputs").
 E.g. you can just log the role name:
@@ -112,7 +110,9 @@ You'll notice some files show up in `.alchemy/`:
       - my-role.json
 ```
 
-These are called the State files. Go ahead, click on one and take a look. Here's how my `my-role.json` looks:
+These are called the State files.
+
+Go ahead, click on one and take a look. Here's how my `my-role.json` looks:
 
 ```jsonc
 {
@@ -124,24 +124,26 @@ These are called the State files. Go ahead, click on one and take a look. Here's
     "roleName": "alchemy-api-lambda-role"
     // ..
   },
-  "inputs": [
-    {
-      "roleName": "alchemy-api-lambda-role",
-      "assumeRolePolicy": {
-        "Version": "2012-10-17"
-        // ..
-      }
+  "props": {
+    "roleName": "alchemy-api-lambda-role",
+    "assumeRolePolicy": {
+      "Version": "2012-10-17"
+      // ..
     }
-  ]
+  }
 }
 ```
+
+This is the Role's "Resource State". Alchemy uses this state file to determine when to Create, Update or Skip Resources. For example, if the inputs haven't changed since the last deployment, then it will be skipped. Otherwise, it will be updated.
 
 > [!TIP]
 > Alchemy goes to great effort to be fully transparent. Each Resource's state is just a JSON file, nothing more. You can inspect it, modify it, commit it to your repo, store it in a database, etc.
 
-## Resource "Scopes"
+## Resource Scope Tree
 
 Alchemy manages resources with a named tree of `Scope`s, similar to a file system tree. Each Scope has a name and contains named Resources and other (named) nested Scopes.
+
+### Application Scope
 
 The `alchemy` call from before (in your `alchemy.config.ts`) actually initiated the Alchemy Application Scope (aka. "Root Scope"):
 
@@ -161,46 +163,22 @@ To get a better understanding, notice how it has 1:1 correspondence with the `.a
       my-role.json # resource instance
 ```
 
-### `alchemy.run`
+### Stage Scope
 
-You can create nested scopes using the `alchemy.run` function. This will call your closure
+When you create an app, you can also specify a `stage`.
+
+Stage is just an opinionated Scope placed under the root useful as a convention for isolating "stages" such as `prod`, `dev`, `$USER`.
 
 ```ts
-await alchemy.run("nested", async () => {
-  await Worker("my-worker");
+await using app = alchemy("my-app", {
+  // scope: my-app/prod
+  stage: "prod",
 });
 ```
 
-Nested scopes are stored within their parent Scope's state folder:
+### Instance Scope
 
-```sh
-.alchemy/
-  my-app/ # app
-    prod/ # stage
-      nested/ # scope
-        my-worker.json # instance
-```
-
-> [!TIP]
-> Scopes can be nested arbitrarily.
-
-### Get the current Scope
-
-The current Scope is stored in `AsyncLocalStorage` and accessible by many means:
-
-```ts
-Scope.current; // will throw if not in a scope
-Scope.get(); // Scope | undefined
-await alchemy.run("nested", async (scope) => {
-  // scope is passed in as an argument
-});
-// create a Scope and bind to the current async context
-using scope = alchemy.scope("nested");
-```
-
-### Resource instances are Scopes
-
-Each Resource instance also has its own scope to isolated Resources created in its Lifecycle Handler:
+Each Resource instance has its own scope to isolate Resources created in its Lifecycle Handler:
 
 ```ts
 export const MyResource = Resource(
@@ -215,7 +193,7 @@ export const MyResource = Resource(
 );
 ```
 
-When I create an instance of `MyResource`, its nested resources will be scoped to the instance:
+When you create an instance of `MyResource`, its nested Resources will be scoped to the Resource Instance:
 
 ```ts
 await MyResource("instance");
@@ -231,13 +209,67 @@ await MyResource("instance");
         my-worker.json # instance
 ```
 
+### Nested Scopes
+
+Nested Scopes are stored within their parent Scope's state folder:
+
+```sh
+.alchemy/
+  my-app/ # app
+    prod/ # stage
+      nested/ # scope
+        my-worker.json # instance
+```
+
+> [!TIP]
+> Scopes can be nested arbitrarily.
+
+### `alchemy.scope`
+
+You can create and "enter" a Nested Scope synchronously in a function. This will create and set the current async context's Scope (using AsyncLocalStorage):
+
+```ts
+await using scope = alchemy.scope("nested");
+
+// resources created AFTER are placed in the "nested' Scope
+await Worker("my-worker");
+```
+
+### `alchemy.run`
+
+You can also create nested scopes using the `alchemy.run` function and a closure:
+
+```ts
+await alchemy.run("nested", async () => {
+  // resources created in here are isolated to the "nested' Scope
+  await Worker("my-worker");
+});
+
+// resources out here are placed in the "parent" SCope
+await Worker("my-worker");
+```
+
+### Get the current Scope
+
+The current Scope is stored in `AsyncLocalStorage` and accessible when needed:
+
+```ts
+Scope.current; // will throw if not in a scope
+Scope.get(); // Scope | undefined
+await alchemy.run("nested", async (scope) => {
+  // scope is passed in as an argument
+});
+// create a Scope and bind to the current async context
+using scope = alchemy.scope("nested");
+```
+
 ## Creating a Resource Provider
 
 Adding new resources is the whole point of Alchemy, and is therefore very simple.
 
 A Resource provider is just a function with a globally unique name, e.g. `dynamo::Table`, and an implementation of the Create, Update, Delete lifecycle operations.
 
-E.g. below we show what a simple `dynamo::Table` provider might look like.
+E.g. below is a skeleton of the `dynamo::Table` provider:
 
 > [!NOTE]
 > See [table.ts](./alchemy/src/aws/table.ts) for the full implementation.
@@ -278,7 +310,7 @@ export const Table = Resource(
 > [!TIP]
 > Use Cursor or an LLM like Claude/OpenAI to generate the implementation of your resource. I think you'll be pleasantly surprised at how well it works, especially if you provide the API reference docs in your context.
 
-That's it! Now you can instantiate tables in your app.
+That's it! Now you can instantiate tables.
 
 ```ts
 const table = await Table("items", {
@@ -289,9 +321,9 @@ const table = await Table("items", {
 table.tableArn; // string
 ```
 
-## `apply` and `destroy`
+## `destroy`
 
-Any object in your graph (`Resource` or `Promise<Resource>`) can be "applied" or "destroyed" individually and programmatically.
+Any `Resource` or `ResourcePromise` can be "destroyed" individually and programmatically.
 
 Say, you've got some two resources, a `Role` and a `Function`.
 
@@ -315,12 +347,8 @@ In this case we have `Role` (a 1-node graph, `Role`), and `Function` (a 2-node g
 Each sub-graph can be "applied" or "destroyed" individually using the `apply` and `destroy` functions:
 
 ```ts
-import { apply, destroy } from "alchemy";
+import { destroy } from "alchemy";
 
-// will create Role and then Function (in that order)
-const { functionArn } = await apply(func);
-
-// you can destroy it right after if you want ☠️
 await destroy(func); // will delete just the Function
 
 // destroy deletes the resource and any downstream dependencies
@@ -330,11 +358,11 @@ await destroy(role); // will delete Role and then Function
 
 ## Destroying the app
 
-To destroy the whole app (aka. the whole graph), you can call `alchemy` with the `mode: "destroy"` option. This will delete all resources in the specified or default stage.
+To destroy the whole app (aka. the whole graph), you can call `alchemy` with the `phase: "destroy"` option. This will delete all resources in the specified or default stage.
 
 ```ts
 await using _ = alchemy({
-  mode: "destroy",
+  phase: "destroy",
   // ..
 });
 ```
@@ -345,53 +373,12 @@ await using _ = alchemy({
 > ```ts
 > await using _ = alchemy({
 >   // decide the mode/stage however you want, e.g. a CLI parser
->   mode: process.argv[2] === "destroy" ? "destroy" : "up",
+>   phase: process.argv[2] === "destroy" ? "destroy" : "up",
 >   stage: process.argv[3],
 > });
 > ```
 
-## "Stage" and State
-
-> [!NOTE]
-> Stage is inspired by [SST](https://sst.dev)'s stage concept.
-
-Alchemy supports a "stage" concept to help isolate different environments from each other. E.g. a `"user"` or `"dev"` or `"prod"` stage.
-
-By default, the stage is assumed to be your user name (a sensible default for local development).
-
-To override the stage, you have three options:
-
-1. Pass the `stage` option to `alchemize`/`apply`/`destroy` (recommended)
-
-```ts
-// alchemize the entire app
-await alchemize({ stage: "production" });
-
-// apply a single resource
-await apply(func, { stage: "production" });
-```
-
-2. Config in `./alchemy.ts` (up to you if you want to have a global config). See the [alchemy.ts section](#global-values-and-the-alchemy-ts-config-file) for more details.
-
-```ts
-export default {
-  defaultStage: "production",
-};
-```
-
-3. Set the `ALCHEMY_STAGE` environment variable (not recommended, but available as an escape hatch)
-
-```sh
-ALCHEMY_STAGE=production bun ./my-app.ts
-```
-
-Each Resource "provider" can access the stage it's being deployed to via the `ctx.stage` property.
-
-```ts
-class Table extends Resource("dynamo::Table", async (ctx, inputs) => {
-  ctx.stage; // "production"
-});
-```
+## Physical Names
 
 > [!CAUTION]
 > It is up to you to ensure that the physical names of resources don't conflict - alchemy does not (yet) offer any help or opinions here. You must decide on physical names, but you're free to add name generation logic to your resources if you so desire.
@@ -403,21 +390,3 @@ class Table extends Resource("dynamo::Table", async (ctx, inputs) => {
 >   // ..
 > });
 > ```
-
-## Global values and the `alchemy.ts` config file.
-
-Alchemy looks for a `${cwd}/alchemy.ts` file and imports it if it finds it. This can be useful for emulating SST's `sst.config.ts` file as a convention for global configuration.
-
-It supports overriding the `defaultStage` (instead of defaulting to your username) and providing a custom `stateStore` (instead of writing to the local file system).
-
-```ts
-import type { Config } from "alchemy";
-
-export default {
-  defaultStage: "dev",
-  stateStore: myCustomStateStore,
-} satisfies Config;
-```
-
-> [!NOTE]
-> See [global.ts](./alchemy/src/global.ts).
