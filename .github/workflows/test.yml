@@ -37,9 +37,7 @@ jobs:
           aws-region: us-west-2
           
       - name: Run tests
-        # TODO: re-enable this once static site tests are fixed in CI
-        # run: bun test --timeout 120000
-        run: bun test --timeout 120000 ./alchemy/test/cloudflare/static-site.test.ts
+        run: bun test --timeout 120000
         env:
           CI: true
           BRANCH_PREFIX: pr-${{ github.ref_name }}
