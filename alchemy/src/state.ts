@@ -86,7 +86,12 @@ export class FileSystemStateStore implements StateStore {
         await this.getPath(key),
         "utf8",
       );
-      return (await deserialize(this.scope, JSON.parse(content))) as State;
+      try {
+        return (await deserialize(this.scope, JSON.parse(content))) as State;
+      } catch (error: any) {
+        console.error("Error deserializing state for", key, error);
+        throw error;
+      }
     } catch (error: any) {
       if (error.code === "ENOENT") {
         return undefined;
@@ -96,10 +101,15 @@ export class FileSystemStateStore implements StateStore {
   }
 
   async set(key: string, value: State): Promise<void> {
-    return fs.promises.writeFile(
-      await this.getPath(key),
-      JSON.stringify(await serialize(this.scope, value), null, 2),
-    );
+    try {
+      return fs.promises.writeFile(
+        await this.getPath(key),
+        JSON.stringify(await serialize(this.scope, value), null, 2),
+      );
+    } catch (error: any) {
+      console.error("Error serializing state for", key, error);
+      throw error;
+    }
   }
 
   async delete(key: string): Promise<void> {
