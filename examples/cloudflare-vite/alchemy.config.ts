@@ -10,7 +10,7 @@ import {
   Worker,
 } from "alchemy/cloudflare";
 
-await using _ = alchemy.scope({
+await using _ = alchemy({
   mode: process.argv.includes("--destroy") ? "destroy" : "up",
   quiet: process.argv.includes("--verbose") ? false : true,
 });

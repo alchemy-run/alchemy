@@ -6,23 +6,27 @@ import type { StateStoreType } from "./state";
 // TODO: support browser
 const DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
 
+function _alchemy(...parameters: Parameters<typeof scope>) {
+  return scope(...parameters);
+}
+_alchemy.destroy = destroy;
+_alchemy.run = run;
+_alchemy.scope = scope;
+_alchemy.secret = secret;
+
+// alchemy type is to semantically highlight `alchemy` as a type (keyword)
+export type alchemy = Alchemy;
+
+export const alchemy: Alchemy = _alchemy as any;
+
 // Alchemy is for module augmentation
 export interface Alchemy {
   scope: typeof scope;
   run: typeof run;
   destroy: typeof destroy;
   secret: typeof secret;
+  (...parameters: Parameters<typeof scope>): ReturnType<typeof scope>;
 }
-// alchemy is to semantically highlight `alchemy` as a type (keyword)
-export type alchemy = Alchemy;
-
-// @ts-ignore
-export const alchemy: Alchemy = {
-  destroy,
-  run,
-  scope,
-  secret,
-};
 
 export interface AlchemyOptions {
   /**

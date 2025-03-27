@@ -4,7 +4,7 @@ import { Bundle } from "alchemy/esbuild";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-await using _ = alchemy.scope({
+await using _ = alchemy({
   // decide the mode/stage however you want
   mode: process.argv[2] === "destroy" ? "destroy" : "up",
   stage: process.argv[3],
