@@ -9,6 +9,7 @@ import {
 const scopeStorage = new AsyncLocalStorage<Scope>();
 
 export type ScopeOptions = {
+  appName?: string;
   stage: string;
   parent?: Scope;
   scopeName?: string;
@@ -31,6 +32,7 @@ export class Scope {
   }
 
   public readonly resources = new Map<ResourceID, PendingResource>();
+  public readonly appName: string | undefined;
   public readonly stage: string;
   public readonly scopeName: string | null;
   public readonly parent: Scope | undefined;
@@ -39,6 +41,7 @@ export class Scope {
   public readonly quiet: boolean;
 
   constructor(options: ScopeOptions) {
+    this.appName = options.appName;
     this.stage = options.stage;
     this.scopeName = options.scopeName ?? null;
     this.parent = options.parent ?? Scope.get();
@@ -62,10 +65,12 @@ export class Scope {
   }
 
   public get chain(): string[] {
+    const thisScope = this.scopeName ? [this.scopeName] : [];
+    const app = this.appName ? [this.appName] : [];
     if (this.parent) {
-      return [...this.parent.chain, this.scopeName!];
+      return [...this.parent.chain, ...thisScope];
     } else {
-      return [this.stage, this.scopeName!];
+      return [...app, this.stage, ...thisScope];
     }
   }
 

@@ -3,8 +3,8 @@ import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
 import { GitHubSecret } from "./alchemy/src/github";
 
-await using _ = alchemy({
-  stage: "github:alchemy",
+await using _ = alchemy("github:alchemy", {
+  stage: "prod",
   mode: process.argv.includes("--destroy") ? "destroy" : "up",
   // pass the password in (you can get it from anywhere, e.g. stdin)
   password: process.env.SECRET_PASSPHRASE,

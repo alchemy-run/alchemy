@@ -6,8 +6,12 @@ import type { StateStoreType } from "./state";
 // TODO: support browser
 const DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
 
-function _alchemy(...parameters: Parameters<typeof scope>) {
-  return scope(...parameters);
+function _alchemy(appName: string, options: Omit<AlchemyOptions, "appName">) {
+  return scope(undefined, {
+    ...options,
+    appName,
+    stage: options.stage,
+  });
 }
 _alchemy.destroy = destroy;
 _alchemy.run = run;
@@ -29,6 +33,10 @@ export interface Alchemy {
 }
 
 export interface AlchemyOptions {
+  /**
+   * The name of the application.
+   */
+  appName?: string;
   /**
    * Determines whether the resources will be created/updated or deleted.
    *
@@ -74,23 +82,16 @@ export interface AlchemyOptions {
  * @returns
  */
 function scope(
-  ...args:
-    | [id?: string]
-    | [options: AlchemyOptions]
-    | [id: string | undefined, options?: AlchemyOptions]
+  id: string | undefined,
+  options?: AlchemyOptions,
   // TODO: maybe we want to allow using _ = await alchemy.scope(import.meta)
   // | [meta: ImportMeta]
 ): Scope {
-  const [scopeName, options] =
-    args.length === 2
-      ? args
-      : typeof args[0] === "string"
-        ? [args[0], args[1]]
-        : [DEFAULT_STAGE, args[0]];
   const scope = new Scope({
     ...options,
+    appName: options?.appName,
     stage: options?.stage ?? DEFAULT_STAGE,
-    scopeName,
+    scopeName: id,
     parent: options?.parent ?? Scope.get(),
   });
   scope.enter();
@@ -99,9 +100,7 @@ function scope(
 
 async function run<T>(
   ...args:
-    | [fn: (this: Scope, scope: Scope) => Promise<T>]
     | [id: string, fn: (this: Scope, scope: Scope) => Promise<T>]
-    | [options: AlchemyOptions, fn: (this: Scope, scope: Scope) => Promise<T>]
     | [
         id: string,
         options: AlchemyOptions,
@@ -109,19 +108,13 @@ async function run<T>(
       ]
 ): Promise<T> {
   const [id, options, fn] =
-    args.length === 3
-      ? [args[0], args[1], args[2]]
-      : args.length === 2
-        ? typeof args[0] === "string"
-          ? [args[0], undefined, args[1]]
-          : [undefined, args[0], args[1]]
-        : [undefined, undefined, args[0]];
-  await using scope = alchemy.scope(
-    id,
-    options ??
-      {
-        // TODO: defaults
-      },
-  );
+    typeof args[1] === "function"
+      ? [args[0], undefined, args[1]]
+      : (args as [
+          string,
+          AlchemyOptions | undefined,
+          (this: Scope, scope: Scope) => Promise<T>,
+        ]);
+  await using scope = alchemy.scope(id, options);
   return await fn.bind(scope)(scope);
 }

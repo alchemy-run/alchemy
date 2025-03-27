@@ -10,7 +10,7 @@ import {
   Worker,
 } from "alchemy/cloudflare";
 
-await using _ = alchemy({
+await using _ = alchemy("cloudflare-vite", {
   mode: process.argv.includes("--destroy") ? "destroy" : "up",
   quiet: process.argv.includes("--verbose") ? false : true,
 });
