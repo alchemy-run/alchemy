@@ -3,13 +3,16 @@ import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
 import { GitHubSecret } from "./alchemy/src/github";
 
-await using _ = alchemy("github:alchemy", {
+await using app = alchemy("github:alchemy", {
   stage: "prod",
-  mode: process.argv.includes("--destroy") ? "destroy" : "up",
   // pass the password in (you can get it from anywhere, e.g. stdin)
   password: process.env.SECRET_PASSPHRASE,
   quiet: process.argv.includes("--verbose") ? false : true,
 });
+
+if (process.argv.includes("--destroy")) {
+  await alchemy.destroy(app);
+}
 
 const accountId = await getAccountId();
 
