@@ -31,9 +31,17 @@ export async function apply<Out extends Resource>(
   if (state === undefined) {
     state = {
       kind: resource.Kind,
+      id: resource.ID,
+      fqn: resource.FQN,
       status: "creating",
       data: {},
-      output: undefined!,
+      output: {
+        ID: resource.ID,
+        FQN: resource.FQN,
+        Kind: resource.Kind,
+        Scope: scope,
+        Seq: resource.Seq,
+      },
       // deps: [...deps],
       props,
     };
@@ -104,6 +112,8 @@ export async function apply<Out extends Resource>(
 
   await scope.state.set(resource.ID, {
     kind: resource.Kind,
+    id: resource.ID,
+    fqn: resource.FQN,
     data: state.data,
     status: phase === "create" ? "created" : "updated",
     output,

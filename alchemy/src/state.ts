@@ -18,6 +18,8 @@ export interface State<
     | `deleting`
     | `deleted`;
   kind: Kind;
+  id: string;
+  fqn: string;
   data: Record<string, any>;
   // deps: string[];
   props: Props;
