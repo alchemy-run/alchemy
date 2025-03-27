@@ -12,7 +12,6 @@ import { BRANCH_PREFIX } from "../util";
 const test = alchemy.test(import.meta);
 
 describe("StaticSite Resource", () => {
-  const testId = `${BRANCH_PREFIX}-test-static-site`;
   let tempDir: string;
 
   // Create temp dir with test files
@@ -56,16 +55,16 @@ describe("StaticSite Resource", () => {
       // quiet: true,
     },
     async (scope) => {
-      const siteName = `${BRANCH_PREFIX}-${testId}`;
-      const site = await StaticSite(siteName, {
-        name: siteName,
-        dir: tempDir,
-        bundle: {
-          minify: false,
-        },
-      });
+      const siteName = `${BRANCH_PREFIX}-test-static-site`;
 
       try {
+        const site = await StaticSite(siteName, {
+          name: siteName,
+          dir: tempDir,
+          bundle: {
+            minify: false,
+          },
+        });
         expect(site.workerId).toBeTruthy();
         expect(site.assets.length).toBeGreaterThan(0);
 
@@ -130,7 +129,7 @@ describe("StaticSite Resource", () => {
       `,
     );
 
-    const siteName = `${BRANCH_PREFIX}-${testId}-with-backend`;
+    const siteName = `${BRANCH_PREFIX}-test-static-site-with-backend`;
 
     // Verify site and backend worker were created
     const api = await createCloudflareApi();
