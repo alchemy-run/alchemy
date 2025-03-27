@@ -87,10 +87,6 @@ describe("serde", () => {
     const serialized = await serialize(scope, complexObj);
     const deserialized = await deserialize(scope, serialized);
 
-    console.log(complexObj.settings.tokens);
-    console.log(serialized.settings.tokens);
-    console.log(deserialized.settings.tokens);
-
     // Verify structure
     expect(deserialized).toHaveProperty("name", "test");
     expect(deserialized.credentials.username).toBe("user");

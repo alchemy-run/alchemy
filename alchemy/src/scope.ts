@@ -41,13 +41,18 @@ export class Scope {
   constructor(options: ScopeOptions) {
     this.stage = options.stage;
     this.scopeName = options.scopeName ?? null;
-    this.parent = options.parent;
-    this.quiet = options.quiet ?? false;
+    this.parent = options.parent ?? Scope.get();
+    this.quiet = options.quiet ?? this.parent?.quiet ?? false;
     if (this.parent && !this.scopeName) {
       throw new Error("Scope name is required when creating a child scope");
     }
     this.password = options.password;
     this.state = new (options.stateStore ?? FileSystemStateStore)(this);
+  }
+
+  public async delete(resourceID: ResourceID) {
+    await this.state.delete(resourceID);
+    this.resources.delete(resourceID);
   }
 
   private _seq = 0;
