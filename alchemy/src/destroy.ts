@@ -51,6 +51,7 @@ export async function destroy<Type extends string>(
 
   const Provider: Provider<Type> | undefined = PROVIDERS.get(instance.Kind);
   if (!Provider) {
+    console.log(instance);
     throw new Error(
       `Cannot destroy resource type ${instance.Kind} - no provider found. You may need to import the provider in your alchemy.config.ts.`,
     );
