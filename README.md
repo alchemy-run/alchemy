@@ -140,11 +140,14 @@ This is the Role's Resource State File. Alchemy uses this to determine when to C
 > [!TIP]
 > Alchemy goes to great effort to be fully transparent. Each Resource's state is just a JSON file, nothing more. You can inspect it, modify it, commit it to your repo, store it in a database, etc.
 
-## Create a Resource Provider
+## "Custom" Resources
 
 Adding new Resources is the whole point of Alchemy, and is therefore very simple.
 
 A Resource provider is just a function with a globally unique name, e.g. `dynamo::Table`, and an implementation of the Create, Update, Delete lifecycle operations.
+
+> [!TIP]
+> All Resources in Alchemy are Custom. There is no difference between "first party" and "third party" resource providers.
 
 E.g. below is a skeleton of the `dynamo::Table` provider:
 
