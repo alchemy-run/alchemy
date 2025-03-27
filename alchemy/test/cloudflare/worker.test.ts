@@ -19,19 +19,6 @@ async function assertWorkerDoesNotExist(workerName: string) {
 }
 
 describe("Worker Resource", () => {
-  // Use a fixed name for the test worker
-  const testName = `${BRANCH_PREFIX}-test-worker`;
-  const esmTestName = `${BRANCH_PREFIX}-test-worker-esm`;
-  const formatConversionTestName = `${BRANCH_PREFIX}-test-worker-format-conversion`;
-  const doBindingTestName = `${BRANCH_PREFIX}-test-worker-do-binding`;
-  const kvBindingTestName = `${BRANCH_PREFIX}-test-worker-kv-binding`;
-  const multiBindingsTestName = `${BRANCH_PREFIX}-test-worker-multi-bindings`;
-  const envVarsTestName = `${BRANCH_PREFIX}-test-worker-env-vars`;
-  const r2BindingTestName = `${BRANCH_PREFIX}-test-worker-r2-binding`;
-
-  // Add a new test name for DO migration
-  const doMigrationTestName = `${BRANCH_PREFIX}-test-worker-do-migration`;
-
   // Sample worker script (CJS style)
   const workerScript = `
     addEventListener('fetch', event => {
@@ -242,12 +229,12 @@ describe("Worker Resource", () => {
   `;
 
   test("create, update, and delete worker (CJS format)", async (scope) => {
-    const workerName = `${BRANCH_PREFIX}-${testName}-cjs-1`;
+    const workerName = `${BRANCH_PREFIX}-test-worker-cjs-1`;
 
     let worker: Worker | undefined = undefined;
     try {
       // Create a worker with an explicit name
-      worker = await Worker(testName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: workerScript,
         format: "cjs",
@@ -265,7 +252,7 @@ describe("Worker Resource", () => {
         });
       `;
 
-      worker = await Worker(testName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: updatedScript,
         format: "cjs",
@@ -279,12 +266,12 @@ describe("Worker Resource", () => {
   });
 
   test("create, update, and delete worker (ESM format)", async (scope) => {
-    const workerName = `${BRANCH_PREFIX}-${esmTestName}-esm-1`;
+    const workerName = `${BRANCH_PREFIX}-test-worker-esm-1`;
 
     let worker: Worker | undefined = undefined;
     try {
       // Create a worker with ESM format
-      worker = await Worker(esmTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: esmWorkerScript,
         format: "esm", // Explicitly using ESM
@@ -304,7 +291,7 @@ describe("Worker Resource", () => {
         };
       `;
 
-      worker = await Worker(esmTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: updatedEsmScript,
         format: "esm",
@@ -318,12 +305,12 @@ describe("Worker Resource", () => {
   });
 
   test("convert between ESM and CJS formats", async (scope) => {
-    const workerName = `${formatConversionTestName}-convert-1`;
+    const workerName = `${BRANCH_PREFIX}-test-worker-format-conversion-convert-1`;
 
     let worker: Worker | undefined = undefined;
     try {
       // First create with ESM format
-      worker = await Worker(formatConversionTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: esmWorkerScript,
         format: "esm",
@@ -332,7 +319,7 @@ describe("Worker Resource", () => {
       expect(worker.format).toEqual("esm");
 
       // Update to CJS format
-      worker = await Worker(formatConversionTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: workerScript,
         format: "cjs",
@@ -340,7 +327,7 @@ describe("Worker Resource", () => {
       expect(worker.format).toEqual("cjs");
 
       // Update back to ESM format
-      worker = await Worker(formatConversionTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: esmWorkerScript,
         format: "esm",
@@ -379,12 +366,12 @@ describe("Worker Resource", () => {
   });
 
   test("create and delete worker with Durable Object binding", async (scope) => {
-    const workerName = `${doBindingTestName}-do-1`;
+    const workerName = `${BRANCH_PREFIX}-test-worker-do-binding-do-1`;
 
     let worker: Worker | undefined = undefined;
     try {
       // First create the worker without the DO binding
-      worker = await Worker(doBindingTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: durableObjectWorkerScript,
         format: "esm",
@@ -405,7 +392,7 @@ describe("Worker Resource", () => {
       );
 
       // Update the worker with the DO binding
-      worker = await Worker(doBindingTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: durableObjectWorkerScript,
         format: "esm",
@@ -424,7 +411,7 @@ describe("Worker Resource", () => {
   });
 
   test("create and delete worker with KV Namespace binding", async (scope) => {
-    const workerName = `${kvBindingTestName}-kv-1`;
+    const workerName = `${BRANCH_PREFIX}-test-worker-kv-binding-kv-1`;
 
     let worker: Worker | undefined = undefined;
     let testKv: KVNamespace | undefined = undefined;
@@ -441,7 +428,7 @@ describe("Worker Resource", () => {
       });
 
       // Create a worker with the KV Namespace binding
-      worker = await Worker(kvBindingTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: kvWorkerScript,
         format: "esm",
@@ -459,7 +446,7 @@ describe("Worker Resource", () => {
   });
 
   test("create and delete worker with multiple bindings", async (scope) => {
-    const workerName = `${multiBindingsTestName}-multi-1`;
+    const workerName = `${BRANCH_PREFIX}-test-worker-multi-bindings-multi-1`;
 
     // Create a Durable Object namespace
     const counterNamespace = new DurableObjectNamespace(
@@ -485,7 +472,7 @@ describe("Worker Resource", () => {
 
     try {
       // First create the worker without bindings
-      worker = await Worker(multiBindingsTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: multiBindingsWorkerScript,
         format: "esm",
@@ -495,7 +482,7 @@ describe("Worker Resource", () => {
       expect(worker.name).toEqual(workerName);
 
       // Update the worker with all bindings
-      worker = await Worker(multiBindingsTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: multiBindingsWorkerScript,
         format: "esm",
@@ -517,11 +504,11 @@ describe("Worker Resource", () => {
 
   // Add a new test for environment variables
   test("create and test worker with environment variables", async (scope) => {
-    const workerName = `${envVarsTestName}-env-1`;
+    const workerName = `${BRANCH_PREFIX}-test-worker-env-vars-env-1`;
     let worker: Worker | undefined = undefined;
     try {
       // Create a worker with environment variables
-      worker = await Worker(envVarsTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: envVarsWorkerScript,
         format: "esm",
@@ -558,7 +545,7 @@ describe("Worker Resource", () => {
       }
 
       // Update the worker with different environment variables
-      worker = await Worker(envVarsTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: envVarsWorkerScript,
         format: "esm",
@@ -607,11 +594,11 @@ describe("Worker Resource", () => {
   });
 
   test("migrate durable object by renaming class", async (scope) => {
-    const workerName = `${doMigrationTestName}-migrate-1`;
+    const workerName = `${BRANCH_PREFIX}-test-worker-do-migration-migrate-1`;
     let worker: Worker | undefined = undefined;
     try {
       // First create the worker with the original Counter class
-      worker = await Worker(doMigrationTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: doMigrationWorkerScriptV1,
         format: "esm",
@@ -631,7 +618,7 @@ describe("Worker Resource", () => {
       );
 
       // Update worker with the original Counter binding
-      worker = await Worker(doMigrationTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: doMigrationWorkerScriptV1,
         format: "esm",
@@ -652,7 +639,7 @@ describe("Worker Resource", () => {
       );
 
       // Update worker with the migrated binding
-      worker = await Worker(doMigrationTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: doMigrationWorkerScriptV2,
         format: "esm",
@@ -669,14 +656,12 @@ describe("Worker Resource", () => {
   });
 
   test("add environment variables to worker with durable object", async (scope) => {
-    // Add a new test name for DO with env vars
-    const doWithEnvVarsTestName = `${BRANCH_PREFIX}-test-worker-do-with-env`;
-    const workerName = `${doWithEnvVarsTestName}-doenv-1`;
+    const workerName = `${BRANCH_PREFIX}-test-worker-do-with-env-doenv-1`;
 
     let worker: Worker | undefined = undefined;
     try {
       // First create a worker with a Durable Object but no env vars
-      worker = await Worker(doWithEnvVarsTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: durableObjectWorkerScript,
         format: "esm",
@@ -695,7 +680,7 @@ describe("Worker Resource", () => {
       );
 
       // Update the worker with the DO binding
-      worker = await Worker(doWithEnvVarsTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: durableObjectWorkerScript,
         format: "esm",
@@ -709,7 +694,7 @@ describe("Worker Resource", () => {
       expect(worker.env).toBeUndefined();
 
       // Now update the worker by adding environment variables
-      worker = await Worker(doWithEnvVarsTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: durableObjectWorkerScript,
         format: "esm",
@@ -733,7 +718,7 @@ describe("Worker Resource", () => {
   });
 
   test("create and delete worker with R2 bucket binding", async (scope) => {
-    const workerName = `${r2BindingTestName}-r2-1`;
+    const workerName = `${BRANCH_PREFIX}-test-worker-r2-binding-r2-1`;
 
     // Create a test R2 bucket
     let testBucket: R2Bucket | undefined;
@@ -747,7 +732,7 @@ describe("Worker Resource", () => {
       });
 
       // Create a worker with the R2 bucket binding
-      worker = await Worker(r2BindingTestName, {
+      worker = await Worker(workerName, {
         name: workerName,
         script: r2WorkerScript,
         format: "esm",

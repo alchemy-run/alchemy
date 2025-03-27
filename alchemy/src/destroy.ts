@@ -119,7 +119,7 @@ export async function destroy<Type extends string>(
 export namespace destroy {
   export async function all(resources: Resource[], options?: DestroyOptions) {
     if (options?.strategy !== "parallel") {
-      for (const resource of resources.sort((a, b) => a.Seq - b.Seq)) {
+      for (const resource of resources.sort((a, b) => b.Seq - a.Seq)) {
         await destroy(resource);
       }
     } else {

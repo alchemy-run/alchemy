@@ -4,6 +4,7 @@ import { Bundle, type BundleProps } from "../esbuild/bundle";
 import { Resource } from "../resource";
 import { isSecret } from "../secret";
 import { withExponentialBackoff } from "../util/retry";
+import { slugify } from "../util/slugify";
 import { type CloudflareApi, createCloudflareApi } from "./api";
 import {
   type Bindings,
@@ -385,7 +386,8 @@ async function prepareWorkerMetadata<B extends Bindings>(
     observability: {
       enabled: props.observability?.enabled !== false,
     },
-    tags: [`alchemy:id:${ctx.fqn}`],
+    // TODO(sam): base64 encode instead? 0 collision risk vs readability.
+    tags: [`alchemy:id:${slugify(ctx.fqn)}`],
     migrations: {
       new_classes: props.migrations?.new_classes ?? [],
       deleted_classes: props.migrations?.deleted_classes ?? [],
@@ -515,7 +517,7 @@ async function assertWorkerDoesNotExist<B extends Bindings>(
 
     if (
       metadata.default_environment?.script.tags.includes(
-        `alchemy:id:${ctx.fqn}`,
+        `alchemy:id:${slugify(ctx.fqn)}`,
       )
     ) {
       return true;
