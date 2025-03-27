@@ -20,8 +20,8 @@ Unlike similar tools like Pulumi, Terraform, and CloudFormation, Alchemy is impl
 
 # Examples
 
-- CloudFlare ViteJS Website + API Backend with Durable Objects: [examples/cloudflare-vite/](./examples/cloudflare-vite/)
-- Deploy an AWS Lambda Function with a DynamoDB Table and IAM Role: [examples/aws-app/](./examples/aws-app/)
+- CloudFlare ViteJS Website + API Backend with Durable Objects: [examples/cloudflare-vite/](./examples/cloudflare-vite/alchemy.config.ts)
+- Deploy an AWS Lambda Function with a DynamoDB Table and IAM Role: [examples/aws-app/](./examples/aws-app/alchemy.config.ts)
 
 # Getting Started
 
@@ -32,7 +32,7 @@ An alchemy "app" (if you want to call it that) is just an ordinary TypeScript or
 bun add alchemy
 ```
 
-Usually, you'll want to create an `alchemy.config.ts` script where you'll define your initial resources.
+Usually, you'll want to create an `alchemy.config.ts` script and then define your Resources.
 
 > [!TIP]
 > The `alchemy.config.ts` file is just a convention, not a requirement.
@@ -58,11 +58,9 @@ await using app = alchemy("my-app", {
 ```
 
 > [!NOTE]
-> Alchemy makes use of Async Disposables (the `await using _` syntax) to execute finalization logic at the end of your script.
->
-> See the [ECMAScript Explicit Resource Management](https://github.com/tc39/proposal-explicit-resource-management) RFC to learn more about Async Disposables.
+> Alchemy makes use of Async Disposables (the `await using _` syntax) to execute finalization logic at the end of your script. See the [ECMAScript Explicit Resource Management](https://github.com/tc39/proposal-explicit-resource-management) RFC to learn more about Async Disposables.
 
-Now that our app is initialized, we can start creating Resources. For example, an AWS IAM Role:
+Now that our app is initialized, we can start creating Resources, e.g. an AWS IAM Role:
 
 ```ts
 import { Role } from "alchemy/aws";
@@ -87,7 +85,7 @@ Notice how the `Role` is created by an `await Role(..)` function call.
 In contrast to other IaC frameworks, Alchemy models Resources as memoized async functions that can be executed in any async environment - including the browser, serverless functions and durable workflows.
 
 A nice benefit of async-await is how easy it becomes to access physical properties (otherwise known as "Stack Outputs").
-E.g. you can just log the role name:
+You can just log the role name (crazy concept, right?):
 
 ```ts
 console.log({
@@ -112,7 +110,7 @@ You'll notice some files show up in `.alchemy/`:
       - my-role.json
 ```
 
-These are called the State files. Go ahead, click on one and take a look. Here's how my `my-role.json` looks:
+These are called the State files. Go ahead, click on one and take a look, here's how my `my-role.json` looks:
 
 ```jsonc
 {
@@ -134,16 +132,17 @@ These are called the State files. Go ahead, click on one and take a look. Here's
 }
 ```
 
-This is the Role's "Resource State". Alchemy uses this state file to determine when to Create, Update or Skip Resources.
+This is the Role's Resource State File. Alchemy uses this to determine when to Create, Update or Skip a Resource.For example, if the inputs haven't changed since the last deployment, then it will be skipped, otherwise it will be updated. If the Resource no longer exists in the program (aka. is an orphan), then it will be deleted.
 
-For example, if the inputs haven't changed since the last deployment, then it will be skipped, otherwise it will be updated.
+> [!TIP]
+> If you ever run into a problem with a Resource, this is the file to inspect, edit or delete.
 
 > [!TIP]
 > Alchemy goes to great effort to be fully transparent. Each Resource's state is just a JSON file, nothing more. You can inspect it, modify it, commit it to your repo, store it in a database, etc.
 
 ## Create a Resource Provider
 
-Adding new resources is the whole point of Alchemy, and is therefore very simple.
+Adding new Resources is the whole point of Alchemy, and is therefore very simple.
 
 A Resource provider is just a function with a globally unique name, e.g. `dynamo::Table`, and an implementation of the Create, Update, Delete lifecycle operations.
 
@@ -167,23 +166,42 @@ export interface Table extends Resource<"dynamo::Table"> {
 export const Table = Resource(
   "dynamo::Table",
   async function (
+    // the resource context (phase, previous state, etc.) is made available as the bound `this` param
     this: Context<TableOutput>,
+    // the resource's ID (unique within the current Scope)
     id: string,
-    inputs: TableInputs
+    // the resource input properties
+    props: TableInputs
   ): Promise<Table> {
+    // this function implement the CRUD resource lifecycle for an instance of this Resource
+
     if (this.phase === "create") {
-      // create logic
+      // (create logic)
     } else if (this.phase === "update") {
-      // update logic
+      // (update logic)
     } else if (this.phase === "delete") {
-      // delete logic
+      // (delete logic)
+
+      // terminate the delete process early
       return this.destroy();
     }
     // return the created/updated resource properties
-    return this(output);
+    return this(props);
   }
 );
 ```
+
+<details>
+  <summary>Nitty gritty details on this pattern's design and oddities</summary>
+I call this pattern the "pseudo class", designed to model a Resource with a CRUD lifecycle implemented with memoized async functions.
+
+The `this` parameter in this "pseudo class" serves many purposes:
+
+1. contains the resource' `phase` (`create`, `update`, `delete`)
+2. contains the resource's current state and previous props (`this.props`, `this.fqn`, `this.stage`, `this.scope`)
+3. provides a handle to destroy the resource (`this.destroy`)
+4. provides a factory for constructing the resource object (`this({..}`) - you can think of this as emulating `super({..})`
+</details>
 
 > [!TIP]
 > Use Cursor or an LLM like Claude/OpenAI to generate the implementation of your resource. I think you'll be pleasantly surprised at how well it works, especially if you provide the API reference docs in your context.
