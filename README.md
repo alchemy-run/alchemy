@@ -107,7 +107,9 @@ You'll notice some files show up in `.alchemy/`:
       my-role.json
 ```
 
-These are called the State files. Go ahead, click on one and take a look, here's how my `my-role.json` looks:
+These are called the "state files".
+
+Go ahead, click on one and take a look - here's how my `my-role.json` looks:
 
 ```jsonc
 {
@@ -129,10 +131,12 @@ These are called the State files. Go ahead, click on one and take a look, here's
 }
 ```
 
-This is the Role's state that Alchemy uses to determine when to Create, Update, Delete or Skip:
+Alchemy uses state to determine when to Create, Update, Delete or Skip Resources at runtime:
 
-1. If the inputs haven't changed since the last deployment, then it will be skipped, otherwise it will be updated
-2. If the Resource no longer exists in the program (aka. is an orphan), then it will be deleted.
+1. If the resource doesn't have a prior state, it will be `created`
+1. If the inputs haven't changed since the last deployment, then it will be `skipped`,
+1. If the inputs have changed, it will be `updated`
+1. If the Resource no longer exists in the program (aka. is an orphan), then it will be `deleted`.
 
 > [!TIP]
 > Alchemy goes to great effort to be fully transparent. Each Resource's state is just a JSON file, nothing more. You can inspect it, modify it, commit it to your repo, store it in a database, etc.
@@ -143,14 +147,14 @@ Adding new Resources is the whole point of Alchemy, and is therefore very simple
 
 A Resource provider is just a function with a globally unique name, e.g. `dynamo::Table`, and an implementation of the Create, Update, Delete lifecycle operations.
 
-Below is an illustrative example of the `dynamo::Table` provider:
+Below is an illustrative example of the `dynamo::Table` provider.
 
 > [!NOTE]
 > See [table.ts](./alchemy/src/aws/table.ts) for the full implementation.
 
-All Resources follow the same templated structure:
+All Resources follow the same templated structure/convention:
 
-1. an interface for the Resource's (Input) Properties
+1. an interface (or type) for the Resource's (Input) Properties
 
 ```ts
 // a type to represent the Resource's input properties
@@ -215,7 +219,7 @@ The `this` parameter in this "pseudo class" serves many purposes:
 > [!TIP]
 > Use Cursor or an LLM like Claude/OpenAI to generate the implementation of your resource. I think you'll be pleasantly surprised at how well it works, especially if you provide the API reference docs in your context.
 
-That's it! Now you can instantiate tables.
+That's it! Now you can instantiate DynamoDB Tables:
 
 ```ts
 const table = await Table("items", {
@@ -224,6 +228,47 @@ const table = await Table("items", {
 });
 
 table.tableArn; // string
+```
+
+## Secrets
+
+Recall that the `alchemy` function accepts a `password` property:
+
+```ts
+await using app = alchemy("my-app", {
+  // password for encrypting/decrypting secrets stored in state
+  password: process.env.SECRET_PASSPHRASE,
+});
+```
+
+This password is used to encrypt and decrypt secret data within an Alchemy state:
+
+```ts
+const OPENAI_API_KEY = alchemy.secret(process.env.OPENAI_API_KEY);
+```
+
+Now, I can pass this secret to a Resource safely:
+
+```ts
+await Worker("my-func", {
+  bindings: {
+    OPENAI_API_KEY,
+  },
+});
+```
+
+In our `.alchemy/` state, the property will be encrypted instead of plain text:
+
+```json
+{
+  "props": {
+    "bindings": {
+      "OPENAI_API_KEY": {
+        "@secret": "Tgz3e/WAscu4U1oanm5S4YXH..."
+      }
+    }
+  }
+}
 ```
 
 ## Resource Scope Tree
