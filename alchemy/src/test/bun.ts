@@ -20,7 +20,7 @@ export interface TestOptions {
   password?: string;
 }
 
-const globalTestScope = await alchemy.scope("test");
+const globalTestScope = alchemy.scope("test");
 
 type test = {
   (name: string, fn: (scope: Scope) => Promise<any>, timeout?: number): void;

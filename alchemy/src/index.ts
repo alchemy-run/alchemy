@@ -1,5 +1,4 @@
 export type * from "./context";
-export * from "./global";
 export * from "./resource";
 export * from "./secret";
 export * from "./state";
