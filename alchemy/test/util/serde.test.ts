@@ -98,4 +98,14 @@ describe("serde", () => {
     expect(deserialized.settings.tokens[0].unencrypted).toBe("token1");
     expect(deserialized.settings.tokens[1].unencrypted).toBe("token2");
   });
+
+  test("props", async (scope) => {
+    const props = {
+      name: "alchemy.run",
+      type: "full",
+    };
+
+    const serialized = await serialize(scope, props);
+    console.log(serialized);
+  });
 });

@@ -15,6 +15,7 @@
     "./esbuild": "./lib/esbuild/index.js",
     "./fs": "./lib/fs/index.js",
     "./github": "./lib/github/index.js",
+    "./project": "./lib/project/index.js",
     "./stripe": "./lib/stripe/index.js",
     "./test/bun": "./lib/test/bun.js"
   },

@@ -1,8 +1,10 @@
 import alchemy from "./alchemy/src";
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
-import { Zone } from "./alchemy/src/cloudflare/zone";
+import { Zone } from "./alchemy/src/cloudflare";
 import { GitHubSecret } from "./alchemy/src/github";
+import { ViteProject } from "./alchemy/src/project";
+ViteProject;
 
 await using _ = alchemy("github:alchemy", {
   stage: "prod",
@@ -12,10 +14,19 @@ await using _ = alchemy("github:alchemy", {
   quiet: process.argv.includes("--verbose") ? false : true,
 });
 
+const webPackage = await ViteProject("alchemy.run package", {
+  name: "alchemy.run",
+  template: "react-ts",
+  extends: "../tsconfig.base.json",
+  references: ["../alchemy/tsconfig.json"],
+});
+
 const zone = await Zone("alchemy.run", {
   name: "alchemy.run",
   type: "full",
 });
+
+console.log("nameservers:", zone.nameservers);
 
 const accountId = await getAccountId();
 
