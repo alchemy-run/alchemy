@@ -17,5 +17,9 @@
     "@types/bun": "latest",
     "@types/node": "latest",
     "typescript": "latest"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.0.17",
+    "tailwindcss": "^4.0.17"
   }
 }

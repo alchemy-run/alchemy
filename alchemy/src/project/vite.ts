@@ -1,9 +1,10 @@
 import { exec } from "child_process";
-import fs, { rm } from "fs/promises";
+import fs from "fs/promises";
 import path from "path";
 import { promisify } from "util";
 import type { Context } from "../context";
 import { Resource } from "../resource";
+import { rm } from "../util/rm";
 const execAsync = promisify(exec);
 
 type ViteTemplate =
@@ -43,6 +44,16 @@ export interface ViteProjectProps {
    * The references to add to the tsconfig.json file
    */
   references?: string[];
+  /**
+   * @default false
+   */
+  tailwind?: boolean;
+  /**
+   * Force overwrite the project config tfiles during the update phase
+   *
+   * @default false
+   */
+  overwrite?: boolean;
 }
 
 export interface ViteProject extends ViteProjectProps, Resource {
@@ -62,7 +73,7 @@ export const ViteProject = Resource(
     if (this.phase === "delete") {
       try {
         if (await fs.exists(props.name)) {
-          await rm(props.name, { recursive: true, force: true });
+          await fs.rm(props.name, { recursive: true, force: true });
         }
       } catch (error) {
         console.error(`Error deleting project ${id}:`, error);
@@ -71,41 +82,68 @@ export const ViteProject = Resource(
     }
 
     if (this.phase === "update") {
-      console.warn(
-        "ViteProject does not support updates - the project must be recreated to change the template",
-      );
+      if (props.overwrite) {
+        await modifyConfig(props);
+      } else {
+        console.warn(
+          "ViteProject does not support updates - the project must be recreated to change the template",
+        );
+      }
     } else {
       // Create phase
       await execAsync(`bun create vite ${id} --template ${props.template}`);
 
-      await Promise.all([
-        fs.rm(path.join(props.name, "tsconfig.app.json")),
-        fs.rm(path.join(props.name, "tsconfig.node.json")),
-        fs.writeFile(
-          path.join(props.name, "tsconfig.json"),
-          JSON.stringify(
-            {
-              extends: props.extends,
-              compilerOptions: {
-                types: ["@cloudflare/workers-types"],
-                allowImportingTsExtensions: true,
-                jsx: "react-jsx",
-              },
-              include: [
-                "vite/*.ts",
-                "src/**/*.ts",
-                "src/**/*.tsx",
-                "src/env.d.ts",
-              ],
-              references: props.references?.map((path) => ({ path })),
-            },
-            null,
-            2,
-          ),
-        ),
-      ]);
+      await modifyConfig(props);
     }
 
     return this(props);
   },
 );
+
+async function modifyConfig(props: ViteProjectProps) {
+  if (props.tailwind) {
+    await execAsync(`bun add tailwindcss @tailwindcss/vite`);
+
+    await fs.writeFile(
+      path.join(props.name, "vite.config.ts"),
+      `import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+
+// https://vite.dev/config/
+export default defineConfig({
+plugins: [react(), tailwindcss()],
+});`,
+    );
+
+    // Add Tailwind CSS import to index.css
+    const indexCssPath = path.join(props.name, "src", "index.css");
+    const currentCss = await fs.readFile(indexCssPath, "utf-8");
+    await fs.writeFile(
+      indexCssPath,
+      currentCss + '\n\n@import "tailwindcss";\n',
+    );
+  }
+
+  await Promise.all([
+    rm(path.join(props.name, "tsconfig.app.json")),
+    rm(path.join(props.name, "tsconfig.node.json")),
+    fs.writeFile(
+      path.join(props.name, "tsconfig.json"),
+      JSON.stringify(
+        {
+          extends: props.extends,
+          compilerOptions: {
+            types: ["@cloudflare/workers-types"],
+            allowImportingTsExtensions: true,
+            jsx: "react-jsx",
+          },
+          include: ["vite/*.ts", "src/**/*.ts", "src/**/*.tsx", "src/env.d.ts"],
+          references: props.references?.map((path) => ({ path })),
+        },
+        null,
+        2,
+      ),
+    ),
+  ]);
+}

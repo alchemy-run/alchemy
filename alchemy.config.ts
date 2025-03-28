@@ -14,11 +14,13 @@ await using _ = alchemy("github:alchemy", {
   quiet: process.argv.includes("--verbose") ? false : true,
 });
 
-const webPackage = await ViteProject("alchemy.run package", {
+await ViteProject("alchemy.run package", {
   name: "alchemy.run",
   template: "react-ts",
   extends: "../tsconfig.base.json",
   references: ["../alchemy/tsconfig.json"],
+  tailwind: true,
+  overwrite: true,
 });
 
 const zone = await Zone("alchemy.run", {
