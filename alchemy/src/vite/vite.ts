@@ -4,8 +4,8 @@ import path from "path";
 import { promisify } from "util";
 import type { Context } from "../context";
 import { Resource } from "../resource";
+import { ShadcnComponent } from "../shadcn/component";
 import { rm } from "../util/rm";
-import { ShadcnComponent } from "./shadcn/component";
 
 const execAsync = promisify(exec);
 

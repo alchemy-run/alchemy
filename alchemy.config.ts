@@ -4,13 +4,13 @@ import alchemy from "./alchemy/src";
 import "./alchemy/src/aws";
 import "./alchemy/src/aws/oidc";
 import "./alchemy/src/cloudflare";
-import "./alchemy/src/project";
+import "./alchemy/src/vite";
 
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
 import { StaticSite, Zone } from "./alchemy/src/cloudflare";
 import { GitHubSecret } from "./alchemy/src/github";
-import { ViteProject } from "./alchemy/src/project";
+import { ViteProject } from "./alchemy/src/vite";
 
 await using _ = alchemy("github:alchemy", {
   stage: "prod",

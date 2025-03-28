@@ -15,9 +15,10 @@
     "./esbuild": "./lib/esbuild/index.js",
     "./fs": "./lib/fs/index.js",
     "./github": "./lib/github/index.js",
-    "./project": "./lib/project/index.js",
+    "./shadcn": "./lib/shadcn/index.js",
     "./stripe": "./lib/stripe/index.js",
-    "./test/bun": "./lib/test/bun.js"
+    "./test/bun": "./lib/test/bun.js",
+    "./vite": "./lib/vite/index.js"
   },
   "peerDependencies": {
     "@ai-sdk/openai": "^1.1.9",

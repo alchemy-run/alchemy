@@ -2,8 +2,8 @@ import { exec } from "child_process";
 import fs from "fs/promises";
 import path from "path";
 import { promisify } from "util";
-import type { Context } from "../../context";
-import { Resource } from "../../resource";
+import type { Context } from "../context";
+import { Resource } from "../resource";
 
 const execAsync = promisify(exec);
 
