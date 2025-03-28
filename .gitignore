@@ -179,7 +179,8 @@ dist
 .out/
 alchemy/README.md
 
-lib/
+/lib/
+/alchemy/lib/
 .test
 
 node_modules

@@ -34,6 +34,11 @@ await ViteProject("alchemy.run package", {
   references: ["../alchemy/tsconfig.json"],
   tailwind: true,
   tanstack: true,
+  shadcn: {
+    baseColor: "neutral",
+    force: true,
+    components: ["button", "card", "input", "label", "sheet", "table", "tabs"],
+  },
   overwrite: true,
 });
 

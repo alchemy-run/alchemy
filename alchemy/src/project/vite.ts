@@ -5,6 +5,7 @@ import { promisify } from "util";
 import type { Context } from "../context";
 import { Resource } from "../resource";
 import { rm } from "../util/rm";
+import { ShadcnComponent } from "./shadcn/component";
 
 const execAsync = promisify(exec);
 
@@ -46,14 +47,66 @@ export interface ViteProjectProps {
    */
   references?: string[];
   /**
+   * Add Tailwind CSS to the project
    * @default false
    */
   tailwind?: boolean;
   /**
-   * Whether to add Tanstack Router to the project
+   * Add Tanstack Router to the project
    * @default false
    */
   tanstack?: boolean;
+  /**
+   * Add Shadcn UI to the project
+   * @default false
+   */
+  shadcn?: {
+    /**
+     * The base color to use
+     * @default "neutral"
+     */
+    baseColor?: "neutral" | "gray" | "zinc" | "stone" | "slate";
+    /**
+     * Use default configuration
+     * @default false
+     */
+    defaults?: boolean;
+
+    /**
+     * Force overwrite of existing configuration
+     * @default false
+     */
+    force?: boolean;
+
+    /**
+     * The working directory
+     * @default current directory
+     */
+    cwd?: string;
+
+    /**
+     * Mute output
+     * @default false
+     */
+    silent?: boolean;
+
+    /**
+     * Use the src directory when creating a new project
+     * @default false
+     */
+    srcDir?: boolean;
+
+    /**
+     * Use css variables for theming
+     * @default true
+     */
+    cssVariables?: boolean;
+
+    /**
+     * The components to add
+     */
+    components?: string[];
+  };
   /**
    * Force overwrite the project config files during the update phase
    *
@@ -137,6 +190,10 @@ export const ViteProject = Resource(
         await installTanstack();
       }
 
+      if (props.shadcn !== undefined) {
+        await installShadcn();
+      }
+
       await build();
 
       async function build() {
@@ -149,7 +206,8 @@ export const ViteProject = Resource(
 
         await fs.writeFile(
           path.join(props.name, "vite.config.ts"),
-          `import react from "@vitejs/plugin-react";
+          `import path from "path";
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 ${tailwind ? "import tailwindcss from '@tailwindcss/vite';" : ""}
 ${tanstack ? 'import { TanStackRouterVite } from "@tanstack/router-plugin/vite";' : ""}
@@ -157,6 +215,11 @@ ${tanstack ? 'import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [${plugins.join(", ")}],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
 });`,
         );
 
@@ -168,6 +231,37 @@ export default defineConfig({
             indexCssPath,
             '@import "tailwindcss";\n\n' + currentCss,
           );
+        }
+      }
+
+      async function installShadcn() {
+        await exec("bun add -D @types/node");
+
+        // Build the shadcn init command with all options
+        const shadcnOptions = props.shadcn;
+        const initCommand = [
+          "bunx --bun shadcn@latest init",
+          shadcnOptions?.baseColor && `-b ${shadcnOptions.baseColor}`,
+          shadcnOptions?.defaults && "-d",
+          shadcnOptions?.force && "-f",
+          shadcnOptions?.cwd && `-c ${shadcnOptions.cwd}`,
+          shadcnOptions?.silent && "-s",
+          shadcnOptions?.srcDir && "--src-dir",
+          shadcnOptions?.cssVariables === false && "--no-css-variables",
+        ]
+          .filter(Boolean)
+          .join(" ");
+
+        await exec(initCommand);
+
+        // Install requested components using the ShadcnComponent resource
+        for (const componentName of props.shadcn?.components ?? []) {
+          await ShadcnComponent(`shadcn-component-${componentName}`, {
+            name: componentName,
+            cwd: props.name,
+            force: props.shadcn?.force,
+            silent: props.shadcn?.silent,
+          });
         }
       }
 
@@ -285,6 +379,10 @@ if (!rootElement.innerHTML) {
               {
                 extends: props.extends,
                 compilerOptions: {
+                  baseUrl: ".",
+                  paths: {
+                    "@/*": ["./src/*"],
+                  },
                   types: ["@cloudflare/workers-types"],
                   allowImportingTsExtensions: true,
                   jsx: "react-jsx",
