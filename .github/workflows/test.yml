@@ -29,6 +29,9 @@ jobs:
           
       - name: Install dependencies
         run: bun install
+
+      - name: Check Types
+        run: bun run check
       
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
