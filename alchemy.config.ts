@@ -1,10 +1,12 @@
 import alchemy from "./alchemy/src";
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
-import { Zone } from "./alchemy/src/cloudflare";
+import { StaticSite, WranglerJson, Zone } from "./alchemy/src/cloudflare";
 import { GitHubSecret } from "./alchemy/src/github";
 import { ViteProject } from "./alchemy/src/project";
-ViteProject;
+
+// ensure providers are registered
+import "./alchemy/src/cloudflare";
 
 await using _ = alchemy("github:alchemy", {
   stage: "prod",
@@ -13,6 +15,13 @@ await using _ = alchemy("github:alchemy", {
   password: process.env.SECRET_PASSPHRASE,
   quiet: process.argv.includes("--verbose") ? false : true,
 });
+
+const zone = await Zone("alchemy.run", {
+  name: "alchemy.run",
+  type: "full",
+});
+
+console.log("nameservers:", zone.nameservers);
 
 await ViteProject("alchemy.run package", {
   name: "alchemy.run",
@@ -23,12 +32,25 @@ await ViteProject("alchemy.run package", {
   overwrite: true,
 });
 
-const zone = await Zone("alchemy.run", {
-  name: "alchemy.run",
-  type: "full",
+// cloudflare
+await WranglerJson("alchemy.run wrangler.json", {
+  name: "alchemy",
+  compatibility_date: "2024-01-01",
+  path: "alchemy.run/wrangler.jsonc",
 });
 
-console.log("nameservers:", zone.nameservers);
+const site = await StaticSite("alchemy.run site", {
+  name: "alchemy",
+  dir: "alchemy.run/dist",
+  domain: "alchemy.run",
+  build: {
+    command: "bun run --filter alchemy.run build",
+  },
+});
+
+console.log({
+  url: site.url,
+});
 
 const accountId = await getAccountId();
 

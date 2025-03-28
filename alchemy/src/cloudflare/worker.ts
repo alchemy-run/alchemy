@@ -528,7 +528,7 @@ async function assertWorkerDoesNotExist<B extends Bindings>(
     );
   } else {
     throw new Error(
-      `Error checking if worker exists: ${response.status} ${response.statusText}`,
+      `Error checking if worker exists: ${response.status} ${response.statusText} ${await response.text()}`,
     );
   }
 }

@@ -230,17 +230,6 @@ export const StaticSite = Resource(
       throw new Error("Directory is required for StaticSite");
     }
 
-    try {
-      const dirStat = await fs.stat(props.dir);
-      if (!dirStat.isDirectory()) {
-        throw new Error(`"${props.dir}" is not a directory`);
-      }
-    } catch (error: any) {
-      throw new Error(
-        `Directory "${props.dir}" does not exist: ${error.message}`,
-      );
-    }
-
     // Run build command if provided
     if (props.build?.command) {
       try {
@@ -264,6 +253,17 @@ export const StaticSite = Resource(
           `Build command "${props.build.command}" failed with exit code ${error.code}:\n${error.stderr || error.message}`,
         );
       }
+    }
+
+    try {
+      const dirStat = await fs.stat(props.dir);
+      if (!dirStat.isDirectory()) {
+        throw new Error(`"${props.dir}" is not a directory`);
+      }
+    } catch (error: any) {
+      throw new Error(
+        `Directory "${props.dir}" does not exist: ${error.message}`,
+      );
     }
 
     // Use the provided name

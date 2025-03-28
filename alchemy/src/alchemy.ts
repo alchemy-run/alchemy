@@ -1,4 +1,4 @@
-import { destroy } from "./destroy";
+import { DestroyedSignal, destroy } from "./destroy";
 import { Scope } from "./scope";
 import { secret } from "./secret";
 import type { StateStoreType } from "./state";
@@ -119,7 +119,9 @@ async function run<T>(
   try {
     return await fn.bind(scope)(scope);
   } catch (error) {
-    scope.fail();
+    if (!(error instanceof DestroyedSignal)) {
+      scope.fail();
+    }
     throw error;
   }
 }
