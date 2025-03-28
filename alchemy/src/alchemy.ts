@@ -116,5 +116,10 @@ async function run<T>(
           (this: Scope, scope: Scope) => Promise<T>,
         ]);
   await using scope = alchemy.scope(id, options);
-  return await fn.bind(scope)(scope);
+  try {
+    return await fn.bind(scope)(scope);
+  } catch (error) {
+    scope.fail();
+    throw error;
+  }
 }

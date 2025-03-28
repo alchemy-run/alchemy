@@ -92,7 +92,12 @@ export async function destroy<Type extends string>(
       // BUG: this does not restore persisted scope
       await alchemy.run(instance.ID, async (scope) => {
         nestedScope = scope;
-        return Provider.handler.bind(ctx)(instance.ID, state.props);
+        try {
+          return await Provider.handler.bind(ctx)(instance.ID, state.props);
+        } catch (error) {
+          scope.fail();
+          throw error;
+        }
       });
     } catch (err) {
       if (err instanceof DestroyedSignal) {

@@ -103,9 +103,14 @@ export async function apply<Out extends Resource>(
     },
   });
 
-  const output = await alchemy.run(resource.ID, async () =>
-    provider.handler.bind(ctx)(resource.ID, props),
-  );
+  const output = await alchemy.run(resource.ID, async (scope) => {
+    try {
+      return await provider.handler.bind(ctx)(resource.ID, props);
+    } catch (error) {
+      scope.fail();
+      throw error;
+    }
+  });
 
   if (!quiet) {
     console.log(

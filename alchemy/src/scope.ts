@@ -41,6 +41,8 @@ export class Scope {
   public readonly state: StateStore;
   public readonly quiet: boolean;
 
+  private isErrored = false;
+
   constructor(options: ScopeOptions) {
     this.appName = options.appName;
     this.stage = options.stage;
@@ -75,6 +77,11 @@ export class Scope {
     }
   }
 
+  public fail() {
+    console.error("Scope failed", this.chain.join("/"));
+    this.isErrored = true;
+  }
+
   public enter() {
     scopeStorage.enterWith(this);
   }
@@ -92,16 +99,23 @@ export class Scope {
   }
 
   public async finalize() {
-    const resourceIds = await this.state.list();
-    const aliveIds = new Set(this.resources.keys());
-    const orphanIds = Array.from(resourceIds.filter((id) => !aliveIds.has(id)));
-    const orphans = await Promise.all(
-      orphanIds.map(async (id) => (await this.state.get(id))!.output),
-    );
-    await destroy.all(orphans, {
-      quiet: this.quiet,
-      strategy: "sequential",
-    });
+    if (!this.isErrored) {
+      // TODO: need to detect if it is in error
+      const resourceIds = await this.state.list();
+      const aliveIds = new Set(this.resources.keys());
+      const orphanIds = Array.from(
+        resourceIds.filter((id) => !aliveIds.has(id)),
+      );
+      const orphans = await Promise.all(
+        orphanIds.map(async (id) => (await this.state.get(id))!.output),
+      );
+      await destroy.all(orphans, {
+        quiet: this.quiet,
+        strategy: "sequential",
+      });
+    } else {
+      console.warn("Scope is in error, skipping finalize");
+    }
   }
 
   public async run<T>(fn: (scope: Scope) => Promise<T>): Promise<T> {
