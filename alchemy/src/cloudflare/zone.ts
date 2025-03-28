@@ -6,7 +6,6 @@ import type {
   AutomaticHTTPSRewritesValue,
   BrotliValue,
   CloudflareZoneSettingResponse,
-  CloudflareZoneSettingSingleResponse,
   DevelopmentModeValue,
   EarlyHintsValue,
   EmailObfuscationValue,
@@ -271,106 +270,97 @@ export const Zone = Resource(
             `Error deleting zone '${props.name}': ${errorData.errors?.[0]?.message || deleteResponse.statusText}`,
           );
         }
+      } else {
+        console.warn(`Zone '${props.name}' not found, skipping delete`);
       }
       return this.destroy();
     }
 
-    try {
-      let zoneOutput: Zone;
+    if (this.phase === "update" && this.output?.id) {
+      // Get zone details to verify it exists
+      const response = await api.get(`/zones/${this.output.id}`);
 
-      if (this.phase === "update" && this.output?.id) {
-        // Get zone details to verify it exists
-        const getResponse = await api.get(`/zones/${this.output.id}`);
-
-        if (!getResponse.ok) {
-          const errorData: any = await getResponse.json().catch(() => ({
-            errors: [{ message: getResponse.statusText }],
-          }));
-          throw new Error(
-            `Error getting zone '${props.name}': ${errorData.errors?.[0]?.message || getResponse.statusText}`,
-          );
-        }
-
-        const result = (await getResponse.json()) as CloudflareZoneResponse;
-        const zoneData = result.result;
-
-        // Update zone settings if provided
-        if (props.settings) {
-          await updateZoneSettings(api, this.output.id, props.settings);
-          // Add a small delay to ensure settings are propagated
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        }
-
-        zoneOutput = this({
-          id: zoneData.id,
-          name: zoneData.name,
-          type: zoneData.type,
-          status: zoneData.status,
-          paused: zoneData.paused,
-          accountId: zoneData.account.id,
-          nameservers: zoneData.name_servers,
-          originalNameservers: zoneData.original_name_servers,
-          createdAt: new Date(zoneData.created_on).getTime(),
-          modifiedAt: new Date(zoneData.modified_on).getTime(),
-          activatedAt: zoneData.activated_on
-            ? new Date(zoneData.activated_on).getTime()
-            : null,
-          settings: await getZoneSettings(api, zoneData.id),
-        });
-      } else {
-        // Create new zone
-        const createPayload = {
-          name: props.name,
-          type: props.type || "full",
-          jump_start: props.jumpStart !== false,
-          account: {
-            id: api.accountId,
-          },
-        };
-
-        const createResponse = await api.post("/zones", createPayload);
-
-        if (!createResponse.ok) {
-          const errorData: any = await createResponse.json().catch(() => ({
-            errors: [{ message: createResponse.statusText }],
-          }));
-          throw new Error(
-            `Error creating zone '${props.name}': ${errorData.errors?.[0]?.message || createResponse.statusText}`,
-          );
-        }
-
-        const result = (await createResponse.json()) as CloudflareZoneResponse;
-        const zoneData = result.result;
-
-        // Update zone settings if provided
-        if (props.settings) {
-          await updateZoneSettings(api, zoneData.id, props.settings);
-          // Add a small delay to ensure settings are propagated
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        }
-
-        zoneOutput = this({
-          id: zoneData.id,
-          name: zoneData.name,
-          type: zoneData.type,
-          status: zoneData.status,
-          paused: zoneData.paused,
-          accountId: zoneData.account.id,
-          nameservers: zoneData.name_servers,
-          originalNameservers: zoneData.original_name_servers,
-          createdAt: new Date(zoneData.created_on).getTime(),
-          modifiedAt: new Date(zoneData.modified_on).getTime(),
-          activatedAt: zoneData.activated_on
-            ? new Date(zoneData.activated_on).getTime()
-            : null,
-          settings: await getZoneSettings(api, zoneData.id),
-        });
+      if (!response.ok) {
+        throw new Error(
+          `Error getting zone '${props.name}': ${response.statusText}`,
+        );
       }
 
-      return zoneOutput;
-    } catch (error) {
-      console.error("Error creating/updating zone:", error);
-      throw error;
+      const result = (await response.json()) as CloudflareZoneResponse;
+      const zoneData = result.result;
+
+      // Update zone settings if provided
+      if (props.settings) {
+        await updateZoneSettings(api, this.output.id, props.settings);
+        // Add a small delay to ensure settings are propagated
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      return this({
+        id: zoneData.id,
+        name: zoneData.name,
+        type: zoneData.type,
+        status: zoneData.status,
+        paused: zoneData.paused,
+        accountId: zoneData.account.id,
+        nameservers: zoneData.name_servers,
+        originalNameservers: zoneData.original_name_servers,
+        createdAt: new Date(zoneData.created_on).getTime(),
+        modifiedAt: new Date(zoneData.modified_on).getTime(),
+        activatedAt: zoneData.activated_on
+          ? new Date(zoneData.activated_on).getTime()
+          : null,
+        settings: await getZoneSettings(api, zoneData.id),
+      });
+    } else {
+      // Create new zone
+
+      console.log("Creating zone in phase", this.phase);
+      const response = await api.post("/zones", {
+        name: props.name,
+        type: props.type || "full",
+        jump_start: props.jumpStart !== false,
+        account: {
+          id: api.accountId,
+        },
+      });
+
+      const body = await response.text();
+      if (!response.ok) {
+        if (response.status === 400 && body.includes("already exists")) {
+          // TODO: should we error?
+        } else {
+          throw new Error(
+            `Error creating zone '${props.name}': ${response.statusText}\n${body}`,
+          );
+        }
+      }
+
+      const zoneData = (JSON.parse(body) as CloudflareZoneResponse).result;
+
+      // Update zone settings if provided
+      if (props.settings) {
+        await updateZoneSettings(api, zoneData.id, props.settings);
+        // Add a small delay to ensure settings are propagated
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      return this({
+        id: zoneData.id,
+        name: zoneData.name,
+        type: zoneData.type,
+        status: zoneData.status,
+        paused: zoneData.paused,
+        accountId: zoneData.account.id,
+        nameservers: zoneData.name_servers,
+        originalNameservers: zoneData.original_name_servers,
+        createdAt: new Date(zoneData.created_on).getTime(),
+        modifiedAt: new Date(zoneData.modified_on).getTime(),
+        activatedAt: zoneData.activated_on
+          ? new Date(zoneData.activated_on).getTime()
+          : null,
+        settings: await getZoneSettings(api, zoneData.id),
+      });
     }
   },
 );
@@ -404,36 +394,32 @@ async function updateZoneSettings(
     minTlsVersion: "min_tls_version",
   };
 
-  // Create an array of promises for all settings updates
-  const updatePromises = Object.entries(settings)
-    .filter(([_, value]) => value !== undefined)
-    .map(async ([key, value]) => {
-      const settingId = settingsMap[key as keyof typeof settings];
-      if (!settingId) return;
+  await Promise.all(
+    Object.entries(settings)
+      .filter(([_, value]) => value !== undefined)
+      .map(async ([key, value]) => {
+        const settingId = settingsMap[key as keyof typeof settings];
+        if (!settingId) return;
 
-      const response = await api.patch(
-        `/zones/${zoneId}/settings/${settingId}`,
-        {
-          value,
-        } as UpdateZoneSettingParams,
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({
-          errors: [{ message: response.statusText }],
-        }));
-        throw new Error(
-          `Failed to update zone setting ${key}: ${errorData.errors?.[0]?.message || response.statusText}`,
+        const response = await api.patch(
+          `/zones/${zoneId}/settings/${settingId}`,
+          {
+            value,
+          } as UpdateZoneSettingParams,
         );
-      }
 
-      // Log the response for debugging
-      const responseData =
-        (await response.json()) as CloudflareZoneSettingSingleResponse;
-    });
-
-  // Wait for all settings to be updated
-  await Promise.all(updatePromises);
+        if (!response.ok) {
+          const data = await response.text();
+          if (response.status === 400 && data.includes("already enabled")) {
+            console.warn(`Warning: Setting '${key}' already enabled`);
+            return;
+          }
+          throw new Error(
+            `Failed to update zone setting ${key}: ${response.statusText}`,
+          );
+        }
+      }),
+  );
 }
 
 /**

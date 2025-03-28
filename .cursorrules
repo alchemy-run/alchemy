@@ -221,8 +221,7 @@ export const {{ResourceName}} = Resource(
 
           // Check response status directly instead of relying on exceptions
           if (!deleteResponse.ok && deleteResponse.status !== 404) {
-            const errorData = await deleteResponse.json().catch(() => ({ message: deleteResponse.statusText }));
-            console.error("Error deleting resource:", errorData.message || deleteResponse.statusText);
+            console.error("Error deleting resource:", deleteResponse.statusText);
           }
         }
       } catch (error) {
@@ -259,8 +258,7 @@ export const {{ResourceName}} = Resource(
 
         // Check response status directly
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ message: response.statusText }));
-          throw new Error(`API error: ${errorData.message || response.statusText}`);
+          throw new Error(`API error: ${response.statusText}`);
         }
 
         // Parse response JSON

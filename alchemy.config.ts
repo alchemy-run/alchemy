@@ -1,6 +1,7 @@
 import alchemy from "./alchemy/src";
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
+import { Zone } from "./alchemy/src/cloudflare/zone";
 import { GitHubSecret } from "./alchemy/src/github";
 
 await using _ = alchemy("github:alchemy", {
@@ -9,6 +10,11 @@ await using _ = alchemy("github:alchemy", {
   // pass the password in (you can get it from anywhere, e.g. stdin)
   password: process.env.SECRET_PASSPHRASE,
   quiet: process.argv.includes("--verbose") ? false : true,
+});
+
+const zone = await Zone("alchemy.run", {
+  name: "alchemy.run",
+  type: "full",
 });
 
 const accountId = await getAccountId();

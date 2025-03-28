@@ -12,7 +12,7 @@ const test = alchemy.test(import.meta);
 
 describe("Zone Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding zone names
-  const testDomain = `${BRANCH_PREFIX}-test-3.dev`;
+  const testDomain = `${BRANCH_PREFIX}-test.dev`;
 
   test("create, update, and delete zone with all settings", async (scope) => {
     let zone: Zone | undefined;
