@@ -5,6 +5,7 @@ import { promisify } from "util";
 import type { Context } from "../context";
 import { Resource } from "../resource";
 import { rm } from "../util/rm";
+
 const execAsync = promisify(exec);
 
 type ViteTemplate =
@@ -49,7 +50,12 @@ export interface ViteProjectProps {
    */
   tailwind?: boolean;
   /**
-   * Force overwrite the project config tfiles during the update phase
+   * Whether to add Tanstack Router to the project
+   * @default false
+   */
+  tanstack?: boolean;
+  /**
+   * Force overwrite the project config files during the update phase
    *
    * @default false
    */
@@ -65,11 +71,15 @@ export interface ViteProject extends ViteProjectProps, Resource {
 
 export const ViteProject = Resource(
   "project::ViteProject",
+  {
+    alwaysUpdate: true,
+  },
   async function (
     this: Context<ViteProject>,
     id: string,
     props: ViteProjectProps,
   ): Promise<ViteProject> {
+    const phase = this.phase;
     if (this.phase === "delete") {
       try {
         if (await fs.exists(props.name)) {
@@ -91,62 +101,208 @@ export const ViteProject = Resource(
         );
       }
     } else {
-      // Create phase
       await execAsync(`bun create vite ${id} --template ${props.template}`);
 
       await modifyConfig(props);
     }
 
     return this(props);
-  },
-);
 
-async function modifyConfig(props: ViteProjectProps) {
-  if (props.tailwind) {
-    await execAsync(`bun add tailwindcss @tailwindcss/vite`);
+    async function modifyConfig(props: ViteProjectProps) {
+      const tailwind = props.tailwind ?? false;
+      const tanstack = props.tanstack ?? false;
 
-    await fs.writeFile(
-      path.join(props.name, "vite.config.ts"),
-      `import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
+      const plugins = [
+        tailwind && "tailwindcss()",
+        tanstack &&
+          "TanStackRouterVite({ target: 'react', autoCodeSplitting: true })",
+        "react()",
+      ].filter((s) => typeof s === "string");
+
+      const cwd = path.resolve(process.cwd(), props.name);
+
+      const exec = (command: string) => execAsync(command, { cwd });
+
+      if (phase === "create" || props.overwrite) {
+        await removeUnnecessaryFiles();
+      }
+
+      await patchTsConfig();
+
+      if (props.tailwind) {
+        await installTailwind();
+      }
+
+      if (props.tanstack) {
+        await installTanstack();
+      }
+
+      await build();
+
+      async function build() {
+        // tsc -b will fail if we have not invoked tan stacks' code gen
+        await execAsync(`bun vite build`, { cwd: props.name });
+      }
+
+      async function installTailwind() {
+        await exec(`bun add tailwindcss @tailwindcss/vite`);
+
+        await fs.writeFile(
+          path.join(props.name, "vite.config.ts"),
+          `import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+${tailwind ? "import tailwindcss from '@tailwindcss/vite';" : ""}
+${tanstack ? 'import { TanStackRouterVite } from "@tanstack/router-plugin/vite";' : ""}
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [${plugins.join(", ")}],
 });`,
-    );
+        );
 
-    // Add Tailwind CSS import to index.css
-    const indexCssPath = path.join(props.name, "src", "index.css");
-    const currentCss = await fs.readFile(indexCssPath, "utf-8");
-    if (!currentCss.includes('@import "tailwindcss";')) {
-      await fs.writeFile(
-        indexCssPath,
-        '@import "tailwindcss";\n\n' + currentCss,
-      );
-    }
+        // Add Tailwind CSS import to index.css
+        const indexCssPath = path.join(props.name, "src", "index.css");
+        const currentCss = await fs.readFile(indexCssPath, "utf-8");
+        if (!currentCss.includes('@import "tailwindcss";')) {
+          await fs.writeFile(
+            indexCssPath,
+            '@import "tailwindcss";\n\n' + currentCss,
+          );
+        }
+      }
+
+      async function installTanstack() {
+        await exec(`bun add @tanstack/react-router`);
+        await exec(
+          `bun add -D @tanstack/router-plugin @tanstack/react-router-devtools`,
+        );
+
+        const src = path.join(props.name, "src");
+        const routes = path.join(src, "routes");
+        await fs.mkdir(routes, { recursive: true });
+        await fs.writeFile(
+          path.join(routes, "__root.tsx"),
+          `import { Link, Outlet, createRootRoute } from "@tanstack/react-router";
+import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+
+export const Route = createRootRoute({
+  component: () => (
+    <div className="w-full min-h-screen flex flex-col">
+      <div className="p-2 flex gap-2">
+        <Link to="/" className="[&.active]:font-bold">
+          Home
+        </Link>{" "}
+        <Link to="/about" className="[&.active]:font-bold">
+          About
+        </Link>
+      </div>
+      <hr />
+      <Outlet />
+      <TanStackRouterDevtools />
+    </div>
+  ),
+});
+`,
+        );
+
+        await fs.writeFile(
+          path.join(routes, "index.tsx"),
+          `import { createLazyFileRoute } from '@tanstack/react-router'
+
+export const Route = createLazyFileRoute('/')({
+  component: Index,
+})
+
+function Index() {
+  return (
+    <div className="p-2">
+      <h3>Welcome Home!</h3>
+    </div>
+  )
+}`,
+        );
+
+        await fs.writeFile(
+          path.join(routes, "about.tsx"),
+          `import { createLazyFileRoute } from '@tanstack/react-router'
+
+export const Route = createLazyFileRoute('/about')({
+  component: About,
+})
+
+function About() {
+  return <div className="p-2">Hello from About!</div>
+}`,
+        );
+
+        await fs.writeFile(
+          path.join(src, "main.tsx"),
+          `import { StrictMode } from 'react'
+import ReactDOM from 'react-dom/client'
+import { RouterProvider, createRouter } from '@tanstack/react-router'
+import './index.css'
+
+// Import the generated route tree
+import { routeTree } from './routeTree.gen'
+
+// Create a new router instance
+const router = createRouter({ routeTree })
+
+// Register the router instance for type safety
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router
   }
-
-  await Promise.all([
-    rm(path.join(props.name, "tsconfig.app.json")),
-    rm(path.join(props.name, "tsconfig.node.json")),
-    fs.writeFile(
-      path.join(props.name, "tsconfig.json"),
-      JSON.stringify(
-        {
-          extends: props.extends,
-          compilerOptions: {
-            types: ["@cloudflare/workers-types"],
-            allowImportingTsExtensions: true,
-            jsx: "react-jsx",
-          },
-          include: ["vite/*.ts", "src/**/*.ts", "src/**/*.tsx", "src/env.d.ts"],
-          references: props.references?.map((path) => ({ path })),
-        },
-        null,
-        2,
-      ),
-    ),
-  ]);
 }
+
+// Render the app
+const rootElement = document.getElementById('root')!
+if (!rootElement.innerHTML) {
+  const root = ReactDOM.createRoot(rootElement)
+  root.render(
+    <StrictMode>
+      <RouterProvider router={router} />
+    </StrictMode>,
+  )
+}`,
+        );
+      }
+
+      async function removeUnnecessaryFiles() {
+        await Promise.all([
+          rm(path.join(props.name, "src", "App.tsx")),
+          rm(path.join(props.name, "src", "App.css")),
+        ]);
+      }
+
+      async function patchTsConfig() {
+        await Promise.all([
+          rm(path.join(props.name, "tsconfig.app.json")),
+          rm(path.join(props.name, "tsconfig.node.json")),
+          fs.writeFile(
+            path.join(props.name, "tsconfig.json"),
+            JSON.stringify(
+              {
+                extends: props.extends,
+                compilerOptions: {
+                  types: ["@cloudflare/workers-types"],
+                  allowImportingTsExtensions: true,
+                  jsx: "react-jsx",
+                },
+                include: [
+                  "vite/*.ts",
+                  "src/**/*.ts",
+                  "src/**/*.tsx",
+                  "src/env.d.ts",
+                ],
+                references: props.references?.map((path) => ({ path })),
+              },
+              null,
+              2,
+            ),
+          ),
+        ]);
+      }
+    }
+  },
+);

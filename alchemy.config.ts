@@ -1,12 +1,16 @@
 import alchemy from "./alchemy/src";
-import { Role, getAccountId } from "./alchemy/src/aws";
-import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
-import { StaticSite, WranglerJson, Zone } from "./alchemy/src/cloudflare";
-import { GitHubSecret } from "./alchemy/src/github";
-import { ViteProject } from "./alchemy/src/project";
 
 // ensure providers are registered
+import "./alchemy/src/aws";
+import "./alchemy/src/aws/oidc";
 import "./alchemy/src/cloudflare";
+import "./alchemy/src/project";
+
+import { Role, getAccountId } from "./alchemy/src/aws";
+import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
+import { StaticSite, Zone } from "./alchemy/src/cloudflare";
+import { GitHubSecret } from "./alchemy/src/github";
+import { ViteProject } from "./alchemy/src/project";
 
 await using _ = alchemy("github:alchemy", {
   stage: "prod",
@@ -29,15 +33,16 @@ await ViteProject("alchemy.run package", {
   extends: "../tsconfig.base.json",
   references: ["../alchemy/tsconfig.json"],
   tailwind: true,
+  tanstack: true,
   overwrite: true,
 });
 
 // cloudflare vite plugin requires a wrangler.json file
-await WranglerJson("alchemy.run wrangler.json", {
-  name: "alchemy",
-  compatibility_date: "2024-01-01",
-  path: "alchemy.run/wrangler.jsonc",
-});
+// await WranglerJson("alchemy.run wrangler.json", {
+//   name: "alchemy",
+//   compatibility_date: "2024-01-01",
+//   path: "alchemy.run/wrangler.jsonc",
+// });
 
 const site = await StaticSite("alchemy.run site", {
   name: "alchemy",
