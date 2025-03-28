@@ -89,7 +89,15 @@ export class FileSystemStateStore implements StateStore {
         await this.getPath(key),
         "utf8",
       );
-      return (await deserialize(this.scope, JSON.parse(content))) as State;
+      const state = (await deserialize(
+        this.scope,
+        JSON.parse(content),
+      )) as State;
+      if (state.output === undefined) {
+        state.output = {} as any;
+      }
+      state.output.Scope = this.scope;
+      return state;
     } catch (error: any) {
       if (error.code === "ENOENT") {
         return undefined;

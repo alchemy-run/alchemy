@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { destroy } from "./destroy";
 import type { PendingResource, ResourceID } from "./resource";
 import {
   FileSystemStateStore,
@@ -91,7 +92,16 @@ export class Scope {
   }
 
   public async finalize() {
-    // TODO
+    const resourceIds = await this.state.list();
+    const aliveIds = new Set(this.resources.keys());
+    const orphanIds = Array.from(resourceIds.filter((id) => !aliveIds.has(id)));
+    const orphans = await Promise.all(
+      orphanIds.map(async (id) => (await this.state.get(id))!.output),
+    );
+    await destroy.all(orphans, {
+      quiet: this.quiet,
+      strategy: "sequential",
+    });
   }
 
   public async run<T>(fn: (scope: Scope) => Promise<T>): Promise<T> {

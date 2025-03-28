@@ -64,7 +64,7 @@ export interface {{ResourceName}}Props {
  * For example, if your resource is exported as "Product", this interface
  * should be named "Product" (not "ProductOutput")
  */
-export interface {{ResourceName}} extends {{ResourceName}}Props {
+export interface {{ResourceName}} extends Resource<"{{service-name}}::{{ResourceName}}"> {{ResourceName}}Props {
   /**
    * The ID of the resource
    */
