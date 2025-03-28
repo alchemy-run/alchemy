@@ -354,6 +354,10 @@ import { destroy } from "../../src/destroy";
 import { {{ResourceName}} } from "../../src/{{service-name}}/{{resource-name}}";
 import { {{ServiceName}}Api } from "../../src/{{service-name}}/api";
 import { BRANCH_PREFIX } from "../util";
+// must import this or else alchemy.test won't exist
+import "../../src/test/bun";
+
+const api = new {{ServiceName}}Api();
 
 const test = alchemy.test(import.meta);
 
@@ -362,8 +366,7 @@ describe("{{ResourceName}} Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-resource`;
 
   test("create, update, and delete resource", async (scope) => {
-    let resource;
-
+    let resource: {{ResourceName}} | undefined;
     try {
       // Create a test resource
       resource = await {{ResourceName}}(testId, {
@@ -375,7 +378,6 @@ describe("{{ResourceName}} Resource", () => {
       expect(resource.name).toEqual(`Test Resource ${testId}`);
 
       // Verify resource was created by querying the API directly
-      const api = new {{ServiceName}}Api();
       const getResponse = await api.get(`/accounts/${api.accountId}/resources/${resource.id}`);
       expect(getResponse.status).toEqual(200);
 
@@ -383,24 +385,27 @@ describe("{{ResourceName}} Resource", () => {
       expect(responseData.result.name).toEqual(`Test Resource ${testId}`);
 
       // Update the resource
-      const updatedResource = await {{ResourceName}}(testId, {
+      resource = await {{ResourceName}}(testId, {
         name: `Updated Resource ${testId}`,
         description: "This is an updated test resource"
       });
 
-      expect(updatedResource.id).toEqual(resource.id);
-      expect(updatedResource.name).toEqual(`Updated Resource ${testId}`);
+      expect(resource.id).toEqual(resource.id);
+      expect(resource.name).toEqual(`Updated Resource ${testId}`);
 
       // Verify resource was updated
       const getUpdatedResponse = await api.get(`/accounts/${api.accountId}/resources/${resource.id}`);
       const updatedData = await getUpdatedResponse.json();
       expect(updatedData.result.name).toEqual(`Updated Resource ${testId}`);
+    } catch(err) {
+      // log the error or else it's silently swallowed by destroy errors
+      console.log(err);
+      throw err;
     } finally {
       // Always clean up, even if test assertions fail
       await destroy(scope);
 
       // Verify resource was deleted
-      const api = new {{ServiceName}}Api();
       const getDeletedResponse = await api.get(`/accounts/${api.accountId}/resources/${resource?.id}`);
       expect(getDeletedResponse.status).toEqual(404);
     }
