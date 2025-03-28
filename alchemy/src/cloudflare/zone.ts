@@ -315,7 +315,6 @@ export const Zone = Resource(
     } else {
       // Create new zone
 
-      console.log("Creating zone in phase", this.phase);
       const response = await api.post("/zones", {
         name: props.name,
         type: props.type || "full",
