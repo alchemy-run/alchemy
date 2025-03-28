@@ -55,7 +55,8 @@ export async function apply<Out extends Resource>(
   // Skip update if inputs haven't changed and resource is in a stable state
   if (state.status === "created" || state.status === "updated") {
     if (
-      JSON.stringify(state.props) === JSON.stringify(serialize(scope, props)) &&
+      JSON.stringify(state.props) ===
+        JSON.stringify(await serialize(scope, props)) &&
       alwaysUpdate !== true
     ) {
       if (!quiet) {
