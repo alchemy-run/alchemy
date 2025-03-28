@@ -32,7 +32,7 @@ await ViteProject("alchemy.run package", {
   overwrite: true,
 });
 
-// cloudflare
+// cloudflare vite plugin requires a wrangler.json file
 await WranglerJson("alchemy.run wrangler.json", {
   name: "alchemy",
   compatibility_date: "2024-01-01",
