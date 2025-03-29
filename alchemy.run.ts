@@ -9,14 +9,15 @@ import "./alchemy/src/cloudflare";
 import "./alchemy/src/docs";
 import "./alchemy/src/fs";
 import "./alchemy/src/vite";
+import "./alchemy/src/vitepress";
 
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
 import { StaticSite, Zone } from "./alchemy/src/cloudflare";
-import { Document } from "./alchemy/src/docs";
 import { Folder } from "./alchemy/src/fs";
 import { GitHubSecret } from "./alchemy/src/github";
 import { ViteProject } from "./alchemy/src/vite";
+import { VitePressProject } from "./alchemy/src/vitepress";
 
 await using _ = alchemy("github:alchemy", {
   stage: "prod",
@@ -29,6 +30,13 @@ await using _ = alchemy("github:alchemy", {
 const zone = await Zone("alchemy.run", {
   name: "alchemy.run",
   type: "full",
+});
+
+await VitePressProject("alchemy.run docs", {
+  name: "alchemy.docs2",
+  title: "Alchemy",
+  description: "Alchemy is a TypeScript-native, embeddable IaC library",
+  overwrite: true,
 });
 
 console.log("nameservers:", zone.nameservers);
@@ -50,31 +58,31 @@ await ViteProject("alchemy.run package", {
 
 const docs = await Folder(path.join("alchemy.run", "docs"));
 
-await Document("alchemy.run home.md", {
-  path: path.join(docs.path, "home.md"),
-  prompt: [
-    "Generate a markdown document capturing the Home page (landing page) content for the alchemy.run product",
-    "In this document, we focus purely on Hero, Sub-Hero, Call-to-Action, and Feature sections",
-    "The content is light and lean. We don't over explain. Emphasis is on clarity and conciseness",
-    "I want the following sections to be present in the document:",
-    "1. Hero section (1 short sentence, e.g. Materialize and deploy cloud software)",
-    "2. Sub-Hero section (1 short sentence, e.g. Alchemy is a TypeScript-native, embeddable IaC library ...",
-    "3. Call-to-Action section",
-    "4. Feature section - focus on how to use Resources, Scopes, how to create your own Resources, IaC (Create/Update/Delete automatically)",
-    "",
-    "Refer to the README.md file to get an overview of the alchemy.run product.",
-    "Take a look at the example `alchemy.config.ts` files to see real usage",
-    "Feature section should not parrot the README.md, those are not features.",
-    "It should focus on code feature + snippet.",
-  ],
-  context: await alchemy.files(
-    "./.cursorrules",
-    "./README.md",
-    "./alchemy.config.ts",
-    "./examples/cloudflare-vite/alchemy.config.ts",
-    "./examples/cloudflare-vite/src/env.d.ts",
-  ),
-});
+// await Document("alchemy.run home.md", {
+//   path: path.join(docs.path, "home.md"),
+//   prompt: [
+//     "Generate a markdown document capturing the Home page (landing page) content for the alchemy.run product",
+//     "In this document, we focus purely on Hero, Sub-Hero, Call-to-Action, and Feature sections",
+//     "The content is light and lean. We don't over explain. Emphasis is on clarity and conciseness",
+//     "I want the following sections to be present in the document:",
+//     "1. Hero section (1 short sentence, e.g. Materialize and deploy cloud software)",
+//     "2. Sub-Hero section (1 short sentence, e.g. Alchemy is a TypeScript-native, embeddable IaC library ...",
+//     "3. Call-to-Action section",
+//     "4. Feature section - focus on how to use Resources, Scopes, how to create your own Resources, IaC (Create/Update/Delete automatically)",
+//     "",
+//     "Refer to the README.md file to get an overview of the alchemy.run product.",
+//     "Take a look at the example `alchemy.config.ts` files to see real usage",
+//     "Feature section should not parrot the README.md, those are not features.",
+//     "It should focus on code feature + snippet.",
+//   ],
+//   context: await alchemy.files(
+//     "./.cursorrules",
+//     "./README.md",
+//     "./alchemy.run.ts",
+//     "./examples/cloudflare-vite/alchemy.config.ts",
+//     "./examples/cloudflare-vite/src/env.d.ts",
+//   ),
+// });
 
 // cloudflare vite plugin requires a wrangler.json file
 // await WranglerJson("alchemy.run wrangler.json", {
@@ -131,6 +139,7 @@ const githubSecrets = {
   CLOUDFLARE_API_KEY: process.env.CLOUDFLARE_API_KEY,
   CLOUDFLARE_EMAIL: process.env.CLOUDFLARE_EMAIL,
   STRIPE_API_KEY: process.env.STRIPE_API_KEY,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
 };
 
 await Promise.all([
