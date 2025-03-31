@@ -193,7 +193,7 @@ export const Document = Resource(
         ? props.prompt.join("\n")
         : props.prompt!;
 
-      console.log(fullPrompt);
+      // console.log(fullPrompt);
 
       const { text } = await generateText({
         model: provider(props.model?.id || "gpt-4o"),

@@ -127,18 +127,21 @@ export const VitePressProject = Resource(
         ...props.devDependencies,
       },
     });
-
     // Create .vitepress directory and config
-    await Folder(`${cwd}/.vitepress/theme`);
+    await Folder(path.join(cwd, ".vitepress"));
+    await Folder(path.join(cwd, ".vitepress", "theme"));
 
     await Promise.all([
-      TextFile(`${cwd}/.gitignore`, `.vitepress/cache\n`),
-      JsonFile(`${cwd}/tsconfig.json`, {
+      TextFile(path.join(cwd, ".gitignore"), `.vitepress/cache\n`),
+      JsonFile(path.join(cwd, "tsconfig.json"), {
         extends: props.tsconfig?.extends,
         references: props.tsconfig?.references?.map((path) => ({ path })),
         compilerOptions: props.tsconfig?.compilerOptions,
       }),
-      TextFile(`${cwd}/index.md`, `---\n${yaml.stringify(props.home)}---\n`),
+      TextFile(
+        path.join(cwd, "index.md"),
+        `---\n${yaml.stringify(props.home)}---\n`,
+      ),
       TypeScriptFile(
         path.join(cwd, "alchemy.run.ts"),
         `import alchemy from "alchemy";
@@ -162,7 +165,7 @@ await Document("home.md", {
 `,
       ),
       TypeScriptFile(
-        `${cwd}/.vitepress/theme/index.ts`,
+        path.join(cwd, ".vitepress", "theme", "index.ts"),
         `import TwoslashFloatingVue from "@shikijs/vitepress-twoslash/client";
 import "@shikijs/vitepress-twoslash/style.css";
 import type { Theme as ThemeConfig } from "vitepress";
@@ -320,7 +323,7 @@ export default {
 `,
       ),
       TypeScriptFile(
-        `${cwd}/.vitepress/config.mts`,
+        path.join(cwd, ".vitepress", "config.mts"),
         `import { transformerTwoslash } from "@shikijs/vitepress-twoslash";
 import footnotePlugin from "markdown-it-footnote";
 import { defineConfig } from "vitepress";
