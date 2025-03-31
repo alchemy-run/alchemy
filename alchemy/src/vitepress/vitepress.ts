@@ -34,6 +34,12 @@ export interface VitePressProjectProps {
    */
   typescript?: boolean;
 
+  tsconfig?: {
+    extends?: string;
+    references?: string[];
+    compilerOptions?: Record<string, any>;
+  };
+
   /**
    * Force overwrite the project config files during the update phase
    * @default false
@@ -101,6 +107,7 @@ export const VitePressProject = Resource(
     await JsonFile(path.join(cwd, "package.json"), {
       name: props.name,
       scripts: {
+        "docs:gen": "bun alchemy.run.ts",
         "docs:dev": "vitepress dev",
         "docs:build": "vitepress build",
         "docs:preview": "vitepress preview",
@@ -126,7 +133,34 @@ export const VitePressProject = Resource(
 
     await Promise.all([
       TextFile(`${cwd}/.gitignore`, `.vitepress/cache\n`),
+      JsonFile(`${cwd}/tsconfig.json`, {
+        extends: props.tsconfig?.extends,
+        references: props.tsconfig?.references?.map((path) => ({ path })),
+        compilerOptions: props.tsconfig?.compilerOptions,
+      }),
       TextFile(`${cwd}/index.md`, `---\n${yaml.stringify(props.home)}---\n`),
+      TypeScriptFile(
+        path.join(cwd, "alchemy.run.ts"),
+        `import alchemy from "alchemy";
+import { Folder } from "alchemy/fs";
+import { Document } from "alchemy/docs";
+import path from "path";
+
+await using _ = alchemy("alchemy.run", {
+  stage: "prod",
+  phase: process.argv.includes("--destroy") ? "destroy" : "up",
+  password: process.env.SECRET_PASSPHRASE,
+  quiet: !process.argv.includes("--verbose"),
+});
+
+const docs = await Folder(path.join("alchemy.run", "docs"));
+
+await Document("home.md", {
+  path: path.join(docs.path, "home.md"),
+  prompt: await alchemy\`Generate a landing page.\`,
+});
+`,
+      ),
       TypeScriptFile(
         `${cwd}/.vitepress/theme/index.ts`,
         `import TwoslashFloatingVue from "@shikijs/vitepress-twoslash/client";
@@ -144,7 +178,7 @@ export default {
   `,
       ),
       TextFile(
-        `${cwd}/.vitepress/theme/style.css`,
+        path.join(cwd, ".vitepress", "theme", "style.css"),
         `/**
 * Customize default theme styling by overriding CSS variables:
 * https://github.com/vuejs/vitepress/blob/main/src/client/theme-default/styles/vars.css
@@ -191,30 +225,30 @@ export default {
 * -------------------------------------------------------------------------- */
 
 :root {
---vp-c-default-1: var(--vp-c-gray-1);
---vp-c-default-2: var(--vp-c-gray-2);
---vp-c-default-3: var(--vp-c-gray-3);
---vp-c-default-soft: var(--vp-c-gray-soft);
+  --vp-c-default-1: var(--vp-c-gray-1);
+  --vp-c-default-2: var(--vp-c-gray-2);
+  --vp-c-default-3: var(--vp-c-gray-3);
+  --vp-c-default-soft: var(--vp-c-gray-soft);
 
---vp-c-brand-1: var(--vp-c-indigo-1);
---vp-c-brand-2: var(--vp-c-indigo-2);
---vp-c-brand-3: var(--vp-c-indigo-3);
---vp-c-brand-soft: var(--vp-c-indigo-soft);
+  --vp-c-brand-1: var(--vp-c-indigo-1);
+  --vp-c-brand-2: var(--vp-c-indigo-2);
+  --vp-c-brand-3: var(--vp-c-indigo-3);
+  --vp-c-brand-soft: var(--vp-c-indigo-soft);
 
---vp-c-tip-1: var(--vp-c-brand-1);
---vp-c-tip-2: var(--vp-c-brand-2);
---vp-c-tip-3: var(--vp-c-brand-3);
---vp-c-tip-soft: var(--vp-c-brand-soft);
+  --vp-c-tip-1: var(--vp-c-brand-1);
+  --vp-c-tip-2: var(--vp-c-brand-2);
+  --vp-c-tip-3: var(--vp-c-brand-3);
+  --vp-c-tip-soft: var(--vp-c-brand-soft);
 
---vp-c-warning-1: var(--vp-c-yellow-1);
---vp-c-warning-2: var(--vp-c-yellow-2);
---vp-c-warning-3: var(--vp-c-yellow-3);
---vp-c-warning-soft: var(--vp-c-yellow-soft);
+  --vp-c-warning-1: var(--vp-c-yellow-1);
+  --vp-c-warning-2: var(--vp-c-yellow-2);
+  --vp-c-warning-3: var(--vp-c-yellow-3);
+  --vp-c-warning-soft: var(--vp-c-yellow-soft);
 
---vp-c-danger-1: var(--vp-c-red-1);
---vp-c-danger-2: var(--vp-c-red-2);
---vp-c-danger-3: var(--vp-c-red-3);
---vp-c-danger-soft: var(--vp-c-red-soft);
+  --vp-c-danger-1: var(--vp-c-red-1);
+  --vp-c-danger-2: var(--vp-c-red-2);
+  --vp-c-danger-3: var(--vp-c-red-3);
+  --vp-c-danger-soft: var(--vp-c-red-soft);
 }
 
 /**
@@ -222,15 +256,15 @@ export default {
 * -------------------------------------------------------------------------- */
 
 :root {
---vp-button-brand-border: transparent;
---vp-button-brand-text: var(--vp-c-white);
---vp-button-brand-bg: var(--vp-c-brand-3);
---vp-button-brand-hover-border: transparent;
---vp-button-brand-hover-text: var(--vp-c-white);
---vp-button-brand-hover-bg: var(--vp-c-brand-2);
---vp-button-brand-active-border: transparent;
---vp-button-brand-active-text: var(--vp-c-white);
---vp-button-brand-active-bg: var(--vp-c-brand-1);
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-text: var(--vp-c-white);
+  --vp-button-brand-bg: var(--vp-c-brand-3);
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-hover-text: var(--vp-c-white);
+  --vp-button-brand-hover-bg: var(--vp-c-brand-2);
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-active-text: var(--vp-c-white);
+  --vp-button-brand-active-bg: var(--vp-c-brand-1);
 }
 
 /**
@@ -238,31 +272,31 @@ export default {
 * -------------------------------------------------------------------------- */
 
 :root {
---vp-home-hero-name-color: transparent;
---vp-home-hero-name-background: -webkit-linear-gradient(
-  120deg,
-  #bd34fe 30%,
-  #41d1ff
-);
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: -webkit-linear-gradient(
+    120deg,
+    #bd34fe 30%,
+    #41d1ff
+  );
 
---vp-home-hero-image-background-image: linear-gradient(
-  -45deg,
-  #bd34fe 50%,
-  #47caff 50%
-);
---vp-home-hero-image-filter: blur(44px);
+  --vp-home-hero-image-background-image: linear-gradient(
+    -45deg,
+    #bd34fe 50%,
+    #47caff 50%
+  );
+  --vp-home-hero-image-filter: blur(44px);
 }
 
 @media (min-width: 640px) {
-:root {
-  --vp-home-hero-image-filter: blur(56px);
-}
+  :root {
+    --vp-home-hero-image-filter: blur(56px);
+  }
 }
 
 @media (min-width: 960px) {
-:root {
-  --vp-home-hero-image-filter: blur(68px);
-}
+  :root {
+    --vp-home-hero-image-filter: blur(68px);
+  }
 }
 
 /**
@@ -270,10 +304,10 @@ export default {
 * -------------------------------------------------------------------------- */
 
 :root {
---vp-custom-block-tip-border: transparent;
---vp-custom-block-tip-text: var(--vp-c-text-1);
---vp-custom-block-tip-bg: var(--vp-c-brand-soft);
---vp-custom-block-tip-code-bg: var(--vp-c-brand-soft);
+  --vp-custom-block-tip-border: transparent;
+  --vp-custom-block-tip-text: var(--vp-c-text-1);
+  --vp-custom-block-tip-bg: var(--vp-c-brand-soft);
+  --vp-custom-block-tip-code-bg: var(--vp-c-brand-soft);
 }
 
 /**
@@ -281,7 +315,7 @@ export default {
 * -------------------------------------------------------------------------- */
 
 .DocSearch {
---docsearch-primary-color: var(--vp-c-brand-1) !important;
+  --docsearch-primary-color: var(--vp-c-brand-1) !important;
 }
 `,
       ),

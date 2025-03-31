@@ -8,11 +8,22 @@ import { alchemy } from "../alchemy";
 
 declare module "../alchemy" {
   interface Alchemy {
+    file(path: string): Promise<FileRef>;
     files: (...paths: string[]) => Promise<{
       [relativePath: string]: string;
     }>;
   }
 }
+
+export type FileRef = {
+  kind: "fs::FileRef";
+  path: string;
+};
+
+alchemy.file = async (path: string) => ({
+  kind: "fs::FileRef",
+  path,
+});
 
 alchemy.files = async (...paths: string[]) =>
   Object.fromEntries(
@@ -34,14 +45,12 @@ export const File = Resource(
   async function (
     this: Context<File>,
     id: string,
-    {
-      path: filePath,
-      content,
-    }: {
-      path: string;
+    props: {
+      path?: string;
       content: string;
     },
   ): Promise<File> {
+    const filePath = props?.path ?? id;
     if (this.phase === "delete") {
       await ignore("ENOENT", async () => fs.promises.unlink(filePath));
       return this.destroy();
@@ -49,11 +58,11 @@ export const File = Resource(
       await fs.promises.mkdir(path.dirname(filePath), {
         recursive: true,
       });
-      await fs.promises.writeFile(filePath, content);
+      await fs.promises.writeFile(filePath, props.content);
     }
-    return this({
+    return this(filePath ? id : id.replaceAll("/", ":"), {
       path: filePath,
-      content,
+      content: props.content,
     });
   },
 );
@@ -61,17 +70,15 @@ export const File = Resource(
 export type JsonFile = File;
 
 export function JsonFile(id: string, content: any): Promise<JsonFile> {
-  return File(id.replace("/", "-"), {
-    path: id,
-    content: JSON.stringify(content),
+  return File(id, {
+    content: JSON.stringify(content, null, 2),
   });
 }
 
 export type TextFile = File;
 
 export function TextFile(id: string, content: string): Promise<TextFile> {
-  return File(id.replace("/", "-"), {
-    path: id,
+  return File(id, {
     content,
   });
 }
@@ -80,8 +87,7 @@ export type YamlFile = File;
 
 export async function YamlFile(id: string, content: any): Promise<YamlFile> {
   const yaml = await import("yaml");
-  return File(id.replace("/", "-"), {
-    path: id,
+  return File(id, {
     content: yaml.stringify(content),
   });
 }
@@ -93,8 +99,7 @@ export async function TypeScriptFile(
   content: string,
 ): Promise<TypeScriptFile> {
   const prettier = await import("prettier");
-  return File(id.replace("/", "-"), {
-    path: id,
+  return File(id, {
     content: await prettier.format(content, {
       parser: "typescript",
       editor: {

@@ -6,18 +6,6 @@ import type { StateStoreType } from "./state";
 // TODO: support browser
 const DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
 
-function _alchemy(appName: string, options: Omit<AlchemyOptions, "appName">) {
-  return scope(undefined, {
-    ...options,
-    appName,
-    stage: options.stage,
-  });
-}
-_alchemy.destroy = destroy;
-_alchemy.run = run;
-_alchemy.scope = scope;
-_alchemy.secret = secret;
-
 // alchemy type is to semantically highlight `alchemy` as a type (keyword)
 export type alchemy = Alchemy;
 
@@ -30,7 +18,63 @@ export interface Alchemy {
   destroy: typeof destroy;
   secret: typeof secret;
   (...parameters: Parameters<typeof scope>): ReturnType<typeof scope>;
+  (template: TemplateStringsArray, ...values: any[]): Promise<string>;
 }
+
+function _alchemy(
+  ...args:
+    | [template: TemplateStringsArray, ...values: any[]]
+    | [appName: string, options: Omit<AlchemyOptions, "appName">]
+): any {
+  if (typeof args[0] === "string") {
+    const [appName, options] = args;
+    return scope(undefined, {
+      ...options,
+      appName,
+      stage: options.stage,
+    });
+  } else {
+    const [template, ...values] = args;
+    const [, secondLine] = template[0].split("\n");
+    const leadingSpaces = secondLine
+      ? secondLine.match(/^(\s*)/)?.[1]?.length || 0
+      : 0;
+    const indent = " ".repeat(leadingSpaces);
+
+    return (async () => {
+      const stringValues = await Promise.all(
+        values.map(async function resolve(value) {
+          if (typeof value === "string") {
+            return indent + value;
+          } else if (value instanceof Promise) {
+            return resolve(await value);
+          } else {
+            // TODO: support other types
+            throw new Error(`Unsupported value type: ${typeof value}`);
+          }
+        }),
+      );
+      // Construct the string template by joining template parts with interpolated values
+      return template
+        .map((part) =>
+          part
+            .split("\n")
+            .map((line) =>
+              line.startsWith(indent) ? line.slice(indent.length) : line,
+            )
+            .join("\n"),
+        )
+        .flatMap((part, i) =>
+          i < stringValues.length ? [part, stringValues[i] || ""] : [part],
+        )
+        .join("");
+    })();
+  }
+}
+_alchemy.destroy = destroy;
+_alchemy.run = run;
+_alchemy.scope = scope;
+_alchemy.secret = secret;
 
 export interface AlchemyOptions {
   /**
@@ -115,13 +159,16 @@ async function run<T>(
           AlchemyOptions | undefined,
           (this: Scope, scope: Scope) => Promise<T>,
         ]);
-  await using scope = alchemy.scope(id, options);
+  const scope = alchemy.scope(id, options);
   try {
     return await fn.bind(scope)(scope);
   } catch (error) {
     if (!(error instanceof DestroyedSignal)) {
       scope.fail();
+    } else {
     }
     throw error;
+  } finally {
+    await scope.finalize();
   }
 }

@@ -68,6 +68,7 @@ export interface BaseContext<Out extends Resource> {
   /**
    * Create the Resource envelope (with Alchemy + User properties)
    */
+  (id: string, props: Omit<Out, keyof Resource>): Out;
   (props: Omit<Out, keyof Resource>): Out;
 }
 
@@ -95,7 +96,19 @@ export function context<
   state: State<Kind, Props, Out>;
   replace: () => void;
 }): Context<Out> {
-  function create(props: Omit<Out, "Kind" | "ID" | "Scope">): Out {
+  function create(props: Omit<Out, "Kind" | "ID" | "Scope">): Out;
+  function create(id: string, props: Omit<Out, "Kind" | "ID" | "Scope">): Out;
+  function create(
+    ...args:
+      | [props: Omit<Out, "Kind" | "ID" | "Scope">]
+      | [id: string, props: Omit<Out, "Kind" | "ID" | "Scope">]
+  ): Out {
+    const [id, props] =
+      typeof args[0] === "string"
+        ? args.length === 1
+          ? [undefined, args[0]]
+          : args
+        : [undefined, args[0]];
     return {
       ...props,
       Kind: kind,

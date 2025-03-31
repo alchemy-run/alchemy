@@ -67,7 +67,7 @@
     "typescript": "latest",
     "vite": "^6.0.7",
     "vitepress": "^1.6.3",
-    "yaml": "^2.7.1",
-    "wrangler": "^3.114.0"
+    "wrangler": "^3.114.0",
+    "yaml": "^2.7.1"
   }
 }

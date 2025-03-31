@@ -26,7 +26,7 @@ export const Folder = Resource(
         fs.promises.mkdir(dirPath, { recursive: true }),
       );
     }
-    return this({
+    return this(props?.path === undefined ? id.replaceAll("/", ":") : id, {
       path: dirPath,
     });
   },
