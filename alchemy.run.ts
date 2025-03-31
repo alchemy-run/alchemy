@@ -16,8 +16,6 @@ import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
 import { StaticSite, Zone } from "./alchemy/src/cloudflare";
 import { Folder } from "./alchemy/src/fs";
 import { GitHubSecret } from "./alchemy/src/github";
-import { ViteProject } from "./alchemy/src/vite";
-import { VitePressProject } from "./alchemy/src/vitepress";
 
 await using _ = alchemy("github:alchemy", {
   stage: "prod",
@@ -32,29 +30,89 @@ const zone = await Zone("alchemy.run", {
   type: "full",
 });
 
-await VitePressProject("alchemy.run docs", {
-  name: "alchemy.docs2",
-  title: "Alchemy",
-  description: "Alchemy is a TypeScript-native, embeddable IaC library",
-  overwrite: true,
-});
+// await VitePressProject("alchemy.run docs", {
+//   name: "alchemy.docs2",
+//   title: "Alchemy",
+//   description: "Alchemy is a TypeScript-native, embeddable IaC library",
+//   overwrite: true,
+//   devDependencies: {
+//     alchemy: "workspace:*",
+//   },
+//   theme: {
+//     light: "light-plus",
+//     dark: "dark-plus",
+//   },
+//   home: {
+//     layout: "home",
+//     hero: {
+//       text: "Alchemy",
+//       tagline: "Alchemy is a TypeScript-native, embeddable IaC library",
+//       actions: [
+//         {
+//           text: "Get Started",
+//           link: "/docs",
+//           theme: "brand",
+//         },
+//       ],
+//     },
+//   },
+//   themeConfig: {
+//     search: {
+//       provider: "local",
+//     },
+//     // https://vitepress.dev/reference/default-theme-config
+//     nav: [
+//       { text: "Docs", link: "/docs" },
+//       { text: "Examples", link: "/examples" },
+//     ],
+//     sidebar: {
+//       "/blog/": [
+//         {
+//           text: "Blog",
+//           items: [{ text: "Foo", link: "/blog/foo" }],
+//         },
+//       ],
+//       "/docs/": [
+//         {
+//           text: "Docs",
+//           items: [{ text: "Foo", link: "/docs/foo" }],
+//         },
+//       ],
+//       "/examples/": [
+//         {
+//           text: "Examples",
+//           items: [{ text: "Foo", link: "/examples/foo" }],
+//         },
+//       ],
+//       "/": [
+//         {
+//           text: "Home",
+//           items: [
+//             { text: "Markdown Examples", link: "/markdown-examples" },
+//             { text: "Runtime API Examples", link: "/api-examples" },
+//           ],
+//         },
+//       ],
+//     },
+//   },
+// });z
 
 console.log("nameservers:", zone.nameservers);
 
-await ViteProject("alchemy.run package", {
-  name: "alchemy.run",
-  template: "react-ts",
-  extends: "../tsconfig.base.json",
-  references: ["../alchemy/tsconfig.json"],
-  tailwind: true,
-  tanstack: true,
-  shadcn: {
-    baseColor: "neutral",
-    force: true,
-    components: ["button", "card", "input", "label", "sheet", "table", "tabs"],
-  },
-  overwrite: true,
-});
+// await ViteProject("alchemy.run package", {
+//   name: "alchemy.run",
+//   template: "react-ts",
+//   extends: "../tsconfig.base.json",
+//   references: ["../alchemy/tsconfig.json"],
+//   tailwind: true,
+//   tanstack: true,
+//   shadcn: {
+//     baseColor: "neutral",
+//     force: true,
+//     components: ["button", "card", "input", "label", "sheet", "table", "tabs"],
+//   },
+//   overwrite: true,
+// });
 
 const docs = await Folder(path.join("alchemy.run", "docs"));
 

@@ -11,17 +11,12 @@
     "check": "tsc -b ./tsconfig.json",
     "publish:npm": "bun run --filter alchemy publish:npm"
   },
-  "workspaces": [
-    "alchemy",
-    "alchemy.run",
-    "alchemy.docs",
-    "alchemy.docs2",
-    "examples/*"
-  ],
+  "workspaces": ["alchemy", "alchemy.run", "alchemy.docs2", "examples/*"],
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@biomejs/biome": "~1.8.0",
     "@types/bun": "latest",
     "@types/node": "latest",
-    "typescript": "latest"
+    "typescript": "latest",
+    "yaml": "^2.7.1"
   }
 }

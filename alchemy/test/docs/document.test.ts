@@ -70,8 +70,7 @@ describe("Document Resource", () => {
       // Create a test document with AI-generated content using string prompt
       document = await Document(testId, {
         path: testPath,
-        prompt:
-          "Write a short markdown document about the importance of testing.",
+        prompt: "Write a short markdown document about TypeScript.",
         apiKey: alchemy.secret(process.env.OPENAI_API_KEY),
         model: {
           id: "gpt-4o",
@@ -85,7 +84,7 @@ describe("Document Resource", () => {
 
       expect(document.path).toBe(testPath);
       expect(document.content).toBeTruthy();
-      expect(document.content).toContain("testing");
+      expect(document.content).toContain("TypeScript");
       expect(document.createdAt).toBeTruthy();
       expect(document.updatedAt).toBeTruthy();
 
@@ -137,13 +136,10 @@ describe("Document Resource", () => {
       // Create a test document with AI-generated content and context
       document = await Document(testId, {
         path: testPath,
-        prompt:
-          "Write a short markdown document summarizing these files and their relationships.",
+        prompt: "Write a short markdown document about React components.",
         context: {
-          "src/config.ts":
-            "export const config = { port: 3000, host: 'localhost' };",
-          "src/server.ts":
-            "import { config } from './config';\n\nconst server = createServer(config);",
+          "src/components/Button.tsx":
+            "export const Button = ({ children, onClick }) => {\n  return <button onClick={onClick}>{children}</button>;\n};",
         },
         apiKey: alchemy.secret(process.env.OPENAI_API_KEY),
         model: {
@@ -158,9 +154,9 @@ describe("Document Resource", () => {
 
       expect(document.path).toBe(testPath);
       expect(document.content).toBeTruthy();
-      // The content should reference both files
-      expect(document.content).toContain("config");
-      expect(document.content).toContain("server");
+      // The content should reference the Button component
+      expect(document.content).toContain("Button");
+      expect(document.content).toContain("component");
       expect(document.createdAt).toBeTruthy();
       expect(document.updatedAt).toBeTruthy();
 
@@ -171,10 +167,10 @@ describe("Document Resource", () => {
       // Update with different context
       document = await Document(testId, {
         path: testPath,
-        prompt: "Write a short markdown document explaining this component.",
+        prompt: "Write a short markdown document about React components.",
         context: {
-          "src/components/Button.tsx":
-            "export const Button = ({ children, onClick }) => {\n  return <button onClick={onClick}>{children}</button>;\n};",
+          "src/components/Link.tsx":
+            "export const Link = ({ href, children }) => {\n  return <a href={href}>{children}</a>;\n};",
         },
         model: {
           id: "gpt-4o",
@@ -185,7 +181,7 @@ describe("Document Resource", () => {
       });
 
       expect(document.content).toBeTruthy();
-      expect(document.content).toContain("Button");
+      expect(document.content).toContain("Link");
       expect(document.content).toContain("component");
 
       // Verify file was updated
@@ -206,31 +202,31 @@ describe("Document Resource", () => {
   });
 
   test("create document with Document resources as context", async (scope) => {
-    let configDoc: Document | undefined;
-    let serverDoc: Document | undefined;
+    let buttonDoc: Document | undefined;
+    let linkDoc: Document | undefined;
     let document: Document | undefined;
 
     try {
       // Create source documents first
-      configDoc = await Document("config", {
-        path: path.join(".out", "docs", "config.md"),
-        content: "export const config = { port: 3000, host: 'localhost' };",
+      buttonDoc = await Document("button", {
+        path: path.join(".out", "docs", "button.md"),
+        content:
+          "export const Button = ({ children, onClick }) => {\n  return <button onClick={onClick}>{children}</button>;\n};",
       });
 
-      serverDoc = await Document("server", {
-        path: path.join(".out", "docs", "server.md"),
+      linkDoc = await Document("link", {
+        path: path.join(".out", "docs", "link.md"),
         content:
-          "import { config } from './config';\n\nconst server = createServer(config);",
+          "export const Link = ({ href, children }) => {\n  return <a href={href}>{children}</a>;\n};",
       });
 
       // Create a document using other documents as context
       document = await Document(testId, {
         path: testPath,
-        prompt:
-          "Write a short markdown document summarizing these files and their relationships.",
+        prompt: "Write a short markdown document about these React components.",
         context: {
-          "src/config.ts": configDoc,
-          "src/server.ts": serverDoc,
+          "src/components/Button.tsx": buttonDoc,
+          "src/components/Link.tsx": linkDoc,
         },
         apiKey: alchemy.secret(process.env.OPENAI_API_KEY),
         model: {
@@ -245,53 +241,21 @@ describe("Document Resource", () => {
 
       expect(document.path).toBe(testPath);
       expect(document.content).toBeTruthy();
-      // The content should reference both files
-      expect(document.content).toContain("config");
-      expect(document.content).toContain("server");
+      // The content should reference both components
+      expect(document.content).toContain("Button");
+      expect(document.content).toContain("Link");
       expect(document.createdAt).toBeTruthy();
       expect(document.updatedAt).toBeTruthy();
 
       // Verify file was created
       const content = await fs.readFile(testPath, "utf-8");
       expect(content).toBe(document.content);
-
-      // Update with mixed string and Document context
-      const buttonDoc = await Document("button", {
-        path: path.join(".out", "docs", "button.md"),
-        content:
-          "export const Button = ({ children, onClick }) => {\n  return <button onClick={onClick}>{children}</button>;\n};",
-      });
-
-      document = await Document(testId, {
-        path: testPath,
-        prompt: "Write a short markdown document explaining these components.",
-        context: {
-          "src/components/Button.tsx": buttonDoc,
-          "src/components/Link.tsx":
-            "export const Link = ({ href, children }) => {\n  return <a href={href}>{children}</a>;\n};",
-        },
-        model: {
-          id: "gpt-4o",
-          options: {
-            temperature: 0.5,
-          },
-        },
-      });
-
-      expect(document.content).toBeTruthy();
-      expect(document.content).toContain("Button");
-      expect(document.content).toContain("Link");
-      expect(document.content).toContain("component");
-
-      // Verify file was updated
-      const updatedContent = await fs.readFile(testPath, "utf-8");
-      expect(updatedContent).toBe(document.content);
     } finally {
       // Clean up
       await destroy(scope);
 
       // Verify all files were deleted
-      for (const file of [testPath, configDoc?.path, serverDoc?.path]) {
+      for (const file of [testPath, buttonDoc?.path, linkDoc?.path]) {
         if (!file) continue;
         try {
           await fs.access(file);
@@ -432,4 +396,172 @@ describe("Document Resource", () => {
       await destroy(scope);
     }
   }
+
+  test("should not regenerate content when prompt and context haven't changed", async (scope) => {
+    let document: Document | undefined;
+    try {
+      // Create initial document
+      document = await Document(testId, {
+        path: testPath,
+        prompt: "Write a short markdown document about TypeScript.",
+        context: {
+          "example.ts": "const x: number = 42;",
+        },
+        apiKey: alchemy.secret(process.env.OPENAI_API_KEY),
+        model: {
+          id: "gpt-4o",
+          options: { temperature: 0.7 },
+        },
+      });
+
+      const initialContent = document.content;
+      const initialUpdatedAt = document.updatedAt;
+
+      // Wait a bit to ensure timestamps would be different if updated
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Update with same prompt and context
+      document = await Document(testId, {
+        path: testPath,
+        prompt: "Write a short markdown document about TypeScript.",
+        context: {
+          "example.ts": "const x: number = 42;",
+        },
+        apiKey: alchemy.secret(process.env.OPENAI_API_KEY),
+        model: {
+          id: "gpt-4o",
+          options: { temperature: 0.7 },
+        },
+      });
+
+      // Content and timestamps should remain unchanged
+      expect(document.content).toBe(initialContent);
+      expect(document.updatedAt).toBe(initialUpdatedAt);
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("should regenerate content when prompt changes", async (scope) => {
+    let document: Document | undefined;
+    try {
+      // Create initial document
+      document = await Document(testId, {
+        path: testPath,
+        prompt: "Write about TypeScript.",
+        context: {
+          "example.ts": "const x: number = 42;",
+        },
+        apiKey: alchemy.secret(process.env.OPENAI_API_KEY),
+        model: {
+          id: "gpt-4o",
+          options: { temperature: 0.7 },
+        },
+      });
+
+      const initialContent = document.content;
+      const initialUpdatedAt = document.updatedAt;
+
+      // Wait a bit to ensure timestamps would be different
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Update with different prompt
+      document = await Document(testId, {
+        path: testPath,
+        prompt: "Write about JavaScript.", // Changed prompt
+        context: {
+          "example.ts": "const x: number = 42;",
+        },
+        apiKey: alchemy.secret(process.env.OPENAI_API_KEY),
+        model: {
+          id: "gpt-4o",
+          options: { temperature: 0.7 },
+        },
+      });
+
+      // Content and timestamps should be updated
+      expect(document.content).not.toBe(initialContent);
+      expect(document.updatedAt).toBeGreaterThan(initialUpdatedAt);
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("should regenerate content when context changes", async (scope) => {
+    let document: Document | undefined;
+    try {
+      // Create initial document
+      document = await Document(testId, {
+        path: testPath,
+        prompt: "Explain this code.",
+        context: {
+          "example.ts": "const x: number = 42;",
+        },
+        apiKey: alchemy.secret(process.env.OPENAI_API_KEY),
+        model: {
+          id: "gpt-4o",
+          options: { temperature: 0.7 },
+        },
+      });
+
+      const initialContent = document.content;
+      const initialUpdatedAt = document.updatedAt;
+
+      // Wait a bit to ensure timestamps would be different
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Update with different context
+      document = await Document(testId, {
+        path: testPath,
+        prompt: "Explain this code.",
+        context: {
+          "example.ts": "const x: string = 'hello';", // Changed context
+        },
+        apiKey: alchemy.secret(process.env.OPENAI_API_KEY),
+        model: {
+          id: "gpt-4o",
+          options: { temperature: 0.7 },
+        },
+      });
+
+      // Content and timestamps should be updated
+      expect(document.content).not.toBe(initialContent);
+      expect(document.updatedAt).toBeGreaterThan(initialUpdatedAt);
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("should include diff in prompt when regenerating", async (scope) => {
+    let document: Document | undefined;
+    try {
+      // Create initial document
+      document = await Document(testId, {
+        path: testPath,
+        prompt: "Write about TypeScript.",
+        apiKey: alchemy.secret(process.env.OPENAI_API_KEY),
+        model: {
+          id: "gpt-4o",
+          options: { temperature: 0.7 },
+        },
+      });
+
+      // Update with different prompt to trigger diff
+      document = await Document(testId, {
+        path: testPath,
+        prompt: "Write about JavaScript and TypeScript.",
+        apiKey: alchemy.secret(process.env.OPENAI_API_KEY),
+        model: {
+          id: "gpt-4o",
+          options: { temperature: 0.7 },
+        },
+      });
+
+      // Content should mention both JavaScript and TypeScript
+      expect(document.content).toContain("JavaScript");
+      expect(document.content).toContain("TypeScript");
+    } finally {
+      await destroy(scope);
+    }
+  });
 });

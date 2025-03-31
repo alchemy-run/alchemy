@@ -34,16 +34,17 @@
     "@aws-sdk/client-sqs": "^3.0.0",
     "@aws-sdk/client-sts": "^3.0.0",
     "@octokit/rest": "^21.1.1",
-    "ai": "^4.1.16",
+    "ai": "^4.0.0",
     "diff": "^7.0.0",
-    "esbuild": "^0.24.2",
-    "glob": "^10.3.10",
-    "hono": "^4.7.4",
+    "esbuild": "^0.25.1",
+    "glob": "^10.0.0",
+    "hono": "^4.0.0",
     "libsodium-wrappers": "^0.7.15",
     "jszip": "^3.0.0",
-    "stripe": "^17.7.0",
-    "turndown": "^7.2.0",
-    "zod": "^3.24.1"
+    "stripe": "^17.0.0",
+    "turndown": "^7.0.0",
+    "yaml": "^2.0.0",
+    "zod": "^3.0.0"
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^1.1.6",
@@ -63,6 +64,8 @@
     "turndown": "^7.2.0",
     "typescript": "latest",
     "vite": "^6.0.7",
+    "vitepress": "^1.6.3",
+    "yaml": "^2.7.1",
     "wrangler": "^3.114.0"
   }
 }
