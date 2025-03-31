@@ -13,9 +13,10 @@ import "./alchemy/src/vitepress";
 
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
-import { StaticSite, Zone } from "./alchemy/src/cloudflare";
+import { Zone } from "./alchemy/src/cloudflare";
 import { Folder } from "./alchemy/src/fs";
 import { GitHubSecret } from "./alchemy/src/github";
+import { VitePressProject } from "./alchemy/src/vitepress";
 
 await using _ = alchemy("github:alchemy", {
   stage: "prod",
@@ -30,72 +31,78 @@ const zone = await Zone("alchemy.run", {
   type: "full",
 });
 
-// await VitePressProject("alchemy.run docs", {
-//   name: "alchemy.docs2",
-//   title: "Alchemy",
-//   description: "Alchemy is a TypeScript-native, embeddable IaC library",
-//   overwrite: true,
-//   devDependencies: {
-//     alchemy: "workspace:*",
-//   },
-//   theme: {
-//     light: "light-plus",
-//     dark: "dark-plus",
-//   },
-//   home: {
-//     layout: "home",
-//     hero: {
-//       text: "Alchemy",
-//       tagline: "Alchemy is a TypeScript-native, embeddable IaC library",
-//       actions: [
-//         {
-//           text: "Get Started",
-//           link: "/docs",
-//           theme: "brand",
-//         },
-//       ],
-//     },
-//   },
-//   themeConfig: {
-//     search: {
-//       provider: "local",
-//     },
-//     // https://vitepress.dev/reference/default-theme-config
-//     nav: [
-//       { text: "Docs", link: "/docs" },
-//       { text: "Examples", link: "/examples" },
-//     ],
-//     sidebar: {
-//       "/blog/": [
-//         {
-//           text: "Blog",
-//           items: [{ text: "Foo", link: "/blog/foo" }],
-//         },
-//       ],
-//       "/docs/": [
-//         {
-//           text: "Docs",
-//           items: [{ text: "Foo", link: "/docs/foo" }],
-//         },
-//       ],
-//       "/examples/": [
-//         {
-//           text: "Examples",
-//           items: [{ text: "Foo", link: "/examples/foo" }],
-//         },
-//       ],
-//       "/": [
-//         {
-//           text: "Home",
-//           items: [
-//             { text: "Markdown Examples", link: "/markdown-examples" },
-//             { text: "Runtime API Examples", link: "/api-examples" },
-//           ],
-//         },
-//       ],
-//     },
-//   },
-// });z
+await VitePressProject("alchemy.run docs", {
+  name: "alchemy.run",
+  title: "Alchemy",
+  description: "Alchemy is a TypeScript-native, embeddable IaC library",
+  overwrite: true,
+  devDependencies: {
+    alchemy: "workspace:*",
+  },
+  theme: {
+    light: "light-plus",
+    dark: "dark-plus",
+  },
+  home: {
+    layout: "home",
+    hero: {
+      text: "Alchemy",
+      tagline: "Alchemy is a TypeScript-native, embeddable IaC library",
+      actions: [
+        {
+          text: "Get Started",
+          link: "/docs",
+          theme: "brand",
+        },
+      ],
+    },
+    features: [
+      {
+        title: "Easy to use",
+        details: "Alchemy is easy to use and understand",
+      },
+    ],
+  },
+  themeConfig: {
+    search: {
+      provider: "local",
+    },
+    // https://vitepress.dev/reference/default-theme-config
+    nav: [
+      { text: "Docs", link: "/docs" },
+      { text: "Examples", link: "/examples" },
+    ],
+    sidebar: {
+      "/blog/": [
+        {
+          text: "Blog",
+          items: [{ text: "Foo", link: "/blog/foo" }],
+        },
+      ],
+      "/docs/": [
+        {
+          text: "Docs",
+          items: [{ text: "Foo", link: "/docs/foo" }],
+        },
+      ],
+      "/examples/": [
+        {
+          text: "Examples",
+          items: [{ text: "Foo", link: "/examples/foo" }],
+        },
+      ],
+      "/": [
+        {
+          text: "Home",
+          items: [
+            { text: "Markdown Examples", link: "/markdown-examples" },
+            { text: "Runtime API Examples", link: "/api-examples" },
+          ],
+        },
+      ],
+    },
+  },
+});
 
 console.log("nameservers:", zone.nameservers);
 
@@ -149,18 +156,18 @@ const docs = await Folder(path.join("alchemy.run", "docs"));
 //   path: "alchemy.run/wrangler.jsonc",
 // });
 
-const site = await StaticSite("alchemy.run site", {
-  name: "alchemy",
-  dir: "alchemy.run/dist",
-  domain: "alchemy.run",
-  build: {
-    command: "bun run --filter alchemy.run build",
-  },
-});
+// const site = await StaticSite("alchemy.run site", {
+//   name: "alchemy",
+//   dir: "alchemy.run/dist",
+//   domain: "alchemy.run",
+//   build: {
+//     command: "bun run --filter alchemy.run build",
+//   },
+// });
 
-console.log({
-  url: site.url,
-});
+// console.log({
+//   url: site.url,
+// });
 
 const accountId = await getAccountId();
 

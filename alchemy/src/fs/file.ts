@@ -57,3 +57,50 @@ export const File = Resource(
     });
   },
 );
+
+export type JsonFile = File;
+
+export function JsonFile(id: string, content: any): Promise<JsonFile> {
+  return File(id.replace("/", "-"), {
+    path: id,
+    content: JSON.stringify(content),
+  });
+}
+
+export type TextFile = File;
+
+export function TextFile(id: string, content: string): Promise<TextFile> {
+  return File(id.replace("/", "-"), {
+    path: id,
+    content,
+  });
+}
+
+export type YamlFile = File;
+
+export async function YamlFile(id: string, content: any): Promise<YamlFile> {
+  const yaml = await import("yaml");
+  return File(id.replace("/", "-"), {
+    path: id,
+    content: yaml.stringify(content),
+  });
+}
+
+export type TypeScriptFile = File;
+
+export async function TypeScriptFile(
+  id: string,
+  content: string,
+): Promise<TypeScriptFile> {
+  const prettier = await import("prettier");
+  return File(id.replace("/", "-"), {
+    path: id,
+    content: await prettier.format(content, {
+      parser: "typescript",
+      editor: {
+        tabWidth: 2,
+        indentWidth: 2,
+      },
+    }),
+  });
+}

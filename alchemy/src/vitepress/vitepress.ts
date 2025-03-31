@@ -1,10 +1,13 @@
 import { exec } from "child_process";
 import fs from "fs/promises";
+import path from "path";
 import { promisify } from "util";
 import type { DefaultTheme, ThemeOptions } from "vitepress";
 import yaml from "yaml";
 import type { Context } from "../context";
+import { Folder, JsonFile, TextFile, TypeScriptFile } from "../fs";
 import { Resource } from "../resource";
+import { InstallDependencies, fixedDependencies } from "./dependencies";
 import type { HomePage } from "./home-page";
 
 const execAsync = promisify(exec);
@@ -80,7 +83,6 @@ export const VitePressProject = Resource(
     id: string,
     props: VitePressProjectProps,
   ): Promise<VitePressProject> {
-    const phase = this.phase;
     if (this.phase === "delete") {
       try {
         if (await fs.exists(props.name)) {
@@ -93,94 +95,39 @@ export const VitePressProject = Resource(
       return this.destroy();
     }
 
-    if (this.phase === "update") {
-      if (props.overwrite) {
-        await modifyConfig(props);
-      } else {
-        console.warn(
-          "VitePressProject does not support updates without overwrite: true - the project must be recreated to change the configuration",
-        );
-      }
-    } else {
-      // Create the project directory
-      await fs.mkdir(props.name, { recursive: true });
+    const cwd = (await Folder(props.name)).path;
 
-      // Initialize project files
-      await initializeProject(props);
-    }
+    // Initialize package.json
+    await JsonFile(path.join(cwd, "package.json"), {
+      name: props.name,
+      scripts: {
+        "docs:dev": "vitepress dev",
+        "docs:build": "vitepress build",
+        "docs:preview": "vitepress preview",
+      },
+      dependencies: fixedDependencies(props.dependencies || {}),
+      devDependencies: fixedDependencies(props.devDependencies || {}),
+    });
 
-    return this(props);
+    await InstallDependencies("dependencies", {
+      cwd,
+      dependencies: props.dependencies,
+      devDependencies: {
+        vue: "latest",
+        vitepress: "latest",
+        "@shikijs/vitepress-twoslash": "latest",
+        "markdown-it-footnote": "latest",
+        ...props.devDependencies,
+      },
+    });
 
-    async function initializeProject(props: VitePressProjectProps) {
-      const cwd = props.name;
+    // Create .vitepress directory and config
+    await Folder(`${cwd}/.vitepress/theme`);
 
-      // Initialize package.json
-      await fs.writeFile(
-        `${cwd}/package.json`,
-        JSON.stringify(
-          {
-            name: props.name,
-            scripts: {
-              "docs:dev": "vitepress dev",
-              "docs:build": "vitepress build",
-              "docs:preview": "vitepress preview",
-            },
-            dependencies: fixedDependencies(props.dependencies || {}),
-            devDependencies: fixedDependencies(props.devDependencies || {}),
-          },
-          null,
-          2,
-        ),
-      );
-
-      await installDependencies(props.dependencies);
-      await installDependencies(
-        {
-          vue: "latest",
-          vitepress: "latest",
-          "@shikijs/vitepress-twoslash": "latest",
-          "markdown-it-footnote": "latest",
-        },
-        "-D",
-      );
-
-      await execAsync("bun install", { cwd });
-
-      function isInstallableVersion(version: string) {
-        // TODO: file:// ?
-        return !version.startsWith("workspace:");
-      }
-
-      function fixedDependencies(dependencies?: Record<string, string>) {
-        if (!dependencies) return {};
-        return Object.fromEntries(
-          Object.entries(dependencies).filter(
-            ([, value]) => !isInstallableVersion(value),
-          ),
-        );
-      }
-
-      async function installDependencies(
-        dependencies: Record<string, string> | undefined,
-        ...args: string[]
-      ) {
-        if (!dependencies) return;
-        const deps = Object.entries(dependencies)
-          .filter(([, value]) => isInstallableVersion(value))
-          .map(([pkg, version]) => `${pkg}@${version}`)
-          .join(" ");
-
-        await execAsync(`bun add ${args.join(" ")} ${deps}`, { cwd });
-      }
-
-      // Create .gitignore
-      await fs.writeFile(`${cwd}/.gitignore`, `.vitepress/cache\n`);
-
-      // Create .vitepress directory and config
-      await fs.mkdir(`${cwd}/.vitepress/theme`, { recursive: true });
-
-      // Create theme files
-      await fs.writeFile(
+    await Promise.all([
+      TextFile(`${cwd}/.gitignore`, `.vitepress/cache\n`),
+      TextFile(`${cwd}/index.md`, `---\n${yaml.stringify(props.home)}---\n`),
+      TypeScriptFile(
         `${cwd}/.vitepress/theme/index.ts`,
         `import TwoslashFloatingVue from "@shikijs/vitepress-twoslash/client";
 import "@shikijs/vitepress-twoslash/style.css";
@@ -194,161 +141,151 @@ export default {
     ctx.app.use(TwoslashFloatingVue);
   },
 } satisfies ThemeConfig;
-`,
-      );
-
-      await fs.writeFile(
+  `,
+      ),
+      TextFile(
         `${cwd}/.vitepress/theme/style.css`,
         `/**
- * Customize default theme styling by overriding CSS variables:
- * https://github.com/vuejs/vitepress/blob/main/src/client/theme-default/styles/vars.css
- */
+* Customize default theme styling by overriding CSS variables:
+* https://github.com/vuejs/vitepress/blob/main/src/client/theme-default/styles/vars.css
+*/
 
 /**
- * Colors
- *
- * Each colors have exact same color scale system with 3 levels of solid
- * colors with different brightness, and 1 soft color.
- *
- * - \`XXX-1\`: The most solid color used mainly for colored text. It must
- *   satisfy the contrast ratio against when used on top of \`XXX-soft\`.
- *
- * - \`XXX-2\`: The color used mainly for hover state of the button.
- *
- * - \`XXX-3\`: The color for solid background, such as bg color of the button.
- *   It must satisfy the contrast ratio with pure white (#ffffff) text on
- *   top of it.
- *
- * - \`XXX-soft\`: The color used for subtle background such as custom container
- *   or badges. It must satisfy the contrast ratio when putting \`XXX-1\` colors
- *   on top of it.
- *
- *   The soft color must be semi transparent alpha channel. This is crucial
- *   because it allows adding multiple "soft" colors on top of each other
- *   to create a accent, such as when having inline code block inside
- *   custom containers.
- *
- * - \`default\`: The color used purely for subtle indication without any
- *   special meanings attached to it such as bg color for menu hover state.
- *
- * - \`brand\`: Used for primary brand colors, such as link text, button with
- *   brand theme, etc.
- *
- * - \`tip\`: Used to indicate useful information. The default theme uses the
- *   brand color for this by default.
- *
- * - \`warning\`: Used to indicate warning to the users. Used in custom
- *   container, badges, etc.
- *
- * - \`danger\`: Used to show error, or dangerous message to the users. Used
- *   in custom container, badges, etc.
- * -------------------------------------------------------------------------- */
+* Colors
+*
+* Each colors have exact same color scale system with 3 levels of solid
+* colors with different brightness, and 1 soft color.
+*
+* - \`XXX-1\`: The most solid color used mainly for colored text. It must
+*   satisfy the contrast ratio against when used on top of \`XXX-soft\`.
+*
+* - \`XXX-2\`: The color used mainly for hover state of the button.
+*
+* - \`XXX-3\`: The color for solid background, such as bg color of the button.
+*   It must satisfy the contrast ratio with pure white (#ffffff) text on
+*   top of it.
+*
+* - \`XXX-soft\`: The color used for subtle background such as custom container
+*   or badges. It must satisfy the contrast ratio when putting \`XXX-1\` colors
+*   on top of it.
+*
+*   The soft color must be semi transparent alpha channel. This is crucial
+*   because it allows adding multiple "soft" colors on top of each other
+*   to create a accent, such as when having inline code block inside
+*   custom containers.
+*
+* - \`default\`: The color used purely for subtle indication without any
+*   special meanings attached to it such as bg color for menu hover state.
+*
+* - \`brand\`: Used for primary brand colors, such as link text, button with
+*   brand theme, etc.
+*
+* - \`tip\`: Used to indicate useful information. The default theme uses the
+*   brand color for this by default.
+*
+* - \`warning\`: Used to indicate warning to the users. Used in custom
+*   container, badges, etc.
+*
+* - \`danger\`: Used to show error, or dangerous message to the users. Used
+*   in custom container, badges, etc.
+* -------------------------------------------------------------------------- */
 
 :root {
-  --vp-c-default-1: var(--vp-c-gray-1);
-  --vp-c-default-2: var(--vp-c-gray-2);
-  --vp-c-default-3: var(--vp-c-gray-3);
-  --vp-c-default-soft: var(--vp-c-gray-soft);
+--vp-c-default-1: var(--vp-c-gray-1);
+--vp-c-default-2: var(--vp-c-gray-2);
+--vp-c-default-3: var(--vp-c-gray-3);
+--vp-c-default-soft: var(--vp-c-gray-soft);
 
-  --vp-c-brand-1: var(--vp-c-indigo-1);
-  --vp-c-brand-2: var(--vp-c-indigo-2);
-  --vp-c-brand-3: var(--vp-c-indigo-3);
-  --vp-c-brand-soft: var(--vp-c-indigo-soft);
+--vp-c-brand-1: var(--vp-c-indigo-1);
+--vp-c-brand-2: var(--vp-c-indigo-2);
+--vp-c-brand-3: var(--vp-c-indigo-3);
+--vp-c-brand-soft: var(--vp-c-indigo-soft);
 
-  --vp-c-tip-1: var(--vp-c-brand-1);
-  --vp-c-tip-2: var(--vp-c-brand-2);
-  --vp-c-tip-3: var(--vp-c-brand-3);
-  --vp-c-tip-soft: var(--vp-c-brand-soft);
+--vp-c-tip-1: var(--vp-c-brand-1);
+--vp-c-tip-2: var(--vp-c-brand-2);
+--vp-c-tip-3: var(--vp-c-brand-3);
+--vp-c-tip-soft: var(--vp-c-brand-soft);
 
-  --vp-c-warning-1: var(--vp-c-yellow-1);
-  --vp-c-warning-2: var(--vp-c-yellow-2);
-  --vp-c-warning-3: var(--vp-c-yellow-3);
-  --vp-c-warning-soft: var(--vp-c-yellow-soft);
+--vp-c-warning-1: var(--vp-c-yellow-1);
+--vp-c-warning-2: var(--vp-c-yellow-2);
+--vp-c-warning-3: var(--vp-c-yellow-3);
+--vp-c-warning-soft: var(--vp-c-yellow-soft);
 
-  --vp-c-danger-1: var(--vp-c-red-1);
-  --vp-c-danger-2: var(--vp-c-red-2);
-  --vp-c-danger-3: var(--vp-c-red-3);
-  --vp-c-danger-soft: var(--vp-c-red-soft);
+--vp-c-danger-1: var(--vp-c-red-1);
+--vp-c-danger-2: var(--vp-c-red-2);
+--vp-c-danger-3: var(--vp-c-red-3);
+--vp-c-danger-soft: var(--vp-c-red-soft);
 }
 
 /**
- * Component: Button
- * -------------------------------------------------------------------------- */
+* Component: Button
+* -------------------------------------------------------------------------- */
 
 :root {
-  --vp-button-brand-border: transparent;
-  --vp-button-brand-text: var(--vp-c-white);
-  --vp-button-brand-bg: var(--vp-c-brand-3);
-  --vp-button-brand-hover-border: transparent;
-  --vp-button-brand-hover-text: var(--vp-c-white);
-  --vp-button-brand-hover-bg: var(--vp-c-brand-2);
-  --vp-button-brand-active-border: transparent;
-  --vp-button-brand-active-text: var(--vp-c-white);
-  --vp-button-brand-active-bg: var(--vp-c-brand-1);
+--vp-button-brand-border: transparent;
+--vp-button-brand-text: var(--vp-c-white);
+--vp-button-brand-bg: var(--vp-c-brand-3);
+--vp-button-brand-hover-border: transparent;
+--vp-button-brand-hover-text: var(--vp-c-white);
+--vp-button-brand-hover-bg: var(--vp-c-brand-2);
+--vp-button-brand-active-border: transparent;
+--vp-button-brand-active-text: var(--vp-c-white);
+--vp-button-brand-active-bg: var(--vp-c-brand-1);
 }
 
 /**
- * Component: Home
- * -------------------------------------------------------------------------- */
+* Component: Home
+* -------------------------------------------------------------------------- */
 
 :root {
-  --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: -webkit-linear-gradient(
-    120deg,
-    #bd34fe 30%,
-    #41d1ff
-  );
+--vp-home-hero-name-color: transparent;
+--vp-home-hero-name-background: -webkit-linear-gradient(
+  120deg,
+  #bd34fe 30%,
+  #41d1ff
+);
 
-  --vp-home-hero-image-background-image: linear-gradient(
-    -45deg,
-    #bd34fe 50%,
-    #47caff 50%
-  );
-  --vp-home-hero-image-filter: blur(44px);
+--vp-home-hero-image-background-image: linear-gradient(
+  -45deg,
+  #bd34fe 50%,
+  #47caff 50%
+);
+--vp-home-hero-image-filter: blur(44px);
 }
 
 @media (min-width: 640px) {
-  :root {
-    --vp-home-hero-image-filter: blur(56px);
-  }
+:root {
+  --vp-home-hero-image-filter: blur(56px);
+}
 }
 
 @media (min-width: 960px) {
-  :root {
-    --vp-home-hero-image-filter: blur(68px);
-  }
+:root {
+  --vp-home-hero-image-filter: blur(68px);
+}
 }
 
 /**
- * Component: Custom Block
- * -------------------------------------------------------------------------- */
+* Component: Custom Block
+* -------------------------------------------------------------------------- */
 
 :root {
-  --vp-custom-block-tip-border: transparent;
-  --vp-custom-block-tip-text: var(--vp-c-text-1);
-  --vp-custom-block-tip-bg: var(--vp-c-brand-soft);
-  --vp-custom-block-tip-code-bg: var(--vp-c-brand-soft);
+--vp-custom-block-tip-border: transparent;
+--vp-custom-block-tip-text: var(--vp-c-text-1);
+--vp-custom-block-tip-bg: var(--vp-c-brand-soft);
+--vp-custom-block-tip-code-bg: var(--vp-c-brand-soft);
 }
 
 /**
- * Component: Algolia
- * -------------------------------------------------------------------------- */
+* Component: Algolia
+* -------------------------------------------------------------------------- */
 
 .DocSearch {
-  --docsearch-primary-color: var(--vp-c-brand-1) !important;
+--docsearch-primary-color: var(--vp-c-brand-1) !important;
 }
 `,
-      );
-
-      const themeConfig = {
-        ...props.themeConfig,
-        search: props.themeConfig.search ?? { provider: "local" },
-        nav: props.themeConfig.nav ?? [{ text: "Home", link: "/" }],
-        sidebar: props.themeConfig.sidebar ?? [],
-        socialLinks: props.themeConfig.socialLinks ?? [],
-      };
-
-      await fs.writeFile(
+      ),
+      TypeScriptFile(
         `${cwd}/.vitepress/config.mts`,
         `import { transformerTwoslash } from "@shikijs/vitepress-twoslash";
 import footnotePlugin from "markdown-it-footnote";
@@ -370,46 +307,18 @@ export default defineConfig({
     config: (md) => md.use(footnotePlugin),
   },
   // https://vitepress.dev/reference/default-theme-config
-  themeConfig: ${JSON.stringify(themeConfig)}
+  themeConfig: ${JSON.stringify({
+    ...props.themeConfig,
+    search: props.themeConfig.search ?? { provider: "local" },
+    nav: props.themeConfig.nav ?? [{ text: "Home", link: "/" }],
+    sidebar: props.themeConfig.sidebar ?? [],
+    socialLinks: props.themeConfig.socialLinks ?? [],
+  })}
 });
 `,
-      );
+      ),
+    ]);
 
-      // Create markdown files
-      await fs.writeFile(
-        `${cwd}/index.md`,
-        `---\n${yaml.stringify(props.home)}---\n`,
-      );
-
-      // Install dependencies
-      await execAsync("bun install", { cwd });
-    }
-
-    async function modifyConfig(props: VitePressProjectProps) {
-      const cwd = props.name;
-      const configPath = `${cwd}/.vitepress/config.mts`;
-
-      // Only modify if the file exists and we have title or description to update
-      if ((await fs.exists(configPath)) && (props.title || props.description)) {
-        const configContent = await fs.readFile(configPath, "utf-8");
-        let updatedContent = configContent;
-
-        if (props.title) {
-          updatedContent = updatedContent.replace(
-            /title:\s*['"].*?['"]/,
-            `title: ${JSON.stringify(props.title)}`,
-          );
-        }
-
-        if (props.description) {
-          updatedContent = updatedContent.replace(
-            /description:\s*['"].*?['"]/,
-            `description: ${JSON.stringify(props.description)}`,
-          );
-        }
-
-        await fs.writeFile(configPath, updatedContent);
-      }
-    }
+    return this(props);
   },
 );
