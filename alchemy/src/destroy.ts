@@ -70,10 +70,9 @@ export async function destroy<Type extends string>(
       console.log(`Delete:  "${instance.FQN}"`);
     }
 
-    const state = (await scope.state.get(instance.ID))!;
+    const state = await scope.state.get(instance.ID);
 
     if (state === undefined) {
-      console.warn(`Resource "${instance.FQN}" not found`);
       return;
     }
 

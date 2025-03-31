@@ -103,12 +103,7 @@ export function context<
       | [props: Omit<Out, "Kind" | "ID" | "Scope">]
       | [id: string, props: Omit<Out, "Kind" | "ID" | "Scope">]
   ): Out {
-    const [id, props] =
-      typeof args[0] === "string"
-        ? args.length === 1
-          ? [undefined, args[0]]
-          : args
-        : [undefined, args[0]];
+    const [ID, props] = typeof args[0] === "string" ? args : [id, args[0]];
     return {
       ...props,
       Kind: kind,

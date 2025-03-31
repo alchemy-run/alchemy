@@ -1,6 +1,5 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText } from "ai";
-import * as diffLib from "diff";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "../context";
@@ -172,6 +171,8 @@ export const Document = Resource(
 
     let content: string;
 
+    console.log("Generating content for", props.path);
+
     // Generate content if prompt is provided
     if ("prompt" in props) {
       // Get API key from props or environment
@@ -188,57 +189,11 @@ export const Document = Resource(
       });
 
       // Build the full prompt with context if provided
-      let fullPrompt = Array.isArray(props.prompt)
+      const fullPrompt = Array.isArray(props.prompt)
         ? props.prompt.join("\n")
         : props.prompt!;
 
-      // If this is an update, include the current document content and diff with previous prompt
-      if (
-        this.phase === "update" &&
-        this.output &&
-        "prompt" in this.props &&
-        !("content" in this.props)
-      ) {
-        try {
-          // Read the current document content
-          const currentContent = await fs.readFile(props.path, "utf-8");
-
-          // Get the previous prompt from GeneratedDocumentProps
-          const previousPrompt = Array.isArray(this.props.prompt)
-            ? this.props.prompt.join("\n")
-            : this.props.prompt;
-
-          // Generate standard unified diff
-          const promptDiff = diffLib.createTwoFilesPatch(
-            "previous-prompt",
-            "current-prompt",
-            previousPrompt,
-            fullPrompt,
-          );
-
-          // Add current content and prompt diff to context
-          fullPrompt = `${fullPrompt}\n\nCurrent document content:\n${currentContent}\n\nPrompt changes:\n${promptDiff}`;
-        } catch (error) {
-          console.warn(
-            "Failed to include current document content or diff in prompt:",
-            error,
-          );
-        }
-      }
-      console.log("Prompt:");
       console.log(fullPrompt);
-
-      if (props.context) {
-        const contextFiles = await Promise.all(
-          Object.entries(props.context).map(async ([filePath, content]) => {
-            // If content is a Document, use its content
-            const fileContent =
-              typeof content === "string" ? content : content.content;
-            return `// ${filePath}\n${fileContent}`;
-          }),
-        );
-        fullPrompt = `${fullPrompt}\n\nContext:\n\n${contextFiles.join("\n\n")}`;
-      }
 
       const { text } = await generateText({
         model: provider(props.model?.id || "gpt-4o"),

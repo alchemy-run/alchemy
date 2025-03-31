@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+
 import { DestroyedSignal, destroy } from "./destroy";
 import { Scope } from "./scope";
 import { secret } from "./secret";
@@ -24,14 +27,14 @@ export interface Alchemy {
 function _alchemy(
   ...args:
     | [template: TemplateStringsArray, ...values: any[]]
-    | [appName: string, options: Omit<AlchemyOptions, "appName">]
+    | [appName: string, options?: Omit<AlchemyOptions, "appName">]
 ): any {
   if (typeof args[0] === "string") {
     const [appName, options] = args;
     return scope(undefined, {
       ...options,
       appName,
-      stage: options.stage,
+      stage: options?.stage,
     });
   } else {
     const [template, ...values] = args;
@@ -42,20 +45,43 @@ function _alchemy(
     const indent = " ".repeat(leadingSpaces);
 
     return (async () => {
+      const { isFileCollection, isFileRef } = await import("./fs/file");
+
+      const appendices: Record<string, string> = {};
+
       const stringValues = await Promise.all(
-        values.map(async function resolve(value) {
+        values.map(async function resolve(value): Promise<string> {
           if (typeof value === "string") {
             return indent + value;
           } else if (value instanceof Promise) {
             return resolve(await value);
+          } else if (isFileRef(value)) {
+            if (!(value.path in appendices)) {
+              appendices[value.path] = await fs.readFile(value.path, "utf-8");
+            }
+            return `[${path.basename(value.path)}](${value.path})`;
+          } else if (isFileCollection(value)) {
+            return Object.entries(value.files)
+              .map(([filePath, content]) => {
+                appendices[filePath] = content;
+                return `[${path.basename(filePath)}](${filePath})`;
+              })
+              .join("\n\n");
+          } else if (Array.isArray(value)) {
+            return (
+              await Promise.all(
+                value.map(async (value, i) => `${i}. ${await resolve(value)}`),
+              )
+            ).join("\n");
           } else {
             // TODO: support other types
-            throw new Error(`Unsupported value type: ${typeof value}`);
+            throw new Error(`Unsupported value type: ${JSON.stringify(value)}`);
           }
         }),
       );
+
       // Construct the string template by joining template parts with interpolated values
-      return template
+      const lines = template
         .map((part) =>
           part
             .split("\n")
@@ -65,9 +91,28 @@ function _alchemy(
             .join("\n"),
         )
         .flatMap((part, i) =>
-          i < stringValues.length ? [part, stringValues[i] || ""] : [part],
+          i < stringValues.length ? [part, stringValues[i] ?? ""] : [part],
         )
-        .join("");
+        .join("")
+        .split("\n");
+
+      // Collect and sort appendices by file path
+      return [
+        // format the user prompt and trim the first line if it's empty
+        lines.length > 1 && lines[0].replaceAll(" ", "").length === 0
+          ? lines.slice(1).join("\n")
+          : lines.join("\n"),
+
+        // sort appendices by path and include at the end of the prompt
+        Object.entries(appendices)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([filePath, content]) => {
+            const extension = path.extname(filePath).slice(1);
+            const codeTag = extension ? extension : "";
+            return `// ${filePath}\n\`\`\`${codeTag}\n${content}\n\`\`\``;
+          })
+          .join("\n\n"),
+      ].join("\n");
     })();
   }
 }

@@ -2,15 +2,24 @@ import { Scope } from "../scope";
 import { Secret } from "../secret";
 import { decryptWithKey, encryptWithKey } from "./encrypt";
 
-export async function serialize(scope: Scope, value: any): Promise<any> {
+export async function serialize(
+  scope: Scope,
+  value: any,
+  options?: {
+    encrypt?: boolean;
+  },
+): Promise<any> {
   if (Array.isArray(value)) {
-    return Promise.all(value.map((value) => serialize(scope, value)));
+    return Promise.all(value.map((value) => serialize(scope, value, options)));
   } else if (value instanceof Secret) {
     if (!scope.password) {
       throw new Error("Cannot serialize secret without password");
     }
     return {
-      "@secret": await encryptWithKey(value.unencrypted, scope.password),
+      "@secret":
+        options?.encrypt !== false
+          ? await encryptWithKey(value.unencrypted, scope.password)
+          : value.unencrypted,
     };
   } else if (value instanceof Scope) {
     return undefined;
@@ -19,7 +28,7 @@ export async function serialize(scope: Scope, value: any): Promise<any> {
       await Promise.all(
         Object.entries(value).map(async ([key, value]) => [
           key,
-          await serialize(scope, value),
+          await serialize(scope, value, options),
         ]),
       ),
     );

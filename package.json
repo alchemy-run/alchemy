@@ -5,8 +5,8 @@
   "type": "module",
   "module": "./lib/index.js",
   "scripts": {
-    "dev": "bun run --filter alchemy.run dev",
-    "docs:gen": "bun run --filter alchemy.run docs:gen",
+    "dev": "bun run --filter alchemy-web dev",
+    "docs:gen": "bun run --filter alchemy-web docs:gen",
     "bootstrap": "bun run --env-file .env ./alchemy.config.ts --verbose",
     "build": "tsc -b",
     "check": "tsc -b ./tsconfig.json",

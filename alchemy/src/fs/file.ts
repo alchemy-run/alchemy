@@ -9,9 +9,8 @@ import { alchemy } from "../alchemy";
 declare module "../alchemy" {
   interface Alchemy {
     file(path: string): Promise<FileRef>;
-    files: (...paths: string[]) => Promise<{
-      [relativePath: string]: string;
-    }>;
+    files(paths: string[]): Promise<FileCollection>;
+    files(path: string, ...paths: string[]): Promise<FileCollection>;
   }
 }
 
@@ -20,20 +19,53 @@ export type FileRef = {
   path: string;
 };
 
+export function isFileRef(value: unknown): value is FileRef {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "kind" in value &&
+    value.kind === "fs::FileRef"
+  );
+}
+
+export type FileCollection = {
+  type: "fs::FileCollection";
+  files: {
+    [relativePath: string]: string;
+  };
+};
+
+export function isFileCollection(value: unknown): value is FileCollection {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    value.type === "fs::FileCollection"
+  );
+}
+
 alchemy.file = async (path: string) => ({
   kind: "fs::FileRef",
   path,
 });
 
-alchemy.files = async (...paths: string[]) =>
-  Object.fromEntries(
-    await Promise.all(
-      paths.map(async (path) => [
-        path,
-        await fs.promises.readFile(path, "utf-8"),
-      ]),
+alchemy.files = async (
+  ...args: [paths: string[]] | [...paths: string[]]
+): Promise<FileCollection> => {
+  const paths: string[] =
+    typeof args[0] === "string" ? (args as string[]) : args[0];
+  return {
+    type: "fs::FileCollection",
+    files: Object.fromEntries(
+      await Promise.all(
+        paths.map(async (path) => [
+          path,
+          await fs.promises.readFile(path, "utf-8"),
+        ]),
+      ),
     ),
-  );
+  };
+};
 
 export interface File extends Resource<"fs::File"> {
   path: string;

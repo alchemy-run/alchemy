@@ -9,154 +9,21 @@ import "./alchemy/src/fs";
 import "./alchemy/src/vite";
 import "./alchemy/src/vitepress";
 
+import path from "path";
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
 import { Zone } from "./alchemy/src/cloudflare";
+import { Folder } from "./alchemy/src/fs";
 import { GitHubSecret } from "./alchemy/src/github";
 import { VitePressProject } from "./alchemy/src/vitepress";
 
-await using _ = alchemy("github:alchemy", {
+const app = alchemy("github:alchemy", {
   stage: "prod",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   // pass the password in (you can get it from anywhere, e.g. stdin)
   password: process.env.SECRET_PASSPHRASE,
   quiet: process.argv.includes("--verbose") ? false : true,
 });
-
-const zone = await Zone("alchemy.run", {
-  name: "alchemy.run",
-  type: "full",
-});
-
-await VitePressProject("alchemy.run.website", {
-  name: "alchemy-web",
-  title: "Alchemy",
-  description: "Alchemy is a TypeScript-native, embeddable IaC library",
-  overwrite: true,
-  tsconfig: {
-    extends: "../tsconfig.base.json",
-    references: ["../alchemy/tsconfig.json"],
-  },
-  devDependencies: {
-    alchemy: "workspace:*",
-  },
-  theme: {
-    light: "light-plus",
-    dark: "dark-plus",
-  },
-  home: {
-    layout: "home",
-    hero: {
-      text: "Alchemy",
-      tagline: "Alchemy is a TypeScript-native, embeddable IaC library",
-      actions: [
-        {
-          text: "Get Started",
-          link: "/docs",
-          theme: "brand",
-        },
-      ],
-    },
-    features: [
-      {
-        title: "Easy to use",
-        details: "Alchemy is easy to use and understand",
-      },
-    ],
-  },
-  themeConfig: {
-    search: {
-      provider: "local",
-    },
-    // https://vitepress.dev/reference/default-theme-config
-    nav: [
-      { text: "Docs", link: "/docs" },
-      { text: "Examples", link: "/examples" },
-    ],
-    sidebar: {
-      "/blog/": [
-        {
-          text: "Blog",
-          items: [{ text: "Foo", link: "/blog/foo" }],
-        },
-      ],
-      "/docs/": [
-        {
-          text: "Docs",
-          items: [{ text: "Foo", link: "/docs/foo" }],
-        },
-      ],
-      "/examples/": [
-        {
-          text: "Examples",
-          items: [{ text: "Foo", link: "/examples/foo" }],
-        },
-      ],
-      "/": [
-        {
-          text: "Home",
-          items: [
-            { text: "Markdown Examples", link: "/markdown-examples" },
-            { text: "Runtime API Examples", link: "/api-examples" },
-          ],
-        },
-      ],
-    },
-  },
-});
-
-console.log("nameservers:", zone.nameservers);
-
-// await ViteProject("alchemy.run package", {
-//   name: "alchemy.run",
-//   template: "react-ts",
-//   extends: "../tsconfig.base.json",
-//   references: ["../alchemy/tsconfig.json"],
-//   tailwind: true,
-//   tanstack: true,
-//   shadcn: {
-//     baseColor: "neutral",
-//     force: true,
-//     components: ["button", "card", "input", "label", "sheet", "table", "tabs"],
-//   },
-//   overwrite: true,
-// });
-
-// const docs = await Folder(path.join("alchemy.run", "docs"));
-
-// await Document("home.md", {
-//   path: path.join(docs.path, "home.md"),
-//   prompt: await alchemy`Generate a landing page from:
-//     1. ${["Cursor Rules Files", "./.cursorrules"]} - the rules for generating resources
-//     2. ${["Project README", "./README.md"]} - overview of the alchemy product
-
-//     It should have the following sections:
-//     1. Hero: let's start with "Materialize all the things!"
-//     2. Subhero: Alchemy is a TypeScript-native, embeddable IaC library for materializing software and services.
-//     3. Features:
-//       Get these from the ${["Project README", "./README.md"]}
-//     `,
-// });
-
-// cloudflare vite plugin requires a wrangler.json file
-// await WranglerJson("alchemy.run wrangler.json", {
-//   name: "alchemy",
-//   compatibility_date: "2024-01-01",
-//   path: "alchemy.run/wrangler.jsonc",
-// });
-
-// const site = await StaticSite("alchemy.run site", {
-//   name: "alchemy",
-//   dir: "alchemy.run/dist",
-//   domain: "alchemy.run",
-//   build: {
-//     command: "bun run --filter alchemy.run build",
-//   },
-// });
-
-// console.log({
-//   url: site.url,
-// });
 
 const accountId = await getAccountId();
 
@@ -211,3 +78,205 @@ await Promise.all([
     }),
   ),
 ]);
+
+const zone = await Zone("alchemy.run", {
+  name: "alchemy.run",
+  type: "full",
+});
+
+console.log("nameservers:", zone.nameservers);
+
+// await alchemyDocs();
+
+async function alchemyDocs() {
+  await VitePressProject("alchemy.run.website", {
+    name: "alchemy-web",
+    title: "Alchemy",
+    description: "Alchemy is a TypeScript-native, embeddable IaC library",
+    overwrite: true,
+    tsconfig: {
+      extends: "../tsconfig.base.json",
+      references: ["../alchemy/tsconfig.json"],
+    },
+    devDependencies: {
+      alchemy: "workspace:*",
+    },
+    theme: {
+      light: "light-plus",
+      dark: "dark-plus",
+    },
+    home: {
+      layout: "home",
+      hero: {
+        text: "Alchemy",
+        tagline: "Alchemy is a TypeScript-native, embeddable IaC library",
+        actions: [
+          {
+            text: "Get Started",
+            link: "/docs",
+            theme: "brand",
+          },
+        ],
+      },
+      features: [
+        {
+          title: "Easy to use",
+          details: "Alchemy is easy to use and understand",
+        },
+      ],
+    },
+    themeConfig: {
+      search: {
+        provider: "local",
+      },
+      // https://vitepress.dev/reference/default-theme-config
+      nav: [
+        { text: "Docs", link: "/docs" },
+        { text: "Examples", link: "/examples" },
+      ],
+      sidebar: {
+        "/blog/": [
+          {
+            text: "Blog",
+            items: [{ text: "Foo", link: "/blog/foo" }],
+          },
+        ],
+        "/docs/": [
+          {
+            text: "Docs",
+            items: [{ text: "Foo", link: "/docs/foo" }],
+          },
+        ],
+        "/examples/": [
+          {
+            text: "Examples",
+            items: [{ text: "Foo", link: "/examples/foo" }],
+          },
+        ],
+        "/": [
+          {
+            text: "Home",
+            items: [
+              { text: "Markdown Examples", link: "/markdown-examples" },
+              { text: "Runtime API Examples", link: "/api-examples" },
+            ],
+          },
+        ],
+      },
+    },
+  });
+
+  const docs = await Folder(path.join("alchemy-web", "docs"));
+
+  // const exclude = ["util", "test"];
+
+  // // Get all folders in the alchemy/src directory
+  // const providers = (
+  //   await fs.readdir(path.resolve("alchemy", "src"), {
+  //     withFileTypes: true,
+  //   })
+  // )
+  //   .filter((dirent) => dirent.isDirectory() && !exclude.includes(dirent.name))
+  //   .map((dirent) => path.join(dirent.parentPath, dirent.name));
+
+  // // For each provider, list all files
+  // await Promise.all(
+  //   providers.map(async (provider) => {
+  //     const providerName = path.basename(provider);
+  //     console.log(`\nProvider: ${providerName}`);
+  //     const files = (
+  //       await fs.readdir(path.resolve(provider), {
+  //         withFileTypes: true,
+  //       })
+  //     )
+  //       .filter((dirent) => dirent.isFile())
+  //       .map((dirent) =>
+  //         path.relative(process.cwd(), path.resolve(provider, dirent.name)),
+  //       );
+
+  //     await Document(providerName, {
+  //       path: path.join(docs.path, `${providerName}.md`),
+  //       prompt: await alchemy`
+  //         You are a technical writer writing API documentation for an Alchemy IaC provider.
+  //         See ${alchemy.file("./README.md")} to understand the overview of Alchemy.
+  //         See ${alchemy.file("./.cursorrules")} to better understand the structure and convention of an Alchemy Resource.
+  //         Then, write concise, clear, and comprehensive documentation for the ${provider} provider:
+  //         ${alchemy.files(files)}
+
+  //         Each code snippet should use twoslash syntax for proper highlighting.
+
+  //         E.g.
+  //         \`\`\`ts twoslash
+  //         import alchemy from "alchemy";
+
+  //         alchemy
+  //         //  ^?
+
+  //         // it needs to be placed under the symbol like so:
+  //         const foo = "string";
+  //         //     ^?
+
+  //         alchemy.ru
+  //             //  ^|
+  //         \`\`\`
+
+  //         The \`^?\` syntax is for displaying the type of an expression.
+  //         The \`^|\` syntax is for displaying auto-completions after a dot and (optional prefix)
+  //       `,
+  //     });
+  //   }),
+  // );
+}
+
+// await ViteProject("alchemy.run package", {
+//   name: "alchemy.run",
+//   template: "react-ts",
+//   extends: "../tsconfig.base.json",
+//   references: ["../alchemy/tsconfig.json"],
+//   tailwind: true,
+//   tanstack: true,
+//   shadcn: {
+//     baseColor: "neutral",
+//     force: true,
+//     components: ["button", "card", "input", "label", "sheet", "table", "tabs"],
+//   },
+//   overwrite: true,
+// });
+
+// const docs = await Folder(path.join("alchemy.run", "docs"));
+
+// await Document("home.md", {
+//   path: path.join(docs.path, "home.md"),
+//   prompt: await alchemy`Generate a landing page from:
+//     1. ${["Cursor Rules Files", "./.cursorrules"]} - the rules for generating resources
+//     2. ${["Project README", "./README.md"]} - overview of the alchemy product
+
+//     It should have the following sections:
+//     1. Hero: let's start with "Materialize all the things!"
+//     2. Subhero: Alchemy is a TypeScript-native, embeddable IaC library for materializing software and services.
+//     3. Features:
+//       Get these from the ${["Project README", "./README.md"]}
+//     `,
+// });
+
+// cloudflare vite plugin requires a wrangler.json file
+// await WranglerJson("alchemy.run wrangler.json", {
+//   name: "alchemy",
+//   compatibility_date: "2024-01-01",
+//   path: "alchemy.run/wrangler.jsonc",
+// });
+
+// const site = await StaticSite("alchemy.run site", {
+//   name: "alchemy",
+//   dir: "alchemy.run/dist",
+//   domain: "alchemy.run",
+//   build: {
+//     command: "bun run --filter alchemy.run build",
+//   },
+// });
+
+// console.log({
+//   url: site.url,
+// });
+
+await app.finalize();

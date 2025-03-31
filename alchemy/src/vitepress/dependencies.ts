@@ -62,5 +62,7 @@ export async function installDependencies(
     .map(([pkg, version]) => `${pkg}@${version}`)
     .join(" ");
 
-  await execAsync(`bun add ${args.join(" ")} ${deps}`, { cwd });
+  const cmd = `bun add ${args.join(" ")} ${deps}`;
+  console.log(cmd);
+  await execAsync(cmd, { cwd });
 }

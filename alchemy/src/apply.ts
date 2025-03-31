@@ -7,6 +7,7 @@ import {
   type Resource,
   type ResourceProps,
 } from "./resource";
+import { Secret } from "./secret";
 import type { State } from "./state";
 import { serialize } from "./util/serde";
 
@@ -55,17 +56,27 @@ export async function apply<Out extends Resource>(
 
     // Skip update if inputs haven't changed and resource is in a stable state
     if (state.status === "created" || state.status === "updated") {
-      if (
-        JSON.stringify(state.props) ===
-          JSON.stringify(await serialize(scope, props)) &&
-        alwaysUpdate !== true
-      ) {
+      const oldProps = JSON.stringify(
+        state.props,
+        (_, value) =>
+          value instanceof Secret
+            ? {
+                "@secret": value.unencrypted,
+              }
+            : value,
+        2,
+      );
+      const newProps = JSON.stringify(
+        await serialize(scope, props, {
+          encrypt: false,
+        }),
+        null,
+        2,
+      );
+      if (oldProps === newProps && alwaysUpdate !== true) {
         if (!quiet) {
           console.log(`Skip:    "${resource.FQN}" (no changes)`);
         }
-        // if (resourceState.output !== undefined) {
-        //   resource[Provide](resourceState.output);
-        // }
         return state.output as Awaited<Out>;
       }
     }
