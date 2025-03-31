@@ -49,3 +49,4 @@ jobs:
           CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           GITHUB_ACCESS_TOKEN: ${{ secrets.ADMIN_GITHUB_ACCESS_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
