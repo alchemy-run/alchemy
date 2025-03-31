@@ -78,7 +78,7 @@ export const File = Resource(
     this: Context<File>,
     id: string,
     props: {
-      path?: string;
+      path: string;
       content: string;
     },
   ): Promise<File> {
@@ -92,7 +92,7 @@ export const File = Resource(
       });
       await fs.promises.writeFile(filePath, props.content);
     }
-    return this(props?.path ? id : id.replaceAll("/", ":"), {
+    return this({
       path: filePath,
       content: props.content,
     });
@@ -103,6 +103,7 @@ export type JsonFile = File;
 
 export function JsonFile(id: string, content: any): Promise<JsonFile> {
   return File(id, {
+    path: id,
     content: JSON.stringify(content, null, 2),
   });
 }
@@ -111,6 +112,7 @@ export type TextFile = File;
 
 export function TextFile(id: string, content: string): Promise<TextFile> {
   return File(id, {
+    path: id,
     content,
   });
 }
@@ -120,6 +122,7 @@ export type YamlFile = File;
 export async function YamlFile(id: string, content: any): Promise<YamlFile> {
   const yaml = await import("yaml");
   return File(id, {
+    path: id,
     content: yaml.stringify(content),
   });
 }
@@ -132,6 +135,7 @@ export async function TypeScriptFile(
 ): Promise<TypeScriptFile> {
   const prettier = await import("prettier");
   return File(id, {
+    path: id,
     content: await prettier.format(content, {
       parser: "typescript",
       editor: {

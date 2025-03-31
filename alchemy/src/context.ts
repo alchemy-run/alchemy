@@ -105,9 +105,7 @@ export function context<
   ): Out {
     const [ID, props] =
       typeof args[0] === "string" ? (args as [string, any]) : [id, args[0]];
-    if (ID.includes("/")) {
-      throw new Error(`ID cannot include slashes: ${ID}`);
-    }
+
     return {
       ...props,
       Kind: kind,

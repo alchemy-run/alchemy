@@ -74,7 +74,8 @@ export class FileSystemStateStore implements StateStore {
       });
       return files
         .filter((dirent) => dirent.isFile() && dirent.name.endsWith(".json"))
-        .map((dirent) => dirent.name.replace(/\.json$/, ""));
+        .map((dirent) => dirent.name.replace(/\.json$/, ""))
+        .map((key) => key.replaceAll(":", "/"));
     } catch (error: any) {
       if (error.code === "ENOENT") {
         return [];
@@ -138,6 +139,12 @@ export class FileSystemStateStore implements StateStore {
   }
 
   private async getPath(key: string): Promise<string> {
+    if (key.includes(":")) {
+      throw new Error(`ID cannot include colons: ${key}`);
+    }
+    if (key.includes("/")) {
+      key = key.replaceAll("/", ":");
+    }
     const file = path.join(this.dir, `${key}.json`);
     const dir = path.dirname(file);
     await fs.promises.mkdir(dir, { recursive: true });

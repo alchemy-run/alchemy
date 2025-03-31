@@ -104,6 +104,11 @@ export function Resource<
   ): Promise<Resource<string>> => {
     const scope = _Scope.current;
 
+    if (resourceID.includes(":")) {
+      // we want to use : as an internal separator for resources
+      throw new Error(`ID cannot include colons: ${resourceID}`);
+    }
+
     if (scope.resources.has(resourceID)) {
       // TODO(sam): do we want to throw?
       // it's kind of awesome that you can re-create a resource and call apply

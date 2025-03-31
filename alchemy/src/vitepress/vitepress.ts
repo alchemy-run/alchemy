@@ -101,11 +101,7 @@ export const VitePressProject = Resource(
       return this.destroy();
     }
 
-    const cwd = (
-      await Folder("dir", {
-        path: props.name,
-      })
-    ).path;
+    const cwd = (await Folder(props.name)).path;
 
     // Initialize package.json
     await JsonFile(path.join(cwd, "package.json"), {
