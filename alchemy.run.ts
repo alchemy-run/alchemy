@@ -9,11 +9,9 @@ import "./alchemy/src/fs";
 import "./alchemy/src/vite";
 import "./alchemy/src/vitepress";
 
-import path from "path";
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
 import { Zone } from "./alchemy/src/cloudflare";
-import { Folder } from "./alchemy/src/fs";
 import { GitHubSecret } from "./alchemy/src/github";
 import { VitePressProject } from "./alchemy/src/vitepress";
 
@@ -89,7 +87,7 @@ console.log("nameservers:", zone.nameservers);
 // await alchemyDocs();
 
 async function alchemyDocs() {
-  await VitePressProject("alchemy.run.website", {
+  await VitePressProject("docs", {
     name: "alchemy-web",
     title: "Alchemy",
     description: "Alchemy is a TypeScript-native, embeddable IaC library",
@@ -166,7 +164,7 @@ async function alchemyDocs() {
     },
   });
 
-  const docs = await Folder(path.join("alchemy-web", "docs"));
+  // const docs = await Folder(path.join("alchemy-web", "docs"));
 
   // const exclude = ["util", "test"];
 

@@ -92,7 +92,7 @@ export const File = Resource(
       });
       await fs.promises.writeFile(filePath, props.content);
     }
-    return this(filePath ? id : id.replaceAll("/", ":"), {
+    return this(props?.path ? id : id.replaceAll("/", ":"), {
       path: filePath,
       content: props.content,
     });

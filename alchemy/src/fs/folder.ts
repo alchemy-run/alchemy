@@ -14,7 +14,7 @@ export const Folder = Resource(
     id: string,
     props?: { path: string },
   ): Promise<Folder> {
-    const dirPath = props?.path || id;
+    const dirPath = props?.path ?? id;
     if (this.phase === "delete") {
       // we just do a best effort attempt
       await ignore(["ENOENT", "ENOTEMPTY"], async () =>
@@ -26,7 +26,7 @@ export const Folder = Resource(
         fs.promises.mkdir(dirPath, { recursive: true }),
       );
     }
-    return this(props?.path === undefined ? id.replaceAll("/", ":") : id, {
+    return this(props?.path ? id : id.replaceAll("/", ":"), {
       path: dirPath,
     });
   },

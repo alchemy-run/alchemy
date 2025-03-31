@@ -103,11 +103,15 @@ export function context<
       | [props: Omit<Out, "Kind" | "ID" | "Scope">]
       | [id: string, props: Omit<Out, "Kind" | "ID" | "Scope">]
   ): Out {
-    const [ID, props] = typeof args[0] === "string" ? args : [id, args[0]];
+    const [ID, props] =
+      typeof args[0] === "string" ? (args as [string, any]) : [id, args[0]];
+    if (ID.includes("/")) {
+      throw new Error(`ID cannot include slashes: ${ID}`);
+    }
     return {
       ...props,
       Kind: kind,
-      ID: id,
+      ID,
       FQN: fqn,
       Scope: scope,
       Seq: seq,
