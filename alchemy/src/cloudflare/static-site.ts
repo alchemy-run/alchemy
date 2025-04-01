@@ -1,6 +1,6 @@
 import { exec } from "child_process";
 import { promises as fs } from "fs";
-import path from "path";
+import path from "node:path";
 import { promisify } from "util";
 import type { Context } from "../context";
 import type { BundleProps } from "../esbuild/bundle";
@@ -202,6 +202,58 @@ export interface StaticSite extends Resource<"cloudflare::StaticSite"> {
   routes?: Record<string, string>;
 }
 
+/**
+ * A StaticSite resource deploys static web content to Cloudflare Workers, using KV for asset storage.
+ * It provides an efficient way to serve static websites with global distribution and caching.
+ *
+ * @example
+ * // Create a basic static site with default settings
+ * const basicSite = await StaticSite("my-site", {
+ *   name: "my-site",
+ *   dir: "./dist",
+ *   url: true
+ * });
+ *
+ * @example
+ * // Create a static site with custom build command and minification disabled
+ * const devSite = await StaticSite("dev-site", {
+ *   name: "dev-site",
+ *   dir: "./public",
+ *   build: {
+ *     command: "npm run build"
+ *   },
+ *   bundle: {
+ *     minify: false
+ *   }
+ * });
+ *
+ * @example
+ * // Create a static site with a backend API worker
+ * const backend = await Worker("api-backend", {
+ *   name: "api-backend",
+ *   entrypoint: "./src/api.ts"
+ * });
+ *
+ * const fullSite = await StaticSite("full-site", {
+ *   name: "full-site",
+ *   dir: "./dist",
+ *   routes: {
+ *     "/api/*": backend
+ *   }
+ * });
+ *
+ * @example
+ * // Create a static site with custom error page and index
+ * const customSite = await StaticSite("custom-site", {
+ *   name: "custom-site",
+ *   dir: "./www",
+ *   errorPage: "404.html",
+ *   indexPage: "home.html",
+ *   domain: "www.example.com"
+ * });
+ *
+ * @see https://developers.cloudflare.com/workers/platform/sites
+ */
 export const StaticSite = Resource(
   "cloudflare::StaticSite",
   {

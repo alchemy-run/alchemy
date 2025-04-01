@@ -138,6 +138,69 @@ export interface Worker<B extends Bindings = Bindings>
   };
 }
 
+/**
+ * A Cloudflare Worker is a serverless function that can be deployed to the Cloudflare network.
+ *
+ * @example
+ * // Create a basic HTTP handler worker with custom domain routing
+ * // and workers.dev URL:
+ * const api = await Worker("api", {
+ *   name: "api-worker",
+ *   entrypoint: "./src/api.ts",
+ *   routes: ["api.example.com/*"],
+ *   url: true
+ * });
+ *
+ * @example
+ * // Create a real-time chat worker using Durable Objects
+ * // for state management:
+ * const chatRooms = new DurableObjectNamespace("chat-rooms");
+ * const userStore = new DurableObjectNamespace("user-store");
+ *
+ * const chat = await Worker("chat", {
+ *   name: "chat-worker",
+ *   entrypoint: "./src/chat.ts",
+ *   bindings: {
+ *     ROOMS: chatRooms,
+ *     USERS: userStore
+ *   },
+ * });
+ *
+ * @example
+ * // Create a worker with KV namespace for caching and data storage:
+ * const cache = await KVNamespace("cache-store");
+ * const settings = await KVNamespace("user-settings");
+ *
+ * const cacheWorker = await Worker("cache", {
+ *   name: "cache-worker",
+ *   entrypoint: "./src/cache.ts",
+ *   bindings: {
+ *     CACHE: cache,
+ *     SETTINGS: settings
+ *   }
+ * });
+ *
+ * @example
+ * // Create a worker with R2 bucket for object storage:
+ * const uploads = await R2Bucket("uploads", {
+ *   name: "user-uploads"
+ * });
+ * const assets = await R2Bucket("assets", {
+ *   name: "static-assets",
+ *   allowPublicAccess: true
+ * });
+ *
+ * const storageWorker = await Worker("storage", {
+ *   name: "storage-worker",
+ *   entrypoint: "./src/storage.ts",
+ *   bindings: {
+ *     UPLOADS: uploads,
+ *     ASSETS: assets
+ *   }
+ * });
+ *
+ * @see https://developers.cloudflare.com/workers/
+ */
 export const Worker = Resource(
   "cloudflare::Worker",
   {

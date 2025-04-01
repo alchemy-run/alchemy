@@ -125,6 +125,56 @@ export interface Price extends Resource<"stripe::Price">, PriceProps {
   lookupKey?: string;
 }
 
+/**
+ * Create and manage Stripe prices for products
+ *
+ * @example
+ * // Create a one-time fixed price for a product
+ * const oneTimePrice = await Price("basic-license", {
+ *   currency: "usd",
+ *   unitAmount: 2999, // $29.99
+ *   product: "prod_xyz"
+ * });
+ *
+ * @example
+ * // Create a recurring subscription price with fixed monthly billing
+ * const subscriptionPrice = await Price("pro-monthly", {
+ *   currency: "usd",
+ *   unitAmount: 1499, // $14.99/month
+ *   product: "prod_xyz",
+ *   recurring: {
+ *     interval: "month",
+ *     usageType: "licensed"
+ *   }
+ * });
+ *
+ * @example
+ * // Create a metered price for usage-based billing
+ * const meteredPrice = await Price("storage", {
+ *   currency: "usd",
+ *   unitAmount: 25, // $0.25 per GB
+ *   product: "prod_xyz",
+ *   recurring: {
+ *     interval: "month",
+ *     usageType: "metered",
+ *     aggregateUsage: "sum"
+ *   }
+ * });
+ *
+ * @example
+ * // Create a tiered price with tax behavior
+ * const tieredPrice = await Price("enterprise", {
+ *   currency: "usd",
+ *   unitAmount: 10000, // $100.00
+ *   product: "prod_xyz",
+ *   billingScheme: "tiered",
+ *   taxBehavior: "exclusive",
+ *   metadata: {
+ *     tier: "enterprise",
+ *     features: "all"
+ *   }
+ * });
+ */
 export const Price = Resource(
   "stripe::Price",
   async function (

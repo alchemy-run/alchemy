@@ -245,6 +245,61 @@ export interface Zone extends Resource<"cloudflare::Zone"> {
   };
 }
 
+/**
+ * A Cloudflare Zone represents a domain and its configuration settings on Cloudflare.
+ * Zones allow you to manage DNS, SSL/TLS, caching, security and other settings for a domain.
+ *
+ * @example
+ * // Create a basic zone with default settings
+ * const basicZone = await Zone("example.com", {
+ *   name: "example.com",
+ *   type: "full",
+ *   jumpStart: true
+ * });
+ *
+ * @example
+ * // Create a zone with enhanced security settings
+ * const secureZone = await Zone("secure.example.com", {
+ *   name: "secure.example.com",
+ *   type: "full",
+ *   settings: {
+ *     ssl: "strict",
+ *     alwaysUseHttps: "on",
+ *     automaticHttpsRewrites: "on",
+ *     minTlsVersion: "1.3",
+ *     tls13: "zrt"
+ *   }
+ * });
+ *
+ * @example
+ * // Create a zone with optimized performance settings
+ * const fastZone = await Zone("fast.example.com", {
+ *   name: "fast.example.com",
+ *   settings: {
+ *     browserCacheTtl: 7200,
+ *     brotli: "on",
+ *     zeroRtt: "on",
+ *     http2: "on",
+ *     http3: "on",
+ *     earlyHints: "on"
+ *   }
+ * });
+ *
+ * @example
+ * // Create a development zone with specific features
+ * const devZone = await Zone("dev.example.com", {
+ *   name: "dev.example.com",
+ *   settings: {
+ *     developmentMode: "on",
+ *     emailObfuscation: "on",
+ *     hotlinkProtection: "on",
+ *     ipv6: "on",
+ *     websockets: "on"
+ *   }
+ * });
+ *
+ * @see https://developers.cloudflare.com/dns/zone-setups/
+ */
 export const Zone = Resource(
   "cloudflare::Zone",
   async function (

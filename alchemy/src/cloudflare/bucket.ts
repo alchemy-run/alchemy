@@ -54,6 +54,42 @@ export interface R2Bucket
   creationDate: number;
 }
 
+/**
+ * Creates and manages Cloudflare R2 Buckets for object storage.
+ *
+ * R2 Buckets provide S3-compatible object storage with automatic data replication
+ * across multiple regions for high availability and durability.
+ *
+ * @example
+ * // Create a basic R2 bucket with default settings
+ * const basicBucket = await R2Bucket("my-app-data", {
+ *   name: "my-app-data"
+ * });
+ *
+ * @example
+ * // Create a bucket with location hint for optimal performance
+ * const euBucket = await R2Bucket("eu-user-data", {
+ *   name: "eu-user-data",
+ *   locationHint: "eu",
+ *   jurisdiction: "eu"
+ * });
+ *
+ * @example
+ * // Create a development bucket with public access enabled
+ * const publicBucket = await R2Bucket("public-assets", {
+ *   name: "public-assets",
+ *   allowPublicAccess: true
+ * });
+ *
+ * @example
+ * // Create a FedRAMP compliant bucket for government workloads
+ * const fedRampBucket = await R2Bucket("gov-data", {
+ *   name: "gov-data",
+ *   jurisdiction: "fedramp"
+ * });
+ *
+ * @see https://developers.cloudflare.com/r2/buckets/
+ */
 export const R2Bucket = Resource(
   "cloudflare::R2Bucket",
   async function (

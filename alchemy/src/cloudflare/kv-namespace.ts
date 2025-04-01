@@ -78,6 +78,42 @@ export interface KVNamespace
   modifiedAt: number;
 }
 
+/**
+ * A Cloudflare KV Namespace is a key-value store that can be used to store data for your application.
+ *
+ * @see https://developers.cloudflare.com/kv/concepts/kv-namespaces/
+ *
+ * @example
+ * // Create a basic KV namespace for storing user data
+ * const users = await KVNamespace("users", {
+ *   title: "user-data"
+ * });
+ *
+ * @example
+ * // Create a KV namespace with initial values and TTL
+ * const sessions = await KVNamespace("sessions", {
+ *   title: "user-sessions",
+ *   values: [{
+ *     key: "session_123",
+ *     value: { userId: "user_456", role: "admin" },
+ *     expirationTtl: 3600 // Expires in 1 hour
+ *   }]
+ * });
+ *
+ * @example
+ * // Create a KV namespace with metadata for caching
+ * const assets = await KVNamespace("assets", {
+ *   title: "static-assets",
+ *   values: [{
+ *     key: "main.js",
+ *     value: "content...",
+ *     metadata: {
+ *       contentType: "application/javascript",
+ *       etag: "abc123"
+ *     }
+ *   }]
+ * });
+ */
 export const KVNamespace = Resource(
   "cloudflare::KVNamespace",
   async function (

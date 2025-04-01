@@ -4,7 +4,8 @@
   "type": "module",
   "module": "./lib/index.js",
   "scripts": {
-    "publish:npm": "cp ../README.md . && rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && npm publish && rm README.md"
+    "publish:npm": "cp ../README.md . && rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && npm publish && rm README.md",
+    "docs:gen": "rm -rf ./docs && typedoc"
   },
   "files": ["lib", "src"],
   "exports": {
@@ -64,6 +65,8 @@
     "openpgp": "^6.1.0",
     "prettier": "^3.5.3",
     "turndown": "^7.2.0",
+    "typedoc": "^0.28.1",
+    "typedoc-plugin-markdown": "^4.6.0",
     "typescript": "latest",
     "vite": "^6.0.7",
     "vitepress": "^1.6.3",

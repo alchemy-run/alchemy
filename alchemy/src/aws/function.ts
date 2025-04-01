@@ -16,61 +16,275 @@ import type { Context } from "../context";
 import { Resource } from "../resource";
 import { ignore } from "../util/ignore";
 
-async function resolveRegion(client: LambdaClient): Promise<string> {
-  const region = client.config.region;
-  if (typeof region === "string") return region;
-  if (typeof region === "function") return region();
-  throw new Error("Could not resolve AWS region");
-}
-
+/**
+ * Properties for creating or updating a Lambda function
+ */
 export interface FunctionProps {
+  /**
+   * Name of the Lambda function
+   */
   functionName: string;
+
+  /**
+   * Path to the zip file containing the function code
+   */
   zipPath: string;
+
+  /**
+   * ARN of the IAM role that Lambda assumes when executing the function
+   */
   roleArn: string;
+
+  /**
+   * Function handler in the format 'file.function'
+   * For Node.js this is typically 'index.handler' or similar
+   */
   handler?: string;
+
+  /**
+   * Lambda runtime environment for the function
+   * Defaults to nodejs20.x if not specified
+   */
   runtime?: Runtime;
+
+  /**
+   * CPU architecture for the function
+   * Defaults to x86_64 if not specified
+   */
   architecture?: Architecture;
+
+  /**
+   * Description of the function's purpose
+   */
   description?: string;
+
+  /**
+   * Maximum execution time in seconds
+   * Defaults to 3 seconds if not specified
+   */
   timeout?: number;
+
+  /**
+   * Amount of memory available to the function in MB
+   * Defaults to 128 MB if not specified
+   */
   memorySize?: number;
+
+  /**
+   * Environment variables available to the function code
+   */
   environment?: Record<string, string>;
+
+  /**
+   * Resource tags for the function
+   */
   tags?: Record<string, string>;
+
+  /**
+   * Function URL configuration for direct HTTP(S) invocation
+   */
   url?: {
+    /**
+     * Authentication type for the function URL
+     */
     authType?: "AWS_IAM" | "NONE";
+
+    /**
+     * CORS configuration for the function URL
+     */
     cors?: {
+      /**
+       * Whether to allow credentials in CORS requests
+       */
       allowCredentials?: boolean;
+
+      /**
+       * Allowed headers in CORS requests
+       */
       allowHeaders?: string[];
+
+      /**
+       * Allowed HTTP methods in CORS requests
+       */
       allowMethods?: string[];
+
+      /**
+       * Allowed origins in CORS requests
+       */
       allowOrigins?: string[];
+
+      /**
+       * Headers exposed to the browser
+       */
       exposeHeaders?: string[];
+
+      /**
+       * CORS preflight cache time in seconds
+       */
       maxAge?: number;
     };
   };
 }
 
+/**
+ * Output returned after Lambda function creation/update
+ */
 export interface Function extends Resource<"lambda::Function">, FunctionProps {
+  /**
+   * ARN of the Lambda function
+   */
   arn: string;
+
+  /**
+   * Timestamp of the last function modification
+   */
   lastModified: string;
+
+  /**
+   * Function version
+   */
   version: string;
-  qualifiedArn: string; // ARN with version
-  invokeArn: string; // ARN for API Gateway
+
+  /**
+   * ARN with version suffix
+   */
+  qualifiedArn: string;
+
+  /**
+   * ARN for invoking the function through API Gateway
+   */
+  invokeArn: string;
+
+  /**
+   * SHA256 hash of the function code
+   */
   sourceCodeHash: string;
+
+  /**
+   * Size of the function code in bytes
+   */
   sourceCodeSize: number;
+
+  /**
+   * Size of ephemeral storage (/tmp) in MB
+   */
   ephemeralStorageSize?: number;
+
+  /**
+   * List of supported CPU architectures
+   */
   architectures: string[];
-  masterArn?: string; // Only for Lambda@Edge
+
+  /**
+   * ARN of the master function (Lambda@Edge only)
+   */
+  masterArn?: string;
+
+  /**
+   * Unique identifier for the current function code/config
+   */
   revisionId: string;
+
+  /**
+   * Current state of the function
+   */
   state?: string;
+
+  /**
+   * Reason for the current state
+   */
   stateReason?: string;
+
+  /**
+   * Code for the current state reason
+   */
   stateReasonCode?: string;
+
+  /**
+   * Status of the last update operation
+   */
   lastUpdateStatus?: string;
+
+  /**
+   * Reason for the last update status
+   */
   lastUpdateStatusReason?: string;
+
+  /**
+   * Code for the last update status reason
+   */
   lastUpdateStatusReasonCode?: string;
+
+  /**
+   * Function package type (Zip or Image)
+   */
   packageType: string;
+
+  /**
+   * ARN of the signing profile version
+   */
   signingProfileVersionArn?: string;
+
+  /**
+   * ARN of the signing job
+   */
   signingJobArn?: string;
 }
 
+/**
+ * AWS Lambda Function Resource
+ *
+ * Creates and manages AWS Lambda functions with support for Node.js runtimes, custom handlers,
+ * environment variables, and function URLs. Handles deployment packaging, IAM role
+ * stabilization, and function updates.
+ *
+ * @example
+ * // Create a basic Lambda function with minimal configuration
+ * const basicFunction = await Function("api-handler", {
+ *   functionName: "api-handler",
+ *   zipPath: "./dist/api.zip",
+ *   roleArn: role.arn,
+ *   runtime: Runtime.nodejs20x,
+ *   handler: "index.handler",
+ *   tags: {
+ *     Environment: "production"
+ *   }
+ * });
+ *
+ * @example
+ * // Create a function with environment variables and custom memory/timeout
+ * const configuredFunction = await Function("worker", {
+ *   functionName: "worker",
+ *   zipPath: "./dist/worker.zip",
+ *   roleArn: role.arn,
+ *   runtime: Runtime.nodejs20x,
+ *   handler: "worker.process",
+ *   memorySize: 512,
+ *   timeout: 30,
+ *   environment: {
+ *     QUEUE_URL: queue.url,
+ *     LOG_LEVEL: "info"
+ *   }
+ * });
+ *
+ * @example
+ * // Create a function with a public URL endpoint and CORS
+ * const apiFunction = await Function("public-api", {
+ *   functionName: "public-api",
+ *   zipPath: "./dist/api.zip",
+ *   roleArn: role.arn,
+ *   handler: "api.handler",
+ *   url: {
+ *     authType: "NONE",
+ *     cors: {
+ *       allowOrigins: ["*"],
+ *       allowMethods: ["GET", "POST"],
+ *       allowHeaders: ["content-type"],
+ *       maxAge: 86400
+ *     }
+ *   }
+ * });
+ */
 export const Function = Resource(
   "lambda::Function",
   async function (this: Context<Function>, id: string, props: FunctionProps) {
@@ -279,4 +493,11 @@ async function zipCode(filePath: string): Promise<Buffer> {
     compression: "DEFLATE",
     platform: "UNIX",
   });
+}
+
+async function resolveRegion(client: LambdaClient): Promise<string> {
+  const region = client.config.region;
+  if (typeof region === "string") return region;
+  if (typeof region === "function") return region();
+  throw new Error("Could not resolve AWS region");
 }

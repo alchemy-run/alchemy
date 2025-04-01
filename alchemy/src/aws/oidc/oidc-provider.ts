@@ -17,43 +17,52 @@ import { getAccountId } from "../account-id";
 export interface OIDCProviderProps {
   /**
    * The GitHub organization or user that owns the repository
+   * Example: "my-org" or "my-username"
    */
   owner: string;
 
   /**
    * The name of the GitHub repository
+   * Example: "my-repo"
    */
   repository: string;
 
   /**
    * Optional list of branches to restrict access to
    * If not provided, all branches will be allowed
+   * Example: ["main", "prod"]
    */
   branches?: string[];
 
   /**
    * Optional list of environments to restrict access to
    * If not provided, all environments will be allowed
+   * Example: ["staging", "production"]
    */
   environments?: string[];
 
   /**
    * The ARN of the IAM role to be assumed
+   * Format: arn:aws:iam::account-id:role/role-name
    */
   roleArn: string;
 
   /**
-   * Optional maximum session duration in seconds (default: 3600)
+   * Optional maximum session duration in seconds
+   * Default: 3600 (1 hour)
+   * Range: 900-43200 seconds (15 minutes to 12 hours)
    */
   maxSessionDuration?: number;
 
   /**
    * Thumbprint for the OIDC provider
+   * Used to verify the identity provider's server certificate
    */
   thumbprint: string;
 
   /**
-   * Optional AWS region (defaults to AWS_REGION environment variable)
+   * Optional AWS region
+   * Defaults to AWS_REGION environment variable
    */
   region?: string;
 }
@@ -66,24 +75,47 @@ export interface OIDCProvider
     OIDCProviderProps {
   /**
    * The ARN of the OIDC provider
+   * Format: arn:aws:iam::account-id:oidc-provider/token.actions.githubusercontent.com
    */
   providerArn: string;
 
   /**
    * Time at which the provider was created
+   * Unix timestamp in milliseconds
    */
   createdAt: number;
 }
 
 /**
- * Unique identifier for our trust policy statement
- * Used to track and remove our specific statement without affecting others
+ * AWS OIDC Provider Resource for GitHub Actions
+ *
+ * Creates and manages an OpenID Connect (OIDC) identity provider in AWS IAM
+ * for GitHub Actions workflows. This enables secure, token-based authentication
+ * between GitHub Actions and AWS without storing long-term credentials.
+ *
+ * @example
+ * // Create an OIDC provider for all branches
+ * const provider = await OIDCProvider("github", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   roleArn: "arn:aws:iam::123456789012:role/github-actions",
+ *   thumbprint: "6938fd4d98bab03faadb97b34396831e3780aea1"
+ * });
+ *
+ * @example
+ * // Create an OIDC provider restricted to specific branches and environments
+ * const provider = await OIDCProvider("github-restricted", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   branches: ["main", "prod"],
+ *   environments: ["staging", "production"],
+ *   roleArn: "arn:aws:iam::123456789012:role/github-actions",
+ *   thumbprint: "6938fd4d98bab03faadb97b34396831e3780aea1",
+ *   maxSessionDuration: 7200
+ * });
  */
 const TRUST_POLICY_SID = "GitHubOIDCTrust";
 
-/**
- * Resource for configuring AWS OIDC provider for GitHub Actions
- */
 export const OIDCProvider = Resource(
   "aws::OIDCProvider",
   async function (

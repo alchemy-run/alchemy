@@ -6,6 +6,10 @@
     "types": ["@cloudflare/workers-types", "@types/node"],
     "rootDir": "./src",
     "outDir": "./lib",
-    "noEmit": false
+    "noEmit": false,
+    "esModuleInterop": true,
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "target": "ESNext"
   }
 }

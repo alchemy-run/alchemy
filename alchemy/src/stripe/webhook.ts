@@ -86,6 +86,51 @@ export interface WebhookEndpoint
   status: string;
 }
 
+/**
+ * Create and manage Stripe webhook endpoints
+ *
+ * @example
+ * // Create a basic webhook for payment events
+ * const paymentWebhook = await WebhookEndpoint("payment-webhook", {
+ *   url: "https://api.example.com/stripe/payments",
+ *   enabledEvents: [
+ *     "payment_intent.succeeded",
+ *     "payment_intent.payment_failed"
+ *   ],
+ *   description: "Webhook for payment notifications"
+ * });
+ *
+ * @example
+ * // Create a webhook for subscription management
+ * const subscriptionWebhook = await WebhookEndpoint("subscription-webhook", {
+ *   url: "https://api.example.com/stripe/subscriptions",
+ *   enabledEvents: [
+ *     "customer.subscription.created",
+ *     "customer.subscription.updated",
+ *     "customer.subscription.deleted",
+ *     "invoice.payment_succeeded",
+ *     "invoice.payment_failed"
+ *   ],
+ *   description: "Webhook for subscription lifecycle events"
+ * });
+ *
+ * @example
+ * // Create a webhook for Connect platform events
+ * const connectWebhook = await WebhookEndpoint("connect-webhook", {
+ *   url: "https://api.example.com/stripe/connect",
+ *   enabledEvents: [
+ *     "account.updated",
+ *     "account.application.deauthorized",
+ *     "payout.created",
+ *     "payout.failed"
+ *   ],
+ *   connect: true,
+ *   metadata: {
+ *     platform: "connect",
+ *     environment: "production"
+ *   }
+ * });
+ */
 export const WebhookEndpoint = Resource(
   "stripe::WebhookEndpoint",
   async function (

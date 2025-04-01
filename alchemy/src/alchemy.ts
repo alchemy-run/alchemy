@@ -9,21 +9,79 @@ import type { StateStoreType } from "./state";
 // TODO: support browser
 const DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
 
-// alchemy type is to semantically highlight `alchemy` as a type (keyword)
+/**
+ * Type alias for semantic highlighting of `alchemy` as a type keyword
+ */
 export type alchemy = Alchemy;
 
 export const alchemy: Alchemy = _alchemy as any;
 
-// Alchemy is for module augmentation
+/**
+ * The Alchemy interface provides core functionality and is augmented by providers.
+ * Supports both application scoping with secrets and template string interpolation.
+ *
+ * @example
+ * // Create an application scope with stage and secret handling
+ * const app = alchemy("github:alchemy", {
+ *   stage: "prod",
+ *   phase: "up",
+ *   // Required for encrypting/decrypting secrets
+ *   password: process.env.SECRET_PASSPHRASE
+ * });
+ *
+ * // Create a resource with encrypted secrets
+ * const resource = await Resource("my-resource", {
+ *   apiKey: alchemy.secret(process.env.API_KEY)
+ * });
+ *
+ * await app.finalize();
+ */
 export interface Alchemy {
   scope: typeof scope;
   run: typeof run;
   destroy: typeof destroy;
+  /**
+   * Creates an encrypted secret that can be safely stored in state files.
+   * Requires a password to be set either globally in the application options
+   * or locally in the current scope.
+   */
   secret: typeof secret;
+  /**
+   * Creates a new application scope with the given name and options.
+   * Used to create and manage resources with proper secret handling.
+   *
+   * @example
+   * const app = alchemy("my-app", {
+   *   stage: "prod",
+   *   // Required for encrypting/decrypting secrets
+   *   password: process.env.SECRET_PASSPHRASE
+   * });
+   */
   (...parameters: Parameters<typeof scope>): ReturnType<typeof scope>;
+  /**
+   * Template literal tag that supports file interpolation for documentation.
+   * Automatically formats the content and appends file contents as code blocks.
+   *
+   * @example
+   * // Generate documentation using file contents
+   * await Document("api-docs", {
+   *   prompt: await alchemy`
+   *     Generate docs using the contents of:
+   *     ${alchemy.file("README.md")}
+   *     ${alchemy.file("./.cursorrules")}
+   *
+   *     And here are the source files:
+   *     ${alchemy.files(files)}
+   *   `
+   * });
+   */
   (template: TemplateStringsArray, ...values: any[]): Promise<string>;
 }
 
+/**
+ * Implementation of the alchemy function that handles both application scoping
+ * and template string interpolation.
+ */
 function _alchemy(
   ...args:
     | [template: TemplateStringsArray, ...values: any[]]
@@ -161,14 +219,24 @@ export interface AlchemyOptions {
 
   /**
    * A passphrase to use to encrypt/decrypt secrets.
+   * Required if using alchemy.secret() in this scope.
    */
   password?: string;
 }
 
 /**
  * Enter a new scope synchronously.
- * @param options
- * @returns
+ *
+ * @example
+ * // Create a scope with a password for secret handling
+ * await using scope = alchemy.scope("my-scope", {
+ *   password: process.env.SECRET_PASSPHRASE
+ * });
+ *
+ * // Use secrets within the scope
+ * const resource = await Resource("my-resource", {
+ *   apiKey: alchemy.secret(process.env.API_KEY)
+ * });
  */
 function scope(
   id: string | undefined,
@@ -187,6 +255,21 @@ function scope(
   return scope;
 }
 
+/**
+ * Run a function in a new scope asynchronously.
+ * Useful for isolating secret handling with a specific password.
+ *
+ * @example
+ * // Run operations in a scope with its own password
+ * await alchemy.run("secure-scope", {
+ *   password: process.env.SCOPE_PASSWORD
+ * }, async () => {
+ *   // Secrets in this scope will use this password
+ *   const resource = await Resource("my-resource", {
+ *     apiKey: alchemy.secret(process.env.API_KEY)
+ *   });
+ * });
+ */
 async function run<T>(
   ...args:
     | [id: string, fn: (this: Scope, scope: Scope) => Promise<T>]

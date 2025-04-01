@@ -99,6 +99,44 @@ export interface Product extends Resource<"stripe::Product">, ProductProps {
   };
 }
 
+/**
+ * Create and manage Stripe products
+ *
+ * @example
+ * // Create a basic digital product
+ * const digitalProduct = await Product("basic-software", {
+ *   name: "Basic Software License",
+ *   description: "Single-user license for basic software package",
+ *   metadata: {
+ *     type: "digital",
+ *     features: "basic"
+ *   }
+ * });
+ *
+ * @example
+ * // Create a physical product with shipping details
+ * const physicalProduct = await Product("premium-hardware", {
+ *   name: "Premium Hardware Kit",
+ *   description: "Complete hardware kit with premium components",
+ *   shippable: true,
+ *   images: ["https://example.com/hardware-kit.jpg"],
+ *   unitLabel: "kit",
+ *   statementDescriptor: "PREMIUM HW KIT"
+ * });
+ *
+ * @example
+ * // Create a service product with tax code
+ * const serviceProduct = await Product("consulting", {
+ *   name: "Professional Consulting",
+ *   description: "Expert consulting services",
+ *   type: "service",
+ *   taxCode: "txcd_10000000",
+ *   metadata: {
+ *     industry: "technology",
+ *     expertise: "cloud"
+ *   }
+ * });
+ */
 export const Product = Resource(
   "stripe::Product",
   async function (

@@ -40,7 +40,8 @@ Example: `alchemy/src/stripe/price.ts`
 Start by importing dependencies and defining the resource interfaces:
 
 ```typescript
-import { Resource, type Context } from "../resource";
+import type { Context } from "../context";
+import { Resource } from "../resource";
 
 /**
  * Properties for creating or updating a {{ResourceName}}
@@ -65,6 +66,7 @@ export interface {{ResourceName}}Props {
  * IMPORTANT: The interface name MUST match the exported resource name
  * For example, if your resource is exported as "Product", this interface
  * should be named "Product" (not "ProductOutput")
+ * 
  */
 export interface {{ResourceName}} extends Resource<"{{service-name}}::{{ResourceName}}"> {{ResourceName}}Props {
   /**
@@ -203,6 +205,90 @@ export class {{ServiceName}}Api {
 Create the resource with the pseudo-class pattern using `this` with Context type. The exported const MUST match the output interface name:
 
 ```typescript
+/**
+ * (Resource description)
+ * 
+ * (followed by examples for distinct use-cases of the Resource)
+ * 
+ * @example
+ * // Create a basic table with just a hash key for simple 
+ * // key-value lookups:
+ * const basicTable = await DynamoTable("users", {
+ *   hashKey: {
+ *     name: "userId",
+ *     type: "string"
+ *   }
+ * });
+ * 
+ * @example
+ * // Create a time-series table with hash and sort key 
+ * // for efficient range queries:
+ * const timeSeriesTable = await DynamoTable("events", {
+ *   hashKey: {
+ *     name: "deviceId",
+ *     type: "string"
+ *   },
+ *   sortKey: {
+ *     name: "timestamp",
+ *     type: "number"
+ *   }
+ * });
+ * 
+ * @example
+ * // Create a table with a global secondary index 
+ * // for alternate access patterns:
+ * const ordersTable = await DynamoTable("orders", {
+ *   hashKey: {
+ *     name: "orderId",
+ *     type: "string"
+ *   },
+ *   globalSecondaryIndexes: [{
+ *     indexName: "by-customer",
+ *     hashKey: {
+ *       name: "customerId",
+ *       type: "string"
+ *     },
+ *     sortKey: {
+ *       name: "orderDate",
+ *       type: "string"
+ *     }
+ *   }]
+ * });
+ * 
+ * @example
+ * // Create a one-time fixed price for a product:
+ * const oneTimePrice = await Price("basic-license", {
+ *   currency: "usd",
+ *   unitAmount: 2999,
+ *   product: "prod_xyz"
+ * });
+ * 
+ * @example
+ * // Create a recurring subscription price with fixed 
+ * // monthly billing:
+ * const subscriptionPrice = await Price("pro-monthly", {
+ *   currency: "usd",
+ *   unitAmount: 1499,
+ *   product: "prod_xyz",
+ *   recurring: {
+ *     interval: "month",
+ *     usageType: "licensed"
+ *   }
+ * });
+ * 
+ * @example
+ * // Create a metered price for usage-based billing:
+ * const meteredPrice = await Price("storage", {
+ *   currency: "usd",
+ *   unitAmount: 25,
+ *   product: "prod_xyz",
+ *   recurring: {
+ *     interval: "month",
+ *     usageType: "metered",
+ *     aggregateUsage: "sum"
+ *   }
+ * });
+ */
 export const {{ResourceName}} = Resource(
   "{{service-name}}::{{ResourceName}}",
   async function(this: Context<{{ResourceName}}>, id: string, props: {{ResourceName}}Props): Promise<{{ResourceName}}> {

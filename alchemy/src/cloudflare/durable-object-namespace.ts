@@ -1,3 +1,6 @@
+/**
+ * Properties for creating a Durable Object Namespace
+ */
 export interface DurableObjectNamespaceInput {
   className: string;
   scriptName?: string | undefined;
@@ -6,6 +9,28 @@ export interface DurableObjectNamespaceInput {
   namespaceId?: string | undefined;
 }
 
+/**
+ * @example
+ * // Create a basic Durable Object namespace for stateful chat rooms
+ * const rooms = new DurableObjectNamespace("chat-rooms", {
+ *   className: "ChatRoom"
+ * });
+ *
+ * @example
+ * // Create a Durable Object with SQLite storage for user data
+ * const users = new DurableObjectNamespace("user-store", {
+ *   className: "User",
+ *   sqlite: true
+ * });
+ *
+ * @example
+ * // Create a Durable Object in production for game state management
+ * const game = new DurableObjectNamespace("game-state", {
+ *   className: "GameState",
+ *   scriptName: "game-worker",
+ *   environment: "production"
+ * });
+ */
 export class DurableObjectNamespace implements DurableObjectNamespaceInput {
   public readonly type = "durable_object_namespace" as const;
   // alias for bindingName to be consistent with other bindings

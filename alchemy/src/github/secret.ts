@@ -29,8 +29,11 @@ export interface GitHubSecretProps {
 
   /**
    * Optional GitHub API token (overrides environment variable)
+   * If not provided, will use GITHUB_TOKEN environment variable
+   * Token must have 'repo' scope for private repositories
+   * or 'public_repo' scope for public repositories
    */
-  token?: string;
+  token?: Secret;
 }
 
 /**
@@ -52,6 +55,64 @@ export interface GitHubSecretOutput
 
 /**
  * Resource for managing GitHub repository secrets
+ *
+ * Authentication is handled in the following order:
+ * 1. `token` parameter in the resource props (if provided)
+ * 2. `GITHUB_TOKEN` environment variable
+ *
+ * The token must have the following permissions:
+ * - 'repo' scope for private repositories
+ * - 'public_repo' scope for public repositories
+ *
+ * @example
+ * // Create a secret using GITHUB_TOKEN environment variable:
+ * const secret = await GitHubSecret("my-secret", {
+ *   owner: "my-github-username",
+ *   repository: "my-repo",
+ *   name: "API_KEY",
+ *   value: alchemy.secret("my-secret-value")
+ * });
+ *
+ * @example
+ * // Create a secret with a custom GitHub token:
+ * const secret = await GitHubSecret("my-secret", {
+ *   owner: "my-github-username",
+ *   repository: "my-repo",
+ *   name: "API_KEY",
+ *   value: alchemy.secret("my-secret-value"),
+ *   token: alchemy.secret(process.env.CUSTOM_GITHUB_TOKEN)
+ * });
+ *
+ * @example
+ * // Create multiple secrets with environment variables:
+ * const secrets = await Promise.all([
+ *   GitHubSecret("aws-secret", {
+ *     owner: "my-github-username",
+ *     repository: "cloud-app",
+ *     name: "AWS_ROLE_ARN",
+ *     value: alchemy.secret(process.env.AWS_ROLE_ARN)
+ *   }),
+ *   GitHubSecret("cf-secret", {
+ *     owner: "my-github-username",
+ *     repository: "cloud-app",
+ *     name: "CLOUDFLARE_API_KEY",
+ *     value: alchemy.secret(process.env.CLOUDFLARE_API_KEY)
+ *   })
+ * ]);
+ *
+ * @example
+ * // Create a secret in a secure scope with a password:
+ * await alchemy.run("secure-scope", {
+ *   password: process.env.SECRET_PASSPHRASE
+ * }, async () => {
+ *   const secret = await GitHubSecret("deploy-secret", {
+ *     owner: "my-github-username",
+ *     repository: "my-app",
+ *     name: "DEPLOY_TOKEN",
+ *     value: alchemy.secret(process.env.DEPLOY_TOKEN),
+ *     token: alchemy.secret(process.env.GITHUB_TOKEN)
+ *   });
+ * });
  */
 export const GitHubSecret = Resource(
   "github::Secret",
@@ -62,7 +123,9 @@ export const GitHubSecret = Resource(
   ): Promise<GitHubSecretOutput> {
     // Create authenticated Octokit client - will automatically handle token resolution
     /// TODO: use fetch
-    const octokit = await createGitHubClient({ token: props.token });
+    const octokit = await createGitHubClient({
+      token: props.token?.unencrypted,
+    });
 
     // Verify authentication and permissions
     if (!this.quiet) {
