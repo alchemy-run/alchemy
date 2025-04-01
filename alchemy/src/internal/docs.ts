@@ -1,8 +1,8 @@
 import { type } from "arktype";
 import fs from "fs/promises";
 import path from "path";
+import { Data } from "../ai/data";
 import { Document } from "../ai/document";
-import { Information } from "../ai/information";
 import { alchemy } from "../alchemy";
 import { Folder } from "../fs/folder";
 import { VitePressProject } from "../vitepress/vitepress";
@@ -54,7 +54,7 @@ export async function AlchemyDocs({ docs: isDocsEnabled }: DocsProps) {
 
       const {
         object: { groups },
-      } = await Information(`docs/${providerName}`, {
+      } = await Data(`docs/${providerName}`, {
         schema: type({
           groups: type({
             title: type("string").describe(

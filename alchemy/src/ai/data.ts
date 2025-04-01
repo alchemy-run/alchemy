@@ -14,7 +14,7 @@ import {
 /**
  * Properties for creating or updating an AI Object
  */
-export interface InformationProps<T extends Type<any, any>> {
+export interface DataProps<T extends Type<any, any>> {
   /**
    * The ArkType schema to validate and structure the generated content
    */
@@ -59,7 +59,7 @@ export interface InformationProps<T extends Type<any, any>> {
 /**
  * A resource that uses AI to generate structured content based on a schema
  */
-export interface Information<T> extends Resource<"ai::Object"> {
+export interface Data<T> extends Resource<"ai::Object"> {
   type: JsonSchema;
 
   /**
@@ -115,10 +115,10 @@ export interface Information<T> extends Resource<"ai::Object"> {
  *   system: "You are a technical documentation writer"
  * });
  */
-export const Information = Resource("ai::Object", async function <
+export const Data = Resource("ai::Object", async function <
   const T extends Type<any, any>,
->(this: Context<Information<any>>, id: string, props: InformationProps<T>): Promise<
-  Information<type.infer<T>>
+>(this: Context<Data<any>>, id: string, props: DataProps<T>): Promise<
+  Data<type.infer<T>>
 > {
   if (this.phase === "delete") {
     return this.destroy();
