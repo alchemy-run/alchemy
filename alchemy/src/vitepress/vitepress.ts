@@ -142,28 +142,28 @@ export const VitePressProject = Resource(
         path.join(cwd, "index.md"),
         `---\n${yaml.stringify(props.home)}---\n`,
       ),
-      TypeScriptFile(
-        path.join(cwd, "alchemy.run.ts"),
-        `import alchemy from "alchemy";
-import { Folder } from "alchemy/fs";
-import { Document } from "alchemy/docs";
-import path from "path";
+      //       TypeScriptFile(
+      //         path.join(cwd, "alchemy.run.ts"),
+      //         `import alchemy from "alchemy";
+      // import { Folder } from "alchemy/fs";
+      // import { Document } from "alchemy/docs";
+      // import path from "path";
 
-await using _ = alchemy("alchemy.run", {
-  stage: "prod",
-  phase: process.argv.includes("--destroy") ? "destroy" : "up",
-  password: process.env.SECRET_PASSPHRASE,
-  quiet: !process.argv.includes("--verbose"),
-});
+      // await using _ = alchemy("alchemy.run", {
+      //   stage: "prod",
+      //   phase: process.argv.includes("--destroy") ? "destroy" : "up",
+      //   password: process.env.SECRET_PASSPHRASE,
+      //   quiet: !process.argv.includes("--verbose"),
+      // });
 
-const docs = await Folder(path.join("alchemy.run", "docs"));
+      // const docs = await Folder(path.join("alchemy.run", "docs"));
 
-await Document("home.md", {
-  path: path.join(docs.path, "home.md"),
-  prompt: await alchemy\`Generate a landing page.\`,
-});
-`,
-      ),
+      // await Document("home.md", {
+      //   path: path.join(docs.path, "home.md"),
+      //   prompt: await alchemy\`Generate a landing page.\`,
+      // });
+      // `,
+      //       ),
       TypeScriptFile(
         path.join(cwd, ".vitepress", "theme", "index.ts"),
         `import TwoslashFloatingVue from "@shikijs/vitepress-twoslash/client";

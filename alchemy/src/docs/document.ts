@@ -1,10 +1,15 @@
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText } from "ai";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "../context";
 import { Resource } from "../resource";
 import type { Secret } from "../secret";
+import {
+  type ModelConfig,
+  createClient,
+  getModelId,
+  getModelOptions,
+} from "./client";
 
 /**
  * Properties for creating or updating a Document
@@ -41,24 +46,7 @@ export interface DocumentProps {
   /**
    * Model configuration
    */
-  model?: {
-    /**
-     * Model ID to use
-     * @default 'gpt-4o'
-     */
-    id?: string;
-
-    /**
-     * Model provider name
-     * @default 'openai'
-     */
-    provider?: string;
-
-    /**
-     * Model-specific options
-     */
-    options?: Record<string, unknown>;
-  };
+  model?: ModelConfig;
 }
 
 /**
@@ -117,10 +105,7 @@ export interface Document extends DocumentProps, Resource<"docs::Document"> {
  *   path: "./docs/models.md",
  *   prompt: await alchemy`
  *     Write documentation for these data models:
- *     ${alchemy.files({
- *       "src/models/user.ts": userModelCode,
- *       "src/models/post.ts": postModelCode
- *     })}
+ *     ${alchemy.files("src/models/user.ts", "src/models/post.ts")}
  *   `
  *   // This creates a prompt with all files appended as code blocks,
  *   // automatically handling syntax highlighting based on file extensions
@@ -148,26 +133,14 @@ export const Document = Resource(
       return this.destroy();
     }
 
-    console.log("Generating content for", props.path);
-
-    // Get API key from props or environment
-    const apiKey = props.apiKey?.unencrypted || process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error("OpenAI API key is required for content generation");
-    }
-
-    // Initialize OpenAI compatible provider
-    const provider = createOpenAICompatible({
-      name: props.model?.provider || "openai",
-      apiKey,
-      baseURL: props.baseURL || "https://api.openai.com/v1",
-    });
+    // Initialize OpenAI compatible provider using shared client
+    const provider = createClient(props);
 
     // Generate content
     const { text } = await generateText({
-      model: provider(props.model?.id || "gpt-4o"),
+      model: provider(getModelId(props)),
       prompt: props.prompt,
-      ...(props.model?.options || {}),
+      ...getModelOptions(props),
     });
 
     // Write content to file

@@ -25,15 +25,21 @@ export default defineConfig({
           text: "Guides",
           items: [
             { text: "Custom Resource", link: "/docs/guides/custom-resource" },
-            { text: "Developing with LLMs", link: "/docs/guides/llms" },
+            { text: "Automating with LLMs", link: "/docs/guides/llms" },
           ],
         },
         {
           text: "Core",
+          collapsed: true,
           items: [
+            { text: "App", link: "/docs/core/app" },
             { text: "Resource", link: "/docs/core/resource" },
             { text: "Scope", link: "/docs/core/scope" },
-            { text: "Phases", link: "/docs/core/phases" },
+            { text: "Phase", link: "/docs/core/phase" },
+            { text: "Finalize", link: "/docs/core/finalize" },
+            { text: "State", link: "/docs/core/state" },
+            { text: "Secret", link: "/docs/core/secret" },
+            { text: "Context", link: "/docs/core/context" },
           ],
         },
         {

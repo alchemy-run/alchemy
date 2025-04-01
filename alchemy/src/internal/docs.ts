@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { alchemy } from "../alchemy";
 import { Document } from "../docs/document";
+import { Groups } from "../docs/groups";
 import { Folder } from "../fs/folder";
 import { VitePressProject } from "../vitepress/vitepress";
 
@@ -60,17 +61,23 @@ export async function alchemyDocs(enabled: {
                 link: "/docs/guides/custom-resource",
               },
               {
-                text: "Developing with LLMs",
+                text: "Automating with LLMs",
                 link: "/docs/guides/llms",
               },
             ],
           },
           {
             text: "Core",
+            collapsed: true,
             items: [
+              { text: "App", link: "/docs/core/app" },
               { text: "Resource", link: "/docs/core/resource" },
               { text: "Scope", link: "/docs/core/scope" },
-              { text: "Phases", link: "/docs/core/phases" },
+              { text: "Phase", link: "/docs/core/phase" },
+              { text: "Finalize", link: "/docs/core/finalize" },
+              { text: "State", link: "/docs/core/state" },
+              { text: "Secret", link: "/docs/core/secret" },
+              { text: "Context", link: "/docs/core/context" },
             ],
           },
           {
@@ -157,9 +164,10 @@ export async function alchemyDocs(enabled: {
     },
   });
 
-  const docs = await Folder(path.join("alchemy-web", "docs"));
+  const docs = (await Folder(path.join("alchemy-web", "docs"))).path;
+  const providersDir = (await Folder(path.join(docs, "providers"))).path;
 
-  const exclude = ["util", "test"];
+  const exclude = ["util", "test", "vitepress", "vite", "shadcn", "internal"];
 
   // Get all folders in the alchemy/src directory
   let providers = (
@@ -187,38 +195,137 @@ export async function alchemyDocs(enabled: {
         .filter((dirent) => dirent.isFile())
         .map((dirent) =>
           path.relative(process.cwd(), path.resolve(provider, dirent.name)),
-        );
+        )
+        .filter((file) => file.endsWith(".ts") && !file.endsWith("index.ts"));
 
-      await Document(`docs/${providerName}`, {
-        path: path.join(docs.path, `${providerName}.md`),
+      const { groups } = await Groups(`docs/${providerName}`, {
+        categories: ["Resource", "Client", "Utility", "Types"],
         prompt: await alchemy`
-            You are a technical writer writing API documentation for an Alchemy IaC provider.
-            See ${alchemy.file("./README.md")} to understand the overview of Alchemy.
-            See ${alchemy.file("./.cursorrules")} to better understand the structure and convention of an Alchemy Resource.
-            Then, write concise, clear, and comprehensive documentation for the ${provider} provider:
-            ${alchemy.files(files)}
-  
-            Each code snippet should use twoslash syntax for proper highlighting.
-  
-            E.g.
-            \`\`\`ts twoslash
-            import alchemy from "alchemy";
-  
-            alchemy
-            //  ^?
-  
-            // it needs to be placed under the symbol like so:
-            const foo = "string";
-            //     ^?
-  
-            alchemy.ru
-                //  ^|
-            \`\`\`
-  
-            The \`^?\` syntax is for displaying the type of an expression.
-            The \`^|\` syntax is for displaying auto-completions after a dot and (optional prefix)
-          `,
+          Identify and classify the documents that need to be written for the '${provider}' Service's Alchemy Resources.
+          For background knowledge on Alchemy, see ${alchemy.file("./README.md")}.
+          For background knowledge on the structure of an Alchemy Resource, see ${alchemy.file("./.cursorrules")}.
+
+          The ${provider} Service has the following resources:
+          ${alchemy.files(files)}
+
+          A file is considered a "Resource" if it contains a const <ResourceName> = Resource(...) call or if it is a function that calls a Resource function, e.g. const TypeScriptFile = () => File(...).
+          A file is considered a "Client" if it exposes a wrapper around creating a SDK client or fetch.
+          A file is considered a "Utility" if it contains utility functions that are not resources or clients.
+          A file is considered a "Types" if it contains just type definitions and maybe helpers around working with those types.
+
+          The title should be simply the name of the resource, e.g. "Bucket" or "Function", except with spaces, e.g. "Static Site" instead of "StaticSite". Maintain all other casing.
+        `,
       });
+
+      const providerDocsDir = (
+        await Folder(path.join(providersDir, providerName))
+      ).path;
+
+      await Promise.all(
+        groups
+          .filter((g) => g.category === "Resource")
+          .map(async (g) => {
+            await Document(`docs/${providerName}/${g.title}`, {
+              path: path.join(
+                providerDocsDir,
+                `${g.filename.replace(".ts", "").replace(".md", "")}.md`,
+              ),
+              prompt: await alchemy`
+                You are a technical writer writing API documentation for an Alchemy IaC Resource.
+                See ${alchemy.file("./README.md")} to understand the overview of Alchemy.
+                See ${alchemy.file("./.cursorrules")} to better understand the structure and convention of an Alchemy Resource.
+
+                Relevant files for the ${providerName} Service:
+                ${alchemy.files(files)}
+                
+                Write concise documentation for the "${g.title}" Resource.
+
+                > [!CAUTION]
+                > Avoid the temptation to over explain or over describe. Focus on concise, simple, high value snippets. One heading and 0-1 descriptions per snippet.
+                
+                > [!TIP]
+                > Make sure the examples follow a natural progression from the minimal example to logical next steps of how the Resource might be used.
+
+                Each document must follow the following format:
+                
+                # ${g.title}
+
+                (simple description with an external link to the provider's website)
+                e.g.
+                The Efs component lets you add [Amazon Elastic File System (EFS)](https://docs.aws.amazon.com/efs/latest/ug/whatisefs.html) to your app.
+
+                # Minimal Example
+
+                \`\`\`ts twoslash
+                import { ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
+
+                (example)
+                \`\`\`
+
+
+                # Create the ${g.title}
+
+                \`\`\`ts twoslash
+                import { ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
+
+                (example)
+                \`\`\`
+
+                ${
+                  providerName === "cloudflare"
+                    ? await alchemy`# Bind to a Worker
+                (if it is a Cloudflare Resource)
+
+                \`\`\`ts twoslash
+                import { Worker, ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
+
+                const myResource = await ${g.title.replaceAll(" ", "")}("my-resource", {
+                  // ...
+                });
+
+                await Worker("my-worker", {
+                  name: "my-worker",
+                  script: "console.log('Hello, world!')",
+                  bindings: {
+                    myResource,
+                  },
+                });
+                \`\`\``
+                    : ""
+                }
+
+                Each code snippet should use twoslash syntax for proper highlighting.
+
+                E.g.
+                \`\`\`ts twoslash
+                import alchemy from "alchemy";
+
+                alchemy
+                //  ^?
+
+                // it needs to be placed under the symbol like so:
+                const foo = "string";
+                //     ^?
+
+                const basicBucket = await Bucket("my-app-storage", {
+                  //  ^?
+                  bucketName: "my-app-storage",
+                  tags: {
+                    Environment: "production",
+                    Project: "my-app"
+                  }
+                });
+
+                alchemy.ru
+                    //  ^|
+                \`\`\`
+
+                The \`^?\` syntax is for displaying the type of an expression.
+                The \`^|\` syntax is for displaying auto-completions after a dot and (optional prefix)
+              `,
+            });
+          }),
+      );
     }),
   );
 }

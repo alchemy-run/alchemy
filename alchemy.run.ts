@@ -85,7 +85,7 @@ const zone = await Zone("alchemy.run", {
 console.log("nameservers:", zone.nameservers);
 
 await alchemyDocs({
-  docs: false,
+  docs: true,
 });
 
 // cloudflare vite plugin requires a wrangler.json file

@@ -1,5 +1,6 @@
 {
   "files": [],
+  "exclude": ["node_modules", "dist"],
   "references": [
     { "path": "./alchemy/tsconfig.json" },
     { "path": "./examples/aws-app/tsconfig.json" },
