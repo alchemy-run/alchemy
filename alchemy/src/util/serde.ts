@@ -2,6 +2,17 @@ import { Scope } from "../scope";
 import { Secret } from "../secret";
 import { decryptWithKey, encryptWithKey } from "./encrypt";
 
+import type { Type } from "arktype";
+
+// zero-dependency type guard for ArkType
+function isType(value: any): value is Type<any, any> {
+  return (
+    value &&
+    typeof value === "object" &&
+    typeof value.toJsonSchema === "function"
+  );
+}
+
 export async function serialize(
   scope: Scope,
   value: any,
@@ -20,6 +31,10 @@ export async function serialize(
         options?.encrypt !== false
           ? await encryptWithKey(value.unencrypted, scope.password)
           : value.unencrypted,
+    };
+  } else if (isType(value)) {
+    return {
+      "@schema": value.toJSON(),
     };
   } else if (value instanceof Scope) {
     return undefined;
@@ -47,6 +62,8 @@ export async function deserialize(scope: Scope, value: any): Promise<any> {
         throw new Error("Cannot deserialize secret without password");
       }
       return new Secret(await decryptWithKey(value["@secret"], scope.password));
+    } else if ("@schema" in value) {
+      return value["@schema"];
     } else {
       return Object.fromEntries(
         await Promise.all(

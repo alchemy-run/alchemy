@@ -1,170 +1,23 @@
+import { type } from "arktype";
 import fs from "fs/promises";
 import path from "path";
+import { Document } from "../ai/document";
+import { Object } from "../ai/object";
 import { alchemy } from "../alchemy";
-import { Document } from "../docs/document";
-import { Groups } from "../docs/groups";
 import { Folder } from "../fs/folder";
 import { VitePressProject } from "../vitepress/vitepress";
 
-export async function alchemyDocs(enabled: {
+export interface DocsProps {
   docs?: boolean | number;
-}) {
-  await VitePressProject("docs", {
-    name: "alchemy-web",
-    title: "Alchemy",
-    description: "Alchemy is an TypeScript-native, embeddable IaC library",
-    overwrite: true,
-    tsconfig: {
-      extends: "../tsconfig.base.json",
-      references: ["../alchemy/tsconfig.json"],
-    },
-    devDependencies: {
-      alchemy: "workspace:*",
-    },
-    theme: {
-      light: "light-plus",
-      dark: "dark-plus",
-    },
-    home: {
-      layout: "home",
-      hero: {
-        text: "Alchemy",
-        tagline: "Alchemy is a TypeScript-native, embeddable IaC library",
-        actions: [
-          {
-            text: "Get Started",
-            link: "/docs",
-            theme: "brand",
-          },
-        ],
-      },
-      features: [
-        {
-          title: "Easy to use",
-          details: "Alchemy is easy to use and understand",
-        },
-      ],
-    },
-    themeConfig: {
-      sidebar: {
-        "/blog/": [{ text: "Blog", items: [{ text: "Blog", link: "/blog/" }] }],
-        "/docs/": [
-          {
-            text: "Getting Started",
-            items: [{ text: "Install", link: "/docs/getting-started/install" }],
-          },
-          {
-            text: "Guides",
-            items: [
-              {
-                text: "Custom Resource",
-                link: "/docs/guides/custom-resource",
-              },
-              {
-                text: "Automating with LLMs",
-                link: "/docs/guides/llms",
-              },
-            ],
-          },
-          {
-            text: "Core",
-            collapsed: true,
-            items: [
-              { text: "App", link: "/docs/core/app" },
-              { text: "Resource", link: "/docs/core/resource" },
-              { text: "Scope", link: "/docs/core/scope" },
-              { text: "Phase", link: "/docs/core/phase" },
-              { text: "Finalize", link: "/docs/core/finalize" },
-              { text: "State", link: "/docs/core/state" },
-              { text: "Secret", link: "/docs/core/secret" },
-              { text: "Context", link: "/docs/core/context" },
-            ],
-          },
-          {
-            text: "Resources",
-            items: [
-              {
-                text: "AWS",
-                link: "/docs/aws",
-                collapsed: true,
-                items: [
-                  { text: "Bucket", link: "/docs/aws/bucket" },
-                  { text: "Function", link: "/docs/aws/function" },
-                  { text: "Policy", link: "/docs/aws/policy" },
-                  { text: "Queue", link: "/docs/aws/queue" },
-                  { text: "Table", link: "/docs/aws/table" },
-                  { text: "Simple Email Service", link: "/docs/aws/ses" },
-                ].sort((a, b) => a.text.localeCompare(b.text)),
-              },
-              {
-                text: "Cloudflare",
-                link: "/docs/cloudflare",
-                collapsed: true,
-                items: [
-                  { text: "Bucket", link: "/docs/cloudflare/bucket" },
-                  {
-                    text: "Durable Object",
-                    link: "/docs/cloudflare/durable-object",
-                  },
-                  { text: "Static Site", link: "/docs/cloudflare/static-site" },
-                  {
-                    text: "KV Namespace",
-                    link: "/docs/cloudflare/kv-namespace",
-                  },
-                  { text: "Worker", link: "/docs/cloudflare/worker" },
-                  { text: "Zone", link: "/docs/cloudflare/zone" },
-                ].sort((a, b) => a.text.localeCompare(b.text)),
-              },
-              {
-                text: "Stripe",
-                link: "/docs/stripe",
-                collapsed: true,
-                items: [
-                  { text: "Product", link: "/docs/stripe/product" },
-                  { text: "Price", link: "/docs/stripe/price" },
-                ],
-              },
-              {
-                text: "GitHub",
-                link: "/docs/github",
-                collapsed: true,
-                items: [{ text: "Secret", link: "/docs/github/secret" }],
-              },
-              {
-                text: "File System",
-                link: "/docs/fs",
-                collapsed: true,
-                items: [
-                  { text: "File", link: "/docs/fs/file" },
-                  { text: "Folder", link: "/docs/fs/folder" },
-                ],
-              },
-            ].sort((a, b) => a.text.localeCompare(b.text)),
-          },
-        ],
-        "/examples/": [
-          { text: "Examples", items: [{ text: "Foo", link: "/examples/foo" }] },
-        ],
-        "/": [
-          {
-            text: "Home",
-            items: [
-              { text: "Markdown Examples", link: "/markdown-examples" },
-              { text: "Runtime API Examples", link: "/api-examples" },
-            ],
-          },
-        ],
-      },
-      socialLinks: [
-        {
-          icon: "github",
-          link: "https://github.com/sam-goodwin/alchemy",
-        },
-      ],
-    },
-  });
+}
 
-  const docs = (await Folder(path.join("alchemy-web", "docs"))).path;
+export type AlchemyDocs = Awaited<ReturnType<typeof AlchemyDocs>>;
+
+export async function AlchemyDocs({ docs: isDocsEnabled }: DocsProps) {
+  const root = (await Folder("alchemy-web")).path;
+
+  const docs = (await Folder(path.join(root, "docs"))).path;
+
   const providersDir = (await Folder(path.join(docs, "providers"))).path;
 
   const exclude = ["util", "test", "vitepress", "vite", "shadcn", "internal"];
@@ -179,13 +32,14 @@ export async function alchemyDocs(enabled: {
     .map((dirent) => path.join(dirent.parentPath, dirent.name));
 
   // For each provider, list all files
-  if (enabled.docs === false) {
+  if (isDocsEnabled === false) {
     return;
-  } else if (typeof enabled.docs === "number") {
-    providers = providers.slice(0, enabled.docs);
+  } else if (typeof isDocsEnabled === "number") {
+    providers = providers.slice(0, isDocsEnabled);
   }
-  await Promise.all(
-    providers.map(async (provider) => {
+
+  await Promise.all([
+    ...providers.map(async (provider) => {
       const providerName = path.basename(provider);
       const files = (
         await fs.readdir(path.resolve(provider), {
@@ -198,8 +52,27 @@ export async function alchemyDocs(enabled: {
         )
         .filter((file) => file.endsWith(".ts") && !file.endsWith("index.ts"));
 
-      const { groups } = await Groups(`docs/${providerName}`, {
-        categories: ["Resource", "Client", "Utility", "Types"],
+      const {
+        object: { groups },
+      } = await Object(`docs/${providerName}`, {
+        schema: type({
+          groups: type({
+            title: type("string").describe(
+              "The title of the group, should be the Resource Name exactly without spaces, e.g. Bucket or Static Site.",
+            ),
+            filename: type("string").describe(
+              "The filename of the Resource's Document, e.g. bucket.md or static-site.md",
+            ),
+            category: type("'Resource'|'Client'|'Utility'|'Types'").describe(
+              "The classification of the Resource's Document, one of: Resource, Client, Utility, or Types.",
+            ),
+          }).array(),
+        }),
+        system: await alchemy`
+          You are a technical writer tasked with identifying the distinct documents that need to be written for a document group (folder) in a documentation site.
+          You will be provided with a list of documents and instructions on how to classify them.
+          Each document has a title, file name, and category.
+        `,
         prompt: await alchemy`
           Identify and classify the documents that need to be written for the '${provider}' Service's Alchemy Resources.
           For background knowledge on Alchemy, see ${alchemy.file("./README.md")}.
@@ -256,7 +129,7 @@ export async function alchemyDocs(enabled: {
 
                 # Minimal Example
 
-                \`\`\`ts twoslash
+                \`\`\`ts
                 import { ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
 
                 (example)
@@ -265,7 +138,7 @@ export async function alchemyDocs(enabled: {
 
                 # Create the ${g.title}
 
-                \`\`\`ts twoslash
+                \`\`\`ts
                 import { ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
 
                 (example)
@@ -276,7 +149,7 @@ export async function alchemyDocs(enabled: {
                     ? await alchemy`# Bind to a Worker
                 (if it is a Cloudflare Resource)
 
-                \`\`\`ts twoslash
+                \`\`\`ts
                 import { Worker, ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
 
                 const myResource = await ${g.title.replaceAll(" ", "")}("my-resource", {
@@ -293,39 +166,204 @@ export async function alchemyDocs(enabled: {
                 \`\`\``
                     : ""
                 }
-
-                Each code snippet should use twoslash syntax for proper highlighting.
-
-                E.g.
-                \`\`\`ts twoslash
-                import alchemy from "alchemy";
-
-                alchemy
-                //  ^?
-
-                // it needs to be placed under the symbol like so:
-                const foo = "string";
-                //     ^?
-
-                const basicBucket = await Bucket("my-app-storage", {
-                  //  ^?
-                  bucketName: "my-app-storage",
-                  tags: {
-                    Environment: "production",
-                    Project: "my-app"
-                  }
-                });
-
-                alchemy.ru
-                    //  ^|
-                \`\`\`
-
-                The \`^?\` syntax is for displaying the type of an expression.
-                The \`^|\` syntax is for displaying auto-completions after a dot and (optional prefix)
               `,
             });
+            // Each code snippet should use twoslash syntax for proper highlighting.
+
+            //     E.g.
+            //     \`\`\`ts twoslash
+            //     import alchemy from "alchemy";
+
+            //     alchemy
+            //     //  ^?
+
+            //     // it needs to be placed under the symbol like so:
+            //     const foo = "string";
+            //     //     ^?
+
+            //     const basicBucket = await Bucket("my-app-storage", {
+            //       //  ^?
+            //       bucketName: "my-app-storage",
+            //       tags: {
+            //         Environment: "production",
+            //         Project: "my-app"
+            //       }
+            //     });
+
+            //     alchemy.ru
+            //         //  ^|
+            //     \`\`\`
+
+            //     The \`^?\` syntax is for displaying the type of an expression.
+            //     The \`^|\` syntax is for displaying auto-completions after a dot and (optional prefix)
           }),
       );
     }),
-  );
+
+    VitePressProject("docs", {
+      name: "alchemy-web",
+      title: "Alchemy",
+      description: "Alchemy is an TypeScript-native, embeddable IaC library",
+      overwrite: true,
+      delete: false,
+      tsconfig: {
+        extends: "../tsconfig.base.json",
+        references: ["../alchemy/tsconfig.json"],
+      },
+      devDependencies: {
+        alchemy: "workspace:*",
+      },
+      theme: {
+        light: "light-plus",
+        dark: "dark-plus",
+      },
+      home: {
+        layout: "home",
+        hero: {
+          text: "Alchemy",
+          tagline: "Alchemy is a TypeScript-native, embeddable IaC library",
+          actions: [
+            {
+              text: "Get Started",
+              link: "/docs",
+              theme: "brand",
+            },
+          ],
+        },
+        features: [
+          {
+            title: "Easy to use",
+            details: "Alchemy is easy to use and understand",
+          },
+        ],
+      },
+      themeConfig: {
+        sidebar: {
+          "/blog/": [
+            { text: "Blog", items: [{ text: "Blog", link: "/blog/" }] },
+          ],
+          "/docs/": [
+            {
+              text: "Getting Started",
+              items: [
+                { text: "Install", link: "/docs/getting-started/install" },
+              ],
+            },
+            {
+              text: "Guides",
+              items: [
+                {
+                  text: "Custom Resource",
+                  link: "/docs/guides/custom-resource",
+                },
+                {
+                  text: "Automating with LLMs",
+                  link: "/docs/guides/llms",
+                },
+              ],
+            },
+            {
+              text: "Core",
+              collapsed: true,
+              items: [
+                { text: "App", link: "/docs/core/app" },
+                { text: "Resource", link: "/docs/core/resource" },
+                { text: "Scope", link: "/docs/core/scope" },
+                { text: "Phase", link: "/docs/core/phase" },
+                { text: "Finalize", link: "/docs/core/finalize" },
+                { text: "State", link: "/docs/core/state" },
+                { text: "Secret", link: "/docs/core/secret" },
+                { text: "Context", link: "/docs/core/context" },
+              ],
+            },
+            {
+              text: "Resources",
+              items: [
+                {
+                  text: "AWS",
+                  link: "/docs/aws",
+                  collapsed: true,
+                  items: [
+                    { text: "Bucket", link: "/docs/aws/bucket" },
+                    { text: "Function", link: "/docs/aws/function" },
+                    { text: "Policy", link: "/docs/aws/policy" },
+                    { text: "Queue", link: "/docs/aws/queue" },
+                    { text: "Table", link: "/docs/aws/table" },
+                    { text: "Simple Email Service", link: "/docs/aws/ses" },
+                  ].sort((a, b) => a.text.localeCompare(b.text)),
+                },
+                {
+                  text: "Cloudflare",
+                  link: "/docs/cloudflare",
+                  collapsed: true,
+                  items: [
+                    { text: "Bucket", link: "/docs/cloudflare/bucket" },
+                    {
+                      text: "Durable Object",
+                      link: "/docs/cloudflare/durable-object",
+                    },
+                    {
+                      text: "Static Site",
+                      link: "/docs/cloudflare/static-site",
+                    },
+                    {
+                      text: "KV Namespace",
+                      link: "/docs/cloudflare/kv-namespace",
+                    },
+                    { text: "Worker", link: "/docs/cloudflare/worker" },
+                    { text: "Zone", link: "/docs/cloudflare/zone" },
+                  ].sort((a, b) => a.text.localeCompare(b.text)),
+                },
+                {
+                  text: "Stripe",
+                  link: "/docs/stripe",
+                  collapsed: true,
+                  items: [
+                    { text: "Product", link: "/docs/stripe/product" },
+                    { text: "Price", link: "/docs/stripe/price" },
+                  ],
+                },
+                {
+                  text: "GitHub",
+                  link: "/docs/github",
+                  collapsed: true,
+                  items: [{ text: "Secret", link: "/docs/github/secret" }],
+                },
+                {
+                  text: "File System",
+                  link: "/docs/fs",
+                  collapsed: true,
+                  items: [
+                    { text: "File", link: "/docs/fs/file" },
+                    { text: "Folder", link: "/docs/fs/folder" },
+                  ],
+                },
+              ].sort((a, b) => a.text.localeCompare(b.text)),
+            },
+          ],
+          "/examples/": [
+            {
+              text: "Examples",
+              items: [{ text: "Foo", link: "/examples/foo" }],
+            },
+          ],
+          "/": [
+            {
+              text: "Home",
+              items: [
+                { text: "Markdown Examples", link: "/markdown-examples" },
+                { text: "Runtime API Examples", link: "/api-examples" },
+              ],
+            },
+          ],
+        },
+        socialLinks: [
+          {
+            icon: "github",
+            link: "https://github.com/sam-goodwin/alchemy",
+          },
+        ],
+      },
+    }),
+  ]);
 }

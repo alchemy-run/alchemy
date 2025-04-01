@@ -1,8 +1,8 @@
 // ensure providers are registered (for deletion purposes)
+import "./alchemy/src/ai";
 import "./alchemy/src/aws";
 import "./alchemy/src/aws/oidc";
 import "./alchemy/src/cloudflare";
-import "./alchemy/src/docs";
 import "./alchemy/src/fs";
 import "./alchemy/src/stripe";
 import "./alchemy/src/vite";
@@ -11,9 +11,9 @@ import "./alchemy/src/vitepress";
 import alchemy from "./alchemy/src";
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
-import { Zone } from "./alchemy/src/cloudflare";
+import { StaticSite, Zone } from "./alchemy/src/cloudflare";
 import { GitHubSecret } from "./alchemy/src/github";
-import { alchemyDocs } from "./alchemy/src/internal/docs";
+import { AlchemyDocs } from "./alchemy/src/internal/docs";
 
 const app = alchemy("github:alchemy", {
   stage: "prod",
@@ -84,9 +84,27 @@ const zone = await Zone("alchemy.run", {
 
 console.log("nameservers:", zone.nameservers);
 
-await alchemyDocs({
-  docs: true,
-});
+if (false) {
+  // generate the Alchemy docs from source
+  await AlchemyDocs({
+    docs: true,
+  });
+
+  const site = await StaticSite("alchemy.run site", {
+    name: "alchemy",
+    dir: "alchemy-web/.vitepress/dist",
+    domain: "alchemy.run",
+    build: {
+      command: "bun run --filter alchemy-web docs:build",
+    },
+  });
+
+  console.log({
+    url: site.url,
+  });
+}
+
+await app.finalize();
 
 // cloudflare vite plugin requires a wrangler.json file
 // await WranglerJson("alchemy.run wrangler.json", {
@@ -94,18 +112,3 @@ await alchemyDocs({
 //   compatibility_date: "2024-01-01",
 //   path: "alchemy.run/wrangler.jsonc",
 // });
-
-// const site = await StaticSite("alchemy.run site", {
-//   name: "alchemy",
-//   dir: "alchemy.run/dist",
-//   domain: "alchemy.run",
-//   build: {
-//     command: "bun run --filter alchemy.run build",
-//   },
-// });
-
-// console.log({
-//   url: site.url,
-// });
-
-await app.finalize();

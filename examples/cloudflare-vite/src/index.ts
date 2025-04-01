@@ -1,8 +1,9 @@
 export { Counter } from "./counter/counter-object";
+import type { CloudFlareEnv } from "./env.d";
 
 // Worker script that uses the Counter Durable Object
 export default {
-  async fetch(request: Request, env: any): Promise<Response> {
+  async fetch(request: Request, env: CloudFlareEnv): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
 

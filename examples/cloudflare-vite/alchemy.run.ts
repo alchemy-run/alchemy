@@ -10,7 +10,8 @@ import {
   Worker,
 } from "alchemy/cloudflare";
 
-await using _ = alchemy("cloudflare-vite", {
+const app = alchemy("cloudflare-vite", {
+  stage: process.env.USER ?? "dev",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   quiet: process.argv.includes("--verbose") ? false : true,
 });
@@ -56,3 +57,5 @@ export const website = await StaticSite("Website", {
 console.log({
   url: website.url,
 });
+
+await app.finalize();

@@ -3,6 +3,18 @@ import type { Context } from "../context";
 import { Resource } from "../resource";
 import { ignore } from "../util/ignore";
 
+export interface FolderProps {
+  /**
+   * The path of the folder
+   */
+  path?: string;
+  /**
+   * Whether to delete the folder during the delete phase
+   * @default true
+   */
+  delete?: boolean;
+}
+
 /**
  * Base folder resource type
  */
@@ -37,14 +49,16 @@ export const Folder = Resource(
   async function (
     this: Context<Folder>,
     id: string,
-    props?: { path: string },
+    props?: FolderProps,
   ): Promise<Folder> {
     const dirPath = props?.path ?? id;
     if (this.phase === "delete") {
-      // we just do a best effort attempt
-      await ignore(["ENOENT", "ENOTEMPTY"], async () =>
-        fs.promises.rmdir(dirPath),
-      );
+      if (props?.delete !== false) {
+        // we just do a best effort attempt
+        await ignore(["ENOENT", "ENOTEMPTY"], async () =>
+          fs.promises.rmdir(dirPath),
+        );
+      }
       return this.destroy();
     } else {
       await ignore("EEXIST", async () =>
