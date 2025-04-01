@@ -103,7 +103,7 @@ function _alchemy(
     const indent = " ".repeat(leadingSpaces);
 
     return (async () => {
-      const { isFileCollection, isFileRef } = await import("./fs/file");
+      const { isFileCollection, isFileRef } = await import("./fs");
 
       const appendices: Record<string, string> = {};
 

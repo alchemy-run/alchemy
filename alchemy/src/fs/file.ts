@@ -5,6 +5,8 @@ import { Resource } from "../resource";
 import { ignore } from "../util/ignore";
 
 import { alchemy } from "../alchemy";
+import type { FileCollection } from "./file-collection";
+import type { FileRef } from "./file-ref";
 
 declare module "../alchemy" {
   interface Alchemy {
@@ -51,54 +53,6 @@ declare module "../alchemy" {
     files(paths: string[]): Promise<FileCollection>;
     files(path: string, ...paths: string[]): Promise<FileCollection>;
   }
-}
-
-/**
- * Reference to a file in the filesystem
- */
-export type FileRef = {
-  /**
-   * Type identifier for FileRef
-   */
-  kind: "fs::FileRef";
-  /**
-   * Path to the file
-   */
-  path: string;
-};
-
-export function isFileRef(value: unknown): value is FileRef {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "kind" in value &&
-    value.kind === "fs::FileRef"
-  );
-}
-
-/**
- * Collection of files with their contents
- */
-export type FileCollection = {
-  /**
-   * Type identifier for FileCollection
-   */
-  type: "fs::FileCollection";
-  /**
-   * Map of relative paths to file contents
-   */
-  files: {
-    [relativePath: string]: string;
-  };
-};
-
-export function isFileCollection(value: unknown): value is FileCollection {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "type" in value &&
-    value.type === "fs::FileCollection"
-  );
 }
 
 alchemy.file = async (path: string) => ({
@@ -184,104 +138,3 @@ export const File = Resource(
     });
   },
 );
-
-/**
- * Creates a JSON file with formatted content
- *
- * @example
- * // Create a JSON configuration file
- * const config = await JsonFile("config.json", {
- *   api: {
- *     endpoint: "https://api.example.com",
- *     version: "v1"
- *   },
- *   features: ["auth", "logging"]
- * });
- */
-export type JsonFile = File;
-
-export function JsonFile(id: string, content: any): Promise<JsonFile> {
-  return File(id, {
-    path: id,
-    content: JSON.stringify(content, null, 2),
-  });
-}
-
-/**
- * Creates a plain text file
- *
- * @example
- * // Create a text file with content
- * const readme = await TextFile("README.md",
- *   "# Project Name\n\nProject description goes here."
- * );
- */
-export type TextFile = File;
-
-export function TextFile(id: string, content: string): Promise<TextFile> {
-  return File(id, {
-    path: id,
-    content,
-  });
-}
-
-/**
- * Creates a YAML file with formatted content
- *
- * @example
- * // Create a YAML configuration file
- * const config = await YamlFile("config.yaml", {
- *   server:
- *     host: "localhost"
- *     port: 3000
- *   database:
- *     url: "postgresql://localhost:5432/db"
- *     pool:
- *       min: 1
- *       max: 10
- * });
- */
-export type YamlFile = File;
-
-export async function YamlFile(id: string, content: any): Promise<YamlFile> {
-  const yaml = await import("yaml");
-  return File(id, {
-    path: id,
-    content: yaml.stringify(content),
-  });
-}
-
-/**
- * Creates a TypeScript file with formatted content using prettier
- *
- * @example
- * // Create a TypeScript file
- * const component = await TypeScriptFile("Component.ts", `
- *   interface Props {
- *     name: string;
- *     age: number;
- *   }
- *
- *   export function Component({ name, age }: Props) {
- *     return <div>Hello {name}, you are {age} years old</div>;
- *   }
- * `);
- */
-export type TypeScriptFile = File;
-
-export async function TypeScriptFile(
-  id: string,
-  content: string,
-): Promise<TypeScriptFile> {
-  const prettier = await import("prettier");
-  return File(id, {
-    path: id,
-    content: await prettier.format(content, {
-      parser: "typescript",
-      editor: {
-        tabWidth: 2,
-        indentWidth: 2,
-      },
-    }),
-  });
-}

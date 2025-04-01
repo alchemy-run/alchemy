@@ -62,7 +62,7 @@ export interface OIDCProviderProps {
 
   /**
    * Optional AWS region
-   * Defaults to AWS_REGION environment variable
+   * @default AWS_REGION environment variable
    */
   region?: string;
 }

@@ -43,13 +43,13 @@ export interface FunctionProps {
 
   /**
    * Lambda runtime environment for the function
-   * Defaults to nodejs20.x if not specified
+   * @default nodejs20.x if not specified
    */
   runtime?: Runtime;
 
   /**
    * CPU architecture for the function
-   * Defaults to x86_64 if not specified
+   * @default x86_64 if not specified
    */
   architecture?: Architecture;
 
@@ -60,13 +60,13 @@ export interface FunctionProps {
 
   /**
    * Maximum execution time in seconds
-   * Defaults to 3 seconds if not specified
+   * @default 3 seconds if not specified
    */
   timeout?: number;
 
   /**
    * Amount of memory available to the function in MB
-   * Defaults to 128 MB if not specified
+   * @default 128 MB if not specified
    */
   memorySize?: number;
 

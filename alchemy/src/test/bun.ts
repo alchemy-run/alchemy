@@ -26,19 +26,19 @@ alchemy.test = test;
 export interface TestOptions {
   /**
    * Whether to automatically destroy resources after test.
-   * Defaults to true.
+   * @default true.
    */
   destroy?: boolean;
 
   /**
    * Whether to suppress logging output.
-   * Defaults to false.
+   * @default false.
    */
   quiet?: boolean;
 
   /**
    * Password to use for test resources.
-   * Defaults to "test-password".
+   * @default "test-password".
    */
   password?: string;
 }
