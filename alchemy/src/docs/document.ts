@@ -7,9 +7,9 @@ import { Resource } from "../resource";
 import type { Secret } from "../secret";
 
 /**
- * Base properties for a Document
+ * Properties for creating or updating a Document
  */
-interface BaseDocumentProps {
+export interface DocumentProps {
   /**
    * Path to the markdown document
    */
@@ -20,72 +20,17 @@ interface BaseDocumentProps {
    * @default 'https://api.openai.com/v1'
    */
   baseURL?: string;
-}
-
-/**
- * Properties for creating a document with static content
- */
-interface StaticDocumentProps extends BaseDocumentProps {
-  /**
-   * Static content of the document
-   */
-  content: string;
 
   /**
    * Prompt for generating content
-   * @internal This is marked as never to ensure content and prompt are mutually exclusive
+   * Use alchemy template literals to include file context:
+   * @example
+   * prompt: await alchemy`
+   *   Generate docs using:
+   *   ${alchemy.file("src/api.ts")}
+   * `
    */
-  prompt?: never;
-
-  /**
-   * OpenAI API key
-   * @internal This is marked as never since it's not needed for static content
-   */
-  apiKey?: never;
-
-  /**
-   * Model configuration
-   * @internal This is marked as never since it's not needed for static content
-   */
-  model?: never;
-
-  /**
-   * Context files
-   * @internal This is marked as never since it's not needed for static content
-   */
-  context?: never;
-}
-
-/**
- * Properties for creating a document with AI-generated content
- */
-interface GeneratedDocumentProps extends BaseDocumentProps {
-  /**
-   * Static content of the document
-   * @internal This is marked as never to ensure content and prompt are mutually exclusive
-   */
-  content?: never;
-
-  /**
-   * Prompt for generating content
-   * Can be either a single string or an array of strings that will be joined with newlines
-   */
-  prompt: string | string[];
-
-  /**
-   * Optional context files to include in the prompt
-   * Key is the relative path to the file
-   * Value can be either the content string or another Document resource
-   */
-  context?: {
-    [relativePath: string]:
-      | string
-      | Document
-      | {
-          path: string;
-          content: string;
-        };
-  };
+  prompt: string;
 
   /**
    * OpenAI API key to use for generating content
@@ -117,17 +62,9 @@ interface GeneratedDocumentProps extends BaseDocumentProps {
 }
 
 /**
- * Properties for creating or updating a Document
- * Must provide either static content or a prompt for AI generation
- */
-export type DocumentProps = StaticDocumentProps | GeneratedDocumentProps;
-
-/**
  * A markdown document that can be created, updated, and deleted
  */
-export interface Document
-  extends Omit<DocumentProps, "content" | "prompt" | "context">,
-    Resource<"docs::Document"> {
+export interface Document extends DocumentProps, Resource<"docs::Document"> {
   /**
    * Content of the document
    */
@@ -145,12 +82,54 @@ export interface Document
 }
 
 /**
- * Resource for managing markdown documents using the Vercel AI SDK
+ * Resource for managing AI-generated markdown documents using the Vercel AI SDK.
+ * Supports powerful context handling through the alchemy template literal tag.
+ *
+ * @example
+ * // Create a document using alchemy template literals for context
+ * const apiDocs = await Document("api-docs", {
+ *   path: "./docs/api.md",
+ *   prompt: await alchemy`
+ *     Generate API documentation based on these source files:
+ *     ${alchemy.file("src/api.ts")}
+ *     ${alchemy.file("src/types.ts")}
+ *   `
+ *   // The above will automatically append the file contents as code blocks:
+ *   //
+ *   // Generate API documentation based on these source files:
+ *   // [api.ts](src/api.ts)
+ *   // [types.ts](src/types.ts)
+ *   //
+ *   // // src/api.ts
+ *   // ```ts
+ *   // ... contents of api.ts ...
+ *   // ```
+ *   //
+ *   // // src/types.ts
+ *   // ```ts
+ *   // ... contents of types.ts ...
+ *   // ```
+ * });
+ *
+ * @example
+ * // Use alchemy template literals with file collections
+ * const modelDocs = await Document("models", {
+ *   path: "./docs/models.md",
+ *   prompt: await alchemy`
+ *     Write documentation for these data models:
+ *     ${alchemy.files({
+ *       "src/models/user.ts": userModelCode,
+ *       "src/models/post.ts": postModelCode
+ *     })}
+ *   `
+ *   // This creates a prompt with all files appended as code blocks,
+ *   // automatically handling syntax highlighting based on file extensions
+ * });
  */
 export const Document = Resource(
   "docs::Document",
   async function (
-    this: Context<Document, DocumentProps>,
+    this: Context<Document>,
     id: string,
     props: DocumentProps,
   ): Promise<Document> {
@@ -169,55 +148,38 @@ export const Document = Resource(
       return this.destroy();
     }
 
-    let content: string;
-
     console.log("Generating content for", props.path);
 
-    // Generate content if prompt is provided
-    if ("prompt" in props) {
-      // Get API key from props or environment
-      const apiKey = props.apiKey?.unencrypted || process.env.OPENAI_API_KEY;
-      if (!apiKey) {
-        throw new Error("OpenAI API key is required for content generation");
-      }
-
-      // Initialize OpenAI compatible provider
-      const provider = createOpenAICompatible({
-        name: props.model?.provider || "openai",
-        apiKey,
-        baseURL: props.baseURL || "https://api.openai.com/v1",
-      });
-
-      // Build the full prompt with context if provided
-      const fullPrompt = Array.isArray(props.prompt)
-        ? props.prompt.join("\n")
-        : props.prompt!;
-
-      // console.log(fullPrompt);
-
-      const { text } = await generateText({
-        model: provider(props.model?.id || "gpt-4o"),
-        prompt: fullPrompt,
-        ...(props.model?.options || {}),
-      });
-
-      content = text;
-    } else {
-      // Use static content
-      content = props.content;
+    // Get API key from props or environment
+    const apiKey = props.apiKey?.unencrypted || process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error("OpenAI API key is required for content generation");
     }
 
+    // Initialize OpenAI compatible provider
+    const provider = createOpenAICompatible({
+      name: props.model?.provider || "openai",
+      apiKey,
+      baseURL: props.baseURL || "https://api.openai.com/v1",
+    });
+
+    // Generate content
+    const { text } = await generateText({
+      model: provider(props.model?.id || "gpt-4o"),
+      prompt: props.prompt,
+      ...(props.model?.options || {}),
+    });
+
     // Write content to file
-    await fs.writeFile(props.path, content);
+    await fs.writeFile(props.path, text);
 
     // Get file stats for timestamps
     const stats = await fs.stat(props.path);
 
     // Return the resource
     return this({
-      path: props.path,
-      baseURL: props.baseURL,
-      content,
+      ...props,
+      content: text,
       createdAt: stats.birthtimeMs,
       updatedAt: stats.mtimeMs,
     });
