@@ -9,7 +9,7 @@ Resources are simple memoized async functions that can run in any JavaScript run
 ```ts
 import alchemy from "alchemy";
 
-await using _ = alchemy("cloudflare-worker");
+await using Worker = alchemy("cloudflare-worker");
 
 export const worker = await Worker("worker", {
   name: "my-worker",
@@ -38,8 +38,8 @@ export const worker = await Worker("worker", {
 
 # Examples
 
-- CloudFlare ViteJS Website + API Backend with Durable Objects: [examples/cloudflare-vite/](./examples/cloudflare-vite/alchemy.config.ts)
-- Deploy an AWS Lambda Function with a DynamoDB Table and IAM Role: [examples/aws-app/](./examples/aws-app/alchemy.config.ts)
+- CloudFlare ViteJS Website + API Backend with Durable Objects: [examples/cloudflare-vite/](./examples/cloudflare-vite/alchemy.run.ts)
+- Deploy an AWS Lambda Function with a DynamoDB Table and IAM Role: [examples/aws-app/](./examples/aws-app/alchemy.run.ts)
 
 # Getting Started
 
