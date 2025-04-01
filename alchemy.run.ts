@@ -84,25 +84,23 @@ const zone = await Zone("alchemy.run", {
 
 console.log("nameservers:", zone.nameservers);
 
-if (false) {
-  // generate the Alchemy docs from source
-  await AlchemyDocs({
-    docs: true,
-  });
+// generate the Alchemy docs from source
+await AlchemyDocs({
+  docs: true,
+});
 
-  const site = await StaticSite("alchemy.run site", {
-    name: "alchemy",
-    dir: "alchemy-web/.vitepress/dist",
-    domain: "alchemy.run",
-    build: {
-      command: "bun run --filter alchemy-web docs:build",
-    },
-  });
+const site = await StaticSite("alchemy.run site", {
+  name: "alchemy",
+  dir: "alchemy-web/.vitepress/dist",
+  domain: "alchemy.run",
+  build: {
+    command: "bun run --filter alchemy-web docs:build",
+  },
+});
 
-  console.log({
-    url: site.url,
-  });
-}
+console.log({
+  url: site.url,
+});
 
 await app.finalize();
 
