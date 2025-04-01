@@ -2,7 +2,7 @@ import { type } from "arktype";
 import fs from "fs/promises";
 import path from "path";
 import { Document } from "../ai/document";
-import { Object } from "../ai/object";
+import { Information } from "../ai/information";
 import { alchemy } from "../alchemy";
 import { Folder } from "../fs/folder";
 import { VitePressProject } from "../vitepress/vitepress";
@@ -38,8 +38,8 @@ export async function AlchemyDocs({ docs: isDocsEnabled }: DocsProps) {
     providers = providers.slice(0, isDocsEnabled);
   }
 
-  await Promise.all([
-    ...providers.map(async (provider) => {
+  const providerDocs = await Promise.all(
+    providers.map(async (provider) => {
       const providerName = path.basename(provider);
       const files = (
         await fs.readdir(path.resolve(provider), {
@@ -54,7 +54,7 @@ export async function AlchemyDocs({ docs: isDocsEnabled }: DocsProps) {
 
       const {
         object: { groups },
-      } = await Object(`docs/${providerName}`, {
+      } = await Information(`docs/${providerName}`, {
         schema: type({
           groups: type({
             title: type("string").describe(
@@ -94,11 +94,12 @@ export async function AlchemyDocs({ docs: isDocsEnabled }: DocsProps) {
         await Folder(path.join(providersDir, providerName))
       ).path;
 
-      await Promise.all(
+      const documents = await Promise.all(
         groups
           .filter((g) => g.category === "Resource")
-          .map(async (g) => {
-            await Document(`docs/${providerName}/${g.title}`, {
+          .map(async (g) =>
+            Document(`docs/${providerName}/${g.title}`, {
+              title: g.title,
               path: path.join(
                 providerDocsDir,
                 `${g.filename.replace(".ts", "").replace(".md", "")}.md`,
@@ -167,203 +168,171 @@ export async function AlchemyDocs({ docs: isDocsEnabled }: DocsProps) {
                     : ""
                 }
               `,
-            });
-            // Each code snippet should use twoslash syntax for proper highlighting.
-
-            //     E.g.
-            //     \`\`\`ts twoslash
-            //     import alchemy from "alchemy";
-
-            //     alchemy
-            //     //  ^?
-
-            //     // it needs to be placed under the symbol like so:
-            //     const foo = "string";
-            //     //     ^?
-
-            //     const basicBucket = await Bucket("my-app-storage", {
-            //       //  ^?
-            //       bucketName: "my-app-storage",
-            //       tags: {
-            //         Environment: "production",
-            //         Project: "my-app"
-            //       }
-            //     });
-
-            //     alchemy.ru
-            //         //  ^|
-            //     \`\`\`
-
-            //     The \`^?\` syntax is for displaying the type of an expression.
-            //     The \`^|\` syntax is for displaying auto-completions after a dot and (optional prefix)
-          }),
+            }),
+          ),
       );
-    }),
 
-    VitePressProject("docs", {
-      name: "alchemy-web",
-      title: "Alchemy",
-      description: "Alchemy is an TypeScript-native, embeddable IaC library",
-      overwrite: true,
-      delete: false,
-      tsconfig: {
-        extends: "../tsconfig.base.json",
-        references: ["../alchemy/tsconfig.json"],
-      },
-      devDependencies: {
-        alchemy: "workspace:*",
-      },
-      theme: {
-        light: "light-plus",
-        dark: "dark-plus",
-      },
-      home: {
-        layout: "home",
-        hero: {
-          text: "Alchemy",
-          tagline: "Alchemy is a TypeScript-native, embeddable IaC library",
-          actions: [
-            {
-              text: "Get Started",
-              link: "/docs",
-              theme: "brand",
-            },
-          ],
-        },
-        features: [
-          {
-            title: "Easy to use",
-            details: "Alchemy is easy to use and understand",
-          },
-        ],
-      },
-      themeConfig: {
-        sidebar: {
-          "/blog/": [
-            { text: "Blog", items: [{ text: "Blog", link: "/blog/" }] },
-          ],
-          "/docs/": [
-            {
-              text: "Getting Started",
-              items: [
-                { text: "Install", link: "/docs/getting-started/install" },
-              ],
-            },
-            {
-              text: "Guides",
-              items: [
-                {
-                  text: "Custom Resource",
-                  link: "/docs/guides/custom-resource",
-                },
-                {
-                  text: "Automating with LLMs",
-                  link: "/docs/guides/llms",
-                },
-              ],
-            },
-            {
-              text: "Core",
-              collapsed: true,
-              items: [
-                { text: "App", link: "/docs/core/app" },
-                { text: "Resource", link: "/docs/core/resource" },
-                { text: "Scope", link: "/docs/core/scope" },
-                { text: "Phase", link: "/docs/core/phase" },
-                { text: "Finalize", link: "/docs/core/finalize" },
-                { text: "State", link: "/docs/core/state" },
-                { text: "Secret", link: "/docs/core/secret" },
-                { text: "Context", link: "/docs/core/context" },
-              ],
-            },
-            {
-              text: "Resources",
-              items: [
-                {
-                  text: "AWS",
-                  link: "/docs/aws",
-                  collapsed: true,
-                  items: [
-                    { text: "Bucket", link: "/docs/aws/bucket" },
-                    { text: "Function", link: "/docs/aws/function" },
-                    { text: "Policy", link: "/docs/aws/policy" },
-                    { text: "Queue", link: "/docs/aws/queue" },
-                    { text: "Table", link: "/docs/aws/table" },
-                    { text: "Simple Email Service", link: "/docs/aws/ses" },
-                  ].sort((a, b) => a.text.localeCompare(b.text)),
-                },
-                {
-                  text: "Cloudflare",
-                  link: "/docs/cloudflare",
-                  collapsed: true,
-                  items: [
-                    { text: "Bucket", link: "/docs/cloudflare/bucket" },
-                    {
-                      text: "Durable Object",
-                      link: "/docs/cloudflare/durable-object",
-                    },
-                    {
-                      text: "Static Site",
-                      link: "/docs/cloudflare/static-site",
-                    },
-                    {
-                      text: "KV Namespace",
-                      link: "/docs/cloudflare/kv-namespace",
-                    },
-                    { text: "Worker", link: "/docs/cloudflare/worker" },
-                    { text: "Zone", link: "/docs/cloudflare/zone" },
-                  ].sort((a, b) => a.text.localeCompare(b.text)),
-                },
-                {
-                  text: "Stripe",
-                  link: "/docs/stripe",
-                  collapsed: true,
-                  items: [
-                    { text: "Product", link: "/docs/stripe/product" },
-                    { text: "Price", link: "/docs/stripe/price" },
-                  ],
-                },
-                {
-                  text: "GitHub",
-                  link: "/docs/github",
-                  collapsed: true,
-                  items: [{ text: "Secret", link: "/docs/github/secret" }],
-                },
-                {
-                  text: "File System",
-                  link: "/docs/fs",
-                  collapsed: true,
-                  items: [
-                    { text: "File", link: "/docs/fs/file" },
-                    { text: "Folder", link: "/docs/fs/folder" },
-                  ],
-                },
-              ].sort((a, b) => a.text.localeCompare(b.text)),
-            },
-          ],
-          "/examples/": [
-            {
-              text: "Examples",
-              items: [{ text: "Foo", link: "/examples/foo" }],
-            },
-          ],
-          "/": [
-            {
-              text: "Home",
-              items: [
-                { text: "Markdown Examples", link: "/markdown-examples" },
-                { text: "Runtime API Examples", link: "/api-examples" },
-              ],
-            },
-          ],
-        },
-        socialLinks: [
-          {
-            icon: "github",
-            link: "https://github.com/sam-goodwin/alchemy",
-          },
-        ],
-      },
+      return {
+        dir: providerDocsDir,
+        provider: providerName,
+        documents,
+      } as const;
     }),
-  ]);
+  );
+
+  await VitePressProject("docs", {
+    name: "alchemy-web",
+    title: "Alchemy",
+    description: "Alchemy is an TypeScript-native, embeddable IaC library",
+    overwrite: true,
+    delete: false,
+    tsconfig: {
+      extends: "../tsconfig.base.json",
+      references: ["../alchemy/tsconfig.json"],
+    },
+    devDependencies: {
+      alchemy: "workspace:*",
+    },
+    theme: {
+      light: "light-plus",
+      dark: "dark-plus",
+    },
+    home: {
+      layout: "home",
+      hero: {
+        name: "Alchemy",
+        text: "Materialize all the things! 🪄",
+        tagline: "TypeScript-native Infrastructure-as-Code (IaC)",
+        image: {
+          src: "./public/alchemist.png",
+          alt: "The Alchemist",
+        },
+        actions: [
+          {
+            text: "Get Started",
+            link: "/docs",
+            theme: "brand",
+          },
+        ],
+      },
+      features: [
+        {
+          title: "JS-native",
+          details:
+            "No second language, toolchains, dependencies, processes, services, etc. to lug around.",
+        },
+        {
+          title: "Async",
+          details:
+            "Resources are just async functions - no complex abstraction to learn.",
+        },
+        {
+          title: "ESM",
+          details:
+            "Built exclusively on ESM, with a slight preference for modern JS runtimes like Bun.",
+        },
+        {
+          title: "Embeddable",
+          details:
+            "Runs in any JavaScript/TypeScript environment, including the browser!",
+        },
+        {
+          title: "Extensible",
+          details: "Implement your own resources with a simple function.",
+        },
+        {
+          title: "AI-first",
+          details:
+            "Create, copy, fork, and modify resources using LLMs to fit your needs.",
+        },
+        {
+          title: "No dependencies",
+          details: "The alchemy core package has 0 required dependencies.",
+        },
+        {
+          title: "No service",
+          details:
+            "State files are stored locally in your project for easy inspection and version control.",
+        },
+        {
+          title: "No strong opinions",
+          details:
+            "Structure your codebase however you want, store state anywhere - we don't care!",
+        },
+      ],
+    },
+    themeConfig: {
+      sidebar: {
+        "/blog/": [{ text: "Blog", items: [{ text: "Blog", link: "/blog/" }] }],
+        "/docs/": [
+          {
+            text: "Getting Started",
+            items: [{ text: "Install", link: "/docs/getting-started/install" }],
+          },
+          {
+            text: "Guides",
+            items: [
+              {
+                text: "Custom Resource",
+                link: "/docs/guides/custom-resource",
+              },
+              {
+                text: "Automating with LLMs",
+                link: "/docs/guides/llms",
+              },
+            ],
+          },
+          {
+            text: "Core",
+            collapsed: true,
+            items: [
+              { text: "App", link: "/docs/core/app" },
+              { text: "Resource", link: "/docs/core/resource" },
+              { text: "Scope", link: "/docs/core/scope" },
+              { text: "Phase", link: "/docs/core/phase" },
+              { text: "Finalize", link: "/docs/core/finalize" },
+              { text: "State", link: "/docs/core/state" },
+              { text: "Secret", link: "/docs/core/secret" },
+              { text: "Context", link: "/docs/core/context" },
+            ],
+          },
+          {
+            text: "Providers",
+            items: providerDocs
+              .map((provider) => ({
+                text: provider.provider,
+                link: `/docs/providers/${provider.provider}`,
+                collapsed: true,
+                items: provider.documents.map((document) => ({
+                  text: document.title,
+                  link: `/docs/providers/${provider.provider}/${path.basename(document.path, ".md")}`,
+                })),
+              }))
+              .sort((a, b) => a.text.localeCompare(b.text)),
+          },
+        ],
+        "/examples/": [
+          {
+            text: "Examples",
+            items: [{ text: "Foo", link: "/examples/foo" }],
+          },
+        ],
+        "/": [
+          {
+            text: "Home",
+            items: [
+              { text: "Markdown Examples", link: "/markdown-examples" },
+              { text: "Runtime API Examples", link: "/api-examples" },
+            ],
+          },
+        ],
+      },
+      socialLinks: [
+        {
+          icon: "github",
+          link: "https://github.com/sam-goodwin/alchemy",
+        },
+      ],
+    },
+  });
 }

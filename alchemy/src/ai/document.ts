@@ -16,6 +16,11 @@ import {
  */
 export interface DocumentProps {
   /**
+   * Title of the document
+   */
+  title: string;
+
+  /**
    * Path to the markdown document
    */
   path: string;

@@ -1,2 +1,2 @@
 export * from "./document";
-export * from "./object";
+export * from "./information";

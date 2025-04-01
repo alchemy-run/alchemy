@@ -1,7 +1,7 @@
 // we don't use node in ./src/**, only here for alchemy to bootstrap CloudFlare
 import "@types/node";
 
-import alchemy, { secret } from "alchemy";
+import alchemy from "alchemy";
 import {
   DurableObjectNamespace,
   KVNamespace,
@@ -16,11 +16,6 @@ const app = alchemy("cloudflare-vite", {
   quiet: process.argv.includes("--verbose") ? false : true,
 });
 
-export const counter = new DurableObjectNamespace("COUNTER", {
-  className: "Counter",
-  sqlite: true,
-});
-
 export const [authStore, storage] = await Promise.all([
   KVNamespace("AUTH_STORE", {
     title: "alchemy-example-auth-store",
@@ -31,15 +26,20 @@ export const [authStore, storage] = await Promise.all([
   }),
 ]);
 
+export const counter = new DurableObjectNamespace("COUNTER", {
+  className: "Counter",
+  sqlite: true,
+});
+
 export const api = await Worker("api", {
   name: "alchemy-example-vite-api",
   entrypoint: "./src/index.ts",
   bindings: {
     COUNTER: counter,
-    STORAGE: storage, // Bind the R2 bucket to the worker
+    STORAGE: storage,
     AUTH_STORE: authStore,
-    GITHUB_CLIENT_ID: secret(process.env.GITHUB_CLIENT_ID),
-    GITHUB_CLIENT_SECRET: secret(process.env.GITHUB_CLIENT_SECRET),
+    GITHUB_CLIENT_ID: alchemy.secret(process.env.GITHUB_CLIENT_ID),
+    GITHUB_CLIENT_SECRET: alchemy.secret(process.env.GITHUB_CLIENT_SECRET),
   },
 });
 
