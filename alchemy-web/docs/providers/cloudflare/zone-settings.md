@@ -1,6 +1,6 @@
 # Zone Settings
 
-The Zone Settings component allows you to manage various settings for a Cloudflare zone, such as SSL/TLS encryption, caching, and security features. For more information, visit the [Cloudflare API documentation](https://developers.cloudflare.com/api/resources/zones/).
+The Zone Settings component allows you to manage [Cloudflare Zone Settings](https://developers.cloudflare.com/dns/zone-setups/) for your domain, including SSL/TLS, caching, security, and other configurations.
 
 # Minimal Example
 

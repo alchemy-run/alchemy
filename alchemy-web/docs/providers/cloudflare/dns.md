@@ -1,6 +1,6 @@
 # Dns
 
-The Dns component allows you to manage [Cloudflare DNS Records](https://developers.cloudflare.com/dns/) for your domain. It supports creating, updating, and deleting multiple DNS records at once.
+The Dns component allows you to manage [Cloudflare DNS Records](https://developers.cloudflare.com/dns/) within your application. It supports creating, updating, and deleting multiple DNS records in a Cloudflare zone.
 
 # Minimal Example
 
@@ -49,7 +49,7 @@ const dnsRecords = await DnsRecords("example.com-dns", {
 ```ts
 import { Worker, DnsRecords } from "alchemy/cloudflare";
 
-const myDnsRecords = await DnsRecords("example.com-dns", {
+const dnsRecords = await DnsRecords("example.com-dns", {
   zoneId: "your-zone-id",
   records: [
     {
@@ -65,7 +65,7 @@ await Worker("my-worker", {
   name: "my-worker",
   script: "console.log('Hello, world!')",
   bindings: {
-    myDnsRecords,
+    dnsRecords,
   },
 });
 ```

@@ -1,6 +1,6 @@
 # Product
 
-The Product component allows you to create and manage [Stripe Products](https://stripe.com/docs/api/products) within your application. Products can represent physical goods, digital goods, or services.
+The Product component allows you to create and manage [Stripe Products](https://stripe.com/docs/api/products) within your application. Stripe Products represent the goods or services you offer to your customers.
 
 # Minimal Example
 

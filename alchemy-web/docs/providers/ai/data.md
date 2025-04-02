@@ -1,6 +1,6 @@
 # Data
 
-The Data component allows you to generate structured content using AI based on a defined schema. It leverages the Vercel AI SDK for content generation, supporting advanced context handling and model configuration.
+The Data component allows you to generate structured content using AI based on a specified schema. It leverages the Vercel AI SDK to create content that adheres to a given structure, making it ideal for generating consistent and validated outputs. Learn more about [Vercel AI SDK](https://vercel.com/docs/ai).
 
 # Minimal Example
 
@@ -57,4 +57,6 @@ const analysis = await Data("code-analysis", {
   },
   temperature: 0.1
 });
+
+console.log(analysis.object); // Typed as per schema
 ```

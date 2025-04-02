@@ -9,7 +9,9 @@ import { AlchemyProject } from "./src/project";
 import "./src/providers";
 import { AlchemyProviderDocs } from "./src/providers";
 
-const app = alchemy("alchemy-web");
+const app = alchemy("alchemy-web", {
+  quiet: false,
+});
 
 const docs = await Folder("docs");
 

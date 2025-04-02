@@ -76,7 +76,7 @@ export async function AlchemyProviderDocs({
           //   reasoningEffort: "high",
           // },
         },
-        // temperature: 0.1,
+        temperature: 0.1,
         schema: type({
           groups: type({
             title: type("string").describe(
@@ -115,7 +115,7 @@ export async function AlchemyProviderDocs({
         `,
       });
 
-      console.log(groups);
+      // console.log(groups);
 
       const providerDocsDir = (
         await Folder(path.join(providersDir, providerName))

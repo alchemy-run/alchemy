@@ -21,9 +21,6 @@ import { Worker } from "alchemy/cloudflare";
 const myWorker = await Worker("my-worker", {
   name: "my-worker",
   entrypoint: "./src/index.ts",
-  bindings: {
-    MY_SECRET: "my-secret-value",
-  },
   routes: ["example.com/*"],
   url: true,
 });
@@ -32,18 +29,17 @@ const myWorker = await Worker("my-worker", {
 # Bind to a Worker
 
 ```ts
-import { Worker } from "alchemy/cloudflare";
+import { Worker, KVNamespace } from "alchemy/cloudflare";
 
-const myResource = await Worker("my-resource", {
-  name: "my-resource",
-  script: "console.log('Resource initialized')",
+const myKVNamespace = await KVNamespace("my-kv-namespace", {
+  title: "my-kv-namespace",
 });
 
-await Worker("my-worker", {
+const myWorker = await Worker("my-worker", {
   name: "my-worker",
   script: "console.log('Hello, world!')",
   bindings: {
-    myResource,
+    MY_KV_NAMESPACE: myKVNamespace,
   },
 });
 ```

@@ -1,6 +1,6 @@
 # Document
 
-The Document resource allows you to create, update, and manage markdown documents using AI-generated content. It leverages the Vercel AI SDK for content generation, supporting context handling through Alchemy template literals. This resource is ideal for generating documentation, technical specifications, and other markdown-based content.
+The Document component allows you to manage AI-generated markdown documents using the Vercel AI SDK. It supports context handling through the Alchemy template literal tag. For more information, visit the [Vercel AI SDK documentation](https://vercel.com/docs/ai).
 
 # Minimal Example
 

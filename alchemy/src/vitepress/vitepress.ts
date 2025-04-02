@@ -117,12 +117,15 @@ export const VitePressProject = Resource(
       return this.destroy();
     }
 
-    const cwd = (
-      await Folder("dir", {
-        path: dir,
-        delete: props.delete,
-      })
-    ).path;
+    const cwd = path.relative(
+      process.cwd(),
+      (
+        await Folder("dir", {
+          path: dir,
+          delete: props.delete,
+        })
+      ).path,
+    );
 
     // Initialize package.json
     await JsonFile(path.join(cwd, "package.json"), {

@@ -1,6 +1,6 @@
 # Folder
 
-The Folder component allows you to create and manage directories in the filesystem with automatic parent directory creation and cleanup on deletion.
+The Folder component allows you to manage directories in the filesystem, including automatic parent directory creation and cleanup on deletion.
 
 # Minimal Example
 

@@ -1,6 +1,6 @@
 # SES
 
-The SES component allows you to manage [Amazon Simple Email Service (SES)](https://aws.amazon.com/ses/) resources, including configuration sets and email identities, with support for DKIM signing and identity verification.
+The SES component allows you to manage [Amazon Simple Email Service (SES)](https://docs.aws.amazon.com/ses/latest/DeveloperGuide/Welcome.html) resources, including configuration sets and email identities, with support for DKIM signing and identity verification.
 
 # Minimal Example
 
@@ -35,4 +35,4 @@ const domainIdentity = await SES("domain-identity", {
 });
 ```
 
-This documentation provides a concise overview of how to use the SES resource in Alchemy to manage SES configuration sets and email identities.
+This example demonstrates how to create a domain identity with DKIM enabled, which helps prevent email spoofing by verifying sender authenticity.

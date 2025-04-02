@@ -1,6 +1,6 @@
 # Function
 
-The Function component allows you to create and manage [AWS Lambda functions](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) with support for Node.js runtimes, custom handlers, environment variables, and function URLs.
+The Function component allows you to create and manage [AWS Lambda functions](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) with support for Node.js runtimes, custom handlers, environment variables, and function URLs. It handles deployment packaging, IAM role stabilization, and function updates.
 
 # Minimal Example
 

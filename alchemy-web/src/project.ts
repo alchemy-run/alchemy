@@ -18,7 +18,7 @@ export function AlchemyProject({
   hero,
   docs,
 }: AlchemyProjectProps): Promise<AlchemyProject> {
-  return VitePressProject("docs", {
+  return VitePressProject("project", {
     name: "alchemy-web",
     title: "Alchemy",
     dir: process.cwd(),

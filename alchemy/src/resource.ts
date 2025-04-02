@@ -112,7 +112,16 @@ export function Resource<
     if (scope.resources.has(resourceID)) {
       // TODO(sam): do we want to throw?
       // it's kind of awesome that you can re-create a resource and call apply
-      // console.warn(`Resource ${id} already exists in the stack: ${stack.id}`);
+      const otherResource = scope.resources.get(resourceID);
+      if (otherResource?.Kind !== type) {
+        scope.fail();
+        throw new Error(
+          `Resource ${resourceID} already exists in the stack and is of a different type: '${otherResource?.Kind}' !== '${type}'`,
+        );
+      }
+      // console.warn(
+      //   `Resource ${resourceID} already exists in the stack: ${scope.chain.join("/")}`,
+      // );
     }
 
     // get a sequence number (unique within the scope) for the resource

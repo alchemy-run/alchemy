@@ -1,6 +1,6 @@
 # File
 
-The File resource allows you to create and manage files in the filesystem with automatic directory creation and proper cleanup on deletion.
+The File resource allows you to create and manage files in the filesystem with automatic directory creation and cleanup on deletion.
 
 # Minimal Example
 

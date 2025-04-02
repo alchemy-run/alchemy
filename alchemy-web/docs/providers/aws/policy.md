@@ -63,4 +63,4 @@ const apiPolicy = await Policy("api-access", {
 });
 ```
 
-This documentation provides a concise overview of the Policy resource, including a minimal example and a more detailed example of creating a policy with multiple statements and conditions.
+This example demonstrates creating a policy with multiple statements and conditions, allowing specific actions on API Gateway and CloudWatch Logs.

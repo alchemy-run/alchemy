@@ -32,15 +32,4 @@ const versionedBucket = await Bucket("document-archive", {
 });
 ```
 
-```ts
-import { Bucket } from "alchemy/aws";
-
-// Create a development bucket with minimal configuration
-const devBucket = await Bucket("dev-testing", {
-  bucketName: "dev-testing",
-  tags: {
-    Environment: "development",
-    Temporary: "true"
-  }
-});
-```
+This example demonstrates how to create an S3 bucket with versioning enabled and specific tags for organization and cost tracking.

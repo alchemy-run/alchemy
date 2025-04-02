@@ -1,6 +1,6 @@
 # Import Dns Records
 
-The Import Dns Records component allows you to fetch DNS records for a domain using Cloudflare's DNS-over-HTTPS API and store them in a structured format. This can be useful for managing DNS records programmatically. For more information on Cloudflare's DNS-over-HTTPS API, visit [Cloudflare's documentation](https://developers.cloudflare.com/1.1.1.1/dns-over-https/json-format/).
+The Import Dns Records component allows you to fetch DNS records for a domain using Cloudflare's DNS-over-HTTPS API. This resource provides a structured format for DNS records, making them compatible with other DNS management functions. For more information on Cloudflare's DNS-over-HTTPS API, visit [Cloudflare's documentation](https://developers.cloudflare.com/1.1.1.1/dns-over-https/json-format/).
 
 # Minimal Example
 
@@ -17,7 +17,7 @@ const allRecords = await ImportDnsRecords("example.com", {
 ```ts
 import { ImportDnsRecords } from "alchemy/dns";
 
-// Import all default record types
+// Import all default record types for a domain
 const allRecords = await ImportDnsRecords("example.com", {
   domain: "example.com"
 });

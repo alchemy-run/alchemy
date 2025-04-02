@@ -1,6 +1,6 @@
 # TypeScript File
 
-The TypeScript File resource allows you to create and manage TypeScript files with formatted content using [Prettier](https://prettier.io/).
+The TypeScript File resource allows you to create and manage TypeScript files with formatted content using Prettier. This resource is part of the Alchemy Infrastructure-as-Code (IaC) library, which is a zero-dependency, TypeScript-native library for modeling resources. For more information, visit the [Alchemy GitHub repository](https://github.com/alchemy).
 
 # Minimal Example
 
@@ -38,3 +38,5 @@ const userClass = await TypeScriptFile("User.ts", `
   export default User;
 `);
 ```
+
+This resource uses Prettier to format the TypeScript content, ensuring consistent code style and readability.

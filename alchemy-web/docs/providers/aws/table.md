@@ -1,6 +1,6 @@
 # Table
 
-The Table component allows you to create and manage [Amazon DynamoDB tables](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html) with support for partition and sort keys, flexible billing modes, and automatic table status monitoring.
+The Table component allows you to create and manage [Amazon DynamoDB](https://aws.amazon.com/dynamodb/) tables with support for partition and sort keys, flexible billing modes, and automatic table status monitoring.
 
 # Minimal Example
 
@@ -45,7 +45,7 @@ const table = await Table("user-events", {
 });
 
 // Create a table with provisioned capacity
-const tableWithProvisionedCapacity = await Table("high-throughput", {
+const provisionedTable = await Table("high-throughput", {
   tableName: "high-throughput",
   partitionKey: {
     name: "userId",
@@ -56,5 +56,3 @@ const tableWithProvisionedCapacity = await Table("high-throughput", {
   writeCapacity: 50
 });
 ```
-
-This documentation provides a concise overview of how to create and manage DynamoDB tables using the Alchemy IaC library, with examples demonstrating different configurations.
