@@ -13,7 +13,7 @@
     },
     "alchemy": {
       "name": "alchemy",
-      "version": "0.2.4",
+      "version": "0.2.5",
       "devDependencies": {
         "@ai-sdk/anthropic": "^1.1.6",
         "@ai-sdk/openai": "^1.1.9",
@@ -1635,7 +1635,7 @@
 
     "alchemy/@types/bun": ["@types/bun@1.2.8", "", { "dependencies": { "bun-types": "1.2.7" } }, "sha512-t8L1RvJVUghW5V+M/fL3Thbxcs0HwNsXsnTEBEfEVqGteiJToOlZ/fyOEaR1kZsNqnu+3XA4RI/qmnX4w6+S+w=="],
 
-    "alchemy/@types/node": ["@types/node@22.13.15", "", { "dependencies": { "undici-types": "~6.20.0" } }, "sha512-imAbQEEbVni6i6h6Bd5xkCRwLqFc8hihCsi2GbtDoAtUcAFQ6Zs4pFXTZUUbroTkXdImczWM9AI8eZUuybXE3w=="],
+    "alchemy/@types/node": ["@types/node@22.13.17", "", { "dependencies": { "undici-types": "~6.20.0" } }, "sha512-nAJuQXoyPj04uLgu+obZcSmsfOenUg6DxPKogeUy6yNCFwWaj5sBF8/G/pNo8EtBJjAfSVgfIlugR/BCOleO+g=="],
 
     "cloudflare/@types/node": ["@types/node@18.19.80", "", { "dependencies": { "undici-types": "~5.26.4" } }, "sha512-kEWeMwMeIvxYkeg1gTc01awpwLbfMRZXdIhwRcakd/KlK53jmRC26LqcbIt7fnAQTu5GzlnWmzA3H6+l1u6xxQ=="],
 

@@ -38,7 +38,7 @@ export async function AlchemyProviderDocs({
 
   // Get all folders in the alchemy/src directory
   let providers = (
-    await fs.readdir(path.resolve("alchemy", "src"), {
+    await fs.readdir(path.resolve("..", "alchemy", "src"), {
       withFileTypes: true,
     })
   )
@@ -89,8 +89,8 @@ export async function AlchemyProviderDocs({
         `,
         prompt: await alchemy`
           Identify and classify the documents that need to be written for the '${provider}' Service's Alchemy Resources.
-          For background knowledge on Alchemy, see ${alchemy.file("./README.md")}.
-          For background knowledge on the structure of an Alchemy Resource, see ${alchemy.file("./.cursorrules")}.
+          For background knowledge on Alchemy, see ${alchemy.file("../README.md")}.
+          For background knowledge on the structure of an Alchemy Resource, see ${alchemy.file("../.cursorrules")}.
 
           The ${provider} Service has the following resources:
           ${alchemy.files(files)}
@@ -120,8 +120,8 @@ export async function AlchemyProviderDocs({
               ),
               prompt: await alchemy`
                 You are a technical writer writing API documentation for an Alchemy IaC Resource.
-                See ${alchemy.file("./README.md")} to understand the overview of Alchemy.
-                See ${alchemy.file("./.cursorrules")} to better understand the structure and convention of an Alchemy Resource.
+                See ${alchemy.file("../README.md")} to understand the overview of Alchemy.
+                See ${alchemy.file("../.cursorrules")} to better understand the structure and convention of an Alchemy Resource.
 
                 Relevant files for the ${providerName} Service:
                 ${alchemy.files(files)}

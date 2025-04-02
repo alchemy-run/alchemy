@@ -7,6 +7,7 @@ The TypeScript File resource allows you to create and manage TypeScript files wi
 ```ts
 import { TypeScriptFile } from "alchemy/fs";
 
+// Create a simple TypeScript file
 const component = await TypeScriptFile("Component.ts", `
   interface Props {
     name: string;
@@ -24,13 +25,16 @@ const component = await TypeScriptFile("Component.ts", `
 ```ts
 import { TypeScriptFile } from "alchemy/fs";
 
-const service = await TypeScriptFile("Service.ts", `
-  export class Service {
-    constructor(private name: string) {}
+// Create a TypeScript file with a class definition
+const userClass = await TypeScriptFile("User.ts", `
+  class User {
+    constructor(public name: string, public age: number) {}
 
-    getName() {
-      return this.name;
+    greet() {
+      return \`Hello, my name is \${this.name} and I am \${this.age} years old.\`;
     }
   }
+
+  export default User;
 `);
 ```

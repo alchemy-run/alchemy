@@ -26,9 +26,12 @@ const bundle = await Bundle("app", {
   outfile: "dist/app.js",
   format: "cjs",
   platform: "node",
+  target: "node16",
   minify: true,
   sourcemap: "external",
   external: ["express"],
-  target: ["node16", "es2020"]
+  options: {
+    define: { "process.env.NODE_ENV": '"production"' }
+  }
 });
 ```

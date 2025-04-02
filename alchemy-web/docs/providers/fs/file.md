@@ -1,6 +1,6 @@
 # File
 
-The File resource in Alchemy allows you to create and manage files within the filesystem, ensuring automatic directory creation and proper cleanup on deletion. This resource is part of the Alchemy Infrastructure-as-Code (IaC) library, which is designed to be lightweight and embeddable in any JavaScript environment. For more information, visit the [Alchemy GitHub repository](https://github.com/alchemy).
+The File resource allows you to create and manage files in the filesystem with automatic directory creation and cleanup on deletion.
 
 # Minimal Example
 
@@ -25,5 +25,3 @@ const log = await File("logs/app.log", {
   content: "application log entry"
 });
 ```
-
-The File resource is versatile and can be used to create various types of files, including JSON, YAML, and TypeScript files, by utilizing specific functions like `JsonFile`, `YamlFile`, and `TypeScriptFile`. These functions format the content appropriately for each file type.

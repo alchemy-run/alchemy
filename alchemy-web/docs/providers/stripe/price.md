@@ -1,6 +1,6 @@
 # Price
 
-The Price component allows you to create and manage [Stripe Prices](https://stripe.com/docs/api/prices) for products, enabling various billing models such as one-time, recurring, and metered billing.
+The Price component allows you to create and manage [Stripe Prices](https://stripe.com/docs/api/prices) for products, supporting both one-time and recurring billing models.
 
 # Minimal Example
 

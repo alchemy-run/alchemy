@@ -50,9 +50,8 @@ export default defineConfig({
               link: "/docs/providers/ai",
               collapsed: true,
               items: [
+                { text: "Data", link: "/docs/providers/ai/data" },
                 { text: "Document", link: "/docs/providers/ai/document" },
-                { text: "Ark", link: "/docs/providers/ai/ark" },
-                { text: "Information", link: "/docs/providers/ai/information" },
               ],
             },
             {
@@ -68,7 +67,7 @@ export default defineConfig({
                 },
                 { text: "Role", link: "/docs/providers/aws/role" },
                 { text: "Policy", link: "/docs/providers/aws/policy" },
-                { text: "Ses", link: "/docs/providers/aws/ses" },
+                { text: "SES", link: "/docs/providers/aws/ses" },
                 { text: "Bucket", link: "/docs/providers/aws/bucket" },
                 { text: "Queue", link: "/docs/providers/aws/queue" },
               ],
@@ -79,7 +78,6 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { text: "State", link: "/docs/providers/cloudflare/state" },
-                { text: "Bound", link: "/docs/providers/cloudflare/bound" },
                 {
                   text: "Durable Object Namespace",
                   link: "/docs/providers/cloudflare/durable-object-namespace",
@@ -95,7 +93,7 @@ export default defineConfig({
                 },
                 { text: "Bucket", link: "/docs/providers/cloudflare/bucket" },
                 {
-                  text: "KV Namespace",
+                  text: "Kv Namespace",
                   link: "/docs/providers/cloudflare/kv-namespace",
                 },
                 { text: "Worker", link: "/docs/providers/cloudflare/worker" },
@@ -140,7 +138,10 @@ export default defineConfig({
               items: [
                 { text: "Price", link: "/docs/providers/stripe/price" },
                 { text: "Product", link: "/docs/providers/stripe/product" },
-                { text: "Webhook", link: "/docs/providers/stripe/webhook" },
+                {
+                  text: "Webhook Endpoint",
+                  link: "/docs/providers/stripe/webhook",
+                },
               ],
             },
           ],

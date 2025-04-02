@@ -1,11 +1,11 @@
-# Information
+# Data
 
-The Information component allows you to generate structured content using AI, based on a specified schema. It leverages the Vercel AI SDK for content generation. For more details, visit the [Vercel AI SDK documentation](https://vercel.com/docs/ai).
+The Data component allows you to generate structured content using AI based on a specified schema. It leverages the Vercel AI SDK to create content that adheres to a given structure, making it ideal for generating consistent and validated outputs. Learn more about [Vercel AI SDK](https://vercel.com/docs/ai).
 
 # Minimal Example
 
 ```ts
-import { Information } from "alchemy/ai";
+import { Data } from "alchemy/ai";
 
 const productSchema = type({
   name: "string",
@@ -14,19 +14,19 @@ const productSchema = type({
   price: "number"
 });
 
-const productInfo = await Information("product-info", {
+const product = await Data("new-product", {
   schema: productSchema,
   prompt: "Generate a product description for a new smartphone",
   system: "You are a product copywriter specializing in tech products"
 });
 
-console.log(productInfo.object);
+console.log(product.object); // Typed as per schema
 ```
 
-# Create the Information
+# Create the Data
 
 ```ts
-import { Information } from "alchemy/ai";
+import { Data } from "alchemy/ai";
 
 const docSchema = type({
   summary: "string",
@@ -38,7 +38,7 @@ const docSchema = type({
   returns: "string"
 });
 
-const functionDocs = await Information("function-docs", {
+const docs = await Data("function-docs", {
   schema: docSchema,
   prompt: await alchemy`
     Generate documentation for this function:
@@ -47,5 +47,5 @@ const functionDocs = await Information("function-docs", {
   system: "You are a technical documentation writer"
 });
 
-console.log(functionDocs.object);
+console.log(docs.object); // Typed as per schema
 ```

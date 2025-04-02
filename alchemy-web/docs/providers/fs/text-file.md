@@ -16,8 +16,8 @@ const readme = await TextFile("README.md", "# Project Name\n\nProject descriptio
 ```ts
 import { TextFile } from "alchemy/fs";
 
-// Create a text file with specified content
+// Create a text file with specific content
 const notes = await TextFile("notes.txt", "These are some important notes.");
 ```
 
-The Text File resource is useful for generating documentation, configuration files, or any other text-based files needed in your application.
+This example demonstrates how to create a text file named `notes.txt` with specified content using the Text File resource.

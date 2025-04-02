@@ -43,3 +43,5 @@ const myWorker = await Worker("my-worker", {
   },
 });
 ```
+
+This documentation provides a concise overview of how to create and bind Cloudflare Workers using the Alchemy IaC library. The examples demonstrate the creation of a worker, setting up routes, enabling a workers.dev URL, and binding a KV Namespace to the worker.

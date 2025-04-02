@@ -13,13 +13,6 @@ const table = await Table("user-events", {
     name: "id",
     type: "S"
   },
-  sortKey: {
-    name: "timestamp",
-    type: "N"
-  },
-  tags: {
-    Environment: "test"
-  }
 });
 ```
 
@@ -28,8 +21,24 @@ const table = await Table("user-events", {
 ```ts
 import { Table } from "alchemy/aws";
 
+// Create a table with partition and sort key
+const table = await Table("user-events", {
+  tableName: "user-events",
+  partitionKey: {
+    name: "id",
+    type: "S"
+  },
+  sortKey: {
+    name: "timestamp",
+    type: "N"
+  },
+  tags: {
+    Environment: "test"
+  }
+});
+
 // Create a table with provisioned capacity
-const table = await Table("high-throughput", {
+const provisionedTable = await Table("high-throughput", {
   tableName: "high-throughput",
   partitionKey: {
     name: "userId",

@@ -1,6 +1,6 @@
 # Zone
 
-The Zone component allows you to manage [Cloudflare Zones](https://developers.cloudflare.com/dns/zone-setups/) for your domain. A Cloudflare Zone represents a domain and its configuration settings on Cloudflare, enabling you to manage DNS, SSL/TLS, caching, security, and other settings.
+The Zone component allows you to manage [Cloudflare Zones](https://developers.cloudflare.com/dns/zone-setups/) for your domain, enabling you to configure DNS, SSL/TLS, caching, security, and other settings.
 
 # Minimal Example
 
@@ -40,6 +40,10 @@ import { Worker, Zone } from "alchemy/cloudflare";
 const myZone = await Zone("my-zone", {
   name: "my-zone.com",
   type: "full",
+  settings: {
+    ssl: "full",
+    alwaysUseHttps: "on",
+  },
 });
 
 await Worker("my-worker", {

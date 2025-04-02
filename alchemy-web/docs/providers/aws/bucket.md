@@ -1,6 +1,6 @@
 # Bucket
 
-The Bucket component allows you to create and manage [Amazon S3 buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html) with support for versioning, tags, and regional configuration. S3 buckets provide scalable object storage for any type of data, with features like versioning, lifecycle policies, and fine-grained access control.
+The Bucket component allows you to create and manage [Amazon S3 Buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html) with support for versioning, tags, and regional configuration. S3 buckets provide scalable object storage for any type of data, with features like versioning, lifecycle policies, and fine-grained access control.
 
 # Minimal Example
 
@@ -9,10 +9,6 @@ import { Bucket } from "alchemy/aws";
 
 const basicBucket = await Bucket("my-app-storage", {
   bucketName: "my-app-storage",
-  tags: {
-    Environment: "production",
-    Project: "my-app"
-  }
 });
 ```
 

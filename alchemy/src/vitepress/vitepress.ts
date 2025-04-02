@@ -78,7 +78,7 @@ export interface VitePressProjectProps {
   delete?: boolean;
 
   /**
-   * The directory to generate the docs in
+   * The directory to initialize the project in.
    *
    * @default {@link name}
    */

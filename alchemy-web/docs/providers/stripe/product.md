@@ -1,6 +1,6 @@
 # Product
 
-The Product component allows you to create and manage [Stripe Products](https://stripe.com/docs/api/products) for your application.
+The Product component allows you to create and manage [Stripe Products](https://stripe.com/docs/api/products) within your application. This resource is used to define the details of a product that can be sold through Stripe, including its name, description, and pricing details.
 
 # Minimal Example
 

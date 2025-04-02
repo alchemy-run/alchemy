@@ -1,14 +1,14 @@
 # Bucket
 
-The Bucket component allows you to create and manage [Cloudflare R2 Buckets](https://developers.cloudflare.com/r2/buckets/), which provide S3-compatible object storage with automatic data replication across multiple regions for high availability and durability.
+The Bucket component allows you to manage [Cloudflare R2 Buckets](https://developers.cloudflare.com/r2/buckets/) for object storage. R2 Buckets provide S3-compatible object storage with automatic data replication across multiple regions for high availability and durability.
 
 # Minimal Example
 
 ```ts
 import { R2Bucket } from "alchemy/cloudflare";
 
-const myBucket = await R2Bucket("my-bucket", {
-  name: "my-bucket"
+const basicBucket = await R2Bucket("my-app-data", {
+  name: "my-app-data"
 });
 ```
 
@@ -17,11 +17,10 @@ const myBucket = await R2Bucket("my-bucket", {
 ```ts
 import { R2Bucket } from "alchemy/cloudflare";
 
-const myBucket = await R2Bucket("my-bucket", {
-  name: "my-bucket",
-  locationHint: "us-east-1",
-  jurisdiction: "default",
-  allowPublicAccess: false
+const euBucket = await R2Bucket("eu-user-data", {
+  name: "eu-user-data",
+  locationHint: "eu",
+  jurisdiction: "eu"
 });
 ```
 
@@ -30,8 +29,8 @@ const myBucket = await R2Bucket("my-bucket", {
 ```ts
 import { Worker, R2Bucket } from "alchemy/cloudflare";
 
-const myBucket = await R2Bucket("my-bucket", {
-  name: "my-bucket",
+const myBucket = await R2Bucket("my-resource", {
+  name: "my-resource",
   allowPublicAccess: true
 });
 

@@ -1,6 +1,6 @@
 # Json File
 
-The Json File resource allows you to create and manage JSON files with formatted content in the filesystem. It is part of the Alchemy Infrastructure-as-Code (IaC) library, which is a TypeScript-native solution for managing resources. For more information on Alchemy, visit the [Alchemy GitHub repository](https://github.com/alchemy).
+The Json File resource allows you to create and manage JSON files with formatted content in the filesystem. This resource is part of the Alchemy Infrastructure-as-Code (IaC) library, which is designed to be lightweight and TypeScript-native.
 
 # Minimal Example
 
@@ -22,15 +22,18 @@ const config = await JsonFile("config.json", {
 ```ts
 import { JsonFile } from "alchemy/fs";
 
-// Create a JSON configuration file with nested objects and arrays
+// Create a JSON configuration file with nested objects
 const settings = await JsonFile("settings.json", {
-  user: {
-    name: "John Doe",
-    roles: ["admin", "editor"]
+  database: {
+    host: "localhost",
+    port: 5432,
+    user: "admin"
   },
-  preferences: {
-    theme: "dark",
-    notifications: true
+  services: {
+    authService: {
+      url: "https://auth.example.com",
+      timeout: 5000
+    }
   }
 });
 ```

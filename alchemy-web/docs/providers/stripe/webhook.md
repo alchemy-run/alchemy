@@ -1,22 +1,19 @@
-# Webhook
+# Webhook Endpoint
 
-The Webhook component allows you to create and manage [Stripe Webhook Endpoints](https://stripe.com/docs/webhooks) for handling events from Stripe.
+The Webhook Endpoint component allows you to create and manage [Stripe Webhook Endpoints](https://stripe.com/docs/webhooks) for handling events from Stripe.
 
 # Minimal Example
 
 ```ts
 import { WebhookEndpoint } from "alchemy/stripe";
 
-const webhook = await WebhookEndpoint("payment-webhook", {
-  url: "https://api.example.com/stripe/payments",
-  enabledEvents: [
-    "payment_intent.succeeded",
-    "payment_intent.payment_failed"
-  ],
+const webhook = await WebhookEndpoint("basic-webhook", {
+  url: "https://api.example.com/stripe/webhook",
+  enabledEvents: ["payment_intent.succeeded", "payment_intent.payment_failed"],
 });
 ```
 
-# Create the Webhook
+# Create the Webhook Endpoint
 
 ```ts
 import { WebhookEndpoint } from "alchemy/stripe";
@@ -28,10 +25,8 @@ const subscriptionWebhook = await WebhookEndpoint("subscription-webhook", {
     "customer.subscription.updated",
     "customer.subscription.deleted",
     "invoice.payment_succeeded",
-    "invoice.payment_failed"
+    "invoice.payment_failed",
   ],
-  description: "Webhook for subscription lifecycle events"
+  description: "Webhook for subscription lifecycle events",
 });
 ```
-
-This example demonstrates how to create a webhook endpoint for managing subscription lifecycle events.

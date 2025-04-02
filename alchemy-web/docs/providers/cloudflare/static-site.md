@@ -32,16 +32,19 @@ const customSite = await StaticSite("custom-site", {
 ```ts
 import { Worker, StaticSite } from "alchemy/cloudflare";
 
-const mySite = await StaticSite("my-site", {
-  name: "my-site",
+const fullSite = await StaticSite("full-site", {
+  name: "full-site",
   dir: "./dist",
+  routes: {
+    "/api/*": backend,
+  },
 });
 
-await Worker("my-worker", {
-  name: "my-worker",
-  script: "console.log('Hello, world!')",
+const backend = await Worker("api-backend", {
+  name: "api-backend",
+  entrypoint: "./src/api.ts",
   bindings: {
-    mySite,
+    fullSite,
   },
 });
 ```

@@ -3,6 +3,10 @@ import path from "path";
 import type { AlchemyProviderDocs } from "./providers";
 
 export interface AlchemyProjectProps {
+  hero: {
+    text: string;
+    tagline: string;
+  };
   docs: {
     providers: AlchemyProviderDocs;
   };
@@ -11,11 +15,13 @@ export interface AlchemyProjectProps {
 export type AlchemyProject = VitePressProject;
 
 export function AlchemyProject({
+  hero,
   docs,
 }: AlchemyProjectProps): Promise<AlchemyProject> {
   return VitePressProject("docs", {
     name: "alchemy-web",
     title: "Alchemy",
+    dir: process.cwd(),
     description: "Alchemy is an TypeScript-native, embeddable IaC library",
     overwrite: true,
     delete: false,
@@ -34,8 +40,8 @@ export function AlchemyProject({
       layout: "home",
       hero: {
         name: "Alchemy",
-        text: "Materialize all the things! 🪄",
-        tagline: "TypeScript-native Infrastructure-as-Code (IaC)",
+        text: hero.text,
+        tagline: hero.tagline,
         image: {
           src: "./public/alchemist.png",
           alt: "The Alchemist",

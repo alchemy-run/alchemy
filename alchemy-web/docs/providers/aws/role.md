@@ -60,6 +60,75 @@ const basicRole = await Role("lambda-role", {
     }
   }]
 });
-```
 
-This example demonstrates creating a basic IAM role for AWS Lambda with an inline policy for logging. The role is tagged for the production environment.
+// Create a role with AWS managed policies
+const managedRole = await Role("readonly-role", {
+  roleName: "readonly-role",
+  assumeRolePolicy: {
+    Version: "2012-10-17",
+    Statement: [{
+      Effect: "Allow",
+      Principal: {
+        Service: "lambda.amazonaws.com"
+      },
+      Action: "sts:AssumeRole"
+    }]
+  },
+  description: "Role with managed policies",
+  managedPolicyArns: [
+    "arn:aws:iam::aws:policy/ReadOnlyAccess"
+  ],
+  tags: {
+    Environment: "production"
+  }
+});
+
+// Create a role with multiple inline policies and custom session duration
+const customRole = await Role("custom-role", {
+  roleName: "custom-role",
+  assumeRolePolicy: {
+    Version: "2012-10-17",
+    Statement: [{
+      Effect: "Allow",
+      Principal: {
+        Service: "lambda.amazonaws.com"
+      },
+      Action: "sts:AssumeRole"
+    }]
+  },
+  description: "Role with multiple policies",
+  maxSessionDuration: 7200,
+  policies: [
+    {
+      policyName: "logs",
+      policyDocument: {
+        Version: "2012-10-17",
+        Statement: [{
+          Effect: "Allow",
+          Action: [
+            "logs:CreateLogGroup",
+            "logs:CreateLogStream",
+            "logs:PutLogEvents"
+          ],
+          Resource: "*"
+        }]
+      }
+    },
+    {
+      policyName: "s3",
+      policyDocument: {
+        Version: "2012-10-17",
+        Statement: [{
+          Effect: "Allow",
+          Action: "s3:ListBucket",
+          Resource: "*"
+        }]
+      }
+    }
+  ],
+  tags: {
+    Environment: "production",
+    Updated: "true"
+  }
+});
+```

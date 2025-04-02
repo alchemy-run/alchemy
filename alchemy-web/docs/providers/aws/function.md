@@ -29,8 +29,8 @@ const basicFunction = await Function("api-handler", {
   runtime: "nodejs20.x",
   handler: "index.handler",
   tags: {
-    Environment: "production"
-  }
+    Environment: "production",
+  },
 });
 
 // Create a function with environment variables and custom memory/timeout
@@ -44,8 +44,8 @@ const configuredFunction = await Function("worker", {
   timeout: 30,
   environment: {
     QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/123456789012/my-queue",
-    LOG_LEVEL: "info"
-  }
+    LOG_LEVEL: "info",
+  },
 });
 
 // Create a function with a public URL endpoint and CORS
@@ -60,8 +60,8 @@ const apiFunction = await Function("public-api", {
       allowOrigins: ["*"],
       allowMethods: ["GET", "POST"],
       allowHeaders: ["content-type"],
-      maxAge: 86400
-    }
-  }
+      maxAge: 86400,
+    },
+  },
 });
 ```
