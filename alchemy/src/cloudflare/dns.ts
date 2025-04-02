@@ -1,4 +1,9 @@
 import type { Context } from "../context";
+import type {
+  DnsRecord as BaseDnsRecord,
+  DnsRecordType,
+  DnsRecordWithMetadata,
+} from "../dns/record";
 import { Resource } from "../resource";
 import { type CloudflareApi, createCloudflareApi } from "./api";
 import type { CloudflareResponse } from "./response";
@@ -28,76 +33,17 @@ interface CloudflareDnsRecord {
 /**
  * Properties for a DNS record
  */
-export interface DnsRecordProps {
-  /**
-   * DNS record name (e.g., "example.com", "subdomain.example.com")
-   */
-  name: string;
-
+export interface DnsRecordProps extends Omit<BaseDnsRecord, "type"> {
   /**
    * Record type (A, AAAA, CNAME, etc.)
    */
-  type: "A" | "AAAA" | "CNAME" | "TXT" | "MX" | "NS" | "SRV" | "PTR";
-
-  /**
-   * DNS record content (e.g., IP address, hostname)
-   */
-  content: string;
-
-  /**
-   * Time To Live (TTL) in seconds
-   * Setting to 1 means 'automatic'
-   * Value must be between 60 and 86400, with minimum reduced to 30 for Enterprise zones
-   * @default 1
-   */
-  ttl?: number;
-
-  /**
-   * Whether the record is receiving proxied traffic through Cloudflare
-   * @default false
-   */
-  proxied?: boolean;
-
-  /**
-   * Comments or notes about the record
-   */
-  comment?: string;
-
-  /**
-   * Record tags
-   */
-  tags?: string[];
-
-  /**
-   * Priority value for MX/SRV records
-   */
-  priority?: number;
+  type: DnsRecordType;
 }
 
 /**
  * Output returned after DNS record creation/update
  */
-export interface DnsRecord extends DnsRecordProps {
-  /**
-   * Record ID
-   */
-  id: string;
-
-  /**
-   * Zone ID the record belongs to
-   */
-  zoneId: string;
-
-  /**
-   * Time at which the record was created
-   */
-  createdAt: number;
-
-  /**
-   * Time at which the record was last modified
-   */
-  modifiedAt: number;
-}
+export interface DnsRecord extends DnsRecordWithMetadata {}
 
 /**
  * Properties for managing multiple DNS records

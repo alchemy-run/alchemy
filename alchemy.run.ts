@@ -12,9 +12,10 @@ import "./alchemy/src/vitepress";
 import alchemy from "./alchemy/src";
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
-import { Zone } from "./alchemy/src/cloudflare";
+import { DnsRecords, Zone } from "./alchemy/src/cloudflare";
 import { ImportDnsRecords } from "./alchemy/src/dns";
 import { GitHubSecret } from "./alchemy/src/github";
+
 const app = alchemy("github:alchemy", {
   stage: "prod",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
@@ -77,13 +78,24 @@ await Promise.all([
   ),
 ]);
 
-const dnsRecords = await ImportDnsRecords("dns-records", {
-  domain: "alchemy.run",
-});
-
 const zone = await Zone("alchemy.run", {
   name: "alchemy.run",
   type: "full",
+});
+
+const { records } = await ImportDnsRecords("dns-records", {
+  domain: "alchemy.run",
+  bump: 2,
+});
+
+await DnsRecords("transfer-dns-records", {
+  zoneId: zone.id,
+  records: records.filter(
+    (r) =>
+      // cloudflare doesn't support SOA
+      // @see https://developers.cloudflare.com/api/operations/dns-records-for-a-zone-create-dns-record
+      r.type !== "SOA",
+  ),
 });
 
 console.log("nameservers:", zone.nameservers);

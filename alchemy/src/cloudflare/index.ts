@@ -1,5 +1,6 @@
 export * from "./bindings";
 export * from "./bucket";
+export * from "./dns";
 export * from "./durable-object-namespace";
 export * from "./kv-namespace";
 export * from "./state";
