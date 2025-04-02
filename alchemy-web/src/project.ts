@@ -143,7 +143,7 @@ export function AlchemyProject({
             items: (docs.providers ?? [])
               .map((provider) => ({
                 text: provider.provider,
-                link: `/docs/providers/${provider.provider}`,
+                // link: `/docs/providers/${provider.provider}`,
                 collapsed: true,
                 items: provider.documents
                   .map((document) => ({

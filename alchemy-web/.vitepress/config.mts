@@ -47,7 +47,6 @@ export default defineConfig({
           items: [
             {
               text: "ai",
-              link: "/docs/providers/ai",
               collapsed: true,
               items: [
                 { text: "Data", link: "/docs/providers/ai/data" },
@@ -56,7 +55,6 @@ export default defineConfig({
             },
             {
               text: "aws",
-              link: "/docs/providers/aws",
               collapsed: true,
               items: [
                 { text: "Bucket", link: "/docs/providers/aws/bucket" },
@@ -74,7 +72,6 @@ export default defineConfig({
             },
             {
               text: "cloudflare",
-              link: "/docs/providers/cloudflare",
               collapsed: true,
               items: [
                 { text: "Bucket", link: "/docs/providers/cloudflare/bucket" },
@@ -102,7 +99,6 @@ export default defineConfig({
             },
             {
               text: "dns",
-              link: "/docs/providers/dns",
               collapsed: true,
               items: [
                 {
@@ -113,7 +109,6 @@ export default defineConfig({
             },
             {
               text: "esbuild",
-              link: "/docs/providers/esbuild",
               collapsed: true,
               items: [
                 { text: "Bundle", link: "/docs/providers/esbuild/bundle" },
@@ -121,7 +116,6 @@ export default defineConfig({
             },
             {
               text: "fs",
-              link: "/docs/providers/fs",
               collapsed: true,
               items: [
                 { text: "File", link: "/docs/providers/fs/file" },
@@ -137,7 +131,6 @@ export default defineConfig({
             },
             {
               text: "github",
-              link: "/docs/providers/github",
               collapsed: true,
               items: [
                 {
@@ -148,7 +141,6 @@ export default defineConfig({
             },
             {
               text: "stripe",
-              link: "/docs/providers/stripe",
               collapsed: true,
               items: [
                 { text: "Price", link: "/docs/providers/stripe/price" },

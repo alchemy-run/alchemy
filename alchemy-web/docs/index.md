@@ -136,8 +136,8 @@ await using app = alchemy("my-app", {
 
 To learn more about Alchemy and explore advanced use cases, consider the following:
 
-- Explore the [examples](./examples) directory for real-world use cases.
-- Read the [README.md](../README.md) for a comprehensive overview of Alchemy's features.
+- Explore the examples directory for real-world use cases.
+- Read the README.md for a comprehensive overview of Alchemy's features.
 - Dive into the source code to understand how resources are implemented and extend Alchemy with custom resources.
 
 > [!TIP]
