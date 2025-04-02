@@ -14,6 +14,7 @@
     "./aws": "./lib/aws/index.js",
     "./aws/oidc": "./lib/aws/oidc/index.js",
     "./cloudflare": "./lib/cloudflare/index.js",
+    "./dns": "./lib/dns/index.js",
     "./esbuild": "./lib/esbuild/index.js",
     "./fs": "./lib/fs/index.js",
     "./github": "./lib/github/index.js",

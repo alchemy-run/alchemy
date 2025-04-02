@@ -3,8 +3,8 @@ layout: home
 hero:
   name: Alchemy
   text: Materialize all the Things 🪄
-  tagline: Synthesize content and deploy cloud infrastructure with pure TypeScript that runs in any JS runtime
-  # tagline: AI Synthesis and Infrastructure-as-Code with web-standard TypeScript code.
+  tagline: Synthesize content and deploy cloud infrastructure with pure TypeScript
+    that runs in any JS runtime
   image:
     src: ./public/alchemist.png
     alt: The Alchemist

@@ -6,8 +6,8 @@
   "module": "./lib/index.js",
   "license": "Apache-2.0",
   "scripts": {
-    "docs:dev": "bun run --filter alchemy-web docs:dev",
-    "docs:gen": "bun run --filter alchemy-web docs:gen",
+    "docs:dev": "bun run --filter alchemy-web dev",
+    "docs:gen": "bun run --filter alchemy-web gen",
     "bootstrap": "bun run --env-file .env ./alchemy.config.ts --verbose",
     "build": "tsc -b",
     "check": "tsc -b ./tsconfig.json",
