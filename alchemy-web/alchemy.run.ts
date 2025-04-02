@@ -25,8 +25,10 @@ const [providers] = await Promise.all([
 export const project = await AlchemyProject({
   hero: {
     text: "Materialize all the Things 🪄",
-    tagline:
-      "Synthesize content and deploy cloud infrastructure with pure TypeScript that runs in any JS runtime",
+    // tagline: "IaC for Gen-AI",
+    // tagline: "IaC that's as simple as bunx",
+    // tagline: "Portable infrastructure, in a language you and LLMs just know",
+    tagline: "TypeScript-native infrastructure-as-Code designed for Gen-AI",
   },
   docs: {
     providers,

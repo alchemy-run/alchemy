@@ -22,6 +22,14 @@ import type {
 } from "./zone-settings";
 
 /**
+ * Cloudflare Zone response format
+ */
+export interface CloudflareZone {
+  id: string;
+  name: string;
+}
+
+/**
  * Properties for creating or updating a Zone
  */
 export interface ZoneProps {

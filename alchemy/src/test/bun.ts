@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 
-import { afterAll, it } from "bun:test";
+import { afterAll, beforeAll, it } from "bun:test";
 import path from "node:path";
 import { alchemy } from "../alchemy";
 import { destroy } from "../destroy";
@@ -80,6 +80,10 @@ type test = {
    */
   skipIf(condition: boolean): test;
 
+  beforeAll(fn: (scope: Scope) => Promise<void>): void;
+
+  afterAll(fn: (scope: Scope) => Promise<void>): void;
+
   /**
    * Current test scope
    */
@@ -125,8 +129,26 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
   });
   test.scope = localTestScope;
 
+  test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {
+    return beforeAll(async () => {
+      test.scope.enter();
+      await fn(test.scope);
+    });
+  };
+
+  test.afterAll = (fn: (scope: Scope) => Promise<void>) => {
+    return afterAll(async () => {
+      test.scope.enter();
+      await fn(test.scope);
+    });
+  };
+
   // Clean up test scope after all tests complete
-  afterAll(() => alchemy.destroy(test.scope));
+  afterAll(async () => {
+    if (defaultOptions?.destroy !== false) {
+      await alchemy.destroy(test.scope);
+    }
+  });
 
   return test as any;
 
@@ -173,6 +195,9 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
           scope.enter();
           try {
             await fn(scope);
+          } catch (err) {
+            console.error(err);
+            throw err;
           } finally {
             if (options.destroy !== false) {
               await destroy(scope);
