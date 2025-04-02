@@ -399,6 +399,7 @@ export const Zone = Resource(
       }
 
       const zoneData = (JSON.parse(body) as CloudflareZoneResponse).result;
+      console.log(JSON.parse(body));
 
       // Update zone settings if provided
       if (props.settings) {
