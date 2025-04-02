@@ -4,6 +4,7 @@ import path from "node:path";
 import type { Context } from "../context";
 import { Resource } from "../resource";
 import type { Secret } from "../secret";
+import { ignore } from "../util/ignore";
 import { type ModelConfig, createModel } from "./client";
 
 /**
@@ -162,6 +163,10 @@ export const Document = Resource(
         : // some models error if you provide it (rather than ignoring it)
           { temperature: props.temperature }),
     });
+
+    if (this.phase === "update" && props.path !== this.props.path) {
+      await ignore("ENOENT", () => fs.unlink(this.props.path));
+    }
 
     // Write content to file
     await fs.writeFile(props.path, text);

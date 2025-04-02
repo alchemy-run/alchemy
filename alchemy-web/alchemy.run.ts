@@ -16,7 +16,7 @@ const app = alchemy("alchemy-web", {
 
 const docs = await Folder("docs");
 
-const [providers] = await Promise.all([
+const [gettingStarted, providers] = await Promise.all([
   GettingStarted({
     outDir: docs,
   }),
@@ -37,7 +37,7 @@ export const project = await AlchemyProject({
     tagline: "Agentic Infrastructure-as-Code in pure TypeScript",
   },
   docs: {
-    // providers,
+    providers,
   },
 });
 

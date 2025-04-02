@@ -1,6 +1,6 @@
 import alchemy from "alchemy";
 import { Document } from "alchemy/ai";
-import { Folder } from "alchemy/fs";
+import type { Folder } from "alchemy/fs";
 import path from "path";
 
 export interface GettingStartedProps {
@@ -16,11 +16,9 @@ export async function GettingStarted({
   outDir,
 }: GettingStartedProps): Promise<Document> {
   outDir = typeof outDir === "string" ? outDir : outDir.path;
-  const docsDir = (await Folder(path.join(outDir, "guide"))).path;
-
   return Document(`docs/getting-started`, {
     title: "Getting Started with Alchemy",
-    path: path.join(docsDir, "getting-started.md"),
+    path: path.join(outDir, "index.md"),
     prompt: await alchemy`
       You are a technical writer creating a getting started guide for Alchemy, an infrastructure as code (IaC) framework.
       See ${alchemy.file("../README.md")} to understand the overview of Alchemy.

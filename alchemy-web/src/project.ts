@@ -145,10 +145,12 @@ export function AlchemyProject({
                 text: provider.provider,
                 link: `/docs/providers/${provider.provider}`,
                 collapsed: true,
-                items: provider.documents.map((document) => ({
-                  text: document.title,
-                  link: `/docs/providers/${provider.provider}/${path.basename(document.path, ".md")}`,
-                })),
+                items: provider.documents
+                  .map((document) => ({
+                    text: document.title,
+                    link: `/docs/providers/${provider.provider}/${path.basename(document.path, ".md")}`,
+                  }))
+                  .sort((a, b) => a.text.localeCompare(b.text)),
               }))
               .sort((a, b) => a.text.localeCompare(b.text)),
           },

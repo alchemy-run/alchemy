@@ -15,7 +15,7 @@ export default defineConfig({
   // https://vitepress.dev/reference/default-theme-config
   themeConfig: {
     sidebar: {
-      // "/blog/": [{ text: "Blog", items: [{ text: "Blog", link: "/blog/" }] }],
+      "/blog/": [{ text: "Blog", items: [{ text: "Blog", link: "/blog/" }] }],
       "/docs/": [
         {
           text: "Getting Started",
@@ -42,7 +42,125 @@ export default defineConfig({
             { text: "Context", link: "/docs/core/context" },
           ],
         },
-        { text: "Providers", items: [] },
+        {
+          text: "Providers",
+          items: [
+            {
+              text: "ai",
+              link: "/docs/providers/ai",
+              collapsed: true,
+              items: [
+                { text: "Data", link: "/docs/providers/ai/data" },
+                { text: "Document", link: "/docs/providers/ai/document" },
+              ],
+            },
+            {
+              text: "aws",
+              link: "/docs/providers/aws",
+              collapsed: true,
+              items: [
+                { text: "Bucket", link: "/docs/providers/aws/bucket" },
+                { text: "Function", link: "/docs/providers/aws/function" },
+                { text: "Policy", link: "/docs/providers/aws/policy" },
+                {
+                  text: "Policy Attachment",
+                  link: "/docs/providers/aws/policy-attachment",
+                },
+                { text: "Queue", link: "/docs/providers/aws/queue" },
+                { text: "Role", link: "/docs/providers/aws/role" },
+                { text: "SES", link: "/docs/providers/aws/ses" },
+                { text: "Table", link: "/docs/providers/aws/table" },
+              ],
+            },
+            {
+              text: "cloudflare",
+              link: "/docs/providers/cloudflare",
+              collapsed: true,
+              items: [
+                { text: "Bucket", link: "/docs/providers/cloudflare/bucket" },
+                { text: "Dns", link: "/docs/providers/cloudflare/dns" },
+                {
+                  text: "Durable Object Namespace",
+                  link: "/docs/providers/cloudflare/durable-object-namespace",
+                },
+                {
+                  text: "Kv Namespace",
+                  link: "/docs/providers/cloudflare/kv-namespace",
+                },
+                { text: "State", link: "/docs/providers/cloudflare/state" },
+                {
+                  text: "Static Site",
+                  link: "/docs/providers/cloudflare/static-site",
+                },
+                { text: "Worker", link: "/docs/providers/cloudflare/worker" },
+                { text: "Zone", link: "/docs/providers/cloudflare/zone" },
+                {
+                  text: "Zone Settings",
+                  link: "/docs/providers/cloudflare/zone-settings",
+                },
+              ],
+            },
+            {
+              text: "dns",
+              link: "/docs/providers/dns",
+              collapsed: true,
+              items: [
+                {
+                  text: "Import Dns Records",
+                  link: "/docs/providers/dns/import-dns",
+                },
+              ],
+            },
+            {
+              text: "esbuild",
+              link: "/docs/providers/esbuild",
+              collapsed: true,
+              items: [
+                { text: "Bundle", link: "/docs/providers/esbuild/bundle" },
+              ],
+            },
+            {
+              text: "fs",
+              link: "/docs/providers/fs",
+              collapsed: true,
+              items: [
+                { text: "File", link: "/docs/providers/fs/file" },
+                { text: "Folder", link: "/docs/providers/fs/folder" },
+                { text: "Json File", link: "/docs/providers/fs/json-file" },
+                { text: "Text File", link: "/docs/providers/fs/text-file" },
+                {
+                  text: "TypeScript File",
+                  link: "/docs/providers/fs/typescript-file",
+                },
+                { text: "Yaml File", link: "/docs/providers/fs/yaml-file" },
+              ],
+            },
+            {
+              text: "github",
+              link: "/docs/providers/github",
+              collapsed: true,
+              items: [
+                {
+                  text: "GitHub Secret",
+                  link: "/docs/providers/github/secret",
+                },
+              ],
+            },
+            {
+              text: "stripe",
+              link: "/docs/providers/stripe",
+              collapsed: true,
+              items: [
+                { text: "Price", link: "/docs/providers/stripe/price" },
+                { text: "Product", link: "/docs/providers/stripe/product" },
+                {
+                  text: "Webhook Endpoint",
+                  link: "/docs/providers/stripe/webhook",
+                },
+              ],
+            },
+          ],
+        },
       ],
       "/examples/": [
         { text: "Examples", items: [{ text: "Foo", link: "/examples/foo" }] },
