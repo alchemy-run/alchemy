@@ -9,7 +9,7 @@ Resources are simple memoized async functions that can run in any JavaScript run
 ```ts
 import alchemy from "alchemy";
 
-await using Worker = alchemy("cloudflare-worker");
+await using app = alchemy("cloudflare-worker");
 
 export const worker = await Worker("worker", {
   name: "my-worker",
