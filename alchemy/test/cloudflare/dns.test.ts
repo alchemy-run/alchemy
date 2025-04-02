@@ -10,7 +10,7 @@ import { BRANCH_PREFIX } from "../util";
 import "../../src/test/bun";
 
 const test = alchemy.test(import.meta, {
-  destroy: false,
+  destroy: true,
 });
 
 const testDomain = `${BRANCH_PREFIX}-test-2.com`;
