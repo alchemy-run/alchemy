@@ -69,10 +69,18 @@ export async function AlchemyProviderDocs({
       const {
         object: { groups },
       } = await Data(`docs/${providerName}`, {
+        model: {
+          id: "gpt-4o",
+          provider: "openai",
+          // options: {
+          //   reasoningEffort: "high",
+          // },
+        },
+        // temperature: 0.1,
         schema: type({
           groups: type({
             title: type("string").describe(
-              "The title of the group, should be the Resource Name exactly without spaces, e.g. Bucket or Static Site.",
+              "The title of the group, should be the Resource Name exactly as it's defined in code (const ResourceName translates to 'Resource Name') without spaces, e.g. Bucket or Static Site.",
             ),
             filename: type("string").describe(
               "The filename of the Resource's Document, e.g. bucket.md or static-site.md",
@@ -100,9 +108,14 @@ export async function AlchemyProviderDocs({
           A file is considered a "Utility" if it contains utility functions that are not resources or clients.
           A file is considered a "Types" if it contains just type definitions and maybe helpers around working with those types.
 
-          The title should be simply the name of the resource, e.g. "Bucket" or "Function", except with spaces, e.g. "Static Site" instead of "StaticSite". Maintain all other casing.
+          The title should be simply the name of the resource's const in code (with spaces added in between each word), e.g. "Bucket" or "Function", except with spaces, e.g. "Static Site" for "const StaticSite". Maintain all other casing.
+
+          // "Resource Name"
+          const ResourceName = Resource(...)
         `,
       });
+
+      console.log(groups);
 
       const providerDocsDir = (
         await Folder(path.join(providersDir, providerName))

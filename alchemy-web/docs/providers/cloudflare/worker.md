@@ -9,7 +9,7 @@ import { Worker } from "alchemy/cloudflare";
 
 const myWorker = await Worker("my-worker", {
   name: "my-worker",
-  entrypoint: "./src/index.ts",
+  script: "console.log('Hello, world!')",
 });
 ```
 
@@ -21,6 +21,9 @@ import { Worker } from "alchemy/cloudflare";
 const myWorker = await Worker("my-worker", {
   name: "my-worker",
   entrypoint: "./src/index.ts",
+  bindings: {
+    MY_SECRET: "my-secret-value",
+  },
   routes: ["example.com/*"],
   url: true,
 });
@@ -29,19 +32,18 @@ const myWorker = await Worker("my-worker", {
 # Bind to a Worker
 
 ```ts
-import { Worker, KVNamespace } from "alchemy/cloudflare";
+import { Worker } from "alchemy/cloudflare";
 
-const myKVNamespace = await KVNamespace("my-kv-namespace", {
-  title: "my-kv-namespace",
+const myResource = await Worker("my-resource", {
+  name: "my-resource",
+  script: "console.log('Resource initialized')",
 });
 
-const myWorker = await Worker("my-worker", {
+await Worker("my-worker", {
   name: "my-worker",
-  entrypoint: "./src/index.ts",
+  script: "console.log('Hello, world!')",
   bindings: {
-    MY_KV_NAMESPACE: myKVNamespace,
+    myResource,
   },
 });
 ```
-
-This documentation provides a concise overview of how to create and bind Cloudflare Workers using the Alchemy IaC library. The examples demonstrate the creation of a worker, setting up routes, enabling a workers.dev URL, and binding a KV Namespace to the worker.

@@ -1,13 +1,14 @@
 # State
 
-The State component allows you to manage state using [Cloudflare KV Namespace](https://developers.cloudflare.com/workers/runtime-apis/kv).
+The State component allows you to manage state using [Cloudflare KV Namespace](https://developers.cloudflare.com/workers/runtime-apis/kv/), providing a scalable and distributed key-value store for your application.
 
 # Minimal Example
 
 ```ts
 import { CloudflareStateStore } from "alchemy/cloudflare";
 
-const stateStore = new CloudflareStateStore(myKVNamespace, {
+const kvNamespace = /* obtain KVNamespace instance */;
+const stateStore = new CloudflareStateStore(kvNamespace, {
   prefix: "my-app-state:",
 });
 ```
@@ -17,7 +18,8 @@ const stateStore = new CloudflareStateStore(myKVNamespace, {
 ```ts
 import { CloudflareStateStore } from "alchemy/cloudflare";
 
-const stateStore = new CloudflareStateStore(myKVNamespace, {
+const kvNamespace = /* obtain KVNamespace instance */;
+const stateStore = new CloudflareStateStore(kvNamespace, {
   prefix: "my-app-state:",
 });
 
@@ -44,7 +46,8 @@ await stateStore.delete("user-123");
 ```ts
 import { Worker, CloudflareStateStore } from "alchemy/cloudflare";
 
-const stateStore = new CloudflareStateStore(myKVNamespace, {
+const kvNamespace = /* obtain KVNamespace instance */;
+const stateStore = new CloudflareStateStore(kvNamespace, {
   prefix: "my-app-state:",
 });
 

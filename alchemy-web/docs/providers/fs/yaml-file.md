@@ -1,6 +1,6 @@
 # Yaml File
 
-The Yaml File component allows you to create and manage YAML files with formatted content using the [YAML](https://yaml.org/) format.
+The Yaml File resource allows you to create and manage YAML files with formatted content using the [YAML](https://yaml.org/) format.
 
 # Minimal Example
 

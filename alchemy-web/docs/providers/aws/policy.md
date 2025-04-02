@@ -37,7 +37,7 @@ const apiPolicy = await Policy("api-access", {
         Sid: "InvokeAPI",
         Effect: "Allow",
         Action: "execute-api:Invoke",
-        Resource: "arn:aws:execute-api:region:account-id:api-id/stage/method/resource-path",
+        Resource: "arn:aws:execute-api:region:account-id:api-id/stage/METHOD/resource-path",
         Condition: {
           StringEquals: {
             "aws:SourceVpc": "vpc-id"
@@ -63,4 +63,4 @@ const apiPolicy = await Policy("api-access", {
 });
 ```
 
-This example demonstrates creating a policy with multiple statements and conditions, allowing API Gateway invocation and log reading, with specific conditions and tags.
+This documentation provides a concise overview of the Policy resource, including a minimal example and a more detailed example of creating a policy with multiple statements and conditions.

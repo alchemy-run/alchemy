@@ -35,4 +35,4 @@ const domainIdentity = await SES("domain-identity", {
 });
 ```
 
-This example demonstrates how to create a domain identity with DKIM enabled, which helps prevent email spoofing by verifying sender authenticity.
+This documentation provides a concise overview of how to use the SES resource in Alchemy to manage SES configuration sets and email identities.

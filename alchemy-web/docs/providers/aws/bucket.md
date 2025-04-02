@@ -9,6 +9,10 @@ import { Bucket } from "alchemy/aws";
 
 const basicBucket = await Bucket("my-app-storage", {
   bucketName: "my-app-storage",
+  tags: {
+    Environment: "production",
+    Project: "my-app"
+  }
 });
 ```
 
@@ -16,15 +20,6 @@ const basicBucket = await Bucket("my-app-storage", {
 
 ```ts
 import { Bucket } from "alchemy/aws";
-
-// Create a basic S3 bucket with default settings
-const basicBucket = await Bucket("my-app-storage", {
-  bucketName: "my-app-storage",
-  tags: {
-    Environment: "production",
-    Project: "my-app"
-  }
-});
 
 // Create a bucket with versioning enabled and specific tags
 const versionedBucket = await Bucket("document-archive", {
@@ -35,6 +30,10 @@ const versionedBucket = await Bucket("document-archive", {
     Versioning: "enabled"
   }
 });
+```
+
+```ts
+import { Bucket } from "alchemy/aws";
 
 // Create a development bucket with minimal configuration
 const devBucket = await Bucket("dev-testing", {

@@ -13,6 +13,13 @@ const table = await Table("user-events", {
     name: "id",
     type: "S"
   },
+  sortKey: {
+    name: "timestamp",
+    type: "N"
+  },
+  tags: {
+    Environment: "test"
+  }
 });
 ```
 
@@ -38,7 +45,7 @@ const table = await Table("user-events", {
 });
 
 // Create a table with provisioned capacity
-const provisionedTable = await Table("high-throughput", {
+const tableWithProvisionedCapacity = await Table("high-throughput", {
   tableName: "high-throughput",
   partitionKey: {
     name: "userId",
@@ -49,3 +56,5 @@ const provisionedTable = await Table("high-throughput", {
   writeCapacity: 50
 });
 ```
+
+This documentation provides a concise overview of how to create and manage DynamoDB tables using the Alchemy IaC library, with examples demonstrating different configurations.

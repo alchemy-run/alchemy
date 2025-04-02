@@ -34,9 +34,9 @@ const gameState = await DurableObjectNamespace("game-state", {
   environment: "production"
 });
 
-await Worker("game-worker", {
-  name: "game-worker",
-  script: "console.log('Game Worker Initialized')",
+await Worker("my-worker", {
+  name: "my-worker",
+  script: "console.log('Hello, world!')",
   bindings: {
     gameState,
   },

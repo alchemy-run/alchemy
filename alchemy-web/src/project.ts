@@ -8,7 +8,7 @@ export interface AlchemyProjectProps {
     tagline: string;
   };
   docs: {
-    providers: AlchemyProviderDocs;
+    providers?: AlchemyProviderDocs;
   };
 }
 
@@ -137,7 +137,7 @@ export function AlchemyProject({
           },
           {
             text: "Providers",
-            items: docs.providers
+            items: (docs.providers ?? [])
               .map((provider) => ({
                 text: provider.provider,
                 link: `/docs/providers/${provider.provider}`,

@@ -1,6 +1,6 @@
 # Document
 
-The Document resource allows you to create, update, and manage markdown documents using AI-generated content. It leverages the Vercel AI SDK for generating content based on provided prompts and file contexts. This resource is ideal for generating documentation with dynamic content and context-aware prompts.
+The Document resource allows you to create, update, and manage markdown documents using AI-generated content. It leverages the Vercel AI SDK for content generation, supporting context handling through Alchemy template literals. This resource is ideal for generating documentation, technical specifications, and other markdown-based content.
 
 # Minimal Example
 
@@ -8,12 +8,17 @@ The Document resource allows you to create, update, and manage markdown document
 import { Document } from "alchemy/ai";
 
 const apiDocs = await Document("api-docs", {
+  title: "API Documentation",
   path: "./docs/api.md",
   prompt: await alchemy`
     Generate API documentation based on these source files:
     ${alchemy.file("src/api.ts")}
     ${alchemy.file("src/types.ts")}
-  `
+  `,
+  model: {
+    id: "gpt-4o",
+    provider: "openai"
+  }
 });
 ```
 
@@ -22,11 +27,20 @@ const apiDocs = await Document("api-docs", {
 ```ts
 import { Document } from "alchemy/ai";
 
-const modelDocs = await Document("models", {
-  path: "./docs/models.md",
+const techDocs = await Document("tech-specs", {
+  title: "Technical Specifications",
+  path: "./docs/tech-specs.md",
   prompt: await alchemy`
-    Write documentation for these data models:
-    ${alchemy.files("src/models/user.ts", "src/models/post.ts")}
-  `
+    Create detailed technical specifications based on these requirements:
+    ${alchemy.file("requirements/system.md")}
+  `,
+  model: {
+    id: "o3-mini",
+    provider: "openai",
+    options: {
+      reasoningEffort: "high"
+    }
+  },
+  temperature: 0.1
 });
 ```

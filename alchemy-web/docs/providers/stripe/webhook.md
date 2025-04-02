@@ -1,6 +1,6 @@
 # Webhook Endpoint
 
-The Webhook Endpoint component allows you to create and manage [Stripe Webhook Endpoints](https://stripe.com/docs/webhooks) for handling events from Stripe.
+The Webhook Endpoint component allows you to create and manage [Stripe Webhook Endpoints](https://stripe.com/docs/webhooks) to receive event notifications from Stripe.
 
 # Minimal Example
 

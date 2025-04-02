@@ -29,8 +29,8 @@ const euBucket = await R2Bucket("eu-user-data", {
 ```ts
 import { Worker, R2Bucket } from "alchemy/cloudflare";
 
-const myBucket = await R2Bucket("my-resource", {
-  name: "my-resource",
+const myBucket = await R2Bucket("my-bucket", {
+  name: "my-bucket",
   allowPublicAccess: true
 });
 

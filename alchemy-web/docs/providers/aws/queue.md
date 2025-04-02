@@ -22,8 +22,8 @@ const standardQueue = await Queue("my-queue", {
   queueName: "my-queue",
   visibilityTimeout: 30,
   tags: {
-    Environment: "production",
-  },
+    Environment: "production"
+  }
 });
 
 // Create a FIFO queue with content-based deduplication
@@ -33,8 +33,8 @@ const fifoQueue = await Queue("orders-queue", {
   contentBasedDeduplication: true,
   visibilityTimeout: 30,
   tags: {
-    Environment: "production",
-  },
+    Environment: "production"
+  }
 });
 
 // Create a queue with custom message retention and size
@@ -44,6 +44,6 @@ const customQueue = await Queue("large-messages", {
   maximumMessageSize: 262144,      // 256 KB
   visibilityTimeout: 60,
   delaySeconds: 5,
-  receiveMessageWaitTimeSeconds: 20,
+  receiveMessageWaitTimeSeconds: 20
 });
 ```

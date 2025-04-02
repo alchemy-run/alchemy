@@ -1,13 +1,13 @@
 # Kv Namespace
 
-The Kv Namespace component allows you to create and manage [Cloudflare KV Namespaces](https://developers.cloudflare.com/kv/concepts/kv-namespaces/), which are key-value stores for your application.
+The Kv Namespace component allows you to manage [Cloudflare Workers KV](https://developers.cloudflare.com/workers/runtime-apis/kv) namespaces, which are key-value stores for your application.
 
 # Minimal Example
 
 ```ts
-import { KvNamespace } from "alchemy/cloudflare";
+import { KVNamespace } from "alchemy/cloudflare";
 
-const myNamespace = await KvNamespace("my-namespace", {
+const myNamespace = await KVNamespace("my-namespace", {
   title: "example-namespace"
 });
 ```
@@ -15,9 +15,9 @@ const myNamespace = await KvNamespace("my-namespace", {
 # Create the Kv Namespace
 
 ```ts
-import { KvNamespace } from "alchemy/cloudflare";
+import { KVNamespace } from "alchemy/cloudflare";
 
-const myNamespace = await KvNamespace("my-namespace", {
+const myNamespace = await KVNamespace("my-namespace", {
   title: "example-namespace",
   values: [
     {
@@ -32,9 +32,9 @@ const myNamespace = await KvNamespace("my-namespace", {
 # Bind to a Worker
 
 ```ts
-import { Worker, KvNamespace } from "alchemy/cloudflare";
+import { Worker, KVNamespace } from "alchemy/cloudflare";
 
-const myNamespace = await KvNamespace("my-namespace", {
+const myNamespace = await KVNamespace("my-namespace", {
   title: "example-namespace"
 });
 

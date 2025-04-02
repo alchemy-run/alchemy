@@ -1,6 +1,6 @@
 # Data
 
-The Data component allows you to generate structured content using AI based on a specified schema. It leverages the Vercel AI SDK to create content that adheres to a given structure, making it ideal for generating consistent and validated outputs. Learn more about [Vercel AI SDK](https://vercel.com/docs/ai).
+The Data component allows you to generate structured content using AI based on a defined schema. It leverages the Vercel AI SDK for content generation, supporting advanced context handling and model configuration.
 
 # Minimal Example
 
@@ -17,7 +17,14 @@ const productSchema = type({
 const product = await Data("new-product", {
   schema: productSchema,
   prompt: "Generate a product description for a new smartphone",
-  system: "You are a product copywriter specializing in tech products"
+  system: "You are a product copywriter specializing in tech products",
+  model: {
+    id: "gpt-4o",
+    provider: "openai",
+    options: {
+      temperature: 0.7
+    }
+  }
 });
 
 console.log(product.object); // Typed as per schema
@@ -28,24 +35,26 @@ console.log(product.object); // Typed as per schema
 ```ts
 import { Data } from "alchemy/ai";
 
-const docSchema = type({
-  summary: "string",
-  parameters: {
-    name: "string",
-    type: "string",
-    description: "string"
-  }[],
-  returns: "string"
+const analysisSchema = type({
+  insights: "string[]",
+  recommendations: "string[]",
+  risk: "'low'|'medium'|'high'"
 });
 
-const docs = await Data("function-docs", {
-  schema: docSchema,
+const analysis = await Data("code-analysis", {
+  schema: analysisSchema,
   prompt: await alchemy`
-    Generate documentation for this function:
-    ${alchemy.file("src/utils/format.ts")}
+    Analyze this code for security issues:
+    ${alchemy.file("src/auth/login.ts")}
   `,
-  system: "You are a technical documentation writer"
+  system: "You are a security expert specializing in code analysis",
+  model: {
+    id: "o3-mini",
+    provider: "openai",
+    options: {
+      reasoningEffort: "high"
+    }
+  },
+  temperature: 0.1
 });
-
-console.log(docs.object); // Typed as per schema
 ```

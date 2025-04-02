@@ -22,18 +22,18 @@ const config = await JsonFile("config.json", {
 ```ts
 import { JsonFile } from "alchemy/fs";
 
-// Create a JSON configuration file with nested objects
+// Create a JSON configuration file with nested objects and arrays
 const settings = await JsonFile("settings.json", {
-  database: {
-    host: "localhost",
-    port: 5432,
-    user: "admin"
+  user: {
+    name: "John Doe",
+    email: "john.doe@example.com"
   },
-  services: {
-    authService: {
-      url: "https://auth.example.com",
-      timeout: 5000
-    }
-  }
+  preferences: {
+    theme: "dark",
+    notifications: true
+  },
+  roles: ["admin", "editor"]
 });
 ```
+
+This resource simplifies the creation of JSON files by automatically formatting the content, making it easy to manage configuration files and other structured data in your projects.

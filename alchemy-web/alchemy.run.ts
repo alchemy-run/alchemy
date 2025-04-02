@@ -1,7 +1,6 @@
 import alchemy from "alchemy";
 
 import "alchemy/cloudflare";
-import { StaticSite } from "alchemy/cloudflare";
 import "alchemy/fs";
 import { Folder } from "alchemy/fs";
 import "alchemy/vitepress";
@@ -31,21 +30,21 @@ export const project = await AlchemyProject({
     tagline: "TypeScript-native infrastructure-as-Code designed for Gen-AI",
   },
   docs: {
-    providers,
+    // providers,
   },
 });
 
-export const site = await StaticSite("alchemy.run site", {
-  name: "alchemy",
-  dir: ".vitepress/dist",
-  domain: "alchemy.run",
-  build: {
-    command: "bun run docs:build",
-  },
-});
+// export const site = await StaticSite("alchemy.run site", {
+//   name: "alchemy",
+//   dir: ".vitepress/dist",
+//   domain: "alchemy.run",
+//   build: {
+//     command: "bun run docs:build",
+//   },
+// });
 
-console.log({
-  url: site.url,
-});
+// console.log({
+//   url: site.url,
+// });
 
 await app.finalize();

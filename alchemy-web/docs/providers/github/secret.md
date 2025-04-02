@@ -1,6 +1,6 @@
 # GitHub Secret
 
-The GitHub Secret component allows you to manage [GitHub repository secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) securely. It supports creating, updating, and deleting secrets in a GitHub repository.
+The GitHub Secret component allows you to manage [GitHub repository secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) securely. It supports creating, updating, and deleting secrets in a GitHub repository using the GitHub API.
 
 # Minimal Example
 
@@ -20,6 +20,7 @@ const secret = await GitHubSecret("my-secret", {
 ```ts
 import { GitHubSecret } from "alchemy/github";
 
+// Create a secret with a custom GitHub token
 const secret = await GitHubSecret("my-secret", {
   owner: "my-github-username",
   repository: "my-repo",

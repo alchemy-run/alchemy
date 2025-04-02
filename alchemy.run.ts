@@ -100,15 +100,6 @@ await DnsRecords("transfer-dns-records", {
 
 console.log("nameservers:", zone.nameservers);
 
-// const site = await StaticSite("alchemy.run site", {
-//   name: "alchemy",
-//   dir: "alchemy-web/.vitepress/dist",
-//   domain: "alchemy.run",
-//   build: {
-//     command: "bun run --filter alchemy-web docs:build",
-//   },
-// });
-
 await app.finalize();
 
 // cloudflare vite plugin requires a wrangler.json file
