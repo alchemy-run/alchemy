@@ -52,5 +52,13 @@
     "**/__pycache__": true,
     "**/*.pyc": true
   },
-  "cSpell.words": ["bunx", "cursorrules", "deinit", "Pulumi", "qwik", "Shadcn"]
+  "cSpell.words": [
+    "Agentic",
+    "bunx",
+    "cursorrules",
+    "deinit",
+    "Pulumi",
+    "qwik",
+    "Shadcn"
+  ]
 }
