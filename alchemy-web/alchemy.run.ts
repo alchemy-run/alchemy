@@ -3,11 +3,10 @@ import alchemy from "alchemy";
 import "alchemy/cloudflare";
 import "alchemy/fs";
 import "alchemy/vitepress";
-import "./src/project";
-import "./src/providers";
 
 import { StaticSite } from "alchemy/cloudflare";
 import { Folder } from "alchemy/fs";
+import { GettingStarted } from "./src/getting-started";
 import { AlchemyProject } from "./src/project";
 import { AlchemyProviderDocs } from "./src/providers";
 
@@ -18,7 +17,10 @@ const app = alchemy("alchemy-web", {
 const docs = await Folder("docs");
 
 const [providers] = await Promise.all([
-  await AlchemyProviderDocs({
+  GettingStarted({
+    outDir: docs,
+  }),
+  AlchemyProviderDocs({
     filter: true,
     outDir: docs,
   }),

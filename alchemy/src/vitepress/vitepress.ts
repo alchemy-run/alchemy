@@ -34,6 +34,14 @@ export interface VitePressProjectProps {
    */
   typescript?: boolean;
 
+  /**
+   * The scripts to add to the project
+   */
+  scripts?: Record<string, string>;
+
+  /**
+   * The tsconfig to use
+   */
   tsconfig?: {
     extends?: string;
     references?: string[];
@@ -135,6 +143,7 @@ export const VitePressProject = Resource(
         "docs:dev": "vitepress dev",
         "docs:build": "vitepress build",
         "docs:preview": "vitepress preview",
+        ...props.scripts,
       },
       dependencies: fixedDependencies(props.dependencies || {}),
       devDependencies: fixedDependencies(props.devDependencies || {}),

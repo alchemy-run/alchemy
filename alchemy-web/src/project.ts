@@ -25,6 +25,9 @@ export function AlchemyProject({
     description: "Alchemy is an TypeScript-native, embeddable IaC library",
     overwrite: true,
     delete: false,
+    scripts: {
+      deploy: "bun --env-file ../.env alchemy.run.ts",
+    },
     tsconfig: {
       extends: "../tsconfig.base.json",
       references: ["../alchemy/tsconfig.json"],

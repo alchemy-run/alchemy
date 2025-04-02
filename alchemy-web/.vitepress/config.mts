@@ -15,7 +15,7 @@ export default defineConfig({
   // https://vitepress.dev/reference/default-theme-config
   themeConfig: {
     sidebar: {
-      "/blog/": [{ text: "Blog", items: [{ text: "Blog", link: "/blog/" }] }],
+      // "/blog/": [{ text: "Blog", items: [{ text: "Blog", link: "/blog/" }] }],
       "/docs/": [
         {
           text: "Getting Started",
