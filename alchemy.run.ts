@@ -11,9 +11,8 @@ import "./alchemy/src/vitepress";
 import alchemy from "./alchemy/src";
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
-import { StaticSite, Zone } from "./alchemy/src/cloudflare";
+import { Zone } from "./alchemy/src/cloudflare";
 import { GitHubSecret } from "./alchemy/src/github";
-import { AlchemyDocs } from "./alchemy/src/internal/docs";
 
 const app = alchemy("github:alchemy", {
   stage: "prod",
@@ -84,23 +83,14 @@ const zone = await Zone("alchemy.run", {
 
 console.log("nameservers:", zone.nameservers);
 
-// generate the Alchemy docs from source
-await AlchemyDocs({
-  docs: true,
-});
-
-const site = await StaticSite("alchemy.run site", {
-  name: "alchemy",
-  dir: "alchemy-web/.vitepress/dist",
-  domain: "alchemy.run",
-  build: {
-    command: "bun run --filter alchemy-web docs:build",
-  },
-});
-
-console.log({
-  url: site.url,
-});
+// const site = await StaticSite("alchemy.run site", {
+//   name: "alchemy",
+//   dir: "alchemy-web/.vitepress/dist",
+//   domain: "alchemy.run",
+//   build: {
+//     command: "bun run --filter alchemy-web docs:build",
+//   },
+// });
 
 await app.finalize();
 

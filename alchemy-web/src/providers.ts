@@ -1,24 +1,38 @@
+import alchemy from "alchemy";
+import { Data, Document } from "alchemy/ai";
+import { Folder } from "alchemy/fs";
 import { type } from "arktype";
 import fs from "fs/promises";
 import path from "path";
-import { Data } from "../ai/data";
-import { Document } from "../ai/document";
-import { alchemy } from "../alchemy";
-import { Folder } from "../fs/folder";
-import { VitePressProject } from "../vitepress/vitepress";
 
 export interface DocsProps {
-  docs?: boolean | number;
+  /**
+   * The output directory for the docs.
+   */
+  outDir: string | Folder;
+  /**
+   * Whether to filter the docs.
+   * If true, include all docs.
+   * If false, include none.
+   * If a number, include that many providers.
+   *
+   * @default true (all docs)
+   */
+  filter?: boolean | number;
 }
 
-export type AlchemyDocs = Awaited<ReturnType<typeof AlchemyDocs>>;
+export type AlchemyProviderDocs = {
+  dir: string;
+  provider: string;
+  documents: Document[];
+}[];
 
-export async function AlchemyDocs({ docs: isDocsEnabled }: DocsProps) {
-  const root = (await Folder("alchemy-web")).path;
-
-  const docs = (await Folder(path.join(root, "docs"))).path;
-
-  const providersDir = (await Folder(path.join(docs, "providers"))).path;
+export async function AlchemyProviderDocs({
+  outDir,
+  filter,
+}: DocsProps): Promise<AlchemyProviderDocs> {
+  outDir = typeof outDir === "string" ? outDir : outDir.path;
+  const providersDir = (await Folder(path.join(outDir, "providers"))).path;
 
   const exclude = ["util", "test", "vitepress", "vite", "shadcn", "internal"];
 
@@ -32,13 +46,13 @@ export async function AlchemyDocs({ docs: isDocsEnabled }: DocsProps) {
     .map((dirent) => path.join(dirent.parentPath, dirent.name));
 
   // For each provider, list all files
-  if (isDocsEnabled === false) {
-    return;
-  } else if (typeof isDocsEnabled === "number") {
-    providers = providers.slice(0, isDocsEnabled);
+  if (filter === false) {
+    return [];
+  } else if (typeof filter === "number") {
+    providers = providers.slice(0, filter);
   }
 
-  const providerDocs = await Promise.all(
+  return await Promise.all(
     providers.map(async (provider) => {
       const providerName = path.basename(provider);
       const files = (
@@ -179,160 +193,4 @@ export async function AlchemyDocs({ docs: isDocsEnabled }: DocsProps) {
       } as const;
     }),
   );
-
-  await VitePressProject("docs", {
-    name: "alchemy-web",
-    title: "Alchemy",
-    description: "Alchemy is an TypeScript-native, embeddable IaC library",
-    overwrite: true,
-    delete: false,
-    tsconfig: {
-      extends: "../tsconfig.base.json",
-      references: ["../alchemy/tsconfig.json"],
-    },
-    devDependencies: {
-      alchemy: "workspace:*",
-    },
-    theme: {
-      light: "light-plus",
-      dark: "dark-plus",
-    },
-    home: {
-      layout: "home",
-      hero: {
-        name: "Alchemy",
-        text: "Materialize all the things! 🪄",
-        tagline: "TypeScript-native Infrastructure-as-Code (IaC)",
-        image: {
-          src: "./public/alchemist.png",
-          alt: "The Alchemist",
-        },
-        actions: [
-          {
-            text: "Get Started",
-            link: "/docs",
-            theme: "brand",
-          },
-        ],
-      },
-      features: [
-        {
-          title: "JS-native",
-          details:
-            "No second language, toolchains, dependencies, processes, services, etc. to lug around.",
-        },
-        {
-          title: "Async",
-          details:
-            "Resources are just async functions - no complex abstraction to learn.",
-        },
-        {
-          title: "ESM",
-          details:
-            "Built exclusively on ESM, with a slight preference for modern JS runtimes like Bun.",
-        },
-        {
-          title: "Embeddable",
-          details:
-            "Runs in any JavaScript/TypeScript environment, including the browser!",
-        },
-        {
-          title: "Extensible",
-          details: "Implement your own resources with a simple function.",
-        },
-        {
-          title: "AI-first",
-          details:
-            "Create, copy, fork, and modify resources using LLMs to fit your needs.",
-        },
-        {
-          title: "No dependencies",
-          details: "The alchemy core package has 0 required dependencies.",
-        },
-        {
-          title: "No service",
-          details:
-            "State files are stored locally in your project for easy inspection and version control.",
-        },
-        {
-          title: "No strong opinions",
-          details:
-            "Structure your codebase however you want, store state anywhere - we don't care!",
-        },
-      ],
-    },
-    themeConfig: {
-      sidebar: {
-        "/blog/": [{ text: "Blog", items: [{ text: "Blog", link: "/blog/" }] }],
-        "/docs/": [
-          {
-            text: "Getting Started",
-            items: [{ text: "Install", link: "/docs/getting-started/install" }],
-          },
-          {
-            text: "Guides",
-            items: [
-              {
-                text: "Custom Resource",
-                link: "/docs/guides/custom-resource",
-              },
-              {
-                text: "Automating with LLMs",
-                link: "/docs/guides/llms",
-              },
-            ],
-          },
-          {
-            text: "Core",
-            collapsed: true,
-            items: [
-              { text: "App", link: "/docs/core/app" },
-              { text: "Resource", link: "/docs/core/resource" },
-              { text: "Scope", link: "/docs/core/scope" },
-              { text: "Phase", link: "/docs/core/phase" },
-              { text: "Finalize", link: "/docs/core/finalize" },
-              { text: "State", link: "/docs/core/state" },
-              { text: "Secret", link: "/docs/core/secret" },
-              { text: "Context", link: "/docs/core/context" },
-            ],
-          },
-          {
-            text: "Providers",
-            items: providerDocs
-              .map((provider) => ({
-                text: provider.provider,
-                link: `/docs/providers/${provider.provider}`,
-                collapsed: true,
-                items: provider.documents.map((document) => ({
-                  text: document.title,
-                  link: `/docs/providers/${provider.provider}/${path.basename(document.path, ".md")}`,
-                })),
-              }))
-              .sort((a, b) => a.text.localeCompare(b.text)),
-          },
-        ],
-        "/examples/": [
-          {
-            text: "Examples",
-            items: [{ text: "Foo", link: "/examples/foo" }],
-          },
-        ],
-        "/": [
-          {
-            text: "Home",
-            items: [
-              { text: "Markdown Examples", link: "/markdown-examples" },
-              { text: "Runtime API Examples", link: "/api-examples" },
-            ],
-          },
-        ],
-      },
-      socialLinks: [
-        {
-          icon: "github",
-          link: "https://github.com/sam-goodwin/alchemy",
-        },
-      ],
-    },
-  });
 }
