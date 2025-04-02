@@ -17,7 +17,7 @@ To create a basic Alchemy project, follow these steps:
 
 1. **Initialize Alchemy**: Start by creating an Alchemy app, which serves as the root scope for your resources.
 
-   ```ts
+   ```ts twoslash
    import alchemy from "alchemy";
 
    await using app = alchemy("my-app", {
@@ -30,7 +30,7 @@ To create a basic Alchemy project, follow these steps:
 
 2. **Define a Resource**: Create a resource, such as an AWS IAM Role, using Alchemy's resource functions.
 
-   ```ts
+   ```ts twoslash
    import { Role } from "alchemy/aws";
 
    export const role = await Role("my-role", {
