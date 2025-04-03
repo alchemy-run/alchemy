@@ -84,7 +84,6 @@ export default defineConfig({
                   text: "Kv Namespace",
                   link: "/docs/providers/cloudflare/kv-namespace",
                 },
-                { text: "State", link: "/docs/providers/cloudflare/state" },
                 {
                   text: "Static Site",
                   link: "/docs/providers/cloudflare/static-site",

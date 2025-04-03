@@ -40,9 +40,6 @@ import { Worker, Zone } from "alchemy/cloudflare";
 const myZone = await Zone("my-zone", {
   name: "my-zone.com",
   type: "full",
-  settings: {
-    ssl: "full",
-  },
 });
 
 await Worker("my-worker", {

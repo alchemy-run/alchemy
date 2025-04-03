@@ -7,7 +7,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "dev:docs": "bun run --filter alchemy-web docs:dev",
-    "deploy:docs": "bun run --filter alchemy-web deploy",
+    "build:docs": "bun run --filter alchemy-web deploy -- --verbose",
     "bootstrap": "bun run --env-file .env ./alchemy.config.ts --verbose",
     "build": "tsc -b",
     "check": "tsc -b ./tsconfig.json",

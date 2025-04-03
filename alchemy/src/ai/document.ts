@@ -39,6 +39,14 @@ export interface DocumentProps {
   prompt: string;
 
   /**
+   * System prompt for the model
+   * This is used to provide instructions to the model about how to format the response
+   * The default system prompt instructs the model to return a single markdown document inside ```md fences
+   * @default "You are a technical documentation writer. Create a single markdown document based on the user's requirements. Your response MUST include only a single markdown document inside ```md fences. Do not include any other text, explanations, or multiple code blocks."
+   */
+  system?: string;
+
+  /**
    * OpenAI API key to use for generating content
    * If not provided, will use OPENAI_API_KEY environment variable
    */
@@ -79,6 +87,12 @@ export interface Document extends DocumentProps, Resource<"docs::Document"> {
 }
 
 /**
+ * Default system prompt for markdown document generation
+ */
+const DEFAULT_MD_SYSTEM_PROMPT =
+  "You are a technical documentation writer. Create a single markdown document based on the user's requirements. Your response MUST include only a single markdown document inside ```md fences. Do not include any other text, explanations, or multiple code blocks.";
+
+/**
  * Resource for managing AI-generated markdown documents using the Vercel AI SDK.
  * Supports powerful context handling through the alchemy template literal tag.
  *
@@ -111,7 +125,7 @@ export interface Document extends DocumentProps, Resource<"docs::Document"> {
  * });
  *
  * @example
- * // Advanced model configuration with custom provider options
+ * // Advanced model configuration with custom provider options and custom system prompt
  * const techDocs = await Document("tech-specs", {
  *   title: "Technical Specifications",
  *   path: "./docs/tech-specs.md",
@@ -119,6 +133,7 @@ export interface Document extends DocumentProps, Resource<"docs::Document"> {
  *     Create detailed technical specifications based on these requirements:
  *     ${alchemy.file("requirements/system.md")}
  *   `,
+ *   system: "You are an expert technical writer specializing in system specifications. Create a single markdown document inside ```md fences with no additional text.",
  *   model: {
  *     id: "o3-mini",
  *     provider: "openai",
@@ -151,12 +166,14 @@ export const Document = Resource(
       return this.destroy();
     }
 
-    // Initialize OpenAI compatible provider using shared client
+    // Use provided system prompt or default
+    const system = props.system || DEFAULT_MD_SYSTEM_PROMPT;
 
-    // Generate content
+    // Generate initial content
     const { text } = await generateText({
       model: createModel(props),
       prompt: props.prompt,
+      system,
       providerOptions: props.model?.options,
       ...(props.temperature === undefined
         ? {}
@@ -164,12 +181,40 @@ export const Document = Resource(
           { temperature: props.temperature }),
     });
 
+    // Extract and validate markdown content
+    let { content, error } = await extractMarkdownContent(text);
+
+    // Re-prompt if there are validation errors
+    if (error) {
+      const errorSystem = `${system}\n\nERROR: ${error}\n\nPlease try again and ensure your response contains exactly one markdown document inside \`\`\`md fences.`;
+
+      const { text: retryText } = await generateText({
+        model: createModel(props),
+        prompt: props.prompt,
+        system: errorSystem,
+        providerOptions: props.model?.options,
+        ...(props.temperature === undefined
+          ? {}
+          : { temperature: props.temperature }),
+      });
+
+      const retryResult = await extractMarkdownContent(retryText);
+
+      if (retryResult.error) {
+        throw new Error(
+          `Failed to generate valid markdown content: ${retryResult.error}`,
+        );
+      }
+
+      content = retryResult.content;
+    }
+
     if (this.phase === "update" && props.path !== this.props.path) {
       await ignore("ENOENT", () => fs.unlink(this.props.path));
     }
 
     // Write content to file
-    await fs.writeFile(props.path, text);
+    await fs.writeFile(props.path, content);
 
     // Get file stats for timestamps
     const stats = await fs.stat(props.path);
@@ -177,9 +222,41 @@ export const Document = Resource(
     // Return the resource
     return this({
       ...props,
-      content: text,
+      content: content,
       createdAt: stats.birthtimeMs,
       updatedAt: stats.mtimeMs,
     });
   },
 );
+
+/**
+ * Extracts markdown content from between ```md fences
+ * Validates that exactly one markdown code block exists
+ *
+ * @param text The text to extract markdown content from
+ * @returns The extracted markdown content or error message
+ */
+async function extractMarkdownContent(
+  text: string,
+): Promise<{ content: string; error?: string }> {
+  const mdCodeRegex = /```md\s*([\s\S]*?)```/g;
+  const matches = Array.from(text.matchAll(mdCodeRegex));
+
+  if (matches.length === 0) {
+    return {
+      content: "",
+      error:
+        "No markdown code block found in the response. Please include your markdown content within ```md fences.",
+    };
+  }
+
+  if (matches.length > 1) {
+    return {
+      content: "",
+      error:
+        "Multiple markdown code blocks found in the response. Please provide exactly one markdown block within ```md fences.",
+    };
+  }
+
+  return { content: matches[0][1].trim() };
+}

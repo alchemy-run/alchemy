@@ -28,7 +28,7 @@ const userStore = new DurableObjectNamespace("user-store", {
 ```ts
 import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";
 
-const game = await DurableObjectNamespace("game-state", {
+const gameState = await DurableObjectNamespace("game-state", {
   className: "GameState",
   scriptName: "game-worker",
   environment: "production"
@@ -36,9 +36,9 @@ const game = await DurableObjectNamespace("game-state", {
 
 await Worker("game-worker", {
   name: "game-worker",
-  script: "console.log('Game worker initialized')",
+  script: "console.log('Hello, world!')",
   bindings: {
-    game,
+    gameState,
   },
 });
 ```

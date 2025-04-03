@@ -1,13 +1,13 @@
 # Yaml File
 
-The Yaml File component allows you to create and manage YAML files with formatted content using the [YAML](https://yaml.org/) format.
+The Yaml File component allows you to create and manage YAML files with formatted content using the Alchemy IaC library. YAML is a human-readable data serialization standard that can be used in conjunction with all programming languages and is often used for configuration files. Learn more about YAML at [yaml.org](https://yaml.org/).
 
 # Minimal Example
 
 ```ts
 import { YamlFile } from "alchemy/fs";
 
-// Create a simple YAML file
+// Create a simple YAML configuration file
 const config = await YamlFile("config.yaml", {
   server: {
     host: "localhost",
@@ -28,8 +28,8 @@ const config = await YamlFile("config.yaml", {
 ```ts
 import { YamlFile } from "alchemy/fs";
 
-// Create a YAML configuration file with nested properties
-const config = await YamlFile("app-config.yaml", {
+// Create a YAML file with nested configuration
+const appConfig = await YamlFile("app-config.yaml", {
   application: {
     name: "MyApp",
     version: "1.0.0"
@@ -40,12 +40,8 @@ const config = await YamlFile("app-config.yaml", {
   },
   services: {
     auth: {
-      endpoint: "https://auth.example.com",
-      timeout: 5000
-    },
-    data: {
-      endpoint: "https://data.example.com",
-      timeout: 10000
+      enabled: true,
+      providers: ["google", "facebook"]
     }
   }
 });

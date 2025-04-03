@@ -1,6 +1,6 @@
 # Worker
 
-The Worker component allows you to deploy [Cloudflare Workers](https://developers.cloudflare.com/workers/) to the Cloudflare network. Cloudflare Workers are serverless functions that run on Cloudflare's edge network, enabling you to build fast, scalable applications.
+The Worker component allows you to deploy [Cloudflare Workers](https://developers.cloudflare.com/workers/) to the Cloudflare network. Cloudflare Workers are serverless functions that can be used to build scalable applications with global distribution.
 
 # Minimal Example
 

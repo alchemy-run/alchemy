@@ -1,6 +1,6 @@
 # Text File
 
-The Text File resource allows you to create and manage plain text files in the filesystem using Alchemy. This resource is part of the Alchemy Infrastructure-as-Code (IaC) library, which is designed to model resources that are created, updated, and deleted automatically. For more information about Alchemy, visit the [Alchemy GitHub repository](https://github.com/alchemy).
+The Text File resource allows you to create and manage plain text files in the filesystem using Alchemy's Infrastructure-as-Code (IaC) framework. This resource is part of the Alchemy fs service, which provides various file management capabilities.
 
 # Minimal Example
 
@@ -20,4 +20,4 @@ import { TextFile } from "alchemy/fs";
 const notes = await TextFile("notes.txt", "These are some important notes.");
 ```
 
-This example demonstrates how to create a text file named `notes.txt` with specified content using the Text File resource in Alchemy.
+This example demonstrates how to create a text file named `notes.txt` with specified content using the Text File resource.

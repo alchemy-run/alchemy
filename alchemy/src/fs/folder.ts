@@ -13,6 +13,12 @@ export interface FolderProps {
    * @default true
    */
   delete?: boolean;
+
+  /**
+   * Whether to create the folder recursively
+   * @default true
+   */
+  recursive?: boolean;
 }
 
 /**
@@ -62,7 +68,7 @@ export const Folder = Resource(
       return this.destroy();
     } else {
       await ignore("EEXIST", async () =>
-        fs.promises.mkdir(dirPath, { recursive: true }),
+        fs.promises.mkdir(dirPath, { recursive: props?.recursive ?? true }),
       );
     }
     return this({

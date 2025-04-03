@@ -1,14 +1,14 @@
 # Dns
 
-The Dns component allows you to manage [Cloudflare DNS Records](https://developers.cloudflare.com/dns/) within your application. It supports creating, updating, and deleting multiple DNS records in a Cloudflare zone.
+The Dns component allows you to manage [Cloudflare DNS Records](https://developers.cloudflare.com/dns/) for your domain. It supports creating, updating, and deleting multiple DNS records at once.
 
 # Minimal Example
 
 ```ts
-import { DnsRecords } from "alchemy/cloudflare";
+import { Dns } from "alchemy/cloudflare";
 
-const dnsRecords = await DnsRecords("example.com-dns", {
-  zoneId: "your-zone-id",
+const dnsRecords = await Dns("example.com-dns", {
+  zoneId: "example-zone-id",
   records: [
     {
       name: "www.example.com",
@@ -23,10 +23,10 @@ const dnsRecords = await DnsRecords("example.com-dns", {
 # Create the Dns
 
 ```ts
-import { DnsRecords } from "alchemy/cloudflare";
+import { Dns } from "alchemy/cloudflare";
 
-const dnsRecords = await DnsRecords("example.com-dns", {
-  zoneId: "your-zone-id",
+const dnsRecords = await Dns("example.com-dns", {
+  zoneId: "example-zone-id",
   records: [
     {
       name: "www.example.com",
@@ -47,10 +47,10 @@ const dnsRecords = await DnsRecords("example.com-dns", {
 # Bind to a Worker
 
 ```ts
-import { Worker, DnsRecords } from "alchemy/cloudflare";
+import { Worker, Dns } from "alchemy/cloudflare";
 
-const dnsRecords = await DnsRecords("example.com-dns", {
-  zoneId: "your-zone-id",
+const myDns = await Dns("my-dns", {
+  zoneId: "example-zone-id",
   records: [
     {
       name: "api.example.com",
@@ -65,7 +65,7 @@ await Worker("my-worker", {
   name: "my-worker",
   script: "console.log('Hello, world!')",
   bindings: {
-    dnsRecords,
+    myDns,
   },
 });
 ```

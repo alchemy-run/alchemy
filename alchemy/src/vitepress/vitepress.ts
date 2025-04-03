@@ -3,12 +3,10 @@ import fs from "fs/promises";
 import path from "path";
 import { promisify } from "util";
 import type { DefaultTheme, ThemeOptions } from "vitepress";
-import yaml from "yaml";
 import type { Context } from "../context";
 import { Folder, JsonFile, TextFile, TypeScriptFile } from "../fs";
 import { Resource } from "../resource";
 import { InstallDependencies, fixedDependencies } from "./dependencies";
-import type { HomePage } from "./home-page";
 
 const execAsync = promisify(exec);
 
@@ -73,11 +71,6 @@ export interface VitePressProjectProps {
    * The theme config to use
    */
   themeConfig: DefaultTheme.Config;
-
-  /**
-   * The home page configuration
-   */
-  home: HomePage;
 
   /**
    * Whether to delete the project folder during the delete phase
@@ -171,10 +164,7 @@ export const VitePressProject = Resource(
         references: props.tsconfig?.references?.map((path) => ({ path })),
         compilerOptions: props.tsconfig?.compilerOptions,
       }),
-      TextFile(
-        path.join(cwd, "index.md"),
-        `---\n${yaml.stringify(props.home)}---\n`,
-      ),
+
       //       TypeScriptFile(
       //         path.join(cwd, "alchemy.run.ts"),
       //         `import alchemy from "alchemy";
