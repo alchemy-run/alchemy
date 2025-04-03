@@ -388,17 +388,29 @@ export const Zone = Resource(
       });
 
       const body = await response.text();
+      let zoneData;
       if (!response.ok) {
         if (response.status === 400 && body.includes("already exists")) {
-          // TODO: should we error?
+          // Zone already exists, fetch it instead
+          console.log(`Zone '${props.name}' already exists, fetching it...`);
+          const getResponse = await api.get(`/zones/${props.name}`);
+
+          if (!getResponse.ok) {
+            throw new Error(
+              `Error fetching existing zone '${props.name}': ${getResponse.statusText}`,
+            );
+          }
+
+          zoneData = ((await getResponse.json()) as CloudflareZoneResponse)
+            .result;
         } else {
           throw new Error(
             `Error creating zone '${props.name}': ${response.statusText}\n${body}`,
           );
         }
+      } else {
+        zoneData = (JSON.parse(body) as CloudflareZoneResponse).result;
       }
-
-      const zoneData = (JSON.parse(body) as CloudflareZoneResponse).result;
 
       // Update zone settings if provided
       if (props.settings) {
