@@ -9,11 +9,11 @@ import { ignore } from "../util/ignore";
 import { type ModelConfig, createModel } from "./client";
 
 /**
- * Properties for creating or updating a TypeScriptFile
+ * Properties for creating or updating an AstroFile
  */
-export interface TypeScriptFileProps {
+export interface AstroFileProps {
   /**
-   * Path to the TypeScript file
+   * Path to the Astro file
    */
   path: string;
 
@@ -28,7 +28,7 @@ export interface TypeScriptFileProps {
    * Use alchemy template literals to include file context:
    * @example
    * prompt: await alchemy`
-   *   Generate a TypeScript utility function using:
+   *   Generate an Astro component using:
    *   ${alchemy.file("src/types.ts")}
    * `
    */
@@ -37,8 +37,8 @@ export interface TypeScriptFileProps {
   /**
    * System prompt for the model
    * This is used to provide instructions to the model about how to format the response
-   * The default system prompt instructs the model to return TypeScript code inside ```ts fences
-   * @default "You are a TypeScript code generator. Create TypeScript code based on the user's requirements. Your response MUST include only TypeScript code inside ```ts fences. Do not include any other text, explanations, or multiple code blocks."
+   * The default system prompt instructs the model to return Astro code inside ```astro fences
+   * @default "You are an Astro component generator. Create Astro components based on the user's requirements. Your response MUST include only Astro code inside ```astro fences. Do not include any other text, explanations, or multiple code blocks."
    */
   system?: string;
 
@@ -62,20 +62,18 @@ export interface TypeScriptFileProps {
   temperature?: number;
 
   /**
-   * Prettier configuration to use for formatting the TypeScript code
+   * Prettier configuration to use for formatting the Astro code
    * If not provided, will use the default Prettier configuration
    */
   prettierConfig?: prettier.Options;
 }
 
 /**
- * A TypeScript file that can be created, updated, and deleted
+ * An Astro file that can be created, updated, and deleted
  */
-export interface TypeScriptFile
-  extends TypeScriptFileProps,
-    Resource<"ai::TypeScriptFile"> {
+export interface AstroFile extends AstroFileProps, Resource<"ai::AstroFile"> {
   /**
-   * Content of the TypeScript file
+   * Content of the Astro file
    */
   content: string;
 
@@ -91,26 +89,26 @@ export interface TypeScriptFile
 }
 
 /**
- * Default system prompt for TypeScript file generation
+ * Default system prompt for Astro file generation
  */
-const DEFAULT_TS_SYSTEM_PROMPT =
-  "You are a TypeScript code generator. Create TypeScript code based on the user's requirements. Your response MUST include only TypeScript code inside ```ts fences. Do not include any other text, explanations, or multiple code blocks.";
+const DEFAULT_ASTRO_SYSTEM_PROMPT =
+  "You are an Astro component generator. Create Astro components based on the user's requirements. Your response MUST include only Astro code inside ```astro fences. Do not include any other text, explanations, or multiple code blocks.";
 
 /**
- * Resource for generating TypeScript files using AI models.
- * Extracts TypeScript code from between ```ts fences, validates the response,
+ * Resource for generating Astro files using AI models.
+ * Extracts Astro code from between ```astro fences, validates the response,
  * and formats the code with Prettier.
  *
  * @example
- * // Create a utility function
- * const utils = await TypeScriptFile("string-utils", {
- *   path: "./src/utils/string-utils.ts",
+ * // Create a simple Astro component
+ * const header = await AstroFile("header", {
+ *   path: "./src/components/Header.astro",
  *   prompt: await alchemy`
- *     Generate TypeScript utility functions for string manipulation:
- *     - Capitalize first letter
- *     - Truncate with ellipsis
- *     - Convert to camelCase and kebab-case
- *     - Remove special characters
+ *     Generate an Astro header component with:
+ *     - Site logo
+ *     - Navigation menu with Home, About, Services, Contact links
+ *     - Mobile responsive design
+ *     - Dark/light mode toggle
  *   `,
  *   model: {
  *     id: "gpt-4o",
@@ -119,19 +117,18 @@ const DEFAULT_TS_SYSTEM_PROMPT =
  * });
  *
  * @example
- * // Generate a TypeScript class with custom formatting
- * const userService = await TypeScriptFile("user-service", {
- *   path: "./src/services/UserService.ts",
+ * // Generate an Astro page with data fetching
+ * const blogPost = await AstroFile("blog-post", {
+ *   path: "./src/pages/blog/[slug].astro",
  *   prompt: await alchemy`
- *     Create a UserService class that handles user authentication and profile management.
- *     The service should use the User type from:
- *     ${alchemy.file("src/types/User.ts")}
+ *     Create an Astro blog post page that:
+ *     - Uses getStaticPaths to generate pages from a CMS
+ *     - Renders markdown content
+ *     - Includes author info, publication date, and related posts
+ *     - Has social sharing buttons
  *
- *     Include methods for:
- *     - login(email, password)
- *     - register(user)
- *     - updateProfile(userId, profileData)
- *     - deleteAccount(userId)
+ *     Use the following types:
+ *     ${alchemy.file("src/types/Blog.ts")}
  *   `,
  *   temperature: 0.2,
  *   prettierConfig: {
@@ -142,32 +139,30 @@ const DEFAULT_TS_SYSTEM_PROMPT =
  * });
  *
  * @example
- * // Generate a React hook with custom system prompt
- * const useFormHook = await TypeScriptFile("use-form", {
- *   path: "./src/hooks/useForm.ts",
+ * // Generate a layout with custom system prompt
+ * const mainLayout = await AstroFile("main-layout", {
+ *   path: "./src/layouts/MainLayout.astro",
  *   prompt: await alchemy`
- *     Create a custom React hook called useForm that handles form state, validation, and submission.
- *     It should support:
- *     - Initial values
- *     - Validation rules
- *     - Field errors
- *     - Form submission with loading state
- *     - Reset functionality
+ *     Create the main layout for an Astro site that:
+ *     - Includes common head metadata and SEO optimization
+ *     - Has slots for page content, header, and footer
+ *     - Imports and uses the Header and Footer components
+ *     - Sets up viewport and responsive configurations
  *   `,
- *   system: "You are an expert React developer specializing in TypeScript hooks. Create a single TypeScript file inside ```ts fences with no additional text. Follow React best practices and include proper typing.",
+ *   system: "You are an expert Astro developer. Create a single Astro layout file inside ```astro fences with no additional text. Follow Astro best practices and include proper typing in the frontmatter section.",
  *   model: {
  *     id: "claude-3-opus-20240229",
  *     provider: "anthropic"
  *   }
  * });
  */
-export const TypeScriptFile = Resource(
-  "ai::TypeScriptFile",
+export const AstroFile = Resource(
+  "ai::AstroFile",
   async function (
-    this: Context<TypeScriptFile>,
+    this: Context<AstroFile>,
     id: string,
-    props: TypeScriptFileProps,
-  ): Promise<TypeScriptFile> {
+    props: AstroFileProps,
+  ): Promise<AstroFile> {
     // Ensure directory exists
     await fs.mkdir(path.dirname(props.path), { recursive: true });
 
@@ -184,7 +179,7 @@ export const TypeScriptFile = Resource(
     }
 
     // Use provided system prompt or default
-    const system = props.system || DEFAULT_TS_SYSTEM_PROMPT;
+    const system = props.system || DEFAULT_ASTRO_SYSTEM_PROMPT;
 
     // Generate initial content
     const { text } = await generateText({
@@ -197,12 +192,12 @@ export const TypeScriptFile = Resource(
         : { temperature: props.temperature }),
     });
 
-    // Extract and validate TypeScript code
-    let { code, error } = await extractTypeScriptCode(text);
+    // Extract and validate Astro code
+    let { code, error } = await extractAstroCode(text);
 
     // Re-prompt if there are validation errors
     if (error) {
-      const errorSystem = `${system}\n\nERROR: ${error}\n\nPlease try again and ensure your response contains exactly one TypeScript code block inside \`\`\`ts fences.`;
+      const errorSystem = `${system}\n\nERROR: ${error}\n\nPlease try again and ensure your response contains exactly one Astro code block inside \`\`\`astro fences.`;
 
       const { text: retryText } = await generateText({
         model: createModel(props),
@@ -214,11 +209,11 @@ export const TypeScriptFile = Resource(
           : { temperature: props.temperature }),
       });
 
-      const retryResult = await extractTypeScriptCode(retryText);
+      const retryResult = await extractAstroCode(retryText);
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid TypeScript code: ${retryResult.error}`,
+          `Failed to generate valid Astro code: ${retryResult.error}`,
         );
       }
 
@@ -227,9 +222,9 @@ export const TypeScriptFile = Resource(
 
     // Format the code with Prettier
     try {
-      // Set default parser to typescript
+      // Set default parser to astro
       const prettierOptions: prettier.Options = {
-        parser: "typescript",
+        parser: "astro",
         ...props.prettierConfig,
       };
 
@@ -237,7 +232,7 @@ export const TypeScriptFile = Resource(
       code = await prettier.format(code, prettierOptions);
     } catch (error) {
       // If Prettier formatting fails, just use the unformatted code
-      console.warn("Failed to format TypeScript code with Prettier:", error);
+      console.warn("Failed to format Astro code with Prettier:", error);
     }
 
     if (this.phase === "update" && props.path !== this.props.path) {
@@ -261,23 +256,23 @@ export const TypeScriptFile = Resource(
 );
 
 /**
- * Extracts TypeScript code from between ```ts fences
- * Validates that exactly one TypeScript code block exists
+ * Extracts Astro code from between ```astro fences
+ * Validates that exactly one Astro code block exists
  *
- * @param text The text to extract TypeScript code from
- * @returns The extracted TypeScript code or error message
+ * @param text The text to extract Astro code from
+ * @returns The extracted Astro code or error message
  */
-async function extractTypeScriptCode(
+async function extractAstroCode(
   text: string,
 ): Promise<{ code: string; error?: string }> {
-  const tsCodeRegex = /```ts\s*([\s\S]*?)```/g;
-  const matches = Array.from(text.matchAll(tsCodeRegex));
+  const astroCodeRegex = /```astro\s*([\s\S]*?)```/g;
+  const matches = Array.from(text.matchAll(astroCodeRegex));
 
   if (matches.length === 0) {
     return {
       code: "",
       error:
-        "No TypeScript code block found in the response. Please include your code within ```ts fences.",
+        "No Astro code block found in the response. Please include your code within ```astro fences.",
     };
   }
 
@@ -285,7 +280,7 @@ async function extractTypeScriptCode(
     return {
       code: "",
       error:
-        "Multiple TypeScript code blocks found in the response. Please provide exactly one code block within ```ts fences.",
+        "Multiple Astro code blocks found in the response. Please provide exactly one code block within ```astro fences.",
     };
   }
 

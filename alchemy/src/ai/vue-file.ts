@@ -88,38 +88,6 @@ const DEFAULT_VUE_SYSTEM_PROMPT =
   "You are a Vue component generator. Create a single Vue component based on the user's requirements. Your response MUST include only a single Vue component inside ```vue fences. Do not include any other text, explanations, or multiple code blocks.";
 
 /**
- * Extracts Vue code from between ```vue fences
- * Validates that exactly one Vue code block exists
- *
- * @param text The text to extract Vue code from
- * @returns The extracted Vue code or error message
- */
-async function extractVueCode(
-  text: string,
-): Promise<{ code: string; error?: string }> {
-  const vueCodeRegex = /```vue\s*([\s\S]*?)```/g;
-  const matches = Array.from(text.matchAll(vueCodeRegex));
-
-  if (matches.length === 0) {
-    return {
-      code: "",
-      error:
-        "No Vue code block found in the response. Please include your code within ```vue fences.",
-    };
-  }
-
-  if (matches.length > 1) {
-    return {
-      code: "",
-      error:
-        "Multiple Vue code blocks found in the response. Please provide exactly one code block within ```vue fences.",
-    };
-  }
-
-  return { code: matches[0][1].trim() };
-}
-
-/**
  * Resource for generating Vue files using AI models.
  * Extracts Vue code from between ```vue fences and validates the response.
  *
@@ -259,3 +227,35 @@ export const VueFile = Resource(
     });
   },
 );
+
+/**
+ * Extracts Vue code from between ```vue fences
+ * Validates that exactly one Vue code block exists
+ *
+ * @param text The text to extract Vue code from
+ * @returns The extracted Vue code or error message
+ */
+async function extractVueCode(
+  text: string,
+): Promise<{ code: string; error?: string }> {
+  const vueCodeRegex = /```vue\s*([\s\S]*?)```/g;
+  const matches = Array.from(text.matchAll(vueCodeRegex));
+
+  if (matches.length === 0) {
+    return {
+      code: "",
+      error:
+        "No Vue code block found in the response. Please include your code within ```vue fences.",
+    };
+  }
+
+  if (matches.length > 1) {
+    return {
+      code: "",
+      error:
+        "Multiple Vue code blocks found in the response. Please provide exactly one code block within ```vue fences.",
+    };
+  }
+
+  return { code: matches[0][1].trim() };
+}

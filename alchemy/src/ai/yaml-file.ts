@@ -110,43 +110,6 @@ const DEFAULT_YAML_SYSTEM_PROMPT =
   "You are a YAML generator. Create valid YAML based on the user's requirements. Your response MUST include only YAML inside ```yaml fences. Do not include any other text, explanations, or multiple code blocks. Use standard YAML syntax with proper indentation. Use quotes around strings that contain special characters when necessary.";
 
 /**
- * Extracts YAML content from between ```yaml fences
- * Validates that exactly one YAML code block exists
- *
- * @param text The text to extract YAML from
- * @returns The extracted YAML or error message
- */
-async function extractYAMLContent(
-  text: string,
-): Promise<{ content: string; error?: string }> {
-  // Check for yaml or yml fence blocks
-  const yamlCodeRegex = /```(yaml|yml)\s*([\s\S]*?)```/g;
-  const matches = Array.from(text.matchAll(yamlCodeRegex));
-
-  if (matches.length === 0) {
-    return {
-      content: "",
-      error:
-        "No YAML code block found in the response. Please include your YAML within ```yaml fences.",
-    };
-  }
-
-  if (matches.length > 1) {
-    return {
-      content: "",
-      error:
-        "Multiple YAML code blocks found in the response. Please provide exactly one YAML block within ```yaml fences.",
-    };
-  }
-
-  const content = matches[0][2].trim();
-
-  // We don't validate YAML parsing here because js-yaml might not be available
-  // Validation will happen at usage time if needed
-  return { content };
-}
-
-/**
  * Resource for generating YAML files using AI models.
  * Can operate in two modes:
  * 1. With schema: Uses generateObject with type validation, then converts to YAML
@@ -366,3 +329,40 @@ export const YAMLFile = Resource("ai::YAMLFile", async function <
     updatedAt: stats.mtimeMs,
   });
 });
+
+/**
+ * Extracts YAML content from between ```yaml fences
+ * Validates that exactly one YAML code block exists
+ *
+ * @param text The text to extract YAML from
+ * @returns The extracted YAML or error message
+ */
+async function extractYAMLContent(
+  text: string,
+): Promise<{ content: string; error?: string }> {
+  // Check for yaml or yml fence blocks
+  const yamlCodeRegex = /```(yaml|yml)\s*([\s\S]*?)```/g;
+  const matches = Array.from(text.matchAll(yamlCodeRegex));
+
+  if (matches.length === 0) {
+    return {
+      content: "",
+      error:
+        "No YAML code block found in the response. Please include your YAML within ```yaml fences.",
+    };
+  }
+
+  if (matches.length > 1) {
+    return {
+      content: "",
+      error:
+        "Multiple YAML code blocks found in the response. Please provide exactly one YAML block within ```yaml fences.",
+    };
+  }
+
+  const content = matches[0][2].trim();
+
+  // We don't validate YAML parsing here because js-yaml might not be available
+  // Validation will happen at usage time if needed
+  return { content };
+}

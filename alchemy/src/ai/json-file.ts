@@ -122,49 +122,6 @@ const DEFAULT_JSON_SYSTEM_PROMPT =
   "You are a JSON generator. Create valid JSON based on the user's requirements. Your response MUST include only JSON inside ```json fences. Do not include any other text, explanations, or multiple code blocks.";
 
 /**
- * Extracts JSON content from between ```json fences
- * Validates that exactly one JSON code block exists
- *
- * @param text The text to extract JSON from
- * @returns The extracted JSON or error message
- */
-async function extractJSONContent(
-  text: string,
-): Promise<{ content: string; error?: string }> {
-  const jsonCodeRegex = /```json\s*([\s\S]*?)```/g;
-  const matches = Array.from(text.matchAll(jsonCodeRegex));
-
-  if (matches.length === 0) {
-    return {
-      content: "",
-      error:
-        "No JSON code block found in the response. Please include your JSON within ```json fences.",
-    };
-  }
-
-  if (matches.length > 1) {
-    return {
-      content: "",
-      error:
-        "Multiple JSON code blocks found in the response. Please provide exactly one JSON block within ```json fences.",
-    };
-  }
-
-  const content = matches[0][1].trim();
-
-  // Validate JSON can be parsed
-  try {
-    JSON.parse(content);
-    return { content };
-  } catch (e) {
-    return {
-      content: "",
-      error: `Invalid JSON: ${(e as Error).message}. Please provide valid JSON syntax.`,
-    };
-  }
-}
-
-/**
  * Resource for generating JSON files using AI models.
  * Can operate in two modes:
  * 1. With schema: Uses generateObject with type validation
@@ -347,3 +304,46 @@ export const JSONFile = Resource("ai::JSONFile", async function <
     updatedAt: stats.mtimeMs,
   });
 });
+
+/**
+ * Extracts JSON content from between ```json fences
+ * Validates that exactly one JSON code block exists
+ *
+ * @param text The text to extract JSON from
+ * @returns The extracted JSON or error message
+ */
+async function extractJSONContent(
+  text: string,
+): Promise<{ content: string; error?: string }> {
+  const jsonCodeRegex = /```json\s*([\s\S]*?)```/g;
+  const matches = Array.from(text.matchAll(jsonCodeRegex));
+
+  if (matches.length === 0) {
+    return {
+      content: "",
+      error:
+        "No JSON code block found in the response. Please include your JSON within ```json fences.",
+    };
+  }
+
+  if (matches.length > 1) {
+    return {
+      content: "",
+      error:
+        "Multiple JSON code blocks found in the response. Please provide exactly one JSON block within ```json fences.",
+    };
+  }
+
+  const content = matches[0][1].trim();
+
+  // Validate JSON can be parsed
+  try {
+    JSON.parse(content);
+    return { content };
+  } catch (e) {
+    return {
+      content: "",
+      error: `Invalid JSON: ${(e as Error).message}. Please provide valid JSON syntax.`,
+    };
+  }
+}

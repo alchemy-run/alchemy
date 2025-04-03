@@ -88,38 +88,6 @@ const DEFAULT_CSS_SYSTEM_PROMPT =
   "You are a CSS code generator. Create CSS code based on the user's requirements. Your response MUST include only CSS code inside ```css fences. Do not include any other text, explanations, or multiple code blocks.";
 
 /**
- * Extracts CSS code from between ```css fences
- * Validates that exactly one CSS code block exists
- *
- * @param text The text to extract CSS code from
- * @returns The extracted CSS code or error message
- */
-async function extractCSSCode(
-  text: string,
-): Promise<{ code: string; error?: string }> {
-  const cssCodeRegex = /```css\s*([\s\S]*?)```/g;
-  const matches = Array.from(text.matchAll(cssCodeRegex));
-
-  if (matches.length === 0) {
-    return {
-      code: "",
-      error:
-        "No CSS code block found in the response. Please include your code within ```css fences.",
-    };
-  }
-
-  if (matches.length > 1) {
-    return {
-      code: "",
-      error:
-        "Multiple CSS code blocks found in the response. Please provide exactly one code block within ```css fences.",
-    };
-  }
-
-  return { code: matches[0][1].trim() };
-}
-
-/**
  * Resource for generating CSS files using AI models.
  * Extracts CSS code from between ```css fences and validates the response.
  *
@@ -264,3 +232,35 @@ export const CSSFile = Resource(
     });
   },
 );
+
+/**
+ * Extracts CSS code from between ```css fences
+ * Validates that exactly one CSS code block exists
+ *
+ * @param text The text to extract CSS code from
+ * @returns The extracted CSS code or error message
+ */
+async function extractCSSCode(
+  text: string,
+): Promise<{ code: string; error?: string }> {
+  const cssCodeRegex = /```css\s*([\s\S]*?)```/g;
+  const matches = Array.from(text.matchAll(cssCodeRegex));
+
+  if (matches.length === 0) {
+    return {
+      code: "",
+      error:
+        "No CSS code block found in the response. Please include your code within ```css fences.",
+    };
+  }
+
+  if (matches.length > 1) {
+    return {
+      code: "",
+      error:
+        "Multiple CSS code blocks found in the response. Please provide exactly one code block within ```css fences.",
+    };
+  }
+
+  return { code: matches[0][1].trim() };
+}

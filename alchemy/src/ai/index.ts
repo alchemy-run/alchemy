@@ -1,4 +1,5 @@
 export * from "./ark";
+export * from "./astro-file";
 export * from "./css-file";
 export * from "./data";
 export * from "./document";
