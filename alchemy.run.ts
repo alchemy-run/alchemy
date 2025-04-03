@@ -111,7 +111,6 @@ if (process.argv.includes("--astro")) {
       defaults: true,
       components: ["button", "card", "input", "label", "sheet", "table"],
     },
-    overwrite: true,
   });
 }
 

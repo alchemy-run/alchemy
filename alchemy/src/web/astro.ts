@@ -84,12 +84,6 @@ export interface AstroProjectProps {
   };
 
   /**
-   * Force overwrite the project config files during the update phase
-   * @default false
-   */
-  overwrite?: boolean;
-
-  /**
    * Whether to delete the project folder during the delete phase
    * @default true
    */

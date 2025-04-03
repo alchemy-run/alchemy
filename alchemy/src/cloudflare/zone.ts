@@ -407,6 +407,10 @@ export const Zone = Resource(
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
 
+      console.log("status", response.status);
+      console.log("statusText", response.statusText);
+      console.log("zoneData", zoneData);
+
       return this({
         id: zoneData.id,
         name: zoneData.name,
