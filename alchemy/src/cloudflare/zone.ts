@@ -393,7 +393,7 @@ export const Zone = Resource(
         if (response.status === 400 && body.includes("already exists")) {
           // Zone already exists, fetch it instead
           console.log(`Zone '${props.name}' already exists, fetching it...`);
-          const getResponse = await api.get(`/zones/${props.name}`);
+          const getResponse = await api.get(`/zones?name=${props.name}`);
 
           if (!getResponse.ok) {
             throw new Error(
