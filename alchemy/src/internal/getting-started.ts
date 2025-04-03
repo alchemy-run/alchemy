@@ -1,30 +1,28 @@
-import alchemy from "alchemy";
-import { Document } from "alchemy/ai";
-import type { Folder } from "alchemy/fs";
-import path from "path";
+import { Document } from "../ai";
+import { alchemy } from "../alchemy";
+import type { Folder } from "../fs";
 
 export interface GettingStartedProps {
   /**
    * The output directory for the getting started document.
    */
-  outDir: string | Folder;
+  path: string | Folder;
 }
 
 export type GettingStarted = Document;
 
 export async function GettingStarted({
-  outDir,
+  path: outFile,
 }: GettingStartedProps): Promise<Document> {
-  outDir = typeof outDir === "string" ? outDir : outDir.path;
   return Document(`docs/getting-started`, {
     title: "Getting Started with Alchemy",
-    path: path.join(outDir, "index.md"),
+    path: typeof outFile === "string" ? outFile : outFile.path,
     prompt: await alchemy`
       You are a technical writer creating a getting started guide for Alchemy, an infrastructure as code (IaC) framework.
-      See ${alchemy.file("../README.md")} to understand the overview of Alchemy.
-      See ${alchemy.file("../.cursorrules")} to better understand the structure and conventions of Alchemy.
+      See ${alchemy.file("./README.md")} to understand the overview of Alchemy.
+      See ${alchemy.file("./.cursorrules")} to better understand the structure and conventions of Alchemy.
 
-      See ${alchemy.file("../alchemy/test/cloudflare/worker.test.ts")} for an example of how testing works.
+      See ${alchemy.file("./alchemy/test/cloudflare/worker.test.ts")} for an example of how testing works.
 
       Write a comprehensive getting started guide for Alchemy that covers the following topics:
       

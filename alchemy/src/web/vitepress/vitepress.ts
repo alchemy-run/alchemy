@@ -96,10 +96,15 @@ export interface VitePressProject extends VitePressProjectProps, Resource {
    * The name/path of the project
    */
   name: string;
+
+  /**
+   * The directory of the project
+   */
+  dir: string;
 }
 
-export const VitePressProject = Resource(
-  "project::VitePressProject",
+export const VitepressProject = Resource(
+  "project::VitepressProject",
   {
     alwaysUpdate: true,
   },
@@ -164,11 +169,19 @@ export const VitePressProject = Resource(
 
     await Promise.all([
       StaticTextFile(path.join(cwd, ".gitignore"), `.vitepress/cache\n`),
-      StaticJsonFile(path.join(cwd, "tsconfig.json"), {
-        extends: props.tsconfig?.extends,
-        references: props.tsconfig?.references?.map((path) => ({ path })),
-        compilerOptions: props.tsconfig?.compilerOptions,
-      }),
+      // StaticJsonFile(path.join(cwd, "tsconfig.json"), {
+      //   extends: props.tsconfig?.extends,
+      //   references: props.tsconfig?.references?.map((path) => ({ path })),
+      //   compilerOptions: props.tsconfig?.compilerOptions ?? {
+      //     target: "ES2020",
+      //     module: "ESNext",
+      //     moduleResolution: "Node",
+      //     allowJs: true,
+      //     skipLibCheck: true,
+      //     forceConsistentCasingInFileNames: true,
+          
+      //   },
+      // }),
 
       //       TypeScriptFile(
       //         path.join(cwd, "alchemy.run.ts"),
@@ -384,6 +397,9 @@ export default defineConfig({
       ),
     ]);
 
-    return this(props);
+    return this({
+      ...props,
+      dir
+    });
   },
 );

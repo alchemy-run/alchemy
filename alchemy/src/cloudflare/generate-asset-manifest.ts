@@ -17,10 +17,10 @@ export async function generateAssetManifest(
       cacheControl: "max-age=0,no-cache,no-store,must-revalidate",
     },
     {
-      files: ["**/*.js", "**/*.css"],
+      files: ["**/*.js", "**/*.css", "**/*.png", "**/*.webp"],
       cacheControl: "max-age=31536000,public,immutable",
     },
-  ],
+  ]
 ): Promise<AssetManifest> {
   // First, collect all file info based on fileOptions (reversed to prioritize later rules)
   const fileInfos: Array<{
@@ -55,7 +55,7 @@ export async function generateAssetManifest(
                 : (fileOption.ignore ?? [])),
             ],
           });
-        }),
+        })
       )
     )
       .flat()
@@ -86,7 +86,7 @@ export async function generateAssetManifest(
         cacheControl,
         contentType: contentType ?? getContentType(file),
       } satisfies AssetManifestEntry;
-    }),
+    })
   );
 
   return manifestEntries;

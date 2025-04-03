@@ -1,5 +1,5 @@
 import path from "path";
-import { VitePressProject } from "../web/vitepress";
+import { VitepressProject, type VitePressProject } from "../web/vitepress";
 import type { AlchemyProviderDocs } from "./providers";
 
 export interface AlchemyProjectProps {
@@ -18,7 +18,7 @@ export function AlchemyProject({
   hero,
   docs,
 }: AlchemyProjectProps): Promise<AlchemyProject> {
-  return VitePressProject("project", {
+  return VitepressProject("project", {
     name: "alchemy-web",
     title: "Alchemy",
     dir: process.cwd(),

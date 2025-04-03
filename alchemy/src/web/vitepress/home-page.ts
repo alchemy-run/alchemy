@@ -1,6 +1,7 @@
-import alchemy from "alchemy";
 import yaml from "yaml";
 import { Document } from "../../ai/document";
+import { alchemy } from "../../alchemy";
+import { StaticTextFile } from "../../fs";
 import type { Secret } from "../../secret";
 
 /**
@@ -184,12 +185,12 @@ export interface HomePageProps {
   /**
    * User prompt describing the design of the home page
    */
-  prompt: string;
+  prompt?: string;
 
   /**
    * Optional extension to the built-in system prompt
    */
-  systemPromptExtension?: string;
+  system?: string;
 
   /**
    * Base URL for the OpenAI API
@@ -218,7 +219,7 @@ export interface HomePageProps {
 /**
  * Output type for the HomePage resource
  */
-export type HomePage = import("../../ai/document").Document;
+export type HomePage = StaticTextFile | Document;
 
 /**
  * Parse YAML frontmatter to home page config
@@ -313,7 +314,7 @@ Follow these guidelines:
 6. Ensure all links are properly formatted
 7. Use appropriate markdown formatting for headings, lists, etc.
 
-${props.systemPromptExtension || ""}
+${props.system || ""}
 `;
 
   // Convert hero and features to YAML strings if provided
@@ -322,42 +323,53 @@ ${props.systemPromptExtension || ""}
     ? JSON.stringify(props.features, null, 2)
     : "";
 
-  // Create the document using the AI Document resource
-  return Document(`${id}`, {
-    title: props.title,
-    path: props.outFile,
-    baseURL: props.baseURL,
-    apiKey: props.apiKey,
-    model: props.model ?? {
-      id: "claude-3-7-sonnet-latest",
-      provider: "anthropic",
-    },
-    temperature: props.temperature ?? 0.7,
-    prompt: await alchemy`
-${systemPrompt}
-
-Create a VitePress homepage based on the following description:
-${props.prompt}
-
-${
-  props.hero
-    ? `Use this hero section configuration:
-\`\`\`json
-${heroYaml}
-\`\`\``
-    : ""
-}
-
-${
-  props.features
-    ? `Use these features:
-\`\`\`json
-${featuresYaml}
-\`\`\``
-    : ""
-}
+    if (props.prompt) {
+      return Document(id, {
+        title: props.title,
+        path: props.outFile,
+        baseURL: props.baseURL,
+        apiKey: props.apiKey,
+        model: props.model ?? {
+          id: "claude-3-7-sonnet-latest",
+          provider: "anthropic",
+        },
+        temperature: props.temperature ?? 0.7,
+        prompt: await alchemy`
+    ${systemPrompt}
     
-    The output should be a complete index.md file with proper YAML frontmatter and markdown content.
-    `,
-  });
+    Create a VitePress homepage based on the following description:
+    ${props.prompt}
+    
+    ${
+      props.hero
+        ? `Use this hero section configuration:
+    \`\`\`json
+    ${heroYaml}
+    \`\`\``
+        : ""
+    }
+    
+    ${
+      props.features
+        ? `Use these features:
+    \`\`\`json
+    ${featuresYaml}
+    \`\`\``
+        : ""
+    }
+        
+        The output should be a complete index.md file with proper YAML frontmatter and markdown content.
+        `,
+      });
+  } else {
+    return StaticTextFile(id, props.outFile, `---
+${yaml.stringify({
+  layout: "home",
+  name: props.title,
+  hero: props.hero,
+  features: props.features,
+})}
+---
+`);
+  }
 }

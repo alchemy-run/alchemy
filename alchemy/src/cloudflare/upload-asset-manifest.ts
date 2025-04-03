@@ -17,7 +17,7 @@ type UploadResult = {
 export async function uploadAssetManifest(
   api: CloudflareApi,
   namespaceId: string,
-  manifest: AssetManifest,
+  manifest: AssetManifest
 ): Promise<UploadResult[]> {
   const results: UploadResult[] = [];
 
@@ -59,14 +59,16 @@ export async function uploadAssetManifest(
     const formData = new FormData();
     formData.append("metadata", JSON.stringify(metadata));
 
-    // Add file content as 'value'
-    const blob = new Blob([content]);
+    // Add file content as 'value' - Fix for binary file corruption
+    const blob = new Blob([new Uint8Array(content)], {
+      type: item.contentType,
+    });
     formData.append("value", blob);
 
     try {
       const response = await api.put(
         `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}/values/${item.key}`,
-        formData,
+        formData
       );
 
       const result = { item, success: response.ok, status: response.status };

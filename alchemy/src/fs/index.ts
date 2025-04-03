@@ -1,3 +1,4 @@
+export * from "./copy-file";
 export * from "./file";
 export * from "./file-collection";
 export * from "./file-ref";

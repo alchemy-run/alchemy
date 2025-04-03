@@ -262,7 +262,7 @@ export const StaticSite = Resource(
   async function (
     this: Context<StaticSite>,
     id: string,
-    props: StaticSiteProps,
+    props: StaticSiteProps
   ) {
     if (this.phase === "delete") {
       // For delete operations, we'll rely on the Worker delete to clean up
@@ -273,7 +273,7 @@ export const StaticSite = Resource(
     // Validate that a name is provided
     if (!props.name) {
       throw new Error(
-        "StaticSite name is required - must be explicitly specified",
+        "StaticSite name is required - must be explicitly specified"
       );
     }
 
@@ -302,7 +302,7 @@ export const StaticSite = Resource(
 
         // Throw a more descriptive error that includes the exit code and stderr
         throw new Error(
-          `Build command "${props.build.command}" failed with exit code ${error.code}:\n${error.stderr || error.message}`,
+          `Build command "${props.build.command}" failed with exit code ${error.code}:\n${error.stderr || error.message}`
         );
       }
     }
@@ -314,7 +314,7 @@ export const StaticSite = Resource(
       }
     } catch (error: any) {
       throw new Error(
-        `Directory "${props.dir}" does not exist: ${error.message}`,
+        `Directory "${props.dir}" does not exist: ${error.message}`
       );
     }
 
@@ -332,6 +332,10 @@ export const StaticSite = Resource(
       }),
       generateAssetManifest(props.dir),
     ]);
+
+    console.log({
+      assetManifest,
+    });
 
     // Step 3: Upload assets to KV
     await uploadAssetManifest(api, kv.namespaceId, assetManifest);
@@ -356,7 +360,7 @@ export const StaticSite = Resource(
 
     // Create asset manifest banner for static site router
     const assetManifestBanner = `const __ASSET_MANIFEST__ = ${JSON.stringify(
-      Object.fromEntries(assetManifest.map((item) => [item.key, item.hash])),
+      Object.fromEntries(assetManifest.map((item) => [item.key, item.hash]))
     )};\n`;
 
     const bundleOptions = {
@@ -398,7 +402,7 @@ export const StaticSite = Resource(
           Object.entries(routes).map(([key, value]) => [
             `__ROUTE_${value}`,
             key,
-          ]),
+          ])
         ),
       },
     });
@@ -420,5 +424,5 @@ export const StaticSite = Resource(
       url: worker.url,
       routes,
     });
-  },
+  }
 );

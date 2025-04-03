@@ -13,10 +13,13 @@ export type StaticTextFile = File;
 
 export function StaticTextFile(
   id: string,
-  content: string,
+  ...args: 
+  | [content: string]
+  | [path: string, content: string]
 ): Promise<StaticTextFile> {
+  const [path, content] = args.length === 1 ? [id, args[0]] : args;
   return File(id, {
-    path: id,
+    path,
     content,
   });
 }

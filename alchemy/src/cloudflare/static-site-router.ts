@@ -65,21 +65,27 @@ app.notFound(async (ctx) => {
 
   // Fetch from KV
   {
-    const object = await env.ASSETS.getWithMetadata(filePath);
+    const object = await env.ASSETS.getWithMetadata(filePath, {
+      type: "arrayBuffer",
+    });
     if (object.value) {
       return await respond(200, filePath, object);
     }
   }
   {
     const guess = filePath + (filePath.endsWith("/") ? "" : "/") + "index.html";
-    const object = await env.ASSETS.getWithMetadata(guess);
+    const object = await env.ASSETS.getWithMetadata(guess, {
+      type: "arrayBuffer",
+    });
     if (object.value) {
       return await respond(200, guess, object);
     }
   }
   {
     const guess = filePath + ".html";
-    const object = await env.ASSETS.getWithMetadata(guess);
+    const object = await env.ASSETS.getWithMetadata(guess, {
+      type: "arrayBuffer",
+    });
     if (object.value) {
       return await respond(200, guess, object);
     }
@@ -87,12 +93,16 @@ app.notFound(async (ctx) => {
 
   // Handle error page
   if (env.ERROR_PAGE) {
-    const object = await env.ASSETS.getWithMetadata(env.ERROR_PAGE);
+    const object = await env.ASSETS.getWithMetadata(env.ERROR_PAGE, {
+      type: "arrayBuffer",
+    });
     if (object.value) {
       return await respond(404, env.ERROR_PAGE, object);
     }
   } else {
-    const object = await env.ASSETS.getWithMetadata(env.INDEX_PAGE);
+    const object = await env.ASSETS.getWithMetadata(env.INDEX_PAGE, {
+      type: "arrayBuffer",
+    });
     if (object.value) {
       return await respond(200, env.INDEX_PAGE, object);
     }
@@ -122,7 +132,7 @@ app.notFound(async (ctx) => {
   async function respond(
     status: number,
     filePath: string,
-    object: KVNamespaceGetWithMetadataResult<any, any>,
+    object: KVNamespaceGetWithMetadataResult<any, any>
   ) {
     // build response
     const headers = new Headers();
@@ -131,8 +141,8 @@ app.notFound(async (ctx) => {
       headers.set("content-type", object.metadata.contentType);
       headers.set("cache-control", object.metadata.cacheControl);
     }
-    // TODO: do we need base64 encoded here?
-    // const response = new Response(base64ToArrayBuffer(object.value), {
+
+    // Create response with the raw data directly
     const response = new Response(object.value, {
       status,
       headers,
