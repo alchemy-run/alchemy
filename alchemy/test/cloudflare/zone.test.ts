@@ -8,7 +8,9 @@ import { BRANCH_PREFIX } from "../util";
 
 const api = await createCloudflareApi();
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("Zone Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding zone names

@@ -15,7 +15,9 @@ import { Bundle } from "../../src/esbuild";
 import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 

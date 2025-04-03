@@ -3,7 +3,7 @@ export * from "./bucket";
 export * from "./dns";
 export * from "./durable-object-namespace";
 export * from "./kv-namespace";
-export * from "./state";
+export * from "./r2-rest-state-store";
 export * from "./static-site";
 export * from "./worker";
 export * from "./wrangler.json";

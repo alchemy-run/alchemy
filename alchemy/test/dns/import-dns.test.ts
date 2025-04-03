@@ -6,7 +6,9 @@ import { BRANCH_PREFIX } from "../util";
 // must import this or else alchemy.test won't exist
 import "../../src/test/bun";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("ImportDnsRecords Resource", () => {
   const testDomain = "example.com";

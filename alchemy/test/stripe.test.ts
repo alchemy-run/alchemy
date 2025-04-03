@@ -8,7 +8,9 @@ import { WebhookEndpoint } from "../src/stripe/webhook";
 import "../src/test/bun";
 import { BRANCH_PREFIX } from "./util";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 const stripeApiKey = import.meta.env.STRIPE_API_KEY;
 if (!stripeApiKey) {

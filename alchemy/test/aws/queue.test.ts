@@ -11,7 +11,9 @@ import { destroy } from "../../src/destroy";
 import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 const sqs = new SQSClient({});
 

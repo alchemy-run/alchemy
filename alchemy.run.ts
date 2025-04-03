@@ -13,7 +13,7 @@ import "./alchemy/src/web/vitepress";
 import alchemy from "./alchemy/src";
 import { Role, getAccountId } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
-import { DnsRecords, Zone } from "./alchemy/src/cloudflare";
+import { DnsRecords, R2Bucket, Zone } from "./alchemy/src/cloudflare";
 import { ImportDnsRecords } from "./alchemy/src/dns";
 import { GitHubSecret } from "./alchemy/src/github";
 import { AstroProject } from "./alchemy/src/web/astro";
@@ -56,12 +56,17 @@ const githubRole = await Role("github-oidc-role", {
   managedPolicyArns: ["arn:aws:iam::aws:policy/AdministratorAccess"],
 });
 
+const stateStore = await R2Bucket("state-store", {
+  name: "alchemy-state-store",
+});
+
 const githubSecrets = {
   AWS_ROLE_ARN: githubRole.arn,
   CLOUDFLARE_API_KEY: process.env.CLOUDFLARE_API_KEY,
   CLOUDFLARE_EMAIL: process.env.CLOUDFLARE_EMAIL,
   STRIPE_API_KEY: process.env.STRIPE_API_KEY,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  R2_BUCKET_NAME: stateStore.name,
 };
 
 await Promise.all([
@@ -100,7 +105,10 @@ await DnsRecords("transfer-dns-records", {
   ),
 });
 
-console.log("nameservers:", zone.nameservers);
+console.log({
+  bucketName: stateStore.name,
+  nameservers: zone.nameservers,
+});
 
 if (process.argv.includes("--astro")) {
   const astro = await AstroProject("astro", {

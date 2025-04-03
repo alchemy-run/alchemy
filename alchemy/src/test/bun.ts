@@ -3,8 +3,10 @@
 import { afterAll, beforeAll, it } from "bun:test";
 import path from "node:path";
 import { alchemy } from "../alchemy";
+import { R2RestStateStore } from "../cloudflare";
 import { destroy } from "../destroy";
 import type { Scope } from "../scope";
+import type { StateStoreType } from "../state";
 
 /**
  * Extend the Alchemy interface to include test functionality
@@ -41,12 +43,17 @@ export interface TestOptions {
    * @default "test-password".
    */
   password?: string;
-}
 
-/**
- * Global test scope for all tests
- */
-const globalTestScope = alchemy.scope("test");
+  /**
+   * Override the default state store for the test.
+   */
+  stateStore?: StateStoreType;
+
+  /**
+   * Prefix to use for the scope to isolate tests and environments.
+   */
+  prefix?: string;
+}
 
 /**
  * Test function type definition with overloads
@@ -114,6 +121,20 @@ type test = {
  * ```
  */
 export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
+  defaultOptions = defaultOptions ?? {};
+  if (
+    defaultOptions.stateStore === undefined &&
+    // process.env.CI &&
+    process.env.ALCHEMY_STATE_STORE === "cloudflare"
+  ) {
+    defaultOptions.stateStore = (scope) =>
+      new R2RestStateStore(scope, {
+        apiKey: process.env.CLOUDFLARE_API_KEY,
+        email: process.env.CLOUDFLARE_EMAIL,
+        bucketName: process.env.CLOUDFLARE_BUCKET_NAME!,
+      });
+  }
+
   // Add skipIf functionality
   test.skipIf = (condition: boolean) => {
     if (condition) {
@@ -124,9 +145,13 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
   };
 
   // Create local test scope based on filename
-  const localTestScope = alchemy.scope(path.basename(meta.filename), {
-    parent: globalTestScope,
-  });
+  const localTestScope = alchemy.scope(
+    `${defaultOptions.prefix ? `${defaultOptions.prefix}-` : ""}${path.basename(meta.filename)}`,
+    {
+      // parent: globalTestScope,
+      stateStore: defaultOptions?.stateStore,
+    },
+  );
   test.scope = localTestScope;
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {

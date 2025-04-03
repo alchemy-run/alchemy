@@ -8,7 +8,9 @@ import { Worker } from "../../src/cloudflare/worker";
 import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 async function assertWorkerDoesNotExist(workerName: string) {
   const api = await createCloudflareApi();

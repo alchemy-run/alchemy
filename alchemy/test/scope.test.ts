@@ -4,9 +4,11 @@ import { alchemy } from "../src/alchemy";
 import { File } from "../src/fs/file";
 import { Scope } from "../src/scope";
 import "../src/test/bun";
+import { BRANCH_PREFIX } from "./util";
 
 const test = alchemy.test(import.meta, {
   destroy: true,
+  prefix: BRANCH_PREFIX,
 });
 
 describe("Scope", () => {

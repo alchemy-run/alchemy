@@ -1,11 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { destroy } from "./destroy";
+import { FileSystemStateStore } from "./fs/file-system-state-store";
 import type { PendingResource, ResourceID } from "./resource";
-import {
-  FileSystemStateStore,
-  type StateStore,
-  type StateStoreType,
-} from "./state";
+import type { StateStore, StateStoreType } from "./state";
 
 const scopeStorage = new AsyncLocalStorage<Scope>();
 
@@ -53,7 +50,9 @@ export class Scope {
       throw new Error("Scope name is required when creating a child scope");
     }
     this.password = options.password;
-    this.state = new (options.stateStore ?? FileSystemStateStore)(this);
+    this.state = options.stateStore
+      ? options.stateStore(this)
+      : new FileSystemStateStore(this);
   }
 
   public async delete(resourceID: ResourceID) {

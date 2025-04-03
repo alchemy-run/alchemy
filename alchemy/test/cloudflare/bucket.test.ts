@@ -5,7 +5,9 @@ import { R2Bucket } from "../../src/cloudflare/bucket";
 import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 /**
  * Type definitions for API responses
