@@ -3,6 +3,7 @@ import path from "path";
 import { promisify } from "util";
 import type { Context } from "../context";
 import { Folder, StaticJsonFile } from "../fs";
+import { StaticTypeScriptFile } from "../fs/static-typescript-file";
 import { Resource } from "../resource";
 import { ShadcnComponent } from "./shadcn-component";
 
@@ -85,6 +86,11 @@ export interface ShadcnUI extends ShadcnUIProps, Resource<"project::ShadcnUI"> {
    * The ui directory
    */
   ui: Folder;
+
+  /**
+   * The lib directory
+   */
+  lib: Folder;
 }
 
 /**
@@ -168,6 +174,29 @@ export const ShadcnUI = Resource(
       ),
     );
 
+    // Create lib directory
+    const libPath = path.join(
+      props.cwd,
+      props.srcDir !== false ? "src" : "",
+      "lib",
+    );
+    const lib = await Folder(libPath);
+
+    // Create utils.ts file
+    const utilsContent = `
+      import { type ClassValue, clsx } from "clsx";
+      import { twMerge } from "tailwind-merge";
+       
+      export function cn(...inputs: ClassValue[]) {
+        return twMerge(clsx(inputs));
+      }
+    `;
+
+    await StaticTypeScriptFile(path.join(libPath, "utils.ts"), utilsContent);
+
+    // Install clsx and tailwind-merge
+    await exec(`bun add clsx tailwind-merge`);
+
     // Install requested components
     if (props.components && props.components.length > 0) {
       for (const componentName of props.components) {
@@ -183,6 +212,7 @@ export const ShadcnUI = Resource(
     return this({
       ...props,
       ui,
+      lib,
     });
   },
 );

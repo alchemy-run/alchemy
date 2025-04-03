@@ -436,6 +436,7 @@ pnpm-debug.log*
 
 # macOS-specific files
 .DS_Store
+.astro/
 `,
       );
 
