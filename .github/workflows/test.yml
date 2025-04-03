@@ -44,6 +44,7 @@ jobs:
         env:
           CI: true
           ALCHEMY_STATE_STORE: cloudflare
+          CLOUDFLARE_BUCKET_NAME: ${{ secrets.CLOUDFLARE_BUCKET_NAME }}
           BRANCH_PREFIX: pr-${{ github.ref_name }}
           AWS_REGION: us-west-2
           CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}

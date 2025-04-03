@@ -66,7 +66,7 @@ const githubSecrets = {
   CLOUDFLARE_EMAIL: process.env.CLOUDFLARE_EMAIL,
   STRIPE_API_KEY: process.env.STRIPE_API_KEY,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-  R2_BUCKET_NAME: stateStore.name,
+  CLOUDFLARE_BUCKET_NAME: stateStore.name,
 };
 
 await Promise.all([
