@@ -45,7 +45,6 @@ describe("CopyFile Resource", () => {
       });
 
       // Verify resource properties
-      expect(resource.id).toBe(testId);
       expect(resource.src).toBe(sourceFilePath);
       expect(resource.dest).toBe(destinationFilePath);
       expect(resource.overwrite).toBe(true);

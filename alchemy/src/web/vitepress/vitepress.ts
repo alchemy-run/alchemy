@@ -2,7 +2,6 @@ import { exec } from "child_process";
 import fs from "fs/promises";
 import path from "path";
 import { promisify } from "util";
-import type { DefaultTheme, ThemeOptions } from "vitepress";
 import type { Context } from "../../context";
 import {
   Folder,
@@ -70,12 +69,12 @@ export interface VitePressProjectProps {
   /**
    * The theme options to use
    */
-  theme?: ThemeOptions;
+  // theme?: ThemeOptions;
 
   /**
    * The theme config to use
    */
-  themeConfig: DefaultTheme.Config;
+  // themeConfig: DefaultTheme.Config;
 
   /**
    * Whether to delete the project folder during the delete phase
@@ -111,7 +110,7 @@ export const VitepressProject = Resource(
   async function (
     this: Context<VitePressProject>,
     id: string,
-    props: VitePressProjectProps,
+    props: VitePressProjectProps
   ): Promise<VitePressProject> {
     const dir = props.dir ?? props.name;
     if (this.phase === "delete") {
@@ -135,7 +134,7 @@ export const VitepressProject = Resource(
           path: dir,
           delete: props.delete,
         })
-      ).path,
+      ).path
     );
 
     // Initialize package.json
@@ -179,7 +178,7 @@ export const VitepressProject = Resource(
       //     allowJs: true,
       //     skipLibCheck: true,
       //     forceConsistentCasingInFileNames: true,
-          
+
       //   },
       // }),
 
@@ -219,7 +218,7 @@ export default {
     ctx.app.use(TwoslashFloatingVue);
   },
 } satisfies ThemeConfig;
-  `,
+  `
       ),
       StaticTextFile(
         path.join(cwd, ".vitepress", "theme", "style.css"),
@@ -361,45 +360,13 @@ export default {
 .DocSearch {
   --docsearch-primary-color: var(--vp-c-brand-1) !important;
 }
-`,
-      ),
-      StaticTypeScriptFile(
-        path.join(cwd, ".vitepress", "config.mts"),
-        `import { transformerTwoslash } from "@shikijs/vitepress-twoslash";
-import footnotePlugin from "markdown-it-footnote";
-import { defineConfig } from "vitepress";
-
-// https://vitepress.dev/reference/site-config
-export default defineConfig({
-  title: ${JSON.stringify(props.title || "Alchemy")},
-  description: ${JSON.stringify(props.description || "Alchemy Docs")},
-  markdown: {
-    // @ts-ignore
-    codeTransformers: [transformerTwoslash()],
-    theme: ${JSON.stringify(
-      props.theme ?? {
-        light: "light-plus",
-        dark: "dark-plus",
-      },
-    )},
-    config: (md) => md.use(footnotePlugin),
-  },
-  // https://vitepress.dev/reference/default-theme-config
-  themeConfig: ${JSON.stringify({
-    ...props.themeConfig,
-    search: props.themeConfig.search ?? { provider: "local" },
-    nav: props.themeConfig.nav ?? [{ text: "Home", link: "/" }],
-    sidebar: props.themeConfig.sidebar ?? [],
-    socialLinks: props.themeConfig.socialLinks ?? [],
-  })}
-});
-`,
+`
       ),
     ]);
 
     return this({
       ...props,
-      dir
+      dir,
     });
-  },
+  }
 );

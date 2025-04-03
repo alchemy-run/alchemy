@@ -18,7 +18,33 @@ export default defineConfig({
       { text: "Home", link: "/" },
       { text: "Docs", link: "/docs/getting-started" },
     ],
-    sidebar: [{ text: "Getting Started", link: "/docs/getting-started" }],
+    sidebar: [
+      { text: "Getting Started", link: "/docs/getting-started" },
+      {
+        text: "Providers",
+        link: "/docs/providers",
+        collapsed: false,
+        items: [
+          {
+            text: "web",
+            collapsed: true,
+            items: [
+              { text: "ViteProject", link: "/docs/providers/web/vite.md" },
+              { text: "AstroProject", link: "/docs/providers/web/astro.md" },
+              {
+                text: "ShadcnComponent",
+                link: "/docs/providers/web/shadcn-component.md",
+              },
+              {
+                text: "TailwindConfig",
+                link: "/docs/providers/web/tailwind.md",
+              },
+              { text: "ShadcnUI", link: "/docs/providers/web/shadcn.md" },
+            ],
+          },
+        ],
+      },
+    ],
     search: { provider: "local" },
     socialLinks: [],
   },

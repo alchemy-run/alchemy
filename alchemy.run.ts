@@ -25,7 +25,11 @@ import { CopyFile, Folder } from "./alchemy/src/fs";
 import { GitHubSecret } from "./alchemy/src/github";
 import { GettingStarted } from "./alchemy/src/internal/getting-started";
 import { AlchemyProviderDocs } from "./alchemy/src/internal/providers";
-import { HomePage, VitepressProject } from "./alchemy/src/web/vitepress";
+import {
+  HomePage,
+  VitePressConfig,
+  VitepressProject,
+} from "./alchemy/src/web/vitepress";
 const app = alchemy("github:alchemy", {
   stage: "prod",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
@@ -122,18 +126,6 @@ if (process.argv.includes("--vitepress")) {
   const vitepress = await VitepressProject("vitepress", {
     name: "alchemy-web",
     delete: true,
-    themeConfig: {
-      nav: [
-        { text: "Home", link: "/" },
-        { text: "Docs", link: "/docs/getting-started" },
-      ],
-      sidebar: [
-        {
-          text: "Getting Started",
-          link: "/docs/getting-started",
-        },
-      ],
-    },
   });
 
   const docsPublic = await Folder("docs-public", {
@@ -174,14 +166,54 @@ if (process.argv.includes("--vitepress")) {
     path: path.join(docs.path, "providers"),
   });
 
-  await AlchemyProviderDocs({
+  const filterIdx = process.argv.findIndex((arg) => arg === "--filter");
+
+  const providersDocs = await AlchemyProviderDocs({
     srcDir: path.join("alchemy", "src"),
     outDir: providers.path,
-    filter: 1,
+    filter:
+      process.argv[filterIdx + 1] === "true"
+        ? true
+        : filterIdx > -1
+          ? isNaN(parseInt(process.argv[filterIdx + 1]))
+            ? false
+            : parseInt(process.argv[filterIdx + 1])
+          : false,
   });
 
   await GettingStarted({
     path: path.join(docs.path, "getting-started.md"),
+  });
+
+  await VitePressConfig({
+    cwd: vitepress.dir,
+    title: "Alchemy",
+    description: "Alchemy Docs",
+    themeConfig: {
+      nav: [
+        { text: "Home", link: "/" },
+        { text: "Docs", link: "/docs/getting-started" },
+      ],
+      sidebar: [
+        {
+          text: "Getting Started",
+          link: "/docs/getting-started",
+        },
+        {
+          text: "Providers",
+          link: "/docs/providers",
+          collapsed: false,
+          items: providersDocs.map((p) => ({
+            text: p.provider,
+            collapsed: true,
+            items: p.documents.map((r) => ({
+              text: r.title,
+              link: `/docs/providers/${p.provider}/${path.basename(r.path)}`,
+            })),
+          })),
+        },
+      ],
+    },
   });
 
   if (process.argv.includes("--publish")) {
@@ -201,104 +233,3 @@ if (process.argv.includes("--vitepress")) {
 }
 
 await app.finalize();
-
-// cloudflare vite plugin requires a wrangler.json file
-// await WranglerJson("alchemy.run wrangler.json", {
-//   name: "alchemy",
-//   compatibility_date: "2024-01-01",
-//   path: "alchemy.run/wrangler.jsonc",
-// });
-
-// const theme = await CustomTheme("theme", {
-//   outDir: ".vitepress/theme",
-//   title: "Alchemy",
-//   description: "Agentic Infrastructure as Code 🪄",
-//   prompt: await alchemy`
-//     Create a custom theme for the Alchemy documentation site.
-//     Use pastel colors like #FFB6C1 and #87CEEB.
-//     Use a modern and clean design.
-//   `,
-//   model: {
-//     id: "claude-3-7-sonnet-latest",
-//     provider: "anthropic",
-//   },
-// });
-
-// const [home, gettingStarted, providers] = await Promise.all([
-//   HomePage("home", {
-//     outFile: "index.md",
-//     title: "Alchemy",
-//     hero: {
-//       name: "Alchemy",
-//       text: "Agentic Infrastructure as Code 🪄",
-//       tagline: "Building the assembly-line for self-generating software",
-//       image: {
-//         src: "./public/alchemist.png",
-//         alt: "The Alchemist",
-//       },
-//       actions: [
-//         {
-//           text: "Get Started",
-//           link: "/docs",
-//           theme: "brand",
-//         },
-//       ],
-//     },
-//     prompt: await alchemy`
-//       Using HTML below the frontmatter, create a feature showcase section with:
-
-//       1. A centered main heading "Features"
-//       2. A left-to-right alternating layout of 4 features:
-//         - Resources for Cloud Services (show the Secret, Static Site and Worker example from ${alchemy.file("../README.md")} and ${alchemy.file("../examples/cloudflare-vite/alchemy.run.ts")})
-//         - Automated development of new Resources using Agentic IDEs (Cursor, Windsurf, etc) (leave example as TODO)
-//         - Agentic Resources (show a concise example from ${alchemy.files(
-//           "./src/providers.ts",
-//           "./src/project.ts",
-//           "./src/getting-started.ts",
-//         )})
-//         - Organizational Tree (show the ${alchemy.file("./alchemy.run.ts")} example)
-
-//       Make sure each feature has a code block with syntax highlighting. Use vitepress for syntax highlighting.
-//       Do not over explain: 1 short sentence per feature is enough.
-//       Do not use markdown for the feature section.
-//       # Features <- (not this)
-//     `,
-//   }),
-//   GettingStarted({
-//     outDir: docs,
-//   }),
-//   AlchemyProviderDocs({
-//     filter: true,
-//     outDir: docs,
-//   }),
-//   // TODO: add other docs
-// ]);
-
-// export const project = await AlchemyProject({
-//   hero: {
-//     text: "Agentic Infrastructure as Code 🪄",
-//     // text: "Agentic IaC 🪄",
-//     // tagline: "IaC for Gen-AI",
-//     // tagline: "IaC that's as simple as bunx",
-//     // tagline: "Portable infrastructure, in a language you and LLMs just know",
-//     tagline: "Agentic Infrastructure-as-Code in pure TypeScript",
-//   },
-//   docs: {
-//     providers,
-//   },
-// });
-
-// if (process.argv.includes("--deploy")) {
-//   const site = await StaticSite("alchemy.run site", {
-//     name: "alchemy",
-//     dir: ".vitepress/dist",
-//     domain: "alchemy.run",
-//     build: {
-//       command: "bun run docs:build",
-//     },
-//   });
-
-//   console.log({
-//     url: site.url,
-//   });
-// }

@@ -149,7 +149,7 @@ export const Document = Resource(
   async function (
     this: Context<Document>,
     id: string,
-    props: DocumentProps,
+    props: DocumentProps
   ): Promise<Document> {
     // Ensure directory exists
     await fs.mkdir(path.dirname(props.path), { recursive: true });
@@ -174,6 +174,7 @@ export const Document = Resource(
       model: createModel(props),
       prompt: props.prompt,
       system,
+      maxTokens: 10000,
       providerOptions: props.model?.options,
       ...(props.temperature === undefined
         ? {}
@@ -181,8 +182,10 @@ export const Document = Resource(
           { temperature: props.temperature }),
     });
 
+    console.log(text);
+
     // Extract and validate markdown content
-    let { content, error } = await extractMarkdownContent(text);
+    let { content, error } = extractMarkdownContent(text);
 
     // Re-prompt if there are validation errors
     if (error) {
@@ -198,11 +201,11 @@ export const Document = Resource(
           : { temperature: props.temperature }),
       });
 
-      const retryResult = await extractMarkdownContent(retryText);
+      const retryResult = extractMarkdownContent(retryText);
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid markdown content: ${retryResult.error}`,
+          `Failed to generate valid markdown content: ${retryResult.error}`
         );
       }
 
@@ -226,7 +229,7 @@ export const Document = Resource(
       createdAt: stats.birthtimeMs,
       updatedAt: stats.mtimeMs,
     });
-  },
+  }
 );
 
 /**
@@ -236,13 +239,14 @@ export const Document = Resource(
  * @param text The text to extract markdown content from
  * @returns The extracted markdown content or error message
  */
-async function extractMarkdownContent(
-  text: string,
-): Promise<{ content: string; error?: string }> {
-  const mdCodeRegex = /```md\s*([\s\S]*?)```/g;
-  const matches = Array.from(text.matchAll(mdCodeRegex));
+function extractMarkdownContent(text: string): {
+  content: string;
+  error?: string;
+} {
+  const lines = text.split("\n");
+  const startIdx = lines.findIndex((line) => line.trim() === "```md");
 
-  if (matches.length === 0) {
+  if (startIdx === -1) {
     return {
       content: "",
       error:
@@ -250,13 +254,24 @@ async function extractMarkdownContent(
     };
   }
 
-  if (matches.length > 1) {
+  const rest = lines.slice(startIdx + 1);
+  const endRelativeIdx = rest
+    .map((line) => line.trim() === "```")
+    .lastIndexOf(true);
+
+  if (endRelativeIdx === -1) {
     return {
       content: "",
-      error:
-        "Multiple markdown code blocks found in the response. Please provide exactly one markdown block within ```md fences.",
+      error: "Markdown block was not closed properly.",
     };
   }
 
-  return { content: matches[0][1].trim() };
+  const endIdx = startIdx + 1 + endRelativeIdx;
+
+  const content = lines
+    .slice(startIdx + 1, endIdx)
+    .join("\n")
+    .trim();
+
+  return { content };
 }
