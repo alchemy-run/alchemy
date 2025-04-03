@@ -182,8 +182,6 @@ export const Document = Resource(
           { temperature: props.temperature }),
     });
 
-    console.log(text);
-
     // Extract and validate markdown content
     let { content, error } = extractMarkdownContent(text);
 

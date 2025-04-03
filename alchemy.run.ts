@@ -203,14 +203,18 @@ if (process.argv.includes("--vitepress")) {
           text: "Providers",
           link: "/docs/providers",
           collapsed: false,
-          items: providersDocs.map((p) => ({
-            text: p.provider,
-            collapsed: true,
-            items: p.documents.map((r) => ({
-              text: r.title,
-              link: `/docs/providers/${p.provider}/${path.basename(r.path)}`,
+          items: providersDocs
+            .sort((a, b) => a.provider.localeCompare(b.provider))
+            .map((p) => ({
+              text: p.provider,
+              collapsed: true,
+              items: p.documents
+                .sort((a, b) => a.title.localeCompare(b.title))
+                .map((r) => ({
+                  text: r.title,
+                  link: `/docs/providers/${p.provider}/${path.basename(r.path)}`,
+                })),
             })),
-          })),
         },
       ],
     },

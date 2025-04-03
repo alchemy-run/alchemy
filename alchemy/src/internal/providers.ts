@@ -40,7 +40,15 @@ export async function AlchemyProviderDocs({
 }: DocsProps): Promise<AlchemyProviderDocs> {
   outDir = typeof outDir === "string" ? outDir : outDir.path;
 
-  const exclude = ["util", "test", "vitepress", "vite", "shadcn", "internal"];
+  const exclude = [
+    "util",
+    "test",
+    "vitepress",
+    "vite",
+    "shadcn",
+    "internal",
+    "web",
+  ];
 
   // Get all folders in the alchemy/src directory
   let providers = (
