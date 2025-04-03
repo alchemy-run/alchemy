@@ -409,6 +409,7 @@ export const Zone = Resource(
 
       console.log("status", response.status);
       console.log("statusText", response.statusText);
+      console.log("body", JSON.parse(body));
       console.log("zoneData", zoneData);
 
       return this({
