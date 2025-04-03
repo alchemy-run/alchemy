@@ -384,7 +384,9 @@ export const Zone = Resource(
       if (!response.ok) {
         if (response.status === 400 && body.includes("already exists")) {
           // Zone already exists, fetch it instead
-          console.log(`Zone '${props.name}' already exists, fetching it...`);
+          console.warn(
+            `Zone '${props.name}' already exists during Zone create, adopting it...`,
+          );
           const getResponse = await api.get(`/zones?name=${props.name}`);
 
           if (!getResponse.ok) {
@@ -417,11 +419,6 @@ export const Zone = Resource(
         // Add a small delay to ensure settings are propagated
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
-
-      console.log("status", response.status);
-      console.log("statusText", response.statusText);
-      console.log("body", JSON.parse(body));
-      console.log("zoneData", zoneData);
 
       return this({
         id: zoneData.id,
