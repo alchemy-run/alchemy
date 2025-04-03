@@ -1,5 +1,5 @@
-import { VitePressProject } from "alchemy/vitepress";
 import path from "path";
+import { VitePressProject } from "../web/vitepress";
 import type { AlchemyProviderDocs } from "./providers";
 
 export interface AlchemyProjectProps {
