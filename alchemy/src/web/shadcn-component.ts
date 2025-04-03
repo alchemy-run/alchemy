@@ -4,6 +4,7 @@ import path from "path";
 import { promisify } from "util";
 import type { Context } from "../context";
 import { Resource } from "../resource";
+import { ignore } from "../util/ignore";
 
 const execAsync = promisify(exec);
 
@@ -46,20 +47,11 @@ export const ShadcnComponent = Resource(
     props: ShadcnComponentProps,
   ): Promise<ShadcnComponent> {
     if (this.phase === "delete") {
-      const componentPath = path.join(
-        props.cwd,
-        "src",
-        "components",
-        "ui",
-        `${props.name}.tsx`,
+      await ignore("ENOENT", () =>
+        fs.unlink(
+          path.join(props.cwd, "src", "components", "ui", `${props.name}.tsx`),
+        ),
       );
-      try {
-        await fs.unlink(componentPath);
-      } catch (error) {
-        if ((error as any).code !== "ENOENT") {
-          throw error;
-        }
-      }
       return this.destroy();
     }
 

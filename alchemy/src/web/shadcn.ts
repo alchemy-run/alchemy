@@ -129,6 +129,7 @@ export const ShadcnUI = Resource(
       console.log(
         "Note: ShadcnUI delete phase does not remove installed components",
       );
+
       return this.destroy();
     }
 

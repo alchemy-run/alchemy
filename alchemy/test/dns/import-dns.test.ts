@@ -11,7 +11,7 @@ const test = alchemy.test(import.meta);
 describe("ImportDnsRecords Resource", () => {
   const testDomain = "example.com";
 
-  test.skipIf(!!process.env.CI)("import all DNS records", async (scope) => {
+  test("import all DNS records", async (scope) => {
     try {
       // Import all DNS records
       const records = await ImportDnsRecords(`${BRANCH_PREFIX}-${testDomain}`, {
@@ -59,46 +59,43 @@ describe("ImportDnsRecords Resource", () => {
     }
   });
 
-  test.skipIf(!!process.env.CI)(
-    "import specific DNS record types",
-    async (scope) => {
-      try {
-        // Import only A and MX records
-        const records = await ImportDnsRecords(
-          `${BRANCH_PREFIX}-${testDomain}-specific`,
-          {
-            domain: testDomain,
-            recordTypes: ["A", "MX"],
-          },
-        );
+  test("import specific DNS record types", async (scope) => {
+    try {
+      // Import only A and MX records
+      const records = await ImportDnsRecords(
+        `${BRANCH_PREFIX}-${testDomain}-specific`,
+        {
+          domain: testDomain,
+          recordTypes: ["A", "MX"],
+        },
+      );
 
-        // Verify array structure
-        expect(Array.isArray(records.records)).toBe(true);
+      // Verify array structure
+      expect(Array.isArray(records.records)).toBe(true);
 
-        // Verify we only got the requested record types
-        const recordTypes = new Set(records.records.map((r) => r.type));
-        expect(recordTypes.size).toBeLessThanOrEqual(2);
-        for (const type of recordTypes) {
-          expect(["A", "MX"]).toContain(type);
-        }
-
-        // Verify record structure
-        if (records.records.length > 0) {
-          const record = records.records[0];
-          expect(record.name).toBeTruthy();
-          expect(record.type).toBeTruthy();
-          expect(record.TTL).toBeTruthy();
-          expect(record.data).toBeTruthy();
-          expect(record.content).toBeTruthy(); // Compatibility field
-          expect(record.ttl).toBeTruthy(); // Lowercase ttl field
-        }
-      } finally {
-        await destroy(scope);
+      // Verify we only got the requested record types
+      const recordTypes = new Set(records.records.map((r) => r.type));
+      expect(recordTypes.size).toBeLessThanOrEqual(2);
+      for (const type of recordTypes) {
+        expect(["A", "MX"]).toContain(type);
       }
-    },
-  );
 
-  test.skipIf(!!process.env.CI)("properly format MX records", async (scope) => {
+      // Verify record structure
+      if (records.records.length > 0) {
+        const record = records.records[0];
+        expect(record.name).toBeTruthy();
+        expect(record.type).toBeTruthy();
+        expect(record.TTL).toBeTruthy();
+        expect(record.data).toBeTruthy();
+        expect(record.content).toBeTruthy(); // Compatibility field
+        expect(record.ttl).toBeTruthy(); // Lowercase ttl field
+      }
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("properly format MX records", async (scope) => {
     try {
       // Import only MX records
       const records = await ImportDnsRecords(
@@ -146,7 +143,7 @@ describe("ImportDnsRecords Resource", () => {
     }
   });
 
-  test.skipIf(!!process.env.CI)("handle non-existent domain", async (scope) => {
+  test("handle non-existent domain", async (scope) => {
     try {
       const records = await ImportDnsRecords(`${BRANCH_PREFIX}-non-existent`, {
         domain: "this-domain-definitely-does-not-exist-12345.com",

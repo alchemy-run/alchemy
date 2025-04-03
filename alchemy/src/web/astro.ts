@@ -223,23 +223,19 @@ export const AstroProject = Resource(
 
     const cwd = path.resolve(process.cwd(), dir);
 
-    if (this.phase === "update") {
-      if (props.overwrite) {
-        await setupProject(props);
-      } else {
-        console.warn(
-          "AstroProject updates are limited - set overwrite:true to force config updates",
-        );
-      }
-    } else {
-      // Create the project directory
-      await Folder("project-dir", {
-        path: dir,
-        delete: props.delete,
-      });
+    // Create the project directory
+    await Folder("project-dir", {
+      path: dir,
+      delete: true,
+    });
 
-      await setupProject(props);
-    }
+    await Folder(".astro", {
+      path: dir,
+      delete: true,
+      clean: true,
+    });
+
+    await setupProject(props);
 
     return this(props);
 
