@@ -32,8 +32,8 @@
     "editor.insertSpaces": true,
     "editor.defaultFormatter": "biomejs.biome"
   },
-  "[typescript|javascript|tsx|jsx]": {
-    "editor.defaultFormatter": "biomejs.biome"
+  "[typescript][javascript][tsx][jsx]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "[markdown]": {
     "editor.formatOnSave": false

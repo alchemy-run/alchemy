@@ -1,8 +1,10 @@
 {
-  "extends": "../tsconfig.base.json",
-  "references": [
-    {
-      "path": "../alchemy/tsconfig.json"
-    }
-  ]
+  "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] },
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.astro"]
 }

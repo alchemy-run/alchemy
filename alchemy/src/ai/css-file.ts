@@ -238,7 +238,7 @@ export const CSSFile = Resource(
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid CSS code: ${retryResult.error}`,
+          `Failed to generate valid CSS code: ${retryResult.error}\n${retryText}`,
         );
       }
 
