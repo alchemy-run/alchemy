@@ -1,34 +1,42 @@
 # HTML File
 
-The HTMLFile component allows you to generate and manage HTML files using AI models. It extracts HTML code from AI-generated responses and ensures the content is valid and formatted. Learn more about HTML at [MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/HTML).
+The HTMLFile resource lets you generate HTML files using AI models like [OpenAI GPT-4](https://platform.openai.com/docs/models/gpt-4) and [Anthropic Claude](https://www.anthropic.com/claude).
 
 # Minimal Example
+
+Creates a basic HTML file with AI-generated content.
 
 ```ts
 import { HTMLFile } from "alchemy/ai";
 
-const landingPage = await HTMLFile("landing-page", {
+const page = await HTMLFile("landing", {
   path: "./public/index.html",
-  prompt: "Generate a simple HTML page with a header, footer, and main content area.",
+  prompt: "Generate a simple landing page with a hero section, features list, and contact form"
 });
 ```
 
-# Create the HTML File
+# Create an HTML File with Custom Configuration
 
 ```ts
 import { HTMLFile } from "alchemy/ai";
 
 const emailTemplate = await HTMLFile("welcome-email", {
-  path: "./emails/welcome.html",
-  prompt: `
-    Create an HTML email template for welcoming new users.
-    Include a company logo, welcome message, and contact information.
+  path: "./emails/welcome.html", 
+  prompt: await alchemy`
+    Create an HTML email template with:
+    - Company logo and branding
+    - Welcome message with {{name}} placeholder
+    - Getting started steps
+    - Support contact info
+    - Unsubscribe footer
   `,
-  system: "You are an HTML email template generator. Create a single HTML file inside ```html fences.",
+  system: "You are an email template expert. Create responsive HTML that works across email clients.",
   model: {
     id: "gpt-4o",
-    provider: "openai"
-  },
-  temperature: 0.2
+    provider: "openai",
+    options: {
+      temperature: 0.2
+    }
+  }
 });
 ```

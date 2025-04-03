@@ -1,165 +1,129 @@
 # Getting Started with Alchemy
 
-Alchemy is an embeddable, zero-dependency, TypeScript-native Infrastructure-as-Code (IaC) library for modeling resources that are created, updated, and deleted automatically. Unlike similar tools like Pulumi, Terraform, and CloudFormation, Alchemy is implemented in pure ESM-native TypeScript code with zero dependencies.
+Alchemy is a TypeScript-native Infrastructure as Code (IaC) framework that allows you to define and manage cloud resources using pure TypeScript/JavaScript code. Unlike other IaC tools, Alchemy has zero dependencies and can run in any JavaScript environment.
 
 ## Installation
 
-To get started with Alchemy, you need to install it using your preferred package manager. We recommend using Bun for its speed and efficiency.
-
 ```bash
-# Install Alchemy
 bun add alchemy
 ```
 
-## Creating Your First Alchemy Project
+## Creating Your First Alchemy Project 
 
-To create a basic Alchemy project, follow these steps:
+Create a new file called `alchemy.config.ts`:
 
-1. **Initialize the Alchemy App**: Start by creating an Alchemy app in your TypeScript file.
+```ts
+import alchemy from "alchemy";
 
-    ```ts
-    import alchemy from "alchemy";
+// Initialize Alchemy app
+await using app = alchemy("my-app", {
+  stage: process.env.STAGE ?? "dev",
+  password: process.env.SECRET_PASSPHRASE
+});
 
-    await using app = alchemy("my-first-app", {
-      stage: "dev",
-      phase: "up",
-    });
-    ```
-
-2. **Define a Resource**: Create a simple resource, such as an AWS IAM Role.
-
-    ```ts
-    import { Role } from "alchemy/aws";
-
-    export const role = await Role("my-role", {
-      roleName: "my-role",
-      assumeRolePolicy: {
-        Version: "2012-10-17",
-        Statement: [
-          {
-            Effect: "Allow",
-            Principal: { Service: "lambda.amazonaws.com" },
-            Action: "sts:AssumeRole",
-          },
-        ],
-      },
-    });
-
-    console.log({
-      roleName: role.roleName,
-    });
-    ```
-
-3. **Run Your Script**: Execute your script using Bun.
-
-    ```bash
-    bun ./my-first-app.ts
-    ```
+// Define resources here
+```
 
 ## Core Concepts
 
 ### Resources
 
-In Alchemy, resources are modeled as memoized async functions that can be executed in any async environment. This allows for easy creation, updating, and deletion of resources.
+Resources are the core building blocks in Alchemy. Each resource is defined as an async function that handles create, update and delete operations:
 
 ```ts
 import { Role } from "alchemy/aws";
 
-export const role = await Role("my-role", {
-  roleName: "my-role",
+const role = await Role("api-role", {
+  roleName: "api-lambda-role",
   assumeRolePolicy: {
     Version: "2012-10-17",
-    Statement: [
-      {
-        Effect: "Allow",
-        Principal: { Service: "lambda.amazonaws.com" },
-        Action: "sts:AssumeRole",
-      },
-    ],
-  },
+    Statement: [{
+      Effect: "Allow",
+      Principal: { Service: "lambda.amazonaws.com" },
+      Action: "sts:AssumeRole"
+    }]
+  }
 });
+
+// Access resource properties
+console.log(role.roleName); // "api-lambda-role"
 ```
 
 ### Context
 
-Alchemy uses a context to manage the lifecycle of resources. The context provides information about the current phase (create, update, delete) and allows for managing resource state.
+Resources have access to context through the `this` parameter which provides:
+
+- Current phase (create/update/delete)
+- Resource state
+- Scope information
+- Helper methods
 
 ```ts
 export const MyResource = Resource(
   "my::Resource",
-  async function (this, id, props) {
+  async function(this: Context<MyResource>, id: string, props: MyResourceProps) {
     if (this.phase === "delete") {
       return this.destroy();
     }
-    // Resource creation logic
+    
+    // Create/update logic
+    return this({
+      id,
+      ...props
+    });
   }
 );
 ```
 
 ## Working with Secrets
 
-Alchemy provides a simple way to handle secrets using the `alchemy.secret()` function. This ensures that sensitive information is encrypted in the state files.
+Alchemy provides built-in secret management:
 
 ```ts
-const apiKey = alchemy.secret("API_KEY");
+const apiKey = alchemy.secret(process.env.API_KEY);
 
-await Worker("my-worker", {
+await Worker("api", {
   bindings: {
-    API_KEY: apiKey,
-  },
+    API_KEY: apiKey // Will be encrypted in state
+  }
 });
 ```
 
 ## Testing
 
-Testing in Alchemy is straightforward. You can create tests for your resources using Bun's testing framework.
+Create test files ending in `.test.ts`:
 
 ```ts
-import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { Worker } from "../../src/cloudflare/worker";
+import { alchemy } from "alchemy";
+import "alchemy/test/bun";
 
-describe("Worker Resource", () => {
-  test("create and delete worker", async (scope) => {
-    const worker = await Worker("test-worker", {
-      name: "test-worker",
-      script: "console.log('Hello, world!');",
-    });
+const test = alchemy.test(import.meta);
 
-    expect(worker.id).toBeTruthy();
-    await alchemy.destroy(scope);
+test("create and update resource", async (scope) => {
+  const resource = await MyResource("test", {
+    name: "test-resource"
   });
+  
+  expect(resource.name).toEqual("test-resource");
+  
+  // Resource will be cleaned up automatically
 });
 ```
 
 ## Deployment
 
-Deploying resources with Alchemy involves running your script with the appropriate phase. For example, to deploy resources, ensure the phase is set to "up".
+Run your Alchemy configuration:
 
-```ts
-await using app = alchemy("my-app", {
-  phase: "up",
-});
-```
+```bash
+# Deploy
+bun alchemy.config.ts
 
-To destroy resources, set the phase to "destroy".
-
-```ts
-await using app = alchemy("my-app", {
-  phase: "destroy",
-});
+# Destroy
+bun alchemy.config.ts --destroy
 ```
 
 ## Next Steps
 
-To learn more about Alchemy and explore advanced use cases, consider the following:
-
-- Explore the [Alchemy documentation](https://alchemy.example.com/docs) for detailed guides and API references.
-- Check out the [examples](https://alchemy.example.com/examples) to see Alchemy in action.
-- Join the Alchemy community on [Discord](https://discord.gg/alchemy) to connect with other users and developers.
-
-> [!CAUTION]
-> Avoid the temptation to over explain or over describe. Focus on concise, simple, high-value snippets.
-
-> [!TIP]
-> Make sure the examples follow a natural progression from minimal examples to more complex use cases.
+- Review the [examples](https://github.com/alchemy/examples) for real-world usage
+- Learn how to [create custom resources](https://github.com/alchemy/docs/custom-resources.md)
+- Join the [Discord community](https://discord.gg/alchemy) for help

@@ -1,32 +1,16 @@
-# Dns
+# Dns Records
 
-The Dns component allows you to manage [Cloudflare DNS](https://developers.cloudflare.com/dns/) records for your domain. It supports creating, updating, and deleting multiple DNS records at once.
+The Dns Records resource lets you manage [Cloudflare DNS records](https://developers.cloudflare.com/dns/) for a zone.
 
 # Minimal Example
 
-```ts
-import { DnsRecords } from "alchemy/cloudflare";
-
-const dnsRecords = await DnsRecords("example.com-dns", {
-  zoneId: "your-zone-id",
-  records: [
-    {
-      name: "www.example.com",
-      type: "A",
-      content: "192.0.2.1",
-      proxied: true
-    }
-  ]
-});
-```
-
-# Create the Dns
+Create basic A and CNAME records for a domain.
 
 ```ts
 import { DnsRecords } from "alchemy/cloudflare";
 
-const dnsRecords = await DnsRecords("example.com-dns", {
-  zoneId: "your-zone-id",
+const records = await DnsRecords("example.com-dns", {
+  zoneId: "example.com", 
   records: [
     {
       name: "www.example.com",
@@ -35,7 +19,7 @@ const dnsRecords = await DnsRecords("example.com-dns", {
       proxied: true
     },
     {
-      name: "blog.example.com",
+      name: "blog.example.com", 
       type: "CNAME",
       content: "www.example.com",
       proxied: true
@@ -44,28 +28,53 @@ const dnsRecords = await DnsRecords("example.com-dns", {
 });
 ```
 
-# Bind to a Worker
+# Create Email Records
+
+Create MX and TXT records for email routing.
 
 ```ts
-import { Worker, DnsRecords } from "alchemy/cloudflare";
+import { DnsRecords } from "alchemy/cloudflare";
 
-const myDnsRecords = await DnsRecords("example.com-dns", {
-  zoneId: "your-zone-id",
+const emailRecords = await DnsRecords("example.com-email", {
+  zoneId: "example.com",
   records: [
     {
-      name: "api.example.com",
-      type: "A",
-      content: "192.0.2.2",
-      proxied: true
+      name: "example.com",
+      type: "MX", 
+      content: "aspmx.l.google.com",
+      priority: 1
+    },
+    {
+      name: "example.com",
+      type: "TXT",
+      content: "v=spf1 include:_spf.google.com ~all"
     }
   ]
 });
+```
 
-await Worker("my-worker", {
-  name: "my-worker",
-  script: "console.log('Hello, world!')",
-  bindings: {
-    myDnsRecords,
-  },
+# Create Service Records
+
+Create SRV records for service discovery.
+
+```ts
+import { DnsRecords } from "alchemy/cloudflare";
+
+const serviceRecords = await DnsRecords("example.com-services", {
+  zoneId: "example.com",
+  records: [
+    {
+      name: "_sip._tcp.example.com",
+      type: "SRV",
+      content: "1 10 5060 sip1.example.com",
+      priority: 10
+    },
+    {
+      name: "_sip._tcp.example.com", 
+      type: "SRV",
+      content: "1 20 5060 sip2.example.com",
+      priority: 20
+    }
+  ]
 });
 ```

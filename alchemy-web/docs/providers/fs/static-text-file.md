@@ -1,21 +1,26 @@
 # Static Text File
 
-The Static Text File resource allows you to create and manage plain text files within your application using Alchemy IaC. This resource is part of the Alchemy file system service, which provides various utilities for file management. For more information, visit the [Alchemy website](https://alchemy.com).
+The Static Text File resource creates and manages plain text files in the filesystem using [Node.js File System](https://nodejs.org/api/fs.html).
 
 # Minimal Example
 
+Creates a basic text file with content.
+
 ```ts
 import { StaticTextFile } from "alchemy/fs";
 
-// Create a simple text file with content
 const readme = await StaticTextFile("README.md", "# Project Name\n\nProject description goes here.");
 ```
 
-# Create the Static Text File
+# Create with Custom Path
+
+Creates a text file at a specific path location.
 
 ```ts
 import { StaticTextFile } from "alchemy/fs";
 
-// Create a text file with a specified path and content
-const notes = await StaticTextFile("notes.txt", "These are some important notes.");
+const doc = await StaticTextFile("docs/guide.md", 
+  "docs/getting-started.md",
+  "# Getting Started\n\nFollow these steps to get started..."
+);
 ```

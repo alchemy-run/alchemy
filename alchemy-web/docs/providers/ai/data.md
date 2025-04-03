@@ -1,44 +1,54 @@
 # Data
 
-The Data component allows you to generate structured content using AI models, validated against a specified schema. This resource is part of the Alchemy AI service, which leverages AI to automate content generation tasks. For more information, visit the [Alchemy AI documentation](https://alchemy.com/ai).
+The Data resource lets you generate structured content using [AI models](https://platform.openai.com/docs/api-reference) with schema validation.
 
 # Minimal Example
 
+Generate structured data using an ArkType schema:
+
 ```ts
 import { Data } from "alchemy/ai";
+import { type } from "arktype";
 
-const productSchema = type({
+const schema = type({
   name: "string",
   description: "string",
-  price: "number"
+  features: "string[]"
 });
 
-const productData = await Data("product-info", {
-  schema: productSchema,
-  prompt: "Generate a product description for a new smartphone",
-  system: "You are a product copywriter specializing in tech products"
+const product = await Data("product", {
+  schema,
+  prompt: "Generate a product description for a smartphone"
 });
+
+console.log(product.object); // Typed as per schema
 ```
 
-# Create the Data
+# Generate with Context
+
+Use alchemy template literals to include file context:
 
 ```ts
 import { Data } from "alchemy/ai";
+import { type } from "arktype";
 
-const userSchema = type({
-  id: "string",
-  name: "string",
-  email: "string",
-  role: "'admin' | 'user' | 'guest'",
-  active: "boolean"
+const docSchema = type({
+  summary: "string", 
+  parameters: [{
+    name: "string",
+    type: "string",
+    description: "string"
+  }],
+  returns: "string"
 });
 
-const userData = await Data("user-data", {
-  schema: userSchema,
-  prompt: "Generate sample user data for an application with various roles and permissions",
-  system: "You are a data generator for user profiles",
+const docs = await Data("function-docs", {
+  schema: docSchema,
+  prompt: await alchemy`
+    Generate documentation for this function:
+    ${alchemy.file("src/utils/format.ts")}
+  `,
+  system: "You are a technical documentation writer",
   temperature: 0.2
 });
-
-console.log(userData.object); // Access the generated data
 ```

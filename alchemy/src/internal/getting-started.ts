@@ -17,6 +17,10 @@ export async function GettingStarted({
   return Document(`docs/getting-started`, {
     title: "Getting Started with Alchemy",
     path: typeof outFile === "string" ? outFile : outFile.path,
+    model: {
+      id: "claude-3-5-sonnet-latest",
+      provider: "anthropic",
+    },
     prompt: await alchemy`
       You are a technical writer creating a getting started guide for Alchemy, an infrastructure as code (IaC) framework.
       See ${alchemy.file("./README.md")} to understand the overview of Alchemy.

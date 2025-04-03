@@ -5,7 +5,7 @@ import type { Context } from "../context";
 import { Resource } from "../resource";
 import type { Secret } from "../secret";
 import { ignore } from "../util/ignore";
-import { type ModelConfig, createModel } from "./client";
+import { type ModelConfig, createModel, withRateLimitRetry } from "./client";
 
 /**
  * Properties for creating or updating a Document
@@ -64,6 +64,13 @@ export interface DocumentProps {
    * @default 0.7
    */
   temperature?: number;
+
+  /**
+   * Maximum number of tokens to generate.
+   * Higher values allow for longer documents but may increase cost and generation time.
+   * @default 10000
+   */
+  maxTokens?: number;
 }
 
 /**
@@ -169,17 +176,19 @@ export const Document = Resource(
     // Use provided system prompt or default
     const system = props.system || DEFAULT_MD_SYSTEM_PROMPT;
 
-    // Generate initial content
-    const { text } = await generateText({
-      model: createModel(props),
-      prompt: props.prompt,
-      system,
-      maxTokens: 10000,
-      providerOptions: props.model?.options,
-      ...(props.temperature === undefined
-        ? {}
-        : // some models error if you provide it (rather than ignoring it)
-          { temperature: props.temperature }),
+    // Generate initial content with rate limit retry
+    const { text } = await withRateLimitRetry(async () => {
+      return generateText({
+        model: createModel(props),
+        prompt: props.prompt,
+        system,
+        maxTokens: props.maxTokens || 8192,
+        providerOptions: props.model?.options,
+        ...(props.temperature === undefined
+          ? {}
+          : // some models error if you provide it (rather than ignoring it)
+            { temperature: props.temperature }),
+      });
     });
 
     // Extract and validate markdown content
@@ -189,14 +198,16 @@ export const Document = Resource(
     if (error) {
       const errorSystem = `${system}\n\nERROR: ${error}\n\nPlease try again and ensure your response contains exactly one markdown document inside \`\`\`md fences.`;
 
-      const { text: retryText } = await generateText({
-        model: createModel(props),
-        prompt: props.prompt,
-        system: errorSystem,
-        providerOptions: props.model?.options,
-        ...(props.temperature === undefined
-          ? {}
-          : { temperature: props.temperature }),
+      const { text: retryText } = await withRateLimitRetry(async () => {
+        return generateText({
+          model: createModel(props),
+          prompt: props.prompt,
+          system: errorSystem,
+          providerOptions: props.model?.options,
+          ...(props.temperature === undefined
+            ? {}
+            : { temperature: props.temperature }),
+        });
       });
 
       const retryResult = extractMarkdownContent(retryText);

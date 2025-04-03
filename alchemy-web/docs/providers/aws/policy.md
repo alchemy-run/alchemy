@@ -1,14 +1,16 @@
 # Policy
 
-The Policy component allows you to create and manage [AWS IAM Policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) that define permissions for AWS services and resources. It supports automatic versioning and updates when policy content changes.
+The Policy Resource creates and manages [AWS IAM Policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) that define permissions for AWS services and resources.
 
 # Minimal Example
+
+Create a basic IAM policy that allows S3 bucket access.
 
 ```ts
 import { Policy } from "alchemy/aws";
 
-const s3Policy = await Policy("bucket-access", {
-  policyName: "s3-bucket-access",
+const policy = await Policy("bucket-access", {
+  policyName: "s3-bucket-access", 
   document: {
     Version: "2012-10-17",
     Statement: [{
@@ -17,42 +19,41 @@ const s3Policy = await Policy("bucket-access", {
         "s3:GetObject",
         "s3:PutObject"
       ],
-      Resource: "arn:aws:s3:::my-bucket/*"
+      Resource: `${bucket.arn}/*`
     }]
   }
 });
 ```
 
-# Create the Policy
+# Create a Policy with Multiple Statements
 
 ```ts
 import { Policy } from "alchemy/aws";
 
-// Create a policy with multiple statements and conditions
-const apiPolicy = await Policy("api-access", {
+const policy = await Policy("api-access", {
   policyName: "api-gateway-access",
   document: {
-    Version: "2012-10-17",
+    Version: "2012-10-17", 
     Statement: [
       {
         Sid: "InvokeAPI",
         Effect: "Allow",
         Action: "execute-api:Invoke",
-        Resource: "arn:aws:execute-api:region:account-id:api-id/stage/METHOD/resource-path",
+        Resource: `${api.executionArn}/*`,
         Condition: {
           StringEquals: {
-            "aws:SourceVpc": "vpc-id"
+            "aws:SourceVpc": vpc.id
           }
         }
       },
       {
         Sid: "ReadLogs",
-        Effect: "Allow",
+        Effect: "Allow", 
         Action: [
           "logs:GetLogEvents",
           "logs:FilterLogEvents"
         ],
-        Resource: "arn:aws:logs:region:account-id:log-group:log-group-name:*"
+        Resource: `${api.logGroupArn}:*`
       }
     ]
   },
@@ -60,6 +61,29 @@ const apiPolicy = await Policy("api-access", {
   tags: {
     Service: "API Gateway",
     Environment: "production"
+  }
+});
+```
+
+# Create a Deny Policy
+
+```ts
+import { Policy } from "alchemy/aws";
+
+const policy = await Policy("deny-production", {
+  policyName: "deny-production-access",
+  document: {
+    Version: "2012-10-17",
+    Statement: [{
+      Effect: "Deny",
+      Action: "*", 
+      Resource: "*",
+      Condition: {
+        StringEquals: {
+          "aws:ResourceTag/Environment": "production"
+        }
+      }
+    }]
   }
 });
 ```

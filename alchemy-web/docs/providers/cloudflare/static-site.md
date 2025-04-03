@@ -1,54 +1,60 @@
 # Static Site
 
-The Static Site component allows you to deploy static web content to [Cloudflare Workers](https://developers.cloudflare.com/workers/), using KV for asset storage. It provides an efficient way to serve static websites with global distribution and caching.
+The Static Site resource lets you deploy static websites to [Cloudflare Workers](https://developers.cloudflare.com/workers/platform/sites/), using KV for asset storage and global distribution.
 
 # Minimal Example
 
+Deploy a basic static site with default settings:
+
 ```ts
 import { StaticSite } from "alchemy/cloudflare";
 
 const site = await StaticSite("my-site", {
   name: "my-site",
-  dir: "./dist",
+  dir: "./dist"
 });
 ```
 
-# Create the Static Site
+# Create with Custom Settings
 
 ```ts
 import { StaticSite } from "alchemy/cloudflare";
 
-const site = await StaticSite("my-site", {
-  name: "my-site",
-  dir: "./dist",
+const site = await StaticSite("custom-site", {
+  name: "custom-site", 
+  dir: "./www",
+  errorPage: "404.html",
+  indexPage: "home.html",
+  domain: "www.example.com",
   build: {
-    command: "npm run build",
+    command: "npm run build"
   },
   assets: {
     fileOptions: [
       {
-        files: "**/*.js",
-        cacheControl: "max-age=31536000,public,immutable",
-      },
-    ],
-  },
-  domain: "www.example.com",
+        files: ["**/*.js", "**/*.css"],
+        cacheControl: "max-age=31536000,immutable"
+      }
+    ]
+  }
 });
 ```
 
-# Bind to a Worker
+# Add API Routes
 
 ```ts
-import { Worker, StaticSite } from "alchemy/cloudflare";
+import { StaticSite, Worker } from "alchemy/cloudflare";
 
-const mySite = await StaticSite("my-site", {
-  name: "my-site",
+const api = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts"
+});
+
+const site = await StaticSite("full-site", {
+  name: "full-site",
   dir: "./dist",
   routes: {
-    "/api/*": await Worker("api-worker", {
-      name: "api-worker",
-      script: "console.log('Hello, API!')",
-    }),
-  },
+    "/api/*": api
+  }
 });
 ```

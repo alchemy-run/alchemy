@@ -1,56 +1,50 @@
-# Function
+# AWS Lambda Function
 
-The Function component allows you to create and manage [AWS Lambda Functions](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) with support for Node.js runtimes, custom handlers, environment variables, and function URLs.
+The Function resource lets you create and manage [AWS Lambda functions](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) for serverless compute.
 
 # Minimal Example
 
+Creates a basic Lambda function with default settings.
+
 ```ts
 import { Function } from "alchemy/aws";
 
-const basicFunction = await Function("api-handler", {
+const func = await Function("api", {
   functionName: "api-handler",
-  zipPath: "./dist/api.zip",
-  roleArn: "arn:aws:iam::123456789012:role/execution_role",
+  zipPath: "./dist/api.zip", 
+  roleArn: role.arn,
+  handler: "index.handler"
 });
 ```
 
-# Create the Function
+# Create Function with Environment Variables
 
 ```ts
 import { Function } from "alchemy/aws";
 
-// Create a basic Lambda function with minimal configuration
-const basicFunction = await Function("api-handler", {
-  functionName: "api-handler",
-  zipPath: "./dist/api.zip",
-  roleArn: "arn:aws:iam::123456789012:role/execution_role",
-  runtime: "nodejs20.x",
-  handler: "index.handler",
-  tags: {
-    Environment: "production"
-  }
-});
-
-// Create a function with environment variables and custom memory/timeout
-const configuredFunction = await Function("worker", {
+const func = await Function("worker", {
   functionName: "worker",
   zipPath: "./dist/worker.zip",
-  roleArn: "arn:aws:iam::123456789012:role/execution_role",
-  runtime: "nodejs20.x",
+  roleArn: role.arn,
   handler: "worker.process",
   memorySize: 512,
   timeout: 30,
   environment: {
-    QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/123456789012/my-queue",
+    QUEUE_URL: queue.url,
     LOG_LEVEL: "info"
   }
 });
+```
 
-// Create a function with a public URL endpoint and CORS
-const apiFunction = await Function("public-api", {
-  functionName: "public-api",
+# Create Function with URL Endpoint
+
+```ts
+import { Function } from "alchemy/aws";
+
+const api = await Function("public-api", {
+  functionName: "public-api", 
   zipPath: "./dist/api.zip",
-  roleArn: "arn:aws:iam::123456789012:role/execution_role",
+  roleArn: role.arn,
   handler: "api.handler",
   url: {
     authType: "NONE",

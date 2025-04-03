@@ -1,16 +1,32 @@
-# Table
+# DynamoDB Table
 
-The Table component allows you to create and manage [Amazon DynamoDB](https://aws.amazon.com/dynamodb/) tables with support for partition and sort keys, flexible billing modes, and automatic table status monitoring.
+The DynamoDB Table resource lets you create and manage [Amazon DynamoDB tables](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html) for NoSQL database storage.
 
 # Minimal Example
+
+Create a basic table with just a partition key:
 
 ```ts
 import { Table } from "alchemy/aws";
 
-const table = await Table("user-events", {
-  tableName: "user-events",
+const table = await Table("users", {
+  tableName: "users",
   partitionKey: {
-    name: "id",
+    name: "userId", 
+    type: "S"
+  }
+});
+```
+
+# Create a Table with Sort Key
+
+```ts
+import { Table } from "alchemy/aws";
+
+const table = await Table("events", {
+  tableName: "events",
+  partitionKey: {
+    name: "deviceId",
     type: "S"
   },
   sortKey: {
@@ -18,17 +34,16 @@ const table = await Table("user-events", {
     type: "N"
   },
   tags: {
-    Environment: "test"
+    Environment: "production"
   }
 });
 ```
 
-# Create the Table
+# Create a Table with Provisioned Capacity
 
 ```ts
 import { Table } from "alchemy/aws";
 
-// Create a table with provisioned capacity
 const table = await Table("high-throughput", {
   tableName: "high-throughput",
   partitionKey: {

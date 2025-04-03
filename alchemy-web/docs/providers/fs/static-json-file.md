@@ -1,36 +1,38 @@
-# Static Json File
+# Static JSON File
 
-The Static Json File resource allows you to create a JSON file with formatted content using [Alchemy](https://alchemy.com). This resource is useful for generating configuration files or storing structured data in a JSON format.
+The Static JSON File resource creates and manages JSON files with automatic formatting using [Prettier](https://prettier.io/).
 
 # Minimal Example
 
+Creates a basic JSON file with formatted content.
+
 ```ts
 import { StaticJsonFile } from "alchemy/fs";
 
-// Create a simple JSON file
 const config = await StaticJsonFile("config.json", {
-  api: {
-    endpoint: "https://api.example.com",
-    version: "v1"
-  },
-  features: ["auth", "logging"]
+  name: "my-app",
+  version: "1.0.0"
 });
 ```
 
-# Create the Static Json File
+# Create Complex JSON File
 
 ```ts
 import { StaticJsonFile } from "alchemy/fs";
 
-// Create a JSON configuration file with nested objects and arrays
-const settings = await StaticJsonFile("settings.json", {
-  user: {
-    name: "John Doe",
-    roles: ["admin", "editor"]
+const config = await StaticJsonFile("config.json", {
+  api: {
+    endpoint: "https://api.example.com",
+    version: "v1",
+    features: ["auth", "logging"]
   },
-  preferences: {
-    theme: "dark",
-    notifications: true
+  database: {
+    host: "localhost",
+    port: 5432,
+    credentials: {
+      username: "admin",
+      password: "secret"
+    }
   }
 });
 ```

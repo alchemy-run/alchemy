@@ -143,7 +143,8 @@ if (process.argv.includes("--vitepress")) {
     hero: {
       name: "Alchemy",
       text: "Agentic Infrastructure as Code 🪄",
-      tagline: "Building the assembly-line for self-generating software",
+      tagline:
+        "Building the Assembly Line for self-generated software and services",
       image: {
         src: "/alchemist.webp",
         alt: "The Alchemist",

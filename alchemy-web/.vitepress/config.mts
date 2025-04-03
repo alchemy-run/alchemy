@@ -34,7 +34,6 @@ export default defineConfig({
               { text: "Data", link: "/docs/providers/ai/data.md" },
               { text: "Document", link: "/docs/providers/ai/document.md" },
               { text: "HTML File", link: "/docs/providers/ai/html-file.md" },
-              { text: "JSON File", link: "/docs/providers/ai/json-file.md" },
               {
                 text: "TypeScript File",
                 link: "/docs/providers/ai/typescript-file.md",
@@ -64,31 +63,28 @@ export default defineConfig({
             text: "cloudflare",
             collapsed: true,
             items: [
-              { text: "Bound", link: "/docs/providers/cloudflare/bound.md" },
-              { text: "Bucket", link: "/docs/providers/cloudflare/bucket.md" },
-              { text: "Dns", link: "/docs/providers/cloudflare/dns.md" },
               {
-                text: "Durable Object Namespace",
-                link: "/docs/providers/cloudflare/durable-object-namespace.md",
+                text: "Dns Records",
+                link: "/docs/providers/cloudflare/dns.md",
               },
               {
-                text: "Kv Namespace",
+                text: "KV Namespace",
                 link: "/docs/providers/cloudflare/kv-namespace.md",
               },
               {
-                text: "R2 Rest State Store",
-                link: "/docs/providers/cloudflare/r2-rest-state-store.md",
+                text: "R2 Bucket",
+                link: "/docs/providers/cloudflare/bucket.md",
               },
               {
                 text: "Static Site",
                 link: "/docs/providers/cloudflare/static-site.md",
               },
               { text: "Worker", link: "/docs/providers/cloudflare/worker.md" },
-              { text: "Zone", link: "/docs/providers/cloudflare/zone.md" },
               {
-                text: "Zone Settings",
-                link: "/docs/providers/cloudflare/zone-settings.md",
+                text: "Wrangler Json",
+                link: "/docs/providers/cloudflare/wrangler.json.md",
               },
+              { text: "Zone", link: "/docs/providers/cloudflare/zone.md" },
             ],
           },
           {
@@ -116,7 +112,7 @@ export default defineConfig({
               { text: "File", link: "/docs/providers/fs/file.md" },
               { text: "Folder", link: "/docs/providers/fs/folder.md" },
               {
-                text: "Static Json File",
+                text: "Static JSON File",
                 link: "/docs/providers/fs/static-json-file.md",
               },
               {
@@ -124,11 +120,11 @@ export default defineConfig({
                 link: "/docs/providers/fs/static-text-file.md",
               },
               {
-                text: "Static Type Script File",
+                text: "Static TypeScript File",
                 link: "/docs/providers/fs/static-typescript-file.md",
               },
               {
-                text: "Static Yaml File",
+                text: "Static YAML File",
                 link: "/docs/providers/fs/static-yaml-file.md",
               },
             ],
@@ -150,7 +146,7 @@ export default defineConfig({
               { text: "Price", link: "/docs/providers/stripe/price.md" },
               { text: "Product", link: "/docs/providers/stripe/product.md" },
               {
-                text: "WebhookEndpoint",
+                text: "Webhook Endpoint",
                 link: "/docs/providers/stripe/webhook.md",
               },
             ],

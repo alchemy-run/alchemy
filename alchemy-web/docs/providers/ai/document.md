@@ -1,36 +1,59 @@
 # Document
 
-The Document resource allows you to create, update, and manage markdown documents using AI-generated content. It leverages AI models to generate structured markdown content based on a given prompt and system instructions. For more information, visit the [Alchemy Documentation](https://alchemy.example.com/docs).
+The Document resource lets you generate markdown documentation using AI models like [OpenAI GPT-4](https://openai.com/gpt-4) and [Anthropic Claude](https://www.anthropic.com/claude).
 
 # Minimal Example
+
+Creates a markdown document with AI-generated content.
+
+```ts
+import { Document } from "alchemy/ai";
+
+const docs = await Document("api-docs", {
+  title: "API Documentation",
+  path: "./docs/api.md",
+  prompt: "Generate API documentation for a REST API"
+});
+```
+
+# Create Documentation with Context
 
 ```ts
 import { Document } from "alchemy/ai";
 
 const apiDocs = await Document("api-docs", {
-  title: "API Documentation",
+  title: "API Documentation", 
   path: "./docs/api.md",
-  prompt: "Generate API documentation for the new endpoints.",
+  prompt: await alchemy`
+    Generate API documentation based on these source files:
+    ${alchemy.file("src/api.ts")}
+    ${alchemy.file("src/types.ts")}
+  `,
+  model: {
+    id: "gpt-4o",
+    provider: "openai"
+  }
 });
 ```
 
-# Create the Document
+# Advanced Configuration
 
 ```ts
 import { Document } from "alchemy/ai";
 
-const techSpecs = await Document("tech-specs", {
+const techDocs = await Document("tech-specs", {
   title: "Technical Specifications",
   path: "./docs/tech-specs.md",
-  prompt: "Create detailed technical specifications for the new system architecture.",
-  system: "You are an expert technical writer specializing in system specifications. Create a single markdown document inside ```md fences with no additional text.",
+  prompt: await alchemy`
+    Create detailed technical specifications based on:
+    ${alchemy.file("requirements/system.md")}
+  `,
+  system: "You are an expert technical writer specializing in system specifications.",
   model: {
-    id: "o3-mini",
-    provider: "openai",
-    options: {
-      reasoningEffort: "high"
-    }
+    id: "claude-3-opus-20240229", 
+    provider: "anthropic"
   },
-  temperature: 0.1
+  temperature: 0.1,
+  maxTokens: 10000
 });
 ```

@@ -1,45 +1,70 @@
 # Worker
 
-The Worker component allows you to deploy [Cloudflare Workers](https://developers.cloudflare.com/workers/) to the Cloudflare network, enabling serverless functions with global distribution and caching.
+The Worker resource lets you deploy [Cloudflare Workers](https://developers.cloudflare.com/workers/) - serverless JavaScript functions that run on Cloudflare's global network.
 
 # Minimal Example
 
+Create a basic HTTP handler worker:
+
 ```ts
 import { Worker } from "alchemy/cloudflare";
 
-const myWorker = await Worker("my-worker", {
-  name: "my-worker",
-  entrypoint: "./src/index.ts",
+const worker = await Worker("api", {
+  name: "api-worker", 
+  script: "addEventListener('fetch', event => event.respondWith(new Response('Hello!')))"
 });
 ```
 
-# Create the Worker
+# Create a Worker with Bindings
+
+```ts
+import { Worker, KVNamespace, DurableObjectNamespace } from "alchemy/cloudflare";
+
+const kv = await KVNamespace("data", {
+  title: "data-store"
+});
+
+const counter = new DurableObjectNamespace("counter", {
+  className: "Counter"
+});
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
+  bindings: {
+    DATA: kv,
+    COUNTER: counter
+  }
+});
+```
+
+# Create a Worker with Routes
 
 ```ts
 import { Worker } from "alchemy/cloudflare";
 
-const apiWorker = await Worker("api-worker", {
+const worker = await Worker("api", {
   name: "api-worker",
   entrypoint: "./src/api.ts",
   routes: ["api.example.com/*"],
-  url: true,
+  url: true // Enable workers.dev URL
 });
 ```
 
-# Bind to a Worker
+# Create a Worker with Environment Variables
 
 ```ts
-import { Worker, KVNamespace } from "alchemy/cloudflare";
+import { Worker } from "alchemy/cloudflare";
+import { secret } from "alchemy";
 
-const myKVNamespace = await KVNamespace("my-kv", {
-  title: "my-kv-namespace",
-});
-
-const myWorker = await Worker("my-worker", {
-  name: "my-worker",
-  entrypoint: "./src/index.ts",
-  bindings: {
-    MY_KV: myKVNamespace,
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
+  env: {
+    API_URL: "https://api.example.com"
   },
+  bindings: {
+    API_KEY: secret(process.env.API_KEY)
+  }
 });
 ```

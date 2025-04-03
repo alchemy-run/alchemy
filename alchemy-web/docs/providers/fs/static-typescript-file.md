@@ -1,13 +1,15 @@
 # Static TypeScript File
 
-The Static TypeScript File resource allows you to create a TypeScript file with formatted content using [Prettier](https://prettier.io/).
+The Static TypeScript File resource creates a TypeScript file with formatted content using [Prettier](https://prettier.io/).
 
 # Minimal Example
+
+Creates a basic TypeScript file with formatted content.
 
 ```ts
 import { StaticTypeScriptFile } from "alchemy/fs";
 
-const component = await StaticTypeScriptFile("Component.ts", `
+const file = await StaticTypeScriptFile("Component.ts", `
   interface Props {
     name: string;
     age: number;
@@ -19,35 +21,51 @@ const component = await StaticTypeScriptFile("Component.ts", `
 `);
 ```
 
-# Create the Static TypeScript File
+# Create a TypeScript Interface File
 
 ```ts
 import { StaticTypeScriptFile } from "alchemy/fs";
 
-// Create a TypeScript file with a simple function
-const utils = await StaticTypeScriptFile("utils.ts", `
-  export function add(a: number, b: number): number {
-    return a + b;
-  }
-`);
-
-// Create a TypeScript file with an interface and a class
-const model = await StaticTypeScriptFile("model.ts", `
-  interface User {
+const interfaces = await StaticTypeScriptFile("types.ts", `
+  export interface User {
     id: string;
     name: string;
+    email: string;
+    createdAt: Date;
   }
 
-  export class UserModel {
-    private users: User[] = [];
+  export interface Post {
+    id: string;
+    title: string;
+    content: string;
+    authorId: string;
+    publishedAt?: Date;
+  }
+`);
+```
 
-    addUser(user: User) {
-      this.users.push(user);
-    }
+# Create a React Component File
 
-    getUser(id: string): User | undefined {
-      return this.users.find(user => user.id === id);
-    }
+```ts
+import { StaticTypeScriptFile } from "alchemy/fs";
+
+const component = await StaticTypeScriptFile("UserProfile.tsx", `
+  import React from 'react';
+  import type { User } from './types';
+
+  interface Props {
+    user: User;
+    onUpdate: (user: User) => void;
+  }
+
+  export function UserProfile({ user, onUpdate }: Props) {
+    return (
+      <div className="profile">
+        <h1>{user.name}</h1>
+        <p>{user.email}</p>
+        <span>Member since {user.createdAt.toLocaleDateString()}</span>
+      </div>
+    );
   }
 `);
 ```

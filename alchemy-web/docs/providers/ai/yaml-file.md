@@ -1,58 +1,45 @@
 # YAML File
 
-The YAML File resource allows you to create and manage YAML files using AI models. It can generate YAML content based on a prompt and optionally validate it against a schema. For more information on YAML, visit [YAML's official website](https://yaml.org/).
+The YAML File resource lets you generate [YAML](https://yaml.org/) files using AI models. It supports schema validation and can extract YAML from code blocks.
 
 # Minimal Example
+
+Creates a simple YAML configuration file.
 
 ```ts
 import { YAMLFile } from "alchemy/ai";
 
-const serverlessConfig = await YAMLFile("serverless-config", {
-  path: "./serverless.yml",
-  prompt: "Generate a basic serverless configuration for AWS Lambda.",
+const config = await YAMLFile("config", {
+  path: "./config.yml",
+  prompt: "Generate a basic nginx configuration with server blocks for port 80"
 });
 ```
 
-# Create the YAML File
+# Create a YAML File with Schema Validation
 
 ```ts
 import { YAMLFile } from "alchemy/ai";
 import { type } from "arktype";
 
-const k8sConfigSchema = type({
-  apiVersion: "string",
-  kind: "string",
-  metadata: {
+const schema = type({
+  service: "string",
+  provider: "string",
+  functions: [{
     name: "string",
-    namespace: "string?",
-    labels: "Record<string, string>?"
-  },
-  spec: {
-    replicas: "number",
-    selector: {
-      matchLabels: "Record<string, string>"
-    },
-    template: {
-      metadata: {
-        labels: "Record<string, string>"
-      },
-      spec: {
-        containers: [{
-          name: "string",
-          image: "string",
-          ports: [{
-            containerPort: "number"
-          }]
-        }]
+    handler: "string",
+    events: [{
+      http: {
+        path: "string",
+        method: "string"
       }
-    }
-  }
+    }]
+  }]
 });
 
-const deployment = await YAMLFile("k8s-deployment", {
-  path: "./kubernetes/deployment.yaml",
-  schema: k8sConfigSchema,
-  prompt: "Generate a Kubernetes deployment for a web application named 'frontend' with 3 replicas using the nginx:latest image and exposing port 80",
+const serverless = await YAMLFile("serverless", {
+  path: "serverless.yml",
+  schema,
+  prompt: "Generate a serverless.yml for a basic API with GET and POST endpoints",
   temperature: 0.2
 });
 ```

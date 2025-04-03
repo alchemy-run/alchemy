@@ -56,3 +56,62 @@ export function createModel(config: ClientConfig) {
     return openai(config.model?.id ?? "gpt-4o");
   }
 }
+
+/**
+ * Maximum time to retry in milliseconds (5 minutes)
+ */
+const MAX_RETRY_TIME = 5 * 60 * 1000;
+
+/**
+ * Initial delay between retries in milliseconds
+ */
+const INITIAL_RETRY_DELAY = 1000;
+
+/**
+ * Maximum number of retries
+ */
+const MAX_RETRIES = 10;
+
+/**
+ * Handles rate limiting with exponential backoff
+ * @param fn Function to retry
+ * @returns Result of the function
+ * @throws Error if max retries or time is exceeded
+ */
+export async function withRateLimitRetry<T>(fn: () => Promise<T>): Promise<T> {
+  let retryCount = 0;
+  let lastError: Error | null = null;
+  let startTime = Date.now();
+
+  while (true) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+
+      console.log("retry error", error);
+
+      // Check if we should retry
+      const isRateLimit = error.statusCode === 429;
+      const timeElapsed = Date.now() - startTime;
+      const shouldRetry =
+        isRateLimit && retryCount < MAX_RETRIES && timeElapsed < MAX_RETRY_TIME;
+
+      if (!shouldRetry) {
+        throw error;
+      }
+
+      // Calculate delay with exponential backoff
+      const delay = Math.min(
+        INITIAL_RETRY_DELAY * Math.pow(2, retryCount),
+        MAX_RETRY_TIME - timeElapsed
+      );
+
+      console.log(`Retrying in ${delay}ms`);
+
+      // Wait before retrying
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      retryCount++;
+    }
+  }
+}

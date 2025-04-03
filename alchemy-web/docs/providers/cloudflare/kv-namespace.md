@@ -1,47 +1,50 @@
-# Kv Namespace
+# KV Namespace
 
-The Kv Namespace component allows you to create and manage [Cloudflare KV Namespaces](https://developers.cloudflare.com/kv/concepts/kv-namespaces/), which are key-value stores for your application.
+The KV Namespace resource lets you create and manage [Cloudflare Workers KV](https://developers.cloudflare.com/workers/runtime-apis/kv/) key-value storage namespaces.
 
-# Minimal Example
+## Minimal Example
+
+Create a basic KV namespace for storing data:
 
 ```ts
-import { KvNamespace } from "alchemy/cloudflare";
+import { KVNamespace } from "alchemy/cloudflare";
 
-const myNamespace = await KvNamespace("my-namespace", {
-  title: "example-namespace"
+const kv = await KVNamespace("my-namespace", {
+  title: "my-namespace"
 });
 ```
 
-# Create the Kv Namespace
+## Create with Initial Values
 
 ```ts
-import { KvNamespace } from "alchemy/cloudflare";
+import { KVNamespace } from "alchemy/cloudflare";
 
-const myNamespace = await KvNamespace("my-namespace", {
-  title: "example-namespace",
+const kv = await KVNamespace("sessions", {
+  title: "user-sessions",
   values: [
     {
-      key: "exampleKey",
-      value: "exampleValue"
+      key: "session_123",
+      value: { userId: "user_456", role: "admin" },
+      expirationTtl: 3600 // Expires in 1 hour
     }
   ]
 });
 ```
 
-# Bind to a Worker
+## Bind to a Worker
 
 ```ts
-import { Worker, KvNamespace } from "alchemy/cloudflare";
+import { Worker, KVNamespace } from "alchemy/cloudflare";
 
-const myNamespace = await KvNamespace("my-namespace", {
-  title: "example-namespace"
+const kv = await KVNamespace("cache", {
+  title: "cache-store"
 });
 
 await Worker("my-worker", {
   name: "my-worker",
   script: "console.log('Hello, world!')",
   bindings: {
-    myNamespace,
-  },
+    CACHE: kv
+  }
 });
 ```

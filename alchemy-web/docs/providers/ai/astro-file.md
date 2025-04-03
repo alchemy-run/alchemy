@@ -1,15 +1,17 @@
 # Astro File
 
-The AstroFile component allows you to generate and manage [Astro](https://astro.build/) files using AI models. It supports creating, updating, and deleting Astro files with content generated based on specified prompts.
+The AstroFile resource lets you generate [Astro](https://astro.build) components and pages using AI models.
 
 # Minimal Example
+
+Creates a basic Astro component with AI-generated content.
 
 ```ts
 import { AstroFile } from "alchemy/ai";
 
 const header = await AstroFile("header", {
   path: "./src/components/Header.astro",
-  prompt: "Generate a simple header component with a logo and navigation links.",
+  prompt: "Generate a simple header component with a logo and navigation menu"
 });
 ```
 
@@ -24,12 +26,17 @@ const blogPost = await AstroFile("blog-post", {
     Create an Astro blog post page that:
     - Uses getStaticPaths to generate pages from a CMS
     - Renders markdown content
-    - Includes author info, publication date, and related posts
+    - Includes author info and publication date
     - Has social sharing buttons
+
+    Use the following types:
+    ${alchemy.file("src/types/Blog.ts")}
   `,
-  model: {
-    id: "gpt-4o",
-    provider: "openai"
+  temperature: 0.2,
+  prettierConfig: {
+    semi: false,
+    singleQuote: true,
+    printWidth: 120
   }
 });
 ```

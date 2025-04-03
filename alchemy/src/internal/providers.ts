@@ -84,11 +84,11 @@ export async function AlchemyProviderDocs({
         object: { groups },
       } = await Data(`docs/${providerName}`, {
         model: {
-          id: "gpt-4o",
+          id: "o3-mini",
           provider: "openai",
-          // options: {
-          //   reasoningEffort: "high",
-          // },
+          options: {
+            reasoningEffort: "high",
+          },
         },
         temperature: 0.1,
         schema: type({
@@ -134,7 +134,7 @@ export async function AlchemyProviderDocs({
       const providerDocsDir = (await Folder(path.join(outDir, providerName)))
         .path;
 
-      const documents = await Promise.all(
+      const documents = await Promise.allSettled(
         groups
           .filter((g) => g.category === "Resource")
           .map(async (g) =>
@@ -144,6 +144,13 @@ export async function AlchemyProviderDocs({
                 providerDocsDir,
                 `${g.filename.replace(".ts", "").replace(".md", "")}.md`
               ),
+              model: {
+                id: "claude-3-5-sonnet-latest",
+                provider: "anthropic",
+                // options: {
+                //   reasoningEffort: "high",
+                // },
+              },
               prompt: await alchemy`
                 You are a technical writer writing API documentation for an Alchemy IaC Resource.
                 See ${alchemy.file("./README.md")} to understand the overview of Alchemy.
@@ -169,6 +176,8 @@ export async function AlchemyProviderDocs({
                 The Efs component lets you add [Amazon Elastic File System (EFS)](https://docs.aws.amazon.com/efs/latest/ug/whatisefs.html) to your app.
 
                 # Minimal Example
+
+                (brief 1-2 sentences of what it does)
 
                 \`\`\`ts
                 import { ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
@@ -212,10 +221,20 @@ export async function AlchemyProviderDocs({
           )
       );
 
+      // Unwrap all documents, fail if any rejected
+      const results = await Promise.all(
+        documents.map((r) => {
+          if (r.status === "rejected") {
+            throw r.reason;
+          }
+          return r.value;
+        })
+      );
+
       return {
         dir: providerDocsDir,
         provider: providerName,
-        documents,
+        documents: results,
       } as const;
     })
   );
