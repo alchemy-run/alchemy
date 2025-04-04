@@ -118,11 +118,6 @@ await DnsRecords("transfer-dns-records", {
   ),
 });
 
-console.log({
-  bucketName: stateStore.name,
-  nameservers: zone.nameservers,
-});
-
 if (process.argv.includes("--vitepress")) {
   const vitepress = await VitepressProject("vitepress", {
     name: "alchemy-web",
@@ -145,7 +140,7 @@ if (process.argv.includes("--vitepress")) {
       name: "Alchemy",
       text: "Create Update Delete",
       tagline:
-        "Agentic Infrastructure-as-Code workflows that run in any JS environments",
+        "Agentic Infrastructure-as-Code workflows in pure async TypeScript that runs anywhere",
       // "A minimal, embeddable, JS-native Infrastructure-as-Code library optimized for Gen-AI",
       // "Building the Assembly Line for self-generated software and services",
       image: {
@@ -185,7 +180,7 @@ if (process.argv.includes("--vitepress")) {
           : false,
   });
 
-  await GettingStarted({
+  const gettingStarted = await GettingStarted({
     path: path.join(docs.path, "getting-started.md"),
     prompt: await alchemy`
       1. bun add alchemy - make sure to take this opportunity to explain how there is nothing special alchemy.run.ts and you can run alchemy code anywhere (it's just a script)
@@ -214,73 +209,88 @@ if (process.argv.includes("--vitepress")) {
 
   const rules = `Always use bun as the package manager and to run scripts.`;
 
-  // Tutorial 1: Deploying a Cloudflare Worker and Static Site
-  await Tutorial("deploy-cloudflare-worker-and-static-site", {
-    path: path.join(
-      tutorials.path,
-      "deploy-cloudflare-worker-and-static-site.md"
-    ),
-    title: "Deploying a Cloudflare Worker and Static Site",
-    difficulty: "beginner",
-    estimatedTime: 5,
-    prompt: await alchemy`
-      Create a comprehensive tutorial on how to deploy a Cloudflare Worker and Static Site using Alchemy.
-      
-      The tutorial should cover:
-      1. Setting up a new project with Alchemy
-      2. Creating a Cloudflare Worker
-      3. Creating a Static Site
-      4. Connecting the Worker to the Static Site
-      5. Deploying both resources
-      
-      Include code examples and explanations for each step.
-      
-      Reference these files for implementation details:
-      - ${alchemy.file("./alchemy/src/cloudflare/worker.ts")} - For Worker implementation
-      - ${alchemy.file("./alchemy/src/cloudflare/static-site.ts")} - For Static Site implementation
-      - ${alchemy.file("./alchemy/test/cloudflare/worker.test.ts")} - For testing examples
-      - ${alchemy.file("./alchemy/test/cloudflare/static-site.test.ts")} - For testing examples
-      
-      Make sure to explain how to set up the necessary environment variables and configuration.
+  if (process.argv.includes("--tutorials")) {
+    // Tutorial 1: Deploying a Cloudflare Worker and Static Site
 
-      ${rules}
+    await Tutorial("cloudflare-worker", {
+      path: path.join(
+        tutorials.path,
+        "deploy-cloudflare-worker-and-static-site.md"
+      ),
+      title: "Deploying a Cloudflare Worker and Static Site",
+      difficulty: "beginner",
+      estimatedTime: 5,
+      prompt: await alchemy`
+        Create a comprehensive tutorial on how to deploy a Cloudflare Worker and Static Site using Alchemy.
+  
+        The tutorial should cover:
+        1. Refer the reader to Getting Started to set up a project.
+        2. Iniitalize a vite project with bun create vite
+          bun create vite my-alchemy-app --template react-ts
+        3. Create a StaticSite and configure it to build the vite project and deploy to cloudflare
+        4. console.log({ url: staticSite.url }) 
+        5. Prompt them to run \`bun ./alchemy.run\` and explain the output (provide snippet of example)
+        6. Now move on to designing an API by creating src/api.ts and initialize a hono app that serves data out of env.DB.get()
+        7. Create a KV Namespace
+        8. Create a Worker and bind the KV namespace
+        9. Introduce env.d.ts and show how to infer the binding types by import type { apiWorker }
+        10. Update the App.tsx to fetch data from the API
+        11. Prompt them to run \`bun ./alchemy.run\` again.
+        12. Show the output of the worker and static site
+  
+        Include code examples and explanations for each step.
+  
+        Reference these files for implementation details:
+        - ${alchemy.file(gettingStarted.path!)}
+        - ${alchemy.file("./alchemy/src/cloudflare/worker.ts")} 
+        - ${alchemy.file("./alchemy/src/cloudflare/static-site.ts")} 
+        - ${alchemy.file("./alchemy/test/cloudflare/worker.test.ts")} 
+        - ${alchemy.file("./alchemy/test/cloudflare/static-site.test.ts")} 
+        - ${alchemy.file("./alchemy/src/cloudflare/kv-namespace.ts")} 
+        - ${alchemy.file("./alchemy/test/cloudflare/kv-namespace.test.ts")}
+        - ${alchemy.file("./examples/cloudflare-vite/src/env.d.ts")}
+  
+        Make sure to explain how to set up the necessary environment variables and configuration.
+  
+        ${rules}
+  
+        See ${alchemy.file("./examples/cloudflare-vite/alchemy.run.ts")} to understand how alchemy.run.ts is used to deploy the worker and static site.
+      `,
+    });
 
-      See ${alchemy.file("./examples/cloudflare-vite/alchemy.run.ts")} to understand how alchemy.run.ts is used to deploy the worker and static site.
-    `,
-  });
+    // Tutorial 2: Bundling and Deploying an AWS Lambda Function
+    // await Tutorial("aws-lambda-function", {
+    //   path: path.join(tutorials.path, "deploy-aws-lambda-function.md"),
+    //   title: "Bundling and Deploying an AWS Lambda Function",
+    //   difficulty: "beginner",
+    //   estimatedTime: 5,
+    //   prompt: await alchemy`
+    //     Create a comprehensive tutorial on how to bundle and deploy an AWS Lambda Function using Alchemy.
 
-  // Tutorial 2: Bundling and Deploying an AWS Lambda Function
-  await Tutorial("deploy-aws-lambda-function", {
-    path: path.join(tutorials.path, "deploy-aws-lambda-function.md"),
-    title: "Bundling and Deploying an AWS Lambda Function",
-    difficulty: "beginner",
-    estimatedTime: 5,
-    prompt: await alchemy`
-      Create a comprehensive tutorial on how to bundle and deploy an AWS Lambda Function using Alchemy.
-      
-      The tutorial should cover:
-      1. Setting up a new project with Alchemy
-      2. Creating an AWS Lambda Function
-      3. Bundling the function code
-      4. Setting up IAM roles and permissions
-      5. Deploying the function
-      6. Testing the function
-      
-      Include code examples and explanations for each step.
-      
-      Reference these files for implementation details:
-      - ${alchemy.file("./alchemy/src/aws/function.ts")} - For Lambda implementation
-      - ${alchemy.file("./alchemy/src/aws/role.ts")} - For IAM role implementation
-      - ${alchemy.file("./alchemy/test/aws/function.test.ts")} - For testing examples
-      
-      Make sure to explain how to set up the necessary environment variables and configuration.
-      Include information about different runtime environments and how to bundle dependencies.
+    //     The tutorial should cover:
+    //     1. Setting up a new project with Alchemy
+    //     2. Creating an AWS Lambda Function
+    //     3. Bundling the function code
+    //     4. Setting up IAM roles and permissions
+    //     5. Deploying the function
+    //     6. Testing the function
 
-      ${rules}
+    //     Include code examples and explanations for each step.
 
-      See ${alchemy.file("./examples/aws-app/alchemy.run.ts")} to understand how alchemy.run.ts is used to deploy the lambda function.
-    `,
-  });
+    //     Reference these files for implementation details:
+    //     - ${alchemy.file("./alchemy/src/aws/function.ts")} - For Lambda implementation
+    //     - ${alchemy.file("./alchemy/src/aws/role.ts")} - For IAM role implementation
+    //     - ${alchemy.file("./alchemy/test/aws/function.test.ts")} - For testing examples
+
+    //     Make sure to explain how to set up the necessary environment variables and configuration.
+    //     Include information about different runtime environments and how to bundle dependencies.
+
+    //     ${rules}
+
+    //     See ${alchemy.file("./examples/aws-app/alchemy.run.ts")} to understand how alchemy.run.ts is used to deploy the lambda function.
+    //   `,
+    // });
+  }
 
   await VitePressConfig({
     cwd: vitepress.dir,
@@ -349,3 +359,8 @@ if (process.argv.includes("--vitepress")) {
 }
 
 await app.finalize();
+
+console.log({
+  bucketName: stateStore.name,
+  nameservers: zone.nameservers,
+});

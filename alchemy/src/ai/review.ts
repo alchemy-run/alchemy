@@ -16,20 +16,24 @@ export interface ReviewProps {
    *   Review this code:
    *   ${alchemy.file("src/api.ts")}
    * `
+   *
+   * Required unless messages are provided
    */
-  content: string;
+  content?: string;
 
   /**
    * Prompt for the review
    * This should include specific instructions for the review
    * @example
    * prompt: "Review this code for security vulnerabilities, performance issues, and best practices."
+   *
+   * Required unless messages are provided
    */
-  prompt: string;
+  prompt?: string;
 
   /**
    * Message history for the conversation
-   * If provided, this will be used instead of the prompt
+   * If provided, this will be used instead of the prompt and content
    */
   messages?: CoreMessage[];
 
@@ -75,6 +79,11 @@ export interface Review extends ReviewProps, Resource<"ai::Review"> {
    * Content of the review
    */
   content: string;
+
+  /**
+   * Updated message history with the review response appended
+   */
+  messages: CoreMessage[];
 
   /**
    * Time at which the review was created
@@ -152,12 +161,22 @@ export const Review = Resource(
     const system = props.system || DEFAULT_REVIEW_SYSTEM_PROMPT;
 
     // Create messages array if not provided
-    const messages = props.messages || [
-      {
-        role: "user",
-        content: `${props.content}\n\n${props.prompt}`,
-      },
-    ];
+    const messages =
+      props.messages ||
+      (props.content && props.prompt
+        ? [
+            {
+              role: "user",
+              content: `${props.content}\n\n${props.prompt}`,
+            },
+          ]
+        : []);
+
+    if (messages.length === 0) {
+      throw new Error(
+        "Either messages or both content and prompt must be provided"
+      );
+    }
 
     // Generate review content with rate limit retry
     const { text } = await withRateLimitRetry(async () => {
@@ -173,10 +192,20 @@ export const Review = Resource(
       });
     });
 
-    // Return the review with the direct text from the LLM
+    // Create updated message history with the AI's response
+    const updatedMessages = [
+      ...messages,
+      {
+        role: "assistant" as const,
+        content: text,
+      },
+    ];
+
+    // Return the review with the direct text from the LLM and updated messages
     return this({
       ...props,
       content: text,
+      messages: updatedMessages,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });

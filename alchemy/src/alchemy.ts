@@ -143,7 +143,8 @@ function _alchemy(
             ).join("\n");
           } else {
             // TODO: support other types
-            throw new Error(`Unsupported value type: ${JSON.stringify(value)}`);
+            console.log(value);
+            throw new Error(`Unsupported value type: ${value}`);
           }
         })
       );

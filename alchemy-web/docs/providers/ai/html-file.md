@@ -1,6 +1,6 @@
 # HTML File
 
-The HTMLFile resource lets you generate HTML files using AI models like [OpenAI GPT-4](https://platform.openai.com/docs/models/gpt-4) and [Anthropic Claude](https://www.anthropic.com/claude).
+The HTML File resource lets you generate HTML files using AI models like [OpenAI GPT-4](https://platform.openai.com/docs/models/gpt-4) and [Anthropic Claude](https://www.anthropic.com/claude).
 
 # Minimal Example
 
@@ -9,22 +9,24 @@ Generate a simple HTML file with AI.
 ```ts
 import { HTMLFile } from "alchemy/ai";
 
-const page = await HTMLFile("landing-page", {
+const page = await HTMLFile("landing", {
   path: "./public/index.html",
-  prompt: "Generate a modern landing page with a hero section, features list, and contact form"
+  prompt: "Create a simple landing page with a hero section and call-to-action button"
 });
 ```
 
 # Create an HTML File with Context
 
+Use template literals to include file context in the prompt.
+
 ```ts
 import { HTMLFile } from "alchemy/ai";
 
-const component = await HTMLFile("nav-component", {
-  path: "./components/nav.html", 
+const component = await HTMLFile("user-card", {
+  path: "./components/UserCard.html", 
   prompt: await alchemy`
-    Create a responsive navigation component using:
-    ${alchemy.file("src/styles/theme.css")}
+    Create an HTML component using the styles from:
+    ${alchemy.file("src/styles/card.css")}
   `,
   model: {
     id: "gpt-4o",
@@ -35,13 +37,15 @@ const component = await HTMLFile("nav-component", {
 
 # Generate HTML with Custom System Prompt
 
+Customize the model's behavior with a system prompt.
+
 ```ts
 import { HTMLFile } from "alchemy/ai";
 
 const form = await HTMLFile("contact-form", {
-  path: "./components/form.html",
-  prompt: "Create an accessible contact form with validation",
-  system: "You are an accessibility expert. Generate semantic HTML that follows WCAG guidelines.",
+  path: "./components/ContactForm.html",
+  prompt: "Create a contact form with name, email, message fields and validation",
+  system: "You are an HTML expert specializing in accessible forms. Create semantic HTML with ARIA attributes.",
   temperature: 0.2
 });
 ```

@@ -15,7 +15,7 @@ const header = await AstroFile("header", {
 });
 ```
 
-# Create an Astro Component
+# Create an Astro Component with Context
 
 ```ts
 import { AstroFile } from "alchemy/ai";
@@ -27,15 +27,29 @@ const blogPost = await AstroFile("blog-post", {
     - Uses getStaticPaths to generate pages from a CMS
     - Renders markdown content
     - Includes author info and publication date
-    - Has social sharing buttons
     
-    Use the following types:
+    Use these types:
     ${alchemy.file("src/types/Blog.ts")}
   `,
   model: {
     id: "gpt-4o",
     provider: "openai"
-  },
-  temperature: 0.2
+  }
+});
+```
+
+# Generate a Layout with Custom System Prompt
+
+```ts
+import { AstroFile } from "alchemy/ai";
+
+const layout = await AstroFile("main-layout", {
+  path: "./src/layouts/MainLayout.astro", 
+  prompt: "Create a main layout with SEO metadata, header and footer slots",
+  system: "You are an expert Astro developer. Create a single layout file with proper typing.",
+  model: {
+    id: "claude-3-opus-20240229",
+    provider: "anthropic"
+  }
 });
 ```

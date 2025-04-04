@@ -4,7 +4,7 @@ The TypeScript File resource lets you generate TypeScript code files using AI mo
 
 # Minimal Example
 
-Creates a TypeScript file with AI-generated code based on a prompt.
+Generate a TypeScript utility function file.
 
 ```ts
 import { TypeScriptFile } from "alchemy/ai";
@@ -42,10 +42,10 @@ const userService = await TypeScriptFile("user-service", {
 ```ts
 import { TypeScriptFile } from "alchemy/ai";
 
-const formHook = await TypeScriptFile("use-form", {
+const hook = await TypeScriptFile("use-form", {
   path: "./src/hooks/useForm.ts",
-  prompt: "Create a custom React hook for form state management",
-  system: "You are an expert React developer. Create a single TypeScript file with proper typing.",
+  prompt: "Create a form handling hook with validation and submission",
+  system: "You are an expert React developer. Create a single TypeScript hook.",
   model: {
     id: "claude-3-opus-20240229", 
     provider: "anthropic"

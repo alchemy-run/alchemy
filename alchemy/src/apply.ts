@@ -19,7 +19,7 @@ export interface ApplyOptions {
 export async function apply<Out extends Resource>(
   resource: PendingResource<Out>,
   props: ResourceProps | undefined,
-  options?: ApplyOptions,
+  options?: ApplyOptions
 ): Promise<Awaited<Out>> {
   const scope = resource.Scope;
   try {
@@ -64,18 +64,18 @@ export async function apply<Out extends Resource>(
                 "@secret": value.unencrypted,
               }
             : value,
-        2,
+        2
       );
       const newProps = JSON.stringify(
         await serialize(scope, props, {
           encrypt: false,
         }),
         null,
-        2,
+        2
       );
       if (oldProps === newProps && alwaysUpdate !== true) {
         if (!quiet) {
-          console.log(`Skip:    "${resource.FQN}" (no changes)`);
+          // console.log(`Skip:    "${resource.FQN}" (no changes)`);
         }
         return state.output as Awaited<Out>;
       }
@@ -88,7 +88,7 @@ export async function apply<Out extends Resource>(
 
     if (!quiet) {
       console.log(
-        `${phase === "create" ? "Create" : "Update"}:  "${resource.FQN}"`,
+        `${phase === "create" ? "Create" : "Update"}:  "${resource.FQN}"`
       );
     }
 
@@ -108,7 +108,7 @@ export async function apply<Out extends Resource>(
       replace: () => {
         if (isReplaced) {
           console.warn(
-            `Resource ${resource.Kind} ${resource.FQN} is already marked as REPLACE`,
+            `Resource ${resource.Kind} ${resource.FQN} is already marked as REPLACE`
           );
           return;
         }
@@ -117,11 +117,11 @@ export async function apply<Out extends Resource>(
     });
 
     const output = await alchemy.run(resource.ID, async () =>
-      provider.handler.bind(ctx)(resource.ID, props),
+      provider.handler.bind(ctx)(resource.ID, props)
     );
     if (!quiet) {
       console.log(
-        `${phase === "create" ? "Created" : "Updated"}: "${resource.FQN}"`,
+        `${phase === "create" ? "Created" : "Updated"}: "${resource.FQN}"`
       );
     }
 

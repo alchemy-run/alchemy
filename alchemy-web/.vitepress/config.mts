@@ -45,19 +45,19 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: "Approve", link: "/docs/providers/ai/approve.md" },
-              { text: "AstroFile", link: "/docs/providers/ai/astro-file.md" },
-              { text: "CSSFile", link: "/docs/providers/ai/css-file.md" },
+              { text: "Astro File", link: "/docs/providers/ai/astro-file.md" },
+              { text: "CSS File", link: "/docs/providers/ai/css-file.md" },
               { text: "Data", link: "/docs/providers/ai/data.md" },
               { text: "Document", link: "/docs/providers/ai/document.md" },
-              { text: "HTMLFile", link: "/docs/providers/ai/html-file.md" },
-              { text: "JSONFile", link: "/docs/providers/ai/json-file.md" },
+              { text: "HTML File", link: "/docs/providers/ai/html-file.md" },
+              { text: "JSON File", link: "/docs/providers/ai/json-file.md" },
               { text: "Review", link: "/docs/providers/ai/review.md" },
               {
-                text: "TypeScriptFile",
+                text: "TypeScript File",
                 link: "/docs/providers/ai/typescript-file.md",
               },
-              { text: "VueFile", link: "/docs/providers/ai/vue-file.md" },
-              { text: "YAMLFile", link: "/docs/providers/ai/yaml-file.md" },
+              { text: "Vue File", link: "/docs/providers/ai/vue-file.md" },
+              { text: "YAML File", link: "/docs/providers/ai/yaml-file.md" },
             ],
           },
           {
@@ -82,7 +82,7 @@ export default defineConfig({
             collapsed: true,
             items: [
               {
-                text: "Dns Records",
+                text: "DNS Records",
                 link: "/docs/providers/cloudflare/dns.md",
               },
               {
@@ -130,6 +130,18 @@ export default defineConfig({
               { text: "File", link: "/docs/providers/fs/file.md" },
               { text: "Folder", link: "/docs/providers/fs/folder.md" },
               {
+                text: "Static Astro File",
+                link: "/docs/providers/fs/static-astro-file.md",
+              },
+              {
+                text: "Static CSS File",
+                link: "/docs/providers/fs/static-css-file.md",
+              },
+              {
+                text: "Static HTML File",
+                link: "/docs/providers/fs/static-html-file.md",
+              },
+              {
                 text: "Static JSON File",
                 link: "/docs/providers/fs/static-json-file.md",
               },
@@ -140,6 +152,10 @@ export default defineConfig({
               {
                 text: "Static TypeScript File",
                 link: "/docs/providers/fs/static-typescript-file.md",
+              },
+              {
+                text: "Static Vue File",
+                link: "/docs/providers/fs/static-vue-file.md",
               },
               {
                 text: "Static YAML File",

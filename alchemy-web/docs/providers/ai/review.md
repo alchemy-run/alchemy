@@ -1,10 +1,21 @@
 # Review
 
-The Review resource uses AI models to provide detailed feedback and analysis of content using the [Vercel AI SDK](https://sdk.vercel.ai/docs).
+The Review Resource lets you generate AI-powered reviews of content using [Vercel AI SDK](https://sdk.vercel.ai/docs).
 
 # Minimal Example
 
-Creates a review of code or content with detailed feedback and suggestions.
+Creates a basic review of content with default settings.
+
+```ts
+import { Review } from "alchemy/ai";
+
+const review = await Review("code-review", {
+  content: "function add(a,b) { return a + b }",
+  prompt: "Review this code for best practices"
+});
+```
+
+# Create a Code Review
 
 ```ts
 import { Review } from "alchemy/ai";
@@ -14,11 +25,16 @@ const codeReview = await Review("api-review", {
     Review this API implementation:
     ${alchemy.file("src/api.ts")}
   `,
-  prompt: "Review this API implementation for security vulnerabilities, performance issues, and best practices."
+  prompt: "Review this API for security vulnerabilities, performance issues, and best practices",
+  model: {
+    id: "gpt-4o",
+    provider: "openai"
+  },
+  temperature: 0.2
 });
 ```
 
-# Create a Review with Message History
+# Review with Message History
 
 ```ts
 import { Review } from "alchemy/ai";
@@ -32,9 +48,6 @@ const reviewWithHistory = await Review("code-review-iteration-2", {
     { role: "user", content: "Here's my implementation: [code]" },
     { role: "assistant", content: "Here's my review of your code: [previous review]" }
   ],
-  model: {
-    id: "gpt-4o",
-    provider: "openai"
-  }
+  system: "You are a senior software engineer reviewing code changes"
 });
 ```

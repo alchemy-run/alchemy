@@ -1,10 +1,10 @@
-# Data
+# AI Data
 
-The Data resource lets you generate structured content using [AI models](https://platform.openai.com/docs/api-reference) with schema validation.
+The Data resource lets you generate structured content using [AI models](https://platform.openai.com/docs/models) with schema validation.
 
 # Minimal Example
 
-Generate structured data using an ArkType schema:
+Generate structured data using an ArkType schema.
 
 ```ts
 import { Data } from "alchemy/ai";
@@ -16,25 +16,24 @@ const schema = type({
   features: "string[]"
 });
 
-const product = await Data("product", {
+const data = await Data("product", {
   schema,
   prompt: "Generate a product description for a smartphone"
 });
 
-console.log(product.object); // Typed as per schema
+console.log(data.object); // Typed according to schema
 ```
 
-# Create Data with Message History
+# Generate with Message History
 
-Use message history for iterative content generation:
+Use message history for iterative content generation.
 
 ```ts
 import { Data } from "alchemy/ai";
 import { type } from "arktype";
 
 const schema = type({
-  rating: "number",
-  feedback: "string",
+  summary: "string", 
   improvements: "string[]"
 });
 
@@ -49,30 +48,34 @@ const feedback = await Data("feedback", {
 });
 ```
 
-# Generate Data with File Context
+# Custom Model Configuration
 
-Use alchemy template literals to include file context:
+Configure the AI model and generation parameters.
 
 ```ts
 import { Data } from "alchemy/ai";
 import { type } from "arktype";
 
-const docSchema = type({
-  summary: "string",
-  parameters: [{
-    name: "string", 
-    type: "string",
-    description: "string"
-  }],
-  returns: "string"
+const schema = type({
+  title: "string",
+  sections: [{
+    heading: "string",
+    content: "string"
+  }]
 });
 
-const docs = await Data("function-docs", {
-  schema: docSchema,
+const docs = await Data("api-docs", {
+  schema,
   prompt: await alchemy`
-    Generate documentation for this function:
-    ${alchemy.file("src/utils/format.ts")}
+    Generate documentation for:
+    ${alchemy.file("src/api.ts")}
   `,
-  temperature: 0.2
+  model: {
+    id: "gpt-4o",
+    provider: "openai",
+    options: {
+      temperature: 0.2
+    }
+  }
 });
 ```

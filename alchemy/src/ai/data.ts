@@ -77,6 +77,11 @@ export interface Data<T> extends Resource<"ai::Object"> {
   object: T;
 
   /**
+   * Updated message history with the AI's response appended
+   */
+  messages: CoreMessage[];
+
+  /**
    * Time at which the content was generated
    */
   createdAt: number;
@@ -186,10 +191,21 @@ export const Data = Resource("ai::Object", async function <
         { temperature: props.temperature }),
   });
 
-  // Return the resource with typed content
+  // Create updated message history with the structured response
+  const responseText = JSON.stringify(object);
+  const updatedMessages = [
+    ...messages,
+    {
+      role: "assistant" as const,
+      content: responseText,
+    },
+  ];
+
+  // Return the resource with typed content and updated messages
   return this({
     type: props.schema,
     object: object,
+    messages: updatedMessages,
     createdAt: Date.now(),
   });
 });

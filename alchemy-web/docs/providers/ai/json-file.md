@@ -4,20 +4,20 @@ The JSON File resource lets you generate JSON files using AI models. It supports
 
 # Minimal Example
 
-Generate a simple JSON configuration file:
+Creates a simple JSON configuration file.
 
 ```ts
 import { JSONFile } from "alchemy/ai";
 
 const config = await JSONFile("app-config", {
   path: "./config/app.json",
-  prompt: "Generate a configuration for a web application with server settings, database connection details, and feature flags"
+  prompt: "Generate a configuration for a web application with server settings, database connection details, and logging configuration"
 });
 ```
 
-# Generate JSON with Schema Validation 
+# Create with Schema Validation
 
-Use ArkType schemas to ensure type-safe JSON generation:
+Uses ArkType schema to validate and structure the generated JSON.
 
 ```ts
 import { JSONFile } from "alchemy/ai";
@@ -40,31 +40,19 @@ const userData = await JSONFile("user-data", {
   prompt: "Generate sample user data with various roles and permissions",
   temperature: 0.2
 });
-
-// Type-safe access to generated data
-console.log(userData.json.users[0].role); // Typed as 'admin' | 'user' | 'guest'
 ```
 
 # Generate API Mock Data
 
-Create realistic mock data for API development:
+Creates realistic mock data for API testing.
 
 ```ts
 import { JSONFile } from "alchemy/ai";
 
 const apiMock = await JSONFile("api-mock", {
-  path: "./mocks/products-api.json",
-  prompt: await alchemy`
-    Create mock data for a product catalog API response with:
-    - 10 products with different categories
-    - Each product should have id, name, price, category, inventory, and image_url
-    - Include pagination metadata (total, page, limit)
-  `,
-  system: "You are an API design expert. Create realistic mock JSON data that follows REST API best practices.",
-  model: {
-    id: "claude-3-opus-20240229",
-    provider: "anthropic"
-  },
+  path: "./mocks/products-api.json", 
+  prompt: "Create mock data for a product catalog API with 10 products including id, name, price, category, inventory and pagination metadata",
+  system: "You are an API design expert. Create realistic mock JSON data following REST API best practices.",
   pretty: true,
   indent: 4
 });

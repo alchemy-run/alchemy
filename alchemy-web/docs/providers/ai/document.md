@@ -1,23 +1,21 @@
-# Document
+# Document Resource
 
-The Document Resource lets you generate markdown documentation using AI models like [OpenAI GPT-4](https://openai.com/gpt-4) and [Anthropic Claude](https://www.anthropic.com/claude).
+The Document Resource lets you generate markdown documentation using AI models like OpenAI's GPT-4 and Anthropic's Claude.
 
 # Minimal Example
 
-Generate a markdown document from a prompt.
+Creates a simple markdown document with AI-generated content.
 
 ```ts
 import { Document } from "alchemy/ai";
 
-const docs = await Document("api-docs", {
+const doc = await Document("api-docs", {
   title: "API Documentation",
   prompt: "Generate API documentation for a REST API"
 });
 ```
 
 # Create a Document with File Context
-
-Use alchemy template literals to include file context in the prompt.
 
 ```ts
 import { Document } from "alchemy/ai";
@@ -29,17 +27,11 @@ const apiDocs = await Document("api-docs", {
     Generate API documentation based on these source files:
     ${alchemy.file("src/api.ts")}
     ${alchemy.file("src/types.ts")}
-  `,
-  model: {
-    id: "gpt-4o",
-    provider: "openai"
-  }
+  `
 });
 ```
 
-# Create a Document with Message History
-
-Use message history for iterative document generation.
+# Generate Documentation with Message History
 
 ```ts
 import { Document } from "alchemy/ai";
@@ -52,5 +44,28 @@ const apiDocs = await Document("api-docs", {
     { role: "user", content: "Here are the files: [file contents]" }
   ],
   system: "You are a technical documentation writer. Generate clear and concise API documentation."
+});
+```
+
+# Configure Model and Generation Parameters
+
+```ts
+import { Document } from "alchemy/ai";
+
+const techDocs = await Document("tech-specs", {
+  title: "Technical Specifications",
+  path: "./docs/tech-specs.md",
+  prompt: await alchemy`
+    Create detailed technical specifications based on:
+    ${alchemy.file("requirements/system.md")}
+  `,
+  model: {
+    id: "gpt-4o",
+    provider: "openai",
+    options: {
+      temperature: 0.2,
+      maxTokens: 8192
+    }
+  }
 });
 ```

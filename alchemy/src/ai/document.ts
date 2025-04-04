@@ -94,6 +94,11 @@ export interface Document extends DocumentProps, Resource<"docs::Document"> {
   content: string;
 
   /**
+   * Updated message history with the document response appended
+   */
+  messages: CoreMessage[];
+
+  /**
    * Time at which the document was created
    */
   createdAt: number;
@@ -272,6 +277,10 @@ export const Document = Resource(
     const result: Partial<Document> = {
       ...props,
       content,
+      messages: [
+        ...(props.messages || [{ role: "user", content: props.prompt! }]),
+        { role: "assistant", content },
+      ],
       createdAt: this.output?.createdAt || Date.now(),
       updatedAt: Date.now(),
     };

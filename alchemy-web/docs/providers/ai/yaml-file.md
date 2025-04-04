@@ -11,11 +11,13 @@ import { YAMLFile } from "alchemy/ai";
 
 const config = await YAMLFile("app-config", {
   path: "./config.yml",
-  prompt: "Generate a basic application configuration with server settings and database connection details"
+  prompt: "Generate a basic app configuration with server settings and database connection"
 });
 ```
 
-# Create a YAML File with Schema Validation
+# Generate YAML with Schema Validation
+
+Use a schema to ensure the generated YAML matches your requirements.
 
 ```ts
 import { YAMLFile } from "alchemy/ai";
@@ -24,8 +26,7 @@ import { type } from "arktype";
 const configSchema = type({
   server: {
     port: "number",
-    host: "string",
-    timeout: "number"
+    host: "string"
   },
   database: {
     url: "string",
@@ -36,29 +37,20 @@ const configSchema = type({
 const config = await YAMLFile("app-config", {
   path: "./config.yml",
   schema: configSchema,
-  prompt: "Generate a configuration with server and database settings",
-  temperature: 0.2
+  prompt: "Generate a configuration with server port 3000 and PostgreSQL database"
 });
 ```
 
-# Generate a Kubernetes Configuration
+# Generate Kubernetes Configuration
+
+Create Kubernetes resource definitions with proper YAML formatting.
 
 ```ts
 import { YAMLFile } from "alchemy/ai";
 
 const deployment = await YAMLFile("k8s-deployment", {
-  path: "./kubernetes/deployment.yaml",
-  prompt: await alchemy`
-    Create a Kubernetes deployment for a web application that:
-    - Uses nginx:latest image
-    - Has 3 replicas
-    - Exposes port 80
-    - Includes resource limits
-    - Sets up health checks
-  `,
-  model: {
-    id: "gpt-4o",
-    provider: "openai"
-  }
+  path: "./deployment.yml",
+  prompt: "Generate a Kubernetes deployment for a web app with 3 replicas using nginx:latest",
+  system: "You are a Kubernetes expert. Create valid Kubernetes YAML manifests."
 });
 ```

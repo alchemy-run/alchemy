@@ -1,17 +1,17 @@
 # Approve
 
-The Approve resource lets you use AI to make approval decisions on content based on specific criteria.
+The Approve resource uses AI models to make approval decisions based on provided content and criteria. It leverages the [Vercel AI SDK](https://sdk.vercel.ai/docs) for generating structured approval responses.
 
 # Minimal Example
 
-Creates an approval decision for content based on a prompt.
+Makes an approval decision with explanation based on content and criteria.
 
 ```ts
 import { Approve } from "alchemy/ai";
 
 const result = await Approve("code-approval", {
-  content: "function add(a,b) { return a + b }",
-  prompt: "Approve this code if it follows best practices"
+  content: "Code to review...",
+  prompt: "Approve if code follows security best practices"
 });
 
 if (result.approved) {
@@ -28,29 +28,26 @@ if (result.approved) {
 import { Approve } from "alchemy/ai";
 
 const result = await Approve("doc-approval", {
-  content: "This is the content to review",
-  prompt: "Approve this documentation if it is clear and accurate",
   messages: [
     { role: "user", content: "Can you review this documentation?" },
-    { role: "assistant", content: "Yes, I'd be happy to review it." },
-    { role: "user", content: "Please check for clarity and accuracy." }
+    { role: "assistant", content: "Yes, I'll review it." },
+    { role: "user", content: "Here's the content to review..." }
   ],
-  temperature: 0.2
+  system: "You are a technical documentation reviewer. Approve content that is clear, accurate and complete."
 });
 ```
 
-# Create an Approval with Custom System Prompt
+# Create an Approval with File Context
 
 ```ts
 import { Approve } from "alchemy/ai";
 
-const result = await Approve("security-approval", {
+const result = await Approve("api-approval", {
   content: await alchemy`
-    Review this code for security:
+    Review this API implementation:
     ${alchemy.file("src/api.ts")}
   `,
-  prompt: "Approve only if there are no security vulnerabilities",
-  system: "You are a security expert. Carefully analyze code for security issues. Be strict and thorough in your assessment.",
+  prompt: "Approve if the API follows REST best practices and has proper error handling",
   model: {
     id: "gpt-4o",
     provider: "openai"

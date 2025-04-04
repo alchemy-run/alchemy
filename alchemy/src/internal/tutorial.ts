@@ -1,6 +1,7 @@
 import type { CoreMessage } from "ai";
 import { Approve, Document, Review } from "../ai";
 import type { ModelConfig } from "../ai/client";
+import { alchemy } from "../alchemy";
 import type { Context } from "../context";
 import type { Folder } from "../fs";
 import { Resource } from "../resource";
@@ -133,7 +134,7 @@ export const Tutorial = Resource(
         provider: "anthropic",
       },
       maxIterations = 3,
-      messages = [],
+      messages: initialMessages = [],
     } = props;
 
     console.log(`Tutorial: Starting creation of "${title}" (ID: ${id})`);
@@ -249,63 +250,34 @@ export const Tutorial = Resource(
     
     (Links to documentation, community resources, or related tutorials)`;
 
-    const reviewSystemPrompt = `You are an expert reviewer evaluating a tutorial. Provide detailed, constructive feedback on the following aspects:
-    
-    1. Technical accuracy and correctness
-    2. Conciseness (avoiding over-explanation)
-    3. Logical flow from basic to advanced concepts
-    4. Accuracy of descriptions and instructions
-    5. Appropriateness for the specified difficulty level
-    6. Completability within the estimated time
-    
-    Be thorough, specific, and constructive in your feedback.`;
-
-    const approvalSystemPrompt = `You are an expert reviewer deciding if a tutorial meets quality standards. Make a clear approval or denial decision based on:
-    
-    1. Technical accuracy and correctness
-    2. Conciseness (avoiding over-explanation)
-    3. Logical flow from basic to advanced concepts
-    4. Accuracy of descriptions and instructions
-    5. Appropriateness for the specified difficulty level
-    6. Completability within the estimated time
-    
-    Your response should include a clear APPROVED or DENIED decision, followed by your explanation and suggestions for improvement if denied.`;
-
-    // Initialize conversation history
-    let conversationHistory: CoreMessage[] = [...messages];
-
-    // Initialize with user prompt if there's no history
-    if (conversationHistory.length === 0) {
-      console.log(`Tutorial: Initializing conversation for "${title}"`);
-      conversationHistory.push({
-        role: "user",
-        content: `Create a comprehensive tutorial about ${title}.\n\n${prompt}\n\nDifficulty level: ${difficulty}\nEstimated time to complete: ${estimatedTime} minutes`,
-      });
-    }
+    // Initial message if none provided
+    const startingMessages =
+      initialMessages.length > 0
+        ? initialMessages
+        : [
+            {
+              role: "user" as const,
+              content: `Create a comprehensive tutorial about ${title}.\n\n${prompt}\n\nDifficulty level: ${difficulty}\nEstimated time to complete: ${estimatedTime} minutes`,
+            },
+          ];
 
     // Generate the initial tutorial
     console.log(`Tutorial: Generating initial tutorial for "${title}"`);
-    const docId = `docs/tutorials/${id}`;
-    let tutorial = await Document(docId, {
+    let tutorial = await Document(`document`, {
       title: title,
       path: typeof outFile === "string" ? outFile : outFile.path,
       model,
-      messages: conversationHistory,
+      messages: startingMessages,
       system: docSystemPrompt,
     });
     console.log(
       `Tutorial: Initial tutorial generated for "${title}" (${tutorial.content.length} chars)`
     );
 
-    // Add initial tutorial as assistant message
-    conversationHistory.push({
-      role: "assistant",
-      content: tutorial.content,
-    });
-
     // Review and improve the tutorial in a loop
     let iteration = 0;
     let approved = false;
+    let finalMessages = tutorial.messages;
 
     while (!approved && iteration < maxIterations) {
       iteration++;
@@ -313,9 +285,13 @@ export const Tutorial = Resource(
         `Tutorial: Starting review iteration ${iteration}/${maxIterations} for "${title}"`
       );
 
-      // Add user message requesting a review
-      const reviewPrompt = `Please review this tutorial for correctness, conciseness, logical flow, and accurateness. 
-      
+      // Review the tutorial using system prompt
+      console.log(`Tutorial: Requesting review for iteration ${iteration}`);
+      const review = await Review(`review-${iteration}`, {
+        messages: finalMessages,
+        system:
+          await alchemy`Please review this tutorial for correctness, conciseness, logical flow, and accurateness. 
+        
       The tutorial should:
       1. Be technically accurate and free of errors
       2. Be concise without over-explaining
@@ -324,35 +300,23 @@ export const Tutorial = Resource(
       5. Be appropriate for the ${difficulty} difficulty level
       6. Be completable within approximately ${estimatedTime} minutes
       
-      Provide specific feedback on areas that need improvement.`;
-
-      conversationHistory.push({
-        role: "user",
-        content: reviewPrompt,
-      });
-
-      // Review the tutorial
-      console.log(`Tutorial: Requesting review for iteration ${iteration}`);
-      const review = await Review(`tutorial-review-${docId}-${iteration}`, {
-        content: tutorial.content,
-        prompt: reviewPrompt,
-        messages: conversationHistory,
-        system: reviewSystemPrompt,
+      Provide specific feedback on areas that need improvement.`,
         model,
       });
+
+      // Extract the actual review content from the last assistant message
+      const reviewContent =
+        review.messages[review.messages.length - 1]?.content || "";
       console.log(
-        `Tutorial: Review received for iteration ${iteration} (${review.content.length} chars)`
+        `Tutorial: Review received for iteration ${iteration} (${reviewContent.length} chars)`
       );
 
-      // Add review as assistant message
-      conversationHistory.push({
-        role: "assistant",
-        content: review.content,
-      });
-
-      // Add user message requesting approval decision
-      const approvalPrompt = `Based on the review above, determine if the tutorial meets the quality standards.
-      
+      // Check if the tutorial is approved using system prompt
+      console.log(`Tutorial: Evaluating approval for iteration ${iteration}`);
+      const approvalResult = await Approve(`approval-${iteration}`, {
+        messages: review.messages,
+        system:
+          await alchemy`Based on the review above, determine if the tutorial meets the quality standards.
       The tutorial should be approved if:
       1. It is technically accurate and free of errors
       2. It is concise without over-explaining
@@ -361,33 +325,11 @@ export const Tutorial = Resource(
       5. It is appropriate for the ${difficulty} difficulty level
       6. It is completable within approximately ${estimatedTime} minutes
       
-      Respond with APPROVED or DENIED, followed by your explanation.`;
-
-      conversationHistory.push({
-        role: "user",
-        content: approvalPrompt,
+      Respond with APPROVED or DENIED, followed by your explanation.`,
       });
-
-      // Check if the tutorial is approved
-      console.log(`Tutorial: Evaluating approval for iteration ${iteration}`);
-      const approvalResult = await Approve(
-        `tutorial-approval-${docId}-${iteration}`,
-        {
-          content: review.content,
-          prompt: approvalPrompt,
-          messages: conversationHistory,
-          system: approvalSystemPrompt,
-        }
-      );
       console.log(
         `Tutorial: Approval result for iteration ${iteration}: ${approvalResult.approved ? "APPROVED" : "DENIED"}`
       );
-
-      // Add approval decision as assistant message
-      conversationHistory.push({
-        role: "assistant",
-        content: `${approvalResult.approved ? "APPROVED" : "DENIED"}: ${approvalResult.explanation}`,
-      });
 
       // Log approval status
       if (approvalResult.approved) {
@@ -395,38 +337,37 @@ export const Tutorial = Resource(
           `Tutorial: Final tutorial approved: ${approvalResult.explanation}`
         );
         approved = true;
+        finalMessages = approvalResult.messages;
       } else {
         console.log(
           `Tutorial: Tutorial needs improvement: ${approvalResult.explanation}`
         );
 
-        // Add user message requesting improvements
-        conversationHistory.push({
-          role: "user",
-          content: `Please create an improved version of the tutorial that addresses the issues identified in the review: ${approvalResult.explanation}`,
-        });
+        // Add improvement request and generate an improved tutorial
+        const improvementMessages = [
+          ...approvalResult.messages,
+          {
+            role: "user" as const,
+            content: `Please create an improved version of the tutorial that addresses the issues identified in the review: ${approvalResult.explanation}`,
+          },
+        ];
 
-        // Generate an improved tutorial based on the conversation history
         console.log(
           `Tutorial: Regenerating tutorial based on feedback for iteration ${iteration}`
         );
 
-        tutorial = await Document(`${docId}-${iteration}`, {
+        tutorial = await Document(`tutorial-${iteration}`, {
           title: title,
           path: typeof outFile === "string" ? outFile : outFile.path,
           model,
-          messages: conversationHistory,
+          messages: improvementMessages,
           system: docSystemPrompt,
         });
         console.log(
           `Tutorial: Improved tutorial generated for iteration ${iteration} (${tutorial.content.length} chars)`
         );
 
-        // Add improved tutorial as assistant message
-        conversationHistory.push({
-          role: "assistant",
-          content: tutorial.content,
-        });
+        finalMessages = tutorial.messages;
       }
     }
 
@@ -443,7 +384,7 @@ export const Tutorial = Resource(
       ...props,
       document: tutorial,
       content: tutorial.content,
-      messages: conversationHistory,
+      messages: finalMessages,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });

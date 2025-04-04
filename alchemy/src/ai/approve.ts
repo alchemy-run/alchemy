@@ -14,16 +14,20 @@ export interface ApproveProps {
    *   Review this code:
    *   ${alchemy.file("src/api.ts")}
    * `
+   *
+   * Required unless messages are provided
    */
-  content: string;
+  content?: string;
 
   /**
    * Prompt for the approval decision
    * This should include specific criteria for approval or denial
    * @example
    * prompt: "Approve this code if it follows security best practices and has proper error handling."
+   *
+   * Required unless messages are provided
    */
-  prompt: string;
+  prompt?: string;
 
   /**
    * System prompt for the model
@@ -33,7 +37,7 @@ export interface ApproveProps {
 
   /**
    * Message history for the conversation
-   * If provided, this will be used instead of the prompt
+   * If provided, this will be used instead of the prompt and content
    */
   messages?: CoreMessage[];
 
@@ -64,6 +68,11 @@ export interface ApprovalResult {
    * Suggestions for improvement if denied
    */
   suggestions?: string[];
+
+  /**
+   * Updated message history with the approval response appended
+   */
+  messages: CoreMessage[];
 }
 
 export type Approve = ApprovalResult;
@@ -117,21 +126,38 @@ export async function Approve(
   id: string,
   props: ApproveProps
 ): Promise<ApprovalResult> {
-  return (
-    await Data(id, {
-      schema: type({
-        approved: "boolean",
-        explanation: "string",
-        suggestions: "string[]?",
-      }),
-      messages: props.messages || [
-        {
-          role: "user" as const,
-          content: `${props.content}\n\n${props.prompt}`,
-        },
-      ],
-      system: props.system || DEFAULT_APPROVE_SYSTEM_PROMPT,
-      temperature: props.temperature ?? 0.2,
-    })
-  ).object;
+  // Create messages array if not provided
+  const messages =
+    props.messages ||
+    (props.content && props.prompt
+      ? [
+          {
+            role: "user" as const,
+            content: `${props.content}\n\n${props.prompt}`,
+          },
+        ]
+      : []);
+
+  if (messages.length === 0) {
+    throw new Error(
+      "Either messages or both content and prompt must be provided"
+    );
+  }
+
+  const data = await Data(id, {
+    schema: type({
+      approved: "boolean",
+      explanation: "string",
+      suggestions: "string[]?",
+    }),
+    messages,
+    system: props.system || DEFAULT_APPROVE_SYSTEM_PROMPT,
+    temperature: props.temperature ?? 0.2,
+  });
+
+  // Return the result with updated messages from Data
+  return {
+    ...data.object,
+    messages: data.messages,
+  };
 }
