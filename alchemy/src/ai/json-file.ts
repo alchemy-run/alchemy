@@ -1,11 +1,9 @@
 import { generateObject, generateText } from "ai";
 import type { JsonSchema, Type, type } from "arktype";
-import fs from "node:fs/promises";
-import path from "node:path";
 import type { Context } from "../context";
+import { StaticJsonFile } from "../fs/static-json-file";
 import { Resource } from "../resource";
 import type { Secret } from "../secret";
-import { ignore } from "../util/ignore";
 import { ark } from "./ark";
 import { type ModelConfig, createModel } from "./client";
 
@@ -193,24 +191,10 @@ export const JSONFile = Resource("ai::JSONFile", async function <
 >(this: Context<JSONFile<T extends Type<any, any> ? type.infer<T> : any>>, id: string, props: JSONFileProps<T>): Promise<
   JSONFile<T extends Type<any, any> ? type.infer<T> : any>
 > {
-  // Ensure directory exists
-  await fs.mkdir(path.dirname(props.path), { recursive: true });
-
+  // Handle deletion phase
   if (this.phase === "delete") {
-    try {
-      await fs.unlink(props.path);
-    } catch (error: any) {
-      // Ignore if file doesn't exist
-      if (error.code !== "ENOENT") {
-        throw error;
-      }
-    }
     return this.destroy();
   }
-
-  // Determine if we should use pretty printing
-  const pretty = props.pretty !== false;
-  const indent = props.indent ?? 2;
 
   let jsonContent: string;
   let jsonObject: any;
@@ -232,9 +216,10 @@ export const JSONFile = Resource("ai::JSONFile", async function <
     });
 
     jsonObject = object;
-    jsonContent = pretty
-      ? JSON.stringify(jsonObject, null, indent)
-      : JSON.stringify(jsonObject);
+
+    // Use StaticJsonFile to create the file
+    const file = await StaticJsonFile("file", props.path, jsonObject);
+    jsonContent = file.content;
   } else {
     // Use fence-based extraction
     // Use provided system prompt or default
@@ -277,22 +262,13 @@ export const JSONFile = Resource("ai::JSONFile", async function <
       content = retryResult.content;
     }
 
-    // Parse JSON
+    // Parse JSON to get the object representation
     jsonObject = JSON.parse(content);
 
-    // Format with or without indentation based on pretty option
-    jsonContent = pretty ? JSON.stringify(jsonObject, null, indent) : content;
+    // Use StaticJsonFile to create the file
+    const file = await StaticJsonFile("file", props.path, jsonObject);
+    jsonContent = file.content;
   }
-
-  if (this.phase === "update" && props.path !== this.props.path) {
-    await ignore("ENOENT", () => fs.unlink(this.props.path));
-  }
-
-  // Write content to file
-  await fs.writeFile(props.path, jsonContent);
-
-  // Get file stats for timestamps
-  const stats = await fs.stat(props.path);
 
   // Return the resource
   return this({
@@ -300,8 +276,8 @@ export const JSONFile = Resource("ai::JSONFile", async function <
     schema: props.schema,
     content: jsonContent,
     json: jsonObject,
-    createdAt: stats.birthtimeMs,
-    updatedAt: stats.mtimeMs,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
   });
 });
 
@@ -313,7 +289,7 @@ export const JSONFile = Resource("ai::JSONFile", async function <
  * @returns The extracted JSON or error message
  */
 async function extractJSONContent(
-  text: string,
+  text: string
 ): Promise<{ content: string; error?: string }> {
   const jsonCodeRegex = /```json\s*([\s\S]*?)```/g;
   const matches = Array.from(text.matchAll(jsonCodeRegex));

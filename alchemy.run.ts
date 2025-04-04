@@ -25,6 +25,7 @@ import { CopyFile, Folder } from "./alchemy/src/fs";
 import { GitHubSecret } from "./alchemy/src/github";
 import { GettingStarted } from "./alchemy/src/internal/getting-started";
 import { AlchemyProviderDocs } from "./alchemy/src/internal/providers";
+import { Tutorial } from "./alchemy/src/internal/tutorial";
 import {
   HomePage,
   VitePressConfig,
@@ -142,9 +143,11 @@ if (process.argv.includes("--vitepress")) {
     title: "Alchemy",
     hero: {
       name: "Alchemy",
-      text: "Agentic Infrastructure as Code 🪄",
+      text: "Create Update Delete",
       tagline:
-        "Building the Assembly Line for self-generated software and services",
+        "Agentic Infrastructure-as-Code workflows that run in any JS environments",
+      // "A minimal, embeddable, JS-native Infrastructure-as-Code library optimized for Gen-AI",
+      // "Building the Assembly Line for self-generated software and services",
       image: {
         src: "/alchemist.webp",
         alt: "The Alchemist",
@@ -184,6 +187,99 @@ if (process.argv.includes("--vitepress")) {
 
   await GettingStarted({
     path: path.join(docs.path, "getting-started.md"),
+    prompt: await alchemy`
+      1. bun add alchemy - make sure to take this opportunity to explain how there is nothing special alchemy.run.ts and you can run alchemy code anywhere (it's just a script)
+      2. a minimal alchemy.run.ts
+      3. create a single a File Resource
+      4. run bun ./alchemy.run.ts
+      5. describe how it would have created a file
+      5. introduce the .alchemy/ folder structure and the state file
+      6. remove the resource and run again, show how the file is now gone 
+      7. show how also the state file is gone
+
+      Next Steps:
+      1. Jump to examples.
+      2. See the Guide on how to deploy to Cloudflare.
+
+      See ${alchemy.file("./README.md")} to understand the overview of Alchemy.
+      See ${alchemy.file("./.cursorrules")} to better understand the structure and conventions of Alchemy.
+      See ${alchemy.file("./alchemy/test/cloudflare/worker.test.ts")} for an example of how testing works.
+    `,
+  });
+
+  // Create tutorials directory
+  const tutorials = await Folder("tutorials", {
+    path: path.join(docs.path, "tutorials"),
+  });
+
+  const rules = `Always use bun as the package manager and to run scripts.`;
+
+  // Tutorial 1: Deploying a Cloudflare Worker and Static Site
+  await Tutorial("deploy-cloudflare-worker-and-static-site", {
+    path: path.join(
+      tutorials.path,
+      "deploy-cloudflare-worker-and-static-site.md"
+    ),
+    title: "Deploying a Cloudflare Worker and Static Site",
+    difficulty: "beginner",
+    estimatedTime: 5,
+    prompt: await alchemy`
+      Create a comprehensive tutorial on how to deploy a Cloudflare Worker and Static Site using Alchemy.
+      
+      The tutorial should cover:
+      1. Setting up a new project with Alchemy
+      2. Creating a Cloudflare Worker
+      3. Creating a Static Site
+      4. Connecting the Worker to the Static Site
+      5. Deploying both resources
+      
+      Include code examples and explanations for each step.
+      
+      Reference these files for implementation details:
+      - ${alchemy.file("./alchemy/src/cloudflare/worker.ts")} - For Worker implementation
+      - ${alchemy.file("./alchemy/src/cloudflare/static-site.ts")} - For Static Site implementation
+      - ${alchemy.file("./alchemy/test/cloudflare/worker.test.ts")} - For testing examples
+      - ${alchemy.file("./alchemy/test/cloudflare/static-site.test.ts")} - For testing examples
+      
+      Make sure to explain how to set up the necessary environment variables and configuration.
+
+      ${rules}
+
+      See ${alchemy.file("./examples/cloudflare-vite/alchemy.run.ts")} to understand how alchemy.run.ts is used to deploy the worker and static site.
+    `,
+  });
+
+  // Tutorial 2: Bundling and Deploying an AWS Lambda Function
+  await Tutorial("deploy-aws-lambda-function", {
+    path: path.join(tutorials.path, "deploy-aws-lambda-function.md"),
+    title: "Bundling and Deploying an AWS Lambda Function",
+    difficulty: "beginner",
+    estimatedTime: 5,
+    prompt: await alchemy`
+      Create a comprehensive tutorial on how to bundle and deploy an AWS Lambda Function using Alchemy.
+      
+      The tutorial should cover:
+      1. Setting up a new project with Alchemy
+      2. Creating an AWS Lambda Function
+      3. Bundling the function code
+      4. Setting up IAM roles and permissions
+      5. Deploying the function
+      6. Testing the function
+      
+      Include code examples and explanations for each step.
+      
+      Reference these files for implementation details:
+      - ${alchemy.file("./alchemy/src/aws/function.ts")} - For Lambda implementation
+      - ${alchemy.file("./alchemy/src/aws/role.ts")} - For IAM role implementation
+      - ${alchemy.file("./alchemy/test/aws/function.test.ts")} - For testing examples
+      
+      Make sure to explain how to set up the necessary environment variables and configuration.
+      Include information about different runtime environments and how to bundle dependencies.
+
+      ${rules}
+
+      See ${alchemy.file("./examples/aws-app/alchemy.run.ts")} to understand how alchemy.run.ts is used to deploy the lambda function.
+    `,
   });
 
   await VitePressConfig({
@@ -201,6 +297,21 @@ if (process.argv.includes("--vitepress")) {
           link: "/docs/getting-started",
         },
         {
+          text: "Tutorials",
+          link: "/docs/tutorials/deploy-cloudflare-worker-and-static-site",
+          collapsed: false,
+          items: [
+            {
+              text: "Deploying a Cloudflare Worker and Static Site",
+              link: "/docs/tutorials/deploy-cloudflare-worker-and-static-site",
+            },
+            {
+              text: "Bundling and Deploying an AWS Lambda Function",
+              link: "/docs/tutorials/deploy-aws-lambda-function",
+            },
+          ],
+        },
+        {
           text: "Providers",
           link: "/docs/providers",
           collapsed: false,
@@ -213,7 +324,7 @@ if (process.argv.includes("--vitepress")) {
                 .sort((a, b) => a.title.localeCompare(b.title))
                 .map((r) => ({
                   text: r.title,
-                  link: `/docs/providers/${p.provider}/${path.basename(r.path)}`,
+                  link: `/docs/providers/${p.provider}/${path.basename(r.path!)}`,
                 })),
             })),
         },

@@ -1,16 +1,16 @@
 # Copy File
 
-The Copy File resource lets you copy files from one location to another in the filesystem with automatic directory creation and cleanup.
+The Copy File resource lets you copy files from one location to another in the filesystem.
 
 # Minimal Example
 
-Creates a copy of a file at a new location.
+Copy a file to a new location.
 
 ```ts
 import { CopyFile } from "alchemy/fs";
 
 const copiedFile = await CopyFile("config-copy", {
-  src: "config.json", 
+  src: "config.json",
   dest: "backup/config.json"
 });
 ```
@@ -21,7 +21,7 @@ const copiedFile = await CopyFile("config-copy", {
 import { CopyFile } from "alchemy/fs";
 
 const safeCopy = await CopyFile("safe-copy", {
-  src: "data.json",
+  src: "data.json", 
   dest: "backup/data.json",
   overwrite: false // Don't overwrite if destination exists
 });

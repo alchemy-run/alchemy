@@ -5,7 +5,7 @@ import { File } from "./file";
  *
  * @example
  * // Create a JSON configuration file
- * const config = await JsonFile("config.json", {
+ * const config = await StaticJsonFile("config.json", {
  *   api: {
  *     endpoint: "https://api.example.com",
  *     version: "v1"
@@ -17,11 +17,12 @@ export type StaticJsonFile = File;
 
 export async function StaticJsonFile(
   id: string,
-  content: any,
+  ...args: [content: any] | [path: string, content: any]
 ): Promise<StaticJsonFile> {
+  const [path, content] = args.length === 1 ? [id, args[0]] : args;
   const prettier = await import("prettier");
   return File(id, {
-    path: id,
+    path,
     content: await prettier.format(JSON.stringify(content), {
       parser: "json",
       editor: {

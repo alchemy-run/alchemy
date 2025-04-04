@@ -72,8 +72,8 @@ alchemy.files = async (
         paths.map(async (path) => [
           path,
           await fs.promises.readFile(path, "utf-8"),
-        ]),
-      ),
+        ])
+      )
     ),
   };
 };
@@ -111,6 +111,19 @@ export interface File extends Resource<"fs::File"> {
  *   path: "logs/app.log",
  *   content: "application log entry"
  * });
+ *
+ * @example
+ * // Update file content and path
+ * let file = await File("config.json", {
+ *   path: "config.json",
+ *   content: '{ "version": "1.0.0" }'
+ * });
+ *
+ * // Later, update the path and content (old file will be removed)
+ * file = await File("config.json", {
+ *   path: "config/config.json",
+ *   content: '{ "version": "1.0.1" }'
+ * });
  */
 export const File = Resource(
   "fs::File",
@@ -120,21 +133,34 @@ export const File = Resource(
     props: {
       path: string;
       content: string;
-    },
+    }
   ): Promise<File> {
     const filePath = props?.path ?? id;
+
     if (this.phase === "delete") {
       await ignore("ENOENT", async () => fs.promises.unlink(filePath));
       return this.destroy();
-    } else {
-      await fs.promises.mkdir(path.dirname(filePath), {
-        recursive: true,
-      });
-      await fs.promises.writeFile(filePath, props.content);
+    } else if (
+      this.phase === "update" &&
+      this.output &&
+      this.output.path !== filePath
+    ) {
+      // If path has changed, delete the old file
+      console.log(
+        `File: Path changed from ${this.output.path} to ${filePath}, removing old file`
+      );
+      await ignore("ENOENT", async () => fs.promises.unlink(this.output.path));
     }
+
+    // Create directory and write file
+    await fs.promises.mkdir(path.dirname(filePath), {
+      recursive: true,
+    });
+    await fs.promises.writeFile(filePath, props.content);
+
     return this({
       path: filePath,
       content: props.content,
     });
-  },
+  }
 );

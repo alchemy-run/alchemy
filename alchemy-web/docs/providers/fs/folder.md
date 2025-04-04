@@ -14,27 +14,39 @@ const dir = await Folder("uploads");
 
 # Create a Nested Directory
 
-Creates a directory with an explicit path and recursive parent directory creation.
+Creates a directory with an explicit path and nested structure.
 
 ```ts
 import { Folder } from "alchemy/fs";
 
 const logs = await Folder("logs", {
   path: "var/log/app",
-  recursive: true 
+  recursive: true
 });
 ```
 
-# Create a Temporary Directory
+# Preserve Directory on Delete
 
-Creates a directory that will be cleaned up during deletion, even if it contains files.
+Creates a directory that won't be deleted during cleanup.
+
+```ts
+import { Folder } from "alchemy/fs";
+
+const persist = await Folder("data", {
+  path: "data",
+  delete: false
+});
+```
+
+# Clean Directory on Delete
+
+Creates a directory that will be cleaned (including contents) during deletion.
 
 ```ts
 import { Folder } from "alchemy/fs";
 
 const temp = await Folder("temp", {
-  path: "tmp/cache",
-  clean: true,
-  delete: true
+  path: "temp",
+  clean: true
 });
 ```

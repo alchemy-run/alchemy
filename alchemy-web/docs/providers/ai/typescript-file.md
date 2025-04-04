@@ -15,26 +15,40 @@ const utils = await TypeScriptFile("string-utils", {
 });
 ```
 
-# Create a TypeScript File with Custom Configuration
+# Create a TypeScript File with Schema Validation
 
 ```ts
 import { TypeScriptFile } from "alchemy/ai";
 
 const userService = await TypeScriptFile("user-service", {
-  path: "./src/services/UserService.ts",
+  path: "./src/services/UserService.ts", 
   prompt: await alchemy`
-    Create a UserService class that handles user authentication.
-    Use the User type from:
+    Create a UserService class using:
     ${alchemy.file("src/types/User.ts")}
   `,
-  temperature: 0.2,
-  prettierConfig: {
-    semi: false,
-    singleQuote: true
-  },
   model: {
     id: "gpt-4o",
     provider: "openai"
+  },
+  prettierConfig: {
+    semi: false,
+    singleQuote: true
+  }
+});
+```
+
+# Generate a React Hook
+
+```ts
+import { TypeScriptFile } from "alchemy/ai";
+
+const formHook = await TypeScriptFile("use-form", {
+  path: "./src/hooks/useForm.ts",
+  prompt: "Create a custom React hook for form state management",
+  system: "You are an expert React developer. Create a single TypeScript file with proper typing.",
+  model: {
+    id: "claude-3-opus-20240229", 
+    provider: "anthropic"
   }
 });
 ```

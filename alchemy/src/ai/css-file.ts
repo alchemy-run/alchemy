@@ -1,10 +1,8 @@
 import { generateText } from "ai";
-import fs from "node:fs/promises";
-import path from "node:path";
 import type { Context } from "../context";
+import { StaticCSSFile } from "../fs/static-css-file";
 import { Resource } from "../resource";
 import type { Secret } from "../secret";
-import { ignore } from "../util/ignore";
 import { type ModelConfig, createModel } from "./client";
 
 /**
@@ -154,20 +152,10 @@ export const CSSFile = Resource(
   async function (
     this: Context<CSSFile>,
     id: string,
-    props: CSSFileProps,
+    props: CSSFileProps
   ): Promise<CSSFile> {
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(props.path), { recursive: true });
-
+    // Handle deletion phase
     if (this.phase === "delete") {
-      try {
-        await fs.unlink(props.path);
-      } catch (error: any) {
-        // Ignore if file doesn't exist
-        if (error.code !== "ENOENT") {
-          throw error;
-        }
-      }
       return this.destroy();
     }
 
@@ -206,31 +194,24 @@ export const CSSFile = Resource(
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid CSS code: ${retryResult.error}\n${retryText}`,
+          `Failed to generate valid CSS code: ${retryResult.error}\n${retryText}`
         );
       }
 
       code = retryResult.code;
     }
 
-    if (this.phase === "update" && props.path !== this.props.path) {
-      await ignore("ENOENT", () => fs.unlink(this.props.path));
-    }
-
-    // Write content to file
-    await fs.writeFile(props.path, code);
-
-    // Get file stats for timestamps
-    const stats = await fs.stat(props.path);
+    // Use StaticCSSFile to create/update the file
+    const file = await StaticCSSFile("file", props.path, code);
 
     // Return the resource
     return this({
       ...props,
-      content: code,
-      createdAt: stats.birthtimeMs,
-      updatedAt: stats.mtimeMs,
+      content: file.content,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     });
-  },
+  }
 );
 
 /**
@@ -241,7 +222,7 @@ export const CSSFile = Resource(
  * @returns The extracted CSS code or error message
  */
 async function extractCSSCode(
-  text: string,
+  text: string
 ): Promise<{ code: string; error?: string }> {
   const cssCodeRegex = /```css\s*([\s\S]*?)```/g;
   const matches = Array.from(text.matchAll(cssCodeRegex));

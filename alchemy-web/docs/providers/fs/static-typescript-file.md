@@ -1,15 +1,27 @@
 # Static TypeScript File
 
-The Static TypeScript File resource creates a TypeScript file with formatted content using [Prettier](https://prettier.io/).
+The Static TypeScript File resource creates formatted TypeScript files using [Prettier](https://prettier.io/) for consistent code style.
 
 # Minimal Example
 
-Creates a basic TypeScript file with formatted content.
+Creates a basic TypeScript file with automatic formatting.
 
 ```ts
 import { StaticTypeScriptFile } from "alchemy/fs";
 
-const file = await StaticTypeScriptFile("Component.ts", `
+const file = await StaticTypeScriptFile("hello.ts", `
+  export function hello(name: string) {
+    return "Hello " + name;
+  }
+`);
+```
+
+# Create Component File
+
+```ts
+import { StaticTypeScriptFile } from "alchemy/fs";
+
+const component = await StaticTypeScriptFile("Component.ts", `
   interface Props {
     name: string;
     age: number;
@@ -21,51 +33,24 @@ const file = await StaticTypeScriptFile("Component.ts", `
 `);
 ```
 
-# Create a TypeScript Interface File
+# Create with Custom Path
 
 ```ts
 import { StaticTypeScriptFile } from "alchemy/fs";
 
-const interfaces = await StaticTypeScriptFile("types.ts", `
-  export interface User {
-    id: string;
-    name: string;
-    email: string;
-    createdAt: Date;
+const utils = await StaticTypeScriptFile("utils", 
+  "src/utils/format.ts",
+  `
+  export function formatDate(date: Date): string {
+    return date.toLocaleDateString();
   }
-
-  export interface Post {
-    id: string;
-    title: string;
-    content: string;
-    authorId: string;
-    publishedAt?: Date;
+  
+  export function formatCurrency(amount: number): string {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount);
   }
-`);
-```
-
-# Create a React Component File
-
-```ts
-import { StaticTypeScriptFile } from "alchemy/fs";
-
-const component = await StaticTypeScriptFile("UserProfile.tsx", `
-  import React from 'react';
-  import type { User } from './types';
-
-  interface Props {
-    user: User;
-    onUpdate: (user: User) => void;
-  }
-
-  export function UserProfile({ user, onUpdate }: Props) {
-    return (
-      <div className="profile">
-        <h1>{user.name}</h1>
-        <p>{user.email}</p>
-        <span>Member since {user.createdAt.toLocaleDateString()}</span>
-      </div>
-    );
-  }
-`);
+  `
+);
 ```

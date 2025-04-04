@@ -1,10 +1,10 @@
 # Static YAML File
 
-The Static YAML File resource creates a [YAML](https://yaml.org/) file with formatted content using the yaml package.
+Creates and manages [YAML](https://yaml.org/) files with automatic formatting using the yaml package.
 
 # Minimal Example
 
-Creates a simple YAML file with basic configuration.
+Creates a simple YAML configuration file.
 
 ```ts
 import { StaticYamlFile } from "alchemy/fs";
@@ -17,14 +17,14 @@ const config = await StaticYamlFile("config.yaml", {
 });
 ```
 
-# Create a Nested Configuration File
+# Create a Nested Configuration
 
 ```ts
 import { StaticYamlFile } from "alchemy/fs";
 
 const config = await StaticYamlFile("config.yaml", {
   server: {
-    host: "localhost",
+    host: "localhost", 
     port: 3000
   },
   database: {
@@ -33,7 +33,23 @@ const config = await StaticYamlFile("config.yaml", {
       min: 1,
       max: 10
     }
-  },
-  features: ["auth", "logging"]
+  }
 });
+```
+
+# Create with Custom Path
+
+```ts
+import { StaticYamlFile } from "alchemy/fs";
+
+const config = await StaticYamlFile("config", 
+  "config/production.yaml",
+  {
+    environment: "production",
+    features: {
+      auth: true,
+      logging: true
+    }
+  }
+);
 ```

@@ -1,10 +1,8 @@
 import { generateText } from "ai";
-import fs from "node:fs/promises";
-import path from "node:path";
 import type { Context } from "../context";
+import { StaticVueFile } from "../fs/static-vue-file";
 import { Resource } from "../resource";
 import type { Secret } from "../secret";
-import { ignore } from "../util/ignore";
 import { type ModelConfig, createModel } from "./client";
 
 /**
@@ -149,20 +147,10 @@ export const VueFile = Resource(
   async function (
     this: Context<VueFile>,
     id: string,
-    props: VueFileProps,
+    props: VueFileProps
   ): Promise<VueFile> {
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(props.path), { recursive: true });
-
+    // Handle deletion phase
     if (this.phase === "delete") {
-      try {
-        await fs.unlink(props.path);
-      } catch (error: any) {
-        // Ignore if file doesn't exist
-        if (error.code !== "ENOENT") {
-          throw error;
-        }
-      }
       return this.destroy();
     }
 
@@ -201,31 +189,24 @@ export const VueFile = Resource(
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid Vue code: ${retryResult.error}`,
+          `Failed to generate valid Vue code: ${retryResult.error}`
         );
       }
 
       code = retryResult.code;
     }
 
-    if (this.phase === "update" && props.path !== this.props.path) {
-      await ignore("ENOENT", () => fs.unlink(this.props.path));
-    }
-
-    // Write content to file
-    await fs.writeFile(props.path, code);
-
-    // Get file stats for timestamps
-    const stats = await fs.stat(props.path);
+    // Use StaticVueFile to create/update the file
+    const file = await StaticVueFile("file", props.path, code);
 
     // Return the resource
     return this({
       ...props,
-      content: code,
-      createdAt: stats.birthtimeMs,
-      updatedAt: stats.mtimeMs,
+      content: file.content,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     });
-  },
+  }
 );
 
 /**
@@ -236,7 +217,7 @@ export const VueFile = Resource(
  * @returns The extracted Vue code or error message
  */
 async function extractVueCode(
-  text: string,
+  text: string
 ): Promise<{ code: string; error?: string }> {
   const vueCodeRegex = /```vue\s*([\s\S]*?)```/g;
   const matches = Array.from(text.matchAll(vueCodeRegex));

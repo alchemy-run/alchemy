@@ -1,4 +1,5 @@
 import { Document } from "../ai";
+import type { ModelConfig } from "../ai/client";
 import { alchemy } from "../alchemy";
 import type { Folder } from "../fs";
 
@@ -7,89 +8,96 @@ export interface GettingStartedProps {
    * The output directory for the getting started document.
    */
   path: string | Folder;
+
+  /**
+   * The prompt to use for generating the getting started guide.
+   * This should include specific details about the product or framework.
+   */
+  prompt: string;
+
+  /**
+   * Optional model configuration for generating the getting started guide.
+   * Defaults to Claude 3.5 Sonnet.
+   */
+  model?: ModelConfig;
 }
 
 export type GettingStarted = Document;
 
 export async function GettingStarted({
   path: outFile,
+  prompt,
+  model = {
+    id: "claude-3-5-sonnet-latest",
+    provider: "anthropic",
+  },
 }: GettingStartedProps): Promise<Document> {
   return Document(`docs/getting-started`, {
-    title: "Getting Started with Alchemy",
+    title: "Getting Started Guide",
     path: typeof outFile === "string" ? outFile : outFile.path,
-    model: {
-      id: "claude-3-5-sonnet-latest",
-      provider: "anthropic",
-    },
+    model,
     prompt: await alchemy`
-      You are a technical writer creating a getting started guide for Alchemy, an infrastructure as code (IaC) framework.
-      See ${alchemy.file("./README.md")} to understand the overview of Alchemy.
-      See ${alchemy.file("./.cursorrules")} to better understand the structure and conventions of Alchemy.
-
-      See ${alchemy.file("./alchemy/test/cloudflare/worker.test.ts")} for an example of how testing works.
-
-      Write a comprehensive getting started guide for Alchemy that covers the following topics:
+      You are a technical writer creating a getting started guide.
       
-      # Getting Started with Alchemy
+      ${prompt}
       
-      (Brief introduction to Alchemy as an infrastructure as code framework)
+      If you need a template structure to follow, use this format:
+      
+      # Getting Started with [Product/Framework Name]
+      
+      (Brief introduction to the product/framework)
       
       ## Installation
       
       \`\`\`bash
-      # Install Alchemy
-      bun add alchemy
+      # Installation command
       \`\`\`
       
-      ## Creating Your First Alchemy Project
+      ## Creating Your First Project
       
-      (Step-by-step guide to creating a basic Alchemy project)
+      (Step-by-step guide to creating a basic project)
       
       \`\`\`ts
-      // Example of a simple Alchemy project
-      import alchemy from "alchemy";
-      
-      // Sample code here
+      // Example of a simple project
       \`\`\`
       
       ## Core Concepts
       
-      ### Resources
+      ### [Concept 1]
       
-      (Explanation of Alchemy resources and how they work)
+      (Explanation of the first core concept)
       
       \`\`\`ts
-      // Example of creating a resource
+      // Example of using the concept
       \`\`\`
       
-      ### Context
+      ### [Concept 2]
       
-      (Explanation of Alchemy context and lifecycle management)
+      (Explanation of the second core concept)
       
       \`\`\`ts
-      // Example of working with context
+      // Example of using the concept
       \`\`\`
       
-      ## Working with Secrets
+      ## Working with [Feature]
       
-      (How to handle secrets in Alchemy)
+      (How to use a specific feature)
       
       \`\`\`ts
-      // Example of using alchemy.secret()
-      const apiKey = alchemy.secret("API_KEY");
+      // Example of using the feature
       \`\`\`
       
       ## Testing
       
-      (How to test Alchemy resources)
+      (How to test your project)
       
       \`\`\`ts
-      // Example of testing Alchemy resources
+      // Example of testing
       \`\`\`
       
       ## Deployment
       
-      (How to deploy resources with Alchemy)
+      (How to deploy your project)
       
       \`\`\`ts
       // Example of deployment
@@ -97,13 +105,11 @@ export async function GettingStarted({
       
       ## Next Steps
       
-      (Where to go next to learn more about Alchemy)
-      
-      > [!CAUTION]
-      > Avoid the temptation to over explain or over describe. Focus on concise, simple, high value snippets.
+      (Where to go next to learn more)
       
       > [!TIP]
       > Make sure the examples follow a natural progression from minimal examples to more complex use cases.
+      > Keep explanations concise and focused on high-value information.
     `,
   });
 }

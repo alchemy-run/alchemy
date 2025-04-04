@@ -1,8 +1,8 @@
 # Worker
 
-The Worker resource lets you deploy [Cloudflare Workers](https://developers.cloudflare.com/workers/) - serverless JavaScript functions that run on Cloudflare's global network.
+The Worker resource lets you deploy [Cloudflare Workers](https://developers.cloudflare.com/workers/) - serverless JavaScript/TypeScript functions that run on Cloudflare's global network.
 
-# Minimal Example
+## Minimal Example
 
 Create a basic HTTP handler worker:
 
@@ -11,11 +11,11 @@ import { Worker } from "alchemy/cloudflare";
 
 const worker = await Worker("api", {
   name: "api-worker", 
-  script: "addEventListener('fetch', event => event.respondWith(new Response('Hello!')))"
+  script: "addEventListener('fetch', event => event.respondWith(new Response('Hello World')))"
 });
 ```
 
-# Create a Worker with Bindings
+## Create a Worker with Bindings
 
 ```ts
 import { Worker, KVNamespace, DurableObjectNamespace } from "alchemy/cloudflare";
@@ -38,7 +38,7 @@ const worker = await Worker("api", {
 });
 ```
 
-# Create a Worker with Routes
+## Create a Worker with Routes
 
 ```ts
 import { Worker } from "alchemy/cloudflare";
@@ -51,7 +51,7 @@ const worker = await Worker("api", {
 });
 ```
 
-# Create a Worker with Environment Variables
+## Create a Worker with Environment Variables
 
 ```ts
 import { Worker } from "alchemy/cloudflare";
@@ -60,11 +60,11 @@ import { secret } from "alchemy";
 const worker = await Worker("api", {
   name: "api-worker",
   entrypoint: "./src/api.ts",
-  env: {
-    API_URL: "https://api.example.com"
-  },
   bindings: {
     API_KEY: secret(process.env.API_KEY)
+  },
+  env: {
+    NODE_ENV: "production"
   }
 });
 ```

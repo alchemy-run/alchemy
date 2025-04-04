@@ -21,6 +21,21 @@ export default defineConfig({
     sidebar: [
       { text: "Getting Started", link: "/docs/getting-started" },
       {
+        text: "Tutorials",
+        link: "/docs/tutorials/deploy-cloudflare-worker-and-static-site",
+        collapsed: false,
+        items: [
+          {
+            text: "Deploying a Cloudflare Worker and Static Site",
+            link: "/docs/tutorials/deploy-cloudflare-worker-and-static-site",
+          },
+          {
+            text: "Bundling and Deploying an AWS Lambda Function",
+            link: "/docs/tutorials/deploy-aws-lambda-function",
+          },
+        ],
+      },
+      {
         text: "Providers",
         link: "/docs/providers",
         collapsed: false,
@@ -29,17 +44,20 @@ export default defineConfig({
             text: "ai",
             collapsed: true,
             items: [
-              { text: "Astro File", link: "/docs/providers/ai/astro-file.md" },
-              { text: "CSS File", link: "/docs/providers/ai/css-file.md" },
+              { text: "Approve", link: "/docs/providers/ai/approve.md" },
+              { text: "AstroFile", link: "/docs/providers/ai/astro-file.md" },
+              { text: "CSSFile", link: "/docs/providers/ai/css-file.md" },
               { text: "Data", link: "/docs/providers/ai/data.md" },
               { text: "Document", link: "/docs/providers/ai/document.md" },
-              { text: "HTML File", link: "/docs/providers/ai/html-file.md" },
+              { text: "HTMLFile", link: "/docs/providers/ai/html-file.md" },
+              { text: "JSONFile", link: "/docs/providers/ai/json-file.md" },
+              { text: "Review", link: "/docs/providers/ai/review.md" },
               {
-                text: "TypeScript File",
+                text: "TypeScriptFile",
                 link: "/docs/providers/ai/typescript-file.md",
               },
-              { text: "Vue File", link: "/docs/providers/ai/vue-file.md" },
-              { text: "YAML File", link: "/docs/providers/ai/yaml-file.md" },
+              { text: "VueFile", link: "/docs/providers/ai/vue-file.md" },
+              { text: "YAMLFile", link: "/docs/providers/ai/yaml-file.md" },
             ],
           },
           {

@@ -1,17 +1,17 @@
 # Vue File
 
-The Vue File resource lets you generate [Vue.js](https://vuejs.org/) components using AI models.
+The Vue File resource lets you generate [Vue.js](https://vuejs.org/) components using AI models. It extracts Vue code from between ```vue fences and validates the response.
 
 # Minimal Example
 
-Creates a basic Vue component file with the specified content.
+Creates a basic Vue component file.
 
 ```ts
 import { VueFile } from "alchemy/ai";
 
 const button = await VueFile("button", {
   path: "./src/components/Button.vue",
-  prompt: "Create a reusable button component with primary and secondary variants"
+  prompt: "Generate a simple button component with primary and secondary variants"
 });
 ```
 
@@ -23,26 +23,32 @@ import { VueFile } from "alchemy/ai";
 const userCard = await VueFile("user-card", {
   path: "./src/components/UserCard.vue", 
   prompt: await alchemy`
-    Create a UserCard component that displays user info.
-    Use the types from: ${alchemy.file("src/types/User.ts")}
-    Follow the styling from: ${alchemy.file("src/styles/card.css")}
+    Create a UserCard component using:
+    ${alchemy.file("src/types/User.ts")}
+    ${alchemy.file("src/styles/card.css")}
   `,
-  temperature: 0.2
+  model: {
+    id: "gpt-4o",
+    provider: "openai"
+  }
 });
 ```
 
-# Create a Form Component with Custom System Prompt
+# Generate a Form Component
 
 ```ts
 import { VueFile } from "alchemy/ai";
 
 const form = await VueFile("registration-form", {
   path: "./src/components/RegistrationForm.vue",
-  prompt: "Generate a registration form with email, password and validation",
-  system: "You are a Vue expert specializing in form components. Create a single Vue component inside ```vue fences.",
-  model: {
-    id: "gpt-4",
-    provider: "openai"
-  }
+  prompt: await alchemy`
+    Generate a registration form with:
+    - Email and password fields
+    - Form validation
+    - Submit handler
+    - Loading state
+  `,
+  system: "Create a Vue form component with validation and error handling",
+  temperature: 0.2
 });
 ```

@@ -4,7 +4,7 @@ The AstroFile resource lets you generate [Astro](https://astro.build) components
 
 # Minimal Example
 
-Creates a basic Astro component with AI-generated content.
+Creates a basic Astro component with AI-generated code.
 
 ```ts
 import { AstroFile } from "alchemy/ai";
@@ -15,7 +15,7 @@ const header = await AstroFile("header", {
 });
 ```
 
-# Create the Astro File
+# Create an Astro Component
 
 ```ts
 import { AstroFile } from "alchemy/ai";
@@ -28,15 +28,14 @@ const blogPost = await AstroFile("blog-post", {
     - Renders markdown content
     - Includes author info and publication date
     - Has social sharing buttons
-
+    
     Use the following types:
     ${alchemy.file("src/types/Blog.ts")}
   `,
-  temperature: 0.2,
-  prettierConfig: {
-    semi: false,
-    singleQuote: true,
-    printWidth: 120
-  }
+  model: {
+    id: "gpt-4o",
+    provider: "openai"
+  },
+  temperature: 0.2
 });
 ```

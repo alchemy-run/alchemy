@@ -1,12 +1,9 @@
 import { generateText } from "ai";
-import fs from "node:fs/promises";
-import path from "node:path";
-import prettier from "prettier";
 import type { Context } from "../context";
+import { StaticTypeScriptFile } from "../fs/static-typescript-file";
 import { Resource } from "../resource";
 import type { Secret } from "../secret";
-import { ignore } from "../util/ignore";
-import { type ModelConfig, createModel } from "./client";
+import { createModel, type ModelConfig } from "./client";
 
 /**
  * Properties for creating or updating a TypeScriptFile
@@ -65,7 +62,7 @@ export interface TypeScriptFileProps {
    * Prettier configuration to use for formatting the TypeScript code
    * If not provided, will use the default Prettier configuration
    */
-  prettierConfig?: prettier.Options;
+  prettierConfig?: object;
 }
 
 /**
@@ -166,20 +163,11 @@ export const TypeScriptFile = Resource(
   async function (
     this: Context<TypeScriptFile>,
     id: string,
-    props: TypeScriptFileProps,
+    props: TypeScriptFileProps
   ): Promise<TypeScriptFile> {
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(props.path), { recursive: true });
-
+    // Handle delete phase
     if (this.phase === "delete") {
-      try {
-        await fs.unlink(props.path);
-      } catch (error: any) {
-        // Ignore if file doesn't exist
-        if (error.code !== "ENOENT") {
-          throw error;
-        }
-      }
+      // StaticTypeScriptFile will handle the deletion
       return this.destroy();
     }
 
@@ -218,46 +206,24 @@ export const TypeScriptFile = Resource(
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid TypeScript code: ${retryResult.error}`,
+          `Failed to generate valid TypeScript code: ${retryResult.error}`
         );
       }
 
       code = retryResult.code;
     }
 
-    // Format the code with Prettier
-    try {
-      // Set default parser to typescript
-      const prettierOptions: prettier.Options = {
-        parser: "typescript",
-        ...props.prettierConfig,
-      };
-
-      // Format the code
-      code = await prettier.format(code, prettierOptions);
-    } catch (error) {
-      // If Prettier formatting fails, just use the unformatted code
-      console.warn("Failed to format TypeScript code with Prettier:", error);
-    }
-
-    if (this.phase === "update" && props.path !== this.props.path) {
-      await ignore("ENOENT", () => fs.unlink(this.props.path));
-    }
-
-    // Write content to file
-    await fs.writeFile(props.path, code);
-
-    // Get file stats for timestamps
-    const stats = await fs.stat(props.path);
+    // Use StaticTypeScriptFile to create/update the file
+    const file = await StaticTypeScriptFile("file", props.path, code);
 
     // Return the resource
     return this({
       ...props,
-      content: code,
-      createdAt: stats.birthtimeMs,
-      updatedAt: stats.mtimeMs,
+      content: file.content,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     });
-  },
+  }
 );
 
 /**
@@ -268,7 +234,7 @@ export const TypeScriptFile = Resource(
  * @returns The extracted TypeScript code or error message
  */
 async function extractTypeScriptCode(
-  text: string,
+  text: string
 ): Promise<{ code: string; error?: string }> {
   const tsCodeRegex = /```ts\s*([\s\S]*?)```/g;
   const matches = Array.from(text.matchAll(tsCodeRegex));

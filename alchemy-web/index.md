@@ -3,8 +3,8 @@ layout: home
 name: Alchemy
 hero:
   name: Alchemy
-  text: Agentic Infrastructure as Code 🪄
-  tagline: Building the Assembly Line for self-generated software and services
+  text: Create Update Delete
+  tagline: Agentic Infrastructure-as-Code workflows that run in any JS environments
   image:
     src: /alchemist.webp
     alt: The Alchemist

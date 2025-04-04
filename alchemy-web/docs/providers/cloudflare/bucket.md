@@ -4,7 +4,7 @@ The R2 Bucket resource lets you create and manage [Cloudflare R2 object storage 
 
 ## Minimal Example
 
-Create a basic R2 bucket for storing application data:
+Create a basic R2 bucket for storing application data.
 
 ```ts
 import { R2Bucket } from "alchemy/cloudflare";
@@ -43,12 +43,12 @@ const bucket = await R2Bucket("public-bucket", {
 import { Worker, R2Bucket } from "alchemy/cloudflare";
 
 const storage = await R2Bucket("storage", {
-  name: "my-storage"
+  name: "user-uploads"
 });
 
-await Worker("my-worker", {
-  name: "my-worker",
-  script: "console.log('Hello, world!')",
+await Worker("storage-worker", {
+  name: "storage-worker",
+  script: "console.log('Hello from storage worker!')",
   bindings: {
     STORAGE: storage
   }

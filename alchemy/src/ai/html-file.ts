@@ -1,10 +1,8 @@
 import { generateText } from "ai";
-import fs from "node:fs/promises";
-import path from "node:path";
 import type { Context } from "../context";
+import { StaticHTMLFile } from "../fs/static-html-file";
 import { Resource } from "../resource";
 import type { Secret } from "../secret";
-import { ignore } from "../util/ignore";
 import { type ModelConfig, createModel } from "./client";
 
 /**
@@ -151,20 +149,10 @@ export const HTMLFile = Resource(
   async function (
     this: Context<HTMLFile>,
     id: string,
-    props: HTMLFileProps,
+    props: HTMLFileProps
   ): Promise<HTMLFile> {
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(props.path), { recursive: true });
-
+    // Handle deletion phase
     if (this.phase === "delete") {
-      try {
-        await fs.unlink(props.path);
-      } catch (error: any) {
-        // Ignore if file doesn't exist
-        if (error.code !== "ENOENT") {
-          throw error;
-        }
-      }
       return this.destroy();
     }
 
@@ -203,31 +191,24 @@ export const HTMLFile = Resource(
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid HTML code: ${retryResult.error}`,
+          `Failed to generate valid HTML code: ${retryResult.error}`
         );
       }
 
       code = retryResult.code;
     }
 
-    if (this.phase === "update" && props.path !== this.props.path) {
-      await ignore("ENOENT", () => fs.unlink(this.props.path));
-    }
-
-    // Write content to file
-    await fs.writeFile(props.path, code);
-
-    // Get file stats for timestamps
-    const stats = await fs.stat(props.path);
+    // Use StaticHTMLFile to create/update the file
+    const file = await StaticHTMLFile("file", props.path, code);
 
     // Return the resource
     return this({
       ...props,
-      content: code,
-      createdAt: stats.birthtimeMs,
-      updatedAt: stats.mtimeMs,
+      content: file.content,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     });
-  },
+  }
 );
 
 /**
@@ -238,7 +219,7 @@ export const HTMLFile = Resource(
  * @returns The extracted HTML code or error message
  */
 async function extractHTMLCode(
-  text: string,
+  text: string
 ): Promise<{ code: string; error?: string }> {
   const htmlCodeRegex = /```html\s*([\s\S]*?)```/g;
   const matches = Array.from(text.matchAll(htmlCodeRegex));

@@ -111,6 +111,16 @@ function _alchemy(
         values.map(async function resolve(value): Promise<string> {
           if (typeof value === "string") {
             return indent + value;
+          } else if (value === null) {
+            return "null";
+          } else if (value === undefined) {
+            return "undefined";
+          } else if (
+            typeof value === "number" ||
+            typeof value === "boolean" ||
+            typeof value === "bigint"
+          ) {
+            return value.toString();
           } else if (value instanceof Promise) {
             return resolve(await value);
           } else if (isFileRef(value)) {
@@ -128,14 +138,14 @@ function _alchemy(
           } else if (Array.isArray(value)) {
             return (
               await Promise.all(
-                value.map(async (value, i) => `${i}. ${await resolve(value)}`),
+                value.map(async (value, i) => `${i}. ${await resolve(value)}`)
               )
             ).join("\n");
           } else {
             // TODO: support other types
             throw new Error(`Unsupported value type: ${JSON.stringify(value)}`);
           }
-        }),
+        })
       );
 
       // Construct the string template by joining template parts with interpolated values
@@ -144,12 +154,12 @@ function _alchemy(
           part
             .split("\n")
             .map((line) =>
-              line.startsWith(indent) ? line.slice(indent.length) : line,
+              line.startsWith(indent) ? line.slice(indent.length) : line
             )
-            .join("\n"),
+            .join("\n")
         )
         .flatMap((part, i) =>
-          i < stringValues.length ? [part, stringValues[i] ?? ""] : [part],
+          i < stringValues.length ? [part, stringValues[i] ?? ""] : [part]
         )
         .join("")
         .split("\n");
@@ -240,7 +250,7 @@ export interface AlchemyOptions {
  */
 function scope(
   id: string | undefined,
-  options?: AlchemyOptions,
+  options?: AlchemyOptions
   // TODO: maybe we want to allow using _ = await alchemy.scope(import.meta)
   // | [meta: ImportMeta]
 ): Scope {

@@ -1,6 +1,6 @@
 # KV Namespace
 
-The KV Namespace resource lets you create and manage [Cloudflare Workers KV](https://developers.cloudflare.com/workers/runtime-apis/kv/) key-value storage namespaces.
+The KV Namespace resource lets you create and manage [Cloudflare Workers KV](https://developers.cloudflare.com/kv/) key-value storage namespaces.
 
 ## Minimal Example
 
@@ -21,13 +21,11 @@ import { KVNamespace } from "alchemy/cloudflare";
 
 const kv = await KVNamespace("sessions", {
   title: "user-sessions",
-  values: [
-    {
-      key: "session_123",
-      value: { userId: "user_456", role: "admin" },
-      expirationTtl: 3600 // Expires in 1 hour
-    }
-  ]
+  values: [{
+    key: "session_123",
+    value: { userId: "user_456", role: "admin" },
+    expirationTtl: 3600 // Expires in 1 hour
+  }]
 });
 ```
 

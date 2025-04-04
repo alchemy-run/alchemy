@@ -4,26 +4,30 @@ import { File } from "./file";
  *
  * @example
  * // Create a YAML configuration file
- * const config = await YamlFile("config.yaml", {
- *   server:
- *     host: "localhost"
+ * const config = await StaticYamlFile("config.yaml", {
+ *   server: {
+ *     host: "localhost",
  *     port: 3000
- *   database:
- *     url: "postgresql://localhost:5432/db"
- *     pool:
- *       min: 1
+ *   },
+ *   database: {
+ *     url: "postgresql://localhost:5432/db",
+ *     pool: {
+ *       min: 1,
  *       max: 10
+ *     }
+ *   }
  * });
  */
 export type StaticYamlFile = File;
 
 export async function StaticYamlFile(
   id: string,
-  content: any,
+  ...args: [content: any] | [path: string, content: any]
 ): Promise<StaticYamlFile> {
+  const [path, content] = args.length === 1 ? [id, args[0]] : args;
   const yaml = await import("yaml");
   return File(id, {
-    path: id,
+    path,
     content: yaml.stringify(content),
   });
 }

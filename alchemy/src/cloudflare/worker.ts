@@ -16,6 +16,7 @@ import type { DurableObjectNamespace } from "./durable-object-namespace";
 import { isKVNamespace } from "./kv-namespace";
 import type { WorkerScriptMetadata } from "./worker-metadata";
 import type { SingleStepMigration } from "./worker-migration";
+
 /**
  * Properties for creating or updating a Worker
  */
@@ -209,7 +210,7 @@ export const Worker = Resource(
   async function <const B extends Bindings>(
     this: Context<Worker<NoInfer<B>>>,
     id: string,
-    props: WorkerProps<B>,
+    props: WorkerProps<B>
   ): Promise<Worker<B>> {
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi();
@@ -234,7 +235,7 @@ export const Worker = Resource(
     const scriptMetadata = await prepareWorkerMetadata(
       this,
       oldBindings,
-      props,
+      props
     );
 
     // Get the script content - either from props.script, or by bundling
@@ -254,7 +255,7 @@ export const Worker = Resource(
       this,
       api,
       workerName,
-      props.url ?? false,
+      props.url ?? false
     );
 
     // Get current timestamp
@@ -277,17 +278,17 @@ export const Worker = Resource(
       // phantom property
       Env: undefined!,
     });
-  },
+  }
 );
 
 async function deleteWorker<B extends Bindings>(
   ctx: Context<Worker<B>>,
   api: CloudflareApi,
-  workerName: string,
+  workerName: string
 ) {
   // Delete worker
   const deleteResponse = await api.delete(
-    `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+    `/accounts/${api.accountId}/workers/scripts/${workerName}`
   );
 
   // Check for success (2xx status code)
@@ -297,7 +298,7 @@ async function deleteWorker<B extends Bindings>(
       .catch(() => ({ errors: [{ message: deleteResponse.statusText }] }));
     console.error(
       "Error deleting worker:",
-      errorData.errors?.[0]?.message || deleteResponse.statusText,
+      errorData.errors?.[0]?.message || deleteResponse.statusText
     );
   }
 
@@ -308,7 +309,7 @@ async function deleteWorker<B extends Bindings>(
 
     if (!routesResponse.ok) {
       throw new Error(
-        `Could not fetch routes for cleanup: ${routesResponse.status} ${routesResponse.statusText}`,
+        `Could not fetch routes for cleanup: ${routesResponse.status} ${routesResponse.statusText}`
       );
     }
     const routesData: any = await routesResponse.json();
@@ -318,12 +319,12 @@ async function deleteWorker<B extends Bindings>(
       if (ctx.output.routes.includes(route.pattern)) {
         // Delete the route
         const routeDeleteResponse = await api.delete(
-          `/zones/${api.zoneId}/workers/routes/${route.id}`,
+          `/zones/${api.zoneId}/workers/routes/${route.id}`
         );
 
         if (!routeDeleteResponse.ok) {
           console.warn(
-            `Failed to delete route ${route.pattern}: ${routeDeleteResponse.status} ${routeDeleteResponse.statusText}`,
+            `Failed to delete route ${route.pattern}: ${routeDeleteResponse.status} ${routeDeleteResponse.statusText}`
           );
         }
       }
@@ -338,7 +339,7 @@ async function deleteWorker<B extends Bindings>(
         JSON.stringify({ enabled: false }),
         {
           headers: { "Content-Type": "application/json" },
-        },
+        }
       );
     } catch (error) {
       console.warn("Failed to disable worker URL during deletion:", error);
@@ -353,7 +354,7 @@ async function putWorker(
   api: CloudflareApi,
   workerName: string,
   scriptContent: string,
-  scriptMetadata: WorkerMetadata,
+  scriptMetadata: WorkerMetadata
 ) {
   return withExponentialBackoff(
     async () => {
@@ -371,7 +372,7 @@ async function putWorker(
             ? "application/javascript+module"
             : "application/javascript",
         }),
-        scriptName,
+        scriptName
       );
 
       // Add metadata as JSON
@@ -379,7 +380,7 @@ async function putWorker(
         "metadata",
         new Blob([JSON.stringify(scriptMetadata)], {
           type: "application/json",
-        }),
+        })
       );
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -392,7 +393,7 @@ async function putWorker(
           headers: {
             "Content-Type": "multipart/form-data",
           },
-        },
+        }
       );
 
       // Check if the upload was successful
@@ -416,7 +417,7 @@ async function putWorker(
     },
     (err) => err instanceof NotFoundError,
     10,
-    100,
+    100
   );
 }
 
@@ -441,7 +442,7 @@ interface WorkerMetadata {
 async function prepareWorkerMetadata<B extends Bindings>(
   ctx: Context<Worker<B>>,
   oldBindings: Bindings | undefined,
-  props: WorkerProps,
+  props: WorkerProps
 ): Promise<WorkerMetadata> {
   // Prepare metadata with bindings
   const meta: WorkerMetadata = {
@@ -498,7 +499,7 @@ async function prepareWorkerMetadata<B extends Bindings>(
       });
 
       const oldBinding: DurableObjectNamespace | undefined = Object.values(
-        oldBindings ?? {},
+        oldBindings ?? {}
       )
         ?.filter(isDurableObjectNamespace)
         ?.find((b) => b.id === stableId);
@@ -561,10 +562,10 @@ async function prepareWorkerMetadata<B extends Bindings>(
 async function assertWorkerDoesNotExist<B extends Bindings>(
   ctx: Context<Worker<B>>,
   api: CloudflareApi,
-  workerName: string,
+  workerName: string
 ) {
   const response = await api.get(
-    `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+    `/accounts/${api.accountId}/workers/scripts/${workerName}`
   );
   if (response.status === 404) {
     return true;
@@ -574,24 +575,24 @@ async function assertWorkerDoesNotExist<B extends Bindings>(
 
     if (!metadata) {
       throw new Error(
-        `Worker exists but failed to fetch metadata: ${response.status} ${response.statusText}`,
+        `Worker exists but failed to fetch metadata: ${response.status} ${response.statusText}`
       );
     }
 
     if (
       metadata.default_environment?.script.tags.includes(
-        `alchemy:id:${slugify(ctx.fqn)}`,
+        `alchemy:id:${slugify(ctx.fqn)}`
       )
     ) {
       return true;
     }
 
     throw new Error(
-      `Worker with name '${workerName}' already exists. Please use a unique name.`,
+      `Worker with name '${workerName}' already exists. Please use a unique name.`
     );
   } else {
     throw new Error(
-      `Error checking if worker exists: ${response.status} ${response.statusText} ${await response.text()}`,
+      `Error checking if worker exists: ${response.status} ${response.statusText} ${await response.text()}`
     );
   }
 }
@@ -634,7 +635,7 @@ async function bundleWorkerScript<B extends Bindings>(props: WorkerProps) {
 async function setupRoutes(
   api: CloudflareApi,
   workerName: string,
-  routes: string[],
+  routes: string[]
 ) {
   // Set up routes if provided
   if (routes && routes.length > 0 && api.zoneId) {
@@ -643,7 +644,7 @@ async function setupRoutes(
 
     if (!routesResponse.ok) {
       throw new Error(
-        `Could not fetch routes: ${routesResponse.status} ${routesResponse.statusText}`,
+        `Could not fetch routes: ${routesResponse.status} ${routesResponse.statusText}`
       );
     }
     const routesData: any = await routesResponse.json();
@@ -652,7 +653,7 @@ async function setupRoutes(
     // For each desired route
     for (const pattern of routes) {
       const existingRoute = existingRoutes.find(
-        (r: any) => r.pattern === pattern,
+        (r: any) => r.pattern === pattern
       );
 
       if (existingRoute) {
@@ -663,12 +664,12 @@ async function setupRoutes(
             {
               pattern,
               script: workerName,
-            },
+            }
           );
 
           if (!updateRouteResponse.ok) {
             console.warn(
-              `Failed to update route ${pattern}: ${updateRouteResponse.status} ${updateRouteResponse.statusText}`,
+              `Failed to update route ${pattern}: ${updateRouteResponse.status} ${updateRouteResponse.statusText}`
             );
           }
         }
@@ -679,12 +680,12 @@ async function setupRoutes(
           {
             pattern,
             script: workerName,
-          },
+          }
         );
 
         if (!createRouteResponse.ok) {
           throw new Error(
-            `Failed to create route ${pattern}: ${createRouteResponse.status} ${createRouteResponse.statusText}`,
+            `Failed to create route ${pattern}: ${createRouteResponse.status} ${createRouteResponse.statusText}`
           );
         }
       }
@@ -696,7 +697,7 @@ async function configureURL<B extends Bindings>(
   ctx: Context<Worker<B>>,
   api: CloudflareApi,
   workerName: string,
-  url: boolean,
+  url: boolean
 ) {
   let workerUrl;
   if (url) {
@@ -706,17 +707,17 @@ async function configureURL<B extends Bindings>(
       { enabled: true, previews_enabled: true },
       {
         headers: { "Content-Type": "application/json" },
-      },
+      }
     );
 
     // Get the account's workers.dev subdomain
     const subdomainResponse = await api.get(
-      `/accounts/${api.accountId}/workers/subdomain`,
+      `/accounts/${api.accountId}/workers/subdomain`
     );
 
     if (!subdomainResponse.ok) {
       throw new Error(
-        `Could not fetch workers.dev subdomain: ${subdomainResponse.status} ${subdomainResponse.statusText}`,
+        `Could not fetch workers.dev subdomain: ${subdomainResponse.status} ${subdomainResponse.statusText}`
       );
     }
     const subdomainData: {
@@ -743,11 +744,11 @@ async function configureURL<B extends Bindings>(
       JSON.stringify({ enabled: false }),
       {
         headers: { "Content-Type": "application/json" },
-      },
+      }
     );
     if (!response.ok) {
       throw new Error(
-        `Failed to disable worker URL: ${response.status} ${response.statusText}`,
+        `Failed to disable worker URL: ${response.status} ${response.statusText}`
       );
     }
   }
@@ -756,17 +757,17 @@ async function configureURL<B extends Bindings>(
 
 async function getWorkerScriptMetadata(
   api: CloudflareApi,
-  workerName: string,
+  workerName: string
 ): Promise<WorkerScriptMetadata | undefined> {
   const response = await api.get(
-    `/accounts/${api.accountId}/workers/services/${workerName}`,
+    `/accounts/${api.accountId}/workers/services/${workerName}`
   );
   if (response.status === 404) {
     return undefined;
   }
   if (!response.ok) {
     throw new Error(
-      `Error getting worker script metadata: ${response.status} ${response.statusText}`,
+      `Error getting worker script metadata: ${response.status} ${response.statusText}`
     );
   }
   return ((await response.json()) as any).result as WorkerScriptMetadata;
@@ -775,7 +776,7 @@ async function getWorkerScriptMetadata(
 async function getWorkerBindings(
   api: CloudflareApi,
   workerName: string,
-  environment = "production",
+  environment = "production"
 ) {
   const response = await api.get(
     `/accounts/${api.accountId}/workers/services/${workerName}/environments/${environment}/bindings`,
@@ -784,7 +785,7 @@ async function getWorkerBindings(
         Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
         "Content-Type": "application/json",
       },
-    },
+    }
   );
 
   if (response.status === 404) {
@@ -793,7 +794,7 @@ async function getWorkerBindings(
 
   if (!response.ok) {
     throw new Error(
-      `Failed to fetch bindings: ${response.status} ${response.statusText}`,
+      `Failed to fetch bindings: ${response.status} ${response.statusText}`
     );
   }
 

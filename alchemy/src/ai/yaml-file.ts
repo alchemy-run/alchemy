@@ -1,11 +1,9 @@
 import { generateObject, generateText } from "ai";
 import type { JsonSchema, Type, type } from "arktype";
-import fs from "node:fs/promises";
-import path from "node:path";
 import type { Context } from "../context";
+import { StaticYamlFile } from "../fs/static-yaml-file";
 import { Resource } from "../resource";
 import type { Secret } from "../secret";
-import { ignore } from "../util/ignore";
 import { ark } from "./ark";
 import { type ModelConfig, createModel } from "./client";
 
@@ -200,30 +198,9 @@ export const YAMLFile = Resource("ai::YAMLFile", async function <
 >(this: Context<YAMLFile<T extends Type<any, any> ? type.infer<T> : any>>, id: string, props: YAMLFileProps<T>): Promise<
   YAMLFile<T extends Type<any, any> ? type.infer<T> : any>
 > {
-  // Ensure directory exists
-  await fs.mkdir(path.dirname(props.path), { recursive: true });
-
+  // Handle deletion phase
   if (this.phase === "delete") {
-    try {
-      await fs.unlink(props.path);
-    } catch (error: any) {
-      // Ignore if file doesn't exist
-      if (error.code !== "ENOENT") {
-        throw error;
-      }
-    }
     return this.destroy();
-  }
-
-  // Dynamic import js-yaml to avoid dependency issues
-  // This allows the code to work even if js-yaml is not installed
-  let yaml: typeof import("yaml");
-  try {
-    yaml = await import("yaml");
-  } catch (err) {
-    throw new Error(
-      "The 'yaml' package is required for the YAMLFile resource. Please install it with: bun add yaml",
-    );
   }
 
   let yamlContent: string;
@@ -247,16 +224,9 @@ export const YAMLFile = Resource("ai::YAMLFile", async function <
 
     yamlObject = object;
 
-    // Convert object to YAML
-    try {
-      yamlContent = yaml.stringify(yamlObject, {
-        indent: 2,
-      });
-    } catch (error) {
-      throw new Error(
-        `Failed to convert object to YAML: ${(error as Error).message}`,
-      );
-    }
+    // Let StaticYamlFile handle the YAML conversion
+    const file = await StaticYamlFile("file", props.path, yamlObject);
+    yamlContent = file.content;
   } else {
     // Use fence-based extraction
     // Use provided system prompt or default
@@ -301,23 +271,13 @@ export const YAMLFile = Resource("ai::YAMLFile", async function <
 
     yamlContent = content;
 
-    // Parse YAML to validate and get object representation
-    try {
-      yamlObject = yaml.parse(yamlContent);
-    } catch (error) {
-      throw new Error(`Failed to parse YAML: ${(error as Error).message}`);
-    }
+    // Create the file with the string content
+    const file = await StaticYamlFile("file", props.path, yamlContent);
+
+    // We need to parse the YAML to get the object representation
+    const yaml = await import("yaml");
+    yamlObject = yaml.parse(yamlContent);
   }
-
-  if (this.phase === "update" && props.path !== this.props.path) {
-    await ignore("ENOENT", () => fs.unlink(this.props.path));
-  }
-
-  // Write content to file
-  await fs.writeFile(props.path, yamlContent);
-
-  // Get file stats for timestamps
-  const stats = await fs.stat(props.path);
 
   // Return the resource
   return this({
@@ -325,8 +285,8 @@ export const YAMLFile = Resource("ai::YAMLFile", async function <
     schema: props.schema,
     content: yamlContent,
     yaml: yamlObject,
-    createdAt: stats.birthtimeMs,
-    updatedAt: stats.mtimeMs,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
   });
 });
 
@@ -338,7 +298,7 @@ export const YAMLFile = Resource("ai::YAMLFile", async function <
  * @returns The extracted YAML or error message
  */
 async function extractYAMLContent(
-  text: string,
+  text: string
 ): Promise<{ content: string; error?: string }> {
   // Check for yaml or yml fence blocks
   const yamlCodeRegex = /```(yaml|yml)\s*([\s\S]*?)```/g;

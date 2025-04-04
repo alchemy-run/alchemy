@@ -1,10 +1,10 @@
-import { generateObject } from "ai";
+import { generateObject, type CoreMessage } from "ai";
 import type { JsonSchema, Type, type } from "arktype";
 import type { Context } from "../context";
 import { Resource } from "../resource";
 import type { Secret } from "../secret";
 import { ark } from "./ark";
-import { type ModelConfig, createModel } from "./client";
+import { createModel, type ModelConfig } from "./client";
 
 /**
  * Properties for creating or updating an AI Object
@@ -24,7 +24,13 @@ export interface DataProps<T extends Type<any, any>> {
    *   ${alchemy.file("src/data.ts")}
    * `
    */
-  prompt: string;
+  prompt?: string;
+
+  /**
+   * Message history for the conversation
+   * If provided, this will be used instead of the prompt
+   */
+  messages?: CoreMessage[];
 
   /**
    * System prompt to guide the AI's behavior
@@ -127,28 +133,23 @@ export interface Data<T> extends Resource<"ai::Object"> {
  * });
  *
  * @example
- * // Using specific model configuration with advanced options
- * const analysisSchema = type({
- *   insights: "string[]",
- *   recommendations: "string[]",
- *   risk: "'low'|'medium'|'high'"
+ * // Using message history for iterative generation
+ * const feedbackSchema = type({
+ *   rating: "number",
+ *   positives: "string[]",
+ *   improvements: "string[]",
+ *   summary: "string"
  * });
  *
- * const analysis = await Data("code-analysis", {
- *   schema: analysisSchema,
- *   prompt: await alchemy`
- *     Analyze this code for security issues:
- *     ${alchemy.file("src/auth/login.ts")}
- *   `,
- *   system: "You are a security expert specializing in code analysis",
- *   model: {
- *     id: "o3-mini",
- *     provider: "openai",
- *     options: {
- *       reasoningEffort: "high"
- *     }
- *   },
- *   temperature: 0.1
+ * const feedback = await Data("product-feedback", {
+ *   schema: feedbackSchema,
+ *   messages: [
+ *     { role: "user", content: "I'd like feedback on my product design" },
+ *     { role: "assistant", content: "I'd be happy to provide feedback. What's your product?" },
+ *     { role: "user", content: "It's a new smart home device that..." }
+ *   ],
+ *   system: "You are a product design expert providing structured feedback",
+ *   temperature: 0.3
  * });
  */
 export const Data = Resource("ai::Object", async function <
@@ -160,6 +161,14 @@ export const Data = Resource("ai::Object", async function <
     return this.destroy();
   }
 
+  // Validate that either prompt or messages is provided
+  if (!props.prompt && !props.messages) {
+    throw new Error("Either prompt or messages must be provided");
+  }
+
+  // Create messages array if only prompt is provided
+  const messages = props.messages || [{ role: "user", content: props.prompt! }];
+
   // Generate structured output using generateObject
   const { object } = await generateObject({
     model: createModel(props),
@@ -170,7 +179,7 @@ export const Data = Resource("ai::Object", async function <
     system:
       props.system ||
       "You are an AI assistant tasked with generating structured content.",
-    prompt: props.prompt,
+    messages,
     ...(props.temperature === undefined
       ? {}
       : // some models error if you provide it (rather than ignoring it)

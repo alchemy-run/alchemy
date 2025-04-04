@@ -5,7 +5,7 @@ import { File } from "./file";
  *
  * @example
  * // Create a TypeScript file
- * const component = await TypeScriptFile("Component.ts", `
+ * const component = await StaticTypeScriptFile("Component.ts", `
  *   interface Props {
  *     name: string;
  *     age: number;
@@ -20,11 +20,12 @@ export type StaticTypeScriptFile = File;
 
 export async function StaticTypeScriptFile(
   id: string,
-  content: string,
+  ...args: [content: string] | [path: string, content: string]
 ): Promise<StaticTypeScriptFile> {
+  const [path, content] = args.length === 1 ? [id, args[0]] : args;
   const prettier = await import("prettier");
   return File(id, {
-    path: id,
+    path,
     content: await prettier.format(content, {
       parser: "typescript",
       editor: {

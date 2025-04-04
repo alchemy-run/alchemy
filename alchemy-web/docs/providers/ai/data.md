@@ -24,7 +24,32 @@ const product = await Data("product", {
 console.log(product.object); // Typed as per schema
 ```
 
-# Generate with Context
+# Create Data with Message History
+
+Use message history for iterative content generation:
+
+```ts
+import { Data } from "alchemy/ai";
+import { type } from "arktype";
+
+const schema = type({
+  rating: "number",
+  feedback: "string",
+  improvements: "string[]"
+});
+
+const feedback = await Data("feedback", {
+  schema,
+  messages: [
+    { role: "user", content: "Review my product design" },
+    { role: "assistant", content: "I'll help review it. What's the product?" },
+    { role: "user", content: "It's a smart home device that..." }
+  ],
+  system: "You are a product design expert providing structured feedback"
+});
+```
+
+# Generate Data with File Context
 
 Use alchemy template literals to include file context:
 
@@ -33,9 +58,9 @@ import { Data } from "alchemy/ai";
 import { type } from "arktype";
 
 const docSchema = type({
-  summary: "string", 
+  summary: "string",
   parameters: [{
-    name: "string",
+    name: "string", 
     type: "string",
     description: "string"
   }],
@@ -48,7 +73,6 @@ const docs = await Data("function-docs", {
     Generate documentation for this function:
     ${alchemy.file("src/utils/format.ts")}
   `,
-  system: "You are a technical documentation writer",
   temperature: 0.2
 });
 ```
