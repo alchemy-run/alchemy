@@ -3,8 +3,9 @@ import {
   DeleteVpcCommand,
   DescribeVpcsCommand,
   EC2Client,
-  ResourceNotFoundException,
+  ResourceType,
   type Tag,
+  type TagSpecification,
 } from "@aws-sdk/client-ec2";
 import type { Context } from "../context";
 import { Resource } from "../resource";
@@ -219,7 +220,7 @@ export const Vpc = Resource(
     if (this.phase === "delete") {
       try {
         if (this.output?.id) {
-          await ignore(ResourceNotFoundException.name, () =>
+          await ignore("VpcNotFound", () =>
             client.send(
               new DeleteVpcCommand({
                 VpcId: this.output.id,
@@ -235,7 +236,7 @@ export const Vpc = Resource(
     } else {
       try {
         // Format tags for AWS API
-        const tagSpecifications = [];
+        const tagSpecifications: TagSpecification[] = [];
         const tags: Tag[] = [];
 
         if (props.name) {
@@ -256,7 +257,7 @@ export const Vpc = Resource(
 
         if (tags.length > 0) {
           tagSpecifications.push({
-            ResourceType: "vpc",
+            ResourceType: ResourceType.vpc,
             Tags: tags,
           });
         }

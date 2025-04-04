@@ -74,16 +74,15 @@ describe("Vpc Resource", () => {
           // Check if it's in a terminated state or gone from the response
           if (getDeletedResponse.Vpcs && getDeletedResponse.Vpcs.length > 0) {
             const deletedVpc = getDeletedResponse.Vpcs[0];
-            expect(deletedVpc.State).toEqual("pending-delete");
+            // VPC states are "available" or "pending"
+            expect(deletedVpc.State).toEqual("pending");
           } else {
             // VPC was successfully deleted
             expect(getDeletedResponse.Vpcs?.length).toEqual(0);
           }
         } catch (error: any) {
           // The describe call should fail with a not found error
-          expect(error.name).toMatch(
-            /VpcNotFound|InvalidVpcId|ResourceNotFoundException/
-          );
+          expect(error.name).toMatch(/VpcNotFound/);
         }
       }
     }
