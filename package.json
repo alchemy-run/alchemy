@@ -20,8 +20,5 @@
     "prettier": "^3.5.3",
     "typescript": "latest",
     "yaml": "^2.7.1"
-  },
-  "peerDependencies": {
-    "@aws-sdk/client-ec2": "^3.783.0"
   }
 }
