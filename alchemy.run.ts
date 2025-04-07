@@ -123,6 +123,8 @@ await Promise.all([
     STRIPE_API_KEY: alchemy.secret.env("STRIPE_API_KEY"),
     OPENAI_API_KEY: alchemy.secret.env("OPENAI_API_KEY"),
     CLOUDFLARE_BUCKET_NAME: stateStore.name,
+    R2_ACCESS_KEY_ID: accountAccessToken.id,
+    R2_SECRET_ACCESS_KEY: accountAccessToken.value,
   }).map(async ([name, value]) =>
     GitHubSecret(`github-secret-${name}`, {
       owner: "sam-goodwin",
