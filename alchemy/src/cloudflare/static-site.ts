@@ -333,10 +333,6 @@ export const StaticSite = Resource(
       generateAssetManifest(props.dir),
     ]);
 
-    console.log({
-      assetManifest,
-    });
-
     // Step 3: Upload assets to KV
     await uploadAssetManifest(api, kv.namespaceId, assetManifest);
 

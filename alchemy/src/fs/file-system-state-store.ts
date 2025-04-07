@@ -1,9 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Scope } from "../scope";
+import { deserialize, serialize } from "../serde";
 import type { State, StateStore } from "../state";
 import { ignore } from "../util/ignore";
-import { deserialize, serialize } from "../util/serde";
 
 const stateRootDir = path.join(process.cwd(), ".alchemy");
 
@@ -48,7 +48,7 @@ export class FileSystemStateStore implements StateStore {
       const content = await fs.readFile(await this.getPath(key), "utf8");
       const state = (await deserialize(
         this.scope,
-        JSON.parse(content),
+        JSON.parse(content)
       )) as State;
       if (state.output === undefined) {
         state.output = {} as any;
@@ -66,7 +66,7 @@ export class FileSystemStateStore implements StateStore {
   async set(key: string, value: State): Promise<void> {
     return fs.writeFile(
       await this.getPath(key),
-      JSON.stringify(await serialize(this.scope, value), null, 2),
+      JSON.stringify(await serialize(this.scope, value), null, 2)
     );
   }
 
@@ -88,9 +88,9 @@ export class FileSystemStateStore implements StateStore {
               return [] as const;
             }
             return [[id, s]] as const;
-          }),
+          })
         )
-      ).flat(),
+      ).flat()
     );
   }
 

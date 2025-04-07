@@ -78,7 +78,7 @@ type test = {
     name: string,
     options: TestOptions,
     fn: (scope: Scope) => Promise<any>,
-    timeout?: number,
+    timeout?: number
   ): void;
 
   /**
@@ -121,6 +121,7 @@ type test = {
  * ```
  */
 export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
+  let isFailed = false;
   defaultOptions = defaultOptions ?? {};
   if (
     defaultOptions.stateStore === undefined &&
@@ -129,7 +130,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
   ) {
     defaultOptions.stateStore = (scope) =>
       new R2RestStateStore(scope, {
-        apiKey: process.env.CLOUDFLARE_API_KEY,
+        apiKey: alchemy.secret(process.env.CLOUDFLARE_API_KEY),
         email: process.env.CLOUDFLARE_EMAIL,
         bucketName: process.env.CLOUDFLARE_BUCKET_NAME!,
       });
@@ -150,7 +151,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     {
       // parent: globalTestScope,
       stateStore: defaultOptions?.stateStore,
-    },
+    }
   );
   test.scope = localTestScope;
 
@@ -170,7 +171,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
 
   // Clean up test scope after all tests complete
   afterAll(async () => {
-    if (defaultOptions?.destroy !== false) {
+    if (defaultOptions?.destroy !== false && !isFailed) {
       await alchemy.destroy(test.scope);
     }
   });
@@ -192,8 +193,8 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
       obj && typeof obj === "object"
         ? Object.fromEntries(
             Object.entries(obj).flatMap(([k, v]) =>
-              v !== undefined ? [[k, v]] : [],
-            ),
+              v !== undefined ? [[k, v]] : []
+            )
           )
         : {};
 
@@ -229,7 +230,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
             }
           }
         });
-      },
+      }
     );
   }
 }

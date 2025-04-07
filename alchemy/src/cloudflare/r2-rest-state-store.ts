@@ -1,7 +1,8 @@
 import type { Scope } from "../scope";
+import type { Secret } from "../secret";
+import { deserialize, serialize } from "../serde";
 import type { State, StateStore } from "../state";
 import { withExponentialBackoff } from "../util/retry";
-import { deserialize, serialize } from "../util/serde";
 import { type CloudflareApi, createCloudflareApi } from "./api";
 
 /**
@@ -23,7 +24,7 @@ export interface CloudflareR2StateStoreOptions {
   /**
    * API key to use (overrides CLOUDFLARE_API_KEY env var)
    */
-  apiKey?: string;
+  apiKey?: Secret;
 
   /**
    * Account ID to use (overrides CLOUDFLARE_ACCOUNT_ID env var)
@@ -44,7 +45,7 @@ export class R2RestStateStore implements StateStore {
   private api: CloudflareApi;
   private prefix: string;
   private bucketName: string;
-  private apiKey: string | undefined;
+  private apiKey: Secret | undefined;
   private accountId: string | undefined;
   private email: string | undefined;
   private initialized = false;
@@ -57,7 +58,7 @@ export class R2RestStateStore implements StateStore {
    */
   constructor(
     public readonly scope: Scope,
-    options: CloudflareR2StateStoreOptions,
+    options: CloudflareR2StateStoreOptions
   ) {
     // Use the scope's chain to build the prefix, similar to how FileSystemStateStore builds its directory
     const scopePath = scope.chain.join("/");
@@ -129,7 +130,7 @@ export class R2RestStateStore implements StateStore {
           errors: [{ message: response.statusText }],
         }));
         throw new Error(
-          `Error listing R2 objects: ${errorData.errors?.[0]?.message || response.statusText}`,
+          `Error listing R2 objects: ${errorData.errors?.[0]?.message || response.statusText}`
         );
       }
 
@@ -144,7 +145,7 @@ export class R2RestStateStore implements StateStore {
         objects.map((obj: any) => {
           const keyName = obj.key || obj.name;
           return this.convertKeyFromStorage(keyName.slice(this.prefix.length));
-        }),
+        })
       );
 
       // Update cursor for next page if available
@@ -176,7 +177,7 @@ export class R2RestStateStore implements StateStore {
 
     try {
       const response = await this.api.get(
-        `/accounts/${this.api.accountId}/r2/buckets/${this.bucketName}/objects/${this.getObjectKey(key)}`,
+        `/accounts/${this.api.accountId}/r2/buckets/${this.bucketName}/objects/${this.getObjectKey(key)}`
       );
 
       if (!response.ok) {
@@ -188,7 +189,7 @@ export class R2RestStateStore implements StateStore {
           errors: [{ message: response.statusText }],
         }));
         throw new Error(
-          `Error getting R2 object: ${errorData.errors?.[0]?.message || response.statusText}`,
+          `Error getting R2 object: ${errorData.errors?.[0]?.message || response.statusText}`
         );
       }
 
@@ -267,7 +268,7 @@ export class R2RestStateStore implements StateStore {
             headers: {
               "Content-Type": "application/json",
             },
-          },
+          }
         );
 
         if (!response.ok) {
@@ -275,7 +276,7 @@ export class R2RestStateStore implements StateStore {
             errors: [{ message: response.statusText }],
           }));
           throw new Error(
-            `Error writing to R2: ${errorData.errors?.[0]?.message || response.statusText}`,
+            `Error writing to R2: ${errorData.errors?.[0]?.message || response.statusText}`
           );
         }
 
@@ -285,7 +286,7 @@ export class R2RestStateStore implements StateStore {
       (error) =>
         error.message?.includes("503") || error.message?.includes("timeout"),
       5, // 5 retry attempts
-      1000, // Start with 1 second delay
+      1000 // Start with 1 second delay
     );
   }
 
@@ -298,7 +299,7 @@ export class R2RestStateStore implements StateStore {
     await this.ensureInitialized();
 
     const response = await this.api.delete(
-      `/accounts/${this.api.accountId}/r2/buckets/${this.bucketName}/objects/${this.getObjectKey(key)}`,
+      `/accounts/${this.api.accountId}/r2/buckets/${this.bucketName}/objects/${this.getObjectKey(key)}`
     );
 
     if (!response.ok && response.status !== 404) {
@@ -306,7 +307,7 @@ export class R2RestStateStore implements StateStore {
         errors: [{ message: response.statusText }],
       }));
       throw new Error(
-        `Error deleting from R2: ${errorData.errors?.[0]?.message || response.statusText}`,
+        `Error deleting from R2: ${errorData.errors?.[0]?.message || response.statusText}`
       );
     }
   }

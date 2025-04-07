@@ -12,11 +12,12 @@
     "check": "tsc -b ./tsconfig.json",
     "publish:npm": "bun run --filter alchemy publish:npm"
   },
-  "workspaces": ["alchemy", "alchemy-web", "examples/*"],
+  "workspaces": ["alchemy", "examples/*"],
   "devDependencies": {
     "@biomejs/biome": "~1.8.0",
     "@types/bun": "latest",
     "@types/node": "latest",
+    "aws4fetch": "^1.0.20",
     "prettier": "^3.5.3",
     "typescript": "latest",
     "yaml": "^2.7.1"

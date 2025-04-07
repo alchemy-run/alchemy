@@ -83,3 +83,19 @@ export function secret<S extends string | undefined>(unencrypted: S): Secret {
   }
   return new Secret(unencrypted);
 }
+
+export namespace secret {
+  export async function env(
+    name: string,
+    value?: string,
+    error?: string
+  ): Promise<Secret> {
+    const alchemy = await import("./alchemy");
+    const result = await alchemy.env(name, value, error);
+    if (typeof result === "string") {
+      return secret(result);
+    } else {
+      throw new Error(`Secret environment variable ${name} is not a string`);
+    }
+  }
+}

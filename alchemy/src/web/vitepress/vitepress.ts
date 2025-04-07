@@ -117,8 +117,9 @@ export const VitepressProject = Resource(
       try {
         if (props.delete !== false) {
           if (await fs.exists(dir)) {
-            // Delete the entire project directory
-            await execAsync(`rm -rf ${dir}`);
+            await fs.rm(dir, { recursive: true, force: true });
+            // // Delete the entire project directory
+            // await execAsync(`rm -rf ${dir}`);
           }
         }
       } catch (error) {

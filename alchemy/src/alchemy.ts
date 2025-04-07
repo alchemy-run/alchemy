@@ -40,6 +40,12 @@ export interface Alchemy {
   scope: typeof scope;
   run: typeof run;
   destroy: typeof destroy;
+
+  /**
+   * Get an environment variable and error if it's not set.
+   */
+  env: typeof env;
+
   /**
    * Creates an encrypted secret that can be safely stored in state files.
    * Requires a password to be set either globally in the application options
@@ -88,12 +94,18 @@ function _alchemy(
     | [appName: string, options?: Omit<AlchemyOptions, "appName">]
 ): any {
   if (typeof args[0] === "string") {
-    const [appName, options] = args;
-    return scope(undefined, {
+    const [appName, options] = args as [string, AlchemyOptions?];
+    const root = scope(undefined, {
       ...options,
       appName,
       stage: options?.stage,
     });
+    if (options?.phase === "destroy") {
+      return destroy(root).finally(() => {
+        process.exit(0);
+      });
+    }
+    return root;
   } else {
     const [template, ...values] = args;
     const [, secondLine] = template[0].split("\n");
@@ -189,6 +201,7 @@ _alchemy.destroy = destroy;
 _alchemy.run = run;
 _alchemy.scope = scope;
 _alchemy.secret = secret;
+_alchemy.env = env;
 
 export interface AlchemyOptions {
   /**
@@ -310,4 +323,26 @@ async function run<T>(
   } finally {
     await scope.finalize();
   }
+}
+
+export async function env<T = string>(
+  name: string,
+  value?: T | undefined,
+  error?: string
+): Promise<T> {
+  if (value !== undefined) {
+    return value;
+  } else if (typeof process !== undefined) {
+    // we are in a node environment
+    return process.env[name]! as T;
+  } else {
+    // we are in a browser environment
+    try {
+      const { env } = await import("cloudflare:workers");
+      if (name in env) {
+        return env[name as keyof typeof env];
+      }
+    } catch (error) {}
+  }
+  throw new Error(error ?? `Environment variable ${name} is not set`);
 }

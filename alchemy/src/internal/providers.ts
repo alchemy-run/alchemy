@@ -25,6 +25,13 @@ export interface DocsProps {
    * @default true (all docs)
    */
   filter?: boolean | number;
+
+  /**
+   * Whether to run in parallel.
+   *
+   * @default true
+   */
+  parallel?: boolean;
 }
 
 export type AlchemyProviderDocs = {
@@ -37,6 +44,7 @@ export async function AlchemyProviderDocs({
   srcDir,
   outDir,
   filter,
+  parallel = true,
 }: DocsProps): Promise<AlchemyProviderDocs> {
   outDir = typeof outDir === "string" ? outDir : outDir.path;
 
@@ -66,50 +74,68 @@ export async function AlchemyProviderDocs({
     providers = providers.slice(0, filter);
   }
 
-  return await Promise.all(
-    providers.map(async (provider) => {
-      const providerName = path.basename(provider);
-      const files = (
-        await fs.readdir(path.resolve(provider), {
-          withFileTypes: true,
-        })
-      )
-        .filter((dirent) => dirent.isFile())
-        .map((dirent) =>
-          path.relative(process.cwd(), path.resolve(provider, dirent.name))
-        )
-        .filter((file) => file.endsWith(".ts") && !file.endsWith("index.ts"));
+  if (parallel) {
+    return await Promise.all(
+      providers.map((provider) => generateProviderDocs({ provider, outDir }))
+    );
+  } else {
+    const generatedProviders = [];
+    for (const provider of providers) {
+      generatedProviders.push(await generateProviderDocs({ provider, outDir }));
+    }
+    return generatedProviders;
+  }
+}
 
-      const {
-        object: { groups },
-      } = await Data(`docs/${providerName}`, {
-        model: {
-          id: "o3-mini",
-          provider: "openai",
-          options: {
-            reasoningEffort: "high",
-          },
-        },
-        temperature: 0.1,
-        schema: type({
-          groups: type({
-            title: type("string").describe(
-              "The title of the group, should be the Resource Name exactly as it's defined in code (const ResourceName translates to 'Resource Name') without spaces, e.g. Bucket or Static Site."
-            ),
-            filename: type("string").describe(
-              "The filename of the Resource's Document, e.g. bucket.md or static-site.md"
-            ),
-            category: type("'Resource'|'Client'|'Utility'|'Types'").describe(
-              "The classification of the Resource's Document, one of: Resource, Client, Utility, or Types."
-            ),
-          }).array(),
-        }),
-        system: await alchemy`
+async function generateProviderDocs({
+  provider,
+  outDir,
+}: {
+  provider: string;
+  outDir: string;
+}) {
+  const providerName = path.basename(provider);
+  const files = (
+    await fs.readdir(path.resolve(provider), {
+      withFileTypes: true,
+    })
+  )
+    .filter((dirent) => dirent.isFile())
+    .map((dirent) =>
+      path.relative(process.cwd(), path.resolve(provider, dirent.name))
+    )
+    .filter((file) => file.endsWith(".ts") && !file.endsWith("index.ts"));
+
+  const {
+    object: { groups },
+  } = await Data(`docs/${providerName}`, {
+    model: {
+      id: "o3-mini",
+      provider: "openai",
+      options: {
+        reasoningEffort: "high",
+      },
+    },
+    temperature: 0.1,
+    schema: type({
+      groups: type({
+        title: type("string").describe(
+          "The title of the group, should be the Resource Name exactly as it's defined in code (const ResourceName translates to 'Resource Name') without spaces, e.g. Bucket or Static Site."
+        ),
+        filename: type("string").describe(
+          "The filename of the Resource's Document, e.g. bucket.md or static-site.md"
+        ),
+        category: type("'Resource'|'Client'|'Utility'|'Types'").describe(
+          "The classification of the Resource's Document, one of: Resource, Client, Utility, or Types."
+        ),
+      }).array(),
+    }),
+    system: await alchemy`
           You are a technical writer tasked with identifying the distinct documents that need to be written for a document group (folder) in a documentation site.
           You will be provided with a list of documents and instructions on how to classify them.
           Each document has a title, file name, and category.
         `,
-        prompt: await alchemy`
+    prompt: await alchemy`
           Identify and classify the documents that need to be written for the '${provider}' Service's Alchemy Resources.
           For background knowledge on Alchemy, see ${alchemy.file("./README.md")}.
           For background knowledge on the structure of an Alchemy Resource, see ${alchemy.file("./.cursorrules")}.
@@ -127,31 +153,30 @@ export async function AlchemyProviderDocs({
           // "Resource Name"
           const ResourceName = Resource(...)
         `,
-      });
+  });
 
-      // console.log(groups);
+  // console.log(groups);
 
-      const providerDocsDir = (await Folder(path.join(outDir, providerName)))
-        .path;
+  const providerDocsDir = (await Folder(path.join(outDir, providerName))).path;
 
-      const documents = await Promise.allSettled(
-        groups
-          .filter((g) => g.category === "Resource")
-          .map(async (g) =>
-            Document(`docs/${providerName}/${g.title}`, {
-              title: g.title,
-              path: path.join(
-                providerDocsDir,
-                `${g.filename.replace(".ts", "").replace(".md", "")}.md`
-              ),
-              model: {
-                id: "claude-3-5-sonnet-latest",
-                provider: "anthropic",
-                // options: {
-                //   reasoningEffort: "high",
-                // },
-              },
-              prompt: await alchemy`
+  const documents = await Promise.allSettled(
+    groups
+      .filter((g) => g.category === "Resource")
+      .map(async (g) =>
+        Document(`docs/${providerName}/${g.title}`, {
+          title: g.title,
+          path: path.join(
+            providerDocsDir,
+            `${g.filename.replace(".ts", "").replace(".md", "")}.md`
+          ),
+          model: {
+            id: "claude-3-5-sonnet-latest",
+            provider: "anthropic",
+            // options: {
+            //   reasoningEffort: "high",
+            // },
+          },
+          prompt: await alchemy`
                 You are a technical writer writing API documentation for an Alchemy IaC Resource.
                 See ${alchemy.file("./README.md")} to understand the overview of Alchemy.
                 See ${alchemy.file("./.cursorrules")} to better understand the structure and convention of an Alchemy Resource.
@@ -217,25 +242,23 @@ export async function AlchemyProviderDocs({
                     : ""
                 }
               `,
-            })
-          )
-      );
-
-      // Unwrap all documents, fail if any rejected
-      const results = await Promise.all(
-        documents.map((r) => {
-          if (r.status === "rejected") {
-            throw r.reason;
-          }
-          return r.value;
         })
-      );
+      )
+  );
 
-      return {
-        dir: providerDocsDir,
-        provider: providerName,
-        documents: results,
-      } as const;
+  // Unwrap all documents, fail if any rejected
+  const results = await Promise.all(
+    documents.map((r) => {
+      if (r.status === "rejected") {
+        throw r.reason;
+      }
+      return r.value;
     })
   );
+
+  return {
+    dir: providerDocsDir,
+    provider: providerName,
+    documents: results,
+  };
 }

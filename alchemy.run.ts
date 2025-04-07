@@ -12,10 +12,13 @@ import "./alchemy/src/web/vitepress";
 
 import path from "node:path";
 import alchemy from "./alchemy/src";
-import { Role, getAccountId } from "./alchemy/src/aws";
+import { AccountId, Role } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
 import {
+  AccountApiToken,
+  CloudflareAccountId,
   DnsRecords,
+  PermissionGroups,
   R2Bucket,
   StaticSite,
   Zone,
@@ -31,6 +34,7 @@ import {
   VitePressConfig,
   VitepressProject,
 } from "./alchemy/src/web/vitepress";
+
 const app = alchemy("github:alchemy", {
   stage: "prod",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
@@ -39,7 +43,39 @@ const app = alchemy("github:alchemy", {
   quiet: process.argv.includes("--quiet"),
 });
 
-const accountId = await getAccountId();
+const cfEmail = await alchemy.env("CLOUDFLARE_EMAIL");
+
+const cfApiKey = await alchemy.secret.env("CLOUDFLARE_API_KEY");
+
+const cfAccountId = await CloudflareAccountId({
+  email: cfEmail,
+  apiKey: cfApiKey,
+});
+
+const zone = await Zone("alchemy.run", {
+  name: "alchemy.run",
+  type: "full",
+});
+
+const permissions = await PermissionGroups("cloudflare-permissions", {
+  // TODO: remove this once we have a way to get the account ID from the API
+  accountId: cfAccountId,
+});
+
+const accountAccessToken = await AccountApiToken("account-access-token", {
+  name: "alchemy-account-access-token",
+  policies: [
+    {
+      effect: "allow",
+      permissionGroups: [{ id: permissions["Workers R2 Storage Write"].id }],
+      resources: {
+        [`com.cloudflare.api.account.${cfAccountId}`]: "*",
+      },
+    },
+  ],
+});
+
+const awsAccountId = await AccountId();
 
 const githubRole = await Role("github-oidc-role", {
   roleName: "alchemy-github-oidc-role",
@@ -50,7 +86,7 @@ const githubRole = await Role("github-oidc-role", {
         Sid: "GitHubOIDC",
         Effect: "Allow",
         Principal: {
-          Federated: `arn:aws:iam::${accountId}:oidc-provider/token.actions.githubusercontent.com`,
+          Federated: `arn:aws:iam::${awsAccountId}:oidc-provider/token.actions.githubusercontent.com`,
         },
         Action: "sts:AssumeRoleWithWebIdentity",
         Condition: {
@@ -73,35 +109,29 @@ const stateStore = await R2Bucket("state-store", {
   name: "alchemy-state-store",
 });
 
-const githubSecrets = {
-  AWS_ROLE_ARN: githubRole.arn,
-  CLOUDFLARE_API_KEY: process.env.CLOUDFLARE_API_KEY,
-  CLOUDFLARE_EMAIL: process.env.CLOUDFLARE_EMAIL,
-  STRIPE_API_KEY: process.env.STRIPE_API_KEY,
-  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-  CLOUDFLARE_BUCKET_NAME: stateStore.name,
-};
-
 await Promise.all([
   GitHubOIDCProvider("github-oidc", {
     owner: "sam-goodwin",
     repository: "alchemy",
     roleArn: githubRole.arn,
   }),
-  ...Object.entries(githubSecrets).map(([name, value]) =>
+  ...Object.entries({
+    AWS_ROLE_ARN: githubRole.arn,
+    CLOUDFLARE_ACCOUNT_ID: cfAccountId,
+    CLOUDFLARE_API_KEY: cfApiKey,
+    CLOUDFLARE_EMAIL: cfEmail,
+    STRIPE_API_KEY: alchemy.secret.env("STRIPE_API_KEY"),
+    OPENAI_API_KEY: alchemy.secret.env("OPENAI_API_KEY"),
+    CLOUDFLARE_BUCKET_NAME: stateStore.name,
+  }).map(async ([name, value]) =>
     GitHubSecret(`github-secret-${name}`, {
       owner: "sam-goodwin",
       repository: "alchemy",
       name,
-      value: alchemy.secret(value),
+      value: typeof value === "string" ? alchemy.secret(value) : await value!,
     })
   ),
 ]);
-
-const zone = await Zone("alchemy.run", {
-  name: "alchemy.run",
-  type: "full",
-});
 
 const { records } = await ImportDnsRecords("dns-records", {
   domain: "alchemy.run",
@@ -170,6 +200,8 @@ if (process.argv.includes("--vitepress")) {
   const providersDocs = await AlchemyProviderDocs({
     srcDir: path.join("alchemy", "src"),
     outDir: providers.path,
+    // anthropic throttles are painful, so we'll run them serially
+    parallel: false,
     filter:
       process.argv[filterIdx + 1] === "true"
         ? true
@@ -352,15 +384,8 @@ if (process.argv.includes("--vitepress")) {
       },
     });
 
-    console.log({
-      url: site.url,
-    });
+    console.log("Site URL:", site.url);
   }
 }
 
 await app.finalize();
-
-console.log({
-  bucketName: stateStore.name,
-  nameservers: zone.nameservers,
-});

@@ -8,8 +8,8 @@ import {
   type ResourceProps,
 } from "./resource";
 import { Secret } from "./secret";
+import { serialize } from "./serde";
 import type { State } from "./state";
-import { serialize } from "./util/serde";
 
 export interface ApplyOptions {
   quiet?: boolean;
@@ -141,6 +141,7 @@ export async function apply<Out extends Resource>(
     // }
     return output as any;
   } catch (error) {
+    console.error(new Error().stack);
     scope.fail();
     throw error;
   }

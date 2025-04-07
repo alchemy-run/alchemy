@@ -1,3 +1,4 @@
+import type { Secret } from "../secret";
 import { type CloudflareAuthOptions, getCloudflareHeaders } from "./auth";
 
 /**
@@ -7,7 +8,7 @@ export interface CloudflareApiOptions {
   /**
    * API Key to use (overrides CLOUDFLARE_API_KEY env var)
    */
-  apiKey?: string;
+  apiKey?: Secret;
 
   /**
    * Account ID to use (overrides CLOUDFLARE_ACCOUNT_ID env var)
@@ -36,28 +37,96 @@ interface CloudflareAccount {
 }
 
 /**
+ * Custom error class for Cloudflare API errors
+ * Includes HTTP status information from the Response
+ */
+export class CloudflareApiError extends Error {
+  /**
+   * HTTP status code
+   */
+  status: number;
+
+  /**
+   * HTTP status text
+   */
+  statusText: string;
+
+  /**
+   * Raw error data from the API
+   */
+  errorData?: any;
+
+  /**
+   * Create a new CloudflareApiError
+   */
+  constructor(message: string, response: Response, errorData?: any) {
+    super(message);
+    this.name = "CloudflareApiError";
+    this.status = response.status;
+    this.statusText = response.statusText;
+    this.errorData = errorData;
+
+    // Ensure instanceof works correctly
+    Object.setPrototypeOf(this, CloudflareApiError.prototype);
+  }
+}
+
+/**
+ * Helper function to handle API errors
+ *
+ * @param response The fetch Response object
+ * @param action The action being performed (e.g., "creating", "deleting")
+ * @param resourceType The type of resource being acted upon (e.g., "R2 bucket", "Worker")
+ * @param resourceName The name/identifier of the specific resource
+ * @returns Never returns - always throws an error
+ */
+export async function handleApiError(
+  response: Response,
+  action: string,
+  resourceType: string,
+  resourceName: string
+): Promise<never> {
+  const json: any = await response.json();
+  console.log(json);
+  const errorData: any = json.errors || [{ message: response.statusText }];
+
+  const errorMessage = `Error ${action} ${resourceType} '${resourceName}': ${errorData.errors?.[0]?.message || response.statusText}`;
+
+  throw new CloudflareApiError(errorMessage, response, errorData);
+}
+
+/**
  * Creates a CloudflareApi instance with automatic account ID discovery if not provided
  *
  * @param options API options
  * @returns Promise resolving to a CloudflareApi instance
  */
 export async function createCloudflareApi(
-  options: CloudflareApiOptions = {},
+  options: CloudflareApiOptions = {}
 ): Promise<CloudflareApi> {
   try {
     return new CloudflareApi({
       ...options,
-      accountId:
-        options.accountId ||
-        process.env.CLOUDFLARE_ACCOUNT_ID ||
-        (await fetchAccountId()),
+      accountId: await CloudflareAccountId(options),
     });
   } catch (error) {
     console.error("Error during Cloudflare account ID discovery:", error);
     throw new Error(
-      "Failed to automatically discover Cloudflare account ID. Please provide an account ID explicitly or ensure your API token/key has sufficient permissions.",
+      "Failed to automatically discover Cloudflare account ID. Please provide an account ID explicitly or ensure your API token/key has sufficient permissions."
     );
   }
+}
+
+export type CloudflareAccountId = string & {
+  readonly __brand: "CloudflareAccountId";
+};
+
+export async function CloudflareAccountId(
+  options: CloudflareApiOptions = {}
+): Promise<CloudflareAccountId> {
+  return (options.accountId ||
+    process.env.CLOUDFLARE_ACCOUNT_ID ||
+    (await fetchAccountId())) as CloudflareAccountId;
 }
 
 /**
@@ -93,10 +162,12 @@ export class CloudflareApi {
     this.baseUrl = "https://api.cloudflare.com/client/v4";
 
     const apiKey =
-      options.apiKey || process.env.CLOUDFLARE_API_KEY || undefined;
+      options.apiKey?.unencrypted ||
+      process.env.CLOUDFLARE_API_KEY ||
+      undefined;
     if (!apiKey) {
       throw new Error(
-        "No API key provided. Use createCloudflareApi() instead for automatic account discovery.",
+        "No API key provided. Use createCloudflareApi() instead for automatic account discovery."
       );
     }
     this.apiKey = apiKey;
@@ -104,7 +175,7 @@ export class CloudflareApi {
     this.email = options.email || process.env.CLOUDFLARE_EMAIL;
     if (!this.email) {
       throw new Error(
-        "No email provided. Use createCloudflareApi() instead for automatic account discovery.",
+        "No email provided. Use createCloudflareApi() instead for automatic account discovery."
       );
     }
 
@@ -113,7 +184,7 @@ export class CloudflareApi {
       options.accountId || process.env.CLOUDFLARE_ACCOUNT_ID || "";
     if (!this.accountId) {
       throw new Error(
-        "No account ID provided. Use createCloudflareApi() instead for automatic account discovery.",
+        "No account ID provided. Use createCloudflareApi() instead for automatic account discovery."
       );
     }
 
@@ -146,7 +217,7 @@ export class CloudflareApi {
     // Get auth headers (async now)
     const authHeaders = await getCloudflareHeaders(
       contentType,
-      this.authOptions,
+      this.authOptions
     );
 
     // Combine all headers
@@ -195,7 +266,7 @@ export class CloudflareApi {
   async post(
     path: string,
     body: any,
-    init: RequestInit = {},
+    init: RequestInit = {}
   ): Promise<Response> {
     const requestBody =
       body instanceof FormData
@@ -212,7 +283,7 @@ export class CloudflareApi {
   async put(
     path: string,
     body: any,
-    init: RequestInit = {},
+    init: RequestInit = {}
   ): Promise<Response> {
     const requestBody = body instanceof FormData ? body : JSON.stringify(body);
     return this.fetch(path, { ...init, method: "PUT", body: requestBody });
@@ -224,7 +295,7 @@ export class CloudflareApi {
   async patch(
     path: string,
     body: any,
-    init: RequestInit = {},
+    init: RequestInit = {}
   ): Promise<Response> {
     return this.fetch(path, {
       ...init,
@@ -264,7 +335,7 @@ async function fetchAccountId(): Promise<string> {
     }));
 
     throw new Error(
-      `Error fetching Cloudflare accounts: ${errorData.errors?.[0]?.message || response.statusText}`,
+      `Error fetching Cloudflare accounts: ${errorData.errors?.[0]?.message || response.statusText}`
     );
   }
 
@@ -273,7 +344,7 @@ async function fetchAccountId(): Promise<string> {
 
   if (!accounts || accounts.length === 0) {
     throw new Error(
-      "No Cloudflare accounts found. Check your API token/key permissions.",
+      "No Cloudflare accounts found. Check your API token/key permissions."
     );
   }
 
