@@ -1,5 +1,5 @@
 import type { CoreMessage } from "ai";
-import { Approve, Document, Review } from "../ai";
+import { Document } from "../ai";
 import type { ModelConfig } from "../ai/client";
 import { alchemy } from "../alchemy";
 import type { Context } from "../context";
@@ -43,12 +43,6 @@ export interface TutorialProps {
    * Defaults to Claude 3.5 Sonnet.
    */
   model?: ModelConfig;
-
-  /**
-   * Maximum number of review iterations.
-   * Defaults to 3.
-   */
-  maxIterations?: number;
 
   /**
    * Initial message history for the conversation.
@@ -133,7 +127,6 @@ export const Tutorial = Resource(
         id: "claude-3-5-sonnet-latest",
         provider: "anthropic",
       },
-      maxIterations = 3,
       messages: initialMessages = [],
     } = props;
 
@@ -146,109 +139,6 @@ export const Tutorial = Resource(
     }
 
     // System prompts
-    const docSystemPrompt = `You are a technical writer creating a comprehensive tutorial.
-    
-    Your task is to create a detailed tutorial about ${title} with difficulty level: ${difficulty} and estimated time to complete: ${estimatedTime} minutes.
-    
-    The tutorial should take users from zero knowledge to a working understanding of the tool or framework.
-    
-    The tutorial should be structured as follows:
-    
-    # ${title}
-    
-    ## Overview
-    
-    (Provide a brief introduction to the tool/framework, its purpose, and what users will learn in this tutorial)
-    
-    ## Prerequisites
-    
-    (List any prerequisites, tools, or knowledge required before starting the tutorial)
-    
-    ## Setup
-    
-    ### Installation
-    
-    \`\`\`bash
-    # Installation commands
-    \`\`\`
-    
-    ### Configuration
-    
-    (Explain any necessary configuration steps)
-    
-    \`\`\`bash
-    # Configuration commands or code
-    \`\`\`
-    
-    ## Step 1: [First Step Title]
-    
-    (Explain the first step in detail)
-    
-    \`\`\`bash
-    # Commands or code for the first step
-    \`\`\`
-    
-    (Explain what the code does and why it's important)
-    
-    ## Step 2: [Second Step Title]
-    
-    (Explain the second step in detail)
-    
-    \`\`\`bash
-    # Commands or code for the second step
-    \`\`\`
-    
-    (Explain what the code does and why it's important)
-    
-    ## Step 3: [Third Step Title]
-    
-    (Explain the third step in detail)
-    
-    \`\`\`bash
-    # Commands or code for the third step
-    \`\`\`
-    
-    (Explain what the code does and why it's important)
-    
-    ## Step 4: [Fourth Step Title]
-    
-    (Explain the fourth step in detail)
-    
-    \`\`\`bash
-    # Commands or code for the fourth step
-    \`\`\`
-    
-    (Explain what the code does and why it's important)
-    
-    ## Step 5: [Fifth Step Title]
-    
-    (Explain the fifth step in detail)
-    
-    \`\`\`bash
-    # Commands or code for the fifth step
-    \`\`\`
-    
-    (Explain what the code does and why it's important)
-    
-    ## Testing Your Work
-    
-    (Explain how to verify that everything is working correctly)
-    
-    \`\`\`bash
-    # Testing commands or code
-    \`\`\`
-    
-    ## Troubleshooting
-    
-    (Common issues users might encounter and how to resolve them)
-    
-    ## Next Steps
-    
-    (Suggest additional resources, advanced topics, or projects to try next)
-    
-    ## Additional Resources
-    
-    (Links to documentation, community resources, or related tutorials)`;
 
     // Initial message if none provided
     const startingMessages =
@@ -261,130 +151,108 @@ export const Tutorial = Resource(
             },
           ];
 
-    // Generate the initial tutorial
-    console.log(`Tutorial: Generating initial tutorial for "${title}"`);
-    let tutorial = await Document(`document`, {
+    const tutorial = await Document(`document`, {
       title: title,
       path: typeof outFile === "string" ? outFile : outFile.path,
       model,
       messages: startingMessages,
-      system: docSystemPrompt,
+      system:
+        await alchemy`You are a technical writer creating a comprehensive tutorial.
+          Your task is to create a detailed tutorial about ${title} with difficulty level: ${difficulty} and estimated time to complete: ${estimatedTime} minutes.
+          The tutorial should take users from zero knowledge to a working understanding of the tool or framework.
+          The tutorial should be structured as follows:
+          
+          # ${title}
+          
+          ## Overview
+          
+          (Provide a brief introduction to the tool/framework, its purpose, and what users will learn in this tutorial)
+          
+          ## Prerequisites
+          
+          (List any prerequisites, tools, or knowledge required before starting the tutorial)
+          
+          ## Setup
+          
+          ### Installation
+          
+          \`\`\`bash
+          # Installation commands
+          \`\`\`
+          
+          ### Configuration
+          
+          (Explain any necessary configuration steps)
+          
+          \`\`\`bash
+          # Configuration commands or code
+          \`\`\`
+          
+          ## Step 1: [First Step Title]
+          
+          (Explain the first step in detail)
+          
+          \`\`\`bash
+          # Commands or code for the first step
+          \`\`\`
+          
+          (Explain what the code does and why it's important)
+          
+          ## Step 2: [Second Step Title]
+          
+          (Explain the second step in detail)
+          
+          \`\`\`bash
+          # Commands or code for the second step
+          \`\`\`
+          
+          (Explain what the code does and why it's important)
+          
+          ## Step 3: [Third Step Title]
+          
+          (Explain the third step in detail)
+          
+          \`\`\`bash
+          # Commands or code for the third step
+          \`\`\`
+          
+          (Explain what the code does and why it's important)
+          
+          ## Step 4: [Fourth Step Title]
+          
+          (Explain the fourth step in detail)
+          
+          \`\`\`bash
+          # Commands or code for the fourth step
+          \`\`\`
+          
+          (Explain what the code does and why it's important)
+          
+          ## Step 5: [Fifth Step Title]
+          
+          (Explain the fifth step in detail)
+          
+          \`\`\`bash
+          # Commands or code for the fifth step
+          \`\`\`
+          
+          (Explain what the code does and why it's important)
+          
+          ## Testing Your Work
+          
+          (Explain how to verify that everything is working correctly)
+          
+          \`\`\`bash
+          # Testing commands or code
+          \`\`\`
+         `,
     });
-    console.log(
-      `Tutorial: Initial tutorial generated for "${title}" (${tutorial.content.length} chars)`
-    );
 
-    // Review and improve the tutorial in a loop
-    let iteration = 0;
-    let approved = false;
-    let finalMessages = tutorial.messages;
-
-    while (!approved && iteration < maxIterations) {
-      iteration++;
-      console.log(
-        `Tutorial: Starting review iteration ${iteration}/${maxIterations} for "${title}"`
-      );
-
-      // Review the tutorial using system prompt
-      console.log(`Tutorial: Requesting review for iteration ${iteration}`);
-      const review = await Review(`review-${iteration}`, {
-        messages: finalMessages,
-        system:
-          await alchemy`Please review this tutorial for correctness, conciseness, logical flow, and accurateness. 
-        
-      The tutorial should:
-      1. Be technically accurate and free of errors
-      2. Be concise without over-explaining
-      3. Have a logical flow from basic to advanced concepts
-      4. Be accurate in its descriptions and instructions
-      5. Be appropriate for the ${difficulty} difficulty level
-      6. Be completable within approximately ${estimatedTime} minutes
-      
-      Provide specific feedback on areas that need improvement.`,
-        model,
-      });
-
-      // Extract the actual review content from the last assistant message
-      const reviewContent =
-        review.messages[review.messages.length - 1]?.content || "";
-      console.log(
-        `Tutorial: Review received for iteration ${iteration} (${reviewContent.length} chars)`
-      );
-
-      // Check if the tutorial is approved using system prompt
-      console.log(`Tutorial: Evaluating approval for iteration ${iteration}`);
-      const approvalResult = await Approve(`approval-${iteration}`, {
-        messages: review.messages,
-        system:
-          await alchemy`Based on the review above, determine if the tutorial meets the quality standards.
-      The tutorial should be approved if:
-      1. It is technically accurate and free of errors
-      2. It is concise without over-explaining
-      3. It has a logical flow from basic to advanced concepts
-      4. It is accurate in its descriptions and instructions
-      5. It is appropriate for the ${difficulty} difficulty level
-      6. It is completable within approximately ${estimatedTime} minutes
-      
-      Respond with APPROVED or DENIED, followed by your explanation.`,
-      });
-      console.log(
-        `Tutorial: Approval result for iteration ${iteration}: ${approvalResult.approved ? "APPROVED" : "DENIED"}`
-      );
-
-      // Log approval status
-      if (approvalResult.approved) {
-        console.log(
-          `Tutorial: Final tutorial approved: ${approvalResult.explanation}`
-        );
-        approved = true;
-        finalMessages = approvalResult.messages;
-      } else {
-        console.log(
-          `Tutorial: Tutorial needs improvement: ${approvalResult.explanation}`
-        );
-
-        // Add improvement request and generate an improved tutorial
-        const improvementMessages = [
-          ...approvalResult.messages,
-          {
-            role: "user" as const,
-            content: `Please create an improved version of the tutorial that addresses the issues identified in the review: ${approvalResult.explanation}`,
-          },
-        ];
-
-        console.log(
-          `Tutorial: Regenerating tutorial based on feedback for iteration ${iteration}`
-        );
-
-        tutorial = await Document(`tutorial-${iteration}`, {
-          title: title,
-          path: typeof outFile === "string" ? outFile : outFile.path,
-          model,
-          messages: improvementMessages,
-          system: docSystemPrompt,
-        });
-        console.log(
-          `Tutorial: Improved tutorial generated for iteration ${iteration} (${tutorial.content.length} chars)`
-        );
-
-        finalMessages = tutorial.messages;
-      }
-    }
-
-    if (!approved) {
-      console.log(
-        `Tutorial: Tutorial not approved after ${maxIterations} iterations. Using the best version available.`
-      );
-    }
-
-    console.log(`Tutorial: Completed creation of "${title}" (ID: ${id})`);
-
-    // Return the tutorial resource
     return this({
       ...props,
       document: tutorial,
       content: tutorial.content,
-      messages: finalMessages,
+      messages: tutorial.messages,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });

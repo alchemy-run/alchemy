@@ -9,8 +9,10 @@ Resources are simple memoized async functions that can run in any JavaScript run
 ```ts
 import alchemy from "alchemy";
 
-await using app = alchemy("cloudflare-worker");
+// initialize the app (with default state $USER)
+const app = alchemy("cloudflare-worker");
 
+// create a Cloudflare Worker
 export const worker = await Worker("worker", {
   name: "my-worker",
   entrypoint: "./src/index.ts",
@@ -18,10 +20,13 @@ export const worker = await Worker("worker", {
     COUNTER: counter,
     STORAGE: storage, // Bind the R2 bucket to the worker
     AUTH_STORE: authStore,
-    GITHUB_CLIENT_ID: secret(process.env.GITHUB_CLIENT_ID),
-    GITHUB_CLIENT_SECRET: secret(process.env.GITHUB_CLIENT_SECRET),
+    GITHUB_CLIENT_ID: alchemy.secret(process.env.GITHUB_CLIENT_ID),
+    GITHUB_CLIENT_SECRET: alchemy.secret(process.env.GITHUB_CLIENT_SECRET),
   },
 });
+
+// finalize the alchemy app (triggering deletion of orphaned resources)
+await app.finalize();
 ```
 
 # Features

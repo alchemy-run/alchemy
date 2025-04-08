@@ -131,28 +131,28 @@ async function generateProviderDocs({
       }).array(),
     }),
     system: await alchemy`
-          You are a technical writer tasked with identifying the distinct documents that need to be written for a document group (folder) in a documentation site.
-          You will be provided with a list of documents and instructions on how to classify them.
-          Each document has a title, file name, and category.
-        `,
+      You are a technical writer tasked with identifying the distinct documents that need to be written for a document group (folder) in a documentation site.
+      You will be provided with a list of documents and instructions on how to classify them.
+      Each document has a title, file name, and category.
+    `,
     prompt: await alchemy`
-          Identify and classify the documents that need to be written for the '${provider}' Service's Alchemy Resources.
-          For background knowledge on Alchemy, see ${alchemy.file("./README.md")}.
-          For background knowledge on the structure of an Alchemy Resource, see ${alchemy.file("./.cursorrules")}.
+      Identify and classify the documents that need to be written for the '${provider}' Service's Alchemy Resources.
+      For background knowledge on Alchemy, see ${alchemy.file("./README.md")}.
+      For background knowledge on the structure of an Alchemy Resource, see ${alchemy.file("./.cursorrules")}.
 
-          The ${provider} Service has the following resources:
-          ${alchemy.files(files)}
+      The ${provider} Service has the following resources:
+      ${alchemy.files(files)}
 
-          A file is considered a "Resource" if it contains a const <ResourceName> = Resource(...) call or if it is a function that calls a Resource function, e.g. const TypeScriptFile = () => File(...).
-          A file is considered a "Client" if it exposes a wrapper around creating a SDK client or fetch.
-          A file is considered a "Utility" if it contains utility functions that are not resources or clients.
-          A file is considered a "Types" if it contains just type definitions and maybe helpers around working with those types.
+      A file is considered a "Resource" if it contains a const <ResourceName> = Resource(...) call or if it is a function that calls a Resource function, e.g. const TypeScriptFile = () => File(...).
+      A file is considered a "Client" if it exposes a wrapper around creating a SDK client or fetch.
+      A file is considered a "Utility" if it contains utility functions that are not resources or clients.
+      A file is considered a "Types" if it contains just type definitions and maybe helpers around working with those types.
 
-          The title should be simply the name of the resource's const in code (with spaces added in between each word), e.g. "Bucket" or "Function", except with spaces, e.g. "Static Site" for "const StaticSite". Maintain all other casing.
+      The title should be simply the name of the resource's const in code (with spaces added in between each word), e.g. "Bucket" or "Function", except with spaces, e.g. "Static Site" for "const StaticSite". Maintain all other casing.
 
-          // "Resource Name"
-          const ResourceName = Resource(...)
-        `,
+      // "Resource Name"
+      const ResourceName = Resource(...)
+    `,
   });
 
   // console.log(groups);
@@ -164,7 +164,7 @@ async function generateProviderDocs({
       .filter((g) => g.category === "Resource")
       .map(async (g) =>
         Document(`docs/${providerName}/${g.title}`, {
-          title: g.title,
+          title: g.title.replaceAll(" ", ""),
           path: path.join(
             providerDocsDir,
             `${g.filename.replace(".ts", "").replace(".md", "")}.md`
@@ -177,71 +177,75 @@ async function generateProviderDocs({
             // },
           },
           prompt: await alchemy`
-                You are a technical writer writing API documentation for an Alchemy IaC Resource.
-                See ${alchemy.file("./README.md")} to understand the overview of Alchemy.
-                See ${alchemy.file("./.cursorrules")} to better understand the structure and convention of an Alchemy Resource.
+            You are a technical writer writing API documentation for an Alchemy IaC Resource.
+            See ${alchemy.file("./README.md")} to understand the overview of Alchemy.
+            See ${alchemy.file("./.cursorrules")} to better understand the structure and convention of an Alchemy Resource.
 
-                Relevant files for the ${providerName} Service:
-                ${alchemy.files(files)}
-                
-                Write concise documentation for the "${g.title}" Resource.
+            Relevant files for the ${providerName} Service:
+            ${alchemy.files(files)}
+            
+            Write concise documentation for the "${g.title}" Resource.
 
-                > [!CAUTION]
-                > Avoid the temptation to over explain or over describe. Focus on concise, simple, high value snippets. One heading and 0-1 descriptions per snippet.
-                
-                > [!TIP]
-                > Make sure the examples follow a natural progression from the minimal example to logical next steps of how the Resource might be used.
+            > [!CAUTION]
+            > Avoid the temptation to over explain or over describe. Focus on concise, simple, high value snippets. One heading and 0-1 descriptions per snippet.
+            
+            > [!TIP]
+            > Make sure the examples follow a natural progression from the minimal example to logical next steps of how the Resource might be used.
 
-                Each document must follow the following format:
-                
-                # ${g.title}
+            Each document must follow the following format:
+            
+            # ${g.title}
 
-                (simple description with an external link to the provider's website)
-                e.g.
-                The Efs component lets you add [Amazon Elastic File System (EFS)](https://docs.aws.amazon.com/efs/latest/ug/whatisefs.html) to your app.
+            (simple description with an external link to the provider's website)
+            e.g.
+            The Efs component lets you add [Amazon Elastic File System (EFS)](https://docs.aws.amazon.com/efs/latest/ug/whatisefs.html) to your app.
 
-                # Minimal Example
+            # Minimal Example
 
-                (brief 1-2 sentences of what it does)
+            (brief 1-2 sentences of what it does)
 
-                \`\`\`ts
-                import { ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
+            \`\`\`ts
+            import { ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
 
-                (example)
-                \`\`\`
+            (example)
+            \`\`\`
 
 
-                # Create the ${g.title}
+            # Create the ${g.title}
 
-                \`\`\`ts
-                import { ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
+            (brief 1-2 sentences of what it does)
 
-                (example)
-                \`\`\`
+            \`\`\`ts
+            import { ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
 
-                ${
-                  providerName === "cloudflare"
-                    ? await alchemy`# Bind to a Worker
-                (if it is a Cloudflare Resource)
+            (example)
+            \`\`\`
 
-                \`\`\`ts
-                import { Worker, ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
+            ${
+              providerName === "cloudflare"
+                ? await alchemy`# Bind to a Worker
+            (if it is a Cloudflare Resource)
 
-                const myResource = await ${g.title.replaceAll(" ", "")}("my-resource", {
-                  // ...
-                });
+            (brief 1-2 sentences of what it does)
 
-                await Worker("my-worker", {
-                  name: "my-worker",
-                  script: "console.log('Hello, world!')",
-                  bindings: {
-                    myResource,
-                  },
-                });
-                \`\`\``
-                    : ""
-                }
-              `,
+            \`\`\`ts
+            import { Worker, ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
+
+            const myResource = await ${g.title.replaceAll(" ", "")}("my-resource", {
+              // ...
+            });
+
+            await Worker("my-worker", {
+              name: "my-worker",
+              script: "console.log('Hello, world!')",
+              bindings: {
+                myResource,
+              },
+            });
+            \`\`\``
+                : ""
+            }
+          `,
         })
       )
   );
