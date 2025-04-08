@@ -165,6 +165,11 @@ export interface AccountApiToken
  * @see https://developers.cloudflare.com/api/resources/accounts/subresources/tokens/methods/create/
  *
  * @example
+ * // First, fetch all permission groups
+ * const permissions = await PermissionGroups("cloudflare-permissions", {
+ *   accountId: cfAccountId,
+ * });
+ *
  * // Create a token with read-only permissions for specific zones
  * const readOnlyToken = await AccountApiToken("readonly-token", {
  *   name: "Readonly Zone Token",
@@ -172,8 +177,8 @@ export interface AccountApiToken
  *     {
  *       effect: "allow",
  *       permissionGroups: [
- *         { id: "c8fed203ed3043cba015a93ad1616f1f" }, // Zone Read permission
- *         { id: "82e64a83756745bbbb1c9c2701bf816b" }  // Analytics Read permission
+ *         { id: permissions["Zone Read"].id },
+ *         { id: permissions["Analytics Read"].id }
  *       ],
  *       resources: {
  *         "com.cloudflare.api.account.zone.22b1de5f1c0e4b3ea97bb1e963b06a43": "*",
@@ -192,7 +197,7 @@ export interface AccountApiToken
  *     {
  *       effect: "allow",
  *       permissionGroups: [
- *         { id: "e6d8d4d3c4b3a2b1a0z9y8x7w6v5u4t3" } // Worker Routes Edit
+ *         { id: permissions["Worker Routes Edit"].id }
  *       ],
  *       resources: {
  *         "com.cloudflare.api.account.worker.route.*": "*"

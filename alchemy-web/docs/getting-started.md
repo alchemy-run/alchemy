@@ -1,91 +1,140 @@
 # Getting Started with Alchemy
 
-Alchemy is a TypeScript-native Infrastructure-as-Code library that lets you model cloud resources as simple async functions.
+Alchemy is a TypeScript-native Infrastructure-as-Code (IaC) library with zero dependencies. It lets you model resources that are automatically created, updated, and deleted.
 
-## Installation 
+## Installation
+
+Start by installing Alchemy using Bun:
 
 ```bash
 bun add alchemy
 ```
 
-Note that there's nothing special about `alchemy.run.ts` - it's just a regular TypeScript script that can run anywhere.
+## Creating Your First Alchemy App
 
-## Your First Alchemy Application
+Create a file named `alchemy.run.ts` in your project directory and follow these steps:
 
-Here's a minimal example that creates a file resource:
+### Step 1: Initialize the Alchemy Application Scope
 
-```ts
+```typescript
 import alchemy from "alchemy";
 import { File } from "alchemy/fs";
 
-await using app = alchemy("my-app", {
-  stage: "dev"
-});
-
-await File("hello.txt", {
-  path: "./hello.txt",
-  content: "Hello World!"
+// Initialize the Alchemy application scope
+const app = alchemy("my-first-app", {
+  stage: "dev",
+  phase: process.argv.includes("--destroy") ? "destroy" : "up",
+  quiet: false,
 });
 ```
 
-## Creating Your First Resource
+> [!NOTE]
+> Learn more about Alchemy scopes in [Concepts: Scope](./concepts/scope.md)
 
-Let's create a simple File resource:
+### Step 2: Create Resources
 
-```ts
-const file = await File("config.json", {
+```typescript
+// Create a file resource
+const configFile = await File("config.json", {
   path: "./config.json",
-  content: JSON.stringify({
-    name: "my-app",
-    version: "1.0.0"
-  }, null, 2)
+  content: "hello world"
 });
+
+console.log(`Created file at: ${configFile.path}`);
 ```
 
-## Running the Application
+> [!NOTE]
+> Learn more about Alchemy resources in [Concepts: Resource](./concepts/resource.md)
 
-Run the application with:
+### Step 3: Finalize the Application
+
+```typescript
+// Finalize the app to apply changes
+await app.finalize();
+```
+
+This finalizes your application scope, ensuring all resources are properly created, updated, or deleted.
+
+## Running Your App
+
+Run your Alchemy app with:
 
 ```bash
 bun ./alchemy.run.ts
 ```
 
-This will create the file at `./config.json` with the specified content.
+You should see output similar to:
+
+```
+Create:  "my-first-app/dev/config.json"
+Created: "my-first-app/dev/config.json"
+```
+
+This indicates that Alchemy has:
+1. Identified that the resource needs to be created
+2. Successfully created the resource
 
 ## Understanding State
 
-Alchemy tracks resource state in the `.alchemy/` folder:
+After running your app, Alchemy creates a `.alchemy` directory to store state:
 
 ```
 .alchemy/
-  my-app/
+  my-first-app/
     dev/
-      config.json.state
+      config.json.json
 ```
 
-The state file contains information about the resource like:
-- Current properties
-- Output values 
-- Status (created/updated/deleted)
+This state file tracks:
+- Resource properties
+- Output values
+- Current status
+- Dependencies
 
-## Resource Lifecycle
+> [!NOTE]
+> Learn more about Alchemy state in [Concepts: State](./concepts/state.md)
 
-Let's see what happens when we remove the resource:
+State files help Alchemy determine whether to create, update, delete, or skip resources on subsequent runs. If you run the same script again without changes, you'll see no operations performed because the state hasn't changed.
 
-```ts
-// Delete alchemy.run.ts or remove the File resource
+## Destroying Resources
 
-// Run again to trigger deletion
-bun ./alchemy.run.ts
+To delete resources, either:
+
+1. Comment out the resource and run again:
+
+```typescript
+// COMMENTED OUT:
+// const configFile = await File("config.json", {
+//   path: "./config.json",
+//   content: "hello world"
+// });
 ```
 
-The file will be deleted along with its state file since it's no longer referenced in the code.
+2. Or run with the `--destroy` flag:
+
+```bash
+bun ./alchemy.run.ts --destroy
+```
+
+The output should look like:
+
+```
+Delete:  "my-first-app/dev/config.json"
+Deleted: "my-first-app/dev/config.json"
+```
+
+After deletion, both the file and its state entry will be removed.
+
+> [!NOTE]
+> Learn more about resource lifecycle in [Concepts: Destroy](./concepts/destroy.md) and [Scope Finalization](./concepts/scope.md#scope-finalization).
 
 ## Next Steps
 
-1. Jump to [examples](https://github.com/sam-goodwin/alchemy/tree/main/examples)
-   1. [Deploying a Cloudflare Worker and Static Site](/docs/tutorials/deploy-cloudflare-worker-and-static-site)
-2. [Bundling and Deploying an AWS Lambda Function](/docs/tutorials/deploy-aws-lambda-function) 
-3. [Create a Custom Resource with AI](/docs/tutorials/writing-custom-resource)
+Now that you've created your first Alchemy project, you might want to:
 
-See [README.md](./README.md) for an overview of Alchemy concepts.
+- Try a more complex example with [Cloudflare and Vite](./guides/cloudflare/vitejs)
+- Learn about [Resource Scopes](./concepts/scope.md)
+- Understand [Secrets Management](./concepts/secret.md)
+- Learn about [Testing Your Infrastructure](./concepts/testing.md)
+
+Alchemy's modular, zero-dependency approach makes it perfect for embedding in any JavaScript environment, from browsers to serverless functions.

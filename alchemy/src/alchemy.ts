@@ -164,6 +164,14 @@ function _alchemy(
               appendices[value.path] = await fs.readFile(value.path, "utf-8");
               return `[${path.basename(value.path)}](${value.path})`;
             }
+          } else if (typeof value === "object") {
+            return (
+              await Promise.all(
+                Object.entries(value).map(async ([key, value]) => {
+                  return `* ${key}: ${await resolve(value)}`;
+                })
+              )
+            ).join("\n");
           } else {
             // TODO: support other types
             console.log(value);

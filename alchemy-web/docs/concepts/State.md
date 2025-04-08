@@ -1,115 +1,133 @@
-# State Management in Alchemy
+---
+order: 3
+---
 
-Alchemy uses a state management system to track resources and their dependencies across scopes. The state system is responsible for determining when to create, update, delete, or skip resources during execution.
+# State
+
+Alchemy uses a transparent and pluggable state management system to track resource lifecycles and enable idempotent operations. It's designed to be simple, with multiple backend options ranging from local files to cloud storage.
 
 ## What is State in Alchemy?
 
-State in Alchemy represents the persisted information about resources that have been created. It contains the resource's properties, outputs, and metadata needed to manage the resource lifecycle.
-
-> [!NOTE]
-> State is what enables Alchemy to be idempotent - running the same code multiple times will only create resources once.
-
-## State and Resource Lifecycle
-
-State directly influences how resources are processed:
-
-1. No state → Resource is created
-2. State exists, inputs unchanged → Resource is skipped
-3. State exists, inputs changed → Resource is updated
-4. State exists, resource no longer in code → Resource is deleted
-
-> [!TIP]
-> You can inspect state files to understand what resources exist and their current configuration.
-
-# The State Store Interface
-
-The state store interface is designed to be storage-agnostic, supporting multiple backends through a common API. This allows Alchemy to work with various storage options:
-
-- Local filesystem (.alchemy folder)
-- Cloud storage (S3, R2)
-- Databases (DynamoDB, SQLite)
-- Other key-value stores
-
-Each state store implements methods for listing, getting, setting, and deleting state entries.
-
-# Default State Storage
-
-By default, state is stored in the `.alchemy` folder in your project directory. The structure follows a hierarchical pattern based on scopes:
+State in Alchemy consists of resource data that tracks the current status, properties, and outputs of each resource. By default, it's stored in JSON files in a `.alchemy` directory, organized by app and stage:
 
 ```
 .alchemy/
-  my-app/                 # Application scope
-    prod/                 # Stage scope
-      my-resource.json    # Resource state
-      nested-scope/       # Nested scope
-        other-resource.json
+  my-app/
+    dev/
+      my-resource.json
+      my-other-resource.json
 ```
 
-# State File Format
+## State File Structure
 
-State files are stored as JSON and contain all the information needed to manage a resource:
+Each state file contains the full information about a resource:
 
 ```json
 {
-  "status": "updated",
-  "kind": "cloudflare::Worker",
-  "id": "api",
-  "fqn": "my-app/prod/api",
-  "seq": 3,
+  "provider": "service::ResourceName",
   "data": {},
-  "props": {
-    "name": "my-worker",
-    "entrypoint": "./src/index.ts",
-    "bindings": {
-      "KV_NAMESPACE": {
-        "namespaceId": "abcdef123456",
-        "title": "my-namespace"
-      }
-    }
-  },
+  "status": "updated",
   "output": {
-    "id": "api",
-    "name": "my-worker",
-    "url": "https://my-worker.workers.dev",
-    "createdAt": 1678901234567
+    "id": "resource-123",
+    "name": "My Resource",
+    "createdAt": 1679012345678
+  },
+  "props": {
+    "name": "My Resource",
+    "description": "This is a test resource"
   }
 }
 ```
 
-> [!NOTE]
-> Sensitive values like API keys are automatically encrypted when using the `alchemy.secret()` function and a password is provided.
+The state file includes:
 
-# Override the Application State Store
+- **provider**: The resource type identifier
+- **data**: Internal provider-specific data
+- **status**: Current lifecycle status (created, updated, deleted)
+- **output**: The resource's current output values
+- **props**: The resource's input properties
 
-The state store is pluggable and can be overridden when initializing your application:
+## How Alchemy Uses State
 
-```javascript
-import { R2RestStateStore } from "alchemy/cloudflare";
+Alchemy uses state to determine the appropriate action for each resource:
 
+1. **No state file**: The resource is created
+2. **State exists + props unchanged**: The resource is skipped
+3. **State exists + props changed**: The resource is updated
+4. **Resource removed from code**: The resource is deleted
+
+This approach enables idempotent operations - running the same code multiple times produces the same result, avoiding duplicate resource creation.
+
+## State Location
+
+By default, Alchemy stores state files in the `.alchemy` directory in your project root. This approach has several benefits:
+
+- **Transparency**: State files are plain JSON and can be inspected and modified manually
+- **Versioning**: State can be committed to source control with your code
+- **Portability**: No external service dependencies required
+
+## State Inspection
+
+State files can be directly inspected:
+
+```bash
+cat .alchemy/my-app/dev/my-resource.json
+```
+
+This transparency helps with debugging and understanding what Alchemy is doing.
+
+## Customizing State Storage
+
+Alchemy supports multiple state storage backends. You can use the default file system store or integrate with cloud services like Cloudflare R2:
+
+```typescript
+// Example with Cloudflare R2 state store
 const app = alchemy("my-app", {
-  state: new R2RestStateStore({
-    bucket: "my-bucket",
-    accessKeyId: "my-access-key-id",
-    secretAccessKey: "my-secret-access-key",
+  stage: "prod",
+  phase: process.argv.includes("--destroy") ? "destroy" : "up",
+  stateStore: (scope) => new R2RestStateStore(scope, {
+    apiKey: alchemy.secret(process.env.CLOUDFLARE_API_KEY),
+    email: process.env.CLOUDFLARE_EMAIL,
+    bucketName: process.env.CLOUDFLARE_BUCKET_NAME!,
   })
 });
 ```
 
-# Override a Scope's Application State Store
+> [!TIP]
+> Learn how to implement your own state storage in [Custom State Stores Guide](../guides/custom-state-store.md)
 
-You can also configure a different state store for a specific scope:
+## Security and Secrets
 
-```javascript
-await alchemy.run("my-app", {
-  stateStore: new R2StateStore({
-    bucket: "my-bucket",
-    accessKeyId: "my-access-key-id",
-    secretAccessKey: "my-secret-access-key",
-  })
-}, async (scope) => {
-    // Resources created here will use the R2 state store
-})
+State files may contain sensitive information. Alchemy provides a mechanism to encrypt sensitive values using the `alchemy.secret()` function:
+
+```typescript
+const apiKey = alchemy.secret(process.env.API_KEY);
+
+await ApiResource("my-api", {
+  key: apiKey
+});
 ```
 
+Secrets are encrypted in state files:
+
+```json
+{
+  "props": {
+    "key": {
+      "@secret": "Tgz3e/WAscu4U1oanm5S4YXH..."
+    }
+  }
+}
+```
+
+> [!IMPORTANT]
+> Always use `alchemy.secret()` for sensitive values to prevent them from being stored in plain text.
+
 > [!NOTE]
-> Nested scopes inherit the state store of their parent scope (unless otherwise specified)
+> Learn more about secrets management in [Concepts: Secrets](./secret.md)
+
+## Related Concepts
+
+- [Resources](./resource.md)
+- [Resource Destroy](./destroy.md)
+- [Secrets Management](./secret.md) 

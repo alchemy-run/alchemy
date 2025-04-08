@@ -33,6 +33,7 @@
     "editor.defaultFormatter": "biomejs.biome"
   },
   "[typescript][javascript][tsx][jsx]": {
+    "editor.indentSize": 2,
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "[markdown]": {

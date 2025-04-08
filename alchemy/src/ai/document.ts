@@ -11,8 +11,10 @@ import { createModel, withRateLimitRetry, type ModelConfig } from "./client";
 export interface DocumentProps {
   /**
    * Title of the document
+   *
+   * @default id
    */
-  title: string;
+  title?: string;
 
   /**
    * Optional path to the markdown document
@@ -88,6 +90,11 @@ export interface DocumentProps {
  * A markdown document that can be created, updated, and deleted
  */
 export interface Document extends DocumentProps, Resource<"docs::Document"> {
+  /**
+   * The title of the document
+   */
+  title: string;
+
   /**
    * Content of the document
    */
@@ -266,7 +273,7 @@ export const Document = Resource(
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid markdown content: ${retryResult.error}`
+          `Failed to generate valid markdown content: ${retryResult.error}\n${retryText}`
         );
       }
 
@@ -283,6 +290,7 @@ export const Document = Resource(
       ],
       createdAt: this.output?.createdAt || Date.now(),
       updatedAt: Date.now(),
+      title: props.title || id,
     };
 
     // Write file if path is provided

@@ -1,107 +1,136 @@
+---
+order: 1
+---
+
 # Resource
 
-A Resource in Alchemy is a fundamental building block that represents an infrastructure component with a lifecycle of creation, updating, and deletion. Resources are implemented as memoized async functions that can be executed in any JavaScript environment.
+Resources are the core building blocks of Alchemy. Each resource represents a piece of infrastructure or configuration that can be created, updated, and deleted automatically.
 
-## How to create a Resource
+## What is a Resource?
 
-Creating a resource is as simple as awaiting a resource function with an ID and properties:
+In Alchemy, a resource is:
 
-```typescript
-await Worker("my-worker", {
-  name: "my-worker",
-  entrypoint: "./src/index.ts",
-  bindings: {
-    COUNTER: counter,
-    STORAGE: storage
-  }
-});
-```
+1. **A memoized async function** that can run in any JavaScript environment
+2. **Stateful** with tracked inputs and outputs
+3. **Lifecycle-aware** with create, update, and delete phases
+4. **Dependency-aware** with automatic dependency resolution
 
-> [!NOTE]
-> The first parameter is the resource ID which must be unique within the current scope.
+## Resource Structure
 
-## How to update a Resource
-
-Updating a resource uses the same syntax as creating one - Alchemy automatically detects changes to the properties and performs an update operation:
+Each Alchemy resource follows a consistent pattern:
 
 ```typescript
-await Worker("my-worker", {
-  name: "my-worker",
-  entrypoint: "./src/index.ts",
-  bindings: {
-    COUNTER: counter,
-    STORAGE: storage,
-    NEW_BINDING: newBinding
-  }
-});
-```
+// Props interface for resource inputs
+export interface ResourceNameProps {
+  // Required and optional properties for creating/updating
+  name: string;
+  description?: string;
+}
 
-## What is a Resource Provider
+// Resource interface for outputs (extends the props)
+export interface ResourceName extends Resource<"service::ResourceName">, ResourceNameProps {
+  // Additional properties returned after creation
+  id: string;
+  createdAt: number;
+}
 
-A Resource Provider is the implementation of a specific resource type that handles its lifecycle operations. It defines how a resource is created, updated, and deleted.
-
-```typescript
-interface MyResourceProps { }
-interface MyResource extends Resource<"my::resource"> { }
-
-const MyResource = Resource(
-    "my::resource", 
-    async function(this: Context<MyResource>, props: MyResourceProps) {
-        if (this.phase === "delete") {
-            return this.destroy();
-        } else if (this.phase === "create") {
-            // create resource implementation
-        } else if (this.phase === "update") {
-            // update resource implementation
-        }
-        return this({});
+// Resource implementation
+export const ResourceName = Resource(
+  "service::ResourceName",
+  async function(this: Context<ResourceName>, id: string, props: ResourceNameProps): Promise<ResourceName> {
+    // Implementation of create/update/delete lifecycle
+    if (this.phase === "delete") {
+      // Delete the resource
+      return this.destroy();
+    } else {
+      // Create or update the resource
+      return this({
+        id: "generated-id",
+        ...props,
+        createdAt: Date.now()
+      });
     }
+  }
 );
 ```
+
+## Resource Usage
+
+Using a resource is as simple as calling an async function:
+
+```typescript
+// Create a new resource instance
+const myResource = await ResourceName("my-resource", {
+  name: "My Resource",
+  description: "This is a test resource"
+});
+
+// Access resource outputs
+console.log(myResource.id); // "generated-id"
+console.log(myResource.name); // "My Resource"
+```
+
+## Resource Context
+
+Each resource has access to a special `this` context that provides:
+
+- `this.phase`: Current lifecycle phase ("create", "update", or "delete")
+- `this.output`: Current resource state (previous outputs)
+- `this({...})`: Constructor for returning resource outputs
+- `this.destroy()`: Helper for resource deletion
+
+## Resource Lifecycle
+
+Alchemy resources go through three main lifecycle phases:
+
+1. **Create**: When a resource is first created
+2. **Update**: When a resource's properties change
+3. **Delete**: When a resource is removed or orphaned
+
+The appropriate phase is determined by comparing current inputs with stored state.
+
+> [!NOTE]
+> When resources are removed from code but still exist in state, they become "orphaned".
+
+## Custom Resources
+
+Creating custom resources is straightforward:
+
+```typescript
+export const MyCustomResource = Resource(
+  "custom::MyResource",
+  async function(this, id, props) {
+    // Your implementation here
+    return this({
+      id: "my-id",
+      ...props
+    });
+  }
+);
+```
+
+This pattern makes Alchemy highly extensible, allowing you to easily implement your own resources for any service.
+
+## Resource Scopes
+
+Resources can be organized into scopes:
+
+```typescript
+await alchemy.run("api", async () => {
+  // Resources created here are in the "api" scope
+  await Table("users");
+  await Function("getUser");
+});
+```
+
+Scopes create a tree structure that helps with organization and dependency management.
 
 > [!TIP]
-> Resource providers follow a "pseudo-class" pattern where `this` is bound to the resource context, providing access to the current phase, state, and helper methods.
+> Learn more about scopes in [Concepts: Scope](./scope.md)
 
-## The CRUD lifecycle
+## Related Concepts
 
-Resources in Alchemy follow a Create, Read, Update, Delete (CRUD) lifecycle. When a resource is first created, it enters the "create" phase. When properties change, it enters the "update" phase. When a resource is no longer referenced in code or explicitly destroyed, it enters the "delete" phase.
-
-## State
-
-Each resource maintains its state in a JSON file that tracks the resource's properties, outputs, and metadata. This state is used to determine whether a resource needs to be created, updated, or deleted.
-
-> [!NOTE]
-> For more information on state management, see /docs/concepts/state
-
-## Resource Scope
-
-Each Resource has its own Scope which isolates any resources created within its lifecycle handler.
-
-> [!NOTE]
-> For more information on scopes, see /docs/concepts/scope
-
-A resource provider can create other resources within its implementation:
-
-```typescript
-const ComplexResource = Resource(
-    "my::complex", 
-    async function(this: Context<ComplexResource>, props: ComplexResourceProps) {
-        // Create dependent resources within this resource's scope
-        const storage = await R2Bucket("storage", {
-            name: "resource-storage"
-        });
-        
-        const worker = await Worker("worker", {
-            name: "resource-worker",
-            bindings: {
-                STORAGE: storage
-            }
-        });
-        
-        return this({
-            storageId: storage.id,
-            workerId: worker.id
-        });
-    }
-);
-```
+- [State Management](./state.md)
+- [Resource Destroy](./destroy.md)
+- [Secrets](./secret.md) 
+- [Scopes](./scope.md)
