@@ -1,10 +1,10 @@
 # R2 Bucket
 
-The R2 Bucket resource lets you create and manage [Cloudflare R2 object storage buckets](https://developers.cloudflare.com/r2/) for storing and serving files.
+The R2 Bucket resource lets you create and manage [Cloudflare R2 object storage buckets](https://developers.cloudflare.com/r2/buckets/) for storing and serving files.
 
 ## Minimal Example
 
-Create a basic R2 bucket for storing application data.
+Create a basic R2 bucket with default settings:
 
 ```ts
 import { R2Bucket } from "alchemy/cloudflare";
@@ -16,7 +16,7 @@ const bucket = await R2Bucket("my-bucket", {
 
 ## Create with Location Hint
 
-Create a bucket with location hint for optimal performance in a specific region.
+Create a bucket with location hint for optimal performance:
 
 ```ts
 import { R2Bucket } from "alchemy/cloudflare";
@@ -30,7 +30,7 @@ const euBucket = await R2Bucket("eu-bucket", {
 
 ## Bind to a Worker
 
-Bind an R2 bucket to a Worker for direct access to stored objects.
+Bind an R2 bucket to a Worker for direct access:
 
 ```ts
 import { Worker, R2Bucket } from "alchemy/cloudflare";

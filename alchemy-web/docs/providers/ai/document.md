@@ -1,6 +1,6 @@
 # Document
 
-The Document Resource lets you generate markdown documentation using AI models like [OpenAI GPT-4](https://platform.openai.com/docs/models/gpt-4) and [Anthropic Claude](https://www.anthropic.com/claude).
+The Document Resource lets you generate markdown documentation using AI models like [OpenAI GPT-4](https://platform.openai.com/docs/models/gpt-4) and [Anthropic Claude](https://www.anthropic.com/product).
 
 # Minimal Example
 
@@ -44,8 +44,9 @@ Use conversation history for iterative document generation.
 ```ts
 import { Document } from "alchemy/ai";
 
-const docs = await Document("api-docs", {
+const apiDocs = await Document("api-docs", {
   title: "API Documentation",
+  path: "./docs/api.md",
   messages: [
     { role: "user", content: "Create API documentation for these files" },
     { role: "assistant", content: "I'll help you create API documentation. Please provide the files." },

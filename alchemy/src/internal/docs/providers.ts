@@ -127,8 +127,8 @@ async function generateProviderDocs({
     temperature: 0.1,
     schema: type({
       groups: type({
-        title: type("string").describe(
-          "The title of the group, should be the Resource Name exactly as it's defined in code (const ResourceName translates to 'Resource Name') without spaces, e.g. Bucket or Static Site."
+        identifier: type("string").describe(
+          "The identifier of the file's primary exported Resource/Function/Type, e.g. Bucket or StaticSite, AstroFile, TypeScriptFile"
         ),
         filename: type("string").describe(
           "The filename of the Resource's Document, e.g. bucket.md or static-site.md"
@@ -177,7 +177,8 @@ async function generateProviderDocs({
   }
 
   async function generateDocument(g: Group) {
-    return Document(`docs/${providerName}/${g.title}`, {
+    return Document(`docs/${providerName}/${g.identifier}`, {
+      title: g.identifier,
       path: path.join(
         providerDocsDir,
         `${g.filename.replace(".ts", "").replace(".md", "")}.md`
@@ -197,7 +198,7 @@ async function generateProviderDocs({
         Relevant files for the ${providerName} Service:
         ${alchemy.files(files)}
         
-        Write concise documentation for the "${g.title}" Resource.
+        Write concise documentation for the "${g.identifier}" Resource.
 
         > [!CAUTION]
         > Avoid the temptation to over explain or over describe. Focus on concise, simple, high value snippets. One heading and 0-1 descriptions per snippet.
@@ -207,7 +208,7 @@ async function generateProviderDocs({
 
         Each document must follow the following format:
         
-        # ${g.title}
+        # ${g.identifier}
 
         (simple description with an external link to the provider's website)
         e.g.
@@ -218,18 +219,18 @@ async function generateProviderDocs({
         (brief 1-2 sentences of what it does)
 
         \`\`\`ts
-        import { ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
+        import { ${g.identifier.replaceAll(" ", "")} } from "alchemy/${providerName}";
 
         (example)
         \`\`\`
 
 
-        # Create the ${g.title}
+        # Create the ${g.identifier}
 
         (brief 1-2 sentences of what it does)
 
         \`\`\`ts
-        import { ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
+        import { ${g.identifier.replaceAll(" ", "")} } from "alchemy/${providerName}";
 
         (example)
         \`\`\`
@@ -242,9 +243,9 @@ async function generateProviderDocs({
         (brief 1-2 sentences of what it does)
 
         \`\`\`ts
-        import { Worker, ${g.title.replaceAll(" ", "")} } from "alchemy/${providerName}";
+        import { Worker, ${g.identifier.replaceAll(" ", "")} } from "alchemy/${providerName}";
 
-        const myResource = await ${g.title.replaceAll(" ", "")}("my-resource", {
+        const myResource = await ${g.identifier.replaceAll(" ", "")}("my-resource", {
           // ...
         });
 

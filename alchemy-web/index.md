@@ -7,7 +7,7 @@ hero:
   text: Create, Update, Delete
   image: /alchemist.webp
 
-  tagline: TypeScript-native Infrastructure-as-Code optimized for Agentic workflows
+  tagline: Infrastructure-as-Code in pure TypeScript, optimized for Gen-AI
   actions:
     - theme: brand
       text: Get Started

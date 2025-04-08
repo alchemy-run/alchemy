@@ -1,59 +1,58 @@
-# Static Vue File
+# StaticVueFile
 
-The Static Vue File resource lets you create and manage [Vue.js](https://vuejs.org/) single-file component files (.vue) in your project.
+The StaticVueFile resource creates [Vue single-file components](https://vuejs.org/guide/scaling-up/sfc.html) with template, script and style blocks.
 
 # Minimal Example
 
-Creates a basic Vue component file with template, script and style sections.
+Create a basic Vue component file with a template.
+
+```ts
+import { StaticVueFile } from "alchemy/fs";
+
+const component = await StaticVueFile("Button.vue", `
+<template>
+  <button>Click me</button>
+</template>
+`);
+```
+
+# Create a Full Component
+
+Create a Vue component with template, script and scoped styles.
 
 ```ts
 import { StaticVueFile } from "alchemy/fs";
 
 const button = await StaticVueFile("Button.vue", `
 <template>
-  <button class="btn">{{ text }}</button>
+  <button class="btn" @click="handleClick">
+    {{ text }}
+  </button>
 </template>
 
 <script>
 export default {
   props: {
-    text: String
+    text: {
+      type: String,
+      required: true
+    }
+  },
+  methods: {
+    handleClick() {
+      this.$emit('click')
+    }
   }
 }
 </script>
 
-<style>
+<style scoped>
 .btn {
   padding: 0.5rem 1rem;
+  border-radius: 4px;
+  background: #42b883;
+  color: white;
 }
 </style>
-`);
-```
-
-# Create with Custom Path
-
-Creates a Vue component file at a specific path location.
-
-```ts
-import { StaticVueFile } from "alchemy/fs";
-
-const header = await StaticVueFile("Header", 
-  "components/Header.vue",
-  `<template>
-    <header>
-      <h1>{{ title }}</h1>
-      <nav>
-        <slot></slot>
-      </nav>
-    </header>
-  </template>
-
-  <script>
-  export default {
-    props: {
-      title: String
-    }
-  }
-  </script>
 `);
 ```

@@ -1,10 +1,10 @@
-# Static HTML File
+# StaticHTMLFile
 
-The Static HTML File resource lets you create and manage static HTML files in your project's filesystem.
+The StaticHTMLFile resource creates static HTML files in your project's filesystem. It extends the base [File](./file.md) resource type.
 
 # Minimal Example
 
-Creates a basic HTML file with the specified content.
+Create a basic HTML file with content:
 
 ```ts
 import { StaticHTMLFile } from "alchemy/fs";
@@ -24,21 +24,25 @@ const page = await StaticHTMLFile("index.html", `
 
 # Create with Custom Path
 
-Creates an HTML file at a specific path location.
+Create an HTML file at a specific path:
 
 ```ts
 import { StaticHTMLFile } from "alchemy/fs";
 
 const page = await StaticHTMLFile("home", 
-  "pages/home.html",
+  "pages/index.html",
   `<!DOCTYPE html>
   <html>
     <head>
+      <meta charset="UTF-8">
       <title>Home</title>
       <link rel="stylesheet" href="styles.css">
     </head>
     <body>
-      <h1>Welcome Home</h1>
+      <main>
+        <h1>Welcome</h1>
+        <p>This is the home page.</p>
+      </main>
     </body>
   </html>`
 );

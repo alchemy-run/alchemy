@@ -1,10 +1,10 @@
 # Queue
 
-The Queue component lets you add [Amazon Simple Queue Service (SQS)](https://aws.amazon.com/sqs/) queues to your app.
+The Queue component lets you create and manage [Amazon Simple Queue Service (SQS)](https://aws.amazon.com/sqs/) queues for your app.
 
 # Minimal Example
 
-Create a basic SQS queue with default settings.
+Create a basic standard SQS queue with default settings.
 
 ```ts
 import { Queue } from "alchemy/aws";

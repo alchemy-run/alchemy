@@ -2,9 +2,12 @@
 
 Alchemy is a TypeScript-native Infrastructure-as-Code (IaC) library with zero dependencies. It lets you model resources that are automatically created, updated, and deleted.
 
+> [!TIP]
+> Read [What is Alchemy](./what-is-alchemy.md) to get an overview of Alchemy and how it's different than tradtional IaC
+
 ## Installation
 
-Start by installing Alchemy using Bun:
+Start by installing the Alchemy library using Bun (or your preferred package manager):
 
 ```bash
 bun add alchemy
@@ -13,6 +16,9 @@ bun add alchemy
 ## Creating Your First Alchemy App
 
 Create a file named `alchemy.run.ts` in your project directory and follow these steps:
+
+> [!TIP]
+> `alchemy.run.ts` is just a convention - you can run Alchemy in any script or JavaScript environment.
 
 ### Step 1: Initialize the Alchemy Application Scope
 
@@ -31,7 +37,9 @@ const app = alchemy("my-first-app", {
 > [!NOTE]
 > Learn more about Alchemy scopes in [Concepts: Scope](./concepts/scope.md)
 
-### Step 2: Create Resources
+### Step 2: Instantiate a Resource
+
+A Resource is just an async function that takes a unique id (`config.json`) and some properties.
 
 ```typescript
 // Create a file resource
@@ -53,7 +61,7 @@ console.log(`Created file at: ${configFile.path}`);
 await app.finalize();
 ```
 
-This finalizes your application scope, ensuring all resources are properly created, updated, or deleted.
+This finalizes your application scope by ensuring any "orphaned" resources are deleted.
 
 ## Running Your App
 
@@ -74,6 +82,9 @@ This indicates that Alchemy has:
 1. Identified that the resource needs to be created
 2. Successfully created the resource
 
+> [!TIP]
+> If you're familiar with other IaC tools, this should feel similar to `terraform apply`, `pulumi up`, `cdk deploy` or `sst deploy`
+
 ## Understanding State
 
 After running your app, Alchemy creates a `.alchemy` directory to store state:
@@ -89,12 +100,11 @@ This state file tracks:
 - Resource properties
 - Output values
 - Current status
-- Dependencies
+
+State files help Alchemy determine whether to create, update, delete, or skip resources on subsequent runs. If you run the same script again without changes, you'll see no operations performed because the state hasn't changed.
 
 > [!NOTE]
 > Learn more about Alchemy state in [Concepts: State](./concepts/state.md)
-
-State files help Alchemy determine whether to create, update, delete, or skip resources on subsequent runs. If you run the same script again without changes, you'll see no operations performed because the state hasn't changed.
 
 ## Destroying Resources
 
@@ -110,7 +120,7 @@ To delete resources, either:
 // });
 ```
 
-2. Or run with the `--destroy` flag:
+2. Or simply run with the `--destroy` flag:
 
 ```bash
 bun ./alchemy.run.ts --destroy
@@ -125,16 +135,18 @@ Deleted: "my-first-app/dev/config.json"
 
 After deletion, both the file and its state entry will be removed.
 
-> [!NOTE]
-> Learn more about resource lifecycle in [Concepts: Destroy](./concepts/destroy.md) and [Scope Finalization](./concepts/scope.md#scope-finalization).
+> [!TIP]
+> Recall that `--destroy` is arbitrary. You're free to design your own CLI to fit your preferences and use-case
+> ```ts
+> const app = alchemy("my-first-app", {
+>  // this could just as easily be --remove to match sst!
+>  phase: process.argv.includes("--remove") ? "destroy" : "up",
+> });
+> ```
 
 ## Next Steps
 
 Now that you've created your first Alchemy project, you might want to:
 
-- Try a more complex example with [Cloudflare and Vite](./guides/cloudflare/vitejs)
-- Learn about [Resource Scopes](./concepts/scope.md)
-- Understand [Secrets Management](./concepts/secret.md)
-- Learn about [Testing Your Infrastructure](./concepts/testing.md)
-
-Alchemy's modular, zero-dependency approach makes it perfect for embedding in any JavaScript environment, from browsers to serverless functions.
+- [Deploy a ViteJS site to Cloudflare](./guides/cloudflare/vitejs)
+- [Build your own Custom Resource](./guides/custom-resources.md)

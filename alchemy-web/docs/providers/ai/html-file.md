@@ -11,28 +11,28 @@ import { HTMLFile } from "alchemy/ai";
 
 const page = await HTMLFile("landing", {
   path: "./public/index.html",
-  prompt: "Generate a simple landing page with a hero section, features list, and contact form"
+  prompt: "Generate a simple landing page with a hero section and call-to-action button"
 });
 ```
 
-# Create an HTML File with Context
+# Create an HTML Component
 
-Generates HTML using existing files and templates as context.
+Generates a reusable HTML component with specific functionality.
 
 ```ts
 import { HTMLFile } from "alchemy/ai";
 
-const component = await HTMLFile("nav", {
+const nav = await HTMLFile("navigation", {
   path: "./components/nav.html", 
   prompt: await alchemy`
-    Create a navigation component following the style from:
-    ${alchemy.file("src/templates/base.html")}
+    Create a responsive navigation component with:
+    - Logo in the left corner
+    - Navigation links: Home, Products, About, Contact
+    - Mobile hamburger menu
+    - Login/signup buttons
     
-    Include:
-    - Logo
-    - Navigation links
-    - Mobile menu
-    - Search bar
+    Use the styling from:
+    ${alchemy.file("src/styles/theme.css")}
   `,
   model: {
     id: "gpt-4o",

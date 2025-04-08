@@ -15,7 +15,7 @@ app (Application Scope)
 └── prod (Stage Scope)
 ```
 
-# Application Scope
+## Application Scope
 
 The top-level scope created using the `alchemy()` function:
 
@@ -37,7 +37,7 @@ State directory structure:
       config.json
 ```
 
-# Stage Scope
+## Stage Scope
 
 A scope directly under the application scope for separating environments:
 
@@ -54,11 +54,11 @@ const database = await Database("main", { /* props */ });
 ```
 .alchemy/
   my-app/
-    prod/  # Stage scope
+    prod/  ## Stage scope
       main.json
 ```
 
-# Resource Scope
+## Resource Scope
 
 Each resource gets its own scope for managing child resources:
 
@@ -92,7 +92,7 @@ const app = await WebApp("my-app", {});
         api.json
 ```
 
-# Nested Scope
+## Nested Scope
 
 Create custom nested scopes to organize related resources:
 
@@ -119,7 +119,7 @@ await alchemy.run("frontend", async () => {
         assets.json
 ```
 
-# Scope Finalization
+## Scope Finalization
 
 When finalized, scopes delete any orphaned resources (resources in state but not in code):
 
@@ -142,7 +142,7 @@ await Database("main", {});
 // app.finalize() happens automatically when the block ends
 ```
 
-# Test Scope
+## Test Scope
 
 Alchemy provides isolated test scopes that automatically clean up after tests:
 

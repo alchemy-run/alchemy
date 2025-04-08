@@ -4,7 +4,7 @@ The Webhook Endpoint resource lets you create and manage [Stripe webhook endpoin
 
 # Minimal Example
 
-Create a basic webhook endpoint to receive payment events.
+Create a basic webhook endpoint to receive payment-related events.
 
 ```ts
 import { WebhookEndpoint } from "alchemy/stripe";
@@ -19,7 +19,7 @@ const webhook = await WebhookEndpoint("payment-webhook", {
 });
 ```
 
-# Create a Subscription Webhook
+# Create a Subscription Management Webhook
 
 Create a webhook endpoint to handle subscription lifecycle events.
 
@@ -35,13 +35,17 @@ const subscriptionWebhook = await WebhookEndpoint("subscription-webhook", {
     "invoice.payment_succeeded",
     "invoice.payment_failed"
   ],
-  description: "Webhook for subscription lifecycle events"
+  description: "Webhook for subscription lifecycle events",
+  metadata: {
+    type: "subscription",
+    environment: "production"
+  }
 });
 ```
 
 # Create a Connect Platform Webhook
 
-Create a webhook endpoint for Stripe Connect platform events.
+Create a webhook endpoint for handling Stripe Connect platform events.
 
 ```ts
 import { WebhookEndpoint } from "alchemy/stripe";

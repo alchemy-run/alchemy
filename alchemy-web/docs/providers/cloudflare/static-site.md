@@ -17,7 +17,7 @@ const site = await StaticSite("my-site", {
 
 # Create with Custom Settings
 
-Creates a static site with custom error page, index file, and build command.
+Creates a static site with custom build command, error page, and caching settings.
 
 ```ts
 import { StaticSite } from "alchemy/cloudflare";
@@ -30,13 +30,21 @@ const site = await StaticSite("custom-site", {
   domain: "www.example.com",
   build: {
     command: "npm run build"
+  },
+  assets: {
+    fileOptions: [
+      {
+        files: ["**/*.js", "**/*.css"],
+        cacheControl: "max-age=31536000,immutable"
+      }
+    ]
   }
 });
 ```
 
 # Bind to a Worker
 
-Routes API requests to a backend worker while serving static content.
+Creates a static site with a backend API worker for handling dynamic requests.
 
 ```ts
 import { Worker, StaticSite } from "alchemy/cloudflare";

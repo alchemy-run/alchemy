@@ -125,9 +125,3 @@ Secrets are encrypted in state files:
 
 > [!NOTE]
 > Learn more about secrets management in [Concepts: Secrets](./secret.md)
-
-## Related Concepts
-
-- [Resources](./resource.md)
-- [Resource Destroy](./destroy.md)
-- [Secrets Management](./secret.md) 

@@ -1,6 +1,6 @@
 # VueFile
 
-The VueFile resource lets you generate [Vue.js](https://vuejs.org/) component files using AI models.
+The VueFile resource lets you generate [Vue.js](https://vuejs.org/) components using AI models.
 
 # Minimal Example
 

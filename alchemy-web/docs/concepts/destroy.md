@@ -87,8 +87,3 @@ if (this.phase === "delete") {
   return this.destroy();
 }
 ```
-
-## Related Concepts
-
-- [Resource Lifecycle](./resource.md)
-- [State Management](./state.md)

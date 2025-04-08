@@ -39,9 +39,9 @@ const role = await Role("lambda-role", {
 });
 ```
 
-# Create Role with Managed Policies
+# Create a Role with AWS Managed Policies
 
-Create a role that uses AWS managed policies for common permissions.
+Attach AWS managed policies to grant common permissions.
 
 ```ts
 import { Role } from "alchemy/aws";
@@ -59,8 +59,7 @@ const role = await Role("readonly-role", {
     }]
   },
   managedPolicyArns: [
-    "arn:aws:iam::aws:policy/ReadOnlyAccess",
-    "arn:aws:iam::aws:policy/AWSLambdaBasicExecutionRole"
+    "arn:aws:iam::aws:policy/ReadOnlyAccess"
   ],
   tags: {
     Environment: "production"

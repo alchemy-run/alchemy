@@ -1,6 +1,6 @@
-# Policy Attachment
+# PolicyAttachment
 
-The Policy Attachment resource lets you attach [IAM policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) to IAM roles in AWS.
+The PolicyAttachment resource lets you attach [IAM policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) to IAM roles in AWS.
 
 # Minimal Example
 
@@ -15,9 +15,9 @@ const adminAccess = await PolicyAttachment("admin-policy", {
 });
 ```
 
-# Create the Policy Attachment
+# Attach Multiple Policies
 
-Attach multiple policies to a role:
+Attach multiple policies to a role for granular permissions:
 
 ```ts
 import { PolicyAttachment } from "alchemy/aws";

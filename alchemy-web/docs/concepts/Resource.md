@@ -8,129 +8,157 @@ Resources are the core building blocks of Alchemy. Each resource represents a pi
 
 ## What is a Resource?
 
-In Alchemy, a resource is:
+A Resource is simply a memoized async function that implemented a lifecycle handler for three phases:
+1. `create` - what to do when first creating the resource
+2. `update` - what to do when updating a resource
+3. `delete` - what to when deleting a resource
 
-1. **A memoized async function** that can run in any JavaScript environment
-2. **Stateful** with tracked inputs and outputs
-3. **Lifecycle-aware** with create, update, and delete phases
-4. **Dependency-aware** with automatic dependency resolution
+## Resource ID
 
-## Resource Structure
+When creating a resource, you always pass an `id` that is unique within the Resource's [Scope](../concepts/scope.md).
 
-Each Alchemy resource follows a consistent pattern:
+```ts
+await MyResource("id")
+```
+
+This ID is what Alchemy uses to track the state of the resource and trigger the appropriate create/update/delete phase.
+
+## Resource Props
+
+Each Resource has an interface for its "input properties"
 
 ```typescript
-// Props interface for resource inputs
-export interface ResourceNameProps {
-  // Required and optional properties for creating/updating
+export interface DatabaseProps {
   name: string;
-  description?: string;
+  branchId: string;
+  projectId: string;
+  // Other properties...
 }
+```
 
-// Resource interface for outputs (extends the props)
-export interface ResourceName extends Resource<"service::ResourceName">, ResourceNameProps {
-  // Additional properties returned after creation
+## Resource Instance
+
+Each Resource has an interface for its "output attributes":
+
+```typescript
+export interface Database extends Resource<"neon::Database">, DatabaseProps {
   id: string;
   createdAt: number;
+  // Additional properties...
 }
+```
 
-// Resource implementation
-export const ResourceName = Resource(
-  "service::ResourceName",
-  async function(this: Context<ResourceName>, id: string, props: ResourceNameProps): Promise<ResourceName> {
-    // Implementation of create/update/delete lifecycle
+> [!CAUTION]
+> This interface must extend `Resource<..>`
+
+## Resource Provider
+
+Each Resource exports a "Provider" function with a globally unique name and an implementation of the lifecycle handler logic.
+
+```typescript
+export const Database = Resource(
+  "neon::Database",
+  async function(this: Context<Database>, id: string, props: DatabaseProps): Promise<Database> {
     if (this.phase === "delete") {
-      // Delete the resource
+      // Delete resource logic
+      // ...
       return this.destroy();
+    } else if (this.phase === "update") {
+      // Update resource logic
+      // ...
+      return this({/* updated resource */});
     } else {
-      // Create or update the resource
-      return this({
-        id: "generated-id",
-        ...props,
-        createdAt: Date.now()
-      });
+      // Create resource logic
+      // ...
+      return this({/* new resource */});
     }
   }
 );
 ```
 
-## Resource Usage
+> [!TIP]
+> By Convention, the name of this exported `const` should match the name of your Resource's interface.
 
-Using a resource is as simple as calling an async function:
+Let's break this down a bit futher, since it may seem confusing at first.
 
-```typescript
-// Create a new resource instance
-const myResource = await ResourceName("my-resource", {
-  name: "My Resource",
-  description: "This is a test resource"
-});
+## Resource FQN
 
-// Access resource outputs
-console.log(myResource.id); // "generated-id"
-console.log(myResource.name); // "My Resource"
+Each Resource has a globally unique name (aka. fully qualified name), e.g `"neon:Database"`:
+
+```ts
+export const Database = Resource("neon::Database"),
 ```
 
-## Resource Context
+Alchemy and uses this FQN to delete orphaned resources (stored in your [State](../concepts/state.md) files) by looking up the corresponding "provider".
 
-Each resource has access to a special `this` context that provides:
+## Lifecycle Function
 
-- `this.phase`: Current lifecycle phase ("create", "update", or "delete")
-- `this.output`: Current resource state (previous outputs)
-- `this({...})`: Constructor for returning resource outputs
-- `this.destroy()`: Helper for resource deletion
+The Resource's lifecycle handler is defined using an `async function` declaration with 3 required arguments:
 
-## Resource Lifecycle
-
-Alchemy resources go through three main lifecycle phases:
-
-1. **Create**: When a resource is first created
-2. **Update**: When a resource's properties change
-3. **Delete**: When a resource is removed or orphaned
-
-The appropriate phase is determined by comparing current inputs with stored state.
-
-> [!NOTE]
-> When resources are removed from code but still exist in state, they become "orphaned".
-
-## Custom Resources
-
-Creating custom resources is straightforward:
-
-```typescript
-export const MyCustomResource = Resource(
-  "custom::MyResource",
-  async function(this, id, props) {
-    // Your implementation here
-    return this({
-      id: "my-id",
-      ...props
-    });
-  }
-);
+```ts
+async function(
+  // the resource's state/context is bound to `this`
+  this: Context<Database>, 
+  // the id of the resource (unique within a SCope)
+  id: string, 
+  // the input properties
+  props: DatabaseProps
+): Promise<Database>
 ```
 
-This pattern makes Alchemy highly extensible, allowing you to easily implement your own resources for any service.
+> [!CAUTION]
+> It must be function declaration (not an arrow function) because the Resource's context is passed through as the `this: Context<Database>` parameter.
 
-## Resource Scopes
+## Lifecycle Phases
 
-Resources can be organized into scopes:
+The lifecycle handler is a simple function that handles the 3 phases: `"create"`, `"update"` or `"delete"`:
 
-```typescript
-await alchemy.run("api", async () => {
-  // Resources created here are in the "api" scope
-  await Table("users");
-  await Function("getUser");
-});
+```ts
+if (this.phase === "delete") {
+  // Delete resource logic
+  // ...
+  return this.destroy();
+} else if (this.phase === "update") {
+  // Update resource logic
+  // ...
+  return this({/* updated properties */});
+} else {
+  // Create resource logic
+  // ...
+  return this({/* initial properties */});
+}
 ```
 
-Scopes create a tree structure that helps with organization and dependency management.
+## `this.destroy()`
+
+When a resource is being deleted, you must return `this.destroy()` to signal that the resource deletion process is complete.
 
 > [!TIP]
-> Learn more about scopes in [Concepts: Scope](./scope.md)
+> This also enables type inference since `this.destroy()` returns `never`, so the type of the resource can be inferred from the return type of the function.
 
-## Related Concepts
+## `this({..})`
 
-- [State Management](./state.md)
-- [Resource Destroy](./destroy.md)
-- [Secrets](./secret.md) 
-- [Scopes](./scope.md)
+To construct the resource (including your properites and Alchemy's intrinsic properties), call `this(props)` with your output properties:
+
+```ts
+return this({/* updated properties */});
+```
+
+What's going on here? `this` is a function? Huh?
+
+Alchemy resources are implemented with pure functions, but are designed to emulate classes (except with an async constructor that implements a CRUD lifecycle handler).
+
+`this` is analagous to `super` in a standard class:
+```ts
+return super({/* updated properties */});
+```
+
+> [!TIP]
+> If this syntax freaks you out too much, it is also aliased as `this.create`:
+> ```ts
+> return this.create({/* updated properties */});
+> ```
+
+## Testing
+
+See the [Testing](./testing.md) documentation for a comprehensive walkthrough on how to test your own resources.

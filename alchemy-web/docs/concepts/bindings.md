@@ -120,9 +120,3 @@ const worker = await Worker("worker", {
   }
 });
 ```
-
-## Related Concepts
-
-- [Resource Dependencies](./resource.md)
-- [Secrets Management](./secret.md)
-- [Cloudflare Workers Guide](../guides/cloudflare/worker.md) 

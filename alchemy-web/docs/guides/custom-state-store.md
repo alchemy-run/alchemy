@@ -382,10 +382,3 @@ describe("InMemoryStateStore", () => {
   });
 });
 ```
-
-## Related Resources
-
-- [State Management Concepts](../concepts/state.md)
-- [Resource Lifecycle](../concepts/resource.md)
-- [Secrets Management](../concepts/secret.md)
-- [Serialization and Deserialization](../advanced/serde.md) 

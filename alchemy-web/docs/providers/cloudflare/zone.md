@@ -2,7 +2,7 @@
 
 The Zone resource lets you manage [Cloudflare Zones](https://developers.cloudflare.com/dns/zone-setups/) which represent domains and their configuration settings on Cloudflare.
 
-## Minimal Example
+# Minimal Example
 
 Create a basic zone with default settings:
 
@@ -16,7 +16,7 @@ const zone = await Zone("example.com", {
 });
 ```
 
-## Create a Zone with Enhanced Security
+# Create a Zone with Enhanced Security
 
 Configure a zone with strict SSL and other security settings:
 
@@ -36,7 +36,7 @@ const secureZone = await Zone("secure.example.com", {
 });
 ```
 
-## Create a Zone with Performance Settings
+# Create a Zone with Performance Settings
 
 Configure a zone with optimized performance settings:
 

@@ -118,8 +118,8 @@ await Promise.all([
     STRIPE_API_KEY: alchemy.secret.env("STRIPE_API_KEY"),
     OPENAI_API_KEY: alchemy.secret.env("OPENAI_API_KEY"),
     CLOUDFLARE_BUCKET_NAME: stateStore.name,
-    R2_ACCESS_KEY_ID: accountAccessToken.id,
-    R2_SECRET_ACCESS_KEY: accountAccessToken.value,
+    R2_ACCESS_KEY_ID: accountAccessToken.accessKeyId,
+    R2_SECRET_ACCESS_KEY: accountAccessToken.secretAccessKey,
   }).map(async ([name, value]) =>
     GitHubSecret(`github-secret-${name}`, {
       owner: "sam-goodwin",
@@ -244,14 +244,10 @@ await alchemy.run("docs", async () => {
               collapsed: true,
               items: p.documents
                 .sort((a, b) => a.title.localeCompare(b.title))
-                .map((r) => {
-                  const name = path.basename(r.path!);
-                  const text = name.charAt(0).toUpperCase() + name.slice(1);
-                  return {
-                    text: text.replace(".md", ""),
-                    link: `/docs/providers/${p.provider}/${name}`,
-                  };
-                }),
+                .map((doc) => ({
+                  text: doc.title.replaceAll(" ", ""),
+                  link: `/docs/providers/${p.provider}/${path.basename(doc.path!, ".md")}`,
+                })),
             })),
         },
       ],
@@ -261,7 +257,7 @@ await alchemy.run("docs", async () => {
   const site = await StaticSite("static-site", {
     name: "alchemy-web",
     dir: path.join(project.dir, ".vitepress", "dist"),
-    // domain: "alchemy.run",
+    domain: "alchemy.run",
     build: {
       command: "bun run --filter alchemy-web docs:build",
     },

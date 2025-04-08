@@ -1,6 +1,6 @@
 # Wrangler Json
 
-The Wrangler Json resource lets you create and manage [wrangler.json configuration files](https://developers.cloudflare.com/workers/wrangler/configuration/) for Cloudflare Workers.
+The WranglerJson resource lets you create and manage [wrangler.json configuration files](https://developers.cloudflare.com/workers/wrangler/configuration/) for Cloudflare Workers.
 
 # Minimal Example
 
@@ -15,36 +15,33 @@ const config = await WranglerJson("my-worker-config", {
 });
 ```
 
-# Create a Full Configuration
+# Create with Advanced Configuration
 
-Create a wrangler.json with multiple bindings and settings:
+Create a wrangler.json with custom settings and bindings:
 
 ```ts
 import { WranglerJson } from "alchemy/cloudflare";
 
 const config = await WranglerJson("my-worker-config", {
   name: "my-worker",
-  main: "src",
-  entrypoint: "index.ts",
+  main: "src/index.ts",
+  outdir: "dist",
   minify: true,
   node_compat: true,
-  vars: {
-    API_URL: "https://api.example.com"
-  },
-  kv_namespaces: [{
-    binding: "CACHE",
-    id: "xxx"
-  }],
-  r2_buckets: [{
-    binding: "STORAGE",
-    bucket_name: "my-bucket"
-  }],
-  durable_objects: {
-    bindings: [{
-      name: "COUNTER",
-      class_name: "Counter"
-    }]
-  },
+  compatibility_date: "2023-01-01",
+  kv_namespaces: [
+    {
+      binding: "MY_KV",
+      id: "xxx",
+      preview_id: "yyy"
+    }
+  ],
+  r2_buckets: [
+    {
+      binding: "MY_BUCKET", 
+      bucket_name: "my-bucket"
+    }
+  ],
   routes: ["example.com/*"],
   triggers: {
     crons: ["0 0 * * *"]

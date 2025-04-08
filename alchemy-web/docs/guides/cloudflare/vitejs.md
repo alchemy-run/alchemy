@@ -50,11 +50,11 @@ await app.finalize();
 
 ## StaticSite Resource
 
-The StaticSite resource configures Cloudflare Pages for your app:
+The StaticSite resource configures a Cloudflare Worker that serves cached static assets from a KV namespace:
 
 ```typescript
 export const website = await StaticSite("Website", {
-  name: "my-cloudflare-app", // Cloudflare Pages site name
+  name: "my-cloudflare-app", // Worker name
   dir: "./dist",             // Vite build output
   build: {
     command: "bun run build", // Build command
@@ -81,7 +81,7 @@ Uploading files to my-cloudflare-app...
 ✓ Uploaded 15 files to my-cloudflare-app
 Created: "cloudflare-vite/dev/Website"
 {
-  url: "https://my-cloudflare-app.pages.dev"
+  url: "https://alchemy-web.alchemy-run.workers.dev"
 }
 ```
 
@@ -114,3 +114,4 @@ Deleting my-cloudflare-app...
 ✓ Deleted my-cloudflare-app
 Deleted: "cloudflare-vite/dev/Website"
 ```
+

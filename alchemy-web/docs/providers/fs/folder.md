@@ -25,22 +25,22 @@ const logs = await Folder("logs", {
 });
 ```
 
-# Preserve Directory on Delete
+# Create a Persistent Directory 
 
-Creates a directory that will not be deleted during cleanup.
+Creates a directory that won't be deleted during cleanup.
 
 ```ts
 import { Folder } from "alchemy/fs";
 
-const persist = await Folder("data", {
+const data = await Folder("data", {
   path: "data",
   delete: false
 });
 ```
 
-# Clean Directory on Delete
+# Create a Clean Directory
 
-Creates a directory that will be cleaned (including contents) during deletion.
+Creates a directory that will be cleaned (emptied) during deletion.
 
 ```ts
 import { Folder } from "alchemy/fs";

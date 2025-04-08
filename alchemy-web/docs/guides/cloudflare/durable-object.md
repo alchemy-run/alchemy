@@ -2,7 +2,7 @@
 order: 3
 ---
 
-# Durable Object
+# Durable Objects & Migrations
 
 This guide is Part 3 in our Cloudflare and Alchemy series. We'll add Durable Objects to our application.
 
@@ -70,11 +70,8 @@ Update your `alchemy.run.ts` file:
 ```typescript
 import { DurableObjectNamespace } from "alchemy/cloudflare";
 
-// Create a Durable Object namespace
-export const counter = await DurableObjectNamespace("COUNTER", {
+export const counter = new DurableObjectNamespace("COUNTER", {
   className: "Counter",
-  // Enable SQLite for persistent storage
-  sqlite: true,
 });
 ```
 

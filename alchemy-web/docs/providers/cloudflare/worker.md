@@ -23,7 +23,7 @@ const api = await Worker("api", {
 
 # Create a Worker with Bindings
 
-Bind KV namespaces, Durable Objects, and other resources to your worker:
+Bind KV namespaces, Durable Objects, and other resources to a worker:
 
 ```ts
 import { Worker, KVNamespace, DurableObjectNamespace } from "alchemy/cloudflare";
@@ -48,7 +48,7 @@ const worker = await Worker("api", {
 
 # Create a Worker with Routes
 
-Create a worker with custom domain routing and workers.dev URL:
+Configure custom domain routing and enable workers.dev URL:
 
 ```ts
 import { Worker } from "alchemy/cloudflare";
@@ -57,6 +57,8 @@ const api = await Worker("api", {
   name: "api-worker",
   entrypoint: "./src/api.ts",
   routes: ["api.example.com/*"],
-  url: true
+  url: true // Enables workers.dev URL
 });
+
+console.log(api.url); // https://api-worker.username.workers.dev
 ```

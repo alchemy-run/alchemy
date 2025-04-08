@@ -53,6 +53,22 @@ This worker simply:
 3. Saves it back to KV
 4. Returns the new value
 
+## Bind the KV Namespace to your Worker
+
+Connect the worker to the KV namespace in `alchemy.run.ts`:
+
+```typescript
+// Create a worker with the KV namespace binding
+export const api = await Worker("api", {
+  name: "my-cloudflare-app-api",
+  entrypoint: "./api/index.ts",
+  bindings: {
+    // This gives the worker access to the KV namespace
+    DATA_STORE: dataStore
+  }
+});
+```
+
 ## Adding Type-Safe Bindings
 
 To make your worker type-safe, create an `env.d.ts` file:
@@ -75,7 +91,7 @@ Now update your worker to use the typed environment:
 ```typescript
 // api/index.ts
 export default {
-  async fetch(request: Request, env: Cloudflare.Env) {
+  async fetch(request: Request, env: WorkerEnv) {
     // env.DATA_STORE is now fully typed with get(), put(), etc.
     const value = await env.DATA_STORE.get("counter") || "0";
     // ...
@@ -83,23 +99,17 @@ export default {
 };
 ```
 
-Learn more about how bindings work in our [bindings concept guide](../../concepts/bindings.md).
+Or, use Cloudflare's new global `env` import
 
-## Binding the Worker to KV
+```ts
+import { env } from "cloudflare:workers";
 
-Connect the worker to the KV namespace in `alchemy.run.ts`:
-
-```typescript
-// Create a worker with the KV namespace binding
-export const api = await Worker("api", {
-  name: "my-cloudflare-app-api",
-  entrypoint: "./api/index.ts",
-  bindings: {
-    // This gives the worker access to the KV namespace
-    DATA_STORE: dataStore
-  }
-});
+env.DATA_STORE // is safely KVNamespace
 ```
+
+> [!NOTE]
+> Learn more about how bindings work in our [Concepts: Bindings](../../concepts/bindings.md).
+
 
 ## Connecting the Worker to Your Site
 
@@ -114,6 +124,7 @@ export const website = await StaticSite("Website", {
     command: "bun run build",
   },
   routes: {
+    // configure the StaticSite router worker to route /api/* to our worker
     "/api/*": api
   }
 });
@@ -164,3 +175,4 @@ bun ./alchemy.run.ts
 ```
 
 Visit your app to see the counter increment each time you refresh or click the button.
+

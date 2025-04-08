@@ -12,12 +12,12 @@ import { PermissionGroups } from "alchemy/cloudflare";
 const permissions = await PermissionGroups("cloudflare-permissions");
 ```
 
-# Create Permission Groups with API Token
+# Create API Token with Permissions
 
-Create an API token with specific permissions using the permission groups:
+Use permission groups to create an API token with specific access:
 
 ```ts
-import { PermissionGroups, AccountApiToken } from "alchemy/cloudflare";
+import { AccountApiToken, PermissionGroups } from "alchemy/cloudflare";
 
 const permissions = await PermissionGroups("cloudflare-permissions");
 

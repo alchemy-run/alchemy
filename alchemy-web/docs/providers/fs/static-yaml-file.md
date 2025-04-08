@@ -1,10 +1,10 @@
-# Static YAML File
+# StaticYamlFile
 
-The Static YAML File resource creates and manages YAML files with formatted content using the [YAML](https://yaml.org/) format.
+Creates a YAML file with formatted content using the [yaml](https://www.npmjs.com/package/yaml) package.
 
-## Minimal Example
+# Minimal Example
 
-Creates a basic YAML configuration file.
+Creates a simple YAML configuration file.
 
 ```ts
 import { StaticYamlFile } from "alchemy/fs";
@@ -17,24 +17,28 @@ const config = await StaticYamlFile("config.yaml", {
 });
 ```
 
-## Create a Nested YAML File
+# Create Nested Configuration
 
-Creates a YAML file with nested configuration and custom path.
+Creates a YAML file with nested configuration options.
 
 ```ts
 import { StaticYamlFile } from "alchemy/fs";
 
-const config = await StaticYamlFile("database", {
-  path: "config/database.yaml",
-  content: {
-    database: {
-      url: "postgresql://localhost:5432/db",
-      pool: {
-        min: 1,
-        max: 10
-      },
-      logging: true
+const config = await StaticYamlFile("config.yaml", {
+  server: {
+    host: "localhost", 
+    port: 3000
+  },
+  database: {
+    url: "postgresql://localhost:5432/db",
+    pool: {
+      min: 1,
+      max: 10
     }
+  },
+  logging: {
+    level: "info",
+    format: "json"
   }
 });
 ```

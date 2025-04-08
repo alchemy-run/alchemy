@@ -100,9 +100,3 @@ const worker = await Worker("multi-secret-worker", {
   }
 });
 ```
-
-## Related Concepts
-
-- [State Management](./state.md)
-- [Resources](./resource.md)
-- [Custom State Stores](../guides/custom-state-store.md) 

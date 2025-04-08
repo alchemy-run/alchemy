@@ -1,10 +1,10 @@
-# Static Text File
+# StaticTextFile
 
-The Static Text File resource lets you create and manage plain text files in your filesystem.
+The StaticTextFile resource creates and manages plain text files in the filesystem. It is part of the [Alchemy File System](https://github.com/alchemyjs/alchemy) service.
 
 # Minimal Example
 
-Creates a simple text file with content.
+Create a simple text file with content:
 
 ```ts
 import { StaticTextFile } from "alchemy/fs";
@@ -16,7 +16,7 @@ const readme = await StaticTextFile("README.md",
 
 # Create with Custom Path
 
-Creates a text file at a specific path location.
+Create a text file with an explicit path different from the ID:
 
 ```ts
 import { StaticTextFile } from "alchemy/fs";

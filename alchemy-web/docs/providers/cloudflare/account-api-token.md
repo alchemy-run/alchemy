@@ -1,10 +1,10 @@
-# Account API Token
+# Account Api Token
 
-Creates and manages [Cloudflare API Tokens](https://developers.cloudflare.com/api/tokens/) for authenticating with Cloudflare services.
+Creates and manages [Cloudflare API tokens](https://developers.cloudflare.com/api/tokens/) for authenticating with Cloudflare services.
 
 # Minimal Example
 
-Create a basic API token with read-only permissions.
+Create a basic API token with read-only permissions:
 
 ```ts
 import { AccountApiToken, PermissionGroups } from "alchemy/cloudflare";
@@ -23,7 +23,7 @@ const token = await AccountApiToken("readonly-token", {
         { id: permissions["Analytics Read"].id }
       ],
       resources: {
-        "com.cloudflare.api.account.zone.22b1de5f1c0e4b3ea97bb1e963b06a43": "*"
+        "com.cloudflare.api.account.zone.*": "*"
       }
     }
   ]
@@ -32,7 +32,7 @@ const token = await AccountApiToken("readonly-token", {
 
 # Create Token with Restrictions
 
-Create a token with time and IP restrictions.
+Create a token with time and IP restrictions:
 
 ```ts
 import { AccountApiToken, PermissionGroups } from "alchemy/cloudflare";
@@ -56,40 +56,9 @@ const token = await AccountApiToken("restricted-token", {
   expiresOn: "2024-12-31T23:59:59Z",
   condition: {
     requestIp: {
-      in: ["192.168.1.0/24"],
+      in: ["192.168.1.0/24", "10.0.0.0/8"],
       notIn: ["192.168.1.100/32"]
     }
-  }
-});
-```
-
-# Bind to a Worker
-
-Use the token in a Worker binding.
-
-```ts
-import { Worker, AccountApiToken } from "alchemy/cloudflare";
-
-const token = await AccountApiToken("api-token", {
-  name: "Worker API Token",
-  policies: [
-    {
-      effect: "allow",
-      permissionGroups: [
-        { id: permissions["Zone Read"].id }
-      ],
-      resources: {
-        "com.cloudflare.api.account.zone.*": "*"
-      }
-    }
-  ]
-});
-
-await Worker("my-worker", {
-  name: "my-worker",
-  script: "console.log('Hello, world!')",
-  bindings: {
-    API_TOKEN: token.value
   }
 });
 ```

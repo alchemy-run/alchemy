@@ -1,6 +1,6 @@
-# Static Astro File
+# StaticAstroFile
 
-The Static Astro File resource creates [Astro](https://astro.build/) component files with automatic directory creation and cleanup.
+Creates [Astro](https://astro.build/) component files with automatic formatting and directory management.
 
 # Minimal Example
 
