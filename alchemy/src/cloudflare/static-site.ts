@@ -96,16 +96,6 @@ export interface StaticSiteProps {
    */
   production?: boolean;
 
-  /**
-   * Custom domain for the site
-   */
-  domain?:
-    | string
-    | {
-        name: string;
-        redirects?: string[];
-      };
-
   build?: {
     /**
      * Command to run before deploying the site
@@ -177,16 +167,6 @@ export interface StaticSite extends Resource<"cloudflare::StaticSite"> {
   assets: string[];
 
   /**
-   * Custom domain for the site
-   */
-  domain?:
-    | string
-    | {
-        name: string;
-        redirects?: string[];
-      };
-
-  /**
    * Whether the site is deployed to production
    */
   production?: boolean;
@@ -243,13 +223,26 @@ export interface StaticSite extends Resource<"cloudflare::StaticSite"> {
  * });
  *
  * @example
- * // Create a static site with custom error page and index
- * const customSite = await StaticSite("custom-site", {
+ * // Create a static site with a custom domain using the CustomDomain resource
+ * const site = await StaticSite("custom-site", {
  *   name: "custom-site",
  *   dir: "./www",
  *   errorPage: "404.html",
- *   indexPage: "home.html",
- *   domain: "www.example.com"
+ *   indexPage: "home.html"
+ * });
+ *
+ * // Then configure the custom domain separately
+ * const domain = await CustomDomain("custom-domain", {
+ *   name: "www.example.com",
+ *   zoneId: "abcdef123456789",
+ *   workerName: site.name
+ * });
+ *
+ * @example
+ * // Create a static site with multiple domains (primary + redirects)
+ * const site = await StaticSite("multi-domain-site", {
+ *   name: "multi-domain-site",
+ *   dir: "./public"
  * });
  *
  * @see https://developers.cloudflare.com/workers/platform/sites
@@ -264,6 +257,9 @@ export const StaticSite = Resource(
     id: string,
     props: StaticSiteProps
   ) {
+    // Create Cloudflare API client with automatic account discovery
+    const api = await createCloudflareApi();
+
     if (this.phase === "delete") {
       // For delete operations, we'll rely on the Worker delete to clean up
       // Return empty output for deleted state
@@ -321,9 +317,6 @@ export const StaticSite = Resource(
     // Use the provided name
     const siteName = props.name;
     const indexPage = props.indexPage || "index.html";
-
-    // Create Cloudflare API client with automatic account discovery
-    const api = await createCloudflareApi();
 
     // Step 1: Create or get the KV namespace for assets
     const [kv, assetManifest] = await Promise.all([
@@ -415,7 +408,6 @@ export const StaticSite = Resource(
       assets: assetManifest.map((item) => item.key),
       createdAt: this.output?.createdAt || now,
       updatedAt: now,
-      domain: props.domain,
       production: props.production !== false,
       url: worker.url,
       routes,

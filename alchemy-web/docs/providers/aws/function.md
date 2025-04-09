@@ -1,33 +1,30 @@
-# Function
+# AWS Lambda Function
 
-The Function Resource lets you create and manage [AWS Lambda Functions](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) for serverless compute.
+The [AWS Lambda Function](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) resource lets you create and manage Lambda functions that run code in response to events.
 
-# Minimal Example
+## Minimal Example
 
-Create a basic Lambda function with minimal configuration.
+Create a basic Lambda function with default settings:
 
 ```ts
 import { Function } from "alchemy/aws";
 
-const func = await Function("api-handler", {
-  functionName: "api-handler", 
-  zipPath: "./dist/api.zip",
+const func = await Function("api", {
+  functionName: "api-handler",
+  zipPath: "./dist/api.zip", 
   roleArn: role.arn,
-  handler: "index.handler",
-  runtime: "nodejs20.x"
+  handler: "index.handler"
 });
 ```
 
-# Create a Function with Environment Variables
+## Custom Configuration
 
-Create a function with environment variables and custom memory/timeout settings.
+Configure memory, timeout and environment variables:
 
 ```ts
-import { Function } from "alchemy/aws";
-
 const func = await Function("worker", {
   functionName: "worker",
-  zipPath: "./dist/worker.zip", 
+  zipPath: "./dist/worker.zip",
   roleArn: role.arn,
   handler: "worker.process",
   memorySize: 512,
@@ -39,15 +36,13 @@ const func = await Function("worker", {
 });
 ```
 
-# Create a Function with URL Endpoint
+## Function URL
 
-Create a function with a public URL endpoint and CORS configuration.
+Create a function with a public URL endpoint and CORS:
 
 ```ts
-import { Function } from "alchemy/aws";
-
 const func = await Function("public-api", {
-  functionName: "public-api",
+  functionName: "public-api", 
   zipPath: "./dist/api.zip",
   roleArn: role.arn,
   handler: "api.handler",
@@ -56,8 +51,7 @@ const func = await Function("public-api", {
     cors: {
       allowOrigins: ["*"],
       allowMethods: ["GET", "POST"],
-      allowHeaders: ["content-type"],
-      maxAge: 86400
+      allowHeaders: ["content-type"]
     }
   }
 });

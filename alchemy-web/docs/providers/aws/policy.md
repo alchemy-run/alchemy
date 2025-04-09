@@ -1,10 +1,10 @@
 # Policy
 
-The Policy component lets you create and manage [AWS IAM Policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) that define permissions for AWS services and resources.
+The Policy resource lets you create and manage [AWS IAM Policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) that define permissions for AWS services and resources.
 
 # Minimal Example
 
-Create a basic IAM policy that allows S3 bucket access.
+Create a basic policy that allows S3 bucket access:
 
 ```ts
 import { Policy } from "alchemy/aws";
@@ -25,9 +25,9 @@ const s3Policy = await Policy("bucket-access", {
 });
 ```
 
-# Create a Policy with Multiple Statements
+# Multiple Statements
 
-Create a policy with multiple statements and conditions for API Gateway access.
+Create a policy with multiple statements and conditions:
 
 ```ts
 import { Policy } from "alchemy/aws";
@@ -63,6 +63,31 @@ const apiPolicy = await Policy("api-access", {
   tags: {
     Service: "API Gateway",
     Environment: "production"
+  }
+});
+```
+
+# Deny Policy
+
+Create a policy that denies access based on tags:
+
+```ts
+import { Policy } from "alchemy/aws";
+
+const denyPolicy = await Policy("deny-production", {
+  policyName: "deny-production-access",
+  document: {
+    Version: "2012-10-17",
+    Statement: [{
+      Effect: "Deny", 
+      Action: "*",
+      Resource: "*",
+      Condition: {
+        StringEquals: {
+          "aws:ResourceTag/Environment": "production"
+        }
+      }
+    }]
   }
 });
 ```

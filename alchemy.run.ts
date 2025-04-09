@@ -18,6 +18,7 @@ import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
 import {
   AccountApiToken,
   CloudflareAccountId,
+  CustomDomain,
   DnsRecords,
   PermissionGroups,
   R2Bucket,
@@ -180,21 +181,6 @@ await alchemy.run("docs", async () => {
 
   const filterIdx = process.argv.findIndex((arg) => arg === "--filter");
 
-  const providersDocs = await Providers({
-    srcDir: path.join("alchemy", "src"),
-    outDir: providers.path,
-    // anthropic throttles are painful, so we'll run them serially
-    parallel: false,
-    filter:
-      process.argv[filterIdx + 1] === "true"
-        ? true
-        : filterIdx > -1
-          ? isNaN(parseInt(process.argv[filterIdx + 1]))
-            ? false
-            : parseInt(process.argv[filterIdx + 1])
-          : false,
-  });
-
   await VitePressConfig({
     cwd: project.dir,
     title: "Alchemy",
@@ -233,23 +219,42 @@ await alchemy.run("docs", async () => {
           collapsed: false,
           items: await processFrontmatterFiles(guides.path, "/docs/guides"),
         },
-        {
-          text: "Providers",
-          link: "/docs/providers",
-          collapsed: false,
-          items: providersDocs
-            .sort((a, b) => a.provider.localeCompare(b.provider))
-            .map((p) => ({
-              text: p.provider,
-              collapsed: true,
-              items: p.documents
-                .sort((a, b) => a.title.localeCompare(b.title))
-                .map((doc) => ({
-                  text: doc.title.replaceAll(" ", ""),
-                  link: `/docs/providers/${p.provider}/${path.basename(doc.path!, ".md")}`,
-                })),
-            })),
-        },
+        ...(process.argv.includes("--providers")
+          ? [
+              {
+                text: "Providers",
+                link: "/docs/providers",
+                collapsed: false,
+                items: (
+                  await Providers({
+                    srcDir: path.join("alchemy", "src"),
+                    outDir: providers.path,
+                    // anthropic throttles are painful, so we'll run them serially
+                    parallel: false,
+                    filter:
+                      process.argv[filterIdx + 1] === "true"
+                        ? true
+                        : filterIdx > -1
+                          ? isNaN(parseInt(process.argv[filterIdx + 1]))
+                            ? false
+                            : parseInt(process.argv[filterIdx + 1])
+                          : false,
+                  })
+                )
+                  .sort((a, b) => a.provider.localeCompare(b.provider))
+                  .map((p) => ({
+                    text: p.provider,
+                    collapsed: true,
+                    items: p.documents
+                      .sort((a, b) => a.title.localeCompare(b.title))
+                      .map((doc) => ({
+                        text: doc.title.replaceAll(" ", ""),
+                        link: `/docs/providers/${p.provider}/${path.basename(doc.path!, ".md")}`,
+                      })),
+                  })),
+              },
+            ]
+          : []),
       ],
     },
   });
@@ -257,13 +262,20 @@ await alchemy.run("docs", async () => {
   const site = await StaticSite("static-site", {
     name: "alchemy-web",
     dir: path.join(project.dir, ".vitepress", "dist"),
-    domain: "alchemy.run",
     build: {
       command: "bun run --filter alchemy-web docs:build",
     },
   });
 
   console.log("Site URL:", site.url);
+
+  await CustomDomain("alchemy-web-domain", {
+    name: "alchemy.run",
+    zoneId: zone.id,
+    workerName: site.name,
+  });
+
+  console.log(`https://alchemy.run`);
 });
 
 /**

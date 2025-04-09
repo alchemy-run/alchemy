@@ -1,52 +1,50 @@
 # Bundle
 
-The Bundle Resource lets you bundle JavaScript and TypeScript files using [esbuild](https://esbuild.github.io/).
+The Bundle resource uses [esbuild](https://esbuild.github.io/) to bundle JavaScript and TypeScript files into optimized output.
 
 # Minimal Example
 
-Bundle a TypeScript file for Node.js.
+Bundle a TypeScript file into an ESM module:
 
 ```ts
 import { Bundle } from "alchemy/esbuild";
 
 const bundle = await Bundle("handler", {
   entryPoint: "src/handler.ts",
-  outdir: ".alchemy/.out",
-  format: "esm",
-  platform: "node"
+  format: "esm"
 });
 ```
 
-# Bundle with Source Maps
+# Node.js Bundle
 
-Create a bundle with source maps for debugging.
+Bundle a file specifically for Node.js with sourcemaps:
+
+```ts
+import { Bundle } from "alchemy/esbuild";
+
+const bundle = await Bundle("api", {
+  entryPoint: "src/api.ts",
+  format: "cjs",
+  platform: "node", 
+  target: "node18",
+  sourcemap: true,
+  external: ["aws-sdk"]
+});
+```
+
+# Browser Bundle
+
+Create a minified browser bundle:
 
 ```ts
 import { Bundle } from "alchemy/esbuild";
 
 const bundle = await Bundle("app", {
   entryPoint: "src/app.ts",
-  outfile: "dist/app.js",
-  sourcemap: true,
-  minify: true,
+  outfile: "dist/app.min.js",
   format: "iife",
-  platform: "browser"
-});
-```
-
-# Bundle with External Dependencies
-
-Bundle code while excluding certain dependencies.
-
-```ts
-import { Bundle } from "alchemy/esbuild";
-
-const bundle = await Bundle("lambda", {
-  entryPoint: "src/lambda.ts",
-  outdir: "dist",
-  format: "cjs",
-  platform: "node",
-  target: "node18",
-  external: ["aws-sdk", "sharp"]
+  platform: "browser",
+  target: ["es2020", "chrome58"],
+  minify: true
 });
 ```

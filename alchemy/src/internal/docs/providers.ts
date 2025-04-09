@@ -224,8 +224,7 @@ async function generateProviderDocs({
         (example)
         \`\`\`
 
-
-        # Create the ${g.identifier}
+        # (one heading per variation)
 
         (brief 1-2 sentences of what it does)
 
@@ -235,6 +234,16 @@ async function generateProviderDocs({
         (example)
         \`\`\`
 
+        Before writing the document, think through:
+        1. What is the minimal, most common example use case for this resource?
+        2. What are the variations (e.g. combination of different options) that are also commonly used, e.g. specifying the memory size of a lambda function.
+        3. Make sure to draw from the examples and your understanding of Alchemy.
+
+        Refer to alchemy docs to understand the context of how this documentation is consumed:
+        - ${alchemy.file("./alchemy-web/docs/what-is-alchemy.md")}
+        - ${alchemy.file("./alchemy-web/docs/getting-started.md")}
+        - ${alchemy.folder("./alchemy-web/docs/concepts/")}
+        
         ${
           providerName === "cloudflare"
             ? await alchemy`# Bind to a Worker

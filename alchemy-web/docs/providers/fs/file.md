@@ -1,10 +1,10 @@
 # File
 
-The File resource lets you create, update, and manage files in the filesystem with automatic directory creation and cleanup.
+The File resource creates and manages files in the filesystem with automatic directory creation and cleanup.
 
 ## Minimal Example
 
-Creates a simple text file with content.
+Creates a simple text file:
 
 ```ts
 import { File } from "alchemy/fs";
@@ -17,11 +17,9 @@ const config = await File("config.txt", {
 
 ## Create File in Nested Directory
 
-Creates a file in a nested directory structure, automatically creating parent directories.
+Automatically creates parent directories as needed:
 
 ```ts
-import { File } from "alchemy/fs";
-
 const log = await File("logs/app.log", {
   path: "logs/app.log",
   content: "application log entry"
@@ -30,19 +28,51 @@ const log = await File("logs/app.log", {
 
 ## Update File Path and Content
 
-Updates an existing file's path and content, automatically cleaning up the old file.
+Updates file content and moves it to a new location:
 
 ```ts
-import { File } from "alchemy/fs";
-
 let file = await File("config.json", {
   path: "config.json",
   content: '{ "version": "1.0.0" }'
 });
 
-// Later update path and content (old file is removed)
+// Later, update path and content (old file will be removed)
 file = await File("config.json", {
   path: "config/config.json", 
   content: '{ "version": "1.0.1" }'
+});
+```
+
+## Specialized File Types
+
+The fs service provides specialized file types for common formats:
+
+```ts
+import { StaticJsonFile, StaticTypeScriptFile, StaticYamlFile } from "alchemy/fs";
+
+// Create formatted JSON file
+const config = await StaticJsonFile("config.json", {
+  api: {
+    endpoint: "https://api.example.com",
+    version: "v1"
+  }
+});
+
+// Create formatted TypeScript file
+const component = await StaticTypeScriptFile("Component.ts", `
+  interface Props {
+    name: string;
+  }
+  export function Component({ name }: Props) {
+    return <div>Hello {name}</div>;
+  }
+`);
+
+// Create YAML file
+const deployment = await StaticYamlFile("deploy.yaml", {
+  service: {
+    name: "api",
+    replicas: 3
+  }
 });
 ```

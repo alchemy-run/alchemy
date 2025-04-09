@@ -1,10 +1,10 @@
-# Static Site
+# StaticSite
 
-The Static Site resource lets you deploy static websites to [Cloudflare Workers](https://developers.cloudflare.com/workers/platform/sites/), using KV for asset storage and global distribution.
+The StaticSite resource deploys static web content to [Cloudflare Workers](https://developers.cloudflare.com/workers/platform/sites/), using KV for asset storage and providing global distribution and caching.
 
 # Minimal Example
 
-Creates a basic static site with default settings.
+Deploy a basic static site with default settings:
 
 ```ts
 import { StaticSite } from "alchemy/cloudflare";
@@ -15,50 +15,75 @@ const site = await StaticSite("my-site", {
 });
 ```
 
-# Create with Custom Settings
+# Custom Build Command
 
-Creates a static site with custom build command, error page, and caching settings.
+Run a build command before deploying:
 
 ```ts
 import { StaticSite } from "alchemy/cloudflare";
 
-const site = await StaticSite("custom-site", {
-  name: "custom-site", 
-  dir: "./www",
-  errorPage: "404.html",
-  indexPage: "home.html",
-  domain: "www.example.com",
+const site = await StaticSite("my-site", {
+  name: "my-site", 
+  dir: "./public",
   build: {
     command: "npm run build"
-  },
-  assets: {
-    fileOptions: [
-      {
-        files: ["**/*.js", "**/*.css"],
-        cacheControl: "max-age=31536000,immutable"
-      }
-    ]
   }
 });
 ```
 
-# Bind to a Worker
+# Custom Error Page
 
-Creates a static site with a backend API worker for handling dynamic requests.
+Configure a custom error page and index file:
 
 ```ts
-import { Worker, StaticSite } from "alchemy/cloudflare";
+import { StaticSite } from "alchemy/cloudflare";
+
+const site = await StaticSite("my-site", {
+  name: "my-site",
+  dir: "./www",
+  errorPage: "404.html",
+  indexPage: "home.html"
+});
+```
+
+# API Backend Integration
+
+Add an API backend worker to handle API routes:
+
+```ts
+import { StaticSite, Worker } from "alchemy/cloudflare";
 
 const backend = await Worker("api", {
   name: "api-worker",
   entrypoint: "./src/api.ts"
 });
 
-const site = await StaticSite("full-site", {
-  name: "full-site",
+const site = await StaticSite("my-site", {
+  name: "my-site",
   dir: "./dist",
   routes: {
     "/api/*": backend
+  }
+});
+```
+
+# Bind to a Worker
+
+Bind the static site to a worker to access its assets:
+
+```ts
+import { Worker, StaticSite } from "alchemy/cloudflare";
+
+const site = await StaticSite("my-site", {
+  name: "my-site",
+  dir: "./dist"
+});
+
+await Worker("my-worker", {
+  name: "my-worker",
+  script: "console.log('Hello, world!')",
+  bindings: {
+    SITE: site
   }
 });
 ```

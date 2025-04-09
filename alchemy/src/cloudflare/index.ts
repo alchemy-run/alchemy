@@ -2,6 +2,7 @@ export * from "./account-api-token";
 export * from "./api";
 export * from "./bindings";
 export * from "./bucket";
+export * from "./custom-domain";
 export * from "./dns-records";
 export * from "./durable-object-namespace";
 export * from "./kv-namespace";

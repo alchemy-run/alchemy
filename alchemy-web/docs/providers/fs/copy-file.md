@@ -1,23 +1,23 @@
 # CopyFile
 
-The CopyFile resource lets you copy files from one location to another in the filesystem.
+The CopyFile resource copies files from one location to another in the filesystem. It provides options for overwriting existing files and handles cleanup during deletion.
 
-# Minimal Example
+## Minimal Example
 
-Copy a file to a new location.
+Copy a file to a new location:
 
 ```ts
 import { CopyFile } from "alchemy/fs";
 
-const copiedFile = await CopyFile("config-copy", {
+const copiedFile = await CopyFile("config-backup", {
   src: "config.json",
   dest: "backup/config.json"
 });
 ```
 
-# Create a CopyFile with Options
+## Copy Without Overwriting
 
-Copy a file with control over overwriting behavior.
+Prevent overwriting existing destination files:
 
 ```ts
 import { CopyFile } from "alchemy/fs";
@@ -25,6 +25,24 @@ import { CopyFile } from "alchemy/fs";
 const safeCopy = await CopyFile("safe-copy", {
   src: "data.json", 
   dest: "backup/data.json",
-  overwrite: false // Won't overwrite if destination exists
+  overwrite: false
 });
+```
+
+## Copy with Cleanup
+
+The destination file will be automatically deleted when the resource is destroyed:
+
+```ts
+import { CopyFile, destroy } from "alchemy/fs";
+
+const scope = alchemy.scope("temp");
+
+const tempCopy = await CopyFile("temp-copy", {
+  src: "data.json",
+  dest: "temp/data.json"
+});
+
+// Later, clean up the copied file
+await destroy(scope);
 ```

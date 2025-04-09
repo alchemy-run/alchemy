@@ -52,6 +52,28 @@ declare module "../alchemy" {
      */
     files(paths: string[]): Promise<FileCollection>;
     files(path: string, ...paths: string[]): Promise<FileCollection>;
+
+    /**
+     * Gets all of the files in a directory.
+     * @param path Path to the directory
+     * @param props Optional properties
+     * @returns Promise resolving to a FileCollection
+     *
+     * @example
+     * // Get all files in a directory
+     * const files = await alchemy.folder("./docs");
+     *
+     */
+    folder(
+      path: string,
+      props?: {
+        /**
+         * Whether to recursively get all files in the directory
+         * @default false
+         */
+        recursive?: boolean;
+      }
+    ): Promise<FileCollection>;
   }
 }
 
@@ -76,6 +98,13 @@ alchemy.files = async (
       )
     ),
   };
+};
+
+alchemy.folder = async (dir: string, props?: { recursive?: boolean }) => {
+  const files = await fs.promises.readdir(dir, {
+    recursive: props?.recursive ?? false,
+  });
+  return alchemy.files(files.map((file) => path.join(dir, file)));
 };
 
 /**

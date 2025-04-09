@@ -1,10 +1,10 @@
-# KV Namespace
+# KVNamespace
 
-A [Cloudflare KV Namespace](https://developers.cloudflare.com/kv/concepts/kv-namespaces/) provides low-latency key-value storage that is globally distributed and eventually consistent.
+The KVNamespace resource lets you create and manage [Cloudflare KV Namespaces](https://developers.cloudflare.com/kv/concepts/kv-namespaces/) for key-value storage.
 
 # Minimal Example
 
-Create a basic KV namespace for storing user data.
+Create a basic KV namespace for storing user data:
 
 ```ts
 import { KVNamespace } from "alchemy/cloudflare";
@@ -14,9 +14,9 @@ const users = await KVNamespace("users", {
 });
 ```
 
-# Create with Initial Values
+# With Initial Values
 
-Create a KV namespace with initial key-value pairs and TTL.
+Create a KV namespace with initial key-value pairs and TTL:
 
 ```ts
 import { KVNamespace } from "alchemy/cloudflare";
@@ -31,22 +31,42 @@ const sessions = await KVNamespace("sessions", {
 });
 ```
 
+# With Metadata
+
+Create a KV namespace with metadata for caching:
+
+```ts
+import { KVNamespace } from "alchemy/cloudflare";
+
+const assets = await KVNamespace("assets", {
+  title: "static-assets", 
+  values: [{
+    key: "main.js",
+    value: "content...",
+    metadata: {
+      contentType: "application/javascript",
+      etag: "abc123"
+    }
+  }]
+});
+```
+
 # Bind to a Worker
 
-Bind a KV namespace to a Worker for use in your application code.
+Bind a KV namespace to a Cloudflare Worker:
 
 ```ts
 import { Worker, KVNamespace } from "alchemy/cloudflare";
 
-const sessions = await KVNamespace("sessions", {
-  title: "user-sessions"
+const kv = await KVNamespace("my-kv", {
+  title: "my-kv-namespace"
 });
 
-await Worker("auth", {
-  name: "auth-worker", 
-  script: "export default { fetch() {} }",
+await Worker("my-worker", {
+  name: "my-worker",
+  script: "console.log('Hello, world!')",
   bindings: {
-    SESSIONS: sessions
+    MY_KV: kv
   }
 });
 ```

@@ -4,12 +4,12 @@ The GitHubSecret resource lets you manage [GitHub Actions secrets](https://docs.
 
 # Minimal Example
 
-Create a secret using the GITHUB_TOKEN environment variable:
+Create a secret in a GitHub repository using the GITHUB_TOKEN environment variable:
 
 ```ts
 import { GitHubSecret } from "alchemy/github";
 
-const secret = await GitHubSecret("my-secret", {
+const secret = await GitHubSecret("api-key", {
   owner: "my-github-username", 
   repository: "my-repo",
   name: "API_KEY",
@@ -17,9 +17,25 @@ const secret = await GitHubSecret("my-secret", {
 });
 ```
 
-# Create Multiple Secrets
+# Custom Token
 
-Create multiple repository secrets with environment variables:
+Create a secret using a custom GitHub token:
+
+```ts
+import { GitHubSecret } from "alchemy/github";
+
+const secret = await GitHubSecret("deploy-token", {
+  owner: "my-github-username",
+  repository: "my-repo", 
+  name: "DEPLOY_TOKEN",
+  value: alchemy.secret("my-secret-value"),
+  token: alchemy.secret(process.env.CUSTOM_GITHUB_TOKEN)
+});
+```
+
+# Multiple Secrets
+
+Create multiple secrets in a repository:
 
 ```ts
 import { GitHubSecret } from "alchemy/github";
@@ -27,51 +43,15 @@ import { GitHubSecret } from "alchemy/github";
 const secrets = await Promise.all([
   GitHubSecret("aws-secret", {
     owner: "my-github-username",
-    repository: "cloud-app", 
-    name: "AWS_ROLE_ARN",
+    repository: "cloud-app",
+    name: "AWS_ROLE_ARN", 
     value: alchemy.secret(process.env.AWS_ROLE_ARN)
   }),
   GitHubSecret("cf-secret", {
-    owner: "my-github-username",
+    owner: "my-github-username", 
     repository: "cloud-app",
-    name: "CLOUDFLARE_API_KEY", 
+    name: "CLOUDFLARE_API_KEY",
     value: alchemy.secret(process.env.CLOUDFLARE_API_KEY)
   })
 ]);
-```
-
-# Create Secret with Custom Token
-
-Create a secret using a custom GitHub token:
-
-```ts
-import { GitHubSecret } from "alchemy/github";
-
-const secret = await GitHubSecret("my-secret", {
-  owner: "my-github-username",
-  repository: "my-repo",
-  name: "API_KEY",
-  value: alchemy.secret("my-secret-value"),
-  token: alchemy.secret(process.env.CUSTOM_GITHUB_TOKEN)
-});
-```
-
-# Create Secret in Secure Scope
-
-Create a secret in a secure scope with a password:
-
-```ts
-import { GitHubSecret } from "alchemy/github";
-
-await alchemy.run("secure-scope", {
-  password: process.env.SECRET_PASSPHRASE
-}, async () => {
-  const secret = await GitHubSecret("deploy-secret", {
-    owner: "my-github-username",
-    repository: "my-app",
-    name: "DEPLOY_TOKEN",
-    value: alchemy.secret(process.env.DEPLOY_TOKEN),
-    token: alchemy.secret(process.env.GITHUB_TOKEN)
-  });
-});
 ```

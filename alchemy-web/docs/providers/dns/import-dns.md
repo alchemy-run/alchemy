@@ -1,6 +1,6 @@
 # ImportDnsRecords
 
-The ImportDnsRecords component lets you import DNS records from a domain using [Cloudflare's DNS-over-HTTPS API](https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/).
+The ImportDnsRecords resource lets you import DNS records from any domain using [Cloudflare's DNS-over-HTTPS API](https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/).
 
 # Minimal Example
 
@@ -9,7 +9,7 @@ Import all default DNS record types for a domain.
 ```ts
 import { ImportDnsRecords } from "alchemy/dns";
 
-const dnsRecords = await ImportDnsRecords("dns-records", {
+const records = await ImportDnsRecords("example.com", {
   domain: "example.com"
 });
 ```
@@ -21,24 +21,28 @@ Import only specified DNS record types.
 ```ts
 import { ImportDnsRecords } from "alchemy/dns";
 
-const records = await ImportDnsRecords("dns-records", {
+const records = await ImportDnsRecords("example.com", {
   domain: "example.com",
   recordTypes: ["A", "MX"]
 });
 ```
 
-# Import and Transfer Records
+# Transfer Records to Cloudflare
 
-Import DNS records and transfer them to another provider.
+Import records and transfer them to a Cloudflare zone.
 
 ```ts
-import { ImportDnsRecords, DnsRecords } from "alchemy/dns";
+import { ImportDnsRecords, DnsRecords, Zone } from "alchemy/dns";
 
 const dnsRecords = await ImportDnsRecords("dns-records", {
   domain: "example.com"
 });
 
-// Records are directly compatible with DnsRecords function
+const zone = await Zone("example.com", {
+  name: "example.com",
+  type: "full"
+});
+
 await DnsRecords("transfer-dns-records", {
   zoneId: zone.id,
   records: dnsRecords.records

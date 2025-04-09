@@ -1,10 +1,10 @@
-# Wrangler Json
+# WranglerJson
 
-The WranglerJson resource lets you create and manage [wrangler.json configuration files](https://developers.cloudflare.com/workers/wrangler/configuration/) for Cloudflare Workers.
+The WranglerJson resource creates and manages [wrangler.json configuration files](https://developers.cloudflare.com/workers/wrangler/configuration/) for Cloudflare Workers.
 
 # Minimal Example
 
-Create a basic wrangler.json file with minimal configuration:
+Create a basic wrangler.json file with required settings:
 
 ```ts
 import { WranglerJson } from "alchemy/cloudflare";
@@ -15,36 +15,63 @@ const config = await WranglerJson("my-worker-config", {
 });
 ```
 
-# Create with Advanced Configuration
+# With KV and R2 Bindings
 
-Create a wrangler.json with custom settings and bindings:
+Configure a worker with KV namespaces and R2 bucket bindings:
 
 ```ts
 import { WranglerJson } from "alchemy/cloudflare";
 
-const config = await WranglerJson("my-worker-config", {
-  name: "my-worker",
-  main: "src/index.ts",
-  outdir: "dist",
-  minify: true,
-  node_compat: true,
-  compatibility_date: "2023-01-01",
+const config = await WranglerJson("api-config", {
+  name: "api-worker",
+  main: "src/api.ts",
   kv_namespaces: [
     {
-      binding: "MY_KV",
-      id: "xxx",
-      preview_id: "yyy"
+      binding: "CACHE",
+      id: "xxxx", 
+      preview_id: "yyyy"
     }
   ],
   r2_buckets: [
     {
-      binding: "MY_BUCKET", 
+      binding: "STORAGE",
       bucket_name: "my-bucket"
     }
-  ],
-  routes: ["example.com/*"],
-  triggers: {
-    crons: ["0 0 * * *"]
+  ]
+});
+```
+
+# With Durable Objects
+
+Configure a worker with Durable Object bindings and migrations:
+
+```ts
+import { WranglerJson } from "alchemy/cloudflare";
+
+const config = await WranglerJson("chat-config", {
+  name: "chat-worker", 
+  main: "src/chat.ts",
+  durable_objects: {
+    bindings: [
+      {
+        name: "ROOMS",
+        class_name: "ChatRoom"
+      }
+    ]
   }
+});
+```
+
+# With Custom Path
+
+Specify a custom path for the wrangler.json file:
+
+```ts
+import { WranglerJson } from "alchemy/cloudflare";
+
+const config = await WranglerJson("worker-config", {
+  name: "my-worker",
+  main: "src/index.ts",
+  path: "./config/wrangler.json"
 });
 ```

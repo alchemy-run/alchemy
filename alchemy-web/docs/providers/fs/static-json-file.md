@@ -1,8 +1,8 @@
 # StaticJsonFile
 
-The StaticJsonFile resource creates formatted JSON files using [Prettier](https://prettier.io/) for consistent formatting.
+The StaticJsonFile resource creates formatted JSON files with automatic prettification using Prettier.
 
-# Minimal Example
+## Minimal Example
 
 Creates a simple JSON configuration file.
 
@@ -10,50 +10,53 @@ Creates a simple JSON configuration file.
 import { StaticJsonFile } from "alchemy/fs";
 
 const config = await StaticJsonFile("config.json", {
-  api: {
-    endpoint: "https://api.example.com",
-    version: "v1"
-  }
+  name: "my-app",
+  version: "1.0.0"
 });
 ```
 
-# Create with Custom Path
+## Custom Path Example
 
-Creates a JSON file at a specific path location.
+Creates a JSON file at a specific path.
 
 ```ts
 import { StaticJsonFile } from "alchemy/fs";
 
-const settings = await StaticJsonFile("settings", {
+const config = await StaticJsonFile("config", {
   path: "config/settings.json",
   content: {
-    theme: "dark",
-    notifications: true,
-    language: "en"
+    api: {
+      endpoint: "https://api.example.com",
+      version: "v1"
+    },
+    features: ["auth", "logging"]
   }
 });
 ```
 
-# Create Nested JSON
+## Complex Configuration Example
 
-Creates a JSON file with nested configuration data.
+Creates a JSON file with nested configuration.
 
 ```ts
 import { StaticJsonFile } from "alchemy/fs";
 
-const dbConfig = await StaticJsonFile("database.json", {
-  connection: {
+const config = await StaticJsonFile("app-config.json", {
+  server: {
     host: "localhost",
-    port: 5432,
-    credentials: {
-      username: "admin",
-      password: "secret"
+    port: 3000,
+    middleware: ["cors", "compression"]
+  },
+  database: {
+    url: "postgresql://localhost:5432/db",
+    pool: {
+      min: 1,
+      max: 10
     }
   },
-  pool: {
-    min: 1,
-    max: 10,
-    idleTimeout: 60000
+  logging: {
+    level: "info",
+    transports: ["console", "file"]
   }
 });
 ```

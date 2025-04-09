@@ -16,16 +16,15 @@ const zone = await Zone("example.com", {
 });
 ```
 
-# Create a Zone with Enhanced Security
+# Enhanced Security Settings
 
-Configure a zone with strict SSL and other security settings:
+Configure a zone with strict SSL and enhanced security:
 
 ```ts
 import { Zone } from "alchemy/cloudflare";
 
 const secureZone = await Zone("secure.example.com", {
   name: "secure.example.com", 
-  type: "full",
   settings: {
     ssl: "strict",
     alwaysUseHttps: "on",
@@ -36,9 +35,9 @@ const secureZone = await Zone("secure.example.com", {
 });
 ```
 
-# Create a Zone with Performance Settings
+# Performance Optimization
 
-Configure a zone with optimized performance settings:
+Create a zone optimized for performance:
 
 ```ts
 import { Zone } from "alchemy/cloudflare";
@@ -52,6 +51,25 @@ const fastZone = await Zone("fast.example.com", {
     http2: "on",
     http3: "on",
     earlyHints: "on"
+  }
+});
+```
+
+# Development Configuration
+
+Configure a zone for development with specific features enabled:
+
+```ts
+import { Zone } from "alchemy/cloudflare";
+
+const devZone = await Zone("dev.example.com", {
+  name: "dev.example.com",
+  settings: {
+    developmentMode: "on",
+    emailObfuscation: "on",
+    hotlinkProtection: "on",
+    ipv6: "on",
+    websockets: "on"
   }
 });
 ```

@@ -122,6 +122,14 @@ export default defineConfig({
                 link: "/docs/providers/cloudflare/account-api-token",
               },
               {
+                text: "AccountId",
+                link: "/docs/providers/cloudflare/account-id",
+              },
+              {
+                text: "CustomDomain",
+                link: "/docs/providers/cloudflare/custom-domain",
+              },
+              {
                 text: "DnsRecords",
                 link: "/docs/providers/cloudflare/dns-records",
               },

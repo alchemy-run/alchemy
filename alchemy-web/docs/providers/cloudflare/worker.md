@@ -1,35 +1,45 @@
 # Worker
 
-A [Cloudflare Worker](https://developers.cloudflare.com/workers/) is a serverless function that runs on Cloudflare's global network. Workers can handle HTTP requests, manipulate responses, and interact with other Cloudflare services.
+The [Worker](https://developers.cloudflare.com/workers/) resource lets you deploy serverless JavaScript/TypeScript functions to Cloudflare's global network.
 
 # Minimal Example
 
-Create a basic HTTP handler worker:
+Deploy a basic worker with an HTTP handler:
 
 ```ts
 import { Worker } from "alchemy/cloudflare";
 
-const api = await Worker("api", {
+const worker = await Worker("api", {
   name: "api-worker", 
-  script: `
-    export default {
-      async fetch(request) {
-        return new Response("Hello World!");
-      }
-    }
-  `
+  script: "export default { async fetch() { return new Response('Hello') } }"
 });
 ```
 
-# Create a Worker with Bindings
+# Worker with Bundling
 
-Bind KV namespaces, Durable Objects, and other resources to a worker:
+Bundle and deploy a TypeScript worker:
+
+```ts
+import { Worker } from "alchemy/cloudflare";
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/worker.ts",
+  bundle: {
+    minify: true
+  }
+});
+```
+
+# Worker with Bindings
+
+Bind KV namespaces, Durable Objects and other resources:
 
 ```ts
 import { Worker, KVNamespace, DurableObjectNamespace } from "alchemy/cloudflare";
 
-const kv = await KVNamespace("data", {
-  title: "data-store"
+const kv = await KVNamespace("store", {
+  title: "my-store"
 });
 
 const counter = new DurableObjectNamespace("counter", {
@@ -38,27 +48,50 @@ const counter = new DurableObjectNamespace("counter", {
 
 const worker = await Worker("api", {
   name: "api-worker",
-  entrypoint: "./src/api.ts",
+  script: "export default { async fetch() { return new Response('Hello') } }",
   bindings: {
-    DATA: kv,
+    STORE: kv,
     COUNTER: counter
   }
 });
 ```
 
-# Create a Worker with Routes
+# Worker with Custom Domain
 
-Configure custom domain routing and enable workers.dev URL:
+Deploy a worker with a custom domain:
+
+```ts
+import { Worker, CustomDomain } from "alchemy/cloudflare";
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  script: "export default { async fetch() { return new Response('Hello') } }"
+});
+
+const domain = await CustomDomain("api-domain", {
+  name: "api.example.com",
+  zoneId: "YOUR_ZONE_ID",
+  workerName: worker.name
+});
+```
+
+# Bind to a Worker
+
+Bind a worker to another worker:
 
 ```ts
 import { Worker } from "alchemy/cloudflare";
 
-const api = await Worker("api", {
-  name: "api-worker",
-  entrypoint: "./src/api.ts",
-  routes: ["api.example.com/*"],
-  url: true // Enables workers.dev URL
+const backend = await Worker("backend", {
+  name: "backend-worker",
+  script: "export default { async fetch() { return new Response('Hello') } }"
 });
 
-console.log(api.url); // https://api-worker.username.workers.dev
+const frontend = await Worker("frontend", {
+  name: "frontend-worker", 
+  script: "export default { async fetch() { return new Response('Hello') } }",
+  bindings: {
+    BACKEND: backend
+  }
+});
 ```

@@ -1,6 +1,6 @@
 # YAMLFile
 
-The YAMLFile resource lets you generate [YAML](https://yaml.org/) files using AI models. It supports both schema-based validation and freeform YAML generation.
+The YAMLFile resource lets you generate YAML files using AI models. It supports both schema-validated and freeform YAML generation.
 
 # Minimal Example
 
@@ -10,14 +10,14 @@ Generate a simple YAML configuration file:
 import { YAMLFile } from "alchemy/ai";
 
 const config = await YAMLFile("app-config", {
-  path: "./config/app.yml",
-  prompt: "Generate a basic YAML config with server port, host and database connection settings"
+  path: "./config.yml",
+  prompt: "Generate a basic application config with server port, database URL, and logging level"
 });
 ```
 
-# Generate YAML with Schema Validation 
+# Schema Validation
 
-Use an ArkType schema to validate and structure the generated YAML:
+Use a schema to ensure the generated YAML matches your type requirements:
 
 ```ts
 import { YAMLFile } from "alchemy/ai";
@@ -35,9 +35,28 @@ const configSchema = type({
 });
 
 const config = await YAMLFile("app-config", {
-  path: "./config/app.yml",
+  path: "./config.yml",
   schema: configSchema,
-  prompt: "Generate a server configuration with database settings",
-  temperature: 0.2
+  prompt: "Generate a server configuration with database settings"
+});
+```
+
+# Context-Aware Generation
+
+Use alchemy template literals to include file context in the prompt:
+
+```ts
+import { YAMLFile } from "alchemy/ai";
+
+const k8sConfig = await YAMLFile("k8s-config", {
+  path: "./k8s/deployment.yml",
+  prompt: await alchemy`
+    Generate a Kubernetes deployment config based on:
+    ${alchemy.file("src/app.ts")}
+  `,
+  model: {
+    id: "gpt-4o",
+    provider: "openai"
+  }
 });
 ```
