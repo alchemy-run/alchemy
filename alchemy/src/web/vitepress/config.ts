@@ -1,11 +1,12 @@
 import path from "path";
-import type { DefaultTheme, ThemeOptions } from "vitepress";
+import type { DefaultTheme, HeadConfig, ThemeOptions } from "vitepress";
 import { StaticTypeScriptFile } from "../../fs/static-typescript-file";
 
 export type VitePressConfigProps = {
   cwd: string;
   title?: string;
   description?: string;
+  head?: HeadConfig[];
   theme?: ThemeOptions;
   themeConfig: DefaultTheme.Config;
 };
@@ -23,6 +24,7 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   title: ${JSON.stringify(props.title || "Alchemy")},
   description: ${JSON.stringify(props.description || "Alchemy Docs")},
+  head: ${JSON.stringify(props.head || [])},
   markdown: {
     // @ts-ignore
     codeTransformers: [transformerTwoslash()],

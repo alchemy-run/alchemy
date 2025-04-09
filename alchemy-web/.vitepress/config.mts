@@ -6,6 +6,30 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   title: "Alchemy",
   description: "Alchemy Docs",
+  head: [
+    ["link", { rel: "icon", type: "image/png", href: "/alchemy-flower.png" }],
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:title", content: "Alchemy" }],
+    ["meta", { property: "og:description", content: "Alchemy Docs" }],
+    ["meta", { property: "og:url", content: "https://alchemy.run" }],
+    [
+      "meta",
+      {
+        property: "og:image",
+        content: "https://alchemy.run/alchemy-unfurl.png",
+      },
+    ],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    ["meta", { name: "twitter:title", content: "Alchemy" }],
+    ["meta", { name: "twitter:description", content: "Alchemy Docs" }],
+    [
+      "meta",
+      {
+        name: "twitter:image",
+        content: "https://alchemy.run/alchemy-unfurl.png",
+      },
+    ],
+  ],
   markdown: {
     // @ts-ignore
     codeTransformers: [transformerTwoslash()],

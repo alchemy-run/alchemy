@@ -10,7 +10,6 @@ import "./alchemy/src/web/astro";
 import "./alchemy/src/web/vite";
 import "./alchemy/src/web/vitepress";
 
-import fs from "node:fs/promises";
 import path from "node:path";
 import alchemy from "./alchemy/src";
 import { AccountId, Role } from "./alchemy/src/aws";
@@ -29,7 +28,11 @@ import { ImportDnsRecords } from "./alchemy/src/dns";
 import { CopyFile, Folder } from "./alchemy/src/fs";
 import { GitHubSecret } from "./alchemy/src/github";
 import { Providers } from "./alchemy/src/internal/docs/providers";
-import { VitePressConfig, VitepressProject } from "./alchemy/src/web/vitepress";
+import {
+  VitePressConfig,
+  VitepressProject,
+  processFrontmatterFiles,
+} from "./alchemy/src/web/vitepress";
 
 const app = alchemy("github:alchemy", {
   stage: "prod",
@@ -185,6 +188,32 @@ await alchemy.run("docs", async () => {
     cwd: project.dir,
     title: "Alchemy",
     description: "Alchemy Docs",
+    head: [
+      ["link", { rel: "icon", type: "image/png", href: "/alchemy-flower.png" }],
+      // Open Graph
+      ["meta", { property: "og:type", content: "website" }],
+      ["meta", { property: "og:title", content: "Alchemy" }],
+      ["meta", { property: "og:description", content: "Alchemy Docs" }],
+      ["meta", { property: "og:url", content: "https://alchemy.run" }],
+      [
+        "meta",
+        {
+          property: "og:image",
+          content: "https://alchemy.run/alchemy-unfurl.png",
+        },
+      ],
+      // Twitter Card (similar to Open Graph)
+      ["meta", { name: "twitter:card", content: "summary_large_image" }],
+      ["meta", { name: "twitter:title", content: "Alchemy" }],
+      ["meta", { name: "twitter:description", content: "Alchemy Docs" }],
+      [
+        "meta",
+        {
+          name: "twitter:image",
+          content: "https://alchemy.run/alchemy-unfurl.png",
+        },
+      ],
+    ],
     themeConfig: {
       nav: [
         { text: "Home", link: "/" },
@@ -277,103 +306,5 @@ await alchemy.run("docs", async () => {
 
   console.log(`https://alchemy.run`);
 });
-
-/**
- * Process markdown files with frontmatter to generate navigation items
- * @param directoryPath The directory containing markdown files
- * @param linkPrefix The prefix for navigation links
- * @returns Sorted array of navigation items with text and link properties
- */
-async function processFrontmatterFiles(
-  directoryPath: string,
-  linkPrefix: string
-) {
-  const entries = await fs.readdir(directoryPath, { withFileTypes: true });
-
-  const processedEntries = await Promise.all(
-    entries
-      .filter((entry) => !entry.name.endsWith("index.md"))
-      .map(async (entry) => {
-        const fullPath = path.join(directoryPath, entry.name);
-
-        if (entry.isDirectory()) {
-          // Process subdirectory recursively
-          const items = await processFrontmatterFiles(
-            fullPath,
-            `${linkPrefix}/${entry.name}`
-          );
-
-          // Create section for subdirectory
-          return {
-            text: entry.name.charAt(0).toUpperCase() + entry.name.slice(1),
-            collapsed: true,
-            items,
-            order: 10000, // Default order for directories
-          };
-        }
-
-        // Process markdown file
-        if (!entry.name.endsWith(".md")) {
-          return null;
-        }
-
-        const content = await fs.readFile(fullPath, "utf-8");
-        const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-        let order = 10000;
-        let title;
-
-        if (frontmatterMatch) {
-          const frontmatter = frontmatterMatch[1];
-          const orderMatch = frontmatter.match(/order:\s*(\d+)/);
-          if (orderMatch) {
-            order = parseInt(orderMatch[1]);
-          }
-          const titleMatch = frontmatter.match(/title:\s*(.+)/);
-          if (titleMatch) {
-            title = titleMatch[1].trim();
-          }
-        }
-
-        // If no title in frontmatter, try to get first heading
-        if (!title) {
-          const headingMatch = content.match(/^#\s+(.+)$/m);
-          if (headingMatch) {
-            title = headingMatch[1].trim();
-          }
-        }
-
-        // Fall back to filename if no title found
-        if (!title) {
-          const name = entry.name.replace(".md", "");
-          title = name.charAt(0).toUpperCase() + name.slice(1);
-        }
-
-        return {
-          text: title,
-          link: `${linkPrefix}/${entry.name}`,
-          order,
-        };
-      })
-  );
-
-  // Filter out null entries and sort by order
-  return processedEntries
-    .filter((entry) => entry !== null)
-    .sort((a, b) => a.order - b.order)
-    .map(({ text, link, items }) =>
-      items ? { text, items, collapsed: true } : { text, link }
-    );
-}
-
-// export const site = await StaticSite("alchemy.run site", {
-//   name: "alchemy",
-//   dir: path.join(project.dir, ".vitepress", "dist"),
-//   domain: "alchemy.run",
-//   build: {
-//     command: "bun run --filter=alchemy-web docs:build",
-//   },
-// });
-
-// console.log("Site URL:", site.url);
 
 await app.finalize();
