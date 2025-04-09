@@ -84,6 +84,12 @@ export interface DocumentProps {
    * @default 10000
    */
   maxTokens?: number;
+
+  /**
+   * Freeze the document after creation (do not re-generate on updates)
+   * @default false
+   */
+  freeze?: boolean;
 }
 
 /**
@@ -226,6 +232,16 @@ export const Document = Resource(
     // Handle deletion phase
     if (this.phase === "delete") {
       return this.destroy();
+    }
+
+    if (this.phase === "update" && props.freeze) {
+      if (props.path) {
+        const filePath = props.path;
+        const fileId = `${id}-file`;
+
+        await StaticTextFile(fileId, filePath, this.output!.content);
+      }
+      return this(this.output);
     }
 
     // Use provided system prompt or default

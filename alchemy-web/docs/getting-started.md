@@ -1,6 +1,10 @@
 # Getting Started with Alchemy
 
-Alchemy is a TypeScript-native Infrastructure-as-Code (IaC) library with zero dependencies. It lets you model resources that are automatically created, updated, and deleted.
+Alchemy is an Infrastructure-as-Code library for building cloud applications with simple, familiar TypeScript code.
+
+You write and run an `alchemy.run.ts` script that creates your resources (e.g. `await Database()`, or `await StaticSite()`) and Alchemy keeps track of each resource's state to automatically create new resouces, update modified ones, or delete resources you no longer need.
+
+This enables you to focus on what infrastructure configuration you want and not worry about how to get there.
 
 > [!TIP]
 > Read [What is Alchemy](./what-is-alchemy.md) to get an overview of Alchemy and how it's different than tradtional IaC

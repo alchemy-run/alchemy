@@ -62,11 +62,11 @@ import { type } from "arktype";
 
 const docSchema = type({
   summary: "string",
-  parameters: type({
+  parameters: {
     name: "string",
     type: "string", 
     description: "string"
-  }).array(),
+  }[],
   returns: "string"
 });
 

@@ -2,6 +2,28 @@
 
 Alchemy is a TypeScript-native Infrastructure-as-Code (IaC) library with zero dependencies that lets you model resources that are automatically created, updated, and deleted.
 
+## What is Infrastructure as Code?
+
+Infrastructure as Code means writing code that defines your infrastructure instead of manually creating it. 
+
+Let's say you need a database. Instead of clicking through a cloud console, you write:
+
+```typescript
+const database = await Database("main", { 
+  engine: "postgres",
+  size: "small"
+});
+
+// Access properties directly
+console.log(database.connectionString);
+```
+
+Run this code, and the actual database gets created. Change the size to "medium" and run it again - your database will be updated. Remove the code, and the database will be deleted.
+
+Your code becomes the blueprint for repeatable infrastructure. The IaC tool (Alchemy in this case) handles the synchronization between your code and the real world.
+
+## How Alchemy Works
+
 ```typescript
 // Define and deploy a resource with a single async function call
 const bucket = await Bucket("assets", { name: "my-app-assets" });

@@ -183,6 +183,7 @@ async function generateProviderDocs({
         providerDocsDir,
         `${g.filename.replace(".ts", "").replace(".md", "")}.md`
       ),
+      freeze: true,
       model: {
         id: "claude-3-5-sonnet-latest",
         provider: "anthropic",
