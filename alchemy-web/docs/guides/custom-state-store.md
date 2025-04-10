@@ -1,5 +1,5 @@
 ---
-order: 100
+order: 3
 ---
 
 # Custom State Store
@@ -336,7 +336,7 @@ return {
 To use your custom state store, pass it to the Alchemy app initialization:
 
 ```typescript
-const app = alchemy("my-app", {
+const app = await alchemy("my-app", {
   stage: "prod",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   stateStore: (scope) => new InMemoryStateStore(scope)

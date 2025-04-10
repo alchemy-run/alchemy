@@ -34,7 +34,7 @@ import {
   processFrontmatterFiles,
 } from "./alchemy/src/web/vitepress";
 
-const app = alchemy("github:alchemy", {
+const app = await alchemy("github:alchemy", {
   stage: "prod",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   // pass the password in (you can get it from anywhere, e.g. stdin)

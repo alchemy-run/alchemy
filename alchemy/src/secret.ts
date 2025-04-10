@@ -5,7 +5,7 @@
  *
  * 1. Globally when initializing the alchemy application:
  * ```ts
- * const app = alchemy("my-app", {
+ * const app = await alchemy("my-app", {
  *   password: process.env.SECRET_PASSPHRASE
  * });
  * ```
@@ -55,7 +55,7 @@ export function isSecret(binding: any): binding is Secret {
  *
  * @example
  * // Global password for all secrets
- * const app = alchemy("my-app", {
+ * const app = await alchemy("my-app", {
  *   password: process.env.SECRET_PASSPHRASE
  * });
  *

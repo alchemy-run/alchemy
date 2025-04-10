@@ -190,7 +190,7 @@ export const VitepressProject = Resource(
       // import { Document } from "alchemy/docs";
       // import path from "path";
 
-      // await using _ = alchemy("alchemy.run", {
+      // const app = await alchemy("alchemy.run", {
       //   stage: "prod",
       //   phase: process.argv.includes("--destroy") ? "destroy" : "up",
       //   password: process.env.SECRET_PASSPHRASE,

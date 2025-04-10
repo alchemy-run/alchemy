@@ -1,8 +1,8 @@
 /// <reference types="./env.d.ts" />
 
-import type { api } from "../alchemy.run";
+import type { website } from "../alchemy.run";
 
-export type CloudFlareEnv = typeof api.Env;
+export type CloudFlareEnv = typeof website.Env;
 
 declare module "cloudflare:workers" {
   namespace Cloudflare {

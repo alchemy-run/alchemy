@@ -101,6 +101,11 @@ export interface WorkerProps<B extends Bindings = Bindings> {
    * Migrations to apply to the worker
    */
   migrations?: SingleStepMigration;
+
+  /**
+   * Whether to adopt the Worker if it already exists when creating
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -245,7 +250,9 @@ export const Worker = Resource(
       await deleteWorker(this, api, workerName);
       return this.destroy();
     } else if (this.phase === "create") {
-      await assertWorkerDoesNotExist(this, api, workerName);
+      if (!props.adopt) {
+        await assertWorkerDoesNotExist(this, api, workerName);
+      }
     }
 
     const oldBindings = await this.get<Bindings>("bindings");

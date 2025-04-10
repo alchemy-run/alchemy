@@ -17,6 +17,7 @@
     "valibot": "^1.0.0"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.0.4",
     "@eslint/js": "^9.21.0",
     "@types/node": "^22.13.10",
     "@types/react": "^19.0.10",

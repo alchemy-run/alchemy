@@ -18,6 +18,7 @@
     "./esbuild": "./lib/esbuild/index.js",
     "./fs": "./lib/fs/index.js",
     "./github": "./lib/github/index.js",
+    "./os": "./lib/os/index.js",
     "./shadcn": "./lib/shadcn/index.js",
     "./stripe": "./lib/stripe/index.js",
     "./test/bun": "./lib/test/bun.js",

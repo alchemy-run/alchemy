@@ -70,31 +70,16 @@ export default defineConfig({
         collapsed: false,
         items: [
           {
+            text: "Deploy a ViteJS Site & API to Cloudflare",
+            link: "/docs/guides/cloudflare-vitejs.md",
+          },
+          {
             text: "Use AI to develop Custom Resources",
             link: "/docs/guides/custom-resources.md",
           },
           {
             text: "Custom State Store",
             link: "/docs/guides/custom-state-store.md",
-          },
-          {
-            text: "Cloudflare",
-            items: [
-              {
-                text: "Deploy ViteJS Static Site",
-                link: "/docs/guides/cloudflare/vitejs.md",
-              },
-              {
-                text: "Workers and Bindings",
-                link: "/docs/guides/cloudflare/worker.md",
-              },
-              {
-                text: "Durable Objects & Migrations",
-                link: "/docs/guides/cloudflare/durable-object.md",
-              },
-              { text: "DNS & Zone", link: "/docs/guides/cloudflare/zone.md" },
-            ],
-            collapsed: true,
           },
         ],
       },

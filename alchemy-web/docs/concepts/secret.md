@@ -20,7 +20,7 @@ Secrets in Alchemy are sensitive values that need special handling to prevent ex
 Secrets are encrypted using a password that you provide when initializing your Alchemy app:
 
 ```typescript
-const app = alchemy("my-app", {
+const app = await alchemy("my-app", {
   stage: "dev",
   password: process.env.SECRET_PASSPHRASE,
 });

@@ -4,7 +4,7 @@ import { Bundle } from "alchemy/esbuild";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-await using _ = alchemy("aws-app", {
+const app = await alchemy("aws-app", {
   // decide the mode/stage however you want
   phase: process.argv[2] === "destroy" ? "destroy" : "up",
   stage: process.argv[3],
@@ -78,3 +78,5 @@ const api = await Function("api", {
     },
   },
 });
+
+await app.finalize();

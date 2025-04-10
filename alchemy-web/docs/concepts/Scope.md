@@ -23,7 +23,7 @@ The top-level scope created using the `alchemy()` function:
 import alchemy from "alchemy";
 
 // Create root scope
-const app = alchemy("my-app");
+const app = await alchemy("my-app");
 
 // Create a resource in this scope
 const file = await File("config", { path: "./config.json", content: "{}" });
@@ -43,7 +43,7 @@ A scope directly under the application scope for separating environments:
 
 ```typescript
 // Create app with explicit stage
-const app = alchemy("my-app", {
+const app = await alchemy("my-app", {
   stage: "prod"
 });
 
@@ -124,7 +124,7 @@ await alchemy.run("frontend", async () => {
 When finalized, scopes delete any orphaned resources (resources in state but not in code):
 
 ```typescript
-const app = alchemy("my-app");
+const app = await alchemy("my-app");
 
 await Bucket("assets", {});
 // If a previously existing resource is removed from code,
@@ -133,14 +133,7 @@ await Bucket("assets", {});
 await app.finalize(); // Manual finalization
 ```
 
-Application scopes need manual finalization, but nested scopes finalize automatically when their execution completes. You can also use `await using` for automatic finalization:
-
-```typescript
-await using app = alchemy("my-app");
-
-await Database("main", {});
-// app.finalize() happens automatically when the block ends
-```
+Application scopes need manual finalization, but nested scopes finalize automatically when their execution completes. 
 
 ## Test Scope
 

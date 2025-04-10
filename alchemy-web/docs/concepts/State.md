@@ -82,7 +82,7 @@ Alchemy supports multiple state storage backends. You can use the default file s
 
 ```typescript
 // Example with Cloudflare R2 state store
-const app = alchemy("my-app", {
+const app = await alchemy("my-app", {
   stage: "prod",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   stateStore: (scope) => new R2RestStateStore(scope, {

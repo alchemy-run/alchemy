@@ -10,7 +10,7 @@ Resource destruction in Alchemy removes resources from both your state file and 
 ### Application Destruction
 ```typescript
 // Destroys all resources in the application
-const app = alchemy("my-app", {
+const app = await alchemy("my-app", {
   phase: "destroy"  // or process.argv.includes("--destroy") ? "destroy" : "up"
 });
 ```
@@ -37,7 +37,7 @@ Use for: Targeted cleanup of specific resources or test resources without affect
 
 ```typescript
 // In alchemy.run.ts
-const app = alchemy("my-app", {
+const app = await alchemy("my-app", {
   stage: "dev",
   phase: process.argv.includes("--destroy") ? "destroy" : "up"
 });

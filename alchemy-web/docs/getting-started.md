@@ -24,7 +24,7 @@ Create a file named `alchemy.run.ts` in your project directory and follow these 
 import alchemy from "alchemy";
 
 // Initialize the Alchemy application scope
-const app = alchemy("my-first-app", {
+const app = await alchemy("my-first-app", {
   stage: "dev",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
 });

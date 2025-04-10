@@ -1,4 +1,5 @@
 import type { Secret } from "../secret";
+import type { Assets } from "./assets";
 import type { Binding } from "./bindings";
 import type { R2Bucket as _R2Bucket } from "./bucket";
 import type { DurableObjectNamespace as _DurableObjectNamespace } from "./durable-object-namespace";
@@ -15,4 +16,6 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace
         ? R2Bucket
         : T extends Secret
           ? string
-          : never;
+          : T extends Assets
+            ? Service
+            : Service;

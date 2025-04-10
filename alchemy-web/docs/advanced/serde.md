@@ -90,7 +90,7 @@ const deserializedObject = await deserialize(scope, JSON.parse(storedData));
 When serializing secrets, a password must be set on the scope:
 
 ```typescript
-const app = alchemy("my-app", {
+const app = await alchemy("my-app", {
   password: process.env.SECRET_PASSPHRASE,
 });
 ```

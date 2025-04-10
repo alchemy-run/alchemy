@@ -10,7 +10,7 @@ Resources are simple memoized async functions that can run in any JavaScript run
 import alchemy from "alchemy";
 
 // initialize the app (with default state $USER)
-const app = alchemy("cloudflare-worker");
+const app = await alchemy("cloudflare-worker");
 
 // create a Cloudflare Worker
 export const worker = await Worker("worker", {
@@ -65,8 +65,7 @@ Your script should start by creating the Alchemy `app` (aka. "Root Scope", more 
 ```ts
 import alchemy from "alchemy";
 
-// async disposables trigger finalization of the stack at the end of the script (after resources are declared)
-await using app = alchemy("my-app", {
+const app = await alchemy("my-app", {
   // namespace for stages
   stage: process.env.STAGE ?? "dev",
   // update or destroy the app
@@ -77,7 +76,10 @@ await using app = alchemy("my-app", {
   quiet: process.argv.includes("--verbose") ? false : true,
 });
 
-// (otherwise, declare resources here AFTER the bootstrap)
+// (declare resources here AFTER the bootstrap)
+
+// finalize the app at the end of the script
+await app.finalize()
 ```
 
 Now that our app is initialized, we can start creating Resources, e.g. an AWS IAM Role:
@@ -258,7 +260,7 @@ table.tableArn; // string
 Recall that the `alchemy` function accepts a `password` property:
 
 ```ts
-await using app = alchemy("my-app", {
+const app = await alchemy("my-app", {
   // password for encrypting/decrypting secrets stored in state
   password: process.env.SECRET_PASSPHRASE,
 });
@@ -303,7 +305,7 @@ Alchemy manages resources with a named tree of `Scope`s, similar to a file syste
 The `alchemy` bootstrap (in your `alchemy.config.ts`) creates and binds to the Alchemy Application Scope (aka. "Root Scope"):
 
 ```ts
-await using app = alchemy("my-app", {
+const app = await alchemy("my-app", {
   stage: "prod",
   // ..
 });
@@ -325,7 +327,7 @@ When you create an app, you can also specify a `stage`.
 Stage is just an opinionated Scope placed under the root useful as a convention for isolating "stages" such as `prod`, `dev`, `$USER`.
 
 ```ts
-await using app = alchemy("my-app", {
+const app = await alchemy("my-app", {
   // scope: my-app/prod
   stage: "prod",
 });
@@ -384,7 +386,7 @@ Nested Scopes are stored within their parent Scope's state folder:
 You can create and "enter" a Nested Scope synchronously in a function. This will create and set the current async context's Scope (using AsyncLocalStorage):
 
 ```ts
-await using scope = alchemy.scope("nested");
+const scope = alchemy.scope("nested");
 
 // resources created AFTER are placed in the "nested' Scope
 await Worker("my-worker");
@@ -475,7 +477,7 @@ try {
 To destroy the whole app (aka. the whole graph), you can call `alchemy` with the `phase: "destroy"` option. This will delete all resources in the specified or default stage.
 
 ```ts
-await using _ = alchemy({
+const app = await alchemy({
   phase: "destroy",
   // ..
 });
@@ -485,7 +487,7 @@ await using _ = alchemy({
 > Alchemy is designed to have the minimum number of opinions as possible. This "embeddable" design is so that you can implement your own tools around Alchemy, e.g. a CLI or UI, instead of being stuck with a specific tool.
 >
 > ```ts
-> await using _ = alchemy({
+> const app = await alchemy({
 >   // decide the mode/stage however you want, e.g. a CLI parser
 >   phase: process.argv[2] === "destroy" ? "destroy" : "up",
 >   stage: process.argv[3],

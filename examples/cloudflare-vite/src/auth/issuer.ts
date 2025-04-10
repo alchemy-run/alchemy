@@ -1,17 +1,15 @@
 import { issuer as openauthIssuer } from "@openauthjs/openauth";
 import { GithubProvider } from "@openauthjs/openauth/provider/github";
 import { CloudflareStorage } from "@openauthjs/openauth/storage/cloudflare";
-import { api } from "../api";
+import { env } from "cloudflare:workers";
 import { Subjects } from "../auth/subjects";
 
-import { env } from "cloudflare:workers";
-
 const storage = CloudflareStorage({
-  namespace: env.AUTH_STORE as any,
+  namespace: env.AUTH_STORE as any, // TODO: what is openauth doing weird with types?
 });
 
 // Create the OpenAuth issuer app
-const issuer = openauthIssuer({
+export const issuer = openauthIssuer({
   // Configure providers
   ttl: {
     // see: https://github.com/toolbeam/openauth/issues/133
@@ -71,5 +69,3 @@ const issuer = openauthIssuer({
     });
   },
 });
-
-api.route("/*", issuer);

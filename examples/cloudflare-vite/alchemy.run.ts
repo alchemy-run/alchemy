@@ -1,19 +1,14 @@
-// we don't use node in ./src/**, only here for alchemy to bootstrap CloudFlare
-import "@types/node";
+/// <reference types="node" />
 
 import alchemy from "alchemy";
-import {
-  DurableObjectNamespace,
-  KVNamespace,
-  R2Bucket,
-  StaticSite,
-  Worker,
-} from "alchemy/cloudflare";
+import { Assets, KVNamespace, R2Bucket, Worker } from "alchemy/cloudflare";
+import { Exec } from "alchemy/os";
 
-const app = alchemy("cloudflare-vite", {
+const app = await alchemy("cloudflare-vite", {
   stage: process.env.USER ?? "dev",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   quiet: process.argv.includes("--verbose") ? false : true,
+  password: process.env.ALCHEMY_PASSWORD,
 });
 
 export const [authStore, storage] = await Promise.all([
@@ -26,31 +21,31 @@ export const [authStore, storage] = await Promise.all([
   }),
 ]);
 
-export const counter = new DurableObjectNamespace("COUNTER", {
-  className: "Counter",
-  sqlite: true,
+// export const counter = new DurableObjectNamespace("COUNTER", {
+//   className: "Counter",
+//   sqlite: true,
+// });
+
+await Exec("build", {
+  command: "bun run build",
 });
 
-export const api = await Worker("api", {
+const staticAssets = await Assets("static-assets", {
+  path: "./dist",
+});
+
+export const website = await Worker("worker", {
   name: "alchemy-example-vite-api",
   entrypoint: "./src/index.ts",
+  url: true,
+  adopt: true,
   bindings: {
-    COUNTER: counter,
+    ASSETS: staticAssets,
+    // COUNTER: counter,
     STORAGE: storage,
     AUTH_STORE: authStore,
     GITHUB_CLIENT_ID: alchemy.secret(process.env.GITHUB_CLIENT_ID),
     GITHUB_CLIENT_SECRET: alchemy.secret(process.env.GITHUB_CLIENT_SECRET),
-  },
-});
-
-export const website = await StaticSite("Website", {
-  name: "alchemy-example-vite",
-  dir: "./dist",
-  build: {
-    command: "bun run build",
-  },
-  routes: {
-    "/api/*": api,
   },
 });
 
