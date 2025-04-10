@@ -192,7 +192,7 @@ await alchemy.run("docs", async () => {
     title: "Alchemy",
     description: "Alchemy Docs",
     head: [
-      ["link", { rel: "icon", type: "image/png", href: "/alchemy-flower.png" }],
+      ["link", { rel: "icon", type: "image/png", href: "/potion.png" }],
       // Open Graph
       ["meta", { property: "og:type", content: "website" }],
       ["meta", { property: "og:title", content: "Alchemy" }],

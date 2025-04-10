@@ -7,7 +7,7 @@ export default defineConfig({
   title: "Alchemy",
   description: "Alchemy Docs",
   head: [
-    ["link", { rel: "icon", type: "image/png", href: "/alchemy-flower.png" }],
+    ["link", { rel: "icon", type: "image/png", href: "/potion.png" }],
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:title", content: "Alchemy" }],
     ["meta", { property: "og:description", content: "Alchemy Docs" }],
