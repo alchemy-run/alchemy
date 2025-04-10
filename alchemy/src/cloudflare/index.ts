@@ -9,7 +9,6 @@ export * from "./durable-object-namespace";
 export * from "./kv-namespace";
 export * from "./permission-groups";
 export * from "./r2-rest-state-store";
-export * from "./static-site";
 export * from "./worker";
 export * from "./wrangler.json";
 export * from "./zone";
