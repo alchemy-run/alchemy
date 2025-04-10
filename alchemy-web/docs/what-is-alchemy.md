@@ -252,9 +252,15 @@ Alchemy works for a wide range of infrastructure use cases.
 
 ```typescript
 // Cloudflare Workers and Static Sites
-const site = await StaticSite("Website", {
+const assets = await Assets("Assets", {
+  path: "./dist"
+})
+
+const site = await Worker("Website", {
   name: "my-app",
-  dir: "./dist"
+  bindings: {
+    ASSETS: assets
+  }
 });
 
 // AWS Lambda Functions

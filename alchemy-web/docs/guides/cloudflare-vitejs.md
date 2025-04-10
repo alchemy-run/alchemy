@@ -6,7 +6,7 @@ order: 1
 
 This guide shows how to deploy a Vite.js React TypeScript application to Cloudflare using Alchemy.
 
-## Creating a Vite.js Project
+## Create a new Vite.js Project
 
 Start by creating a new Vite.js project:
 
@@ -16,7 +16,7 @@ cd my-cloudflare-app
 bun install
 ```
 
-## Setting Up Alchemy
+## Create `alchemy.run.ts`
 
 Create a standard `alchemy.run.ts` file in your project root:
 
@@ -32,9 +32,9 @@ const app = await alchemy("cloudflare-vite", {
 ```
 
 > [!NOTE]
-> See the [Getting Started](../../getting-started.md) guide if this is unfamiliar.
+> See the [Getting Started](../getting-started) guide if this is unfamiliar.
 
-## Building Your Application
+## Build Vite.js
 
 We're using a ViteJS site that needs to be built to create a `./dist` folder.
 
@@ -49,7 +49,7 @@ await Exec("build", {
 });
 ```
 
-## Creating Assets Resource
+## Create Cloudflare Assets
 
 Now that we've built our website's assets, we need to create an `Assets` Resource to store them in our Cloudflare Worker.
 
@@ -61,7 +61,7 @@ const staticAssets = await Assets("static-assets", {
 });
 ```
 
-## Creating Worker Resource
+## Create the Worker & Bind to Assets
 
 Now bind the static assets to our worker so we can serve them using Cloudflare's CDN.
 
@@ -86,8 +86,7 @@ console.log({
 await app.finalize();
 ```
 
-
-## Creating the Worker Entrypoint
+## Create the Worker Entrypoint
 
 Now create a `src/index.ts` file where you'll implement your server's entrypoint:
 
@@ -101,7 +100,7 @@ export default {
 };
 ```
 
-## Configure the Worker Environment types
+## Configure the Worker Environment Types
 
 Your server won't yet compile - first, we need to set up the types for our Worker's Environment.
 
@@ -121,7 +120,7 @@ declare module "cloudflare:workers" {
 ```
 
 > [!TIP]
-> See the [Type-safe Bindings](../../concepts/bindings.md#type-safe-bindings) documentation for more information.
+> See the [Type-safe Bindings](../concepts/bindings#type-safe-bindings) documentation for more information.
 
 ## Deploy the Website
 
@@ -136,7 +135,7 @@ It'll log out our URL
 
 Click it, you should see your site!
 
-## Adding an API Endpoint
+## Add an API Endpoint
 
 Now, what good's a site without an API to back it? Let's now set that up.
 
@@ -190,7 +189,7 @@ export default {
 bun ./alchemy.run
 ```
 
-## Running the Deployment
+## Re-deploy
 
 Deploy your app to Cloudflare:
 

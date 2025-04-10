@@ -166,5 +166,5 @@ And the `hello-world.txt` file is now gone.
 
 This was a very simple example using the local file system. Now, you might want to do something more interesting like deploy some Cloudflare resources or build your own!
 
-- [Deploy a ViteJS site to Cloudflare](./guides/cloudflare/vitejs)
+- [Deploy a ViteJS site to Cloudflare](./guides/cloudflare-vitejs)
 - [Build your own Custom Resource](./guides/custom-resources.md)

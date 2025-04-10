@@ -86,6 +86,9 @@ export interface AssetFile {
  */
 export const Assets = Resource(
   "cloudflare::Asset",
+  {
+    alwaysUpdate: true,
+  },
   async function (
     this: Context<Assets>,
     id: string,

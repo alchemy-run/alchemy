@@ -64,8 +64,7 @@ export interface CustomDomain
 
 /**
  * Configure custom domain for a Cloudflare Worker using the Cloudflare Custom Domains API
- * This attaches a worker (either a standard Worker or the one backing a StaticSite)
- * to a specific hostname within a zone.
+ * This attaches a worker to a specific hostname within a zone.
  *
  * @example
  * // Bind a domain to a standard Cloudflare Worker
@@ -78,19 +77,6 @@ export interface CustomDomain
  *   name: "api.example.com",
  *   zoneId: "YOUR_ZONE_ID", // Replace with actual Zone ID
  *   workerName: apiWorker.name // Use the name from the Worker resource
- * });
- *
- * @example
- * // Bind a domain to a Cloudflare Static Site
- * const mySite = await StaticSite("landing-page", {
- *   name: "my-landing-page-site", // This becomes the underlying worker name
- *   dir: "./dist/landing-page"
- * });
- *
- * const siteDomain = await CustomDomain("site-domain-binding", {
- *   name: "www.example.com",
- *   zoneId: "YOUR_ZONE_ID", // Replace with actual Zone ID
- *   workerName: mySite.name // Use the name from the StaticSite resource
  * });
  *
  * @see https://developers.cloudflare.com/api/resources/workers/subresources/domains/

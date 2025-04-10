@@ -63,6 +63,12 @@ export interface DataProps<T extends Type<any, any>> {
    * Model configuration
    */
   model?: ModelConfig;
+
+  /**
+   * Whether to freeze the generated object
+   * @default false
+   */
+  freeze?: boolean;
 }
 
 /**
@@ -169,6 +175,10 @@ export const Data = Resource("ai::Object", async function <
   // Validate that either prompt or messages is provided
   if (!props.prompt && !props.messages) {
     throw new Error("Either prompt or messages must be provided");
+  }
+
+  if (this.phase === "update" && props.freeze) {
+    return this(this.output);
   }
 
   // Create messages array if only prompt is provided

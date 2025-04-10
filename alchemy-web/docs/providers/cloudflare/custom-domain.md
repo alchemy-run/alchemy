@@ -16,25 +16,6 @@ const domain = await CustomDomain("api-domain", {
 });
 ```
 
-# Bind to a Static Site
-
-Bind a domain to a Cloudflare Static Site's underlying worker.
-
-```ts
-import { StaticSite, CustomDomain } from "alchemy/cloudflare";
-
-const site = await StaticSite("landing-page", {
-  name: "my-landing-page",
-  dir: "./dist"
-});
-
-const domain = await CustomDomain("site-domain", {
-  name: "www.example.com",
-  zoneId: "YOUR_ZONE_ID", 
-  workerName: site.name
-});
-```
-
 # Bind to a Worker
 
 ```ts

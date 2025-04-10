@@ -124,6 +124,7 @@ async function generateProviderDocs({
         reasoningEffort: "high",
       },
     },
+    freeze: true,
     temperature: 0.1,
     schema: type({
       groups: type({
@@ -156,7 +157,7 @@ async function generateProviderDocs({
       A file is considered a "Utility" if it contains utility functions that are not resources or clients.
       A file is considered a "Types" if it contains just type definitions and maybe helpers around working with those types.
 
-      The title should be simply the name of the resource's const in code (with spaces added in between each word), e.g. "Bucket" or "Function", except with spaces, e.g. "Static Site" for "const StaticSite". Maintain all other casing.
+      The title should be simply the name of the resource's const in code (with spaces added in between each word), e.g. "Bucket" or "Function", except with spaces, e.g. "StaticSite" for "const StaticSite". Maintain all other casing.
 
       // "Resource Name"
       const ResourceName = Resource(...)

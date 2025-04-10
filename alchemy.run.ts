@@ -5,6 +5,7 @@ import "./alchemy/src/aws/oidc";
 import "./alchemy/src/cloudflare";
 import "./alchemy/src/dns";
 import "./alchemy/src/fs";
+import "./alchemy/src/os";
 import "./alchemy/src/stripe";
 import "./alchemy/src/web/astro";
 import "./alchemy/src/web/vite";
@@ -16,18 +17,20 @@ import { AccountId, Role } from "./alchemy/src/aws";
 import { GitHubOIDCProvider } from "./alchemy/src/aws/oidc";
 import {
   AccountApiToken,
+  Assets,
   CloudflareAccountId,
   CustomDomain,
   DnsRecords,
   PermissionGroups,
   R2Bucket,
-  StaticSite,
+  Worker,
   Zone,
 } from "./alchemy/src/cloudflare";
 import { ImportDnsRecords } from "./alchemy/src/dns";
 import { CopyFile, Folder } from "./alchemy/src/fs";
 import { GitHubSecret } from "./alchemy/src/github";
 import { Providers } from "./alchemy/src/internal/docs/providers";
+import { Exec } from "./alchemy/src/os";
 import {
   VitePressConfig,
   VitepressProject,
@@ -288,12 +291,27 @@ await alchemy.run("docs", async () => {
     },
   });
 
-  const site = await StaticSite("static-site", {
-    name: "alchemy-web",
-    dir: path.join(project.dir, ".vitepress", "dist"),
-    build: {
-      command: "bun run --filter alchemy-web docs:build",
+  await Exec("build-site", {
+    command: "bun run --filter alchemy-web docs:build",
+  });
+
+  const staticAssets = await Assets("static-assets", {
+    path: path.join(project.dir, ".vitepress", "dist"),
+  });
+
+  const site = await Worker("website", {
+    name: "alchemy-website",
+    url: true,
+    bindings: {
+      ASSETS: staticAssets,
     },
+    script: `
+export default {
+  async fetch(request, env) {
+    return env.ASSETS.fetch(request);
+  },
+};
+`,
   });
 
   console.log("Site URL:", site.url);

@@ -70,7 +70,7 @@ export default defineConfig({
         collapsed: false,
         items: [
           {
-            text: "Deploy a ViteJS Site & API to Cloudflare",
+            text: "Deploy ViteJS Static Site",
             link: "/docs/guides/cloudflare-vitejs.md",
           },
           {
@@ -153,10 +153,6 @@ export default defineConfig({
                 link: "/docs/providers/cloudflare/permission-groups",
               },
               { text: "R2Bucket", link: "/docs/providers/cloudflare/bucket" },
-              {
-                text: "StaticSite",
-                link: "/docs/providers/cloudflare/static-site",
-              },
               { text: "Worker", link: "/docs/providers/cloudflare/worker" },
               {
                 text: "WranglerJson",
@@ -200,10 +196,6 @@ export default defineConfig({
                 link: "/docs/providers/fs/static-html-file",
               },
               {
-                text: "StaticJsonFile",
-                link: "/docs/providers/fs/static-json-file",
-              },
-              {
                 text: "StaticTextFile",
                 link: "/docs/providers/fs/static-text-file",
               },
@@ -227,6 +219,11 @@ export default defineConfig({
             items: [
               { text: "GitHubSecret", link: "/docs/providers/github/secret" },
             ],
+          },
+          {
+            text: "os",
+            collapsed: true,
+            items: [{ text: "Exec", link: "/docs/providers/os/exec" }],
           },
           {
             text: "stripe",
