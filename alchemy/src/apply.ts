@@ -70,15 +70,6 @@ export async function apply<Out extends Resource>(
         }
         return state.output as Awaited<Out>;
       }
-
-      const diff = await import("diff");
-      const yaml = await import("yaml");
-      const old = yaml.stringify(oldProps);
-      const news = yaml.stringify(newProps);
-      const patch = diff.createPatch(resource.ID, old, news);
-      // console.log(patch);
-      // if (resource.ID === "what-is-alchemy") {
-      // }
     }
 
     const phase = state.status === "creating" ? "create" : "update";

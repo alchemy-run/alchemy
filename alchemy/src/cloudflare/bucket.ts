@@ -40,11 +40,18 @@ export interface BucketProps extends CloudflareApiOptions {
   allowPublicAccess?: boolean;
 
   /**
-   * Whether to delete the bucket and its contents during resource deletion
+   * Whether to delete the bucket.
    * If set to false, the bucket will remain but the resource will be removed from state
-   * Default: true
+   *
+   * @default true
    */
   delete?: boolean;
+
+  /**
+   * Whether to empty the bucket and delete all objects during resource deletion
+   * @default false
+   */
+  empty?: boolean;
 }
 
 /**
@@ -112,18 +119,18 @@ export const R2Bucket = Resource(
     id: string,
     props: BucketProps
   ): Promise<R2Bucket> {
-    const [api, r2Client] = await Promise.all([
-      createCloudflareApi(props),
-      createR2Client(props),
-    ]);
-
+    const api = await createCloudflareApi(props);
     const bucketName = props.name || this.id;
 
     if (this.phase === "delete") {
       console.log("Deleting R2 bucket:", bucketName);
       if (props.delete !== false) {
-        // Empty the bucket first by deleting all objects
-        await emptyBucket(r2Client, bucketName, props.jurisdiction);
+        if (props.empty) {
+          console.log("Emptying R2 bucket:", bucketName);
+          const r2Client = await createR2Client(props);
+          // Empty the bucket first by deleting all objects
+          await emptyBucket(r2Client, bucketName, props.jurisdiction);
+        }
 
         // Delete R2 bucket
         console.log("Deleting R2 bucket:", bucketName);

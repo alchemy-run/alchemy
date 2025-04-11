@@ -96,6 +96,7 @@ describe("R2 Bucket Resource", async () => {
       const bucketName = `${testId}-with-files`;
       bucket = await R2Bucket(bucketName, {
         name: bucketName,
+        empty: true,
       });
       expect(bucket.name).toEqual(bucketName);
 

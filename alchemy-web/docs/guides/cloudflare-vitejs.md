@@ -16,6 +16,18 @@ cd my-cloudflare-app
 bun install
 ```
 
+## Set up Cloudflare Credentials
+
+Create a `.env` file in the root of the new project and place your Cloudflare Account's Email and API Key:
+
+```
+CLOUDFLARE_API_KEY=<your-api-key>
+CLOUDFLARE_EMAIL=<account-email>
+```
+
+> [!TIP]
+> Use the "Global API Key" from https://dash.cloudflare.com/profile/api-tokens
+
 ## Create `alchemy.run.ts`
 
 Create a standard `alchemy.run.ts` file in your project root:
