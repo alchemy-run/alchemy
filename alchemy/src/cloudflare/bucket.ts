@@ -110,6 +110,14 @@ export interface R2Bucket
  *   jurisdiction: "fedramp"
  * });
  *
+ * @example
+ * // Create a bucket that will be automatically emptied when deleted
+ * // This will delete all objects in the bucket before deleting the bucket itself
+ * const temporaryBucket = await R2Bucket("temp-storage", {
+ *   name: "temp-storage",
+ *   empty: true  // All objects will be deleted when this resource is destroyed
+ * });
+ *
  * @see https://developers.cloudflare.com/r2/buckets/
  */
 export const R2Bucket = Resource(
