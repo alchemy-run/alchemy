@@ -8,12 +8,6 @@ import {
 } from "./api";
 import { handleApiError } from "./api-error";
 
-export function isKVNamespace(resource: any): resource is KVNamespace {
-  return (
-    resource && typeof resource === "object" && resource.type === "kv_namespace"
-  );
-}
-
 /**
  * Properties for creating or updating a KV Namespace
  */

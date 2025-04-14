@@ -1,7 +1,13 @@
 /// <reference types="node" />
 
 import alchemy from "alchemy";
-import { Assets, KVNamespace, R2Bucket, Worker } from "alchemy/cloudflare";
+import {
+  Assets,
+  KVNamespace,
+  R2Bucket,
+  Worker,
+  WranglerJson,
+} from "alchemy/cloudflare";
 import { Exec } from "alchemy/os";
 
 const app = await alchemy("cloudflare-vite", {
@@ -47,6 +53,10 @@ export const website = await Worker("worker", {
     GITHUB_CLIENT_ID: alchemy.secret(process.env.GITHUB_CLIENT_ID),
     GITHUB_CLIENT_SECRET: alchemy.secret(process.env.GITHUB_CLIENT_SECRET),
   },
+});
+
+await WranglerJson("wrangler.json", {
+  worker: website,
 });
 
 console.log({

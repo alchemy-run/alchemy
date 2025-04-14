@@ -15,7 +15,6 @@ import { type Assets } from "./assets";
 import { type Bindings, type WorkerBindingSpec } from "./bindings";
 import type { Bound } from "./bound";
 import { type DurableObjectNamespace } from "./durable-object-namespace";
-import { isKVNamespace } from "./kv-namespace";
 import type { WorkerScriptMetadata } from "./worker-metadata";
 import type { SingleStepMigration } from "./worker-migration";
 import { upsertWorkflow, type Workflow } from "./workflow";
@@ -319,8 +318,10 @@ export const Worker = Resource(
 
     // Construct the output
     return this({
+      ...props,
       type: "service",
       id,
+      entrypoint: props.entrypoint,
       name: workerName,
       script: scriptContent,
       format: props.format || "esm", // Include format in the output
@@ -521,17 +522,17 @@ async function prepareWorkerMetadata<B extends Bindings>(
   for (const [bindingName, binding] of Object.entries(bindings)) {
     // Create a copy of the binding to avoid modifying the original
 
-    if (isKVNamespace(binding)) {
-      meta.bindings.push({
-        type: "kv_namespace",
-        name: bindingName,
-        namespace_id: binding.namespaceId,
-      });
-    } else if (typeof binding === "string") {
+    if (typeof binding === "string") {
       meta.bindings.push({
         type: "plain_text",
         name: bindingName,
         text: binding,
+      });
+    } else if (binding.type === "kv_namespace") {
+      meta.bindings.push({
+        type: "kv_namespace",
+        name: bindingName,
+        namespace_id: binding.namespaceId,
       });
     } else if (binding.type === "service") {
       meta.bindings.push({

@@ -1,248 +1,23 @@
-import * as fs from "fs/promises";
 import type { Context } from "../context";
+import { StaticJsonFile } from "../fs";
 import { Resource } from "../resource";
+import type { Bindings } from "./bindings";
+import type { DurableObjectNamespace } from "./durable-object-namespace";
+import type { Worker } from "./worker";
 
 /**
  * Properties for wrangler.json configuration file
  */
 export interface WranglerJsonProps {
+  name?: string;
   /**
-   * The name of your worker
+   * The worker to generate the wrangler.json file for
    */
-  name: string;
-
+  worker: Worker;
   /**
-   * The directory containing your worker entry point
-   * @default "src"
-   */
-  main?: string;
-
-  /**
-   * The entry point for your worker
-   * @default "index.ts" or "index.js"
-   */
-  entrypoint?: string;
-
-  /**
-   * The directory to store build artifacts
-   * @default "dist"
-   */
-  outdir?: string;
-
-  /**
-   * The directory to serve static assets from
-   */
-  assets?: string;
-
-  /**
-   * Minify the worker script
-   * @default true
-   */
-  minify?: boolean;
-
-  /**
-   * Node.js compatibility mode
-   * @default false
-   */
-  node_compat?: boolean;
-
-  /**
-   * First-party worker service bindings
-   */
-  services?: Array<{
-    /**
-     * Binding name
-     */
-    name: string;
-    /**
-     * Service environment
-     */
-    environment?: string;
-  }>;
-
-  /**
-   * Worker environment variables
-   */
-  vars?: Record<string, string>;
-
-  /**
-   * KV Namespace bindings
-   */
-  kv_namespaces?: Array<{
-    /**
-     * Binding name
-     */
-    binding: string;
-    /**
-     * KV namespace ID
-     */
-    id: string;
-    /**
-     * Preview KV namespace ID
-     */
-    preview_id?: string;
-  }>;
-
-  /**
-   * R2 bucket bindings
-   */
-  r2_buckets?: Array<{
-    /**
-     * Binding name
-     */
-    binding: string;
-    /**
-     * Bucket name
-     */
-    bucket_name: string;
-    /**
-     * Preview bucket name
-     */
-    preview_bucket_name?: string;
-  }>;
-
-  /**
-   * D1 database bindings
-   */
-  d1_databases?: Array<{
-    /**
-     * Binding name
-     */
-    binding: string;
-    /**
-     * Database name
-     */
-    database_name: string;
-    /**
-     * Database ID
-     */
-    database_id: string;
-    /**
-     * Preview database ID
-     */
-    preview_database_id?: string;
-  }>;
-
-  /**
-   * Durable Object bindings
-   */
-  durable_objects?: {
-    /**
-     * Durable Object bindings
-     */
-    bindings: Array<{
-      /**
-       * Binding name
-       */
-      name: string;
-      /**
-       * Class name
-       */
-      class_name: string;
-      /**
-       * Script name
-       */
-      script_name?: string;
-      /**
-       * Environment name
-       */
-      environment?: string;
-    }>;
-  };
-
-  /**
-   * Queue bindings
-   */
-  queues?: {
-    /**
-     * Producer bindings
-     */
-    producers?: Array<{
-      /**
-       * Binding name
-       */
-      binding: string;
-      /**
-       * Queue name
-       */
-      queue: string;
-    }>;
-    /**
-     * Consumer configuration
-     */
-    consumers?: Array<{
-      /**
-       * Queue name
-       */
-      queue: string;
-      /**
-       * Maximum batch size
-       */
-      max_batch_size?: number;
-      /**
-       * Maximum batch timeout
-       */
-      max_batch_timeout?: number;
-      /**
-       * Maximum retries
-       */
-      max_retries?: number;
-      /**
-       * Dead letter queue
-       */
-      dead_letter_queue?: string;
-    }>;
-  };
-
-  /**
-   * Analytics Engine bindings
-   */
-  analytics_engine_datasets?: Array<{
-    /**
-     * Binding name
-     */
-    binding: string;
-    /**
-     * Dataset name
-     */
-    dataset?: string;
-  }>;
-
-  /**
-   * Route configuration
-   */
-  routes?: Array<string>;
-
-  /**
-   * Triggers configuration
-   */
-  triggers?: {
-    /**
-     * Cron triggers
-     */
-    crons: Array<string>;
-  };
-
-  /**
-   * Worker compatibility date
-   */
-  compatibility_date?: string;
-
-  /**
-   * Worker compatibility flags
-   */
-  compatibility_flags?: Array<string>;
-
-  /**
-   * Worker usage model
-   * "bundled" - Includes resources like CPU and memory. Better for consistent workloads.
-   * "unbound" - Pay only for what you use. Better for sporadic workloads.
-   */
-  usage_model?: "bundled" | "unbound";
-
-  /**
-   * Path to the wrangler.json file
-   * @internal
+   * Path to write the wrangler.json file to
+   *
+   * @default cwd/wrangler.json
    */
   path?: string;
 }
@@ -262,6 +37,11 @@ export interface WranglerJson
    * Time at which the file was last updated
    */
   updatedAt: number;
+
+  /**
+   * Path to the wrangler.json file
+   */
+  path: string;
 }
 
 /**
@@ -272,38 +52,271 @@ export const WranglerJson = Resource(
   async function (
     this: Context<WranglerJson>,
     id: string,
-    props: WranglerJsonProps,
+    props: WranglerJsonProps
   ): Promise<WranglerJson> {
     // Default path is wrangler.json in current directory
     const filePath = props.path || "wrangler.json";
 
     if (this.phase === "delete") {
-      try {
-        await fs.unlink(filePath);
-      } catch (error) {
-        // Ignore errors if file doesn't exist
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-          throw error;
-        }
-      }
       return this.destroy();
     }
 
-    // Create or update the file
-    const config = {
-      ...props,
-      // Remove internal path property
-      path: undefined,
+    if (props.worker.entrypoint === undefined) {
+      throw new Error(
+        "Worker must have an entrypoint to generate a wrangler.json"
+      );
+    }
+
+    const worker = props.worker;
+
+    const spec: WranglerJsonSpec = {
+      name: worker.name,
+      // Use entrypoint as main if it exists
+      main: worker.entrypoint,
+      // Map ESM/CJS format to wrangler format
+      format: worker.format === "esm" ? "esm" : "service-worker",
+      // see: https://developers.cloudflare.com/workers/configuration/compatibility-dates/
+      compatibility_date: "2022-04-05",
     };
 
-    // Write the file
-    await fs.writeFile(filePath, JSON.stringify(config, null, 2));
+    // Process bindings if they exist
+    if (worker.bindings) {
+      processBindings(spec, worker.bindings);
+    }
+
+    // Add environment variables as vars
+    if (worker.env) {
+      spec.vars = { ...worker.env };
+    }
+
+    await StaticJsonFile("wrangler.json", spec);
 
     // Return the resource
     return this({
       ...props,
+      path: filePath,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
-  },
+  }
 );
+
+/**
+ * Wrangler.json configuration specification based on Cloudflare's schema
+ */
+export interface WranglerJsonSpec {
+  /**
+   * The name of the worker
+   */
+  name: string;
+
+  /**
+   * Main entry point for the worker
+   */
+  main?: string;
+
+  /**
+   * Module format for the worker script
+   * 'esm' - ECMAScript modules
+   * 'service-worker' - CommonJS modules
+   */
+  format?: "esm" | "service-worker";
+
+  /**
+   * A date in the form yyyy-mm-dd used to determine Workers runtime version
+   */
+  compatibility_date?: string;
+
+  /**
+   * A list of flags that enable features from upcoming Workers runtime
+   */
+  compatibility_flags?: string[];
+
+  /**
+   * Whether to enable a workers.dev URL for this worker
+   */
+  workers_dev?: boolean;
+
+  /**
+   * Routes to attach to the worker
+   */
+  routes?: string[];
+
+  /**
+   * KV Namespace bindings
+   */
+  kv_namespaces?: {
+    binding: string;
+    id: string;
+  }[];
+
+  /**
+   * Durable Object bindings
+   */
+  durable_objects?: {
+    bindings: {
+      name: string;
+      class_name: string;
+      script_name?: string;
+      environment?: string;
+    }[];
+  };
+
+  /**
+   * R2 bucket bindings
+   */
+  r2_buckets?: {
+    binding: string;
+    bucket_name: string;
+  }[];
+
+  /**
+   * Service bindings
+   */
+  services?: {
+    binding: string;
+    service: string;
+    environment?: string;
+  }[];
+
+  /**
+   * Workflow bindings
+   */
+  workflows?: {
+    name: string;
+    binding: string;
+    class_name: string;
+  }[];
+
+  /**
+   * Plain text bindings (vars)
+   */
+  vars?: Record<string, string>;
+
+  /**
+   * Secret bindings
+   */
+  secrets?: string[];
+
+  /**
+   * Assets bindings
+   */
+  assets?: {
+    directory: string;
+    binding: string;
+  };
+
+  /**
+   * Workflow bindings
+   */
+  wasm_modules?: Record<string, string>;
+
+  /**
+   * Safe mode configuration
+   */
+  node_compat?: boolean;
+
+  /**
+   * Whether to minify the worker script
+   */
+  minify?: boolean;
+}
+
+/**
+ * Process worker bindings into wrangler.json format
+ */
+function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
+  // Arrays to collect different binding types
+  const kvNamespaces: { binding: string; id: string }[] = [];
+  const durableObjects: {
+    name: string;
+    class_name: string;
+    script_name?: string;
+    environment?: string;
+  }[] = [];
+  const r2Buckets: { binding: string; bucket_name: string }[] = [];
+  const services: { binding: string; service: string; environment?: string }[] =
+    [];
+  const secrets: string[] = [];
+  const workflows: { binding: string; workflow: string }[] = [];
+
+  // Process each binding
+  for (const [bindingName, binding] of Object.entries(bindings)) {
+    if (typeof binding === "string") {
+      // Plain text binding - add to vars
+      if (!spec.vars) {
+        spec.vars = {};
+      }
+      spec.vars[bindingName] = binding;
+    } else if (binding.type === "kv_namespace") {
+      // KV Namespace binding
+      kvNamespaces.push({
+        binding: bindingName,
+        id: binding.namespaceId,
+      });
+    } else if (
+      typeof binding === "object" &&
+      binding.type === "durable_object_namespace"
+    ) {
+      // Durable Object binding
+      const doBinding = binding as DurableObjectNamespace;
+      durableObjects.push({
+        name: bindingName,
+        class_name: doBinding.className,
+        script_name: doBinding.scriptName,
+        environment: doBinding.environment,
+      });
+    } else if (binding.type === "r2_bucket") {
+      r2Buckets.push({
+        binding: bindingName,
+        bucket_name: binding.name,
+      });
+    } else if (binding.type === "service") {
+      // Service binding
+      services.push({
+        binding: bindingName,
+        service: binding.id,
+      });
+    } else if (binding.type === "secret") {
+      // Secret binding
+      secrets.push(bindingName);
+    } else if (typeof binding === "string") {
+      // Plain text binding - add to vars
+      if (!spec.vars) {
+        spec.vars = {};
+      }
+      spec.vars[bindingName] = binding;
+    } else if (binding.type === "assets") {
+      spec.assets = {
+        directory: binding.path,
+        binding: bindingName,
+      };
+    } else if (binding.type === "workflow") {
+      // Currently wrangler.json doesn't have direct workflow support
+      // We'd have to handle this specially if needed
+    }
+  }
+
+  // Add collected bindings to the spec
+  if (kvNamespaces.length > 0) {
+    spec.kv_namespaces = kvNamespaces;
+  }
+
+  if (durableObjects.length > 0) {
+    spec.durable_objects = {
+      bindings: durableObjects,
+    };
+  }
+
+  if (r2Buckets.length > 0) {
+    spec.r2_buckets = r2Buckets;
+  }
+
+  if (services.length > 0) {
+    spec.services = services;
+  }
+
+  if (secrets.length > 0) {
+    spec.secrets = secrets;
+  }
+}
