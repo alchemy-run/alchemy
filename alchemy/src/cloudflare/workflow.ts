@@ -34,7 +34,7 @@ export class Workflow<PARAMS = unknown> {
 
   constructor(
     public readonly id: string,
-    props: WorkflowProps
+    props: WorkflowProps = {}
   ) {
     this.workflowName = props.workflowName ?? props.className ?? id;
     this.className = props.className ?? this.workflowName;
