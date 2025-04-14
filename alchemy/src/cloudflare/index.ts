@@ -10,5 +10,6 @@ export * from "./kv-namespace";
 export * from "./permission-groups";
 export * from "./r2-rest-state-store";
 export * from "./worker";
+export { Workflow } from "./workflow";
 export * from "./wrangler.json";
 export * from "./zone";

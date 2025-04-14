@@ -72,6 +72,14 @@ export default defineConfig({
             link: "/docs/guides/cloudflare-vitejs.md",
           },
           {
+            text: "Cloudflare Workflows",
+            link: "/docs/guides/cloudflare-workflows.md",
+          },
+          {
+            text: "Cloudflare Durable Objects",
+            link: "/docs/guides/cloudflare-durable-objects.md",
+          },
+          {
             text: "Use AI to develop Custom Resources",
             link: "/docs/guides/custom-resources.md",
           },
