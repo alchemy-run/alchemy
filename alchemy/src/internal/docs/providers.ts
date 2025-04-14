@@ -145,7 +145,7 @@ async function generateProviderDocs({
       The ${provider} Service has the following resources:
       ${alchemy.files(files)}
 
-      A file is considered a "Resource" if it contains a const <ResourceName> = Resource(...) call or if it is a function that calls a Resource function, e.g. const TypeScriptFile = () => File(...).
+      A file is considered a "Resource" if it contains a const <ResourceName> = Resource(...) call or if it is a function that calls a Resource function, e.g. const TypeScriptFile = () => File(...), or it is the Workflow or DurableObject classes.
       A file is considered a "Client" if it exposes a wrapper around creating a SDK client or fetch.
       A file is considered a "Utility" if it contains utility functions that are not resources or clients.
       A file is considered a "Types" if it contains just type definitions and maybe helpers around working with those types.

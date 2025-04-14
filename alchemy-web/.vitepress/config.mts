@@ -68,16 +68,16 @@ export default defineConfig({
         collapsed: false,
         items: [
           {
-            text: "Deploy ViteJS Static Site",
+            text: "Cloudflare ViteJS Site & Workers",
             link: "/docs/guides/cloudflare-vitejs.md",
-          },
-          {
-            text: "Cloudflare Workflows",
-            link: "/docs/guides/cloudflare-workflows.md",
           },
           {
             text: "Cloudflare Durable Objects",
             link: "/docs/guides/cloudflare-durable-objects.md",
+          },
+          {
+            text: "Cloudflare Workflows",
+            link: "/docs/guides/cloudflare-workflows.md",
           },
           {
             text: "Use AI to develop Custom Resources",
@@ -146,6 +146,10 @@ export default defineConfig({
                 link: "/docs/providers/cloudflare/dns-records",
               },
               {
+                text: "DurableObjectNamespace",
+                link: "/docs/providers/cloudflare/durable-object-namespace",
+              },
+              {
                 text: "KVNamespace",
                 link: "/docs/providers/cloudflare/kv-namespace",
               },
@@ -155,6 +159,7 @@ export default defineConfig({
               },
               { text: "R2Bucket", link: "/docs/providers/cloudflare/bucket" },
               { text: "Worker", link: "/docs/providers/cloudflare/worker" },
+              { text: "Workflow", link: "/docs/providers/cloudflare/workflow" },
               {
                 text: "WranglerJson",
                 link: "/docs/providers/cloudflare/wrangler.json",
