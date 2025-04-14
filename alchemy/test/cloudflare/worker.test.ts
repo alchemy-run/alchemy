@@ -8,12 +8,14 @@ import { R2Bucket } from "../../src/cloudflare/bucket";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace";
 import { KVNamespace } from "../../src/cloudflare/kv-namespace";
 import { Worker } from "../../src/cloudflare/worker";
+import { Workflow } from "../../src/cloudflare/workflow";
 import { destroy } from "../../src/destroy";
 import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
+  destroy: false,
 });
 
 // Create a Cloudflare API client for verification
@@ -902,6 +904,219 @@ describe("Worker Resource", () => {
         await fs.rm(tempDir, { recursive: true, force: true });
       }
 
+      await destroy(scope);
+      // Verify the worker was deleted
+      await assertWorkerDoesNotExist(workerName);
+    }
+  });
+
+  // Test for binding a workflow to a worker
+  test("create and delete worker with workflow binding", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-workflow`;
+
+    // Sample worker script with workflow handler - updated to match Cloudflare Workflows pattern
+    const workflowWorkerScript = `
+      // Workflow definition for email notifications
+      export class EmailNotifier {
+        constructor(state, env) {
+          this.state = state;
+          this.env = env;
+        }
+        
+        async run(event, step) {
+          // Process order data from event payload
+          const orderDetails = await step.do('process-order', async () => {
+            console.log("Processing order", event.payload);
+            return { 
+              success: true, 
+              orderId: event.payload.orderId, 
+              message: "Order processed successfully"
+            };
+          });
+          
+          return orderDetails;
+        }
+      }
+
+      // Workflow definition for order processing
+      export class OrderProcessor {
+        constructor(state, env) {
+          this.state = state;
+          this.env = env;
+        }
+        
+        async run(event, step) {
+          // Process shipping data
+          const shippingDetails = await step.do('process-shipping', async () => {
+            console.log("Processing shipping", event.payload);
+            return { 
+              success: true, 
+              shipmentId: event.payload.shipmentId, 
+              message: "Shipment scheduled successfully"
+            };
+          });
+          
+          return shippingDetails;
+        }
+      }
+
+      export default {
+        async fetch(request, env, ctx) {
+          const url = new URL(request.url);
+          
+          // Add endpoints to trigger workflows for testing
+          if (url.pathname === '/trigger-email-workflow') {
+            try {
+              // Get workflow binding
+              const workflow = env.EMAIL_WORKFLOW;
+              
+              if (!workflow) {
+                return new Response(JSON.stringify({ error: "No email workflow binding found" }), { 
+                  status: 500,
+                  headers: { 'Content-Type': 'application/json' }
+                });
+              }
+              
+              // Create a workflow instance with parameters
+              const params = { orderId: "test-123", amount: 99.99 };
+              const instance = await workflow.create(params);
+              
+              return Response.json({
+                id: instance.id,
+                details: await instance.status(),
+                success: true,
+                orderId: params.orderId,
+                message: "Order processed successfully"
+              });
+            } catch (error) {
+              console.error("Error triggering email workflow:", error);
+              return new Response(JSON.stringify({ error: error.message || "Unknown error" }), { 
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+          }
+          
+          // Endpoint for the order workflow
+          if (url.pathname === '/trigger-order-workflow') {
+            try {
+              // Get workflow binding
+              const workflow = env.ORDER_WORKFLOW;
+              
+              if (!workflow) {
+                return new Response(JSON.stringify({ error: "No order workflow binding found" }), { 
+                  status: 500,
+                  headers: { 'Content-Type': 'application/json' }
+                });
+              }
+              
+              // Create a workflow instance with parameters
+              const params = { shipmentId: "ship-456", carrier: "FastShip" };
+              const instance = await workflow.create(params);
+              
+              return Response.json({
+                id: instance.id,
+                details: await instance.status(),
+                success: true,
+                shipmentId: params.shipmentId,
+                message: "Shipment scheduled successfully"
+              });
+            } catch (error) {
+              console.error("Error triggering order workflow:", error);
+              return new Response(JSON.stringify({ error: error.message || "Unknown error" }), { 
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+          }
+          
+          return new Response('Worker with workflow bindings!', { status: 200 });
+        }
+      };
+    `;
+
+    let worker: Worker | undefined = undefined;
+    try {
+      // Create a workflow instance
+      const emailWorkflow = new Workflow("email-notifier", {
+        className: "EmailNotifier",
+        workflowName: "email-notification-workflow",
+      });
+
+      // Create a worker with the workflow binding
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: workflowWorkerScript,
+        format: "esm",
+        bindings: {
+          EMAIL_WORKFLOW: emailWorkflow,
+        },
+        url: true, // Enable workers.dev URL to test the workflow
+      });
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+      expect(worker.url).toBeTruthy();
+
+      // Test triggering the first workflow
+      const response = await fetch(`${worker.url!}/trigger-email-workflow`);
+      const result = await response.json();
+      console.log("Email workflow response:", result);
+
+      expect(response.status).toEqual(200);
+      expect(result.success).toEqual(true);
+      expect(result.orderId).toEqual("test-123");
+      expect(result.message).toEqual("Order processed successfully");
+      // Verify the instance ID is not empty
+      expect(result.id).toBeTruthy();
+      expect(typeof result.id).toBe("string");
+      expect(result.id.length).toBeGreaterThan(0);
+      // Verify the details contain valid status
+      expect(result.details).toBeDefined();
+      expect(result.details.status).toBeTruthy();
+
+      // Create a new workflow binding and update the worker
+      const orderWorkflow = new Workflow("order-processor", {
+        className: "OrderProcessor",
+        workflowName: "order-processing-workflow",
+      });
+
+      // Update the worker with multiple workflow bindings
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: workflowWorkerScript,
+        format: "esm",
+        bindings: {
+          EMAIL_WORKFLOW: emailWorkflow,
+          ORDER_WORKFLOW: orderWorkflow,
+        },
+        url: true,
+      });
+
+      expect(worker.bindings).toBeDefined();
+      expect(Object.keys(worker.bindings || {})).toHaveLength(2);
+
+      // Test triggering the second workflow
+      const orderResponse = await fetch(
+        `${worker.url!}/trigger-order-workflow`
+      );
+      const orderResult = await orderResponse.json();
+      console.log("Order workflow response:", orderResult);
+
+      expect(orderResponse.status).toEqual(200);
+      expect(orderResult.success).toEqual(true);
+      expect(orderResult.shipmentId).toEqual("ship-456");
+      expect(orderResult.message).toEqual("Shipment scheduled successfully");
+      // Verify the instance ID is not empty
+      expect(orderResult.id).toBeTruthy();
+      expect(typeof orderResult.id).toBe("string");
+      expect(orderResult.id.length).toBeGreaterThan(0);
+      // Verify the details contain valid status
+      expect(orderResult.details).toBeDefined();
+      expect(orderResult.details.status).toBeTruthy();
+    } finally {
+      // Explicitly destroy resources since destroy: false is set
       await destroy(scope);
       // Verify the worker was deleted
       await assertWorkerDoesNotExist(workerName);

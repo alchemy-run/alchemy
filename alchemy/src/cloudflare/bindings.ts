@@ -9,6 +9,7 @@ import type { R2Bucket } from "./bucket";
 import type { DurableObjectNamespace } from "./durable-object-namespace";
 import type { KVNamespace } from "./kv-namespace";
 import type { Worker } from "./worker";
+import type { Workflow } from "./workflow";
 
 export type Bindings = {
   [bindingName: string]: Binding;
@@ -21,25 +22,11 @@ export type Binding =
   | DurableObjectNamespace
   | KVNamespace
   | Worker
+  | Workflow
   | R2Bucket
   | Secret
   | string
   | Assets;
-
-export function isDurableObjectNamespace(
-  binding: Binding
-): binding is DurableObjectNamespace {
-  return (
-    typeof binding === "object" && binding.type === "durable_object_namespace"
-  );
-}
-
-/**
- * Check if a binding is an Assets resource
- */
-export function isAssets(binding: Binding): binding is Assets {
-  return typeof binding === "object" && binding.type === "assets";
-}
 
 /**
  * Union type for all Worker binding types (API spec)
@@ -65,7 +52,8 @@ export type WorkerBindingSpec =
   | WorkerBindingTailConsumer
   | WorkerBindingVectorize
   | WorkerBindingVersionMetadata
-  | WorkerBindingWasmModule;
+  | WorkerBindingWasmModule
+  | WorkerBindingWorkflow;
 
 /**
  * AI binding type
@@ -325,4 +313,21 @@ export interface WorkerBindingStaticContent {
   name: string;
   /** Type identifier for Static Content binding */
   type: "static_content";
+}
+
+export interface WorkerBindingWorkflow {
+  /** The name of the binding */
+  name: string;
+  /** Type identifier for Workflow binding */
+  type: "workflow";
+  /** Workflow name */
+  workflow_name: string;
+  /** Workflow class name */
+  class_name: string;
+  /**
+   * Workflow script name
+   *
+   * @default - the name of the script it is bound to
+   */
+  script_name?: string;
 }

@@ -5,6 +5,7 @@ import type { R2Bucket as _R2Bucket } from "./bucket";
 import type { DurableObjectNamespace as _DurableObjectNamespace } from "./durable-object-namespace";
 import type { KVNamespace as _KVNamespace } from "./kv-namespace";
 import type { Worker as _Worker } from "./worker";
+import type { Workflow as _Workflow } from "./workflow";
 
 export type Bound<T extends Binding> = T extends _DurableObjectNamespace
   ? DurableObjectNamespace
@@ -18,4 +19,6 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace
           ? string
           : T extends Assets
             ? Service
-            : Service;
+            : T extends _Workflow<infer P>
+              ? Workflow<P>
+              : Service;

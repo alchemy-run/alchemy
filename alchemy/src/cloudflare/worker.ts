@@ -3,27 +3,22 @@ import * as fs from "fs/promises";
 import type { Context } from "../context";
 import { Bundle, type BundleProps } from "../esbuild/bundle";
 import { Resource } from "../resource";
-import { isSecret } from "../secret";
 import { getContentType } from "../util/content-type";
 import { withExponentialBackoff } from "../util/retry";
 import { slugify } from "../util/slugify";
 import {
+  createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
-  createCloudflareApi,
 } from "./api";
-import type { Assets } from "./assets";
-import {
-  type Bindings,
-  type WorkerBindingSpec,
-  isAssets,
-  isDurableObjectNamespace,
-} from "./bindings";
+import { type Assets } from "./assets";
+import { type Bindings, type WorkerBindingSpec } from "./bindings";
 import type { Bound } from "./bound";
-import type { DurableObjectNamespace } from "./durable-object-namespace";
+import { type DurableObjectNamespace } from "./durable-object-namespace";
 import { isKVNamespace } from "./kv-namespace";
 import type { WorkerScriptMetadata } from "./worker-metadata";
 import type { SingleStepMigration } from "./worker-migration";
+import { upsertWorkflow, type Workflow } from "./workflow";
 
 /**
  * Properties for creating or updating a Worker
@@ -261,10 +256,16 @@ export const Worker = Resource(
 
     // Find any assets bindings
     const assetsBindings: { name: string; assets: Assets }[] = [];
+    const workflowsBindings: Workflow[] = [];
+
     if (props.bindings) {
       for (const [bindingName, binding] of Object.entries(props.bindings)) {
-        if (isAssets(binding)) {
-          assetsBindings.push({ name: bindingName, assets: binding });
+        if (typeof binding === "object") {
+          if (binding.type === "assets") {
+            assetsBindings.push({ name: bindingName, assets: binding });
+          } else if (binding.type === "workflow") {
+            workflowsBindings.push(binding);
+          }
         }
       }
     }
@@ -292,8 +293,15 @@ export const Worker = Resource(
       assetUploadResult
     );
 
-    // Upload the worker script
     await putWorker(api, workerName, scriptContent, scriptMetadata);
+
+    for (const workflow of workflowsBindings) {
+      await upsertWorkflow(api, {
+        workflowName: workflow.workflowName,
+        className: workflow.className,
+        scriptName: workerName,
+      });
+    }
 
     // TODO: it is less than ideal that this can fail, resulting in state problem
     await this.set("bindings", props.bindings);
@@ -532,60 +540,79 @@ async function prepareWorkerMetadata<B extends Bindings>(
         service: binding.id,
       });
     } else if (binding.type === "durable_object_namespace") {
-      const stableId = binding.id;
-      const className = binding.className;
-
       meta.bindings.push({
         type: "durable_object_namespace",
         name: bindingName,
-        class_name: className,
+        class_name: binding.className,
         script_name: binding.scriptName,
         environment: binding.environment,
         namespace_id: binding.namespaceId,
       });
-
-      const oldBinding: DurableObjectNamespace | undefined = Object.values(
-        oldBindings ?? {}
-      )
-        ?.filter(isDurableObjectNamespace)
-        ?.find((b) => b.id === stableId);
-
-      if (!oldBinding) {
-        if (binding.sqlite) {
-          meta.migrations!.new_sqlite_classes!.push(className);
-        } else {
-          meta.migrations!.new_classes!.push(className);
-        }
-      } else if (oldBinding.className !== className) {
-        meta.migrations!.renamed_classes!.push({
-          from: oldBinding.className,
-          to: className,
-        });
-      }
+      configureClassMigration(binding, binding.id, binding.className);
     } else if (binding.type === "r2_bucket") {
       meta.bindings.push({
         type: "r2_bucket",
         name: bindingName,
         bucket_name: binding.name,
       });
-    } else if (isAssets(binding)) {
+    } else if (binding.type === "assets") {
       meta.bindings.push({
         type: "assets",
         name: bindingName,
       });
-    } else if (isSecret(binding)) {
+    } else if (binding.type === "secret") {
       meta.bindings.push({
         type: "secret_text",
         name: bindingName,
         text: binding.unencrypted,
       });
+    } else if (binding.type === "workflow") {
+      meta.bindings.push({
+        type: "workflow",
+        name: bindingName,
+        workflow_name: binding.workflowName,
+        class_name: binding.className,
+        // this should be set if the Workflow is in another script ...
+        // script_name: ??,
+      });
+      // it's unclear whether this is needed, but it works both ways
+      configureClassMigration(binding, binding.id, binding.className);
     } else {
       // @ts-expect-error - we should never reach here
       throw new Error(`Unsupported binding type: ${binding.type}`);
     }
   }
 
+  function configureClassMigration(
+    binding: DurableObjectNamespace | Workflow,
+    stableId: string,
+    className: string
+  ) {
+    const oldBinding: DurableObjectNamespace | Workflow | undefined =
+      Object.values(oldBindings ?? {})
+        ?.filter(
+          (b) =>
+            typeof b === "object" &&
+            (b.type === "durable_object_namespace" || b.type === "workflow")
+        )
+        ?.find((b) => b.id === stableId);
+
+    if (!oldBinding) {
+      if (binding.type === "durable_object_namespace" && binding.sqlite) {
+        meta.migrations!.new_sqlite_classes!.push(className);
+      } else {
+        meta.migrations!.new_classes!.push(className);
+      }
+    } else if (oldBinding.className !== className) {
+      meta.migrations!.renamed_classes!.push({
+        from: oldBinding.className,
+        to: className,
+      });
+    }
+  }
+
   // Convert env variables to plain_text bindings
+  // TODO(sam): remove Worker.env in favor of always bindings
   if (props.env) {
     for (const [key, value] of Object.entries(props.env)) {
       meta.bindings.push({
