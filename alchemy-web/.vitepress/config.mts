@@ -68,7 +68,7 @@ export default defineConfig({
         collapsed: false,
         items: [
           {
-            text: "Cloudflare ViteJS Site & Workers",
+            text: "Cloudflare ViteJS",
             link: "/docs/guides/cloudflare-vitejs.md",
           },
           {

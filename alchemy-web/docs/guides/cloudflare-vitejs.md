@@ -206,7 +206,7 @@ bun ./alchemy.run
 Deploy your app to Cloudflare:
 
 ```bash
-bun ./alchemy.run.ts
+bun ./alchemy.run
 ```
 
 It'll log out our URL
@@ -221,11 +221,79 @@ $ curl https://your-endpoint.workers.dev/api/hello
 hello world
 ```
 
+## Local Development
+
+Until now, we've been deploying directly to Cloudflare, but this is inconvenient for testing.
+
+> [!TIP]
+> Luckily, Cloudflare has a Vite plugin to run your Worker and other Cloudflare Resources locally when you run `vite dev`.
+
+> [!CAUTION]
+> Unluckily, it depends on a `wrangler.json` file, which we don't have because we're using Alchemy instead of Wrangler!
+
+As a workaround, use the `WranglerJson` Resource to generate `wrangler.json` from your `Worker` in your `alchemy.run.ts` script:
+
+```ts
+import { WranglerJson } from "alchemy/cloudflare";
+
+await WranglerJson("wrangler.json", {
+  worker: website
+})
+```
+
+Then re-deploy:
+```sh
+bun ./alchemy.run
+```
+
+This will generate a `./wrangler.json` file:
+```json
+{
+  "name": "alchemy-example-vite-api",
+  "main": "./src/index.ts",
+  "format": "esm",
+  "compatibility_date": "2022-04-05",
+  "assets": { 
+    "directory": "./dist",
+    "binding": "ASSETS"
+  }
+}
+```
+
+Now, edit the `./vite.config.ts` file and configure the `cloudflare()` plugin:
+
+```ts
+import { cloudflare } from "@cloudflare/vite-plugin";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react(), cloudflare()],
+});
+```
+
+Finally, run `vite dev` 
+```sh
+vite dev
+```
+
+The vite dev server will start as normal, along with your Worker and Cloudflare Resources running locally in miniflare (matching a deployment as closely as possible).
+
+```sh
+VITE v6.2.2  ready in 1114 ms
+
+➜  Local:   http://localhost:5173/
+➜  Network: use --host to expose
+➜  Debug:   http://localhost:5173/__debug
+➜  press h + enter to show help
+```
+
 ## Tear Down
 
 That's it! You can now tear down the app:
 
 ```bash
-bun ./alchemy.run.ts --destroy
+bun ./alchemy.run --destroy
 ```
 

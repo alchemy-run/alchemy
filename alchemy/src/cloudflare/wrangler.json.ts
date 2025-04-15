@@ -73,8 +73,6 @@ export const WranglerJson = Resource(
       name: worker.name,
       // Use entrypoint as main if it exists
       main: worker.entrypoint,
-      // Map ESM/CJS format to wrangler format
-      format: worker.format === "esm" ? "esm" : "service-worker",
       // see: https://developers.cloudflare.com/workers/configuration/compatibility-dates/
       compatibility_date: "2022-04-05",
     };
@@ -114,13 +112,6 @@ export interface WranglerJsonSpec {
    * Main entry point for the worker
    */
   main?: string;
-
-  /**
-   * Module format for the worker script
-   * 'esm' - ECMAScript modules
-   * 'service-worker' - CommonJS modules
-   */
-  format?: "esm" | "service-worker";
 
   /**
    * A date in the form yyyy-mm-dd used to determine Workers runtime version
@@ -192,11 +183,6 @@ export interface WranglerJsonSpec {
    * Plain text bindings (vars)
    */
   vars?: Record<string, string>;
-
-  /**
-   * Secret bindings
-   */
-  secrets?: string[];
 
   /**
    * Assets bindings
@@ -314,9 +300,5 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
 
   if (services.length > 0) {
     spec.services = services;
-  }
-
-  if (secrets.length > 0) {
-    spec.secrets = secrets;
   }
 }
