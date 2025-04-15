@@ -292,6 +292,8 @@ export const Worker = Resource(
       assetUploadResult
     );
 
+    console.log(scriptMetadata);
+
     await putWorker(api, workerName, scriptContent, scriptMetadata);
 
     for (const workflow of workflowsBindings) {
@@ -589,6 +591,12 @@ async function prepareWorkerMetadata<B extends Bindings>(
         type: "queue",
         name: bindingName,
         queue_name: binding.name,
+      });
+    } else if (binding.type === "pipeline") {
+      meta.bindings.push({
+        type: "pipelines",
+        name: bindingName,
+        pipeline: binding.name,
       });
     } else {
       // @ts-expect-error - we should never reach here

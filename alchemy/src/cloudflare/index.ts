@@ -10,6 +10,7 @@ export * from "./dns-records";
 export * from "./durable-object-namespace";
 export * from "./kv-namespace";
 export * from "./permission-groups";
+export * from "./pipeline";
 export * from "./queue";
 export * from "./r2-rest-state-store";
 export * from "./worker";

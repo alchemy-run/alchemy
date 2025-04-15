@@ -1,3 +1,4 @@
+import type { Pipeline } from "cloudflare:pipelines";
 import type { Secret } from "../secret";
 import type { Assets } from "./assets";
 import type { Binding } from "./bindings";
@@ -5,6 +6,7 @@ import type { R2Bucket as _R2Bucket } from "./bucket";
 import type { D1Database as _D1Database } from "./d1-database";
 import type { DurableObjectNamespace as _DurableObjectNamespace } from "./durable-object-namespace";
 import type { KVNamespace as _KVNamespace } from "./kv-namespace";
+import type { Pipeline as _Pipeline } from "./pipeline";
 import type { Queue as _Queue } from "./queue";
 import type { Worker as _Worker } from "./worker";
 import type { Workflow as _Workflow } from "./workflow";
@@ -27,4 +29,6 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace
                 ? D1Database
                 : T extends _Queue
                   ? Queue
-                  : Service;
+                  : T extends _Pipeline<infer R>
+                    ? Pipeline<R>
+                    : Service;

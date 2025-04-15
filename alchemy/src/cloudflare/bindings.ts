@@ -9,6 +9,7 @@ import type { R2Bucket } from "./bucket";
 import type { D1Database } from "./d1-database";
 import type { DurableObjectNamespace } from "./durable-object-namespace";
 import type { KVNamespace } from "./kv-namespace";
+import type { Pipeline } from "./pipeline";
 import type { Queue } from "./queue";
 import type { Worker } from "./worker";
 import type { Workflow } from "./workflow";
@@ -25,6 +26,7 @@ export type Binding =
   | D1Database
   | DurableObjectNamespace
   | KVNamespace
+  | Pipeline
   | Queue
   | R2Bucket
   | Secret
@@ -47,6 +49,7 @@ export type WorkerBindingSpec =
   | WorkerBindingJson
   | WorkerBindingKVNamespace
   | WorkerBindingMTLSCertificate
+  | WorkerBindingPipeline
   | WorkerBindingPlainText
   | WorkerBindingQueue
   | WorkerBindingR2Bucket
@@ -334,4 +337,16 @@ export interface WorkerBindingWorkflow {
    * @default - the name of the script it is bound to
    */
   script_name?: string;
+}
+
+/**
+ * Pipeline binding type
+ */
+export interface WorkerBindingPipeline {
+  /** The name of the binding */
+  name: string;
+  /** Type identifier for Pipeline binding */
+  type: "pipelines";
+  /** Pipeline name */
+  pipeline: string;
 }
