@@ -46,6 +46,82 @@ describe("D1 Database Resource", async () => {
       }
     }
   }, 120000);
+
+  test("primary location hint", async (scope) => {
+    const locationDb = `${testId}-location`;
+
+    try {
+      // Create a database with West North America location hint
+      const database = await D1Database(locationDb, {
+        name: locationDb,
+        primaryLocationHint: "wnam", // West North America
+      });
+
+      expect(database.name).toEqual(locationDb);
+      expect(database.id).toBeTruthy();
+      expect(database.primaryLocationHint).toEqual("wnam");
+
+      // Check if database exists
+      const databases = await listDatabases(api);
+      const foundDatabase = databases.find((db) => db.name === locationDb);
+      expect(foundDatabase).toBeTruthy();
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  }, 120000);
+
+  test("update read replication mode", async (scope) => {
+    const replicationDb = `${testId}-replication`;
+
+    try {
+      // Create a database with default settings
+      let database = await D1Database(replicationDb, {
+        name: replicationDb,
+      });
+
+      expect(database.name).toEqual(replicationDb);
+      expect(database.id).toBeTruthy();
+
+      // Update the database with disabled read replication
+      database = await D1Database(replicationDb, {
+        name: replicationDb,
+        readReplication: {
+          mode: "disabled",
+        },
+      });
+
+      // Verify the update
+      expect(database.readReplication?.mode).toEqual("disabled");
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  }, 120000);
+
+  test("throws error on invalid update", async (scope) => {
+    const invalidUpdateDb = `${testId}-invalid-update`;
+
+    try {
+      // Create a database with West North America location hint
+      const database = await D1Database(invalidUpdateDb, {
+        name: invalidUpdateDb,
+        primaryLocationHint: "wnam", // West North America
+      });
+
+      expect(database.name).toEqual(invalidUpdateDb);
+      expect(database.id).toBeTruthy();
+      expect(database.primaryLocationHint).toEqual("wnam");
+
+      // Attempt to update with a different location hint, which should throw an error
+      await expect(
+        D1Database(invalidUpdateDb, {
+          name: invalidUpdateDb,
+          primaryLocationHint: "eeur", // East Europe - different from original
+        })
+      ).rejects.toThrow("Cannot update primaryLocationHint");
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  }, 120000);
 });
 
 async function assertDatabaseDeleted(database: D1Database) {

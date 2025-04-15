@@ -17,7 +17,27 @@ export interface D1DatabaseProps {
    * Optional primary location hint for the database
    * Indicates the primary geographical location data will be stored
    */
-  primaryLocationHint?: string;
+  primaryLocationHint?:
+    | "wnam"
+    | "enam"
+    | "weur"
+    | "eeur"
+    | "apac"
+    | "auto"
+    | string;
+
+  /**
+   * Read replication configuration
+   * Only mutable property during updates
+   */
+  readReplication?: {
+    /**
+     * Read replication mode
+     * - auto: Automatic read replication
+     * - disabled: No read replication
+     */
+    mode: "auto" | "disabled";
+  };
 
   /**
    * Whether to delete the database.
@@ -79,7 +99,10 @@ export interface D1Database
    * Read replication configuration
    */
   readReplication?: {
-    mode: string;
+    /**
+     * Read replication mode
+     */
+    mode: "auto" | "disabled";
   };
 }
 
@@ -168,8 +191,9 @@ interface CloudflareD1Response {
     file_size: number;
     num_tables: number;
     version: string;
+    primary_location_hint?: string;
     read_replication?: {
-      mode: string;
+      mode: "auto" | "disabled";
     };
   };
   success: boolean;
@@ -299,18 +323,34 @@ export async function listDatabases(
 
 /**
  * Update a D1 database
+ *
+ * Note: According to Cloudflare API, only read_replication.mode can be modified during updates.
  */
 export async function updateDatabase(
   api: CloudflareApi,
   databaseId: string,
   props: D1DatabaseProps
 ): Promise<CloudflareD1Response> {
-  const updatePayload: any = {
-    name: props.name,
-  };
+  // Get current database state to check for non-mutable changes
+  const currentDB = await getDatabase(api, databaseId);
 
-  if (props.primaryLocationHint) {
-    updatePayload.primary_location_hint = props.primaryLocationHint;
+  // Only read_replication can be modified in update
+  if (
+    props.primaryLocationHint &&
+    props.primaryLocationHint !== currentDB.result.primary_location_hint
+  ) {
+    throw new Error(
+      "Cannot update primaryLocationHint after database creation. Only readReplication.mode can be modified."
+    );
+  }
+
+  const updatePayload: any = {};
+
+  // Only include read_replication in update payload
+  if (props.readReplication) {
+    updatePayload.read_replication = {
+      mode: props.readReplication.mode,
+    };
   }
 
   const updateResponse = await api.patch(
