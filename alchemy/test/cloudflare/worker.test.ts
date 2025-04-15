@@ -5,8 +5,10 @@ import { alchemy } from "../../src/alchemy";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { Assets } from "../../src/cloudflare/assets";
 import { R2Bucket } from "../../src/cloudflare/bucket";
+import { D1Database } from "../../src/cloudflare/d1-database";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace";
 import { KVNamespace } from "../../src/cloudflare/kv-namespace";
+import { Queue } from "../../src/cloudflare/queue";
 import { Worker } from "../../src/cloudflare/worker";
 import { Workflow } from "../../src/cloudflare/workflow";
 import { destroy } from "../../src/destroy";
@@ -1122,4 +1124,234 @@ describe("Worker Resource", () => {
       await assertWorkerDoesNotExist(workerName);
     }
   });
+
+  test("create and test worker with D1 database binding", async (scope) => {
+    // Sample ESM worker script with D1 database functionality
+    const d1WorkerScript = `
+      export default {
+        async fetch(request, env, ctx) {
+          const url = new URL(request.url);
+          
+          // Initialize the database with a table and data
+          if (url.pathname === '/init-db') {
+            try {
+              const db = env.DATABASE;
+              
+              // Create a test table
+              await db.exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)");
+              
+              // Insert some test data
+              await db.exec("INSERT INTO users (name, email) VALUES ('Test User', 'test@example.com')");
+              
+              return new Response('Database initialized successfully!', { 
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            } catch (error) {
+              return new Response('Error initializing database: ' + error.message, { 
+                status: 500,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            }
+          }
+          
+          // Query data from the database
+          if (url.pathname === '/query-db') {
+            try {
+              const db = env.DATABASE;
+              
+              // Query the database
+              const { results } = await db.prepare("SELECT * FROM users").all();
+              
+              return new Response(JSON.stringify({ success: true, data: results }), { 
+                status: 200,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            } catch (error) {
+              return new Response(JSON.stringify({ 
+                success: false, 
+                error: error.message
+              }), { 
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+          }
+          
+          return new Response('D1 Database Worker is running!', { 
+            status: 200,
+            headers: { 'Content-Type': 'text/plain' }
+          });
+        }
+      };
+    `;
+
+    const workerName = `${BRANCH_PREFIX}-test-worker-d1`;
+
+    let worker: Worker<{ DATABASE: D1Database }> | undefined = undefined;
+    let db: D1Database | undefined = undefined;
+
+    try {
+      // Create a D1 database
+      db = await D1Database(`${BRANCH_PREFIX}-test-db`, {
+        name: `${BRANCH_PREFIX}-test-db`,
+        primaryLocationHint: "wnam", // West North America
+      });
+
+      expect(db.id).toBeTruthy();
+      expect(db.name).toEqual(`${BRANCH_PREFIX}-test-db`);
+
+      // Create a worker with the D1 database binding
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: d1WorkerScript,
+        format: "esm",
+        url: true, // Enable workers.dev URL to test the worker
+        bindings: {
+          DATABASE: db,
+        },
+      });
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+      expect(worker.bindings!.DATABASE).toBeDefined();
+      expect(worker.bindings!.DATABASE.id).toEqual(db.id);
+      expect(worker.url).toBeTruthy();
+
+      // Wait for the worker to be available
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      if (worker.url) {
+        // Initialize the database with a table and data
+        const initResponse = await fetch(`${worker.url}/init-db`);
+        expect(initResponse.status).toEqual(200);
+        const initText = await initResponse.text();
+        expect(initText).toEqual("Database initialized successfully!");
+
+        // Wait for the database to be initialized
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Query data from the database
+        const queryResponse = await fetch(`${worker.url}/query-db`);
+        expect(queryResponse.status).toEqual(200);
+        const queryData = await queryResponse.json();
+        expect(queryData.success).toEqual(true);
+        expect(queryData.data).toBeArray();
+        expect(queryData.data.length).toBeGreaterThan(0);
+        expect(queryData.data[0].name).toEqual("Test User");
+        expect(queryData.data[0].email).toEqual("test@example.com");
+      }
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(workerName);
+    }
+  }, 120000); // Increased timeout for D1 database operations
+
+  test("create and test worker with Queue binding", async (scope) => {
+    // Sample ESM worker script with Queue functionality
+    const queueWorkerScript = `
+      export default {
+        async fetch(request, env, ctx) {
+          const url = new URL(request.url);
+          
+          // Send a message to the queue
+          if (url.pathname === '/send-message') {
+            try {
+              const body = await request.json();
+              const messageId = await env.MESSAGE_QUEUE.send(body);
+              
+              return new Response(JSON.stringify({ 
+                success: true, 
+                messageId,
+                message: 'Message sent successfully'
+              }), { 
+                status: 200,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            } catch (error) {
+              return new Response(JSON.stringify({ 
+                success: false, 
+                error: error.message 
+              }), { 
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+          }
+          
+          return new Response('Queue Worker is running!', { 
+            status: 200,
+            headers: { 'Content-Type': 'text/plain' }
+          });
+        }
+      };
+    `;
+
+    const workerName = `${BRANCH_PREFIX}-test-worker-queue`;
+    const queueName = `${BRANCH_PREFIX}-test-queue`;
+
+    let worker: Worker<{ MESSAGE_QUEUE: Queue }> | undefined = undefined;
+    let queue: Queue | undefined = undefined;
+
+    try {
+      // Create a Queue
+      queue = await Queue(queueName, {
+        name: queueName,
+        settings: {
+          deliveryDelay: 0, // No delay for testing
+          deliveryPaused: false,
+        },
+      });
+
+      expect(queue.id).toBeTruthy();
+      expect(queue.name).toEqual(queueName);
+      expect(queue.type).toEqual("queue");
+
+      // Create a worker with the Queue binding
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: queueWorkerScript,
+        format: "esm",
+        url: true, // Enable workers.dev URL to test the worker
+        bindings: {
+          MESSAGE_QUEUE: queue,
+        },
+      });
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+      expect(worker.bindings!.MESSAGE_QUEUE).toBeDefined();
+      expect(worker.url).toBeTruthy();
+
+      // Wait for the worker to be available
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      if (worker.url) {
+        // Send a message to the queue
+        const testMessage = {
+          id: "msg-123",
+          content: "Test message content",
+          timestamp: Date.now(),
+        };
+
+        const sendResponse = await fetch(`${worker.url}/send-message`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(testMessage),
+        });
+
+        expect(sendResponse.status).toEqual(200);
+        const responseData = await sendResponse.json();
+        expect(responseData.success).toEqual(true);
+        expect(responseData.message).toEqual("Message sent successfully");
+      }
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(workerName);
+    }
+  }, 120000); // Increased timeout for Queue operations
 });
