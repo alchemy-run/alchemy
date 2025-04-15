@@ -528,6 +528,12 @@ async function prepareWorkerMetadata<B extends Bindings>(
         name: bindingName,
         text: binding,
       });
+    } else if (binding.type === "d1") {
+      meta.bindings.push({
+        type: "d1",
+        name: bindingName,
+        id: binding.id,
+      });
     } else if (binding.type === "kv_namespace") {
       meta.bindings.push({
         type: "kv_namespace",

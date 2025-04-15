@@ -6,6 +6,7 @@
 import type { Secret } from "../secret";
 import type { Assets } from "./assets";
 import type { R2Bucket } from "./bucket";
+import type { D1Database } from "./d1-database";
 import type { DurableObjectNamespace } from "./durable-object-namespace";
 import type { KVNamespace } from "./kv-namespace";
 import type { Worker } from "./worker";
@@ -19,6 +20,7 @@ export type Bindings = {
  * L2 Binding Resources.
  */
 export type Binding =
+  | D1Database
   | DurableObjectNamespace
   | KVNamespace
   | Worker

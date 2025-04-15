@@ -2,6 +2,7 @@ import type { Secret } from "../secret";
 import type { Assets } from "./assets";
 import type { Binding } from "./bindings";
 import type { R2Bucket as _R2Bucket } from "./bucket";
+import type { D1Database as _D1Database } from "./d1-database";
 import type { DurableObjectNamespace as _DurableObjectNamespace } from "./durable-object-namespace";
 import type { KVNamespace as _KVNamespace } from "./kv-namespace";
 import type { Worker as _Worker } from "./worker";
@@ -21,4 +22,6 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace
             ? Service
             : T extends _Workflow<infer P>
               ? Workflow<P>
-              : Service;
+              : T extends _D1Database
+                ? D1Database
+                : Service;

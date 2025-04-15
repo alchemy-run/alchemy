@@ -224,7 +224,12 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
   const services: { binding: string; service: string; environment?: string }[] =
     [];
   const secrets: string[] = [];
-  const workflows: { binding: string; workflow: string }[] = [];
+  const workflows: { name: string; binding: string; class_name: string }[] = [];
+  const d1Databases: {
+    binding: string;
+    database_id: string;
+    database_name: string;
+  }[] = [];
 
   // Process each binding
   for (const [bindingName, binding] of Object.entries(bindings)) {
@@ -278,8 +283,17 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
         binding: bindingName,
       };
     } else if (binding.type === "workflow") {
-      // Currently wrangler.json doesn't have direct workflow support
-      // We'd have to handle this specially if needed
+      workflows.push({
+        name: bindingName,
+        binding: binding.id,
+        class_name: binding.className,
+      });
+    } else if (binding.type === "d1") {
+      d1Databases.push({
+        binding: bindingName,
+        database_id: binding.id,
+        database_name: binding.name,
+      });
     }
   }
 
