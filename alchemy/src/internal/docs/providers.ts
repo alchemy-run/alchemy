@@ -171,14 +171,13 @@ async function generateProviderDocs({
   }
 
   async function generateDocument(g: Group) {
-    const filePath = path.join(
-      providerDocsDir,
-      `${g.filename.replace(".ts", "").replace(".md", "")}.md`
-    );
     return Document(`docs/${providerName}/${g.identifier}`, {
       title: g.identifier,
-      path: filePath,
-      freeze: !filePath.includes("wrangler.json"),
+      path: path.join(
+        providerDocsDir,
+        `${g.filename.replace(".ts", "").replace(".md", "")}.md`
+      ),
+      freeze: true,
       model: {
         id: "claude-3-5-sonnet-latest",
         provider: "anthropic",
