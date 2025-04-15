@@ -291,7 +291,7 @@ describe("Pipeline Resource", () => {
       export default {
         async fetch(request, env, ctx) {
           const url = new URL(request.url);
-          
+
           // Send a record to the pipeline
           if (url.pathname === '/send-record') {
             try {
@@ -435,11 +435,11 @@ describe("Pipeline Resource", () => {
         console.log("Records sent to pipeline:", responseData);
       }
     } finally {
-      //   await destroy(scope);
-      //   // Verify the worker was deleted
-      //   if (worker) {
-      //     await assertWorkerDoesNotExist(workerName);
-      //   }
+      await destroy(scope);
+      // Verify the worker was deleted
+      if (worker) {
+        await assertWorkerDoesNotExist(workerName);
+      }
     }
   }, 120000); // Increase timeout for worker and pipeline operations
 });

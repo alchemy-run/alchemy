@@ -292,8 +292,6 @@ export const Worker = Resource(
       assetUploadResult
     );
 
-    console.log(scriptMetadata);
-
     await putWorker(api, workerName, scriptContent, scriptMetadata);
 
     for (const workflow of workflowsBindings) {
