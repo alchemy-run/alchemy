@@ -9,6 +9,7 @@ import type { R2Bucket } from "./bucket";
 import type { D1Database } from "./d1-database";
 import type { DurableObjectNamespace } from "./durable-object-namespace";
 import type { KVNamespace } from "./kv-namespace";
+import type { Queue } from "./queue";
 import type { Worker } from "./worker";
 import type { Workflow } from "./workflow";
 
@@ -20,15 +21,16 @@ export type Bindings = {
  * L2 Binding Resources.
  */
 export type Binding =
+  | Assets
   | D1Database
   | DurableObjectNamespace
   | KVNamespace
-  | Worker
-  | Workflow
+  | Queue
   | R2Bucket
   | Secret
   | string
-  | Assets;
+  | Worker
+  | Workflow;
 
 /**
  * Union type for all Worker binding types (API spec)

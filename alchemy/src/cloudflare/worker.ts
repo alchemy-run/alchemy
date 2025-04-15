@@ -584,6 +584,12 @@ async function prepareWorkerMetadata<B extends Bindings>(
       });
       // it's unclear whether this is needed, but it works both ways
       configureClassMigration(binding, binding.id, binding.className);
+    } else if (binding.type === "queue") {
+      meta.bindings.push({
+        type: "queue",
+        name: bindingName,
+        queue_name: binding.name,
+      });
     } else {
       // @ts-expect-error - we should never reach here
       throw new Error(`Unsupported binding type: ${binding.type}`);

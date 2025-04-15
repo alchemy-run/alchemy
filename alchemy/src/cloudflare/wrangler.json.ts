@@ -162,6 +162,14 @@ export interface WranglerJsonSpec {
   }[];
 
   /**
+   * Queue bindings
+   */
+  queues?: {
+    binding: string;
+    queue: string;
+  }[];
+
+  /**
    * Service bindings
    */
   services?: {
@@ -230,6 +238,7 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
     database_id: string;
     database_name: string;
   }[] = [];
+  const queues: { binding: string; queue: string }[] = [];
 
   // Process each binding
   for (const [bindingName, binding] of Object.entries(bindings)) {
@@ -271,12 +280,6 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
     } else if (binding.type === "secret") {
       // Secret binding
       secrets.push(bindingName);
-    } else if (typeof binding === "string") {
-      // Plain text binding - add to vars
-      if (!spec.vars) {
-        spec.vars = {};
-      }
-      spec.vars[bindingName] = binding;
     } else if (binding.type === "assets") {
       spec.assets = {
         directory: binding.path,
@@ -293,6 +296,11 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
         binding: bindingName,
         database_id: binding.id,
         database_name: binding.name,
+      });
+    } else if (binding.type === "queue") {
+      queues.push({
+        binding: bindingName,
+        queue: binding.name,
       });
     }
   }
@@ -314,5 +322,9 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
 
   if (services.length > 0) {
     spec.services = services;
+  }
+
+  if (queues.length > 0) {
+    spec.queues = queues;
   }
 }

@@ -1,13 +1,16 @@
 import type { Context } from "../context";
 import { Resource } from "../resource";
-import type { Secret } from "../secret";
-import { CloudflareApi, createCloudflareApi } from "./api";
+import {
+  CloudflareApi,
+  createCloudflareApi,
+  type CloudflareApiOptions,
+} from "./api";
 import { CloudflareApiError, handleApiError } from "./api-error";
 
 /**
  * Properties for creating or updating a D1 Database
  */
-export interface D1DatabaseProps {
+export interface D1DatabaseProps extends CloudflareApiOptions {
   /**
    * Name of the database
    */
@@ -46,26 +49,6 @@ export interface D1DatabaseProps {
    * @default true
    */
   delete?: boolean;
-
-  /**
-   * API Token to use for the database
-   */
-  apiToken?: Secret;
-
-  /**
-   * API Key to use for the database
-   */
-  apiKey?: Secret;
-
-  /**
-   * Email to use for the database
-   */
-  email?: string;
-
-  /**
-   * Account ID to use for the database
-   */
-  accountId?: string;
 }
 
 /**
