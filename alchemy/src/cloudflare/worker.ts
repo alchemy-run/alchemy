@@ -720,6 +720,10 @@ async function bundleWorkerScript<B extends Bindings>(props: WorkerProps) {
     minify: true,
     options: {
       keepNames: true, // Important for Durable Object classes
+      loader: {
+        ".sql": "text",
+        ".json": "json",
+      },
     },
   };
 

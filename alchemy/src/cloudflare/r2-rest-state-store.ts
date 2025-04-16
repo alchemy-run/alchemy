@@ -7,6 +7,7 @@ import {
   type CloudflareApiOptions,
   createCloudflareApi,
 } from "./api";
+import { CloudflareApiError, handleApiError } from "./api-error";
 
 /**
  * Options for CloudflareR2StateStore
@@ -106,21 +107,13 @@ export class R2RestStateStore implements StateStore {
           const response = await this.api.get(listPath);
 
           if (!response.ok) {
-            const errorData: any = await response.json().catch(() => ({
-              errors: [{ message: response.statusText }],
-            }));
-            throw new Error(
-              `Error listing R2 objects: ${errorData.errors?.[0]?.message || response.statusText}`
-            );
+            await handleApiError(response, "list", "bucket", this.bucketName);
           }
 
           return response;
         },
         // Retry on transient errors
-        (error) =>
-          error.message?.includes("502") ||
-          error.message?.includes("503") ||
-          error.message?.includes("timeout"),
+        isRetryableError,
         5, // 5 retry attempts
         1000 // Start with 1 second delay
       );
@@ -173,26 +166,14 @@ export class R2RestStateStore implements StateStore {
             `/accounts/${this.api.accountId}/r2/buckets/${this.bucketName}/objects/${this.getObjectKey(key)}`
           );
 
-          if (!response.ok) {
-            if (response.status === 404) {
-              return response;
-            }
-
-            const errorData: any = await response.json().catch(() => ({
-              errors: [{ message: response.statusText }],
-            }));
-            throw new Error(
-              `Error getting R2 object: ${errorData.errors?.[0]?.message || response.statusText}`
-            );
+          if (!response.ok && response.status !== 404) {
+            await handleApiError(response, "get", "object", key);
           }
 
           return response;
         },
         // Retry on transient errors
-        (error) =>
-          error.message?.includes("502") ||
-          error.message?.includes("503") ||
-          error.message?.includes("timeout"),
+        isRetryableError,
         5, // 5 retry attempts
         1000 // Start with 1 second delay
       );
@@ -280,19 +261,12 @@ export class R2RestStateStore implements StateStore {
         );
 
         if (!response.ok) {
-          const errorData: any = await response.json().catch(() => ({
-            errors: [{ message: response.statusText }],
-          }));
-          throw new Error(
-            `Error writing to R2: ${errorData.errors?.[0]?.message || response.statusText}`
-          );
+          await handleApiError(response, "put", "object", objectKey);
         }
-
         return response;
       },
       // Retry on transient errors
-      (error) =>
-        error.message?.includes("503") || error.message?.includes("timeout"),
+      isRetryableError,
       5, // 5 retry attempts
       1000 // Start with 1 second delay
     );
@@ -313,21 +287,12 @@ export class R2RestStateStore implements StateStore {
         );
 
         if (!response.ok && response.status !== 404) {
-          const errorData: any = await response.json().catch(() => ({
-            errors: [{ message: response.statusText }],
-          }));
-          throw new Error(
-            `Error deleting from R2: ${errorData.errors?.[0]?.message || response.statusText}`
-          );
+          await handleApiError(response, "delete", "object", key);
         }
 
         return response;
       },
-      // Retry on transient errors
-      (error) =>
-        error.message?.includes("502") ||
-        error.message?.includes("503") ||
-        error.message?.includes("timeout"),
+      isRetryableError,
       5, // 5 retry attempts
       1000 // Start with 1 second delay
     );
@@ -372,4 +337,17 @@ export class R2RestStateStore implements StateStore {
       await this.init();
     }
   }
+}
+
+function isRetryableError(error: any): boolean {
+  if (error instanceof CloudflareApiError) {
+    return (
+      error.status === 500 ||
+      error.status === 502 ||
+      error.status === 503 ||
+      error.message.includes("timeout") ||
+      error.message.includes("internal error")
+    );
+  }
+  return false;
 }
