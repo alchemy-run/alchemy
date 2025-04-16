@@ -49,6 +49,14 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
    * @default true
    */
   delete?: boolean;
+
+  /**
+   * Whether to adopt an existing database with the same name if it exists
+   * If true and a database with the same name exists, it will be adopted rather than creating a new one
+   *
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -108,6 +116,16 @@ export interface D1Database
  *   primaryLocationHint: "wnam"
  * });
  *
+ * @example
+ * // Adopt an existing database if it already exists instead of failing
+ * const existingDb = await D1Database("existing-db", {
+ *   name: "existing-db",
+ *   adopt: true,
+ *   readReplication: {
+ *     mode: "auto"
+ *   }
+ * });
+ *
  * @see https://developers.cloudflare.com/d1/
  */
 export const D1Database = Resource(
@@ -135,7 +153,41 @@ export const D1Database = Resource(
 
       if (this.phase === "create") {
         console.log("Creating D1 database:", databaseName);
-        dbData = await createDatabase(api, databaseName, props);
+        try {
+          dbData = await createDatabase(api, databaseName, props);
+        } catch (error) {
+          // Check if this is a "database already exists" error and adopt is enabled
+          if (
+            props.adopt &&
+            error instanceof CloudflareApiError &&
+            error.message.includes("already exists")
+          ) {
+            console.log(`Database ${databaseName} already exists, adopting it`);
+            // Find the existing database by name
+            const databases = await listDatabases(api, databaseName);
+            const existingDb = databases.find((db) => db.name === databaseName);
+
+            if (!existingDb) {
+              throw new Error(
+                `Failed to find existing database '${databaseName}' for adoption`
+              );
+            }
+
+            // Get the database details using its ID
+            dbData = await getDatabase(api, existingDb.id);
+
+            // Update the database with the provided properties
+            if (props.readReplication) {
+              console.log(
+                `Updating adopted database ${databaseName} with new properties`
+              );
+              dbData = await updateDatabase(api, existingDb.id, props);
+            }
+          } else {
+            // Re-throw the error if adopt is false or it's not a "database already exists" error
+            throw error;
+          }
+        }
       } else {
         // Update operation
         if (this.output?.id) {
@@ -272,9 +324,15 @@ export async function deleteDatabase(
  * List all D1 databases in an account
  */
 export async function listDatabases(
-  api: CloudflareApi
+  api: CloudflareApi,
+  name?: string
 ): Promise<{ name: string; id: string }[]> {
-  const response = await api.get(`/accounts/${api.accountId}/d1/database`);
+  // Construct query string if name is provided
+  const queryParams = name ? `?name=${encodeURIComponent(name)}` : "";
+
+  const response = await api.get(
+    `/accounts/${api.accountId}/d1/database${queryParams}`
+  );
 
   if (!response.ok) {
     throw new CloudflareApiError(

@@ -24,6 +24,7 @@ describe("D1 Database Resource", async () => {
       database = await D1Database(testId, {
         name: testId,
         primaryLocationHint: "wnam", // West North America
+        adopt: true,
       });
 
       expect(database.name).toEqual(testId);
@@ -55,6 +56,7 @@ describe("D1 Database Resource", async () => {
       const database = await D1Database(locationDb, {
         name: locationDb,
         primaryLocationHint: "wnam", // West North America
+        adopt: true,
       });
 
       expect(database.name).toEqual(locationDb);
@@ -77,6 +79,7 @@ describe("D1 Database Resource", async () => {
       // Create a database with default settings
       let database = await D1Database(replicationDb, {
         name: replicationDb,
+        adopt: true,
       });
 
       expect(database.name).toEqual(replicationDb);
@@ -88,6 +91,7 @@ describe("D1 Database Resource", async () => {
         readReplication: {
           mode: "disabled",
         },
+        adopt: true,
       });
 
       // Verify the update
@@ -105,6 +109,7 @@ describe("D1 Database Resource", async () => {
       const database = await D1Database(invalidUpdateDb, {
         name: invalidUpdateDb,
         primaryLocationHint: "wnam", // West North America
+        adopt: true,
       });
 
       expect(database.name).toEqual(invalidUpdateDb);
@@ -116,6 +121,7 @@ describe("D1 Database Resource", async () => {
         D1Database(invalidUpdateDb, {
           name: invalidUpdateDb,
           primaryLocationHint: "eeur", // East Europe - different from original
+          adopt: true,
         })
       ).rejects.toThrow("Cannot update primaryLocationHint");
     } finally {
