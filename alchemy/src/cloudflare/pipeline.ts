@@ -356,7 +356,6 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
       }
     }
 
-    console.log(pipelineData.result);
     return this({
       type: "pipeline",
       id: pipelineData.result.id,

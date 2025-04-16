@@ -415,6 +415,7 @@ export async function emptyBucket(
 
   try {
     do {
+      console.log(`Listing objects in bucket ${bucketName}`);
       // List objects in the bucket
       const { objects, continuationToken: nextToken } = await listObjects(
         r2,

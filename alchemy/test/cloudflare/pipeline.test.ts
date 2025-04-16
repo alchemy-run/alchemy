@@ -337,6 +337,10 @@ describe("Pipeline Resource", () => {
       // Create an R2 bucket
       bucket = await R2Bucket("worker-bucket", {
         name: bucketName,
+        accessKey: accessKeyId,
+        secretAccessKey: secretAccessKey,
+        delete: true,
+        empty: true,
       });
 
       // Create a pipeline with the R2 bucket as destination
@@ -361,7 +365,7 @@ describe("Pipeline Resource", () => {
           },
           batch: {
             maxMb: 1, // 1 MB
-            maxSeconds: 30, // 30 seconds
+            maxSeconds: 1, // 5 seconds
             maxRows: 100, // 100 rows
           },
         },
@@ -435,6 +439,8 @@ describe("Pipeline Resource", () => {
         console.log("Records sent to pipeline:", responseData);
       }
     } finally {
+      // wait 10s for pipeline to flush
+      await new Promise((resolve) => setTimeout(resolve, 3 * 1000));
       await destroy(scope);
       // Verify the worker was deleted
       if (worker) {

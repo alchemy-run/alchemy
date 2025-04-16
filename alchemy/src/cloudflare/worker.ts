@@ -456,6 +456,8 @@ class NotFoundError extends Error {
 }
 
 interface WorkerMetadata {
+  compatibility_date: string;
+  compatibility_flags?: string[];
   bindings: WorkerBindingSpec[];
   observability: {
     enabled: boolean;
@@ -490,6 +492,7 @@ async function prepareWorkerMetadata<B extends Bindings>(
 ): Promise<WorkerMetadata> {
   // Prepare metadata with bindings
   const meta: WorkerMetadata = {
+    compatibility_date: "2024-09-09",
     bindings: [],
     observability: {
       enabled: props.observability?.enabled !== false,
