@@ -1,3 +1,4 @@
+import type { BuildOptions } from "esbuild";
 import * as esbuild from "esbuild";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -8,7 +9,7 @@ import { Resource } from "../resource";
 /**
  * Properties for creating or updating an esbuild bundle
  */
-export interface BundleProps {
+export interface BundleProps extends BuildOptions {
   /**
    * Entry point for the bundle
    * Path to the source file to bundle (e.g., "src/handler.ts")
@@ -116,7 +117,7 @@ export const Bundle = Resource(
   async function (
     this: Context<Bundle>,
     id: string,
-    props: BundleProps,
+    props: BundleProps
   ): Promise<Bundle> {
     // Determine output path
     const outputPath = getOutputPath(props);
@@ -145,7 +146,7 @@ export const Bundle = Resource(
       path: outputPath,
       hash,
     });
-  },
+  }
 );
 
 export async function bundle(props: BundleProps) {
@@ -172,7 +173,7 @@ function getOutputPath(props: BundleProps) {
     props.outfile ||
     path.join(
       props.outdir || "dist",
-      path.basename(props.entryPoint, path.extname(props.entryPoint)) + ".js",
+      path.basename(props.entryPoint, path.extname(props.entryPoint)) + ".js"
     )
   );
 }
