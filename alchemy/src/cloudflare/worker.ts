@@ -99,6 +99,17 @@ export interface WorkerProps<B extends Bindings = Bindings>
    * Whether to adopt the Worker if it already exists when creating
    */
   adopt?: boolean;
+
+  /**
+   * The compatibility date for the worker
+   * @default "2024-09-09"
+   */
+  compatibilityDate?: string;
+
+  /**
+   * The compatibility flags for the worker
+   */
+  compatibilityFlags?: string[];
 }
 
 /**
@@ -492,7 +503,8 @@ async function prepareWorkerMetadata<B extends Bindings>(
 ): Promise<WorkerMetadata> {
   // Prepare metadata with bindings
   const meta: WorkerMetadata = {
-    compatibility_date: "2024-09-09",
+    compatibility_date: props.compatibilityDate ?? "2024-09-09",
+    compatibility_flags: props.compatibilityFlags,
     bindings: [],
     observability: {
       enabled: props.observability?.enabled !== false,
