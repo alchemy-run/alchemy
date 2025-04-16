@@ -1,4 +1,3 @@
-import type { BuildOptions } from "esbuild";
 import * as esbuild from "esbuild";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -9,7 +8,7 @@ import { Resource } from "../resource";
 /**
  * Properties for creating or updating an esbuild bundle
  */
-export interface BundleProps extends BuildOptions {
+export interface BundleProps {
   /**
    * Entry point for the bundle
    * Path to the source file to bundle (e.g., "src/handler.ts")

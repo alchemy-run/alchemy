@@ -718,12 +718,12 @@ async function bundleWorkerScript<B extends Bindings>(props: WorkerProps) {
     target: "es2020",
     platform: "browser",
     minify: true,
-    loader: {
-      ".sql": "text",
-      ".json": "json",
-    },
     options: {
       keepNames: true, // Important for Durable Object classes
+      loader: {
+        ".sql": "text",
+        ".json": "json",
+      },
     },
   };
 
