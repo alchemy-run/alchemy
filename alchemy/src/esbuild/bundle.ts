@@ -150,8 +150,8 @@ export const Bundle = Resource(
 
 export async function bundle(props: BundleProps) {
   const outputPath = getOutputPath(props);
-  // Build the bundle
   return await esbuild.build({
+    ...props.options,
     entryPoints: [props.entryPoint],
     outfile: outputPath,
     bundle: true,
@@ -159,11 +159,14 @@ export async function bundle(props: BundleProps) {
     target: props.target,
     minify: props.minify,
     sourcemap: props.sourcemap,
-    external: props.external,
+    external: [
+      "node:async_hooks",
+      ...(props.external ?? []),
+      ...(props.options?.external ?? []),
+    ],
     platform: props.platform,
     metafile: true,
     write: true,
-    ...props.options,
   });
 }
 

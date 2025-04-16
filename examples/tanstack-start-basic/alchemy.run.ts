@@ -21,13 +21,7 @@ const worker = await Worker("tanstack-website", {
     ASSETS: assets,
   },
   url: true,
-  compatibilityFlags: ["nodejs_compat", "nodejs_als"],
-  compatibilityDate: "2025-04-16",
-  bundle: {
-    options: {
-      external: ["node:async_hooks"],
-    },
-  },
+  compatibilityFlags: ["nodejs_compat"],
 });
 
 console.log({

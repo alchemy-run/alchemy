@@ -13,13 +13,6 @@ export default defineConfig({
     unenv: {
       external: ["node:async_hooks"],
     },
-    // externals: {
-    //   external: ["node:async_hooks"],
-    // },
-    // prerender: {
-    //   routes: ["/"],
-    //   autoSubfolderIndex: false,
-    // },
   },
   vite: {
     plugins: [
