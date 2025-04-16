@@ -1,15 +1,37 @@
 import "alchemy/cloudflare";
 
+import alchemy from "alchemy";
 import { Assets, Worker } from "alchemy/cloudflare";
+import { Exec } from "alchemy/os";
 
-const assets = await Assets("assets", {
-  path: ".output",
+const app = await alchemy("tanstack-app");
+
+await Exec("build", {
+  command: "bun run build",
 });
 
-await Worker("website", {
-  name: "website",
-  script: "./src/index.ts",
+const assets = await Assets("assets", {
+  path: ".output/public",
+});
+
+const worker = await Worker("tanstack-website", {
+  name: "tanstack-website",
+  entrypoint: ".output/server/index.mjs",
   bindings: {
     ASSETS: assets,
   },
+  url: true,
+  compatibilityFlags: ["nodejs_compat", "nodejs_als"],
+  compatibilityDate: "2025-04-16",
+  bundle: {
+    options: {
+      external: ["node:async_hooks"],
+    },
+  },
 });
+
+console.log({
+  url: worker.url,
+});
+
+await app.finalize();
