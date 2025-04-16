@@ -1,5 +1,5 @@
 ---
-order: 3
+order: 4
 ---
 
 # Cloudflare Workflows 
@@ -23,7 +23,7 @@ If you're paying close attention, you'll notice that we call `new Workflow` inst
 
 This is because of oddities in Cloudflare's API design. Workflows are not resources in the traditional sense because they cannot exist without a Worker.
 
-## Bind th Workflow to a Worker
+## Bind the Workflow to a Worker
 
 Instead, you create a Workflow object and then bind it to your Worker:
 

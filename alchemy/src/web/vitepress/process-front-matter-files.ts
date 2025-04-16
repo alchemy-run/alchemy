@@ -58,7 +58,7 @@ export async function processFrontmatterFiles(
           const frontmatter = frontmatterMatch[1];
           const orderMatch = frontmatter.match(/order:\s*(\d+)/);
           if (orderMatch) {
-            order = parseInt(orderMatch[1]);
+            order = parseFloat(orderMatch[1]);
           }
           const titleMatch = frontmatter.match(/title:\s*(.+)/);
           if (titleMatch) {

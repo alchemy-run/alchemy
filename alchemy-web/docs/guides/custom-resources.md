@@ -1,5 +1,5 @@
 ---
-order: 4
+order: 5
 ---
 
 # Use AI to develop Custom Resources

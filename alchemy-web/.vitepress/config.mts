@@ -72,6 +72,10 @@ export default defineConfig({
             link: "/docs/guides/cloudflare-vitejs.md",
           },
           {
+            text: "Cloudflare TanStack Start",
+            link: "/docs/guides/cloudflare-tanstack-start.md",
+          },
+          {
             text: "Cloudflare Durable Objects",
             link: "/docs/guides/cloudflare-durable-objects.md",
           },
