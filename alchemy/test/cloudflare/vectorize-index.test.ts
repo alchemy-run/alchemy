@@ -26,17 +26,15 @@ describe("Vectorize Index Resource", async () => {
     try {
       index = await VectorizeIndex(testId, {
         name: testId,
-        config: {
-          dimensions: 768,
-          metric: "cosine",
-        },
+        dimensions: 768,
+        metric: "cosine",
         adopt: true,
       });
 
       expect(index.name).toEqual(testId);
       expect(index.id).toBeTruthy();
-      expect(index.config.dimensions).toEqual(768);
-      expect(index.config.metric).toEqual("cosine");
+      expect(index.dimensions).toEqual(768);
+      expect(index.metric).toEqual("cosine");
 
       // Check if index exists by listing indexes
       const indexes = await listIndexes(api);
@@ -59,25 +57,21 @@ describe("Vectorize Index Resource", async () => {
       // Create an index
       const index = await VectorizeIndex(updateIndex, {
         name: updateIndex,
-        config: {
-          dimensions: 768,
-          metric: "cosine",
-        },
+        dimensions: 768,
+        metric: "cosine",
         adopt: true,
       });
 
       expect(index.name).toEqual(updateIndex);
-      expect(index.config.dimensions).toEqual(768);
+      expect(index.dimensions).toEqual(768);
 
       // Attempt to update the index, which should throw an error indicating updates are not supported
       await expect(
         VectorizeIndex(updateIndex, {
           name: updateIndex,
           description: "Updated description",
-          config: {
-            dimensions: 768,
-            metric: "cosine",
-          },
+          dimensions: 768,
+          metric: "cosine",
           adopt: true,
         })
       ).rejects.toThrow(

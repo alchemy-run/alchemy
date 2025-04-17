@@ -22,19 +22,14 @@ export interface VectorizeIndexProps extends CloudflareApiOptions {
   description?: string;
 
   /**
-   * Configuration for the vector index
+   * Dimensions of the vectors
    */
-  config: {
-    /**
-     * Dimensions of the vectors
-     */
-    dimensions: number;
+  dimensions: number;
 
-    /**
-     * Distance metric used for vector similarity
-     */
-    metric: "cosine" | "euclidean" | "dot_product";
-  };
+  /**
+   * Distance metric used for vector similarity
+   */
+  metric: "cosine" | "euclidean" | "dot_product";
 
   /**
    * Whether to delete the index if removed
@@ -136,7 +131,10 @@ export const VectorizeIndex = Resource(
       if (this.phase === "create") {
         console.log("Creating Vectorize index:", indexName);
         try {
-          indexData = await createIndex(api, indexName, props);
+          indexData = await createIndex(api, indexName, {
+            ...props,
+            name: indexName,
+          });
         } catch (error) {
           // Check if this is a "index already exists" error and adopt is enabled
           if (
@@ -165,13 +163,11 @@ export const VectorizeIndex = Resource(
         id: indexName,
         name: indexName,
         description: props.description,
-        config: {
-          dimensions: indexData.result.config.dimensions,
-          metric: indexData.result.config.metric as
-            | "cosine"
-            | "euclidean"
-            | "dot_product",
-        },
+        dimensions: indexData.result.config.dimensions,
+        metric: indexData.result.config.metric as
+          | "cosine"
+          | "euclidean"
+          | "dot_product",
         accountId: api.accountId,
         createdAt: indexData.result.created_on
           ? new Date(indexData.result.created_on).getTime()
@@ -208,8 +204,8 @@ export async function createIndex(
   const createPayload: any = {
     name: indexName,
     config: {
-      dimensions: props.config.dimensions,
-      metric: props.config.metric,
+      dimensions: props.dimensions,
+      metric: props.metric,
     },
   };
 
