@@ -611,6 +611,12 @@ async function prepareWorkerMetadata<B extends Bindings>(
         name: bindingName,
         pipeline: binding.name,
       });
+    } else if (binding.type === "vectorize") {
+      meta.bindings.push({
+        type: "vectorize",
+        name: bindingName,
+        index_name: binding.name,
+      });
     } else {
       // @ts-expect-error - we should never reach here
       throw new Error(`Unsupported binding type: ${binding.type}`);

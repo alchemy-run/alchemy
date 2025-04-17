@@ -189,6 +189,10 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
   ) {
     const testName = args[0];
     const _options = typeof args[1] === "object" ? args[1] : undefined;
+    const timeout =
+      typeof args[args.length - 1] === "number"
+        ? (args[args.length - 1] as number)
+        : 120000;
     const spread = (obj: any) =>
       obj && typeof obj === "object"
         ? Object.fromEntries(
@@ -199,7 +203,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
         : {};
 
     // Merge options with defaults
-    const options = {
+    const options: TestOptions = {
       destroy: true,
       quiet: false,
       password: "test-password",
@@ -216,20 +220,24 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
         parent: localTestScope,
       },
       async (scope) => {
-        return it(testName, async () => {
-          // Enter test scope since bun calls from different scope
-          scope.enter();
-          try {
-            await fn(scope);
-          } catch (err) {
-            console.error(err);
-            throw err;
-          } finally {
-            if (options.destroy !== false) {
-              await destroy(scope);
+        return it(
+          testName,
+          async () => {
+            // Enter test scope since bun calls from different scope
+            scope.enter();
+            try {
+              await fn(scope);
+            } catch (err) {
+              console.error(err);
+              throw err;
+            } finally {
+              if (options.destroy !== false) {
+                await destroy(scope);
+              }
             }
-          }
-        });
+          },
+          timeout
+        );
       }
     );
   }

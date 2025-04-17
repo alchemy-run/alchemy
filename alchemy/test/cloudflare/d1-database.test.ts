@@ -46,7 +46,7 @@ describe("D1 Database Resource", async () => {
         await assertDatabaseDeleted(database);
       }
     }
-  }, 120000);
+  });
 
   test("primary location hint", async (scope) => {
     const locationDb = `${testId}-location`;
@@ -70,7 +70,7 @@ describe("D1 Database Resource", async () => {
     } finally {
       await alchemy.destroy(scope);
     }
-  }, 120000);
+  });
 
   test("update read replication mode", async (scope) => {
     const replicationDb = `${testId}-replication`;
@@ -99,7 +99,7 @@ describe("D1 Database Resource", async () => {
     } finally {
       await alchemy.destroy(scope);
     }
-  }, 120000);
+  });
 
   test("throws error on invalid update", async (scope) => {
     const invalidUpdateDb = `${testId}-invalid-update`;
@@ -127,7 +127,7 @@ describe("D1 Database Resource", async () => {
     } finally {
       await alchemy.destroy(scope);
     }
-  }, 120000);
+  });
 });
 
 async function assertDatabaseDeleted(database: D1Database) {

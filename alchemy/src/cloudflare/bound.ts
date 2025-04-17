@@ -8,6 +8,7 @@ import type { DurableObjectNamespace as _DurableObjectNamespace } from "./durabl
 import type { KVNamespace as _KVNamespace } from "./kv-namespace";
 import type { Pipeline as _Pipeline } from "./pipeline";
 import type { Queue as _Queue } from "./queue";
+import type { VectorizeIndex as _VectorizeIndex } from "./vectorize-index";
 import type { Worker as _Worker } from "./worker";
 import type { Workflow as _Workflow } from "./workflow";
 
@@ -27,8 +28,10 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace
               ? Workflow<P>
               : T extends _D1Database
                 ? D1Database
-                : T extends _Queue
-                  ? Queue
-                  : T extends _Pipeline<infer R>
-                    ? Pipeline<R>
-                    : Service;
+                : T extends _VectorizeIndex
+                  ? VectorizeIndex
+                  : T extends _Queue
+                    ? Queue
+                    : T extends _Pipeline<infer R>
+                      ? Pipeline<R>
+                      : Service;

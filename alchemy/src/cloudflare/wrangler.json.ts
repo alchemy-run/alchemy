@@ -188,6 +188,14 @@ export interface WranglerJsonSpec {
   }[];
 
   /**
+   * Vectorize index bindings
+   */
+  vectorize_indexes?: {
+    binding: string;
+    index_name: string;
+  }[];
+
+  /**
    * Plain text bindings (vars)
    */
   vars?: Record<string, string>;
@@ -239,6 +247,7 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
     database_name: string;
   }[] = [];
   const queues: { binding: string; queue: string }[] = [];
+  const vectorizeIndexes: { binding: string; index_name: string }[] = [];
 
   // Process each binding
   for (const [bindingName, binding] of Object.entries(bindings)) {
@@ -302,6 +311,11 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
         binding: bindingName,
         queue: binding.name,
       });
+    } else if (binding.type === "vectorize") {
+      vectorizeIndexes.push({
+        binding: bindingName,
+        index_name: binding.name,
+      });
     }
   }
 
@@ -326,5 +340,9 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
 
   if (queues.length > 0) {
     spec.queues = queues;
+  }
+
+  if (vectorizeIndexes.length > 0) {
+    spec.vectorize_indexes = vectorizeIndexes;
   }
 }

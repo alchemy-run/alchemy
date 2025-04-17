@@ -49,7 +49,7 @@ export async function handleApiError(
   resourceName: string
 ): Promise<never> {
   const json: any = await response.json();
-  const errors: { message: string }[] = json.errors || [
+  const errors: { message: string }[] = json?.errors || [
     { message: response.statusText },
   ];
   const errorMessage = `Error ${action} ${resourceType} '${resourceName}': ${errors[0]?.message || response.statusText}`;

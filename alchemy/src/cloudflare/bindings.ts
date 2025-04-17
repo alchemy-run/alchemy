@@ -11,6 +11,7 @@ import type { DurableObjectNamespace } from "./durable-object-namespace";
 import type { KVNamespace } from "./kv-namespace";
 import type { Pipeline } from "./pipeline";
 import type { Queue } from "./queue";
+import type { VectorizeIndex } from "./vectorize-index";
 import type { Worker } from "./worker";
 import type { Workflow } from "./workflow";
 
@@ -31,6 +32,7 @@ export type Binding =
   | R2Bucket
   | Secret
   | string
+  | VectorizeIndex
   | Worker
   | Workflow;
 
