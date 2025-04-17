@@ -24,10 +24,8 @@ describe("Vectorize Metadata Index Resource", async () => {
     // First create a parent vectorize index
     const vectorIndex = await VectorizeIndex(`${testId}-parent`, {
       name: `${testId}-parent`,
-      config: {
-        dimensions: 768,
-        metric: "cosine",
-      },
+      dimensions: 768,
+      metric: "cosine",
       adopt: true,
     });
 
@@ -70,10 +68,8 @@ describe("Vectorize Metadata Index Resource", async () => {
     // First create a parent vectorize index
     const vectorIndex = await VectorizeIndex(`${testId}-parent-noupdate`, {
       name: `${testId}-parent-noupdate`,
-      config: {
-        dimensions: 768,
-        metric: "cosine",
-      },
+      dimensions: 768,
+      metric: "cosine",
       adopt: true,
     });
 
