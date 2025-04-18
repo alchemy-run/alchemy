@@ -170,12 +170,6 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     });
   };
 
-  afterAll(async () => {
-    if (defaultOptions?.destroy !== false && !isFailed) {
-      await alchemy.destroy(test.scope);
-    }
-  });
-
   return test as any;
 
   async function test(
