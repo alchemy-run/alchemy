@@ -76,7 +76,7 @@ export async function ViteSite<B extends Bindings>(
     }
 
     await Exec("build", {
-      command: "bun run build",
+      command: props.command,
     });
 
     const staticAssets = await Assets("assets", {
