@@ -318,7 +318,6 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
   const pipelineName = props.name || id;
 
   if (this.phase === "delete") {
-    console.log("Deleting Cloudflare Pipeline:", pipelineName);
     if (props.delete !== false) {
       // Delete Pipeline
       await deletePipeline(api, pipelineName);
@@ -330,13 +329,10 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
     let pipelineData: CloudflarePipelineResponse;
 
     if (this.phase === "create") {
-      console.log("Creating Cloudflare Pipeline:", pipelineName);
       pipelineData = await createPipeline(api, pipelineName, props);
     } else {
       // Update operation
       if (this.output?.id) {
-        console.log("Updating Cloudflare Pipeline:", pipelineName);
-
         // Check if name is being changed, which is not allowed
         if (props.name !== this.output.name) {
           throw new Error(

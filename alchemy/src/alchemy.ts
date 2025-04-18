@@ -309,6 +309,7 @@ export interface RunOptions extends AlchemyOptions {
   // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
   isResource?: boolean;
 }
+
 /**
  * Run a function in a new scope asynchronously.
  * Useful for isolating secret handling with a specific password.
@@ -343,9 +344,9 @@ async function run<T>(
         ]);
   const scope = alchemy.scope(id, options);
   try {
-    if (options?.isResource !== true) {
+    if (options?.isResource !== true && scope.parent) {
       // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
-      const seq = scope.parent!.seq();
+      const seq = scope.parent.seq();
       const output = {
         ID: id,
         FQN: "",

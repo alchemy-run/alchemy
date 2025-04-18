@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 
-import { afterAll, beforeAll, it } from "bun:test";
+import { it } from "bun:test";
 import path from "node:path";
 import { alchemy } from "../alchemy";
 import { R2RestStateStore } from "../cloudflare";
@@ -86,10 +86,6 @@ type test = {
    */
   skipIf(condition: boolean): test;
 
-  beforeAll(fn: (scope: Scope) => Promise<void>): void;
-
-  afterAll(fn: (scope: Scope) => Promise<void>): void;
-
   /**
    * Current test scope
    */
@@ -120,7 +116,6 @@ type test = {
  * ```
  */
 export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
-  let isFailed = false;
   defaultOptions = defaultOptions ?? {};
   if (
     defaultOptions.stateStore === undefined &&
@@ -142,32 +137,6 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
       return (...args: any[]) => {};
     }
     return test;
-  };
-
-  // Create local test scope based on filename
-  const localTestScope = alchemy.scope(
-    `${defaultOptions.prefix ? `${defaultOptions.prefix}-` : ""}${path.basename(meta.filename)}`,
-    {
-      // parent: globalTestScope,
-      stateStore: defaultOptions?.stateStore,
-      enter: false,
-    }
-  );
-
-  test.scope = localTestScope;
-
-  test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {
-    return beforeAll(async () => {
-      test.scope.enter();
-      await fn(test.scope);
-    });
-  };
-
-  test.afterAll = (fn: (scope: Scope) => Promise<void>) => {
-    return afterAll(async () => {
-      test.scope.enter();
-      await fn(test.scope);
-    });
   };
 
   return test as any;
@@ -207,10 +176,10 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     const fn = typeof args[1] === "function" ? args[1] : args[2]!;
 
     return alchemy.run(
-      testName,
+      `${defaultOptions!.prefix ? `${defaultOptions!.prefix}-` : ""}${path.basename(meta.filename)}-${testName}`,
       {
         ...options,
-        parent: localTestScope,
+        // parent: localTestScope,
       },
       async (scope) => {
         return it(
