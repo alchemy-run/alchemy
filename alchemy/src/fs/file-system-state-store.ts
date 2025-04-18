@@ -19,7 +19,6 @@ export class FileSystemStateStore implements StateStore {
       return;
     }
     this.initialized = true;
-
     await fs.promises.mkdir(this.dir, { recursive: true });
   }
 
@@ -69,7 +68,6 @@ export class FileSystemStateStore implements StateStore {
   }
 
   async set(key: string, value: State): Promise<void> {
-    // comment this out and tests will be detected, otherwise `bun test` fails silently
     await this.init();
     await fs.promises.writeFile(
       this.getPath(key),

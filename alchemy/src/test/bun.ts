@@ -1,10 +1,10 @@
 /// <reference types="bun" />
 
-import { it } from "bun:test";
+import { afterAll, beforeAll, it } from "bun:test";
 import path from "node:path";
 import { alchemy } from "../alchemy";
 import { R2RestStateStore } from "../cloudflare";
-import type { Scope } from "../scope";
+import { Scope } from "../scope";
 import type { StateStoreType } from "../state";
 
 /**
@@ -25,12 +25,6 @@ alchemy.test = test;
  * Options for configuring test behavior
  */
 export interface TestOptions {
-  /**
-   * Whether to destroy the test scope after all tests complete.
-   * @default true.
-   */
-  destroy?: boolean;
-
   /**
    * Whether to suppress logging output.
    * @default false.
@@ -86,6 +80,10 @@ type test = {
    */
   skipIf(condition: boolean): test;
 
+  beforeAll(fn: (scope: Scope) => Promise<void>): void;
+
+  afterAll(fn: (scope: Scope) => Promise<void>): void;
+
   /**
    * Current test scope
    */
@@ -139,9 +137,29 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     return test;
   };
 
+  // Create local test scope based on filename
+  const localTestScope = new Scope({
+    scopeName: `${defaultOptions.prefix ? `${defaultOptions.prefix}-` : ""}${path.basename(meta.filename)}`,
+    // parent: globalTestScope,
+    stateStore: defaultOptions?.stateStore,
+  });
+  test.scope = localTestScope;
+
+  test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {
+    return beforeAll(async () => {
+      await test.scope.run(() => fn(test.scope));
+    });
+  };
+
+  test.afterAll = (fn: (scope: Scope) => Promise<void>) => {
+    return afterAll(async () => {
+      await test.scope.run(() => fn(test.scope));
+    });
+  };
+
   return test as any;
 
-  async function test(
+  function test(
     ...args:
       | [
           name: string,
@@ -175,16 +193,16 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
 
     const fn = typeof args[1] === "function" ? args[1] : args[2]!;
 
-    return alchemy.run(
-      `${defaultOptions!.prefix ? `${defaultOptions!.prefix}-` : ""}${path.basename(meta.filename)}-${testName}`,
-      {
-        ...options,
-        // parent: localTestScope,
-      },
-      async (scope) => {
-        return it(
+    return it(
+      testName,
+      async () =>
+        alchemy.run(
           testName,
-          async () => {
+          {
+            ...options,
+            parent: localTestScope,
+          },
+          async (scope) => {
             // Enter test scope since bun calls from different scope
             scope.enter();
             try {
@@ -192,15 +210,10 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
             } catch (err) {
               console.error(err);
               throw err;
-            } finally {
-              if (options.destroy !== false) {
-                await alchemy.destroy(scope);
-              }
             }
-          },
-          timeout
-        );
-      }
+          }
+        ),
+      timeout
     );
   }
 }

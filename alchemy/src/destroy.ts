@@ -53,9 +53,9 @@ export async function destroy<Type extends string>(
   }
 
   if (instance.Kind === "alchemy::Scope") {
-    const scope = alchemy.scope(instance.ID, {
+    const scope = new Scope({
       parent: instance.Scope,
-      enter: false,
+      scopeName: instance.ID,
     });
     console.log("Destroying scope", scope.chain.join("/"));
     return await destroy(scope, options);

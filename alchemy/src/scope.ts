@@ -8,13 +8,16 @@ const scopeStorage = new AsyncLocalStorage<Scope>();
 
 export type ScopeOptions = {
   appName?: string;
-  stage: string;
+  stage?: string;
   parent?: Scope;
   scopeName?: string;
   password?: string;
   stateStore?: StateStoreType;
   quiet?: boolean;
 };
+
+// TODO: support browser
+const DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
 
 export class Scope {
   public static get(): Scope | undefined {
@@ -42,7 +45,7 @@ export class Scope {
 
   constructor(options: ScopeOptions) {
     this.appName = options.appName;
-    this.stage = options.stage;
+    this.stage = options?.stage ?? DEFAULT_STAGE;
     this.scopeName = options.scopeName ?? null;
     this.parent = options.parent ?? Scope.get();
     this.quiet = options.quiet ?? this.parent?.quiet ?? false;
