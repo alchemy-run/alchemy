@@ -357,10 +357,11 @@ import { describe, expect } from "bun:test";
 import { alchemy } from "alchemy";
 import { InMemoryStateStore } from "./in-memory-state-store";
 
+const test = alchemy.test(import.meta)
+
 describe("InMemoryStateStore", () => {
-  const scope = alchemy.scope("test-scope");
   
-  test("basic operations", async () => {
+  test("basic operations", async (scope) => {
     const store = new InMemoryStateStore(scope);
     await store.init();
     

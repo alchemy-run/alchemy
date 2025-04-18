@@ -36,8 +36,6 @@ The destination file will be automatically deleted when the resource is destroye
 ```ts
 import { CopyFile, destroy } from "alchemy/fs";
 
-const scope = alchemy.scope("temp");
-
 const tempCopy = await CopyFile("temp-copy", {
   src: "data.json",
   dest: "temp/data.json"

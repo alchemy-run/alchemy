@@ -53,32 +53,11 @@ import { destroy } from "alchemy";
 await destroy(myFile);
 ```
 
-### 4. Scope-Based Destruction
-
-```typescript
-// Destroy all resources in a scope
-import { destroy } from "alchemy";
-const scope = alchemy.scope("temporary");
-const tempFile = await File("temp.txt", { ... });
-
-await destroy(scope);
-```
-
 ## Destruction Order
 
 Resources are destroyed in dependency order: dependents first, then dependencies.
 
 ## Best Practices
-
-```typescript
-// Clean up test resources reliably with try/finally
-const scope = alchemy.scope("test");
-try {
-  // Create test resources
-} finally {
-  await destroy(scope);
-}
-```
 
 ```typescript
 // When implementing custom resources, handle deletion phase
