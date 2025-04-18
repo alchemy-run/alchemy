@@ -4,7 +4,7 @@ order: 1
 
 # Cloudflare ViteJS
 
-This guide shows how to deploy a Vite.js React TypeScript application to Cloudflare using Alchemy.
+This guide demonstrates how to deploy a Vite.js React TypeScript application with a Hono API to Cloudflare using Alchemy.
 
 ## Create a new Vite.js Project
 
@@ -33,23 +33,10 @@ Update your `tsconfig.json` to register `@cloudflare/workers-types` globally:
 }
 ```
 
-## Set up Cloudflare Credentials
-
-Create a `.env` file in the root of the new project and place your Cloudflare Account's Email and API Key:
-
-```
-CLOUDFLARE_API_KEY=<your-api-key>
-CLOUDFLARE_EMAIL=<account-email>
-```
-
-> [!TIP]
-> Use the "Global API Key" from https://dash.cloudflare.com/profile/api-tokens
-
 ## Create `alchemy.run.ts`
 
-Create a standard `alchemy.run.ts` file in your project root:
-
 ```ts
+// ./alchemy.run.ts
 import alchemy from "alchemy";
 
 const app = await alchemy("cloudflare-vite", {
@@ -66,7 +53,7 @@ await app.finalize(); // must be at end
 > [!NOTE]
 > See the [Getting Started](../getting-started) guide if this is unfamiliar.
 
-## Create Vite.js Resource
+## Create ViteSite
 
 Import the `ViteSite` and configure your build command and assets directory:
 
@@ -81,8 +68,6 @@ export const website = await ViteSite("website", {
 });
 ```
 
-## Log Website URL
-
 Log out the website's URL:
 ```ts
 console.log({
@@ -90,9 +75,15 @@ console.log({
 })
 ```
 
-## Deploy to Cloudflare
+## Deploy Static Site
 
-Deploy by simply running you `alchemy.run.ts` script, e.g. with `bun`:
+Login to Cloudflare:
+
+```sh
+wrangler login
+```
+
+Run `alchemy.run.ts` script to deploy:
 
 ```sh
 bun ./alchemy.run
@@ -107,11 +98,9 @@ It should log out the URL of your deployed site:
 
 Click the endpoint to see your site!
 
-## Add a Backend API with Hono
+## Add a Backend API
 
-Let's now add a backend API route with Hono.
-
-Start by creating an entrypoint for our server, `src/index.ts`:
+Create an entrypoint for your server, `src/index.ts`:
 
 ```ts
 import { env } from "cloudflare:workers";
@@ -123,8 +112,8 @@ export default {
 };
 ```
 
-> [!NOTE]
-> This basic entrypoint simply serves the static assets and was automatically injected 
+> [!TIP]
+> This basic entrypoint simply serves the static assets and was automatically injected by `ViteSite` when we did not specify `main`.
 
 Update the `StaticSite` to use our custom server entrypoint:
 
@@ -137,7 +126,7 @@ export const website = await ViteSite("website", {
 });
 ```
 
-## Create `./src/api.ts`
+Now, create a `Hono` app for your api in `./src/api.ts`:
 
 ```ts
 import { Hono } from "hono";
@@ -148,14 +137,12 @@ export const api = new Hono();
 api.get("/hello", (c) => c.text("Hello World"));
 ```
 
-## Route `/api/*` to the Hono `api`
-
-Modify `src/index.ts` to serve any `/api/*` requests with a Hono app:
+Modify `src/index.ts` to create another `Hono` app and route all `/api/*` requests to the API:
 
 ```ts
+import { api } from "./api";
 import { env } from "cloudflare:workers";
 import { Hono } from "hono";
-import { api } from "./api";
 
 // create a root Hono app
 const app = new Hono();
@@ -176,13 +163,26 @@ export default {
 ```
 
 > [!TIP]
-> It's a good practice to use `app.route` to partition routes behind a prefix like `/api/` to simplify routing (see below)
+> You may be wondering why 2 Hono apps instead of 1.
+>
+> By using `app.route("/api/", api)`, we ensure all routes on `api` are under `/api/`:
+> ```ts
+> // no need to remember api.get("/api/hello")
+> api.get("/hello", (c) => c.text("Hello World"));
+> ```
+>
+> Now, a simple `if` statement is all it takes to differentiate between static asset and API requests:
+>
+> ```ts
+> // makes it really easy to route non-static asset requests
+> if (url.pathname.startsWith("/api/")) {
+>   return app.fetch(request);
+> }
+> ```
 
-## Configure the Worker Environment Types
+## Infer Binding Types
 
-Your server won't yet compile - first, we need to set up the types for our Worker's Environment.
-
-For that, create a `./src/env.d.ts` file and paste the following:
+Your server won't yet type check - first, we need to infer the binding types from our Worker by creating a `./src/env.d.ts` file:
 
 ```ts
 /// <reference types="./env.d.ts" />
@@ -201,11 +201,31 @@ declare module "cloudflare:workers" {
 > [!TIP]
 > See the [Bindings](../concepts/bindings.md) documentation to learn more.
 
-## Deploy the Site + API
+## Deploy Static Site and API
+
+Re-run to deploy the new worker code:
 
 ```sh
 bun ./alchemy.run
 ```
+
+Test the API route is set up correctly with `curl`:
+
+```sh
+curl https://your-site.workers.dev/api/hello
+```
+
+It should output:
+```
+Hello World
+```
+
+> [!TIP]
+> You can call this API from your frontend code with `fetch`:
+>
+> ```ts
+> await fetch(`${window.origin}/api/hello`)
+> ```
 
 ## Local Development
 
@@ -222,7 +242,7 @@ export default defineConfig({
 });
 ```
 
-Finally, run `vite dev` 
+Now you can run `vite dev`:
 ```sh
 bun vite dev
 ```
@@ -240,7 +260,7 @@ VITE v6.2.2  ready in 1114 ms
 
 ## Tear Down
 
-That's it! You can now tear down the app:
+That's it! You can now tear down the app (if you want to):
 
 ```bash
 bun ./alchemy.run --destroy
