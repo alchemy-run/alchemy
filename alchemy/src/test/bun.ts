@@ -138,26 +138,21 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
   };
 
   // Create local test scope based on filename
-  const localTestScope = new Scope({
+  const scope = new Scope({
     scopeName: `${defaultOptions.prefix ? `${defaultOptions.prefix}-` : ""}${path.basename(meta.filename)}`,
     // parent: globalTestScope,
     stateStore: defaultOptions?.stateStore,
   });
-  test.scope = localTestScope;
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {
-    return beforeAll(async () => {
-      await test.scope.run(() => fn(test.scope));
-    });
+    return beforeAll(() => scope.run(() => fn(scope)));
   };
 
   test.afterAll = (fn: (scope: Scope) => Promise<void>) => {
-    return afterAll(async () => {
-      await test.scope.run(() => fn(test.scope));
-    });
+    return afterAll(() => scope.run(() => fn(scope)));
   };
 
-  return test as any;
+  return test as test;
 
   function test(
     ...args:
@@ -200,13 +195,12 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
           testName,
           {
             ...options,
-            parent: localTestScope,
+            parent: scope,
           },
           async (scope) => {
-            // Enter test scope since bun calls from different scope
-            scope.enter();
             try {
-              await fn(scope);
+              // Enter test scope since bun calls from different scope
+              await scope.run(() => fn(scope));
             } catch (err) {
               console.error(err);
               throw err;
