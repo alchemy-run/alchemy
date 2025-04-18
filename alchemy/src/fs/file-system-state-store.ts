@@ -20,6 +20,7 @@ export class FileSystemStateStore implements StateStore {
     }
     this.initialized = true;
 
+    console.log("NODE_ENV", process.env.NODE_ENV);
     if (process.env.NODE_ENV === "test") {
       // TODO(sam): `bun test` has a bug where if this is async, then 0 tests will be run.
       fs.mkdirSync(this.dir, { recursive: true });
