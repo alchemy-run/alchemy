@@ -4,7 +4,6 @@ import { afterAll, beforeAll, it } from "bun:test";
 import path from "node:path";
 import { alchemy } from "../alchemy";
 import { R2RestStateStore } from "../cloudflare";
-import { destroy } from "../destroy";
 import type { Scope } from "../scope";
 import type { StateStoreType } from "../state";
 
@@ -27,7 +26,7 @@ alchemy.test = test;
  */
 export interface TestOptions {
   /**
-   * Whether to automatically destroy resources after test.
+   * Whether to destroy the test scope after all tests complete.
    * @default true.
    */
   destroy?: boolean;
@@ -151,8 +150,10 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     {
       // parent: globalTestScope,
       stateStore: defaultOptions?.stateStore,
+      enter: false,
     }
   );
+
   test.scope = localTestScope;
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {
@@ -169,7 +170,6 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     });
   };
 
-  // Clean up test scope after all tests complete
   afterAll(async () => {
     if (defaultOptions?.destroy !== false && !isFailed) {
       await alchemy.destroy(test.scope);
@@ -178,7 +178,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
 
   return test as any;
 
-  function test(
+  async function test(
     ...args:
       | [
           name: string,
@@ -204,7 +204,6 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
 
     // Merge options with defaults
     const options: TestOptions = {
-      destroy: true,
       quiet: false,
       password: "test-password",
       ...spread(defaultOptions),
@@ -232,7 +231,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
               throw err;
             } finally {
               if (options.destroy !== false) {
-                await destroy(scope);
+                await alchemy.destroy(scope);
               }
             }
           },

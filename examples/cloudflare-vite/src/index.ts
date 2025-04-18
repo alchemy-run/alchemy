@@ -15,6 +15,7 @@ export default {
     if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) {
       return app.fetch(request);
     }
+    // @ts-ignore
     return env.ASSETS.fetch(request);
   },
 };

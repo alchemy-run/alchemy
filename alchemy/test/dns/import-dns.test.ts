@@ -69,7 +69,7 @@ describe("ImportDnsRecords Resource", () => {
         {
           domain: testDomain,
           recordTypes: ["A", "MX"],
-        },
+        }
       );
 
       // Verify array structure
@@ -105,7 +105,7 @@ describe("ImportDnsRecords Resource", () => {
         {
           domain: testDomain,
           recordTypes: ["MX"],
-        },
+        }
       );
 
       // Verify we got some records back
@@ -153,7 +153,7 @@ describe("ImportDnsRecords Resource", () => {
 
       // Verify we get an empty result set
       expect(records.domain).toBe(
-        "this-domain-definitely-does-not-exist-12345.com",
+        "this-domain-definitely-does-not-exist-12345.com"
       );
       expect(records.importedAt).toBeTruthy();
       expect(records.records).toBeTruthy();

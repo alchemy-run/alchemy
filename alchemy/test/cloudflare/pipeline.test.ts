@@ -10,7 +10,6 @@ import { BRANCH_PREFIX } from "../util";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
-  destroy: false,
 });
 
 // Create a Cloudflare API client for verification

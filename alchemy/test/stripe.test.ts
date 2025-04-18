@@ -40,7 +40,7 @@ describe("Stripe Resources", () => {
 
       // Verify with Stripe API
       expect((await stripe.products.retrieve(product.id)).name).toBe(
-        productName,
+        productName
       );
 
       // Create a price for the product
@@ -77,7 +77,7 @@ describe("Stripe Resources", () => {
 
       // Verify with Stripe API
       expect((await stripe.webhookEndpoints.retrieve(webhook.id)).url).toBe(
-        "https://example.com/alchemy-webhook",
+        "https://example.com/alchemy-webhook"
       );
     } finally {
       await destroy(scope);

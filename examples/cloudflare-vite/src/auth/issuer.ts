@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { issuer as openauthIssuer } from "@openauthjs/openauth";
 import { GithubProvider } from "@openauthjs/openauth/provider/github";
 import { CloudflareStorage } from "@openauthjs/openauth/storage/cloudflare";

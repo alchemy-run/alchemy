@@ -99,15 +99,15 @@ describe("AWS Resources", () => {
 
         expect(func.arn).toMatch(
           new RegExp(
-            `^arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}$`,
-          ),
+            `^arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}$`
+          )
         );
         expect(func.state).toBe("Active");
         expect(func.lastUpdateStatus).toBe("Successful");
         expect(func.invokeArn).toMatch(
           new RegExp(
-            `^arn:aws:apigateway:[a-z0-9-]+:lambda:path\\/2015-03-31\\/functions\\/arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}\\/invocations$`,
-          ),
+            `^arn:aws:apigateway:[a-z0-9-]+:lambda:path\\/2015-03-31\\/functions\\/arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}\\/invocations$`
+          )
         );
 
         // Immediately apply again to test stabilization logic
@@ -120,12 +120,12 @@ describe("AWS Resources", () => {
           new InvokeCommand({
             FunctionName: functionName,
             Payload: JSON.stringify(testEvent),
-          }),
+          })
         );
 
         // Parse the response
         const responsePayload = new TextDecoder().decode(
-          invokeResponse.Payload,
+          invokeResponse.Payload
         );
         const response = JSON.parse(responsePayload);
         expect(response.statusCode).toBe(200);
@@ -142,8 +142,8 @@ describe("AWS Resources", () => {
             lambda.send(
               new GetFunctionCommand({
                 FunctionName: functionName,
-              }),
-            ),
+              })
+            )
           ).rejects.toThrow(ResourceNotFoundException);
         }
       }

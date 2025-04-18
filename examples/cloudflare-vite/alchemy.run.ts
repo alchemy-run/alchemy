@@ -1,8 +1,8 @@
 /// <reference types="node" />
 
-import alchemy from "alchemy";
-import { KVNamespace, R2Bucket, ViteSite } from "alchemy/cloudflare";
-import "alchemy/os";
+import alchemy from "../../alchemy/src";
+import { KVNamespace, R2Bucket, ViteSite } from "../../alchemy/src/cloudflare";
+import "../../alchemy/src/os";
 
 const app = await alchemy("cloudflare-vite", {
   stage: process.env.USER ?? "dev",
@@ -21,7 +21,7 @@ export const [authStore, storage] = await Promise.all([
   }),
 ]);
 
-export const website = await ViteSite("website", {
+export const website = await ViteSite("cloudflare-vite", {
   main: "./src/index.ts",
   assets: "./dist",
   command: "bun run build",

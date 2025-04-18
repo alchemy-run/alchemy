@@ -90,6 +90,7 @@ export class Scope {
   }
 
   public async deinit() {
+    await this.parent?.state.delete(this.scopeName!);
     await this.state.deinit?.();
   }
 

@@ -55,7 +55,7 @@ export const WranglerJson = Resource(
     props: WranglerJsonProps
   ): Promise<WranglerJson> {
     // Default path is wrangler.json in current directory
-    const filePath = props.path || "wrangler.json";
+    const filePath = props.path || "wrangler.jsonc";
 
     if (this.phase === "delete") {
       return this.destroy();

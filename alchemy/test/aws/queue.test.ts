@@ -33,11 +33,11 @@ describe("AWS Resources", () => {
         });
         expect(queue.url).toMatch(
           new RegExp(
-            `https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName}$`,
-          ),
+            `https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName}$`
+          )
         );
         expect(queue.arn).toMatch(
-          new RegExp(`^arn:aws:sqs:[a-z0-9-]+:\\d+:${queueName}$`),
+          new RegExp(`^arn:aws:sqs:[a-z0-9-]+:\\d+:${queueName}$`)
         );
         expect(queue.tags).toEqual({
           Environment: "test",
@@ -47,18 +47,18 @@ describe("AWS Resources", () => {
         const getQueueUrlResponse = await sqs.send(
           new GetQueueUrlCommand({
             QueueName: queueName,
-          }),
+          })
         );
 
         const getQueueAttributesResponse = await sqs.send(
           new GetQueueAttributesCommand({
             QueueUrl: getQueueUrlResponse.QueueUrl,
             AttributeNames: ["All"],
-          }),
+          })
         );
 
         expect(getQueueAttributesResponse.Attributes?.VisibilityTimeout).toBe(
-          "30",
+          "30"
         );
       } finally {
         // Always clean up, even if test assertions fail
@@ -69,8 +69,8 @@ describe("AWS Resources", () => {
           sqs.send(
             new GetQueueUrlCommand({
               QueueName: queueName,
-            }),
-          ),
+            })
+          )
         ).rejects.toThrow("The specified queue does not exist");
       }
     });
@@ -91,8 +91,8 @@ describe("AWS Resources", () => {
         });
         expect(queue.url).toMatch(
           new RegExp(
-            `https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName.replace(/\./g, "\\.")}$`,
-          ),
+            `https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName.replace(/\./g, "\\.")}$`
+          )
         );
         expect(queue.fifo).toBe(true);
         expect(queue.contentBasedDeduplication).toBe(true);
@@ -101,19 +101,19 @@ describe("AWS Resources", () => {
         const getQueueUrlResponse = await sqs.send(
           new GetQueueUrlCommand({
             QueueName: queueName,
-          }),
+          })
         );
 
         const getQueueAttributesResponse = await sqs.send(
           new GetQueueAttributesCommand({
             QueueUrl: getQueueUrlResponse.QueueUrl,
             AttributeNames: ["All"],
-          }),
+          })
         );
 
         expect(getQueueAttributesResponse.Attributes?.FifoQueue).toBe("true");
         expect(
-          getQueueAttributesResponse.Attributes?.ContentBasedDeduplication,
+          getQueueAttributesResponse.Attributes?.ContentBasedDeduplication
         ).toBe("true");
       } finally {
         // Always clean up, even if test assertions fail
@@ -132,12 +132,12 @@ describe("AWS Resources", () => {
           visibilityTimeout: 30,
         });
         expect(queue.arn).toMatch(
-          new RegExp(`^arn:aws:sqs:[a-z0-9-]+:\\d+:${queueName}$`),
+          new RegExp(`^arn:aws:sqs:[a-z0-9-]+:\\d+:${queueName}$`)
         );
         expect(queue.url).toMatch(
           new RegExp(
-            `^https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName}$`,
-          ),
+            `^https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName}$`
+          )
         );
 
         // Send a test message
@@ -145,7 +145,7 @@ describe("AWS Resources", () => {
           new SendMessageCommand({
             QueueUrl: queue.url,
             MessageBody: "Hello from test!",
-          }),
+          })
         );
         expect(messageResponse.MessageId).toBeTruthy();
 
@@ -157,8 +157,8 @@ describe("AWS Resources", () => {
           sqs.send(
             new GetQueueUrlCommand({
               QueueName: queueName,
-            }),
-          ),
+            })
+          )
         ).rejects.toThrow("The specified queue does not exist");
 
         // Immediately try to recreate the queue - this should handle the QueueDeletedRecently error
@@ -172,12 +172,12 @@ describe("AWS Resources", () => {
         });
 
         expect(recreatedQueue.arn).toMatch(
-          new RegExp(`^arn:aws:sqs:[a-z0-9-]+:\\d+:${queueName}$`),
+          new RegExp(`^arn:aws:sqs:[a-z0-9-]+:\\d+:${queueName}$`)
         );
         expect(recreatedQueue.url).toMatch(
           new RegExp(
-            `^https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName}$`,
-          ),
+            `^https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName}$`
+          )
         );
       } catch (error) {
         throw error; // Re-throw the original error

@@ -43,7 +43,7 @@ describe("SES Resource", () => {
       const getResponse = await client.send(
         new GetConfigurationSetCommand({
           ConfigurationSetName: configurationSetName,
-        }),
+        })
       );
 
       // In SESv2, check the sending options specifically
@@ -72,7 +72,7 @@ describe("SES Resource", () => {
       const getUpdatedResponse = await client.send(
         new GetConfigurationSetCommand({
           ConfigurationSetName: configurationSetName,
-        }),
+        })
       );
 
       // In SESv2, check the sending options specifically
@@ -123,7 +123,7 @@ describe("SES Resource", () => {
       const getResponse = await client.send(
         new GetEmailIdentityCommand({
           EmailIdentity: testDomain,
-        }),
+        })
       );
 
       // Check that the identity exists (it should have DkimAttributes)
@@ -146,7 +146,7 @@ async function assertSESDoesNotExist(configurationSetName: string) {
     await client.send(
       new GetConfigurationSetCommand({
         ConfigurationSetName: configurationSetName,
-      }),
+      })
     );
     // Should not reach here
     expect(true).toBe(false);

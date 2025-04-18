@@ -107,8 +107,12 @@ export async function apply<Out extends Resource>(
       },
     });
 
-    const output = await alchemy.run(resource.ID, async () =>
-      provider.handler.bind(ctx)(resource.ID, props)
+    const output = await alchemy.run(
+      resource.ID,
+      {
+        isResource: true,
+      },
+      async () => provider.handler.bind(ctx)(resource.ID, props)
     );
     if (!quiet) {
       console.log(

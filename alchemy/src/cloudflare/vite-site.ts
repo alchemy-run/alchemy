@@ -102,7 +102,7 @@ export default {
       },
     });
 
-    await WranglerJson("wrangler.json", {
+    await WranglerJson("wrangler.jsonc", {
       worker,
     });
 
