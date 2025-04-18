@@ -342,7 +342,10 @@ async function run<T>(
           RunOptions,
           (this: Scope, scope: Scope) => Promise<T>,
         ]);
-  const scope = alchemy.scope(id, options);
+  const scope = alchemy.scope(id, {
+    ...options,
+    enter: false,
+  });
   try {
     if (options?.isResource !== true && scope.parent) {
       // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
@@ -370,7 +373,8 @@ async function run<T>(
         Object.assign(Promise.resolve(resource), output) as PendingResource
       );
     }
-    return await fn.bind(scope)(scope);
+
+    return await scope.run(() => fn.bind(scope)(scope));
   } catch (error) {
     if (!(error instanceof DestroyedSignal)) {
       console.log(error);
