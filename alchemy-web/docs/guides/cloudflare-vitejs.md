@@ -49,7 +49,7 @@ CLOUDFLARE_EMAIL=<account-email>
 
 Create a standard `alchemy.run.ts` file in your project root:
 
-```ts twoslash
+```ts
 import alchemy from "alchemy";
 
 const app = await alchemy("cloudflare-vite", {
@@ -70,7 +70,7 @@ await app.finalize(); // must be at end
 
 Import the `ViteSite` and configure your build command and assets directory:
 
-```ts twoslash
+```ts
 import { ViteSite } from "alchemy/cloudflare";
 
 export const website = await ViteSite("website", {
