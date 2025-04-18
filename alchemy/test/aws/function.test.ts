@@ -23,6 +23,65 @@ const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
 const lambda = new LambdaClient({});
 
+// Common role and policy setup for tests
+const setupRole = async (roleName: string) => {
+  const assumeRolePolicy: PolicyDocument = {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: {
+          Service: "lambda.amazonaws.com",
+        },
+        Action: "sts:AssumeRole",
+      },
+    ],
+  };
+
+  const logsPolicy: PolicyDocument = {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Action: [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+        ],
+        Resource: "*",
+      },
+    ],
+  };
+
+  return await Role(roleName, {
+    roleName,
+    assumeRolePolicy,
+    description: "Test role for Lambda function",
+    policies: [
+      {
+        policyName: "logs",
+        policyDocument: logsPolicy,
+      },
+    ],
+    tags: {
+      Environment: "test",
+    },
+  });
+};
+
+// Helper function to invoke a Lambda function directly
+const invokeLambda = async (functionName: string, event: any) => {
+  const invokeResponse = await lambda.send(
+    new InvokeCommand({
+      FunctionName: functionName,
+      Payload: JSON.stringify(event),
+    })
+  );
+
+  const responsePayload = new TextDecoder().decode(invokeResponse.Payload);
+  return JSON.parse(responsePayload);
+};
+
 describe("AWS Resources", () => {
   describe("Function", () => {
     test("create function with bundled code", async (scope) => {
@@ -287,6 +346,219 @@ describe("AWS Resources", () => {
             )
           ).rejects.toThrow(ResourceNotFoundException);
         }
+      }
+    });
+
+    test("create function with URL then remove URL in update phase", async (scope) => {
+      // Define resources that need to be cleaned up
+      let role: Role | undefined = undefined;
+      let bundle: Bundle | undefined = undefined;
+      let func: Function | null = null;
+      const functionName = `${BRANCH_PREFIX}-alchemy-test-func-url-remove`;
+      const roleName = `${BRANCH_PREFIX}-alchemy-test-lambda-url-rem-role`;
+
+      try {
+        bundle = await Bundle(
+          `${BRANCH_PREFIX}-test-lambda-url-remove-bundle`,
+          {
+            entryPoint: path.join(__dirname, "..", "handler.ts"),
+            outdir: ".out",
+            format: "cjs",
+            platform: "node",
+            target: "node18",
+          }
+        );
+
+        role = await setupRole(roleName);
+
+        // Create the Lambda function with URL config
+        func = await Function(functionName, {
+          functionName,
+          zipPath: bundle.path,
+          roleArn: role.arn,
+          handler: "handler.handler",
+          runtime: "nodejs20.x",
+          tags: {
+            Environment: "test",
+          },
+          url: {
+            authType: "NONE",
+            cors: {
+              allowOrigins: ["*"],
+              allowMethods: ["GET", "POST"],
+              allowHeaders: ["Content-Type"],
+            },
+          },
+        });
+
+        // Verify function was created with URL
+        expect(func.arn).toBeTruthy();
+        expect(func.state).toBe("Active");
+        expect(func.functionUrl).toBeTruthy();
+
+        // Test function URL invocation
+        const testEvent = { test: "url-event" };
+        const urlResponse = await fetch(func.functionUrl!, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(testEvent),
+        });
+
+        expect(urlResponse.status).toBe(200);
+
+        const urlResponseBody = await urlResponse.json();
+        expect(urlResponseBody.message).toBe("Hello from bundled handler!");
+        expect(urlResponseBody.event).toEqual(testEvent);
+
+        // Also invoke directly
+        const directResponse = await invokeLambda(functionName, {
+          direct: "invoke",
+        });
+        expect(directResponse.statusCode).toBe(200);
+        const directBody = JSON.parse(directResponse.body);
+        expect(directBody.message).toBe("Hello from bundled handler!");
+        expect(directBody.event).toEqual({ direct: "invoke" });
+
+        // Now update the function to remove the URL
+        func = await Function(functionName, {
+          functionName,
+          zipPath: bundle.path,
+          roleArn: role.arn,
+          handler: "handler.handler",
+          runtime: "nodejs20.x",
+          tags: {
+            Environment: "test",
+          },
+          // No URL config to remove it
+        });
+
+        // Verify URL was removed
+        expect(func.functionUrl).toBeUndefined();
+
+        // Try to invoke URL (should fail)
+        let urlFailed = false;
+        try {
+          await fetch(func.functionUrl || "https://invalid-url", {
+            method: "POST",
+          });
+        } catch (error) {
+          urlFailed = true;
+        }
+        expect(urlFailed).toBe(true);
+
+        // Direct invocation should still work
+        const directResponse2 = await invokeLambda(functionName, {
+          after: "update",
+        });
+        expect(directResponse2.statusCode).toBe(200);
+        const directBody2 = JSON.parse(directResponse2.body);
+        expect(directBody2.message).toBe("Hello from bundled handler!");
+        expect(directBody2.event).toEqual({ after: "update" });
+      } finally {
+        await destroy(scope);
+      }
+    });
+
+    test("create function without URL then add URL in update phase", async (scope) => {
+      // Define resources that need to be cleaned up
+      let role: Role | undefined = undefined;
+      let bundle: Bundle | undefined = undefined;
+      let func: Function | null = null;
+      const functionName = `${BRANCH_PREFIX}-alchemy-test-func-add-url`;
+      const roleName = `${BRANCH_PREFIX}-alchemy-test-lambda-add-url-role`;
+
+      try {
+        bundle = await Bundle(`${BRANCH_PREFIX}-test-lambda-add-url-bundle`, {
+          entryPoint: path.join(__dirname, "..", "handler.ts"),
+          outdir: ".out",
+          format: "cjs",
+          platform: "node",
+          target: "node18",
+        });
+
+        role = await setupRole(roleName);
+
+        // Create the Lambda function without URL config
+        func = await Function(functionName, {
+          functionName,
+          zipPath: bundle.path,
+          roleArn: role.arn,
+          handler: "handler.handler",
+          runtime: "nodejs20.x",
+          tags: {
+            Environment: "test",
+          },
+          // No URL config initially
+        });
+
+        // Verify function was created without URL
+        expect(func.arn).toBeTruthy();
+        expect(func.state).toBe("Active");
+        expect(func.functionUrl).toBeUndefined();
+
+        // Invoke directly
+        const directResponse = await invokeLambda(functionName, {
+          initial: "invoke",
+        });
+        expect(directResponse.statusCode).toBe(200);
+        const directBody = JSON.parse(directResponse.body);
+        expect(directBody.message).toBe("Hello from bundled handler!");
+        expect(directBody.event).toEqual({ initial: "invoke" });
+
+        // Now update the function to add the URL
+        func = await Function(functionName, {
+          functionName,
+          zipPath: bundle.path,
+          roleArn: role.arn,
+          handler: "handler.handler",
+          runtime: "nodejs20.x",
+          tags: {
+            Environment: "test",
+          },
+          url: {
+            authType: "NONE",
+            cors: {
+              allowOrigins: ["*"],
+              allowMethods: ["GET", "POST"],
+              allowHeaders: ["Content-Type"],
+            },
+          },
+        });
+
+        // Verify URL was added
+        expect(func.functionUrl).toBeTruthy();
+        expect(func.functionUrl).toMatch(
+          /^https:\/\/.+\.lambda-url\..+\.on\.aws\/?$/
+        );
+
+        // Test function URL invocation
+        const testEvent = { test: "added-url-event" };
+        const urlResponse = await fetch(func.functionUrl!, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(testEvent),
+        });
+
+        expect(urlResponse.status).toBe(200);
+
+        const urlResponseBody = await urlResponse.json();
+        expect(urlResponseBody.message).toBe("Hello from bundled handler!");
+        expect(urlResponseBody.event).toEqual(testEvent);
+
+        // Direct invocation should still work
+        const directResponse2 = await invokeLambda(functionName, {
+          after: "url-added",
+        });
+        expect(directResponse2.statusCode).toBe(200);
+        const directBody2 = JSON.parse(directResponse2.body);
+        expect(directBody2.message).toBe("Hello from bundled handler!");
+        expect(directBody2.event).toEqual({ after: "url-added" });
+      } finally {
+        await destroy(scope);
       }
     });
   });
