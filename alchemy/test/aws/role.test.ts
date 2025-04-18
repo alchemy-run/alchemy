@@ -221,7 +221,7 @@ describe("AWS Resources", () => {
         await new Promise((resolve) => setTimeout(resolve, 2000));
         await assertRoleNotExists(roleName);
       }
-    }, 15000); // Set timeout to 15 seconds
+    });
 
     test("remove managed policies when not specified in update", async (scope) => {
       const managedPolicyArn = "arn:aws:iam::aws:policy/ReadOnlyAccess";

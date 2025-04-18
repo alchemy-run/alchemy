@@ -48,11 +48,16 @@ export async function handleApiError(
   resourceType: string,
   resourceName: string
 ): Promise<never> {
-  const json: any = await response.json();
+  const text = await response.text();
+  let json: any;
+  try {
+    json = JSON.parse(text);
+  } catch (error) {
+    json = { errors: [{ message: text }] };
+  }
   const errors: { message: string }[] = json?.errors || [
     { message: response.statusText },
   ];
   const errorMessage = `Error ${action} ${resourceType} '${resourceName}': ${errors[0]?.message || response.statusText}`;
-
   throw new CloudflareApiError(errorMessage, response, errors);
 }
