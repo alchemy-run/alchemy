@@ -1,14 +1,8 @@
 /// <reference types="node" />
 
 import alchemy from "alchemy";
-import {
-  Assets,
-  KVNamespace,
-  R2Bucket,
-  Worker,
-  WranglerJson,
-} from "alchemy/cloudflare";
-import { Exec } from "alchemy/os";
+import { KVNamespace, R2Bucket, ViteSite } from "alchemy/cloudflare";
+import "alchemy/os";
 
 const app = await alchemy("cloudflare-vite", {
   stage: process.env.USER ?? "dev",
@@ -27,36 +21,16 @@ export const [authStore, storage] = await Promise.all([
   }),
 ]);
 
-// export const counter = new DurableObjectNamespace("COUNTER", {
-//   className: "Counter",
-//   sqlite: true,
-// });
-
-await Exec("build", {
+export const website = await ViteSite("website", {
+  main: "./src/index.ts",
+  assets: "./dist",
   command: "bun run build",
-});
-
-const staticAssets = await Assets("static-assets", {
-  path: "./dist",
-});
-
-export const website = await Worker("worker", {
-  name: "alchemy-example-vite-api",
-  entrypoint: "./src/index.ts",
-  url: true,
-  adopt: true,
   bindings: {
-    ASSETS: staticAssets,
-    // COUNTER: counter,
     STORAGE: storage,
     AUTH_STORE: authStore,
     GITHUB_CLIENT_ID: alchemy.secret(process.env.GITHUB_CLIENT_ID),
     GITHUB_CLIENT_SECRET: alchemy.secret(process.env.GITHUB_CLIENT_SECRET),
   },
-});
-
-await WranglerJson("wrangler.json", {
-  worker: website,
 });
 
 console.log({

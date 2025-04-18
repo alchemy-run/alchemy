@@ -49,7 +49,7 @@ export class Scope {
     if (this.parent && !this.scopeName) {
       throw new Error("Scope name is required when creating a child scope");
     }
-    this.password = options.password;
+    this.password = options.password ?? this.parent?.password;
     this.state = options.stateStore
       ? options.stateStore(this)
       : new FileSystemStateStore(this);
@@ -111,10 +111,10 @@ export class Scope {
       const resourceIds = await this.state.list();
       const aliveIds = new Set(this.resources.keys());
       const orphanIds = Array.from(
-        resourceIds.filter((id) => !aliveIds.has(id)),
+        resourceIds.filter((id) => !aliveIds.has(id))
       );
       const orphans = await Promise.all(
-        orphanIds.map(async (id) => (await this.state.get(id))!.output),
+        orphanIds.map(async (id) => (await this.state.get(id))!.output)
       );
       await destroy.all(orphans, {
         quiet: this.quiet,
