@@ -338,6 +338,10 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
     spec.services = services;
   }
 
+  if (d1Databases.length > 0) {
+    spec.d1_databases = d1Databases;
+  }
+
   if (queues.length > 0) {
     spec.queues = queues;
   }
