@@ -23,50 +23,33 @@ const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
 const lambda = new LambdaClient({});
 
-// Common role and policy setup for tests
-const setupRole = async (roleName: string) => {
-  const assumeRolePolicy: PolicyDocument = {
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Effect: "Allow",
-        Principal: {
-          Service: "lambda.amazonaws.com",
-        },
-        Action: "sts:AssumeRole",
+// Common policy definitions
+const LAMBDA_ASSUME_ROLE_POLICY: PolicyDocument = {
+  Version: "2012-10-17",
+  Statement: [
+    {
+      Effect: "Allow",
+      Principal: {
+        Service: "lambda.amazonaws.com",
       },
-    ],
-  };
-
-  const logsPolicy: PolicyDocument = {
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Effect: "Allow",
-        Action: [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-        ],
-        Resource: "*",
-      },
-    ],
-  };
-
-  return await Role(roleName, {
-    roleName,
-    assumeRolePolicy,
-    description: "Test role for Lambda function",
-    policies: [
-      {
-        policyName: "logs",
-        policyDocument: logsPolicy,
-      },
-    ],
-    tags: {
-      Environment: "test",
+      Action: "sts:AssumeRole",
     },
-  });
+  ],
+};
+
+const LAMBDA_LOGS_POLICY: PolicyDocument = {
+  Version: "2012-10-17",
+  Statement: [
+    {
+      Effect: "Allow",
+      Action: [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+      ],
+      Resource: "*",
+    },
+  ],
 };
 
 // Helper function to invoke a Lambda function directly
@@ -86,33 +69,6 @@ describe("AWS Resources", () => {
   describe("Function", () => {
     test("create function with bundled code", async (scope) => {
       // First create the execution role
-      const assumeRolePolicy: PolicyDocument = {
-        Version: "2012-10-17",
-        Statement: [
-          {
-            Effect: "Allow",
-            Principal: {
-              Service: "lambda.amazonaws.com",
-            },
-            Action: "sts:AssumeRole",
-          },
-        ],
-      };
-
-      const logsPolicy: PolicyDocument = {
-        Version: "2012-10-17",
-        Statement: [
-          {
-            Effect: "Allow",
-            Action: [
-              "logs:CreateLogGroup",
-              "logs:CreateLogStream",
-              "logs:PutLogEvents",
-            ],
-            Resource: "*",
-          },
-        ],
-      };
       // Define resources that need to be cleaned up
       let role: Role | undefined = undefined;
       let bundle: Bundle | undefined = undefined;
@@ -131,12 +87,12 @@ describe("AWS Resources", () => {
 
         role = await Role(roleName, {
           roleName,
-          assumeRolePolicy,
+          assumeRolePolicy: LAMBDA_ASSUME_ROLE_POLICY,
           description: "Test role for Lambda function",
           policies: [
             {
               policyName: "logs",
-              policyDocument: logsPolicy,
+              policyDocument: LAMBDA_LOGS_POLICY,
             },
           ],
           tags: {
@@ -210,34 +166,6 @@ describe("AWS Resources", () => {
 
     test("create function with URL configuration", async (scope) => {
       // Create execution role
-      const assumeRolePolicy: PolicyDocument = {
-        Version: "2012-10-17",
-        Statement: [
-          {
-            Effect: "Allow",
-            Principal: {
-              Service: "lambda.amazonaws.com",
-            },
-            Action: "sts:AssumeRole",
-          },
-        ],
-      };
-
-      const logsPolicy: PolicyDocument = {
-        Version: "2012-10-17",
-        Statement: [
-          {
-            Effect: "Allow",
-            Action: [
-              "logs:CreateLogGroup",
-              "logs:CreateLogStream",
-              "logs:PutLogEvents",
-            ],
-            Resource: "*",
-          },
-        ],
-      };
-
       // Define resources that need to be cleaned up
       let role: Role | undefined = undefined;
       let bundle: Bundle | undefined = undefined;
@@ -256,12 +184,12 @@ describe("AWS Resources", () => {
 
         role = await Role(roleName, {
           roleName,
-          assumeRolePolicy,
+          assumeRolePolicy: LAMBDA_ASSUME_ROLE_POLICY,
           description: "Test role for Lambda function with URL",
           policies: [
             {
               policyName: "logs",
-              policyDocument: logsPolicy,
+              policyDocument: LAMBDA_LOGS_POLICY,
             },
           ],
           tags: {
@@ -369,7 +297,20 @@ describe("AWS Resources", () => {
           }
         );
 
-        role = await setupRole(roleName);
+        role = await Role(roleName, {
+          roleName,
+          assumeRolePolicy: LAMBDA_ASSUME_ROLE_POLICY,
+          description: "Test role for Lambda function",
+          policies: [
+            {
+              policyName: "logs",
+              policyDocument: LAMBDA_LOGS_POLICY,
+            },
+          ],
+          tags: {
+            Environment: "test",
+          },
+        });
 
         // Create the Lambda function with URL config
         func = await Function(functionName, {
@@ -478,7 +419,20 @@ describe("AWS Resources", () => {
           target: "node18",
         });
 
-        role = await setupRole(roleName);
+        role = await Role(roleName, {
+          roleName,
+          assumeRolePolicy: LAMBDA_ASSUME_ROLE_POLICY,
+          description: "Test role for Lambda function",
+          policies: [
+            {
+              policyName: "logs",
+              policyDocument: LAMBDA_LOGS_POLICY,
+            },
+          ],
+          tags: {
+            Environment: "test",
+          },
+        });
 
         // Create the Lambda function without URL config
         func = await Function(functionName, {
