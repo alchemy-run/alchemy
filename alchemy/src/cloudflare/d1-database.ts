@@ -6,6 +6,7 @@ import {
   type CloudflareApiOptions,
 } from "./api";
 import { CloudflareApiError, handleApiError } from "./api-error";
+import { applyMigrations } from "./d1-migrations";
 
 /**
  * Properties for creating or updating a D1 Database
@@ -57,6 +58,18 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
    * @default false
    */
   adopt?: boolean;
+
+  /**
+   * Name of the table used to track migrations. Only used if migrationsDir is specified.
+   * This is analogous to wrangler's `migrations_table`.
+   */
+  migrationsTable?: string;
+
+  /**
+   * Directory containing migration SQL files. If not set, no migrations will be applied.
+   * This is analogous to wrangler's `migrations_dir`.
+   */
+  migrationsDir?: string;
 }
 
 /**
@@ -201,6 +214,27 @@ export const D1Database = Resource(
             databaseName
           );
           dbData = await createDatabase(api, databaseName, props);
+        }
+      }
+
+      // Run migrations if migrationsDir is set
+      if (props.migrationsDir) {
+        try {
+          const migrationsTable = props.migrationsTable || "d1_migrations";
+          const databaseId = dbData.result.uuid || this.output?.id;
+
+          if (!databaseId) throw new Error("Database ID not found for migrations");
+          
+          await applyMigrations({
+            migrationsDir: props.migrationsDir,
+            migrationsTable,
+            accountId: api.accountId,
+            databaseId,
+            api,
+          });
+        } catch (migrationErr) {
+          console.error("Failed to apply D1 migrations:", migrationErr);
+          throw migrationErr;
         }
       }
 
