@@ -116,7 +116,7 @@ export const Bundle = Resource(
   async function (
     this: Context<Bundle>,
     id: string,
-    props: BundleProps,
+    props: BundleProps
   ): Promise<Bundle> {
     // Determine output path
     const outputPath = getOutputPath(props);
@@ -145,13 +145,13 @@ export const Bundle = Resource(
       path: outputPath,
       hash,
     });
-  },
+  }
 );
 
 export async function bundle(props: BundleProps) {
   const outputPath = getOutputPath(props);
-  // Build the bundle
   return await esbuild.build({
+    ...props.options,
     entryPoints: [props.entryPoint],
     outfile: outputPath,
     bundle: true,
@@ -159,11 +159,14 @@ export async function bundle(props: BundleProps) {
     target: props.target,
     minify: props.minify,
     sourcemap: props.sourcemap,
-    external: props.external,
+    external: [
+      "node:async_hooks",
+      ...(props.external ?? []),
+      ...(props.options?.external ?? []),
+    ],
     platform: props.platform,
     metafile: true,
     write: true,
-    ...props.options,
   });
 }
 
@@ -172,7 +175,7 @@ function getOutputPath(props: BundleProps) {
     props.outfile ||
     path.join(
       props.outdir || "dist",
-      path.basename(props.entryPoint, path.extname(props.entryPoint)) + ".js",
+      path.basename(props.entryPoint, path.extname(props.entryPoint)) + ".js"
     )
   );
 }

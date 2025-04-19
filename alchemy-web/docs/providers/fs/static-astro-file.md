@@ -1,6 +1,6 @@
-# Static Astro File
+# StaticAstroFile
 
-The Static Astro File resource lets you create [Astro component files](https://docs.astro.build/en/core-concepts/astro-components/) in your project.
+The StaticAstroFile resource creates [Astro component files](https://docs.astro.build/en/core-concepts/astro-components/) with proper formatting and directory structure.
 
 # Minimal Example
 
@@ -20,34 +20,58 @@ const title = "My Site";
 `);
 ```
 
-# Create with Path and Content
+# Component with Props and Styles
+
+Creates an Astro component with props, imports and scoped styles.
 
 ```ts
 import { StaticAstroFile } from "alchemy/fs";
 
-const header = await StaticAstroFile("components/Header.astro", 
+const header = await StaticAstroFile("Header.astro", `
+---
+import Logo from '../components/Logo.astro';
+
+interface Props {
+  navItems: string[];
+}
+
+const { navItems } = Astro.props;
+---
+
+<header class="header">
+  <Logo />
+  <nav>
+    <ul>
+      {navItems.map(item => (
+        <li><a href={\`/\${item.toLowerCase()}\`}>{item}</a></li>
+      ))}
+    </ul>
+  </nav>
+</header>
+
+<style>
+  .header {
+    display: flex;
+    justify-content: space-between;
+    padding: 1rem;
+  }
+</style>
+`);
+```
+
+# Custom Path
+
+Creates an Astro component at a specific path.
+
+```ts
+import { StaticAstroFile } from "alchemy/fs";
+
+const page = await StaticAstroFile("index", 
+  "src/pages/index.astro",
   `---
-  import Logo from '../components/Logo.astro';
-  const navItems = ['Home', 'About', 'Contact'];
-  ---
+const greeting = "Hello World";
+---
 
-  <header class="header">
-    <Logo />
-    <nav>
-      <ul>
-        {navItems.map(item => (
-          <li><a href={`/${item.toLowerCase()}`}>{item}</a></li>
-        ))}
-      </ul>
-    </nav>
-  </header>
-
-  <style>
-    .header {
-      display: flex;
-      justify-content: space-between;
-      padding: 1rem;
-    }
-  </style>`
-);
+<h1>{greeting}</h1>
+`);
 ```

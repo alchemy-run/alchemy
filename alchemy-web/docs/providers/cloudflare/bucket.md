@@ -1,56 +1,62 @@
-# R2 Bucket
+# R2Bucket
 
-The R2 Bucket resource lets you create and manage [Cloudflare R2 object storage buckets](https://developers.cloudflare.com/r2/buckets/) for storing and serving files.
+Creates and manages [Cloudflare R2 Buckets](https://developers.cloudflare.com/r2/buckets/) for S3-compatible object storage.
 
-## Minimal Example
+# Minimal Example
 
-Create a basic R2 bucket for storing application data.
+Create a basic R2 bucket with default settings:
 
 ```ts
 import { R2Bucket } from "alchemy/cloudflare";
 
 const bucket = await R2Bucket("my-bucket", {
-  name: "my-app-data"
+  name: "my-bucket"
 });
 ```
 
-## Create a Bucket with Location Hint
+# With Location Hint and Jurisdiction
+
+Create a bucket with location hint and jurisdiction for data residency:
 
 ```ts
 import { R2Bucket } from "alchemy/cloudflare";
 
-const bucket = await R2Bucket("eu-bucket", {
-  name: "eu-user-data",
+const euBucket = await R2Bucket("eu-bucket", {
+  name: "eu-bucket",
   locationHint: "eu",
   jurisdiction: "eu"
 });
 ```
 
-## Create a Development Bucket with Public Access
+# With Public Access
+
+Create a development bucket with public access enabled:
 
 ```ts
 import { R2Bucket } from "alchemy/cloudflare";
 
-const bucket = await R2Bucket("public-bucket", {
-  name: "public-assets",
+const publicBucket = await R2Bucket("public-bucket", {
+  name: "public-bucket", 
   allowPublicAccess: true
 });
 ```
 
-## Bind to a Worker
+# Bind to a Worker
+
+Bind an R2 bucket to a Cloudflare Worker:
 
 ```ts
 import { Worker, R2Bucket } from "alchemy/cloudflare";
 
-const storage = await R2Bucket("storage", {
-  name: "user-uploads"
+const bucket = await R2Bucket("storage", {
+  name: "my-storage"
 });
 
-await Worker("storage-worker", {
-  name: "storage-worker",
-  script: "console.log('Hello from storage worker!')",
+await Worker("api", {
+  name: "api-worker",
+  script: "export default { fetch() {} }",
   bindings: {
-    STORAGE: storage
+    STORAGE: bucket
   }
 });
 ```

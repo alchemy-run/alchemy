@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 # Ensure only one workflow runs at a time
@@ -21,34 +21,38 @@ jobs:
       actions: write
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
-          
+
       - name: Install dependencies
         run: bun install
 
       - name: Check Types
         run: bun run check
-      
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-west-2
-          
+
       - name: Run tests
         run: bun test --timeout 120000
+        # run: ./scripts/test.sh
         env:
           CI: true
           ALCHEMY_STATE_STORE: cloudflare
-          CLOUDFLARE_BUCKET_NAME: ${{ secrets.CLOUDFLARE_BUCKET_NAME }}
-          BRANCH_PREFIX: pr-${{ github.ref_name }}
           AWS_REGION: us-west-2
+          BRANCH_PREFIX: pr-${{ github.ref_name }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_BUCKET_NAME: ${{ secrets.CLOUDFLARE_BUCKET_NAME }}
           CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           GITHUB_ACCESS_TOKEN: ${{ secrets.ADMIN_GITHUB_ACCESS_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}

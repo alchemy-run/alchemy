@@ -1,10 +1,10 @@
-# File Resource
+# File
 
-The File Resource lets you create and manage files in the filesystem with automatic directory creation and cleanup.
+The File resource creates and manages files in the filesystem with automatic directory creation and cleanup.
 
 ## Minimal Example
 
-Creates a simple text file with content.
+Creates a simple text file:
 
 ```ts
 import { File } from "alchemy/fs";
@@ -17,9 +17,9 @@ const config = await File("config.txt", {
 
 ## Create File in Nested Directory
 
-```ts
-import { File } from "alchemy/fs";
+Automatically creates parent directories as needed:
 
+```ts
 const log = await File("logs/app.log", {
   path: "logs/app.log",
   content: "application log entry"
@@ -28,39 +28,51 @@ const log = await File("logs/app.log", {
 
 ## Update File Path and Content
 
-```ts
-import { File } from "alchemy/fs";
+Updates file content and moves it to a new location:
 
+```ts
 let file = await File("config.json", {
   path: "config.json",
   content: '{ "version": "1.0.0" }'
 });
 
-// Later update path and content (old file will be removed)
+// Later, update path and content (old file will be removed)
 file = await File("config.json", {
   path: "config/config.json", 
   content: '{ "version": "1.0.1" }'
 });
 ```
 
-## Static File Types
+## Specialized File Types
 
-The File Resource includes specialized static file types for common formats:
+The fs service provides specialized file types for common formats:
 
 ```ts
-import { 
-  StaticAstroFile,
-  StaticCSSFile,
-  StaticHTMLFile,
-  StaticJsonFile,
-  StaticTextFile,
-  StaticTypeScriptFile,
-  StaticVueFile,
-  StaticYamlFile
-} from "alchemy/fs";
+import { StaticJsonFile, StaticTypeScriptFile, StaticYamlFile } from "alchemy/fs";
 
-// Create typed files with proper formatting
-const styles = await StaticCSSFile("styles.css", ".container { max-width: 1200px; }");
-const config = await StaticJsonFile("config.json", { version: "1.0.0" });
-const component = await StaticVueFile("Button.vue", "<template><button>{{ text }}</button></template>");
+// Create formatted JSON file
+const config = await StaticJsonFile("config.json", {
+  api: {
+    endpoint: "https://api.example.com",
+    version: "v1"
+  }
+});
+
+// Create formatted TypeScript file
+const component = await StaticTypeScriptFile("Component.ts", `
+  interface Props {
+    name: string;
+  }
+  export function Component({ name }: Props) {
+    return <div>Hello {name}</div>;
+  }
+`);
+
+// Create YAML file
+const deployment = await StaticYamlFile("deploy.yaml", {
+  service: {
+    name: "api",
+    replicas: 3
+  }
+});
 ```

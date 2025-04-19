@@ -143,7 +143,7 @@ export const Table = Resource(
   async function (
     this: Context<Table>,
     id: string,
-    props: TableProps,
+    props: TableProps
   ): Promise<Table> {
     const client = new DynamoDBClient({});
 
@@ -154,15 +154,13 @@ export const Table = Resource(
             client.send(
               new DeleteTableCommand({
                 TableName: props.tableName,
-              }),
-            ),
+              })
+            )
           );
         },
-        (error) =>
-          error instanceof ResourceInUseException ||
-          error instanceof InternalServerError,
+        isRetryableError,
         10, // Max attempts
-        200, // Initial delay in ms
+        200 // Initial delay in ms
       );
 
       // Wait for table to be deleted
@@ -175,7 +173,7 @@ export const Table = Resource(
           await client.send(
             new DescribeTableCommand({
               TableName: props.tableName,
-            }),
+            })
           );
           // If we get here, table still exists
           retryCount++;
@@ -193,7 +191,7 @@ export const Table = Resource(
 
       if (!tableDeleted) {
         throw new Error(
-          `Timed out waiting for table ${props.tableName} to be deleted`,
+          `Timed out waiting for table ${props.tableName} to be deleted`
         );
       }
 
@@ -233,7 +231,7 @@ export const Table = Resource(
             const describeResponse = await client.send(
               new DescribeTableCommand({
                 TableName: props.tableName,
-              }),
+              })
             );
 
             // If table exists and is ACTIVE, no need to create it
@@ -267,16 +265,16 @@ export const Table = Resource(
                         Value,
                       }))
                     : undefined,
-                }),
+                })
               );
             } else {
               throw error;
             }
           }
         },
-        (error) => error instanceof ResourceInUseException,
+        isRetryableError,
         10, // Max attempts
-        200, // Initial delay in ms
+        200 // Initial delay in ms
       );
 
       // Wait for table to be active with timeout
@@ -290,7 +288,7 @@ export const Table = Resource(
           const response = await client.send(
             new DescribeTableCommand({
               TableName: props.tableName,
-            }),
+            })
           );
 
           tableActive = response.Table?.TableStatus === "ACTIVE";
@@ -313,7 +311,7 @@ export const Table = Resource(
 
       if (!tableActive) {
         throw new Error(
-          `Timed out waiting for table ${props.tableName} to become active`,
+          `Timed out waiting for table ${props.tableName} to become active`
         );
       }
 
@@ -324,5 +322,25 @@ export const Table = Resource(
         tableId: tableDescription!.TableId!,
       });
     }
-  },
+  }
 );
+
+const retryableErrors = [
+  "ResourceInUseException",
+  "ResourceNotFoundException",
+  "InternalServerError",
+  "ThrottlingException",
+  "ProvisionedThroughputExceededException",
+  "LimitExceededException",
+  "RequestLimitExceeded",
+];
+
+function isRetryableError(error: any) {
+  return (
+    error instanceof ResourceInUseException ||
+    error instanceof InternalServerError ||
+    retryableErrors.includes(error?.name) ||
+    retryableErrors.includes(error?.code) ||
+    error?.$metadata?.httpStatusCode === 500
+  );
+}

@@ -1,10 +1,10 @@
-# Policy Attachment
+# PolicyAttachment
 
-The Policy Attachment resource lets you attach [AWS IAM policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) to IAM roles.
+The PolicyAttachment resource lets you attach [AWS IAM policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) to IAM roles.
 
-# Minimal Example
+## Minimal Example
 
-Attach an AWS managed policy to a role.
+Attach an AWS managed policy to a role:
 
 ```ts
 import { PolicyAttachment } from "alchemy/aws";
@@ -15,12 +15,38 @@ const adminAccess = await PolicyAttachment("admin-policy", {
 });
 ```
 
-# Create the Policy Attachment
+## Attach Custom Policy
+
+Attach a custom policy created with the Policy resource:
+
+```ts
+import { PolicyAttachment, Policy } from "alchemy/aws";
+
+const customPolicy = await Policy("custom-policy", {
+  policyName: "custom-policy",
+  document: {
+    Version: "2012-10-17",
+    Statement: [{
+      Effect: "Allow",
+      Action: ["s3:ListBucket"],
+      Resource: "*"
+    }]
+  }
+});
+
+const attachment = await PolicyAttachment("custom-policy", {
+  policyArn: customPolicy.arn,
+  roleName: role.name
+});
+```
+
+## Multiple Policy Attachments
+
+Attach multiple policies to a role:
 
 ```ts
 import { PolicyAttachment } from "alchemy/aws";
 
-// Attach multiple policies to a role
 const s3Access = await PolicyAttachment("s3-access", {
   policyArn: "arn:aws:iam::aws:policy/AmazonS3FullAccess",
   roleName: role.name

@@ -1,18 +1,17 @@
 import type { Context } from "../context";
 import { Resource } from "../resource";
 import { withExponentialBackoff } from "../util/retry";
-import { createCloudflareApi } from "./api";
-
-export function isKVNamespace(resource: any): resource is KVNamespace {
-  return (
-    resource && typeof resource === "object" && resource.type === "kv_namespace"
-  );
-}
+import {
+  CloudflareApi,
+  createCloudflareApi,
+  type CloudflareApiOptions,
+} from "./api";
+import { handleApiError } from "./api-error";
 
 /**
  * Properties for creating or updating a KV Namespace
  */
-export interface KVNamespaceProps {
+export interface KVNamespaceProps extends CloudflareApiOptions {
   /**
    * Title of the namespace
    */
@@ -119,28 +118,16 @@ export const KVNamespace = Resource(
   async function (
     this: Context<KVNamespace>,
     id: string,
-    props: KVNamespaceProps,
+    props: KVNamespaceProps
   ) {
     // Create Cloudflare API client with automatic account discovery
-    const api = await createCloudflareApi();
+    const api = await createCloudflareApi(props);
 
     if (this.phase === "delete") {
       // For delete operations, we need to check if the namespace ID exists in the output
       const namespaceId = this.output?.namespaceId;
       if (namespaceId) {
-        // Delete KV namespace
-        const deleteResponse = await api.delete(
-          `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}`,
-        );
-
-        if (!deleteResponse.ok && deleteResponse.status !== 404) {
-          const errorData: any = await deleteResponse.json().catch(() => ({
-            errors: [{ message: deleteResponse.statusText }],
-          }));
-          throw new Error(
-            `Error deleting KV namespace '${props.title}': ${errorData.errors?.[0]?.message || deleteResponse.statusText}`,
-          );
-        }
+        await deleteKVNamespace(api, namespaceId);
       }
 
       // Return minimal output for deleted state
@@ -159,96 +146,12 @@ export const KVNamespace = Resource(
         // Can't update a KV namespace title directly, just work with existing ID
       } else {
         // TODO: if it already exists, then check the tags to see if we own it and continue
-
-        // Create new KV namespace
-        const createResponse = await api.post(
-          `/accounts/${api.accountId}/storage/kv/namespaces`,
-          {
-            title: props.title,
-          },
-        );
-
-        if (!createResponse.ok) {
-          const errorData: any = await createResponse.json().catch(() => ({
-            errors: [{ message: createResponse.statusText }],
-          }));
-          throw new Error(
-            `Error creating KV namespace '${props.title}': ${errorData.errors?.[0]?.message || createResponse.statusText}`,
-          );
-        }
-
-        const createResult: any = await createResponse.json();
-        namespaceId = createResult.result.id;
+        const { id } = await createKVNamespace(api, props);
         createdAt = Date.now();
+        namespaceId = id;
       }
 
-      // Handle KV pairs if provided
-      if (props.values && props.values.length > 0 && namespaceId) {
-        // Process KV pairs in batches of 10000 (API limit)
-        const BATCH_SIZE = 10000;
-
-        for (let i = 0; i < props.values.length; i += BATCH_SIZE) {
-          const batch = props.values.slice(i, i + BATCH_SIZE);
-
-          const bulkPayload = batch.map((entry) => {
-            const item: any = {
-              key: entry.key,
-              value:
-                typeof entry.value === "string"
-                  ? entry.value
-                  : JSON.stringify(entry.value),
-            };
-
-            if (entry.expiration) {
-              item.expiration = entry.expiration;
-            }
-
-            if (entry.expirationTtl) {
-              item.expiration_ttl = entry.expirationTtl;
-            }
-
-            if (entry.metadata) {
-              item.metadata = entry.metadata;
-            }
-
-            return item;
-          });
-
-          try {
-            await withExponentialBackoff(
-              async () => {
-                const bulkResponse = await api.put(
-                  `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}/bulk`,
-                  bulkPayload,
-                );
-
-                if (!bulkResponse.ok) {
-                  const errorData: any = await bulkResponse
-                    .json()
-                    .catch(() => ({
-                      errors: [{ message: bulkResponse.statusText }],
-                    }));
-                  const errorMessage =
-                    errorData.errors?.[0]?.message || bulkResponse.statusText;
-
-                  // Throw error to trigger retry
-                  throw new Error(`Error writing KV batch: ${errorMessage}`);
-                }
-
-                return bulkResponse;
-              },
-              (error) => {
-                // Retry on "namespace not found" errors as they're likely propagation delays
-                return error.message?.includes("not found");
-              },
-              5, // 5 retry attempts
-              1000, // Start with 1 second delay
-            );
-          } catch (error: any) {
-            console.warn(error.message);
-          }
-        }
-      }
+      await insertKVRecords(api, namespaceId, props);
 
       return this({
         type: "kv_namespace",
@@ -259,5 +162,108 @@ export const KVNamespace = Resource(
         modifiedAt: Date.now(),
       });
     }
-  },
+  }
 );
+
+export async function createKVNamespace(
+  api: CloudflareApi,
+  props: KVNamespaceProps
+): Promise<{ id: string }> {
+  const createResponse = await api.post(
+    `/accounts/${api.accountId}/storage/kv/namespaces`,
+    {
+      title: props.title,
+    }
+  );
+
+  if (!createResponse.ok) {
+    await handleApiError(createResponse, "create", "kv_namespace", props.title);
+  }
+
+  return { id: ((await createResponse.json()) as any).result.id };
+}
+
+export async function deleteKVNamespace(
+  api: CloudflareApi,
+  namespaceId: string
+) {
+  // Delete KV namespace
+  const deleteResponse = await api.delete(
+    `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}`
+  );
+
+  if (!deleteResponse.ok && deleteResponse.status !== 404) {
+    await handleApiError(deleteResponse, "delete", "kv_namespace", namespaceId);
+  }
+}
+
+export async function insertKVRecords(
+  api: CloudflareApi,
+  namespaceId: string,
+  props: KVNamespaceProps
+) {
+  if (props.values && props.values.length > 0) {
+    // Process KV pairs in batches of 10000 (API limit)
+    const BATCH_SIZE = 10000;
+
+    for (let i = 0; i < props.values.length; i += BATCH_SIZE) {
+      const batch = props.values.slice(i, i + BATCH_SIZE);
+
+      const bulkPayload = batch.map((entry) => {
+        const item: any = {
+          key: entry.key,
+          value:
+            typeof entry.value === "string"
+              ? entry.value
+              : JSON.stringify(entry.value),
+        };
+
+        if (entry.expiration) {
+          item.expiration = entry.expiration;
+        }
+
+        if (entry.expirationTtl) {
+          item.expiration_ttl = entry.expirationTtl;
+        }
+
+        if (entry.metadata) {
+          item.metadata = entry.metadata;
+        }
+
+        return item;
+      });
+
+      try {
+        await withExponentialBackoff(
+          async () => {
+            const bulkResponse = await api.put(
+              `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}/bulk`,
+              bulkPayload
+            );
+
+            if (!bulkResponse.ok) {
+              const errorData: any = await bulkResponse.json().catch(() => ({
+                errors: [{ message: bulkResponse.statusText }],
+              }));
+              const errorMessage =
+                errorData.errors?.[0]?.message || bulkResponse.statusText;
+
+              // Throw error to trigger retry
+              throw new Error(`Error writing KV batch: ${errorMessage}`);
+            }
+
+            return bulkResponse;
+          },
+          (error) => {
+            // Retry on "namespace not found" errors as they're likely propagation delays
+            return error.message?.includes("not found");
+          },
+          5, // 5 retry attempts
+          1000 // Start with 1 second delay
+        );
+      } catch (error: any) {
+        console.warn(error.message);
+      }
+    }
+  }
+}

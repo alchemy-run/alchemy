@@ -1,25 +1,41 @@
-# GitHub Secret
+# GitHubSecret
 
-The GitHub Secret resource lets you manage [GitHub Actions secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) in your repositories.
+The GitHubSecret resource lets you manage [GitHub Actions secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) in your repositories.
 
 # Minimal Example
 
-Create a secret in a GitHub repository using the GITHUB_TOKEN environment variable.
+Create a secret in a GitHub repository using the GITHUB_TOKEN environment variable:
 
 ```ts
 import { GitHubSecret } from "alchemy/github";
 
 const secret = await GitHubSecret("api-key", {
-  owner: "my-github-username",
-  repository: "my-repo", 
+  owner: "my-github-username", 
+  repository: "my-repo",
   name: "API_KEY",
   value: alchemy.secret("my-secret-value")
 });
 ```
 
-# Create Multiple Secrets
+# Custom Token
 
-Create multiple secrets in a repository using environment variables.
+Create a secret using a custom GitHub token:
+
+```ts
+import { GitHubSecret } from "alchemy/github";
+
+const secret = await GitHubSecret("deploy-token", {
+  owner: "my-github-username",
+  repository: "my-repo", 
+  name: "DEPLOY_TOKEN",
+  value: alchemy.secret("my-secret-value"),
+  token: alchemy.secret(process.env.CUSTOM_GITHUB_TOKEN)
+});
+```
+
+# Multiple Secrets
+
+Create multiple secrets in a repository:
 
 ```ts
 import { GitHubSecret } from "alchemy/github";
@@ -38,20 +54,4 @@ const secrets = await Promise.all([
     value: alchemy.secret(process.env.CLOUDFLARE_API_KEY)
   })
 ]);
-```
-
-# Create Secret with Custom Token
-
-Create a secret using a custom GitHub token instead of environment variables.
-
-```ts
-import { GitHubSecret } from "alchemy/github";
-
-const secret = await GitHubSecret("deploy-secret", {
-  owner: "my-github-username",
-  repository: "my-app",
-  name: "DEPLOY_TOKEN",
-  value: alchemy.secret(process.env.DEPLOY_TOKEN),
-  token: alchemy.secret(process.env.CUSTOM_GITHUB_TOKEN)
-});
 ```

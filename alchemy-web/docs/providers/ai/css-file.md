@@ -1,6 +1,6 @@
-# CSS File
+# CSSFile
 
-The CSS File resource lets you generate CSS files using AI models like [OpenAI GPT-4](https://platform.openai.com/docs/models/gpt-4) or [Anthropic Claude](https://www.anthropic.com/claude).
+The CSSFile resource lets you generate CSS files using AI models. It extracts CSS code from between ```css fences, validates the response, and creates a file at the specified path.
 
 # Minimal Example
 
@@ -15,39 +15,36 @@ const styles = await CSSFile("main-styles", {
 });
 ```
 
-# Create Component Styles
+# Generate Styles Based on HTML
 
-Generate CSS styles for a specific component with hover effects and animations.
+Generate CSS styles by referencing existing HTML components.
 
 ```ts
 import { CSSFile } from "alchemy/ai";
 
-const cardStyles = await CSSFile("card-styles", {
-  path: "./src/styles/card.css", 
+const componentStyles = await CSSFile("component-styles", {
+  path: "./src/styles/component.css", 
   prompt: await alchemy`
     Create CSS styles for this HTML component:
     ${alchemy.file("src/components/Card.html")}
-
-    Include:
-    - Hover effects and transitions
-    - Light/dark theme support
-    - CSS variables for colors
+    
+    Include hover effects and dark/light theme support
   `,
   temperature: 0.2
 });
 ```
 
-# Generate Animation Library
+# Custom System Prompt
 
-Create a reusable CSS animation library with custom system prompt.
+Use a custom system prompt to guide the AI's output format.
 
 ```ts
 import { CSSFile } from "alchemy/ai";
 
 const animations = await CSSFile("animations", {
   path: "./src/styles/animations.css",
-  prompt: "Create CSS animations for fade, slide, bounce, and scale effects",
-  system: "You are an expert CSS animator. Create animations using modern techniques and include vendor prefixes.",
+  prompt: "Create reusable CSS animations for fade, slide, and bounce effects",
+  system: "You are an expert CSS animator. Create a single CSS file inside ```css fences with no additional text. Use modern CSS animation techniques and include vendor prefixes.",
   model: {
     id: "claude-3-opus-20240229",
     provider: "anthropic"

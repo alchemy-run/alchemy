@@ -38,7 +38,7 @@ describe("AWS Resources", () => {
       try {
         expect(table.tableName).toBe(tableName);
         expect(table.arn).toMatch(
-          new RegExp(`^arn:aws:dynamodb:[a-z0-9-]+:\\d+:table\\/${tableName}$`),
+          new RegExp(`^arn:aws:dynamodb:[a-z0-9-]+:\\d+:table\\/${tableName}$`)
         );
         expect(table.tableId).toBeTruthy();
         expect(table.partitionKey).toEqual({
@@ -57,7 +57,7 @@ describe("AWS Resources", () => {
         const describeResponse = await dynamo.send(
           new DescribeTableCommand({
             TableName: tableName,
-          }),
+          })
         );
         expect(describeResponse.Table?.TableStatus).toBe("ACTIVE");
       } finally {
@@ -76,7 +76,7 @@ async function assertTableNotExists(tableName: string) {
     dynamo.send(
       new DescribeTableCommand({
         TableName: tableName,
-      }),
-    ),
+      })
+    )
   ).rejects.toThrow(ResourceNotFoundException);
 }

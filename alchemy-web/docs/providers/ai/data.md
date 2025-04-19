@@ -1,81 +1,82 @@
-# AI Data
+# Data
 
-The Data resource lets you generate structured content using [AI models](https://platform.openai.com/docs/models) with schema validation.
+The Data resource uses AI models to generate structured content based on a schema. It leverages the [Vercel AI SDK](https://sdk.vercel.ai/docs) for type-safe content generation.
 
 # Minimal Example
 
-Generate structured data using an ArkType schema.
+Generate structured data using an ArkType schema:
 
 ```ts
 import { Data } from "alchemy/ai";
 import { type } from "arktype";
 
-const schema = type({
+const productSchema = type({
   name: "string",
-  description: "string",
-  features: "string[]"
+  description: "string", 
+  features: "string[]",
+  price: "number"
 });
 
-const data = await Data("product", {
-  schema,
-  prompt: "Generate a product description for a smartphone"
+const product = await Data("new-product", {
+  schema: productSchema,
+  prompt: "Generate a product description for a new smartphone"
 });
 
-console.log(data.object); // Typed according to schema
+console.log(product.object); // Typed as per schema
 ```
 
-# Generate with Message History
+# With Message History
 
-Use message history for iterative content generation.
+Use message history for iterative content generation:
 
 ```ts
 import { Data } from "alchemy/ai";
 import { type } from "arktype";
 
-const schema = type({
-  summary: "string", 
-  improvements: "string[]"
+const feedbackSchema = type({
+  rating: "number",
+  positives: "string[]",
+  improvements: "string[]",
+  summary: "string"
 });
 
-const feedback = await Data("feedback", {
-  schema,
+const feedback = await Data("product-feedback", {
+  schema: feedbackSchema,
   messages: [
-    { role: "user", content: "Review my product design" },
-    { role: "assistant", content: "I'll help review it. What's the product?" },
-    { role: "user", content: "It's a smart home device that..." }
+    { role: "user", content: "I'd like feedback on my product design" },
+    { role: "assistant", content: "I'd be happy to provide feedback. What's your product?" },
+    { role: "user", content: "It's a new smart home device that..." }
   ],
-  system: "You are a product design expert providing structured feedback"
+  system: "You are a product design expert providing structured feedback",
+  temperature: 0.3
 });
 ```
 
-# Custom Model Configuration
+# With File Context
 
-Configure the AI model and generation parameters.
+Use alchemy template literals to include file context:
 
 ```ts
 import { Data } from "alchemy/ai";
 import { type } from "arktype";
 
-const schema = type({
-  title: "string",
-  sections: [{
-    heading: "string",
-    content: "string"
-  }]
+const docSchema = type({
+  summary: "string",
+  parameters: {
+    name: "string",
+    type: "string", 
+    description: "string"
+  }[],
+  returns: "string"
 });
 
-const docs = await Data("api-docs", {
-  schema,
+const docs = await Data("function-docs", {
+  schema: docSchema,
   prompt: await alchemy`
-    Generate documentation for:
-    ${alchemy.file("src/api.ts")}
+    Generate documentation for this function:
+    ${alchemy.file("src/utils/format.ts")}
   `,
-  model: {
-    id: "gpt-4o",
-    provider: "openai",
-    options: {
-      temperature: 0.2
-    }
-  }
+  system: "You are a technical documentation writer",
+  temperature: 0.2
 });
 ```

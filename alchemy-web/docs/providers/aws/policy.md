@@ -1,15 +1,15 @@
 # Policy
 
-The Policy Resource creates and manages [AWS IAM Policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) that define permissions for AWS services and resources.
+The Policy resource lets you create and manage [AWS IAM Policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) that define permissions for AWS services and resources.
 
 # Minimal Example
 
-Create a basic IAM policy that allows S3 bucket access.
+Create a basic policy that allows S3 bucket access:
 
 ```ts
 import { Policy } from "alchemy/aws";
 
-const policy = await Policy("bucket-access", {
+const s3Policy = await Policy("bucket-access", {
   policyName: "s3-bucket-access", 
   document: {
     Version: "2012-10-17",
@@ -25,12 +25,14 @@ const policy = await Policy("bucket-access", {
 });
 ```
 
-# Create a Policy with Multiple Statements
+# Multiple Statements
+
+Create a policy with multiple statements and conditions:
 
 ```ts
 import { Policy } from "alchemy/aws";
 
-const policy = await Policy("api-access", {
+const apiPolicy = await Policy("api-access", {
   policyName: "api-gateway-access",
   document: {
     Version: "2012-10-17", 
@@ -48,10 +50,10 @@ const policy = await Policy("api-access", {
       },
       {
         Sid: "ReadLogs",
-        Effect: "Allow", 
+        Effect: "Allow",
         Action: [
           "logs:GetLogEvents",
-          "logs:FilterLogEvents"
+          "logs:FilterLogEvents"  
         ],
         Resource: `${api.logGroupArn}:*`
       }
@@ -65,18 +67,20 @@ const policy = await Policy("api-access", {
 });
 ```
 
-# Create a Deny Policy
+# Deny Policy
+
+Create a policy that denies access based on tags:
 
 ```ts
 import { Policy } from "alchemy/aws";
 
-const policy = await Policy("deny-production", {
+const denyPolicy = await Policy("deny-production", {
   policyName: "deny-production-access",
   document: {
     Version: "2012-10-17",
     Statement: [{
-      Effect: "Deny",
-      Action: "*", 
+      Effect: "Deny", 
+      Action: "*",
       Resource: "*",
       Condition: {
         StringEquals: {

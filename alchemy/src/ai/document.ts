@@ -11,8 +11,10 @@ import { createModel, withRateLimitRetry, type ModelConfig } from "./client";
 export interface DocumentProps {
   /**
    * Title of the document
+   *
+   * @default id
    */
-  title: string;
+  title?: string;
 
   /**
    * Optional path to the markdown document
@@ -82,12 +84,23 @@ export interface DocumentProps {
    * @default 10000
    */
   maxTokens?: number;
+
+  /**
+   * Freeze the document after creation (do not re-generate on updates)
+   * @default false
+   */
+  freeze?: boolean;
 }
 
 /**
  * A markdown document that can be created, updated, and deleted
  */
 export interface Document extends DocumentProps, Resource<"docs::Document"> {
+  /**
+   * The title of the document
+   */
+  title: string;
+
   /**
    * Content of the document
    */
@@ -221,6 +234,16 @@ export const Document = Resource(
       return this.destroy();
     }
 
+    if (this.phase === "update" && props.freeze) {
+      if (props.path) {
+        const filePath = props.path;
+        const fileId = `${id}-file`;
+
+        await StaticTextFile(fileId, filePath, this.output!.content);
+      }
+      return this(this.output);
+    }
+
     // Use provided system prompt or default
     const system = props.system || DEFAULT_MD_SYSTEM_PROMPT;
 
@@ -266,7 +289,7 @@ export const Document = Resource(
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid markdown content: ${retryResult.error}`
+          `Failed to generate valid markdown content: ${retryResult.error}\n${retryText}`
         );
       }
 
@@ -283,6 +306,7 @@ export const Document = Resource(
       ],
       createdAt: this.output?.createdAt || Date.now(),
       updatedAt: Date.now(),
+      title: props.title || id,
     };
 
     // Write file if path is provided

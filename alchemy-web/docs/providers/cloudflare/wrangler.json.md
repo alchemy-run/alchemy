@@ -1,57 +1,53 @@
-# Wrangler Json
+# WranglerJson
 
-The WranglerJson resource lets you create and manage [Cloudflare Workers configuration files](https://developers.cloudflare.com/workers/wrangler/configuration/) (wrangler.json).
+The WranglerJson resource generates a [wrangler.json configuration file](https://developers.cloudflare.com/workers/wrangler/configuration/) for a Cloudflare Worker.
 
-## Minimal Example
+# Minimal Example
 
-Creates a basic wrangler.json configuration file for a Worker.
+Create a basic wrangler.json file for a Worker:
 
 ```ts
-import { WranglerJson } from "alchemy/cloudflare";
+import { Worker, WranglerJson } from "alchemy/cloudflare";
 
-const config = await WranglerJson("my-worker-config", {
-  name: "my-worker",
-  main: "src/index.ts"
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts"
+});
+
+await WranglerJson("config", {
+  worker
 });
 ```
 
-## Create a Worker Configuration
+# With Custom Path
+
+Specify a custom path for the wrangler.json file:
 
 ```ts
-import { WranglerJson } from "alchemy/cloudflare";
-
-const config = await WranglerJson("my-worker-config", {
-  name: "my-worker",
-  main: "src",
-  entrypoint: "index.ts",
-  outdir: "dist",
-  minify: true,
-  node_compat: false,
-  compatibility_date: "2023-01-01",
-  routes: ["example.com/*"],
-  vars: {
-    API_URL: "https://api.example.com"
-  },
-  kv_namespaces: [{
-    binding: "CACHE",
-    id: "xxx"
-  }]
+await WranglerJson("config", {
+  worker,
+  path: "./config/wrangler.json"
 });
 ```
 
-## Configure with Durable Objects
+# With Worker Bindings
+
+Generate wrangler.json with Worker bindings configuration:
 
 ```ts
-import { WranglerJson } from "alchemy/cloudflare";
+const kv = await KVNamespace("data", {
+  title: "data-store"
+});
 
-const config = await WranglerJson("chat-worker-config", {
-  name: "chat-worker",
-  main: "src/index.ts",
-  durable_objects: {
-    bindings: [{
-      name: "ROOMS",
-      class_name: "ChatRoom"
-    }]
+const worker = await Worker("api", {
+  name: "api-worker", 
+  entrypoint: "./src/api.ts",
+  bindings: {
+    DATA: kv
   }
+});
+
+await WranglerJson("config", {
+  worker
 });
 ```

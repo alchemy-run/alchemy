@@ -1,19 +1,14 @@
-// we don't use node in ./src/**, only here for alchemy to bootstrap CloudFlare
-import "@types/node";
+/// <reference types="node" />
 
-import alchemy from "alchemy";
-import {
-  DurableObjectNamespace,
-  KVNamespace,
-  R2Bucket,
-  StaticSite,
-  Worker,
-} from "alchemy/cloudflare";
+import alchemy from "../../alchemy/src";
+import { KVNamespace, R2Bucket, ViteSite } from "../../alchemy/src/cloudflare";
+import "../../alchemy/src/os";
 
-const app = alchemy("cloudflare-vite", {
+const app = await alchemy("cloudflare-vite", {
   stage: process.env.USER ?? "dev",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   quiet: process.argv.includes("--verbose") ? false : true,
+  password: process.env.ALCHEMY_PASSWORD,
 });
 
 export const [authStore, storage] = await Promise.all([
@@ -26,31 +21,15 @@ export const [authStore, storage] = await Promise.all([
   }),
 ]);
 
-export const counter = new DurableObjectNamespace("COUNTER", {
-  className: "Counter",
-  sqlite: true,
-});
-
-export const api = await Worker("api", {
-  name: "alchemy-example-vite-api",
-  entrypoint: "./src/index.ts",
+export const website = await ViteSite("cloudflare-vite", {
+  main: "./src/index.ts",
+  assets: "./dist",
+  command: "bun run build",
   bindings: {
-    COUNTER: counter,
     STORAGE: storage,
     AUTH_STORE: authStore,
     GITHUB_CLIENT_ID: alchemy.secret(process.env.GITHUB_CLIENT_ID),
     GITHUB_CLIENT_SECRET: alchemy.secret(process.env.GITHUB_CLIENT_SECRET),
-  },
-});
-
-export const website = await StaticSite("Website", {
-  name: "alchemy-example-vite",
-  dir: "./dist",
-  build: {
-    command: "bun run build",
-  },
-  routes: {
-    "/api/*": api,
   },
 });
 

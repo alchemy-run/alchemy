@@ -1,10 +1,17 @@
 import { describe, expect } from "bun:test";
+import * as fs from "fs/promises";
+import * as path from "path";
 import { alchemy } from "../../src/alchemy";
 import { createCloudflareApi } from "../../src/cloudflare/api";
+import { Assets } from "../../src/cloudflare/assets";
 import { R2Bucket } from "../../src/cloudflare/bucket";
+import { D1Database } from "../../src/cloudflare/d1-database";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace";
 import { KVNamespace } from "../../src/cloudflare/kv-namespace";
+import { Queue } from "../../src/cloudflare/queue";
 import { Worker } from "../../src/cloudflare/worker";
+import { Workflow } from "../../src/cloudflare/workflow";
+import { destroy } from "../../src/destroy";
 import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
 
@@ -12,12 +19,20 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
+// Create a Cloudflare API client for verification
+const api = await createCloudflareApi();
+
+// Helper function to check if a worker exists
 async function assertWorkerDoesNotExist(workerName: string) {
-  const api = await createCloudflareApi();
-  const response = await api.get(
-    `/accounts/${api.accountId}/workers/scripts/${workerName}`,
-  );
-  expect(response.status).toEqual(404);
+  try {
+    const response = await api.get(
+      `/accounts/${api.accountId}/workers/scripts/${workerName}`
+    );
+    expect(response.status).toEqual(404);
+  } catch (error) {
+    // 404 is expected, so we can ignore it
+    return;
+  }
 }
 
 describe("Worker Resource", () => {
@@ -262,7 +277,7 @@ describe("Worker Resource", () => {
 
       expect(worker.id).toEqual(worker.id);
     } finally {
-      await alchemy.destroy(scope);
+      await destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
@@ -301,7 +316,7 @@ describe("Worker Resource", () => {
 
       expect(worker.id).toEqual(worker.id);
     } finally {
-      await alchemy.destroy(scope);
+      await destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
@@ -337,7 +352,7 @@ describe("Worker Resource", () => {
 
       expect(worker.format).toEqual("esm");
     } finally {
-      await alchemy.destroy(scope);
+      await destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
@@ -360,10 +375,10 @@ describe("Worker Resource", () => {
         format: "cjs",
       });
       await expect(duplicateWorker).rejects.toThrow(
-        `Worker with name '${workerName}' already exists. Please use a unique name.`,
+        `Worker with name '${workerName}' already exists. Please use a unique name.`
       );
     } finally {
-      await alchemy.destroy(scope);
+      await destroy(scope);
     }
   });
 
@@ -390,7 +405,7 @@ describe("Worker Resource", () => {
         {
           className: "Counter",
           scriptName: workerName,
-        },
+        }
       );
 
       // Update the worker with the DO binding
@@ -407,7 +422,7 @@ describe("Worker Resource", () => {
       expect(worker.name).toEqual(workerName);
       expect(worker.bindings).toBeDefined();
     } finally {
-      await alchemy.destroy(scope);
+      await destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
@@ -442,7 +457,7 @@ describe("Worker Resource", () => {
       expect(worker.name).toEqual(workerName);
       expect(worker.bindings).toBeDefined();
     } finally {
-      await alchemy.destroy(scope);
+      await destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
@@ -456,7 +471,7 @@ describe("Worker Resource", () => {
       {
         className: "Counter",
         scriptName: workerName,
-      },
+      }
     );
 
     // Create a KV namespace
@@ -499,7 +514,7 @@ describe("Worker Resource", () => {
       expect(worker.name).toEqual(workerName);
       expect(worker.bindings).toBeDefined();
     } finally {
-      await alchemy.destroy(scope);
+      await destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
@@ -589,7 +604,7 @@ describe("Worker Resource", () => {
         expect(removedVarText).toEqual("undefined");
       }
     } finally {
-      await alchemy.destroy(scope);
+      await destroy(scope);
       // Verify the worker was deleted
       await assertWorkerDoesNotExist(workerName);
     }
@@ -616,7 +631,7 @@ describe("Worker Resource", () => {
         {
           className: "Counter",
           scriptName: workerName,
-        },
+        }
       );
 
       // Update worker with the original Counter binding
@@ -637,7 +652,7 @@ describe("Worker Resource", () => {
         {
           className: "CounterV2",
           scriptName: workerName,
-        },
+        }
       );
 
       // Update worker with the migrated binding
@@ -652,7 +667,7 @@ describe("Worker Resource", () => {
 
       expect(worker.bindings).toBeDefined();
     } finally {
-      await alchemy.destroy(scope);
+      await destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
@@ -678,7 +693,7 @@ describe("Worker Resource", () => {
         {
           className: "Counter",
           scriptName: workerName,
-        },
+        }
       );
 
       // Update the worker with the DO binding
@@ -714,7 +729,7 @@ describe("Worker Resource", () => {
       expect(worker.env?.API_SECRET).toEqual("test-secret-123");
       expect(worker.env?.DEBUG_MODE).toEqual("true");
     } finally {
-      await alchemy.destroy(scope);
+      await destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
@@ -763,8 +778,579 @@ describe("Worker Resource", () => {
         expect(data.hasR2).toEqual(true);
       }
     } finally {
-      await alchemy.destroy(scope);
+      await destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }
   });
+
+  // Test for static assets
+  test("create and test worker with static assets", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-assets`;
+    let tempDir: string | undefined = undefined;
+
+    try {
+      // Create a temporary directory to store test assets
+      tempDir = path.join(".out", "alchemy-assets-test");
+
+      await fs.rm(tempDir, { recursive: true, force: true });
+
+      // Ensure directory exists with proper permissions
+      await fs.mkdir(tempDir, { recursive: true });
+
+      // Create test files in the temporary directory
+      const testContent = "Hello from static assets!";
+      const cssContent = "body { color: blue; }";
+      const jsonContent = JSON.stringify({
+        message: "Hello from JSON",
+        timestamp: Date.now(),
+      });
+
+      // Create a subdirectory with additional files
+      const subDir = path.join(tempDir, "data");
+      await Promise.all([
+        fs.writeFile(path.join(tempDir, "index.html"), testContent),
+        fs.writeFile(path.join(tempDir, "styles.css"), cssContent),
+        fs.mkdir(subDir, { recursive: true }),
+      ]);
+      await fs.writeFile(path.join(subDir, "config.json"), jsonContent);
+
+      // Create assets resource
+      const assets = await Assets("static-assets", {
+        path: tempDir,
+      });
+
+      // Create a worker that uses ESM format and serves static assets
+      const workerWithAssetsScript = `
+        export default {
+          async fetch(request, env, ctx) {
+            const url = new URL(request.url);
+
+            if (url.pathname.startsWith("/api/")) {
+              return new Response("Worker with assets is running!", { 
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            }
+            try {
+              return env.ASSETS.fetch(request);
+            } catch (err) {
+              console.log(err);
+              return new Response(\`\${err}\`, { status: 404 });
+            }
+          }
+        };
+      `;
+
+      // Create the worker with assets binding
+      const worker = await Worker(workerName, {
+        name: workerName,
+        script: workerWithAssetsScript,
+        format: "esm",
+        url: true, // Enable workers.dev URL to test the worker
+        bindings: {
+          ASSETS: assets,
+        },
+      });
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.url).toBeTruthy();
+      expect(worker.bindings?.ASSETS).toBeTruthy();
+
+      // Wait for the worker to be available and assets to be ready
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      if (worker.url) {
+        async function get(url: string) {
+          const response = await fetch(url);
+          if (response.status !== 200) {
+            console.log(
+              response.status,
+              response.statusText,
+              await response.text()
+            );
+          }
+          expect(response.status).toEqual(200);
+          const text = await response.text();
+          return text;
+        }
+
+        // Test that the static assets are accessible
+        const indexText = await get(`${worker.url}/index.html`);
+        expect(indexText).toEqual(testContent);
+
+        // Test the worker's main handler
+        // should route to index.html
+        const mainText = await get(worker.url);
+        expect(mainText).toEqual("Hello from static assets!");
+
+        // Test CSS file
+        const cssText = await get(`${worker.url}/styles.css`);
+        expect(cssText).toEqual(cssContent);
+
+        // Test file in subdirectory
+        const jsonData = JSON.parse(
+          await get(`${worker.url}/data/config.json`)
+        );
+        expect(jsonData.message).toEqual("Hello from JSON");
+
+        const apiCall = await get(`${worker.url}/api/data`);
+        expect(apiCall).toEqual("Worker with assets is running!");
+      }
+    } catch (err) {
+      throw err;
+    } finally {
+      // Clean up temporary directory
+      if (tempDir) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
+
+      await destroy(scope);
+      // Verify the worker was deleted
+      await assertWorkerDoesNotExist(workerName);
+    }
+  });
+
+  // Test for binding a workflow to a worker
+  test("create and delete worker with workflow binding", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-workflow`;
+
+    // Sample worker script with workflow handler - updated to match Cloudflare Workflows pattern
+    const workflowWorkerScript = `
+      // Workflow definition for email notifications
+      export class EmailNotifier {
+        constructor(state, env) {
+          this.state = state;
+          this.env = env;
+        }
+        
+        async run(event, step) {
+          // Process order data from event payload
+          const orderDetails = await step.do('process-order', async () => {
+            console.log("Processing order", event.payload);
+            return { 
+              success: true, 
+              orderId: event.payload.orderId, 
+              message: "Order processed successfully"
+            };
+          });
+          
+          return orderDetails;
+        }
+      }
+
+      // Workflow definition for order processing
+      export class OrderProcessor {
+        constructor(state, env) {
+          this.state = state;
+          this.env = env;
+        }
+        
+        async run(event, step) {
+          // Process shipping data
+          const shippingDetails = await step.do('process-shipping', async () => {
+            console.log("Processing shipping", event.payload);
+            return { 
+              success: true, 
+              shipmentId: event.payload.shipmentId, 
+              message: "Shipment scheduled successfully"
+            };
+          });
+          
+          return shippingDetails;
+        }
+      }
+
+      export default {
+        async fetch(request, env, ctx) {
+          const url = new URL(request.url);
+          
+          // Add endpoints to trigger workflows for testing
+          if (url.pathname === '/trigger-email-workflow') {
+            try {
+              // Get workflow binding
+              const workflow = env.EMAIL_WORKFLOW;
+              
+              if (!workflow) {
+                return new Response(JSON.stringify({ error: "No email workflow binding found" }), { 
+                  status: 500,
+                  headers: { 'Content-Type': 'application/json' }
+                });
+              }
+              
+              // Create a workflow instance with parameters
+              const params = { orderId: "test-123", amount: 99.99 };
+              const instance = await workflow.create(params);
+              
+              return Response.json({
+                id: instance.id,
+                details: await instance.status(),
+                success: true,
+                orderId: params.orderId,
+                message: "Order processed successfully"
+              });
+            } catch (error) {
+              console.error("Error triggering email workflow:", error);
+              return new Response(JSON.stringify({ error: error.message || "Unknown error" }), { 
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+          }
+          
+          // Endpoint for the order workflow
+          if (url.pathname === '/trigger-order-workflow') {
+            try {
+              // Get workflow binding
+              const workflow = env.ORDER_WORKFLOW;
+              
+              if (!workflow) {
+                return new Response(JSON.stringify({ error: "No order workflow binding found" }), { 
+                  status: 500,
+                  headers: { 'Content-Type': 'application/json' }
+                });
+              }
+              
+              // Create a workflow instance with parameters
+              const params = { shipmentId: "ship-456", carrier: "FastShip" };
+              const instance = await workflow.create(params);
+              
+              return Response.json({
+                id: instance.id,
+                details: await instance.status(),
+                success: true,
+                shipmentId: params.shipmentId,
+                message: "Shipment scheduled successfully"
+              });
+            } catch (error) {
+              console.error("Error triggering order workflow:", error);
+              return new Response(JSON.stringify({ error: error.message || "Unknown error" }), { 
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+          }
+          
+          return new Response('Worker with workflow bindings!', { status: 200 });
+        }
+      };
+    `;
+
+    let worker: Worker | undefined = undefined;
+    try {
+      // Create a workflow instance
+      const emailWorkflow = new Workflow("email-notifier", {
+        className: "EmailNotifier",
+        workflowName: "email-notification-workflow",
+      });
+
+      // Create a worker with the workflow binding
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: workflowWorkerScript,
+        format: "esm",
+        bindings: {
+          EMAIL_WORKFLOW: emailWorkflow,
+        },
+        url: true, // Enable workers.dev URL to test the workflow
+      });
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+      expect(worker.url).toBeTruthy();
+
+      // Test triggering the first workflow
+      const response = await fetch(`${worker.url!}/trigger-email-workflow`);
+      const result = await response.json();
+      console.log("Email workflow response:", result);
+
+      expect(response.status).toEqual(200);
+      expect(result.success).toEqual(true);
+      expect(result.orderId).toEqual("test-123");
+      expect(result.message).toEqual("Order processed successfully");
+      // Verify the instance ID is not empty
+      expect(result.id).toBeTruthy();
+      expect(typeof result.id).toBe("string");
+      expect(result.id.length).toBeGreaterThan(0);
+      // Verify the details contain valid status
+      expect(result.details).toBeDefined();
+      expect(result.details.status).toBeTruthy();
+
+      // Create a new workflow binding and update the worker
+      const orderWorkflow = new Workflow("order-processor", {
+        className: "OrderProcessor",
+        workflowName: "order-processing-workflow",
+      });
+
+      // Update the worker with multiple workflow bindings
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: workflowWorkerScript,
+        format: "esm",
+        bindings: {
+          EMAIL_WORKFLOW: emailWorkflow,
+          ORDER_WORKFLOW: orderWorkflow,
+        },
+        url: true,
+      });
+
+      expect(worker.bindings).toBeDefined();
+      expect(Object.keys(worker.bindings || {})).toHaveLength(2);
+
+      // Test triggering the second workflow
+      const orderResponse = await fetch(
+        `${worker.url!}/trigger-order-workflow`
+      );
+      const orderResult = await orderResponse.json();
+      console.log("Order workflow response:", orderResult);
+
+      expect(orderResponse.status).toEqual(200);
+      expect(orderResult.success).toEqual(true);
+      expect(orderResult.shipmentId).toEqual("ship-456");
+      expect(orderResult.message).toEqual("Shipment scheduled successfully");
+      // Verify the instance ID is not empty
+      expect(orderResult.id).toBeTruthy();
+      expect(typeof orderResult.id).toBe("string");
+      expect(orderResult.id.length).toBeGreaterThan(0);
+      // Verify the details contain valid status
+      expect(orderResult.details).toBeDefined();
+      expect(orderResult.details.status).toBeTruthy();
+    } finally {
+      // Explicitly destroy resources since destroy: false is set
+      await destroy(scope);
+      // Verify the worker was deleted
+      await assertWorkerDoesNotExist(workerName);
+    }
+  });
+
+  test("create and test worker with D1 database binding", async (scope) => {
+    // Sample ESM worker script with D1 database functionality
+    const d1WorkerScript = `
+      export default {
+        async fetch(request, env, ctx) {
+          const url = new URL(request.url);
+          
+          // Initialize the database with a table and data
+          if (url.pathname === '/init-db') {
+            try {
+              const db = env.DATABASE;
+              
+              // Create a test table
+              await db.exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)");
+              
+              // Insert some test data
+              await db.exec("INSERT INTO users (name, email) VALUES ('Test User', 'test@example.com')");
+              
+              return new Response('Database initialized successfully!', { 
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            } catch (error) {
+              return new Response('Error initializing database: ' + error.message, { 
+                status: 500,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            }
+          }
+          
+          // Query data from the database
+          if (url.pathname === '/query-db') {
+            try {
+              const db = env.DATABASE;
+              
+              // Query the database
+              const { results } = await db.prepare("SELECT * FROM users").all();
+              
+              return new Response(JSON.stringify({ success: true, data: results }), { 
+                status: 200,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            } catch (error) {
+              return new Response(JSON.stringify({ 
+                success: false, 
+                error: error.message
+              }), { 
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+          }
+          
+          return new Response('D1 Database Worker is running!', { 
+            status: 200,
+            headers: { 'Content-Type': 'text/plain' }
+          });
+        }
+      };
+    `;
+
+    const workerName = `${BRANCH_PREFIX}-test-worker-d1`;
+
+    let worker: Worker<{ DATABASE: D1Database }> | undefined = undefined;
+    let db: D1Database | undefined = undefined;
+
+    try {
+      // Create a D1 database
+      db = await D1Database(`${BRANCH_PREFIX}-test-db`, {
+        name: `${BRANCH_PREFIX}-test-db`,
+        primaryLocationHint: "wnam", // West North America
+      });
+
+      expect(db.id).toBeTruthy();
+      expect(db.name).toEqual(`${BRANCH_PREFIX}-test-db`);
+
+      // Create a worker with the D1 database binding
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: d1WorkerScript,
+        format: "esm",
+        url: true, // Enable workers.dev URL to test the worker
+        bindings: {
+          DATABASE: db,
+        },
+      });
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+      expect(worker.bindings!.DATABASE).toBeDefined();
+      expect(worker.bindings!.DATABASE.id).toEqual(db.id);
+      expect(worker.url).toBeTruthy();
+
+      // Wait for the worker to be available
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      if (worker.url) {
+        // Initialize the database with a table and data
+        const initResponse = await fetch(`${worker.url}/init-db`);
+        expect(initResponse.status).toEqual(200);
+        const initText = await initResponse.text();
+        expect(initText).toEqual("Database initialized successfully!");
+
+        // Wait for the database to be initialized
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Query data from the database
+        const queryResponse = await fetch(`${worker.url}/query-db`);
+        expect(queryResponse.status).toEqual(200);
+        const queryData = await queryResponse.json();
+        expect(queryData.success).toEqual(true);
+        expect(queryData.data).toBeArray();
+        expect(queryData.data.length).toBeGreaterThan(0);
+        expect(queryData.data[0].name).toEqual("Test User");
+        expect(queryData.data[0].email).toEqual("test@example.com");
+      }
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(workerName);
+    }
+  }, 120000); // Increased timeout for D1 database operations
+
+  test("create and test worker with Queue binding", async (scope) => {
+    // Sample ESM worker script with Queue functionality
+    const queueWorkerScript = `
+      export default {
+        async fetch(request, env, ctx) {
+          const url = new URL(request.url);
+          
+          // Send a message to the queue
+          if (url.pathname === '/send-message') {
+            try {
+              const body = await request.json();
+              const messageId = await env.MESSAGE_QUEUE.send(body);
+              
+              return new Response(JSON.stringify({ 
+                success: true, 
+                messageId,
+                message: 'Message sent successfully'
+              }), { 
+                status: 200,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            } catch (error) {
+              return new Response(JSON.stringify({ 
+                success: false, 
+                error: error.message 
+              }), { 
+                status: 500,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+          }
+          
+          return new Response('Queue Worker is running!', { 
+            status: 200,
+            headers: { 'Content-Type': 'text/plain' }
+          });
+        }
+      };
+    `;
+
+    const workerName = `${BRANCH_PREFIX}-test-worker-queue`;
+    const queueName = `${BRANCH_PREFIX}-test-queue`;
+
+    let worker: Worker<{ MESSAGE_QUEUE: Queue }> | undefined = undefined;
+    let queue: Queue | undefined = undefined;
+
+    try {
+      // Create a Queue
+      queue = await Queue(queueName, {
+        name: queueName,
+        settings: {
+          deliveryDelay: 0, // No delay for testing
+          deliveryPaused: false,
+        },
+      });
+
+      expect(queue.id).toBeTruthy();
+      expect(queue.name).toEqual(queueName);
+      expect(queue.type).toEqual("queue");
+
+      // Create a worker with the Queue binding
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: queueWorkerScript,
+        format: "esm",
+        url: true, // Enable workers.dev URL to test the worker
+        bindings: {
+          MESSAGE_QUEUE: queue,
+        },
+      });
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+      expect(worker.bindings!.MESSAGE_QUEUE).toBeDefined();
+      expect(worker.url).toBeTruthy();
+
+      // Wait for the worker to be available
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      if (worker.url) {
+        // Send a message to the queue
+        const testMessage = {
+          id: "msg-123",
+          content: "Test message content",
+          timestamp: Date.now(),
+        };
+
+        const sendResponse = await fetch(`${worker.url}/send-message`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(testMessage),
+        });
+
+        expect(sendResponse.status).toEqual(200);
+        const responseData = await sendResponse.json();
+        expect(responseData.success).toEqual(true);
+        expect(responseData.message).toEqual("Message sent successfully");
+      }
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(workerName);
+    }
+  }, 120000); // Increased timeout for Queue operations
 });

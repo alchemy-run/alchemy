@@ -1,29 +1,29 @@
 # Product
 
-The Product resource lets you create and manage [Stripe Products](https://stripe.com/docs/api/products) which represent goods and services that you sell.
+The Product resource lets you create and manage [Stripe Products](https://stripe.com/docs/api/products) that can be used with Prices for billing.
 
 # Minimal Example
 
-Create a basic digital product with name and description.
+Create a basic digital product:
 
 ```ts
 import { Product } from "alchemy/stripe";
 
 const product = await Product("basic-software", {
-  name: "Basic Software License", 
+  name: "Basic Software License",
   description: "Single-user license for basic software package"
 });
 ```
 
-# Create a Physical Product
+# Physical Product
 
-Create a physical product with shipping details and images.
+Create a physical product with shipping details:
 
 ```ts
 import { Product } from "alchemy/stripe";
 
-const physicalProduct = await Product("premium-hardware", {
-  name: "Premium Hardware Kit",
+const product = await Product("premium-hardware", {
+  name: "Premium Hardware Kit", 
   description: "Complete hardware kit with premium components",
   shippable: true,
   images: ["https://example.com/hardware-kit.jpg"],
@@ -32,14 +32,14 @@ const physicalProduct = await Product("premium-hardware", {
 });
 ```
 
-# Create a Service Product
+# Service Product
 
-Create a service product with tax code and metadata.
+Create a service product with tax code:
 
 ```ts
 import { Product } from "alchemy/stripe";
 
-const serviceProduct = await Product("consulting", {
+const product = await Product("consulting", {
   name: "Professional Consulting",
   description: "Expert consulting services", 
   type: "service",

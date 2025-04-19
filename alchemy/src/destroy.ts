@@ -39,7 +39,7 @@ export async function destroy<Type extends string>(
         ...orphan.output,
         Scope: scope,
       })),
-      options,
+      options
     );
     // finally, destroy the scope container
     await scope.deinit();
@@ -52,10 +52,19 @@ export async function destroy<Type extends string>(
     return;
   }
 
+  if (instance.Kind === "alchemy::Scope") {
+    const scope = new Scope({
+      parent: instance.Scope,
+      scopeName: instance.ID,
+    });
+    console.log("Destroying scope", scope.chain.join("/"));
+    return await destroy(scope, options);
+  }
+
   const Provider: Provider<Type> | undefined = PROVIDERS.get(instance.Kind);
   if (!Provider) {
     throw new Error(
-      `Cannot destroy resource "${instance.FQN}" type ${instance.Kind} - no provider found. You may need to import the provider in your alchemy.config.ts.`,
+      `Cannot destroy resource "${instance.FQN}" type ${instance.Kind} - no provider found. You may need to import the provider in your alchemy.config.ts.`
     );
   }
 
@@ -93,10 +102,18 @@ export async function destroy<Type extends string>(
     let nestedScope: Scope | undefined;
     try {
       // BUG: this does not restore persisted scope
-      await alchemy.run(instance.ID, async (scope) => {
-        nestedScope = scope;
-        return await Provider.handler.bind(ctx)(instance.ID, state.props);
-      });
+      await alchemy.run(
+        instance.ID,
+        {
+          // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
+          isResource: instance.Kind !== "alchemy::Scope",
+          parent: scope,
+        },
+        async (scope) => {
+          nestedScope = scope;
+          return await Provider.handler.bind(ctx)(instance.ID, state.props);
+        }
+      );
     } catch (err) {
       if (err instanceof DestroyedSignal) {
         // TODO: should we fail if the DestroyedSignal is not thrown?
@@ -125,11 +142,11 @@ export namespace destroy {
     if (options?.strategy !== "parallel") {
       const sorted = resources.sort((a, b) => b.Seq - a.Seq);
       for (const resource of sorted) {
-        await destroy(resource);
+        await destroy(resource, options);
       }
     } else {
       await Promise.all(
-        resources.map((resource) => destroy(resource, options)),
+        resources.map((resource) => destroy(resource, options))
       );
     }
   }

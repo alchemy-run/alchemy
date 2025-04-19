@@ -4,8 +4,7 @@ import { afterAll, beforeAll, it } from "bun:test";
 import path from "node:path";
 import { alchemy } from "../alchemy";
 import { R2RestStateStore } from "../cloudflare";
-import { destroy } from "../destroy";
-import type { Scope } from "../scope";
+import { Scope } from "../scope";
 import type { StateStoreType } from "../state";
 
 /**
@@ -26,12 +25,6 @@ alchemy.test = test;
  * Options for configuring test behavior
  */
 export interface TestOptions {
-  /**
-   * Whether to automatically destroy resources after test.
-   * @default true.
-   */
-  destroy?: boolean;
-
   /**
    * Whether to suppress logging output.
    * @default false.
@@ -78,7 +71,7 @@ type test = {
     name: string,
     options: TestOptions,
     fn: (scope: Scope) => Promise<any>,
-    timeout?: number,
+    timeout?: number
   ): void;
 
   /**
@@ -129,7 +122,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
   ) {
     defaultOptions.stateStore = (scope) =>
       new R2RestStateStore(scope, {
-        apiKey: process.env.CLOUDFLARE_API_KEY,
+        apiKey: alchemy.secret(process.env.CLOUDFLARE_API_KEY),
         email: process.env.CLOUDFLARE_EMAIL,
         bucketName: process.env.CLOUDFLARE_BUCKET_NAME!,
       });
@@ -145,37 +138,21 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
   };
 
   // Create local test scope based on filename
-  const localTestScope = alchemy.scope(
-    `${defaultOptions.prefix ? `${defaultOptions.prefix}-` : ""}${path.basename(meta.filename)}`,
-    {
-      // parent: globalTestScope,
-      stateStore: defaultOptions?.stateStore,
-    },
-  );
-  test.scope = localTestScope;
+  const scope = new Scope({
+    scopeName: `${defaultOptions.prefix ? `${defaultOptions.prefix}-` : ""}${path.basename(meta.filename)}`,
+    // parent: globalTestScope,
+    stateStore: defaultOptions?.stateStore,
+  });
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {
-    return beforeAll(async () => {
-      test.scope.enter();
-      await fn(test.scope);
-    });
+    return beforeAll(() => scope.run(() => fn(scope)));
   };
 
   test.afterAll = (fn: (scope: Scope) => Promise<void>) => {
-    return afterAll(async () => {
-      test.scope.enter();
-      await fn(test.scope);
-    });
+    return afterAll(() => scope.run(() => fn(scope)));
   };
 
-  // Clean up test scope after all tests complete
-  afterAll(async () => {
-    if (defaultOptions?.destroy !== false) {
-      await alchemy.destroy(test.scope);
-    }
-  });
-
-  return test as any;
+  return test as test;
 
   function test(
     ...args:
@@ -188,18 +165,21 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
   ) {
     const testName = args[0];
     const _options = typeof args[1] === "object" ? args[1] : undefined;
+    const timeout =
+      typeof args[args.length - 1] === "number"
+        ? (args[args.length - 1] as number)
+        : 120000;
     const spread = (obj: any) =>
       obj && typeof obj === "object"
         ? Object.fromEntries(
             Object.entries(obj).flatMap(([k, v]) =>
-              v !== undefined ? [[k, v]] : [],
-            ),
+              v !== undefined ? [[k, v]] : []
+            )
           )
         : {};
 
     // Merge options with defaults
-    const options = {
-      destroy: true,
+    const options: TestOptions = {
       quiet: false,
       password: "test-password",
       ...spread(defaultOptions),
@@ -208,28 +188,26 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
 
     const fn = typeof args[1] === "function" ? args[1] : args[2]!;
 
-    return alchemy.run(
+    return it(
       testName,
-      {
-        ...options,
-        parent: localTestScope,
-      },
-      async (scope) => {
-        return it(testName, async () => {
-          // Enter test scope since bun calls from different scope
-          scope.enter();
-          try {
-            await fn(scope);
-          } catch (err) {
-            console.error(err);
-            throw err;
-          } finally {
-            if (options.destroy !== false) {
-              await destroy(scope);
+      async () =>
+        alchemy.run(
+          testName,
+          {
+            ...options,
+            parent: scope,
+          },
+          async (scope) => {
+            try {
+              // Enter test scope since bun calls from different scope
+              await scope.run(() => fn(scope));
+            } catch (err) {
+              console.error(err);
+              throw err;
             }
           }
-        });
-      },
+        ),
+      timeout
     );
   }
 }

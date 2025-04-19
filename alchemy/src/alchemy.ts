@@ -1,13 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { DestroyedSignal, destroy } from "./destroy";
+import { destroy, DestroyedSignal } from "./destroy";
+import type { PendingResource } from "./resource";
 import { Scope } from "./scope";
 import { secret } from "./secret";
 import type { StateStoreType } from "./state";
-
-// TODO: support browser
-const DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
 
 /**
  * Type alias for semantic highlighting of `alchemy` as a type keyword
@@ -22,7 +20,7 @@ export const alchemy: Alchemy = _alchemy as any;
  *
  * @example
  * // Create an application scope with stage and secret handling
- * const app = alchemy("github:alchemy", {
+ * const app = await alchemy("github:alchemy", {
  *   stage: "prod",
  *   phase: "up",
  *   // Required for encrypting/decrypting secrets
@@ -37,9 +35,14 @@ export const alchemy: Alchemy = _alchemy as any;
  * await app.finalize();
  */
 export interface Alchemy {
-  scope: typeof scope;
   run: typeof run;
   destroy: typeof destroy;
+
+  /**
+   * Get an environment variable and error if it's not set.
+   */
+  env: typeof env;
+
   /**
    * Creates an encrypted secret that can be safely stored in state files.
    * Requires a password to be set either globally in the application options
@@ -51,13 +54,13 @@ export interface Alchemy {
    * Used to create and manage resources with proper secret handling.
    *
    * @example
-   * const app = alchemy("my-app", {
+   * const app = await alchemy("my-app", {
    *   stage: "prod",
    *   // Required for encrypting/decrypting secrets
    *   password: process.env.SECRET_PASSPHRASE
    * });
    */
-  (...parameters: Parameters<typeof scope>): ReturnType<typeof scope>;
+  (appName: string, options?: Omit<AlchemyOptions, "appName">): Promise<Scope>;
   /**
    * Template literal tag that supports file interpolation for documentation.
    * Automatically formats the content and appends file contents as code blocks.
@@ -82,18 +85,24 @@ export interface Alchemy {
  * Implementation of the alchemy function that handles both application scoping
  * and template string interpolation.
  */
-function _alchemy(
+async function _alchemy(
   ...args:
     | [template: TemplateStringsArray, ...values: any[]]
     | [appName: string, options?: Omit<AlchemyOptions, "appName">]
-): any {
+): Promise<Scope | string | never> {
   if (typeof args[0] === "string") {
-    const [appName, options] = args;
-    return scope(undefined, {
+    const [appName, options] = args as [string, AlchemyOptions?];
+    const root = new Scope({
       ...options,
       appName,
       stage: options?.stage,
     });
+    root.enter();
+    if (options?.phase === "destroy") {
+      await destroy(root);
+      return process.exit(0);
+    }
+    return root;
   } else {
     const [template, ...values] = args;
     const [, secondLine] = template[0].split("\n");
@@ -102,93 +111,110 @@ function _alchemy(
       : 0;
     const indent = " ".repeat(leadingSpaces);
 
-    return (async () => {
-      const { isFileCollection, isFileRef } = await import("./fs");
+    const { isFileCollection, isFileRef } = await import("./fs");
 
-      const appendices: Record<string, string> = {};
+    const appendices: Record<string, string> = {};
 
-      const stringValues = await Promise.all(
-        values.map(async function resolve(value): Promise<string> {
-          if (typeof value === "string") {
-            return indent + value;
-          } else if (value === null) {
-            return "null";
-          } else if (value === undefined) {
-            return "undefined";
-          } else if (
-            typeof value === "number" ||
-            typeof value === "boolean" ||
-            typeof value === "bigint"
-          ) {
-            return value.toString();
-          } else if (value instanceof Promise) {
-            return resolve(await value);
-          } else if (isFileRef(value)) {
-            if (!(value.path in appendices)) {
-              appendices[value.path] = await fs.readFile(value.path, "utf-8");
-            }
-            return `[${path.basename(value.path)}](${value.path})`;
-          } else if (isFileCollection(value)) {
-            return Object.entries(value.files)
-              .map(([filePath, content]) => {
-                appendices[filePath] = content;
-                return `[${path.basename(filePath)}](${filePath})`;
-              })
-              .join("\n\n");
-          } else if (Array.isArray(value)) {
-            return (
-              await Promise.all(
-                value.map(async (value, i) => `${i}. ${await resolve(value)}`)
-              )
-            ).join("\n");
-          } else {
-            // TODO: support other types
-            console.log(value);
-            throw new Error(`Unsupported value type: ${value}`);
+    const stringValues = await Promise.all(
+      values.map(async function resolve(value): Promise<string> {
+        if (typeof value === "string") {
+          return indent + value;
+        } else if (value === null) {
+          return "null";
+        } else if (value === undefined) {
+          return "undefined";
+        } else if (
+          typeof value === "number" ||
+          typeof value === "boolean" ||
+          typeof value === "bigint"
+        ) {
+          return value.toString();
+        } else if (value instanceof Promise) {
+          return resolve(await value);
+        } else if (isFileRef(value)) {
+          if (!(value.path in appendices)) {
+            appendices[value.path] = await fs.readFile(value.path, "utf-8");
           }
-        })
-      );
-
-      // Construct the string template by joining template parts with interpolated values
-      const lines = template
-        .map((part) =>
-          part
-            .split("\n")
-            .map((line) =>
-              line.startsWith(indent) ? line.slice(indent.length) : line
+          return `[${path.basename(value.path)}](${value.path})`;
+        } else if (isFileCollection(value)) {
+          return Object.entries(value.files)
+            .map(([filePath, content]) => {
+              appendices[filePath] = content;
+              return `[${path.basename(filePath)}](${filePath})`;
+            })
+            .join("\n\n");
+        } else if (Array.isArray(value)) {
+          return (
+            await Promise.all(
+              value.map(async (value, i) => `${i}. ${await resolve(value)}`)
             )
-            .join("\n")
-        )
-        .flatMap((part, i) =>
-          i < stringValues.length ? [part, stringValues[i] ?? ""] : [part]
-        )
-        .join("")
-        .split("\n");
+          ).join("\n");
+        } else if (
+          typeof value === "object" &&
+          typeof value.path === "string"
+        ) {
+          if (typeof value.content === "string") {
+            appendices[value.path] = value.content;
+            return `[${path.basename(value.path)}](${value.path})`;
+          } else {
+            appendices[value.path] = await fs.readFile(value.path, "utf-8");
+            return `[${path.basename(value.path)}](${value.path})`;
+          }
+        } else if (typeof value === "object") {
+          return (
+            await Promise.all(
+              Object.entries(value).map(async ([key, value]) => {
+                return `* ${key}: ${await resolve(value)}`;
+              })
+            )
+          ).join("\n");
+        } else {
+          // TODO: support other types
+          console.log(value);
+          throw new Error(`Unsupported value type: ${value}`);
+        }
+      })
+    );
 
-      // Collect and sort appendices by file path
-      return [
-        // format the user prompt and trim the first line if it's empty
-        lines.length > 1 && lines[0].replaceAll(" ", "").length === 0
-          ? lines.slice(1).join("\n")
-          : lines.join("\n"),
+    // Construct the string template by joining template parts with interpolated values
+    const lines = template
+      .map((part) =>
+        part
+          .split("\n")
+          .map((line) =>
+            line.startsWith(indent) ? line.slice(indent.length) : line
+          )
+          .join("\n")
+      )
+      .flatMap((part, i) =>
+        i < stringValues.length ? [part, stringValues[i] ?? ""] : [part]
+      )
+      .join("")
+      .split("\n");
 
-        // sort appendices by path and include at the end of the prompt
-        Object.entries(appendices)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([filePath, content]) => {
-            const extension = path.extname(filePath).slice(1);
-            const codeTag = extension ? extension : "";
-            return `// ${filePath}\n\`\`\`${codeTag}\n${content}\n\`\`\``;
-          })
-          .join("\n\n"),
-      ].join("\n");
-    })();
+    // Collect and sort appendices by file path
+    return [
+      // format the user prompt and trim the first line if it's empty
+      lines.length > 1 && lines[0].replaceAll(" ", "").length === 0
+        ? lines.slice(1).join("\n")
+        : lines.join("\n"),
+
+      // sort appendices by path and include at the end of the prompt
+      Object.entries(appendices)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([filePath, content]) => {
+          const extension = path.extname(filePath).slice(1);
+          const codeTag = extension ? extension : "";
+          return `// ${filePath}\n\`\`\`${codeTag}\n${content}\n\`\`\``;
+        })
+        .join("\n\n"),
+    ].join("\n");
   }
 }
 _alchemy.destroy = destroy;
 _alchemy.run = run;
-_alchemy.scope = scope;
 _alchemy.secret = secret;
+_alchemy.env = env;
 
 export interface AlchemyOptions {
   /**
@@ -227,7 +253,6 @@ export interface AlchemyOptions {
    * @default false
    */
   quiet?: boolean;
-
   /**
    * A passphrase to use to encrypt/decrypt secrets.
    * Required if using alchemy.secret() in this scope.
@@ -235,35 +260,16 @@ export interface AlchemyOptions {
   password?: string;
 }
 
-/**
- * Enter a new scope synchronously.
- *
- * @example
- * // Create a scope with a password for secret handling
- * await using scope = alchemy.scope("my-scope", {
- *   password: process.env.SECRET_PASSPHRASE
- * });
- *
- * // Use secrets within the scope
- * const resource = await Resource("my-resource", {
- *   apiKey: alchemy.secret(process.env.API_KEY)
- * });
- */
-function scope(
-  id: string | undefined,
-  options?: AlchemyOptions
-  // TODO: maybe we want to allow using _ = await alchemy.scope(import.meta)
-  // | [meta: ImportMeta]
-): Scope {
-  const scope = new Scope({
-    ...options,
-    appName: options?.appName,
-    stage: options?.stage ?? DEFAULT_STAGE,
-    scopeName: id,
-    parent: options?.parent ?? Scope.get(),
-  });
-  scope.enter();
-  return scope;
+export interface ScopeOptions extends AlchemyOptions {
+  enter: boolean;
+}
+
+export interface RunOptions extends AlchemyOptions {
+  /**
+   * @default false
+   */
+  // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
+  isResource?: boolean;
 }
 
 /**
@@ -286,7 +292,7 @@ async function run<T>(
     | [id: string, fn: (this: Scope, scope: Scope) => Promise<T>]
     | [
         id: string,
-        options: AlchemyOptions,
+        options: RunOptions,
         fn: (this: Scope, scope: Scope) => Promise<T>,
       ]
 ): Promise<T> {
@@ -295,19 +301,70 @@ async function run<T>(
       ? [args[0], undefined, args[1]]
       : (args as [
           string,
-          AlchemyOptions | undefined,
+          RunOptions,
           (this: Scope, scope: Scope) => Promise<T>,
         ]);
-  const scope = alchemy.scope(id, options);
+  const _scope = new Scope({
+    ...options,
+    scopeName: id,
+  });
   try {
-    return await fn.bind(scope)(scope);
+    if (options?.isResource !== true && _scope.parent) {
+      // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
+      const seq = _scope.parent.seq();
+      const output = {
+        ID: id,
+        FQN: "",
+        Kind: "alchemy::Scope",
+        Scope: _scope,
+        Seq: seq,
+      } as const;
+      const resource = {
+        kind: "scope",
+        id,
+        seq,
+        data: {},
+        fqn: "",
+        props: {},
+        status: "created",
+        output,
+      } as const;
+      await _scope.parent!.state.set(id, resource);
+      _scope.parent!.resources.set(
+        id,
+        Object.assign(Promise.resolve(resource), output) as PendingResource
+      );
+    }
+    return await _scope.run(async () => fn.bind(_scope)(_scope));
   } catch (error) {
     if (!(error instanceof DestroyedSignal)) {
-      scope.fail();
-    } else {
+      console.log(error);
+      _scope.fail();
     }
     throw error;
   } finally {
-    await scope.finalize();
+    await _scope.finalize();
   }
+}
+
+export async function env<T = string>(
+  name: string,
+  value?: T | undefined,
+  error?: string
+): Promise<T> {
+  if (value !== undefined) {
+    return value;
+  } else if (typeof process !== undefined) {
+    // we are in a node environment
+    return process.env[name]! as T;
+  } else {
+    // we are in a browser environment
+    try {
+      const { env } = await import("cloudflare:workers");
+      if (name in env) {
+        return env[name as keyof typeof env];
+      }
+    } catch (error) {}
+  }
+  throw new Error(error ?? `Environment variable ${name} is not set`);
 }

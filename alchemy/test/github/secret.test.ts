@@ -56,7 +56,7 @@ describe("GitHubSecret Resource", () => {
             });
 
           const secretInfo = secretList.secrets.find(
-            (s) => s.name === secretName,
+            (s) => s.name === secretName
           );
           expect(secretInfo).toBeDefined();
         } catch (error: any) {
@@ -82,6 +82,6 @@ describe("GitHubSecret Resource", () => {
       } finally {
         await destroy(scope);
       }
-    },
+    }
   );
 });

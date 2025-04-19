@@ -5,7 +5,7 @@
  *
  * 1. Globally when initializing the alchemy application:
  * ```ts
- * const app = alchemy("my-app", {
+ * const app = await alchemy("my-app", {
  *   password: process.env.SECRET_PASSPHRASE
  * });
  * ```
@@ -55,7 +55,7 @@ export function isSecret(binding: any): binding is Secret {
  *
  * @example
  * // Global password for all secrets
- * const app = alchemy("my-app", {
+ * const app = await alchemy("my-app", {
  *   password: process.env.SECRET_PASSPHRASE
  * });
  *
@@ -82,4 +82,20 @@ export function secret<S extends string | undefined>(unencrypted: S): Secret {
     throw new Error("Secret cannot be undefined");
   }
   return new Secret(unencrypted);
+}
+
+export namespace secret {
+  export async function env(
+    name: string,
+    value?: string,
+    error?: string
+  ): Promise<Secret> {
+    const alchemy = await import("./alchemy");
+    const result = await alchemy.env(name, value, error);
+    if (typeof result === "string") {
+      return secret(result);
+    } else {
+      throw new Error(`Secret environment variable ${name} is not a string`);
+    }
+  }
 }

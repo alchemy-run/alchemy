@@ -1,6 +1,6 @@
-# Static JSON File
+# StaticJsonFile
 
-Creates and manages JSON files with automatic formatting using [Prettier](https://prettier.io/). The content is automatically formatted with proper indentation and spacing.
+The StaticJsonFile resource creates formatted JSON files with automatic directory creation and cleanup. It uses Prettier for consistent JSON formatting.
 
 # Minimal Example
 
@@ -10,53 +10,26 @@ Creates a simple JSON configuration file.
 import { StaticJsonFile } from "alchemy/fs";
 
 const config = await StaticJsonFile("config.json", {
-  api: {
-    endpoint: "https://api.example.com",
-    version: "v1"
-  }
+  name: "my-app",
+  version: "1.0.0"
 });
 ```
 
-# Create with Custom Path
+# Custom Path
 
-Creates a JSON file at a specific path location.
+Creates a JSON file at a specific path, creating parent directories as needed.
 
 ```ts
 import { StaticJsonFile } from "alchemy/fs";
 
-const settings = await StaticJsonFile("settings", {
-  path: "config/settings.json",
+const config = await StaticJsonFile("config", {
+  path: "config/settings.json", 
   content: {
-    theme: "dark",
-    notifications: true,
-    language: "en"
+    api: {
+      endpoint: "https://api.example.com",
+      version: "v1"
+    },
+    features: ["auth", "logging"]
   }
-});
-```
-
-# Complex Configuration Example
-
-Creates a JSON file with nested configuration data.
-
-```ts
-import { StaticJsonFile } from "alchemy/fs";
-
-const appConfig = await StaticJsonFile("app-config.json", {
-  server: {
-    host: "localhost",
-    port: 3000,
-    cors: {
-      origins: ["https://example.com"],
-      methods: ["GET", "POST"]
-    }
-  },
-  database: {
-    url: "postgresql://localhost:5432/db",
-    pool: {
-      min: 1,
-      max: 10
-    }
-  },
-  features: ["auth", "logging", "metrics"]
 });
 ```

@@ -1,10 +1,10 @@
 # Price
 
-The Price resource lets you create and manage [Stripe Prices](https://stripe.com/docs/api/prices) for your products.
+The Price resource lets you create and manage [Stripe Prices](https://stripe.com/docs/api/prices) for products.
 
-# Minimal Example
+## Minimal Example
 
-Create a simple one-time fixed price for a product.
+Create a one-time fixed price for a product:
 
 ```ts
 import { Price } from "alchemy/stripe";
@@ -16,7 +16,9 @@ const price = await Price("basic-license", {
 });
 ```
 
-# Create a Subscription Price
+## Recurring Subscription Price
+
+Create a recurring subscription price with fixed monthly billing:
 
 ```ts
 import { Price } from "alchemy/stripe";
@@ -32,7 +34,9 @@ const subscriptionPrice = await Price("pro-monthly", {
 });
 ```
 
-# Create a Metered Price
+## Metered Usage Price
+
+Create a metered price for usage-based billing:
 
 ```ts
 import { Price } from "alchemy/stripe";
@@ -49,7 +53,9 @@ const meteredPrice = await Price("storage", {
 });
 ```
 
-# Create a Tiered Price
+## Tiered Price with Tax
+
+Create a tiered price with tax behavior:
 
 ```ts
 import { Price } from "alchemy/stripe";

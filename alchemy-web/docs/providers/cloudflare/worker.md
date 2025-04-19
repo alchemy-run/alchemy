@@ -1,27 +1,45 @@
 # Worker
 
-The Worker resource lets you deploy [Cloudflare Workers](https://developers.cloudflare.com/workers/) - serverless JavaScript/TypeScript functions that run on Cloudflare's global network.
+The [Worker](https://developers.cloudflare.com/workers/) resource lets you deploy serverless JavaScript/TypeScript functions to Cloudflare's global network.
 
-## Minimal Example
+# Minimal Example
 
-Create a basic HTTP handler worker:
+Deploy a basic worker with an HTTP handler:
 
 ```ts
 import { Worker } from "alchemy/cloudflare";
 
 const worker = await Worker("api", {
   name: "api-worker", 
-  script: "addEventListener('fetch', event => event.respondWith(new Response('Hello World')))"
+  script: "export default { async fetch() { return new Response('Hello') } }"
 });
 ```
 
-## Create a Worker with Bindings
+# Worker with Bundling
+
+Bundle and deploy a TypeScript worker:
+
+```ts
+import { Worker } from "alchemy/cloudflare";
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/worker.ts",
+  bundle: {
+    minify: true
+  }
+});
+```
+
+# Worker with Bindings
+
+Bind KV namespaces, Durable Objects and other resources:
 
 ```ts
 import { Worker, KVNamespace, DurableObjectNamespace } from "alchemy/cloudflare";
 
-const kv = await KVNamespace("data", {
-  title: "data-store"
+const kv = await KVNamespace("store", {
+  title: "my-store"
 });
 
 const counter = new DurableObjectNamespace("counter", {
@@ -30,41 +48,50 @@ const counter = new DurableObjectNamespace("counter", {
 
 const worker = await Worker("api", {
   name: "api-worker",
-  entrypoint: "./src/api.ts",
+  script: "export default { async fetch() { return new Response('Hello') } }",
   bindings: {
-    DATA: kv,
+    STORE: kv,
     COUNTER: counter
   }
 });
 ```
 
-## Create a Worker with Routes
+# Worker with Custom Domain
+
+Deploy a worker with a custom domain:
 
 ```ts
-import { Worker } from "alchemy/cloudflare";
+import { Worker, CustomDomain } from "alchemy/cloudflare";
 
 const worker = await Worker("api", {
   name: "api-worker",
-  entrypoint: "./src/api.ts",
-  routes: ["api.example.com/*"],
-  url: true // Enable workers.dev URL
+  script: "export default { async fetch() { return new Response('Hello') } }"
+});
+
+const domain = await CustomDomain("api-domain", {
+  name: "api.example.com",
+  zoneId: "YOUR_ZONE_ID",
+  workerName: worker.name
 });
 ```
 
-## Create a Worker with Environment Variables
+# Bind to a Worker
+
+Bind a worker to another worker:
 
 ```ts
 import { Worker } from "alchemy/cloudflare";
-import { secret } from "alchemy";
 
-const worker = await Worker("api", {
-  name: "api-worker",
-  entrypoint: "./src/api.ts",
+const backend = await Worker("backend", {
+  name: "backend-worker",
+  script: "export default { async fetch() { return new Response('Hello') } }"
+});
+
+const frontend = await Worker("frontend", {
+  name: "frontend-worker", 
+  script: "export default { async fetch() { return new Response('Hello') } }",
   bindings: {
-    API_KEY: secret(process.env.API_KEY)
-  },
-  env: {
-    NODE_ENV: "production"
+    BACKEND: backend
   }
 });
 ```

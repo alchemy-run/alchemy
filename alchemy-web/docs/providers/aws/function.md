@@ -1,10 +1,10 @@
 # AWS Lambda Function
 
-The Function resource lets you create and manage [AWS Lambda functions](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) for serverless compute.
+The [AWS Lambda Function](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) resource lets you create and manage Lambda functions that run code in response to events.
 
-# Minimal Example
+## Minimal Example
 
-Creates a basic Lambda function with default settings.
+Create a basic Lambda function with default settings:
 
 ```ts
 import { Function } from "alchemy/aws";
@@ -17,11 +17,11 @@ const func = await Function("api", {
 });
 ```
 
-# Create Function with Environment Variables
+## Custom Configuration
+
+Configure memory, timeout and environment variables:
 
 ```ts
-import { Function } from "alchemy/aws";
-
 const func = await Function("worker", {
   functionName: "worker",
   zipPath: "./dist/worker.zip",
@@ -36,12 +36,12 @@ const func = await Function("worker", {
 });
 ```
 
-# Create Function with URL Endpoint
+## Function URL
+
+Create a function with a public URL endpoint and CORS:
 
 ```ts
-import { Function } from "alchemy/aws";
-
-const api = await Function("public-api", {
+const func = await Function("public-api", {
   functionName: "public-api", 
   zipPath: "./dist/api.zip",
   roleArn: role.arn,
@@ -51,8 +51,7 @@ const api = await Function("public-api", {
     cors: {
       allowOrigins: ["*"],
       allowMethods: ["GET", "POST"],
-      allowHeaders: ["content-type"],
-      maxAge: 86400
+      allowHeaders: ["content-type"]
     }
   }
 });

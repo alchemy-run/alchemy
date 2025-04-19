@@ -2,9 +2,9 @@
 
 The Folder resource creates and manages directories in the filesystem with automatic parent directory creation and cleanup on deletion.
 
-# Minimal Example
+## Minimal Example
 
-Creates a basic directory using the ID as the path.
+Creates a directory using the ID as the path:
 
 ```ts
 import { Folder } from "alchemy/fs";
@@ -12,41 +12,41 @@ import { Folder } from "alchemy/fs";
 const dir = await Folder("uploads");
 ```
 
-# Create a Nested Directory
+## Custom Path
 
-Creates a directory with an explicit path and nested structure.
+Specify an explicit path for the directory:
 
 ```ts
 import { Folder } from "alchemy/fs";
 
 const logs = await Folder("logs", {
-  path: "var/log/app",
-  recursive: true
+  path: "var/log/app"
 });
 ```
 
-# Preserve Directory on Delete
+## Recursive Creation
 
-Creates a directory that won't be deleted during cleanup.
+Create nested directory structures automatically:
 
 ```ts
 import { Folder } from "alchemy/fs";
 
-const persist = await Folder("data", {
-  path: "data",
-  delete: false
+const nested = await Folder("nested", {
+  path: "path/to/nested/dir",
+  recursive: true // default is true
 });
 ```
 
-# Clean Directory on Delete
+## Cleanup Options
 
-Creates a directory that will be cleaned (including contents) during deletion.
+Control how folders are cleaned up during deletion:
 
 ```ts
 import { Folder } from "alchemy/fs";
 
 const temp = await Folder("temp", {
   path: "temp",
-  clean: true
+  delete: true,    // Whether to delete on destroy (default true)
+  clean: true      // Remove contents during deletion (default false)
 });
 ```

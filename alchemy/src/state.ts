@@ -1,11 +1,11 @@
 import type { Resource, ResourceProps } from "./resource";
 import type { Scope } from "./scope";
 
-export interface State<
+export type State<
   Kind extends string = string,
   Props extends ResourceProps | undefined = ResourceProps | undefined,
   Out extends Resource = Resource,
-> {
+> = {
   status:
     | `creating`
     | `created`
@@ -22,7 +22,7 @@ export interface State<
   props: Props;
   oldProps?: Props;
   output: Out;
-}
+};
 
 export type StateStoreType = (scope: Scope) => StateStore;
 

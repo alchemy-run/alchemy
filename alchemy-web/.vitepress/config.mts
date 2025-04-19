@@ -6,6 +6,15 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   title: "Alchemy",
   description: "Alchemy Docs",
+  head: [
+    ["link", { rel: "icon", type: "image/png", href: "/potion.png" }],
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:title", content: "Alchemy" }],
+    ["meta", { property: "og:description", content: "Alchemy Docs" }],
+    ["meta", { property: "og:url", content: "https://alchemy.run" }],
+    ["meta", { name: "twitter:title", content: "Alchemy" }],
+    ["meta", { name: "twitter:description", content: "Alchemy Docs" }],
+  ],
   markdown: {
     // @ts-ignore
     codeTransformers: [transformerTwoslash()],
@@ -18,63 +27,94 @@ export default defineConfig({
       { text: "Home", link: "/" },
       { text: "Docs", link: "/docs/getting-started" },
     ],
+    socialLinks: [
+      { icon: "github", link: "https://github.com/sam-goodwin/alchemy" },
+      { icon: "discord", link: "https://discord.gg/jwKw8dBJdN" },
+      { icon: "x", link: "https://twitter.com/samgoodwin89" },
+    ],
     sidebar: [
-      { text: "Getting Started", link: "/docs/getting-started" },
+      { text: "Get Started", link: "/docs/getting-started" },
+      { text: "What is Alchemy?", link: "/docs/what-is-alchemy" },
       {
-        text: "Tutorials",
-        link: "/docs/tutorials/deploy-cloudflare-worker-and-static-site",
+        text: "Concepts",
+        collapsed: false,
+        items: [
+          { text: "Resource", link: "/docs/concepts/resource.md" },
+          { text: "Scope", link: "/docs/concepts/scope.md" },
+          { text: "State", link: "/docs/concepts/state.md" },
+          { text: "Secret", link: "/docs/concepts/secret.md" },
+          { text: "Testing", link: "/docs/concepts/testing.md" },
+          { text: "Destroy", link: "/docs/concepts/destroy.md" },
+          { text: "Bindings", link: "/docs/concepts/bindings.md" },
+        ],
+      },
+      {
+        text: "Guides",
         collapsed: false,
         items: [
           {
-            text: "Deploying a Cloudflare Worker and Static Site",
-            link: "/docs/tutorials/deploy-cloudflare-worker-and-static-site",
+            text: "Cloudflare ViteJS",
+            link: "/docs/guides/cloudflare-vitejs.md",
           },
           {
-            text: "Bundling and Deploying an AWS Lambda Function",
-            link: "/docs/tutorials/deploy-aws-lambda-function",
+            text: "Cloudflare TanStack Start",
+            link: "/docs/guides/cloudflare-tanstack-start.md",
+          },
+          {
+            text: "Cloudflare Durable Objects",
+            link: "/docs/guides/cloudflare-durable-objects.md",
+          },
+          {
+            text: "Cloudflare Workflows",
+            link: "/docs/guides/cloudflare-workflows.md",
+          },
+          {
+            text: "Use AI to develop Custom Resources",
+            link: "/docs/guides/custom-resources.md",
+          },
+          {
+            text: "Custom State Store",
+            link: "/docs/guides/custom-state-store.md",
           },
         ],
       },
       {
         text: "Providers",
-        link: "/docs/providers",
         collapsed: false,
         items: [
           {
             text: "ai",
             collapsed: true,
             items: [
-              { text: "Approve", link: "/docs/providers/ai/approve.md" },
-              { text: "Astro File", link: "/docs/providers/ai/astro-file.md" },
-              { text: "CSS File", link: "/docs/providers/ai/css-file.md" },
-              { text: "Data", link: "/docs/providers/ai/data.md" },
-              { text: "Document", link: "/docs/providers/ai/document.md" },
-              { text: "HTML File", link: "/docs/providers/ai/html-file.md" },
-              { text: "JSON File", link: "/docs/providers/ai/json-file.md" },
-              { text: "Review", link: "/docs/providers/ai/review.md" },
+              { text: "AstroFile", link: "/docs/providers/ai/astro-file" },
+              { text: "CSSFile", link: "/docs/providers/ai/css-file" },
+              { text: "Data", link: "/docs/providers/ai/data" },
+              { text: "Document", link: "/docs/providers/ai/document" },
+              { text: "HTMLFile", link: "/docs/providers/ai/html-file" },
+              { text: "JSONFile", link: "/docs/providers/ai/json-file" },
               {
-                text: "TypeScript File",
-                link: "/docs/providers/ai/typescript-file.md",
+                text: "TypeScriptFile",
+                link: "/docs/providers/ai/typescript-file",
               },
-              { text: "Vue File", link: "/docs/providers/ai/vue-file.md" },
-              { text: "YAML File", link: "/docs/providers/ai/yaml-file.md" },
+              { text: "VueFile", link: "/docs/providers/ai/vue-file" },
+              { text: "YAMLFile", link: "/docs/providers/ai/yaml-file" },
             ],
           },
           {
             text: "aws",
             collapsed: true,
             items: [
-              { text: "Bucket", link: "/docs/providers/aws/bucket.md" },
-              { text: "Function", link: "/docs/providers/aws/function.md" },
-              { text: "Policy", link: "/docs/providers/aws/policy.md" },
+              { text: "Bucket", link: "/docs/providers/aws/bucket" },
+              { text: "Function", link: "/docs/providers/aws/function" },
+              { text: "Policy", link: "/docs/providers/aws/policy" },
               {
-                text: "Policy Attachment",
-                link: "/docs/providers/aws/policy-attachment.md",
+                text: "PolicyAttachment",
+                link: "/docs/providers/aws/policy-attachment",
               },
-              { text: "Queue", link: "/docs/providers/aws/queue.md" },
-              { text: "Role", link: "/docs/providers/aws/role.md" },
-              { text: "SES", link: "/docs/providers/aws/ses.md" },
-              { text: "Table", link: "/docs/providers/aws/table.md" },
+              { text: "Queue", link: "/docs/providers/aws/queue" },
+              { text: "Role", link: "/docs/providers/aws/role" },
+              { text: "SES", link: "/docs/providers/aws/ses" },
+              { text: "Table", link: "/docs/providers/aws/table" },
             ],
           },
           {
@@ -82,27 +122,43 @@ export default defineConfig({
             collapsed: true,
             items: [
               {
-                text: "DNS Records",
-                link: "/docs/providers/cloudflare/dns.md",
+                text: "AccountApiToken",
+                link: "/docs/providers/cloudflare/account-api-token",
+              },
+              { text: "Assets", link: "/docs/providers/cloudflare/assets" },
+              {
+                text: "CustomDomain",
+                link: "/docs/providers/cloudflare/custom-domain",
               },
               {
-                text: "KV Namespace",
-                link: "/docs/providers/cloudflare/kv-namespace.md",
+                text: "D1Database",
+                link: "/docs/providers/cloudflare/d1-database",
               },
               {
-                text: "R2 Bucket",
-                link: "/docs/providers/cloudflare/bucket.md",
+                text: "DnsRecords",
+                link: "/docs/providers/cloudflare/dns-records",
               },
               {
-                text: "Static Site",
-                link: "/docs/providers/cloudflare/static-site.md",
+                text: "DurableObjectNamespace",
+                link: "/docs/providers/cloudflare/durable-object-namespace",
               },
-              { text: "Worker", link: "/docs/providers/cloudflare/worker.md" },
               {
-                text: "Wrangler Json",
-                link: "/docs/providers/cloudflare/wrangler.json.md",
+                text: "KVNamespace",
+                link: "/docs/providers/cloudflare/kv-namespace",
               },
-              { text: "Zone", link: "/docs/providers/cloudflare/zone.md" },
+              {
+                text: "PermissionGroups",
+                link: "/docs/providers/cloudflare/permission-groups",
+              },
+              { text: "Queue", link: "/docs/providers/cloudflare/queue" },
+              { text: "R2Bucket", link: "/docs/providers/cloudflare/bucket" },
+              { text: "Worker", link: "/docs/providers/cloudflare/worker" },
+              { text: "Workflow", link: "/docs/providers/cloudflare/workflow" },
+              {
+                text: "WranglerJson",
+                link: "/docs/providers/cloudflare/wrangler.json",
+              },
+              { text: "Zone", link: "/docs/providers/cloudflare/zone" },
             ],
           },
           {
@@ -110,56 +166,54 @@ export default defineConfig({
             collapsed: true,
             items: [
               {
-                text: "Import Dns Records",
-                link: "/docs/providers/dns/import-dns.md",
+                text: "ImportDnsRecords",
+                link: "/docs/providers/dns/import-dns",
               },
             ],
           },
           {
             text: "esbuild",
             collapsed: true,
-            items: [
-              { text: "Bundle", link: "/docs/providers/esbuild/bundle.md" },
-            ],
+            items: [{ text: "Bundle", link: "/docs/providers/esbuild/bundle" }],
           },
           {
             text: "fs",
             collapsed: true,
             items: [
-              { text: "Copy File", link: "/docs/providers/fs/copy-file.md" },
-              { text: "File", link: "/docs/providers/fs/file.md" },
-              { text: "Folder", link: "/docs/providers/fs/folder.md" },
+              { text: "CopyFile", link: "/docs/providers/fs/copy-file" },
+              { text: "File", link: "/docs/providers/fs/file" },
+              { text: "Folder", link: "/docs/providers/fs/folder" },
               {
-                text: "Static Astro File",
-                link: "/docs/providers/fs/static-astro-file.md",
+                text: "StaticAstroFile",
+                link: "/docs/providers/fs/static-astro-file",
               },
               {
-                text: "Static CSS File",
-                link: "/docs/providers/fs/static-css-file.md",
+                text: "StaticCSSFile",
+                link: "/docs/providers/fs/static-css-file",
               },
               {
-                text: "Static HTML File",
-                link: "/docs/providers/fs/static-html-file.md",
+                text: "StaticHTMLFile",
+                link: "/docs/providers/fs/static-html-file",
               },
               {
-                text: "Static JSON File",
-                link: "/docs/providers/fs/static-json-file.md",
+                text: "StaticJsonFile",
+                link: "/docs/providers/fs/static-json-file",
               },
               {
-                text: "Static Text File",
-                link: "/docs/providers/fs/static-text-file.md",
+                text: "StaticTextFile",
+                link: "/docs/providers/fs/static-text-file",
               },
               {
-                text: "Static TypeScript File",
-                link: "/docs/providers/fs/static-typescript-file.md",
+                text: "StaticTypeScriptFile",
+                link: "/docs/providers/fs/static-typescript-file",
               },
               {
-                text: "Static Vue File",
-                link: "/docs/providers/fs/static-vue-file.md",
+                text: "StaticVueFile",
+                link: "/docs/providers/fs/static-vue-file",
               },
               {
-                text: "Static YAML File",
-                link: "/docs/providers/fs/static-yaml-file.md",
+                text: "StaticYamlFile",
+                link: "/docs/providers/fs/static-yaml-file",
               },
             ],
           },
@@ -167,21 +221,23 @@ export default defineConfig({
             text: "github",
             collapsed: true,
             items: [
-              {
-                text: "GitHub Secret",
-                link: "/docs/providers/github/secret.md",
-              },
+              { text: "GitHubSecret", link: "/docs/providers/github/secret" },
             ],
+          },
+          {
+            text: "os",
+            collapsed: true,
+            items: [{ text: "Exec", link: "/docs/providers/os/exec" }],
           },
           {
             text: "stripe",
             collapsed: true,
             items: [
-              { text: "Price", link: "/docs/providers/stripe/price.md" },
-              { text: "Product", link: "/docs/providers/stripe/product.md" },
+              { text: "Price", link: "/docs/providers/stripe/price" },
+              { text: "Product", link: "/docs/providers/stripe/product" },
               {
-                text: "Webhook Endpoint",
-                link: "/docs/providers/stripe/webhook.md",
+                text: "WebhookEndpoint",
+                link: "/docs/providers/stripe/webhook",
               },
             ],
           },
@@ -189,6 +245,5 @@ export default defineConfig({
       },
     ],
     search: { provider: "local" },
-    socialLinks: [],
   },
 });

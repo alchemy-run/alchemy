@@ -1,14 +1,19 @@
 import {
+  AddPermissionCommand,
   Architecture,
   CreateFunctionCommand,
+  CreateFunctionUrlConfigCommand,
   DeleteFunctionCommand,
+  DeleteFunctionUrlConfigCommand,
   GetFunctionCommand,
   GetFunctionConfigurationCommand,
+  GetFunctionUrlConfigCommand,
   LambdaClient,
   ResourceNotFoundException,
   Runtime,
   UpdateFunctionCodeCommand,
   UpdateFunctionConfigurationCommand,
+  UpdateFunctionUrlConfigCommand,
 } from "@aws-sdk/client-lambda";
 import fs from "node:fs";
 import path from "node:path";
@@ -229,6 +234,11 @@ export interface Function extends Resource<"lambda::Function">, FunctionProps {
    * ARN of the signing job
    */
   signingJobArn?: string;
+
+  /**
+   * Function URL if configured
+   */
+  functionUrl?: string;
 }
 
 /**
@@ -294,22 +304,38 @@ export const Function = Resource(
     const code = await zipCode(props.zipPath);
 
     if (this.phase === "delete") {
+      // Delete function URL if it exists
+      if (this.output?.url) {
+        try {
+          await client.send(
+            new DeleteFunctionUrlConfigCommand({
+              FunctionName: props.functionName,
+            })
+          );
+        } catch (error: any) {
+          if (error.name !== "ResourceNotFoundException") {
+            console.warn("Failed to delete function URL:", error);
+          }
+        }
+      }
+
       await ignore(ResourceNotFoundException.name, () =>
         client.send(
           new DeleteFunctionCommand({
             FunctionName: props.functionName,
-          }),
-        ),
+          })
+        )
       );
 
       return this.destroy();
     } else {
+      let functionUrl: string | undefined;
       try {
         // Check if function exists
         await client.send(
           new GetFunctionCommand({
             FunctionName: props.functionName,
-          }),
+          })
         );
 
         if (this.phase === "update") {
@@ -321,7 +347,7 @@ export const Function = Resource(
             new UpdateFunctionCodeCommand({
               FunctionName: props.functionName,
               ZipFile: code,
-            }),
+            })
           );
 
           // Wait for code update to stabilize
@@ -340,11 +366,157 @@ export const Function = Resource(
               Environment: props.environment
                 ? { Variables: props.environment }
                 : undefined,
-            }),
+            })
           );
 
           // Wait for configuration update to stabilize
           await waitForFunctionStabilization(client, props.functionName);
+
+          // Handle URL configuration
+          if (props.url) {
+            try {
+              // Check if URL config exists already
+              const urlConfig = await client.send(
+                new GetFunctionUrlConfigCommand({
+                  FunctionName: props.functionName,
+                })
+              );
+
+              // Update URL configuration if it exists
+              if (urlConfig) {
+                const updateResult = await client.send(
+                  new UpdateFunctionUrlConfigCommand({
+                    FunctionName: props.functionName,
+                    AuthType: props.url.authType || "NONE",
+                    Cors: props.url.cors
+                      ? {
+                          AllowCredentials: props.url.cors.allowCredentials,
+                          AllowHeaders: props.url.cors.allowHeaders,
+                          AllowMethods: props.url.cors.allowMethods,
+                          AllowOrigins: props.url.cors.allowOrigins,
+                          ExposeHeaders: props.url.cors.exposeHeaders,
+                          MaxAge: props.url.cors.maxAge,
+                        }
+                      : undefined,
+                  })
+                );
+                functionUrl = updateResult.FunctionUrl;
+
+                // Add public access permission for function URL
+                if (props.url.authType === "NONE") {
+                  try {
+                    await client.send(
+                      new AddPermissionCommand({
+                        FunctionName: props.functionName,
+                        StatementId: "FunctionURLAllowPublicAccess",
+                        Action: "lambda:InvokeFunctionUrl",
+                        Principal: "*",
+                        FunctionUrlAuthType: "NONE",
+                      })
+                    );
+                  } catch (permError: any) {
+                    if (!permError.message?.includes("already exists")) {
+                      console.warn("Error adding URL permission:", permError);
+                    }
+                  }
+                }
+              } else {
+                // Create URL configuration if it doesn't exist
+                const createResult = await client.send(
+                  new CreateFunctionUrlConfigCommand({
+                    FunctionName: props.functionName,
+                    AuthType: props.url.authType || "NONE",
+                    Cors: props.url.cors
+                      ? {
+                          AllowCredentials: props.url.cors.allowCredentials,
+                          AllowHeaders: props.url.cors.allowHeaders,
+                          AllowMethods: props.url.cors.allowMethods,
+                          AllowOrigins: props.url.cors.allowOrigins,
+                          ExposeHeaders: props.url.cors.exposeHeaders,
+                          MaxAge: props.url.cors.maxAge,
+                        }
+                      : undefined,
+                  })
+                );
+                functionUrl = createResult.FunctionUrl;
+
+                // Add public access permission for function URL
+                if (props.url.authType === "NONE") {
+                  try {
+                    await client.send(
+                      new AddPermissionCommand({
+                        FunctionName: props.functionName,
+                        StatementId: "FunctionURLAllowPublicAccess",
+                        Action: "lambda:InvokeFunctionUrl",
+                        Principal: "*",
+                        FunctionUrlAuthType: "NONE",
+                      })
+                    );
+                  } catch (permError: any) {
+                    if (!permError.message?.includes("already exists")) {
+                      console.warn("Error adding URL permission:", permError);
+                    }
+                  }
+                }
+              }
+            } catch (error: any) {
+              if (error.name === "ResourceNotFoundException") {
+                // Create URL configuration if it doesn't exist
+                const createResult = await client.send(
+                  new CreateFunctionUrlConfigCommand({
+                    FunctionName: props.functionName,
+                    AuthType: props.url.authType || "NONE",
+                    Cors: props.url.cors
+                      ? {
+                          AllowCredentials: props.url.cors.allowCredentials,
+                          AllowHeaders: props.url.cors.allowHeaders,
+                          AllowMethods: props.url.cors.allowMethods,
+                          AllowOrigins: props.url.cors.allowOrigins,
+                          ExposeHeaders: props.url.cors.exposeHeaders,
+                          MaxAge: props.url.cors.maxAge,
+                        }
+                      : undefined,
+                  })
+                );
+                functionUrl = createResult.FunctionUrl;
+
+                // Add public access permission for function URL
+                if (props.url.authType === "NONE") {
+                  try {
+                    await client.send(
+                      new AddPermissionCommand({
+                        FunctionName: props.functionName,
+                        StatementId: "FunctionURLAllowPublicAccess",
+                        Action: "lambda:InvokeFunctionUrl",
+                        Principal: "*",
+                        FunctionUrlAuthType: "NONE",
+                      })
+                    );
+                  } catch (permError: any) {
+                    if (!permError.message?.includes("already exists")) {
+                      console.warn("Error adding URL permission:", permError);
+                    }
+                  }
+                }
+              } else {
+                throw error;
+              }
+            }
+          } else if (this.output?.url) {
+            // Remove URL config if it was previously set but not in current props
+            try {
+              await client.send(
+                new DeleteFunctionUrlConfigCommand({
+                  FunctionName: props.functionName,
+                })
+              );
+              functionUrl = undefined;
+            } catch (error: any) {
+              if (error.name !== "ResourceNotFoundException") {
+                console.warn("Failed to delete function URL:", error);
+              }
+            }
+          }
         }
       } catch (error: any) {
         if (error.name === "ResourceNotFoundException") {
@@ -371,7 +543,7 @@ export const Function = Resource(
                     ? [props.architecture]
                     : [Architecture.x86_64],
                   Tags: props.tags,
-                }),
+                })
               );
               break; // Success - exit retry loop
             } catch (createError: any) {
@@ -384,7 +556,7 @@ export const Function = Resource(
 
               if (Date.now() - startTime > 10000) {
                 throw new Error(
-                  "Timeout waiting for IAM role to be assumable by Lambda after 10s",
+                  "Timeout waiting for IAM role to be assumable by Lambda after 10s"
                 );
               }
 
@@ -399,11 +571,55 @@ export const Function = Resource(
             const config = await client.send(
               new GetFunctionConfigurationCommand({
                 FunctionName: props.functionName,
-              }),
+              })
             );
             isCreating = config.State === "Pending";
             if (isCreating) {
               await new Promise((resolve) => setTimeout(resolve, 1000));
+            }
+          }
+
+          // Create URL configuration if needed
+          if (props.url) {
+            try {
+              const createResult = await client.send(
+                new CreateFunctionUrlConfigCommand({
+                  FunctionName: props.functionName,
+                  AuthType: props.url.authType || "NONE",
+                  Cors: props.url.cors
+                    ? {
+                        AllowCredentials: props.url.cors.allowCredentials,
+                        AllowHeaders: props.url.cors.allowHeaders,
+                        AllowMethods: props.url.cors.allowMethods,
+                        AllowOrigins: props.url.cors.allowOrigins,
+                        ExposeHeaders: props.url.cors.exposeHeaders,
+                        MaxAge: props.url.cors.maxAge,
+                      }
+                    : undefined,
+                })
+              );
+              functionUrl = createResult.FunctionUrl;
+
+              // Add public access permission for function URL
+              if (props.url.authType === "NONE") {
+                try {
+                  await client.send(
+                    new AddPermissionCommand({
+                      FunctionName: props.functionName,
+                      StatementId: "FunctionURLAllowPublicAccess",
+                      Action: "lambda:InvokeFunctionUrl",
+                      Principal: "*",
+                      FunctionUrlAuthType: "NONE",
+                    })
+                  );
+                } catch (permError: any) {
+                  if (!permError.message?.includes("already exists")) {
+                    console.warn("Error adding URL permission:", permError);
+                  }
+                }
+              }
+            } catch (error) {
+              console.warn("Failed to create function URL:", error);
             }
           }
         } else {
@@ -416,14 +632,30 @@ export const Function = Resource(
         client.send(
           new GetFunctionCommand({
             FunctionName: props.functionName,
-          }),
+          })
         ),
         client.send(
           new GetFunctionConfigurationCommand({
             FunctionName: props.functionName,
-          }),
+          })
         ),
       ]);
+
+      // Try to get function URL if it wasn't already retrieved and URL is configured
+      if (!functionUrl && (props.url || this.output?.url)) {
+        try {
+          const urlConfig = await client.send(
+            new GetFunctionUrlConfigCommand({
+              FunctionName: props.functionName,
+            })
+          );
+          functionUrl = urlConfig.FunctionUrl;
+        } catch (error: any) {
+          if (error.name !== "ResourceNotFoundException") {
+            console.warn("Failed to get function URL:", error);
+          }
+        }
+      }
 
       return this({
         ...props,
@@ -447,21 +679,22 @@ export const Function = Resource(
         packageType: config.PackageType!,
         signingProfileVersionArn: config.SigningProfileVersionArn,
         signingJobArn: config.SigningJobArn,
+        functionUrl: functionUrl,
       });
     }
-  },
+  }
 );
 
 // Helper to wait for function to stabilize
 async function waitForFunctionStabilization(
   client: LambdaClient,
-  functionName: string,
+  functionName: string
 ) {
   while (true) {
     const config = await client.send(
       new GetFunctionConfigurationCommand({
         FunctionName: functionName,
-      }),
+      })
     );
 
     // Check if function is in a stable state
@@ -472,7 +705,7 @@ async function waitForFunctionStabilization(
     // If there's a failure, throw an error
     if (config.State === "Failed" || config.LastUpdateStatus === "Failed") {
       throw new Error(
-        `Function failed to stabilize: ${config.StateReason || config.LastUpdateStatusReason}`,
+        `Function failed to stabilize: ${config.StateReason || config.LastUpdateStatusReason}`
       );
     }
 

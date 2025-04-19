@@ -1,25 +1,29 @@
-import fs from "node:fs/promises";
+import fs from "node:fs";
 import path from "node:path";
 import type { Scope } from "../scope";
+import { deserialize, serialize } from "../serde";
 import type { State, StateStore } from "../state";
 import { ignore } from "../util/ignore";
-import { deserialize, serialize } from "../util/serde";
 
 const stateRootDir = path.join(process.cwd(), ".alchemy");
 
 export class FileSystemStateStore implements StateStore {
   public readonly dir: string;
+  private initialized = false;
   constructor(public readonly scope: Scope) {
     this.dir = path.join(stateRootDir, ...scope.chain);
   }
 
   async init(): Promise<void> {
-    await fs.mkdir(stateRootDir, { recursive: true });
-    await fs.mkdir(this.dir, { recursive: true });
+    if (this.initialized) {
+      return;
+    }
+    this.initialized = true;
+    await fs.promises.mkdir(this.dir, { recursive: true });
   }
 
   async deinit(): Promise<void> {
-    await ignore("ENOENT", () => fs.rmdir(this.dir));
+    await ignore("ENOENT", () => fs.promises.rmdir(this.dir));
   }
 
   async count(): Promise<number> {
@@ -28,7 +32,7 @@ export class FileSystemStateStore implements StateStore {
 
   async list(): Promise<string[]> {
     try {
-      const files = await fs.readdir(this.dir, {
+      const files = await fs.promises.readdir(this.dir, {
         withFileTypes: true,
       });
       return files
@@ -45,10 +49,10 @@ export class FileSystemStateStore implements StateStore {
 
   async get(key: string): Promise<State | undefined> {
     try {
-      const content = await fs.readFile(await this.getPath(key), "utf8");
+      const content = await fs.promises.readFile(this.getPath(key), "utf8");
       const state = (await deserialize(
         this.scope,
-        JSON.parse(content),
+        JSON.parse(content)
       )) as State;
       if (state.output === undefined) {
         state.output = {} as any;
@@ -64,14 +68,22 @@ export class FileSystemStateStore implements StateStore {
   }
 
   async set(key: string, value: State): Promise<void> {
-    return fs.writeFile(
-      await this.getPath(key),
-      JSON.stringify(await serialize(this.scope, value), null, 2),
+    await this.init();
+    await fs.promises.writeFile(
+      this.getPath(key),
+      JSON.stringify(await serialize(this.scope, value), null, 2)
     );
   }
 
   async delete(key: string): Promise<void> {
-    return fs.unlink(await this.getPath(key));
+    try {
+      return await fs.promises.unlink(this.getPath(key));
+    } catch (error: any) {
+      if (error.code === "ENOENT") {
+        return;
+      }
+      throw error;
+    }
   }
 
   async all(): Promise<Record<string, State>> {
@@ -88,22 +100,19 @@ export class FileSystemStateStore implements StateStore {
               return [] as const;
             }
             return [[id, s]] as const;
-          }),
+          })
         )
-      ).flat(),
+      ).flat()
     );
   }
 
-  private async getPath(key: string): Promise<string> {
+  private getPath(key: string): string {
     if (key.includes(":")) {
       throw new Error(`ID cannot include colons: ${key}`);
     }
     if (key.includes("/")) {
       key = key.replaceAll("/", ":");
     }
-    const file = path.join(this.dir, `${key}.json`);
-    const dir = path.dirname(file);
-    await fs.mkdir(dir, { recursive: true });
-    return file;
+    return path.join(this.dir, `${key}.json`);
   }
 }

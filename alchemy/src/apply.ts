@@ -7,9 +7,8 @@ import {
   type Resource,
   type ResourceProps,
 } from "./resource";
-import { Secret } from "./secret";
+import { serialize } from "./serde";
 import type { State } from "./state";
-import { serialize } from "./util/serde";
 
 export interface ApplyOptions {
   quiet?: boolean;
@@ -56,24 +55,16 @@ export async function apply<Out extends Resource>(
 
     // Skip update if inputs haven't changed and resource is in a stable state
     if (state.status === "created" || state.status === "updated") {
-      const oldProps = JSON.stringify(
-        state.props,
-        (_, value) =>
-          value instanceof Secret
-            ? {
-                "@secret": value.unencrypted,
-              }
-            : value,
-        2
-      );
-      const newProps = JSON.stringify(
-        await serialize(scope, props, {
-          encrypt: false,
-        }),
-        null,
-        2
-      );
-      if (oldProps === newProps && alwaysUpdate !== true) {
+      const oldProps = await serialize(scope, state.props, {
+        encrypt: false,
+      });
+      const newProps = await serialize(scope, props, {
+        encrypt: false,
+      });
+      if (
+        JSON.stringify(oldProps) === JSON.stringify(newProps) &&
+        alwaysUpdate !== true
+      ) {
         if (!quiet) {
           // console.log(`Skip:    "${resource.FQN}" (no changes)`);
         }
@@ -116,8 +107,12 @@ export async function apply<Out extends Resource>(
       },
     });
 
-    const output = await alchemy.run(resource.ID, async () =>
-      provider.handler.bind(ctx)(resource.ID, props)
+    const output = await alchemy.run(
+      resource.ID,
+      {
+        isResource: true,
+      },
+      async () => provider.handler.bind(ctx)(resource.ID, props)
     );
     if (!quiet) {
       console.log(
@@ -141,6 +136,7 @@ export async function apply<Out extends Resource>(
     // }
     return output as any;
   } catch (error) {
+    console.error(new Error().stack);
     scope.fail();
     throw error;
   }
