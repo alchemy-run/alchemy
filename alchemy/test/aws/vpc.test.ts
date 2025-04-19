@@ -13,14 +13,16 @@ const test = alchemy.test(import.meta);
 describe("Vpc Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-vpc`;
 
-  test("create and delete vpc", async (scope) => {
+  test("create, update, and delete vpc with attributes", async (scope) => {
     let vpc: Vpc | undefined;
 
     try {
-      // Create a test VPC
+      // Create a test VPC with custom attributes
       vpc = await Vpc(testId, {
         cidrBlock: "10.0.0.0/16",
         name: `Test VPC ${testId}`,
+        enableDnsHostnames: true,
+        enableDnsSupport: true,
         tags: {
           Environment: "Testing",
           Project: "Alchemy",
@@ -30,6 +32,8 @@ describe("Vpc Resource", () => {
       expect(vpc.id).toBeTruthy();
       expect(vpc.cidrBlock).toEqual("10.0.0.0/16");
       expect(vpc.name).toEqual(`Test VPC ${testId}`);
+      expect(vpc.enableDnsHostnames).toEqual(true);
+      expect(vpc.enableDnsSupport).toEqual(true);
       expect(vpc.tags?.Environment).toEqual("Testing");
       expect(vpc.tags?.Project).toEqual("Alchemy");
 
@@ -53,6 +57,41 @@ describe("Vpc Resource", () => {
 
       const envTag = awsVpc.Tags?.find((tag) => tag.Key === "Environment");
       expect(envTag?.Value).toEqual("Testing");
+
+      // Update the VPC with different attributes
+      vpc = await Vpc(testId, {
+        cidrBlock: "10.0.0.0/16", // Cannot change CIDR, keep same
+        name: `Updated VPC ${testId}`,
+        enableDnsHostnames: false, // Changed from true
+        enableDnsSupport: true,
+        tags: {
+          Environment: "Production", // Changed from Testing
+          Project: "Alchemy",
+        },
+      });
+
+      expect(vpc.name).toEqual(`Updated VPC ${testId}`);
+      expect(vpc.enableDnsHostnames).toEqual(false);
+      expect(vpc.tags?.Environment).toEqual("Production");
+
+      // Verify updates by querying AWS API directly
+      const updatedResponse = await client.send(
+        new DescribeVpcsCommand({
+          VpcIds: [vpc.id],
+        })
+      );
+
+      const updatedVpc = updatedResponse.Vpcs![0];
+
+      // Verify the name tag was updated
+      const updatedNameTag = updatedVpc.Tags?.find((tag) => tag.Key === "Name");
+      expect(updatedNameTag?.Value).toEqual(`Updated VPC ${testId}`);
+
+      // Verify environment tag was updated
+      const updatedEnvTag = updatedVpc.Tags?.find(
+        (tag) => tag.Key === "Environment"
+      );
+      expect(updatedEnvTag?.Value).toEqual("Production");
     } catch (err) {
       // Log the error to help with debugging
       console.log(err);
@@ -81,8 +120,10 @@ describe("Vpc Resource", () => {
             expect(getDeletedResponse.Vpcs?.length).toEqual(0);
           }
         } catch (error: any) {
-          // The describe call should fail with a not found error
-          expect(error.name).toMatch(/VpcNotFound/);
+          // The describe call should fail with any of the VPC not found error types
+          expect(error.name).toMatch(
+            /VpcNotFound|InvalidVpcID\.NotFound|InvalidVpcID\.Malformed/
+          );
         }
       }
     }

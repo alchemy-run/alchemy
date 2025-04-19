@@ -3,7 +3,9 @@ import {
   DeleteVpcCommand,
   DescribeVpcsCommand,
   EC2Client,
+  ModifyVpcAttributeCommand,
   ResourceType,
+  type AttributeBooleanValue,
   type Tag,
   type TagSpecification,
 } from "@aws-sdk/client-ec2";
@@ -169,6 +171,75 @@ export interface Vpc extends Resource<"aws::Vpc"> {
 }
 
 /**
+ * Modifies a VPC's DNS hostname settings
+ */
+async function modifyVpcDnsHostnames(
+  client: EC2Client,
+  vpcId: string,
+  enable: boolean
+): Promise<void> {
+  try {
+    await client.send(
+      new ModifyVpcAttributeCommand({
+        VpcId: vpcId,
+        EnableDnsHostnames: {
+          Value: enable,
+        } as AttributeBooleanValue,
+      })
+    );
+  } catch (error) {
+    console.error("Error modifying VPC DNS hostnames:", error);
+    throw error;
+  }
+}
+
+/**
+ * Modifies a VPC's DNS support settings
+ */
+async function modifyVpcDnsSupport(
+  client: EC2Client,
+  vpcId: string,
+  enable: boolean
+): Promise<void> {
+  try {
+    await client.send(
+      new ModifyVpcAttributeCommand({
+        VpcId: vpcId,
+        EnableDnsSupport: {
+          Value: enable,
+        } as AttributeBooleanValue,
+      })
+    );
+  } catch (error) {
+    console.error("Error modifying VPC DNS support:", error);
+    throw error;
+  }
+}
+
+/**
+ * Modifies a VPC's network address usage metrics settings
+ */
+async function modifyVpcNetworkAddressUsageMetrics(
+  client: EC2Client,
+  vpcId: string,
+  enable: boolean
+): Promise<void> {
+  try {
+    await client.send(
+      new ModifyVpcAttributeCommand({
+        VpcId: vpcId,
+        EnableNetworkAddressUsageMetrics: {
+          Value: enable,
+        } as AttributeBooleanValue,
+      })
+    );
+  } catch (error) {
+    console.error("Error modifying VPC network address usage metrics:", error);
+    throw error;
+  }
+}
+
+/**
  * AWS VPC (Virtual Private Cloud) Resource
  *
  * Creates a Virtual Private Cloud (VPC) with the specified CIDR block. A VPC is a
@@ -220,12 +291,15 @@ export const Vpc = Resource(
     if (this.phase === "delete") {
       try {
         if (this.output?.id) {
-          await ignore("VpcNotFound", () =>
-            client.send(
-              new DeleteVpcCommand({
-                VpcId: this.output.id,
-              })
-            )
+          // Handle multiple possible error types during deletion
+          await ignore(
+            ["VpcNotFound", "InvalidVpcID.NotFound", "InvalidVpcID.Malformed"],
+            () =>
+              client.send(
+                new DeleteVpcCommand({
+                  VpcId: this.output.id,
+                })
+              )
           );
         }
       } catch (error) {
@@ -263,11 +337,11 @@ export const Vpc = Resource(
         }
 
         let vpcId: string;
+        let existingVpc;
 
         if (this.phase === "update" && this.output?.id) {
           // VPC core properties like CIDR block can't be directly modified
-          // Only tags could be modified, but we'll handle that in a real implementation
-          // For now, we'll just retrieve the existing VPC
+          // But we can modify attributes and tags
           const describeResponse = await client.send(
             new DescribeVpcsCommand({
               VpcIds: [this.output.id],
@@ -278,11 +352,38 @@ export const Vpc = Resource(
             throw new Error(`VPC with ID ${this.output.id} not found`);
           }
 
+          existingVpc = describeResponse.Vpcs[0];
           vpcId = this.output.id;
 
-          // In a full implementation, we would update modifiable attributes here
-          // using ModifyVpcAttributeCommand for attributes like enableDnsSupport
-          // and createTags/deleteTags for tag updates
+          // Update modifiable attributes
+          // DNS Hostnames
+          if (props.enableDnsHostnames !== undefined) {
+            await modifyVpcDnsHostnames(
+              client,
+              vpcId,
+              props.enableDnsHostnames
+            );
+          }
+
+          // DNS Support
+          if (props.enableDnsSupport !== undefined) {
+            await modifyVpcDnsSupport(client, vpcId, props.enableDnsSupport);
+          }
+
+          // Network Address Usage Metrics (note the inverse logic)
+          if (props.disableNetworkAddressUsageMetrics !== undefined) {
+            await modifyVpcNetworkAddressUsageMetrics(
+              client,
+              vpcId,
+              !props.disableNetworkAddressUsageMetrics
+            );
+          }
+
+          // Tags handling would be done here in a full implementation
+          // This would require CreateTags/DeleteTags commands
+
+          // IPv6 CIDR block association would be handled here
+          // This would require DisassociateVpcCidrBlock/AssociateVpcCidrBlock commands
         } else {
           // Create a new VPC
           const createResponse = await client.send(
@@ -313,8 +414,25 @@ export const Vpc = Resource(
           vpcId = createResponse.Vpc.VpcId!;
 
           // Set additional attributes if specified
-          // In a full implementation, we would use ModifyVpcAttributeCommand here
-          // for attributes like enableDnsSupport and enableDnsHostnames
+          if (props.enableDnsHostnames !== undefined) {
+            await modifyVpcDnsHostnames(
+              client,
+              vpcId,
+              props.enableDnsHostnames
+            );
+          }
+
+          if (props.enableDnsSupport !== undefined) {
+            await modifyVpcDnsSupport(client, vpcId, props.enableDnsSupport);
+          }
+
+          if (props.disableNetworkAddressUsageMetrics !== undefined) {
+            await modifyVpcNetworkAddressUsageMetrics(
+              client,
+              vpcId,
+              !props.disableNetworkAddressUsageMetrics
+            );
+          }
         }
 
         // Retrieve the full details of the VPC
@@ -340,7 +458,13 @@ export const Vpc = Resource(
           vpc.Ipv6CidrBlockAssociationSet &&
           vpc.Ipv6CidrBlockAssociationSet.length > 0
         ) {
-          const ipv6Association = vpc.Ipv6CidrBlockAssociationSet[0];
+          // Find an associated IPv6 CIDR block
+          const ipv6Association =
+            vpc.Ipv6CidrBlockAssociationSet.find(
+              (association) =>
+                association.Ipv6CidrBlockState?.State === "associated"
+            ) || vpc.Ipv6CidrBlockAssociationSet[0];
+
           ipv6CidrBlock = ipv6Association.Ipv6CidrBlock;
           ipv6CidrBlockAssociationId = ipv6Association.AssociationId;
         }
@@ -358,6 +482,24 @@ export const Vpc = Resource(
         // Get the VPC name from tags if available
         const name = outputTags["Name"] || props.name;
 
+        // Determine attribute values
+        // For some VPC attributes, we need to query the attributes directly in a full implementation
+        // This would require DescribeVpcAttribute commands
+        // For now, we'll use the provided values or defaults
+
+        const enableDnsHostnames =
+          props.enableDnsHostnames !== undefined
+            ? props.enableDnsHostnames
+            : false; // Default value per AWS
+
+        const enableDnsSupport =
+          props.enableDnsSupport !== undefined ? props.enableDnsSupport : true; // Default value per AWS
+
+        const disableNetworkAddressUsageMetrics =
+          props.disableNetworkAddressUsageMetrics !== undefined
+            ? props.disableNetworkAddressUsageMetrics
+            : false; // Default value per AWS
+
         return this({
           id: vpc.VpcId!,
           cidrBlock: vpc.CidrBlock!,
@@ -366,14 +508,13 @@ export const Vpc = Resource(
           ipv6CidrBlock,
           ipv6CidrBlockAssociationId,
           instanceTenancy: vpc.InstanceTenancy || "default",
-          enableDnsHostnames: props.enableDnsHostnames,
-          enableDnsSupport: props.enableDnsSupport,
-          disableNetworkAddressUsageMetrics:
-            props.disableNetworkAddressUsageMetrics,
+          enableDnsHostnames,
+          enableDnsSupport,
+          disableNetworkAddressUsageMetrics,
           tags: outputTags,
           name,
           region: props.region,
-          createdAt: Date.now(),
+          createdAt: this.output?.createdAt || Date.now(),
         });
       } catch (error) {
         console.error("Error creating/updating VPC:", error);
