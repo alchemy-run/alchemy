@@ -27,7 +27,7 @@ import {
 } from "./alchemy/src/cloudflare";
 import { ImportDnsRecords } from "./alchemy/src/dns";
 import { CopyFile, Folder } from "./alchemy/src/fs";
-import { GitHubSecret } from "./alchemy/src/github";
+import { GitHubSecret, RepositoryEnvironment } from "./alchemy/src/github";
 import { Providers } from "./alchemy/src/internal/docs/providers";
 import { Exec } from "./alchemy/src/os";
 import {
@@ -105,6 +105,15 @@ const stateStore = await R2Bucket("state-store", {
   name: "alchemy-state-store",
 });
 
+const testEnvironment = await RepositoryEnvironment("test environment", {
+  owner: "sam-goodwin",
+  repository: "alchemy",
+  name: "test",
+  reviewers: {
+    users: ["sam-goodwin"],
+  },
+});
+
 await Promise.all([
   GitHubOIDCProvider("github-oidc", {
     owner: "sam-goodwin",
@@ -127,6 +136,7 @@ await Promise.all([
       repository: "alchemy",
       name,
       value: typeof value === "string" ? alchemy.secret(value) : await value!,
+      environment: testEnvironment.name,
     })
   ),
 ]);
