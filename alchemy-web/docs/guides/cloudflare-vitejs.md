@@ -100,20 +100,22 @@ Click the endpoint to see your site!
 
 ## Add a Backend API
 
-Create an entrypoint for your server, `src/index.ts`:
+Create an entrypoint for your server, `src/index.ts` with a Hono app:
 
 ```ts
 import { env } from "cloudflare:workers";
 
+export const api = new Hono();
+
+// create a route
+api.get("/hello", (c) => c.text("Hello World"));
+
 export default {
   async fetch(request: Request): Promise<Response> {
-    return env.ASSETS.fetch(request);
+    return api.fetch(request)
   },
 };
 ```
-
-> [!TIP]
-> This basic entrypoint simply serves the static assets and was automatically injected by `ViteSite` when we did not specify `main`.
 
 Update the `StaticSite` to use our custom server entrypoint:
 
@@ -125,81 +127,6 @@ export const website = await ViteSite("website", {
   main: "./src/index.ts"
 });
 ```
-
-Now, create a `Hono` app for your api in `./src/api.ts`:
-
-```ts
-import { Hono } from "hono";
-
-export const api = new Hono();
-
-// create a route
-api.get("/hello", (c) => c.text("Hello World"));
-```
-
-Modify `src/index.ts` to create another `Hono` app and route all `/api/*` requests to the API:
-
-```ts
-import { api } from "./api";
-import { env } from "cloudflare:workers";
-import { Hono } from "hono";
-
-// create a root Hono app
-const app = new Hono();
-
-// and route /api/ to the api hono app
-app.route("/api/", api);
-
-export default {
-  async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-    if (url.pathname.startsWith("/api/")) {
-      // route /api/* to our API
-      return app.fetch(request);
-    }
-    return env.ASSETS.fetch(request);
-  },
-};
-```
-
-> [!TIP]
-> You may be wondering why 2 Hono apps instead of 1.
->
-> By using `app.route("/api/", api)`, we ensure all routes on `api` are under `/api/`:
-> ```ts
-> // no need to remember api.get("/api/hello")
-> api.get("/hello", (c) => c.text("Hello World"));
-> ```
->
-> Now, a simple `if` statement is all it takes to differentiate between static asset and API requests:
->
-> ```ts
-> // makes it really easy to route non-static asset requests
-> if (url.pathname.startsWith("/api/")) {
->   return app.fetch(request);
-> }
-> ```
-
-## Infer Binding Types
-
-Your server won't yet type check - first, we need to infer the binding types from our Worker by creating a `./src/env.d.ts` file:
-
-```ts
-/// <reference types="./env.d.ts" />
-
-import type { website } from "./alchemy.run";
-
-export type WorkerEnv = typeof website.Env;
-
-declare module "cloudflare:workers" {
-  namespace Cloudflare {
-    export interface Env extends WorkerEnv {}
-  }
-}
-```
-
-> [!TIP]
-> See the [Bindings](../concepts/bindings.md) documentation to learn more.
 
 ## Deploy Static Site and API
 
