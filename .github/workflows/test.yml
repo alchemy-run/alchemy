@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  pull_request_target:
+    types: [opened, reopened, synchronize]
   workflow_dispatch:
 
 # Ensure only one workflow runs at a time
@@ -14,6 +16,7 @@ concurrency:
 
 jobs:
   test:
+    environment: test
     runs-on: ubuntu-latest
     permissions:
       id-token: write
