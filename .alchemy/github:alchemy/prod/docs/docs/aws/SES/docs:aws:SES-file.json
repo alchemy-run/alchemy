@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/aws/SES-file",
+  "fqn": "github:alchemy/prod/docs/docs/aws/SES/docs/aws/SES-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/aws/ses.md",
+    "content": "# SES\n\nThe SES Resource lets you manage [Amazon Simple Email Service (SES)](https://docs.aws.amazon.com/ses/latest/dg/Welcome.html) configuration sets and email identities.\n\n## Minimal Example\n\nCreate a basic configuration set for email sending:\n\n```ts\nimport { SES } from \"alchemy/aws\";\n\nconst configSet = await SES(\"email-config\", {\n  configurationSetName: \"my-email-config\",\n  sendingOptions: {\n    SendingEnabled: true\n  }\n});\n```\n\n## Create Domain Identity with DKIM\n\nCreate and verify a domain identity with DKIM signing enabled:\n\n```ts\nimport { SES } from \"alchemy/aws\";\n\nconst domainIdentity = await SES(\"domain-identity\", {\n  emailIdentity: \"example.com\", \n  enableDkim: true,\n  tags: {\n    Environment: \"production\"\n  }\n});\n```\n\n## Configure Tracking Options\n\nCreate a configuration set with custom tracking and delivery options:\n\n```ts\nimport { SES } from \"alchemy/aws\";\n\nconst emailConfig = await SES(\"tracking-config\", {\n  configurationSetName: \"tracking-config\",\n  trackingOptions: {\n    CustomRedirectDomain: \"click.example.com\"\n  },\n  deliveryOptions: {\n    TlsPolicy: \"REQUIRE\",\n    SendingPoolName: \"production\"\n  }\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/aws/SES-file",
+    "FQN": "github:alchemy/prod/docs/docs/aws/SES/docs/aws/SES-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/aws/ses.md",
+    "content": "# SES\n\nThe SES Resource lets you manage [Amazon Simple Email Service (SES)](https://docs.aws.amazon.com/ses/latest/dg/Welcome.html) configuration sets and email identities.\n\n## Minimal Example\n\nCreate a basic configuration set for email sending:\n\n```ts\nimport { SES } from \"alchemy/aws\";\n\nconst configSet = await SES(\"email-config\", {\n  configurationSetName: \"my-email-config\",\n  sendingOptions: {\n    SendingEnabled: true\n  }\n});\n```\n\n## Create Domain Identity with DKIM\n\nCreate and verify a domain identity with DKIM signing enabled:\n\n```ts\nimport { SES } from \"alchemy/aws\";\n\nconst domainIdentity = await SES(\"domain-identity\", {\n  emailIdentity: \"example.com\", \n  enableDkim: true,\n  tags: {\n    Environment: \"production\"\n  }\n});\n```\n\n## Configure Tracking Options\n\nCreate a configuration set with custom tracking and delivery options:\n\n```ts\nimport { SES } from \"alchemy/aws\";\n\nconst emailConfig = await SES(\"tracking-config\", {\n  configurationSetName: \"tracking-config\",\n  trackingOptions: {\n    CustomRedirectDomain: \"click.example.com\"\n  },\n  deliveryOptions: {\n    TlsPolicy: \"REQUIRE\",\n    SendingPoolName: \"production\"\n  }\n});\n```"
+  }
+}

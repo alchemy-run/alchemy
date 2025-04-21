@@ -1,0 +1,18 @@
+{
+  "kind": "fs::Folder",
+  "id": "public",
+  "fqn": "github:alchemy/prod/docs/public",
+  "seq": 2,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/public",
+    "Kind": "fs::Folder",
+    "ID": "public",
+    "FQN": "github:alchemy/prod/docs/public",
+    "Seq": 2
+  },
+  "props": {
+    "path": "alchemy-web/public"
+  }
+}

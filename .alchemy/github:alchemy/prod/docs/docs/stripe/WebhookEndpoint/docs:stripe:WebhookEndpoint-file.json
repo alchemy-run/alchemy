@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/stripe/WebhookEndpoint-file",
+  "fqn": "github:alchemy/prod/docs/docs/stripe/WebhookEndpoint/docs/stripe/WebhookEndpoint-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/stripe/webhook.md",
+    "content": "# WebhookEndpoint\n\nThe WebhookEndpoint resource lets you create and manage [Stripe webhook endpoints](https://stripe.com/docs/webhooks) to receive notifications about events in your Stripe account.\n\n# Minimal Example\n\nCreate a basic webhook endpoint to receive payment events:\n\n```ts\nimport { WebhookEndpoint } from \"alchemy/stripe\";\n\nconst webhook = await WebhookEndpoint(\"payments\", {\n  url: \"https://api.example.com/webhooks/stripe\",\n  enabledEvents: [\"payment_intent.succeeded\", \"payment_intent.payment_failed\"]\n});\n```\n\n# Subscription Events\n\nCreate a webhook to monitor subscription lifecycle events:\n\n```ts\nimport { WebhookEndpoint } from \"alchemy/stripe\";\n\nconst webhook = await WebhookEndpoint(\"subscriptions\", {\n  url: \"https://api.example.com/webhooks/subscriptions\", \n  enabledEvents: [\n    \"customer.subscription.created\",\n    \"customer.subscription.updated\",\n    \"customer.subscription.deleted\",\n    \"invoice.payment_succeeded\"\n  ],\n  description: \"Subscription lifecycle notifications\"\n});\n```\n\n# Connect Platform Events\n\nCreate a webhook for Stripe Connect platform events:\n\n```ts\nimport { WebhookEndpoint } from \"alchemy/stripe\";\n\nconst webhook = await WebhookEndpoint(\"connect\", {\n  url: \"https://api.example.com/webhooks/connect\",\n  enabledEvents: [\n    \"account.updated\",\n    \"payout.created\", \n    \"payout.failed\"\n  ],\n  connect: true,\n  metadata: {\n    platform: \"connect\"\n  }\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/stripe/WebhookEndpoint-file",
+    "FQN": "github:alchemy/prod/docs/docs/stripe/WebhookEndpoint/docs/stripe/WebhookEndpoint-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/stripe/webhook.md",
+    "content": "# WebhookEndpoint\n\nThe WebhookEndpoint resource lets you create and manage [Stripe webhook endpoints](https://stripe.com/docs/webhooks) to receive notifications about events in your Stripe account.\n\n# Minimal Example\n\nCreate a basic webhook endpoint to receive payment events:\n\n```ts\nimport { WebhookEndpoint } from \"alchemy/stripe\";\n\nconst webhook = await WebhookEndpoint(\"payments\", {\n  url: \"https://api.example.com/webhooks/stripe\",\n  enabledEvents: [\"payment_intent.succeeded\", \"payment_intent.payment_failed\"]\n});\n```\n\n# Subscription Events\n\nCreate a webhook to monitor subscription lifecycle events:\n\n```ts\nimport { WebhookEndpoint } from \"alchemy/stripe\";\n\nconst webhook = await WebhookEndpoint(\"subscriptions\", {\n  url: \"https://api.example.com/webhooks/subscriptions\", \n  enabledEvents: [\n    \"customer.subscription.created\",\n    \"customer.subscription.updated\",\n    \"customer.subscription.deleted\",\n    \"invoice.payment_succeeded\"\n  ],\n  description: \"Subscription lifecycle notifications\"\n});\n```\n\n# Connect Platform Events\n\nCreate a webhook for Stripe Connect platform events:\n\n```ts\nimport { WebhookEndpoint } from \"alchemy/stripe\";\n\nconst webhook = await WebhookEndpoint(\"connect\", {\n  url: \"https://api.example.com/webhooks/connect\",\n  enabledEvents: [\n    \"account.updated\",\n    \"payout.created\", \n    \"payout.failed\"\n  ],\n  connect: true,\n  metadata: {\n    platform: \"connect\"\n  }\n});\n```"
+  }
+}

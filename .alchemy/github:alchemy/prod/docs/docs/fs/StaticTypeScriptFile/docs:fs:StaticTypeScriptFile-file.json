@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/fs/StaticTypeScriptFile-file",
+  "fqn": "github:alchemy/prod/docs/docs/fs/StaticTypeScriptFile/docs/fs/StaticTypeScriptFile-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/fs/static-typescript-file.md",
+    "content": "# StaticTypeScriptFile\n\nCreates a [TypeScript](https://www.typescriptlang.org/) file with automatic formatting using Prettier.\n\n# Minimal Example\n\nCreates a basic TypeScript file with automatic formatting.\n\n```ts\nimport { StaticTypeScriptFile } from \"alchemy/fs\";\n\nconst file = await StaticTypeScriptFile(\"hello.ts\", `\n  export function hello(name: string) {\n    return \"Hello \" + name;\n  }\n`);\n```\n\n# Component Example\n\nCreates a TypeScript React component with proper formatting.\n\n```ts\nimport { StaticTypeScriptFile } from \"alchemy/fs\";\n\nconst component = await StaticTypeScriptFile(\"Button.tsx\", `\n  interface Props {\n    text: string;\n    onClick: () => void;\n  }\n\n  export function Button({ text, onClick }: Props) {\n    return <button onClick={onClick}>{text}</button>;\n  }\n`);\n```\n\n# Custom Path Example\n\nCreates a TypeScript file at a specific path.\n\n```ts\nimport { StaticTypeScriptFile } from \"alchemy/fs\";\n\nconst utils = await StaticTypeScriptFile(\"utils\", \n  \"src/utils/format.ts\",\n  `\n    export function formatDate(date: Date): string {\n      return date.toLocaleDateString();\n    }\n  `\n);\n```",
+    "Kind": "fs::File",
+    "ID": "docs/fs/StaticTypeScriptFile-file",
+    "FQN": "github:alchemy/prod/docs/docs/fs/StaticTypeScriptFile/docs/fs/StaticTypeScriptFile-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/fs/static-typescript-file.md",
+    "content": "# StaticTypeScriptFile\n\nCreates a [TypeScript](https://www.typescriptlang.org/) file with automatic formatting using Prettier.\n\n# Minimal Example\n\nCreates a basic TypeScript file with automatic formatting.\n\n```ts\nimport { StaticTypeScriptFile } from \"alchemy/fs\";\n\nconst file = await StaticTypeScriptFile(\"hello.ts\", `\n  export function hello(name: string) {\n    return \"Hello \" + name;\n  }\n`);\n```\n\n# Component Example\n\nCreates a TypeScript React component with proper formatting.\n\n```ts\nimport { StaticTypeScriptFile } from \"alchemy/fs\";\n\nconst component = await StaticTypeScriptFile(\"Button.tsx\", `\n  interface Props {\n    text: string;\n    onClick: () => void;\n  }\n\n  export function Button({ text, onClick }: Props) {\n    return <button onClick={onClick}>{text}</button>;\n  }\n`);\n```\n\n# Custom Path Example\n\nCreates a TypeScript file at a specific path.\n\n```ts\nimport { StaticTypeScriptFile } from \"alchemy/fs\";\n\nconst utils = await StaticTypeScriptFile(\"utils\", \n  \"src/utils/format.ts\",\n  `\n    export function formatDate(date: Date): string {\n      return date.toLocaleDateString();\n    }\n  `\n);\n```"
+  }
+}

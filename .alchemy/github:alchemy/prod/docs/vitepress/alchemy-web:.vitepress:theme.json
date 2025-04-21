@@ -1,0 +1,15 @@
+{
+  "kind": "fs::Folder",
+  "id": "alchemy-web/.vitepress/theme",
+  "fqn": "github:alchemy/prod/docs/vitepress/alchemy-web/.vitepress/theme",
+  "seq": 4,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/.vitepress/theme",
+    "Kind": "fs::Folder",
+    "ID": "alchemy-web/.vitepress/theme",
+    "FQN": "github:alchemy/prod/docs/vitepress/alchemy-web/.vitepress/theme",
+    "Seq": 4
+  }
+}

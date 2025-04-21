@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/fs/StaticCSSFile-file",
+  "fqn": "github:alchemy/prod/docs/docs/fs/StaticCSSFile/docs/fs/StaticCSSFile-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/fs/static-css-file.md",
+    "content": "# StaticCSSFile\n\nThe StaticCSSFile resource creates and manages static CSS files in your project using [Alchemy's File System](https://alchemy.run/docs/concepts/state.md) capabilities.\n\n# Minimal Example\n\nCreate a basic CSS file with styles:\n\n```ts\nimport { StaticCSSFile } from \"alchemy/fs\";\n\nconst styles = await StaticCSSFile(\"styles.css\", `\n  .container {\n    max-width: 1200px;\n    margin: 0 auto;\n    padding: 0 1rem;\n  }\n`);\n```\n\n# Custom Path\n\nCreate a CSS file at a specific path:\n\n```ts\nimport { StaticCSSFile } from \"alchemy/fs\";\n\nconst styles = await StaticCSSFile(\"main\", \n  \"src/styles/main.css\",\n  `.button {\n    background-color: #0062ff;\n    color: white;\n    border: none;\n    padding: 0.5rem 1rem;\n    border-radius: 4px;\n  }`\n);\n```",
+    "Kind": "fs::File",
+    "ID": "docs/fs/StaticCSSFile-file",
+    "FQN": "github:alchemy/prod/docs/docs/fs/StaticCSSFile/docs/fs/StaticCSSFile-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/fs/static-css-file.md",
+    "content": "# StaticCSSFile\n\nThe StaticCSSFile resource creates and manages static CSS files in your project using [Alchemy's File System](https://alchemy.run/docs/concepts/state.md) capabilities.\n\n# Minimal Example\n\nCreate a basic CSS file with styles:\n\n```ts\nimport { StaticCSSFile } from \"alchemy/fs\";\n\nconst styles = await StaticCSSFile(\"styles.css\", `\n  .container {\n    max-width: 1200px;\n    margin: 0 auto;\n    padding: 0 1rem;\n  }\n`);\n```\n\n# Custom Path\n\nCreate a CSS file at a specific path:\n\n```ts\nimport { StaticCSSFile } from \"alchemy/fs\";\n\nconst styles = await StaticCSSFile(\"main\", \n  \"src/styles/main.css\",\n  `.button {\n    background-color: #0062ff;\n    color: white;\n    border: none;\n    padding: 0.5rem 1rem;\n    border-radius: 4px;\n  }`\n);\n```"
+  }
+}

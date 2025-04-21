@@ -1,0 +1,242 @@
+{
+  "kind": "cloudflare::DnsRecords",
+  "id": "transfer-dns-records",
+  "fqn": "github:alchemy/prod/transfer-dns-records",
+  "seq": 16,
+  "data": {},
+  "status": "created",
+  "output": {
+    "zoneId": "ae65a5f1b4cd62bbfc6e037cdc75adad",
+    "records": [
+      {
+        "id": "cf04780086fd5cb66aca645e2e0acb86",
+        "name": "alchemy.run",
+        "type": "A",
+        "content": "8.8.8.8",
+        "ttl": 600,
+        "proxied": false,
+        "comment": null,
+        "tags": [],
+        "createdAt": 1744146055611,
+        "modifiedAt": 1744146055611,
+        "zoneId": "ae65a5f1b4cd62bbfc6e037cdc75adad"
+      },
+      {
+        "id": "ad2ab154165c594884e8986b0c78939d",
+        "name": "alchemy.run",
+        "type": "MX",
+        "content": "aspmx.l.google.com",
+        "ttl": 3600,
+        "proxied": false,
+        "priority": 1,
+        "comment": null,
+        "tags": [],
+        "createdAt": 1744146055699,
+        "modifiedAt": 1744146055699,
+        "zoneId": "ae65a5f1b4cd62bbfc6e037cdc75adad"
+      },
+      {
+        "id": "ad2ab154165c594884e8986b0c78939d",
+        "name": "alchemy.run",
+        "type": "MX",
+        "content": "alt1.aspmx.l.google.com",
+        "ttl": 3600,
+        "proxied": false,
+        "priority": 5,
+        "comment": null,
+        "tags": [],
+        "createdAt": 1744146055699,
+        "modifiedAt": 1744146056773,
+        "zoneId": "ae65a5f1b4cd62bbfc6e037cdc75adad"
+      },
+      {
+        "id": "d607a18f3377ad23f695a5e3c1482804",
+        "name": "alchemy.run",
+        "type": "MX",
+        "content": "alt2.aspmx.l.google.com",
+        "ttl": 3600,
+        "proxied": false,
+        "priority": 5,
+        "comment": null,
+        "tags": [],
+        "createdAt": 1744146055658,
+        "modifiedAt": 1744146055658,
+        "zoneId": "ae65a5f1b4cd62bbfc6e037cdc75adad"
+      },
+      {
+        "id": "e1f098f75e06cd5d90fa002cfb312439",
+        "name": "alchemy.run",
+        "type": "MX",
+        "content": "alt3.aspmx.l.google.com",
+        "ttl": 3600,
+        "proxied": false,
+        "priority": 10,
+        "comment": null,
+        "tags": [],
+        "createdAt": 1744146055683,
+        "modifiedAt": 1744146055683,
+        "zoneId": "ae65a5f1b4cd62bbfc6e037cdc75adad"
+      },
+      {
+        "id": "ad2ab154165c594884e8986b0c78939d",
+        "name": "alchemy.run",
+        "type": "MX",
+        "content": "alt4.aspmx.l.google.com",
+        "ttl": 3600,
+        "proxied": false,
+        "priority": 10,
+        "comment": null,
+        "tags": [],
+        "createdAt": 1744146055699,
+        "modifiedAt": 1744146056794,
+        "zoneId": "ae65a5f1b4cd62bbfc6e037cdc75adad"
+      },
+      {
+        "id": "cc150aecb837155c849d3c433434197d",
+        "name": "alchemy.run",
+        "type": "TXT",
+        "content": "\"v=spf1 include:dc-aa8e722993._spfm.alchemy.run ~all\"",
+        "ttl": 3600,
+        "proxied": false,
+        "comment": null,
+        "tags": [],
+        "createdAt": 1744146055674,
+        "modifiedAt": 1744146055674,
+        "zoneId": "ae65a5f1b4cd62bbfc6e037cdc75adad"
+      },
+      {
+        "id": "cc150aecb837155c849d3c433434197d",
+        "name": "alchemy.run",
+        "type": "TXT",
+        "content": "\"google-site-verification=GydyFrpqAk1qXbuAyNVLj8g0xYiTiIBwUQotQm93uRY\"",
+        "ttl": 3600,
+        "proxied": false,
+        "comment": null,
+        "tags": [],
+        "createdAt": 1744146055674,
+        "modifiedAt": 1744146056358,
+        "zoneId": "ae65a5f1b4cd62bbfc6e037cdc75adad"
+      },
+      {
+        "id": "4f312570476f6bb831e9ccaedd90f746",
+        "name": "alchemy.run",
+        "type": "NS",
+        "content": "ns31.domaincontrol.com",
+        "ttl": 3600,
+        "proxied": false,
+        "comment": null,
+        "tags": [],
+        "createdAt": 1744146055653,
+        "modifiedAt": 1744146056354,
+        "zoneId": "ae65a5f1b4cd62bbfc6e037cdc75adad"
+      },
+      {
+        "id": "4f312570476f6bb831e9ccaedd90f746",
+        "name": "alchemy.run",
+        "type": "NS",
+        "content": "ns32.domaincontrol.com",
+        "ttl": 3600,
+        "proxied": false,
+        "comment": null,
+        "tags": [],
+        "createdAt": 1744146055653,
+        "modifiedAt": 1744146055653,
+        "zoneId": "ae65a5f1b4cd62bbfc6e037cdc75adad"
+      }
+    ],
+    "Kind": "cloudflare::DnsRecords",
+    "ID": "transfer-dns-records",
+    "FQN": "github:alchemy/prod/transfer-dns-records",
+    "Seq": 16
+  },
+  "props": {
+    "zoneId": "ae65a5f1b4cd62bbfc6e037cdc75adad",
+    "records": [
+      {
+        "name": "alchemy.run",
+        "type": "A",
+        "TTL": 600,
+        "data": "8.8.8.8",
+        "content": "8.8.8.8",
+        "ttl": 600
+      },
+      {
+        "name": "alchemy.run",
+        "type": "MX",
+        "TTL": 3600,
+        "data": "1 aspmx.l.google.com.",
+        "content": "aspmx.l.google.com.",
+        "ttl": 3600,
+        "priority": 1
+      },
+      {
+        "name": "alchemy.run",
+        "type": "MX",
+        "TTL": 3600,
+        "data": "5 alt1.aspmx.l.google.com.",
+        "content": "alt1.aspmx.l.google.com.",
+        "ttl": 3600,
+        "priority": 5
+      },
+      {
+        "name": "alchemy.run",
+        "type": "MX",
+        "TTL": 3600,
+        "data": "5 alt2.aspmx.l.google.com.",
+        "content": "alt2.aspmx.l.google.com.",
+        "ttl": 3600,
+        "priority": 5
+      },
+      {
+        "name": "alchemy.run",
+        "type": "MX",
+        "TTL": 3600,
+        "data": "10 alt3.aspmx.l.google.com.",
+        "content": "alt3.aspmx.l.google.com.",
+        "ttl": 3600,
+        "priority": 10
+      },
+      {
+        "name": "alchemy.run",
+        "type": "MX",
+        "TTL": 3600,
+        "data": "10 alt4.aspmx.l.google.com.",
+        "content": "alt4.aspmx.l.google.com.",
+        "ttl": 3600,
+        "priority": 10
+      },
+      {
+        "name": "alchemy.run",
+        "type": "TXT",
+        "TTL": 3600,
+        "data": "\"v=spf1 include:dc-aa8e722993._spfm.alchemy.run ~all\"",
+        "content": "\"v=spf1 include:dc-aa8e722993._spfm.alchemy.run ~all\"",
+        "ttl": 3600
+      },
+      {
+        "name": "alchemy.run",
+        "type": "TXT",
+        "TTL": 3600,
+        "data": "\"google-site-verification=GydyFrpqAk1qXbuAyNVLj8g0xYiTiIBwUQotQm93uRY\"",
+        "content": "\"google-site-verification=GydyFrpqAk1qXbuAyNVLj8g0xYiTiIBwUQotQm93uRY\"",
+        "ttl": 3600
+      },
+      {
+        "name": "alchemy.run",
+        "type": "NS",
+        "TTL": 3600,
+        "data": "ns31.domaincontrol.com.",
+        "content": "ns31.domaincontrol.com.",
+        "ttl": 3600
+      },
+      {
+        "name": "alchemy.run",
+        "type": "NS",
+        "TTL": 3600,
+        "data": "ns32.domaincontrol.com.",
+        "content": "ns32.domaincontrol.com.",
+        "ttl": 3600
+      }
+    ]
+  }
+}

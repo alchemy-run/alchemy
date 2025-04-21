@@ -1,0 +1,18 @@
+{
+  "kind": "fs::Folder",
+  "id": "docs",
+  "fqn": "github:alchemy/prod/docs/docs",
+  "seq": 1,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs",
+    "Kind": "fs::Folder",
+    "ID": "docs",
+    "FQN": "github:alchemy/prod/docs/docs",
+    "Seq": 1
+  },
+  "props": {
+    "path": "alchemy-web/docs"
+  }
+}

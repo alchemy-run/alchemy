@@ -1,0 +1,23 @@
+{
+  "kind": "project::InstallDependencies",
+  "id": "dependencies",
+  "fqn": "github:alchemy/prod/docs/vitepress/dependencies",
+  "seq": 2,
+  "data": {},
+  "status": "updated",
+  "output": {
+    "Kind": "project::InstallDependencies",
+    "ID": "dependencies",
+    "FQN": "github:alchemy/prod/docs/vitepress/dependencies",
+    "Seq": 2
+  },
+  "props": {
+    "cwd": "alchemy-web",
+    "devDependencies": {
+      "vue": "latest",
+      "vitepress": "latest",
+      "@shikijs/vitepress-twoslash": "latest",
+      "markdown-it-footnote": "latest"
+    }
+  }
+}

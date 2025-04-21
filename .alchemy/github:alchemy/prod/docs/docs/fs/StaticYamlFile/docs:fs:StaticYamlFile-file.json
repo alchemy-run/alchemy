@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/fs/StaticYamlFile-file",
+  "fqn": "github:alchemy/prod/docs/docs/fs/StaticYamlFile/docs/fs/StaticYamlFile-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/fs/static-yaml-file.md",
+    "content": "# StaticYamlFile\n\nThe StaticYamlFile resource creates YAML files with formatted content using the [YAML](https://yaml.org/) format.\n\n# Minimal Example\n\nCreates a simple YAML configuration file.\n\n```ts\nimport { StaticYamlFile } from \"alchemy/fs\";\n\nconst config = await StaticYamlFile(\"config.yaml\", {\n  server: {\n    host: \"localhost\",\n    port: 3000\n  }\n});\n```\n\n# Nested Configuration\n\nCreates a YAML file with nested configuration objects.\n\n```ts\nimport { StaticYamlFile } from \"alchemy/fs\";\n\nconst config = await StaticYamlFile(\"config.yaml\", {\n  server: {\n    host: \"localhost\",\n    port: 3000\n  },\n  database: {\n    url: \"postgresql://localhost:5432/db\",\n    pool: {\n      min: 1, \n      max: 10\n    }\n  },\n  logging: {\n    level: \"info\",\n    format: \"json\"\n  }\n});\n```\n\n# Custom Path\n\nCreates a YAML file at a specific path.\n\n```ts\nimport { StaticYamlFile } from \"alchemy/fs\";\n\nconst config = await StaticYamlFile(\"app-config\", \"config/app.yaml\", {\n  name: \"my-app\",\n  version: \"1.0.0\",\n  dependencies: {\n    express: \"^4.17.1\",\n    typescript: \"^4.5.4\"\n  }\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/fs/StaticYamlFile-file",
+    "FQN": "github:alchemy/prod/docs/docs/fs/StaticYamlFile/docs/fs/StaticYamlFile-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/fs/static-yaml-file.md",
+    "content": "# StaticYamlFile\n\nThe StaticYamlFile resource creates YAML files with formatted content using the [YAML](https://yaml.org/) format.\n\n# Minimal Example\n\nCreates a simple YAML configuration file.\n\n```ts\nimport { StaticYamlFile } from \"alchemy/fs\";\n\nconst config = await StaticYamlFile(\"config.yaml\", {\n  server: {\n    host: \"localhost\",\n    port: 3000\n  }\n});\n```\n\n# Nested Configuration\n\nCreates a YAML file with nested configuration objects.\n\n```ts\nimport { StaticYamlFile } from \"alchemy/fs\";\n\nconst config = await StaticYamlFile(\"config.yaml\", {\n  server: {\n    host: \"localhost\",\n    port: 3000\n  },\n  database: {\n    url: \"postgresql://localhost:5432/db\",\n    pool: {\n      min: 1, \n      max: 10\n    }\n  },\n  logging: {\n    level: \"info\",\n    format: \"json\"\n  }\n});\n```\n\n# Custom Path\n\nCreates a YAML file at a specific path.\n\n```ts\nimport { StaticYamlFile } from \"alchemy/fs\";\n\nconst config = await StaticYamlFile(\"app-config\", \"config/app.yaml\", {\n  name: \"my-app\",\n  version: \"1.0.0\",\n  dependencies: {\n    express: \"^4.17.1\",\n    typescript: \"^4.5.4\"\n  }\n});\n```"
+  }
+}

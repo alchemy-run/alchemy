@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/ai/HTMLFile-file",
+  "fqn": "github:alchemy/prod/docs/docs/ai/HTMLFile/docs/ai/HTMLFile-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/ai/html-file.md",
+    "content": "# HTMLFile\n\nThe HTMLFile resource lets you generate HTML files using AI models like [OpenAI GPT-4](https://platform.openai.com/docs/models/gpt-4) or [Anthropic Claude](https://www.anthropic.com/claude).\n\n# Minimal Example\n\nGenerate a simple HTML file with AI:\n\n```ts\nimport { HTMLFile } from \"alchemy/ai\";\n\nconst page = await HTMLFile(\"landing\", {\n  path: \"./public/index.html\",\n  prompt: \"Generate a simple landing page with a hero section, features list, and contact form\"\n});\n```\n\n# Generate with Context\n\nUse alchemy template literals to include file context:\n\n```ts\nimport { HTMLFile } from \"alchemy/ai\";\n\nconst component = await HTMLFile(\"card\", {\n  path: \"./components/card.html\", \n  prompt: await alchemy`\n    Create an HTML component based on this design:\n    ${alchemy.file(\"design/card.md\")}\n    \n    And match the styles from:\n    ${alchemy.file(\"styles/components.css\")}\n  `\n});\n```\n\n# Custom Model Configuration\n\nConfigure the AI model and generation parameters:\n\n```ts\nimport { HTMLFile } from \"alchemy/ai\";\n\nconst form = await HTMLFile(\"contact-form\", {\n  path: \"./components/form.html\",\n  prompt: \"Generate an accessible contact form with validation\",\n  model: {\n    id: \"claude-3-opus-20240229\",\n    provider: \"anthropic\"\n  },\n  temperature: 0.2,\n  system: \"You are an expert HTML developer focused on accessibility. Create semantic HTML with ARIA attributes.\"\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/ai/HTMLFile-file",
+    "FQN": "github:alchemy/prod/docs/docs/ai/HTMLFile/docs/ai/HTMLFile-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/ai/html-file.md",
+    "content": "# HTMLFile\n\nThe HTMLFile resource lets you generate HTML files using AI models like [OpenAI GPT-4](https://platform.openai.com/docs/models/gpt-4) or [Anthropic Claude](https://www.anthropic.com/claude).\n\n# Minimal Example\n\nGenerate a simple HTML file with AI:\n\n```ts\nimport { HTMLFile } from \"alchemy/ai\";\n\nconst page = await HTMLFile(\"landing\", {\n  path: \"./public/index.html\",\n  prompt: \"Generate a simple landing page with a hero section, features list, and contact form\"\n});\n```\n\n# Generate with Context\n\nUse alchemy template literals to include file context:\n\n```ts\nimport { HTMLFile } from \"alchemy/ai\";\n\nconst component = await HTMLFile(\"card\", {\n  path: \"./components/card.html\", \n  prompt: await alchemy`\n    Create an HTML component based on this design:\n    ${alchemy.file(\"design/card.md\")}\n    \n    And match the styles from:\n    ${alchemy.file(\"styles/components.css\")}\n  `\n});\n```\n\n# Custom Model Configuration\n\nConfigure the AI model and generation parameters:\n\n```ts\nimport { HTMLFile } from \"alchemy/ai\";\n\nconst form = await HTMLFile(\"contact-form\", {\n  path: \"./components/form.html\",\n  prompt: \"Generate an accessible contact form with validation\",\n  model: {\n    id: \"claude-3-opus-20240229\",\n    provider: \"anthropic\"\n  },\n  temperature: 0.2,\n  system: \"You are an expert HTML developer focused on accessibility. Create semantic HTML with ARIA attributes.\"\n});\n```"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/cloudflare/Zone-file",
+  "fqn": "github:alchemy/prod/docs/docs/cloudflare/Zone/docs/cloudflare/Zone-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/cloudflare/zone.md",
+    "content": "# Zone\n\nThe Zone resource lets you manage [Cloudflare Zones](https://developers.cloudflare.com/dns/zone-setups/) which represent domains and their configuration settings on Cloudflare.\n\n# Minimal Example\n\nCreate a basic zone with default settings:\n\n```ts\nimport { Zone } from \"alchemy/cloudflare\";\n\nconst zone = await Zone(\"example-zone\", {\n  name: \"example.com\",\n  type: \"full\"\n});\n```\n\n# Enhanced Security Settings\n\nConfigure a zone with strict SSL and other security features:\n\n```ts\nimport { Zone } from \"alchemy/cloudflare\";\n\nconst secureZone = await Zone(\"secure-zone\", {\n  name: \"secure.example.com\", \n  settings: {\n    ssl: \"strict\",\n    alwaysUseHttps: \"on\",\n    automaticHttpsRewrites: \"on\",\n    minTlsVersion: \"1.3\",\n    tls13: \"zrt\"\n  }\n});\n```\n\n# Performance Optimization\n\nCreate a zone with optimized performance settings:\n\n```ts\nimport { Zone } from \"alchemy/cloudflare\";\n\nconst fastZone = await Zone(\"fast-zone\", {\n  name: \"fast.example.com\",\n  settings: {\n    browserCacheTtl: 7200,\n    brotli: \"on\", \n    zeroRtt: \"on\",\n    http2: \"on\",\n    http3: \"on\",\n    earlyHints: \"on\"\n  }\n});\n```\n\n# Development Zone\n\nConfigure a zone for development with specific features enabled:\n\n```ts\nimport { Zone } from \"alchemy/cloudflare\";\n\nconst devZone = await Zone(\"dev-zone\", {\n  name: \"dev.example.com\",\n  settings: {\n    developmentMode: \"on\",\n    emailObfuscation: \"on\",\n    hotlinkProtection: \"on\",\n    ipv6: \"on\",\n    websockets: \"on\"\n  }\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/cloudflare/Zone-file",
+    "FQN": "github:alchemy/prod/docs/docs/cloudflare/Zone/docs/cloudflare/Zone-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/cloudflare/zone.md",
+    "content": "# Zone\n\nThe Zone resource lets you manage [Cloudflare Zones](https://developers.cloudflare.com/dns/zone-setups/) which represent domains and their configuration settings on Cloudflare.\n\n# Minimal Example\n\nCreate a basic zone with default settings:\n\n```ts\nimport { Zone } from \"alchemy/cloudflare\";\n\nconst zone = await Zone(\"example-zone\", {\n  name: \"example.com\",\n  type: \"full\"\n});\n```\n\n# Enhanced Security Settings\n\nConfigure a zone with strict SSL and other security features:\n\n```ts\nimport { Zone } from \"alchemy/cloudflare\";\n\nconst secureZone = await Zone(\"secure-zone\", {\n  name: \"secure.example.com\", \n  settings: {\n    ssl: \"strict\",\n    alwaysUseHttps: \"on\",\n    automaticHttpsRewrites: \"on\",\n    minTlsVersion: \"1.3\",\n    tls13: \"zrt\"\n  }\n});\n```\n\n# Performance Optimization\n\nCreate a zone with optimized performance settings:\n\n```ts\nimport { Zone } from \"alchemy/cloudflare\";\n\nconst fastZone = await Zone(\"fast-zone\", {\n  name: \"fast.example.com\",\n  settings: {\n    browserCacheTtl: 7200,\n    brotli: \"on\", \n    zeroRtt: \"on\",\n    http2: \"on\",\n    http3: \"on\",\n    earlyHints: \"on\"\n  }\n});\n```\n\n# Development Zone\n\nConfigure a zone for development with specific features enabled:\n\n```ts\nimport { Zone } from \"alchemy/cloudflare\";\n\nconst devZone = await Zone(\"dev-zone\", {\n  name: \"dev.example.com\",\n  settings: {\n    developmentMode: \"on\",\n    emailObfuscation: \"on\",\n    hotlinkProtection: \"on\",\n    ipv6: \"on\",\n    websockets: \"on\"\n  }\n});\n```"
+  }
+}

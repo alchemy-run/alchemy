@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/cloudflare/D1Database-file",
+  "fqn": "github:alchemy/prod/docs/docs/cloudflare/D1Database/docs/cloudflare/D1Database-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/cloudflare/d1-database.md",
+    "content": "# D1Database\n\nThe D1Database component lets you add [Cloudflare D1 Databases](https://developers.cloudflare.com/d1/) to your app. D1 provides serverless SQL databases built on SQLite with automatic data replication.\n\n# Minimal Example\n\nCreate a basic D1 database with default settings:\n\n```ts\nimport { D1Database } from \"alchemy/cloudflare\";\n\nconst database = await D1Database(\"my-app-db\", {\n  name: \"my-app-db\"\n});\n```\n\n# With Location Hint\n\nCreate a database with location hint for optimal performance:\n\n```ts\nimport { D1Database } from \"alchemy/cloudflare\";\n\nconst westUsDatabase = await D1Database(\"west-us-db\", {\n  name: \"west-us-db\", \n  primaryLocationHint: \"wnam\"\n});\n```\n\n# With Read Replication\n\nConfigure read replication settings:\n\n```ts\nimport { D1Database } from \"alchemy/cloudflare\";\n\nconst replicatedDb = await D1Database(\"replicated-db\", {\n  name: \"replicated-db\",\n  readReplication: {\n    mode: \"auto\" // Enable automatic read replication\n  }\n});\n```\n\n# Bind to a Worker\n\nBind a D1 database to a Worker:\n\n```ts\nimport { Worker, D1Database } from \"alchemy/cloudflare\";\n\nconst database = await D1Database(\"my-db\", {\n  name: \"my-db\"\n});\n\nawait Worker(\"my-worker\", {\n  name: \"my-worker\",\n  script: \"console.log('Hello, world!')\",\n  bindings: {\n    DB: database\n  }\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/cloudflare/D1Database-file",
+    "FQN": "github:alchemy/prod/docs/docs/cloudflare/D1Database/docs/cloudflare/D1Database-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/cloudflare/d1-database.md",
+    "content": "# D1Database\n\nThe D1Database component lets you add [Cloudflare D1 Databases](https://developers.cloudflare.com/d1/) to your app. D1 provides serverless SQL databases built on SQLite with automatic data replication.\n\n# Minimal Example\n\nCreate a basic D1 database with default settings:\n\n```ts\nimport { D1Database } from \"alchemy/cloudflare\";\n\nconst database = await D1Database(\"my-app-db\", {\n  name: \"my-app-db\"\n});\n```\n\n# With Location Hint\n\nCreate a database with location hint for optimal performance:\n\n```ts\nimport { D1Database } from \"alchemy/cloudflare\";\n\nconst westUsDatabase = await D1Database(\"west-us-db\", {\n  name: \"west-us-db\", \n  primaryLocationHint: \"wnam\"\n});\n```\n\n# With Read Replication\n\nConfigure read replication settings:\n\n```ts\nimport { D1Database } from \"alchemy/cloudflare\";\n\nconst replicatedDb = await D1Database(\"replicated-db\", {\n  name: \"replicated-db\",\n  readReplication: {\n    mode: \"auto\" // Enable automatic read replication\n  }\n});\n```\n\n# Bind to a Worker\n\nBind a D1 database to a Worker:\n\n```ts\nimport { Worker, D1Database } from \"alchemy/cloudflare\";\n\nconst database = await D1Database(\"my-db\", {\n  name: \"my-db\"\n});\n\nawait Worker(\"my-worker\", {\n  name: \"my-worker\",\n  script: \"console.log('Hello, world!')\",\n  bindings: {\n    DB: database\n  }\n});\n```"
+  }
+}

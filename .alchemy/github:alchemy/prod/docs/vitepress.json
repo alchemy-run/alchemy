@@ -1,0 +1,21 @@
+{
+  "kind": "project::VitepressProject",
+  "id": "vitepress",
+  "fqn": "github:alchemy/prod/docs/vitepress",
+  "seq": 0,
+  "data": {},
+  "status": "updated",
+  "output": {
+    "name": "alchemy-web",
+    "delete": true,
+    "dir": "alchemy-web",
+    "Kind": "project::VitepressProject",
+    "ID": "vitepress",
+    "FQN": "github:alchemy/prod/docs/vitepress",
+    "Seq": 0
+  },
+  "props": {
+    "name": "alchemy-web",
+    "delete": true
+  }
+}

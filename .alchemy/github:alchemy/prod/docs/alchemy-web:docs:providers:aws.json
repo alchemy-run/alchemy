@@ -1,0 +1,15 @@
+{
+  "kind": "fs::Folder",
+  "id": "alchemy-web/docs/providers/aws",
+  "fqn": "github:alchemy/prod/docs/alchemy-web/docs/providers/aws",
+  "seq": 38,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/aws",
+    "Kind": "fs::Folder",
+    "ID": "alchemy-web/docs/providers/aws",
+    "FQN": "github:alchemy/prod/docs/alchemy-web/docs/providers/aws",
+    "Seq": 38
+  }
+}

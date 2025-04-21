@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/dns/ImportDnsRecords-file",
+  "fqn": "github:alchemy/prod/docs/docs/dns/ImportDnsRecords/docs/dns/ImportDnsRecords-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/dns/import-dns.md",
+    "content": "# ImportDnsRecords\n\nThe ImportDnsRecords resource lets you import DNS records from any domain using [Cloudflare's DNS-over-HTTPS API](https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/).\n\n# Minimal Example\n\nImport all default DNS record types for a domain.\n\n```ts\nimport { ImportDnsRecords } from \"alchemy/dns\";\n\nconst records = await ImportDnsRecords(\"example-com\", {\n  domain: \"example.com\"\n});\n```\n\n# Import Specific Record Types\n\nImport only specified DNS record types.\n\n```ts\nimport { ImportDnsRecords } from \"alchemy/dns\";\n\nconst records = await ImportDnsRecords(\"example-com\", {\n  domain: \"example.com\",\n  recordTypes: [\"A\", \"MX\"]\n});\n```\n\n# Transfer DNS Records\n\nImport records from one domain and transfer them to a Cloudflare zone.\n\n```ts\nimport { ImportDnsRecords, DnsRecords } from \"alchemy/dns\";\n\nconst dnsRecords = await ImportDnsRecords(\"dns-records\", {\n  domain: \"example.com\"\n});\n\nawait DnsRecords(\"transfer-records\", {\n  zoneId: zone.id,\n  records: dnsRecords.records\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/dns/ImportDnsRecords-file",
+    "FQN": "github:alchemy/prod/docs/docs/dns/ImportDnsRecords/docs/dns/ImportDnsRecords-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/dns/import-dns.md",
+    "content": "# ImportDnsRecords\n\nThe ImportDnsRecords resource lets you import DNS records from any domain using [Cloudflare's DNS-over-HTTPS API](https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/).\n\n# Minimal Example\n\nImport all default DNS record types for a domain.\n\n```ts\nimport { ImportDnsRecords } from \"alchemy/dns\";\n\nconst records = await ImportDnsRecords(\"example-com\", {\n  domain: \"example.com\"\n});\n```\n\n# Import Specific Record Types\n\nImport only specified DNS record types.\n\n```ts\nimport { ImportDnsRecords } from \"alchemy/dns\";\n\nconst records = await ImportDnsRecords(\"example-com\", {\n  domain: \"example.com\",\n  recordTypes: [\"A\", \"MX\"]\n});\n```\n\n# Transfer DNS Records\n\nImport records from one domain and transfer them to a Cloudflare zone.\n\n```ts\nimport { ImportDnsRecords, DnsRecords } from \"alchemy/dns\";\n\nconst dnsRecords = await ImportDnsRecords(\"dns-records\", {\n  domain: \"example.com\"\n});\n\nawait DnsRecords(\"transfer-records\", {\n  zoneId: zone.id,\n  records: dnsRecords.records\n});\n```"
+  }
+}

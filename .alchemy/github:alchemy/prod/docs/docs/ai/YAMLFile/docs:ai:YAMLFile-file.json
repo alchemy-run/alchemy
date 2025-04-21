@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/ai/YAMLFile-file",
+  "fqn": "github:alchemy/prod/docs/docs/ai/YAMLFile/docs/ai/YAMLFile-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/ai/yaml-file.md",
+    "content": "# YAMLFile\n\nThe YAMLFile resource lets you generate [YAML](https://yaml.org/) files using AI models with optional schema validation.\n\n# Minimal Example\n\nGenerate a simple YAML configuration file:\n\n```ts\nimport { YAMLFile } from \"alchemy/ai\";\n\nconst config = await YAMLFile(\"config\", {\n  path: \"./config.yml\",\n  prompt: \"Generate a basic nginx configuration with server name and port\"\n});\n```\n\n# Schema Validation\n\nUse a schema to validate and type the generated YAML:\n\n```ts\nimport { YAMLFile } from \"alchemy/ai\";\nimport { type } from \"arktype\";\n\nconst schema = type({\n  service: \"string\",\n  port: \"number\",\n  env: \"string\",\n  replicas: \"number\"\n});\n\nconst deployment = await YAMLFile(\"deployment\", {\n  path: \"./deployment.yml\",\n  schema,\n  prompt: \"Generate a deployment config for a web service\",\n  temperature: 0.2\n});\n\n// Typed access to the YAML\nconsole.log(deployment.yaml.service);\n```\n\n# Custom System Prompt\n\nProvide custom instructions for YAML generation:\n\n```ts\nimport { YAMLFile } from \"alchemy/ai\";\n\nconst workflow = await YAMLFile(\"workflow\", {\n  path: \".github/workflows/ci.yml\", \n  prompt: \"Create a GitHub Actions workflow for Node.js testing and deployment\",\n  system: \"You are a DevOps expert. Generate GitHub Actions YAML that follows best practices.\",\n  model: {\n    id: \"gpt-4\",\n    provider: \"openai\"\n  }\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/ai/YAMLFile-file",
+    "FQN": "github:alchemy/prod/docs/docs/ai/YAMLFile/docs/ai/YAMLFile-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/ai/yaml-file.md",
+    "content": "# YAMLFile\n\nThe YAMLFile resource lets you generate [YAML](https://yaml.org/) files using AI models with optional schema validation.\n\n# Minimal Example\n\nGenerate a simple YAML configuration file:\n\n```ts\nimport { YAMLFile } from \"alchemy/ai\";\n\nconst config = await YAMLFile(\"config\", {\n  path: \"./config.yml\",\n  prompt: \"Generate a basic nginx configuration with server name and port\"\n});\n```\n\n# Schema Validation\n\nUse a schema to validate and type the generated YAML:\n\n```ts\nimport { YAMLFile } from \"alchemy/ai\";\nimport { type } from \"arktype\";\n\nconst schema = type({\n  service: \"string\",\n  port: \"number\",\n  env: \"string\",\n  replicas: \"number\"\n});\n\nconst deployment = await YAMLFile(\"deployment\", {\n  path: \"./deployment.yml\",\n  schema,\n  prompt: \"Generate a deployment config for a web service\",\n  temperature: 0.2\n});\n\n// Typed access to the YAML\nconsole.log(deployment.yaml.service);\n```\n\n# Custom System Prompt\n\nProvide custom instructions for YAML generation:\n\n```ts\nimport { YAMLFile } from \"alchemy/ai\";\n\nconst workflow = await YAMLFile(\"workflow\", {\n  path: \".github/workflows/ci.yml\", \n  prompt: \"Create a GitHub Actions workflow for Node.js testing and deployment\",\n  system: \"You are a DevOps expert. Generate GitHub Actions YAML that follows best practices.\",\n  model: {\n    id: \"gpt-4\",\n    provider: \"openai\"\n  }\n});\n```"
+  }
+}

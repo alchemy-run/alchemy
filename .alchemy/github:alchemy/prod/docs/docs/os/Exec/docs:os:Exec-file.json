@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/os/Exec-file",
+  "fqn": "github:alchemy/prod/docs/docs/os/Exec/docs/os/Exec-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/os/exec.md",
+    "content": "# Exec\n\nThe Exec resource allows you to execute shell commands as part of your Alchemy infrastructure code. It provides a way to run system commands with full control over the execution environment.\n\n# Minimal Example\n\nRun a simple shell command:\n\n```ts\nimport { Exec } from \"alchemy/os\";\n\nconst result = await Exec(\"list-files\", {\n  command: \"ls -la\"\n});\n\nconsole.log(result.stdout);\n```\n\n# Run in Custom Directory with Environment Variables\n\nExecute a command in a specific directory with custom environment variables:\n\n```ts\nimport { Exec } from \"alchemy/os\";\n\nconst build = await Exec(\"build-project\", {\n  command: \"npm run build\",\n  cwd: \"./my-project\", \n  env: { NODE_ENV: \"production\" }\n});\n```\n\n# Memoized Command Execution\n\nRun a command that only re-executes when the command changes:\n\n```ts\nimport { Exec } from \"alchemy/os\";\n\nconst status = await Exec(\"git-status\", {\n  command: \"git status\",\n  memoize: true\n});\n\n// Won't run again if command hasn't changed\nawait Exec(\"git-status\", {\n  command: \"git status\", \n  memoize: true\n});\n```\n\n# Custom Buffer Size\n\nRun a command with increased buffer size for large outputs:\n\n```ts\nimport { Exec } from \"alchemy/os\";\n\nconst logs = await Exec(\"get-logs\", {\n  command: \"cat large-log-file.log\",\n  maxBuffer: 10 * 1024 * 1024 // 10MB buffer\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/os/Exec-file",
+    "FQN": "github:alchemy/prod/docs/docs/os/Exec/docs/os/Exec-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/os/exec.md",
+    "content": "# Exec\n\nThe Exec resource allows you to execute shell commands as part of your Alchemy infrastructure code. It provides a way to run system commands with full control over the execution environment.\n\n# Minimal Example\n\nRun a simple shell command:\n\n```ts\nimport { Exec } from \"alchemy/os\";\n\nconst result = await Exec(\"list-files\", {\n  command: \"ls -la\"\n});\n\nconsole.log(result.stdout);\n```\n\n# Run in Custom Directory with Environment Variables\n\nExecute a command in a specific directory with custom environment variables:\n\n```ts\nimport { Exec } from \"alchemy/os\";\n\nconst build = await Exec(\"build-project\", {\n  command: \"npm run build\",\n  cwd: \"./my-project\", \n  env: { NODE_ENV: \"production\" }\n});\n```\n\n# Memoized Command Execution\n\nRun a command that only re-executes when the command changes:\n\n```ts\nimport { Exec } from \"alchemy/os\";\n\nconst status = await Exec(\"git-status\", {\n  command: \"git status\",\n  memoize: true\n});\n\n// Won't run again if command hasn't changed\nawait Exec(\"git-status\", {\n  command: \"git status\", \n  memoize: true\n});\n```\n\n# Custom Buffer Size\n\nRun a command with increased buffer size for large outputs:\n\n```ts\nimport { Exec } from \"alchemy/os\";\n\nconst logs = await Exec(\"get-logs\", {\n  command: \"cat large-log-file.log\",\n  maxBuffer: 10 * 1024 * 1024 // 10MB buffer\n});\n```"
+  }
+}

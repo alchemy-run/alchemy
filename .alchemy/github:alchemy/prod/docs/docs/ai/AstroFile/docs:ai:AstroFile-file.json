@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/ai/AstroFile-file",
+  "fqn": "github:alchemy/prod/docs/docs/ai/AstroFile/docs/ai/AstroFile-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/ai/astro-file.md",
+    "content": "# AstroFile\n\nThe AstroFile resource lets you generate [Astro](https://astro.build) components using AI models.\n\n# Minimal Example\n\nCreate a simple Astro component with AI generation:\n\n```ts\nimport { AstroFile } from \"alchemy/ai\";\n\nconst header = await AstroFile(\"header\", {\n  path: \"./src/components/Header.astro\",\n  prompt: \"Generate an Astro header component with a logo, navigation menu, and mobile responsiveness\"\n});\n```\n\n# Generate Component with File Context\n\nUse alchemy template literals to include existing files as context:\n\n```ts\nimport { AstroFile } from \"alchemy/ai\";\n\nconst blogPost = await AstroFile(\"blog-post\", {\n  path: \"./src/pages/blog/[slug].astro\",\n  prompt: await alchemy`\n    Create an Astro blog post page that uses these types:\n    ${alchemy.file(\"src/types/Blog.ts\")}\n  `,\n  temperature: 0.2\n});\n```\n\n# Custom System Prompt\n\nProvide a custom system prompt to guide the AI's output:\n\n```ts\nimport { AstroFile } from \"alchemy/ai\";\n\nconst layout = await AstroFile(\"layout\", {\n  path: \"./src/layouts/MainLayout.astro\",\n  prompt: \"Create a main layout with SEO metadata and content slots\",\n  system: \"You are an expert Astro developer. Create a single Astro layout file inside ```astro fences with no additional text.\",\n  model: {\n    id: \"claude-3-opus-20240229\",\n    provider: \"anthropic\"\n  }\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/ai/AstroFile-file",
+    "FQN": "github:alchemy/prod/docs/docs/ai/AstroFile/docs/ai/AstroFile-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/ai/astro-file.md",
+    "content": "# AstroFile\n\nThe AstroFile resource lets you generate [Astro](https://astro.build) components using AI models.\n\n# Minimal Example\n\nCreate a simple Astro component with AI generation:\n\n```ts\nimport { AstroFile } from \"alchemy/ai\";\n\nconst header = await AstroFile(\"header\", {\n  path: \"./src/components/Header.astro\",\n  prompt: \"Generate an Astro header component with a logo, navigation menu, and mobile responsiveness\"\n});\n```\n\n# Generate Component with File Context\n\nUse alchemy template literals to include existing files as context:\n\n```ts\nimport { AstroFile } from \"alchemy/ai\";\n\nconst blogPost = await AstroFile(\"blog-post\", {\n  path: \"./src/pages/blog/[slug].astro\",\n  prompt: await alchemy`\n    Create an Astro blog post page that uses these types:\n    ${alchemy.file(\"src/types/Blog.ts\")}\n  `,\n  temperature: 0.2\n});\n```\n\n# Custom System Prompt\n\nProvide a custom system prompt to guide the AI's output:\n\n```ts\nimport { AstroFile } from \"alchemy/ai\";\n\nconst layout = await AstroFile(\"layout\", {\n  path: \"./src/layouts/MainLayout.astro\",\n  prompt: \"Create a main layout with SEO metadata and content slots\",\n  system: \"You are an expert Astro developer. Create a single Astro layout file inside ```astro fences with no additional text.\",\n  model: {\n    id: \"claude-3-opus-20240229\",\n    provider: \"anthropic\"\n  }\n});\n```"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/aws/Bucket-file",
+  "fqn": "github:alchemy/prod/docs/docs/aws/Bucket/docs/aws/Bucket-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/aws/bucket.md",
+    "content": "# Bucket\n\nThe Bucket resource lets you create and manage [Amazon S3 buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html) for scalable object storage.\n\n## Minimal Example\n\nCreate a basic S3 bucket with default settings:\n\n```ts\nimport { Bucket } from \"alchemy/aws\";\n\nconst bucket = await Bucket(\"my-app-storage\", {\n  bucketName: \"my-app-storage\",\n  tags: {\n    Environment: \"production\"\n  }\n});\n```\n\n## With Versioning and Tags\n\nCreate a bucket with versioning enabled and specific tags:\n\n```ts\nimport { Bucket } from \"alchemy/aws\";\n\nconst versionedBucket = await Bucket(\"document-archive\", {\n  bucketName: \"document-archive\", \n  tags: {\n    Environment: \"production\",\n    Purpose: \"document-storage\",\n    Versioning: \"enabled\"\n  }\n});\n```\n\n## Development Bucket\n\nCreate a development bucket with minimal configuration:\n\n```ts\nimport { Bucket } from \"alchemy/aws\";\n\nconst devBucket = await Bucket(\"dev-testing\", {\n  bucketName: \"dev-testing\",\n  tags: {\n    Environment: \"development\",\n    Temporary: \"true\"\n  }\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/aws/Bucket-file",
+    "FQN": "github:alchemy/prod/docs/docs/aws/Bucket/docs/aws/Bucket-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/aws/bucket.md",
+    "content": "# Bucket\n\nThe Bucket resource lets you create and manage [Amazon S3 buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html) for scalable object storage.\n\n## Minimal Example\n\nCreate a basic S3 bucket with default settings:\n\n```ts\nimport { Bucket } from \"alchemy/aws\";\n\nconst bucket = await Bucket(\"my-app-storage\", {\n  bucketName: \"my-app-storage\",\n  tags: {\n    Environment: \"production\"\n  }\n});\n```\n\n## With Versioning and Tags\n\nCreate a bucket with versioning enabled and specific tags:\n\n```ts\nimport { Bucket } from \"alchemy/aws\";\n\nconst versionedBucket = await Bucket(\"document-archive\", {\n  bucketName: \"document-archive\", \n  tags: {\n    Environment: \"production\",\n    Purpose: \"document-storage\",\n    Versioning: \"enabled\"\n  }\n});\n```\n\n## Development Bucket\n\nCreate a development bucket with minimal configuration:\n\n```ts\nimport { Bucket } from \"alchemy/aws\";\n\nconst devBucket = await Bucket(\"dev-testing\", {\n  bucketName: \"dev-testing\",\n  tags: {\n    Environment: \"development\",\n    Temporary: \"true\"\n  }\n});\n```"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "kind": "cloudflare::Zone",
+  "id": "alchemy.run",
+  "fqn": "github:alchemy/prod/alchemy.run",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "id": "ae65a5f1b4cd62bbfc6e037cdc75adad",
+    "name": "alchemy.run",
+    "type": "full",
+    "status": "pending",
+    "paused": false,
+    "accountId": "7bc8e300d3a2fc8be08a9215c36be2d6",
+    "nameservers": [
+      "louis.ns.cloudflare.com",
+      "ulla.ns.cloudflare.com"
+    ],
+    "originalNameservers": [
+      "ns31.domaincontrol.com",
+      "ns32.domaincontrol.com"
+    ],
+    "createdAt": 1744136777307,
+    "modifiedAt": 1744136777307,
+    "activatedAt": null,
+    "settings": {
+      "ssl": "full",
+      "alwaysUseHttps": "off",
+      "automaticHttpsRewrites": "on",
+      "tls13": "on",
+      "earlyHints": "off",
+      "emailObfuscation": "on",
+      "browserCacheTtl": 14400,
+      "developmentMode": "off",
+      "http2": "on",
+      "http3": "on",
+      "ipv6": "on",
+      "websockets": "on",
+      "zeroRtt": "off",
+      "brotli": "on",
+      "hotlinkProtection": "off",
+      "minTlsVersion": "1.0"
+    },
+    "Kind": "cloudflare::Zone",
+    "ID": "alchemy.run",
+    "FQN": "github:alchemy/prod/alchemy.run",
+    "Seq": 0
+  },
+  "props": {
+    "name": "alchemy.run",
+    "type": "full"
+  }
+}

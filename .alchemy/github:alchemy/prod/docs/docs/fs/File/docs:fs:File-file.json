@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/fs/File-file",
+  "fqn": "github:alchemy/prod/docs/docs/fs/File/docs/fs/File-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/fs/file.md",
+    "content": "# File\n\nThe File resource lets you create, update, and delete files in the filesystem with automatic directory creation and cleanup.\n\n## Minimal Example\n\nCreate a simple text file:\n\n```ts\nimport { File } from \"alchemy/fs\";\n\nconst config = await File(\"config.txt\", {\n  path: \"config.txt\", \n  content: \"some configuration data\"\n});\n```\n\n## Nested Directories\n\nCreate files in nested directories (directories are created automatically):\n\n```ts\nimport { File } from \"alchemy/fs\";\n\nconst log = await File(\"app.log\", {\n  path: \"logs/app.log\",\n  content: \"application log entry\" \n});\n```\n\n## Update Path and Content\n\nUpdate a file's path and content (old file is automatically removed):\n\n```ts\nimport { File } from \"alchemy/fs\";\n\nlet file = await File(\"config\", {\n  path: \"config.json\",\n  content: '{ \"version\": \"1.0.0\" }'\n});\n\n// Later update path and content\nfile = await File(\"config\", {\n  path: \"config/v2/config.json\", \n  content: '{ \"version\": \"2.0.0\" }'\n});\n```\n\n## Static File Types\n\nCreate files with automatic formatting for specific file types:\n\n```ts\nimport { StaticJsonFile, StaticTypeScriptFile, StaticYamlFile } from \"alchemy/fs\";\n\n// JSON with formatting\nconst config = await StaticJsonFile(\"config.json\", {\n  api: { endpoint: \"https://api.example.com\" }\n});\n\n// TypeScript with formatting\nconst component = await StaticTypeScriptFile(\"Component.ts\", `\n  export function Component() {\n    return <div>Hello</div>\n  }\n`);\n\n// YAML with formatting\nconst manifest = await StaticYamlFile(\"manifest.yaml\", {\n  version: \"1.0.0\",\n  dependencies: [\"foo\", \"bar\"]\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/fs/File-file",
+    "FQN": "github:alchemy/prod/docs/docs/fs/File/docs/fs/File-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/fs/file.md",
+    "content": "# File\n\nThe File resource lets you create, update, and delete files in the filesystem with automatic directory creation and cleanup.\n\n## Minimal Example\n\nCreate a simple text file:\n\n```ts\nimport { File } from \"alchemy/fs\";\n\nconst config = await File(\"config.txt\", {\n  path: \"config.txt\", \n  content: \"some configuration data\"\n});\n```\n\n## Nested Directories\n\nCreate files in nested directories (directories are created automatically):\n\n```ts\nimport { File } from \"alchemy/fs\";\n\nconst log = await File(\"app.log\", {\n  path: \"logs/app.log\",\n  content: \"application log entry\" \n});\n```\n\n## Update Path and Content\n\nUpdate a file's path and content (old file is automatically removed):\n\n```ts\nimport { File } from \"alchemy/fs\";\n\nlet file = await File(\"config\", {\n  path: \"config.json\",\n  content: '{ \"version\": \"1.0.0\" }'\n});\n\n// Later update path and content\nfile = await File(\"config\", {\n  path: \"config/v2/config.json\", \n  content: '{ \"version\": \"2.0.0\" }'\n});\n```\n\n## Static File Types\n\nCreate files with automatic formatting for specific file types:\n\n```ts\nimport { StaticJsonFile, StaticTypeScriptFile, StaticYamlFile } from \"alchemy/fs\";\n\n// JSON with formatting\nconst config = await StaticJsonFile(\"config.json\", {\n  api: { endpoint: \"https://api.example.com\" }\n});\n\n// TypeScript with formatting\nconst component = await StaticTypeScriptFile(\"Component.ts\", `\n  export function Component() {\n    return <div>Hello</div>\n  }\n`);\n\n// YAML with formatting\nconst manifest = await StaticYamlFile(\"manifest.yaml\", {\n  version: \"1.0.0\",\n  dependencies: [\"foo\", \"bar\"]\n});\n```"
+  }
+}

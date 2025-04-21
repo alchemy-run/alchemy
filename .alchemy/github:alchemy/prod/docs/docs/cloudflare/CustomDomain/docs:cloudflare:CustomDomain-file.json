@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/cloudflare/CustomDomain-file",
+  "fqn": "github:alchemy/prod/docs/docs/cloudflare/CustomDomain/docs/cloudflare/CustomDomain-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/cloudflare/custom-domain.md",
+    "content": "# CustomDomain\n\nThe CustomDomain resource lets you bind a [Cloudflare Worker](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/) to a custom domain within your Cloudflare zone.\n\n# Minimal Example\n\nBind a worker to a custom domain:\n\n```ts\nimport { CustomDomain } from \"alchemy/cloudflare\";\n\nconst domain = await CustomDomain(\"api-domain\", {\n  name: \"api.example.com\",\n  zoneId: \"YOUR_ZONE_ID\", \n  workerName: \"my-api-worker\"\n});\n```\n\n# With Environment\n\nBind a worker environment to a custom domain:\n\n```ts\nimport { CustomDomain } from \"alchemy/cloudflare\";\n\nconst domain = await CustomDomain(\"staging-domain\", {\n  name: \"staging.example.com\",\n  zoneId: \"YOUR_ZONE_ID\",\n  workerName: \"my-worker\",\n  environment: \"staging\"\n});\n```\n\n# Bind to a Worker\n\nCreate a worker and bind it to a custom domain:\n\n```ts\nimport { Worker, CustomDomain } from \"alchemy/cloudflare\";\n\nconst worker = await Worker(\"api\", {\n  name: \"my-api-worker\", \n  script: \"console.log('Hello, world!')\"\n});\n\nconst domain = await CustomDomain(\"api-domain\", {\n  name: \"api.example.com\",\n  zoneId: \"YOUR_ZONE_ID\",\n  workerName: worker.name\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/cloudflare/CustomDomain-file",
+    "FQN": "github:alchemy/prod/docs/docs/cloudflare/CustomDomain/docs/cloudflare/CustomDomain-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/cloudflare/custom-domain.md",
+    "content": "# CustomDomain\n\nThe CustomDomain resource lets you bind a [Cloudflare Worker](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/) to a custom domain within your Cloudflare zone.\n\n# Minimal Example\n\nBind a worker to a custom domain:\n\n```ts\nimport { CustomDomain } from \"alchemy/cloudflare\";\n\nconst domain = await CustomDomain(\"api-domain\", {\n  name: \"api.example.com\",\n  zoneId: \"YOUR_ZONE_ID\", \n  workerName: \"my-api-worker\"\n});\n```\n\n# With Environment\n\nBind a worker environment to a custom domain:\n\n```ts\nimport { CustomDomain } from \"alchemy/cloudflare\";\n\nconst domain = await CustomDomain(\"staging-domain\", {\n  name: \"staging.example.com\",\n  zoneId: \"YOUR_ZONE_ID\",\n  workerName: \"my-worker\",\n  environment: \"staging\"\n});\n```\n\n# Bind to a Worker\n\nCreate a worker and bind it to a custom domain:\n\n```ts\nimport { Worker, CustomDomain } from \"alchemy/cloudflare\";\n\nconst worker = await Worker(\"api\", {\n  name: \"my-api-worker\", \n  script: \"console.log('Hello, world!')\"\n});\n\nconst domain = await CustomDomain(\"api-domain\", {\n  name: \"api.example.com\",\n  zoneId: \"YOUR_ZONE_ID\",\n  workerName: worker.name\n});\n```"
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "kind": "iam::Role",
+  "id": "github-oidc-role",
+  "fqn": "github:alchemy/prod/github-oidc-role",
+  "seq": 3,
+  "data": {},
+  "status": "updated",
+  "output": {
+    "roleName": "alchemy-github-oidc-role",
+    "assumeRolePolicy": {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Sid": "GitHubOIDC",
+          "Effect": "Allow",
+          "Principal": {
+            "Federated": "arn:aws:iam::084828582823:oidc-provider/token.actions.githubusercontent.com"
+          },
+          "Action": "sts:AssumeRoleWithWebIdentity",
+          "Condition": {
+            "StringEquals": {
+              "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+            },
+            "StringLike": {
+              "token.actions.githubusercontent.com:sub": "repo:sam-goodwin/alchemy:*"
+            }
+          }
+        }
+      ]
+    },
+    "managedPolicyArns": [
+      "arn:aws:iam::aws:policy/AdministratorAccess"
+    ],
+    "arn": "arn:aws:iam::084828582823:role/alchemy-github-oidc-role",
+    "uniqueId": "AROARHQBNOOT7RSASTYMS",
+    "roleId": "AROARHQBNOOT7RSASTYMS",
+    "createDate": {
+      "@date": "2025-04-04T08:49:47.000Z"
+    },
+    "Kind": "iam::Role",
+    "ID": "github-oidc-role",
+    "FQN": "github:alchemy/prod/github-oidc-role",
+    "Seq": 3
+  },
+  "props": {
+    "roleName": "alchemy-github-oidc-role",
+    "assumeRolePolicy": {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Sid": "GitHubOIDC",
+          "Effect": "Allow",
+          "Principal": {
+            "Federated": "arn:aws:iam::084828582823:oidc-provider/token.actions.githubusercontent.com"
+          },
+          "Action": "sts:AssumeRoleWithWebIdentity",
+          "Condition": {
+            "StringEquals": {
+              "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+            },
+            "StringLike": {
+              "token.actions.githubusercontent.com:sub": "repo:sam-goodwin/alchemy:*"
+            }
+          }
+        }
+      ]
+    },
+    "managedPolicyArns": [
+      "arn:aws:iam::aws:policy/AdministratorAccess"
+    ]
+  }
+}

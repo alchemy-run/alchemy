@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/aws/Table-file",
+  "fqn": "github:alchemy/prod/docs/docs/aws/Table/docs/aws/Table-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/aws/table.md",
+    "content": "# Table\n\nThe Table Resource lets you create and manage [Amazon DynamoDB tables](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html) in your app.\n\n## Minimal Example\n\nCreate a basic DynamoDB table with just a partition key:\n\n```ts\nimport { Table } from \"alchemy/aws\";\n\nconst table = await Table(\"users\", {\n  tableName: \"users\",\n  partitionKey: {\n    name: \"userId\", \n    type: \"S\"\n  }\n});\n```\n\n## With Sort Key\n\nAdd a sort key for time-series or hierarchical data:\n\n```ts\nimport { Table } from \"alchemy/aws\";\n\nconst table = await Table(\"events\", {\n  tableName: \"events\",\n  partitionKey: {\n    name: \"deviceId\",\n    type: \"S\"\n  },\n  sortKey: {\n    name: \"timestamp\",\n    type: \"N\"\n  }\n});\n```\n\n## Provisioned Capacity\n\nConfigure provisioned throughput for predictable workloads:\n\n```ts\nimport { Table } from \"alchemy/aws\";\n\nconst table = await Table(\"high-traffic\", {\n  tableName: \"high-traffic\",\n  partitionKey: {\n    name: \"id\",\n    type: \"S\"\n  },\n  billingMode: \"PROVISIONED\",\n  readCapacity: 100,\n  writeCapacity: 50\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/aws/Table-file",
+    "FQN": "github:alchemy/prod/docs/docs/aws/Table/docs/aws/Table-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/aws/table.md",
+    "content": "# Table\n\nThe Table Resource lets you create and manage [Amazon DynamoDB tables](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html) in your app.\n\n## Minimal Example\n\nCreate a basic DynamoDB table with just a partition key:\n\n```ts\nimport { Table } from \"alchemy/aws\";\n\nconst table = await Table(\"users\", {\n  tableName: \"users\",\n  partitionKey: {\n    name: \"userId\", \n    type: \"S\"\n  }\n});\n```\n\n## With Sort Key\n\nAdd a sort key for time-series or hierarchical data:\n\n```ts\nimport { Table } from \"alchemy/aws\";\n\nconst table = await Table(\"events\", {\n  tableName: \"events\",\n  partitionKey: {\n    name: \"deviceId\",\n    type: \"S\"\n  },\n  sortKey: {\n    name: \"timestamp\",\n    type: \"N\"\n  }\n});\n```\n\n## Provisioned Capacity\n\nConfigure provisioned throughput for predictable workloads:\n\n```ts\nimport { Table } from \"alchemy/aws\";\n\nconst table = await Table(\"high-traffic\", {\n  tableName: \"high-traffic\",\n  partitionKey: {\n    name: \"id\",\n    type: \"S\"\n  },\n  billingMode: \"PROVISIONED\",\n  readCapacity: 100,\n  writeCapacity: 50\n});\n```"
+  }
+}

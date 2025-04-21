@@ -1,0 +1,18 @@
+{
+  "kind": "fs::Folder",
+  "id": "blogs",
+  "fqn": "github:alchemy/prod/docs/blogs",
+  "seq": 3,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/blogs",
+    "Kind": "fs::Folder",
+    "ID": "blogs",
+    "FQN": "github:alchemy/prod/docs/blogs",
+    "Seq": 3
+  },
+  "props": {
+    "path": "alchemy-web/blogs"
+  }
+}

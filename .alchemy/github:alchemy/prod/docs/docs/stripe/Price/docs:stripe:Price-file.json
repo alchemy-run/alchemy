@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/stripe/Price-file",
+  "fqn": "github:alchemy/prod/docs/docs/stripe/Price/docs/stripe/Price-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/stripe/price.md",
+    "content": "# Price\n\nThe Price resource lets you create and manage [Stripe Prices](https://stripe.com/docs/api/prices) for products.\n\n# Minimal Example\n\nCreate a one-time fixed price for a product:\n\n```ts\nimport { Price } from \"alchemy/stripe\";\n\nconst price = await Price(\"basic-license\", {\n  currency: \"usd\", \n  unitAmount: 2999, // $29.99\n  product: \"prod_xyz\"\n});\n```\n\n# Recurring Subscription Price\n\nCreate a recurring subscription price with fixed monthly billing:\n\n```ts\nimport { Price } from \"alchemy/stripe\";\n\nconst price = await Price(\"pro-monthly\", {\n  currency: \"usd\",\n  unitAmount: 1499, // $14.99/month\n  product: \"prod_xyz\",\n  recurring: {\n    interval: \"month\",\n    usageType: \"licensed\"\n  }\n});\n```\n\n# Metered Usage Price\n\nCreate a metered price for usage-based billing:\n\n```ts\nimport { Price } from \"alchemy/stripe\";\n\nconst price = await Price(\"storage\", {\n  currency: \"usd\",\n  unitAmount: 25, // $0.25 per GB\n  product: \"prod_xyz\", \n  recurring: {\n    interval: \"month\",\n    usageType: \"metered\",\n    aggregateUsage: \"sum\"\n  }\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/stripe/Price-file",
+    "FQN": "github:alchemy/prod/docs/docs/stripe/Price/docs/stripe/Price-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/stripe/price.md",
+    "content": "# Price\n\nThe Price resource lets you create and manage [Stripe Prices](https://stripe.com/docs/api/prices) for products.\n\n# Minimal Example\n\nCreate a one-time fixed price for a product:\n\n```ts\nimport { Price } from \"alchemy/stripe\";\n\nconst price = await Price(\"basic-license\", {\n  currency: \"usd\", \n  unitAmount: 2999, // $29.99\n  product: \"prod_xyz\"\n});\n```\n\n# Recurring Subscription Price\n\nCreate a recurring subscription price with fixed monthly billing:\n\n```ts\nimport { Price } from \"alchemy/stripe\";\n\nconst price = await Price(\"pro-monthly\", {\n  currency: \"usd\",\n  unitAmount: 1499, // $14.99/month\n  product: \"prod_xyz\",\n  recurring: {\n    interval: \"month\",\n    usageType: \"licensed\"\n  }\n});\n```\n\n# Metered Usage Price\n\nCreate a metered price for usage-based billing:\n\n```ts\nimport { Price } from \"alchemy/stripe\";\n\nconst price = await Price(\"storage\", {\n  currency: \"usd\",\n  unitAmount: 25, // $0.25 per GB\n  product: \"prod_xyz\", \n  recurring: {\n    interval: \"month\",\n    usageType: \"metered\",\n    aggregateUsage: \"sum\"\n  }\n});\n```"
+  }
+}

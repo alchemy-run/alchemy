@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/aws/Function-file",
+  "fqn": "github:alchemy/prod/docs/docs/aws/Function/docs/aws/Function-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/aws/function.md",
+    "content": "# Function\n\nThe Function resource lets you create and manage [AWS Lambda functions](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) with support for Node.js runtimes, custom handlers, environment variables, and function URLs.\n\n## Minimal Example\n\nCreate a basic Lambda function with minimal configuration:\n\n```ts\nimport { Function } from \"alchemy/aws\";\n\nconst func = await Function(\"api\", {\n  functionName: \"api-handler\",\n  zipPath: \"./dist/api.zip\", \n  roleArn: role.arn,\n  handler: \"index.handler\"\n});\n```\n\n## With Environment Variables\n\nAdd environment variables and custom memory/timeout settings:\n\n```ts\nconst func = await Function(\"worker\", {\n  functionName: \"worker\",\n  zipPath: \"./dist/worker.zip\",\n  roleArn: role.arn,\n  handler: \"worker.process\",\n  memorySize: 512,\n  timeout: 30,\n  environment: {\n    QUEUE_URL: queue.url,\n    LOG_LEVEL: \"info\"\n  }\n});\n```\n\n## With Function URL\n\nCreate a function with a public URL endpoint and CORS:\n\n```ts\nconst func = await Function(\"public-api\", {\n  functionName: \"public-api\", \n  zipPath: \"./dist/api.zip\",\n  roleArn: role.arn,\n  handler: \"api.handler\",\n  url: {\n    authType: \"NONE\",\n    cors: {\n      allowOrigins: [\"*\"],\n      allowMethods: [\"GET\", \"POST\"],\n      allowHeaders: [\"content-type\"],\n      maxAge: 86400\n    }\n  }\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/aws/Function-file",
+    "FQN": "github:alchemy/prod/docs/docs/aws/Function/docs/aws/Function-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/aws/function.md",
+    "content": "# Function\n\nThe Function resource lets you create and manage [AWS Lambda functions](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) with support for Node.js runtimes, custom handlers, environment variables, and function URLs.\n\n## Minimal Example\n\nCreate a basic Lambda function with minimal configuration:\n\n```ts\nimport { Function } from \"alchemy/aws\";\n\nconst func = await Function(\"api\", {\n  functionName: \"api-handler\",\n  zipPath: \"./dist/api.zip\", \n  roleArn: role.arn,\n  handler: \"index.handler\"\n});\n```\n\n## With Environment Variables\n\nAdd environment variables and custom memory/timeout settings:\n\n```ts\nconst func = await Function(\"worker\", {\n  functionName: \"worker\",\n  zipPath: \"./dist/worker.zip\",\n  roleArn: role.arn,\n  handler: \"worker.process\",\n  memorySize: 512,\n  timeout: 30,\n  environment: {\n    QUEUE_URL: queue.url,\n    LOG_LEVEL: \"info\"\n  }\n});\n```\n\n## With Function URL\n\nCreate a function with a public URL endpoint and CORS:\n\n```ts\nconst func = await Function(\"public-api\", {\n  functionName: \"public-api\", \n  zipPath: \"./dist/api.zip\",\n  roleArn: role.arn,\n  handler: \"api.handler\",\n  url: {\n    authType: \"NONE\",\n    cors: {\n      allowOrigins: [\"*\"],\n      allowMethods: [\"GET\", \"POST\"],\n      allowHeaders: [\"content-type\"],\n      maxAge: 86400\n    }\n  }\n});\n```"
+  }
+}

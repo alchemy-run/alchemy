@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/aws/PolicyAttachment-file",
+  "fqn": "github:alchemy/prod/docs/docs/aws/PolicyAttachment/docs/aws/PolicyAttachment-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/aws/policy-attachment.md",
+    "content": "# PolicyAttachment\n\nThe PolicyAttachment resource lets you attach [AWS IAM policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) to IAM roles.\n\n## Minimal Example\n\nAttach an AWS managed policy to a role:\n\n```ts\nimport { PolicyAttachment } from \"alchemy/aws\";\n\nconst adminAccess = await PolicyAttachment(\"admin-policy\", {\n  policyArn: \"arn:aws:iam::aws:policy/AdministratorAccess\", \n  roleName: role.name\n});\n```\n\n## Attach Custom Policy\n\nAttach a custom policy to a role:\n\n```ts\nimport { PolicyAttachment } from \"alchemy/aws\";\n\nconst customPolicy = await PolicyAttachment(\"custom-policy\", {\n  policyArn: policy.arn,\n  roleName: role.name\n});\n```\n\n## Multiple Policy Attachments \n\nAttach multiple policies to a single role:\n\n```ts\nimport { PolicyAttachment } from \"alchemy/aws\";\n\nconst s3Access = await PolicyAttachment(\"s3-access\", {\n  policyArn: \"arn:aws:iam::aws:policy/AmazonS3FullAccess\",\n  roleName: role.name\n});\n\nconst sqsAccess = await PolicyAttachment(\"sqs-access\", {\n  policyArn: \"arn:aws:iam::aws:policy/AmazonSQSFullAccess\", \n  roleName: role.name\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/aws/PolicyAttachment-file",
+    "FQN": "github:alchemy/prod/docs/docs/aws/PolicyAttachment/docs/aws/PolicyAttachment-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/aws/policy-attachment.md",
+    "content": "# PolicyAttachment\n\nThe PolicyAttachment resource lets you attach [AWS IAM policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) to IAM roles.\n\n## Minimal Example\n\nAttach an AWS managed policy to a role:\n\n```ts\nimport { PolicyAttachment } from \"alchemy/aws\";\n\nconst adminAccess = await PolicyAttachment(\"admin-policy\", {\n  policyArn: \"arn:aws:iam::aws:policy/AdministratorAccess\", \n  roleName: role.name\n});\n```\n\n## Attach Custom Policy\n\nAttach a custom policy to a role:\n\n```ts\nimport { PolicyAttachment } from \"alchemy/aws\";\n\nconst customPolicy = await PolicyAttachment(\"custom-policy\", {\n  policyArn: policy.arn,\n  roleName: role.name\n});\n```\n\n## Multiple Policy Attachments \n\nAttach multiple policies to a single role:\n\n```ts\nimport { PolicyAttachment } from \"alchemy/aws\";\n\nconst s3Access = await PolicyAttachment(\"s3-access\", {\n  policyArn: \"arn:aws:iam::aws:policy/AmazonS3FullAccess\",\n  roleName: role.name\n});\n\nconst sqsAccess = await PolicyAttachment(\"sqs-access\", {\n  policyArn: \"arn:aws:iam::aws:policy/AmazonSQSFullAccess\", \n  roleName: role.name\n});\n```"
+  }
+}

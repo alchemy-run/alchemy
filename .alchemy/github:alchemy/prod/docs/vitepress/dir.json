@@ -1,0 +1,19 @@
+{
+  "kind": "fs::Folder",
+  "id": "dir",
+  "fqn": "github:alchemy/prod/docs/vitepress/dir",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web",
+    "Kind": "fs::Folder",
+    "ID": "dir",
+    "FQN": "github:alchemy/prod/docs/vitepress/dir",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web",
+    "delete": true
+  }
+}

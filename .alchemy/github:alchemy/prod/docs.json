@@ -1,0 +1,15 @@
+{
+  "kind": "scope",
+  "id": "docs",
+  "seq": 27,
+  "data": {},
+  "fqn": "",
+  "props": {},
+  "status": "created",
+  "output": {
+    "ID": "docs",
+    "FQN": "",
+    "Kind": "alchemy::Scope",
+    "Seq": 27
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "kind": "fs::File",
+  "id": "docs/fs/Folder-file",
+  "fqn": "github:alchemy/prod/docs/docs/fs/Folder/docs/fs/Folder-file",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "path": "alchemy-web/docs/providers/fs/folder.md",
+    "content": "# Folder\n\nThe Folder resource creates and manages directories in the filesystem with automatic parent directory creation and cleanup on deletion.\n\n# Minimal Example\n\nCreate a basic directory:\n\n```ts\nimport { Folder } from \"alchemy/fs\";\n\nconst dir = await Folder(\"uploads\");\n```\n\n# Create Nested Directory\n\nCreate a nested directory structure with recursive creation:\n\n```ts\nimport { Folder } from \"alchemy/fs\";\n\nconst logs = await Folder(\"var/log/app\", {\n  path: \"var/log/app\",\n  recursive: true \n});\n```\n\n# Preserve Directory on Delete\n\nKeep the directory when deleting the resource:\n\n```ts\nimport { Folder } from \"alchemy/fs\";\n\nconst persist = await Folder(\"data\", {\n  path: \"data\",\n  delete: false\n});\n```\n\n# Clean Directory on Delete\n\nRemove all contents when deleting the directory:\n\n```ts\nimport { Folder } from \"alchemy/fs\";\n\nconst temp = await Folder(\"temp\", {\n  path: \"temp\",\n  clean: true\n});\n```",
+    "Kind": "fs::File",
+    "ID": "docs/fs/Folder-file",
+    "FQN": "github:alchemy/prod/docs/docs/fs/Folder/docs/fs/Folder-file",
+    "Seq": 0
+  },
+  "props": {
+    "path": "alchemy-web/docs/providers/fs/folder.md",
+    "content": "# Folder\n\nThe Folder resource creates and manages directories in the filesystem with automatic parent directory creation and cleanup on deletion.\n\n# Minimal Example\n\nCreate a basic directory:\n\n```ts\nimport { Folder } from \"alchemy/fs\";\n\nconst dir = await Folder(\"uploads\");\n```\n\n# Create Nested Directory\n\nCreate a nested directory structure with recursive creation:\n\n```ts\nimport { Folder } from \"alchemy/fs\";\n\nconst logs = await Folder(\"var/log/app\", {\n  path: \"var/log/app\",\n  recursive: true \n});\n```\n\n# Preserve Directory on Delete\n\nKeep the directory when deleting the resource:\n\n```ts\nimport { Folder } from \"alchemy/fs\";\n\nconst persist = await Folder(\"data\", {\n  path: \"data\",\n  delete: false\n});\n```\n\n# Clean Directory on Delete\n\nRemove all contents when deleting the directory:\n\n```ts\nimport { Folder } from \"alchemy/fs\";\n\nconst temp = await Folder(\"temp\", {\n  path: \"temp\",\n  clean: true\n});\n```"
+  }
+}
