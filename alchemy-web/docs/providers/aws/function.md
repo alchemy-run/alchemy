@@ -38,7 +38,7 @@ const func = await Function("worker", {
 
 ## Function URL
 
-Create a function with a public URL endpoint and CORS:
+Create a function with a public URL endpoint, CORS and optional response streaming:
 
 ```ts
 const func = await Function("public-api", {
@@ -48,6 +48,7 @@ const func = await Function("public-api", {
   handler: "api.handler",
   url: {
     authType: "NONE",
+    invokeMode: "RESPONSE_STREAM",
     cors: {
       allowOrigins: ["*"],
       allowMethods: ["GET", "POST"],

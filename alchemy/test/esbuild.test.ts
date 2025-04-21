@@ -2,10 +2,10 @@ import { afterAll, expect } from "bun:test";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { alchemy } from "../src/alchemy";
-import { destroy } from "../src/destroy";
 import { Bundle } from "../src/esbuild/bundle";
 import { BRANCH_PREFIX } from "./util";
 
+import { destroy } from "../src/destroy";
 import "../src/test/bun";
 
 const test = alchemy.test(import.meta, {

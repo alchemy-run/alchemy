@@ -26,8 +26,10 @@ export interface ViteSiteProps<B extends Bindings> {
   main?: string;
   /**
    * The directory containing your static assets
+   *
+   * @default "./dist"
    */
-  assets: string;
+  assets?: string;
   /**
    * The bindings to pass to the worker
    */
@@ -80,18 +82,31 @@ export async function ViteSite<B extends Bindings>(
     });
 
     const staticAssets = await Assets("assets", {
-      path: "./dist",
+      path:
+        props.assets ??
+        (await (async () => {
+          try {
+            await fs.access(path.join("dist", "client", "index.html"));
+            return path.join(".", "dist", "client");
+          } catch {
+            return path.join(".", "dist");
+          }
+        })()),
     });
-
     const worker = await Worker("worker", {
       name: props.name ?? id,
       entrypoint: props.main,
+      assets: {
+        html_handling: "auto-trailing-slash",
+        not_found_handling: "single-page-application",
+        run_worker_first: false,
+      },
       script: props.main
         ? undefined
         : `
 export default {
   async fetch(request, env) {
-    return env.ASSETS.fetch(request);
+    return new Response("Not Found", { status: 404 });
   },
 };`,
       url: true,

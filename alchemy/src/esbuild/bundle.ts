@@ -1,6 +1,6 @@
-import * as esbuild from "esbuild";
+import esbuild from "esbuild";
 import crypto from "node:crypto";
-import fs from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "../context";
 import { Resource } from "../resource";
@@ -78,18 +78,25 @@ export interface BundleProps {
 /**
  * Output returned after bundle creation/update
  */
-export interface Bundle extends Resource<"esbuild::Bundle"> {
+export interface Bundle<P extends BundleProps = BundleProps>
+  extends Resource<"esbuild::Bundle">,
+    BundleProps {
   /**
    * Path to the bundled file
    * Absolute or relative path to the generated bundle
    */
-  path: string;
+  path: P extends { outdir: string } | { outfile: string } ? string : undefined;
 
   /**
    * SHA-256 hash of the bundle contents
    * Used for cache busting and content verification
    */
   hash: string;
+
+  /**
+   * The content of the bundle (the .js or .mjs file)
+   */
+  content: string;
 }
 
 /**
@@ -113,32 +120,31 @@ export const Bundle = Resource(
   {
     alwaysUpdate: true,
   },
-  async function (
-    this: Context<Bundle>,
+  async function <Props extends BundleProps>(
+    this: Context<Bundle<any>>,
     id: string,
-    props: BundleProps
-  ): Promise<Bundle> {
-    // Determine output path
-    const outDirPath =
-      props.outfile != null ? path.dirname(props.outfile) : props.outdir;
-
-    if (outDirPath == null) {
-      throw new Error(
-        `You need to specify either outfile or outdir in your bundle configuration ${JSON.stringify(props)}`
-      );
-    }
-
-    // Ensure output directory exists
-    await fs.promises.mkdir(path.dirname(outDirPath), { recursive: true });
+    props: Props
+  ): Promise<Bundle<Props>> {
     if (this.phase === "delete") {
-      await fs.promises.rm(outDirPath, { recursive: true });
+      console.log("delete", this.output.path);
+      if (this.output.path) {
+        try {
+          await fs.rm(this.output.path, { force: true });
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("ENOENT")) {
+            // File doesn't exist, so we can ignore the error
+          } else {
+            throw error;
+          }
+        }
+      }
+      return this.destroy();
     }
 
     const result = await bundle(props);
-    // Check that bundle created output an file for the given entrypoint
-    // Use bundle metada data to retrieve its content
-    const bundleOutputPath = Object.entries(result.metafile.outputs).find(
-      ([file, output]) => {
+
+    const bundlePath = Object.entries(result.metafile.outputs).find(
+      ([_, output]) => {
         if (output.entryPoint === undefined) {
           return false;
         }
@@ -157,34 +163,37 @@ export const Bundle = Resource(
       }
     )?.[0];
 
-    if (!bundleOutputPath) {
-      throw new Error(`Unable to find a compiled file`);
+    const outputFile = result.outputFiles?.[0];
+    if (outputFile === undefined && bundlePath === undefined) {
+      throw new Error("Failed to create bundle");
+    } else if (outputFile) {
+      return this({
+        ...props,
+        path: bundlePath,
+        hash: outputFile.hash,
+        content: outputFile.text,
+      });
+    } else {
+      const content = await fs.readFile(bundlePath!, "utf-8");
+      return this({
+        ...props,
+        path: bundlePath,
+        hash: crypto.createHash("sha256").update(content).digest("hex"),
+        content,
+      });
     }
-
-    // Calculate hash of the output
-    const bundleOutputContent = await fs.promises.readFile(bundleOutputPath);
-    const hash = crypto
-      .createHash("sha256")
-      .update(bundleOutputContent)
-      .digest("hex");
-
-    // Store metadata in context
-    await this.set("metafile", result.metafile);
-    await this.set("hash", hash);
-
-    // Return output info
-    return this({
-      path: bundleOutputPath,
-      hash,
-    });
   }
 );
 
 export async function bundle(props: BundleProps) {
   return await esbuild.build({
     ...props.options,
+    write: !(props.outdir === undefined && props.outfile === undefined),
+    // write:
+    //   props.outdir === undefined && props.outfile === undefined ? false : true,
+    // write: false,
     entryPoints: [props.entryPoint],
-    outdir: props.outdir,
+    outdir: props.outdir ? props.outdir : props.outfile ? undefined : ".out",
     outfile: props.outfile,
     bundle: true,
     format: props.format,
@@ -198,6 +207,5 @@ export async function bundle(props: BundleProps) {
     ],
     platform: props.platform,
     metafile: true,
-    write: true,
   });
 }

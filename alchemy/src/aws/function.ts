@@ -15,9 +15,8 @@ import {
   UpdateFunctionConfigurationCommand,
   UpdateFunctionUrlConfigCommand,
 } from "@aws-sdk/client-lambda";
-import fs from "node:fs";
-import path from "node:path";
 import type { Context } from "../context";
+import type { Bundle } from "../esbuild/bundle";
 import { Resource } from "../resource";
 import { ignore } from "../util/ignore";
 
@@ -31,9 +30,9 @@ export interface FunctionProps {
   functionName: string;
 
   /**
-   * Path to the zip file containing the function code
+   * Bundle for the function
    */
-  zipPath: string;
+  bundle: Bundle;
 
   /**
    * ARN of the IAM role that Lambda assumes when executing the function
@@ -44,7 +43,7 @@ export interface FunctionProps {
    * Function handler in the format 'file.function'
    * For Node.js this is typically 'index.handler' or similar
    */
-  handler?: string;
+  handler: string;
 
   /**
    * Lambda runtime environment for the function
@@ -89,6 +88,11 @@ export interface FunctionProps {
    * Function URL configuration for direct HTTP(S) invocation
    */
   url?: {
+    /**
+     * Configure type of response for the function URL
+     */
+    invokeMode?: "BUFFERED" | "RESPONSE_STREAM";
+
     /**
      * Authentication type for the function URL
      */
@@ -278,7 +282,7 @@ export interface Function extends Resource<"lambda::Function">, FunctionProps {
  * });
  *
  * @example
- * // Create a function with a public URL endpoint and CORS
+ * // Create a function with a public URL endpoint, CORS and optional response streaming
  * const apiFunction = await Function("public-api", {
  *   functionName: "public-api",
  *   zipPath: "./dist/api.zip",
@@ -286,6 +290,7 @@ export interface Function extends Resource<"lambda::Function">, FunctionProps {
  *   handler: "api.handler",
  *   url: {
  *     authType: "NONE",
+ *     invokeMode: "RESPONSE_STREAM",
  *     cors: {
  *       allowOrigins: ["*"],
  *       allowMethods: ["GET", "POST"],
@@ -301,7 +306,7 @@ export const Function = Resource(
     const client = new LambdaClient({});
     const region = await resolveRegion(client);
 
-    const code = await zipCode(props.zipPath);
+    const code = await zipCode(props);
 
     if (this.phase === "delete") {
       // Delete function URL if it exists
@@ -388,6 +393,7 @@ export const Function = Resource(
                   new UpdateFunctionUrlConfigCommand({
                     FunctionName: props.functionName,
                     AuthType: props.url.authType || "NONE",
+                    InvokeMode: props.url.invokeMode || "BUFFERED",
                     Cors: props.url.cors
                       ? {
                           AllowCredentials: props.url.cors.allowCredentials,
@@ -426,6 +432,7 @@ export const Function = Resource(
                   new CreateFunctionUrlConfigCommand({
                     FunctionName: props.functionName,
                     AuthType: props.url.authType || "NONE",
+                    InvokeMode: props.url.invokeMode || "BUFFERED",
                     Cors: props.url.cors
                       ? {
                           AllowCredentials: props.url.cors.allowCredentials,
@@ -466,6 +473,7 @@ export const Function = Resource(
                   new CreateFunctionUrlConfigCommand({
                     FunctionName: props.functionName,
                     AuthType: props.url.authType || "NONE",
+                    InvokeMode: props.url.invokeMode || "BUFFERED",
                     Cors: props.url.cors
                       ? {
                           AllowCredentials: props.url.cors.allowCredentials,
@@ -586,6 +594,7 @@ export const Function = Resource(
                 new CreateFunctionUrlConfigCommand({
                   FunctionName: props.functionName,
                   AuthType: props.url.authType || "NONE",
+                  InvokeMode: props.url.invokeMode || "BUFFERED",
                   Cors: props.url.cors
                     ? {
                         AllowCredentials: props.url.cors.allowCredentials,
@@ -714,9 +723,12 @@ async function waitForFunctionStabilization(
 }
 
 // Helper to zip the code
-async function zipCode(filePath: string): Promise<Buffer> {
-  const fileContent = await fs.promises.readFile(filePath);
-  const fileName = path.basename(filePath);
+async function zipCode(props: FunctionProps): Promise<Buffer> {
+  const fileContent = props.bundle.content;
+
+  const fileName =
+    props.handler.split(".").reverse().slice(0, -1).reverse().join(".") +
+    (props.bundle.format === "cjs" ? ".cjs" : ".mjs");
 
   // Create a zip buffer in memory
   const zip = new (await import("jszip")).default();

@@ -20,6 +20,50 @@ import type { SingleStepMigration } from "./worker-migration";
 import { upsertWorkflow, type Workflow } from "./workflow";
 
 /**
+ * Configuration options for static assets
+ */
+export interface AssetsConfig {
+  /**
+   * The contents of a _headers file (used to attach custom headers on asset responses)
+   */
+  _headers?: string;
+
+  /**
+   * The contents of a _redirects file (used to apply redirects or proxy paths ahead of asset serving)
+   */
+  _redirects?: string;
+
+  /**
+   * Determines the redirects and rewrites of requests for HTML content
+   * @default "auto-trailing-slash"
+   */
+  html_handling?:
+    | "auto-trailing-slash"
+    | "force-trailing-slash"
+    | "drop-trailing-slash"
+    | "none";
+
+  /**
+   * Determines the response when a request does not match a static asset, and there is no Worker script
+   */
+  not_found_handling?: "none" | "404-page" | "single-page-application";
+
+  /**
+   * When true, requests will always invoke the Worker script.
+   * Otherwise, attempt to serve an asset matching the request, falling back to the Worker script.
+   */
+  run_worker_first?: boolean;
+
+  /**
+   * When true and the incoming request matches an asset, that will be served instead of invoking the Worker script.
+   * When false, requests will always invoke the Worker script.
+   * @default true
+   * @deprecated
+   */
+  serve_directly?: boolean;
+}
+
+/**
  * Properties for creating or updating a Worker
  */
 export interface WorkerProps<B extends Bindings = Bindings>
@@ -110,6 +154,11 @@ export interface WorkerProps<B extends Bindings = Bindings>
    * The compatibility flags for the worker
    */
   compatibilityFlags?: string[];
+
+  /**
+   * Configuration for static assets
+   */
+  assets?: AssetsConfig;
 }
 
 /**
@@ -145,6 +194,11 @@ export interface Worker<B extends Bindings = Bindings>
    * The bindings that were created
    */
   bindings: B | undefined;
+
+  /**
+   * Configuration for static assets
+   */
+  assets?: AssetsConfig;
 
   // phantom property (for typeof myWorker.Env)
   Env: {
@@ -291,7 +345,8 @@ export const Worker = Resource(
       assetUploadResult = await uploadAssets(
         api,
         workerName,
-        assetBinding.assets
+        assetBinding.assets,
+        props.assets
       );
     }
 
@@ -342,6 +397,8 @@ export const Worker = Resource(
       createdAt: now,
       updatedAt: now,
       url: workerUrl,
+      // Include assets configuration in the output
+      assets: props.assets,
       // phantom property
       Env: undefined!,
     });
@@ -480,19 +537,50 @@ interface WorkerMetadata {
   assets?: {
     jwt?: string;
     keep_assets?: boolean;
-    config?: {
-      html_handling?: "auto-trailing-slash" | "none";
-      not_found_handling?: "none" | "fall-through";
-    };
+    config?: AssetsConfig;
   };
 }
 
 interface AssetUploadResult {
   completionToken: string;
-  assetConfig?: {
-    html_handling?: "auto-trailing-slash" | "none";
-    not_found_handling?: "none" | "fall-through";
+  assetConfig?: AssetsConfig;
+}
+
+/**
+ * Creates asset configuration object from provided config or defaults
+ */
+function createAssetConfig(config?: AssetsConfig): AssetsConfig {
+  const assetConfig: AssetsConfig = {
+    html_handling: "auto-trailing-slash",
   };
+
+  if (config) {
+    if (config._headers !== undefined) {
+      assetConfig._headers = config._headers;
+    }
+
+    if (config._redirects !== undefined) {
+      assetConfig._redirects = config._redirects;
+    }
+
+    if (config.html_handling !== undefined) {
+      assetConfig.html_handling = config.html_handling;
+    }
+
+    if (config.not_found_handling !== undefined) {
+      assetConfig.not_found_handling = config.not_found_handling;
+    }
+
+    if (config.run_worker_first !== undefined) {
+      assetConfig.run_worker_first = config.run_worker_first;
+    }
+
+    if (config.serve_directly !== undefined) {
+      assetConfig.serve_directly = config.serve_directly;
+    }
+  }
+
+  return assetConfig;
 }
 
 async function prepareWorkerMetadata<B extends Bindings>(
@@ -526,8 +614,17 @@ async function prepareWorkerMetadata<B extends Bindings>(
       jwt: assetUploadResult.completionToken,
     };
 
+    // Initialize config from assetUploadResult if it exists
     if (assetUploadResult.assetConfig) {
-      meta.assets.config = assetUploadResult.assetConfig;
+      meta.assets.config = {
+        ...assetUploadResult.assetConfig,
+      };
+    }
+
+    // If there's no config from assetUploadResult but we have props.assets,
+    // we need to create the config ourselves (this handles the case when no assets were uploaded)
+    if (!meta.assets.config && props.assets) {
+      meta.assets.config = createAssetConfig(props.assets);
     }
   }
 
@@ -747,7 +844,13 @@ async function bundleWorkerScript<B extends Bindings>(props: WorkerProps) {
   });
 
   try {
-    return await fs.readFile(bundle.path, "utf-8");
+    if (bundle.content) {
+      return bundle.content;
+    } else if (bundle.path) {
+      return await fs.readFile(bundle.path, "utf-8");
+    } else {
+      throw new Error("Failed to create bundle");
+    }
   } catch (error) {
     console.error("Error reading bundle:", error);
     throw new Error("Error reading bundle");
@@ -904,13 +1007,18 @@ interface UploadResponse {
  * @param api CloudflareApi instance
  * @param workerName Name of the worker
  * @param assets Assets resource containing files to upload
+ * @param assetConfig Configuration for the assets
  * @returns Completion token for the assets upload
  */
 async function uploadAssets(
   api: CloudflareApi,
   workerName: string,
-  assets: Assets
+  assets: Assets,
+  assetConfig?: WorkerProps["assets"]
 ): Promise<AssetUploadResult> {
+  // Process the assets configuration once at the beginning
+  const processedConfig = createAssetConfig(assetConfig);
+
   // Generate the file manifest
   const fileMetadata: Record<string, FileMetadata> = {};
 
@@ -943,7 +1051,10 @@ async function uploadAssets(
 
   // If there are no buckets, assets are already uploaded or empty
   if (!sessionData.result.buckets || sessionData.result.buckets.length === 0) {
-    return { completionToken: sessionData.result.jwt };
+    return {
+      completionToken: sessionData.result.jwt,
+      assetConfig: processedConfig,
+    };
   }
 
   // Upload the files in batches as specified by the API
@@ -1007,12 +1118,10 @@ async function uploadAssets(
     }
   }
 
-  // Return the final completion token
+  // Return the final completion token with asset configuration
   return {
     completionToken,
-    assetConfig: {
-      html_handling: "auto-trailing-slash",
-    },
+    assetConfig: processedConfig,
   };
 }
 

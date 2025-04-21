@@ -23,7 +23,6 @@ export const [authStore, storage] = await Promise.all([
 
 export const website = await ViteSite("cloudflare-vite", {
   main: "./src/index.ts",
-  assets: "./dist",
   command: "bun run build",
   bindings: {
     STORAGE: storage,
