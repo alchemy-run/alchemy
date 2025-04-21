@@ -1,8 +1,8 @@
-import alchemy from "alchemy";
-import { Pipeline, R2Bucket, ViteSite } from "alchemy/cloudflare";
+import alchemy from "../../alchemy/src";
+import { NuxtSite, Pipeline, R2Bucket } from "../../alchemy/src/cloudflare";
 
-const R2_BUCKET_NAME = "example-bucket2";
-const PIPELINE_NAME = "example-pipeline2";
+const R2_BUCKET_NAME = "example-bucket";
+const PIPELINE_NAME = "example-pipeline";
 
 const app = await alchemy("app", {
   stage: process.env.USER ?? "dev",
@@ -37,7 +37,7 @@ const pipeline = await Pipeline("pipeline", {
   },
 });
 
-export const website = await ViteSite("website", {
+export const website = await NuxtSite("website", {
   command: "bun run build",
   // Nuxt outputs server to .output/server/index.mjs with cloudflare-module preset
   main: "./index.ts",
