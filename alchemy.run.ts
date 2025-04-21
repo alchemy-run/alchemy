@@ -130,15 +130,21 @@ await Promise.all([
     CLOUDFLARE_BUCKET_NAME: stateStore.name,
     R2_ACCESS_KEY_ID: accountAccessToken.accessKeyId,
     R2_SECRET_ACCESS_KEY: accountAccessToken.secretAccessKey,
-  }).map(async ([name, value]) =>
-    GitHubSecret(`github-secret-${name}`, {
+  }).flatMap(async ([name, value]) => {
+    const props = {
       owner: "sam-goodwin",
       repository: "alchemy",
       name,
       value: typeof value === "string" ? alchemy.secret(value) : await value!,
-      environment: testEnvironment.name,
-    })
-  ),
+    };
+    return [
+      GitHubSecret(`github-secret-${name}`, {
+        ...props,
+        environment: testEnvironment.name,
+      }),
+      GitHubSecret(`github-repo-secret-${name}`, props),
+    ];
+  }),
 ]);
 
 const { records } = await ImportDnsRecords("dns-records", {

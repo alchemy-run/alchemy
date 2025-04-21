@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   test:
-    environment: test
+    environment: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' && 'test' || '' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
