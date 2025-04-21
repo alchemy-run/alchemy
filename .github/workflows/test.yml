@@ -22,6 +22,8 @@ jobs:
       actions: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
@@ -40,9 +42,22 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-west-2
 
-      - name: Run tests
-        run: bun test --timeout 120000
-        # run: ./scripts/test.sh
+      - name: Run affected tests
+        run: |
+          # Determine the base commit depending on event type
+          if [ "${{ github.event_name }}" == "pull_request_target" ]; then
+            # For pull requests, use PR base commit
+            BASE_COMMIT="${{ github.event.pull_request.base.sha }}"
+          elif [ "${{ github.event_name }}" == "push" ]; then
+            # For pushes, use the commit before the push
+            BASE_COMMIT="${{ github.event.before }}"
+          else
+            # For manual runs, use a few commits back to ensure sufficient coverage
+            BASE_COMMIT="HEAD~10"
+          fi
+
+          echo "Running tests changed since commit: $BASE_COMMIT"
+          bun run test --since "$BASE_COMMIT"
         env:
           CI: true
           ALCHEMY_STATE_STORE: cloudflare

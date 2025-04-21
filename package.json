@@ -10,6 +10,7 @@
     "bootstrap": "bun run --env-file .env ./alchemy.config.ts --verbose",
     "build": "tsc -b",
     "check": "tsc -b ./tsconfig.json",
+    "test": "bun ./alchemy/test/run.ts",
     "publish:npm": "bun run --filter alchemy publish:npm"
   },
   "workspaces": ["alchemy", "alchemy-web", "examples/*"],
