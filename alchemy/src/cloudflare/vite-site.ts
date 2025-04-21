@@ -106,7 +106,7 @@ export async function ViteSite<B extends Bindings>(
         : `
 export default {
   async fetch(request, env) {
-    return env.ASSETS.fetch(request);
+    return new Response("Not Found", { status: 404 });
   },
 };`,
       url: true,
