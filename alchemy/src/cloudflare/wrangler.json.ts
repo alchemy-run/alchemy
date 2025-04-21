@@ -1,5 +1,5 @@
 import type { Context } from "../context";
-import { StaticJsonFile } from "../fs";
+import { StaticJsonFile } from "../fs/static-json-file";
 import { Resource } from "../resource";
 import type { Bindings } from "./bindings";
 import type { DurableObjectNamespace } from "./durable-object-namespace";

@@ -4,7 +4,7 @@ import { AccountApiToken } from "../../src/cloudflare/account-api-token";
 import { CloudflareApi, createCloudflareApi } from "../../src/cloudflare/api";
 import { destroy } from "../../src/destroy";
 import { BRANCH_PREFIX } from "../util";
-// must import this or else alchemy.test won't exist
+
 import "../../src/test/bun";
 
 // Create API client for verification

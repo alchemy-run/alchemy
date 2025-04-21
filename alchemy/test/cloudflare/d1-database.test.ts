@@ -2,8 +2,9 @@ import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { D1Database, listDatabases } from "../../src/cloudflare/d1-database";
-import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+import "../../src/test/bun";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

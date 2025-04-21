@@ -4,7 +4,7 @@ import { destroy } from "../../src/destroy";
 import { createGitHubClient } from "../../src/github/client";
 import { RepositoryEnvironment } from "../../src/github/repository-environment";
 import { BRANCH_PREFIX } from "../util";
-// must import this or else alchemy.test won't exist
+
 import "../../src/test/bun";
 
 const test = alchemy.test(import.meta);

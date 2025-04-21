@@ -119,22 +119,54 @@ export const Bundle = Resource(
     props: BundleProps
   ): Promise<Bundle> {
     // Determine output path
-    const outputPath = getOutputPath(props);
+    const outDirPath =
+      props.outfile != null ? path.dirname(props.outfile) : props.outdir;
+
+    if (outDirPath == null) {
+      throw new Error(
+        `You need to specify either outfile or outdir in your bundle configuration ${JSON.stringify(props)}`
+      );
+    }
 
     // Ensure output directory exists
-    await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
-
+    await fs.promises.mkdir(path.dirname(outDirPath), { recursive: true });
     if (this.phase === "delete") {
-      await fs.promises.unlink(outputPath).catch(() => {});
-      // Also clean up sourcemap if it exists
-      await fs.promises.unlink(outputPath + ".map").catch(() => {});
-      return this.destroy();
+      await fs.promises.rm(outDirPath, { recursive: true });
     }
 
     const result = await bundle(props);
+    // Check that bundle created output an file for the given entrypoint
+    // Use bundle metada data to retrieve its content
+    const bundleOutputPath = Object.entries(result.metafile.outputs).find(
+      ([file, output]) => {
+        if (output.entryPoint === undefined) {
+          return false;
+        }
+        // resolve to absolute and then relative to ensure consistent result (e.g. ./src/handler.ts instead of src/handler.ts)
+        const relativeOutput = path.relative(
+          process.cwd(),
+          path.resolve(output.entryPoint)
+        );
+        return (
+          relativeOutput ===
+          path.relative(
+            process.cwd(),
+            path.resolve(process.cwd(), props.entryPoint)
+          )
+        );
+      }
+    )?.[0];
+
+    if (!bundleOutputPath) {
+      throw new Error(`Unable to find a compiled file`);
+    }
+
     // Calculate hash of the output
-    const contents = await fs.promises.readFile(outputPath);
-    const hash = crypto.createHash("sha256").update(contents).digest("hex");
+    const bundleOutputContent = await fs.promises.readFile(bundleOutputPath);
+    const hash = crypto
+      .createHash("sha256")
+      .update(bundleOutputContent)
+      .digest("hex");
 
     // Store metadata in context
     await this.set("metafile", result.metafile);
@@ -142,18 +174,18 @@ export const Bundle = Resource(
 
     // Return output info
     return this({
-      path: outputPath,
+      path: bundleOutputPath,
       hash,
     });
   }
 );
 
 export async function bundle(props: BundleProps) {
-  const outputPath = getOutputPath(props);
   return await esbuild.build({
     ...props.options,
     entryPoints: [props.entryPoint],
-    outfile: outputPath,
+    outdir: props.outdir,
+    outfile: props.outfile,
     bundle: true,
     format: props.format,
     target: props.target,
@@ -168,14 +200,4 @@ export async function bundle(props: BundleProps) {
     metafile: true,
     write: true,
   });
-}
-
-function getOutputPath(props: BundleProps) {
-  return (
-    props.outfile ||
-    path.join(
-      props.outdir || "dist",
-      path.basename(props.entryPoint, path.extname(props.entryPoint)) + ".js"
-    )
-  );
 }

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test";
-import * as fs from "fs/promises";
-import * as path from "path";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { alchemy } from "../../src/alchemy";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { Assets } from "../../src/cloudflare/assets";
@@ -12,8 +12,9 @@ import { Queue } from "../../src/cloudflare/queue";
 import { Worker } from "../../src/cloudflare/worker";
 import { Workflow } from "../../src/cloudflare/workflow";
 import { destroy } from "../../src/destroy";
-import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+import "../../src/test/bun";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

@@ -1,17 +1,14 @@
 import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy";
-// must import this or else alchemy.test won't exist
-import { Zone } from "../../src/cloudflare";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { DnsRecords } from "../../src/cloudflare/dns-records";
+import { Zone } from "../../src/cloudflare/zone";
 import { destroy } from "../../src/destroy";
 import { BRANCH_PREFIX } from "../util";
 
 import "../../src/test/bun";
 
-const test = alchemy.test(import.meta, {
-  destroy: true,
-});
+const test = alchemy.test(import.meta);
 
 const testDomain = `${BRANCH_PREFIX}-test-2.com`;
 

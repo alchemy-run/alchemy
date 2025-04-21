@@ -8,8 +8,9 @@ import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy";
 import { Queue } from "../../src/aws/queue";
 import { destroy } from "../../src/destroy";
-import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+import "../../src/test/bun";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

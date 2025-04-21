@@ -1,14 +1,12 @@
 import { exec } from "child_process";
-import fs from "fs/promises";
-import path from "path";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { promisify } from "util";
 import type { Context } from "../../context";
-import {
-  Folder,
-  StaticJsonFile,
-  StaticTextFile,
-  StaticTypeScriptFile,
-} from "../../fs";
+import { Folder } from "../../fs/folder";
+import { StaticJsonFile } from "../../fs/static-json-file";
+import { StaticTextFile } from "../../fs/static-text-file";
+import { StaticTypeScriptFile } from "../../fs/static-typescript-file";
 import { Resource } from "../../resource";
 import { InstallDependencies, fixedDependencies } from "./dependencies";
 
@@ -188,7 +186,7 @@ export const VitepressProject = Resource(
       //         `import alchemy from "alchemy";
       // import { Folder } from "alchemy/fs";
       // import { Document } from "alchemy/docs";
-      // import path from "path";
+      // import path from "node:path";
 
       // const app = await alchemy("alchemy.run", {
       //   stage: "prod",

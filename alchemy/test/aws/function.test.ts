@@ -12,8 +12,9 @@ import type { PolicyDocument } from "../../src/aws/policy";
 import { Role } from "../../src/aws/role";
 import { destroy } from "../../src/destroy";
 import { Bundle } from "../../src/esbuild";
-import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+import "../../src/test/bun";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

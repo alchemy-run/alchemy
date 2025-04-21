@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, it } from "bun:test";
 import path from "node:path";
 import { alchemy } from "../alchemy";
-import { R2RestStateStore } from "../cloudflare";
+import { R2RestStateStore } from "../cloudflare/r2-rest-state-store";
 import { Scope } from "../scope";
 import type { StateStoreType } from "../state";
 

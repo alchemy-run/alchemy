@@ -131,7 +131,7 @@ export class CloudflareApi {
           errorMsg.includes("ETIMEDOUT") ||
           errorMsg.includes("ECONNREFUSED");
 
-        return isNetworkError;
+        return isNetworkError || error.status?.toString().startsWith("5");
       },
       5, // Maximum 5 attempts (1 initial + 4 retries)
       1000 // Start with 1s delay, will exponentially increase

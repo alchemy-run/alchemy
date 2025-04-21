@@ -5,8 +5,9 @@ import { destroy } from "../src/destroy";
 import { Price } from "../src/stripe/price";
 import { Product } from "../src/stripe/product";
 import { WebhookEndpoint } from "../src/stripe/webhook";
-import "../src/test/bun";
 import { BRANCH_PREFIX } from "./util";
+
+import "../src/test/bun";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

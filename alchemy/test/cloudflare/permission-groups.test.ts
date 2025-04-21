@@ -1,8 +1,9 @@
 import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy";
 import { PermissionGroups } from "../../src/cloudflare/permission-groups";
-import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+import "../../src/test/bun";
 
 const test = alchemy.test(import.meta);
 

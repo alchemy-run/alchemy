@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { alchemy } from "../src/alchemy";
 import { destroy } from "../src/destroy";
-import { Bundle } from "../src/esbuild";
+import { Bundle } from "../src/esbuild/bundle";
 import { BRANCH_PREFIX } from "./util";
 
 import "../src/test/bun";

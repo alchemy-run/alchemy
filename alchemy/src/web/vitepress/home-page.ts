@@ -1,7 +1,7 @@
 import yaml from "yaml";
 import { Document } from "../../ai/document";
 import { alchemy } from "../../alchemy";
-import { StaticTextFile } from "../../fs";
+import { StaticTextFile } from "../../fs/static-text-file";
 import type { Secret } from "../../secret";
 
 /**
@@ -291,7 +291,7 @@ export function parseHomePage(content: string): HomePageConfig {
  */
 export async function HomePage(
   id: string,
-  props: HomePageProps,
+  props: HomePageProps
 ): Promise<HomePage> {
   // Build the system prompt with optional extension
   const systemPrompt = `
@@ -323,18 +323,18 @@ ${props.system || ""}
     ? JSON.stringify(props.features, null, 2)
     : "";
 
-    if (props.prompt) {
-      return Document(id, {
-        title: props.title,
-        path: props.outFile,
-        baseURL: props.baseURL,
-        apiKey: props.apiKey,
-        model: props.model ?? {
-          id: "claude-3-7-sonnet-latest",
-          provider: "anthropic",
-        },
-        temperature: props.temperature ?? 0.7,
-        prompt: await alchemy`
+  if (props.prompt) {
+    return Document(id, {
+      title: props.title,
+      path: props.outFile,
+      baseURL: props.baseURL,
+      apiKey: props.apiKey,
+      model: props.model ?? {
+        id: "claude-3-7-sonnet-latest",
+        provider: "anthropic",
+      },
+      temperature: props.temperature ?? 0.7,
+      prompt: await alchemy`
     ${systemPrompt}
     
     Create a VitePress homepage based on the following description:
@@ -360,9 +360,12 @@ ${props.system || ""}
         
         The output should be a complete index.md file with proper YAML frontmatter and markdown content.
         `,
-      });
+    });
   } else {
-    return StaticTextFile(id, props.outFile, `---
+    return StaticTextFile(
+      id,
+      props.outFile,
+      `---
 ${yaml.stringify({
   layout: "home",
   name: props.title,
@@ -370,6 +373,7 @@ ${yaml.stringify({
   features: props.features,
 })}
 ---
-`);
+`
+    );
   }
 }

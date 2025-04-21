@@ -3,8 +3,9 @@ import { alchemy } from "../../src/alchemy";
 import { createCloudflareApi } from "../../src/cloudflare/api";
 import { Zone } from "../../src/cloudflare/zone";
 import { destroy } from "../../src/destroy";
-import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+import "../../src/test/bun";
 
 const api = await createCloudflareApi();
 
