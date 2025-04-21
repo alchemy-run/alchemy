@@ -34,4 +34,6 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace
                     ? Queue
                     : T extends _Pipeline<infer R>
                       ? Pipeline<R>
-                      : Service;
+                      : T extends string
+                        ? string
+                        : Service;
