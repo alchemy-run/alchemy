@@ -904,6 +904,193 @@ describe("Worker Resource", () => {
     }
   });
 
+  // Test for worker with assets configuration
+  test("create worker with assets configuration options", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-assets-config`;
+    let tempDir: string | undefined = undefined;
+
+    try {
+      // Create a temporary directory to store test assets
+      tempDir = path.join(".out", "alchemy-assets-config-test");
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(tempDir, { recursive: true });
+
+      // Create test files in the temporary directory
+      const indexContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Assets Config Test</title>
+            <link rel="stylesheet" href="styles.css">
+          </head>
+          <body>
+            <h1>Assets Config Test</h1>
+            <p>Testing assets configuration options</p>
+          </body>
+        </html>
+      `;
+
+      const cssContent =
+        "body { font-family: Arial; color: #333; padding: 20px; }";
+      const spaContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>SPA Page</title>
+          </head>
+          <body>
+            <h1>Single Page App</h1>
+            <div id="app">This is a single page application</div>
+          </body>
+        </html>
+      `;
+
+      // Create files
+      await Promise.all([
+        fs.writeFile(path.join(tempDir, "index.html"), indexContent),
+        fs.writeFile(path.join(tempDir, "styles.css"), cssContent),
+        fs.writeFile(path.join(tempDir, "app.html"), spaContent),
+      ]);
+
+      // Create assets resource
+      const assets = await Assets("assets-with-config", {
+        path: tempDir,
+      });
+
+      // Create custom headers configuration
+      const headersConfig = `# Custom headers for specific paths
+/styles.css
+  Cache-Control: public, max-age=86400
+  Content-Type: text/css
+
+# Headers for all HTML files
+/*.html
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+`;
+
+      // Create custom redirects configuration
+      const redirectsConfig = `# Redirect old path to new path
+/old-path /index.html 301
+
+# Redirect with wildcard
+/legacy/* /app.html 302
+`;
+
+      // Create a worker script that serves assets
+      const workerScript = `
+        export default {
+          async fetch(request, env, ctx) {
+            const url = new URL(request.url);
+
+            // API endpoint to check worker is running
+            if (url.pathname === "/api/status") {
+              return new Response(JSON.stringify({
+                status: "ok",
+                worker: "${workerName}",
+                timestamp: Date.now()
+              }), { 
+                status: 200,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+            
+            // For all other requests, serve from assets
+            return env.ASSETS.fetch(request);
+          }
+        };
+      `;
+
+      // Create the worker with assets binding and configuration
+      const worker = await Worker(workerName, {
+        name: workerName,
+        script: workerScript,
+        format: "esm",
+        url: true,
+        bindings: {
+          ASSETS: assets,
+        },
+        assets: {
+          _headers: headersConfig,
+          _redirects: redirectsConfig,
+          html_handling: "auto-trailing-slash",
+          not_found_handling: "single-page-application",
+          run_worker_first: false,
+        },
+      });
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.url).toBeTruthy();
+      expect(worker.bindings?.ASSETS).toBeTruthy();
+
+      // Verify assets configuration was saved
+      expect(worker.assets).toBeDefined();
+      expect(worker.assets?._headers).toEqual(headersConfig);
+      expect(worker.assets?._redirects).toEqual(redirectsConfig);
+      expect(worker.assets?.html_handling).toEqual("auto-trailing-slash");
+      expect(worker.assets?.not_found_handling).toEqual(
+        "single-page-application"
+      );
+      expect(worker.assets?.run_worker_first).toEqual(false);
+
+      // Wait a moment for the worker to be ready with assets
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Test that the static assets are accessible
+      const indexResponse = await fetch(`${worker.url}/index.html`);
+      expect(indexResponse.status).toEqual(200);
+      expect(await indexResponse.text()).toContain("Assets Config Test");
+
+      // Test that custom headers are applied
+      const cssResponse = await fetch(`${worker.url}/styles.css`);
+      expect(cssResponse.status).toEqual(200);
+      expect(cssResponse.headers.get("Cache-Control")).toEqual(
+        "public, max-age=86400"
+      );
+
+      // Test HTML headers
+      expect(indexResponse.headers.get("X-Frame-Options")).toEqual("DENY");
+      expect(indexResponse.headers.get("X-Content-Type-Options")).toEqual(
+        "nosniff"
+      );
+
+      // Test auto-trailing-slash behavior
+      // With auto-trailing-slash, /index should redirect to /index.html
+      const indexWithoutExtension = await fetch(`${worker.url}/index`, {
+        redirect: "manual",
+      });
+      expect(indexWithoutExtension.status).toEqual(302);
+
+      // Test redirects
+      const oldPathResponse = await fetch(`${worker.url}/old-path`, {
+        redirect: "manual",
+      });
+      expect(oldPathResponse.status).toEqual(301);
+
+      // Test wildcard redirects
+      const legacyResponse = await fetch(`${worker.url}/legacy/something`, {
+        redirect: "manual",
+      });
+      expect(legacyResponse.status).toEqual(302);
+
+      // Test the worker's API endpoint
+      const apiResponse = await fetch(`${worker.url}/api/status`);
+      expect(apiResponse.status).toEqual(200);
+      const apiData = await apiResponse.json();
+      expect(apiData.status).toEqual("ok");
+      expect(apiData.worker).toEqual(workerName);
+    } finally {
+      // Clean up temporary directory
+      if (tempDir) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
+
+      await destroy(scope);
+      await assertWorkerDoesNotExist(workerName);
+    }
+  });
+
   // Test for binding a workflow to a worker
   test("create and delete worker with workflow binding", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-workflow`;
