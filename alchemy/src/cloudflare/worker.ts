@@ -747,7 +747,13 @@ async function bundleWorkerScript<B extends Bindings>(props: WorkerProps) {
   });
 
   try {
-    return await fs.readFile(bundle.path, "utf-8");
+    if (bundle.content) {
+      return bundle.content;
+    } else if (bundle.path) {
+      return await fs.readFile(bundle.path, "utf-8");
+    } else {
+      throw new Error("Failed to create bundle");
+    }
   } catch (error) {
     console.error("Error reading bundle:", error);
     throw new Error("Error reading bundle");

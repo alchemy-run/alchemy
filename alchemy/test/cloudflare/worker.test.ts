@@ -545,9 +545,6 @@ describe("Worker Resource", () => {
       expect(worker.env?.NODE_ENV).toEqual("testing");
       expect(worker.url).toBeTruthy();
 
-      // Wait for the worker to be available
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
       if (worker.url) {
         // Test that the environment variables are accessible in the worker
         const response = await fetch(`${worker.url}/env/TEST_API_KEY`);
@@ -581,9 +578,6 @@ describe("Worker Resource", () => {
       expect(worker.env?.NEW_VAR).toEqual("new-value");
       // APP_DEBUG should no longer be present
       expect(worker.env?.APP_DEBUG).toBeUndefined();
-
-      // Wait for the worker update to propagate
-      await new Promise((resolve) => setTimeout(resolve, 5000));
 
       if (worker.url) {
         // Test that the updated environment variables are accessible
@@ -760,13 +754,12 @@ describe("Worker Resource", () => {
         },
       });
 
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
       expect(worker.bindings).toBeDefined();
       expect(worker.bindings!.STORAGE).toBeDefined();
-
-      // Wait for the worker to be available
-      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       if (worker.url) {
         // Test that the R2 binding is accessible in the worker
@@ -853,13 +846,12 @@ describe("Worker Resource", () => {
         },
       });
 
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
       expect(worker.url).toBeTruthy();
       expect(worker.bindings?.ASSETS).toBeTruthy();
-
-      // Wait for the worker to be available and assets to be ready
-      await new Promise((resolve) => setTimeout(resolve, 500));
 
       if (worker.url) {
         async function get(url: string) {
@@ -1056,6 +1048,8 @@ describe("Worker Resource", () => {
         url: true, // Enable workers.dev URL to test the workflow
       });
 
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
       expect(worker.bindings).toBeDefined();
@@ -1095,6 +1089,8 @@ describe("Worker Resource", () => {
         },
         url: true,
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(worker.bindings).toBeDefined();
       expect(Object.keys(worker.bindings || {})).toHaveLength(2);
@@ -1212,6 +1208,8 @@ describe("Worker Resource", () => {
         },
       });
 
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
       expect(worker.bindings).toBeDefined();
@@ -1219,18 +1217,12 @@ describe("Worker Resource", () => {
       expect(worker.bindings!.DATABASE.id).toEqual(db.id);
       expect(worker.url).toBeTruthy();
 
-      // Wait for the worker to be available
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
       if (worker.url) {
         // Initialize the database with a table and data
         const initResponse = await fetch(`${worker.url}/init-db`);
         expect(initResponse.status).toEqual(200);
         const initText = await initResponse.text();
         expect(initText).toEqual("Database initialized successfully!");
-
-        // Wait for the database to be initialized
-        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         // Query data from the database
         const queryResponse = await fetch(`${worker.url}/query-db`);
@@ -1319,14 +1311,13 @@ describe("Worker Resource", () => {
         },
       });
 
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
       expect(worker.bindings).toBeDefined();
       expect(worker.bindings!.MESSAGE_QUEUE).toBeDefined();
       expect(worker.url).toBeTruthy();
-
-      // Wait for the worker to be available
-      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       if (worker.url) {
         // Send a message to the queue
@@ -1354,4 +1345,128 @@ describe("Worker Resource", () => {
       await assertWorkerDoesNotExist(workerName);
     }
   }, 120000); // Increased timeout for Queue operations
+
+  // Test for worker creation using an entrypoint file instead of an inline script
+  test("create, update, and delete worker using entrypoint file", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-entrypoint`;
+    const tempDir = path.join(".out", "alchemy-entrypoint-test");
+    const entrypointPath = path.join(tempDir, "worker.ts");
+
+    try {
+      // Create a temporary directory for the entrypoint file
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(tempDir, { recursive: true });
+
+      // Create a worker script file
+      const workerScript = `
+        export default {
+          async fetch(request, env, ctx) {
+            const url = new URL(request.url);
+            
+            // Return different responses based on the path
+            if (url.pathname === '/data') {
+              return Response.json({
+                message: "Hello from bundled worker!",
+                timestamp: Date.now(),
+                version: "1.0.0"
+              });
+            }
+            
+            return new Response('Hello from entrypoint file!', { 
+              status: 200,
+              headers: { 'Content-Type': 'text/plain' }
+            });
+          }
+        };
+      `;
+
+      await fs.writeFile(entrypointPath, workerScript);
+
+      // Create a worker using the entrypoint file
+      let worker = await Worker(workerName, {
+        name: workerName,
+        entrypoint: entrypointPath,
+        format: "esm",
+        url: true, // Enable workers.dev URL to test the worker
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Verify the worker was created correctly
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.format).toEqual("esm");
+      expect(worker.url).toBeTruthy();
+
+      if (worker.url) {
+        // Test that the worker is running correctly
+        const response = await fetch(worker.url);
+        expect(response.status).toEqual(200);
+        const text = await response.text();
+        expect(text).toEqual("Hello from entrypoint file!");
+
+        // Test the JSON endpoint
+        const jsonResponse = await fetch(`${worker.url}/data`);
+        expect(jsonResponse.status).toEqual(200);
+        const data = await jsonResponse.json();
+        expect(data.message).toEqual("Hello from bundled worker!");
+        expect(data.version).toEqual("1.0.0");
+      }
+
+      // Update the worker script file
+      const updatedWorkerScript = `
+        export default {
+          async fetch(request, env, ctx) {
+            const url = new URL(request.url);
+            
+            // Return different responses based on the path
+            if (url.pathname === '/data') {
+              return Response.json({
+                message: "Hello from updated bundled worker!",
+                timestamp: Date.now(),
+                version: "2.0.0"
+              });
+            }
+            
+            return new Response('Hello from updated entrypoint file!', { 
+              status: 200,
+              headers: { 'Content-Type': 'text/plain' }
+            });
+          }
+        };
+      `;
+
+      await fs.writeFile(entrypointPath, updatedWorkerScript);
+
+      // Update the worker with the new entrypoint file content
+      worker = await Worker(workerName, {
+        name: workerName,
+        entrypoint: entrypointPath,
+        format: "esm",
+        url: true,
+      });
+
+      if (worker.url) {
+        // Test that the worker was updated correctly
+        const response = await fetch(worker.url);
+        expect(response.status).toEqual(200);
+        const text = await response.text();
+        expect(text).toEqual("Hello from updated entrypoint file!");
+
+        // Test the updated JSON endpoint
+        const jsonResponse = await fetch(`${worker.url}/data`);
+        expect(jsonResponse.status).toEqual(200);
+        const data = await jsonResponse.json();
+        expect(data.message).toEqual("Hello from updated bundled worker!");
+        expect(data.version).toEqual("2.0.0");
+      }
+    } finally {
+      // Clean up the temporary directory
+      await fs.rm(tempDir, { recursive: true, force: true });
+
+      // Clean up the worker
+      await destroy(scope);
+      await assertWorkerDoesNotExist(workerName);
+    }
+  }, 120000); // Increased timeout for bundling operations
 });

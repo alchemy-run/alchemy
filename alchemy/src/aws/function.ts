@@ -15,9 +15,8 @@ import {
   UpdateFunctionConfigurationCommand,
   UpdateFunctionUrlConfigCommand,
 } from "@aws-sdk/client-lambda";
-import fs from "node:fs";
-import path from "node:path";
 import type { Context } from "../context";
+import type { Bundle } from "../esbuild/bundle";
 import { Resource } from "../resource";
 import { ignore } from "../util/ignore";
 
@@ -31,9 +30,9 @@ export interface FunctionProps {
   functionName: string;
 
   /**
-   * Path to the zip file containing the function code
+   * Bundle for the function
    */
-  zipPath: string;
+  bundle: Bundle;
 
   /**
    * ARN of the IAM role that Lambda assumes when executing the function
@@ -44,7 +43,7 @@ export interface FunctionProps {
    * Function handler in the format 'file.function'
    * For Node.js this is typically 'index.handler' or similar
    */
-  handler?: string;
+  handler: string;
 
   /**
    * Lambda runtime environment for the function
@@ -301,7 +300,7 @@ export const Function = Resource(
     const client = new LambdaClient({});
     const region = await resolveRegion(client);
 
-    const code = await zipCode(props.zipPath);
+    const code = await zipCode(props);
 
     if (this.phase === "delete") {
       // Delete function URL if it exists
@@ -714,13 +713,17 @@ async function waitForFunctionStabilization(
 }
 
 // Helper to zip the code
-async function zipCode(filePath: string): Promise<Buffer> {
-  const fileContent = await fs.promises.readFile(filePath);
-  const fileName = path.basename(filePath);
+async function zipCode(props: FunctionProps): Promise<Buffer> {
+  const fileContent = props.bundle.content;
+
+  const fileName =
+    props.handler.split(".").reverse().slice(0, -1).reverse().join(".") +
+    (props.bundle.format === "cjs" ? ".cjs" : ".mjs");
 
   // Create a zip buffer in memory
   const zip = new (await import("jszip")).default();
   zip.file(fileName, fileContent);
+  console.log(fileName);
   return zip.generateAsync({
     type: "nodebuffer",
     compression: "DEFLATE",

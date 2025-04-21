@@ -72,13 +72,12 @@ describe("AWS Resources", () => {
       // First create the execution role
       // Define resources that need to be cleaned up
       let role: Role | undefined = undefined;
-      let bundle: Bundle | undefined = undefined;
       let func: Function | null = null;
       const functionName = `${BRANCH_PREFIX}-alchemy-test-function`;
       const roleName = `${BRANCH_PREFIX}-alchemy-test-lambda-role`;
 
       try {
-        bundle = await Bundle(`${BRANCH_PREFIX}-test-lambda-bundle`, {
+        let bundle = await Bundle(`${BRANCH_PREFIX}-test-lambda-bundle`, {
           entryPoint: path.join(__dirname, "..", "handler.ts"),
           outdir: ".out",
           format: "cjs",
@@ -104,7 +103,7 @@ describe("AWS Resources", () => {
         // Create the Lambda function
         func = await Function(functionName, {
           functionName,
-          zipPath: bundle.path,
+          bundle,
           roleArn: role.arn,
           handler: "handler.handler",
           runtime: "nodejs20.x",
@@ -144,6 +143,7 @@ describe("AWS Resources", () => {
           invokeResponse.Payload
         );
         const response = JSON.parse(responsePayload);
+        console.log(response);
         expect(response.statusCode).toBe(200);
 
         const body = JSON.parse(response.body);
@@ -151,7 +151,6 @@ describe("AWS Resources", () => {
         expect(body.event).toEqual(testEvent);
       } finally {
         await destroy(scope);
-
         // Verify function was properly deleted after cleanup
         if (func) {
           await expect(
@@ -169,13 +168,12 @@ describe("AWS Resources", () => {
       // Create execution role
       // Define resources that need to be cleaned up
       let role: Role | undefined = undefined;
-      let bundle: Bundle | undefined = undefined;
       let func: Function | null = null;
       const functionName = `${BRANCH_PREFIX}-alchemy-test-function-url`;
       const roleName = `${BRANCH_PREFIX}-alchemy-test-lambda-url-role`;
 
       try {
-        bundle = await Bundle(`${BRANCH_PREFIX}-test-lambda-url-bundle`, {
+        let bundle = await Bundle(`${BRANCH_PREFIX}-test-lambda-url-bundle`, {
           entryPoint: path.join(__dirname, "..", "handler.ts"),
           outdir: ".out",
           format: "cjs",
@@ -201,7 +199,7 @@ describe("AWS Resources", () => {
         // Create the Lambda function with URL config
         func = await Function(functionName, {
           functionName,
-          zipPath: bundle.path,
+          bundle,
           roleArn: role.arn,
           handler: "handler.handler",
           runtime: "nodejs20.x",
@@ -250,7 +248,7 @@ describe("AWS Resources", () => {
         // Update the function to remove the URL
         func = await Function(functionName, {
           functionName,
-          zipPath: bundle.path,
+          bundle,
           roleArn: role.arn,
           handler: "handler.handler",
           runtime: "nodejs20.x",
@@ -281,13 +279,12 @@ describe("AWS Resources", () => {
     test("create function with URL then remove URL in update phase", async (scope) => {
       // Define resources that need to be cleaned up
       let role: Role | undefined = undefined;
-      let bundle: Bundle | undefined = undefined;
       let func: Function | null = null;
       const functionName = `${BRANCH_PREFIX}-alchemy-test-func-url-remove`;
       const roleName = `${BRANCH_PREFIX}-alchemy-test-lambda-url-rem-role`;
 
       try {
-        bundle = await Bundle(
+        let bundle = await Bundle(
           `${BRANCH_PREFIX}-test-lambda-url-remove-bundle`,
           {
             entryPoint: path.join(__dirname, "..", "handler.ts"),
@@ -316,7 +313,7 @@ describe("AWS Resources", () => {
         // Create the Lambda function with URL config
         func = await Function(functionName, {
           functionName,
-          zipPath: bundle.path,
+          bundle,
           roleArn: role.arn,
           handler: "handler.handler",
           runtime: "nodejs20.x",
@@ -366,7 +363,7 @@ describe("AWS Resources", () => {
         // Now update the function to remove the URL
         func = await Function(functionName, {
           functionName,
-          zipPath: bundle.path,
+          bundle,
           roleArn: role.arn,
           handler: "handler.handler",
           runtime: "nodejs20.x",
@@ -406,19 +403,21 @@ describe("AWS Resources", () => {
     test("create function without URL then add URL in update phase", async (scope) => {
       // Define resources that need to be cleaned up
       let role: Role | undefined = undefined;
-      let bundle: Bundle | undefined = undefined;
       let func: Function | null = null;
       const functionName = `${BRANCH_PREFIX}-alchemy-test-func-add-url`;
       const roleName = `${BRANCH_PREFIX}-alchemy-test-lambda-add-url-role`;
 
       try {
-        bundle = await Bundle(`${BRANCH_PREFIX}-test-lambda-add-url-bundle`, {
-          entryPoint: path.join(__dirname, "..", "handler.ts"),
-          outdir: ".out",
-          format: "cjs",
-          platform: "node",
-          target: "node18",
-        });
+        let bundle = await Bundle(
+          `${BRANCH_PREFIX}-test-lambda-add-url-bundle`,
+          {
+            entryPoint: path.join(__dirname, "..", "handler.ts"),
+            outdir: ".out",
+            format: "cjs",
+            platform: "node",
+            target: "node18",
+          }
+        );
 
         role = await Role(roleName, {
           roleName,
@@ -438,7 +437,7 @@ describe("AWS Resources", () => {
         // Create the Lambda function without URL config
         func = await Function(functionName, {
           functionName,
-          zipPath: bundle.path,
+          bundle,
           roleArn: role.arn,
           handler: "handler.handler",
           runtime: "nodejs20.x",
@@ -465,7 +464,7 @@ describe("AWS Resources", () => {
         // Now update the function to add the URL
         func = await Function(functionName, {
           functionName,
-          zipPath: bundle.path,
+          bundle,
           roleArn: role.arn,
           handler: "handler.handler",
           runtime: "nodejs20.x",
