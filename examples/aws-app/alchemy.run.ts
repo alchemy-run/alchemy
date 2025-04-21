@@ -62,7 +62,7 @@ const bundle = await Bundle("api-bundle", {
 
 const api = await Function("api", {
   functionName: "alchemy-items-api",
-  zipPath: bundle.path,
+  bundle,
   roleArn: role.arn,
   handler: "index.handler",
   environment: {
