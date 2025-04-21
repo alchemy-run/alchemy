@@ -26,8 +26,10 @@ export interface ViteSiteProps<B extends Bindings> {
   main?: string;
   /**
    * The directory containing your static assets
+   *
+   * @default "./dist"
    */
-  assets: string;
+  assets?: string;
   /**
    * The bindings to pass to the worker
    */
