@@ -143,7 +143,6 @@ describe("AWS Resources", () => {
           invokeResponse.Payload
         );
         const response = JSON.parse(responsePayload);
-        console.log(response);
         expect(response.statusCode).toBe(200);
 
         const body = JSON.parse(response.body);

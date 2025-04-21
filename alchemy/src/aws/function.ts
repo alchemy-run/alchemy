@@ -723,7 +723,6 @@ async function zipCode(props: FunctionProps): Promise<Buffer> {
   // Create a zip buffer in memory
   const zip = new (await import("jszip")).default();
   zip.file(fileName, fileContent);
-  console.log(fileName);
   return zip.generateAsync({
     type: "nodebuffer",
     compression: "DEFLATE",

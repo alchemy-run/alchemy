@@ -174,7 +174,6 @@ export const Bundle = Resource(
         content: outputFile.text,
       });
     } else {
-      console.log("read", bundlePath);
       const content = await fs.readFile(bundlePath!, "utf-8");
       return this({
         ...props,
@@ -189,11 +188,12 @@ export const Bundle = Resource(
 export async function bundle(props: BundleProps) {
   return await esbuild.build({
     ...props.options,
-    // write: !(props.outdir === undefined && props.outfile === undefined),
-    write: false,
+    write: !(props.outdir === undefined && props.outfile === undefined),
+    // write:
+    //   props.outdir === undefined && props.outfile === undefined ? false : true,
     // write: false,
     entryPoints: [props.entryPoint],
-    outdir: (props.outdir ?? props.outfile) ? undefined : ".out",
+    outdir: props.outdir ? props.outdir : props.outfile ? undefined : ".out",
     outfile: props.outfile,
     bundle: true,
     format: props.format,
