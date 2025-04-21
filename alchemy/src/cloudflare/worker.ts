@@ -771,7 +771,6 @@ async function prepareWorkerMetadata<B extends Bindings>(
     // For service worker format (CJS)
     meta.body_part = scriptName;
   }
-  console.log(meta);
   return meta;
 }
 
