@@ -239,6 +239,8 @@ interface WranglerConfig {
   refresh_token?: string;
   expiration_time?: string;
   scopes?: string[];
+  /** exists is `false` if the config file doesn't exist, like in CI */
+  exists?: boolean;
   /** @deprecated - this field was only provided by the deprecated v1 `wrangler config` command. */
   api_token?: string;
 }
@@ -258,6 +260,8 @@ async function getRefreshedAuthConfig(): Promise<WranglerConfig> {
 }
 
 async function writeWranglerConfig(config: WranglerConfig) {
+  if (config.exists === false) return
+
   const TOML = await import("@iarna/toml");
   const configPath = await findWranglerConfig();
   config = {
@@ -274,11 +278,24 @@ const authConfigCache: Record<string, WranglerConfig> = {};
 
 async function readWranglerConfig(): Promise<WranglerConfig> {
   const configPath = await findWranglerConfig();
-  const config = (authConfigCache[configPath] ??= await parseTOML(
-    await fs.readFile(configPath, "utf-8")
-  ));
-  config.path = configPath;
-  return config;
+  try {
+    const config = (authConfigCache[configPath] ??= await parseTOML(
+      await fs.readFile(configPath, "utf-8")
+    ));
+    config.path = configPath;
+
+    return config
+  } catch (e: any) {
+    if (e.code === "ENOENT") {
+      // The config doesn't exist
+      return {
+        path: configPath,
+        exists: false
+      }
+    }
+
+    throw e
+  }
 }
 
 let wranglerConfigPath: string | undefined;
