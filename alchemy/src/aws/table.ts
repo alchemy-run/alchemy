@@ -147,6 +147,8 @@ export const Table = Resource(
   ): Promise<Table> {
     const client = new DynamoDBClient({});
 
+    ("foo");
+
     if (this.phase === "delete") {
       await withExponentialBackoff(
         async () => {
