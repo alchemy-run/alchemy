@@ -5,8 +5,9 @@ import { R2Bucket } from "../../src/cloudflare/bucket";
 import { Pipeline, type PipelineRecord } from "../../src/cloudflare/pipeline";
 import { Worker } from "../../src/cloudflare/worker";
 import { destroy } from "../../src/destroy";
-import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+import "../../src/test/bun";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

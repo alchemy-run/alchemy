@@ -5,7 +5,7 @@ import { alchemy } from "../../src/alchemy";
 import { destroy } from "../../src/destroy";
 import { CopyFile } from "../../src/fs/copy-file";
 import { BRANCH_PREFIX } from "../util";
-// must import this or else alchemy.test won't exist
+
 import "../../src/test/bun";
 
 const test = alchemy.test(import.meta);

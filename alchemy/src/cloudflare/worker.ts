@@ -1,5 +1,5 @@
-import * as crypto from "crypto";
-import * as fs from "fs/promises";
+import * as crypto from "node:crypto";
+import * as fs from "node:fs/promises";
 import type { Context } from "../context";
 import { Bundle, type BundleProps } from "../esbuild/bundle";
 import { Resource } from "../resource";

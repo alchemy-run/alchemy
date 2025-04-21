@@ -1,6 +1,6 @@
 import { exec } from "child_process";
-import fs from "fs/promises";
-import path from "path";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { promisify } from "util";
 import type { Context } from "../context";
 import { Resource } from "../resource";
@@ -44,13 +44,13 @@ export const ShadcnComponent = Resource(
   async function (
     this: Context<ShadcnComponent>,
     id: string,
-    props: ShadcnComponentProps,
+    props: ShadcnComponentProps
   ): Promise<ShadcnComponent> {
     if (this.phase === "delete") {
       await ignore("ENOENT", () =>
         fs.unlink(
-          path.join(props.cwd, "src", "components", "ui", `${props.name}.tsx`),
-        ),
+          path.join(props.cwd, "src", "components", "ui", `${props.name}.tsx`)
+        )
       );
       return this.destroy();
     }
@@ -68,5 +68,5 @@ export const ShadcnComponent = Resource(
     await execAsync(addCommand, { cwd: props.cwd });
 
     return this(props);
-  },
+  }
 );

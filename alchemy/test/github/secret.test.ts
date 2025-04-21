@@ -5,8 +5,9 @@ import { createGitHubClient } from "../../src/github/client";
 import { RepositoryEnvironment } from "../../src/github/repository-environment";
 import { GitHubSecret } from "../../src/github/secret";
 import { secret } from "../../src/secret";
-import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+import "../../src/test/bun";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

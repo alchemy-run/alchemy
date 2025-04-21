@@ -1,4 +1,4 @@
-import path from "path";
+import path from "node:path";
 import type { DefaultTheme, HeadConfig, ThemeOptions } from "vitepress";
 import { StaticTypeScriptFile } from "../../fs/static-typescript-file";
 

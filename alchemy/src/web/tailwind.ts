@@ -1,8 +1,9 @@
 import { exec } from "child_process";
-import path from "path";
+import path from "node:path";
 import { promisify } from "util";
 import type { Context } from "../context";
-import { Folder, StaticTextFile } from "../fs";
+import { Folder } from "../fs/folder";
+import { StaticTextFile } from "../fs/static-text-file";
 import { Resource } from "../resource";
 
 const execAsync = promisify(exec);
@@ -81,7 +82,7 @@ export const TailwindConfig = Resource(
   async function (
     this: Context<TailwindConfig>,
     id: string,
-    props: TailwindConfigProps,
+    props: TailwindConfigProps
   ): Promise<TailwindConfig> {
     if (this.phase === "delete") {
       // Nothing to clean up specifically for Tailwind
@@ -163,5 +164,5 @@ export const TailwindConfig = Resource(
       // Create CSS file with Tailwind directives
       await StaticTextFile(cssPath, tailwindDirectives);
     }
-  },
+  }
 );

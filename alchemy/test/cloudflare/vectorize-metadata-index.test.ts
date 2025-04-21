@@ -6,8 +6,9 @@ import {
   VectorizeMetadataIndex,
   listMetadataIndexes,
 } from "../../src/cloudflare/vectorize-metadata-index";
-import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+import "../../src/test/bun";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

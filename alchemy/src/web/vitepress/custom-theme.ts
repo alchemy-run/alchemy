@@ -1,5 +1,5 @@
 import { type } from "arktype";
-import path from "path";
+import path from "node:path";
 import type { ModelConfig } from "../../ai/client";
 import { CSSFile } from "../../ai/css-file";
 import { Data } from "../../ai/data";
@@ -7,7 +7,7 @@ import { TypeScriptFile } from "../../ai/typescript-file";
 import { VueFile } from "../../ai/vue-file";
 import { alchemy } from "../../alchemy";
 import type { Context } from "../../context";
-import { Folder } from "../../fs";
+import { Folder } from "../../fs/folder";
 import { Resource } from "../../resource";
 import type { Secret } from "../../secret";
 
@@ -208,7 +208,7 @@ export const CustomTheme = Resource(
   async function (
     this: Context<CustomTheme>,
     id: string,
-    props: CustomThemeProps,
+    props: CustomThemeProps
   ): Promise<CustomTheme> {
     // Handle deletion
     if (this.phase === "delete") {
@@ -325,13 +325,13 @@ Break down the layout into logical components like NavBar, Sidebar, Footer, etc.
       schema: type({
         components: type({
           name: type("string").describe(
-            "Component name as used in the import statement (e.g., NavBar, Footer)",
+            "Component name as used in the import statement (e.g., NavBar, Footer)"
           ),
           path: type("string").describe(
-            "Import path as written in the import statement (e.g., './components/NavBar.vue')",
+            "Import path as written in the import statement (e.g., './components/NavBar.vue')"
           ),
           purpose: type("string").describe(
-            "A clear description of the component's purpose, functionality, and responsibilities in the layout",
+            "A clear description of the component's purpose, functionality, and responsibilities in the layout"
           ),
         }).array(),
       }),
@@ -406,7 +406,7 @@ Make sure it integrates well with the overall layout and theme style.`,
           model: props.model,
           temperature: props.temperature,
         });
-      }),
+      })
     );
 
     // Generate user-specified components if provided
@@ -444,7 +444,7 @@ You are writing a Vue component for a VitePress theme.`,
           model: props.model,
           temperature: props.temperature,
         });
-      }),
+      })
     );
 
     // Generate styles file
@@ -510,5 +510,5 @@ You are writing CSS styles for a VitePress theme.`,
       createdAt: this.output?.createdAt || now,
       updatedAt: now,
     });
-  },
+  }
 );

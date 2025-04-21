@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy";
 import { destroy } from "../../src/destroy";
 import { Exec } from "../../src/os/exec";
-// Import test setup to ensure alchemy.test exists
+
 import "../../src/test/bun";
 
 const test = alchemy.test(import.meta);

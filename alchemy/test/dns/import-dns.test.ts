@@ -3,7 +3,7 @@ import { alchemy } from "../../src/alchemy";
 import { destroy } from "../../src/destroy";
 import { ImportDnsRecords } from "../../src/dns/import-dns";
 import { BRANCH_PREFIX } from "../util";
-// must import this or else alchemy.test won't exist
+
 import "../../src/test/bun";
 
 const test = alchemy.test(import.meta, {

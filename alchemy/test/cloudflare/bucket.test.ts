@@ -8,8 +8,9 @@ import {
   R2Bucket,
   withJurisdiction,
 } from "../../src/cloudflare/bucket";
-import "../../src/test/bun";
 import { BRANCH_PREFIX } from "../util";
+
+import "../../src/test/bun";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
