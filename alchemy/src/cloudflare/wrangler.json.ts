@@ -207,6 +207,7 @@ export interface WranglerJsonSpec {
     binding: string;
     database_id: string;
     database_name: string;
+    migrations_dir?: string
   }[];
 
   /**
@@ -254,6 +255,7 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
     binding: string;
     database_id: string;
     database_name: string;
+    migrations_dir?: string;
   }[] = [];
   const queues: { binding: string; queue: string }[] = [];
   const vectorizeIndexes: { binding: string; index_name: string }[] = [];
@@ -314,6 +316,7 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
         binding: bindingName,
         database_id: binding.id,
         database_name: binding.name,
+        migrations_dir: binding.migrationsDir,
       });
     } else if (binding.type === "queue") {
       queues.push({
