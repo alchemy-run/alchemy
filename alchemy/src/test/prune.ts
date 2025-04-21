@@ -1,6 +1,7 @@
 import { exec } from "child_process";
 import * as esbuild from "esbuild";
 import { glob } from "glob";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { promisify } from "util";
 
@@ -25,15 +26,15 @@ export async function runChangedTests(
   // Run the tests with bun using spawn for stdio inheritance
   return new Promise<void>((resolve, reject) => {
     console.log(`bun test ${changedTests.join(" ")}`);
-    resolve();
-    // const child = spawn("bun", ["test", ...changedTests], { stdio: "inherit" });
+    // resolve();
+    const child = spawn("bun", ["test", ...changedTests], { stdio: "inherit" });
 
-    // child.on("close", (code) => {
-    //   if (code === 0) resolve();
-    //   else reject(new Error(`Tests exited with code ${code}`));
-    // });
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`Tests exited with code ${code}`));
+    });
 
-    // child.on("error", reject);
+    child.on("error", reject);
   });
 }
 
