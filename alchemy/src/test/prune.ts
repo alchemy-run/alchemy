@@ -54,18 +54,12 @@ export async function findChangedTestFiles(
   // 2. Get git changed files
   const changedFiles = await getChangedFiles(baseCommit);
 
-  console.log("changedFiles", changedFiles);
-
   // 3. Process each test file
   const changedTestFiles: string[] = [];
 
   for (const testFile of testFiles) {
     // Get dependency tree for the test file
     const dependencies = await getDependencies(testFile);
-
-    if (testFile.includes("kv-namespace")) {
-      console.log(dependencies);
-    }
 
     // Check if any dependencies have changed
     const changedDependencies = [...dependencies].filter((dep) =>
