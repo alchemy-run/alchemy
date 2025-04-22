@@ -2,7 +2,7 @@
 
 The Data resource uses AI models to generate structured content based on a schema. It leverages the [Vercel AI SDK](https://sdk.vercel.ai/docs) for type-safe content generation.
 
-# Minimal Example
+## Minimal Example
 
 Generate structured data using an ArkType schema:
 
@@ -25,9 +25,9 @@ const product = await Data("new-product", {
 console.log(product.object); // Typed as per schema
 ```
 
-# With Message History
+## Using Message History
 
-Use message history for iterative content generation:
+Generate content iteratively using conversation history:
 
 ```ts
 import { Data } from "alchemy/ai";
@@ -47,14 +47,13 @@ const feedback = await Data("product-feedback", {
     { role: "assistant", content: "I'd be happy to provide feedback. What's your product?" },
     { role: "user", content: "It's a new smart home device that..." }
   ],
-  system: "You are a product design expert providing structured feedback",
-  temperature: 0.3
+  system: "You are a product design expert providing structured feedback"
 });
 ```
 
-# With File Context
+## Using File Context
 
-Use alchemy template literals to include file context:
+Generate documentation using file context:
 
 ```ts
 import { Data } from "alchemy/ai";
@@ -76,7 +75,6 @@ const docs = await Data("function-docs", {
     Generate documentation for this function:
     ${alchemy.file("src/utils/format.ts")}
   `,
-  system: "You are a technical documentation writer",
-  temperature: 0.2
+  system: "You are a technical documentation writer"
 });
 ```

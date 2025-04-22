@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+
 /**
  * Process markdown files with frontmatter to generate navigation items
  * @param directoryPath The directory containing markdown files

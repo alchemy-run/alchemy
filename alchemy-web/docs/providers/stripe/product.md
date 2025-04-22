@@ -1,6 +1,6 @@
 # Product
 
-The Product resource lets you create and manage [Stripe Products](https://stripe.com/docs/api/products) that can be used with Prices for billing.
+The Product resource lets you create and manage [Stripe Products](https://stripe.com/docs/api/products) for your Stripe account.
 
 # Minimal Example
 

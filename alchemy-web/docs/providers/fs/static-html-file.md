@@ -1,10 +1,10 @@
 # StaticHTMLFile
 
-The StaticHTMLFile resource creates static HTML files with content. It extends the base [File](./file.md) resource to provide HTML-specific functionality.
+The StaticHTMLFile resource creates static HTML files in your filesystem using [Alchemy's File System](https://alchemy.run/docs/concepts/fs) capabilities.
 
-## Minimal Example
+# Minimal Example
 
-Creates a basic HTML file with content:
+Creates a basic HTML file with the specified content.
 
 ```ts
 import { StaticHTMLFile } from "alchemy/fs";
@@ -22,30 +22,30 @@ const page = await StaticHTMLFile("index.html", `
 `);
 ```
 
-## Custom Path
+# Custom Path
 
-Creates an HTML file at a specific path:
+Creates an HTML file at a specific path location.
 
 ```ts
 import { StaticHTMLFile } from "alchemy/fs";
 
-const page = await StaticHTMLFile("home", "pages/index.html", `
-  <!DOCTYPE html>
+const page = await StaticHTMLFile("home", 
+  "pages/home.html",
+  `<!DOCTYPE html>
   <html>
     <head>
       <title>Home</title>
-      <link rel="stylesheet" href="style.css">
     </head>
     <body>
       <h1>Welcome Home</h1>
     </body>
-  </html>
-`);
+  </html>`
+);
 ```
 
-## Full Page Example
+# Full Page Example
 
-Creates a complete HTML page with metadata, styles and content:
+Creates a complete HTML page with metadata, styles and content.
 
 ```ts
 import { StaticHTMLFile } from "alchemy/fs";
@@ -62,11 +62,6 @@ const page = await StaticHTMLFile("index.html", `
   <body>
     <header>
       <h1>Welcome to My Website</h1>
-      <nav>
-        <a href="/">Home</a>
-        <a href="/about">About</a>
-        <a href="/contact">Contact</a>
-      </nav>
     </header>
     <main>
       <p>This is the main content of the page.</p>

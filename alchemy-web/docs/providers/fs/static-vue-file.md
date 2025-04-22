@@ -1,10 +1,10 @@
 # StaticVueFile
 
-The StaticVueFile resource creates [Vue single-file components](https://vuejs.org/guide/scaling-up/sfc.html) with template, script and style blocks.
+The StaticVueFile resource creates [Vue.js](https://vuejs.org/) single-file component files (.vue) with template, script and style sections.
 
 # Minimal Example
 
-Creates a basic Vue component file with template, script and style blocks.
+Creates a basic Vue component file with template, script and style sections.
 
 ```ts
 import { StaticVueFile } from "alchemy/fs";
@@ -37,13 +37,13 @@ Creates a Vue component file at a specific path.
 ```ts
 import { StaticVueFile } from "alchemy/fs";
 
-const header = await StaticVueFile("Header.vue", 
+const header = await StaticVueFile("Header", 
   "components/Header.vue",
   `<template>
     <header>
       <h1>{{ title }}</h1>
       <nav>
-        <slot />
+        <slot></slot>
       </nav>
     </header>
   </template>

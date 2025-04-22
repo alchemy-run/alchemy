@@ -2,7 +2,7 @@
 
 The Price resource lets you create and manage [Stripe Prices](https://stripe.com/docs/api/prices) for products.
 
-## Minimal Example
+# Minimal Example
 
 Create a one-time fixed price for a product:
 
@@ -16,14 +16,14 @@ const price = await Price("basic-license", {
 });
 ```
 
-## Recurring Subscription Price
+# Recurring Subscription Price
 
 Create a recurring subscription price with fixed monthly billing:
 
 ```ts
 import { Price } from "alchemy/stripe";
 
-const subscriptionPrice = await Price("pro-monthly", {
+const price = await Price("pro-monthly", {
   currency: "usd",
   unitAmount: 1499, // $14.99/month
   product: "prod_xyz",
@@ -34,14 +34,14 @@ const subscriptionPrice = await Price("pro-monthly", {
 });
 ```
 
-## Metered Usage Price
+# Metered Usage Price
 
 Create a metered price for usage-based billing:
 
 ```ts
 import { Price } from "alchemy/stripe";
 
-const meteredPrice = await Price("storage", {
+const price = await Price("storage", {
   currency: "usd", 
   unitAmount: 25, // $0.25 per GB
   product: "prod_xyz",
@@ -49,26 +49,6 @@ const meteredPrice = await Price("storage", {
     interval: "month",
     usageType: "metered",
     aggregateUsage: "sum"
-  }
-});
-```
-
-## Tiered Price with Tax
-
-Create a tiered price with tax behavior:
-
-```ts
-import { Price } from "alchemy/stripe";
-
-const tieredPrice = await Price("enterprise", {
-  currency: "usd",
-  unitAmount: 10000, // $100.00
-  product: "prod_xyz", 
-  billingScheme: "tiered",
-  taxBehavior: "exclusive",
-  metadata: {
-    tier: "enterprise",
-    features: "all"
   }
 });
 ```

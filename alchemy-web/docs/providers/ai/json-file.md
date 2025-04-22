@@ -52,7 +52,7 @@ Customize the AI's behavior with a custom system prompt:
 import { JSONFile } from "alchemy/ai";
 
 const apiMock = await JSONFile("api-mock", {
-  path: "./mocks/products.json",
+  path: "./mocks/products-api.json",
   prompt: "Create mock data for a product catalog API with 10 products",
   system: "You are an API design expert. Create realistic mock JSON data that follows REST API best practices.",
   model: {
