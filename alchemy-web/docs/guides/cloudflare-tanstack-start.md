@@ -46,7 +46,7 @@ await app.finalize();
 
 ## Configure `app.config.ts` for Cloudflare
 
-TanStack's `app.config.ts` needs to be configured to produce a server bundle compatible with Cloduflare:
+TanStack's `app.config.ts` needs to be configured to produce a server bundle compatible with Cloudflare:
 
 ```ts
 import { defineConfig } from "@tanstack/react-start/config";
@@ -57,15 +57,12 @@ export default defineConfig({
     appDirectory: "src",
   },
   server: {
-    // muse use the cloudflare-module preset for Workers with Assets
     preset: "cloudflare-module",
     experimental: {
-      // server functions break without this
       asyncContext: true,
     },
     unenv: {
-      // server functions break without this
-      external: ["node:async_hooks"],
+      external: ["node:async_hooks", "cloudflare:workers"],
     },
   },
   vite: {
@@ -74,6 +71,11 @@ export default defineConfig({
         projects: ["./tsconfig.json"],
       }),
     ],
+    build: {
+      rollupOptions: {
+        external: ["cloudflare:workers", "node:async_hooks"], // ✅ THIS is what Rollup/Vite needs
+      },
+    },
   },
 });
 ```
