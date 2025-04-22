@@ -23,7 +23,7 @@ async function _env<T = string>(
     try {
       const { env } = await import("cloudflare:workers");
       if (name in env) {
-        return env[name as keyof typeof env];
+        return env[name as keyof typeof env] as T;
       }
     } catch (error) {}
   }
