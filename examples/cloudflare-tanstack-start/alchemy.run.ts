@@ -1,7 +1,7 @@
-import "../../alchemy/src/cloudflare";
+import "alchemy/cloudflare";
 
-import alchemy from "../../alchemy/src/";
-import { R2Bucket, TanStackStart } from "../../alchemy/src/cloudflare";
+import alchemy from "alchemy";
+import { R2Bucket, TanStackStart } from "alchemy/cloudflare";
 
 const app = await alchemy("tanstack-app");
 
