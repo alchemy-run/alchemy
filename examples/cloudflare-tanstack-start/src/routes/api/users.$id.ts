@@ -3,11 +3,13 @@ import { createAPIFileRoute } from "@tanstack/react-start/api";
 import type { User } from "../../utils/users";
 
 // TODO(sam): this fails vinxi build
-// import { env } from "cloudflare:workers";
-// env;
+import { env } from "cloudflare:workers";
 
 export const APIRoute = createAPIFileRoute("/api/users/$id")({
   GET: async ({ request, params }) => {
+    // mock to test bindings work
+    await env.BUCKET.list();
+
     console.info(`Fetching users by id=${params.id}... @`, request.url);
     try {
       const res = await fetch(

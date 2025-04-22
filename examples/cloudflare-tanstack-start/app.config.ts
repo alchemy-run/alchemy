@@ -11,7 +11,7 @@ export default defineConfig({
       asyncContext: true,
     },
     unenv: {
-      external: ["node:async_hooks"],
+      external: ["node:async_hooks", "cloudflare:workers"],
     },
   },
   vite: {
@@ -20,5 +20,10 @@ export default defineConfig({
         projects: ["./tsconfig.json"],
       }),
     ],
+    build: {
+      rollupOptions: {
+        external: ["cloudflare:workers", "node:async_hooks"], // ✅ THIS is what Rollup/Vite needs
+      },
+    },
   },
 });

@@ -87,7 +87,7 @@ export const WranglerJson = Resource(
       spec.vars = { ...worker.env };
     }
 
-    await StaticJsonFile("wrangler.json", spec);
+    await StaticJsonFile(filePath, spec);
 
     // Return the resource
     return this({
@@ -207,7 +207,7 @@ export interface WranglerJsonSpec {
     binding: string;
     database_id: string;
     database_name: string;
-    migrations_dir?: string
+    migrations_dir?: string;
   }[];
 
   /**

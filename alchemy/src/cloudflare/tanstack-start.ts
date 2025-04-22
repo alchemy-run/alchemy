@@ -18,7 +18,7 @@ export async function TanStackStart<B extends Bindings>(
   return Website(id, {
     ...props,
     command: props?.command ?? "bun run build",
-    wrangler: props?.wrangler ?? false,
+    wrangler: props?.wrangler ?? true,
     main: props?.main ?? ".output/server/index.mjs",
     compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
     assets: props?.assets ?? ".output/public",
