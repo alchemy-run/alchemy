@@ -27,37 +27,18 @@ This stack will build the app, bundle the assets and deploy a Worker with the As
 import "alchemy/cloudflare";
 
 import alchemy from "alchemy";
-import { Assets, Worker } from "alchemy/cloudflare";
-import { Exec } from "alchemy/os";
+import { TanStackStart } from "alchemy/cloudflare";
 
 const app = await alchemy("tanstack-app", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up"
 });
 
-// build the app
-await Exec("build", {
-  command: "bun run build",
-});
-
-// collect all of the static assets
-const assets = await Assets("assets", {
-  path: ".output/public",
-});
-
-// create a Worker with the 
-const worker = await Worker("tanstack-website", {
-  name: "tanstack-website",
-  entrypoint: ".output/server/index.mjs",
-  bindings: {
-    // WARNING: Nitro requires the assetsbe bound to `ASSETS` - you can't choose a different name
-    ASSETS: assets,
-  },
-  url: true,
-  compatibilityFlags: ["nodejs_compat"],
+const website = await TanStackStart("tanstack-website", {
+  command: "bun run build"
 });
 
 console.log({
-  url: worker.url,
+  url: website.url,
 });
 
 await app.finalize();
