@@ -4,7 +4,7 @@ The VueFile resource lets you generate [Vue.js](https://vuejs.org/) components u
 
 # Minimal Example
 
-Creates a basic Vue component file:
+Creates a basic Vue component file with AI-generated code.
 
 ```ts
 import { VueFile } from "alchemy/ai";
@@ -15,9 +15,9 @@ const button = await VueFile("button", {
 });
 ```
 
-# With Context From Existing Files
+# Generate Component with Context
 
-Generates a component using existing files as reference:
+Uses existing files as reference to generate a component that matches your codebase style.
 
 ```ts
 import { VueFile } from "alchemy/ai";
@@ -25,29 +25,30 @@ import { VueFile } from "alchemy/ai";
 const userCard = await VueFile("user-card", {
   path: "./src/components/UserCard.vue",
   prompt: await alchemy`
-    Create a UserCard component following the style from:
+    Create a UserCard component that follows the styling from:
     ${alchemy.file("src/components/Card.vue")}
     
-    Using the types from:
+    Using the user type from:
     ${alchemy.file("src/types/User.ts")}
-  `
+  `,
+  temperature: 0.2
 });
 ```
 
-# With Custom System Prompt
+# Custom System Prompt
 
-Provides specific instructions to the AI model:
+Provides specific instructions to guide the AI model's output.
 
 ```ts
 import { VueFile } from "alchemy/ai";
 
-const form = await VueFile("login-form", {
-  path: "./src/components/LoginForm.vue",
-  prompt: "Generate a login form with email/password fields and validation",
-  system: "You are a Vue expert specializing in form components. Create a single Vue component inside ```vue fences with proper TypeScript types.",
+const form = await VueFile("registration-form", {
+  path: "./src/components/RegistrationForm.vue",
+  prompt: "Generate a registration form with email, password and validation",
+  system: "You are an expert Vue developer specializing in form components. Create a single Vue component inside ```vue fences with no additional text.",
   model: {
-    id: "gpt-4o",
-    provider: "openai"
+    id: "claude-3-opus-20240229",
+    provider: "anthropic"
   }
 });
 ```

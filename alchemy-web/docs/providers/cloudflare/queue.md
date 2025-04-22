@@ -1,6 +1,6 @@
 # Queue
 
-The Queue component lets you add [Cloudflare Queue](https://developers.cloudflare.com/queues/) to your app for reliable message delivery between workers.
+The Queue component lets you add [Cloudflare Queue](https://developers.cloudflare.com/queues/) to your app for reliable message delivery between workers and other systems.
 
 # Minimal Example
 
@@ -16,15 +16,15 @@ const queue = await Queue("my-queue", {
 
 # Queue with Custom Settings
 
-Configure queue delivery delay and retention period:
+Configure queue delivery delay and message retention:
 
 ```ts
 import { Queue } from "alchemy/cloudflare";
 
-const delayedQueue = await Queue("delayed-queue", {
+const queue = await Queue("delayed-queue", {
   name: "delayed-queue",
   settings: {
-    deliveryDelay: 30, // 30 second delay
+    deliveryDelay: 30, // 30 second delay before message delivery
     messageRetentionPeriod: 86400 // Store messages for 1 day
   }
 });
@@ -32,12 +32,12 @@ const delayedQueue = await Queue("delayed-queue", {
 
 # Paused Queue
 
-Create a paused queue that can be activated later:
+Create a paused queue for later activation:
 
 ```ts
 import { Queue } from "alchemy/cloudflare";
 
-const pausedQueue = await Queue("paused-queue", {
+const queue = await Queue("paused-queue", {
   name: "paused-queue", 
   settings: {
     deliveryPaused: true
@@ -52,7 +52,7 @@ Bind a queue to a worker for message processing:
 ```ts
 import { Worker, Queue } from "alchemy/cloudflare";
 
-const myQueue = await Queue("my-queue", {
+const queue = await Queue("my-queue", {
   name: "my-queue"
 });
 
@@ -60,7 +60,7 @@ await Worker("my-worker", {
   name: "my-worker",
   script: "console.log('Hello, world!')",
   bindings: {
-    MY_QUEUE: myQueue
+    MY_QUEUE: queue
   }
 });
 ```

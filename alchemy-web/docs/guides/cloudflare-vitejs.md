@@ -53,14 +53,14 @@ await app.finalize(); // must be at end
 > [!NOTE]
 > See the [Getting Started](../getting-started) guide if this is unfamiliar.
 
-## Create ViteSite
+## Create Vite
 
-Import the `ViteSite` and configure your build command and assets directory:
+Import the `Vite` and configure your build command and assets directory:
 
 ```ts
-import { ViteSite } from "alchemy/cloudflare";
+import { Vite } from "alchemy/cloudflare";
 
-export const website = await ViteSite("website", {
+export const website = await Vite("website", {
   // command to build the vite site (run vite build)
   command: "bun run build",
   // where the build command will store the assets
@@ -120,7 +120,7 @@ export default {
 Update the `StaticSite` to use our custom server entrypoint:
 
 ```ts
-export const website = await ViteSite("website", {
+export const website = await Vite("website", {
   command: "bun run build",
   assets: "./dist",
   // configure our server's entrypoint

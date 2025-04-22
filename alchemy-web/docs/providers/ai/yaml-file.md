@@ -1,6 +1,6 @@
 # YAMLFile
 
-The YAMLFile resource lets you generate YAML files using AI models. It supports both schema-validated and freeform YAML generation.
+The YAMLFile resource lets you generate [YAML](https://yaml.org/) files using AI models. It supports both schema-based validation and freeform YAML generation.
 
 # Minimal Example
 
@@ -10,14 +10,14 @@ Generate a simple YAML configuration file:
 import { YAMLFile } from "alchemy/ai";
 
 const config = await YAMLFile("app-config", {
-  path: "./config.yml",
-  prompt: "Generate a basic application config with server port, database URL, and logging level"
+  path: "./config/app.yml",
+  prompt: "Generate a basic web application configuration with server port, database URL, and logging level"
 });
 ```
 
 # Schema Validation
 
-Use a schema to ensure the generated YAML matches your type requirements:
+Use a schema to validate the generated YAML structure:
 
 ```ts
 import { YAMLFile } from "alchemy/ai";
@@ -31,32 +31,33 @@ const configSchema = type({
   database: {
     url: "string",
     maxConnections: "number"
+  },
+  logging: {
+    level: "'debug' | 'info' | 'warn' | 'error'"
   }
 });
 
 const config = await YAMLFile("app-config", {
-  path: "./config.yml",
+  path: "./config/app.yml",
   schema: configSchema,
-  prompt: "Generate a server configuration with database settings"
+  prompt: "Generate a web application configuration"
 });
 ```
 
-# Context-Aware Generation
+# Custom System Prompt
 
-Use alchemy template literals to include file context in the prompt:
+Provide specific instructions for YAML generation:
 
 ```ts
 import { YAMLFile } from "alchemy/ai";
 
-const k8sConfig = await YAMLFile("k8s-config", {
-  path: "./k8s/deployment.yml",
-  prompt: await alchemy`
-    Generate a Kubernetes deployment config based on:
-    ${alchemy.file("src/app.ts")}
-  `,
+const workflow = await YAMLFile("github-workflow", {
+  path: "./.github/workflows/ci.yml",
+  prompt: "Create a GitHub Actions workflow for a Node.js project with testing and deployment",
+  system: "You are a DevOps expert. Create a GitHub Actions workflow following best practices.",
   model: {
-    id: "gpt-4o",
-    provider: "openai"
+    id: "claude-3-opus-20240229",
+    provider: "anthropic"
   }
 });
 ```

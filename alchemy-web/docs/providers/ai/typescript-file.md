@@ -1,66 +1,49 @@
 # TypeScriptFile
 
-The TypeScriptFile resource generates TypeScript code files using AI models like OpenAI's GPT-4 or Anthropic's Claude. The generated code is automatically formatted with Prettier and saved to disk.
+The TypeScriptFile resource lets you generate TypeScript code files using AI models like [OpenAI GPT-4](https://platform.openai.com/docs/models/gpt-4) or [Anthropic Claude](https://www.anthropic.com/claude).
 
-## Minimal Example
+# Minimal Example
 
-Create a simple TypeScript utility function:
+Generate a simple TypeScript utility function:
 
 ```ts
 import { TypeScriptFile } from "alchemy/ai";
 
 const utils = await TypeScriptFile("string-utils", {
   path: "./src/utils/string-utils.ts",
-  prompt: "Generate TypeScript utility functions for string manipulation (capitalize, truncate, camelCase, etc)"
+  prompt: "Generate TypeScript utility functions for string manipulation like capitalize, truncate, and camelCase"
 });
 ```
 
-## Generate Code with Context
+# Generate Code with Context
 
-Use alchemy template literals to include existing files as context:
+Use alchemy template literals to include file context:
 
 ```ts
 import { TypeScriptFile } from "alchemy/ai";
 
-const userService = await TypeScriptFile("user-service", {
+const service = await TypeScriptFile("user-service", {
   path: "./src/services/UserService.ts",
   prompt: await alchemy`
-    Create a UserService class using these types:
+    Create a UserService class that handles user authentication.
+    Use the User type from:
     ${alchemy.file("src/types/User.ts")}
   `,
   temperature: 0.2
 });
 ```
 
-## Custom Formatting
+# Custom Model and System Prompt
 
-Configure Prettier formatting options:
-
-```ts
-import { TypeScriptFile } from "alchemy/ai";
-
-const component = await TypeScriptFile("component", {
-  path: "./src/components/Button.tsx",
-  prompt: "Generate a React button component with variants and sizes",
-  prettierConfig: {
-    semi: false,
-    singleQuote: true,
-    printWidth: 120
-  }
-});
-```
-
-## Custom System Prompt
-
-Provide custom instructions to the AI model:
+Configure the AI model and customize the system prompt:
 
 ```ts
 import { TypeScriptFile } from "alchemy/ai";
 
 const hook = await TypeScriptFile("use-form", {
-  path: "./src/hooks/useForm.ts", 
-  prompt: "Create a form handling React hook with validation",
-  system: "You are an expert React developer. Create a single TypeScript file with proper typing and React best practices.",
+  path: "./src/hooks/useForm.ts",
+  prompt: "Create a React form hook with validation and submission handling",
+  system: "You are an expert React developer. Create a single TypeScript file inside ```ts fences.",
   model: {
     id: "claude-3-opus-20240229",
     provider: "anthropic"

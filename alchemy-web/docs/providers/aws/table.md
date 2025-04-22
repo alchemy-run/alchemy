@@ -1,6 +1,6 @@
-# DynamoDB Table
+# Table
 
-The Table resource lets you create and manage [Amazon DynamoDB tables](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html) for NoSQL database storage.
+The Table resource lets you create and manage [Amazon DynamoDB tables](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html) for your application.
 
 ## Minimal Example
 
@@ -20,10 +20,10 @@ const table = await Table("users", {
 
 ## Table with Sort Key
 
-Add a sort key for time-series or hierarchical data:
+Add a sort key to enable range queries and multiple items per partition:
 
 ```ts
-const eventsTable = await Table("events", {
+const table = await Table("events", {
   tableName: "events",
   partitionKey: {
     name: "deviceId",
@@ -41,7 +41,7 @@ const eventsTable = await Table("events", {
 Configure provisioned read/write capacity for predictable workloads:
 
 ```ts
-const highThroughputTable = await Table("orders", {
+const table = await Table("orders", {
   tableName: "orders", 
   partitionKey: {
     name: "orderId",

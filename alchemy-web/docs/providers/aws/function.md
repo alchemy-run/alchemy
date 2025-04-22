@@ -1,32 +1,33 @@
 # AWS Lambda Function
 
-The [AWS Lambda Function](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) resource lets you create and manage Lambda functions that run code in response to events.
+The Function resource lets you create and manage [AWS Lambda functions](https://docs.aws.amazon.com/lambda/latest/dg/welcome.html) for serverless compute.
 
 ## Minimal Example
 
-Create a basic Lambda function with default settings:
+Create a basic Lambda function with default settings.
 
 ```ts
 import { Function } from "alchemy/aws";
 
 const func = await Function("api", {
-  functionName: "api-handler",
-  zipPath: "./dist/api.zip", 
+  functionName: "my-api",
+  bundle: bundle,
   roleArn: role.arn,
   handler: "index.handler"
 });
 ```
 
-## Custom Configuration
+## Custom Runtime and Memory
 
-Configure memory, timeout and environment variables:
+Configure the function's runtime, memory and timeout.
 
 ```ts
 const func = await Function("worker", {
   functionName: "worker",
-  zipPath: "./dist/worker.zip",
+  bundle: bundle,
   roleArn: role.arn,
   handler: "worker.process",
+  runtime: Runtime.nodejs20x,
   memorySize: 512,
   timeout: 30,
   environment: {
@@ -38,12 +39,12 @@ const func = await Function("worker", {
 
 ## Function URL
 
-Create a function with a public URL endpoint, CORS and optional response streaming:
+Create a function with a public URL endpoint and CORS configuration.
 
 ```ts
-const func = await Function("public-api", {
+const api = await Function("public-api", {
   functionName: "public-api", 
-  zipPath: "./dist/api.zip",
+  bundle: bundle,
   roleArn: role.arn,
   handler: "api.handler",
   url: {
@@ -52,7 +53,8 @@ const func = await Function("public-api", {
     cors: {
       allowOrigins: ["*"],
       allowMethods: ["GET", "POST"],
-      allowHeaders: ["content-type"]
+      allowHeaders: ["content-type"],
+      maxAge: 86400
     }
   }
 });

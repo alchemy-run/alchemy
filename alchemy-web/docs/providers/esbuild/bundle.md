@@ -15,36 +15,35 @@ const bundle = await Bundle("handler", {
 });
 ```
 
-# Node.js Bundle
+# Bundle with Output Directory
 
-Bundle a file specifically for Node.js with sourcemaps:
+Specify an output directory and additional build options:
 
 ```ts
 import { Bundle } from "alchemy/esbuild";
 
 const bundle = await Bundle("api", {
-  entryPoint: "src/api.ts",
-  format: "cjs",
-  platform: "node", 
+  entryPoint: "src/api.ts", 
+  outdir: ".build",
+  format: "esm",
+  platform: "node",
   target: "node18",
-  sourcemap: true,
-  external: ["aws-sdk"]
+  minify: true,
+  sourcemap: true
 });
 ```
 
-# Browser Bundle
+# Bundle with External Dependencies
 
-Create a minified browser bundle:
+Exclude packages from the bundle:
 
 ```ts
 import { Bundle } from "alchemy/esbuild";
 
 const bundle = await Bundle("app", {
   entryPoint: "src/app.ts",
-  outfile: "dist/app.min.js",
-  format: "iife",
-  platform: "browser",
-  target: ["es2020", "chrome58"],
-  minify: true
+  format: "esm",
+  external: ["aws-sdk", "lodash"],
+  platform: "node"
 });
 ```

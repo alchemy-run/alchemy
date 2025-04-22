@@ -1,10 +1,10 @@
 # SES
 
-The SES resource lets you manage [Amazon Simple Email Service (SES)](https://docs.aws.amazon.com/ses/latest/dg/Welcome.html) configuration sets and email identities.
+The SES Resource lets you create and manage [Amazon Simple Email Service (SES)](https://docs.aws.amazon.com/ses/latest/dg/Welcome.html) configuration sets and email identities.
 
-## Minimal Example
+# Minimal Example
 
-Create a basic SES configuration set for email sending:
+Create a basic configuration set for sending emails:
 
 ```ts
 import { SES } from "alchemy/aws";
@@ -17,7 +17,7 @@ const configSet = await SES("email-config", {
 });
 ```
 
-## Email Identity with DKIM
+# Domain Identity with DKIM
 
 Create and verify a domain identity with DKIM signing enabled:
 
@@ -33,9 +33,9 @@ const domainIdentity = await SES("domain-identity", {
 });
 ```
 
-## Configuration Set with Options
+# Configuration Set with Options
 
-Create a configuration set with sending, tracking and delivery options:
+Create a configuration set with multiple sending and tracking options:
 
 ```ts
 import { SES } from "alchemy/aws";
@@ -45,8 +45,14 @@ const emailConfig = await SES("email-config", {
   sendingOptions: {
     SendingEnabled: true
   },
+  reputationOptions: {
+    ReputationMetricsEnabled: true
+  },
   trackingOptions: {
     CustomRedirectDomain: "click.example.com"
+  },
+  suppressionOptions: {
+    SuppressedReasons: ["BOUNCE", "COMPLAINT"]
   },
   deliveryOptions: {
     TlsPolicy: "REQUIRE",

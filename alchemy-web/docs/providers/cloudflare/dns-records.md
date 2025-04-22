@@ -1,10 +1,10 @@
 # DnsRecords
 
-The DnsRecords resource lets you manage [DNS records](https://developers.cloudflare.com/dns/) in a Cloudflare zone.
+The DnsRecords component lets you manage [DNS records](https://developers.cloudflare.com/dns/manage-dns-records/) in a Cloudflare zone.
 
 # Minimal Example
 
-Create basic A and CNAME records for a domain:
+Create basic A and CNAME records for a domain.
 
 ```ts
 import { DnsRecords } from "alchemy/cloudflare";
@@ -30,7 +30,7 @@ const records = await DnsRecords("example.com-dns", {
 
 # Email Records
 
-Configure MX records for email routing:
+Create MX and TXT records for email routing.
 
 ```ts
 import { DnsRecords } from "alchemy/cloudflare";
@@ -46,9 +46,8 @@ const emailRecords = await DnsRecords("example.com-email", {
     },
     {
       name: "example.com", 
-      type: "MX",
-      content: "alt1.aspmx.l.google.com",
-      priority: 5
+      type: "TXT",
+      content: "v=spf1 include:_spf.google.com ~all"
     }
   ]
 });
@@ -56,32 +55,34 @@ const emailRecords = await DnsRecords("example.com-email", {
 
 # Multiple Record Types
 
-Create multiple record types with different settings:
+Create multiple record types with different configurations.
 
 ```ts
 import { DnsRecords } from "alchemy/cloudflare";
 
-const multiRecords = await DnsRecords("example.com-multi", {
+const records = await DnsRecords("example.com-dns", {
   zoneId: "YOUR_ZONE_ID",
   records: [
+    // A record with proxy enabled
     {
-      name: "www.example.com",
+      name: "www",
       type: "A",
       content: "192.0.2.1",
-      proxied: true,
-      ttl: 1 
+      proxied: true
     },
+    // CNAME with custom TTL
     {
-      name: "api.example.com",
+      name: "blog",
       type: "CNAME", 
-      content: "api.service.com",
-      proxied: false,
+      content: "www.example.com",
       ttl: 3600
     },
+    // TXT record with comment
     {
       name: "example.com",
       type: "TXT",
-      content: "v=spf1 include:_spf.google.com ~all"
+      content: "verification=abc123",
+      comment: "Domain verification"
     }
   ]
 });

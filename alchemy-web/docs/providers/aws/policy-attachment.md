@@ -17,30 +17,18 @@ const adminAccess = await PolicyAttachment("admin-policy", {
 
 ## Attach Custom Policy
 
-Attach a custom policy created with the Policy resource:
+Attach a custom policy to a role:
 
 ```ts
-import { PolicyAttachment, Policy } from "alchemy/aws";
+import { PolicyAttachment } from "alchemy/aws";
 
-const customPolicy = await Policy("custom-policy", {
-  policyName: "custom-policy",
-  document: {
-    Version: "2012-10-17",
-    Statement: [{
-      Effect: "Allow",
-      Action: ["s3:ListBucket"],
-      Resource: "*"
-    }]
-  }
-});
-
-const attachment = await PolicyAttachment("custom-policy", {
-  policyArn: customPolicy.arn,
+const customPolicy = await PolicyAttachment("custom-policy", {
+  policyArn: policy.arn,
   roleName: role.name
 });
 ```
 
-## Multiple Policy Attachments
+## Multiple Policy Attachments 
 
 Attach multiple policies to a role:
 

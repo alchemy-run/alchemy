@@ -1,6 +1,6 @@
 # WebhookEndpoint
 
-The WebhookEndpoint resource lets you create and manage [Stripe webhook endpoints](https://stripe.com/docs/api/webhook_endpoints) to receive notifications about events in your Stripe account.
+The WebhookEndpoint resource lets you create and manage [Stripe Webhook Endpoints](https://stripe.com/docs/api/webhook_endpoints) to receive notifications about events in your Stripe account.
 
 # Minimal Example
 
@@ -11,16 +11,14 @@ import { WebhookEndpoint } from "alchemy/stripe";
 
 const webhook = await WebhookEndpoint("payments", {
   url: "https://api.example.com/webhooks/stripe",
-  enabledEvents: [
-    "payment_intent.succeeded",
-    "payment_intent.payment_failed"
-  ]
+  enabledEvents: ["payment_intent.succeeded", "payment_intent.payment_failed"],
+  description: "Payment notifications webhook"
 });
 ```
 
-# Subscription Webhook
+# Subscription Events
 
-Create a webhook endpoint to handle subscription lifecycle events:
+Create a webhook to monitor subscription lifecycle events:
 
 ```ts
 import { WebhookEndpoint } from "alchemy/stripe";
@@ -31,19 +29,19 @@ const webhook = await WebhookEndpoint("subscriptions", {
     "customer.subscription.created",
     "customer.subscription.updated",
     "customer.subscription.deleted",
-    "invoice.payment_succeeded"
+    "invoice.payment_succeeded",
+    "invoice.payment_failed"
   ],
-  description: "Subscription management webhook",
+  description: "Subscription lifecycle webhook",
   metadata: {
-    type: "subscription",
-    environment: "production"
+    type: "subscription-events"
   }
 });
 ```
 
-# Connect Platform Webhook 
+# Connect Platform Events
 
-Create a webhook endpoint for Stripe Connect platform events:
+Create a webhook for Stripe Connect platform events:
 
 ```ts
 import { WebhookEndpoint } from "alchemy/stripe";
@@ -57,6 +55,8 @@ const webhook = await WebhookEndpoint("connect", {
     "payout.failed"
   ],
   connect: true,
-  description: "Connect platform webhook"
+  metadata: {
+    platform: "connect"
+  }
 });
 ```

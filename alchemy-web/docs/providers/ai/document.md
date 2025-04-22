@@ -1,8 +1,8 @@
 # Document
 
-The Document resource generates markdown documentation using AI models like OpenAI's GPT-4 and Anthropic's Claude. It supports powerful context handling through the alchemy template literal tag.
+The Document resource lets you generate markdown documentation using [AI models](https://platform.openai.com/docs/models) like GPT-4 and Claude.
 
-# Minimal Example
+## Minimal Example
 
 Generate a simple markdown document with AI:
 
@@ -10,50 +10,62 @@ Generate a simple markdown document with AI:
 import { Document } from "alchemy/ai";
 
 const docs = await Document("api-docs", {
-  title: "API Documentation",
-  prompt: "Generate API documentation for a REST API with endpoints for users, posts and comments",
-  path: "./docs/api.md"
+  path: "./docs/api.md",
+  prompt: await alchemy`
+    Generate API documentation based on:
+    ${alchemy.file("src/api.ts")}
+  `
 });
 ```
 
-# Generate Documentation from Source Files
+## Using Message History
 
-Use alchemy template literals to include file context:
+Generate documentation through a conversation:
 
 ```ts
 import { Document } from "alchemy/ai";
 
-const apiDocs = await Document("api-docs", {
-  title: "API Documentation", 
+const docs = await Document("api-docs", {
+  path: "./docs/api.md", 
+  messages: [
+    { role: "user", content: "Generate API documentation" },
+    { role: "assistant", content: "I'll help create the docs. What API should I document?" },
+    { role: "user", content: "Document the user management API in src/api.ts" }
+  ],
+  system: "You are a technical writer specializing in API documentation."
+});
+```
+
+## Custom Model Configuration
+
+Use specific AI models and parameters:
+
+```ts
+import { Document } from "alchemy/ai";
+
+const docs = await Document("api-docs", {
   path: "./docs/api.md",
-  prompt: await alchemy`
-    Generate API documentation based on these source files:
-    ${alchemy.file("src/api.ts")}
-    ${alchemy.file("src/types.ts")}
-  `,
+  prompt: "Generate API documentation...",
   model: {
-    id: "gpt-4o",
-    provider: "openai"
+    id: "claude-3-opus-20240229",
+    provider: "anthropic",
+    options: {
+      temperature: 0.2
+    }
   }
 });
 ```
 
-# Iterative Document Generation with Message History
+## Freezing Documents
 
-Use message history for conversation-based generation:
+Prevent regeneration on subsequent runs:
 
 ```ts
 import { Document } from "alchemy/ai";
 
-const apiDocs = await Document("api-docs", {
-  title: "API Documentation",
+const docs = await Document("api-docs", {
   path: "./docs/api.md",
-  messages: [
-    { role: "user", content: "Create API documentation for these files" },
-    { role: "assistant", content: "I'll help you create API documentation. Please provide the files." },
-    { role: "user", content: "Here are the files: [file contents]" }
-  ],
-  system: "You are a technical documentation writer. Generate clear and concise API documentation.",
-  temperature: 0.2
+  prompt: "Generate API documentation...",
+  freeze: true // Document won't be regenerated on updates
 });
 ```

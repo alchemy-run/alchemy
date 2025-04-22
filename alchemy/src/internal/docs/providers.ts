@@ -118,7 +118,7 @@ async function generateProviderDocs({
         reasoningEffort: "high",
       },
     },
-    freeze: true,
+    freeze: false,
     temperature: 0.1,
     schema: type({
       groups: type({
@@ -178,7 +178,7 @@ async function generateProviderDocs({
         providerDocsDir,
         `${g.filename.replace(".ts", "").replace(".md", "")}.md`
       ),
-      freeze: true,
+      freeze: false,
       model: {
         id: "claude-3-5-sonnet-latest",
         provider: "anthropic",

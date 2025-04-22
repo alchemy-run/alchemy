@@ -2,7 +2,7 @@
 
 The Exec resource allows you to execute shell commands as part of your Alchemy infrastructure code.
 
-## Minimal Example
+# Minimal Example
 
 Execute a simple shell command:
 
@@ -16,7 +16,7 @@ const result = await Exec("list-files", {
 console.log(result.stdout);
 ```
 
-## Working Directory and Environment
+# Working Directory and Environment
 
 Run a command in a specific directory with custom environment variables:
 
@@ -25,14 +25,14 @@ import { Exec } from "alchemy/os";
 
 const build = await Exec("build-project", {
   command: "npm run build",
-  cwd: "./my-project", 
-  env: {
-    NODE_ENV: "production"
+  cwd: "./my-project",
+  env: { 
+    NODE_ENV: "production" 
   }
 });
 ```
 
-## Command Memoization
+# Memoized Commands
 
 Cache command output and only re-run when the command changes:
 
@@ -44,14 +44,14 @@ const status = await Exec("git-status", {
   memoize: true
 });
 
-// Won't re-run the command if nothing changed
-const cachedStatus = await Exec("git-status", {
+// Won't actually run again if command hasn't changed
+const cached = await Exec("git-status", {
   command: "git status", 
   memoize: true
 });
 ```
 
-## Error Handling
+# Error Handling
 
 Control error behavior with throwOnError:
 
@@ -63,8 +63,4 @@ const result = await Exec("risky-command", {
   throwOnError: true,
   maxBuffer: 10 * 1024 * 1024 // 10MB buffer
 });
-
-if (result.exitCode !== 0) {
-  console.error(result.stderr);
-}
 ```

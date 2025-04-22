@@ -1,10 +1,10 @@
 # StaticCSSFile
 
-The StaticCSSFile resource creates static CSS files with content in your filesystem.
+The StaticCSSFile resource creates and manages static CSS files in your project using [Alchemy's File System](https://alchemy.run/docs/concepts/state.md) capabilities.
 
 # Minimal Example
 
-Creates a basic CSS file with styles.
+Creates a CSS file with basic styles.
 
 ```ts
 import { StaticCSSFile } from "alchemy/fs";
@@ -18,7 +18,7 @@ const styles = await StaticCSSFile("styles.css", `
 `);
 ```
 
-# Custom Path Example
+# Custom Path
 
 Creates a CSS file at a specific path.
 
@@ -26,43 +26,17 @@ Creates a CSS file at a specific path.
 import { StaticCSSFile } from "alchemy/fs";
 
 const styles = await StaticCSSFile("main", "src/styles/main.css", `
+  body {
+    font-family: sans-serif;
+    line-height: 1.5;
+  }
+  
   .button {
-    background-color: #0062ff;
+    background: #0062ff;
     color: white;
     border: none;
     padding: 0.5rem 1rem;
     border-radius: 4px;
-  }
-`);
-```
-
-# Multiple Selectors Example
-
-Creates a CSS file with multiple style rules.
-
-```ts
-import { StaticCSSFile } from "alchemy/fs";
-
-const styles = await StaticCSSFile("theme.css", `
-  :root {
-    --primary: #0062ff;
-    --secondary: #6c757d;
-  }
-
-  .container {
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .button {
-    background-color: var(--primary);
-    color: white;
-    border: none;
-    padding: 0.5rem 1rem;
-  }
-
-  .button:hover {
-    opacity: 0.9;
   }
 `);
 ```

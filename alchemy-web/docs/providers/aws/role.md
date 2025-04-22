@@ -1,10 +1,10 @@
 # Role
 
-The Role resource creates and manages [AWS IAM Roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html) with support for inline policies, managed policies, and automatic cleanup of attached policies during deletion.
+The Role resource lets you create and manage [AWS IAM Roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html) that define permissions for AWS services and resources.
 
 ## Minimal Example
 
-Create a basic Lambda execution role with an inline policy:
+Create a basic Lambda execution role with permissions to write logs:
 
 ```ts
 import { Role } from "alchemy/aws";
@@ -73,6 +73,8 @@ import { Role } from "alchemy/aws";
 
 const role = await Role("custom-role", {
   roleName: "custom-role",
+  description: "Role with multiple policies",
+  maxSessionDuration: 7200,
   assumeRolePolicy: {
     Version: "2012-10-17",
     Statement: [{
@@ -83,7 +85,6 @@ const role = await Role("custom-role", {
       Action: "sts:AssumeRole" 
     }]
   },
-  maxSessionDuration: 7200,
   policies: [
     {
       policyName: "logs",

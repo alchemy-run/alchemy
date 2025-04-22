@@ -1,49 +1,41 @@
 # StaticTextFile
 
-The StaticTextFile resource creates plain text files with specified content. It's part of Alchemy's [File System (fs)](https://docs.alchemy.sh/fs) service.
+The StaticTextFile resource creates plain text files in your filesystem using [Node.js File System](https://nodejs.org/api/fs.html).
 
 # Minimal Example
 
-Create a simple text file:
+Creates a simple text file with content.
 
 ```ts
 import { StaticTextFile } from "alchemy/fs";
 
-const file = await StaticTextFile("README.md", 
+const readme = await StaticTextFile("README.md", 
   "# Project Name\n\nProject description goes here."
 );
 ```
 
-# Custom Path Example
+# Custom Path
 
-Create a text file with a custom path:
+Creates a text file at a specific path.
 
 ```ts
 import { StaticTextFile } from "alchemy/fs";
 
-const file = await StaticTextFile("docs/README.md", "docs/README.md",
-  "# Documentation\n\nThis folder contains project documentation."
+const log = await StaticTextFile("app.log", 
+  "logs/app.log",
+  "Application started successfully"
 );
 ```
 
-# Multiline Content Example 
+# Nested Directories
 
-Create a text file with multiline content using template literals:
+Creates a text file in nested directories (directories are created automatically).
 
 ```ts
 import { StaticTextFile } from "alchemy/fs";
 
-const file = await StaticTextFile("CONTRIBUTING.md", `
-# Contributing Guidelines
-
-## Pull Requests
-- Fork the repository
-- Create a feature branch
-- Submit a PR
-
-## Code Style
-- Use consistent formatting
-- Add comments for complex logic
-- Write unit tests
-`);
+const config = await StaticTextFile("config", 
+  "config/settings/app.conf",
+  "debug=true\nport=3000"
+);
 ```

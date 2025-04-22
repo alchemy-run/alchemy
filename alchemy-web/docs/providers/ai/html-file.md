@@ -1,10 +1,10 @@
 # HTMLFile
 
-The HTMLFile resource generates HTML files using AI models like OpenAI's GPT-4 or Anthropic's Claude. It extracts HTML code from between ```html fences and validates the response.
+The HTMLFile resource lets you generate HTML files using AI models like [OpenAI GPT-4](https://platform.openai.com/docs/models/gpt-4) or [Anthropic Claude](https://www.anthropic.com/claude).
 
-## Minimal Example
+# Minimal Example
 
-Creates a basic HTML file with AI-generated content.
+Creates a simple HTML file with AI-generated content.
 
 ```ts
 import { HTMLFile } from "alchemy/ai";
@@ -15,23 +15,25 @@ const page = await HTMLFile("landing", {
 });
 ```
 
-## With Custom System Prompt
+# Generate with Context
 
-Provides specific instructions to the AI model about how to generate the HTML.
+Uses file context to generate HTML that matches existing code.
 
 ```ts
 import { HTMLFile } from "alchemy/ai";
 
-const nav = await HTMLFile("nav", {
-  path: "./components/nav.html", 
-  prompt: "Create a responsive navigation menu with dropdown support",
-  system: "You are an expert HTML developer specializing in semantic markup and accessibility. Create a single HTML file with no additional text."
+const component = await HTMLFile("card", {
+  path: "./components/card.html", 
+  prompt: await alchemy`
+    Create an HTML card component that matches the style of:
+    ${alchemy.file("components/button.html")}
+  `
 });
 ```
 
-## With Model Configuration
+# Custom Model Configuration
 
-Specifies which AI model to use and its configuration options.
+Specifies a custom model and temperature for more controlled generation.
 
 ```ts
 import { HTMLFile } from "alchemy/ai";
@@ -44,21 +46,5 @@ const form = await HTMLFile("contact-form", {
     provider: "anthropic"
   },
   temperature: 0.2
-});
-```
-
-## With File Context
-
-Uses existing files as context for generating new HTML.
-
-```ts
-import { HTMLFile } from "alchemy/ai";
-
-const card = await HTMLFile("product-card", {
-  path: "./components/card.html",
-  prompt: await alchemy`
-    Create a product card component following the style of:
-    ${alchemy.file("src/components/base-card.html")}
-  `
 });
 ```
