@@ -1,8 +1,8 @@
 ---
-order: 3 # Adjust order as needed
+order: 4 # Adjust order as needed
 ---
 
-# Full Stack Nuxt 3 with Pipeline
+# Cloudflare Nuxt 3 & Cloudflare Pipeline
 
 This guide walks through deploying a full-stack Nuxt 3 application with a backend Pipeline to Cloudflare using Alchemy and `Nuxt`.
 
