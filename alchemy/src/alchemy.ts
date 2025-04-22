@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { destroy, DestroyedSignal } from "./destroy";
+import { env } from "./env";
 import type { PendingResource } from "./resource";
 import { Scope } from "./scope";
 import { secret } from "./secret";
@@ -80,6 +81,11 @@ export interface Alchemy {
    */
   (template: TemplateStringsArray, ...values: any[]): Promise<string>;
 }
+
+_alchemy.destroy = destroy;
+_alchemy.run = run;
+_alchemy.secret = secret;
+_alchemy.env = env;
 
 /**
  * Implementation of the alchemy function that handles both application scoping
@@ -214,10 +220,6 @@ async function _alchemy(
     ].join("\n");
   }
 }
-_alchemy.destroy = destroy;
-_alchemy.run = run;
-_alchemy.secret = secret;
-_alchemy.env = env;
 
 export interface AlchemyOptions {
   /**
@@ -348,26 +350,4 @@ async function run<T>(
   } finally {
     await _scope.finalize();
   }
-}
-
-export async function env<T = string>(
-  name: string,
-  value?: T | undefined,
-  error?: string
-): Promise<T> {
-  if (value !== undefined) {
-    return value;
-  } else if (typeof process !== undefined) {
-    // we are in a node environment
-    return process.env[name]! as T;
-  } else {
-    // we are in a browser environment
-    try {
-      const { env } = await import("cloudflare:workers");
-      if (name in env) {
-        return env[name as keyof typeof env];
-      }
-    } catch (error) {}
-  }
-  throw new Error(error ?? `Environment variable ${name} is not set`);
 }

@@ -1,3 +1,5 @@
+import { alchemy } from "./alchemy";
+
 /**
  * Internal wrapper for sensitive values like API keys and credentials.
  * When stored in alchemy state files, the value is automatically encrypted
@@ -85,12 +87,21 @@ export function secret<S extends string | undefined>(unencrypted: S): Secret {
 }
 
 export namespace secret {
-  export async function env(
+  export interface Env {
+    [key: string]: Promise<Secret>;
+    (name: string, value?: string, error?: string): Promise<Secret>;
+  }
+
+  export const env = new Proxy(_env, {
+    get: (_, name: string) => _env(name),
+    apply: (_, __, args: [string, any?, string?]) => _env(...args),
+  }) as Env;
+
+  async function _env(
     name: string,
     value?: string,
     error?: string
   ): Promise<Secret> {
-    const alchemy = await import("./alchemy");
     const result = await alchemy.env(name, value, error);
     if (typeof result === "string") {
       return secret(result);

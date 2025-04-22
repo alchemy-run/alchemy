@@ -4,6 +4,7 @@
   "references": [
     { "path": "./alchemy/tsconfig.json" },
     { "path": "./examples/aws-app/tsconfig.json" },
-    { "path": "./examples/cloudflare-vite/tsconfig.json" }
+    { "path": "./examples/cloudflare-vite/tsconfig.json" },
+    { "path": "./tsconfig.stacks.json" }
   ]
 }
