@@ -3,14 +3,10 @@
   "include": ["src/**/*"],
   "compilerOptions": {
     "composite": true,
-    "tsBuildInfoFile": null,
-    "types": ["@cloudflare/workers-types", "@types/node"],
-    "rootDir": "./src",
-    "outDir": "./lib",
+
     "noEmit": false,
-    "esModuleInterop": true,
-    "module": "Preserve",
-    "moduleResolution": "Bundler",
-    "target": "ESNext"
+    "outDir": "./lib",
+    "rootDir": "./src",
+    "types": ["@cloudflare/workers-types", "@types/node"]
   }
 }

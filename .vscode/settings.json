@@ -30,7 +30,7 @@
   "[json]": {
     "editor.indentSize": 2,
     "editor.insertSpaces": true,
-    "editor.defaultFormatter": "biomejs.biome"
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "[typescript][javascript][tsx][jsx]": {
     "editor.indentSize": 2,

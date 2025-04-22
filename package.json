@@ -6,13 +6,13 @@
   "module": "./lib/index.js",
   "license": "Apache-2.0",
   "scripts": {
-    "deploy:website": "bun ./stacks/website.run.ts",
-    "deploy:repo": "bun ./stacks/repo.run.ts",
-    "generate:docs": "bun ./stacks/docs.run.ts",
     "build": "tsc -b",
     "check": "tsc -b ./tsconfig.json",
-    "test": "bun ./alchemy/test/run.ts",
-    "publish:npm": "bun run --filter alchemy publish:npm"
+    "deploy:repo": "bun ./stacks/repo.run.ts",
+    "deploy:website": "bun ./stacks/website.run.ts",
+    "generate:docs": "bun ./stacks/docs.run.ts",
+    "publish:npm": "bun run --filter alchemy publish:npm",
+    "test": "bun ./alchemy/test/run.ts"
   },
   "workspaces": ["alchemy", "alchemy-web", "examples/*"],
   "devDependencies": {

@@ -1,7 +1,8 @@
 {
-    "extends": "./tsconfig.base.json",
-    "include": ["./stacks/**/*.ts"],
-    "compilerOptions": {
-        "noEmit": true
-    }
+  "extends": "./tsconfig.base.json",
+  "include": ["./stacks/**/*.ts"],
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "references": [{ "path": "./alchemy/tsconfig.json" }]
 }
