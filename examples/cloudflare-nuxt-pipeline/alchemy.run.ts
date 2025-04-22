@@ -1,14 +1,14 @@
-import alchemy from "../../alchemy/src";
-import { NuxtSite, Pipeline, R2Bucket } from "../../alchemy/src/cloudflare";
+import alchemy from "alchemy";
+import { NuxtSite, Pipeline, R2Bucket } from "alchemy/cloudflare";
 
 const R2_BUCKET_NAME = "example-bucket";
 const PIPELINE_NAME = "example-pipeline";
 
-const app = await alchemy("app", {
+const app = await alchemy("nuxt-pipeline", {
   stage: process.env.USER ?? "dev",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   quiet: !process.argv.includes("--verbose"),
-  password: process.env.ALCHEMY_PASS,
+  password: process.env.ALCHEMY_PASSWORD,
 });
 
 const bucket = await R2Bucket("bucket", {
