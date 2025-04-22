@@ -4,7 +4,7 @@ order: 3 # Adjust order as needed
 
 # Full Stack Nuxt 3 with Pipeline
 
-This guide walks through deploying a full-stack Nuxt 3 application with a backend Pipeline to Cloudflare using Alchemy and `NuxtSite`.
+This guide walks through deploying a full-stack Nuxt 3 application with a backend Pipeline to Cloudflare using Alchemy and `Nuxt`.
 
 ## Create the Nuxt 3 Project
 
@@ -31,7 +31,7 @@ export default defineNuxtConfig({
   compatibilityDate: "2025-04-21", // Example date, use current recommended
   devtools: { enabled: true },
   nitro: {
-    // Must use the cloudflare-module preset for NuxtSite to work correctly
+    // Must use the cloudflare-module preset for Nuxt to work correctly
     preset: "cloudflare-module",
     prerender: {
       routes: ["/"], // Prerender root for static hosting part
@@ -48,7 +48,7 @@ Create the `alchemy.run.ts` script in the root of the Nuxt 3 project.
 ```typescript
 // ./alchemy.run.ts
 import alchemy from "alchemy";
-import { Pipeline, R2Bucket, NuxtSite } from "alchemy/cloudflare";
+import { Pipeline, R2Bucket, Nuxt } from "alchemy/cloudflare";
 
 const R2_BUCKET_NAME = "example-bucket";
 const PIPELINE_NAME = "example-pipeline";
@@ -86,10 +86,10 @@ const pipeline = await Pipeline("pipeline", {
   },
 });
 
-export const website = await NuxtSite("website", {
-  // command: "bun run build", // Defaulted by NuxtSite
-  // main: "./index.ts", // Defaulted by NuxtSite
-  // assets: "./.output/public/", // Defaulted by NuxtSite
+export const website = await Nuxt("website", {
+  // command: "bun run build", // Defaulted by Nuxt
+  // main: "./index.ts", // Defaulted by Nuxt
+  // assets: "./.output/public/", // Defaulted by Nuxt
   bindings: {
     R2_BUCKET: bucket,
     PIPELINE: pipeline,
@@ -241,10 +241,10 @@ Create an `env.d.ts` file in the project root to get type hints for the Cloudfla
 // ./env.d.ts
 /// <reference types="@cloudflare/workers-types" />
 
-// Import the type from the exported NuxtSite resource
+// Import the type from the exported Nuxt resource
 import type { website } from './alchemy.run';
 
-// Define the environment type based on the NuxtSite bindings
+// Define the environment type based on the Nuxt bindings
 export type WorkerEnv = typeof website.Env;
 
 declare module 'cloudflare:workers' {

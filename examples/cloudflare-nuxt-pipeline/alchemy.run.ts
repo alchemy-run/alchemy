@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { NuxtSite, Pipeline, R2Bucket } from "alchemy/cloudflare";
+import { Nuxt, Pipeline, R2Bucket } from "alchemy/cloudflare";
 
 const R2_BUCKET_NAME = "example-bucket";
 const PIPELINE_NAME = "example-pipeline";
@@ -37,7 +37,7 @@ const pipeline = await Pipeline("pipeline", {
   },
 });
 
-export const website = await NuxtSite("website", {
+export const website = await Nuxt("website", {
   bindings: {
     R2_BUCKET: bucket,
     PIPELINE: pipeline,

@@ -4,17 +4,17 @@ import { Website, type WebsiteProps } from "./website";
 import type { Worker } from "./worker";
 
 /**
- * Properties for creating a NuxtSite resource.
+ * Properties for creating a Nuxt resource.
  * Extends WebsiteProps, allowing customization of the underlying Website.
  */
-export interface NuxtSiteProps<B extends Bindings> extends WebsiteProps<B> {}
+export interface NuxtProps<B extends Bindings> extends WebsiteProps<B> {}
 
 /**
- * Represents the output of a NuxtSite resource deployment.
+ * Represents the output of a Nuxt resource deployment.
  * It resolves to the underlying Cloudflare Worker type, ensuring type safety.
  * Prevents overriding the internal ASSETS binding.
  */
-export type NuxtSite<B extends Bindings> = B extends { ASSETS: any }
+export type Nuxt<B extends Bindings> = B extends { ASSETS: any }
   ? never
   : Worker<B & { ASSETS: Assets }>;
 
@@ -33,22 +33,22 @@ export type NuxtSite<B extends Bindings> = B extends { ASSETS: any }
  *
  * @example
  * // Deploy a basic Nuxt site with default settings
- * const nuxtSite = await NuxtSite("my-nuxt-app");
+ * const nuxtSite = await Nuxt("my-nuxt-app");
  *
  * @example
  * // Deploy with custom bindings and build command
  * const db = await D1Database("my-db");
- * const nuxtSiteWithDb = await NuxtSite("my-nuxt-app-with-db", {
+ * const nuxtSiteWithDb = await Nuxt("my-nuxt-app-with-db", {
  *   command: "npm run build:cloudflare", // Specify a custom build command
  *   bindings: {
  *     DB: db, // Add custom bindings
  *   },
  * });
  */
-export async function NuxtSite<B extends Bindings>(
+export async function Nuxt<B extends Bindings>(
   id: string,
-  props?: Partial<NuxtSiteProps<B>>
-): Promise<NuxtSite<B>> {
+  props?: Partial<NuxtProps<B>>
+): Promise<Nuxt<B>> {
   // Call the underlying Website resource with Nuxt defaults
   return Website(id, {
     ...props,
