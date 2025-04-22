@@ -87,11 +87,9 @@ const pipeline = await Pipeline("pipeline", {
 });
 
 export const website = await NuxtSite("website", {
-  command: "bun run build",
-  // Nuxt outputs server to .output/server/index.mjs with cloudflare-module preset
-  main: "./index.ts",
-  // Nuxt outputs static assets to .output/public
-  assets: "./.output/public/",
+  // command: "bun run build", // Defaulted by NuxtSite
+  // main: "./index.ts", // Defaulted by NuxtSite
+  // assets: "./.output/public/", // Defaulted by NuxtSite
   bindings: {
     R2_BUCKET: bucket,
     PIPELINE: pipeline,
