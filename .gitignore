@@ -6,6 +6,6 @@ lib/
 .env
 *.tsbuildinfo
 
-.alchemy/*
-!.alchemy/github:alchemy/
-examples/*/.alchemy
+.alchemy/
+# !.alchemy/github:alchemy/
+# examples/*/.alchemy

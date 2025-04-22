@@ -1,0 +1,140 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { alchemy } from "../alchemy";
+import { Exec } from "../os";
+import { Assets } from "./assets";
+import type { Bindings } from "./bindings";
+import { Worker, type AssetsConfig, type WorkerProps } from "./worker";
+import { WranglerJson } from "./wrangler.json";
+
+export interface WebsiteProps<B extends Bindings>
+  extends Omit<WorkerProps<B>, "name" | "assets"> {
+  /**
+   * The command to run to build the site
+   */
+  command: string;
+  /**
+   * The name of the worker
+   *
+   * @default id
+   */
+  name?: string;
+  /**
+   * The entrypoint to your server
+   *
+   * @default - a simple server that serves static assets is generated
+   */
+  main?: string;
+  /**
+   * The directory containing your static assets
+   *
+   * @default "./dist"
+   */
+  assets?:
+    | string
+    | ({
+        dist?: string;
+      } & AssetsConfig);
+  /**
+   * @default process.cwd()
+   */
+  cwd?: string;
+
+  /**
+   * Write a wrangler.jsonc file
+   *
+   * @default - no wrangler.jsonc file is written
+   */
+  wrangler?: boolean | string;
+}
+
+export type Website<B extends Bindings> = B extends { ASSETS: any }
+  ? never
+  : Worker<B & { ASSETS: Assets }>;
+
+export async function Website<B extends Bindings>(
+  id: string,
+  props: WebsiteProps<B>
+): Promise<Website<B>> {
+  if (props.bindings?.ASSETS) {
+    throw new Error("ASSETS binding is reserved for internal use");
+  }
+
+  return alchemy.run(id, async () => {
+    // building the site requires a wrangler.jsonc file to start
+    // - so initialize an empty one if it doesn't exist
+
+    const cwd = path.resolve(props.cwd || process.cwd());
+    const fileName =
+      typeof props.wrangler === "boolean" ? "wrangler.jsonc" : props.wrangler;
+    const wranglerPath =
+      fileName && path.relative(cwd, path.join(cwd, fileName));
+
+    if (props.wrangler) {
+      try {
+        await fs.access(wranglerPath!);
+      } catch {
+        await fs.writeFile(
+          wranglerPath!,
+          JSON.stringify(
+            {
+              name: id,
+              main: props.main,
+              compatibility_date: new Date().toISOString().split("T")[0],
+            },
+            null,
+            2
+          )
+        );
+      }
+    }
+
+    await Exec("build", {
+      command: props.command,
+    });
+
+    const dist =
+      typeof props.assets === "string"
+        ? props.assets
+        : (props.assets?.dist ?? "dist");
+
+    const staticAssets = await Assets("assets", {
+      path: dist,
+    });
+
+    const worker = await Worker("worker", {
+      ...props,
+      name: props.name ?? id,
+      entrypoint: props.main,
+      assets: {
+        html_handling: "auto-trailing-slash",
+        not_found_handling: "single-page-application",
+        run_worker_first: false,
+        ...(typeof props.assets === "string" ? {} : props.assets),
+      },
+      script: props.main
+        ? undefined
+        : `
+export default {
+async fetch(request, env) {
+  return new Response("Not Found", { status: 404 });
+},
+};`,
+      url: true,
+      adopt: true,
+      bindings: {
+        ...props.bindings,
+        ASSETS: staticAssets,
+      },
+    });
+
+    if (props.wrangler) {
+      await WranglerJson("wrangler.jsonc", {
+        path: wranglerPath,
+        worker,
+      });
+    }
+
+    return worker as Website<B>;
+  });
+}
