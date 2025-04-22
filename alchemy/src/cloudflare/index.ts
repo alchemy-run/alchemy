@@ -13,6 +13,7 @@ export * from "./permission-groups";
 export * from "./pipeline";
 export * from "./queue";
 export * from "./r2-rest-state-store";
+export * from "./shim";
 export * from "./tanstack-start";
 export * from "./vectorize-index";
 export * from "./vectorize-metadata-index";

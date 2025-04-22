@@ -1,15 +1,19 @@
-import { notFound } from '@tanstack/react-router'
-import { createServerFn } from '@tanstack/react-start'
+import { notFound } from '@tanstack/react-router';
+import { createServerFn } from '@tanstack/react-start';
+
+import { env } from "cloudflare:workers";
 
 export type PostType = {
-  id: string
-  title: string
-  body: string
-}
+  id: string;
+  title: string;
+  body: string;
+};
 
 export const fetchPost = createServerFn({ method: 'GET' })
   .validator((d: string) => d)
   .handler(async ({ data }) => {
+    await env.BUCKET.list();
+
     console.info(`Fetching post with id ${data}...`)
     const res = await fetch(
       `https://jsonplaceholder.typicode.com/posts/${data}`,
