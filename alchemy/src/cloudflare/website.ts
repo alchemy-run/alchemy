@@ -8,7 +8,7 @@ import { Worker, type AssetsConfig, type WorkerProps } from "./worker";
 import { WranglerJson } from "./wrangler.json";
 
 export interface WebsiteProps<B extends Bindings>
-  extends Omit<WorkerProps<B>, "name" | "assets"> {
+  extends Omit<WorkerProps<B>, "name" | "assets" | "entrypoint"> {
   /**
    * The command to run to build the site
    */

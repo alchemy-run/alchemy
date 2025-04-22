@@ -19,7 +19,7 @@ export async function TanStackStart<B extends Bindings>(
     ...props,
     command: props?.command ?? "bun run build",
     wrangler: props?.wrangler ?? false,
-    entrypoint: props?.entrypoint ?? ".output/server/index.mjs",
+    main: props?.main ?? ".output/server/index.mjs",
     compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
     assets: props?.assets ?? ".output/public",
   });
