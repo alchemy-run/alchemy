@@ -112,6 +112,15 @@ export default defineConfig({
 > cloudflareWorkersDevEnvironmentShim(),
 > ```
 
+## Modify DEPLOY_URL
+
+Modify `./src/utils/users.tsx` to support non-local domains:
+
+```ts
+// must check if window is not undefined since the bundler also places this code server-side
+export const DEPLOY_URL = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+```
+
 ## Deploy Your Application
 
 Login to Cloudflare:
