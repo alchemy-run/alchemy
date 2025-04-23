@@ -164,17 +164,13 @@ export const AiGateway = Resource(
     if (this.phase === "delete") {
       try {
         const deleteResponse = await api.delete(gatewayPath);
+        // Only swallow 404 Not Found errors, all other errors should be handled
         if (!deleteResponse.ok && deleteResponse.status !== 404) {
           await handleApiError(deleteResponse, "delete", "ai gateway", id);
         }
       } catch (error) {
-        // Only swallow 404 errors, re-throw all others
-        if (error instanceof Response && error.status === 404) {
-          console.log(`AI Gateway ${id} not found, skipping delete.`);
-        } else {
-          console.error(`Error deleting AI Gateway ${id}:`, error);
-          throw error;
-        }
+        console.error(`Error deleting AI Gateway ${id}:`, error);
+        throw error;
       }
       return this.destroy();
     }
