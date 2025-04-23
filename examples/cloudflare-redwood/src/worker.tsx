@@ -1,5 +1,6 @@
 import { index, render } from "@redwoodjs/sdk/router";
 import { defineApp } from "@redwoodjs/sdk/worker";
+import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import { Document } from "src/Document";
 import { setCommonHeaders } from "src/headers";
@@ -13,11 +14,11 @@ export type AppContext = {
   db: ReturnType<typeof drizzle>;
 };
 
-export default defineApp<AppContext>([
+export default defineApp([
   setCommonHeaders(),
-  ({ appContext, env }) => {
+  ({ ctx }) => {
     // setup db in appContext
-    appContext.db = drizzle(env.DB);
+    ctx.db = drizzle(env.DB);
   },
   render(Document, [index([Home])]),
 ]);
