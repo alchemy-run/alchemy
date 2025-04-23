@@ -15,7 +15,7 @@
     },
     "alchemy": {
       "name": "alchemy",
-      "version": "0.12.3",
+      "version": "0.12.4",
       "devDependencies": {
         "@ai-sdk/anthropic": "^1.1.6",
         "@ai-sdk/openai": "^1.1.9",

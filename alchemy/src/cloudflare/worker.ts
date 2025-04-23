@@ -736,6 +736,12 @@ async function prepareWorkerMetadata<B extends Bindings>(
         name: bindingName,
         index_name: binding.name,
       });
+    } else if (binding.type === "ai_gateway") {
+      // AI Gateway binding - just needs the name property
+      meta.bindings.push({
+        type: "ai",
+        name: bindingName,
+      });
     } else {
       // @ts-expect-error - we should never reach here
       throw new Error(`Unsupported binding type: ${binding.type}`);
