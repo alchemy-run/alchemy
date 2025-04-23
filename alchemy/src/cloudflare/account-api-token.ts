@@ -1,9 +1,9 @@
-import { alchemy } from "../alchemy";
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import { Secret } from "../secret";
-import { sha256 } from "../util/sha256";
-import { createCloudflareApi, type CloudflareApiOptions } from "./api";
+import { alchemy } from "../alchemy.js";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { Secret } from "../secret.js";
+import { sha256 } from "../util/sha256.js";
+import { createCloudflareApi, type CloudflareApiOptions } from "./api.js";
 
 /**
  * Permission group for a token policy

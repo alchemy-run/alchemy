@@ -1,4 +1,4 @@
-import { File } from "./file";
+import { File } from "./file.js";
 
 export type StaticHTMLFile = File;
 

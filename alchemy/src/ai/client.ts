@@ -1,6 +1,6 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { openai } from "@ai-sdk/openai";
-import type { Secret } from "../secret";
+import type { Secret } from "../secret.js";
 
 /**
  * Model configuration for AI operations

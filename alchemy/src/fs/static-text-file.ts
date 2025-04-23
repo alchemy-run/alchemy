@@ -1,4 +1,4 @@
-import { File } from "./file";
+import { File } from "./file.js";
 
 /**
  * Creates a plain text file
@@ -13,9 +13,7 @@ export type StaticTextFile = File;
 
 export function StaticTextFile(
   id: string,
-  ...args: 
-  | [content: string]
-  | [path: string, content: string]
+  ...args: [content: string] | [path: string, content: string]
 ): Promise<StaticTextFile> {
   const [path, content] = args.length === 1 ? [id, args[0]] : args;
   return File(id, {

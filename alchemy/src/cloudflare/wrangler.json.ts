@@ -1,9 +1,9 @@
-import type { Context } from "../context";
-import { StaticJsonFile } from "../fs/static-json-file";
-import { Resource } from "../resource";
-import type { Bindings } from "./bindings";
-import type { DurableObjectNamespace } from "./durable-object-namespace";
-import type { Worker } from "./worker";
+import type { Context } from "../context.js";
+import { StaticJsonFile } from "../fs/static-json-file.js";
+import { Resource } from "../resource.js";
+import type { Bindings } from "./bindings.js";
+import type { DurableObjectNamespace } from "./durable-object-namespace.js";
+import type { Worker } from "./worker.js";
 
 /**
  * Properties for wrangler.json configuration file

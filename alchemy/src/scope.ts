@@ -1,8 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { destroy } from "./destroy";
-import { FileSystemStateStore } from "./fs/file-system-state-store";
-import type { PendingResource, ResourceID } from "./resource";
-import type { StateStore, StateStoreType } from "./state";
+import { destroy } from "./destroy.js";
+import { FileSystemStateStore } from "./fs/file-system-state-store.js";
+import type { PendingResource, ResourceID } from "./resource.js";
+import type { StateStore, StateStoreType } from "./state.js";
 
 const scopeStorage = new AsyncLocalStorage<Scope>();
 

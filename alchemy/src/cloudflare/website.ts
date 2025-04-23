@@ -1,11 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { alchemy } from "../alchemy";
-import { Exec } from "../os";
-import { Assets } from "./assets";
-import type { Bindings } from "./bindings";
-import { Worker, type AssetsConfig, type WorkerProps } from "./worker";
-import { WranglerJson } from "./wrangler.json";
+import { alchemy } from "../alchemy.js";
+import { Exec } from "../os/exec.js";
+import { Assets } from "./assets.js";
+import type { Bindings } from "./bindings.js";
+import { Worker, type AssetsConfig, type WorkerProps } from "./worker.js";
+import { WranglerJson } from "./wrangler.json.js";
 
 export interface WebsiteProps<B extends Bindings>
   extends Omit<WorkerProps<B>, "name" | "assets" | "entrypoint"> {

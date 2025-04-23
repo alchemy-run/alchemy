@@ -1,8 +1,8 @@
 import yaml from "yaml";
-import { Document } from "../../ai/document";
-import { alchemy } from "../../alchemy";
-import { StaticTextFile } from "../../fs/static-text-file";
-import type { Secret } from "../../secret";
+import { Document } from "../../ai/document.js";
+import { alchemy } from "../../alchemy.js";
+import { StaticTextFile } from "../../fs/static-text-file.js";
+import type { Secret } from "../../secret.js";
 
 /**
  * Image that can be themed for light/dark mode

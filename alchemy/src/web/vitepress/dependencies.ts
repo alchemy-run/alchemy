@@ -1,7 +1,7 @@
-import { exec } from "child_process";
-import { promisify } from "util";
-import type { Context } from "../../context";
-import { Resource } from "../../resource";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
+import type { Context } from "../../context.js";
+import { Resource } from "../../resource.js";
 
 const execAsync = promisify(exec);
 
@@ -23,7 +23,7 @@ export const InstallDependencies = Resource(
       cwd: string;
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
-    },
+    }
   ) {
     if (this.phase === "delete") {
       return this.destroy();
@@ -34,7 +34,7 @@ export const InstallDependencies = Resource(
     await execAsync("bun install", { cwd });
 
     return this({});
-  },
+  }
 );
 
 function isInstallableVersion(version: string) {
@@ -46,8 +46,8 @@ export function fixedDependencies(dependencies?: Record<string, string>) {
   if (!dependencies) return {};
   return Object.fromEntries(
     Object.entries(dependencies).filter(
-      ([, value]) => !isInstallableVersion(value),
-    ),
+      ([, value]) => !isInstallableVersion(value)
+    )
   );
 }
 

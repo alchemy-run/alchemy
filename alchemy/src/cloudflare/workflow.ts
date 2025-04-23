@@ -1,5 +1,5 @@
-import type { CloudflareApi } from "./api";
-import { handleApiError } from "./api-error";
+import { handleApiError } from "./api-error.js";
+import type { CloudflareApi } from "./api.js";
 
 export interface WorkflowProps {
   /**

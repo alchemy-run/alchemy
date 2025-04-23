@@ -1,9 +1,9 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { Secret } from "../secret";
-import type { CloudflareAccountId } from "./account-id";
-import { handleApiError } from "./api-error";
+import type { Secret } from "../secret.js";
+import type { CloudflareAccountId } from "./account-id.js";
+import { handleApiError } from "./api-error.js";
 /**
  * Authentication options for Cloudflare API
  */
@@ -260,7 +260,7 @@ async function getRefreshedAuthConfig(): Promise<WranglerConfig> {
 }
 
 async function writeWranglerConfig(config: WranglerConfig) {
-  if (config.exists === false) return
+  if (config.exists === false) return;
 
   const TOML = await import("@iarna/toml");
   const configPath = await findWranglerConfig();
@@ -284,17 +284,17 @@ async function readWranglerConfig(): Promise<WranglerConfig> {
     ));
     config.path = configPath;
 
-    return config
+    return config;
   } catch (e: any) {
     if (e.code === "ENOENT") {
       // The config doesn't exist
       return {
         path: configPath,
-        exists: false
-      }
+        exists: false,
+      };
     }
 
-    throw e
+    throw e;
   }
 }
 

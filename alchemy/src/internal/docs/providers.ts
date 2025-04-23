@@ -1,10 +1,10 @@
 import { type } from "arktype";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Data } from "../../ai/data";
-import { Document } from "../../ai/document";
-import { alchemy } from "../../alchemy";
-import { Folder } from "../../fs/folder";
+import { Data } from "../../ai/data.js";
+import { Document } from "../../ai/document.js";
+import { alchemy } from "../../alchemy.js";
+import { Folder } from "../../fs/folder.js";
 
 export interface DocsProps {
   /**

@@ -4,9 +4,9 @@ import {
   IAMClient,
   NoSuchEntityException,
 } from "@aws-sdk/client-iam";
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import { ignore } from "../util/ignore";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { ignore } from "../util/ignore.js";
 
 /**
  * Properties for creating or updating a policy attachment
@@ -66,7 +66,7 @@ export const PolicyAttachment = Resource(
   async function (
     this: Context<PolicyAttachment>,
     id: string,
-    props: PolicyAttachmentProps,
+    props: PolicyAttachmentProps
   ) {
     const client = new IAMClient({});
 
@@ -76,8 +76,8 @@ export const PolicyAttachment = Resource(
           new DetachRolePolicyCommand({
             PolicyArn: props.policyArn,
             RoleName: props.roleName,
-          }),
-        ),
+          })
+        )
       );
       return this.destroy();
     } else {
@@ -85,10 +85,10 @@ export const PolicyAttachment = Resource(
         new AttachRolePolicyCommand({
           PolicyArn: props.policyArn,
           RoleName: props.roleName,
-        }),
+        })
       );
     }
 
     return this(props);
-  },
+  }
 );

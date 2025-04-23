@@ -1,6 +1,6 @@
-import type { Secret } from "../secret";
-import { withExponentialBackoff } from "../util/retry";
-import { getCloudflareAuthHeaders, getCloudflareUserInfo } from "./auth";
+import type { Secret } from "../secret.js";
+import { withExponentialBackoff } from "../util/retry.js";
+import { getCloudflareAuthHeaders, getCloudflareUserInfo } from "./auth.js";
 
 /**
  * Options for Cloudflare API requests

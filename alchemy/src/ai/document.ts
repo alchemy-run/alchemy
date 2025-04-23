@@ -1,9 +1,9 @@
 import { generateText, type CoreMessage } from "ai";
-import type { Context } from "../context";
-import { StaticTextFile } from "../fs/static-text-file";
-import { Resource } from "../resource";
-import type { Secret } from "../secret";
-import { createModel, withRateLimitRetry, type ModelConfig } from "./client";
+import type { Context } from "../context.js";
+import { StaticTextFile } from "../fs/static-text-file.js";
+import { Resource } from "../resource.js";
+import type { Secret } from "../secret.js";
+import { createModel, withRateLimitRetry, type ModelConfig } from "./client.js";
 
 /**
  * Properties for creating or updating a Document

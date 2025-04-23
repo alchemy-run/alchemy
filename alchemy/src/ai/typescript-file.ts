@@ -1,9 +1,9 @@
 import { generateText } from "ai";
-import type { Context } from "../context";
-import { StaticTypeScriptFile } from "../fs/static-typescript-file";
-import { Resource } from "../resource";
-import type { Secret } from "../secret";
-import { createModel, type ModelConfig } from "./client";
+import type { Context } from "../context.js";
+import { StaticTypeScriptFile } from "../fs/static-typescript-file.js";
+import { Resource } from "../resource.js";
+import type { Secret } from "../secret.js";
+import { createModel, type ModelConfig } from "./client.js";
 
 /**
  * Properties for creating or updating a TypeScriptFile

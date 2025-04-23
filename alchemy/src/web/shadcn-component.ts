@@ -1,10 +1,10 @@
-import { exec } from "child_process";
+import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "util";
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import { ignore } from "../util/ignore";
+import { promisify } from "node:util";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { ignore } from "../util/ignore.js";
 
 const execAsync = promisify(exec);
 

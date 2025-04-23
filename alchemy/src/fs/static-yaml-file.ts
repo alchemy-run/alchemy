@@ -1,4 +1,4 @@
-import { File } from "./file";
+import { File } from "./file.js";
 /**
  * Creates a YAML file with formatted content
  *

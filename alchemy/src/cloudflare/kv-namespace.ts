@@ -1,12 +1,12 @@
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import { withExponentialBackoff } from "../util/retry";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { withExponentialBackoff } from "../util/retry.js";
+import { handleApiError } from "./api-error.js";
 import {
   CloudflareApi,
   createCloudflareApi,
   type CloudflareApiOptions,
-} from "./api";
-import { handleApiError } from "./api-error";
+} from "./api.js";
 
 /**
  * Properties for creating or updating a KV Namespace

@@ -8,10 +8,10 @@ import {
   ResourceInUseException,
   ResourceNotFoundException,
 } from "@aws-sdk/client-dynamodb";
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import { ignore } from "../util/ignore";
-import { withExponentialBackoff } from "../util/retry";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { ignore } from "../util/ignore.js";
+import { withExponentialBackoff } from "../util/retry.js";
 
 /**
  * Properties for creating or updating a DynamoDB table

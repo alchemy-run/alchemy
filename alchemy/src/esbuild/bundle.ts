@@ -2,8 +2,8 @@ import esbuild from "esbuild";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Context } from "../context";
-import { Resource } from "../resource";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
 
 /**
  * Properties for creating or updating an esbuild bundle
@@ -201,7 +201,7 @@ export async function bundle(props: BundleProps) {
     minify: props.minify,
     sourcemap: props.sourcemap,
     external: [
-      "node:async_hooks",
+      "node:*",
       ...(props.external ?? []),
       ...(props.options?.external ?? []),
     ],

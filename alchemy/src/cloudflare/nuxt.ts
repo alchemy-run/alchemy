@@ -1,7 +1,7 @@
-import type { Assets } from "./assets";
-import type { Bindings } from "./bindings";
-import { Website, type WebsiteProps } from "./website";
-import type { Worker } from "./worker";
+import type { Assets } from "./assets.js";
+import type { Bindings } from "./bindings.js";
+import { Website, type WebsiteProps } from "./website.js";
+import type { Worker } from "./worker.js";
 
 /**
  * Properties for creating a Nuxt resource.

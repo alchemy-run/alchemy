@@ -1,3 +1,3 @@
-export * from "./price";
-export * from "./product";
-export * from "./webhook";
+export * from "./price.js";
+export * from "./product.js";
+export * from "./webhook.js";

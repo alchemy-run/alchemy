@@ -1,11 +1,11 @@
-import type { Context } from "../context";
-import { Resource } from "../resource";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
-  CloudflareApi,
   createCloudflareApi,
+  type CloudflareApi,
   type CloudflareApiOptions,
-} from "./api";
-import { CloudflareApiError, handleApiError } from "./api-error";
+} from "./api.js";
 
 /**
  * Properties for creating or updating a Vectorize Index

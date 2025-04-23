@@ -1,6 +1,6 @@
 import Stripe from "stripe";
-import type { Context } from "../context";
-import { Resource } from "../resource";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
 
 export type EnabledEvent = Stripe.WebhookEndpointUpdateParams.EnabledEvent;
 
@@ -136,7 +136,7 @@ export const WebhookEndpoint = Resource(
   async function (
     this: Context<WebhookEndpoint>,
     id: string,
-    props: WebhookEndpointProps,
+    props: WebhookEndpointProps
   ) {
     // Get Stripe API key from context or environment
     const apiKey = process.env.STRIPE_API_KEY;
@@ -185,7 +185,7 @@ export const WebhookEndpoint = Resource(
           if (props.connect !== undefined) {
             // Note: connect is specified at creation time and cannot be updated
             console.log(
-              "Note: 'connect' parameter will be applied at creation time only",
+              "Note: 'connect' parameter will be applied at creation time only"
             );
           }
         }
@@ -219,5 +219,5 @@ export const WebhookEndpoint = Resource(
         throw error;
       }
     }
-  },
+  }
 );

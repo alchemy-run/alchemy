@@ -3,17 +3,17 @@
  * Based on Cloudflare API documentation:
  * https://developers.cloudflare.com/api/resources/workers/subresources/scripts/methods/update/
  */
-import type { Secret } from "../secret";
-import type { Assets } from "./assets";
-import type { R2Bucket } from "./bucket";
-import type { D1Database } from "./d1-database";
-import type { DurableObjectNamespace } from "./durable-object-namespace";
-import type { KVNamespace } from "./kv-namespace";
-import type { Pipeline } from "./pipeline";
-import type { Queue } from "./queue";
-import type { VectorizeIndex } from "./vectorize-index";
-import type { Worker } from "./worker";
-import type { Workflow } from "./workflow";
+import type { Secret } from "../secret.js";
+import type { Assets } from "./assets.js";
+import type { R2Bucket } from "./bucket.js";
+import type { D1Database } from "./d1-database.js";
+import type { DurableObjectNamespace } from "./durable-object-namespace.js";
+import type { KVNamespace } from "./kv-namespace.js";
+import type { Pipeline } from "./pipeline.js";
+import type { Queue } from "./queue.js";
+import type { VectorizeIndex } from "./vectorize-index.js";
+import type { Worker } from "./worker.js";
+import type { Workflow } from "./workflow.js";
 
 export type Bindings = {
   [bindingName: string]: Binding;

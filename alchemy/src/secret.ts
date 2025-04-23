@@ -1,4 +1,4 @@
-import { alchemy } from "./alchemy";
+import { alchemy } from "./alchemy.js";
 
 /**
  * Internal wrapper for sensitive values like API keys and credentials.

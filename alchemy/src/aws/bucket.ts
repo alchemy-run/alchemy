@@ -10,9 +10,9 @@ import {
   PutBucketTaggingCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import { ignore } from "../util/ignore";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { ignore } from "../util/ignore.js";
 
 /**
  * Properties for creating or updating an S3 bucket
@@ -136,8 +136,8 @@ export const Bucket = Resource(
         client.send(
           new DeleteBucketCommand({
             Bucket: props.bucketName,
-          }),
-        ),
+          })
+        )
       );
       return this.destroy();
     } else {
@@ -146,7 +146,7 @@ export const Bucket = Resource(
         await client.send(
           new HeadBucketCommand({
             Bucket: props.bucketName,
-          }),
+          })
         );
 
         // Update tags if they changed and bucket exists
@@ -160,7 +160,7 @@ export const Bucket = Resource(
                   Value,
                 })),
               },
-            }),
+            })
           );
         }
       } catch (error: any) {
@@ -178,7 +178,7 @@ export const Bucket = Resource(
                   })),
                 },
               }),
-            }),
+            })
           );
         } else {
           throw error;
@@ -189,10 +189,10 @@ export const Bucket = Resource(
       const [locationResponse, versioningResponse, aclResponse] =
         await Promise.all([
           client.send(
-            new GetBucketLocationCommand({ Bucket: props.bucketName }),
+            new GetBucketLocationCommand({ Bucket: props.bucketName })
           ),
           client.send(
-            new GetBucketVersioningCommand({ Bucket: props.bucketName }),
+            new GetBucketVersioningCommand({ Bucket: props.bucketName })
           ),
           client.send(new GetBucketAclCommand({ Bucket: props.bucketName })),
         ]);
@@ -204,10 +204,10 @@ export const Bucket = Resource(
       if (!tags) {
         try {
           const taggingResponse = await client.send(
-            new GetBucketTaggingCommand({ Bucket: props.bucketName }),
+            new GetBucketTaggingCommand({ Bucket: props.bucketName })
           );
           tags = Object.fromEntries(
-            taggingResponse.TagSet?.map(({ Key, Value }) => [Key, Value]) || [],
+            taggingResponse.TagSet?.map(({ Key, Value }) => [Key, Value]) || []
           );
         } catch (error: any) {
           if (error.name !== "NoSuchTagSet") {
@@ -228,7 +228,7 @@ export const Bucket = Resource(
         ...(tags && { tags }),
       });
     }
-  },
+  }
 );
 
 /**

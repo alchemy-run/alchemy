@@ -1,10 +1,10 @@
 import { generateText } from "ai";
 import prettier from "prettier";
-import type { Context } from "../context";
-import { StaticAstroFile } from "../fs/static-astro-file";
-import { Resource } from "../resource";
-import type { Secret } from "../secret";
-import { type ModelConfig, createModel } from "./client";
+import type { Context } from "../context.js";
+import { StaticAstroFile } from "../fs/static-astro-file.js";
+import { Resource } from "../resource.js";
+import type { Secret } from "../secret.js";
+import { type ModelConfig, createModel } from "./client.js";
 
 /**
  * Properties for creating or updating an AstroFile

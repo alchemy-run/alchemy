@@ -1,7 +1,7 @@
-import { alchemy } from "./alchemy";
-import { context } from "./context";
-import { PROVIDERS, type Provider, type Resource } from "./resource";
-import { Scope } from "./scope";
+import { alchemy } from "./alchemy.js";
+import { context } from "./context.js";
+import { PROVIDERS, type Provider, type Resource } from "./resource.js";
+import { Scope } from "./scope.js";
 
 export class DestroyedSignal extends Error {}
 

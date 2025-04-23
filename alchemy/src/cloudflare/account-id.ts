@@ -1,4 +1,4 @@
-import { getCloudflareUserInfo, type CloudflareAuthOptions } from "./auth";
+import { getCloudflareUserInfo, type CloudflareAuthOptions } from "./auth.js";
 
 export type CloudflareAccountId = string & {
   readonly __brand: "CloudflareAccountId";

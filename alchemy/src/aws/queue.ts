@@ -5,8 +5,8 @@ import {
   GetQueueUrlCommand,
   SQSClient,
 } from "@aws-sdk/client-sqs";
-import type { Context } from "../context";
-import { Resource } from "../resource";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
 
 /**
  * Properties for creating or updating an SQS queue
@@ -137,7 +137,7 @@ export const Queue = Resource(
   async function (
     this: Context<Queue>,
     id: string,
-    props: QueueProps,
+    props: QueueProps
   ): Promise<Queue> {
     const client = new SQSClient({});
     // Don't automatically add .fifo suffix - user must include it in queueName
@@ -154,14 +154,14 @@ export const Queue = Resource(
         const urlResponse = await client.send(
           new GetQueueUrlCommand({
             QueueName: queueName,
-          }),
+          })
         );
 
         // Delete the queue
         await client.send(
           new DeleteQueueCommand({
             QueueUrl: urlResponse.QueueUrl,
-          }),
+          })
         );
 
         // Wait for queue to be deleted
@@ -171,7 +171,7 @@ export const Queue = Resource(
             await client.send(
               new GetQueueUrlCommand({
                 QueueName: queueName,
-              }),
+              })
             );
             // If we get here, queue still exists
             await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -230,7 +230,7 @@ export const Queue = Resource(
       const tags = props.tags
         ? Object.entries(props.tags).reduce(
             (acc, [key, value]) => ({ ...acc, [key]: value }),
-            {},
+            {}
           )
         : undefined;
 
@@ -241,7 +241,7 @@ export const Queue = Resource(
             QueueName: queueName,
             Attributes: attributes,
             tags,
-          }),
+          })
         );
 
         // Get queue attributes
@@ -249,7 +249,7 @@ export const Queue = Resource(
           new GetQueueAttributesCommand({
             QueueUrl: createResponse.QueueUrl,
             AttributeNames: ["QueueArn"],
-          }),
+          })
         );
 
         return this({
@@ -263,7 +263,7 @@ export const Queue = Resource(
           const urlResponse = await client.send(
             new GetQueueUrlCommand({
               QueueName: queueName,
-            }),
+            })
           );
 
           // Get queue attributes
@@ -271,7 +271,7 @@ export const Queue = Resource(
             new GetQueueAttributesCommand({
               QueueUrl: urlResponse.QueueUrl,
               AttributeNames: ["QueueArn"],
-            }),
+            })
           );
 
           return this({
@@ -295,7 +295,7 @@ export const Queue = Resource(
                   QueueName: queueName,
                   Attributes: attributes,
                   tags,
-                }),
+                })
               );
 
               // Get queue attributes
@@ -303,7 +303,7 @@ export const Queue = Resource(
                 new GetQueueAttributesCommand({
                   QueueUrl: createResponse.QueueUrl,
                   AttributeNames: ["QueueArn"],
-                }),
+                })
               );
 
               return this({
@@ -325,5 +325,5 @@ export const Queue = Resource(
         throw error;
       }
     }
-  },
+  }
 );

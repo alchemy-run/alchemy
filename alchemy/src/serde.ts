@@ -1,6 +1,6 @@
-import { decryptWithKey, encrypt } from "./encrypt";
-import { Scope } from "./scope";
-import { Secret } from "./secret";
+import { decryptWithKey, encrypt } from "./encrypt.js";
+import { Scope } from "./scope.js";
+import { Secret } from "./secret.js";
 
 import type { Type } from "arktype";
 

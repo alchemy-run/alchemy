@@ -1,9 +1,9 @@
-export type * from "./context";
-export * from "./resource";
-export type * from "./scope";
-export * from "./secret";
-export * from "./state";
-export * from "./util/ignore";
+export type * from "./context.js";
+export * from "./resource.js";
+export type * from "./scope.js";
+export * from "./secret.js";
+export * from "./state.js";
+export * from "./util/ignore.js";
 
-import { alchemy } from "./alchemy";
+import { alchemy } from "./alchemy.js";
 export default alchemy;

@@ -2,10 +2,10 @@
 
 import { afterAll, beforeAll, it } from "bun:test";
 import path from "node:path";
-import { alchemy } from "../alchemy";
-import { R2RestStateStore } from "../cloudflare/r2-rest-state-store";
-import { Scope } from "../scope";
-import type { StateStoreType } from "../state";
+import { alchemy } from "../alchemy.js";
+import { R2RestStateStore } from "../cloudflare/r2-rest-state-store.js";
+import { Scope } from "../scope.js";
+import type { StateStoreType } from "../state.js";
 
 /**
  * Extend the Alchemy interface to include test functionality

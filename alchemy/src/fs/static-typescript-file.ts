@@ -1,4 +1,4 @@
-import { File } from "./file";
+import { File } from "./file.js";
 
 /**
  * Creates a TypeScript file with formatted content using prettier

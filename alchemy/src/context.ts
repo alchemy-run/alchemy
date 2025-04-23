@@ -1,13 +1,13 @@
-import { DestroyedSignal } from "./destroy";
+import { DestroyedSignal } from "./destroy.js";
 import type {
   Resource,
   ResourceFQN,
   ResourceID,
   ResourceKind,
   ResourceProps,
-} from "./resource";
-import type { Scope } from "./scope";
-import type { State } from "./state";
+} from "./resource.js";
+import type { Scope } from "./scope.js";
+import type { State } from "./state.js";
 
 export type Context<
   Out extends Resource,

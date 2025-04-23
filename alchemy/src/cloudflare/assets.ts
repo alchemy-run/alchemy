@@ -1,8 +1,8 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import { getContentType } from "../util/content-type";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { getContentType } from "../util/content-type.js";
 
 /**
  * Properties for creating or updating Assets

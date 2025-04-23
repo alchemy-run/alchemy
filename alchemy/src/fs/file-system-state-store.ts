@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Scope } from "../scope";
-import { deserialize, serialize } from "../serde";
-import type { State, StateStore } from "../state";
-import { ignore } from "../util/ignore";
+import type { Scope } from "../scope.js";
+import { deserialize, serialize } from "../serde.js";
+import type { State, StateStore } from "../state.js";
+import { ignore } from "../util/ignore.js";
 
 const stateRootDir = path.join(process.cwd(), ".alchemy");
 

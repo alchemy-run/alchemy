@@ -1,23 +1,23 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs/promises";
-import type { Context } from "../context";
-import { Bundle, type BundleProps } from "../esbuild/bundle";
-import { Resource } from "../resource";
-import { getContentType } from "../util/content-type";
-import { withExponentialBackoff } from "../util/retry";
-import { slugify } from "../util/slugify";
+import type { Context } from "../context.js";
+import { Bundle, type BundleProps } from "../esbuild/bundle.js";
+import { Resource } from "../resource.js";
+import { getContentType } from "../util/content-type.js";
+import { withExponentialBackoff } from "../util/retry.js";
+import { slugify } from "../util/slugify.js";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
-} from "./api";
-import { type Assets } from "./assets";
-import { type Bindings, type WorkerBindingSpec } from "./bindings";
-import type { Bound } from "./bound";
-import { type DurableObjectNamespace } from "./durable-object-namespace";
-import type { WorkerScriptMetadata } from "./worker-metadata";
-import type { SingleStepMigration } from "./worker-migration";
-import { upsertWorkflow, type Workflow } from "./workflow";
+} from "./api.js";
+import { type Assets } from "./assets.js";
+import { type Bindings, type WorkerBindingSpec } from "./bindings.js";
+import type { Bound } from "./bound.js";
+import { type DurableObjectNamespace } from "./durable-object-namespace.js";
+import type { WorkerScriptMetadata } from "./worker-metadata.js";
+import type { SingleStepMigration } from "./worker-migration.js";
+import { upsertWorkflow, type Workflow } from "./workflow.js";
 
 /**
  * Configuration options for static assets

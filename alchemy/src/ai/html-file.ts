@@ -1,9 +1,9 @@
 import { generateText } from "ai";
-import type { Context } from "../context";
-import { StaticHTMLFile } from "../fs/static-html-file";
-import { Resource } from "../resource";
-import type { Secret } from "../secret";
-import { type ModelConfig, createModel } from "./client";
+import type { Context } from "../context.js";
+import { StaticHTMLFile } from "../fs/static-html-file.js";
+import { Resource } from "../resource.js";
+import type { Secret } from "../secret.js";
+import { type ModelConfig, createModel } from "./client.js";
 
 /**
  * Properties for creating or updating an HTMLFile

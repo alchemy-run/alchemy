@@ -1,2 +1,2 @@
-export * from "./repository-environment";
-export * from "./secret";
+export * from "./repository-environment.js";
+export * from "./secret.js";

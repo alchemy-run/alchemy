@@ -1,6 +1,6 @@
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import { createCloudflareApi, type CloudflareApiOptions } from "./api";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { createCloudflareApi, type CloudflareApiOptions } from "./api.js";
 
 /**
  * Cloudflare permission group as returned by the API

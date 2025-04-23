@@ -9,8 +9,8 @@ import {
   ListPolicyVersionsCommand,
   NoSuchEntityException,
 } from "@aws-sdk/client-iam";
-import type { Context } from "../context";
-import { Resource } from "../resource";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
 
 /**
  * Type of effect for a policy statement
@@ -230,7 +230,7 @@ export const Policy = Resource(
   async function (
     this: Context<Policy>,
     id: string,
-    props: PolicyProps,
+    props: PolicyProps
   ): Promise<Policy> {
     const client = new IAMClient({});
     const policyArn = `arn:aws:iam::${process.env.AWS_ACCOUNT_ID}:policy${props.path || "/"}${props.policyName}`;
@@ -241,7 +241,7 @@ export const Policy = Resource(
         const versions = await client.send(
           new ListPolicyVersionsCommand({
             PolicyArn: policyArn,
-          }),
+          })
         );
 
         for (const version of versions.Versions || []) {
@@ -250,7 +250,7 @@ export const Policy = Resource(
               new DeletePolicyVersionCommand({
                 PolicyArn: policyArn,
                 VersionId: version.VersionId,
-              }),
+              })
             );
           }
         }
@@ -259,7 +259,7 @@ export const Policy = Resource(
         await client.send(
           new DeletePolicyCommand({
             PolicyArn: policyArn,
-          }),
+          })
         );
       } catch (error: any) {
         if (error.name !== NoSuchEntityException.name) {
@@ -273,7 +273,7 @@ export const Policy = Resource(
         const existingPolicy = await client.send(
           new GetPolicyCommand({
             PolicyArn: policyArn,
-          }),
+          })
         );
 
         // Get current policy version
@@ -281,11 +281,11 @@ export const Policy = Resource(
           new GetPolicyVersionCommand({
             PolicyArn: policyArn,
             VersionId: existingPolicy.Policy!.DefaultVersionId!,
-          }),
+          })
         );
 
         const currentDocument = JSON.parse(
-          decodeURIComponent(currentVersion.PolicyVersion!.Document!),
+          decodeURIComponent(currentVersion.PolicyVersion!.Document!)
         );
 
         // If policy document changed, create new version
@@ -296,13 +296,13 @@ export const Policy = Resource(
           const versions = await client.send(
             new ListPolicyVersionsCommand({
               PolicyArn: policyArn,
-            }),
+            })
           );
 
           // Delete oldest version if we have 5 versions (maximum allowed)
           if (versions.Versions?.length === 5) {
             const oldestVersion = versions.Versions.sort(
-              (a, b) => a.CreateDate!.getTime() - b.CreateDate!.getTime(),
+              (a, b) => a.CreateDate!.getTime() - b.CreateDate!.getTime()
             )[0];
 
             if (!oldestVersion.IsDefaultVersion) {
@@ -310,7 +310,7 @@ export const Policy = Resource(
                 new DeletePolicyVersionCommand({
                   PolicyArn: policyArn,
                   VersionId: oldestVersion.VersionId!,
-                }),
+                })
               );
             }
           }
@@ -321,14 +321,14 @@ export const Policy = Resource(
               PolicyArn: policyArn,
               PolicyDocument: JSON.stringify(props.document),
               SetAsDefault: true,
-            }),
+            })
           );
         }
 
         const policy = await client.send(
           new GetPolicyCommand({
             PolicyArn: policyArn,
-          }),
+          })
         );
 
         return this({
@@ -355,7 +355,7 @@ export const Policy = Resource(
                     Value,
                   }))
                 : undefined,
-            }),
+            })
           );
 
           return this({
@@ -371,5 +371,5 @@ export const Policy = Resource(
         throw error;
       }
     }
-  },
+  }
 );

@@ -1,12 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { destroy, DestroyedSignal } from "./destroy";
-import { env } from "./env";
-import type { PendingResource } from "./resource";
-import { Scope } from "./scope";
-import { secret } from "./secret";
-import type { StateStoreType } from "./state";
+import { destroy, DestroyedSignal } from "./destroy.js";
+import { env } from "./env.js";
+import type { PendingResource } from "./resource.js";
+import { Scope } from "./scope.js";
+import { secret } from "./secret.js";
+import type { StateStoreType } from "./state.js";
 
 /**
  * Type alias for semantic highlighting of `alchemy` as a type keyword

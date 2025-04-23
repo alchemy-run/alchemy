@@ -1,12 +1,12 @@
-import type { Context } from "../context";
-import { Resource } from "../resource";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
-  CloudflareApi,
   createCloudflareApi,
+  type CloudflareApi,
   type CloudflareApiOptions,
-} from "./api";
-import { CloudflareApiError, handleApiError } from "./api-error";
-import { VectorizeIndex } from "./vectorize-index";
+} from "./api.js";
+import { VectorizeIndex } from "./vectorize-index.js";
 
 /**
  * Properties for creating or deleting a Vectorize Metadata Index

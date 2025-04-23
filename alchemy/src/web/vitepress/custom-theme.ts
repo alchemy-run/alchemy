@@ -1,15 +1,15 @@
 import { type } from "arktype";
 import path from "node:path";
-import type { ModelConfig } from "../../ai/client";
-import { CSSFile } from "../../ai/css-file";
-import { Data } from "../../ai/data";
-import { TypeScriptFile } from "../../ai/typescript-file";
-import { VueFile } from "../../ai/vue-file";
-import { alchemy } from "../../alchemy";
-import type { Context } from "../../context";
-import { Folder } from "../../fs/folder";
-import { Resource } from "../../resource";
-import type { Secret } from "../../secret";
+import type { ModelConfig } from "../../ai/client.js";
+import { CSSFile } from "../../ai/css-file.js";
+import { Data } from "../../ai/data.js";
+import { TypeScriptFile } from "../../ai/typescript-file.js";
+import { VueFile } from "../../ai/vue-file.js";
+import { alchemy } from "../../alchemy.js";
+import type { Context } from "../../context.js";
+import { Folder } from "../../fs/folder.js";
+import { Resource } from "../../resource.js";
+import type { Secret } from "../../secret.js";
 
 /**
  * Theme component props for customizing the layout

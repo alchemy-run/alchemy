@@ -1,9 +1,9 @@
 import { AwsClient } from "aws4fetch";
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import type { Secret } from "../secret";
-import { CloudflareApi, createCloudflareApi } from "./api";
-import { CloudflareApiError, handleApiError } from "./api-error";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import type { Secret } from "../secret.js";
+import { CloudflareApiError, handleApiError } from "./api-error.js";
+import { CloudflareApi, createCloudflareApi } from "./api.js";
 
 /**
  * Properties for creating or updating an R2 Bucket

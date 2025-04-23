@@ -1,14 +1,14 @@
-import { alchemy } from "./alchemy";
-import { context } from "./context";
+import { alchemy } from "./alchemy.js";
+import { context } from "./context.js";
 import {
   PROVIDERS,
   type PendingResource,
   type Provider,
   type Resource,
   type ResourceProps,
-} from "./resource";
-import { serialize } from "./serde";
-import type { State } from "./state";
+} from "./resource.js";
+import { serialize } from "./serde.js";
+import type { State } from "./state.js";
 
 export interface ApplyOptions {
   quiet?: boolean;

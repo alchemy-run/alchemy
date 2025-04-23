@@ -1,7 +1,7 @@
-import "alchemy/cloudflare";
+import "../../alchemy/src/cloudflare";
 
-import alchemy from "alchemy";
-import { R2Bucket, TanStackStart } from "alchemy/cloudflare";
+import alchemy from "../../alchemy/src";
+import { R2Bucket, TanStackStart } from "../../alchemy/src/cloudflare";
 
 const app = await alchemy("tanstack-app");
 
@@ -10,8 +10,6 @@ const bucket = await R2Bucket("tanstack-bucket", {
 });
 
 export const website = await TanStackStart("tanstack-website", {
-  assets: ".output/public",
-  main: "./src/index.ts",
   bindings: {
     BUCKET: bucket,
   },

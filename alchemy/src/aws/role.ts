@@ -15,10 +15,10 @@ import {
   UpdateAssumeRolePolicyCommand,
   UpdateRoleCommand,
 } from "@aws-sdk/client-iam";
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import { ignore } from "../util/ignore";
-import type { PolicyDocument } from "./policy";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { ignore } from "../util/ignore.js";
+import type { PolicyDocument } from "./policy.js";
 
 /**
  * Properties for creating or updating an IAM role

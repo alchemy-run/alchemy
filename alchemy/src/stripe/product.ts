@@ -1,6 +1,6 @@
 import Stripe from "stripe";
-import type { Context } from "../context";
-import { Resource } from "../resource";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
 
 type ProductType = Stripe.Product.Type;
 
@@ -142,7 +142,7 @@ export const Product = Resource(
   async function (
     this: Context<Product>,
     id: string,
-    props: ProductProps,
+    props: ProductProps
   ): Promise<Product> {
     // Get Stripe API key from context or environment
     const apiKey = process.env.STRIPE_API_KEY;
@@ -222,5 +222,5 @@ export const Product = Resource(
         throw error;
       }
     }
-  },
+  }
 );

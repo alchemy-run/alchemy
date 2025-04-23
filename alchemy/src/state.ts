@@ -1,5 +1,5 @@
-import type { Resource, ResourceProps } from "./resource";
-import type { Scope } from "./scope";
+import type { Resource, ResourceProps } from "./resource.js";
+import type { Scope } from "./scope.js";
 
 export type State<
   Kind extends string = string,

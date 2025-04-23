@@ -7,6 +7,9 @@
     "outDir": "./lib",
     "rootDir": "./src",
     "sourceMap": true,
-    "declarationMap": true
+    "declarationMap": true,
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "target": "ESNext"
   }
 }

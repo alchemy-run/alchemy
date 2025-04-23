@@ -1,11 +1,11 @@
 import { generateObject, generateText } from "ai";
 import type { JsonSchema, Type, type } from "arktype";
-import type { Context } from "../context";
-import { StaticYamlFile } from "../fs/static-yaml-file";
-import { Resource } from "../resource";
-import type { Secret } from "../secret";
-import { ark } from "./ark";
-import { type ModelConfig, createModel } from "./client";
+import type { Context } from "../context.js";
+import { StaticYamlFile } from "../fs/static-yaml-file.js";
+import { Resource } from "../resource.js";
+import type { Secret } from "../secret.js";
+import { ark } from "./ark.js";
+import { type ModelConfig, createModel } from "./client.js";
 
 /**
  * Properties for creating or updating a YAMLFile

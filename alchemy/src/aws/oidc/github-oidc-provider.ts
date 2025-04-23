@@ -1,4 +1,4 @@
-import { OIDCProvider, type OIDCProviderProps } from "./oidc-provider";
+import { OIDCProvider, type OIDCProviderProps } from "./oidc-provider.js";
 
 /**
  * Default thumbprint for GitHub's OIDC provider
@@ -99,7 +99,7 @@ export type GitHubOIDCProvider = ReturnType<typeof GitHubOIDCProvider>;
  */
 export const GitHubOIDCProvider = async (
   id: string,
-  props: GitHubOIDCProviderProps,
+  props: GitHubOIDCProviderProps
 ) => {
   return OIDCProvider(id, {
     owner: props.owner,

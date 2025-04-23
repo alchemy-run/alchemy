@@ -1,13 +1,13 @@
-import type { Scope } from "../scope";
-import { deserialize, serialize } from "../serde";
-import type { State, StateStore } from "../state";
-import { withExponentialBackoff } from "../util/retry";
+import type { Scope } from "../scope.js";
+import { deserialize, serialize } from "../serde.js";
+import type { State, StateStore } from "../state.js";
+import { withExponentialBackoff } from "../util/retry.js";
+import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
   type CloudflareApi,
   type CloudflareApiOptions,
   createCloudflareApi,
-} from "./api";
-import { CloudflareApiError, handleApiError } from "./api-error";
+} from "./api.js";
 
 /**
  * Options for CloudflareR2StateStore

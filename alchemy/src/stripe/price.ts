@@ -1,6 +1,6 @@
 import Stripe from "stripe";
-import type { Context } from "../context";
-import { Resource } from "../resource";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
 
 /**
  * Properties for price recurring configuration
@@ -180,7 +180,7 @@ export const Price = Resource(
   async function (
     this: Context<Price>,
     id: string,
-    props: PriceProps,
+    props: PriceProps
   ): Promise<Price> {
     // Get Stripe API key from context or environment
     const apiKey = process.env.STRIPE_API_KEY;
@@ -285,5 +285,5 @@ export const Price = Resource(
         throw error;
       }
     }
-  },
+  }
 );

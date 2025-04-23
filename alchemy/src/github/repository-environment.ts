@@ -1,6 +1,6 @@
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import { createGitHubClient, verifyGitHubAuth } from "./client";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { createGitHubClient, verifyGitHubAuth } from "./client.js";
 
 /**
  * Properties for creating or updating a GitHub Repository Environment

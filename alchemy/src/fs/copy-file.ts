@@ -1,7 +1,7 @@
 import fs from "node:fs";
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import { ignore } from "../util/ignore";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { ignore } from "../util/ignore.js";
 
 /**
  * Properties for creating a CopyFile resource
