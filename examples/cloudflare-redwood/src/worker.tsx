@@ -1,9 +1,9 @@
-import { defineApp } from "@redwoodjs/sdk/worker";
 import { index, render } from "@redwoodjs/sdk/router";
-import { Document } from "src/Document";
-import { Home } from "src/pages/Home";
-import { setCommonHeaders } from "src/headers";
+import { defineApp } from "@redwoodjs/sdk/worker";
 import { drizzle } from "drizzle-orm/d1";
+import { Document } from "src/Document";
+import { setCommonHeaders } from "src/headers";
+import { Home } from "src/pages/Home";
 
 export interface Env {
   DB: D1Database;

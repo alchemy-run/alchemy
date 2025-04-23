@@ -204,6 +204,16 @@ export interface Worker<B extends Bindings = Bindings>
   Env: {
     [bindingName in keyof B]: Bound<B[bindingName]>;
   };
+
+  /**
+   * The compatibility date for the worker
+   */
+  compatibilityDate: string;
+
+  /**
+   * The compatibility flags for the worker
+   */
+  compatibilityFlags: string[];
 }
 
 /**
@@ -350,11 +360,18 @@ export const Worker = Resource(
       );
     }
 
+    const compatibilityDate = props.compatibilityDate ?? "2024-09-09";
+    const compatibilityFlags = props.compatibilityFlags ?? [];
+
     // Prepare metadata with bindings
     const scriptMetadata = await prepareWorkerMetadata(
       this,
       oldBindings,
-      props,
+      {
+        ...props,
+        compatibilityDate,
+        compatibilityFlags,
+      },
       assetUploadResult
     );
 
@@ -382,6 +399,11 @@ export const Worker = Resource(
     // Get current timestamp
     const now = Date.now();
 
+    console.log({
+      compatibilityDate,
+      compatibilityFlags,
+    });
+
     // Construct the output
     return this({
       ...props,
@@ -389,6 +411,8 @@ export const Worker = Resource(
       id,
       entrypoint: props.entrypoint,
       name: workerName,
+      compatibilityDate,
+      compatibilityFlags,
       script: scriptContent,
       format: props.format || "esm", // Include format in the output
       bindings: props.bindings ?? ({} as B),
@@ -586,12 +610,15 @@ function createAssetConfig(config?: AssetsConfig): AssetsConfig {
 async function prepareWorkerMetadata<B extends Bindings>(
   ctx: Context<Worker<B>>,
   oldBindings: Bindings | undefined,
-  props: WorkerProps,
+  props: WorkerProps & {
+    compatibilityDate: string;
+    compatibilityFlags: string[];
+  },
   assetUploadResult?: AssetUploadResult
 ): Promise<WorkerMetadata> {
   // Prepare metadata with bindings
   const meta: WorkerMetadata = {
-    compatibility_date: props.compatibilityDate ?? "2024-09-09",
+    compatibility_date: props.compatibilityDate,
     compatibility_flags: props.compatibilityFlags,
     bindings: [],
     observability: {

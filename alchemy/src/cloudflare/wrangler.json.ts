@@ -74,7 +74,8 @@ export const WranglerJson = Resource(
       // Use entrypoint as main if it exists
       main: worker.entrypoint,
       // see: https://developers.cloudflare.com/workers/configuration/compatibility-dates/
-      compatibility_date: "2022-04-05",
+      compatibility_date: worker.compatibilityDate,
+      compatibility_flags: props.worker.compatibilityFlags,
     };
 
     // Process bindings if they exist
@@ -86,6 +87,8 @@ export const WranglerJson = Resource(
     if (worker.env) {
       spec.vars = { ...worker.env };
     }
+
+    console.log(spec);
 
     await StaticJsonFile(filePath, spec);
 
