@@ -21,17 +21,6 @@ Install `cloudflare` and `alchemy`:
 bun add alchemy cloudflare
 ```
 
-Update your `tsconfig.json` to register `@cloudflare/workers-types` globally:
-
-```json
-{
-  "compilerOptions": {
-    // make sure to register this globally
-    "types": ["@cloudflare/workers-types"],
-  }
-}
-```
-
 ## Create `alchemy.run.ts`
 
 ```ts
