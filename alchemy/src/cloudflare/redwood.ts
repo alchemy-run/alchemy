@@ -77,7 +77,7 @@ export async function Redwood<B extends Bindings>(
     ...props,
     command: props?.command ?? "bun run clean && RWSDK_DEPLOY=1 bun run build",
     wrangler: props?.wrangler ?? true,
-    main: props?.main ?? path.join("dist", "worker", "worker.js"),
+    main: props?.main ?? path.join("src", "worker.tsx"),
     assets: props?.assets ?? path.join("dist", "client"),
     compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
     compatibilityDate: props?.compatibilityDate ?? "2025-04-02",

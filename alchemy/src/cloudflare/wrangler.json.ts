@@ -88,8 +88,6 @@ export const WranglerJson = Resource(
       spec.vars = { ...worker.env };
     }
 
-    console.log(spec);
-
     await StaticJsonFile(filePath, spec);
 
     // Return the resource
