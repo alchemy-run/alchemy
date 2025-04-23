@@ -2,7 +2,7 @@
 order: 4 # Adjust order as needed
 ---
 
-# Cloudflare Nuxt 3 & Cloudflare Pipeline
+# Cloudflare Nuxt 3 with Data Pipeline
 
 This guide walks through deploying a full-stack Nuxt 3 application with a backend Pipeline to Cloudflare using Alchemy and `Nuxt`.
 
