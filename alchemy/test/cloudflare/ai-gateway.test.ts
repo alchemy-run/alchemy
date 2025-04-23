@@ -1,25 +1,20 @@
-import { beforeAll, describe, expect } from "bun:test";
+import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy";
 import { AiGateway } from "../../src/cloudflare/ai-gateway";
-import { CloudflareApi, createCloudflareApi } from "../../src/cloudflare/api";
+import { createCloudflareApi } from "../../src/cloudflare/api";
 import { destroy } from "../../src/destroy";
 import { BRANCH_PREFIX } from "../util";
 // must import this or else alchemy.test won't exist
 import "../../src/test/bun";
 
 // Create API client for verification
-let api: CloudflareApi;
+const api = await createCloudflareApi();
 
 const test = alchemy.test(import.meta);
 
 describe("AiGateway Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
   const testId = `${BRANCH_PREFIX}-test-ai-gateway`;
-
-  // Set up API client before tests
-  beforeAll(async () => {
-    api = await createCloudflareApi();
-  });
 
   test("create, update, and delete ai gateway", async (scope) => {
     let gateway: AiGateway | undefined;

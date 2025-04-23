@@ -125,6 +125,132 @@ export interface AiGateway
   type: "ai_gateway";
 }
 
+/**
+ * Represents a Cloudflare AI Gateway.
+ *
+ * @example
+ * // Create a basic AI Gateway with default settings:
+ * const basicGateway = await AiGateway("my-ai-gateway", {});
+ *
+ * @example
+ * // Create an AI Gateway with authentication and rate limiting:
+ * const secureGateway = await AiGateway("secure-ai-gateway", {
+ *   authentication: true,
+ *   rateLimitingInterval: 60, // 60 seconds
+ *   rateLimitingLimit: 100,   // 100 requests
+ *   rateLimitingTechnique: "sliding"
+ * });
+ *
+ * @example
+ * // Create an AI Gateway with logging enabled and logpush:
+ * const loggingGateway = await AiGateway("logging-ai-gateway", {
+ *   collectLogs: true,
+ *   logpush: true,
+ *   logpushPublicKey: "mypublickey..." // Replace with actual public key
+ * });
+ */
+export const AiGateway = Resource(
+  "cloudflare::AiGateway",
+  { alwaysUpdate: true }, // AI Gateway PUT updates, so always run update logic
+  async function (
+    this: Context<AiGateway>,
+    id: string,
+    props: AiGatewayProps = {}
+  ): Promise<AiGateway> {
+    const api = await createCloudflareApi(props);
+    const gatewayPath = `/accounts/${api.accountId}/ai-gateway/gateways/${id}`;
+    const gatewaysPath = `/accounts/${api.accountId}/ai-gateway/gateways`;
+
+    if (this.phase === "delete") {
+      try {
+        const deleteResponse = await api.delete(gatewayPath);
+        if (!deleteResponse.ok && deleteResponse.status !== 404) {
+          await handleApiError(deleteResponse, "delete", "ai gateway", id);
+        }
+      } catch (error) {
+        // Log error but don't throw, allow destroy to proceed
+        console.error(`Error deleting AI Gateway ${id}:`, error);
+      }
+      return this.destroy();
+    }
+
+    // Default values as per Cloudflare documentation examples
+    const mergedProps: AiGatewayProps = {
+      cacheInvalidateOnUpdate: true,
+      cacheTtl: 0,
+      collectLogs: true,
+      rateLimitingInterval: 0,
+      rateLimitingLimit: 0,
+      rateLimitingTechnique: "fixed",
+      ...props, // User props override defaults
+    };
+
+    let response: Response | undefined;
+    let apiResource: any;
+
+    try {
+      if (this.phase === "update") {
+        // Update existing gateway (PUT request)
+        const requestBody = mapPropsToApi(id, mergedProps, false);
+        response = await api.put(gatewayPath, requestBody);
+      } else {
+        // Check if gateway exists before creating (to avoid conflict)
+        const getResponse = await api.get(gatewayPath);
+        if (getResponse.status === 200) {
+          // Gateway exists, treat as update (PUT)
+          console.log(
+            `AI Gateway '${id}' already exists. Updating existing resource.`
+          );
+          const requestBody = mapPropsToApi(id, mergedProps, false);
+          response = await api.put(gatewayPath, requestBody);
+        } else if (getResponse.status === 404) {
+          // Gateway doesn't exist, create new (POST request)
+          const requestBody = mapPropsToApi(id, mergedProps, true); // Include 'id' in POST body
+          response = await api.post(gatewaysPath, requestBody);
+        } else {
+          // Unexpected error during GET check
+          await handleApiError(getResponse, "get", "ai gateway", id);
+        }
+      }
+
+      if (!response?.ok) {
+        const action = this.phase === "update" ? "update" : "create";
+        await handleApiError(response!, action, "ai gateway", id);
+      }
+
+      const data: { result: Record<string, any> } = await response!.json();
+      apiResource = data.result;
+    } catch (error) {
+      console.error(`Error ${this.phase} AI Gateway '${id}':`, error);
+      throw error; // Re-throw the error to fail the deployment
+    }
+
+    // Construct the output object from API response and merged props
+    return this({
+      ...mergedProps, // Start with the input props (including defaults)
+      id: apiResource.id,
+      accountId: apiResource.account_id,
+      accountTag: apiResource.account_tag,
+      createdAt: apiResource.created_at,
+      internalId: apiResource.internal_id,
+      modifiedAt: apiResource.modified_at,
+      // Update props based on the actual response from the API (Cloudflare might set defaults)
+      cacheInvalidateOnUpdate: apiResource.cache_invalidate_on_update,
+      cacheTtl: apiResource.cache_ttl,
+      collectLogs: apiResource.collect_logs,
+      rateLimitingInterval: apiResource.rate_limiting_interval,
+      rateLimitingLimit: apiResource.rate_limiting_limit,
+      rateLimitingTechnique: apiResource.rate_limiting_technique,
+      authentication: apiResource.authentication,
+      logManagement: apiResource.log_management,
+      logManagementStrategy: apiResource.log_management_strategy,
+      logpush: apiResource.logpush,
+      logpushPublicKey: apiResource.logpush_public_key,
+      type: "ai_gateway",
+    });
+  }
+);
+
 // Helper function to map props to the API request body format
 function mapPropsToApi(
   id: string,
@@ -170,132 +296,3 @@ function mapPropsToApi(
   }
   return body;
 }
-
-/**
- * Represents a Cloudflare AI Gateway.
- *
- * @example
- * // Create a basic AI Gateway with default settings:
- * const basicGateway = await AiGateway("my-ai-gateway", {});
- *
- * @example
- * // Create an AI Gateway with authentication and rate limiting:
- * const secureGateway = await AiGateway("secure-ai-gateway", {
- *   authentication: true,
- *   rateLimitingInterval: 60, // 60 seconds
- *   rateLimitingLimit: 100,   // 100 requests
- *   rateLimitingTechnique: "sliding"
- * });
- *
- * @example
- * // Create an AI Gateway with logging enabled and logpush:
- * const loggingGateway = await AiGateway("logging-ai-gateway", {
- *   collectLogs: true,
- *   logpush: true,
- *   logpushPublicKey: "mypublickey..." // Replace with actual public key
- * });
- */
-export const AiGateway = Resource(
-  "cloudflare::AiGateway",
-  { alwaysUpdate: true }, // AI Gateway PUT updates, so always run update logic
-  async function (
-    this: Context<AiGateway>,
-    id: string,
-    props: AiGatewayProps
-  ): Promise<AiGateway> {
-    const api = await createCloudflareApi(props);
-    const gatewayPath = `/accounts/${api.accountId}/ai-gateway/gateways/${id}`;
-    const gatewaysPath = `/accounts/${api.accountId}/ai-gateway/gateways`;
-
-    if (this.phase === "delete") {
-      try {
-        const deleteResponse = await api.delete(gatewayPath);
-        if (!deleteResponse.ok && deleteResponse.status !== 404) {
-          await handleApiError(deleteResponse, "delete", "ai gateway", id);
-        }
-      } catch (error) {
-        // Log error but don't throw, allow destroy to proceed
-        console.error(`Error deleting AI Gateway ${id}:`, error);
-      }
-      return this.destroy();
-    }
-
-    // Default values as per Cloudflare documentation examples
-    const mergedProps: AiGatewayProps = {
-      cacheInvalidateOnUpdate: true,
-      cacheTtl: 0,
-      collectLogs: true,
-      rateLimitingInterval: 0,
-      rateLimitingLimit: 0,
-      rateLimitingTechnique: "fixed",
-      ...props, // User props override defaults
-    };
-
-    let response: Response;
-    let apiResource: any;
-
-    try {
-      if (this.phase === "update") {
-        // Update existing gateway (PUT request)
-        const requestBody = mapPropsToApi(id, mergedProps, false);
-        response = await api.put(gatewayPath, requestBody);
-      } else {
-        // Check if gateway exists before creating (to avoid conflict)
-        const getResponse = await api.get(gatewayPath);
-        if (getResponse.status === 200) {
-          // Gateway exists, treat as update (PUT)
-          console.log(
-            `AI Gateway '${id}' already exists. Updating existing resource.`
-          );
-          const requestBody = mapPropsToApi(id, mergedProps, false);
-          response = await api.put(gatewayPath, requestBody);
-        } else if (getResponse.status === 404) {
-          // Gateway doesn't exist, create new (POST request)
-          const requestBody = mapPropsToApi(id, mergedProps, true); // Include 'id' in POST body
-          response = await api.post(gatewaysPath, requestBody);
-        } else {
-          // Unexpected error during GET check
-          await handleApiError(getResponse, "get", "ai gateway", id);
-          throw new Error("Unexpected error checking for existing gateway"); // Should not happen if handleApiError throws
-        }
-      }
-
-      if (!response.ok) {
-        const action = this.phase === "update" ? "update" : "create";
-        await handleApiError(response, action, "ai gateway", id);
-        // handleApiError should throw, but satisfy TS compiler
-        throw new Error(`Failed to ${action} AI Gateway ${id}`);
-      }
-
-      const data: { result: Record<string, any> } = await response.json();
-      apiResource = data.result;
-    } catch (error) {
-      console.error(`Error ${this.phase} AI Gateway '${id}':`, error);
-      throw error; // Re-throw the error to fail the deployment
-    }
-
-    // Construct the output object from API response and merged props
-    return this({
-      ...mergedProps, // Start with the input props (including defaults)
-      id: apiResource.id,
-      accountId: apiResource.account_id,
-      accountTag: apiResource.account_tag,
-      createdAt: apiResource.created_at,
-      internalId: apiResource.internal_id,
-      modifiedAt: apiResource.modified_at,
-      // Update props based on the actual response from the API (Cloudflare might set defaults)
-      cacheInvalidateOnUpdate: apiResource.cache_invalidate_on_update,
-      cacheTtl: apiResource.cache_ttl,
-      collectLogs: apiResource.collect_logs,
-      rateLimitingInterval: apiResource.rate_limiting_interval,
-      rateLimitingLimit: apiResource.rate_limiting_limit,
-      rateLimitingTechnique: apiResource.rate_limiting_technique,
-      authentication: apiResource.authentication,
-      logManagement: apiResource.log_management,
-      logManagementStrategy: apiResource.log_management_strategy,
-      logpush: apiResource.logpush,
-      logpushPublicKey: apiResource.logpush_public_key,
-      type: "ai_gateway",
-    });
-  }
-);
