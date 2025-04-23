@@ -5,6 +5,8 @@
     "composite": true,
     "noEmit": false,
     "outDir": "./lib",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "sourceMap": true,
+    "declarationMap": true
   }
 }
