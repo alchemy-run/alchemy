@@ -399,11 +399,6 @@ export const Worker = Resource(
     // Get current timestamp
     const now = Date.now();
 
-    console.log({
-      compatibilityDate,
-      compatibilityFlags,
-    });
-
     // Construct the output
     return this({
       ...props,
