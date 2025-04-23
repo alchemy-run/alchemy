@@ -1,7 +1,7 @@
 import "alchemy/cloudflare";
 
-import alchemy from "../../alchemy/src";
-import { D1Database, Redwood } from "../../alchemy/src/cloudflare";
+import alchemy from "alchemy";
+import { D1Database, Redwood } from "alchemy/cloudflare";
 
 const app = await alchemy("redwood-app");
 
@@ -11,7 +11,6 @@ const database = await D1Database("redwood-db", {
 });
 
 export const website = await Redwood("redwood-website", {
-  command: "bun run clean && RWSDK_DEPLOY=1 bun run build",
   bindings: {
     DB: database,
   },

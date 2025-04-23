@@ -278,7 +278,7 @@ export const D1DatabaseResource = Resource(
         readReplication: dbData.result.read_replication,
         primaryLocationHint: props.primaryLocationHint,
         accountId: api.accountId,
-        migrationsDir: props.migrationsDir
+        migrationsDir: props.migrationsDir,
       });
     }
   }
