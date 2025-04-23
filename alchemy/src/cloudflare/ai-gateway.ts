@@ -48,13 +48,13 @@ export interface AiGatewayProps extends CloudflareApiOptions {
 
   /**
    * Enable authentication for the gateway.
-   * @optional
+   * @default false
    */
   authentication?: boolean;
 
   /**
    * Log retention limit in requests.
-   * @optional
+   * @default undefined
    * @minimum 10000
    * @maximum 10000000
    */
@@ -62,19 +62,19 @@ export interface AiGatewayProps extends CloudflareApiOptions {
 
   /**
    * Strategy for handling log limits.
-   * @optional
+   * @default undefined
    */
   logManagementStrategy?: "STOP_INSERTING" | "DELETE_OLDEST";
 
   /**
    * Enable logpush for the gateway.
-   * @optional
+   * @default false
    */
   logpush?: boolean;
 
   /**
    * Public key for logpush encryption.
-   * @optional
+   * @default undefined
    * @minLength 16
    * @maxLength 1024
    */
@@ -168,8 +168,13 @@ export const AiGateway = Resource(
           await handleApiError(deleteResponse, "delete", "ai gateway", id);
         }
       } catch (error) {
-        // Log error but don't throw, allow destroy to proceed
-        console.error(`Error deleting AI Gateway ${id}:`, error);
+        // Only swallow 404 errors, re-throw all others
+        if (error instanceof Response && error.status === 404) {
+          console.log(`AI Gateway ${id} not found, skipping delete.`);
+        } else {
+          console.error(`Error deleting AI Gateway ${id}:`, error);
+          throw error;
+        }
       }
       return this.destroy();
     }
