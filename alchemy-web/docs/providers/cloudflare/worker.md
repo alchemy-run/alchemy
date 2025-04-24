@@ -10,7 +10,7 @@ Create a basic HTTP handler worker:
 import { Worker } from "alchemy/cloudflare";
 
 const api = await Worker("api", {
-  name: "api-worker", 
+  name: "api-worker",
   entrypoint: "./src/api.ts",
   url: true // Enable workers.dev URL
 });
@@ -79,6 +79,24 @@ const worker = await Worker("api", {
 });
 ```
 
+# Worker with Cron Triggers
+
+Create a worker with scheduled cron triggers:
+
+```ts
+import { Worker } from "alchemy/cloudflare";
+
+const cronWorker = await Worker("scheduled-tasks", {
+  name: "cron-worker",
+  entrypoint: "./src/scheduled.ts",
+  crons: [
+    "*/15 * * * *", // Run every 15 minutes
+    "0 0 * * *",    // Run daily at midnight
+    "0 12 * * MON"  // Run Mondays at noon
+  ]
+});
+```
+
 # Bind to a Worker
 
 Use a worker as a binding in another worker:
@@ -92,7 +110,7 @@ const api = await Worker("api", {
 });
 
 const frontend = await Worker("frontend", {
-  name: "frontend-worker", 
+  name: "frontend-worker",
   entrypoint: "./src/frontend.ts",
   bindings: {
     API: api

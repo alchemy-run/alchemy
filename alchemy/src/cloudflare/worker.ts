@@ -6,18 +6,19 @@ import { Resource } from "../resource.js";
 import { getContentType } from "../util/content-type.js";
 import { withExponentialBackoff } from "../util/retry.js";
 import { slugify } from "../util/slugify.js";
+import { handleApiError } from "./api-error.js";
 import {
-  createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
+  createCloudflareApi,
 } from "./api.js";
-import { type Assets } from "./assets.js";
-import { type Bindings, type WorkerBindingSpec } from "./bindings.js";
+import type { Assets } from "./assets.js";
+import type { Bindings, WorkerBindingSpec } from "./bindings.js";
 import type { Bound } from "./bound.js";
-import { type DurableObjectNamespace } from "./durable-object-namespace.js";
+import type { DurableObjectNamespace } from "./durable-object-namespace.js";
 import type { WorkerScriptMetadata } from "./worker-metadata.js";
 import type { SingleStepMigration } from "./worker-migration.js";
-import { upsertWorkflow, type Workflow } from "./workflow.js";
+import { type Workflow, upsertWorkflow } from "./workflow.js";
 
 /**
  * Configuration options for static assets
@@ -159,6 +160,15 @@ export interface WorkerProps<B extends Bindings = Bindings>
    * Configuration for static assets
    */
   assets?: AssetsConfig;
+
+  /**
+   * Cron expressions for the trigger.
+   * Uses standard cron syntax (e.g. "0 0 * * *" for daily at midnight)
+   * To clear all cron triggers, pass an empty array.
+   *
+   * @see https://developers.cloudflare.com/workers/configuration/cron-triggers/#examples
+   */
+  crons?: string[];
 }
 
 /**
@@ -291,7 +301,16 @@ export interface Worker<B extends Bindings = Bindings>
  *   }
  * });
  *
- * @see https://developers.cloudflare.com/workers/
+ * @example
+ * // Create a worker with scheduled cron triggers:
+ * const cronWorker = await Worker("scheduled-tasks", {
+ *   name: "cron-worker",
+ *   entrypoint: "./src/scheduled.ts",
+ *   crons: ['* 15 * * *', '0 0 * * *', '0 12 * * MON']
+ * })
+ *
+ * @see
+ * https://developers.cloudflare.com/workers/
  */
 export const Worker = Resource(
   "cloudflare::Worker",
@@ -399,6 +418,23 @@ export const Worker = Resource(
     // Get current timestamp
     const now = Date.now();
 
+    // Update cron triggers
+    if (props.crons) {
+      const res = await api.put(
+        `/accounts/${api.accountId}/workers/scripts/${workerName}/schedules`,
+        props.crons.map((cron) => ({ cron }))
+      );
+
+      if (!res.ok) {
+        await handleApiError(
+          res,
+          "updating cron triggers",
+          "worker",
+          workerName
+        );
+      }
+    }
+
     // Construct the output
     return this({
       ...props,
@@ -418,6 +454,8 @@ export const Worker = Resource(
       url: workerUrl,
       // Include assets configuration in the output
       assets: props.assets,
+      // Include cron triggers in the output
+      crons: props.crons,
       // phantom property
       Env: undefined!,
     });
@@ -558,6 +596,10 @@ interface WorkerMetadata {
     keep_assets?: boolean;
     config?: AssetsConfig;
   };
+  cron_triggers?: {
+    cron: string;
+    suspended: boolean;
+  }[];
 }
 
 interface AssetUploadResult {

@@ -76,7 +76,7 @@ describe("Worker Resource", () => {
           const stub = env.COUNTER.get(id);
           return stub.fetch(request);
         }
-        
+
         return new Response('Hello with Durable Object!', { status: 200 });
       }
     };
@@ -91,7 +91,7 @@ describe("Worker Resource", () => {
           const value = await env.TEST_KV.get('testKey');
           return new Response('KV Value: ' + (value || 'not found'), { status: 200 });
         }
-        
+
         return new Response('Hello with KV Namespace!', { status: 200 });
       }
     };
@@ -107,12 +107,12 @@ describe("Worker Resource", () => {
           return new Response(JSON.stringify({
             hasR2: !!env.STORAGE,
             bucketName: env.STORAGE.name || 'unknown'
-          }), { 
+          }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' }
           });
         }
-        
+
         return new Response('Hello with R2 Bucket!', { status: 200 });
       }
     };
@@ -137,22 +137,22 @@ describe("Worker Resource", () => {
       async fetch(request, env, ctx) {
         // Path-based routing to demonstrate different bindings
         const url = new URL(request.url);
-        
+
         if (url.pathname.includes('/counter')) {
           const id = env.COUNTER.idFromName('default');
           const stub = env.COUNTER.get(id);
           return stub.fetch(request);
         }
-        
+
         if (url.pathname.includes('/kv')) {
           const value = await env.TEST_KV.get('testKey');
           return new Response('KV Value: ' + (value || 'not found'), { status: 200 });
         }
-        
+
         if (url.pathname.includes('/secret')) {
           return new Response('Secret: ' + env.API_KEY, { status: 200 });
         }
-        
+
         return new Response('Hello worker with multiple bindings!', { status: 200 });
       }
     };
@@ -163,30 +163,30 @@ describe("Worker Resource", () => {
     export default {
       async fetch(request, env, ctx) {
         const url = new URL(request.url);
-        
+
         // Return the value of the requested environment variable
         if (url.pathname.startsWith('/env/')) {
           const varName = url.pathname.split('/env/')[1];
           const value = env[varName];
-          return new Response(value || 'undefined', { 
+          return new Response(value || 'undefined', {
             status: 200,
             headers: { 'Content-Type': 'text/plain' }
           });
         }
-        
+
         // Return all environment variables
         if (url.pathname === '/env') {
           const envVars = Object.entries(env)
             .filter(([key]) => key !== 'COUNTER' && !key.includes('Durable')) // Filter out bindings
             .map(([key, value]) => \`\${key}: \${value}\`)
             .join('\\n');
-          
-          return new Response(envVars, { 
+
+          return new Response(envVars, {
             status: 200,
             headers: { 'Content-Type': 'text/plain' }
           });
         }
-        
+
         return new Response('Hello with environment variables!', { status: 200 });
       }
     };
@@ -243,6 +243,42 @@ describe("Worker Resource", () => {
         }
         return new Response('Hello with Counter V2!', { status: 200 });
       }
+    };
+  `;
+
+  // Sample worker script with a scheduled handler
+  const cronWorkerScript = `
+    export default {
+      async fetch(request, env, ctx) {
+        return new Response('Worker with cron is running!', { status: 200 });
+      },
+      async scheduled(event, env, ctx) {
+        // Log the scheduled event details
+        console.log('Scheduled event received:', event.scheduledTime, event.cron);
+        // In a real worker, you would perform tasks here
+      },
+    };
+  `;
+
+  // Sample worker script with scheduled handler and KV namespace
+  const cronKvWorkerScript = `
+    export default {
+      async fetch(request, env, ctx) {
+        // Use the KV binding
+        if (request.url.includes('/last-run')) {
+          const value = await env.CRON_STATS.get('last_run');
+          return new Response('Last scheduled run: ' + (value || 'never'), { status: 200 });
+        }
+        return new Response('Worker with cron and KV is running!', { status: 200 });
+      },
+      async scheduled(event, env, ctx) {
+        // Log event to KV
+        await env.CRON_STATS.put('last_run', new Date().toISOString());
+        await env.CRON_STATS.put(\`run_\${Date.now()}\`, JSON.stringify({
+          cron: event.cron,
+          scheduledTime: event.scheduledTime
+        }));
+      },
     };
   `;
 
@@ -820,7 +856,7 @@ describe("Worker Resource", () => {
             const url = new URL(request.url);
 
             if (url.pathname.startsWith("/api/")) {
-              return new Response("Worker with assets is running!", { 
+              return new Response("Worker with assets is running!", {
                 status: 200,
                 headers: { 'Content-Type': 'text/plain' }
               });
@@ -995,12 +1031,12 @@ describe("Worker Resource", () => {
                 status: "ok",
                 worker: "${workerName}",
                 timestamp: Date.now()
-              }), { 
+              }), {
                 status: 200,
                 headers: { 'Content-Type': 'application/json' }
               });
             }
-            
+
             return new Response("Not Found", { status: 404 });
           }
         };
@@ -1110,18 +1146,18 @@ describe("Worker Resource", () => {
           this.state = state;
           this.env = env;
         }
-        
+
         async run(event, step) {
           // Process order data from event payload
           const orderDetails = await step.do('process-order', async () => {
             console.log("Processing order", event.payload);
-            return { 
-              success: true, 
-              orderId: event.payload.orderId, 
+            return {
+              success: true,
+              orderId: event.payload.orderId,
               message: "Order processed successfully"
             };
           });
-          
+
           return orderDetails;
         }
       }
@@ -1132,18 +1168,18 @@ describe("Worker Resource", () => {
           this.state = state;
           this.env = env;
         }
-        
+
         async run(event, step) {
           // Process shipping data
           const shippingDetails = await step.do('process-shipping', async () => {
             console.log("Processing shipping", event.payload);
-            return { 
-              success: true, 
-              shipmentId: event.payload.shipmentId, 
+            return {
+              success: true,
+              shipmentId: event.payload.shipmentId,
               message: "Shipment scheduled successfully"
             };
           });
-          
+
           return shippingDetails;
         }
       }
@@ -1151,24 +1187,24 @@ describe("Worker Resource", () => {
       export default {
         async fetch(request, env, ctx) {
           const url = new URL(request.url);
-          
+
           // Add endpoints to trigger workflows for testing
           if (url.pathname === '/trigger-email-workflow') {
             try {
               // Get workflow binding
               const workflow = env.EMAIL_WORKFLOW;
-              
+
               if (!workflow) {
-                return new Response(JSON.stringify({ error: "No email workflow binding found" }), { 
+                return new Response(JSON.stringify({ error: "No email workflow binding found" }), {
                   status: 500,
                   headers: { 'Content-Type': 'application/json' }
                 });
               }
-              
+
               // Create a workflow instance with parameters
               const params = { orderId: "test-123", amount: 99.99 };
               const instance = await workflow.create(params);
-              
+
               return Response.json({
                 id: instance.id,
                 details: await instance.status(),
@@ -1178,30 +1214,30 @@ describe("Worker Resource", () => {
               });
             } catch (error) {
               console.error("Error triggering email workflow:", error);
-              return new Response(JSON.stringify({ error: error.message || "Unknown error" }), { 
+              return new Response(JSON.stringify({ error: error.message || "Unknown error" }), {
                 status: 500,
                 headers: { 'Content-Type': 'application/json' }
               });
             }
           }
-          
+
           // Endpoint for the order workflow
           if (url.pathname === '/trigger-order-workflow') {
             try {
               // Get workflow binding
               const workflow = env.ORDER_WORKFLOW;
-              
+
               if (!workflow) {
-                return new Response(JSON.stringify({ error: "No order workflow binding found" }), { 
+                return new Response(JSON.stringify({ error: "No order workflow binding found" }), {
                   status: 500,
                   headers: { 'Content-Type': 'application/json' }
                 });
               }
-              
+
               // Create a workflow instance with parameters
               const params = { shipmentId: "ship-456", carrier: "FastShip" };
               const instance = await workflow.create(params);
-              
+
               return Response.json({
                 id: instance.id,
                 details: await instance.status(),
@@ -1211,13 +1247,13 @@ describe("Worker Resource", () => {
               });
             } catch (error) {
               console.error("Error triggering order workflow:", error);
-              return new Response(JSON.stringify({ error: error.message || "Unknown error" }), { 
+              return new Response(JSON.stringify({ error: error.message || "Unknown error" }), {
                 status: 500,
                 headers: { 'Content-Type': 'application/json' }
               });
             }
           }
-          
+
           return new Response('Worker with workflow bindings!', { status: 200 });
         }
       };
@@ -1321,54 +1357,54 @@ describe("Worker Resource", () => {
       export default {
         async fetch(request, env, ctx) {
           const url = new URL(request.url);
-          
+
           // Initialize the database with a table and data
           if (url.pathname === '/init-db') {
             try {
               const db = env.DATABASE;
-              
+
               // Create a test table
               await db.exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)");
-              
+
               // Insert some test data
               await db.exec("INSERT INTO users (name, email) VALUES ('Test User', 'test@example.com')");
-              
-              return new Response('Database initialized successfully!', { 
+
+              return new Response('Database initialized successfully!', {
                 status: 200,
                 headers: { 'Content-Type': 'text/plain' }
               });
             } catch (error) {
-              return new Response('Error initializing database: ' + error.message, { 
+              return new Response('Error initializing database: ' + error.message, {
                 status: 500,
                 headers: { 'Content-Type': 'text/plain' }
               });
             }
           }
-          
+
           // Query data from the database
           if (url.pathname === '/query-db') {
             try {
               const db = env.DATABASE;
-              
+
               // Query the database
               const { results } = await db.prepare("SELECT * FROM users").all();
-              
-              return new Response(JSON.stringify({ success: true, data: results }), { 
+
+              return new Response(JSON.stringify({ success: true, data: results }), {
                 status: 200,
                 headers: { 'Content-Type': 'application/json' }
               });
             } catch (error) {
-              return new Response(JSON.stringify({ 
-                success: false, 
+              return new Response(JSON.stringify({
+                success: false,
                 error: error.message
-              }), { 
+              }), {
                 status: 500,
                 headers: { 'Content-Type': 'application/json' }
               });
             }
           }
-          
-          return new Response('D1 Database Worker is running!', { 
+
+          return new Response('D1 Database Worker is running!', {
             status: 200,
             headers: { 'Content-Type': 'text/plain' }
           });
@@ -1440,33 +1476,33 @@ describe("Worker Resource", () => {
       export default {
         async fetch(request, env, ctx) {
           const url = new URL(request.url);
-          
+
           // Send a message to the queue
           if (url.pathname === '/send-message') {
             try {
               const body = await request.json();
               const messageId = await env.MESSAGE_QUEUE.send(body);
-              
-              return new Response(JSON.stringify({ 
-                success: true, 
+
+              return new Response(JSON.stringify({
+                success: true,
                 messageId,
                 message: 'Message sent successfully'
-              }), { 
+              }), {
                 status: 200,
                 headers: { 'Content-Type': 'application/json' }
               });
             } catch (error) {
-              return new Response(JSON.stringify({ 
-                success: false, 
-                error: error.message 
-              }), { 
+              return new Response(JSON.stringify({
+                success: false,
+                error: error.message
+              }), {
                 status: 500,
                 headers: { 'Content-Type': 'application/json' }
               });
             }
           }
-          
-          return new Response('Queue Worker is running!', { 
+
+          return new Response('Queue Worker is running!', {
             status: 200,
             headers: { 'Content-Type': 'text/plain' }
           });
@@ -1556,7 +1592,7 @@ describe("Worker Resource", () => {
         export default {
           async fetch(request, env, ctx) {
             const url = new URL(request.url);
-            
+
             // Return different responses based on the path
             if (url.pathname === '/data') {
               return Response.json({
@@ -1565,8 +1601,8 @@ describe("Worker Resource", () => {
                 version: "1.0.0"
               });
             }
-            
-            return new Response('Hello from entrypoint file!', { 
+
+            return new Response('Hello from entrypoint file!', {
               status: 200,
               headers: { 'Content-Type': 'text/plain' }
             });
@@ -1612,7 +1648,7 @@ describe("Worker Resource", () => {
         export default {
           async fetch(request, env, ctx) {
             const url = new URL(request.url);
-            
+
             // Return different responses based on the path
             if (url.pathname === '/data') {
               return Response.json({
@@ -1621,8 +1657,8 @@ describe("Worker Resource", () => {
                 version: "2.0.0"
               });
             }
-            
-            return new Response('Hello from updated entrypoint file!', { 
+
+            return new Response('Hello from updated entrypoint file!', {
               status: 200,
               headers: { 'Content-Type': 'text/plain' }
             });
@@ -1663,4 +1699,69 @@ describe("Worker Resource", () => {
       await assertWorkerDoesNotExist(workerName);
     }
   }, 120000); // Increased timeout for bundling operations
+
+  test("create and test worker with cron triggers", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-cron`;
+
+    let worker: Worker | undefined = undefined;
+    try {
+      // Create a worker with cron triggers
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: cronWorkerScript,
+        format: "esm",
+        url: true, // Enable workers.dev URL for manual trigger checking
+        crons: [
+          "*/5 * * * *", // Every 5 minutes
+          "0 0 * * *", // Daily at midnight (suspended)
+        ],
+      });
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.url).toBeTruthy();
+      expect(worker.crons).toBeDefined();
+      expect(worker.crons?.length).toEqual(2);
+
+      // Verify the worker exists via API
+      const getResponse = await api.get(
+        `/accounts/${api.accountId}/workers/scripts/${workerName}`
+      );
+      expect(getResponse.status).toEqual(200);
+
+      // Verify cron triggers were created correctly
+      // Since we can't directly query for cron triggers via API, we'll verify using our resource
+
+      const trigger1 = worker.crons?.find((t) => t === "*/5 * * * *");
+      expect(trigger1).toBeDefined();
+
+      const trigger2 = worker.crons?.find((t) => t === "0 0 * * *");
+      expect(trigger2).toBeDefined();
+
+      // Update the worker - change one trigger, remove one
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: cronWorkerScript, // Same script
+        format: "esm",
+        url: true,
+        crons: [
+          "*/10 * * * *", // Changed from */5 to */10
+          // Removed the daily trigger
+        ],
+      });
+
+      expect(worker.id).toBeTruthy(); // Should be the same worker
+      expect(worker.crons).toBeDefined();
+      expect(worker.crons?.length).toEqual(1); // Only one trigger now
+
+      const updatedTrigger = worker.crons?.find((t) => t === "*/10 * * * *");
+      expect(updatedTrigger).toBeDefined();
+      // Verify the removed trigger is gone
+      const removedTrigger = worker.crons?.find((t) => t === "0 0 * * *");
+      expect(removedTrigger).toBeUndefined();
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(workerName);
+    }
+  }, 60000); // Increase timeout for Worker operations
 });
