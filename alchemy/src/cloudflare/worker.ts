@@ -98,9 +98,10 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * Name for the worker
-   * This is mandatory - must be explicitly specified
+   *
+   * @default id
    */
-  name: string;
+  name?: string;
 
   /**
    * Bindings to attach to the worker
@@ -326,7 +327,7 @@ export const Worker = Resource(
     const api = await createCloudflareApi(props);
 
     // Use the provided name
-    const workerName = props.name;
+    const workerName = props.name ?? id;
 
     // Validate input - we need either script, entryPoint, or bundle
     if (!props.script && !props.entrypoint) {

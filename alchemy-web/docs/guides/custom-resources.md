@@ -2,7 +2,7 @@
 order: 6
 ---
 
-# Use AI to develop Custom Resources
+# Custom Resources
 
 In Alchemy, a Resource is "just a function". This makes it super easy to generate resources for your use-cases using Agentic IDEs like Cursor, Claude Code, Windsurf, etc.
 

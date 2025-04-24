@@ -2,7 +2,7 @@
 order: 1
 ---
 
-# Cloudflare ViteJS
+# Vite
 
 This guide demonstrates how to deploy a Vite.js React TypeScript application with a Hono API to Cloudflare using Alchemy.
 
@@ -117,7 +117,7 @@ export default {
 };
 ```
 
-Update the `StaticSite` to use our custom server entrypoint:
+Update `Vite` to use our custom server entrypoint:
 
 ```ts
 export const website = await Vite("website", {

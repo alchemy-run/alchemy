@@ -2,7 +2,7 @@
 order: 3
 ---
 
-# Cloudflare Redwood
+# Redwood
 
 This guide demonstrates how to deploy a Redwood application with Drizzle to Cloudflare using Alchemy.
 

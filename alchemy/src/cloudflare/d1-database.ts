@@ -14,8 +14,10 @@ import { applyMigrations, listMigrationsFiles } from "./d1-migrations.js";
 export interface D1DatabaseProps extends CloudflareApiOptions {
   /**
    * Name of the database
+   *
+   * @default id
    */
-  name: string;
+  name?: string;
 
   /**
    * Optional primary location hint for the database
@@ -176,7 +178,7 @@ export const D1DatabaseResource = Resource(
     props: D1DatabaseProps
   ): Promise<D1Database> {
     const api = await createCloudflareApi(props);
-    const databaseName = props.name || id;
+    const databaseName = props.name ?? id;
 
     if (this.phase === "delete") {
       console.log("Deleting D1 database:", databaseName);
