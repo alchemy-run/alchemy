@@ -1,10 +1,10 @@
 # StaticTextFile
 
-The StaticTextFile resource creates plain text files in your filesystem using [Node.js File System](https://nodejs.org/api/fs.html).
+The StaticTextFile resource creates and manages plain text files in the filesystem using [Alchemy's File System](https://alchemy.run/docs/concepts/fs) capabilities.
 
 # Minimal Example
 
-Creates a simple text file with content.
+Creates a simple text file with content:
 
 ```ts
 import { StaticTextFile } from "alchemy/fs";
@@ -16,26 +16,26 @@ const readme = await StaticTextFile("README.md",
 
 # Custom Path
 
-Creates a text file at a specific path.
+Creates a text file at a specific path:
 
 ```ts
 import { StaticTextFile } from "alchemy/fs";
 
-const log = await StaticTextFile("app.log", 
-  "logs/app.log",
-  "Application started successfully"
+const changelog = await StaticTextFile("CHANGELOG.md",
+  "docs/CHANGELOG.md",
+  "# Changelog\n\n## v1.0.0\n\n- Initial release"
 );
 ```
 
-# Nested Directories
+# Nested Directory
 
-Creates a text file in nested directories (directories are created automatically).
+Creates a text file in a nested directory structure (directories are created automatically):
 
 ```ts
 import { StaticTextFile } from "alchemy/fs";
 
-const config = await StaticTextFile("config", 
-  "config/settings/app.conf",
-  "debug=true\nport=3000"
+const log = await StaticTextFile("app.log",
+  "logs/app/app.log", 
+  "Application started successfully"
 );
 ```

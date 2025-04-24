@@ -1,87 +1,62 @@
 # Website
 
-The Website resource lets you deploy a static website to [Cloudflare Pages](https://developers.cloudflare.com/pages/) with a Worker backend.
+The Website resource lets you deploy a static website to [Cloudflare Pages](https://developers.cloudflare.com/pages/).
 
 # Minimal Example
 
-Deploy a basic static site with a Worker backend:
+Deploy a basic static website to Cloudflare Pages.
 
 ```ts
 import { Website } from "alchemy/cloudflare";
 
 const site = await Website("my-site", {
   name: "my-site",
-  command: "npm run build", 
-  assets: "./dist",
-  entrypoint: "./src/worker.ts"
+  command: "npm run build",
+  assets: "./dist"
 });
 ```
 
-# With Custom Domain
+# With Custom Build Settings
 
-Deploy a site with a custom domain:
+Configure custom build command, entry point and asset directory.
 
-```ts
-import { Website, CustomDomain } from "alchemy/cloudflare";
-
+```ts 
 const site = await Website("my-site", {
   name: "my-site",
-  command: "npm run build",
-  assets: "./dist",
-  entrypoint: "./src/worker.ts"
-});
-
-const domain = await CustomDomain("my-domain", {
-  name: "www.example.com",
-  zoneId: "zone-id",
-  workerName: site.name
-});
-```
-
-# With Bindings
-
-Add KV storage and environment variables to the Worker:
-
-```ts
-import { Website, KVNamespace } from "alchemy/cloudflare";
-
-const kv = await KVNamespace("my-kv", {
-  title: "my-kv"
-});
-
-const site = await Website("my-site", {
-  name: "my-site",
-  command: "npm run build",
-  assets: "./dist", 
-  entrypoint: "./src/worker.ts",
-  bindings: {
-    KV: kv,
-    API_KEY: alchemy.secret(process.env.API_KEY)
+  command: "npm run build:prod",
+  main: "./src/worker.ts",
+  assets: {
+    dist: "./build",
+    html_handling: "single-page-application"
   }
 });
 ```
 
-# With SPA Mode
+# With Environment Variables and Bindings
 
-Configure for single-page application routing:
+Add environment variables and bind to other Cloudflare resources.
 
 ```ts
-import { Website } from "alchemy/cloudflare";
+const db = await D1Database("my-db", {
+  name: "my-db"
+});
 
-const spa = await Website("my-spa", {
-  name: "my-spa",
+const site = await Website("my-site", {
+  name: "my-site",
   command: "npm run build",
-  assets: {
-    dist: "./dist",
-    not_found_handling: "single-page-application"
+  assets: "./dist",
+  env: {
+    NODE_ENV: "production"
   },
-  entrypoint: "./src/worker.ts"
+  bindings: {
+    DB: db
+  }
 });
 ```
 
 # Bind to a Worker
 
-The Website resource is already a Worker binding:
+The Website resource creates a Worker that can be bound to other Workers.
 
 ```ts
 import { Worker, Website } from "alchemy/cloudflare";
@@ -92,9 +67,9 @@ const site = await Website("my-site", {
   assets: "./dist"
 });
 
-await Worker("my-worker", {
-  name: "my-worker", 
-  script: "console.log('Hello from worker!')",
+await Worker("api", {
+  name: "api",
+  script: "console.log('Hello from API')",
   bindings: {
     SITE: site
   }

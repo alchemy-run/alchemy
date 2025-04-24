@@ -4,18 +4,18 @@ The TypeScriptFile resource lets you generate TypeScript code files using AI mod
 
 # Minimal Example
 
-Generate a simple TypeScript utility function:
+Generate a simple TypeScript utility file:
 
 ```ts
 import { TypeScriptFile } from "alchemy/ai";
 
 const utils = await TypeScriptFile("string-utils", {
   path: "./src/utils/string-utils.ts",
-  prompt: "Generate TypeScript utility functions for string manipulation like capitalize, truncate, and camelCase"
+  prompt: "Generate TypeScript utility functions for string manipulation (capitalize, truncate, camelCase, kebabCase)"
 });
 ```
 
-# Generate Code with Context
+# Generate with Context
 
 Use alchemy template literals to include file context:
 
@@ -25,25 +25,41 @@ import { TypeScriptFile } from "alchemy/ai";
 const service = await TypeScriptFile("user-service", {
   path: "./src/services/UserService.ts",
   prompt: await alchemy`
-    Create a UserService class that handles user authentication.
-    Use the User type from:
+    Create a UserService class using the types from:
     ${alchemy.file("src/types/User.ts")}
   `,
   temperature: 0.2
 });
 ```
 
-# Custom Model and System Prompt
+# Custom Formatting
 
-Configure the AI model and customize the system prompt:
+Configure Prettier formatting options:
+
+```ts
+import { TypeScriptFile } from "alchemy/ai";
+
+const component = await TypeScriptFile("button", {
+  path: "./src/components/Button.tsx",
+  prompt: "Generate a reusable React button component with variants and sizes",
+  prettierConfig: {
+    semi: false,
+    singleQuote: true,
+    printWidth: 120
+  }
+});
+```
+
+# Custom Model
+
+Use a specific AI model and provider:
 
 ```ts
 import { TypeScriptFile } from "alchemy/ai";
 
 const hook = await TypeScriptFile("use-form", {
-  path: "./src/hooks/useForm.ts",
+  path: "./src/hooks/useForm.ts", 
   prompt: "Create a React form hook with validation and submission handling",
-  system: "You are an expert React developer. Create a single TypeScript file inside ```ts fences.",
   model: {
     id: "claude-3-opus-20240229",
     provider: "anthropic"

@@ -9,7 +9,7 @@ Import all default DNS record types for a domain.
 ```ts
 import { ImportDnsRecords } from "alchemy/dns";
 
-const records = await ImportDnsRecords("example-com", {
+const dnsRecords = await ImportDnsRecords("example-com", {
   domain: "example.com"
 });
 ```
@@ -29,18 +29,13 @@ const records = await ImportDnsRecords("example-com", {
 
 # Transfer Records to Cloudflare
 
-Import records from a domain and transfer them to a Cloudflare zone.
+Import DNS records and transfer them to a Cloudflare zone.
 
 ```ts
-import { ImportDnsRecords, DnsRecords, Zone } from "alchemy/dns";
+import { ImportDnsRecords, DnsRecords } from "alchemy/dns";
 
 const dnsRecords = await ImportDnsRecords("dns-records", {
   domain: "example.com"
-});
-
-const zone = await Zone("example-com", {
-  name: "example.com",
-  type: "full"
 });
 
 await DnsRecords("transfer-records", {

@@ -1,6 +1,6 @@
 # Role
 
-The Role resource lets you create and manage [AWS IAM Roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html) that define permissions for AWS services and resources.
+The Role resource lets you create and manage [AWS IAM Roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html) that define permissions for AWS services and users.
 
 ## Minimal Example
 
@@ -41,7 +41,7 @@ const role = await Role("lambda-role", {
 
 ## With Managed Policies
 
-Attach AWS managed policies to a role:
+Attach AWS managed policies to grant common permissions:
 
 ```ts
 import { Role } from "alchemy/aws";
@@ -64,7 +64,7 @@ const role = await Role("readonly-role", {
 });
 ```
 
-## With Multiple Inline Policies
+## Multiple Inline Policies
 
 Create a role with multiple inline policies and custom session duration:
 
@@ -73,8 +73,6 @@ import { Role } from "alchemy/aws";
 
 const role = await Role("custom-role", {
   roleName: "custom-role",
-  description: "Role with multiple policies",
-  maxSessionDuration: 7200,
   assumeRolePolicy: {
     Version: "2012-10-17",
     Statement: [{
@@ -82,9 +80,10 @@ const role = await Role("custom-role", {
       Principal: {
         Service: "lambda.amazonaws.com"
       },
-      Action: "sts:AssumeRole" 
+      Action: "sts:AssumeRole"
     }]
   },
+  maxSessionDuration: 7200,
   policies: [
     {
       policyName: "logs",

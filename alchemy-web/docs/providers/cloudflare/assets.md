@@ -1,6 +1,6 @@
 # Assets
 
-The Assets resource lets you add [static assets](https://developers.cloudflare.com/workers/configuration/sites/) to your Cloudflare Workers.
+The Assets component lets you add [static assets](https://developers.cloudflare.com/workers/configuration/sites/) to your Cloudflare Worker.
 
 # Minimal Example
 
@@ -16,7 +16,7 @@ const staticAssets = await Assets("static", {
 
 # Bind to a Worker
 
-Use the assets with a worker:
+Use the assets with a Cloudflare Worker:
 
 ```ts
 import { Worker, Assets } from "alchemy/cloudflare";

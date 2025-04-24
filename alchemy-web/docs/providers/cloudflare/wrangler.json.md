@@ -1,17 +1,17 @@
 # WranglerJson
 
-The WranglerJson resource generates a `wrangler.json` configuration file for a [Cloudflare Worker](https://developers.cloudflare.com/workers/configuration/wrangler-configuration/).
+The WranglerJson resource generates a `wrangler.json` configuration file for a Cloudflare Worker.
 
 # Minimal Example
 
-Creates a basic wrangler.json file for a Worker:
+Creates a basic wrangler.json file for a Worker.
 
 ```ts
 import { Worker, WranglerJson } from "alchemy/cloudflare";
 
-const worker = await Worker("api", {
-  name: "api-worker",
-  entrypoint: "./src/api.ts"
+const worker = await Worker("my-worker", {
+  name: "my-worker",
+  entrypoint: "./src/index.ts"
 });
 
 await WranglerJson("wrangler", {
@@ -19,40 +19,20 @@ await WranglerJson("wrangler", {
 });
 ```
 
-# With Custom Path
+# Custom Path
 
-Specify a custom path for the wrangler.json file:
-
-```ts
-await WranglerJson("wrangler", {
-  worker,
-  path: "./config/wrangler.json"
-});
-```
-
-# With Worker Bindings
-
-Creates a wrangler.json file with KV, Durable Object and other bindings:
+Specify a custom path for the wrangler.json file.
 
 ```ts
-const kv = await KVNamespace("cache", {
-  title: "cache-store"
-});
+import { Worker, WranglerJson } from "alchemy/cloudflare";
 
-const counter = new DurableObjectNamespace("counter", {
-  className: "Counter"
-});
-
-const worker = await Worker("api", {
-  name: "api-worker", 
-  entrypoint: "./src/api.ts",
-  bindings: {
-    CACHE: kv,
-    COUNTER: counter
-  }
+const worker = await Worker("my-worker", {
+  name: "my-worker", 
+  entrypoint: "./src/index.ts"
 });
 
 await WranglerJson("wrangler", {
+  path: "./config/wrangler.json",
   worker
 });
 ```

@@ -11,13 +11,13 @@ import { CSSFile } from "alchemy/ai";
 
 const styles = await CSSFile("main-styles", {
   path: "./public/css/main.css",
-  prompt: "Generate modern CSS styles with a primary color of #0062ff and responsive layout"
+  prompt: "Generate modern CSS styles for a company website with primary color #0062ff and responsive layout"
 });
 ```
 
-# Generate Component Styles
+# Generate CSS Based on HTML
 
-Generate CSS styles based on existing HTML components.
+Generate CSS styles by referencing existing HTML components.
 
 ```ts
 import { CSSFile } from "alchemy/ai";
@@ -28,18 +28,15 @@ const componentStyles = await CSSFile("component-styles", {
     Create CSS styles for this HTML component:
     ${alchemy.file("src/components/Card.html")}
     
-    Include:
-    - Hover effects and transitions
-    - Light/dark theme support
-    - CSS variables for colors
+    Include hover effects and dark/light theme support
   `,
   temperature: 0.2
 });
 ```
 
-# Generate Animations
+# Generate CSS Animations
 
-Generate reusable CSS animations with custom system prompt.
+Generate reusable CSS animations with a custom system prompt.
 
 ```ts
 import { CSSFile } from "alchemy/ai";

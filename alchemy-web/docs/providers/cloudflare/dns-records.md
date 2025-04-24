@@ -1,25 +1,25 @@
 # DnsRecords
 
-The DnsRecords component lets you manage [DNS records](https://developers.cloudflare.com/dns/manage-dns-records/) in a Cloudflare zone.
+The DnsRecords component lets you manage multiple DNS records in a [Cloudflare zone](https://developers.cloudflare.com/dns/manage-dns-records/).
 
 # Minimal Example
 
-Create basic A and CNAME records for a domain.
+Create basic A and CNAME records:
 
 ```ts
 import { DnsRecords } from "alchemy/cloudflare";
 
 const records = await DnsRecords("example.com-dns", {
-  zoneId: "YOUR_ZONE_ID",
+  zoneId: "example.com", 
   records: [
     {
       name: "www.example.com",
-      type: "A", 
+      type: "A",
       content: "192.0.2.1",
       proxied: true
     },
     {
-      name: "blog.example.com",
+      name: "blog.example.com", 
       type: "CNAME",
       content: "www.example.com",
       proxied: true
@@ -30,22 +30,28 @@ const records = await DnsRecords("example.com-dns", {
 
 # Email Records
 
-Create MX and TXT records for email routing.
+Create MX and TXT records for email routing:
 
 ```ts
 import { DnsRecords } from "alchemy/cloudflare";
 
 const emailRecords = await DnsRecords("example.com-email", {
-  zoneId: "YOUR_ZONE_ID", 
+  zoneId: "example.com",
   records: [
     {
       name: "example.com",
-      type: "MX",
+      type: "MX", 
       content: "aspmx.l.google.com",
       priority: 1
     },
     {
-      name: "example.com", 
+      name: "example.com",
+      type: "MX",
+      content: "alt1.aspmx.l.google.com", 
+      priority: 5
+    },
+    {
+      name: "example.com",
       type: "TXT",
       content: "v=spf1 include:_spf.google.com ~all"
     }
@@ -53,37 +59,30 @@ const emailRecords = await DnsRecords("example.com-email", {
 });
 ```
 
-# Multiple Record Types
+# Bind to a Worker
 
-Create multiple record types with different configurations.
+Use DNS records with a Cloudflare Worker:
 
 ```ts
-import { DnsRecords } from "alchemy/cloudflare";
+import { Worker, DnsRecords } from "alchemy/cloudflare";
 
-const records = await DnsRecords("example.com-dns", {
-  zoneId: "YOUR_ZONE_ID",
+const records = await DnsRecords("api-dns", {
+  zoneId: "example.com",
   records: [
-    // A record with proxy enabled
     {
-      name: "www",
+      name: "api.example.com",
       type: "A",
       content: "192.0.2.1",
       proxied: true
-    },
-    // CNAME with custom TTL
-    {
-      name: "blog",
-      type: "CNAME", 
-      content: "www.example.com",
-      ttl: 3600
-    },
-    // TXT record with comment
-    {
-      name: "example.com",
-      type: "TXT",
-      content: "verification=abc123",
-      comment: "Domain verification"
     }
   ]
+});
+
+await Worker("api", {
+  name: "api-worker",
+  script: "console.log('Hello, world!')",
+  bindings: {
+    DNS: records
+  }
 });
 ```

@@ -1,8 +1,8 @@
 # JSONFile
 
-The JSONFile resource lets you generate JSON files using AI models. It supports both schema-based validation and freeform JSON generation.
+The JSONFile resource lets you generate JSON files using AI models with optional schema validation.
 
-# Minimal Example
+## Minimal Example
 
 Generate a simple JSON configuration file:
 
@@ -11,11 +11,11 @@ import { JSONFile } from "alchemy/ai";
 
 const config = await JSONFile("app-config", {
   path: "./config/app.json",
-  prompt: "Generate a configuration for a web application with server settings, database connection details, and feature flags"
+  prompt: "Generate a configuration for a web application with server settings, database connection details, and logging configuration"
 });
 ```
 
-# Schema Validation
+## Schema Validation
 
 Use ArkType schemas to validate and type the generated JSON:
 
@@ -44,20 +44,17 @@ const userData = await JSONFile("user-data", {
 console.log(userData.json.users[0].role); // Typed as 'admin' | 'user' | 'guest'
 ```
 
-# Custom System Prompt
+## Custom Formatting
 
-Customize the AI's behavior with a custom system prompt:
+Control JSON formatting with pretty-printing options:
 
 ```ts
 import { JSONFile } from "alchemy/ai";
 
 const apiMock = await JSONFile("api-mock", {
-  path: "./mocks/products-api.json",
+  path: "./mocks/products.json",
   prompt: "Create mock data for a product catalog API with 10 products",
-  system: "You are an API design expert. Create realistic mock JSON data that follows REST API best practices.",
-  model: {
-    id: "claude-3-opus-20240229",
-    provider: "anthropic"
-  }
+  pretty: true,
+  indent: 4
 });
 ```

@@ -1,10 +1,10 @@
 # StaticHTMLFile
 
-The StaticHTMLFile resource creates static HTML files in your filesystem using [Alchemy's File System](https://alchemy.run/docs/concepts/fs) capabilities.
+The StaticHTMLFile resource creates static HTML files with automatic directory creation and cleanup.
 
 # Minimal Example
 
-Creates a basic HTML file with the specified content.
+Creates a basic HTML file:
 
 ```ts
 import { StaticHTMLFile } from "alchemy/fs";
@@ -12,64 +12,30 @@ import { StaticHTMLFile } from "alchemy/fs";
 const page = await StaticHTMLFile("index.html", `
   <!DOCTYPE html>
   <html>
-    <head>
-      <title>My Page</title>
-    </head>
-    <body>
-      <h1>Hello World</h1>
-    </body>
+    <head><title>My Page</title></head>
+    <body>Hello World</body>
   </html>
 `);
 ```
 
 # Custom Path
 
-Creates an HTML file at a specific path location.
+Creates an HTML file at a specific path:
 
 ```ts
 import { StaticHTMLFile } from "alchemy/fs";
 
-const page = await StaticHTMLFile("home", 
-  "pages/home.html",
-  `<!DOCTYPE html>
+const page = await StaticHTMLFile("home", "pages/index.html", `
+  <!DOCTYPE html>
   <html>
     <head>
       <title>Home</title>
+      <link rel="stylesheet" href="style.css">
     </head>
     <body>
-      <h1>Welcome Home</h1>
+      <h1>Welcome</h1>
+      <p>This is my homepage.</p>
     </body>
-  </html>`
-);
-```
-
-# Full Page Example
-
-Creates a complete HTML page with metadata, styles and content.
-
-```ts
-import { StaticHTMLFile } from "alchemy/fs";
-
-const page = await StaticHTMLFile("index.html", `
-  <!DOCTYPE html>
-  <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Website</title>
-    <link rel="stylesheet" href="styles.css">
-  </head>
-  <body>
-    <header>
-      <h1>Welcome to My Website</h1>
-    </header>
-    <main>
-      <p>This is the main content of the page.</p>
-    </main>
-    <footer>
-      <p>&copy; 2024 My Company</p>
-    </footer>
-  </body>
   </html>
 `);
 ```

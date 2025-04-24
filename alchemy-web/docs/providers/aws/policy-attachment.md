@@ -17,7 +17,7 @@ const adminAccess = await PolicyAttachment("admin-policy", {
 
 ## Attach Custom Policy
 
-Attach a custom policy to a role:
+Attach a custom policy created with the Policy resource:
 
 ```ts
 import { PolicyAttachment } from "alchemy/aws";

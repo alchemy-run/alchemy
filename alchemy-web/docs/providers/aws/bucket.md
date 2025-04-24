@@ -2,14 +2,14 @@
 
 The Bucket resource lets you create and manage [Amazon S3 buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html) for object storage.
 
-## Minimal Example
+# Minimal Example
 
 Create a basic S3 bucket with default settings:
 
 ```ts
 import { Bucket } from "alchemy/aws";
 
-const bucket = await Bucket("my-app-storage", {
+const bucket = await Bucket("storage", {
   bucketName: "my-app-storage",
   tags: {
     Environment: "production"
@@ -17,15 +17,15 @@ const bucket = await Bucket("my-app-storage", {
 });
 ```
 
-## Bucket with Versioning
+# Bucket with Versioning
 
-Create a bucket with versioning enabled and specific tags:
+Create a bucket with versioning enabled for change tracking:
 
 ```ts
 import { Bucket } from "alchemy/aws";
 
 const versionedBucket = await Bucket("document-archive", {
-  bucketName: "document-archive", 
+  bucketName: "document-archive",
   tags: {
     Environment: "production",
     Purpose: "document-storage",
@@ -34,9 +34,9 @@ const versionedBucket = await Bucket("document-archive", {
 });
 ```
 
-## Development Bucket
+# Development Bucket
 
-Create a development bucket with minimal configuration:
+Create a temporary bucket for development/testing:
 
 ```ts
 import { Bucket } from "alchemy/aws";

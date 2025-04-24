@@ -1,10 +1,10 @@
 # R2Bucket
 
-The R2Bucket component lets you create and manage [Cloudflare R2 buckets](https://developers.cloudflare.com/r2/) for object storage.
+The R2Bucket component lets you create and manage [Cloudflare R2 buckets](https://developers.cloudflare.com/r2/buckets/) for object storage.
 
 # Minimal Example
 
-Creates a basic R2 bucket with default settings.
+Create a basic R2 bucket with default settings:
 
 ```ts
 import { R2Bucket } from "alchemy/cloudflare";
@@ -16,7 +16,7 @@ const bucket = await R2Bucket("my-bucket", {
 
 # With Location Hint
 
-Creates a bucket with location hint for optimal performance.
+Create a bucket with location hint for optimal performance:
 
 ```ts
 import { R2Bucket } from "alchemy/cloudflare";
@@ -30,7 +30,7 @@ const euBucket = await R2Bucket("eu-bucket", {
 
 # With Public Access
 
-Creates a development bucket with public access enabled.
+Create a development bucket with public access enabled:
 
 ```ts
 import { R2Bucket } from "alchemy/cloudflare";
@@ -41,22 +41,20 @@ const publicBucket = await R2Bucket("public-assets", {
 });
 ```
 
-# With Auto-Empty
+# With Auto-Emptying
 
-Creates a bucket that will be automatically emptied when deleted.
+Create a bucket that will be automatically emptied when deleted:
 
 ```ts
 import { R2Bucket } from "alchemy/cloudflare";
 
 const tempBucket = await R2Bucket("temp-storage", {
   name: "temp-storage",
-  empty: true // All objects will be deleted when this resource is destroyed
+  empty: true // All objects will be deleted when destroyed
 });
 ```
 
 # Bind to a Worker
-
-Bind an R2 bucket to a Cloudflare Worker.
 
 ```ts
 import { Worker, R2Bucket } from "alchemy/cloudflare";

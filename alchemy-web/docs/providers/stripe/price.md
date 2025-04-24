@@ -23,7 +23,7 @@ Create a recurring subscription price with fixed monthly billing:
 ```ts
 import { Price } from "alchemy/stripe";
 
-const price = await Price("pro-monthly", {
+const subscriptionPrice = await Price("pro-monthly", {
   currency: "usd",
   unitAmount: 1499, // $14.99/month
   product: "prod_xyz",
@@ -41,7 +41,7 @@ Create a metered price for usage-based billing:
 ```ts
 import { Price } from "alchemy/stripe";
 
-const price = await Price("storage", {
+const meteredPrice = await Price("storage", {
   currency: "usd", 
   unitAmount: 25, // $0.25 per GB
   product: "prod_xyz",

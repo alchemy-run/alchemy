@@ -19,7 +19,7 @@ const queue = await Queue("my-queue", {
 
 ## FIFO Queue
 
-Create a FIFO queue with content-based deduplication for exactly-once processing:
+Create a FIFO queue with content-based deduplication:
 
 ```ts
 import { Queue } from "alchemy/aws";
@@ -28,16 +28,13 @@ const fifoQueue = await Queue("orders-queue", {
   queueName: "orders-queue.fifo", 
   fifo: true,
   contentBasedDeduplication: true,
-  visibilityTimeout: 30,
-  tags: {
-    Environment: "production"
-  }
+  visibilityTimeout: 30
 });
 ```
 
-## Custom Message Settings
+## Custom Queue Configuration
 
-Configure custom message retention and visibility settings:
+Create a queue with custom message handling settings:
 
 ```ts
 import { Queue } from "alchemy/aws";

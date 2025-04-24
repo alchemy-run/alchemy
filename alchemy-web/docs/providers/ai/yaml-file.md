@@ -1,6 +1,6 @@
 # YAMLFile
 
-The YAMLFile resource lets you generate [YAML](https://yaml.org/) files using AI models. It supports both schema-based validation and freeform YAML generation.
+The YAMLFile resource lets you generate [YAML](https://yaml.org/) files using AI models with optional schema validation.
 
 # Minimal Example
 
@@ -9,15 +9,15 @@ Generate a simple YAML configuration file:
 ```ts
 import { YAMLFile } from "alchemy/ai";
 
-const config = await YAMLFile("app-config", {
-  path: "./config/app.yml",
-  prompt: "Generate a basic web application configuration with server port, database URL, and logging level"
+const config = await YAMLFile("config", {
+  path: "./config.yml",
+  prompt: "Generate a basic nginx configuration with server name and port"
 });
 ```
 
 # Schema Validation
 
-Use a schema to validate the generated YAML structure:
+Use a schema to validate and type the generated YAML:
 
 ```ts
 import { YAMLFile } from "alchemy/ai";
@@ -25,28 +25,25 @@ import { type } from "arktype";
 
 const configSchema = type({
   server: {
+    name: "string",
     port: "number",
-    host: "string"
-  },
-  database: {
-    url: "string",
-    maxConnections: "number"
-  },
-  logging: {
-    level: "'debug' | 'info' | 'warn' | 'error'"
+    ssl: "boolean"
   }
 });
 
-const config = await YAMLFile("app-config", {
-  path: "./config/app.yml",
+const config = await YAMLFile("config", {
+  path: "./config.yml",
   schema: configSchema,
-  prompt: "Generate a web application configuration"
+  prompt: "Generate an nginx configuration with SSL enabled"
 });
+
+// Type-safe access to the generated YAML
+console.log(config.yaml.server.port); // number
 ```
 
 # Custom System Prompt
 
-Provide specific instructions for YAML generation:
+Customize the AI's behavior with a system prompt:
 
 ```ts
 import { YAMLFile } from "alchemy/ai";
@@ -54,7 +51,7 @@ import { YAMLFile } from "alchemy/ai";
 const workflow = await YAMLFile("github-workflow", {
   path: "./.github/workflows/ci.yml",
   prompt: "Create a GitHub Actions workflow for a Node.js project with testing and deployment",
-  system: "You are a DevOps expert. Create a GitHub Actions workflow following best practices.",
+  system: "You are a DevOps expert specializing in GitHub Actions. Create a single YAML file with proper syntax.",
   model: {
     id: "claude-3-opus-20240229",
     provider: "anthropic"

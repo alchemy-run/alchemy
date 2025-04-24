@@ -13,7 +13,7 @@ const secret = await GitHubSecret("api-key", {
   owner: "my-org",
   repository: "my-repo", 
   name: "API_KEY",
-  value: alchemy.secret("secret-value")
+  value: alchemy.secret("my-secret-value")
 });
 ```
 
@@ -24,7 +24,7 @@ Create a secret scoped to a specific environment:
 ```ts
 import { GitHubSecret } from "alchemy/github";
 
-const secret = await GitHubSecret("prod-key", {
+const secret = await GitHubSecret("prod-secret", {
   owner: "my-org",
   repository: "my-repo",
   name: "DEPLOY_KEY",
@@ -33,18 +33,25 @@ const secret = await GitHubSecret("prod-key", {
 });
 ```
 
-# Custom Token
+# Multiple Secrets
 
-Use a custom GitHub token instead of environment variables:
+Create multiple secrets in a repository:
 
 ```ts
 import { GitHubSecret } from "alchemy/github";
 
-const secret = await GitHubSecret("api-key", {
-  owner: "my-org",
-  repository: "my-repo",
-  name: "API_KEY", 
-  value: alchemy.secret("secret-value"),
-  token: alchemy.secret(process.env.CUSTOM_GITHUB_TOKEN)
-});
+const secrets = await Promise.all([
+  GitHubSecret("aws-secret", {
+    owner: "my-org",
+    repository: "my-repo",
+    name: "AWS_KEY",
+    value: alchemy.secret(process.env.AWS_KEY)
+  }),
+  GitHubSecret("db-secret", {
+    owner: "my-org", 
+    repository: "my-repo",
+    name: "DB_PASSWORD",
+    value: alchemy.secret(process.env.DB_PASSWORD)
+  })
+]);
 ```

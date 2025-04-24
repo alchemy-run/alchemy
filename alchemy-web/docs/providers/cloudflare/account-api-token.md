@@ -1,6 +1,6 @@
 # AccountApiToken
 
-Creates a [Cloudflare API Token](https://developers.cloudflare.com/api/tokens/) with specified permissions and restrictions.
+The AccountApiToken resource creates a [Cloudflare API Token](https://developers.cloudflare.com/api/tokens/) with specified permissions and access policies.
 
 # Minimal Example
 
@@ -34,7 +34,7 @@ const readOnlyToken = await AccountApiToken("readonly-token", {
 
 # Create Token with IP Restrictions
 
-Create a token with IP restrictions and time limits:
+Create a token with IP address restrictions for enhanced security:
 
 ```ts
 import { AccountApiToken } from "alchemy/cloudflare";
@@ -50,8 +50,6 @@ const restrictedToken = await AccountApiToken("restricted-token", {
       "com.cloudflare.api.account.worker.route.*": "*"
     }
   }],
-  notBefore: "2024-01-01T00:00:00Z",
-  expiresOn: "2024-12-31T23:59:59Z",
   condition: {
     requestIp: {
       in: ["192.168.1.0/24", "10.0.0.0/8"],
@@ -61,23 +59,54 @@ const restrictedToken = await AccountApiToken("restricted-token", {
 });
 ```
 
-# Create R2 Token
+# Create Token with Time Restrictions
 
-Create a token for R2 bucket access:
+Create a token that is only valid for a specific time period:
 
 ```ts
 import { AccountApiToken } from "alchemy/cloudflare";
 
-const r2Token = await AccountApiToken("r2-token", {
-  name: "R2 Read-Only Token",
+const timedToken = await AccountApiToken("timed-token", {
+  name: "Time Limited Token",
   policies: [{
     effect: "allow",
-    resources: {
-      "com.cloudflare.edge.r2.bucket.my-bucket": "*"
-    },
     permissionGroups: [
-      { id: permissions["Workers R2 Storage Bucket Item Read"].id }
-    ]
+      { id: permissions["DNS Write"].id }
+    ],
+    resources: {
+      "com.cloudflare.api.account.zone.*": "*"
+    }
+  }],
+  notBefore: "2024-01-01T00:00:00Z",
+  expiresOn: "2024-12-31T23:59:59Z"
+});
+```
+
+# Bind to a Worker
+
+Use the token in a Worker binding:
+
+```ts
+import { Worker, AccountApiToken } from "alchemy/cloudflare";
+
+const token = await AccountApiToken("api-token", {
+  name: "Worker API Token",
+  policies: [{
+    effect: "allow",
+    permissionGroups: [
+      { id: permissions["Cache Purge"].id }
+    ],
+    resources: {
+      "com.cloudflare.api.account.*": "*" 
+    }
   }]
+});
+
+await Worker("my-worker", {
+  name: "my-worker",
+  script: "console.log('Hello, world!')",
+  bindings: {
+    API_TOKEN: token.value
+  }
 });
 ```

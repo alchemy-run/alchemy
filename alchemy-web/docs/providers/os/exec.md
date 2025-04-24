@@ -1,8 +1,8 @@
 # Exec
 
-The Exec resource allows you to execute shell commands as part of your Alchemy infrastructure code.
+The Exec resource allows you to execute shell commands as part of your Alchemy infrastructure. It provides a way to run system commands with full control over the execution environment and output handling.
 
-# Minimal Example
+## Minimal Example
 
 Execute a simple shell command:
 
@@ -16,7 +16,7 @@ const result = await Exec("list-files", {
 console.log(result.stdout);
 ```
 
-# Working Directory and Environment
+## Working Directory and Environment
 
 Run a command in a specific directory with custom environment variables:
 
@@ -27,12 +27,12 @@ const build = await Exec("build-project", {
   command: "npm run build",
   cwd: "./my-project",
   env: { 
-    NODE_ENV: "production" 
+    NODE_ENV: "production"
   }
 });
 ```
 
-# Memoized Commands
+## Command Memoization 
 
 Cache command output and only re-run when the command changes:
 
@@ -43,24 +43,17 @@ const status = await Exec("git-status", {
   command: "git status",
   memoize: true
 });
-
-// Won't actually run again if command hasn't changed
-const cached = await Exec("git-status", {
-  command: "git status", 
-  memoize: true
-});
 ```
 
-# Error Handling
+## Custom Buffer Size
 
-Control error behavior with throwOnError:
+Handle large command output by increasing the buffer size:
 
 ```ts
 import { Exec } from "alchemy/os";
 
-const result = await Exec("risky-command", {
-  command: "some-command-that-might-fail",
-  throwOnError: true,
-  maxBuffer: 10 * 1024 * 1024 // 10MB buffer
+const logs = await Exec("get-logs", {
+  command: "cat large-log-file.log", 
+  maxBuffer: 10 * 1024 * 1024 // 10MB
 });
 ```

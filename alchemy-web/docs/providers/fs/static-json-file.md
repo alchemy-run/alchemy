@@ -22,15 +22,12 @@ Creates a JSON file at a specific path.
 ```ts
 import { StaticJsonFile } from "alchemy/fs";
 
-const config = await StaticJsonFile("config", {
-  path: "src/config/app.json", 
-  content: {
-    api: {
-      endpoint: "https://api.example.com",
-      version: "v1"
-    },
-    features: ["auth", "logging"]
-  }
+const config = await StaticJsonFile("config", "config/settings.json", {
+  api: {
+    endpoint: "https://api.example.com",
+    version: "v1"
+  },
+  features: ["auth", "logging"]
 });
 ```
 
@@ -41,22 +38,27 @@ Creates a JSON file with nested configuration.
 ```ts
 import { StaticJsonFile } from "alchemy/fs";
 
-const settings = await StaticJsonFile("settings.json", {
-  server: {
-    host: "localhost",
-    port: 3000,
-    middleware: ["cors", "compression"]
-  },
-  database: {
-    url: "postgresql://localhost:5432/db",
-    pool: {
-      min: 1,
-      max: 10
+const config = await StaticJsonFile("app-config.json", {
+  app: {
+    name: "my-app",
+    version: "1.0.0",
+    settings: {
+      theme: "dark",
+      notifications: true
     }
   },
-  logging: {
-    level: "info",
-    transports: ["console", "file"]
-  }
+  database: {
+    host: "localhost",
+    port: 5432,
+    credentials: {
+      user: "admin",
+      password: "secret"
+    }
+  },
+  features: [
+    "authentication",
+    "authorization",
+    "logging"
+  ]
 });
 ```

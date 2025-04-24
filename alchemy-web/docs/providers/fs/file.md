@@ -1,10 +1,10 @@
 # File
 
-The File resource creates and manages files in the filesystem with automatic directory creation and cleanup.
+The File resource lets you create, update and delete files in the filesystem with automatic directory creation and cleanup.
 
 ## Minimal Example
 
-Creates a simple text file:
+Create a simple text file:
 
 ```ts
 import { File } from "alchemy/fs";
@@ -15,9 +15,9 @@ const config = await File("config.txt", {
 });
 ```
 
-## Nested Directory
+## Create File in Nested Directory
 
-Creates a file in a nested directory structure:
+The File resource will automatically create parent directories as needed:
 
 ```ts
 import { File } from "alchemy/fs";
@@ -25,12 +25,12 @@ import { File } from "alchemy/fs";
 const log = await File("logs/app.log", {
   path: "logs/app.log",
   content: "application log entry"
-}); 
+});
 ```
 
-## Update Path and Content
+## Update File Path and Content
 
-Updates an existing file's path and content:
+When updating a file's path, the old file is automatically removed:
 
 ```ts
 import { File } from "alchemy/fs";
@@ -40,9 +40,34 @@ let file = await File("config.json", {
   content: '{ "version": "1.0.0" }'
 });
 
-// Later update path and content (old file is removed)
+// Later, update path and content (old file will be removed)
 file = await File("config.json", {
   path: "config/config.json", 
   content: '{ "version": "1.0.1" }'
+});
+```
+
+## Static File Types
+
+The fs service provides specialized file types for common formats:
+
+```ts
+import { StaticJsonFile, StaticTypeScriptFile, StaticYamlFile } from "alchemy/fs";
+
+// Create formatted JSON file
+const config = await StaticJsonFile("config.json", {
+  api: { endpoint: "https://api.example.com" }
+});
+
+// Create formatted TypeScript file 
+const component = await StaticTypeScriptFile("Component.ts", `
+  export function Component() {
+    return <div>Hello</div>
+  }
+`);
+
+// Create YAML file
+const deployment = await StaticYamlFile("deploy.yaml", {
+  service: { replicas: 3 }
 });
 ```

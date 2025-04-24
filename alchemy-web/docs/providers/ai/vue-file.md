@@ -1,10 +1,10 @@
 # VueFile
 
-The VueFile resource lets you generate [Vue.js](https://vuejs.org/) components using AI models.
+The VueFile resource lets you generate [Vue.js](https://vuejs.org/) single-file components using AI models.
 
 # Minimal Example
 
-Creates a basic Vue component file with AI-generated code.
+Creates a basic Vue component file with the specified content.
 
 ```ts
 import { VueFile } from "alchemy/ai";
@@ -37,14 +37,14 @@ const userCard = await VueFile("user-card", {
 
 # Custom System Prompt
 
-Provides specific instructions to guide the AI model's output.
+Provides specific instructions to the AI model about component generation.
 
 ```ts
 import { VueFile } from "alchemy/ai";
 
 const form = await VueFile("registration-form", {
   path: "./src/components/RegistrationForm.vue",
-  prompt: "Generate a registration form with email, password and validation",
+  prompt: "Generate a registration form with email, password validation and submit handler",
   system: "You are an expert Vue developer specializing in form components. Create a single Vue component inside ```vue fences with no additional text.",
   model: {
     id: "claude-3-opus-20240229",

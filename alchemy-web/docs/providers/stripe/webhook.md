@@ -32,7 +32,6 @@ const webhook = await WebhookEndpoint("subscriptions", {
     "invoice.payment_succeeded",
     "invoice.payment_failed"
   ],
-  description: "Subscription lifecycle webhook",
   metadata: {
     type: "subscription-events"
   }

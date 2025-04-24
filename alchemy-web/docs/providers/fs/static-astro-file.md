@@ -1,10 +1,10 @@
 # StaticAstroFile
 
-The StaticAstroFile resource creates [Astro component files](https://docs.astro.build/en/core-concepts/astro-components/) with proper formatting and directory structure.
+The StaticAstroFile resource lets you create [Astro](https://astro.build) component files with automatic formatting and directory creation.
 
 # Minimal Example
 
-Creates a basic Astro component file.
+Creates a basic Astro component file:
 
 ```ts
 import { StaticAstroFile } from "alchemy/fs";
@@ -20,7 +20,7 @@ const title = "Hello World";
 
 # Custom Path
 
-Creates an Astro component in a specific directory.
+Creates an Astro component in a specific directory:
 
 ```ts
 import { StaticAstroFile } from "alchemy/fs";
@@ -36,9 +36,43 @@ const component = await StaticAstroFile("header",
     <Logo />
     <nav>
       {navItems.map(item => (
-        <a href={`/${item.toLowerCase()}`}>{item}</a>
+        <li><a href={item}>{item}</a></li>
       ))}
     </nav>
   </header>
+`);
+```
+
+# Full Component Example
+
+Creates a complete Astro component with styles:
+
+```ts
+import { StaticAstroFile } from "alchemy/fs";
+
+const component = await StaticAstroFile("Header.astro", `
+---
+import Logo from '../components/Logo.astro';
+const navItems = ['Home', 'About', 'Contact'];
+---
+
+<header class="header">
+  <Logo />
+  <nav>
+    <ul>
+      {navItems.map(item => (
+        <li><a href={item}>{item}</a></li>
+      ))}
+    </ul>
+  </nav>
+</header>
+
+<style>
+  .header {
+    display: flex;
+    justify-content: space-between;
+    padding: 1rem;
+  }
+</style>
 `);
 ```

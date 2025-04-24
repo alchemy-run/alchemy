@@ -1,23 +1,23 @@
 # AstroFile
 
-The AstroFile resource lets you generate [Astro](https://astro.build/) components and pages using AI models.
+The AstroFile resource lets you generate [Astro](https://astro.build) components using AI models.
 
 # Minimal Example
 
-Creates a basic Astro component with AI-generated code.
+Create a simple Astro component with basic content.
 
 ```ts
 import { AstroFile } from "alchemy/ai";
 
 const header = await AstroFile("header", {
   path: "./src/components/Header.astro",
-  prompt: "Generate an Astro header component with a logo, navigation menu, and mobile responsiveness"
+  prompt: "Generate an Astro header component with a logo and navigation menu"
 });
 ```
 
-# Generate with File Context
+# Generate Component with Data Types
 
-Uses existing files as context for generating components.
+Generate an Astro component that uses TypeScript types.
 
 ```ts
 import { AstroFile } from "alchemy/ai";
@@ -25,7 +25,12 @@ import { AstroFile } from "alchemy/ai";
 const blogPost = await AstroFile("blog-post", {
   path: "./src/pages/blog/[slug].astro",
   prompt: await alchemy`
-    Create an Astro blog post page using:
+    Create an Astro blog post page that:
+    - Uses getStaticPaths to generate pages from a CMS
+    - Renders markdown content
+    - Includes author info and publication date
+    
+    Use these types:
     ${alchemy.file("src/types/Blog.ts")}
   `,
   temperature: 0.2
@@ -34,15 +39,15 @@ const blogPost = await AstroFile("blog-post", {
 
 # Custom System Prompt
 
-Provides specific instructions to the AI model.
+Use a custom system prompt to control the AI model's output.
 
 ```ts
 import { AstroFile } from "alchemy/ai";
 
-const layout = await AstroFile("layout", {
+const layout = await AstroFile("main-layout", {
   path: "./src/layouts/MainLayout.astro",
-  prompt: "Create a main layout with SEO metadata and content slots",
-  system: "You are an expert Astro developer. Create a single Astro layout file with proper typing and best practices.",
+  prompt: "Create a main layout with header, footer, and content slots",
+  system: "You are an expert Astro developer. Create a single Astro layout file inside ```astro fences with no additional text. Follow Astro best practices and include proper typing in the frontmatter section.",
   model: {
     id: "claude-3-opus-20240229",
     provider: "anthropic"

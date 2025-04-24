@@ -4,7 +4,7 @@ The HTMLFile resource lets you generate HTML files using AI models like [OpenAI 
 
 # Minimal Example
 
-Creates a simple HTML file with AI-generated content.
+Creates a basic HTML file with AI-generated content.
 
 ```ts
 import { HTMLFile } from "alchemy/ai";
