@@ -93,6 +93,11 @@ export type D1Database = Resource<"cloudflare::D1Database"> &
     id: string;
 
     /**
+     * The name of the database
+     */
+    name: string;
+
+    /**
      * File size of the database
      */
     fileSize: number;
@@ -175,7 +180,7 @@ export const D1DatabaseResource = Resource(
   async function (
     this: Context<D1Database>,
     id: string,
-    props: D1DatabaseProps
+    props: D1DatabaseProps = {}
   ): Promise<D1Database> {
     const api = await createCloudflareApi(props);
     const databaseName = props.name ?? id;

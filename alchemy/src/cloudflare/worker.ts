@@ -186,6 +186,13 @@ export interface Worker<B extends Bindings = Bindings>
   id: string;
 
   /**
+   * Name for the worker
+   *
+   * @default id
+   */
+  name: string;
+
+  /**
    * Time at which the worker was created
    */
   createdAt: number;
