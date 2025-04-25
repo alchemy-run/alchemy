@@ -1,15 +1,15 @@
 # Zone
 
-The Zone resource lets you manage [Cloudflare Zones](https://developers.cloudflare.com/dns/zone-setups/) which represent domains and their configuration settings on Cloudflare.
+The Zone resource lets you manage [Cloudflare DNS zones](https://developers.cloudflare.com/dns/zone-setups/) and their configuration settings.
 
 # Minimal Example
 
-Create a basic zone with default settings:
+Create a basic DNS zone with default settings.
 
 ```ts
 import { Zone } from "alchemy/cloudflare";
 
-const zone = await Zone("example.com", {
+const zone = await Zone("example-zone", {
   name: "example.com",
   type: "full"
 });
@@ -17,15 +17,14 @@ const zone = await Zone("example.com", {
 
 # Enhanced Security Settings
 
-Configure a zone with strict SSL and other security settings:
+Configure a zone with strict SSL and enhanced security settings.
 
 ```ts
-const secureZone = await Zone("secure.example.com", {
-  name: "secure.example.com", 
+const secureZone = await Zone("secure-zone", {
+  name: "secure.example.com",
   settings: {
     ssl: "strict",
-    alwaysUseHttps: "on",
-    automaticHttpsRewrites: "on",
+    alwaysUseHttps: "on", 
     minTlsVersion: "1.3",
     tls13: "zrt"
   }
@@ -34,35 +33,31 @@ const secureZone = await Zone("secure.example.com", {
 
 # Performance Optimization
 
-Create a zone with optimized performance settings:
+Create a zone optimized for performance with HTTP/3 and caching.
 
 ```ts
-const fastZone = await Zone("fast.example.com", {
-  name: "fast.example.com",
+const fastZone = await Zone("fast-zone", {
+  name: "fast.example.com", 
   settings: {
     browserCacheTtl: 7200,
-    brotli: "on", 
-    zeroRtt: "on",
-    http2: "on",
+    brotli: "on",
     http3: "on",
     earlyHints: "on"
   }
 });
 ```
 
-# Development Configuration
+# Development Mode
 
-Configure a zone for development with specific features enabled:
+Configure a zone for development with specific features enabled.
 
 ```ts
-const devZone = await Zone("dev.example.com", {
+const devZone = await Zone("dev-zone", {
   name: "dev.example.com",
   settings: {
     developmentMode: "on",
-    emailObfuscation: "on",
-    hotlinkProtection: "on",
-    ipv6: "on",
-    websockets: "on"
+    websockets: "on",
+    hotlinkProtection: "on"
   }
 });
 ```

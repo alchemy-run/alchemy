@@ -1,6 +1,6 @@
 # KVNamespace
 
-The KVNamespace component lets you create [Cloudflare KV Namespaces](https://developers.cloudflare.com/kv/concepts/kv-namespaces/) for key-value storage.
+A [Cloudflare KV Namespace](https://developers.cloudflare.com/kv/concepts/kv-namespaces/) is a key-value store that can be used to store data for your application.
 
 # Minimal Example
 
@@ -14,9 +14,9 @@ const users = await KVNamespace("users", {
 });
 ```
 
-# With Initial Values
+# With Initial Values and TTL
 
-Create a KV namespace with initial key-value pairs and TTL.
+Create a KV namespace with initial values and expiration.
 
 ```ts
 import { KVNamespace } from "alchemy/cloudflare";
@@ -53,20 +53,20 @@ const assets = await KVNamespace("assets", {
 
 # Bind to a Worker
 
-Bind the KV namespace to a Cloudflare Worker.
+Bind a KV namespace to a Worker for data access.
 
 ```ts
 import { Worker, KVNamespace } from "alchemy/cloudflare";
 
-const myKV = await KVNamespace("MY_KV", {
-  title: "my-kv-namespace"
+const store = await KVNamespace("store", {
+  title: "data-store"
 });
 
-await Worker("my-worker", {
-  name: "my-worker",
+await Worker("api", {
+  name: "api-worker",
   script: "console.log('Hello, world!')",
   bindings: {
-    MY_KV: myKV
+    STORE: store
   }
 });
 ```

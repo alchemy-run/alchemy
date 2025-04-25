@@ -1,4 +1,4 @@
-import type { worker } from "../alchemy.run";
+import type { queue, worker } from "../alchemy.run";
 
 export default {
   async fetch(request: Request, env: typeof worker.Env) {
@@ -8,8 +8,11 @@ export default {
     });
     return new Response("Ok");
   },
-  // TODO: what is the type of batch?
-  async queue(batch: any, env: typeof worker.Env) {
-    console.log(batch);
+  async queue(batch: typeof queue.Batch, env: typeof worker.Env) {
+    for (const message of batch.messages) {
+      console.log(message);
+      message.ack();
+    }
+    batch.ackAll();
   },
 };

@@ -4,7 +4,7 @@ Lists all permission groups available for a Cloudflare account and returns a typ
 
 # Minimal Example
 
-Get all permission groups including those for R2.
+Get all permission groups including those for R2:
 
 ```ts
 import { PermissionGroups } from "alchemy/cloudflare";
@@ -12,9 +12,9 @@ import { PermissionGroups } from "alchemy/cloudflare";
 const permissions = await PermissionGroups("cloudflare-permissions");
 ```
 
-# Use with AccountApiToken
+# Create API Token with Permissions
 
-Create a token with proper permissions.
+Use with AccountApiToken to create a token with proper permissions:
 
 ```ts
 import { PermissionGroups, AccountApiToken } from "alchemy/cloudflare";
@@ -32,23 +32,5 @@ const token = await AccountApiToken("r2-token", {
       id: permissions["Workers R2 Storage Bucket Item Read"].id
     }]
   }]
-});
-```
-
-# Bind to a Worker
-
-Bind permission groups to a worker to control access.
-
-```ts
-import { Worker, PermissionGroups } from "alchemy/cloudflare";
-
-const permissions = await PermissionGroups("cloudflare-permissions");
-
-const worker = await Worker("my-worker", {
-  name: "my-worker",
-  script: "console.log('Hello, world!')",
-  bindings: {
-    PERMISSIONS: permissions
-  }
 });
 ```

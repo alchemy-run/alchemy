@@ -1,10 +1,10 @@
 # Website
 
-The Website resource lets you deploy a static website to [Cloudflare Pages](https://developers.cloudflare.com/pages/).
+The Website resource deploys a static website to Cloudflare Pages with an optional Worker for server-side functionality.
 
 # Minimal Example
 
-Deploy a basic static website to Cloudflare Pages.
+Deploy a static site from a local directory:
 
 ```ts
 import { Website } from "alchemy/cloudflare";
@@ -16,62 +16,60 @@ const site = await Website("my-site", {
 });
 ```
 
-# With Custom Build Settings
+# With Custom Worker
 
-Configure custom build command, entry point and asset directory.
+Add server-side functionality with a Worker:
 
-```ts 
+```ts
 const site = await Website("my-site", {
-  name: "my-site",
-  command: "npm run build:prod",
+  name: "my-site", 
+  command: "npm run build",
+  assets: "./dist",
   main: "./src/worker.ts",
-  assets: {
-    dist: "./build",
-    html_handling: "single-page-application"
+  bindings: {
+    DB: database,
+    API_KEY: alchemy.secret(process.env.API_KEY)
   }
 });
 ```
 
-# With Environment Variables and Bindings
+# With Advanced Configuration
 
-Add environment variables and bind to other Cloudflare resources.
+Configure caching, routing and other options:
 
 ```ts
-const db = await D1Database("my-db", {
-  name: "my-db"
-});
-
 const site = await Website("my-site", {
   name: "my-site",
   command: "npm run build",
-  assets: "./dist",
-  env: {
-    NODE_ENV: "production"
+  assets: {
+    dist: "./dist",
+    html_handling: "force-trailing-slash",
+    not_found_handling: "single-page-application",
+    _headers: "/*\n  Cache-Control: public, max-age=3600",
+    _redirects: "/old/* /new/:splat 301"
   },
-  bindings: {
-    DB: db
-  }
+  compatibilityFlags: ["nodejs_compat"],
+  wrangler: true
 });
 ```
 
 # Bind to a Worker
 
-The Website resource creates a Worker that can be bound to other Workers.
+Use the Website's assets in another Worker:
 
 ```ts
 import { Worker, Website } from "alchemy/cloudflare";
 
 const site = await Website("my-site", {
-  name: "my-site",
   command: "npm run build",
   assets: "./dist"
 });
 
 await Worker("api", {
-  name: "api",
-  script: "console.log('Hello from API')",
+  name: "api-worker",
+  script: "console.log('Hello')",
   bindings: {
-    SITE: site
+    ASSETS: site 
   }
 });
 ```

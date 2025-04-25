@@ -1,20 +1,26 @@
 # TanStackStart
 
-Deploy a TanStack application to Cloudflare Pages with automatically configured defaults for the TanStack framework.
+Deploy a TanStack Start application to Cloudflare Pages with automatically configured defaults.
 
 # Minimal Example
-
-Create a basic TanStack site with default settings:
 
 ```ts
 import { TanStackStart } from "alchemy/cloudflare";
 
-const site = await TanStackStart("my-tanstack-app");
+const app = await TanStackStart("my-app");
 ```
 
-# With Custom Bindings
+# With Custom Build Command
 
-Add database and other bindings to your TanStack application:
+```ts
+import { TanStackStart } from "alchemy/cloudflare";
+
+const app = await TanStackStart("my-app", {
+  command: "bun run test && bun run build:production"
+});
+```
+
+# With Database Binding
 
 ```ts
 import { TanStackStart, D1Database } from "alchemy/cloudflare";
@@ -23,23 +29,19 @@ const database = await D1Database("my-db", {
   name: "my-db"
 });
 
-const site = await TanStackStart("my-tanstack-app", {
+const app = await TanStackStart("my-app", {
   bindings: {
-    DB: database,
-    API_KEY: alchemy.secret(process.env.API_KEY)
+    DB: database
   }
 });
 ```
 
-# With Custom Build Command
-
-Customize the build command and environment variables:
+# With Environment Variables
 
 ```ts
 import { TanStackStart } from "alchemy/cloudflare";
 
-const site = await TanStackStart("my-tanstack-app", {
-  command: "npm run test && npm run build:production",
+const app = await TanStackStart("my-app", {
   bindings: {
     API_KEY: alchemy.secret(process.env.API_KEY)
   },
@@ -52,20 +54,16 @@ const site = await TanStackStart("my-tanstack-app", {
 
 # Bind to a Worker
 
-Use the TanStack site as a binding in another worker:
-
 ```ts
 import { Worker, TanStackStart } from "alchemy/cloudflare";
 
-const site = await TanStackStart("my-tanstack-app", {
-  // ...
-});
+const app = await TanStackStart("my-app");
 
 await Worker("my-worker", {
-  name: "my-worker", 
+  name: "my-worker",
   script: "console.log('Hello, world!')",
   bindings: {
-    SITE: site
+    APP: app
   }
 });
 ```

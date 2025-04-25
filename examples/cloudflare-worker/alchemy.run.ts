@@ -10,7 +10,7 @@ import {
 
 const app = await alchemy("worker-app");
 
-const queue = await Queue<{
+export const queue = await Queue<{
   name: string;
   email: string;
 }>("example-worker-queue");

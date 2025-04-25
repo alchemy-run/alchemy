@@ -1,17 +1,17 @@
 # CustomDomain
 
-The CustomDomain resource lets you configure [custom domains for Cloudflare Workers](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
+The CustomDomain resource lets you attach a [custom domain](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/) to a Cloudflare Worker.
 
 # Minimal Example
 
-Bind a domain to a Cloudflare Worker.
+Bind a domain to a worker:
 
 ```ts
 import { Worker, CustomDomain } from "alchemy/cloudflare";
 
 const worker = await Worker("api", {
-  name: "my-api-worker",
-  entrypoint: "./src/api-worker.ts"
+  name: "api-worker",
+  entrypoint: "./src/api.ts"
 });
 
 const domain = await CustomDomain("api-domain", {
@@ -23,13 +23,13 @@ const domain = await CustomDomain("api-domain", {
 
 # With Environment
 
-Configure a domain binding for a specific Worker environment.
+Bind a domain to a specific worker environment:
 
 ```ts
 import { Worker, CustomDomain } from "alchemy/cloudflare";
 
 const domain = await CustomDomain("staging-domain", {
-  name: "staging-api.example.com",
+  name: "staging.example.com",
   zoneId: "YOUR_ZONE_ID", 
   workerName: "my-worker",
   environment: "staging"

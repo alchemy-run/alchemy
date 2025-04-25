@@ -96,7 +96,9 @@ export interface Queue<Body = unknown>
   /**
    * Phantom property to allow type inference
    */
-  _Body: Body;
+  Body: Body;
+
+  Batch: MessageBatch<Body>;
 }
 
 interface CloudflareQueueResponse {
@@ -211,8 +213,9 @@ export const Queue = Resource("cloudflare::Queue", async function <
       createdOn: queueData.result.created_on || new Date().toISOString(),
       modifiedOn: queueData.result.modified_on || new Date().toISOString(),
       accountId: api.accountId,
-      // phantom
-      _Body: undefined as T,
+      // phantom properties
+      Body: undefined as T,
+      Batch: undefined! as MessageBatch<T>,
     });
   }
 });

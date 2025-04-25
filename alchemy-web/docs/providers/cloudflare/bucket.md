@@ -1,6 +1,6 @@
 # R2Bucket
 
-The R2Bucket component lets you create and manage [Cloudflare R2 buckets](https://developers.cloudflare.com/r2/buckets/) for object storage.
+Creates and manages [Cloudflare R2 Buckets](https://developers.cloudflare.com/r2/buckets/) for object storage with S3 compatibility.
 
 # Minimal Example
 
@@ -50,7 +50,7 @@ import { R2Bucket } from "alchemy/cloudflare";
 
 const tempBucket = await R2Bucket("temp-storage", {
   name: "temp-storage",
-  empty: true // All objects will be deleted when destroyed
+  empty: true // All objects will be deleted when this resource is destroyed
 });
 ```
 

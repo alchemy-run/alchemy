@@ -9,48 +9,47 @@ Create a basic D1 database with default settings.
 ```ts
 import { D1Database } from "alchemy/cloudflare";
 
-const database = await D1Database("my-db", {
+const db = await D1Database("my-db", {
   name: "my-db"
 });
 ```
 
-# With Read Replication
+# With Migrations
 
-Enable automatic read replication for better performance.
+Create a database with SQL migrations.
 
 ```ts
 import { D1Database } from "alchemy/cloudflare";
 
-const database = await D1Database("replicated-db", {
-  name: "replicated-db",
+const db = await D1Database("users-db", {
+  name: "users-db",
+  migrationsDir: "./migrations",
+  migrationsTable: "schema_migrations" 
+});
+```
+
+# With Location Hint
+
+Create a database with a specific location hint for optimal performance.
+
+```ts
+import { D1Database } from "alchemy/cloudflare";
+
+const db = await D1Database("eu-db", {
+  name: "eu-db",
+  primaryLocationHint: "weur",
   readReplication: {
     mode: "auto"
   }
 });
 ```
 
-# With Migrations
-
-Apply SQL migrations when creating or updating the database.
-
-```ts
-import { D1Database } from "alchemy/cloudflare";
-
-const database = await D1Database("db-with-migrations", {
-  name: "db-with-migrations", 
-  migrationsDir: "./migrations",
-  migrationsTable: "migrations"
-});
-```
-
 # Bind to a Worker
-
-Bind the D1 database to a Cloudflare Worker.
 
 ```ts
 import { Worker, D1Database } from "alchemy/cloudflare";
 
-const database = await D1Database("my-db", {
+const db = await D1Database("my-db", {
   name: "my-db"
 });
 
@@ -58,7 +57,7 @@ await Worker("my-worker", {
   name: "my-worker",
   script: "console.log('Hello, world!')",
   bindings: {
-    DB: database
+    DB: db
   }
 });
 ```

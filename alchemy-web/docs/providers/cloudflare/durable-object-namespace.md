@@ -1,10 +1,10 @@
 # DurableObjectNamespace
 
-A [Durable Object Namespace](https://developers.cloudflare.com/workers/runtime-apis/durable-objects/) provides a way to create stateful objects that can coordinate across multiple Workers.
+A [Durable Object Namespace](https://developers.cloudflare.com/workers/runtime-apis/durable-objects/) represents a globally unique namespace for Durable Objects that provide strongly consistent storage and coordination.
 
 # Minimal Example
 
-Creates a basic Durable Object namespace for stateful chat rooms.
+Create a basic Durable Object namespace for stateful chat rooms.
 
 ```ts
 import { DurableObjectNamespace } from "alchemy/cloudflare";
@@ -14,9 +14,9 @@ const rooms = new DurableObjectNamespace("chat-rooms", {
 });
 ```
 
-# With SQLite Storage
+# Create with SQLite Storage
 
-Creates a Durable Object with SQLite storage enabled for user data.
+Create a Durable Object with SQLite storage for user data.
 
 ```ts
 import { DurableObjectNamespace } from "alchemy/cloudflare";
@@ -27,9 +27,9 @@ const users = new DurableObjectNamespace("user-store", {
 });
 ```
 
-# With Environment and Script Name
+# Create in Production Environment
 
-Creates a Durable Object in production with specific script name.
+Create a Durable Object in production for game state management.
 
 ```ts
 import { DurableObjectNamespace } from "alchemy/cloudflare";
@@ -43,7 +43,7 @@ const game = new DurableObjectNamespace("game-state", {
 
 # Bind to a Worker
 
-Binds the Durable Object namespace to a Worker.
+Bind a Durable Object namespace to a Worker to enable access.
 
 ```ts
 import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";

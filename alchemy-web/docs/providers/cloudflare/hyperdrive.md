@@ -1,6 +1,6 @@
 # Hyperdrive
 
-[Cloudflare Hyperdrive](https://developers.cloudflare.com/hyperdrive/) provides serverless, globally distributed PostgreSQL connection pooling and caching.
+[Cloudflare Hyperdrive](https://developers.cloudflare.com/hyperdrive/) provides serverless connection pooling and caching for PostgreSQL databases.
 
 # Minimal Example
 
@@ -9,7 +9,7 @@ Create a basic Hyperdrive connection to a PostgreSQL database.
 ```ts
 import { Hyperdrive } from "alchemy/cloudflare";
 
-const basicHyperdrive = await Hyperdrive("my-postgres-db", {
+const db = await Hyperdrive("my-postgres-db", {
   name: "my-postgres-db", 
   origin: {
     database: "postgres",
@@ -26,7 +26,7 @@ const basicHyperdrive = await Hyperdrive("my-postgres-db", {
 Create a Hyperdrive connection with caching disabled.
 
 ```ts
-const noCacheHyperdrive = await Hyperdrive("no-cache-db", {
+const noCacheDb = await Hyperdrive("no-cache-db", {
   name: "no-cache-db",
   origin: {
     database: "postgres",
@@ -46,7 +46,7 @@ const noCacheHyperdrive = await Hyperdrive("no-cache-db", {
 Create a Hyperdrive connection with mTLS security.
 
 ```ts
-const mtlsHyperdrive = await Hyperdrive("secure-db", {
+const secureDb = await Hyperdrive("secure-db", {
   name: "secure-db",
   origin: {
     database: "postgres",
@@ -68,7 +68,7 @@ const mtlsHyperdrive = await Hyperdrive("secure-db", {
 Create a Hyperdrive connection using access client credentials.
 
 ```ts
-const accessHyperdrive = await Hyperdrive("access-db", {
+const accessDb = await Hyperdrive("access-db", {
   name: "access-db",
   origin: {
     database: "postgres",
@@ -83,16 +83,17 @@ const accessHyperdrive = await Hyperdrive("access-db", {
 
 # Bind to a Worker
 
+Use Hyperdrive with a Cloudflare Worker.
+
 ```ts
 import { Worker, Hyperdrive } from "alchemy/cloudflare";
 
-const myHyperdrive = await Hyperdrive("my-hyperdrive", {
-  name: "my-hyperdrive",
+const db = await Hyperdrive("my-db", {
+  name: "my-db",
   origin: {
     database: "postgres",
     host: "database.example.com",
-    password: alchemy.secret("your-password"),
-    port: 5432,
+    password: alchemy.secret("password"),
     user: "postgres"
   }
 });
@@ -101,7 +102,7 @@ await Worker("my-worker", {
   name: "my-worker",
   script: "console.log('Hello, world!')",
   bindings: {
-    DB: myHyperdrive
+    DB: db
   }
 });
 ```

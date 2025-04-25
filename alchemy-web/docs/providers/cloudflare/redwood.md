@@ -1,6 +1,6 @@
 # Redwood
 
-The Redwood component lets you deploy [RedwoodJS](https://redwoodjs.com/) applications to Cloudflare Pages with automatically configured defaults.
+Deploy a RedwoodJS application to Cloudflare Pages with automatically configured defaults. This resource handles the deployment of RedwoodJS applications with optimized settings for Cloudflare Workers.
 
 # Minimal Example
 
@@ -12,7 +12,7 @@ import { Redwood } from "alchemy/cloudflare";
 const redwoodApp = await Redwood("my-redwood-app");
 ```
 
-# Deploy with Database Binding
+# With Database Binding
 
 Add a D1 database binding to your RedwoodJS application:
 
@@ -28,7 +28,7 @@ const redwoodApp = await Redwood("redwood-with-db", {
 });
 ```
 
-# Custom Build and Environment
+# Custom Build Configuration
 
 Deploy with custom build command and environment variables:
 
@@ -47,37 +47,21 @@ const redwoodApp = await Redwood("custom-redwood", {
 });
 ```
 
-# Custom Paths and Compatibility
-
-Deploy with custom paths and additional compatibility flags:
-
-```ts
-import { Redwood } from "alchemy/cloudflare";
-
-const redwoodApp = await Redwood("redwood-custom-paths", {
-  main: "custom/worker.js",
-  assets: "custom/static",
-  compatibilityFlags: ["nodejs_compat", "fetch_refused_to_set_cookies"]
-});
-```
-
 # Bind to a Worker
 
-Bind the RedwoodJS application to a Worker:
+Bind a RedwoodJS application to a Worker:
 
 ```ts
 import { Worker, Redwood } from "alchemy/cloudflare";
 
 const redwoodApp = await Redwood("my-redwood-app", {
-  name: "my-redwood-app",
-  bindings: {
-    DB: database
-  }
+  name: "redwood-worker",
+  command: "bun run build"
 });
 
 await Worker("my-worker", {
   name: "my-worker", 
-  script: "console.log('Hello from worker!')",
+  script: "console.log('Hello from worker')",
   bindings: {
     REDWOOD: redwoodApp
   }

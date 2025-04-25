@@ -1,16 +1,16 @@
 # WranglerJson
 
-The WranglerJson resource generates a `wrangler.json` configuration file for a Cloudflare Worker.
+The WranglerJson resource generates a `wrangler.json` configuration file for a Cloudflare Worker. This file is used by the [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) to deploy and manage Workers.
 
 # Minimal Example
 
-Creates a basic wrangler.json file for a Worker.
+Creates a basic wrangler.json file for a Worker:
 
 ```ts
 import { Worker, WranglerJson } from "alchemy/cloudflare";
 
-const worker = await Worker("my-worker", {
-  name: "my-worker",
+const worker = await Worker("api", {
+  name: "api-worker", 
   entrypoint: "./src/index.ts"
 });
 
@@ -19,20 +19,40 @@ await WranglerJson("wrangler", {
 });
 ```
 
-# Custom Path
+# With Custom Path
 
-Specify a custom path for the wrangler.json file.
+Specify a custom path for the wrangler.json file:
 
 ```ts
-import { Worker, WranglerJson } from "alchemy/cloudflare";
+await WranglerJson("wrangler", {
+  worker,
+  path: "./config/wrangler.dev.json"
+});
+```
 
-const worker = await Worker("my-worker", {
-  name: "my-worker", 
-  entrypoint: "./src/index.ts"
+# With Bindings
+
+Generate wrangler.json with Worker bindings:
+
+```ts
+const kv = await KVNamespace("cache", {
+  title: "cache-store"
+});
+
+const queue = await Queue("tasks", {
+  name: "task-queue"
+});
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/index.ts",
+  bindings: {
+    CACHE: kv,
+    TASKS: queue
+  }
 });
 
 await WranglerJson("wrangler", {
-  path: "./config/wrangler.json",
   worker
 });
 ```

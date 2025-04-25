@@ -1,6 +1,6 @@
 # AiGateway
 
-The AiGateway component lets you create and manage [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/) configurations.
+The AiGateway resource lets you create and manage [Cloudflare AI Gateway](https://developers.cloudflare.com/workers-ai/get-started/workers-ai-gateway/) configurations for accessing AI models through Cloudflare Workers.
 
 # Minimal Example
 
@@ -9,35 +9,39 @@ Create a basic AI Gateway with default settings:
 ```ts
 import { AiGateway } from "alchemy/cloudflare";
 
-const gateway = await AiGateway("my-ai-gateway", {});
+const gateway = await AiGateway("my-ai-gateway", {
+  name: "my-ai-gateway"
+});
 ```
 
 # With Authentication and Rate Limiting
 
-Create an AI Gateway with authentication and rate limiting:
+Configure an AI Gateway with authentication and rate limiting:
 
 ```ts
 import { AiGateway } from "alchemy/cloudflare";
 
-const secureGateway = await AiGateway("secure-ai-gateway", {
+const secureGateway = await AiGateway("secure-gateway", {
+  name: "secure-gateway",
   authentication: true,
-  rateLimitingInterval: 60, // 60 seconds
-  rateLimitingLimit: 100,   // 100 requests
+  rateLimitingInterval: 60,
+  rateLimitingLimit: 100,
   rateLimitingTechnique: "sliding"
 });
 ```
 
 # With Logging and Logpush
 
-Create an AI Gateway with logging enabled and logpush:
+Create an AI Gateway with logging and logpush enabled:
 
 ```ts
 import { AiGateway } from "alchemy/cloudflare";
 
-const loggingGateway = await AiGateway("logging-ai-gateway", {
+const loggingGateway = await AiGateway("logging-gateway", {
+  name: "logging-gateway",
   collectLogs: true,
   logpush: true,
-  logpushPublicKey: "mypublickey..." // Replace with actual public key
+  logpushPublicKey: "mypublickey..."
 });
 ```
 
@@ -49,7 +53,7 @@ Use the AI Gateway in a Cloudflare Worker:
 import { Worker, AiGateway } from "alchemy/cloudflare";
 
 const gateway = await AiGateway("my-gateway", {
-  authentication: true
+  name: "my-gateway"
 });
 
 await Worker("my-worker", {

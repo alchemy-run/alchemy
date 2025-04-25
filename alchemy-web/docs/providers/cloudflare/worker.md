@@ -1,6 +1,6 @@
 # Worker
 
-The Worker resource lets you create and manage [Cloudflare Workers](https://developers.cloudflare.com/workers/) - serverless JavaScript functions that run on Cloudflare's edge network.
+A [Cloudflare Worker](https://developers.cloudflare.com/workers/) is a serverless function that runs on Cloudflare's global network.
 
 # Minimal Example
 
@@ -9,87 +9,83 @@ Create a basic HTTP handler worker:
 ```ts
 import { Worker } from "alchemy/cloudflare";
 
-const api = await Worker("api", {
+const worker = await Worker("api", {
   name: "api-worker", 
   entrypoint: "./src/api.ts"
 });
 ```
 
-# Worker with Bindings
+# With Bindings
 
-Create a worker with KV namespace and Durable Object bindings:
+Attach resources like KV, R2, or Durable Objects:
 
 ```ts
 import { Worker, KVNamespace, DurableObjectNamespace } from "alchemy/cloudflare";
 
-const cache = await KVNamespace("cache", {
-  title: "cache-store"
-});
-
-const counter = new DurableObjectNamespace("counter", {
-  className: "Counter"
-});
+const kv = await KVNamespace("cache", { title: "cache-store" });
+const users = new DurableObjectNamespace("users", { className: "Users" });
 
 const worker = await Worker("api", {
   name: "api-worker",
   entrypoint: "./src/api.ts",
   bindings: {
-    CACHE: cache,
-    COUNTER: counter
+    CACHE: kv,
+    USERS: users
   }
 });
 ```
 
-# Worker with Static Assets
+# With Static Assets
 
-Create a worker that serves static assets:
+Serve static files from a directory:
 
 ```ts
 import { Worker, Assets } from "alchemy/cloudflare";
 
-const staticAssets = await Assets("static", {
-  path: "./dist"
+const assets = await Assets("static", {
+  path: "./public"
 });
 
-const frontend = await Worker("frontend", {
-  name: "frontend-worker",
-  entrypoint: "./src/worker.ts", 
+const worker = await Worker("frontend", {
+  name: "frontend-worker", 
+  entrypoint: "./src/worker.ts",
   bindings: {
-    ASSETS: staticAssets
+    ASSETS: assets
   }
 });
 ```
 
-# Worker with Cron Triggers
+# With Cron Triggers
 
-Create a worker with scheduled cron triggers:
+Schedule recurring tasks:
 
 ```ts
 import { Worker } from "alchemy/cloudflare";
 
-const cronWorker = await Worker("scheduled-tasks", {
+const worker = await Worker("cron", {
   name: "cron-worker",
-  entrypoint: "./src/scheduled.ts",
-  crons: ['* 15 * * *', '0 0 * * *'] 
+  entrypoint: "./src/cron.ts",
+  crons: ["0 0 * * *"] // Run daily at midnight
 });
 ```
 
 # Bind to a Worker
 
-Bind a resource to an existing worker:
+Use a worker as a binding in another worker:
 
 ```ts
-import { Worker, KVNamespace } from "alchemy/cloudflare";
+import { Worker } from "alchemy/cloudflare";
 
-const cache = await KVNamespace("cache", {
-  title: "cache-store"
+const api = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts"
 });
 
-const worker = await Worker("api", {
-  name: "api-worker",
-  entrypoint: "./src/api.ts",
+const frontend = await Worker("frontend", {
+  name: "frontend-worker",
+  entrypoint: "./src/frontend.ts",
   bindings: {
-    CACHE: cache
+    API: api
   }
 });
 ```

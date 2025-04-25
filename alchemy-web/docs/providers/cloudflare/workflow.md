@@ -1,10 +1,10 @@
 # Workflow
 
-The Workflow resource lets you create [Cloudflare Workers Workflow](https://developers.cloudflare.com/workers/configuration/workflows/) instances that enable orchestrating multiple Workers together.
+A [Cloudflare Workflow](https://developers.cloudflare.com/workers/configuration/workflows/) allows you to define reusable logic that can be shared across multiple Workers.
 
 # Minimal Example
 
-Create a basic workflow that can be bound to a Worker:
+Create a basic workflow that can be bound to a Worker.
 
 ```ts
 import { Workflow } from "alchemy/cloudflare";
@@ -17,7 +17,7 @@ const workflow = await Workflow("my-workflow", {
 
 # Bind to a Worker
 
-Bind the workflow to a Worker to enable calling it:
+Bind a workflow to a Worker to use its functionality.
 
 ```ts
 import { Worker, Workflow } from "alchemy/cloudflare";
@@ -31,7 +31,7 @@ await Worker("my-worker", {
   name: "my-worker",
   script: "console.log('Hello, world!')",
   bindings: {
-    MY_WORKFLOW: workflow
+    WORKFLOW: workflow
   }
 });
 ```

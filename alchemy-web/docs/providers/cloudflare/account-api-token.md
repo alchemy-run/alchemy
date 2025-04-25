@@ -1,46 +1,40 @@
 # AccountApiToken
 
-The AccountApiToken resource creates a [Cloudflare API Token](https://developers.cloudflare.com/api/tokens/) with specified permissions and access policies.
+Creates a [Cloudflare API Token](https://developers.cloudflare.com/api/tokens/) with specified permissions and access controls.
 
 # Minimal Example
 
-Create a basic API token with read-only permissions:
+Create a basic API token with read-only permissions.
 
 ```ts
 import { AccountApiToken, PermissionGroups } from "alchemy/cloudflare";
 
-// First, fetch all permission groups
-const permissions = await PermissionGroups("cloudflare-permissions", {
-  accountId: cfAccountId,
-});
+const permissions = await PermissionGroups("cloudflare-permissions");
 
-// Create a token with read-only permissions
-const readOnlyToken = await AccountApiToken("readonly-token", {
+const token = await AccountApiToken("readonly-token", {
   name: "Readonly Zone Token",
-  policies: [
-    {
-      effect: "allow", 
-      permissionGroups: [
-        { id: permissions["Zone Read"].id },
-        { id: permissions["Analytics Read"].id }
-      ],
-      resources: {
-        "com.cloudflare.api.account.zone.*": "*"
-      }
+  policies: [{
+    effect: "allow",
+    permissionGroups: [
+      { id: permissions["Zone Read"].id },
+      { id: permissions["Analytics Read"].id }
+    ],
+    resources: {
+      "com.cloudflare.api.account.zone.*": "*"
     }
-  ]
+  }]
 });
 ```
 
-# Create Token with IP Restrictions
+# With Time and IP Restrictions
 
-Create a token with IP address restrictions for enhanced security:
+Create a token with time-based and IP address restrictions.
 
 ```ts
 import { AccountApiToken } from "alchemy/cloudflare";
 
 const restrictedToken = await AccountApiToken("restricted-token", {
-  name: "Restricted Access Token",
+  name: "Restricted Access Token", 
   policies: [{
     effect: "allow",
     permissionGroups: [
@@ -50,41 +44,20 @@ const restrictedToken = await AccountApiToken("restricted-token", {
       "com.cloudflare.api.account.worker.route.*": "*"
     }
   }],
+  notBefore: "2024-01-01T00:00:00Z",
+  expiresOn: "2024-12-31T23:59:59Z",
   condition: {
     requestIp: {
-      in: ["192.168.1.0/24", "10.0.0.0/8"],
+      in: ["192.168.1.0/24"],
       notIn: ["192.168.1.100/32"]
     }
   }
 });
 ```
 
-# Create Token with Time Restrictions
-
-Create a token that is only valid for a specific time period:
-
-```ts
-import { AccountApiToken } from "alchemy/cloudflare";
-
-const timedToken = await AccountApiToken("timed-token", {
-  name: "Time Limited Token",
-  policies: [{
-    effect: "allow",
-    permissionGroups: [
-      { id: permissions["DNS Write"].id }
-    ],
-    resources: {
-      "com.cloudflare.api.account.zone.*": "*"
-    }
-  }],
-  notBefore: "2024-01-01T00:00:00Z",
-  expiresOn: "2024-12-31T23:59:59Z"
-});
-```
-
 # Bind to a Worker
 
-Use the token in a Worker binding:
+Use the token in a Worker binding.
 
 ```ts
 import { Worker, AccountApiToken } from "alchemy/cloudflare";
@@ -92,12 +65,12 @@ import { Worker, AccountApiToken } from "alchemy/cloudflare";
 const token = await AccountApiToken("api-token", {
   name: "Worker API Token",
   policies: [{
-    effect: "allow",
+    effect: "allow", 
     permissionGroups: [
-      { id: permissions["Cache Purge"].id }
+      { id: permissions["Zone Read"].id }
     ],
     resources: {
-      "com.cloudflare.api.account.*": "*" 
+      "com.cloudflare.api.account.zone.*": "*" 
     }
   }]
 });
@@ -106,7 +79,7 @@ await Worker("my-worker", {
   name: "my-worker",
   script: "console.log('Hello, world!')",
   bindings: {
-    API_TOKEN: token.value
+    API_TOKEN: token
   }
 });
 ```

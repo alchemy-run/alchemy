@@ -1,10 +1,10 @@
 # Pipeline
 
-The Pipeline resource lets you create [Cloudflare Pipeline](https://developers.cloudflare.com/pipelines/) data pipelines for collecting, transforming and routing data to destinations like R2 buckets.
+The [Pipeline](https://developers.cloudflare.com/workers/configuration/pipelines/) resource lets you create and manage Cloudflare Pipelines for collecting, transforming and routing data.
 
 # Minimal Example
 
-Create a basic pipeline that routes data to an R2 bucket:
+Create a basic pipeline with an R2 bucket destination:
 
 ```ts
 import { Pipeline, R2Bucket } from "alchemy/cloudflare";
@@ -32,12 +32,12 @@ const pipeline = await Pipeline("logs-pipeline", {
 
 # Custom Source Configuration
 
-Configure custom HTTP source with CORS and authentication:
+Configure a pipeline with custom HTTP source settings:
 
 ```ts
 import { Pipeline } from "alchemy/cloudflare";
 
-const pipeline = await Pipeline("custom-pipeline", {
+const customPipeline = await Pipeline("custom-pipeline", {
   name: "custom-pipeline",
   source: [{
     type: "http",
@@ -57,34 +57,9 @@ const pipeline = await Pipeline("custom-pipeline", {
     credentials: {
       accessKeyId: alchemy.secret(process.env.R2_ACCESS_KEY_ID!),
       secretAccessKey: alchemy.secret(process.env.R2_SECRET_ACCESS_KEY!)
-    }
-  }
-});
-```
-
-# Batch Configuration
-
-Configure batching behavior for pipeline output:
-
-```ts
-import { Pipeline } from "alchemy/cloudflare";
-
-const pipeline = await Pipeline("batch-pipeline", {
-  name: "batch-pipeline",
-  destination: {
-    type: "r2",
-    format: "json",
-    path: {
-      bucket: "my-bucket"
     },
-    credentials: {
-      accessKeyId: alchemy.secret(process.env.R2_ACCESS_KEY_ID!),
-      secretAccessKey: alchemy.secret(process.env.R2_SECRET_ACCESS_KEY!)
-    },
-    batch: {
-      maxMb: 50,
-      maxRows: 1000000,
-      maxSeconds: 60
+    compression: {
+      type: "gzip"
     }
   }
 });
@@ -92,18 +67,19 @@ const pipeline = await Pipeline("batch-pipeline", {
 
 # Bind to a Worker
 
-Use the pipeline in a Cloudflare Worker:
+Use the pipeline in a worker:
 
 ```ts
 import { Worker, Pipeline } from "alchemy/cloudflare";
 
-const pipeline = await Pipeline("logs", {
+const pipeline = await Pipeline("logs-pipeline", {
   name: "logs-pipeline",
   destination: {
     type: "r2",
     format: "json",
     path: {
-      bucket: "logs"
+      bucket: "logs-bucket",
+      prefix: "app-logs"
     },
     credentials: {
       accessKeyId: alchemy.secret(process.env.R2_ACCESS_KEY_ID!),
@@ -112,11 +88,11 @@ const pipeline = await Pipeline("logs", {
   }
 });
 
-await Worker("api", {
-  name: "api-worker",
+await Worker("my-worker", {
+  name: "my-worker",
   script: "console.log('Hello, world!')",
   bindings: {
-    LOGS: pipeline
+    PIPELINE: pipeline
   }
 });
 ```
