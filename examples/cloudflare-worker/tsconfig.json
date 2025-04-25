@@ -2,7 +2,6 @@
   "include": ["src/*.ts"],
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": false,
     "types": ["@cloudflare/workers-types", "@types/node"]
   },
   "references": [

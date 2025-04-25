@@ -16,7 +16,8 @@
   },
   "workspaces": [
     "alchemy",
-    "alchemy-web"
+    "alchemy-web",
+    "examples/*"
   ],
   "devDependencies": {
     "@biomejs/biome": "~1.8.0",
