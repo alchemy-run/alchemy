@@ -46,8 +46,8 @@ export default defineConfig({
     sidebar: [
       { text: "Get Started", link: "/docs/getting-started" },
       { text: "What is Alchemy?", link: "/docs/what-is-alchemy" },
-      await generateSidebar("Concepts"),
       await generateSidebar("Guides"),
+      await generateSidebar("Concepts"),
       await generateProvidersSidebar(),
     ],
     search: { provider: "local" },
