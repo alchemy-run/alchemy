@@ -105,9 +105,8 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * Name for the worker
-   * This is mandatory - must be explicitly specified
    *
-   * @default - the id of the resource
+   * @default id
    */
   name?: string;
 

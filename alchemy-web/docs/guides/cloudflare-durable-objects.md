@@ -1,8 +1,8 @@
 ---
-order: 3
+order: 5
 ---
 
-# Cloudflare Durable Objects
+# Durable Objects
 
 This guide explains how to create, bind and use Cloudflare Durable Objects within your Worker scripts.
 

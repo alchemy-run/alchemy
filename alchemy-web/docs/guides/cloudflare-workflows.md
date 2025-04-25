@@ -2,7 +2,7 @@
 order: 5
 ---
 
-# Cloudflare Workflows 
+# Workflows 
 
 This guide explains how to create, bind and use Cloudflare Workflows within your Worker scripts.
 

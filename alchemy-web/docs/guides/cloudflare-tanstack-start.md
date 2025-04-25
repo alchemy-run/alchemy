@@ -2,7 +2,7 @@
 order: 2
 ---
 
-# Cloudflare TanStack Start
+# TanStack Start
 
 This guide walks through how to deploy a TanStack Start application to Cloudflare Workers with Alchemy.
 
