@@ -15,6 +15,7 @@ export * from "./local-dev-cloudflare-shim.js";
 export * from "./nuxt.js";
 export * from "./permission-groups.js";
 export * from "./pipeline.js";
+export * from "./queue-consumer.js";
 export * from "./queue.js";
 export * from "./r2-rest-state-store.js";
 export * from "./redwood.js";

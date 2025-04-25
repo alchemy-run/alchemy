@@ -6,7 +6,7 @@ import { Resource } from "../resource.js";
 import { getContentType } from "../util/content-type.js";
 import { withExponentialBackoff } from "../util/retry.js";
 import { slugify } from "../util/slugify.js";
-import { handleApiError } from "./api-error.js";
+import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
   type CloudflareApi,
   type CloudflareApiOptions,
@@ -16,6 +16,13 @@ import type { Assets } from "./assets.js";
 import type { Bindings, WorkerBindingSpec } from "./bindings.js";
 import type { Bound } from "./bound.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
+import { type EventSource, isQueueEventSource } from "./event-source.js";
+import {
+  QueueConsumer,
+  deleteQueueConsumer,
+  listQueueConsumers,
+} from "./queue-consumer.js";
+import { isQueue } from "./queue.js";
 import type { WorkerScriptMetadata } from "./worker-metadata.js";
 import type { SingleStepMigration } from "./worker-migration.js";
 import { type Workflow, upsertWorkflow } from "./workflow.js";
@@ -169,6 +176,12 @@ export interface WorkerProps<B extends Bindings = Bindings>
    * @see https://developers.cloudflare.com/workers/configuration/cron-triggers/#examples
    */
   crons?: string[];
+
+  /**
+   * Event sources that this worker will consume.
+   * Can include queues, streams, or other event sources.
+   */
+  eventSources?: EventSource[];
 }
 
 /**
@@ -404,6 +417,24 @@ export const Worker = Resource(
       });
     }
 
+    await Promise.all(
+      props.eventSources?.map((eventSource) => {
+        if (isQueue(eventSource) || isQueueEventSource(eventSource)) {
+          const queue = isQueue(eventSource) ? eventSource : eventSource.queue;
+          return QueueConsumer(`${queue.id}-consumer`, {
+            queue,
+            scriptName: workerName,
+            accountId: api.accountId,
+            settings: isQueueEventSource(eventSource)
+              ? eventSource.settings
+              : undefined,
+          });
+        } else {
+          throw new Error(`Unsupported event source type: ${eventSource}`);
+        }
+      }) ?? []
+    );
+
     // TODO: it is less than ideal that this can fail, resulting in state problem
     await this.set("bindings", props.bindings);
 
@@ -467,6 +498,9 @@ async function deleteWorker<B extends Bindings>(
   api: CloudflareApi,
   workerName: string
 ) {
+  // Delete any queue consumers attached to this worker first
+  await deleteQueueConsumers(ctx, api, workerName);
+
   // Delete worker
   const deleteResponse = await api.delete(
     `/accounts/${api.accountId}/workers/scripts/${workerName}`
@@ -1221,4 +1255,60 @@ async function calculateFileMetadata(
     hash: fileHash,
     size: fileContent.length,
   };
+}
+
+/**
+ * Lists and deletes all queue consumers for a specific worker
+ * @param ctx Worker context containing eventSources
+ * @param api CloudflareApi instance
+ * @param workerName Name of the worker script
+ */
+async function deleteQueueConsumers<B extends Bindings>(
+  ctx: Context<Worker<B>>,
+  api: CloudflareApi,
+  workerName: string
+): Promise<void> {
+  const eventSources = ctx.output?.eventSources || [];
+
+  // Extract queue IDs from event sources
+  const queueIds = eventSources.flatMap((eventSource) => {
+    if (isQueue(eventSource)) {
+      return [eventSource.id];
+    } else if (isQueueEventSource(eventSource)) {
+      return [eventSource.queue.id];
+    }
+    return [];
+  });
+
+  // Process each queue associated with this worker
+  await Promise.all(
+    queueIds.map(async (queueId) => {
+      try {
+        // List all consumers for this queue
+        const consumers = await listQueueConsumers(api, queueId);
+
+        // Filter consumers by worker name
+        const workerConsumers = consumers.filter(
+          (consumer) => consumer.scriptName === workerName
+        );
+
+        // Delete all consumers for this worker in parallel
+        await Promise.all(
+          workerConsumers.map(async (consumer) => {
+            console.log(
+              `Deleting queue consumer ${consumer.id} for worker ${workerName}`
+            );
+            // Use the deleteQueueConsumer function from queue-consumer.ts
+            await deleteQueueConsumer(api, consumer.queueId, consumer.id);
+          })
+        );
+      } catch (err) {
+        if (err instanceof CloudflareApiError && err.status === 404) {
+          // this is OK
+        } else {
+          throw err;
+        }
+      }
+    })
+  );
 }

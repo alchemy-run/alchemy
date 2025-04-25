@@ -36,8 +36,8 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace
                     ? D1Database
                     : T extends _VectorizeIndex
                       ? VectorizeIndex
-                      : T extends _Queue
-                        ? Queue
+                      : T extends _Queue<infer Body>
+                        ? Queue<Body>
                         : T extends _Pipeline<infer R>
                           ? Pipeline<R>
                           : T extends string
