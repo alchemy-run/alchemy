@@ -3,6 +3,9 @@ import { StaticJsonFile } from "../fs/static-json-file.js";
 import { Resource } from "../resource.js";
 import type { Bindings } from "./bindings.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
+import type { EventSource } from "./event-source.js";
+import { isQueueEventSource } from "./event-source.js";
+import { isQueue } from "./queue.js";
 import type { Worker } from "./worker.js";
 
 /**
@@ -80,7 +83,7 @@ export const WranglerJson = Resource(
 
     // Process bindings if they exist
     if (worker.bindings) {
-      processBindings(spec, worker.bindings);
+      processBindings(spec, worker.bindings, worker.eventSources);
     }
 
     // Add environment variables as vars
@@ -166,9 +169,16 @@ export interface WranglerJsonSpec {
    * Queue bindings
    */
   queues?: {
-    binding: string;
-    queue: string;
-  }[];
+    producers: { queue: string; binding: string }[];
+    consumers: {
+      queue: string;
+      max_batch_size?: number;
+      max_concurrency?: number;
+      max_retries?: number;
+      max_wait_time_ms?: number;
+      retry_delay?: number;
+    }[];
+  };
 
   /**
    * Service bindings
@@ -238,7 +248,11 @@ export interface WranglerJsonSpec {
 /**
  * Process worker bindings into wrangler.json format
  */
-function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
+function processBindings(
+  spec: WranglerJsonSpec,
+  bindings: Bindings,
+  eventSources: EventSource[] | undefined
+): void {
   // Arrays to collect different binding types
   const kvNamespaces: { binding: string; id: string }[] = [];
   const durableObjects: {
@@ -258,9 +272,39 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
     database_name: string;
     migrations_dir?: string;
   }[] = [];
-  const queues: { binding: string; queue: string }[] = [];
+  const queues: {
+    producers: { queue: string; binding: string }[];
+    consumers: {
+      queue: string;
+      max_batch_size?: number;
+      max_concurrency?: number;
+      max_retries?: number;
+      max_wait_time_ms?: number;
+      retry_delay?: number;
+    }[];
+  } = {
+    producers: [],
+    consumers: [],
+  };
+
   const vectorizeIndexes: { binding: string; index_name: string }[] = [];
 
+  for (const eventSource of eventSources ?? []) {
+    if (isQueueEventSource(eventSource)) {
+      queues.consumers.push({
+        queue: eventSource.queue.id,
+        max_batch_size: eventSource.settings?.batchSize,
+        max_concurrency: eventSource.settings?.maxConcurrency,
+        max_retries: eventSource.settings?.maxRetries,
+        max_wait_time_ms: eventSource.settings?.maxWaitTimeMs,
+        retry_delay: eventSource.settings?.retryDelay,
+      });
+    } else if (isQueue(eventSource)) {
+      queues.consumers.push({
+        queue: eventSource.id,
+      });
+    }
+  }
   // Process each binding
   for (const [bindingName, binding] of Object.entries(bindings)) {
     if (typeof binding === "string") {
@@ -320,7 +364,7 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
         migrations_dir: binding.migrationsDir,
       });
     } else if (binding.type === "queue") {
-      queues.push({
+      queues.producers.push({
         binding: bindingName,
         queue: binding.name,
       });
@@ -355,7 +399,7 @@ function processBindings(spec: WranglerJsonSpec, bindings: Bindings): void {
     spec.d1_databases = d1Databases;
   }
 
-  if (queues.length > 0) {
+  if (queues.consumers.length > 0) {
     spec.queues = queues;
   }
 

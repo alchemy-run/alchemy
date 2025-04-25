@@ -13,8 +13,10 @@ export interface BucketProps {
    * Name of the bucket
    * Names can only contain lowercase letters (a-z), numbers (0-9), and hyphens (-)
    * Cannot begin or end with a hyphen
+   *
+   * @default - the id of the resource
    */
-  name: string;
+  name?: string;
 
   /**
    * Optional location hint for the bucket
@@ -91,6 +93,11 @@ export interface R2Bucket
   type: "r2_bucket";
 
   /**
+   * The name of the bucket
+   */
+  name: string;
+
+  /**
    * Location of the bucket
    */
   location: string;
@@ -150,7 +157,7 @@ export const R2Bucket = Resource(
   async function (
     this: Context<R2Bucket>,
     id: string,
-    props: BucketProps
+    props: BucketProps = {}
   ): Promise<R2Bucket> {
     const api = await createCloudflareApi(props);
     const bucketName = props.name || this.id;

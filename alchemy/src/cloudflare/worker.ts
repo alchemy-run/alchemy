@@ -106,8 +106,10 @@ export interface WorkerProps<B extends Bindings = Bindings>
   /**
    * Name for the worker
    * This is mandatory - must be explicitly specified
+   *
+   * @default - the id of the resource
    */
-  name: string;
+  name?: string;
 
   /**
    * Bindings to attach to the worker
@@ -196,6 +198,11 @@ export interface Worker<B extends Bindings = Bindings>
    * The ID of the worker
    */
   id: string;
+
+  /**
+   * The name of the worker
+   */
+  name: string;
 
   /**
    * Time at which the worker was created
@@ -339,7 +346,7 @@ export const Worker = Resource(
     const api = await createCloudflareApi(props);
 
     // Use the provided name
-    const workerName = props.name;
+    const workerName = props.name ?? id;
 
     // Validate input - we need either script, entryPoint, or bundle
     if (!props.script && !props.entrypoint) {
@@ -392,7 +399,7 @@ export const Worker = Resource(
       );
     }
 
-    const compatibilityDate = props.compatibilityDate ?? "2024-09-09";
+    const compatibilityDate = props.compatibilityDate ?? "2025-03-01";
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
     // Prepare metadata with bindings
@@ -482,6 +489,7 @@ export const Worker = Resource(
       observability: scriptMetadata.observability,
       createdAt: now,
       updatedAt: now,
+      eventSources: props.eventSources,
       url: workerUrl,
       // Include assets configuration in the output
       assets: props.assets,

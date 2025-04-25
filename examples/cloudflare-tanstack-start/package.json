@@ -21,7 +21,6 @@
     "@types/node": "^22.5.4",
     "@types/react-dom": "^19.0.3",
     "@types/react": "^19.0.8",
-    "alchemy": "workspace:*",
     "autoprefixer": "^10.4.20",
     "cloudflare": "^4.2.0",
     "postcss": "^8.5.1",

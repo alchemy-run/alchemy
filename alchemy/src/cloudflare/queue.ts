@@ -38,8 +38,10 @@ export interface QueueProps extends CloudflareApiOptions {
    * Name of the queue
    * Required during creation
    * Cannot be changed after creation
+   *
+   * @default id
    */
-  name: string;
+  name?: string;
 
   /**
    * Settings for the queue
@@ -75,6 +77,11 @@ export interface Queue<Body = unknown>
    * The unique ID of the queue
    */
   id: string;
+
+  /**
+   * The name of the queue
+   */
+  name: string;
 
   /**
    * Time when the queue was created
@@ -144,9 +151,11 @@ interface CloudflareQueueResponse {
  */
 export const Queue = Resource("cloudflare::Queue", async function <
   T = unknown,
->(this: Context<Queue<T>>, id: string, props: QueueProps): Promise<Queue<T>> {
+>(this: Context<Queue<T>>, id: string, props: QueueProps = {}): Promise<
+  Queue<T>
+> {
   const api = await createCloudflareApi(props);
-  const queueName = props.name || id;
+  const queueName = props.name ?? id;
 
   if (this.phase === "delete") {
     console.log("Deleting Cloudflare Queue:", queueName);

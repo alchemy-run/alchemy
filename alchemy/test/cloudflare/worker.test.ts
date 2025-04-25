@@ -615,25 +615,23 @@ describe("Worker Resource", () => {
       // APP_DEBUG should no longer be present
       expect(worker.env?.APP_DEBUG).toBeUndefined();
 
-      if (worker.url) {
-        // Test that the updated environment variables are accessible
-        const response = await fetch(`${worker.url}/env/TEST_API_KEY`);
-        expect(response.status).toEqual(200);
-        const text = await response.text();
-        expect(text).toEqual("updated-key-456");
+      // Test that the updated environment variables are accessible
+      const response = await fetch(`${worker.url}/env/TEST_API_KEY`);
+      expect(response.status).toEqual(200);
+      const text = await response.text();
+      expect(text).toEqual("updated-key-456");
 
-        // Test new environment variable
-        const newVarResponse = await fetch(`${worker.url}/env/NEW_VAR`);
-        expect(newVarResponse.status).toEqual(200);
-        const newVarText = await newVarResponse.text();
-        expect(newVarText).toEqual("new-value");
+      // Test new environment variable
+      const newVarResponse = await fetch(`${worker.url}/env/NEW_VAR`);
+      expect(newVarResponse.status).toEqual(200);
+      const newVarText = await newVarResponse.text();
+      expect(newVarText).toEqual("new-value");
 
-        // Test that the removed environment variable is no longer accessible
-        const removedVarResponse = await fetch(`${worker.url}/env/APP_DEBUG`);
-        expect(removedVarResponse.status).toEqual(200);
-        const removedVarText = await removedVarResponse.text();
-        expect(removedVarText).toEqual("undefined");
-      }
+      // Test that the removed environment variable is no longer accessible
+      const removedVarResponse = await fetch(`${worker.url}/env/APP_DEBUG`);
+      expect(removedVarResponse.status).toEqual(200);
+      const removedVarText = await removedVarResponse.text();
+      expect(removedVarText).toEqual("undefined");
     } finally {
       await destroy(scope);
       // Verify the worker was deleted
@@ -861,12 +859,7 @@ describe("Worker Resource", () => {
                 headers: { 'Content-Type': 'text/plain' }
               });
             }
-            try {
-              return env.ASSETS.fetch(request);
-            } catch (err) {
-              console.log(err);
-              return new Response(\`\${err}\`, { status: 404 });
-            }
+            return new Response("Not Found", { status: 404 });
           }
         };
       `;
@@ -889,43 +882,39 @@ describe("Worker Resource", () => {
       expect(worker.url).toBeTruthy();
       expect(worker.bindings?.ASSETS).toBeTruthy();
 
-      if (worker.url) {
-        async function get(url: string) {
-          const response = await fetch(url);
-          if (response.status !== 200) {
-            console.log(
-              response.status,
-              response.statusText,
-              await response.text()
-            );
-          }
-          expect(response.status).toEqual(200);
-          const text = await response.text();
-          return text;
+      async function get(url: string) {
+        const response = await fetch(url);
+        if (response.status !== 200) {
+          console.log(
+            response.status,
+            response.statusText,
+            await response.text()
+          );
         }
-
-        // Test that the static assets are accessible
-        const indexText = await get(`${worker.url}/index.html`);
-        expect(indexText).toEqual(testContent);
-
-        // Test the worker's main handler
-        // should route to index.html
-        const mainText = await get(worker.url);
-        expect(mainText).toEqual("Hello from static assets!");
-
-        // Test CSS file
-        const cssText = await get(`${worker.url}/styles.css`);
-        expect(cssText).toEqual(cssContent);
-
-        // Test file in subdirectory
-        const jsonData = JSON.parse(
-          await get(`${worker.url}/data/config.json`)
-        );
-        expect(jsonData.message).toEqual("Hello from JSON");
-
-        const apiCall = await get(`${worker.url}/api/data`);
-        expect(apiCall).toEqual("Worker with assets is running!");
+        expect(response.status).toEqual(200);
+        const text = await response.text();
+        return text;
       }
+
+      // Test that the static assets are accessible
+      const indexText = await get(`${worker.url}/index.html`);
+      expect(indexText).toEqual(testContent);
+
+      // Test the worker's main handler
+      // should route to index.html
+      const mainText = await get(worker.url!);
+      expect(mainText).toEqual(testContent);
+
+      // Test CSS file
+      const cssText = await get(`${worker.url}/styles.css`);
+      expect(cssText).toEqual(cssContent);
+
+      // Test file in subdirectory
+      const jsonData = JSON.parse(await get(`${worker.url}/data/config.json`));
+      expect(jsonData.message).toEqual("Hello from JSON");
+
+      const apiCall = await get(`${worker.url}/api/data`);
+      expect(apiCall).toEqual("Worker with assets is running!");
     } catch (err) {
       throw err;
     } finally {

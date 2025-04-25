@@ -8,6 +8,7 @@
     { "path": "./examples/cloudflare-vite/tsconfig.json" },
     { "path": "./examples/cloudflare-nuxt-pipeline/tsconfig.json" },
     { "path": "./examples/cloudflare-redwood/tsconfig.json" },
-    { "path": "./examples/cloudflare-tanstack-start/tsconfig.json" }
+    { "path": "./examples/cloudflare-tanstack-start/tsconfig.json" },
+    { "path": "./examples/cloudflare-worker/tsconfig.json" }
   ]
 }
