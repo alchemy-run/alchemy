@@ -577,8 +577,6 @@ async function putWorker(
         })
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
       // Upload worker script with bindings
       const uploadResponse = await api.put(
         `/accounts/${api.accountId}/workers/scripts/${workerName}`,
@@ -592,34 +590,20 @@ async function putWorker(
 
       // Check if the upload was successful
       if (!uploadResponse.ok) {
-        const errorData: any = await uploadResponse
-          .json()
-          .catch(() => ({ errors: [{ message: uploadResponse.statusText }] }));
-
-        const errorMessage = `Error (HTTP ${uploadResponse.status}) uploading worker script '${workerName}': ${errorData.errors?.[0]?.message || uploadResponse.statusText}`;
-
-        if (
-          uploadResponse.status === 400 &&
-          errorMessage.includes("not found")
-        ) {
-          throw new NotFoundError(errorMessage);
-        }
-        throw new Error(errorMessage);
+        await handleApiError(
+          uploadResponse,
+          "uploading worker script",
+          "worker",
+          workerName
+        );
       }
 
       return formData;
     },
-    (err) => err instanceof NotFoundError,
+    (err) => err.status === 404 || err.status === 500 || err.status === 503,
     10,
     100
   );
-}
-
-class NotFoundError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "NotFoundError";
-  }
 }
 
 interface WorkerMetadata {
