@@ -33,9 +33,13 @@ for dir in "$EXAMPLES_DIR"/*/; do
     (
       cd "$dir"
       echo "  Running deploy..."
-      bun run deploy
-      echo "  Running destroy..."
-      bun run destroy
+      if [ -f "../../.env" ]; then
+        bun --env-file ../../.env ./alchemy.run.ts
+        bun --env-file ../../.env ./alchemy.run.ts --destroy
+      else
+        bun ./alchemy.run.ts
+        bun ./alchemy.run.ts --destroy
+      fi
     ) # Run in a subshell to automatically return to the original directory
 
     echo "--- Completed: $EXAMPLE_NAME ---"

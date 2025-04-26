@@ -79,6 +79,11 @@ export interface BucketProps {
    * Secret Access Key to use for the bucket
    */
   secretAccessKey?: Secret;
+
+  /**
+   * Whether to adopt an existing bucket
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -163,7 +168,6 @@ export const R2Bucket = Resource(
     const bucketName = props.name || this.id;
 
     if (this.phase === "delete") {
-      console.log("Deleting R2 bucket:", bucketName);
       if (props.delete !== false) {
         if (props.empty) {
           console.log("Emptying R2 bucket:", bucketName);
@@ -175,8 +179,6 @@ export const R2Bucket = Resource(
           await emptyBucket(r2Client, bucketName, props.jurisdiction);
         }
 
-        // Delete R2 bucket
-        console.log("Deleting R2 bucket:", bucketName);
         await deleteBucket(api, bucketName, props);
       }
 
@@ -184,8 +186,17 @@ export const R2Bucket = Resource(
       return this.destroy();
     } else {
       if (this.phase === "create") {
-        console.log("Creating R2 bucket:", bucketName);
-        await createBucket(api, bucketName, props);
+        try {
+          await createBucket(api, bucketName, props);
+        } catch (err) {
+          if (err instanceof CloudflareApiError && err.status === 409) {
+            if (!props.adopt) {
+              throw err;
+            }
+          } else {
+            throw err;
+          }
+        }
       }
 
       await updatePublicAccess(

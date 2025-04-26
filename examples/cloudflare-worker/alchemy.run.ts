@@ -19,7 +19,10 @@ export const queue = await Queue<{
 export const worker = await Worker(`cloudflare-worker-worker${BRANCH_PREFIX}`, {
   entrypoint: "./src/worker.ts",
   bindings: {
-    BUCKET: await R2Bucket(`cloudflare-worker-bucket${BRANCH_PREFIX}`),
+    BUCKET: await R2Bucket(`cloudflare-worker-bucket${BRANCH_PREFIX}`, {
+      // so that CI is idempotent
+      adopt: true,
+    }),
     QUEUE: queue,
   },
   // eventSources: [queue],

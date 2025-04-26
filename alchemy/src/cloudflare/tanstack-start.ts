@@ -22,8 +22,5 @@ export async function TanStackStart<B extends Bindings>(
     main: props?.main ?? ".output/server/index.mjs",
     compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
     assets: props?.assets ?? ".output/public",
-    bundle: {
-      platform: "browser",
-    },
   });
 }

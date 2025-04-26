@@ -17,6 +17,8 @@ export const [authStore, storage] = await Promise.all([
   }),
   R2Bucket(`cloudflare-vite-storage${BRANCH_PREFIX}`, {
     allowPublicAccess: false,
+    // so that CI is idempotent
+    adopt: true,
   }),
 ]);
 
