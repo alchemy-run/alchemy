@@ -118,17 +118,17 @@ export class CloudflareApi {
     // Use withExponentialBackoff for automatic retry on network errors
     return withExponentialBackoff(
       async () => {
-        const resposne = await fetch(`${this.baseUrl}${path}`, {
+        const response = await fetch(`${this.baseUrl}${path}`, {
           ...init,
           headers,
         });
-        if (resposne.status.toString().startsWith("5")) {
-          throw new Error("5xx error");
+        if (response.status.toString().startsWith("5")) {
+          throw new InternalError("5xx error");
         }
-        return resposne;
+        return response;
       },
       // transient errors should be retried aggressively
-      (error) => error instanceof Error && error.message.includes("5xx"),
+      (error) => error instanceof InternalError,
       5, // Maximum 5 attempts (1 initial + 4 retries)
       1000 // Start with 1s delay, will exponentially increase
     );
@@ -196,5 +196,11 @@ export class CloudflareApi {
    */
   async delete(path: string, init: RequestInit = {}): Promise<Response> {
     return this.fetch(path, { ...init, method: "DELETE" });
+  }
+}
+
+class InternalError extends Error {
+  constructor(message: string) {
+    super(message);
   }
 }

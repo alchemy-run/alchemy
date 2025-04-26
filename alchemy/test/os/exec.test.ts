@@ -13,6 +13,7 @@ describe("Exec Resource", () => {
       // Run a simple command
       const result = await Exec("echo-test", {
         command: "echo 'Hello, Alchemy!'",
+        inheritStdio: false,
       });
 
       expect(result.id).toBe("echo-test");
@@ -31,6 +32,7 @@ describe("Exec Resource", () => {
       const result = await Exec("env-test", {
         command: "echo $TEST_VAR",
         env: { TEST_VAR: "Custom Environment Variable" },
+        inheritStdio: false,
       });
 
       expect(result.exitCode).toBe(0);
@@ -46,6 +48,7 @@ describe("Exec Resource", () => {
       const result = await Exec("fail-test", {
         command: "command-that-does-not-exist",
         throwOnError: false,
+        inheritStdio: false,
       });
 
       expect(result.exitCode).not.toBe(0);
@@ -61,6 +64,7 @@ describe("Exec Resource", () => {
       const result = await Exec("pwd-test", {
         command: "pwd",
         cwd: "/tmp",
+        inheritStdio: false,
       });
 
       expect(result.exitCode).toBe(0);
@@ -82,6 +86,7 @@ describe("Exec Resource", () => {
       const firstRun = await Exec("memoize-test", {
         command: timestampCmd,
         memoize: true,
+        inheritStdio: false,
       });
 
       expect(firstRun.exitCode).toBe(0);
@@ -94,6 +99,7 @@ describe("Exec Resource", () => {
       const secondRun = await Exec("memoize-test", {
         command: timestampCmd,
         memoize: true,
+        inheritStdio: false,
       });
 
       // The output should be identical since it should be memoized
@@ -104,6 +110,7 @@ describe("Exec Resource", () => {
       const thirdRun = await Exec("memoize-test", {
         command: `echo "Different command: $(date +%s)"`,
         memoize: true,
+        inheritStdio: false,
       });
 
       // This should execute and have different output
