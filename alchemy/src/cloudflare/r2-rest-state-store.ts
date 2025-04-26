@@ -122,7 +122,7 @@ export class R2RestStateStore implements StateStore {
 
       // The result structure may be under "result" key in Cloudflare's API
       const result = data.result || data;
-      const objects = result.objects || [];
+      const objects = result.objects || result;
 
       // Add keys to our list, removing the prefix and converting from storage format
       keys = keys.concat(
