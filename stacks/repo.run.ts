@@ -102,6 +102,7 @@ await Promise.all([
     CLOUDFLARE_BUCKET_NAME: stateStore.name,
     R2_ACCESS_KEY_ID: accountAccessToken.accessKeyId,
     R2_SECRET_ACCESS_KEY: accountAccessToken.secretAccessKey,
+    SECRET_PASSPHRASE: alchemy.secret(process.env.SECRET_PASSPHRASE!),
   }).flatMap(async ([name, value]) => {
     const props = {
       owner: "sam-goodwin",

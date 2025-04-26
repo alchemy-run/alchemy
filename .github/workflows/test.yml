@@ -83,3 +83,4 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          SECRET_PASSPHRASE: ${{ secrets.SECRET_PASSPHRASE }}
