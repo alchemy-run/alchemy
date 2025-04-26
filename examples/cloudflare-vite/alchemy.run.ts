@@ -3,6 +3,7 @@
 import alchemy from "../../alchemy/src/";
 import { KVNamespace, R2Bucket, Vite } from "../../alchemy/src/cloudflare";
 
+const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 const app = await alchemy("cloudflare-vite", {
   stage: process.env.USER ?? "dev",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
@@ -12,15 +13,14 @@ const app = await alchemy("cloudflare-vite", {
 
 export const [authStore, storage] = await Promise.all([
   KVNamespace("AUTH_STORE", {
-    title: "alchemy-example-auth-store",
+    title: `cloudflare-vite-auth-store${BRANCH_PREFIX}`,
   }),
-  R2Bucket("storage", {
-    name: "alchemy-example-storage",
+  R2Bucket(`cloudflare-vite-storage${BRANCH_PREFIX}`, {
     allowPublicAccess: false,
   }),
 ]);
 
-export const website = await Vite("cloudflare-vite", {
+export const website = await Vite(`cloudflare-vite-website${BRANCH_PREFIX}`, {
   main: "./src/index.ts",
   command: "bun run build",
   bindings: {

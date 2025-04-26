@@ -181,8 +181,10 @@ export type PipelineDestination = R2DestinationConfig;
 export interface PipelineProps extends CloudflareApiOptions {
   /**
    * Name of the pipeline
+   *
+   * @default id
    */
-  name: string;
+  name?: string;
 
   /**
    * Source configuration for the pipeline
@@ -231,6 +233,11 @@ export interface Pipeline<T extends PipelineRecord = PipelineRecord>
    * The unique ID of the pipeline
    */
   id: string;
+
+  /**
+   * The name of the pipeline
+   */
+  name: string;
 
   /**
    * HTTP endpoint URL for the pipeline
@@ -315,7 +322,7 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
   Pipeline<T>
 > {
   const api = await createCloudflareApi(props);
-  const pipelineName = props.name || id;
+  const pipelineName = props.name ?? id;
 
   if (this.phase === "delete") {
     if (props.delete !== false) {

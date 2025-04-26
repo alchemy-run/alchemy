@@ -22,7 +22,9 @@
     "migrate:dev": "wrangler d1 migrations apply DB --local",
     "seed": "bun run worker:run ./src/db/seed.ts",
     "check": "bun run types",
-    "types": "bun run tsc"
+    "types": "bun run tsc",
+    "deploy": "bun run --env-file ../../.env ./alchemy.run.ts",
+    "destroy": "bun run --env-file ../../.env ./alchemy.run.ts --destroy"
   },
   "dependencies": {
     "@redwoodjs/sdk": "^0.0.68",

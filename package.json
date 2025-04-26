@@ -12,7 +12,8 @@
     "deploy:website": "bun ./stacks/website.run.ts",
     "generate:docs": "bun ./stacks/docs.run.ts",
     "publish:npm": "bun run --filter alchemy publish:npm",
-    "test": "bun ./alchemy/test/run.ts"
+    "test": "bun ./alchemy/test/run.ts",
+    "test:smoke": "./scripts/smoke.sh"
   },
   "workspaces": [
     "alchemy",

@@ -6,19 +6,20 @@ import {
   WranglerJson,
 } from "../../alchemy/src/cloudflare";
 
-const app = await alchemy("worker-app", {
+const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
+const app = await alchemy("cloudflare-worker", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
 });
 
 export const queue = await Queue<{
   name: string;
   email: string;
-}>("example-worker-queue");
+}>(`cloudflare-worker-queue${BRANCH_PREFIX}`);
 
-export const worker = await Worker("example-worker", {
+export const worker = await Worker(`cloudflare-worker-worker${BRANCH_PREFIX}`, {
   entrypoint: "./src/worker.ts",
   bindings: {
-    BUCKET: await R2Bucket("example-worker-bucket"),
+    BUCKET: await R2Bucket(`cloudflare-worker-bucket${BRANCH_PREFIX}`),
     QUEUE: queue,
   },
   // eventSources: [queue],
