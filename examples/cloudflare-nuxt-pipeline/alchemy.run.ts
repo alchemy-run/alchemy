@@ -7,7 +7,7 @@ const app = await alchemy("cloudflare-nuxt-pipeline", {
   stage: process.env.USER ?? "dev",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   quiet: !process.argv.includes("--verbose"),
-  password: process.env.ALCHEMY_PASSWORD,
+  password: process.env.SECRET_PASSPHRASE,
 });
 
 const bucket = await R2Bucket(
