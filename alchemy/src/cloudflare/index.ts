@@ -9,6 +9,7 @@ export * from "./custom-domain.js";
 export * from "./d1-database.js";
 export * from "./dns-records.js";
 export * from "./durable-object-namespace.js";
+export * from "./external.js";
 export * from "./hyperdrive.js";
 export * from "./kv-namespace.js";
 export * from "./local-dev-cloudflare-shim.js";

@@ -23,45 +23,13 @@ export type Redwood<B extends Bindings> = B extends { ASSETS: any }
  *
  * @example
  * // Deploy with a database binding
- * import { D1Database } from "../cloudflare/d1-database";
+ * import { D1Database } from alchemy/cloudflare";
  *
  * const database = await D1Database("redwood-db");
  *
  * const redwoodApp = await Redwood("redwood-with-db", {
  *   bindings: {
  *     DB: database
- *   }
- * });
- *
- * @example
- * // Deploy with custom build command and environment variables
- * const redwoodApp = await Redwood("custom-redwood", {
- *   command: "bun run test && RWSDK_DEPLOY=1 bun run build:production",
- *   bindings: {
- *     API_KEY: alchemy.secret("api-key-secret")
- *   },
- *   vars: {
- *     NODE_ENV: "production",
- *     APP_ENV: "staging"
- *   }
- * });
- *
- * @example
- * // Deploy with custom paths and additional compatibility flags
- * const redwoodApp = await Redwood("redwood-custom-paths", {
- *   main: "custom/worker.js",
- *   assets: "custom/static",
- *   compatibilityFlags: ["nodejs_compat", "fetch_refused_to_set_cookies"]
- * });
- *
- * @example
- * // Deploy with custom bundle configuration
- * const redwoodApp = await Redwood("redwood-custom-bundle", {
- *   bundle: {
- *     options: {
- *       external: ["node:events", "node:stream", "node:crypto"],
- *       format: "esm"
- *     }
  *   }
  * });
  *
@@ -76,21 +44,15 @@ export async function Redwood<B extends Bindings>(
   return Website(id, {
     ...props,
     command: props?.command ?? "bun run clean && RWSDK_DEPLOY=1 bun run build",
-    wrangler: props?.wrangler ?? true,
-    main: props?.main ?? path.join("src", "worker.tsx"),
+    wrangler:
+      props?.wrangler === false
+        ? false
+        : {
+            main: props?.main ?? path.join("src", "worker.tsx"),
+          },
+    main: props?.main ?? path.join("dist", "worker", "worker.js"),
     assets: props?.assets ?? path.join("dist", "client"),
     compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
     compatibilityDate: props?.compatibilityDate ?? "2025-04-02",
-    bundle: {
-      ...props?.bundle,
-      options: {
-        ...props?.bundle?.options,
-        external: [
-          "node:events",
-          "node:stream",
-          ...(props?.bundle?.options?.external ?? []),
-        ],
-      },
-    },
   });
 }

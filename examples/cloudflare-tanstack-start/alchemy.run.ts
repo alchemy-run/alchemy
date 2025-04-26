@@ -3,7 +3,9 @@ import "../../alchemy/src/cloudflare";
 import alchemy from "../../alchemy/src";
 import { R2Bucket, TanStackStart } from "../../alchemy/src/cloudflare";
 
-const app = await alchemy("tanstack-app");
+const app = await alchemy("tanstack-app", {
+  phase: process.argv.includes("--destroy") ? "destroy" : "up",
+});
 
 const bucket = await R2Bucket("tanstack-bucket", {
   name: "tanstack-bucket",

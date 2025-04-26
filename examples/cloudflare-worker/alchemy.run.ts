@@ -1,5 +1,3 @@
-import "../../alchemy/src/cloudflare";
-
 import alchemy from "../../alchemy/src";
 import {
   Queue,
@@ -8,7 +6,9 @@ import {
   WranglerJson,
 } from "../../alchemy/src/cloudflare";
 
-const app = await alchemy("worker-app");
+const app = await alchemy("worker-app", {
+  phase: process.argv.includes("--destroy") ? "destroy" : "up",
+});
 
 export const queue = await Queue<{
   name: string;
@@ -21,7 +21,7 @@ export const worker = await Worker("example-worker", {
     BUCKET: await R2Bucket("example-worker-bucket"),
     QUEUE: queue,
   },
-  eventSources: [queue],
+  // eventSources: [queue],
 });
 
 await WranglerJson("wrangler.jsonc", {

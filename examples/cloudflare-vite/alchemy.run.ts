@@ -1,7 +1,7 @@
 /// <reference types="node" />
 
-import alchemy from "alchemy/";
-import { KVNamespace, R2Bucket, Vite } from "alchemy/cloudflare";
+import alchemy from "../../alchemy/src/";
+import { KVNamespace, R2Bucket, Vite } from "../../alchemy/src/cloudflare";
 
 const app = await alchemy("cloudflare-vite", {
   stage: process.env.USER ?? "dev",

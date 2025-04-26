@@ -23,6 +23,13 @@ export interface WranglerJsonProps {
    * @default cwd/wrangler.json
    */
   path?: string;
+
+  /**
+   * The main entry point for the worker
+   *
+   * @default worker.entrypoint
+   */
+  main?: string;
 }
 
 /**
@@ -75,7 +82,7 @@ export const WranglerJson = Resource(
     const spec: WranglerJsonSpec = {
       name: worker.name,
       // Use entrypoint as main if it exists
-      main: worker.entrypoint,
+      main: props.main ?? worker.entrypoint,
       // see: https://developers.cloudflare.com/workers/configuration/compatibility-dates/
       compatibility_date: worker.compatibilityDate,
       compatibility_flags: props.worker.compatibilityFlags,

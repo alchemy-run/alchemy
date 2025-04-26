@@ -17,6 +17,7 @@ import type { Bindings, WorkerBindingSpec } from "./bindings.js";
 import type { Bound } from "./bound.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
 import { type EventSource, isQueueEventSource } from "./event-source.js";
+import { external } from "./external.js";
 import {
   QueueConsumer,
   deleteQueueConsumer,
@@ -889,6 +890,9 @@ async function prepareWorkerMetadata<B extends Bindings>(
     // For service worker format (CJS)
     meta.body_part = scriptName;
   }
+  if (process.env.DEBUG) {
+    console.log(meta);
+  }
   return meta;
 }
 
@@ -931,34 +935,26 @@ async function assertWorkerDoesNotExist<B extends Bindings>(
 }
 
 async function bundleWorkerScript<B extends Bindings>(props: WorkerProps) {
-  // Get the script content - either from props.script, or by bundling
-
-  // Create and use a Bundle resource with worker-optimized configuration
-  const defaultBundleOptions: Omit<BundleProps, "entryPoint"> = {
+  const bundle = await Bundle("bundle", {
+    entryPoint: props.entrypoint!,
     format: props.format === "cjs" ? "cjs" : "esm", // Use the specified format or default to ESM
-    target: "es2020",
-    platform: "browser",
+    target: "esnext",
+    platform: "neutral",
     minify: true,
+    ...(props.bundle || {}),
     options: {
+      ...(props.bundle?.options || {}),
       keepNames: true, // Important for Durable Object classes
       loader: {
         ".sql": "text",
         ".json": "json",
       },
     },
-  };
-
-  // Merge with user-provided options
-  const bundleOptions = {
-    ...defaultBundleOptions,
-    ...(props.bundle || {}),
-  };
-
-  // Create the bundle
-  const bundle = await Bundle("bundle", {
-    entryPoint: props.entrypoint!,
-    ...bundleOptions,
-    external: [...(bundleOptions.external ?? []), "cloudflare:workers"],
+    external: [
+      ...external,
+      ...(props.bundle?.external ?? []),
+      ...(props.bundle?.options?.external ?? []),
+    ],
   });
 
   try {

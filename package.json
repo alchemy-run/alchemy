@@ -17,7 +17,12 @@
   "workspaces": [
     "alchemy",
     "alchemy-web",
-    "examples/*"
+    "examples/aws-app",
+    "examples/cloudflare-vite",
+    "examples/cloudflare-worker",
+    "examples/cloudflare-nuxt-pipeline",
+    "examples/cloudflare-redwood",
+    "examples/cloudflare-worker"
   ],
   "devDependencies": {
     "@biomejs/biome": "~1.8.0",

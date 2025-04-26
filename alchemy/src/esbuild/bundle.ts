@@ -8,7 +8,7 @@ import { Resource } from "../resource.js";
 /**
  * Properties for creating or updating an esbuild bundle
  */
-export interface BundleProps {
+export interface BundleProps extends Partial<esbuild.BuildOptions> {
   /**
    * Entry point for the bundle
    * Path to the source file to bundle (e.g., "src/handler.ts")
@@ -143,7 +143,7 @@ export const Bundle = Resource(
 
     const result = await bundle(props);
 
-    const bundlePath = Object.entries(result.metafile.outputs).find(
+    const bundlePath = Object.entries(result.metafile!.outputs).find(
       ([_, output]) => {
         if (output.entryPoint === undefined) {
           return false;
@@ -186,7 +186,9 @@ export const Bundle = Resource(
 );
 
 export async function bundle(props: BundleProps) {
-  return await esbuild.build({
+  const { entryPoint, options: _, ...rest } = props;
+  const options = {
+    ...rest,
     ...props.options,
     write: !(props.outdir === undefined && props.outfile === undefined),
     // write:
@@ -200,12 +202,12 @@ export async function bundle(props: BundleProps) {
     target: props.target,
     minify: props.minify,
     sourcemap: props.sourcemap,
-    external: [
-      "node:*",
-      ...(props.external ?? []),
-      ...(props.options?.external ?? []),
-    ],
+    external: [...(props.external ?? []), ...(props.options?.external ?? [])],
     platform: props.platform,
     metafile: true,
-  });
+  };
+  if (process.env.DEBUG) {
+    console.log(options);
+  }
+  return await esbuild.build(options);
 }

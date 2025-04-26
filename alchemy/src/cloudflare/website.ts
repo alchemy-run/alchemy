@@ -45,7 +45,14 @@ export interface WebsiteProps<B extends Bindings>
    *
    * @default - no wrangler.jsonc file is written
    */
-  wrangler?: boolean | string;
+  wrangler?:
+    | boolean
+    | string
+    | {
+        path?: string;
+        // override main
+        main?: string;
+      };
 }
 
 export type Website<B extends Bindings> = B extends { ASSETS: any }
@@ -66,9 +73,17 @@ export async function Website<B extends Bindings>(
 
     const cwd = path.resolve(props.cwd || process.cwd());
     const fileName =
-      typeof props.wrangler === "boolean" ? "wrangler.jsonc" : props.wrangler;
+      typeof props.wrangler === "boolean"
+        ? "wrangler.jsonc"
+        : typeof props.wrangler === "string"
+          ? props.wrangler
+          : (props.wrangler?.path ?? "wrangler.jsonc");
     const wranglerPath =
       fileName && path.relative(cwd, path.join(cwd, fileName));
+    const wranglerMain =
+      typeof props.wrangler === "object"
+        ? (props.wrangler.main ?? props.main)
+        : props.main;
 
     if (props.wrangler) {
       try {
@@ -79,7 +94,7 @@ export async function Website<B extends Bindings>(
           JSON.stringify(
             {
               name: id,
-              main: props.main,
+              main: wranglerMain,
               compatibility_date: new Date().toISOString().split("T")[0],
             },
             null,
@@ -128,6 +143,7 @@ export default {
       await WranglerJson("wrangler.jsonc", {
         path: wranglerPath,
         worker,
+        main: wranglerMain,
       });
     }
 

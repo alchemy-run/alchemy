@@ -1,7 +1,5 @@
-import "alchemy/cloudflare";
-
-import alchemy from "alchemy";
-import { D1Database, Redwood } from "alchemy/cloudflare";
+import alchemy from "../../alchemy/src/";
+import { D1Database, Redwood } from "../../alchemy/src/cloudflare";
 
 const app = await alchemy("redwood-app");
 

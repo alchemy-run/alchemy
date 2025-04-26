@@ -33,7 +33,6 @@
     "@types/node": "^22.14.1",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
-    "alchemy": "workspace:*",
     "drizzle-kit": "beta",
     "tsx": "^4.19.3",
     "vite": "^6.3.2",
