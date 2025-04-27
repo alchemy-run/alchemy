@@ -151,6 +151,13 @@ export interface WranglerJsonSpec {
   routes?: string[];
 
   /**
+   * Browser bindings
+   */
+  browser?: {
+    binding: string;
+  };
+
+  /**
    * KV Namespace bindings
    */
   kv_namespaces?: {
@@ -386,6 +393,13 @@ function processBindings(
         binding: bindingName,
         index_name: binding.name,
       });
+    } else if (binding.type === "browser") {
+      if (spec.browser) {
+        throw new Error(`Browser already bound to ${spec.browser.binding}`);
+      }
+      spec.browser = {
+        binding: bindingName,
+      };
     }
   }
 

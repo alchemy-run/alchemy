@@ -79,6 +79,40 @@ describe("WranglerJson Resource", () => {
         await destroy(scope);
       }
     });
+
+    test("with browser binding", async (scope) => {
+      const name = `${BRANCH_PREFIX}-test-worker-browser`;
+      const tempDir = path.join(".out", "alchemy-browser-test");
+      const entrypoint = path.join(tempDir, "worker.ts");
+
+      try {
+        // Create a temporary directory for the entrypoint file
+        await fs.rm(tempDir, { recursive: true, force: true });
+        await fs.mkdir(tempDir, { recursive: true });
+        await fs.writeFile(entrypoint, esmWorkerScript);
+
+        const worker = await Worker(name, {
+          format: "esm",
+          entrypoint,
+          compatibilityDate: "2024-01-01",
+          bindings: {
+            browser: { type: "browser" },
+          },
+        });
+
+        const { spec } = await WranglerJson(
+          `${BRANCH_PREFIX}-test-wrangler-json-browser`,
+          { worker }
+        );
+
+        expect(spec.name).toEqual(name);
+        expect(spec.browser).toBeDefined();
+        expect(spec.browser?.binding).toEqual("browser");
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        await destroy(scope);
+      }
+    });
   });
 
   describe("without worker", () => {
