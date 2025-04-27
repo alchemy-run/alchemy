@@ -7,6 +7,7 @@ import type { Secret } from "../secret.js";
 import type { AiGateway } from "./ai-gateway.js";
 import type { Assets } from "./assets.js";
 import type { Bound } from "./bound.js";
+import type { BrowserRendering } from "./browser-rendering.js";
 import type { R2Bucket } from "./bucket.js";
 import type { D1Database } from "./d1-database.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
@@ -45,7 +46,8 @@ export type Binding =
   | string
   | VectorizeIndex
   | Worker
-  | Workflow;
+  | Workflow
+  | BrowserRendering;
 
 /**
  * Union type for all Worker binding types (API spec)
@@ -114,7 +116,7 @@ export interface WorkerBindingBrowserRendering {
   /** The name of the binding */
   name: string;
   /** Type identifier for Browser Rendering binding */
-  type: "browser_rendering";
+  type: "browser";
 }
 
 /**

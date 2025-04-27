@@ -156,7 +156,7 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * The compatibility date for the worker
-   * @default "2024-09-09"
+   * @default "2025-04-26"
    */
   compatibilityDate?: string;
 
@@ -399,7 +399,7 @@ export const Worker = Resource(
       );
     }
 
-    const compatibilityDate = props.compatibilityDate ?? "2025-03-01";
+    const compatibilityDate = props.compatibilityDate ?? "2025-04-20";
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
     // Prepare metadata with bindings
@@ -816,6 +816,11 @@ async function prepareWorkerMetadata<B extends Bindings>(
         type: "hyperdrive",
         name: bindingName,
         id: binding.hyperdriveId,
+      });
+    } else if (binding.type === "browser") {
+      meta.bindings.push({
+        type: "browser",
+        name: bindingName,
       });
     } else {
       // @ts-expect-error - we should never reach here
