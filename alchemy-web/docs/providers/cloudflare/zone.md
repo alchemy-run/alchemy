@@ -11,7 +11,8 @@ import { Zone } from "alchemy/cloudflare";
 
 const zone = await Zone("example-zone", {
   name: "example.com",
-  type: "full"
+  type: "full",
+  delete: true //Default true: Delete's Zone on --destroy
 });
 ```
 
