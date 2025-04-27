@@ -31,6 +31,12 @@ export interface ZoneProps extends CloudflareApiOptions {
   name: string;
 
   /**
+   * Whether to delete the zone
+   * @default false
+   */
+  delete?: boolean;
+
+  /**
    * The type of zone to create
    * "full" - Full zone implies that DNS is hosted with Cloudflare
    * "partial" - Partial zone is typically a partner-hosted zone or a CNAME setup
@@ -305,7 +311,7 @@ export const Zone = Resource(
     const api = await createCloudflareApi(props);
 
     if (this.phase === "delete") {
-      if (this.output?.id) {
+      if (this.output?.id && props.delete !== false) {
         // Delete zone
         const deleteResponse = await api.delete(`/zones/${this.output.id}`);
 
