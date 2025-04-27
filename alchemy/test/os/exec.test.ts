@@ -45,14 +45,11 @@ describe("Exec Resource", () => {
   test("execute a command that fails", async (scope) => {
     try {
       // Run a command that will fail
-      const result = await Exec("fail-test", {
+      const result = Exec("fail-test", {
         command: "command-that-does-not-exist",
-        throwOnError: false,
         inheritStdio: false,
       });
-
-      expect(result.exitCode).not.toBe(0);
-      expect(result.stderr).toBeTruthy();
+      await expect(result).rejects.toThrow();
     } finally {
       await destroy(scope);
     }
