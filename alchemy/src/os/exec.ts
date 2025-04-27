@@ -29,11 +29,6 @@ export interface ExecProps {
   env?: Record<string, string>;
 
   /**
-   * Whether to throw an error if the command exits with a non-zero status
-   */
-  throwOnError?: boolean;
-
-  /**
    * Whether to inherit stdio from parent process
    * @default true
    */
@@ -173,28 +168,20 @@ export const Exec = Resource(
           });
 
           childProcess.on("error", (err) => {
-            if (props.throwOnError) {
-              reject(err);
-            } else {
-              stderr += err.toString();
-              resolve(1);
-            }
+            stderr += err.toString();
+            resolve(1);
           });
         });
-
-        if (exitCode !== 0 && props.throwOnError) {
-          throw new Error(
-            `Command failed with exit code ${exitCode}: ${props.command}`
-          );
-        }
       } catch (error: any) {
-        if (props.throwOnError) {
-          throw error;
-        }
-
         // If not throwing, capture the error information
         exitCode = 1;
         stderr += String(error);
+      }
+
+      if (exitCode !== 0) {
+        throw new Error(
+          `Command failed with exit code ${exitCode}: ${props.command}\n${stderr}`
+        );
       }
 
       // Return the execution result
@@ -203,7 +190,6 @@ export const Exec = Resource(
         command: props.command,
         cwd: props.cwd,
         env: props.env,
-        throwOnError: props.throwOnError,
         memoize: props.memoize,
         inheritStdio,
         exitCode,
