@@ -38,9 +38,9 @@ export interface NeonProjectProps extends NeonApiOptions {
 
   /**
    * PostgreSQL version to use
-   * @default 15
+   * @default 16
    */
-  pg_version?: 14 | 15 | 16;
+  pg_version?: 14 | 15 | 16 | 17;
 
   /**
    * Whether to create a default branch and endpoint
@@ -607,7 +607,7 @@ export const NeonProject = Resource(
         id: response.project.id,
         name: response.project.name,
         region_id: response.project.region_id as NeonRegion,
-        pg_version: response.project.pg_version as 14 | 15 | 16,
+        pg_version: response.project.pg_version as 14 | 15 | 16 | 17,
         created_at: response.project.created_at,
         updated_at: response.project.updated_at,
         proxy_host: response.project.proxy_host,
@@ -646,7 +646,7 @@ async function createNewProject(
     project: {
       name: props.name,
       region_id: props.region_id || "aws-us-east-1",
-      pg_version: props.pg_version || 15,
+      pg_version: props.pg_version || 16,
       default_endpoint: defaultEndpoint,
       branch: defaultEndpoint
         ? { name: props.default_branch_name || "main" }
