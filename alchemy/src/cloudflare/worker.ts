@@ -16,7 +16,7 @@ import type { Assets } from "./assets.js";
 import type { Bindings, WorkerBindingSpec } from "./bindings.js";
 import type { Bound } from "./bound.js";
 import { external } from "./bundle/external.js";
-import { nodejsHybridPlugin } from "./bundle/nodejs-compat.js";
+import { nodejsHybridPlugin } from "./bundle/hybrid-nodejs-compat.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
 import { type EventSource, isQueueEventSource } from "./event-source.js";
 import {
