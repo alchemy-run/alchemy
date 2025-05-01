@@ -944,7 +944,11 @@ async function bundleWorkerScript<B extends Bindings>(props: WorkerProps<B>) {
         ".sql": "text",
         ".json": "json",
       },
-      plugins: [await nodejsHybridPlugin()],
+      plugins: props.compatibilityFlags?.find(
+        (flag) => flag === "nodejs_compat"
+      )
+        ? [await nodejsHybridPlugin()]
+        : [],
     },
     external: [
       ...external,
