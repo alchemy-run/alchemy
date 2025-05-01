@@ -130,6 +130,7 @@ async function getDependencies(testFile: string): Promise<Set<string>> {
       bundle: true,
       metafile: true,
       external: ["@cloudflare/workers-types", "bun:test"],
+      logLevel: "error",
     });
 
     if (!result.metafile) {
