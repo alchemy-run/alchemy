@@ -6,7 +6,7 @@ import type { Plugin, PluginBuild } from "esbuild";
 import assert from "node:assert";
 import { builtinModules } from "node:module";
 import nodePath from "node:path";
-import { dedent } from "../../util/dedent";
+import { dedent } from "../../util/dedent.js";
 // import dedent from "ts-dedent";
 // import { getBasePath } from "../../paths";
 
@@ -18,7 +18,9 @@ const REQUIRED_UNENV_ALIAS_NAMESPACE = "required-unenv-alias";
  *
  * @returns ESBuild plugin
  */
-export async function nodejsHybridPlugin(): Promise<Plugin> {
+export async function nodejsHybridPlugin(
+  unenvResolvePaths: string[] | undefined
+): Promise<Plugin> {
   // `unenv` and `@cloudflare/unenv-preset` only publish esm
   const { defineEnv } = await import("unenv");
   const { cloudflare } = await import("@cloudflare/unenv-preset");

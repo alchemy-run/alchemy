@@ -15,8 +15,10 @@ import {
 import type { Assets } from "./assets.js";
 import type { Bindings, WorkerBindingSpec } from "./bindings.js";
 import type { Bound } from "./bound.js";
+import { createAliasPlugin } from "./bundle/alias-plugin.js";
 import { external } from "./bundle/external.js";
-import { nodejsHybridPlugin } from "./bundle/hybrid-nodejs-compat.js";
+import { getNodeJSCompatPlugins } from "./bundle/nodejs-plugins.js";
+import { validateNodeCompatMode } from "./bundle/validate-node-compat-mode.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
 import { type EventSource, isQueueEventSource } from "./event-source.js";
 import {
@@ -86,21 +88,31 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * Path to the entry point file
+   *
    * Will be bundled using esbuild
+   *
    * One of script, entryPoint, or bundle must be provided
    */
   entrypoint?: string;
 
   /**
+   * The project root directory used to resolve aliases.
+   *
+   * @default process.cwd()
+   */
+  projectRoot?: string;
+
+  /**
    * Bundle options when using entryPoint
+   *
    * Ignored if bundle is provided
    */
   bundle?: Omit<BundleProps, "entryPoint">;
 
   /**
    * Module format for the worker script
-   * 'esm' - ECMAScript modules (default)
-   * 'cjs' - CommonJS modules
+   * - 'esm' - ECMAScript modules (default)
+   * - 'cjs' - CommonJS modules
    * @default 'esm'
    */
   format?: "esm" | "cjs";
@@ -119,6 +131,7 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * Environment variables to attach to the worker
+   *
    * These will be converted to plain_text bindings
    */
   env?: {
@@ -127,6 +140,7 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * Whether to enable a workers.dev URL for this worker
+   *
    * If true, the worker will be available at {name}.{subdomain}.workers.dev
    * @default false
    */
@@ -134,6 +148,7 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * Observability configuration for the worker
+   *
    * Controls whether worker logs are enabled
    * @default { enabled: true }
    */
@@ -173,7 +188,9 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * Cron expressions for the trigger.
+   *
    * Uses standard cron syntax (e.g. "0 0 * * *" for daily at midnight)
+   *
    * To clear all cron triggers, pass an empty array.
    *
    * @see https://developers.cloudflare.com/workers/configuration/cron-triggers/#examples
@@ -182,6 +199,7 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * Event sources that this worker will consume.
+   *
    * Can include queues, streams, or other event sources.
    */
   eventSources?: EventSource[];
@@ -370,7 +388,12 @@ export const Worker = Resource(
 
     // Get the script content - either from props.script, or by bundling
     const scriptContent =
-      props.script ?? (await bundleWorkerScript(compatibilityDate, props));
+      props.script ??
+      (await bundleWorkerScript({
+        ...props,
+        compatibilityDate,
+        compatibilityFlags,
+      }));
 
     // Find any assets bindings
     const assetsBindings: { name: string; assets: Assets }[] = [];
@@ -931,28 +954,44 @@ async function assertWorkerDoesNotExist<B extends Bindings>(
 }
 
 async function bundleWorkerScript<B extends Bindings>(
-  compatibilityDate: string,
-  props: WorkerProps<B>
+  props: WorkerProps<B> & {
+    compatibilityDate: string;
+    compatibilityFlags: string[];
+  }
 ) {
+  const projectRoot = props.projectRoot ?? process.cwd();
   const bundle = await Bundle("bundle", {
     entryPoint: props.entrypoint!,
     format: props.format === "cjs" ? "cjs" : "esm", // Use the specified format or default to ESM
     target: "esnext",
-    platform: "neutral",
+    platform: "node",
     minify: false,
     ...(props.bundle || {}),
+    conditions: ["workerd", "worker", "browser"],
     options: {
+      absWorkingDir: projectRoot,
       ...(props.bundle?.options || {}),
       keepNames: true, // Important for Durable Object classes
       loader: {
         ".sql": "text",
         ".json": "json",
       },
-      plugins:
-        compatibilityDate >= "2024-09-23" &&
-        props.compatibilityFlags?.find((flag) => flag === "nodejs_compat")
-          ? [await nodejsHybridPlugin()]
-          : [],
+      plugins: [
+        ...(await getNodeJSCompatPlugins({
+          mode: validateNodeCompatMode(
+            props.compatibilityDate,
+            props.compatibilityFlags
+          ),
+        })),
+        ...(props.bundle?.alias
+          ? [
+              createAliasPlugin({
+                alias: props.bundle?.alias,
+                projectRoot,
+              }),
+            ]
+          : []),
+      ],
     },
     external: [
       ...external,

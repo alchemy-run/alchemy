@@ -44,6 +44,7 @@
     "@aws-sdk/client-sqs": "^3.0.0",
     "@aws-sdk/client-sts": "^3.0.0",
     "@cloudflare/unenv-preset": "^2.3.1",
+    "@cloudflare/workers-shared": "^0.17.5",
     "@iarna/toml": "^2.2.5",
     "@octokit/rest": "^21.1.1",
     "ai": "^4.0.0",
@@ -67,6 +68,7 @@
   "devDependencies": {
     "@ai-sdk/anthropic": "^1.1.6",
     "@ai-sdk/openai": "^1.1.9",
+    "@asteasolutions/zod-to-openapi": "^7.3.0",
     "@aws-sdk/client-s3": "3.726.1",
     "@biomejs/biome": "^1.9.4",
     "@cloudflare/puppeteer": "^1.0.2",
@@ -80,6 +82,7 @@
     "@types/turndown": "^5.0.5",
     "ai": "^4.1.16",
     "arktype": "^2.1.16",
+    "braintrust": "^0.0.201",
     "change-case": "^5.4.4",
     "cloudflare": "^4.2.0",
     "libsodium-wrappers": "^0.7.15",
