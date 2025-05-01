@@ -32,6 +32,7 @@
     "aws4fetch": "^1.0.20",
     "prettier": "^3.5.3",
     "typescript": "latest",
-    "yaml": "^2.7.1"
+    "yaml": "^2.7.1",
+    "braintrust": "*"
   }
 }

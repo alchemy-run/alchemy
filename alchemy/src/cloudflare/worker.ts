@@ -15,9 +15,10 @@ import {
 import type { Assets } from "./assets.js";
 import type { Bindings, WorkerBindingSpec } from "./bindings.js";
 import type { Bound } from "./bound.js";
+import { external } from "./bundle/external.js";
+import { nodejsHybridPlugin } from "./bundle/nodejs-compat.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
 import { type EventSource, isQueueEventSource } from "./event-source.js";
-import { external } from "./external.js";
 import {
   QueueConsumer,
   deleteQueueConsumer,
@@ -928,7 +929,7 @@ async function assertWorkerDoesNotExist<B extends Bindings>(
   }
 }
 
-async function bundleWorkerScript<B extends Bindings>(props: WorkerProps) {
+async function bundleWorkerScript<B extends Bindings>(props: WorkerProps<B>) {
   const bundle = await Bundle("bundle", {
     entryPoint: props.entrypoint!,
     format: props.format === "cjs" ? "cjs" : "esm", // Use the specified format or default to ESM
@@ -943,6 +944,7 @@ async function bundleWorkerScript<B extends Bindings>(props: WorkerProps) {
         ".sql": "text",
         ".json": "json",
       },
+      plugins: [await nodejsHybridPlugin()],
     },
     external: [
       ...external,

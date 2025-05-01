@@ -51,6 +51,9 @@ export async function serialize(
         ])
       )
     );
+  } else if (typeof value === "function") {
+    // can't serialize functions
+    return undefined;
   }
   return value;
 }

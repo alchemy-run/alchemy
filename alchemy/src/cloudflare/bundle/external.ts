@@ -21,10 +21,12 @@ const nodejs_compat = [
   "node:url",
   "node:util",
   "node:zlib",
+  // "node:*",
 ];
 
 export const external = [
   ...nodejs_compat,
   ...nodejs_compat.map((p) => p.split(":")[1]),
   "cloudflare:workers",
+  // "cloudflare:*",
 ];
