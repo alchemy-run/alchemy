@@ -3,7 +3,6 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { alchemy } from "../../src/alchemy";
 import { Ai } from "../../src/cloudflare/ai";
-import { createCloudflareApi } from "../../src/cloudflare/api";
 import { Worker } from "../../src/cloudflare/worker";
 import { WranglerJson } from "../../src/cloudflare/wrangler.json";
 import { destroy } from "../../src/destroy";
@@ -15,10 +14,6 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-// Create a Cloudflare API client for verification
-const api = await createCloudflareApi();
-
-// Sample ESM worker script
 const esmWorkerScript = `
   export default {
     async fetch(request, env, ctx) {
@@ -43,7 +38,6 @@ describe("WranglerJson Resource", () => {
         const worker = await Worker(name, {
           format: "esm",
           entrypoint,
-          compatibilityDate: "2024-01-01",
           compatibilityFlags: ["nodejs_compat"],
         });
 
@@ -95,7 +89,6 @@ describe("WranglerJson Resource", () => {
         const worker = await Worker(name, {
           format: "esm",
           entrypoint,
-          compatibilityDate: "2024-01-01",
           bindings: {
             browser: { type: "browser" },
           },
@@ -129,7 +122,6 @@ describe("WranglerJson Resource", () => {
         const worker = await Worker(name, {
           format: "esm",
           entrypoint,
-          compatibilityDate: "2024-01-01",
           bindings: {
             AI: new Ai(),
           },
