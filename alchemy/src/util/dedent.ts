@@ -24,36 +24,45 @@ export function dedent(
   }, "");
 
   // Split into lines
-  const lines = result.split("\n");
+  let lines = result.split("\n");
 
-  // Remove the first line if it's empty (common when starting with a newline)
-  if (lines.length > 0 && lines[0].trim() === "") {
+  // Remove ALL leading blank/whitespace-only lines
+  while (lines.length > 0 && lines[0].trim() === "") {
     lines.shift();
   }
 
-  // Remove the last line if it's empty or only whitespace (common when ending with a backtick)
-  if (lines.length > 0 && lines[lines.length - 1].trim() === "") {
+  // Remove ALL trailing blank/whitespace-only lines
+  while (lines.length > 0 && lines[lines.length - 1].trim() === "") {
     lines.pop();
   }
 
-  // If there are no lines left, return an empty string
+  // If there are no lines left after trimming, return an empty string
   if (lines.length === 0) {
     return "";
   }
 
-  // Find the minimum indentation level (excluding empty lines)
+  // Find the minimum indentation level (excluding empty/whitespace lines)
   const minIndent = lines
-    .filter((line) => line.trim().length > 0)
+    .filter((line) => line.trim().length > 0) // Only consider non-blank lines for indent calculation
     .reduce((min, line) => {
       const indent = line.match(/^[ \t]*/)?.[0].length || 0;
+      // Handle potentially infinite min if all lines are blank (though handled by early return)
       return indent < min ? indent : min;
     }, Infinity);
 
+  // If minIndent remains Infinity (only blank lines existed), return empty string.
+  // This case should be caught by the lines.length check above, but belt-and-suspenders.
+  if (minIndent === Infinity) {
+    return "";
+  }
+
   // Remove the common indentation from each line
   const dedented = lines.map((line) => {
+    // Preserve internal blank lines as empty strings, don't try to substring them
     if (line.trim().length === 0) {
       return "";
     }
+    // Apply dedent only to lines with content
     return line.substring(minIndent);
   });
 
