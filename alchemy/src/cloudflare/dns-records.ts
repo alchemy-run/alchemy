@@ -212,10 +212,9 @@ export const DnsRecords = Resource(
               return createOrUpdateRecord(api, zoneId, desired, existing.id);
             }
             return existing;
-          } else {
+          }
             // Create new record
             return createOrUpdateRecord(api, zoneId, desired);
-          }
         })
       );
 

@@ -8,7 +8,7 @@ import { alchemy } from "../alchemy.js";
 import type { FileCollection } from "./file-collection.js";
 import type { FileRef } from "./file-ref.js";
 
-declare module "../alchemy" {
+declare module "../alchemy.js" {
   interface Alchemy {
     /**
      * Creates a reference to a file in the filesystem.
@@ -169,7 +169,7 @@ export const File = Resource(
     if (this.phase === "delete") {
       await ignore("ENOENT", async () => fs.promises.unlink(filePath));
       return this.destroy();
-    } else if (
+    }if (
       this.phase === "update" &&
       this.output &&
       this.output.path !== filePath

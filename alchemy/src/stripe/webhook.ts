@@ -159,7 +159,7 @@ export const WebhookEndpoint = Resource(
       }
 
       return this.destroy();
-    } else {
+    }
       try {
         let webhook: Stripe.WebhookEndpoint;
 
@@ -218,6 +218,5 @@ export const WebhookEndpoint = Resource(
         console.error("Error creating/updating webhook:", error);
         throw error;
       }
-    }
   }
 );

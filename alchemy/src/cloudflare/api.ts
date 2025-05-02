@@ -200,7 +200,4 @@ export class CloudflareApi {
 }
 
 class InternalError extends Error {
-  constructor(message: string) {
-    super(message);
-  }
 }

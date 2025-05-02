@@ -618,7 +618,7 @@ import Layout from '../layouts/Layout.astro';
       const exec = (command: string) => execAsync(command, { cwd });
 
       // Install Astro and general dependencies
-      await exec(`bun add astro`);
+      await exec("bun add astro");
 
       // Install dev dependencies
       const devDepsEntries = Object.entries(props.devDependencies || {});

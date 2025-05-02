@@ -139,7 +139,6 @@ export const TailwindConfig = Resource(
           return ["@astrojs/tailwind"];
         case "next":
           return [];
-        case "standalone":
         default:
           return [];
       }

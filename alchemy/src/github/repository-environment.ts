@@ -207,7 +207,7 @@ export const RepositoryEnvironment = Resource(
 
       // Return void (a deleted resource has no content)
       return this.destroy();
-    } else {
+    }
       try {
         // Check if the environment already exists
         let environmentId: number | undefined = undefined; // Use undefined instead of 0
@@ -464,6 +464,5 @@ export const RepositoryEnvironment = Resource(
         }
         throw error;
       }
-    }
   }
 );

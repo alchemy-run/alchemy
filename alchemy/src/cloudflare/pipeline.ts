@@ -3,7 +3,7 @@ import { Resource } from "../resource.js";
 import type { Secret } from "../secret.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
-  CloudflareApi,
+  type CloudflareApi,
   createCloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
@@ -332,7 +332,7 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
 
     // Return void (a deleted pipeline has no content)
     return this.destroy();
-  } else {
+  }
     let pipelineData: CloudflarePipelineResponse;
 
     if (this.phase === "create") {
@@ -375,7 +375,6 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
       compression: props.compression,
       accountId: api.accountId,
     });
-  }
 });
 
 interface CloudflarePipelineResponse {

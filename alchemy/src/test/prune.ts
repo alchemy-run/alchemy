@@ -45,7 +45,7 @@ export async function runChangedTests(
  */
 export async function findChangedTestFiles(
   directory: string,
-  baseCommit: string = "HEAD~1"
+  baseCommit = "HEAD~1"
 ): Promise<string[]> {
   // 1. Find all test files
   const testFiles = await findTestFiles(directory);

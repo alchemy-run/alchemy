@@ -94,7 +94,7 @@ export async function verifyGitHubAuth(
         "Required scopes: 'repo' for private repos or 'public_repo' for public repos\n"
       );
       throw new Error("GitHub authentication failed");
-    } else if (error.status === 403) {
+    }if (error.status === 403) {
       console.error(
         "\n⚠️ Insufficient permissions. You need admin access to the repository."
       );
@@ -102,14 +102,13 @@ export async function verifyGitHubAuth(
         "Make sure your token has the 'repo' scope for private repos or 'public_repo' for public repos\n"
       );
       throw new Error("Insufficient GitHub permissions");
-    } else if (error.status === 404) {
+    }if (error.status === 404) {
       console.error(`\n⚠️ Repository not found: ${owner}/${repo}`);
       console.error(
         "Make sure the repository exists and you have access to it\n"
       );
       throw new Error("GitHub repository not found");
-    } else {
-      throw error;
     }
+      throw error;
   }
 }

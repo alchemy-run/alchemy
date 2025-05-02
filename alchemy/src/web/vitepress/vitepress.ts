@@ -1,4 +1,4 @@
-import { exec } from "child_process";
+import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -166,7 +166,7 @@ export const VitepressProject = Resource(
     await Folder(path.join(cwd, ".vitepress", "theme"));
 
     await Promise.all([
-      StaticTextFile(path.join(cwd, ".gitignore"), `.vitepress/cache\n`),
+      StaticTextFile(path.join(cwd, ".gitignore"), ".vitepress/cache\n"),
       // StaticJsonFile(path.join(cwd, "tsconfig.json"), {
       //   extends: props.tsconfig?.extends,
       //   references: props.tsconfig?.references?.map((path) => ({ path })),

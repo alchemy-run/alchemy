@@ -190,39 +190,39 @@ export const Queue = Resource(
       }
 
       return this.destroy();
-    } else {
+    }
       // Create queue with attributes
       const attributes: Record<string, string> = {};
 
       if (props.visibilityTimeout !== undefined) {
-        attributes["VisibilityTimeout"] = props.visibilityTimeout.toString();
+        attributes.VisibilityTimeout = props.visibilityTimeout.toString();
       }
       if (props.messageRetentionPeriod !== undefined) {
-        attributes["MessageRetentionPeriod"] =
+        attributes.MessageRetentionPeriod =
           props.messageRetentionPeriod.toString();
       }
       if (props.maximumMessageSize !== undefined) {
-        attributes["MaximumMessageSize"] = props.maximumMessageSize.toString();
+        attributes.MaximumMessageSize = props.maximumMessageSize.toString();
       }
       if (props.delaySeconds !== undefined) {
-        attributes["DelaySeconds"] = props.delaySeconds.toString();
+        attributes.DelaySeconds = props.delaySeconds.toString();
       }
       if (props.receiveMessageWaitTimeSeconds !== undefined) {
-        attributes["ReceiveMessageWaitTimeSeconds"] =
+        attributes.ReceiveMessageWaitTimeSeconds =
           props.receiveMessageWaitTimeSeconds.toString();
       }
 
       // FIFO specific attributes
       if (props.fifo) {
-        attributes["FifoQueue"] = "true";
+        attributes.FifoQueue = "true";
         if (props.contentBasedDeduplication) {
-          attributes["ContentBasedDeduplication"] = "true";
+          attributes.ContentBasedDeduplication = "true";
         }
         if (props.deduplicationScope) {
-          attributes["DeduplicationScope"] = props.deduplicationScope;
+          attributes.DeduplicationScope = props.deduplicationScope;
         }
         if (props.fifoThroughputLimit) {
-          attributes["FifoThroughputLimit"] = props.fifoThroughputLimit;
+          attributes.FifoThroughputLimit = props.fifoThroughputLimit;
         }
       }
 
@@ -279,7 +279,7 @@ export const Queue = Resource(
             arn: attributesResponse.Attributes!.QueueArn!,
             url: urlResponse.QueueUrl!,
           });
-        } else if (error.name === "QueueDeletedRecently") {
+        }if (error.name === "QueueDeletedRecently") {
           // Queue was recently deleted, wait and retry
           const maxRetries = 3;
           let retryCount = 0;
@@ -324,6 +324,5 @@ export const Queue = Resource(
         }
         throw error;
       }
-    }
   }
 );

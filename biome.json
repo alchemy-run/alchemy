@@ -18,8 +18,17 @@
 					}
 				}
 			},
+			"performance": {
+				"noAccumulatingSpread": "off"
+			},
+			"complexity": {
+				"noBannedTypes": "off"
+			},
 			"suspicious": {
-				"noExplicitAny": "off"
+				"noExplicitAny": "off",
+				"noImplicitAnyLet": "off",
+				"noAssignInExpressions": "off",
+				"noShadowRestrictedNames": "off"
 			},
 			"style": {
 				"useLiteralEnumMembers": "error",
@@ -29,14 +38,14 @@
 				"useNumericLiterals": "error",
 				"useEnumInitializers": "error",
 				"useSelfClosingElements": "error",
-				"useConst": "error",
+				"useConst": "off",
 				"useSingleVarDeclarator": "error",
 				"noUnusedTemplateLiteral": "error",
 				"useNumberNamespace": "error",
 				"noInferrableTypes": "error",
 				"useExponentiationOperator": "error",
 				"useTemplate": "error",
-				"noParameterAssign": "error",
+				"noParameterAssign": "off",
 				"noNonNullAssertion": "off",
 				"useDefaultParameterLast": "error",
 				"noArguments": "error",

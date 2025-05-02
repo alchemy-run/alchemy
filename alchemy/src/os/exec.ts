@@ -122,14 +122,14 @@ export const Exec = Resource(
     if (this.phase === "delete") {
       // Nothing to actually delete for an exec command
       return this.destroy();
-    } else if (
+    }if (
       this.phase === "update" &&
       props.memoize &&
       this.output?.command === props.command
     ) {
       // If memoize is enabled and the command hasn't changed, return the existing output
       return this.output;
-    } else {
+    }
       // Default values
       let stdout = "";
       let stderr = "";
@@ -198,6 +198,5 @@ export const Exec = Resource(
         executedAt: Date.now(),
         completed: true,
       });
-    }
   }
 );

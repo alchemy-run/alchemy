@@ -203,7 +203,7 @@ export const Price = Resource(
       }
 
       return this.destroy();
-    } else {
+    }
       try {
         let price: Stripe.Price;
 
@@ -284,6 +284,5 @@ export const Price = Resource(
         console.error("Error creating/updating price:", error);
         throw error;
       }
-    }
   }
 );

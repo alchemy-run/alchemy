@@ -361,7 +361,7 @@ ${props.system || ""}
         The output should be a complete index.md file with proper YAML frontmatter and markdown content.
         `,
     });
-  } else {
+  }
     return StaticTextFile(
       id,
       props.outFile,
@@ -375,5 +375,4 @@ ${yaml.stringify({
 ---
 `
     );
-  }
 }

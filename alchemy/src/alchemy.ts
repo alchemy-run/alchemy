@@ -109,7 +109,7 @@ async function _alchemy(
       return process.exit(0);
     }
     return root;
-  } else {
+  }
     const [template, ...values] = args;
     const [, secondLine] = template[0].split("\n");
     const leadingSpaces = secondLine
@@ -118,8 +118,8 @@ async function _alchemy(
     const indent = " ".repeat(leadingSpaces);
 
     const [{ isFileRef }, { isFileCollection }] = await Promise.all([
-      import("./fs/file-ref"),
-      import("./fs/file-collection"),
+      import("./fs/file-ref.js"),
+      import("./fs/file-collection.js"),
     ]);
 
     const appendices: Record<string, string> = {};
@@ -128,48 +128,47 @@ async function _alchemy(
       values.map(async function resolve(value): Promise<string> {
         if (typeof value === "string") {
           return indent + value;
-        } else if (value === null) {
+        }if (value === null) {
           return "null";
-        } else if (value === undefined) {
+        }if (value === undefined) {
           return "undefined";
-        } else if (
+        }if (
           typeof value === "number" ||
           typeof value === "boolean" ||
           typeof value === "bigint"
         ) {
           return value.toString();
-        } else if (value instanceof Promise) {
+        }if (value instanceof Promise) {
           return resolve(await value);
-        } else if (isFileRef(value)) {
+        }if (isFileRef(value)) {
           if (!(value.path in appendices)) {
             appendices[value.path] = await fs.readFile(value.path, "utf-8");
           }
           return `[${path.basename(value.path)}](${value.path})`;
-        } else if (isFileCollection(value)) {
+        }if (isFileCollection(value)) {
           return Object.entries(value.files)
             .map(([filePath, content]) => {
               appendices[filePath] = content;
               return `[${path.basename(filePath)}](${filePath})`;
             })
             .join("\n\n");
-        } else if (Array.isArray(value)) {
+        }if (Array.isArray(value)) {
           return (
             await Promise.all(
               value.map(async (value, i) => `${i}. ${await resolve(value)}`)
             )
           ).join("\n");
-        } else if (
+        }if (
           typeof value === "object" &&
           typeof value.path === "string"
         ) {
           if (typeof value.content === "string") {
             appendices[value.path] = value.content;
             return `[${path.basename(value.path)}](${value.path})`;
-          } else {
+          }
             appendices[value.path] = await fs.readFile(value.path, "utf-8");
             return `[${path.basename(value.path)}](${value.path})`;
-          }
-        } else if (typeof value === "object") {
+        }if (typeof value === "object") {
           return (
             await Promise.all(
               Object.entries(value).map(async ([key, value]) => {
@@ -177,11 +176,10 @@ async function _alchemy(
               })
             )
           ).join("\n");
-        } else {
+        }
           // TODO: support other types
           console.log(value);
           throw new Error(`Unsupported value type: ${value}`);
-        }
       })
     );
 
@@ -218,7 +216,6 @@ async function _alchemy(
         })
         .join("\n\n"),
     ].join("\n");
-  }
 }
 
 export interface AlchemyOptions {

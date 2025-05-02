@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { handleApiError } from "./api-error.js";
-import { CloudflareApi } from "./api.js";
+import type { CloudflareApi } from "./api.js";
 
 export interface D1MigrationOptions {
   migrationsFiles: Array<{ id: string; sql: string }>;
@@ -13,8 +13,8 @@ export interface D1MigrationOptions {
 
 const getPrefix = (name: string) => {
   const prefix = name.split("_")[0];
-  const num = parseInt(prefix, 10);
-  return isNaN(num) ? null : num;
+  const num = Number.parseInt(prefix, 10);
+  return Number.isNaN(num) ? null : num;
 };
 
 async function readMigrationFile(filePath: string): Promise<string> {

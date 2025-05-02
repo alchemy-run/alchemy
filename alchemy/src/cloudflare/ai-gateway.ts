@@ -255,7 +255,7 @@ export const AiGateway = Resource(
 function mapPropsToApi(
   id: string,
   props: AiGatewayProps,
-  includeIdInBody: boolean = false
+  includeIdInBody = false
 ): Record<string, any> {
   const body: Record<string, any> = {};
   if (includeIdInBody) {

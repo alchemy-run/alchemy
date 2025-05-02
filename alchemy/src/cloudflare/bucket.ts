@@ -3,7 +3,7 @@ import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import type { Secret } from "../secret.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
-import { CloudflareApi, createCloudflareApi } from "./api.js";
+import { type CloudflareApi, createCloudflareApi } from "./api.js";
 
 /**
  * Properties for creating or updating an R2 Bucket
@@ -184,7 +184,7 @@ export const R2Bucket = Resource(
 
       // Return void (a deleted bucket has no content)
       return this.destroy();
-    } else {
+    }
       if (this.phase === "create") {
         try {
           await createBucket(api, bucketName, props);
@@ -214,7 +214,6 @@ export const R2Bucket = Resource(
         type: "r2_bucket",
         accountId: api.accountId,
       });
-    }
   }
 );
 
@@ -287,7 +286,7 @@ interface CloudflareBucketResponse {
  * @returns Modified headers object
  */
 export function withJurisdiction(
-  headers: Record<string, string> = {},
+  headers: Record<string, string>,
   props: BucketProps | { jurisdiction?: string } | string | undefined
 ): Record<string, string> {
   // Clone the headers object to avoid modifying the original
@@ -581,7 +580,7 @@ export async function setCorsConfiguration(
   allowedOrigins: string[] = ["*"],
   allowedMethods: string[] = ["GET", "HEAD", "PUT", "POST", "DELETE"],
   allowedHeaders: string[] = ["*"],
-  maxAgeSeconds: number = 3600,
+  maxAgeSeconds = 3600,
   jurisdiction?: string
 ): Promise<void> {
   try {
@@ -682,7 +681,7 @@ export async function listBuckets(
   }
 
   // Build URL with query parameters
-  const path = `/accounts/${api.accountId}/r2/buckets${params.toString() ? "?" + params.toString() : ""}`;
+  const path = `/accounts/${api.accountId}/r2/buckets${params.toString() ? `?${params.toString()}` : ""}`;
 
   // Set jurisdiction header if provided
   const headers = withJurisdiction({}, options.jurisdiction);

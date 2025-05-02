@@ -2,7 +2,7 @@ import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import { handleApiError } from "./api-error.js";
 import {
-  CloudflareApi,
+  type CloudflareApi,
   createCloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
@@ -110,10 +110,9 @@ export const CustomDomain = Resource(
     if (this.phase === "delete") {
       await deleteCustomDomain(this, api, logicalId, props);
       return this.destroy();
-    } else {
+    }
       // Create or Update phase
       return await ensureCustomDomain(this, api, logicalId, props);
-    }
   }
 );
 

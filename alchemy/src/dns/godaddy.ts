@@ -24,6 +24,6 @@ export async function updateNameservers(options: UpdateNameserversOptions) {
     console.log(`✅ Nameservers updated for ${options.domain}`);
   } else {
     const error = await response.json();
-    console.error(`❌ Failed to update nameservers:`, error);
+    console.error("❌ Failed to update nameservers:", error);
   }
 }

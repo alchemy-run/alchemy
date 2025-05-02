@@ -181,7 +181,7 @@ export const GitHubSecret = Resource(
 
       // Return void (a deleted resource has no content)
       return this.destroy();
-    } else {
+    }
       try {
         // Check if we're transitioning between secret types (repo <-> environment)
         if (this.phase === "update") {
@@ -306,7 +306,6 @@ export const GitHubSecret = Resource(
         }
         throw error;
       }
-    }
   }
 );
 

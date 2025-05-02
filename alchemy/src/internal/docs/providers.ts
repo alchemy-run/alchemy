@@ -60,7 +60,7 @@ export async function Providers({
   ];
 
   // Get all folders in the alchemy/src directory
-  let providers = (
+  const providers = (
     await fs.readdir(srcDir, {
       withFileTypes: true,
     })
@@ -74,7 +74,7 @@ export async function Providers({
         generateProviderDocs({ provider, outDir, parallel })
       )
     );
-  } else {
+  }
     const generatedProviders = [];
     for (const provider of providers) {
       generatedProviders.push(
@@ -82,7 +82,6 @@ export async function Providers({
       );
     }
     return generatedProviders;
-  }
 }
 
 async function generateProviderDocs({

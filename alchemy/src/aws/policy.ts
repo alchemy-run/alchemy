@@ -267,7 +267,7 @@ export const Policy = Resource(
         }
       }
       return this.destroy();
-    } else {
+    }
       try {
         // Check if policy exists
         const existingPolicy = await client.send(
@@ -370,6 +370,5 @@ export const Policy = Resource(
         }
         throw error;
       }
-    }
   }
 );

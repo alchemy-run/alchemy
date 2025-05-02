@@ -80,14 +80,13 @@ export const PolicyAttachment = Resource(
         )
       );
       return this.destroy();
-    } else {
+    }
       await client.send(
         new AttachRolePolicyCommand({
           PolicyArn: props.policyArn,
           RoleName: props.roleName,
         })
       );
-    }
 
     return this(props);
   }

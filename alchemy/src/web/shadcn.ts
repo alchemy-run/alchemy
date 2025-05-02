@@ -1,4 +1,4 @@
-import { exec } from "child_process";
+import { exec } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { Context } from "../context.js";
@@ -139,11 +139,11 @@ export const ShadcnUI = Resource(
 
     // Ensure React is installed if not already
     if (!props.react) {
-      await exec(`bun add react react-dom`);
+      await exec("bun add react react-dom");
     }
 
     // Install shadcn dependencies
-    await exec(`bun add -D @types/node`);
+    await exec("bun add -D @types/node");
 
     // Create components.json directly instead of running shadcn init
     await StaticJsonFile(path.join(props.cwd, "components.json"), {
@@ -197,7 +197,7 @@ export const ShadcnUI = Resource(
     await StaticTypeScriptFile(path.join(libPath, "utils.ts"), utilsContent);
 
     // Install clsx and tailwind-merge
-    await exec(`bun add clsx tailwind-merge`);
+    await exec("bun add clsx tailwind-merge");
 
     // Install requested components
     if (props.components && props.components.length > 0) {

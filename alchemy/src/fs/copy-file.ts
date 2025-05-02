@@ -72,7 +72,7 @@ export const CopyFile = Resource(
       // When deleting, remove the destination file
       await ignore("ENOENT", async () => fs.promises.unlink(dest));
       return this.destroy();
-    } else {
+    }
       try {
         // Check if source file exists
         await fs.promises.access(src, fs.constants.F_OK);
@@ -110,6 +110,5 @@ export const CopyFile = Resource(
         console.error(`Error copying file from ${src} to ${dest}:`, error);
         throw error;
       }
-    }
   }
 );

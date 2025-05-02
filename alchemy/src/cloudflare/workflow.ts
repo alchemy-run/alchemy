@@ -21,7 +21,7 @@ export interface WorkflowProps {
 }
 
 export class Workflow<PARAMS = unknown> {
-  public readonly type: "workflow" = "workflow";
+  public readonly type = "workflow";
   /**
    * Phantom property to preserve workflow params at the type level.
    *

@@ -357,7 +357,7 @@ export const Worker = Resource(
     if (this.phase === "delete") {
       await deleteWorker(this, api, workerName);
       return this.destroy();
-    } else if (this.phase === "create") {
+    }if (this.phase === "create") {
       if (!props.adopt) {
         await assertWorkerDoesNotExist(this, api, workerName);
       }
@@ -438,9 +438,8 @@ export const Worker = Resource(
               ? eventSource.settings
               : undefined,
           });
-        } else {
-          throw new Error(`Unsupported event source type: ${eventSource}`);
         }
+          throw new Error(`Unsupported event source type: ${eventSource}`);
       }) ?? []
     );
 
@@ -923,11 +922,10 @@ async function assertWorkerDoesNotExist<B extends Bindings>(
     throw new Error(
       `Worker with name '${workerName}' already exists. Please use a unique name.`
     );
-  } else {
+  }
     throw new Error(
       `Error checking if worker exists: ${response.status} ${response.statusText} ${await response.text()}`
     );
-  }
 }
 
 async function bundleWorkerScript<B extends Bindings>(
@@ -964,11 +962,10 @@ async function bundleWorkerScript<B extends Bindings>(
   try {
     if (bundle.content) {
       return bundle.content;
-    } else if (bundle.path) {
+    }if (bundle.path) {
       return await fs.readFile(bundle.path, "utf-8");
-    } else {
-      throw new Error("Failed to create bundle");
     }
+      throw new Error("Failed to create bundle");
   } catch (error) {
     console.error("Error reading bundle:", error);
     throw new Error("Error reading bundle");
@@ -1281,7 +1278,7 @@ async function deleteQueueConsumers<B extends Bindings>(
   const queueIds = eventSources.flatMap((eventSource) => {
     if (isQueue(eventSource)) {
       return [eventSource.id];
-    } else if (isQueueEventSource(eventSource)) {
+    }if (isQueueEventSource(eventSource)) {
       return [eventSource.queue.id];
     }
     return [];

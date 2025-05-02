@@ -140,7 +140,7 @@ export const Bucket = Resource(
         )
       );
       return this.destroy();
-    } else {
+    }
       try {
         // Check if bucket exists
         await client.send(
@@ -227,7 +227,6 @@ export const Bucket = Resource(
         acl: aclResponse.Grants?.[0]?.Permission?.toLowerCase(),
         ...(tags && { tags }),
       });
-    }
   }
 );
 

@@ -182,7 +182,7 @@ export const ImportDnsRecords = Resource(
                 // Join the rest as hostname in case there are spaces
                 const hostname = parts.slice(1).join(" ");
 
-                if (!isNaN(priority)) {
+                if (!Number.isNaN(priority)) {
                   result.priority = priority;
                   result.content = hostname;
                 }

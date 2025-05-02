@@ -333,7 +333,7 @@ export const Function = Resource(
       );
 
       return this.destroy();
-    } else {
+    }
       let functionUrl: string | undefined;
       try {
         // Check if function exists
@@ -690,7 +690,6 @@ export const Function = Resource(
         signingJobArn: config.SigningJobArn,
         functionUrl: functionUrl,
       });
-    }
   }
 );
 

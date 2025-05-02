@@ -2,7 +2,7 @@ import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
-  CloudflareApi,
+  type CloudflareApi,
   createCloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
@@ -195,7 +195,7 @@ export const D1DatabaseResource = Resource(
 
       // Return void (a deleted database has no content)
       return this.destroy();
-    } else {
+    }
       let dbData: CloudflareD1Response;
 
       if (this.phase === "create") {
@@ -286,7 +286,6 @@ export const D1DatabaseResource = Resource(
         accountId: api.accountId,
         migrationsDir: props.migrationsDir,
       });
-    }
   }
 );
 

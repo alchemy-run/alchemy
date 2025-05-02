@@ -166,14 +166,14 @@ export const Bundle = Resource(
     const outputFile = result.outputFiles?.[0];
     if (outputFile === undefined && bundlePath === undefined) {
       throw new Error("Failed to create bundle");
-    } else if (outputFile) {
+    }if (outputFile) {
       return this({
         ...props,
         path: bundlePath,
         hash: outputFile.hash,
         content: outputFile.text,
       });
-    } else {
+    }
       const content = await fs.readFile(bundlePath!, "utf-8");
       return this({
         ...props,
@@ -181,7 +181,6 @@ export const Bundle = Resource(
         hash: crypto.createHash("sha256").update(content).digest("hex"),
         content,
       });
-    }
   }
 );
 

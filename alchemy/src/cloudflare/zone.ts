@@ -365,7 +365,7 @@ export const Zone = Resource(
           : null,
         settings: await getZoneSettings(api, zoneData.id),
       });
-    } else {
+    }
       // Create new zone
 
       const response = await api.post("/zones", {
@@ -434,7 +434,6 @@ export const Zone = Resource(
           : null,
         settings: await getZoneSettings(api, zoneData.id),
       });
-    }
   }
 );
 

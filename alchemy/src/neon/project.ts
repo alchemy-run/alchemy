@@ -678,7 +678,7 @@ async function getProject(
   const updatedData = await getProjectDetails(api, projectId);
 
   // Start with a copy of the initial data
-  let responseData = { ...initialData };
+  const responseData = { ...initialData };
 
   // Check if we have a branch ID from the initial data
   const branchId = initialData.branch?.id;
@@ -789,7 +789,7 @@ async function waitForOperations(
 
     if (operationStatus === "failed") {
       throw new Error(`Operation ${operation.id} (${operation.action}) failed`);
-    } else if (totalWaitTime >= maxWaitTime) {
+    }if (totalWaitTime >= maxWaitTime) {
       throw new Error(
         `Timeout waiting for operation ${operation.id} (${operation.action}) to complete`
       );

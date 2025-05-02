@@ -211,7 +211,7 @@ export const ViteProject = Resource(
 
       async function build() {
         // tsc -b will fail if we have not invoked tan stacks' code gen
-        await execAsync(`bun vite build`, { cwd: props.name });
+        await execAsync("bun vite build", { cwd: props.name });
       }
 
       async function installTailwind() {
@@ -272,9 +272,9 @@ export default defineConfig({
       }
 
       async function installTanstack() {
-        await exec(`bun add @tanstack/react-router`);
+        await exec("bun add @tanstack/react-router");
         await exec(
-          `bun add -D @tanstack/router-plugin @tanstack/react-router-devtools`
+          "bun add -D @tanstack/router-plugin @tanstack/react-router-devtools"
         );
 
         const src = path.join(props.name, "src");

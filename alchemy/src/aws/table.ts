@@ -196,7 +196,7 @@ export const Table = Resource(
       }
 
       return this.destroy();
-    } else {
+    }
       // Setup for table creation
       const attributeDefinitions = [
         {
@@ -321,7 +321,6 @@ export const Table = Resource(
         streamArn: tableDescription!.LatestStreamArn,
         tableId: tableDescription!.TableId!,
       });
-    }
   }
 );
 

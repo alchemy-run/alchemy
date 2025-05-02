@@ -165,7 +165,7 @@ export const Product = Resource(
 
       // Return a minimal output for deleted state
       return this.destroy();
-    } else {
+    }
       try {
         let product: Stripe.Product;
 
@@ -221,6 +221,5 @@ export const Product = Resource(
         console.error("Error creating/updating product:", error);
         throw error;
       }
-    }
   }
 );

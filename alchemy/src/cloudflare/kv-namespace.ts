@@ -3,7 +3,7 @@ import { Resource } from "../resource.js";
 import { withExponentialBackoff } from "../util/retry.js";
 import { handleApiError } from "./api-error.js";
 import {
-  CloudflareApi,
+  type CloudflareApi,
   createCloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
@@ -132,7 +132,7 @@ export const KVNamespace = Resource(
 
       // Return minimal output for deleted state
       return this.destroy();
-    } else {
+    }
       // For create or update operations
       // If this.phase is "update", we expect this.output to exist
       let namespaceId =
@@ -161,7 +161,6 @@ export const KVNamespace = Resource(
         createdAt: createdAt,
         modifiedAt: Date.now(),
       });
-    }
   }
 );
 

@@ -74,9 +74,8 @@ export class Scope {
     const app = this.appName ? [this.appName] : [];
     if (this.parent) {
       return [...this.parent.chain, ...thisScope];
-    } else {
-      return [...app, this.stage, ...thisScope];
     }
+      return [...app, this.stage, ...thisScope];
   }
 
   public fail() {

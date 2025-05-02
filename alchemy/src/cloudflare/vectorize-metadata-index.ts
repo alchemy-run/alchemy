@@ -6,7 +6,7 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
-import { VectorizeIndex } from "./vectorize-index.js";
+import type { VectorizeIndex } from "./vectorize-index.js";
 
 /**
  * Properties for creating or deleting a Vectorize Metadata Index
@@ -105,13 +105,13 @@ export const VectorizeMetadataIndex = Resource(
         }
       }
       return this.destroy();
-    } else if (this.phase === "update") {
+    }if (this.phase === "update") {
       // Update operation is not supported
       throw new Error(
         "Updating Vectorize metadata indexes is not supported by the Cloudflare API. " +
           "To change a metadata index, delete it and create a new one with the desired configuration."
       );
-    } else {
+    }
       const indexData = await createMetadataIndex(api, indexName, props);
 
       return this({
@@ -122,7 +122,6 @@ export const VectorizeMetadataIndex = Resource(
         accountId: api.accountId,
         mutationId: indexData.result.mutationId,
       });
-    }
   }
 );
 

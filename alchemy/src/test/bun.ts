@@ -10,7 +10,7 @@ import type { StateStoreType } from "../state.js";
 /**
  * Extend the Alchemy interface to include test functionality
  */
-declare module "../alchemy" {
+declare module "../alchemy.js" {
   interface Alchemy {
     test: typeof test;
   }

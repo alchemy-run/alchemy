@@ -125,7 +125,7 @@ export const VectorizeIndex = Resource(
 
       // Return void (a deleted index has no content)
       return this.destroy();
-    } else {
+    }
       let indexData: CloudflareVectorizeResponse;
 
       if (this.phase === "create") {
@@ -173,7 +173,6 @@ export const VectorizeIndex = Resource(
           ? new Date(indexData.result.created_on).getTime()
           : undefined,
       });
-    }
   }
 );
 

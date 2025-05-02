@@ -2,7 +2,7 @@ import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
-  CloudflareApi,
+  type CloudflareApi,
   createCloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
@@ -168,7 +168,7 @@ export const Queue = Resource("cloudflare::Queue", async function <
 
     // Return void (a deleted queue has no content)
     return this.destroy();
-  } else {
+  }
     let queueData: CloudflareQueueResponse;
 
     if (this.phase === "create") {
@@ -217,7 +217,6 @@ export const Queue = Resource("cloudflare::Queue", async function <
       Body: undefined as T,
       Batch: undefined! as MessageBatch<T>,
     });
-  }
 });
 
 /**
