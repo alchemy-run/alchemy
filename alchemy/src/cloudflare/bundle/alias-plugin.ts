@@ -18,7 +18,7 @@ export const createAliasPlugin = ({
     const filter = new RegExp(
       Object.keys(alias)
         .map((key) => escapeRegex(key))
-        .join("|")
+        .join("|"),
     );
 
     // reimplement module aliasing as an esbuild plugin onResolve hook

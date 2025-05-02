@@ -11,8 +11,8 @@ const nodeBuiltinResolveErrorText = new RegExp(
   '^Could not resolve "(' +
     builtinModules.join("|") +
     "|" +
-    builtinModules.map((module) => "node:" + module).join("|") +
-    ')"$'
+    builtinModules.map((module) => `node:${module}`).join("|") +
+    ')"$',
 );
 /**
  * Rewrites esbuild BuildFailures for failing to resolve Node built-in modules
@@ -20,7 +20,7 @@ const nodeBuiltinResolveErrorText = new RegExp(
  */
 export function rewriteNodeCompatBuildFailure(
   errors: esbuild.Message[],
-  compatMode: NodeJSCompatMode = null
+  compatMode: NodeJSCompatMode = null,
 ) {
   for (const error of errors) {
     const match = nodeBuiltinResolveErrorText.exec(error.text);
@@ -58,7 +58,7 @@ export function isBuildFailure(err: unknown): err is esbuild.BuildFailure {
  * Returns true if the error has a cause that is like an esbuild BuildFailure object.
  */
 export function isBuildFailureFromCause(
-  err: unknown
+  err: unknown,
 ): err is { cause: esbuild.BuildFailure } {
   return (
     typeof err === "object" &&

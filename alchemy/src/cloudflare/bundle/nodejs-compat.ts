@@ -51,7 +51,7 @@ export const nodejsCompatPlugin = (mode: NodeJSCompatMode): Plugin => ({
         }
         // This is a normal package—don't treat it specially
         return result;
-      }
+      },
     );
 
     /**
@@ -68,7 +68,7 @@ export const nodejsCompatPlugin = (mode: NodeJSCompatMode): Plugin => ({
         const paths = new Intl.ListFormat("en-US").format(
           Array.from(warnedPackages.keys())
             .map((p) => `"${p}"`)
-            .sort()
+            .sort(),
         );
         return {
           errors: [
@@ -95,7 +95,7 @@ export const nodejsCompatPlugin = (mode: NodeJSCompatMode): Plugin => ({
             dedent`
                 The package "${path}" wasn't found on the file system but is built into node.
                 Your Worker may throw errors at runtime unless you enable the "nodejs_compat" compatibility flag. Refer to https://developers.cloudflare.com/workers/runtime-apis/nodejs/ for more details. Imported from:
-                ${toList(importers, pluginBuild.initialOptions.absWorkingDir)}`
+                ${toList(importers, pluginBuild.initialOptions.absWorkingDir)}`,
           );
         });
       }

@@ -14,11 +14,11 @@ import { getNodeCompat } from "miniflare";
  *
  */
 export function validateNodeCompatMode(
-  compatibilityDateStr: string = "2000-01-01", // Default to some arbitrary old date
+  compatibilityDateStr: string,
   compatibilityFlags: string[],
   props?: {
     noBundle?: boolean;
-  }
+  },
 ): NodeJSCompatMode {
   const {
     mode,
@@ -29,19 +29,19 @@ export function validateNodeCompatMode(
 
   if (hasExperimentalNodejsCompatV2Flag) {
     throw new Error(
-      "The `experimental:` prefix on `nodejs_compat_v2` is no longer valid. Please remove it and try again."
+      "The `experimental:` prefix on `nodejs_compat_v2` is no longer valid. Please remove it and try again.",
     );
   }
 
   if (hasNodejsCompatFlag && hasNodejsCompatV2Flag) {
     throw new Error(
-      "The `nodejs_compat` and `nodejs_compat_v2` compatibility flags cannot be used in together. Please select just one."
+      "The `nodejs_compat` and `nodejs_compat_v2` compatibility flags cannot be used in together. Please select just one.",
     );
   }
 
   if (props?.noBundle && hasNodejsCompatV2Flag) {
     console.warn(
-      "`nodejs_compat_v2` compatibility flag and `--no-bundle` can't be used together. If you want to polyfill Node.js built-ins and disable Wrangler's bundling, please polyfill as part of your own bundling process."
+      "`nodejs_compat_v2` compatibility flag and `--no-bundle` can't be used together. If you want to polyfill Node.js built-ins and disable Wrangler's bundling, please polyfill as part of your own bundling process.",
     );
   }
 
