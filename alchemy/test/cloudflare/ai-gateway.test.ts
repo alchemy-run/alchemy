@@ -86,14 +86,14 @@ describe("AiGateway Resource", () => {
     let gateway: AiGateway | undefined;
     try {
       // Create a test AI Gateway with authentication and logging
-      gateway = await AiGateway(testId + "-auth", {
+      gateway = await AiGateway(`${testId}-auth`, {
         collectLogs: true,
         authentication: true,
         logManagement: 10000,
         logManagementStrategy: "DELETE_OLDEST",
       });
 
-      expect(gateway.id).toEqual(testId + "-auth");
+      expect(gateway.id).toEqual(`${testId}-auth`);
       expect(gateway.authentication).toEqual(true);
       expect(gateway.logManagement).toEqual(10000);
       expect(gateway.logManagementStrategy).toEqual("DELETE_OLDEST");
@@ -126,14 +126,14 @@ describe("AiGateway Resource", () => {
     let gateway: AiGateway | undefined;
     try {
       // Create a test AI Gateway with rate limiting
-      gateway = await AiGateway(testId + "-ratelimit", {
+      gateway = await AiGateway(`${testId}-ratelimit`, {
         rateLimitingInterval: 30,
         rateLimitingLimit: 50,
         rateLimitingTechnique: "sliding",
         cacheInvalidateOnUpdate: true,
       });
 
-      expect(gateway.id).toEqual(testId + "-ratelimit");
+      expect(gateway.id).toEqual(`${testId}-ratelimit`);
       expect(gateway.rateLimitingInterval).toEqual(30);
       expect(gateway.rateLimitingLimit).toEqual(50);
       expect(gateway.rateLimitingTechnique).toEqual("sliding");

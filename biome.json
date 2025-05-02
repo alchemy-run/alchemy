@@ -26,7 +26,13 @@
           "options": {
             "forceJsExtensions": true
           }
-        }
+        },
+        "noUnsafeFinally": "off",
+        "noChildrenProp": "off"
+      },
+      "a11y": {
+        "useButtonType": "off",
+        "useHtmlLang": "off"
       },
       "performance": {
         "noAccumulatingSpread": "off"
@@ -61,7 +67,7 @@
         "noArguments": "error",
         "useImportType": "error",
         "useExportType": "error",
-        "noUselessElse": "error",
+        "noUselessElse": "off",
         "useShorthandFunctionType": "error"
       }
     }

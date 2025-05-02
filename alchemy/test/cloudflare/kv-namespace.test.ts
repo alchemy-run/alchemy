@@ -120,7 +120,7 @@ describe("KV Namespace Resource", () => {
 
         // Calculate exponential backoff time (2^attempt * 1000ms), but cap at maxWaitTime
         const backoffTime = Math.min(
-          Math.pow(2, attempt) * 1000,
+          2 ** attempt * 1000,
           maxWaitTime / maxAttempts,
         );
         console.log(

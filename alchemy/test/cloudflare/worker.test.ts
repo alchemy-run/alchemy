@@ -915,8 +915,6 @@ describe("Worker Resource", () => {
 
       const apiCall = await get(`${worker.url}/api/data`);
       expect(apiCall).toEqual("Worker with assets is running!");
-    } catch (err) {
-      throw err;
     } finally {
       // Clean up temporary directory
       if (tempDir) {

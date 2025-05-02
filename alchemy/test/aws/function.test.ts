@@ -687,7 +687,7 @@ describe("AWS Resources", () => {
             expect(chunkCount).toBeGreaterThan(0);
 
             // Try to parse the complete data
-            if (receivedData && receivedData.trim()) {
+            if (receivedData?.trim()) {
               try {
                 const responseBody = JSON.parse(receivedData);
                 if (responseBody.message) {

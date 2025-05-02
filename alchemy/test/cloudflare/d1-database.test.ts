@@ -137,7 +137,7 @@ describe("D1 Database Resource", async () => {
     try {
       database = await D1Database(migrationsDb, {
         name: migrationsDb,
-        migrationsDir: __dirname + "/migrations",
+        migrationsDir: `${__dirname}/migrations`,
         adopt: true,
       });
 

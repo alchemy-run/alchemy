@@ -180,8 +180,6 @@ describe("AWS Resources", () => {
             `^https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d+\\/${queueName}$`,
           ),
         );
-      } catch (error) {
-        throw error; // Re-throw the original error
       } finally {
         // In case the initial queue creation or tests fail
         await destroy(scope); // Ignore errors on cleanup

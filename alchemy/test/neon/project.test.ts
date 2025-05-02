@@ -96,7 +96,7 @@ describe("NeonProject Resource", () => {
       expect(project.endpoints![0].current_state).toEqual("active");
 
       // Update the project name
-      const updatedName = generateProjectName() + "-updated";
+      const updatedName = `${generateProjectName()}-updated`;
       project = await NeonProject(testId, {
         name: updatedName,
         region_id: "aws-us-east-1",

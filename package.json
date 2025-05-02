@@ -7,8 +7,8 @@
   "license": "Apache-2.0",
   "scripts": {
     "build": "tsc -b",
-    "check": "tsc -b ./tsconfig.json && biome check ./alchemy/src",
-    "fix": "biome check ./alchemy/src --write",
+    "check": "tsc -b ./tsconfig.json && biome check",
+    "fix": "biome check --write",
     "deploy:repo": "bun ./stacks/repo.run.ts",
     "deploy:website": "bun ./stacks/website.run.ts",
     "generate:docs": "bun ./stacks/docs.run.ts",

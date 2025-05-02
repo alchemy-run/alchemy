@@ -1,5 +1,5 @@
 import { initLogger } from "braintrust";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import crypto2 from "node:crypto";
 
 export default {
