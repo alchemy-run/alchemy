@@ -1,6 +1,62 @@
 import { AwsClient } from "aws4fetch";
 
 /**
+ * Status of a Cloud Control API operation
+ */
+export type OperationStatus =
+  | "PENDING"
+  | "IN_PROGRESS"
+  | "SUCCESS"
+  | "FAILED"
+  | "CANCEL_IN_PROGRESS"
+  | "CANCEL_COMPLETE";
+
+/**
+ * Progress event from a Cloud Control API operation
+ */
+export interface ProgressEvent {
+  /**
+   * Operation identifier
+   */
+  operationId?: string;
+
+  /**
+   * Current status of the operation
+   */
+  status: OperationStatus;
+
+  /**
+   * Resource model (properties) if available
+   */
+  resourceModel?: Record<string, any>;
+
+  /**
+   * Resource identifier if available
+   */
+  identifier?: string;
+
+  /**
+   * Error details if operation failed
+   */
+  errorCode?: string;
+  message?: string;
+  retryAfterSeconds?: number;
+}
+
+/**
+ * Error thrown by Cloud Control API operations
+ */
+export class CloudControlError extends Error {
+  name = "CloudControlError";
+  code?: string;
+  requestId?: string;
+  statusCode?: number;
+  operation?: string;
+  resourceType?: string;
+  resourceIdentifier?: string;
+}
+
+/**
  * Options for Cloud Control API requests
  */
 export interface CloudControlOptions {
@@ -23,72 +79,21 @@ export interface CloudControlOptions {
    * AWS session token for temporary credentials
    */
   sessionToken?: string;
-}
-
-/**
- * Status of a Cloud Control API operation
- */
-export type OperationStatus =
-  | "PENDING"
-  | "IN_PROGRESS"
-  | "SUCCESS"
-  | "FAILED"
-  | "CANCEL_IN_PROGRESS"
-  | "CANCEL_COMPLETE";
-
-/**
- * Progress event from a Cloud Control API operation
- */
-export interface ProgressEvent {
-  /**
-   * Type of event (e.g., "Resource Create", "Resource Update", etc.)
-   */
-  eventType?: string;
 
   /**
-   * Identifier for the operation
+   * Maximum number of attempts for polling operations
    */
-  identifier?: string;
+  maxPollingAttempts?: number;
 
   /**
-   * Current status of the operation
+   * Initial delay in milliseconds between polling attempts
    */
-  status: OperationStatus;
+  initialPollingDelay?: number;
 
   /**
-   * Additional status message
+   * Maximum delay in milliseconds between polling attempts
    */
-  statusMessage?: string;
-
-  /**
-   * Resource model after the operation
-   */
-  resourceModel?: Record<string, any>;
-
-  /**
-   * Error code if operation failed
-   */
-  errorCode?: string;
-
-  /**
-   * Error message if operation failed
-   */
-  errorMessage?: string;
-
-  /**
-   * Time the operation was requested
-   */
-  requestToken?: string;
-
-  /**
-   * Resource properties that caused errors
-   */
-  resourceProperties?: Record<string, any>;
-
-  /**
-   * Operation metrics
-   */
-  metrics?: Record<string, any>;
+  maxPollingDelay?: number;
 }
 
 /**
@@ -112,22 +117,22 @@ export interface ResourceDescription {
 }
 
 /**
- * Make a signed request to the Cloud Control API
+ * Make a request to the Cloud Control API
  */
-export async function request(
+async function request(
   client: AwsClient,
   region: string,
   method: string,
-  path: string,
+  action: string,
   body?: any
 ): Promise<any> {
-  const baseUrl = `https://cloudcontrol.${region}.api.aws`;
-  const url = new URL(path, baseUrl);
+  const url = new URL(`https://cloudcontrol.${region}.amazonaws.com/v1/`);
+
   const init: RequestInit = {
     method,
     headers: {
       "Content-Type": "application/json",
-      Accept: "application/json",
+      "X-Amz-Target": `CloudControl_20210730.${action}`,
     },
   };
 
@@ -143,10 +148,13 @@ export async function request(
       message: response.statusText,
     }))) as { message?: string; code?: string };
 
-    const error = new Error(
-      errorData.message || `Cloud Control API error: ${response.statusText}`
+    const error = new CloudControlError(
+      errorData.message || "Unknown Cloud Control API error"
     );
-    error.name = "CloudControlError";
+    error.code = errorData.code;
+    error.requestId = response.headers.get("x-amzn-requestid") || undefined;
+    error.statusCode = response.status;
+    error.operation = action;
     throw error;
   }
 
@@ -156,171 +164,159 @@ export async function request(
 /**
  * Poll for operation completion
  */
-export async function pollOperation(
+async function pollOperation(
   client: AwsClient,
   region: string,
-  operationType: string,
-  requestToken: string,
-  maxAttempts = 60,
-  initialDelay = 5000,
-  maxDelay = 30000
+  operationId: string,
+  options: Required<
+    Pick<
+      CloudControlOptions,
+      "maxPollingAttempts" | "initialPollingDelay" | "maxPollingDelay"
+    >
+  >
 ): Promise<ProgressEvent> {
   let attempts = 0;
-  let delay = initialDelay;
+  let delay = options.initialPollingDelay;
 
-  while (attempts < maxAttempts) {
-    const response = await request(client, region, "GET", "/progress", {
-      OperationType: operationType,
-      RequestToken: requestToken,
-    });
+  while (attempts < options.maxPollingAttempts) {
+    const response = await request(
+      client,
+      region,
+      "POST",
+      "GetResourceRequestStatus",
+      {
+        RequestToken: operationId,
+      }
+    );
 
     const event = response.ProgressEvent;
-
-    if (event.status === "SUCCESS") {
+    if (event.status === "SUCCESS" || event.status === "FAILED") {
       return event;
     }
 
-    if (event.status === "FAILED" || event.status === "CANCEL_COMPLETE") {
-      throw new Error(
-        event.errorMessage || event.statusMessage || "Operation failed"
-      );
-    }
-
-    // Exponential backoff with max delay
-    delay = Math.min(delay * 1.5, maxDelay);
     await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay * 2, options.maxPollingDelay);
     attempts++;
   }
 
-  throw new Error("Operation timed out");
+  throw new CloudControlError(
+    `Operation ${operationId} timed out after ${attempts} attempts`
+  );
 }
 
 /**
- * Get an AWS4Fetch client for Cloud Control API
+ * Create a Cloud Control API client
  */
-export function getClient(options: CloudControlOptions = {}): {
-  client: AwsClient;
-  region: string;
-} {
-  const region = options.region || process.env.AWS_REGION || "us-east-1";
-  const accessKeyId = options.accessKeyId || process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey =
-    options.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY;
-
-  if (!accessKeyId || !secretAccessKey) {
-    throw new Error(
-      "AWS credentials not found. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables."
-    );
-  }
+export function createCloudControlClient(options: CloudControlOptions = {}) {
+  const region = options.region || "us-east-1";
+  const maxPollingAttempts = options.maxPollingAttempts || 30;
+  const initialPollingDelay = options.initialPollingDelay || 1000;
+  const maxPollingDelay = options.maxPollingDelay || 10000;
 
   const client = new AwsClient({
-    accessKeyId,
-    secretAccessKey,
+    accessKeyId: options.accessKeyId || process.env.AWS_ACCESS_KEY_ID || "",
+    secretAccessKey:
+      options.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY || "",
     sessionToken: options.sessionToken || process.env.AWS_SESSION_TOKEN,
-    service: "cloudcontrol",
-    region,
   });
 
-  return { client, region };
-}
+  return {
+    /**
+     * Create a new resource
+     */
+    async createResource(
+      typeName: string,
+      desiredState: Record<string, any>
+    ): Promise<ProgressEvent> {
+      const response = await request(client, region, "POST", "CreateResource", {
+        TypeName: typeName,
+        DesiredState: desiredState,
+      });
 
-/**
- * Create a new resource
- */
-export async function createResource(
-  options: CloudControlOptions,
-  typeName: string,
-  desiredState: Record<string, any>
-): Promise<Record<string, any>> {
-  const { client, region } = getClient(options);
+      return pollOperation(client, region, response.ProgressEvent.operationId, {
+        maxPollingAttempts,
+        initialPollingDelay,
+        maxPollingDelay,
+      });
+    },
 
-  const response = await request(client, region, "POST", "/resources", {
-    TypeName: typeName,
-    DesiredState: desiredState,
-  });
+    /**
+     * Get a resource's current state
+     */
+    async getResource(
+      typeName: string,
+      identifier: string
+    ): Promise<Record<string, any>> {
+      const response = await request(client, region, "POST", "GetResource", {
+        TypeName: typeName,
+        Identifier: identifier,
+      });
 
-  const event = await pollOperation(
-    client,
-    region,
-    "CREATE_RESOURCE",
-    response.ProgressEvent.RequestToken
-  );
+      return response.ResourceDescription.Properties;
+    },
 
-  return event.resourceModel || {};
-}
+    /**
+     * Update a resource
+     */
+    async updateResource(
+      typeName: string,
+      identifier: string,
+      patchDocument: Record<string, any>
+    ): Promise<ProgressEvent> {
+      const response = await request(client, region, "POST", "UpdateResource", {
+        TypeName: typeName,
+        Identifier: identifier,
+        PatchDocument: JSON.stringify(patchDocument),
+      });
 
-/**
- * Get an existing resource
- */
-export async function getResource(
-  options: CloudControlOptions,
-  typeName: string,
-  identifier: string
-): Promise<Record<string, any>> {
-  const { client, region } = getClient(options);
+      return pollOperation(client, region, response.ProgressEvent.operationId, {
+        maxPollingAttempts,
+        initialPollingDelay,
+        maxPollingDelay,
+      });
+    },
 
-  const response = await request(
-    client,
-    region,
-    "GET",
-    `/resources/${typeName}/${identifier}`
-  );
+    /**
+     * Delete a resource
+     */
+    async deleteResource(
+      typeName: string,
+      identifier: string
+    ): Promise<ProgressEvent> {
+      const response = await request(client, region, "POST", "DeleteResource", {
+        TypeName: typeName,
+        Identifier: identifier,
+      });
 
-  return response.ResourceDescription.Properties;
-}
+      return pollOperation(client, region, response.ProgressEvent.operationId, {
+        maxPollingAttempts,
+        initialPollingDelay,
+        maxPollingDelay,
+      });
+    },
 
-/**
- * Update an existing resource
- */
-export async function updateResource(
-  options: CloudControlOptions,
-  typeName: string,
-  identifier: string,
-  patchDocument: Record<string, any>
-): Promise<Record<string, any>> {
-  const { client, region } = getClient(options);
+    /**
+     * List resources of a given type
+     */
+    async listResources(
+      typeName: string,
+      nextToken?: string
+    ): Promise<{
+      resources: Array<{ identifier: string; properties: Record<string, any> }>;
+      nextToken?: string;
+    }> {
+      const response = await request(client, region, "POST", "ListResources", {
+        TypeName: typeName,
+        NextToken: nextToken,
+      });
 
-  const response = await request(
-    client,
-    region,
-    "PATCH",
-    `/resources/${typeName}/${identifier}`,
-    {
-      PatchDocument: patchDocument,
-    }
-  );
-
-  const event = await pollOperation(
-    client,
-    region,
-    "UPDATE_RESOURCE",
-    response.ProgressEvent.RequestToken
-  );
-
-  return event.resourceModel || {};
-}
-
-/**
- * Delete a resource
- */
-export async function deleteResource(
-  options: CloudControlOptions,
-  typeName: string,
-  identifier: string
-): Promise<void> {
-  const { client, region } = getClient(options);
-
-  const response = await request(
-    client,
-    region,
-    "DELETE",
-    `/resources/${typeName}/${identifier}`
-  );
-
-  await pollOperation(
-    client,
-    region,
-    "DELETE_RESOURCE",
-    response.ProgressEvent.RequestToken
-  );
+      return {
+        resources: response.ResourceDescriptions.map((desc: any) => ({
+          identifier: desc.Identifier,
+          properties: desc.Properties,
+        })),
+        nextToken: response.NextToken,
+      };
+    },
+  };
 }
