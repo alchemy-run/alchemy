@@ -41,7 +41,7 @@ jobs:
           bun install
           cd ../..
 
-      - name: Check Types
+      - name: Check Types and Lint
         run: bun run check
 
       - name: Configure AWS Credentials
