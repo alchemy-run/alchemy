@@ -98,10 +98,12 @@ async function _alchemy(
 ): Promise<Scope | string | never> {
   if (typeof args[0] === "string") {
     const [appName, options] = args as [string, AlchemyOptions?];
+    const phase = options?.phase ?? "up";
     const root = new Scope({
       ...options,
       appName,
       stage: options?.stage,
+      phase,
     });
     root.enter();
     if (options?.phase === "destroy") {
@@ -224,6 +226,8 @@ async function _alchemy(
   ].join("\n");
 }
 
+export type Phase = "up" | "destroy" | "read";
+
 export interface AlchemyOptions {
   /**
    * The name of the application.
@@ -234,7 +238,7 @@ export interface AlchemyOptions {
    *
    * @default "up"
    */
-  phase?: "up" | "destroy";
+  phase?: Phase;
   /**
    * Name to scope the resource state under (e.g. `.alchemy/{stage}/..`).
    *

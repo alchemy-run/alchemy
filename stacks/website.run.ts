@@ -8,9 +8,14 @@ import path from "node:path";
 import alchemy from "../alchemy/src";
 import { Assets, CustomDomain, Worker, Zone } from "../alchemy/src/cloudflare";
 import { Exec } from "../alchemy/src/os";
-import options from "./env";
+import options from "./env.js";
 
 const app = await alchemy("alchemy:website", options);
+
+if (options.phase === "destroy") {
+  console.log("AHHHH");
+  process.exit(1);
+}
 
 const zone = await Zone("alchemy.run", {
   name: "alchemy.run",
@@ -25,7 +30,7 @@ const staticAssets = await Assets("static-assets", {
   path: path.join("alchemy-web", ".vitepress", "dist"),
 });
 
-const site = await Worker("website", {
+export const website = await Worker("website", {
   name: "alchemy-website",
   url: true,
   bindings: {
@@ -46,14 +51,10 @@ export default {
 `,
 });
 
-console.log("Site URL:", site.url);
-
 await CustomDomain("alchemy-web-domain", {
   name: "alchemy.run",
   zoneId: zone.id,
-  workerName: site.name,
+  workerName: website.name,
 });
-
-console.log(`https://alchemy.run`);
 
 await app.finalize();

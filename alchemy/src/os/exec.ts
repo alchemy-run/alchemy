@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type SpawnOptions } from "node:child_process";
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 
@@ -201,3 +201,48 @@ export const Exec = Resource(
     });
   },
 );
+
+const defaultOptions: SpawnOptions = {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+  },
+  shell: true,
+};
+
+/**
+ * Execute a command with the website URL available as an environment variable
+ *
+ * @param command The command to execute
+ * @param args Command arguments
+ * @returns A promise that resolves when the command completes
+ */
+export async function exec(
+  command: string,
+  options?: Partial<SpawnOptions>,
+): Promise<void> {
+  const [cmd, ...args] = command.split(/\s+/);
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, {
+      ...defaultOptions,
+      ...options,
+      env: {
+        ...defaultOptions.env,
+        ...options?.env,
+      },
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`Command failed with exit code ${code}`));
+      }
+    });
+
+    child.on("error", (err) => {
+      reject(err);
+    });
+  });
+}

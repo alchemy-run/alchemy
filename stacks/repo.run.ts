@@ -20,7 +20,7 @@ import env, {
   NEON_API_KEY,
   OPENAI_API_KEY,
   STRIPE_API_KEY,
-} from "./env";
+} from "./env.js";
 
 const app = await alchemy("alchemy:repo", env);
 

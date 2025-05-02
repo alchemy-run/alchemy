@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { Phase } from "./alchemy.js";
 import { destroy } from "./destroy.js";
 import { FileSystemStateStore } from "./fs/file-system-state-store.js";
 import type { PendingResource, ResourceID } from "./resource.js";
@@ -14,6 +15,7 @@ export type ScopeOptions = {
   password?: string;
   stateStore?: StateStoreType;
   quiet?: boolean;
+  phase?: Phase;
 };
 
 // TODO: support browser
@@ -40,6 +42,7 @@ export class Scope {
   public readonly password: string | undefined;
   public readonly state: StateStore;
   public readonly quiet: boolean;
+  public readonly phase: Phase;
 
   private isErrored = false;
 
@@ -56,6 +59,11 @@ export class Scope {
     this.state = options.stateStore
       ? options.stateStore(this)
       : new FileSystemStateStore(this);
+    const phase = options.phase ?? this.parent?.phase;
+    if (phase === undefined) {
+      throw new Error("Phase is required");
+    }
+    this.phase = phase;
   }
 
   public async delete(resourceID: ResourceID) {
@@ -109,6 +117,9 @@ export class Scope {
   }
 
   public async finalize() {
+    if (this.phase === "read") {
+      return;
+    }
     if (!this.isErrored) {
       // TODO: need to detect if it is in error
       const resourceIds = await this.state.list();
