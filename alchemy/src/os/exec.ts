@@ -211,11 +211,7 @@ const defaultOptions: SpawnOptions = {
 };
 
 /**
- * Execute a command with the website URL available as an environment variable
- *
- * @param command The command to execute
- * @param args Command arguments
- * @returns A promise that resolves when the command completes
+ * Execute a shell command.
  */
 export async function exec(
   command: string,
