@@ -144,7 +144,6 @@ export async function apply<Out extends Resource>(
     // }
     return output as any;
   } catch (error) {
-    console.error(new Error().stack);
     scope.fail();
     throw error;
   }

@@ -12,62 +12,67 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
+const entrypoint = path.resolve(__dirname, "bundle-handler.ts");
+const entrypoint_als = path.resolve(__dirname, "bundle-handler-als.ts");
+
 describe("Bundle Worker Test", () => {
   test("create, test, and delete worker from bundle", async (scope) => {
-    const workerName = `${BRANCH_PREFIX}-test-bundle-worker`;
-    const entrypointPath = path.resolve(__dirname, "bundle-handler.ts"); // Use absolute path
-
-    let worker: Worker | undefined;
     try {
       // Create a worker using the entrypoint file
-      worker = await Worker(workerName, {
-        name: workerName,
-        entrypoint: entrypointPath,
+      const worker = await Worker(`${BRANCH_PREFIX}-test-bundle-worker`, {
+        entrypoint,
         format: "esm", // Assuming bundle-handler.ts is ESM
         url: true, // Enable workers.dev URL to test the worker
         compatibilityFlags: ["nodejs_compat"],
-        // Add any necessary bindings or env vars if bundle-handler.ts requires them
-        // For example:
-        // env: {
-        //   BRAINTRUST_API_KEY: process.env.BRAINTRUST_API_KEY || "dummy-key",
-        // }
       });
-
-      // Wait for deployment propagation
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // Verify the worker was created correctly
-      expect(worker.id).toBeTruthy();
-      expect(worker.name).toEqual(workerName);
-      expect(worker.format).toEqual("esm");
-      expect(worker.url).toBeTruthy();
 
       const response = await fetch(worker.url!);
       expect(response.status).toEqual(200);
       const text = await response.text();
       // Check against the expected response from bundle-handler.ts
       expect(text).toEqual("Hello World!");
-    } catch (error) {
-      console.error("Error during worker bundle test:", error);
-      throw error;
     } finally {
       // Clean up the worker
       await destroy(scope);
     }
   }, 120000); // Increased timeout for bundling and deployment
 
-  test("create, test, and delete worker from bundle with v1 compatibility (before Sept 23rd 2024)", async (scope) => {
+  test("create, test and delete a worker with 'nodejs_als' compatibility flag", async (scope) => {
+    try {
+      console.log(entrypoint_als);
+      // Create a worker using the entrypoint file
+      const worker = await Worker(`${BRANCH_PREFIX}-test-bundle-worker-als`, {
+        entrypoint: entrypoint_als,
+        format: "esm", // Assuming bundle-handler.ts is ESM
+        url: true, // Enable workers.dev URL to test the worker
+        compatibilityFlags: ["nodejs_als"],
+      });
+
+      const response = await fetch(worker.url!);
+      expect(response.status).toEqual(200);
+      const text = await response.text();
+      // Check against the expected response from bundle-handler.ts
+      expect(text).toEqual("function");
+    } finally {
+      // Clean up the worker
+      await destroy(scope);
+    }
+  }, 120000); // Increased timeout for bundling and deployment
+
+  test("error when using 'nodejs_compat' compatibility flag with a compatibility date before Sept 23rd 2024", async (scope) => {
     try {
       // Create a worker using the entrypoint file
       expect(
-        Worker(`${BRANCH_PREFIX}-test-bundle-worker`, {
-          entrypoint: path.resolve(__dirname, "bundle-handler.ts"),
+        Worker(`${BRANCH_PREFIX}-test-bundle-worker-legacy`, {
+          entrypoint,
           format: "esm",
           url: true,
           compatibilityDate: "2024-09-22", // v1 mode (before Sept 23rd 2024)
           compatibilityFlags: ["nodejs_compat"],
         }),
-      ).rejects.toThrow();
+      ).rejects.toThrow(
+        "You must set your compatibilty date >= 2025-09-23 when using 'nodejs_compat' compatibility flag",
+      );
     } finally {
       // Clean up the worker
       await destroy(scope);

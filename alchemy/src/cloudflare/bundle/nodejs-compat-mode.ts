@@ -13,7 +13,7 @@ import { getNodeCompat } from "miniflare";
  * @param noBundle Whether to skip internal build steps and directly deploy script
  *
  */
-export function validateNodeCompatMode(
+export function getNodeJSCompatMode(
   compatibilityDateStr: string,
   compatibilityFlags: string[],
   props?: {

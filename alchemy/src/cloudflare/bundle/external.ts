@@ -30,3 +30,10 @@ export const external = [
   "cloudflare:workers",
   // "cloudflare:*",
 ];
+
+export const external_als = [
+  //
+  "node:async_hooks",
+  "async_hooks",
+  "cloudflare:*",
+];

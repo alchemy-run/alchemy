@@ -199,13 +199,8 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
             parent: scope,
           },
           async (scope) => {
-            try {
-              // Enter test scope since bun calls from different scope
-              await scope.run(() => fn(scope));
-            } catch (err) {
-              console.error(err);
-              throw err;
-            }
+            // Enter test scope since bun calls from different scope
+            await scope.run(() => fn(scope));
           },
         ),
       timeout,
