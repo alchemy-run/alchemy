@@ -1,17 +1,17 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { destroy } from "../../src/destroy";
-import { ImportDnsRecords } from "../../src/dns/import-dns";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { destroy } from "../../src/destroy.js";
+import { ImportDnsRecords } from "../../src/dns/import-dns.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
 describe("ImportDnsRecords Resource", () => {
-  const testDomain = "example.com";
+  const testDomain = "google.com";
 
   test("import all DNS records", async (scope) => {
     try {
@@ -69,7 +69,7 @@ describe("ImportDnsRecords Resource", () => {
         {
           domain: testDomain,
           recordTypes: ["A", "MX"],
-        }
+        },
       );
 
       // Verify array structure
@@ -105,7 +105,7 @@ describe("ImportDnsRecords Resource", () => {
         {
           domain: testDomain,
           recordTypes: ["MX"],
-        }
+        },
       );
 
       // Verify we got some records back
@@ -153,7 +153,7 @@ describe("ImportDnsRecords Resource", () => {
 
       // Verify we get an empty result set
       expect(records.domain).toBe(
-        "this-domain-definitely-does-not-exist-12345.com"
+        "this-domain-definitely-does-not-exist-12345.com",
       );
       expect(records.importedAt).toBeTruthy();
       expect(records.records).toBeTruthy();
