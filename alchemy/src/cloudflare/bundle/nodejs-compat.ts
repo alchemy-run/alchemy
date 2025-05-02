@@ -49,6 +49,7 @@ export const nodejsCompatPlugin = (mode: NodeJSCompatMode): Plugin => ({
 
           return { external: true };
         }
+        console.log("normal", path);
         // This is a normal package—don't treat it specially
         return result;
       },
