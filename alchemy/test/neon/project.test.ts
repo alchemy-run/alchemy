@@ -1,17 +1,17 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { destroy } from "../../src/destroy";
-import { createNeonApi } from "../../src/neon/api";
+import { alchemy } from "../../src/alchemy.js";
+import { destroy } from "../../src/destroy.js";
+import { createNeonApi } from "../../src/neon/api.js";
 import {
-  NeonBranch,
-  NeonDatabase,
-  NeonEndpoint,
+  type NeonBranch,
+  type NeonDatabase,
+  type NeonEndpoint,
   NeonProject,
-  NeonRole,
-} from "../../src/neon/project";
-import { BRANCH_PREFIX } from "../util";
+  type NeonRole,
+} from "../../src/neon/project.js";
+import { BRANCH_PREFIX } from "../util.js";
 // must import this or else alchemy.test won't exist
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 // Create API client for verification
 const api = createNeonApi();
@@ -61,10 +61,10 @@ describe("NeonProject Resource", () => {
       console.log(project.connection_uris);
       expect(project.connection_uris).toBeTruthy();
       expect(
-        project.connection_uris![0].connection_uri.unencrypted
+        project.connection_uris![0].connection_uri.unencrypted,
       ).toBeTruthy();
       expect(project.connection_uris![0].connection_uri.unencrypted).toContain(
-        "postgresql://"
+        "postgresql://",
       );
 
       expect(project.databases).toBeTruthy();

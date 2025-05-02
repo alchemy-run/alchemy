@@ -3,7 +3,7 @@ import { Resource } from "../resource.js";
 import { withExponentialBackoff } from "../util/retry.js";
 import { handleApiError } from "./api-error.js";
 import {
-  CloudflareApi,
+  type CloudflareApi,
   createCloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
@@ -118,7 +118,7 @@ export const KVNamespace = Resource(
   async function (
     this: Context<KVNamespace>,
     id: string,
-    props: KVNamespaceProps
+    props: KVNamespaceProps,
   ) {
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
@@ -132,48 +132,47 @@ export const KVNamespace = Resource(
 
       // Return minimal output for deleted state
       return this.destroy();
-    } else {
-      // For create or update operations
-      // If this.phase is "update", we expect this.output to exist
-      let namespaceId =
-        this.phase === "update" ? this.output?.namespaceId || "" : "";
-      let createdAt =
-        this.phase === "update"
-          ? this.output?.createdAt || Date.now()
-          : Date.now();
-
-      if (this.phase === "update" && namespaceId) {
-        // Can't update a KV namespace title directly, just work with existing ID
-      } else {
-        // TODO: if it already exists, then check the tags to see if we own it and continue
-        const { id } = await createKVNamespace(api, props);
-        createdAt = Date.now();
-        namespaceId = id;
-      }
-
-      await insertKVRecords(api, namespaceId, props);
-
-      return this({
-        type: "kv_namespace",
-        namespaceId: namespaceId,
-        title: props.title,
-        values: props.values,
-        createdAt: createdAt,
-        modifiedAt: Date.now(),
-      });
     }
-  }
+    // For create or update operations
+    // If this.phase is "update", we expect this.output to exist
+    let namespaceId =
+      this.phase === "update" ? this.output?.namespaceId || "" : "";
+    let createdAt =
+      this.phase === "update"
+        ? this.output?.createdAt || Date.now()
+        : Date.now();
+
+    if (this.phase === "update" && namespaceId) {
+      // Can't update a KV namespace title directly, just work with existing ID
+    } else {
+      // TODO: if it already exists, then check the tags to see if we own it and continue
+      const { id } = await createKVNamespace(api, props);
+      createdAt = Date.now();
+      namespaceId = id;
+    }
+
+    await insertKVRecords(api, namespaceId, props);
+
+    return this({
+      type: "kv_namespace",
+      namespaceId: namespaceId,
+      title: props.title,
+      values: props.values,
+      createdAt: createdAt,
+      modifiedAt: Date.now(),
+    });
+  },
 );
 
 export async function createKVNamespace(
   api: CloudflareApi,
-  props: KVNamespaceProps
+  props: KVNamespaceProps,
 ): Promise<{ id: string }> {
   const createResponse = await api.post(
     `/accounts/${api.accountId}/storage/kv/namespaces`,
     {
       title: props.title,
-    }
+    },
   );
 
   if (!createResponse.ok) {
@@ -185,11 +184,11 @@ export async function createKVNamespace(
 
 export async function deleteKVNamespace(
   api: CloudflareApi,
-  namespaceId: string
+  namespaceId: string,
 ) {
   // Delete KV namespace
   const deleteResponse = await api.delete(
-    `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}`
+    `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}`,
   );
 
   if (!deleteResponse.ok && deleteResponse.status !== 404) {
@@ -200,7 +199,7 @@ export async function deleteKVNamespace(
 export async function insertKVRecords(
   api: CloudflareApi,
   namespaceId: string,
-  props: KVNamespaceProps
+  props: KVNamespaceProps,
 ) {
   if (props.values && props.values.length > 0) {
     // Process KV pairs in batches of 10000 (API limit)
@@ -238,7 +237,7 @@ export async function insertKVRecords(
           async () => {
             const bulkResponse = await api.put(
               `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}/bulk`,
-              bulkPayload
+              bulkPayload,
             );
 
             if (!bulkResponse.ok) {
@@ -259,7 +258,7 @@ export async function insertKVRecords(
             return error.message?.includes("not found");
           },
           5, // 5 retry attempts
-          1000 // Start with 1 second delay
+          1000, // Start with 1 second delay
         );
       } catch (error: any) {
         console.warn(error.message);

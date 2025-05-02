@@ -45,7 +45,7 @@ export class R2RestStateStore implements StateStore {
    */
   constructor(
     public readonly scope: Scope,
-    private readonly options: CloudflareR2StateStoreOptions = {}
+    private readonly options: CloudflareR2StateStoreOptions = {},
   ) {
     // Use the scope's chain to build the prefix, similar to how FileSystemStateStore builds its directory
     const scopePath = scope.chain.join("/");
@@ -74,7 +74,7 @@ export class R2RestStateStore implements StateStore {
         () => getBucket(this.api, this.bucketName),
         isRetryableError,
         5,
-        1000
+        1000,
       );
     } catch (error) {
       // If not, create the alchemy state bucket
@@ -83,7 +83,7 @@ export class R2RestStateStore implements StateStore {
           () => createBucket(this.api, this.bucketName),
           isRetryableError,
           5,
-          1000
+          1000,
         );
       }
     }
@@ -133,7 +133,7 @@ export class R2RestStateStore implements StateStore {
         // Retry on transient errors
         isRetryableError,
         5, // 5 retry attempts
-        1000 // Start with 1 second delay
+        1000, // Start with 1 second delay
       );
 
       const data = (await response.json()) as any;
@@ -147,7 +147,7 @@ export class R2RestStateStore implements StateStore {
         objects.map((obj: any) => {
           const keyName = obj.key || obj.name;
           return this.convertKeyFromStorage(keyName.slice(this.prefix.length));
-        })
+        }),
       );
 
       // Update cursor for next page if available
@@ -181,7 +181,7 @@ export class R2RestStateStore implements StateStore {
       const response = await withExponentialBackoff(
         async () => {
           const response = await this.api.get(
-            `/accounts/${this.api.accountId}/r2/buckets/${this.bucketName}/objects/${this.getObjectKey(key)}`
+            `/accounts/${this.api.accountId}/r2/buckets/${this.bucketName}/objects/${this.getObjectKey(key)}`,
           );
 
           if (!response.ok && response.status !== 404) {
@@ -193,7 +193,7 @@ export class R2RestStateStore implements StateStore {
         // Retry on transient errors
         isRetryableError,
         5, // 5 retry attempts
-        1000 // Start with 1 second delay
+        1000, // Start with 1 second delay
       );
 
       if (response.status === 404) {
@@ -275,7 +275,7 @@ export class R2RestStateStore implements StateStore {
             headers: {
               "Content-Type": "application/json",
             },
-          }
+          },
         );
 
         if (!response.ok) {
@@ -286,7 +286,7 @@ export class R2RestStateStore implements StateStore {
       // Retry on transient errors
       isRetryableError,
       5, // 5 retry attempts
-      1000 // Start with 1 second delay
+      1000, // Start with 1 second delay
     );
   }
 
@@ -301,7 +301,7 @@ export class R2RestStateStore implements StateStore {
     await withExponentialBackoff(
       async () => {
         const response = await this.api.delete(
-          `/accounts/${this.api.accountId}/r2/buckets/${this.bucketName}/objects/${this.getObjectKey(key)}`
+          `/accounts/${this.api.accountId}/r2/buckets/${this.bucketName}/objects/${this.getObjectKey(key)}`,
         );
 
         if (!response.ok && response.status !== 404) {
@@ -312,7 +312,7 @@ export class R2RestStateStore implements StateStore {
       },
       isRetryableError,
       5, // 5 retry attempts
-      1000 // Start with 1 second delay
+      1000, // Start with 1 second delay
     );
   }
 

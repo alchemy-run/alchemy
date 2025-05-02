@@ -174,7 +174,7 @@ export const RepositoryEnvironment = Resource(
   async function (
     this: Context<RepositoryEnvironment>,
     id: string,
-    props: RepositoryEnvironmentProps
+    props: RepositoryEnvironmentProps,
   ): Promise<RepositoryEnvironment> {
     // Create authenticated Octokit client
     const octokit = await createGitHubClient({
@@ -207,138 +207,98 @@ export const RepositoryEnvironment = Resource(
 
       // Return void (a deleted resource has no content)
       return this.destroy();
-    } else {
+    }
+    try {
+      // Check if the environment already exists
+      let environmentId: number | undefined = undefined; // Use undefined instead of 0
       try {
-        // Check if the environment already exists
-        let environmentId: number | undefined = undefined; // Use undefined instead of 0
-        try {
-          const { data: environments } =
-            await octokit.rest.repos.getAllEnvironments({
-              owner: props.owner,
-              repo: props.repository,
+        const { data: environments } =
+          await octokit.rest.repos.getAllEnvironments({
+            owner: props.owner,
+            repo: props.repository,
+          });
+
+        const existingEnv = environments.environments?.find(
+          (env) => env.name.toLowerCase() === props.name.toLowerCase(),
+        );
+
+        if (existingEnv?.id) {
+          environmentId = existingEnv.id;
+        }
+      } catch (error: any) {
+        // If it's a 404, the environment doesn't exist, which is fine
+        if (error.status !== 404) {
+          throw error;
+        }
+      }
+
+      // Convert reviewers to API format
+      const reviewers: { type: "User" | "Team"; id: number }[] = [];
+
+      // Process user reviewers
+      if (props.reviewers?.users && props.reviewers.users.length > 0) {
+        for (const user of props.reviewers.users) {
+          if (typeof user === "number") {
+            // If a numeric ID is provided, use it directly
+            reviewers.push({
+              type: "User" as const,
+              id: user,
+            });
+          } else {
+            // If a username string is provided, look up the ID
+            const { data: userData } = await octokit.rest.users.getByUsername({
+              username: user,
             });
 
-          const existingEnv = environments.environments?.find(
-            (env) => env.name.toLowerCase() === props.name.toLowerCase()
-          );
-
-          if (existingEnv?.id) {
-            environmentId = existingEnv.id;
-          }
-        } catch (error: any) {
-          // If it's a 404, the environment doesn't exist, which is fine
-          if (error.status !== 404) {
-            throw error;
+            reviewers.push({
+              type: "User" as const,
+              id: userData.id,
+            });
           }
         }
+      }
 
-        // Convert reviewers to API format
-        const reviewers: { type: "User" | "Team"; id: number }[] = [];
+      // Process team reviewers
+      if (props.reviewers?.teams && props.reviewers.teams.length > 0) {
+        for (const team of props.reviewers.teams) {
+          if (typeof team === "number") {
+            // If a numeric ID is provided, use it directly
+            reviewers.push({
+              type: "Team" as const,
+              id: team,
+            });
+          } else {
+            // If a team name string is provided, look up the ID
+            // Check if team name is in the format 'org/team-name'
+            const teamParts = team.includes("/")
+              ? team.split("/")
+              : [props.owner, team];
 
-        // Process user reviewers
-        if (props.reviewers?.users && props.reviewers.users.length > 0) {
-          for (const user of props.reviewers.users) {
-            if (typeof user === "number") {
-              // If a numeric ID is provided, use it directly
-              reviewers.push({
-                type: "User" as const,
-                id: user,
-              });
-            } else {
-              // If a username string is provided, look up the ID
-              const { data: userData } = await octokit.rest.users.getByUsername(
-                {
-                  username: user,
-                }
+            if (teamParts.length !== 2) {
+              throw new Error(
+                `Invalid team format: ${team}. Expected format: "org/team-slug" or just "team-slug"`,
               );
-
-              reviewers.push({
-                type: "User" as const,
-                id: userData.id,
-              });
             }
-          }
-        }
 
-        // Process team reviewers
-        if (props.reviewers?.teams && props.reviewers.teams.length > 0) {
-          for (const team of props.reviewers.teams) {
-            if (typeof team === "number") {
-              // If a numeric ID is provided, use it directly
-              reviewers.push({
-                type: "Team" as const,
-                id: team,
-              });
-            } else {
-              // If a team name string is provided, look up the ID
-              // Check if team name is in the format 'org/team-name'
-              const teamParts = team.includes("/")
-                ? team.split("/")
-                : [props.owner, team];
+            const [org, teamSlug] = teamParts;
 
-              if (teamParts.length !== 2) {
-                throw new Error(
-                  `Invalid team format: ${team}. Expected format: "org/team-slug" or just "team-slug"`
-                );
-              }
-
-              const [org, teamSlug] = teamParts;
-
-              const { data: teamData } = await octokit.rest.teams.getByName({
-                org,
-                team_slug: teamSlug,
-              });
-
-              reviewers.push({
-                type: "Team" as const,
-                id: teamData.id,
-              });
-            }
-          }
-        }
-
-        // Create or update the environment
-        if (environmentId === undefined) {
-          // Create the environment
-          const { data: createdEnv } =
-            await octokit.rest.repos.createOrUpdateEnvironment({
-              owner: props.owner,
-              repo: props.repository,
-              environment_name: props.name,
-              wait_timer: props.waitTimer,
-              prevent_self_review: props.preventSelfReview,
-              reviewers: reviewers.length > 0 ? reviewers : undefined,
-              deployment_branch_policy: props.deploymentBranchPolicy
-                ? {
-                    protected_branches:
-                      props.deploymentBranchPolicy.protectedBranches ?? false,
-                    custom_branch_policies:
-                      props.deploymentBranchPolicy.customBranchPolicies ??
-                      false,
-                  }
-                : undefined,
+            const { data: teamData } = await octokit.rest.teams.getByName({
+              org,
+              team_slug: teamSlug,
             });
 
-          environmentId = createdEnv.id;
-
-          // If there are specific branch patterns, set them
-          if (
-            props.deploymentBranchPolicy?.customBranchPolicies === true &&
-            props.branchPatterns &&
-            props.branchPatterns.length > 0
-          ) {
-            // Add branch patterns one by one
-            for (const pattern of props.branchPatterns) {
-              await octokit.rest.repos.createDeploymentBranchPolicy({
-                owner: props.owner,
-                repo: props.repository,
-                environment_name: props.name,
-                name: pattern,
-              });
-            }
+            reviewers.push({
+              type: "Team" as const,
+              id: teamData.id,
+            });
           }
-        } else {
-          // Update the environment
+        }
+      }
+
+      // Create or update the environment
+      if (environmentId === undefined) {
+        // Create the environment
+        const { data: createdEnv } =
           await octokit.rest.repos.createOrUpdateEnvironment({
             owner: props.owner,
             repo: props.repository,
@@ -356,114 +316,150 @@ export const RepositoryEnvironment = Resource(
               : undefined,
           });
 
-          // If there are specific branch patterns, update them
-          if (props.deploymentBranchPolicy?.customBranchPolicies === true) {
-            // Get existing branch policies to understand what's currently configured
-            const { data: existingPolicies } =
-              await octokit.rest.repos.listDeploymentBranchPolicies({
-                owner: props.owner,
-                repo: props.repository,
-                environment_name: props.name,
-              });
+        environmentId = createdEnv.id;
 
-            const existingPatterns = existingPolicies.branch_policies.map(
-              (policy) => policy.name!
-            );
-
-            const newPatterns: string[] = props.branchPatterns || [];
-
-            // For updates, keep track of which branch policies we should manage
-            // This set identifies patterns that were previously managed by this resource
-            // If we don't have previous props, use an empty set
-            const previouslyManagedPatterns: Set<string> = new Set(
-              this.phase === "update" &&
-              this.props?.deploymentBranchPolicy?.customBranchPolicies === true
-                ? this.props.branchPatterns || []
-                : []
-            );
-
-            // Patterns to add (in new config but not in existing)
-            const patternsToAdd = newPatterns.filter(
-              (pattern) => !existingPatterns.includes(pattern)
-            );
-
-            // Patterns to delete (were managed by us previously but not in new config)
-            const patternsToDelete = existingPatterns.filter(
-              (pattern) =>
-                previouslyManagedPatterns.has(pattern) &&
-                !newPatterns.includes(pattern)
-            );
-
-            // Delete policies that are no longer needed
-            for (const patternToDelete of patternsToDelete) {
-              const policy = existingPolicies.branch_policies.find(
-                (p) => p.name === patternToDelete
-              );
-
-              if (policy?.id) {
-                await octokit.rest.repos.deleteDeploymentBranchPolicy({
-                  owner: props.owner,
-                  repo: props.repository,
-                  environment_name: props.name,
-                  branch_policy_id: policy.id,
-                });
-              }
-            }
-
-            // Add new branch patterns
-            for (const pattern of patternsToAdd) {
-              await octokit.rest.repos.createDeploymentBranchPolicy({
-                owner: props.owner,
-                repo: props.repository,
-                environment_name: props.name,
-                name: pattern,
-              });
-            }
+        // If there are specific branch patterns, set them
+        if (
+          props.deploymentBranchPolicy?.customBranchPolicies === true &&
+          props.branchPatterns &&
+          props.branchPatterns.length > 0
+        ) {
+          // Add branch patterns one by one
+          for (const pattern of props.branchPatterns) {
+            await octokit.rest.repos.createDeploymentBranchPolicy({
+              owner: props.owner,
+              repo: props.repository,
+              environment_name: props.name,
+              name: pattern,
+            });
           }
         }
-
-        // Get the updated environment details
-        const { data: env } = await octokit.rest.repos.getEnvironment({
+      } else {
+        // Update the environment
+        await octokit.rest.repos.createOrUpdateEnvironment({
           owner: props.owner,
           repo: props.repository,
           environment_name: props.name,
+          wait_timer: props.waitTimer,
+          prevent_self_review: props.preventSelfReview,
+          reviewers: reviewers.length > 0 ? reviewers : undefined,
+          deployment_branch_policy: props.deploymentBranchPolicy
+            ? {
+                protected_branches:
+                  props.deploymentBranchPolicy.protectedBranches ?? false,
+                custom_branch_policies:
+                  props.deploymentBranchPolicy.customBranchPolicies ?? false,
+              }
+            : undefined,
         });
 
-        // Return environment details
-        return this({
-          id: `${props.owner}/${props.repository}/${props.name}`,
-          environmentId: environmentId || env.id,
-          owner: props.owner,
-          repository: props.repository,
-          name: props.name,
-          waitTimer: props.waitTimer,
-          preventSelfReview: props.preventSelfReview,
-          adminBypass: props.adminBypass,
-          reviewers: props.reviewers,
-          deploymentBranchPolicy: props.deploymentBranchPolicy,
-          branchPatterns: props.branchPatterns,
-          token: props.token,
-          updatedAt: new Date().toISOString(),
-        });
-      } catch (error: any) {
-        if (
-          error.status === 403 &&
-          error.message?.includes("Must have admin rights")
-        ) {
-          console.error(
-            "\n⚠️ Error creating/updating GitHub environment: You must have admin rights to the repository."
+        // If there are specific branch patterns, update them
+        if (props.deploymentBranchPolicy?.customBranchPolicies === true) {
+          // Get existing branch policies to understand what's currently configured
+          const { data: existingPolicies } =
+            await octokit.rest.repos.listDeploymentBranchPolicies({
+              owner: props.owner,
+              repo: props.repository,
+              environment_name: props.name,
+            });
+
+          const existingPatterns = existingPolicies.branch_policies.map(
+            (policy) => policy.name!,
           );
-          console.error(
-            "Make sure your GitHub token has the required permissions (repo scope for private repos).\n"
+
+          const newPatterns: string[] = props.branchPatterns || [];
+
+          // For updates, keep track of which branch policies we should manage
+          // This set identifies patterns that were previously managed by this resource
+          // If we don't have previous props, use an empty set
+          const previouslyManagedPatterns: Set<string> = new Set(
+            this.phase === "update" &&
+              this.props?.deploymentBranchPolicy?.customBranchPolicies === true
+              ? this.props.branchPatterns || []
+              : [],
           );
-        } else {
-          console.error(
-            "Error creating/updating GitHub environment:",
-            error.message
+
+          // Patterns to add (in new config but not in existing)
+          const patternsToAdd = newPatterns.filter(
+            (pattern) => !existingPatterns.includes(pattern),
           );
+
+          // Patterns to delete (were managed by us previously but not in new config)
+          const patternsToDelete = existingPatterns.filter(
+            (pattern) =>
+              previouslyManagedPatterns.has(pattern) &&
+              !newPatterns.includes(pattern),
+          );
+
+          // Delete policies that are no longer needed
+          for (const patternToDelete of patternsToDelete) {
+            const policy = existingPolicies.branch_policies.find(
+              (p) => p.name === patternToDelete,
+            );
+
+            if (policy?.id) {
+              await octokit.rest.repos.deleteDeploymentBranchPolicy({
+                owner: props.owner,
+                repo: props.repository,
+                environment_name: props.name,
+                branch_policy_id: policy.id,
+              });
+            }
+          }
+
+          // Add new branch patterns
+          for (const pattern of patternsToAdd) {
+            await octokit.rest.repos.createDeploymentBranchPolicy({
+              owner: props.owner,
+              repo: props.repository,
+              environment_name: props.name,
+              name: pattern,
+            });
+          }
         }
-        throw error;
       }
+
+      // Get the updated environment details
+      const { data: env } = await octokit.rest.repos.getEnvironment({
+        owner: props.owner,
+        repo: props.repository,
+        environment_name: props.name,
+      });
+
+      // Return environment details
+      return this({
+        id: `${props.owner}/${props.repository}/${props.name}`,
+        environmentId: environmentId || env.id,
+        owner: props.owner,
+        repository: props.repository,
+        name: props.name,
+        waitTimer: props.waitTimer,
+        preventSelfReview: props.preventSelfReview,
+        adminBypass: props.adminBypass,
+        reviewers: props.reviewers,
+        deploymentBranchPolicy: props.deploymentBranchPolicy,
+        branchPatterns: props.branchPatterns,
+        token: props.token,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      if (
+        error.status === 403 &&
+        error.message?.includes("Must have admin rights")
+      ) {
+        console.error(
+          "\n⚠️ Error creating/updating GitHub environment: You must have admin rights to the repository.",
+        );
+        console.error(
+          "Make sure your GitHub token has the required permissions (repo scope for private repos).\n",
+        );
+      } else {
+        console.error(
+          "Error creating/updating GitHub environment:",
+          error.message,
+        );
+      }
+      throw error;
     }
-  }
+  },
 );

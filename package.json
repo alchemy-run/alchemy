@@ -7,7 +7,8 @@
   "license": "Apache-2.0",
   "scripts": {
     "build": "tsc -b",
-    "check": "tsc -b ./tsconfig.json",
+    "check": "tsc -b ./tsconfig.json && biome check ./alchemy/src",
+    "fix": "biome check ./alchemy/src --write",
     "deploy:repo": "bun ./stacks/repo.run.ts",
     "deploy:website": "bun ./stacks/website.run.ts",
     "generate:docs": "bun ./stacks/docs.run.ts",
@@ -26,11 +27,10 @@
     "examples/cloudflare-worker"
   ],
   "devDependencies": {
-    "@biomejs/biome": "~1.8.0",
+    "@biomejs/biome": "beta",
     "@types/bun": "latest",
     "@types/node": "latest",
     "aws4fetch": "^1.0.20",
-    "prettier": "^3.5.3",
     "typescript": "latest",
     "yaml": "^2.7.1",
     "braintrust": "*"

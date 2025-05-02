@@ -147,7 +147,7 @@ export const VueFile = Resource(
   async function (
     this: Context<VueFile>,
     id: string,
-    props: VueFileProps
+    props: VueFileProps,
   ): Promise<VueFile> {
     // Handle deletion phase
     if (this.phase === "delete") {
@@ -189,7 +189,7 @@ export const VueFile = Resource(
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid Vue code: ${retryResult.error}`
+          `Failed to generate valid Vue code: ${retryResult.error}`,
         );
       }
 
@@ -206,7 +206,7 @@ export const VueFile = Resource(
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
-  }
+  },
 );
 
 /**
@@ -217,7 +217,7 @@ export const VueFile = Resource(
  * @returns The extracted Vue code or error message
  */
 async function extractVueCode(
-  text: string
+  text: string,
 ): Promise<{ code: string; error?: string }> {
   const vueCodeRegex = /```vue\s*([\s\S]*?)```/g;
   const matches = Array.from(text.matchAll(vueCodeRegex));

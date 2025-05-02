@@ -219,7 +219,7 @@ export const Role = Resource(
   async function (
     this: Context<Role>,
     id: string,
-    props: RoleProps
+    props: RoleProps,
   ): Promise<Role> {
     const client = new IAMClient({});
 
@@ -233,8 +233,8 @@ export const Role = Resource(
                 new DeleteRolePolicyCommand({
                   RoleName: props.roleName,
                   PolicyName: policy.policyName,
-                })
-              )
+                }),
+              ),
             );
           }
         }
@@ -245,7 +245,7 @@ export const Role = Resource(
           const attachedPoliciesResponse = await client.send(
             new ListAttachedRolePoliciesCommand({
               RoleName: props.roleName,
-            })
+            }),
           );
 
           // Detach all managed policies
@@ -257,8 +257,8 @@ export const Role = Resource(
                 new DetachRolePolicyCommand({
                   RoleName: props.roleName,
                   PolicyArn: policy.PolicyArn!,
-                })
-              )
+                }),
+              ),
             );
           }
         } catch (error: any) {
@@ -273,8 +273,8 @@ export const Role = Resource(
           client.send(
             new DeleteRoleCommand({
               RoleName: props.roleName,
-            })
-          )
+            }),
+          ),
         );
       } catch (error: any) {
         // If we get any other error besides NoSuchEntityException, log it but don't fail
@@ -316,7 +316,7 @@ export const Role = Resource(
                 Value: this.id,
               },
             ],
-          })
+          }),
         );
       }
     } catch (error: any) {
@@ -328,7 +328,7 @@ export const Role = Resource(
         const existingRole = await client.send(
           new GetRoleCommand({
             RoleName: props.roleName,
-          })
+          }),
         );
         const roleTags =
           existingRole.Role?.Tags?.reduce(
@@ -336,7 +336,7 @@ export const Role = Resource(
               acc[tag.Key!] = tag.Value!;
               return acc;
             },
-            {} as Record<string, string>
+            {} as Record<string, string>,
           ) || {};
 
         if (
@@ -354,7 +354,7 @@ export const Role = Resource(
     role = await client.send(
       new GetRoleCommand({
         RoleName: props.roleName,
-      })
+      }),
     );
 
     // Update assume role policy if it changed
@@ -363,7 +363,7 @@ export const Role = Resource(
         new UpdateAssumeRolePolicyCommand({
           RoleName: props.roleName,
           PolicyDocument: assumeRolePolicyDocument,
-        })
+        }),
       );
     }
 
@@ -377,7 +377,7 @@ export const Role = Resource(
           RoleName: props.roleName,
           Description: props.description,
           MaxSessionDuration: props.maxSessionDuration,
-        })
+        }),
       );
     }
 
@@ -395,7 +395,7 @@ export const Role = Resource(
       new TagRoleCommand({
         RoleName: props.roleName,
         Tags: tags,
-      })
+      }),
     );
 
     // Handle policy changes
@@ -407,7 +407,7 @@ export const Role = Resource(
     for (const oldPolicy of previousPolicies) {
       if (
         !currentPolicies.some(
-          (p: { policyName: string }) => p.policyName === oldPolicy.policyName
+          (p: { policyName: string }) => p.policyName === oldPolicy.policyName,
         )
       ) {
         await ignore(NoSuchEntityException.name, () =>
@@ -415,8 +415,8 @@ export const Role = Resource(
             new DeleteRolePolicyCommand({
               RoleName: props.roleName,
               PolicyName: oldPolicy.policyName,
-            })
-          )
+            }),
+          ),
         );
       }
     }
@@ -424,7 +424,7 @@ export const Role = Resource(
     // Update or create policies
     for (const policy of currentPolicies) {
       const oldPolicy = previousPolicies.find(
-        (p) => p.policyName === policy.policyName
+        (p) => p.policyName === policy.policyName,
       );
       if (
         !oldPolicy ||
@@ -436,7 +436,7 @@ export const Role = Resource(
             RoleName: props.roleName,
             PolicyName: policy.policyName,
             PolicyDocument: JSON.stringify(policy.policyDocument),
-          })
+          }),
         );
       }
     }
@@ -446,7 +446,7 @@ export const Role = Resource(
     const attachedPoliciesResponse = await client.send(
       new ListAttachedRolePoliciesCommand({
         RoleName: props.roleName,
-      })
+      }),
     );
 
     const currentAttachedPolicies =
@@ -464,7 +464,7 @@ export const Role = Resource(
           new DetachRolePolicyCommand({
             RoleName: props.roleName,
             PolicyArn: policyArn,
-          })
+          }),
         );
       }
     }
@@ -476,7 +476,7 @@ export const Role = Resource(
           new AttachRolePolicyCommand({
             RoleName: props.roleName,
             PolicyArn: policyArn,
-          })
+          }),
         );
       }
     }
@@ -493,5 +493,5 @@ export const Role = Resource(
       roleName: role.Role.RoleName ?? props.roleName,
       createDate: role.Role.CreateDate!,
     });
-  }
+  },
 );

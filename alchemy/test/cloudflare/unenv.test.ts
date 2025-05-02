@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test";
 import * as path from "node:path";
-import { alchemy } from "../../src/alchemy";
-import { Worker } from "../../src/cloudflare/worker";
-import { destroy } from "../../src/destroy";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { Worker } from "../../src/cloudflare/worker.js";
+import { destroy } from "../../src/destroy.js";
+import { BRANCH_PREFIX } from "../util.js";
 
 import "@cloudflare/unenv-preset/node/process";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

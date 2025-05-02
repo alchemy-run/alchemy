@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { handleApiError } from "./api-error.js";
-import { CloudflareApi } from "./api.js";
+import type { CloudflareApi } from "./api.js";
 
 export interface D1MigrationOptions {
   migrationsFiles: Array<{ id: string; sql: string }>;
@@ -13,8 +13,8 @@ export interface D1MigrationOptions {
 
 const getPrefix = (name: string) => {
   const prefix = name.split("_")[0];
-  const num = parseInt(prefix, 10);
-  return isNaN(num) ? null : num;
+  const num = Number.parseInt(prefix, 10);
+  return Number.isNaN(num) ? null : num;
 };
 
 async function readMigrationFile(filePath: string): Promise<string> {
@@ -26,7 +26,7 @@ async function readMigrationFile(filePath: string): Promise<string> {
  * @param migrationsDir Directory containing .sql migration files
  */
 export async function listMigrationsFiles(
-  migrationsDir: string
+  migrationsDir: string,
 ): Promise<Array<{ id: string; sql: string }>> {
   const entries = await fs.readdir(migrationsDir);
 
@@ -56,7 +56,7 @@ export async function listMigrationsFiles(
  * Ensures the migrations table exists in the D1 database.
  */
 export async function ensureMigrationsTable(
-  options: D1MigrationOptions
+  options: D1MigrationOptions,
 ): Promise<void> {
   const createTableSQL = `CREATE TABLE IF NOT EXISTS ${options.migrationsTable} (id TEXT PRIMARY KEY, applied_at TEXT);`;
 
@@ -67,7 +67,7 @@ export async function ensureMigrationsTable(
  * Gets the list of applied migration IDs from the migrations table.
  */
 export async function getAppliedMigrations(
-  options: D1MigrationOptions
+  options: D1MigrationOptions,
 ): Promise<Set<string>> {
   const sql = `SELECT id FROM ${options.migrationsTable};`;
 
@@ -82,7 +82,7 @@ export async function getAppliedMigrations(
  */
 export async function executeD1SQL(
   options: D1MigrationOptions,
-  sql: string
+  sql: string,
 ): Promise<{
   result: [
     {
@@ -97,7 +97,7 @@ export async function executeD1SQL(
 }> {
   const response = await options.api.post(
     `/accounts/${options.accountId}/d1/database/${options.databaseId}/query`,
-    { sql }
+    { sql },
   );
 
   if (!response.ok) {
@@ -105,7 +105,7 @@ export async function executeD1SQL(
       response,
       "executing migration SQL",
       "D1 database",
-      options.databaseId
+      options.databaseId,
     );
   }
 
@@ -116,7 +116,7 @@ export async function executeD1SQL(
  * Applies all pending migrations from the provided files to the D1 database.
  */
 export async function applyMigrations(
-  options: D1MigrationOptions
+  options: D1MigrationOptions,
 ): Promise<void> {
   await ensureMigrationsTable(options);
   const applied = await getAppliedMigrations(options);

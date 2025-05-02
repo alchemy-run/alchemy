@@ -48,7 +48,7 @@ export interface CloudflareApiOptions {
  * @returns Promise resolving to a CloudflareApi instance
  */
 export async function createCloudflareApi(
-  options: Partial<CloudflareApiOptions> = {}
+  options: Partial<CloudflareApiOptions> = {},
 ): Promise<CloudflareApi> {
   const userInfo = await getCloudflareUserInfo(options);
   return new CloudflareApi({
@@ -77,7 +77,7 @@ export class CloudflareApi {
   constructor(
     private readonly options: CloudflareApiOptions & {
       accountId: string;
-    }
+    },
   ) {
     this.accountId = options.accountId;
     this.baseUrl = options.baseUrl ?? "https://api.cloudflare.com/client/v4";
@@ -130,7 +130,7 @@ export class CloudflareApi {
       // transient errors should be retried aggressively
       (error) => error instanceof InternalError,
       5, // Maximum 5 attempts (1 initial + 4 retries)
-      1000 // Start with 1s delay, will exponentially increase
+      1000, // Start with 1s delay, will exponentially increase
     );
   }
 
@@ -153,7 +153,7 @@ export class CloudflareApi {
   async post(
     path: string,
     body: any,
-    init: RequestInit = {}
+    init: RequestInit = {},
   ): Promise<Response> {
     const requestBody =
       body instanceof FormData
@@ -170,7 +170,7 @@ export class CloudflareApi {
   async put(
     path: string,
     body: any,
-    init: RequestInit = {}
+    init: RequestInit = {},
   ): Promise<Response> {
     const requestBody = body instanceof FormData ? body : JSON.stringify(body);
     return this.fetch(path, { ...init, method: "PUT", body: requestBody });
@@ -182,7 +182,7 @@ export class CloudflareApi {
   async patch(
     path: string,
     body: any,
-    init: RequestInit = {}
+    init: RequestInit = {},
   ): Promise<Response> {
     return this.fetch(path, {
       ...init,
@@ -199,8 +199,4 @@ export class CloudflareApi {
   }
 }
 
-class InternalError extends Error {
-  constructor(message: string) {
-    super(message);
-  }
-}
+class InternalError extends Error {}

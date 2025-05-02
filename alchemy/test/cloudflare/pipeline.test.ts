@@ -1,13 +1,16 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { createCloudflareApi } from "../../src/cloudflare/api";
-import { R2Bucket } from "../../src/cloudflare/bucket";
-import { Pipeline, type PipelineRecord } from "../../src/cloudflare/pipeline";
-import { Worker } from "../../src/cloudflare/worker";
-import { destroy } from "../../src/destroy";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { R2Bucket } from "../../src/cloudflare/bucket.js";
+import {
+  Pipeline,
+  type PipelineRecord,
+} from "../../src/cloudflare/pipeline.js";
+import { Worker } from "../../src/cloudflare/worker.js";
+import { destroy } from "../../src/destroy.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -20,7 +23,7 @@ const api = await createCloudflareApi();
 async function assertPipelineExists(pipelineName: string): Promise<boolean> {
   try {
     const response = await api.get(
-      `/accounts/${api.accountId}/pipelines/${pipelineName}`
+      `/accounts/${api.accountId}/pipelines/${pipelineName}`,
     );
     return response.status === 200;
   } catch (error) {
@@ -32,7 +35,7 @@ async function assertPipelineExists(pipelineName: string): Promise<boolean> {
 async function assertWorkerDoesNotExist(workerName: string) {
   try {
     const response = await api.get(
-      `/accounts/${api.accountId}/workers/scripts/${workerName}`
+      `/accounts/${api.accountId}/workers/scripts/${workerName}`,
     );
     expect(response.status).toEqual(404);
   } catch (error) {

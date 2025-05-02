@@ -21,7 +21,7 @@ export interface WorkflowProps {
 }
 
 export class Workflow<PARAMS = unknown> {
-  public readonly type: "workflow" = "workflow";
+  public readonly type = "workflow";
   /**
    * Phantom property to preserve workflow params at the type level.
    *
@@ -34,7 +34,7 @@ export class Workflow<PARAMS = unknown> {
 
   constructor(
     public readonly id: string,
-    props: WorkflowProps = {}
+    props: WorkflowProps = {},
   ) {
     this.workflowName = props.workflowName ?? props.className ?? id;
     this.className = props.className ?? this.workflowName;
@@ -57,14 +57,14 @@ export async function upsertWorkflow(
   props: WorkflowProps & {
     workflowName: string;
     scriptName: string;
-  }
+  },
 ) {
   const response = await api.put(
     `/accounts/${api.accountId}/workflows/${props.workflowName}`,
     {
       class_name: props.className,
       script_name: props.scriptName,
-    }
+    },
   );
 
   if (!response.ok) {

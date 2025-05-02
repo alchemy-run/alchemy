@@ -1,12 +1,12 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { createCloudflareApi } from "../../src/cloudflare/api";
-import { DnsRecords } from "../../src/cloudflare/dns-records";
-import { Zone } from "../../src/cloudflare/zone";
-import { destroy } from "../../src/destroy";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { DnsRecords } from "../../src/cloudflare/dns-records.js";
+import { Zone } from "../../src/cloudflare/zone.js";
+import { destroy } from "../../src/destroy.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta);
 
@@ -61,7 +61,7 @@ describe("DnsRecords Resource", async () => {
       // Verify records were created by querying the API directly
       for (const record of dnsRecords.records) {
         const response = await api.get(
-          `/zones/${dnsRecords.zoneId}/dns_records/${record.id}`
+          `/zones/${dnsRecords.zoneId}/dns_records/${record.id}`,
         );
         expect(response.ok).toBe(true);
 
@@ -112,27 +112,27 @@ describe("DnsRecords Resource", async () => {
 
       // Verify updated records
       const updatedWww = dnsRecords.records.find(
-        (r) => r.name === `www.${testDomain}`
+        (r) => r.name === `www.${testDomain}`,
       );
       expect(updatedWww?.content).toBe("192.0.2.3");
       expect(updatedWww?.comment).toBe("Updated web server");
 
       // Verify new record
       const newCdn = dnsRecords.records.find(
-        (r) => r.name === `cdn.${testDomain}`
+        (r) => r.name === `cdn.${testDomain}`,
       );
       expect(newCdn?.type).toBe("CNAME");
       expect(newCdn?.content).toBe("cdn.cloudflare.com");
 
       // Verify deleted record is gone
       const mailRecord = dnsRecords.records.find(
-        (r) => r.name === `mail.${testDomain}`
+        (r) => r.name === `mail.${testDomain}`,
       );
       expect(mailRecord).toBeUndefined();
 
       // Verify directly with API
       const listResponse = await api.get(
-        `/zones/${dnsRecords.zoneId}/dns_records`
+        `/zones/${dnsRecords.zoneId}/dns_records`,
       );
       expect(listResponse.ok).toBe(true);
 
@@ -141,7 +141,7 @@ describe("DnsRecords Resource", async () => {
 
       // Should find our 3 records
       const testRecords = apiRecords.filter((r: any) =>
-        r.name.includes(testDomain)
+        r.name.includes(testDomain),
       );
       expect(testRecords).toHaveLength(3);
     } catch (err) {
@@ -154,7 +154,7 @@ describe("DnsRecords Resource", async () => {
       if (dnsRecords?.records) {
         for (const record of dnsRecords.records) {
           const response = await api.get(
-            `/zones/${dnsRecords.zoneId}/dns_records/${record.id}`
+            `/zones/${dnsRecords.zoneId}/dns_records/${record.id}`,
           );
           expect(response.status).toBe(404);
         }

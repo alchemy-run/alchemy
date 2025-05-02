@@ -9,7 +9,7 @@ import path from "node:path";
  */
 export async function processFrontmatterFiles(
   directoryPath: string,
-  linkPrefix: string
+  linkPrefix: string,
 ): Promise<
   {
     text: string;
@@ -33,7 +33,7 @@ export async function processFrontmatterFiles(
           // Process subdirectory recursively
           const items = await processFrontmatterFiles(
             fullPath,
-            `${linkPrefix}/${entry.name}`
+            `${linkPrefix}/${entry.name}`,
           );
 
           // Create section for subdirectory
@@ -59,7 +59,7 @@ export async function processFrontmatterFiles(
           const frontmatter = frontmatterMatch[1];
           const orderMatch = frontmatter.match(/order:\s*(\d+)/);
           if (orderMatch) {
-            order = parseFloat(orderMatch[1]);
+            order = Number.parseFloat(orderMatch[1]);
           }
           const titleMatch = frontmatter.match(/title:\s*(.+)/);
           if (titleMatch) {
@@ -86,7 +86,7 @@ export async function processFrontmatterFiles(
           link: `${linkPrefix}/${entry.name}`,
           order,
         };
-      })
+      }),
   );
 
   // Filter out null entries and sort by order
@@ -94,6 +94,6 @@ export async function processFrontmatterFiles(
     .filter((entry) => entry !== null)
     .sort((a, b) => a.order - b.order)
     .map(({ text, link, items }) =>
-      items ? { text, items, collapsed: true } : { text, link }
+      items ? { text, items, collapsed: true } : { text, link },
     ) as any;
 }

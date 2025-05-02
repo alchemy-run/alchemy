@@ -42,7 +42,7 @@ export class DurableObjectNamespace implements DurableObjectNamespaceInput {
 
   constructor(
     public readonly id: string,
-    input: DurableObjectNamespaceInput
+    input: DurableObjectNamespaceInput,
   ) {
     this.className = input.className;
     this.scriptName = input.scriptName;

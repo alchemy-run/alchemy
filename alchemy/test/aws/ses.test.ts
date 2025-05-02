@@ -5,12 +5,12 @@ import {
   SESv2Client,
 } from "@aws-sdk/client-sesv2";
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { SES } from "../../src/aws/ses";
-import { destroy } from "../../src/destroy";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { SES } from "../../src/aws/ses.js";
+import { destroy } from "../../src/destroy.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -44,7 +44,7 @@ describe("SES Resource", () => {
       const getResponse = await client.send(
         new GetConfigurationSetCommand({
           ConfigurationSetName: configurationSetName,
-        })
+        }),
       );
 
       // In SESv2, check the sending options specifically
@@ -73,7 +73,7 @@ describe("SES Resource", () => {
       const getUpdatedResponse = await client.send(
         new GetConfigurationSetCommand({
           ConfigurationSetName: configurationSetName,
-        })
+        }),
       );
 
       // In SESv2, check the sending options specifically
@@ -124,7 +124,7 @@ describe("SES Resource", () => {
       const getResponse = await client.send(
         new GetEmailIdentityCommand({
           EmailIdentity: testDomain,
-        })
+        }),
       );
 
       // Check that the identity exists (it should have DkimAttributes)
@@ -147,7 +147,7 @@ async function assertSESDoesNotExist(configurationSetName: string) {
     await client.send(
       new GetConfigurationSetCommand({
         ConfigurationSetName: configurationSetName,
-      })
+      }),
     );
     // Should not reach here
     expect(true).toBe(false);

@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { createCloudflareApi } from "../../src/cloudflare/api";
-import { D1Database, listDatabases } from "../../src/cloudflare/d1-database";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { D1Database, listDatabases } from "../../src/cloudflare/d1-database.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -123,7 +123,7 @@ describe("D1 Database Resource", async () => {
           name: invalidUpdateDb,
           primaryLocationHint: "eeur", // East Europe - different from original
           adopt: true,
-        })
+        }),
       ).rejects.toThrow("Cannot update primaryLocationHint");
     } finally {
       await alchemy.destroy(scope);
@@ -149,7 +149,7 @@ describe("D1 Database Resource", async () => {
         `/accounts/${api.accountId}/d1/database/${database.id}/query`,
         {
           sql: "SELECT name FROM sqlite_master WHERE type='table' AND name='test_migrations_table';",
-        }
+        },
       );
       const data = await resp.json();
       const tables = data.result?.results || data.result?.[0]?.results || [];

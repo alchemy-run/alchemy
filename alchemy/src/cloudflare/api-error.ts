@@ -46,7 +46,7 @@ export async function handleApiError(
   response: Response,
   action: string,
   resourceType: string,
-  resourceName: string
+  resourceName: string,
 ): Promise<never> {
   const text = await response.text();
   let json: any;

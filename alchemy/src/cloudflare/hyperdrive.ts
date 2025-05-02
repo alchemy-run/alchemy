@@ -247,7 +247,7 @@ export const Hyperdrive = Resource(
   async function (
     this: Context<Hyperdrive>,
     id: string,
-    props: HyperdriveProps
+    props: HyperdriveProps,
   ): Promise<Hyperdrive> {
     const api = await createCloudflareApi(props);
     const configsPath = `/accounts/${api.accountId}/hyperdrive/configs`;
@@ -297,7 +297,7 @@ export const Hyperdrive = Resource(
           if (getResponse.status === 200) {
             // Hyperdrive exists, update it
             console.log(
-              `Hyperdrive '${id}' already exists. Updating existing resource.`
+              `Hyperdrive '${id}' already exists. Updating existing resource.`,
             );
             response = await api.put(configPath, requestBody);
           } else if (getResponse.status === 404) {
@@ -343,7 +343,7 @@ export const Hyperdrive = Resource(
       mtls: apiResource.mtls,
       type: "hyperdrive",
     });
-  }
+  },
 );
 
 /**

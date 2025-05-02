@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { createCloudflareApi } from "../../src/cloudflare/api";
-import { Hyperdrive } from "../../src/cloudflare/hyperdrive";
-import { Worker } from "../../src/cloudflare/worker";
-import { destroy } from "../../src/destroy";
-import { NeonProject } from "../../src/neon/project";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { Hyperdrive } from "../../src/cloudflare/hyperdrive.js";
+import { Worker } from "../../src/cloudflare/worker.js";
+import { destroy } from "../../src/destroy.js";
+import { NeonProject } from "../../src/neon/project.js";
+import { BRANCH_PREFIX } from "../util.js";
 // must import this or else alchemy.test won't exist
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 // Create API client for verification
 const api = await createCloudflareApi();
@@ -43,25 +43,25 @@ describe("Hyperdrive Resource", () => {
       expect(hyperdrive.id).toEqual(testId);
       expect(hyperdrive.name).toEqual(`test-hyperdrive-${BRANCH_PREFIX}`);
       expect(hyperdrive.origin.host).toEqual(
-        project.connection_uris[0].connection_parameters.host
+        project.connection_uris[0].connection_parameters.host,
       );
       expect(hyperdrive.origin.database).toEqual(
-        project.connection_uris[0].connection_parameters.database
+        project.connection_uris[0].connection_parameters.database,
       );
       expect(hyperdrive.hyperdriveId).toBeTruthy(); // Check that we got a hyperdriveId
 
       // Verify hyperdrive was created by querying the API directly
       const getResponse = await api.get(
-        `/accounts/${api.accountId}/hyperdrive/configs/${hyperdrive.hyperdriveId}`
+        `/accounts/${api.accountId}/hyperdrive/configs/${hyperdrive.hyperdriveId}`,
       );
       expect(getResponse.status).toEqual(200);
 
       const responseData = await getResponse.json();
       expect(responseData.result.name).toEqual(
-        `test-hyperdrive-${BRANCH_PREFIX}`
+        `test-hyperdrive-${BRANCH_PREFIX}`,
       );
       expect(responseData.result.origin.host).toEqual(
-        project.connection_uris[0].connection_parameters.host
+        project.connection_uris[0].connection_parameters.host,
       );
 
       // Create a simple worker script to test the connection
@@ -110,11 +110,11 @@ describe("Hyperdrive Resource", () => {
 
       // Verify hyperdrive was updated
       const getUpdatedResponse = await api.get(
-        `/accounts/${api.accountId}/hyperdrive/configs/${hyperdrive.hyperdriveId}`
+        `/accounts/${api.accountId}/hyperdrive/configs/${hyperdrive.hyperdriveId}`,
       );
       const updatedData = await getUpdatedResponse.json();
       expect(updatedData.result.name).toEqual(
-        `updated-hyperdrive-${BRANCH_PREFIX}`
+        `updated-hyperdrive-${BRANCH_PREFIX}`,
       );
       expect(updatedData.result.caching.disabled).toEqual(true);
     } catch (err) {
@@ -128,7 +128,7 @@ describe("Hyperdrive Resource", () => {
       // Verify hyperdrive was deleted
       if (hyperdrive?.hyperdriveId) {
         const getDeletedResponse = await api.get(
-          `/accounts/${api.accountId}/hyperdrive/configs/${hyperdrive.hyperdriveId}`
+          `/accounts/${api.accountId}/hyperdrive/configs/${hyperdrive.hyperdriveId}`,
         );
         expect(getDeletedResponse.status).toEqual(404);
       }

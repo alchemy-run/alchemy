@@ -100,13 +100,12 @@ export namespace secret {
   async function _env(
     name: string,
     value?: string,
-    error?: string
+    error?: string,
   ): Promise<Secret> {
     const result = await alchemy.env(name, value, error);
     if (typeof result === "string") {
       return secret(result);
-    } else {
-      throw new Error(`Secret environment variable ${name} is not a string`);
     }
+    throw new Error(`Secret environment variable ${name} is not a string`);
   }
 }

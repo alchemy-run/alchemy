@@ -138,7 +138,7 @@ export const ViteProject = Resource(
   async function (
     this: Context<ViteProject>,
     id: string,
-    props: ViteProjectProps
+    props: ViteProjectProps,
   ): Promise<ViteProject> {
     const phase = this.phase;
     if (this.phase === "delete") {
@@ -157,7 +157,7 @@ export const ViteProject = Resource(
         await modifyConfig(props);
       } else {
         console.warn(
-          "ViteProject does not support updates - the project must be recreated to change the template"
+          "ViteProject does not support updates - the project must be recreated to change the template",
         );
       }
     } else {
@@ -211,7 +211,7 @@ export const ViteProject = Resource(
 
       async function build() {
         // tsc -b will fail if we have not invoked tan stacks' code gen
-        await execAsync(`bun vite build`, { cwd: props.name });
+        await execAsync("bun vite build", { cwd: props.name });
       }
 
       async function installTailwind() {
@@ -236,7 +236,7 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-});`
+});`,
         );
       }
 
@@ -272,9 +272,9 @@ export default defineConfig({
       }
 
       async function installTanstack() {
-        await exec(`bun add @tanstack/react-router`);
+        await exec("bun add @tanstack/react-router");
         await exec(
-          `bun add -D @tanstack/router-plugin @tanstack/react-router-devtools`
+          "bun add -D @tanstack/router-plugin @tanstack/react-router-devtools",
         );
 
         const src = path.join(props.name, "src");
@@ -308,7 +308,7 @@ export const Route = createRootRoute({
     </div>
   ),
 });
-`
+`,
         );
 
         // Create index route file
@@ -326,7 +326,7 @@ function Index() {
       <h3>Welcome Home!</h3>
     </div>
   )
-}`
+}`,
         );
 
         // Create about route file
@@ -340,7 +340,7 @@ export const Route = createLazyFileRoute('/about')({
 
 function About() {
   return <div className="p-2">Hello from About!</div>
-}`
+}`,
         );
 
         // Create main.tsx
@@ -373,7 +373,7 @@ if (!rootElement.innerHTML) {
       <RouterProvider router={router} />
     </StrictMode>,
   )
-}`
+}`,
         );
       }
 
@@ -402,5 +402,5 @@ if (!rootElement.innerHTML) {
         });
       }
     }
-  }
+  },
 );

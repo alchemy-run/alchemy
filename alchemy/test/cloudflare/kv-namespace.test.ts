@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { createCloudflareApi } from "../../src/cloudflare/api";
-import { KVNamespace } from "../../src/cloudflare/kv-namespace";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { KVNamespace } from "../../src/cloudflare/kv-namespace.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -32,14 +32,14 @@ describe("KV Namespace Resource", () => {
 
       expect(kvNamespace.namespaceId).toBeTruthy();
       expect(kvNamespace.title).toEqual(
-        `${BRANCH_PREFIX}-Test Namespace ${testId}`
+        `${BRANCH_PREFIX}-Test Namespace ${testId}`,
       );
 
       // Verify KV values were set by reading them back
       await verifyKVValue(
         kvNamespace.namespaceId,
         "test-key-1",
-        "test-value-1"
+        "test-value-1",
       );
       const key2Value = await getKVValue(kvNamespace.namespaceId, "test-key-2");
       expect(JSON.parse(key2Value)).toEqual({ hello: "world" });
@@ -69,7 +69,7 @@ describe("KV Namespace Resource", () => {
       await verifyKVValue(
         kvNamespace.namespaceId,
         "test-key-1",
-        "updated-value-1"
+        "updated-value-1",
       );
       await verifyKVValue(kvNamespace.namespaceId, "test-key-3", "new-value-3");
     } finally {
@@ -78,7 +78,7 @@ describe("KV Namespace Resource", () => {
         // Verify namespace was deleted
         const api = await createCloudflareApi();
         const response = await api.get(
-          `/accounts/${api.accountId}/storage/kv/namespaces/${kvNamespace.namespaceId}`
+          `/accounts/${api.accountId}/storage/kv/namespaces/${kvNamespace.namespaceId}`,
         );
 
         // Should be a 404 if properly deleted
@@ -90,7 +90,7 @@ describe("KV Namespace Resource", () => {
   async function getKVValue(namespaceId: string, key: string): Promise<string> {
     const api = await createCloudflareApi();
     const response = await api.get(
-      `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}/values/${key}`
+      `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}/values/${key}`,
     );
 
     expect(response.ok).toBe(true);
@@ -100,7 +100,7 @@ describe("KV Namespace Resource", () => {
   async function verifyKVValue(
     namespaceId: string,
     key: string,
-    expectedValue: string
+    expectedValue: string,
   ): Promise<void> {
     const maxAttempts = 20; // Total attempts: 1 initial + 5 retries
     const maxWaitTime = 120000; // 2 minutes
@@ -121,10 +121,10 @@ describe("KV Namespace Resource", () => {
         // Calculate exponential backoff time (2^attempt * 1000ms), but cap at maxWaitTime
         const backoffTime = Math.min(
           Math.pow(2, attempt) * 1000,
-          maxWaitTime / maxAttempts
+          maxWaitTime / maxAttempts,
         );
         console.log(
-          `KV value verification failed, retrying in ${backoffTime}ms (attempt ${attempt}/${maxAttempts - 1})...`
+          `KV value verification failed, retrying in ${backoffTime}ms (attempt ${attempt}/${maxAttempts - 1})...`,
         );
         await new Promise((resolve) => setTimeout(resolve, backoffTime));
       }

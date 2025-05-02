@@ -1,5 +1,5 @@
 import alchemy from "../alchemy/src";
-import type { AlchemyOptions } from "../alchemy/src/alchemy";
+import type { AlchemyOptions, Phase } from "../alchemy/src/alchemy.js";
 import { R2RestStateStore } from "../alchemy/src/cloudflare";
 
 export const CLOUDFLARE_EMAIL = await alchemy.env.CLOUDFLARE_EMAIL;
@@ -16,7 +16,13 @@ export const NEON_API_KEY = await alchemy.secret.env.NEON_API_KEY;
 
 export default {
   stage: "prod",
-  phase: process.argv.includes("--destroy") ? "destroy" : "up",
+  phase:
+    (process.env.ALCHEMY_PHASE as Phase) ??
+    (process.argv.includes("--destroy")
+      ? "destroy"
+      : process.argv.includes("--read")
+        ? "read"
+        : "up"),
   // pass the password in (you can get it from anywhere, e.g. stdin)
   password: process.env.SECRET_PASSPHRASE,
   quiet: process.argv.includes("--quiet"),

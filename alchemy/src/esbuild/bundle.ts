@@ -123,7 +123,7 @@ export const Bundle = Resource(
   async function <Props extends BundleProps>(
     this: Context<Bundle<any>>,
     id: string,
-    props: Props
+    props: Props,
   ): Promise<Bundle<Props>> {
     if (this.phase === "delete") {
       console.log("delete", this.output.path);
@@ -151,38 +151,38 @@ export const Bundle = Resource(
         // resolve to absolute and then relative to ensure consistent result (e.g. ./src/handler.ts instead of src/handler.ts)
         const relativeOutput = path.relative(
           process.cwd(),
-          path.resolve(output.entryPoint)
+          path.resolve(output.entryPoint),
         );
         return (
           relativeOutput ===
           path.relative(
             process.cwd(),
-            path.resolve(process.cwd(), props.entryPoint)
+            path.resolve(process.cwd(), props.entryPoint),
           )
         );
-      }
+      },
     )?.[0];
 
     const outputFile = result.outputFiles?.[0];
     if (outputFile === undefined && bundlePath === undefined) {
       throw new Error("Failed to create bundle");
-    } else if (outputFile) {
+    }
+    if (outputFile) {
       return this({
         ...props,
         path: bundlePath,
         hash: outputFile.hash,
         content: outputFile.text,
       });
-    } else {
-      const content = await fs.readFile(bundlePath!, "utf-8");
-      return this({
-        ...props,
-        path: bundlePath,
-        hash: crypto.createHash("sha256").update(content).digest("hex"),
-        content,
-      });
     }
-  }
+    const content = await fs.readFile(bundlePath!, "utf-8");
+    return this({
+      ...props,
+      path: bundlePath,
+      hash: crypto.createHash("sha256").update(content).digest("hex"),
+      content,
+    });
+  },
 );
 
 export async function bundle(props: BundleProps) {

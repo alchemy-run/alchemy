@@ -14,7 +14,7 @@ export type Vite<B extends Bindings> = B extends { ASSETS: any }
 
 export async function Vite<B extends Bindings>(
   id: string,
-  props: ViteProps<B>
+  props: ViteProps<B>,
 ): Promise<Vite<B>> {
   return Website(id, {
     ...props,

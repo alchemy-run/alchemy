@@ -19,12 +19,12 @@ export function dedent(
   ...values: any[]
 ): string {
   // Combine the template strings and values
-  let result = strings.reduce((acc, str, i) => {
+  const result = strings.reduce((acc, str, i) => {
     return acc + str + (values[i] !== undefined ? values[i] : "");
   }, "");
 
   // Split into lines
-  let lines = result.split("\n");
+  const lines = result.split("\n");
 
   // Remove ALL leading blank/whitespace-only lines
   while (lines.length > 0 && lines[0].trim() === "") {
@@ -48,11 +48,11 @@ export function dedent(
       const indent = line.match(/^[ \t]*/)?.[0].length || 0;
       // Handle potentially infinite min if all lines are blank (though handled by early return)
       return indent < min ? indent : min;
-    }, Infinity);
+    }, Number.POSITIVE_INFINITY);
 
   // If minIndent remains Infinity (only blank lines existed), return empty string.
   // This case should be caught by the lines.length check above, but belt-and-suspenders.
-  if (minIndent === Infinity) {
+  if (minIndent === Number.POSITIVE_INFINITY) {
     return "";
   }
 

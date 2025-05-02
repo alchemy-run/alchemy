@@ -128,7 +128,7 @@ export const DnsRecords = Resource(
   async function (
     this: Context<DnsRecords>,
     id: string,
-    props: DnsRecordsProps
+    props: DnsRecordsProps,
   ): Promise<DnsRecords> {
     // Create Cloudflare API client
     const api = await createCloudflareApi(props);
@@ -143,17 +143,17 @@ export const DnsRecords = Resource(
           this.output.records.map(async (record) => {
             try {
               const response = await api.delete(
-                `/zones/${zoneId}/dns_records/${record.id}`
+                `/zones/${zoneId}/dns_records/${record.id}`,
               );
               if (!response.ok && response.status !== 404) {
                 console.error(
-                  `Failed to delete DNS record ${record.name}: ${response.statusText}`
+                  `Failed to delete DNS record ${record.name}: ${response.statusText}`,
                 );
               }
             } catch (error) {
               console.error(`Error deleting DNS record ${record.name}:`, error);
             }
-          })
+          }),
         );
       }
       return this.destroy();
@@ -169,8 +169,8 @@ export const DnsRecords = Resource(
         (current) =>
           !desiredRecords.some(
             (desired) =>
-              desired.name === current.name && desired.type === current.type
-          )
+              desired.name === current.name && desired.type === current.type,
+          ),
       );
 
       // Delete orphaned records
@@ -178,17 +178,17 @@ export const DnsRecords = Resource(
         recordsToDelete.map(async (record) => {
           try {
             const response = await api.delete(
-              `/zones/${zoneId}/dns_records/${record.id}`
+              `/zones/${zoneId}/dns_records/${record.id}`,
             );
             if (!response.ok && response.status !== 404) {
               console.error(
-                `Failed to delete DNS record ${record.name}: ${response.statusText}`
+                `Failed to delete DNS record ${record.name}: ${response.statusText}`,
               );
             }
           } catch (error) {
             console.error(`Error deleting DNS record ${record.name}:`, error);
           }
-        })
+        }),
       );
 
       // Update or create records
@@ -197,7 +197,7 @@ export const DnsRecords = Resource(
           // Find matching existing record
           const existing = currentRecords.find(
             (current) =>
-              current.name === desired.name && current.type === desired.type
+              current.name === desired.name && current.type === desired.type,
           );
 
           if (existing) {
@@ -212,11 +212,10 @@ export const DnsRecords = Resource(
               return createOrUpdateRecord(api, zoneId, desired, existing.id);
             }
             return existing;
-          } else {
-            // Create new record
-            return createOrUpdateRecord(api, zoneId, desired);
           }
-        })
+          // Create new record
+          return createOrUpdateRecord(api, zoneId, desired);
+        }),
       );
 
       return this({
@@ -246,18 +245,18 @@ export const DnsRecords = Resource(
         acc[key] = record;
         return acc;
       },
-      {} as Record<string, DnsRecordProps>
+      {} as Record<string, DnsRecordProps>,
     );
 
     const createdRecords = await Promise.all(
       Object.values(uniqueRecords).map(async (record) => {
         // First check if record exists
         const listResponse = await api.get(
-          `/zones/${zoneId}/dns_records?type=${record.type}&name=${record.name}`
+          `/zones/${zoneId}/dns_records?type=${record.type}&name=${record.name}`,
         );
         if (!listResponse.ok) {
           throw new Error(
-            `Failed to check existing DNS records: ${listResponse.statusText}`
+            `Failed to check existing DNS records: ${listResponse.statusText}`,
           );
         }
 
@@ -267,14 +266,14 @@ export const DnsRecords = Resource(
         const existingRecord = listResult.result[0];
 
         return createOrUpdateRecord(api, zoneId, record, existingRecord?.id);
-      })
+      }),
     );
 
     return this({
       zoneId,
       records: createdRecords,
     });
-  }
+  },
 );
 
 /**
@@ -284,7 +283,7 @@ async function createOrUpdateRecord(
   api: CloudflareApi,
   zoneId: string,
   record: DnsRecordProps,
-  existingId?: string
+  existingId?: string,
 ): Promise<DnsRecord> {
   const payload = getRecordPayload(record);
 
@@ -300,12 +299,12 @@ async function createOrUpdateRecord(
       try {
         const createResponse = await api.post(
           `/zones/${zoneId}/dns_records`,
-          payload
+          payload,
         );
         if (createResponse.ok) {
           return convertCloudflareRecord(
             ((await createResponse.json()) as any).result,
-            zoneId
+            zoneId,
           );
         }
       } catch (err) {
@@ -314,7 +313,7 @@ async function createOrUpdateRecord(
     }
 
     throw new Error(
-      `Failed to ${existingId ? "update" : "create"} DNS record ${record.name}: ${response.statusText}\nResponse: ${errorBody}`
+      `Failed to ${existingId ? "update" : "create"} DNS record ${record.name}: ${response.statusText}\nResponse: ${errorBody}`,
     );
   }
 
@@ -343,7 +342,7 @@ function getRecordPayload(record: DnsRecordProps) {
  */
 function convertCloudflareRecord(
   record: CloudflareDnsRecord,
-  zoneId: string
+  zoneId: string,
 ): DnsRecord {
   return {
     id: record.id,

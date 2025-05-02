@@ -230,7 +230,7 @@ export const Policy = Resource(
   async function (
     this: Context<Policy>,
     id: string,
-    props: PolicyProps
+    props: PolicyProps,
   ): Promise<Policy> {
     const client = new IAMClient({});
     const policyArn = `arn:aws:iam::${process.env.AWS_ACCOUNT_ID}:policy${props.path || "/"}${props.policyName}`;
@@ -241,7 +241,7 @@ export const Policy = Resource(
         const versions = await client.send(
           new ListPolicyVersionsCommand({
             PolicyArn: policyArn,
-          })
+          }),
         );
 
         for (const version of versions.Versions || []) {
@@ -250,7 +250,7 @@ export const Policy = Resource(
               new DeletePolicyVersionCommand({
                 PolicyArn: policyArn,
                 VersionId: version.VersionId,
-              })
+              }),
             );
           }
         }
@@ -259,7 +259,7 @@ export const Policy = Resource(
         await client.send(
           new DeletePolicyCommand({
             PolicyArn: policyArn,
-          })
+          }),
         );
       } catch (error: any) {
         if (error.name !== NoSuchEntityException.name) {
@@ -267,109 +267,106 @@ export const Policy = Resource(
         }
       }
       return this.destroy();
-    } else {
-      try {
-        // Check if policy exists
-        const existingPolicy = await client.send(
-          new GetPolicyCommand({
+    }
+    try {
+      // Check if policy exists
+      const existingPolicy = await client.send(
+        new GetPolicyCommand({
+          PolicyArn: policyArn,
+        }),
+      );
+
+      // Get current policy version
+      const currentVersion = await client.send(
+        new GetPolicyVersionCommand({
+          PolicyArn: policyArn,
+          VersionId: existingPolicy.Policy!.DefaultVersionId!,
+        }),
+      );
+
+      const currentDocument = JSON.parse(
+        decodeURIComponent(currentVersion.PolicyVersion!.Document!),
+      );
+
+      // If policy document changed, create new version
+      if (JSON.stringify(currentDocument) !== JSON.stringify(props.document)) {
+        // List versions to check if we need to delete old ones
+        const versions = await client.send(
+          new ListPolicyVersionsCommand({
             PolicyArn: policyArn,
-          })
+          }),
         );
 
-        // Get current policy version
-        const currentVersion = await client.send(
-          new GetPolicyVersionCommand({
-            PolicyArn: policyArn,
-            VersionId: existingPolicy.Policy!.DefaultVersionId!,
-          })
-        );
+        // Delete oldest version if we have 5 versions (maximum allowed)
+        if (versions.Versions?.length === 5) {
+          const oldestVersion = versions.Versions.sort(
+            (a, b) => a.CreateDate!.getTime() - b.CreateDate!.getTime(),
+          )[0];
 
-        const currentDocument = JSON.parse(
-          decodeURIComponent(currentVersion.PolicyVersion!.Document!)
-        );
-
-        // If policy document changed, create new version
-        if (
-          JSON.stringify(currentDocument) !== JSON.stringify(props.document)
-        ) {
-          // List versions to check if we need to delete old ones
-          const versions = await client.send(
-            new ListPolicyVersionsCommand({
-              PolicyArn: policyArn,
-            })
-          );
-
-          // Delete oldest version if we have 5 versions (maximum allowed)
-          if (versions.Versions?.length === 5) {
-            const oldestVersion = versions.Versions.sort(
-              (a, b) => a.CreateDate!.getTime() - b.CreateDate!.getTime()
-            )[0];
-
-            if (!oldestVersion.IsDefaultVersion) {
-              await client.send(
-                new DeletePolicyVersionCommand({
-                  PolicyArn: policyArn,
-                  VersionId: oldestVersion.VersionId!,
-                })
-              );
-            }
+          if (!oldestVersion.IsDefaultVersion) {
+            await client.send(
+              new DeletePolicyVersionCommand({
+                PolicyArn: policyArn,
+                VersionId: oldestVersion.VersionId!,
+              }),
+            );
           }
-
-          // Create new version
-          await client.send(
-            new CreatePolicyVersionCommand({
-              PolicyArn: policyArn,
-              PolicyDocument: JSON.stringify(props.document),
-              SetAsDefault: true,
-            })
-          );
         }
 
-        const policy = await client.send(
-          new GetPolicyCommand({
+        // Create new version
+        await client.send(
+          new CreatePolicyVersionCommand({
             PolicyArn: policyArn,
-          })
+            PolicyDocument: JSON.stringify(props.document),
+            SetAsDefault: true,
+          }),
+        );
+      }
+
+      const policy = await client.send(
+        new GetPolicyCommand({
+          PolicyArn: policyArn,
+        }),
+      );
+
+      return this({
+        ...props,
+        arn: policy.Policy!.Arn!,
+        defaultVersionId: policy.Policy!.DefaultVersionId!,
+        attachmentCount: policy.Policy!.AttachmentCount!,
+        createDate: policy.Policy!.CreateDate!,
+        updateDate: policy.Policy!.UpdateDate!,
+        isAttachable: policy.Policy!.IsAttachable!,
+      });
+    } catch (error: any) {
+      if (error.name === "NoSuchEntity") {
+        // Create new policy
+        const newPolicy = await client.send(
+          new CreatePolicyCommand({
+            PolicyName: props.policyName,
+            PolicyDocument: JSON.stringify(props.document),
+            Description: props.description,
+            Path: props.path,
+            Tags: props.tags
+              ? Object.entries(props.tags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                }))
+              : undefined,
+          }),
         );
 
         return this({
           ...props,
-          arn: policy.Policy!.Arn!,
-          defaultVersionId: policy.Policy!.DefaultVersionId!,
-          attachmentCount: policy.Policy!.AttachmentCount!,
-          createDate: policy.Policy!.CreateDate!,
-          updateDate: policy.Policy!.UpdateDate!,
-          isAttachable: policy.Policy!.IsAttachable!,
+          arn: newPolicy.Policy!.Arn!,
+          defaultVersionId: newPolicy.Policy!.DefaultVersionId!,
+          attachmentCount: newPolicy.Policy!.AttachmentCount!,
+          createDate: newPolicy.Policy!.CreateDate!,
+          updateDate: newPolicy.Policy!.UpdateDate!,
+          isAttachable: newPolicy.Policy!.IsAttachable!,
         });
-      } catch (error: any) {
-        if (error.name === "NoSuchEntity") {
-          // Create new policy
-          const newPolicy = await client.send(
-            new CreatePolicyCommand({
-              PolicyName: props.policyName,
-              PolicyDocument: JSON.stringify(props.document),
-              Description: props.description,
-              Path: props.path,
-              Tags: props.tags
-                ? Object.entries(props.tags).map(([Key, Value]) => ({
-                    Key,
-                    Value,
-                  }))
-                : undefined,
-            })
-          );
-
-          return this({
-            ...props,
-            arn: newPolicy.Policy!.Arn!,
-            defaultVersionId: newPolicy.Policy!.DefaultVersionId!,
-            attachmentCount: newPolicy.Policy!.AttachmentCount!,
-            createDate: newPolicy.Policy!.CreateDate!,
-            updateDate: newPolicy.Policy!.UpdateDate!,
-            isAttachable: newPolicy.Policy!.IsAttachable!,
-          });
-        }
-        throw error;
       }
+      throw error;
     }
-  }
+  },
 );

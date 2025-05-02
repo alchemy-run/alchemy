@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test";
 import Stripe from "stripe";
-import { alchemy } from "../src/alchemy";
-import { destroy } from "../src/destroy";
-import { Price } from "../src/stripe/price";
-import { Product } from "../src/stripe/product";
-import { WebhookEndpoint } from "../src/stripe/webhook";
-import { BRANCH_PREFIX } from "./util";
+import { alchemy } from "../src/alchemy.js";
+import { destroy } from "../src/destroy.js";
+import { Price } from "../src/stripe/price.js";
+import { Product } from "../src/stripe/product.js";
+import { WebhookEndpoint } from "../src/stripe/webhook.js";
+import { BRANCH_PREFIX } from "./util.js";
 
-import "../src/test/bun";
+import "../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -41,7 +41,7 @@ describe("Stripe Resources", () => {
 
       // Verify with Stripe API
       expect((await stripe.products.retrieve(product.id)).name).toBe(
-        productName
+        productName,
       );
 
       // Create a price for the product
@@ -78,7 +78,7 @@ describe("Stripe Resources", () => {
 
       // Verify with Stripe API
       expect((await stripe.webhookEndpoints.retrieve(webhook.id)).url).toBe(
-        "https://example.com/alchemy-webhook"
+        "https://example.com/alchemy-webhook",
       );
     } finally {
       await destroy(scope);

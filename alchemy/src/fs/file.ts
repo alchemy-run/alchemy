@@ -8,7 +8,7 @@ import { alchemy } from "../alchemy.js";
 import type { FileCollection } from "./file-collection.js";
 import type { FileRef } from "./file-ref.js";
 
-declare module "../alchemy" {
+declare module "../alchemy.js" {
   interface Alchemy {
     /**
      * Creates a reference to a file in the filesystem.
@@ -72,7 +72,7 @@ declare module "../alchemy" {
          * @default false
          */
         recursive?: boolean;
-      }
+      },
     ): Promise<FileCollection>;
   }
 }
@@ -94,8 +94,8 @@ alchemy.files = async (
         paths.map(async (path) => [
           path,
           await fs.promises.readFile(path, "utf-8"),
-        ])
-      )
+        ]),
+      ),
     ),
   };
 };
@@ -162,21 +162,22 @@ export const File = Resource(
     props: {
       path: string;
       content: string;
-    }
+    },
   ): Promise<File> {
     const filePath = props?.path ?? id;
 
     if (this.phase === "delete") {
       await ignore("ENOENT", async () => fs.promises.unlink(filePath));
       return this.destroy();
-    } else if (
+    }
+    if (
       this.phase === "update" &&
       this.output &&
       this.output.path !== filePath
     ) {
       // If path has changed, delete the old file
       console.log(
-        `File: Path changed from ${this.output.path} to ${filePath}, removing old file`
+        `File: Path changed from ${this.output.path} to ${filePath}, removing old file`,
       );
       await ignore("ENOENT", async () => fs.promises.unlink(this.output.path));
     }
@@ -191,5 +192,5 @@ export const File = Resource(
       path: filePath,
       content: props.content,
     });
-  }
+  },
 );

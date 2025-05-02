@@ -1,14 +1,14 @@
 import { describe, expect } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { alchemy } from "../../src/alchemy";
-import { Ai } from "../../src/cloudflare/ai";
-import { Worker } from "../../src/cloudflare/worker";
-import { WranglerJson } from "../../src/cloudflare/wrangler.json";
-import { destroy } from "../../src/destroy";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { Ai } from "../../src/cloudflare/ai.js";
+import { Worker } from "../../src/cloudflare/worker.js";
+import { WranglerJson } from "../../src/cloudflare/wrangler.json.js";
+import { destroy } from "../../src/destroy.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -43,7 +43,7 @@ describe("WranglerJson Resource", () => {
 
         const { spec } = await WranglerJson(
           `${BRANCH_PREFIX}-test-wrangler-json-1`,
-          { worker }
+          { worker },
         );
 
         expect(spec.name).toEqual(name);
@@ -68,7 +68,7 @@ describe("WranglerJson Resource", () => {
         const id = `${BRANCH_PREFIX}-test-wrangler-json-2`;
 
         await expect(async () => await WranglerJson(id, { worker })).toThrow(
-          "Worker must have an entrypoint to generate a wrangler.json"
+          "Worker must have an entrypoint to generate a wrangler.json",
         );
       } finally {
         await destroy(scope);
@@ -96,7 +96,7 @@ describe("WranglerJson Resource", () => {
 
         const { spec } = await WranglerJson(
           `${BRANCH_PREFIX}-test-wrangler-json-browser`,
-          { worker }
+          { worker },
         );
 
         expect(spec.name).toEqual(name);
@@ -129,7 +129,7 @@ describe("WranglerJson Resource", () => {
 
         const { spec } = await WranglerJson(
           `${BRANCH_PREFIX}-test-wrangler-json-ai`,
-          { worker }
+          { worker },
         );
 
         expect(spec.name).toEqual(name);

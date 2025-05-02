@@ -18,11 +18,12 @@ export async function serialize(
   value: any,
   options?: {
     encrypt?: boolean;
-  }
+  },
 ): Promise<any> {
   if (Array.isArray(value)) {
     return Promise.all(value.map((value) => serialize(scope, value, options)));
-  } else if (value instanceof Secret) {
+  }
+  if (value instanceof Secret) {
     if (!scope.password) {
       throw new Error("Cannot serialize secret without password");
     }
@@ -32,26 +33,31 @@ export async function serialize(
           ? await encrypt(value.unencrypted, scope.password)
           : value.unencrypted,
     };
-  } else if (isType(value)) {
+  }
+  if (isType(value)) {
     return {
       "@schema": value.toJSON(),
     };
-  } else if (value instanceof Date) {
+  }
+  if (value instanceof Date) {
     return {
       "@date": value.toISOString(),
     };
-  } else if (value instanceof Scope) {
+  }
+  if (value instanceof Scope) {
     return undefined;
-  } else if (value && typeof value === "object") {
+  }
+  if (value && typeof value === "object") {
     return Object.fromEntries(
       await Promise.all(
         Object.entries(value).map(async ([key, value]) => [
           key,
           await serialize(scope, value, options),
-        ])
-      )
+        ]),
+      ),
     );
-  } else if (typeof value === "function") {
+  }
+  if (typeof value === "function") {
     // can't serialize functions
     return undefined;
   }
@@ -61,28 +67,30 @@ export async function serialize(
 export async function deserialize(scope: Scope, value: any): Promise<any> {
   if (Array.isArray(value)) {
     return await Promise.all(
-      value.map(async (item) => await deserialize(scope, item))
+      value.map(async (item) => await deserialize(scope, item)),
     );
-  } else if (value && typeof value === "object") {
+  }
+  if (value && typeof value === "object") {
     if (typeof value["@secret"] === "string") {
       if (!scope.password) {
         throw new Error("Cannot deserialize secret without password");
       }
       return new Secret(await decryptWithKey(value["@secret"], scope.password));
-    } else if ("@schema" in value) {
-      return value["@schema"];
-    } else if ("@date" in value) {
-      return new Date(value["@date"]);
-    } else {
-      return Object.fromEntries(
-        await Promise.all(
-          Object.entries(value).map(async ([key, value]) => [
-            key,
-            await deserialize(scope, value),
-          ])
-        )
-      );
     }
+    if ("@schema" in value) {
+      return value["@schema"];
+    }
+    if ("@date" in value) {
+      return new Date(value["@date"]);
+    }
+    return Object.fromEntries(
+      await Promise.all(
+        Object.entries(value).map(async ([key, value]) => [
+          key,
+          await deserialize(scope, value),
+        ]),
+      ),
+    );
   }
   return value;
 }

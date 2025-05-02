@@ -61,7 +61,7 @@ export type Website<B extends Bindings> = B extends { ASSETS: any }
 
 export async function Website<B extends Bindings>(
   id: string,
-  props: WebsiteProps<B>
+  props: WebsiteProps<B>,
 ): Promise<Website<B>> {
   if (props.bindings?.ASSETS) {
     throw new Error("ASSETS binding is reserved for internal use");
@@ -98,8 +98,8 @@ export async function Website<B extends Bindings>(
               compatibility_date: new Date().toISOString().split("T")[0],
             },
             null,
-            2
-          )
+            2,
+          ),
         );
       }
     }

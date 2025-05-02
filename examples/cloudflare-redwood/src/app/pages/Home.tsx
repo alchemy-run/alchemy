@@ -1,6 +1,5 @@
-import { RequestInfo } from "@redwoodjs/sdk/worker";
-import { users } from "../../db/schema";
-
+import type { RequestInfo } from "@redwoodjs/sdk/worker";
+import { users } from "../../db/schema.js";
 
 export async function Home({ ctx }: RequestInfo) {
   const allUsers = await ctx.db.select().from(users).all();

@@ -39,7 +39,7 @@ export type Redwood<B extends Bindings> = B extends { ASSETS: any }
  */
 export async function Redwood<B extends Bindings>(
   id: string,
-  props?: Partial<RedwoodProps<B>>
+  props?: Partial<RedwoodProps<B>>,
 ): Promise<Redwood<B>> {
   return Website(id, {
     ...props,

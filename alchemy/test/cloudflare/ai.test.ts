@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { Ai } from "../../src/cloudflare/ai";
-import { Worker } from "../../src/cloudflare/worker";
-import { destroy } from "../../src/destroy";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { Ai } from "../../src/cloudflare/ai.js";
+import { Worker } from "../../src/cloudflare/worker.js";
+import { destroy } from "../../src/destroy.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -53,7 +53,7 @@ describe("AI Resource Binding", () => {
       const response = await fetch(worker.url!);
       expect(response.status).toEqual(200);
       expect(response.headers.get("content-type")).toContain(
-        "application/json"
+        "application/json",
       );
 
       // Parse the response and verify it contains the expected AI model output

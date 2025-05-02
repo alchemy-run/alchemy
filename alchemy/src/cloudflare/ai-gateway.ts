@@ -154,7 +154,7 @@ export const AiGateway = Resource(
   async function (
     this: Context<AiGateway>,
     id: string,
-    props: AiGatewayProps = {}
+    props: AiGatewayProps = {},
   ): Promise<AiGateway> {
     const api = await createCloudflareApi(props);
     const gatewayPath = `/accounts/${api.accountId}/ai-gateway/gateways/${id}`;
@@ -199,7 +199,7 @@ export const AiGateway = Resource(
         if (getResponse.status === 200) {
           // Gateway exists, treat as update (PUT)
           console.log(
-            `AI Gateway '${id}' already exists. Updating existing resource.`
+            `AI Gateway '${id}' already exists. Updating existing resource.`,
           );
           const requestBody = mapPropsToApi(id, mergedProps, false);
           response = await api.put(gatewayPath, requestBody);
@@ -248,14 +248,14 @@ export const AiGateway = Resource(
       logpushPublicKey: apiResource.logpush_public_key,
       type: "ai_gateway",
     });
-  }
+  },
 );
 
 // Helper function to map props to the API request body format
 function mapPropsToApi(
   id: string,
   props: AiGatewayProps,
-  includeIdInBody: boolean = false
+  includeIdInBody = false,
 ): Record<string, any> {
   const body: Record<string, any> = {};
   if (includeIdInBody) {

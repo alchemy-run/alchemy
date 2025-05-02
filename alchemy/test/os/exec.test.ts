@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { destroy } from "../../src/destroy";
-import { Exec } from "../../src/os/exec";
+import { alchemy } from "../../src/alchemy.js";
+import { destroy } from "../../src/destroy.js";
+import { Exec } from "../../src/os/exec.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta);
 

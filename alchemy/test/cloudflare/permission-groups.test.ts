@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { PermissionGroups } from "../../src/cloudflare/permission-groups";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { PermissionGroups } from "../../src/cloudflare/permission-groups.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta);
 
@@ -22,10 +22,10 @@ describe("PermissionGroups Resource", () => {
       expect(permissionGroups["Workers R2 Storage Write"]).toBeTruthy();
       expect(permissionGroups["Workers R2 Storage Read"]).toBeTruthy();
       expect(
-        permissionGroups["Workers R2 Storage Bucket Item Write"]
+        permissionGroups["Workers R2 Storage Bucket Item Write"],
       ).toBeTruthy();
       expect(
-        permissionGroups["Workers R2 Storage Bucket Item Read"]
+        permissionGroups["Workers R2 Storage Bucket Item Read"],
       ).toBeTruthy();
 
       // Verify the structure of one of the permission groups

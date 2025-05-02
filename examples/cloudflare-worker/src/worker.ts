@@ -1,4 +1,4 @@
-import type { queue, worker } from "../alchemy.run";
+import type { queue, worker } from "../alchemy.run.js";
 
 export default {
   async fetch(request: Request, env: typeof worker.Env) {

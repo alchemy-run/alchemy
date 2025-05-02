@@ -1,4 +1,4 @@
-import { AppContext } from "../src/worker";
+import { AppContext } from "../src/worker.js";
 
 declare module "@redwoodjs/sdk/worker" {
   export interface DefaultAppContext extends AppContext {}

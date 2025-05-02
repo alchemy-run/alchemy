@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { alchemy } from "../../src/alchemy";
-import { destroy } from "../../src/destroy";
-import { CopyFile } from "../../src/fs/copy-file";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { destroy } from "../../src/destroy.js";
+import { CopyFile } from "../../src/fs/copy-file.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta);
 
@@ -20,7 +20,7 @@ describe("CopyFile Resource", () => {
   beforeAll(async () => {
     await fs.promises.writeFile(
       sourceFilePath,
-      "This is a test file for copying"
+      "This is a test file for copying",
     );
   });
 
@@ -64,7 +64,7 @@ describe("CopyFile Resource", () => {
       // Update the resource with a different destination
       const newDestinationPath = path.join(
         process.cwd(),
-        "test-destination-updated.txt"
+        "test-destination-updated.txt",
       );
       resource = await CopyFile(testId, {
         src: sourceFilePath,
@@ -106,7 +106,7 @@ describe("CopyFile Resource", () => {
       // Create a file at the destination first
       await fs.promises.writeFile(
         destinationFilePath,
-        "This is the original file"
+        "This is the original file",
       );
 
       // Create a copy file resource with overwrite false

@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { destroy } from "../../src/destroy";
-import { createGitHubClient } from "../../src/github/client";
-import { RepositoryEnvironment } from "../../src/github/repository-environment";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { destroy } from "../../src/destroy.js";
+import { createGitHubClient } from "../../src/github/client.js";
+import { RepositoryEnvironment } from "../../src/github/repository-environment.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta);
 
@@ -52,7 +52,7 @@ describe("RepositoryEnvironment Resource", () => {
 
         // Check the protection rules
         const waitTimerRule = getResponse.data.protection_rules?.find(
-          (rule) => rule.type === "wait_timer"
+          (rule) => rule.type === "wait_timer",
         );
 
         // Using any to ignore type errors since we know the structure from the API
@@ -67,7 +67,7 @@ describe("RepositoryEnvironment Resource", () => {
           });
 
         const branchPatterns = branchPoliciesResponse.data.branch_policies.map(
-          (p) => p.name
+          (p) => p.name,
         );
         expect(branchPatterns).toContain("main");
         expect(branchPatterns).toContain("release/*");
@@ -96,7 +96,7 @@ describe("RepositoryEnvironment Resource", () => {
         // Check the updated protection rules
         const updatedWaitTimerRule =
           getUpdatedResponse.data.protection_rules?.find(
-            (rule) => rule.type === "wait_timer"
+            (rule) => rule.type === "wait_timer",
           );
         expect((updatedWaitTimerRule as any)?.wait_timer).toEqual(10);
       } catch (err) {
@@ -126,7 +126,7 @@ describe("RepositoryEnvironment Resource", () => {
 
         expect(environmentDeleted).toBeTruthy();
       }
-    }
+    },
   );
 
   test.skipIf(!!process.env.CI)(
@@ -155,7 +155,7 @@ describe("RepositoryEnvironment Resource", () => {
           });
 
         let branchPatterns = branchPoliciesResponse.data.branch_policies.map(
-          (p) => p.name
+          (p) => p.name,
         );
         expect(branchPatterns.sort()).toEqual(["develop", "main"]);
 
@@ -176,7 +176,7 @@ describe("RepositoryEnvironment Resource", () => {
           });
 
         branchPatterns = branchPoliciesResponse.data.branch_policies.map(
-          (p) => p.name
+          (p) => p.name,
         );
         expect(branchPatterns.sort()).toEqual([
           "develop",
@@ -205,7 +205,7 @@ describe("RepositoryEnvironment Resource", () => {
           });
 
         branchPatterns = branchPoliciesResponse.data.branch_policies.map(
-          (p) => p.name
+          (p) => p.name,
         );
         // In a real-world scenario with the same ID being reused, this would work correctly
         // For testing purposes, we'll check that the required elements are present instead
@@ -234,7 +234,7 @@ describe("RepositoryEnvironment Resource", () => {
           });
 
         branchPatterns = branchPoliciesResponse.data.branch_policies.map(
-          (p) => p.name
+          (p) => p.name,
         );
         // Check for presence of key patterns rather than exact equality
         expect(branchPatterns.includes("release/*")).toBeTruthy();
@@ -280,7 +280,7 @@ describe("RepositoryEnvironment Resource", () => {
 
         // Check if a branch policy of any type exists
         const hasBranchPolicy = environmentResponse.data.protection_rules?.some(
-          (rule) => rule.type === "branch_policy"
+          (rule) => rule.type === "branch_policy",
         );
         expect(hasBranchPolicy).toBeTruthy();
       } catch (err) {
@@ -304,7 +304,7 @@ describe("RepositoryEnvironment Resource", () => {
         }
         expect(environmentDeleted).toBeTruthy();
       }
-    }
+    },
   );
 
   test.skipIf(!!process.env.CI)("reviewer operations", async (scope) => {
@@ -340,7 +340,7 @@ describe("RepositoryEnvironment Resource", () => {
 
       // Check for reviewer rules
       const reviewerRules = getResponse.data.protection_rules?.filter(
-        (rule) => rule.type === "required_reviewers"
+        (rule) => rule.type === "required_reviewers",
       );
 
       expect(reviewerRules?.length).toBeGreaterThan(0);
@@ -365,7 +365,7 @@ describe("RepositoryEnvironment Resource", () => {
 
       const updatedReviewerRules =
         updatedResponse.data.protection_rules?.filter(
-          (rule) => rule.type === "required_reviewers"
+          (rule) => rule.type === "required_reviewers",
         );
 
       expect(updatedReviewerRules?.length).toBeGreaterThan(0);

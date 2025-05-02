@@ -27,7 +27,7 @@ export interface QueueEventSource {
  * @returns true if the event source is a QueueEventSource, false otherwise
  */
 export function isQueueEventSource(
-  eventSource: any
+  eventSource: any,
 ): eventSource is QueueEventSource {
   return "queue" in eventSource;
 }
