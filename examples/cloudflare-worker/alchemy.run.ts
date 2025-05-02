@@ -30,11 +30,14 @@ export const worker = await Worker(`cloudflare-worker-worker${BRANCH_PREFIX}`, {
     }),
     QUEUE: queue,
   },
-  // eventSources: [queue],
+  url: true,
+  eventSources: [queue],
 });
 
 await WranglerJson("wrangler.jsonc", {
   worker,
 });
+
+console.log(worker.url);
 
 await app.finalize();

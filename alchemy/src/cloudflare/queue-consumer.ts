@@ -2,8 +2,8 @@ import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
-  type CloudflareApi,
   createCloudflareApi,
+  type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
 import type { Queue } from "./queue.js";
@@ -163,10 +163,8 @@ export const QueueConsumer = Resource(
     let consumerData: CloudflareQueueConsumerResponse;
 
     if (this.phase === "create") {
-      console.log(`Creating Queue Consumer for queue ${queueId}`);
       consumerData = await createQueueConsumer(api, queueId, props);
     } else if (this.output?.id) {
-      console.log(`Updating Queue Consumer ${this.output.id}`);
       consumerData = await updateQueueConsumer(
         api,
         queueId,
@@ -174,10 +172,6 @@ export const QueueConsumer = Resource(
         props,
       );
     } else {
-      // If no ID exists, fall back to creating a new consumer
-      console.log(
-        `No existing Consumer ID found, creating new Queue Consumer for queue ${queueId}`,
-      );
       consumerData = await createQueueConsumer(api, queueId, props);
     }
 
