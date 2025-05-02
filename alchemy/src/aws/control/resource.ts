@@ -55,9 +55,20 @@ export interface CloudControlResource
   createdAt: number;
 }
 
+interface CloudControlResourceInfo {
+  identifier: string;
+  typeName: string;
+  properties: Record<string, any>;
+}
+
+interface CloudControlError {
+  code?: string;
+  message?: string;
+}
+
 // Register wildcard deletion handler for AWS::* pattern
 registerDeletionHandler(
-  "AWS::",
+  "AWS::*",
   async function (this: Context<any>, pattern: string) {
     const client = createCloudControlClient();
 
@@ -68,28 +79,155 @@ registerDeletionHandler(
       // List all resources of the service type
       const resources = await client.listResources(`AWS::${serviceName}::*`);
 
-      // Delete each resource
-      for (const resource of resources.resources) {
+      // Delete each resource and track operations
+      const deletionPromises = (
+        resources.resources as CloudControlResourceInfo[]
+      ).map(async (resource) => {
         try {
-          await client.deleteResource(
-            `AWS::${serviceName}::*`,
+          console.log(
+            `Deleting resource ${resource.identifier} (${resource.typeName})`
+          );
+
+          const response = await client.deleteResource(
+            resource.typeName,
             resource.identifier
           );
-        } catch (error) {
-          console.error(
-            `Error deleting resource ${resource.identifier}:`,
-            error
-          );
+
+          // Wait for deletion to complete
+          const result = await response;
+
+          if (result.status === "FAILED") {
+            console.error(
+              `Failed to delete resource ${resource.identifier}: ${result.message}`
+            );
+          } else {
+            console.log(`Successfully deleted resource ${resource.identifier}`);
+          }
+        } catch (error: unknown) {
+          const cloudError = error as CloudControlError;
+          if (cloudError.code === "ResourceNotFoundException") {
+            // Resource already deleted, not an error
+            console.log(`Resource ${resource.identifier} already deleted`);
+          } else {
+            console.error(
+              `Error deleting resource ${resource.identifier}:`,
+              error
+            );
+          }
         }
+      });
+
+      // Wait for all deletions to complete
+      await Promise.allSettled(deletionPromises);
+    } catch (error: unknown) {
+      const cloudError = error as CloudControlError;
+      if (cloudError.code === "ResourceNotFoundException") {
+        // No resources found, not an error
+        console.log(`No resources found matching pattern ${pattern}`);
+      } else {
+        console.error(`Error listing resources for pattern ${pattern}:`, error);
       }
-    } catch (error) {
-      console.error(
-        `Error listing resources for service ${serviceName}:`,
-        error
-      );
     }
   }
 );
+
+// Cache for memoizing resource handlers
+const resourceHandlers: Record<string, any> = {};
+
+/**
+ * Creates a memoized Resource handler for a CloudFormation resource type
+ *
+ * @param typeName CloudFormation resource type (e.g., "AWS::S3::Bucket")
+ * @returns A memoized Resource handler for the specified type
+ */
+export function createResourceType(typeName: string) {
+  // Return cached handler if it exists
+  if (resourceHandlers[typeName]) {
+    return resourceHandlers[typeName];
+  }
+
+  // Create a new handler
+  const handler = Resource(
+    typeName,
+    async function (this: Context<any>, id: string, props: any): Promise<any> {
+      // Initialize the Cloud Control API client
+      const client = createCloudControlClient();
+
+      if (this.phase === "delete") {
+        try {
+          if (this.output?.id) {
+            await client.deleteResource(typeName, this.output.id);
+          }
+        } catch (error) {
+          // Log but don't throw on deletion errors
+          console.error(`Error deleting resource ${typeName}:`, error);
+        }
+        return this.destroy();
+      }
+
+      try {
+        let response;
+
+        if (this.phase === "update" && this.output?.id) {
+          // For updates, we need to create a JSON Patch document
+          const patchDocument = {
+            desiredState: props,
+          };
+
+          response = await client.updateResource(
+            typeName,
+            this.output.id,
+            patchDocument
+          );
+
+          // Poll for completion
+          const result = await response;
+
+          if (result.status === "FAILED") {
+            throw new Error(`Failed to update ${typeName}: ${result.message}`);
+          }
+
+          // Get the current state after update
+          const currentState = await client.getResource(
+            typeName,
+            this.output.id
+          );
+          return this({
+            id: this.output.id,
+            ...currentState,
+          });
+        } else {
+          // Create new resource
+          response = await client.createResource(typeName, props);
+
+          // Poll for completion
+          const result = await response;
+
+          if (result.status === "FAILED") {
+            throw new Error(`Failed to create ${typeName}: ${result.message}`);
+          }
+
+          // Get the created resource state
+          const currentState = await client.getResource(
+            typeName,
+            result.identifier!
+          );
+          return this({
+            id: result.identifier!,
+            ...currentState,
+          });
+        }
+      } catch (error) {
+        console.error(`Error in ${this.phase} phase for ${typeName}:`, error);
+        throw error;
+      }
+    }
+  );
+
+  // Cache and return the handler
+  resourceHandlers[typeName] = handler;
+  return handler;
+}
 
 /**
  * AWS Cloud Control Resource
