@@ -12,11 +12,6 @@ import options from "./env.js";
 
 const app = await alchemy("alchemy:website", options);
 
-if (options.phase === "destroy") {
-  console.log("AHHHH");
-  process.exit(1);
-}
-
 const zone = await Zone("alchemy.run", {
   name: "alchemy.run",
   type: "full",
