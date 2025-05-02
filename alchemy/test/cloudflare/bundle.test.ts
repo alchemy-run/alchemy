@@ -55,4 +55,22 @@ describe("Bundle Worker Test", () => {
       await destroy(scope);
     }
   }, 120000); // Increased timeout for bundling and deployment
+
+  test("create, test, and delete worker from bundle with v1 compatibility (before Sept 23rd 2024)", async (scope) => {
+    try {
+      // Create a worker using the entrypoint file
+      expect(
+        Worker(`${BRANCH_PREFIX}-test-bundle-worker`, {
+          entrypoint: path.resolve(__dirname, "bundle-handler.ts"),
+          format: "esm",
+          url: true,
+          compatibilityDate: "2024-09-22", // v1 mode (before Sept 23rd 2024)
+          compatibilityFlags: ["nodejs_compat"],
+        }),
+      ).rejects.toThrow();
+    } finally {
+      // Clean up the worker
+      await destroy(scope);
+    }
+  }, 120000); // Increased timeout for bundling and deployment
 });
