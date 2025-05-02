@@ -82,5 +82,5 @@ await app.finalize() // <- will not delete any orphaned resources
 > ```
 > 3. Finally, execute your command `bash`:
 > ```sh
-> PHASE=read ./scripts/build.ts
+> PHASE=read bun ./scripts/build.ts
 > ```
