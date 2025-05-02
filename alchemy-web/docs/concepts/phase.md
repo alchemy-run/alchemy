@@ -50,7 +50,7 @@ const app = await alchemy("my-app", {
   phase: "read"
 });
 
-// 
+// will reconstruct itself from state and error if it does not exist
 const worker = await Worker("my-app", { .. });
 
 worker.url; // <- populated from `.alchemy/` state
