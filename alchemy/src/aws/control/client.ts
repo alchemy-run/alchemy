@@ -54,6 +54,8 @@ export class CloudControlError extends Error {
   operation?: string;
   resourceType?: string;
   resourceIdentifier?: string;
+  retryable?: boolean;
+  retryAfterSeconds?: number;
 }
 
 /**
@@ -94,75 +96,135 @@ export interface CloudControlOptions {
    * Maximum delay in milliseconds between polling attempts
    */
   maxPollingDelay?: number;
+
+  /**
+   * Overall timeout in milliseconds for operations
+   */
+  operationTimeout?: number;
+
+  /**
+   * Maximum number of retries for retryable errors
+   */
+  maxRetries?: number;
 }
 
+// List of retryable error codes
+const RETRYABLE_ERRORS = new Set([
+  "ThrottlingException",
+  "ServiceUnavailable",
+  "InternalFailure",
+  "TooManyRequestsException",
+  "RequestLimitExceeded",
+  "Throttling",
+  "ThrottlingException",
+  "LimitExceededException",
+]);
+
 /**
- * Resource description returned by GetResource
+ * Check if an error is retryable
  */
-export interface ResourceDescription {
-  /**
-   * Resource identifier
-   */
-  Identifier: string;
-
-  /**
-   * Resource properties
-   */
-  Properties: Record<string, any>;
-
-  /**
-   * Resource type name
-   */
-  TypeName: string;
+function isRetryableError(error: CloudControlError): boolean {
+  return (
+    RETRYABLE_ERRORS.has(error.code || "") ||
+    (error.statusCode !== undefined &&
+      (error.statusCode === 429 ||
+        (error.statusCode >= 500 && error.statusCode < 600))) ||
+    error.retryable === true
+  );
 }
 
 /**
- * Make a request to the Cloud Control API
+ * Make a request to the Cloud Control API with retry logic
  */
 async function request(
   client: AwsClient,
   region: string,
   method: string,
   action: string,
-  body?: any
+  body?: any,
+  maxRetries = 3
 ): Promise<any> {
   const url = new URL(`https://cloudcontrol.${region}.amazonaws.com/v1/`);
+  let lastError: CloudControlError | undefined;
+  let attempt = 0;
 
-  const init: RequestInit = {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Amz-Target": `CloudControl_20210730.${action}`,
-    },
-  };
+  while (attempt <= maxRetries) {
+    try {
+      const init: RequestInit = {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Amz-Target": `CloudControl_20210730.${action}`,
+        },
+      };
 
-  if (body) {
-    init.body = JSON.stringify(body);
+      if (body) {
+        init.body = JSON.stringify(body);
+      }
+
+      const signedRequest = await client.sign(url.toString(), init);
+      const response = await fetch(signedRequest);
+
+      if (!response.ok) {
+        const errorData = (await response.json().catch(() => ({
+          message: response.statusText,
+        }))) as { message?: string; code?: string; retryable?: boolean };
+
+        const error = new CloudControlError(
+          errorData.message || "Unknown Cloud Control API error"
+        );
+        error.code = errorData.code;
+        error.requestId = response.headers.get("x-amzn-requestid") || undefined;
+        error.statusCode = response.status;
+        error.operation = action;
+        error.retryable = errorData.retryable;
+        error.retryAfterSeconds = parseInt(
+          response.headers.get("retry-after") || "0",
+          10
+        );
+
+        if (isRetryableError(error)) {
+          lastError = error;
+          const retryDelay = error.retryAfterSeconds
+            ? error.retryAfterSeconds * 1000
+            : Math.min(Math.pow(2, attempt) * 100, 5000);
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          attempt++;
+          continue;
+        }
+
+        throw error;
+      }
+
+      return response.json();
+    } catch (error: any) {
+      if (error instanceof CloudControlError) {
+        throw error;
+      }
+
+      // Handle network errors
+      const networkError = new CloudControlError(
+        error.message || "Network error during Cloud Control API request"
+      );
+      networkError.retryable = true;
+
+      if (attempt < maxRetries) {
+        lastError = networkError;
+        const retryDelay = Math.min(Math.pow(2, attempt) * 100, 5000);
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        attempt++;
+        continue;
+      }
+
+      throw networkError;
+    }
   }
 
-  const signedRequest = await client.sign(url.toString(), init);
-  const response = await fetch(signedRequest);
-
-  if (!response.ok) {
-    const errorData = (await response.json().catch(() => ({
-      message: response.statusText,
-    }))) as { message?: string; code?: string };
-
-    const error = new CloudControlError(
-      errorData.message || "Unknown Cloud Control API error"
-    );
-    error.code = errorData.code;
-    error.requestId = response.headers.get("x-amzn-requestid") || undefined;
-    error.statusCode = response.status;
-    error.operation = action;
-    throw error;
-  }
-
-  return response.json();
+  throw lastError || new CloudControlError("Maximum retries exceeded");
 }
 
 /**
- * Poll for operation completion
+ * Poll for operation completion with improved timeout and error handling
  */
 async function pollOperation(
   client: AwsClient,
@@ -171,36 +233,88 @@ async function pollOperation(
   options: Required<
     Pick<
       CloudControlOptions,
-      "maxPollingAttempts" | "initialPollingDelay" | "maxPollingDelay"
+      | "maxPollingAttempts"
+      | "initialPollingDelay"
+      | "maxPollingDelay"
+      | "operationTimeout"
     >
   >
 ): Promise<ProgressEvent> {
   let attempts = 0;
   let delay = options.initialPollingDelay;
+  const startTime = Date.now();
 
   while (attempts < options.maxPollingAttempts) {
-    const response = await request(
-      client,
-      region,
-      "POST",
-      "GetResourceRequestStatus",
-      {
-        RequestToken: operationId,
-      }
-    );
-
-    const event = response.ProgressEvent;
-    if (event.status === "SUCCESS" || event.status === "FAILED") {
-      return event;
+    if (Date.now() - startTime > options.operationTimeout) {
+      throw new CloudControlError(
+        `Operation ${operationId} timed out after ${
+          options.operationTimeout / 1000
+        } seconds`
+      );
     }
 
-    await new Promise((resolve) => setTimeout(resolve, delay));
-    delay = Math.min(delay * 2, options.maxPollingDelay);
-    attempts++;
+    try {
+      const response = await request(
+        client,
+        region,
+        "POST",
+        "GetResourceRequestStatus",
+        {
+          RequestToken: operationId,
+        }
+      );
+
+      const event = response.ProgressEvent;
+
+      // Add more detailed logging for operation progress
+      console.debug(
+        `Operation ${operationId} status: ${event.status}${
+          event.message ? ` - ${event.message}` : ""
+        }`
+      );
+
+      if (event.status === "SUCCESS") {
+        return event;
+      }
+
+      if (event.status === "FAILED") {
+        const error = new CloudControlError(
+          `Operation ${operationId} failed: ${event.message}`
+        );
+        error.code = event.errorCode;
+        error.operation = "GetResourceRequestStatus";
+        throw error;
+      }
+
+      // Use the suggested retry delay if provided
+      const waitTime = event.retryAfterSeconds
+        ? event.retryAfterSeconds * 1000
+        : delay;
+
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+      delay = Math.min(delay * 2, options.maxPollingDelay);
+      attempts++;
+    } catch (error: any) {
+      if (error instanceof CloudControlError && !isRetryableError(error)) {
+        throw error;
+      }
+
+      // For retryable errors, continue polling
+      console.warn(
+        `Error polling operation ${operationId} (attempt ${attempts + 1}):`,
+        error
+      );
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(delay * 2, options.maxPollingDelay))
+      );
+      delay = Math.min(delay * 2, options.maxPollingDelay);
+      attempts++;
+    }
   }
 
   throw new CloudControlError(
-    `Operation ${operationId} timed out after ${attempts} attempts`
+    `Operation ${operationId} polling exceeded maximum attempts (${options.maxPollingAttempts})`
   );
 }
 
@@ -212,6 +326,8 @@ export function createCloudControlClient(options: CloudControlOptions = {}) {
   const maxPollingAttempts = options.maxPollingAttempts || 30;
   const initialPollingDelay = options.initialPollingDelay || 1000;
   const maxPollingDelay = options.maxPollingDelay || 10000;
+  const operationTimeout = options.operationTimeout || 300000; // 5 minutes default
+  const maxRetries = options.maxRetries || 3;
 
   const client = new AwsClient({
     accessKeyId: options.accessKeyId || process.env.AWS_ACCESS_KEY_ID || "",
@@ -228,15 +344,23 @@ export function createCloudControlClient(options: CloudControlOptions = {}) {
       typeName: string,
       desiredState: Record<string, any>
     ): Promise<ProgressEvent> {
-      const response = await request(client, region, "POST", "CreateResource", {
-        TypeName: typeName,
-        DesiredState: desiredState,
-      });
+      const response = await request(
+        client,
+        region,
+        "POST",
+        "CreateResource",
+        {
+          TypeName: typeName,
+          DesiredState: desiredState,
+        },
+        maxRetries
+      );
 
       return pollOperation(client, region, response.ProgressEvent.operationId, {
         maxPollingAttempts,
         initialPollingDelay,
         maxPollingDelay,
+        operationTimeout,
       });
     },
 
@@ -247,10 +371,17 @@ export function createCloudControlClient(options: CloudControlOptions = {}) {
       typeName: string,
       identifier: string
     ): Promise<Record<string, any>> {
-      const response = await request(client, region, "POST", "GetResource", {
-        TypeName: typeName,
-        Identifier: identifier,
-      });
+      const response = await request(
+        client,
+        region,
+        "POST",
+        "GetResource",
+        {
+          TypeName: typeName,
+          Identifier: identifier,
+        },
+        maxRetries
+      );
 
       return response.ResourceDescription.Properties;
     },
@@ -263,16 +394,24 @@ export function createCloudControlClient(options: CloudControlOptions = {}) {
       identifier: string,
       patchDocument: Record<string, any>
     ): Promise<ProgressEvent> {
-      const response = await request(client, region, "POST", "UpdateResource", {
-        TypeName: typeName,
-        Identifier: identifier,
-        PatchDocument: JSON.stringify(patchDocument),
-      });
+      const response = await request(
+        client,
+        region,
+        "POST",
+        "UpdateResource",
+        {
+          TypeName: typeName,
+          Identifier: identifier,
+          PatchDocument: JSON.stringify(patchDocument),
+        },
+        maxRetries
+      );
 
       return pollOperation(client, region, response.ProgressEvent.operationId, {
         maxPollingAttempts,
         initialPollingDelay,
         maxPollingDelay,
+        operationTimeout,
       });
     },
 
@@ -283,15 +422,23 @@ export function createCloudControlClient(options: CloudControlOptions = {}) {
       typeName: string,
       identifier: string
     ): Promise<ProgressEvent> {
-      const response = await request(client, region, "POST", "DeleteResource", {
-        TypeName: typeName,
-        Identifier: identifier,
-      });
+      const response = await request(
+        client,
+        region,
+        "POST",
+        "DeleteResource",
+        {
+          TypeName: typeName,
+          Identifier: identifier,
+        },
+        maxRetries
+      );
 
       return pollOperation(client, region, response.ProgressEvent.operationId, {
         maxPollingAttempts,
         initialPollingDelay,
         maxPollingDelay,
+        operationTimeout,
       });
     },
 
@@ -305,10 +452,17 @@ export function createCloudControlClient(options: CloudControlOptions = {}) {
       resources: Array<{ identifier: string; properties: Record<string, any> }>;
       nextToken?: string;
     }> {
-      const response = await request(client, region, "POST", "ListResources", {
-        TypeName: typeName,
-        NextToken: nextToken,
-      });
+      const response = await request(
+        client,
+        region,
+        "POST",
+        "ListResources",
+        {
+          TypeName: typeName,
+          NextToken: nextToken,
+        },
+        maxRetries
+      );
 
       return {
         resources: response.ResourceDescriptions.map((desc: any) => ({
