@@ -142,12 +142,6 @@ function handleUnenvAliasedPackages(
         namespace: REQUIRED_UNENV_ALIAS_NAMESPACE,
       };
     }
-
-    // Resolve the alias to its absolute path and potentially mark it as external
-    return {
-      path: aliasAbsolute[args.path],
-      external: external.includes(unresolvedAlias),
-    };
   });
 
   build.onLoad(
