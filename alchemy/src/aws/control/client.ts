@@ -1,9 +1,9 @@
 import { AwsClient } from "aws4fetch";
 
 /**
- * Options for Cloud Control API client
+ * Options for Cloud Control API requests
  */
-export interface CloudControlClientOptions {
+export interface CloudControlOptions {
   /**
    * AWS region to use (defaults to us-east-1)
    */
@@ -23,21 +23,6 @@ export interface CloudControlClientOptions {
    * AWS session token for temporary credentials
    */
   sessionToken?: string;
-
-  /**
-   * Maximum number of attempts for polling operations
-   */
-  maxPollingAttempts?: number;
-
-  /**
-   * Initial delay in milliseconds between polling attempts
-   */
-  initialPollingDelay?: number;
-
-  /**
-   * Maximum delay in milliseconds between polling attempts
-   */
-  maxPollingDelay?: number;
 }
 
 /**
@@ -107,196 +92,235 @@ export interface ProgressEvent {
 }
 
 /**
- * Client for AWS Cloud Control API
+ * Resource description returned by GetResource
  */
-export class CloudControlClient {
-  private readonly client: AwsClient;
-  private readonly baseUrl: string;
-  private readonly maxPollingAttempts: number;
-  private readonly initialPollingDelay: number;
-  private readonly maxPollingDelay: number;
+export interface ResourceDescription {
+  /**
+   * Resource identifier
+   */
+  Identifier: string;
 
   /**
-   * Create a new Cloud Control API client
+   * Resource properties
    */
-  constructor(options: CloudControlClientOptions = {}) {
-    const region = options.region || process.env.AWS_REGION || "us-east-1";
-    const accessKeyId = options.accessKeyId || process.env.AWS_ACCESS_KEY_ID;
-    const secretAccessKey =
-      options.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY;
-
-    if (!accessKeyId || !secretAccessKey) {
-      throw new Error(
-        "AWS credentials not found. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables."
-      );
-    }
-
-    this.client = new AwsClient({
-      accessKeyId,
-      secretAccessKey,
-      sessionToken: options.sessionToken || process.env.AWS_SESSION_TOKEN,
-      service: "cloudcontrol",
-      region,
-    });
-
-    this.baseUrl = `https://cloudcontrol.${region}.amazonaws.com/`;
-    this.maxPollingAttempts = options.maxPollingAttempts || 60; // 5 minutes with 5s initial delay
-    this.initialPollingDelay = options.initialPollingDelay || 5000; // 5 seconds
-    this.maxPollingDelay = options.maxPollingDelay || 30000; // 30 seconds
-  }
+  Properties: Record<string, any>;
 
   /**
-   * Make a signed request to the Cloud Control API
+   * Resource type name
    */
-  private async request(
-    method: string,
-    path: string,
-    body?: any
-  ): Promise<any> {
-    const url = new URL(path, this.baseUrl);
-    const init: RequestInit = {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-    };
-
-    if (body) {
-      init.body = JSON.stringify(body);
-    }
-
-    const signedRequest = await this.client.sign(url.toString(), init);
-    const response = await fetch(signedRequest);
-
-    if (!response.ok) {
-      const errorData = (await response
-        .json()
-        .catch(() => ({ message: response.statusText }))) as {
-        message: string;
-      };
-      throw new Error(`Cloud Control API error: ${errorData.message}`);
-    }
-
-    return response.json();
-  }
-
-  /**
-   * Poll for operation completion
-   */
-  private async pollOperation(
-    operationType: string,
-    requestToken: string
-  ): Promise<ProgressEvent> {
-    let attempts = 0;
-    let delay = this.initialPollingDelay;
-
-    while (attempts < this.maxPollingAttempts) {
-      const response = await this.request("GET", "/progress", {
-        OperationType: operationType,
-        RequestToken: requestToken,
-      });
-
-      const event = response.ProgressEvent;
-
-      if (event.status === "SUCCESS") {
-        return event;
-      }
-
-      if (event.status === "FAILED" || event.status === "CANCEL_COMPLETE") {
-        throw new Error(
-          `Operation failed: ${event.errorMessage || event.statusMessage}`
-        );
-      }
-
-      // Exponential backoff with max delay
-      delay = Math.min(delay * 1.5, this.maxPollingDelay);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      attempts++;
-    }
-
-    throw new Error("Operation timed out");
-  }
-
-  /**
-   * Create a new resource
-   */
-  async createResource(
-    typeName: string,
-    desiredState: Record<string, any>
-  ): Promise<Record<string, any>> {
-    const response = await this.request("POST", "/resources", {
-      TypeName: typeName,
-      DesiredState: desiredState,
-    });
-
-    const event = await this.pollOperation(
-      "CREATE_RESOURCE",
-      response.ProgressEvent.RequestToken
-    );
-
-    return event.resourceModel || {};
-  }
-
-  /**
-   * Get an existing resource
-   */
-  async getResource(
-    typeName: string,
-    identifier: string
-  ): Promise<Record<string, any>> {
-    const response = await this.request(
-      "GET",
-      `/resources/${typeName}/${identifier}`
-    );
-    return response.ResourceDescription.Properties;
-  }
-
-  /**
-   * Update an existing resource
-   */
-  async updateResource(
-    typeName: string,
-    identifier: string,
-    patchDocument: Record<string, any>
-  ): Promise<Record<string, any>> {
-    const response = await this.request(
-      "PATCH",
-      `/resources/${typeName}/${identifier}`,
-      {
-        PatchDocument: patchDocument,
-      }
-    );
-
-    const event = await this.pollOperation(
-      "UPDATE_RESOURCE",
-      response.ProgressEvent.RequestToken
-    );
-
-    return event.resourceModel || {};
-  }
-
-  /**
-   * Delete a resource
-   */
-  async deleteResource(typeName: string, identifier: string): Promise<void> {
-    const response = await this.request(
-      "DELETE",
-      `/resources/${typeName}/${identifier}`
-    );
-
-    await this.pollOperation(
-      "DELETE_RESOURCE",
-      response.ProgressEvent.RequestToken
-    );
-  }
+  TypeName: string;
 }
 
 /**
- * Create a new Cloud Control API client
+ * Make a signed request to the Cloud Control API
  */
-export function createCloudControlClient(
-  options: CloudControlClientOptions = {}
-): CloudControlClient {
-  return new CloudControlClient(options);
+export async function request(
+  client: AwsClient,
+  region: string,
+  method: string,
+  path: string,
+  body?: any
+): Promise<any> {
+  const baseUrl = `https://cloudcontrol.${region}.api.aws`;
+  const url = new URL(path, baseUrl);
+  const init: RequestInit = {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+  };
+
+  if (body) {
+    init.body = JSON.stringify(body);
+  }
+
+  const signedRequest = await client.sign(url.toString(), init);
+  const response = await fetch(signedRequest);
+
+  if (!response.ok) {
+    const errorData = (await response.json().catch(() => ({
+      message: response.statusText,
+    }))) as { message?: string; code?: string };
+
+    const error = new Error(
+      errorData.message || `Cloud Control API error: ${response.statusText}`
+    );
+    error.name = "CloudControlError";
+    throw error;
+  }
+
+  return response.json();
+}
+
+/**
+ * Poll for operation completion
+ */
+export async function pollOperation(
+  client: AwsClient,
+  region: string,
+  operationType: string,
+  requestToken: string,
+  maxAttempts = 60,
+  initialDelay = 5000,
+  maxDelay = 30000
+): Promise<ProgressEvent> {
+  let attempts = 0;
+  let delay = initialDelay;
+
+  while (attempts < maxAttempts) {
+    const response = await request(client, region, "GET", "/progress", {
+      OperationType: operationType,
+      RequestToken: requestToken,
+    });
+
+    const event = response.ProgressEvent;
+
+    if (event.status === "SUCCESS") {
+      return event;
+    }
+
+    if (event.status === "FAILED" || event.status === "CANCEL_COMPLETE") {
+      throw new Error(
+        event.errorMessage || event.statusMessage || "Operation failed"
+      );
+    }
+
+    // Exponential backoff with max delay
+    delay = Math.min(delay * 1.5, maxDelay);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    attempts++;
+  }
+
+  throw new Error("Operation timed out");
+}
+
+/**
+ * Get an AWS4Fetch client for Cloud Control API
+ */
+export function getClient(options: CloudControlOptions = {}): {
+  client: AwsClient;
+  region: string;
+} {
+  const region = options.region || process.env.AWS_REGION || "us-east-1";
+  const accessKeyId = options.accessKeyId || process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey =
+    options.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY;
+
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error(
+      "AWS credentials not found. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables."
+    );
+  }
+
+  const client = new AwsClient({
+    accessKeyId,
+    secretAccessKey,
+    sessionToken: options.sessionToken || process.env.AWS_SESSION_TOKEN,
+    service: "cloudcontrol",
+    region,
+  });
+
+  return { client, region };
+}
+
+/**
+ * Create a new resource
+ */
+export async function createResource(
+  options: CloudControlOptions,
+  typeName: string,
+  desiredState: Record<string, any>
+): Promise<Record<string, any>> {
+  const { client, region } = getClient(options);
+
+  const response = await request(client, region, "POST", "/resources", {
+    TypeName: typeName,
+    DesiredState: desiredState,
+  });
+
+  const event = await pollOperation(
+    client,
+    region,
+    "CREATE_RESOURCE",
+    response.ProgressEvent.RequestToken
+  );
+
+  return event.resourceModel || {};
+}
+
+/**
+ * Get an existing resource
+ */
+export async function getResource(
+  options: CloudControlOptions,
+  typeName: string,
+  identifier: string
+): Promise<Record<string, any>> {
+  const { client, region } = getClient(options);
+
+  const response = await request(
+    client,
+    region,
+    "GET",
+    `/resources/${typeName}/${identifier}`
+  );
+
+  return response.ResourceDescription.Properties;
+}
+
+/**
+ * Update an existing resource
+ */
+export async function updateResource(
+  options: CloudControlOptions,
+  typeName: string,
+  identifier: string,
+  patchDocument: Record<string, any>
+): Promise<Record<string, any>> {
+  const { client, region } = getClient(options);
+
+  const response = await request(
+    client,
+    region,
+    "PATCH",
+    `/resources/${typeName}/${identifier}`,
+    {
+      PatchDocument: patchDocument,
+    }
+  );
+
+  const event = await pollOperation(
+    client,
+    region,
+    "UPDATE_RESOURCE",
+    response.ProgressEvent.RequestToken
+  );
+
+  return event.resourceModel || {};
+}
+
+/**
+ * Delete a resource
+ */
+export async function deleteResource(
+  options: CloudControlOptions,
+  typeName: string,
+  identifier: string
+): Promise<void> {
+  const { client, region } = getClient(options);
+
+  const response = await request(
+    client,
+    region,
+    "DELETE",
+    `/resources/${typeName}/${identifier}`
+  );
+
+  await pollOperation(
+    client,
+    region,
+    "DELETE_RESOURCE",
+    response.ProgressEvent.RequestToken
+  );
 }
