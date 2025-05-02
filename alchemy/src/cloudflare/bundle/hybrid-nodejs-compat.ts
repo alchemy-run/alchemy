@@ -1,12 +1,12 @@
-/**
- * Copied from https://github.com/cloudflare/workers-sdk/blob/main/packages/wrangler/src/deployment-bundle/esbuild-plugins/hybrid-nodejs-compat.ts#L17
- */
-
 import type { Plugin, PluginBuild } from "esbuild";
 import assert from "node:assert";
 import { builtinModules } from "node:module";
 import nodePath from "node:path";
 import { dedent } from "../../util/dedent.js";
+
+/**
+ * Copied from https://github.com/cloudflare/workers-sdk/blob/main/packages/wrangler/src/deployment-bundle/esbuild-plugins/hybrid-nodejs-compat.ts#L17
+ */
 
 const REQUIRED_NODE_BUILT_IN_NAMESPACE = "node-built-in-modules";
 const REQUIRED_UNENV_ALIAS_NAMESPACE = "required-unenv-alias";
@@ -56,7 +56,7 @@ function errorOnServiceWorkerFormat(build: PluginBuild) {
       const pathList = new Intl.ListFormat("en-US").format(
         Array.from(paths.keys())
           .map((p) => `"${p}"`)
-          .sort()
+          .sort(),
       );
       return {
         errors: [
@@ -98,7 +98,7 @@ function handleRequireCallsToNodeJSBuiltins(build: PluginBuild) {
             module.exports = libDefault;`,
         loader: "js",
       };
-    }
+    },
   );
 }
 
@@ -112,7 +112,7 @@ function handleRequireCallsToNodeJSBuiltins(build: PluginBuild) {
 function handleUnenvAliasedPackages(
   build: PluginBuild,
   alias: Record<string, string>,
-  external: readonly string[]
+  external: readonly string[],
 ) {
   // esbuild expects alias paths to be absolute
   const aliasAbsolute: Record<string, string> = {};
@@ -125,7 +125,7 @@ function handleUnenvAliasedPackages(
   }
 
   const UNENV_ALIAS_RE = new RegExp(
-    `^(${Object.keys(aliasAbsolute).join("|")})$`
+    `^(${Object.keys(aliasAbsolute).join("|")})$`,
   );
 
   build.onResolve({ filter: UNENV_ALIAS_RE }, (args) => {
@@ -164,7 +164,7 @@ function handleUnenvAliasedPackages(
                 );`,
         loader: "js",
       };
-    }
+    },
   );
 }
 
@@ -177,13 +177,13 @@ function handleUnenvAliasedPackages(
 function handleNodeJSGlobals(
   build: PluginBuild,
   inject: Record<string, string | readonly string[]>,
-  polyfill: readonly string[]
+  polyfill: readonly string[],
 ) {
   const UNENV_VIRTUAL_MODULE_RE = /_virtual_unenv_global_polyfill-(.+)$/;
   const prefix = nodePath.resolve(
     // getBasePath(),
     import.meta.dirname,
-    "_virtual_unenv_global_polyfill-"
+    "_virtual_unenv_global_polyfill-",
   );
 
   /**
@@ -209,10 +209,9 @@ function handleNodeJSGlobals(
       injectsByModule.set(module, []);
       virtualModulePathToSpecifier.set(
         prefix + module.replaceAll("/", "-"),
-        module
+        module,
       );
     }
-    // eslint-disable-next-line  @typescript-eslint/no-non-null-assertion
     injectsByModule.get(module)!.push({ injectedName, exportName, importName });
   }
 
@@ -235,7 +234,7 @@ function handleNodeJSGlobals(
     assert(injects, `Expected ${module} to inject values`);
 
     const imports = injects.map(({ exportName, importName }) =>
-      importName === exportName ? exportName : `${exportName} as ${importName}`
+      importName === exportName ? exportName : `${exportName} as ${importName}`,
     );
 
     return {
