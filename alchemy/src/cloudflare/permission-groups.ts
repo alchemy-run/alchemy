@@ -103,7 +103,7 @@ export const PermissionGroups = Resource(
   async function (
     this: Context<PermissionGroups>,
     id: string,
-    options: CloudflareApiOptions = {}
+    options: CloudflareApiOptions = {},
   ): Promise<PermissionGroups> {
     // Only create and update phases are supported
     if (this.phase === "delete") {
@@ -115,12 +115,12 @@ export const PermissionGroups = Resource(
 
     // Fetch permission groups from Cloudflare API
     const response = await api.get(
-      `/accounts/${api.accountId}/tokens/permission_groups`
+      `/accounts/${api.accountId}/tokens/permission_groups`,
     );
 
     if (!response.ok) {
       throw new Error(
-        `Failed to fetch permission groups: ${response.statusText}`
+        `Failed to fetch permission groups: ${response.statusText}`,
       );
     }
 
@@ -128,14 +128,14 @@ export const PermissionGroups = Resource(
 
     if (!data.success || !data.result) {
       throw new Error(
-        `API returned error: ${data.errors?.[0]?.message || "Unknown error"}`
+        `API returned error: ${data.errors?.[0]?.message || "Unknown error"}`,
       );
     }
 
     return this(
       Object.fromEntries(
-        data.result.map((group) => [group.name, group])
-      ) as PermissionGroups
+        data.result.map((group) => [group.name, group]),
+      ) as PermissionGroups,
     );
-  }
+  },
 );

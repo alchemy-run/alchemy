@@ -83,7 +83,7 @@ export const VectorizeMetadataIndex = Resource(
   async function (
     this: Context<VectorizeMetadataIndex>,
     id: string,
-    props: VectorizeMetadataIndexProps
+    props: VectorizeMetadataIndexProps,
   ): Promise<VectorizeMetadataIndex> {
     const api = await createCloudflareApi(props);
     const indexName = props.index.name;
@@ -105,24 +105,25 @@ export const VectorizeMetadataIndex = Resource(
         }
       }
       return this.destroy();
-    }if (this.phase === "update") {
+    }
+    if (this.phase === "update") {
       // Update operation is not supported
       throw new Error(
         "Updating Vectorize metadata indexes is not supported by the Cloudflare API. " +
-          "To change a metadata index, delete it and create a new one with the desired configuration."
+          "To change a metadata index, delete it and create a new one with the desired configuration.",
       );
     }
-      const indexData = await createMetadataIndex(api, indexName, props);
+    const indexData = await createMetadataIndex(api, indexName, props);
 
-      return this({
-        id: propertyName, // Use propertyName as ID
-        index: props.index,
-        propertyName: props.propertyName,
-        indexType: props.indexType,
-        accountId: api.accountId,
-        mutationId: indexData.result.mutationId,
-      });
-  }
+    return this({
+      id: propertyName, // Use propertyName as ID
+      index: props.index,
+      propertyName: props.propertyName,
+      indexType: props.indexType,
+      accountId: api.accountId,
+      mutationId: indexData.result.mutationId,
+    });
+  },
 );
 
 interface CloudflareMetadataIndexResponse {
@@ -152,7 +153,7 @@ interface CloudflareMetadataIndexListResponse {
 export async function createMetadataIndex(
   api: CloudflareApi,
   indexName: string,
-  props: VectorizeMetadataIndexProps
+  props: VectorizeMetadataIndexProps,
 ): Promise<CloudflareMetadataIndexResponse> {
   // Create new metadata index
   const createPayload = {
@@ -162,7 +163,7 @@ export async function createMetadataIndex(
 
   const createResponse = await api.post(
     `/accounts/${api.accountId}/vectorize/v2/indexes/${indexName}/metadata_index/create`,
-    createPayload
+    createPayload,
   );
 
   if (!createResponse.ok) {
@@ -170,7 +171,7 @@ export async function createMetadataIndex(
       createResponse,
       "creating",
       "Vectorize metadata index",
-      props.propertyName
+      props.propertyName,
     );
   }
 
@@ -183,13 +184,13 @@ export async function createMetadataIndex(
 export async function deleteMetadataIndex(
   api: CloudflareApi,
   indexName: string,
-  propertyName: string
+  propertyName: string,
 ): Promise<void> {
   const deleteResponse = await api.post(
     `/accounts/${api.accountId}/vectorize/v2/indexes/${indexName}/metadata_index/delete`,
     {
       propertyName,
-    }
+    },
   );
 
   if (!deleteResponse.ok) {
@@ -197,7 +198,7 @@ export async function deleteMetadataIndex(
       deleteResponse,
       "deleting",
       "Vectorize metadata index",
-      propertyName
+      propertyName,
     );
   }
 }
@@ -207,12 +208,12 @@ export async function deleteMetadataIndex(
  */
 export async function listMetadataIndexes(
   api: CloudflareApi,
-  indexName: string
+  indexName: string,
 ): Promise<
   { propertyName: string; indexType: "string" | "number" | "boolean" }[]
 > {
   const response = await api.get(
-    `/accounts/${api.accountId}/vectorize/v2/indexes/${indexName}/metadata_index/list`
+    `/accounts/${api.accountId}/vectorize/v2/indexes/${indexName}/metadata_index/list`,
   );
 
   if (response.status === 410) {
@@ -223,7 +224,7 @@ export async function listMetadataIndexes(
   if (!response.ok) {
     throw new CloudflareApiError(
       `Failed to list metadata indexes: ${response.statusText}`,
-      response
+      response,
     );
   }
 

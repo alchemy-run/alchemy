@@ -13,7 +13,7 @@ export type TanStackStart<B extends Bindings> = B extends { ASSETS: any }
 
 export async function TanStackStart<B extends Bindings>(
   id: string,
-  props?: Partial<TanStackStartProps<B>>
+  props?: Partial<TanStackStartProps<B>>,
 ): Promise<TanStackStart<B>> {
   return Website(id, {
     ...props,

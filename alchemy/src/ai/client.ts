@@ -53,7 +53,7 @@ export function createModel(config: ClientConfig) {
   if (config.model?.provider === "anthropic") {
     return anthropic(config.model?.id ?? "claude-3-7-sonnet-latest");
   }
-    return openai(config.model?.id ?? "gpt-4o");
+  return openai(config.model?.id ?? "gpt-4o");
 }
 
 /**
@@ -103,7 +103,7 @@ export async function withRateLimitRetry<T>(fn: () => Promise<T>): Promise<T> {
       // Calculate delay with exponential backoff
       const delay = Math.min(
         INITIAL_RETRY_DELAY * 2 ** retryCount,
-        MAX_RETRY_TIME - timeElapsed
+        MAX_RETRY_TIME - timeElapsed,
       );
 
       console.log(`Retrying in ${delay}ms`);

@@ -32,7 +32,7 @@ export default defineConfig({
       props.theme ?? {
         light: "light-plus",
         dark: "dark-plus",
-      }
+      },
     )},
     config: (md) => md.use(footnotePlugin),
   },
@@ -45,6 +45,6 @@ export default defineConfig({
     socialLinks: props.themeConfig.socialLinks ?? [],
   })}
 });
-`
+`,
   );
 }

@@ -163,7 +163,7 @@ export const TypeScriptFile = Resource(
   async function (
     this: Context<TypeScriptFile>,
     id: string,
-    props: TypeScriptFileProps
+    props: TypeScriptFileProps,
   ): Promise<TypeScriptFile> {
     // Handle delete phase
     if (this.phase === "delete") {
@@ -206,7 +206,7 @@ export const TypeScriptFile = Resource(
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid TypeScript code: ${retryResult.error}`
+          `Failed to generate valid TypeScript code: ${retryResult.error}`,
         );
       }
 
@@ -223,7 +223,7 @@ export const TypeScriptFile = Resource(
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
-  }
+  },
 );
 
 /**
@@ -234,7 +234,7 @@ export const TypeScriptFile = Resource(
  * @returns The extracted TypeScript code or error message
  */
 async function extractTypeScriptCode(
-  text: string
+  text: string,
 ): Promise<{ code: string; error?: string }> {
   const tsCodeRegex = /```ts\s*([\s\S]*?)```/g;
   const matches = Array.from(text.matchAll(tsCodeRegex));

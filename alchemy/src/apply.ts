@@ -18,7 +18,7 @@ export interface ApplyOptions {
 export async function apply<Out extends Resource>(
   resource: PendingResource<Out>,
   props: ResourceProps | undefined,
-  options?: ApplyOptions
+  options?: ApplyOptions,
 ): Promise<Awaited<Out>> {
   const scope = resource.Scope;
   try {
@@ -79,7 +79,7 @@ export async function apply<Out extends Resource>(
 
     if (!quiet) {
       console.log(
-        `${phase === "create" ? "Create" : "Update"}:  "${resource.FQN}"`
+        `${phase === "create" ? "Create" : "Update"}:  "${resource.FQN}"`,
       );
     }
 
@@ -99,7 +99,7 @@ export async function apply<Out extends Resource>(
       replace: () => {
         if (isReplaced) {
           console.warn(
-            `Resource ${resource.Kind} ${resource.FQN} is already marked as REPLACE`
+            `Resource ${resource.Kind} ${resource.FQN} is already marked as REPLACE`,
           );
           return;
         }
@@ -112,11 +112,11 @@ export async function apply<Out extends Resource>(
       {
         isResource: true,
       },
-      async () => provider.handler.bind(ctx)(resource.ID, props)
+      async () => provider.handler.bind(ctx)(resource.ID, props),
     );
     if (!quiet) {
       console.log(
-        `${phase === "create" ? "Created" : "Updated"}: "${resource.FQN}"`
+        `${phase === "create" ? "Created" : "Updated"}: "${resource.FQN}"`,
       );
     }
 

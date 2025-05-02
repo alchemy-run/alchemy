@@ -4,7 +4,7 @@ import { Resource } from "../resource.js";
 import type { Secret } from "../secret.js";
 import { sha256 } from "../util/sha256.js";
 import { type CloudflareApiOptions, createCloudflareApi } from "./api.js";
- 
+
 /**
  * Permission group for a token policy
  */

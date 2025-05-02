@@ -149,7 +149,7 @@ export const HTMLFile = Resource(
   async function (
     this: Context<HTMLFile>,
     id: string,
-    props: HTMLFileProps
+    props: HTMLFileProps,
   ): Promise<HTMLFile> {
     // Handle deletion phase
     if (this.phase === "delete") {
@@ -191,7 +191,7 @@ export const HTMLFile = Resource(
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid HTML code: ${retryResult.error}`
+          `Failed to generate valid HTML code: ${retryResult.error}`,
         );
       }
 
@@ -208,7 +208,7 @@ export const HTMLFile = Resource(
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
-  }
+  },
 );
 
 /**
@@ -219,7 +219,7 @@ export const HTMLFile = Resource(
  * @returns The extracted HTML code or error message
  */
 async function extractHTMLCode(
-  text: string
+  text: string,
 ): Promise<{ code: string; error?: string }> {
   const htmlCodeRegex = /```html\s*([\s\S]*?)```/g;
   const matches = Array.from(text.matchAll(htmlCodeRegex));

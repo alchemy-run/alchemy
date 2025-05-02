@@ -117,12 +117,13 @@ export const Exec = Resource(
   async function (
     this: Context<Exec>,
     id: string,
-    props: ExecProps
+    props: ExecProps,
   ): Promise<Exec> {
     if (this.phase === "delete") {
       // Nothing to actually delete for an exec command
       return this.destroy();
-    }if (
+    }
+    if (
       this.phase === "update" &&
       props.memoize &&
       this.output?.command === props.command
@@ -130,73 +131,73 @@ export const Exec = Resource(
       // If memoize is enabled and the command hasn't changed, return the existing output
       return this.output;
     }
-      // Default values
-      let stdout = "";
-      let stderr = "";
-      let exitCode = 0;
+    // Default values
+    let stdout = "";
+    let stderr = "";
+    let exitCode = 0;
 
-      // Default to inheriting stdio unless explicitly set to false
-      const inheritStdio = props.inheritStdio !== false;
+    // Default to inheriting stdio unless explicitly set to false
+    const inheritStdio = props.inheritStdio !== false;
 
-      try {
-        // Parse the command into command and args
-        const [cmd, ...args] = props.command.split(/\s+/);
+    try {
+      // Parse the command into command and args
+      const [cmd, ...args] = props.command.split(/\s+/);
 
-        // Use spawn for better stdio control
-        const childProcess = spawn(cmd, args, {
-          cwd: props.cwd || process.cwd(),
-          env: { ...process.env, ...props.env },
-          shell: true, // Use shell to handle complex commands
-          stdio: inheritStdio ? "inherit" : "pipe", // Inherit stdio when requested
-        });
-
-        if (!inheritStdio) {
-          // If not inheriting stdio, collect output manually
-          childProcess.stdout?.on("data", (data) => {
-            stdout += data.toString();
-          });
-
-          childProcess.stderr?.on("data", (data) => {
-            stderr += data.toString();
-          });
-        }
-
-        // Wait for the process to complete
-        exitCode = await new Promise<number>((resolve, reject) => {
-          childProcess.on("close", (code) => {
-            resolve(code || 0);
-          });
-
-          childProcess.on("error", (err) => {
-            stderr += err.toString();
-            resolve(1);
-          });
-        });
-      } catch (error: any) {
-        // If not throwing, capture the error information
-        exitCode = 1;
-        stderr += String(error);
-      }
-
-      if (exitCode !== 0) {
-        throw new Error(
-          `Command failed with exit code ${exitCode}: ${props.command}\n${stderr}`
-        );
-      }
-
-      // Return the execution result
-      return this({
-        id,
-        command: props.command,
-        cwd: props.cwd,
-        env: props.env,
-        memoize: props.memoize,
-        inheritStdio,
-        exitCode,
-        stdout,
-        stderr,
-        executedAt: Date.now(),
-        completed: true,
+      // Use spawn for better stdio control
+      const childProcess = spawn(cmd, args, {
+        cwd: props.cwd || process.cwd(),
+        env: { ...process.env, ...props.env },
+        shell: true, // Use shell to handle complex commands
+        stdio: inheritStdio ? "inherit" : "pipe", // Inherit stdio when requested
       });
-  }
+
+      if (!inheritStdio) {
+        // If not inheriting stdio, collect output manually
+        childProcess.stdout?.on("data", (data) => {
+          stdout += data.toString();
+        });
+
+        childProcess.stderr?.on("data", (data) => {
+          stderr += data.toString();
+        });
+      }
+
+      // Wait for the process to complete
+      exitCode = await new Promise<number>((resolve, reject) => {
+        childProcess.on("close", (code) => {
+          resolve(code || 0);
+        });
+
+        childProcess.on("error", (err) => {
+          stderr += err.toString();
+          resolve(1);
+        });
+      });
+    } catch (error: any) {
+      // If not throwing, capture the error information
+      exitCode = 1;
+      stderr += String(error);
+    }
+
+    if (exitCode !== 0) {
+      throw new Error(
+        `Command failed with exit code ${exitCode}: ${props.command}\n${stderr}`,
+      );
+    }
+
+    // Return the execution result
+    return this({
+      id,
+      command: props.command,
+      cwd: props.cwd,
+      env: props.env,
+      memoize: props.memoize,
+      inheritStdio,
+      exitCode,
+      stdout,
+      stderr,
+      executedAt: Date.now(),
+      completed: true,
+    });
+  },
 );

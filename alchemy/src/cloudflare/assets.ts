@@ -92,7 +92,7 @@ export const Assets = Resource(
   async function (
     this: Context<Assets>,
     id: string,
-    props: AssetsProps
+    props: AssetsProps,
   ): Promise<Assets> {
     if (this.phase === "delete") {
       return this.destroy();
@@ -106,7 +106,7 @@ export const Assets = Resource(
       }
     } catch (error) {
       throw new Error(
-        `Assets directory ${props.path} does not exist or is not accessible`
+        `Assets directory ${props.path} does not exist or is not accessible`,
       );
     }
 
@@ -137,7 +137,7 @@ export const Assets = Resource(
       createdAt: this.output?.createdAt || now,
       updatedAt: now,
     });
-  }
+  },
 );
 
 // Helper functions for file operations
@@ -151,7 +151,7 @@ async function getFilesRecursively(dir: string): Promise<string[]> {
         return getFilesRecursively(path);
       }
       return path;
-    })
+    }),
   );
 
   return allFiles.flat();

@@ -125,7 +125,7 @@ export type D1Database = Resource<"cloudflare::D1Database"> &
 
 export async function D1Database(
   id: string,
-  props: Omit<D1DatabaseProps, "migrationsFiles">
+  props: Omit<D1DatabaseProps, "migrationsFiles">,
 ) {
   const migrationsFiles = props.migrationsDir
     ? await listMigrationsFiles(props.migrationsDir)
@@ -180,7 +180,7 @@ export const D1DatabaseResource = Resource(
   async function (
     this: Context<D1Database>,
     id: string,
-    props: D1DatabaseProps = {}
+    props: D1DatabaseProps = {},
   ): Promise<D1Database> {
     const api = await createCloudflareApi(props);
     const databaseName = props.name ?? id;
@@ -196,97 +196,97 @@ export const D1DatabaseResource = Resource(
       // Return void (a deleted database has no content)
       return this.destroy();
     }
-      let dbData: CloudflareD1Response;
+    let dbData: CloudflareD1Response;
 
-      if (this.phase === "create") {
-        console.log("Creating D1 database:", databaseName);
-        try {
-          dbData = await createDatabase(api, databaseName, props);
-        } catch (error) {
-          // Check if this is a "database already exists" error and adopt is enabled
-          if (
-            props.adopt &&
-            error instanceof CloudflareApiError &&
-            error.message.includes("already exists")
-          ) {
-            console.log(`Database ${databaseName} already exists, adopting it`);
-            // Find the existing database by name
-            const databases = await listDatabases(api, databaseName);
-            const existingDb = databases.find((db) => db.name === databaseName);
+    if (this.phase === "create") {
+      console.log("Creating D1 database:", databaseName);
+      try {
+        dbData = await createDatabase(api, databaseName, props);
+      } catch (error) {
+        // Check if this is a "database already exists" error and adopt is enabled
+        if (
+          props.adopt &&
+          error instanceof CloudflareApiError &&
+          error.message.includes("already exists")
+        ) {
+          console.log(`Database ${databaseName} already exists, adopting it`);
+          // Find the existing database by name
+          const databases = await listDatabases(api, databaseName);
+          const existingDb = databases.find((db) => db.name === databaseName);
 
-            if (!existingDb) {
-              throw new Error(
-                `Failed to find existing database '${databaseName}' for adoption`
-              );
-            }
-
-            // Get the database details using its ID
-            dbData = await getDatabase(api, existingDb.id);
-
-            // Update the database with the provided properties
-            if (props.readReplication) {
-              console.log(
-                `Updating adopted database ${databaseName} with new properties`
-              );
-              dbData = await updateDatabase(api, existingDb.id, props);
-            }
-          } else {
-            // Re-throw the error if adopt is false or it's not a "database already exists" error
-            throw error;
+          if (!existingDb) {
+            throw new Error(
+              `Failed to find existing database '${databaseName}' for adoption`,
+            );
           }
-        }
-      } else {
-        // Update operation
-        if (this.output?.id) {
-          console.log("Updating D1 database:", databaseName);
-          // Update the database with new properties
-          dbData = await updateDatabase(api, this.output.id, props);
+
+          // Get the database details using its ID
+          dbData = await getDatabase(api, existingDb.id);
+
+          // Update the database with the provided properties
+          if (props.readReplication) {
+            console.log(
+              `Updating adopted database ${databaseName} with new properties`,
+            );
+            dbData = await updateDatabase(api, existingDb.id, props);
+          }
         } else {
-          // If no ID exists, fall back to creating a new database
-          console.log(
-            "No existing database ID found, creating new D1 database:",
-            databaseName
-          );
-          dbData = await createDatabase(api, databaseName, props);
+          // Re-throw the error if adopt is false or it's not a "database already exists" error
+          throw error;
         }
       }
-
-      // Run migrations if provided
-      if (props.migrationsFiles && props.migrationsFiles.length > 0) {
-        try {
-          const migrationsTable = props.migrationsTable || "d1_migrations";
-          const databaseId = dbData.result.uuid || this.output?.id;
-
-          if (!databaseId) {
-            throw new Error("Database ID not found for migrations");
-          }
-
-          await applyMigrations({
-            migrationsFiles: props.migrationsFiles,
-            migrationsTable,
-            accountId: api.accountId,
-            databaseId,
-            api,
-          });
-        } catch (migrationErr) {
-          console.error("Failed to apply D1 migrations:", migrationErr);
-          throw migrationErr;
-        }
+    } else {
+      // Update operation
+      if (this.output?.id) {
+        console.log("Updating D1 database:", databaseName);
+        // Update the database with new properties
+        dbData = await updateDatabase(api, this.output.id, props);
+      } else {
+        // If no ID exists, fall back to creating a new database
+        console.log(
+          "No existing database ID found, creating new D1 database:",
+          databaseName,
+        );
+        dbData = await createDatabase(api, databaseName, props);
       }
+    }
 
-      return this({
-        type: "d1",
-        id: dbData.result.uuid || "",
-        name: databaseName,
-        fileSize: dbData.result.file_size,
-        numTables: dbData.result.num_tables,
-        version: dbData.result.version,
-        readReplication: dbData.result.read_replication,
-        primaryLocationHint: props.primaryLocationHint,
-        accountId: api.accountId,
-        migrationsDir: props.migrationsDir,
-      });
-  }
+    // Run migrations if provided
+    if (props.migrationsFiles && props.migrationsFiles.length > 0) {
+      try {
+        const migrationsTable = props.migrationsTable || "d1_migrations";
+        const databaseId = dbData.result.uuid || this.output?.id;
+
+        if (!databaseId) {
+          throw new Error("Database ID not found for migrations");
+        }
+
+        await applyMigrations({
+          migrationsFiles: props.migrationsFiles,
+          migrationsTable,
+          accountId: api.accountId,
+          databaseId,
+          api,
+        });
+      } catch (migrationErr) {
+        console.error("Failed to apply D1 migrations:", migrationErr);
+        throw migrationErr;
+      }
+    }
+
+    return this({
+      type: "d1",
+      id: dbData.result.uuid || "",
+      name: databaseName,
+      fileSize: dbData.result.file_size,
+      numTables: dbData.result.num_tables,
+      version: dbData.result.version,
+      readReplication: dbData.result.read_replication,
+      primaryLocationHint: props.primaryLocationHint,
+      accountId: api.accountId,
+      migrationsDir: props.migrationsDir,
+    });
+  },
 );
 
 interface CloudflareD1Response {
@@ -312,7 +312,7 @@ interface CloudflareD1Response {
 export async function createDatabase(
   api: CloudflareApi,
   databaseName: string,
-  props: D1DatabaseProps
+  props: D1DatabaseProps,
 ): Promise<CloudflareD1Response> {
   // Create new D1 database
   const createPayload: any = {
@@ -325,7 +325,7 @@ export async function createDatabase(
 
   const createResponse = await api.post(
     `/accounts/${api.accountId}/d1/database`,
-    createPayload
+    createPayload,
   );
 
   if (!createResponse.ok) {
@@ -333,7 +333,7 @@ export async function createDatabase(
       createResponse,
       "creating",
       "D1 database",
-      databaseName
+      databaseName,
     );
   }
 
@@ -345,14 +345,14 @@ export async function createDatabase(
  */
 export async function getDatabase(
   api: CloudflareApi,
-  databaseId?: string
+  databaseId?: string,
 ): Promise<CloudflareD1Response> {
   if (!databaseId) {
     throw new Error("Database ID is required");
   }
 
   const response = await api.get(
-    `/accounts/${api.accountId}/d1/database/${databaseId}`
+    `/accounts/${api.accountId}/d1/database/${databaseId}`,
   );
 
   if (!response.ok) {
@@ -367,7 +367,7 @@ export async function getDatabase(
  */
 export async function deleteDatabase(
   api: CloudflareApi,
-  databaseId?: string
+  databaseId?: string,
 ): Promise<void> {
   if (!databaseId) {
     console.log("No database ID provided, skipping delete");
@@ -376,7 +376,7 @@ export async function deleteDatabase(
 
   // Delete D1 database
   const deleteResponse = await api.delete(
-    `/accounts/${api.accountId}/d1/database/${databaseId}`
+    `/accounts/${api.accountId}/d1/database/${databaseId}`,
   );
 
   if (!deleteResponse.ok && deleteResponse.status !== 404) {
@@ -385,7 +385,7 @@ export async function deleteDatabase(
     }));
     throw new CloudflareApiError(
       `Error deleting D1 database '${databaseId}': ${errorData.errors?.[0]?.message || deleteResponse.statusText}`,
-      deleteResponse
+      deleteResponse,
     );
   }
 }
@@ -395,19 +395,19 @@ export async function deleteDatabase(
  */
 export async function listDatabases(
   api: CloudflareApi,
-  name?: string
+  name?: string,
 ): Promise<{ name: string; id: string }[]> {
   // Construct query string if name is provided
   const queryParams = name ? `?name=${encodeURIComponent(name)}` : "";
 
   const response = await api.get(
-    `/accounts/${api.accountId}/d1/database${queryParams}`
+    `/accounts/${api.accountId}/d1/database${queryParams}`,
   );
 
   if (!response.ok) {
     throw new CloudflareApiError(
       `Failed to list databases: ${response.statusText}`,
-      response
+      response,
     );
   }
 
@@ -440,7 +440,7 @@ export async function listDatabases(
 export async function updateDatabase(
   api: CloudflareApi,
   databaseId: string,
-  props: D1DatabaseProps
+  props: D1DatabaseProps,
 ): Promise<CloudflareD1Response> {
   // Get current database state to check for non-mutable changes
   const currentDB = await getDatabase(api, databaseId);
@@ -451,7 +451,7 @@ export async function updateDatabase(
     props.primaryLocationHint !== currentDB.result.primary_location_hint
   ) {
     throw new Error(
-      "Cannot update primaryLocationHint after database creation. Only readReplication.mode can be modified."
+      "Cannot update primaryLocationHint after database creation. Only readReplication.mode can be modified.",
     );
   }
 
@@ -466,7 +466,7 @@ export async function updateDatabase(
 
   const updateResponse = await api.patch(
     `/accounts/${api.accountId}/d1/database/${databaseId}`,
-    updatePayload
+    updatePayload,
   );
 
   if (!updateResponse.ok) {
@@ -474,7 +474,7 @@ export async function updateDatabase(
       updateResponse,
       "updating",
       "D1 database",
-      databaseId
+      databaseId,
     );
   }
 

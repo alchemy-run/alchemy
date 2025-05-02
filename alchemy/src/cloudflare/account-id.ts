@@ -5,7 +5,7 @@ export type CloudflareAccountId = string & {
 };
 
 export async function CloudflareAccountId(
-  options: CloudflareAuthOptions
+  options: CloudflareAuthOptions,
 ): Promise<CloudflareAccountId> {
   const userInfo = await getCloudflareUserInfo(options);
   return userInfo.accounts[0].id as CloudflareAccountId;

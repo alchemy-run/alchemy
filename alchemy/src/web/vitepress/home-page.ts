@@ -291,7 +291,7 @@ export function parseHomePage(content: string): HomePageConfig {
  */
 export async function HomePage(
   id: string,
-  props: HomePageProps
+  props: HomePageProps,
 ): Promise<HomePage> {
   // Build the system prompt with optional extension
   const systemPrompt = `
@@ -362,10 +362,10 @@ ${props.system || ""}
         `,
     });
   }
-    return StaticTextFile(
-      id,
-      props.outFile,
-      `---
+  return StaticTextFile(
+    id,
+    props.outFile,
+    `---
 ${yaml.stringify({
   layout: "home",
   name: props.title,
@@ -373,6 +373,6 @@ ${yaml.stringify({
   features: props.features,
 })}
 ---
-`
-    );
+`,
+  );
 }

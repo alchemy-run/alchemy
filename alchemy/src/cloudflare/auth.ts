@@ -77,7 +77,7 @@ export interface CloudflareOrganization {
 const userInfoCache: Record<string, CloudflareUserInfo> = {};
 
 export async function getCloudflareUserInfo(
-  options: CloudflareAuthOptions
+  options: CloudflareAuthOptions,
 ): Promise<CloudflareUserInfo> {
   const cacheKey = JSON.stringify({
     apiKey: options.apiKey?.unencrypted,
@@ -94,7 +94,7 @@ export async function getCloudflareUserInfo(
   if (!user.ok) {
     if (user.status === 403) {
       throw new Error(
-        "Cloudflare authentication required. Did you forget to login with `wrangler login` or set CLOUDFLARE_API_TOKEN, CLOUDFLARE_API_KEY, or CLOUDFLARE_EMAIL, or CLOUDFLARE_API_KEY?"
+        "Cloudflare authentication required. Did you forget to login with `wrangler login` or set CLOUDFLARE_API_TOKEN, CLOUDFLARE_API_KEY, or CLOUDFLARE_EMAIL, or CLOUDFLARE_API_KEY?",
       );
     }
     await handleApiError(user, "getting", "user", "user");
@@ -103,7 +103,7 @@ export async function getCloudflareUserInfo(
     "https://api.cloudflare.com/client/v4/accounts",
     {
       headers,
-    }
+    },
   );
   const userInfo: CloudflareUserInfo = {
     ...((await user.json()) as any).result,
@@ -114,7 +114,7 @@ export async function getCloudflareUserInfo(
 }
 
 export async function getCloudflareAuthHeaders(
-  options: CloudflareAuthOptions = {}
+  options: CloudflareAuthOptions = {},
 ): Promise<Record<string, string>> {
   // Check for API Token (preferred method)
   const apiToken =
@@ -145,7 +145,7 @@ export async function getCloudflareAuthHeaders(
   }
 
   throw new Error(
-    "Cloudflare authentication required. Did you forget to login with `wrangler login` or set CLOUDFLARE_API_TOKEN, CLOUDFLARE_API_KEY, or CLOUDFLARE_EMAIL, or CLOUDFLARE_API_KEY?"
+    "Cloudflare authentication required. Did you forget to login with `wrangler login` or set CLOUDFLARE_API_TOKEN, CLOUDFLARE_API_KEY, or CLOUDFLARE_EMAIL, or CLOUDFLARE_API_KEY?",
   );
 }
 
@@ -169,7 +169,7 @@ async function getUserEmailFromApiKey(apiKey: string): Promise<string> {
 
     if (!response.ok) {
       throw new Error(
-        `Failed to get user information: ${response.status} ${response.statusText}`
+        `Failed to get user information: ${response.status} ${response.statusText}`,
       );
     }
 
@@ -192,13 +192,13 @@ async function getUserEmailFromApiKey(apiKey: string): Promise<string> {
   } catch (error) {
     console.error("Error retrieving email from Cloudflare API:", error);
     throw new Error(
-      "Failed to automatically discover email for API Key authentication"
+      "Failed to automatically discover email for API Key authentication",
     );
   }
 }
 
 async function refreshAuthToken(
-  options: WranglerConfig
+  options: WranglerConfig,
 ): Promise<WranglerConfig> {
   const response = await fetch("https://dash.cloudflare.com/oauth2/token", {
     method: "POST",
@@ -214,7 +214,7 @@ async function refreshAuthToken(
 
   if (!response.ok) {
     throw new Error(
-      `Failed to refresh auth token: ${response.status} ${response.statusText}`
+      `Failed to refresh auth token: ${response.status} ${response.statusText}`,
     );
   }
 
@@ -226,7 +226,7 @@ async function refreshAuthToken(
   options.oauth_token = data.access_token;
   options.refresh_token = data.refresh_token;
   options.expiration_time = new Date(
-    Date.now() + data.expires_in * 1000
+    Date.now() + data.expires_in * 1000,
   ).toISOString();
   options.scopes = data.scope?.split(" ") || [];
 
@@ -280,7 +280,7 @@ async function readWranglerConfig(): Promise<WranglerConfig> {
   const configPath = await findWranglerConfig();
   try {
     const config = (authConfigCache[configPath] ??= await parseTOML(
-      await fs.readFile(configPath, "utf-8")
+      await fs.readFile(configPath, "utf-8"),
     ));
     config.path = configPath;
 
@@ -307,7 +307,7 @@ async function findWranglerConfig(): Promise<string> {
   const environment = process.env.WRANGLER_API_ENVIRONMENT ?? "production";
   const filePath = path.join(
     "config",
-    `${environment === "production" ? "default.toml" : `${environment}.toml`}`
+    `${environment === "production" ? "default.toml" : `${environment}.toml`}`,
   );
 
   const xdgAppPaths = (await import("xdg-app-paths")).default;
@@ -318,7 +318,7 @@ async function findWranglerConfig(): Promise<string> {
   // Check for the .wrangler directory in root if it is not there then use the XDG compliant path.
   wranglerConfigPath = path.join(
     (await isDirectory(legacyConfigDir)) ? legacyConfigDir : configDir,
-    filePath
+    filePath,
   );
   return wranglerConfigPath;
 }
