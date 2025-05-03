@@ -1,6 +1,9 @@
-import { handleApiError } from "../neon/api-error";
-import type { Secret } from "../secret";
-import { getCloudflareAuthHeaders, type CloudflareAuthOptions } from "./auth";
+import { handleApiError } from "../neon/api-error.js";
+import type { Secret } from "../secret.js";
+import {
+  getCloudflareAuthHeaders,
+  type CloudflareAuthOptions,
+} from "./auth.js";
 
 export interface CloudflareAccount {
   name: string;
