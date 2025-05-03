@@ -38,7 +38,7 @@
     "editor.defaultFormatter": "biomejs.biome"
   },
   "[markdown]": {
-    "editor.formatOnSave": false
+    "editor.formatOnSave": false,
   },
   "ruff.lint.args": ["--config=pyproject.toml"],
   "ruff.importStrategy": "fromEnvironment",

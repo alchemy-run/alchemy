@@ -2,10 +2,7 @@
 order: 2
 ---
 
-
 # Phase
-
-## Phases
 
 An Alchemy app can run in one of three phases:
 1. `"up"` - resources should be created, updated and deleted as necessary.
