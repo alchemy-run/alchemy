@@ -44,12 +44,6 @@ export interface ProviderOptions {
    * If true, the resource will be updated even if the inputs have not changed.
    */
   alwaysUpdate: boolean;
-
-  /**
-   * Optional wildcard deletion handler for cleaning up related resources
-   * @deprecated Use registerDeletionHandler instead
-   */
-  wildcardDelete?: WildcardDeletionHandler;
 }
 
 export type ResourceProps = {
@@ -174,32 +168,9 @@ export function Resource<
           }
         }
 
-        // Fallback to legacy wildcardDelete option
-        if (options?.wildcardDelete) {
-          const ctx = context({
-            scope,
-            phase: "delete",
-            kind: type,
-            id: resourceID,
-            fqn: scope.fqn(resourceID),
-            seq: scope.seq(),
-            props: props,
-            state: undefined as any,
-            replace: () => {
-              throw new Error(
-                "Cannot replace a resource during wildcard deletion. " +
-                  "The wildcardDelete handler should handle cleanup of matching resources."
-              );
-            },
-          });
-          return options.wildcardDelete.call(ctx, resourceID, {
-            quiet: scope.quiet,
-          }) as any;
-        }
-
         throw new Error(
           `No wildcard deletion handler registered for pattern '${isWildcardType ? type : resourceID}'. ` +
-            `To handle wildcard deletions, register a handler using registerDeletionHandler() or provide a wildcardDelete handler in the Resource options. ` +
+            `To handle wildcard deletions, register a handler using registerDeletionHandler(). ` +
             `This is required for resource type '${type}' to support cleanup of multiple resources.`
         );
       }
