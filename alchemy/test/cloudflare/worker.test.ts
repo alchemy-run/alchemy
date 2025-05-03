@@ -1659,6 +1659,8 @@ describe("Worker Resource", () => {
         url: true,
       });
 
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
       if (worker.url) {
         // Test that the worker was updated correctly
         const response = await fetch(worker.url);

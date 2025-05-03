@@ -1,12 +1,12 @@
+/**
+ * Copied from https://github.com/cloudflare/workers-sdk/blob/main/packages/wrangler/src/deployment-bundle/esbuild-plugins/hybrid-nodejs-compat.ts#L17
+ */
+
 import type { Plugin, PluginBuild } from "esbuild";
 import assert from "node:assert";
 import { builtinModules } from "node:module";
 import nodePath from "node:path";
-import { dedent } from "../../util/dedent.js";
-
-/**
- * Copied from https://github.com/cloudflare/workers-sdk/blob/main/packages/wrangler/src/deployment-bundle/esbuild-plugins/hybrid-nodejs-compat.ts#L17
- */
+import { dedent } from "../../util/dedent";
 
 const REQUIRED_NODE_BUILT_IN_NAMESPACE = "node-built-in-modules";
 const REQUIRED_UNENV_ALIAS_NAMESPACE = "required-unenv-alias";
@@ -142,6 +142,12 @@ function handleUnenvAliasedPackages(
         namespace: REQUIRED_UNENV_ALIAS_NAMESPACE,
       };
     }
+
+    // Resolve the alias to its absolute path and potentially mark it as external
+    return {
+      path: aliasAbsolute[args.path],
+      external: external.includes(unresolvedAlias),
+    };
   });
 
   build.onLoad(
@@ -206,6 +212,7 @@ function handleNodeJSGlobals(
         module,
       );
     }
+    // eslint-disable-next-line  @typescript-eslint/no-non-null-assertion
     injectsByModule.get(module)!.push({ injectedName, exportName, importName });
   }
 

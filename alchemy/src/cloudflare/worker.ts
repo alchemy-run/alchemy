@@ -1,7 +1,7 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs/promises";
 import type { Context } from "../context.js";
-import { Bundle, type BundleProps } from "../esbuild/bundle.js";
+import type { BundleProps } from "../esbuild/bundle.js";
 import { Resource } from "../resource.js";
 import { getContentType } from "../util/content-type.js";
 import { withExponentialBackoff } from "../util/retry.js";
@@ -15,14 +15,7 @@ import {
 import type { Assets } from "./assets.js";
 import type { Bindings, WorkerBindingSpec } from "./bindings.js";
 import type { Bound } from "./bound.js";
-import { createAliasPlugin } from "./bundle/alias-plugin.js";
-import {
-  isBuildFailure,
-  rewriteNodeCompatBuildFailure,
-} from "./bundle/build-failures.js";
-import { external, external_als } from "./bundle/external.js";
-import { getNodeJSCompatMode } from "./bundle/nodejs-compat-mode.js";
-import { nodeJsCompatPlugin } from "./bundle/nodejs-compat.js";
+import { bundleWorkerScript } from "./bundle/bundle-worker.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
 import { type EventSource, isQueueEventSource } from "./event-source.js";
 import {
@@ -954,83 +947,6 @@ async function assertWorkerDoesNotExist<B extends Bindings>(
   throw new Error(
     `Error checking if worker exists: ${response.status} ${response.statusText} ${await response.text()}`,
   );
-}
-
-async function bundleWorkerScript<B extends Bindings>(
-  props: WorkerProps<B> & {
-    compatibilityDate: string;
-    compatibilityFlags: string[];
-  },
-) {
-  const projectRoot = props.projectRoot ?? process.cwd();
-
-  const nodeJsCompatMode = getNodeJSCompatMode(
-    props.compatibilityDate,
-    props.compatibilityFlags,
-  );
-
-  if (nodeJsCompatMode === "v1") {
-    throw new Error(
-      "You must set your compatibilty date >= 2025-09-23 when using 'nodejs_compat' compatibility flag",
-    );
-  }
-
-  try {
-    const bundle = await Bundle("bundle", {
-      entryPoint: props.entrypoint!,
-      format: props.format === "cjs" ? "cjs" : "esm", // Use the specified format or default to ESM
-      target: "esnext",
-      platform: "node",
-      minify: true,
-      ...(props.bundle || {}),
-      conditions: ["workerd", "worker", "browser"],
-      options: {
-        absWorkingDir: projectRoot,
-        ...(props.bundle?.options || {}),
-        keepNames: true, // Important for Durable Object classes
-        loader: {
-          ".sql": "text",
-          ".json": "json",
-        },
-        plugins: [
-          ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
-          ...(props.bundle?.alias
-            ? [
-                createAliasPlugin({
-                  alias: props.bundle?.alias,
-                  projectRoot,
-                }),
-              ]
-            : []),
-        ],
-      },
-      external: [
-        ...(nodeJsCompatMode === "als" ? external_als : external),
-        ...(props.bundle?.external ?? []),
-        ...(props.bundle?.options?.external ?? []),
-      ],
-    });
-    if (bundle.content) {
-      return bundle.content;
-    }
-    if (bundle.path) {
-      return await fs.readFile(bundle.path, "utf-8");
-    }
-    throw new Error("Failed to create bundle");
-  } catch (e: any) {
-    if (e.message?.includes("No such module 'node:")) {
-      throw new Error(
-        `${e.message}.\nMake sure to set 'nodejs_compat' compatibility flag and compatibilityDate > 2024-09-23`,
-        { cause: e },
-      );
-    }
-    if (isBuildFailure(e)) {
-      rewriteNodeCompatBuildFailure(e.errors, nodeJsCompatMode);
-      throw e;
-    }
-    console.error("Error reading bundle:", e);
-    throw new Error("Error reading bundle");
-  }
 }
 
 async function configureURL<B extends Bindings>(
