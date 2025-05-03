@@ -6,7 +6,7 @@ import { createAliasPlugin } from "./alias-plugin.js";
 import {
   isBuildFailure,
   rewriteNodeCompatBuildFailure,
-} from "./build-failures";
+} from "./build-failures.js";
 import { external, external_als } from "./external.js";
 import { getNodeJSCompatMode } from "./nodejs-compat-mode.js";
 import { nodeJsCompatPlugin } from "./nodejs-compat.js";

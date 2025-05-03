@@ -6,7 +6,7 @@ import type { Plugin, PluginBuild } from "esbuild";
 import assert from "node:assert";
 import { builtinModules } from "node:module";
 import nodePath from "node:path";
-import { dedent } from "../../util/dedent";
+import { dedent } from "../../util/dedent.js";
 
 const REQUIRED_NODE_BUILT_IN_NAMESPACE = "node-built-in-modules";
 const REQUIRED_UNENV_ALIAS_NAMESPACE = "required-unenv-alias";
