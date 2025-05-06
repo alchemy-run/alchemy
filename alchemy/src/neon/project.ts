@@ -38,9 +38,9 @@ export interface NeonProjectProps extends NeonApiOptions {
 
   /**
    * PostgreSQL version to use
-   * @default 15
+   * @default 16
    */
-  pg_version?: 14 | 15 | 16;
+  pg_version?: 14 | 15 | 16 | 17;
 
   /**
    * Whether to create a default branch and endpoint
@@ -510,7 +510,7 @@ export const NeonProject = Resource(
   async function (
     this: Context<NeonProject>,
     id: string,
-    props: NeonProjectProps
+    props: NeonProjectProps,
   ): Promise<NeonProject> {
     const api = createNeonApi(props);
     const projectId = props.existing_project_id || this.output?.id;
@@ -553,7 +553,7 @@ export const NeonProject = Resource(
         response = await getProject(
           api,
           projectId,
-          initialData as Partial<NeonApiResponse>
+          initialData as Partial<NeonApiResponse>,
         );
       } else {
         // Check if a project with this ID already exists
@@ -576,7 +576,7 @@ export const NeonProject = Resource(
             response = await getProject(
               api,
               projectId,
-              initialData as Partial<NeonApiResponse>
+              initialData as Partial<NeonApiResponse>,
             );
           } else if (getResponse.status !== 404) {
             // Unexpected error during GET check
@@ -607,7 +607,7 @@ export const NeonProject = Resource(
         id: response.project.id,
         name: response.project.name,
         region_id: response.project.region_id as NeonRegion,
-        pg_version: response.project.pg_version as 14 | 15 | 16,
+        pg_version: response.project.pg_version as 14 | 15 | 16 | 17,
         created_at: response.project.created_at,
         updated_at: response.project.updated_at,
         proxy_host: response.project.proxy_host,
@@ -631,7 +631,7 @@ export const NeonProject = Resource(
       console.error(`Error ${this.phase} Neon project '${id}':`, error);
       throw error;
     }
-  }
+  },
 );
 
 /**
@@ -639,14 +639,14 @@ export const NeonProject = Resource(
  */
 async function createNewProject(
   api: any,
-  props: NeonProjectProps
+  props: NeonProjectProps,
 ): Promise<NeonApiResponse> {
   const defaultEndpoint = props.default_endpoint ?? true;
   const projectResponse = await api.post("/projects", {
     project: {
       name: props.name,
       region_id: props.region_id || "aws-us-east-1",
-      pg_version: props.pg_version || 15,
+      pg_version: props.pg_version || 16,
       default_endpoint: defaultEndpoint,
       branch: defaultEndpoint
         ? { name: props.default_branch_name || "main" }
@@ -672,13 +672,13 @@ async function createNewProject(
 async function getProject(
   api: any,
   projectId: string,
-  initialData: Partial<NeonApiResponse> = {}
+  initialData: Partial<NeonApiResponse> = {},
 ): Promise<NeonApiResponse> {
   // Get the latest project details
   const updatedData = await getProjectDetails(api, projectId);
 
   // Start with a copy of the initial data
-  let responseData = { ...initialData };
+  const responseData = { ...initialData };
 
   // Check if we have a branch ID from the initial data
   const branchId = initialData.branch?.id;
@@ -736,10 +736,10 @@ async function waitForOperations(
     project_id: string;
     status: string;
     action: string;
-  }>
+  }>,
 ): Promise<void> {
   const pendingOperations = operations.filter(
-    (op) => op.status !== "finished" && op.status !== "failed"
+    (op) => op.status !== "finished" && op.status !== "failed",
   );
 
   if (pendingOperations.length === 0) {
@@ -774,7 +774,7 @@ async function waitForOperations(
 
       // Check operation status
       const operationResponse = await api.get(
-        `/projects/${operation.project_id}/operations/${operation.id}`
+        `/projects/${operation.project_id}/operations/${operation.id}`,
       );
 
       if (operationResponse.ok) {
@@ -782,16 +782,17 @@ async function waitForOperations(
         operationStatus = operationData.operation?.status;
       } else {
         throw new Error(
-          `Failed to check operation ${operation.id} status: HTTP ${operationResponse.status}`
+          `Failed to check operation ${operation.id} status: HTTP ${operationResponse.status}`,
         );
       }
     }
 
     if (operationStatus === "failed") {
       throw new Error(`Operation ${operation.id} (${operation.action}) failed`);
-    } else if (totalWaitTime >= maxWaitTime) {
+    }
+    if (totalWaitTime >= maxWaitTime) {
       throw new Error(
-        `Timeout waiting for operation ${operation.id} (${operation.action}) to complete`
+        `Timeout waiting for operation ${operation.id} (${operation.action}) to complete`,
       );
     }
   }
@@ -810,7 +811,7 @@ async function waitForOperations(
  */
 async function getProjectDetails(
   api: any,
-  projectId: string
+  projectId: string,
 ): Promise<NeonApiResponse> {
   const response = await api.get(`/projects/${projectId}`);
 
@@ -833,7 +834,7 @@ async function getProjectDetails(
 async function getBranchDetails(
   api: any,
   projectId: string,
-  branchId: string
+  branchId: string,
 ): Promise<{ branch: NeonBranch }> {
   const response = await api.get(`/projects/${projectId}/branches/${branchId}`);
 
@@ -856,10 +857,10 @@ async function getBranchDetails(
 async function getEndpointDetails(
   api: any,
   projectId: string,
-  branchId: string
+  branchId: string,
 ): Promise<{ endpoints: NeonEndpoint[] }> {
   const response = await api.get(
-    `/projects/${projectId}/branches/${branchId}/endpoints`
+    `/projects/${projectId}/branches/${branchId}/endpoints`,
   );
 
   if (!response.ok) {

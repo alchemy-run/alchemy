@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { destroy } from "../../src/destroy";
-import { createGitHubClient } from "../../src/github/client";
-import { RepositoryEnvironment } from "../../src/github/repository-environment";
-import { GitHubSecret } from "../../src/github/secret";
-import { secret } from "../../src/secret";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { destroy } from "../../src/destroy.js";
+import { createGitHubClient } from "../../src/github/client.js";
+import { RepositoryEnvironment } from "../../src/github/repository-environment.js";
+import { GitHubSecret } from "../../src/github/secret.js";
+import { secret } from "../../src/secret.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -56,11 +56,11 @@ describe("GitHubSecret Resource", () => {
           {
             owner,
             repo: repository,
-          }
+          },
         );
 
         const secretInfo = secretList.secrets.find(
-          (s) => s.name === secretName
+          (s) => s.name === secretName,
         );
         expect(secretInfo).toBeDefined();
 
@@ -78,7 +78,7 @@ describe("GitHubSecret Resource", () => {
       } finally {
         await destroy(scope);
       }
-    }
+    },
   );
 
   test.skipIf(!!process.env.CI)(
@@ -103,7 +103,7 @@ describe("GitHubSecret Resource", () => {
         });
 
         console.log(
-          `Created test environment: ${environmentName} with ID: ${testEnv.environmentId}`
+          `Created test environment: ${environmentName} with ID: ${testEnv.environmentId}`,
         );
 
         // Step 1: Create a repository-level secret
@@ -123,11 +123,11 @@ describe("GitHubSecret Resource", () => {
           {
             owner,
             repo: repository,
-          }
+          },
         );
 
         const secretExists = secretList.secrets.some(
-          (s) => s.name === secretName
+          (s) => s.name === secretName,
         );
         expect(secretExists).toBe(true);
 
@@ -153,7 +153,7 @@ describe("GitHubSecret Resource", () => {
             });
 
           const repoSecretExists = repoSecrets.secrets.some(
-            (s) => s.name === secretName
+            (s) => s.name === secretName,
           );
           expect(repoSecretExists).toBe(false);
           console.log("Verified repository secret was removed");
@@ -170,7 +170,7 @@ describe("GitHubSecret Resource", () => {
           });
 
         const envSecretExists = envSecrets.secrets.some(
-          (s) => s.name === secretName
+          (s) => s.name === secretName,
         );
         expect(envSecretExists).toBe(true);
 
@@ -197,7 +197,7 @@ describe("GitHubSecret Resource", () => {
             });
 
           const envSecretExists = envSecrets.secrets.some(
-            (s) => s.name === secretName
+            (s) => s.name === secretName,
           );
           expect(envSecretExists).toBe(false);
         }
@@ -210,7 +210,7 @@ describe("GitHubSecret Resource", () => {
           });
 
         const repoSecretExists = repoSecrets.secrets.some(
-          (s) => s.name === secretName
+          (s) => s.name === secretName,
         );
         expect(repoSecretExists).toBe(true);
       } catch (error: any) {
@@ -220,6 +220,6 @@ describe("GitHubSecret Resource", () => {
         // Clean up all resources including the environment
         await destroy(scope);
       }
-    }
+    },
   );
 });

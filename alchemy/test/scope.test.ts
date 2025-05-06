@@ -1,12 +1,12 @@
 import { describe, expect } from "bun:test";
 import fs from "node:fs/promises";
-import { alchemy } from "../src/alchemy";
-import { destroy } from "../src/destroy";
-import { File } from "../src/fs/file";
-import { Scope } from "../src/scope";
-import { BRANCH_PREFIX } from "./util";
+import { alchemy } from "../src/alchemy.js";
+import { destroy } from "../src/destroy.js";
+import { File } from "../src/fs/file.js";
+import { Scope } from "../src/scope.js";
+import { BRANCH_PREFIX } from "./util.js";
 
-import "../src/test/bun";
+import "../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

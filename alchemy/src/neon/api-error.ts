@@ -46,7 +46,7 @@ export async function handleApiError(
   response: Response,
   action: "get" | "create" | "update" | "delete" | "list",
   resourceType: string,
-  resourceId?: string
+  resourceId?: string,
 ): Promise<never> {
   const resourceDisplay = resourceId ? `'${resourceId}'` : "";
   let errorData: any;

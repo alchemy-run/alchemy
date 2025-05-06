@@ -69,7 +69,7 @@ type IsClass = {
 type ResourceLifecycleHandler = (
   this: Context<any, any>,
   id: string,
-  props: any
+  props: any,
 ) => Promise<Resource<string>>;
 
 // see: https://x.com/samgoodwin89/status/1904640134097887653
@@ -100,7 +100,7 @@ export function Resource<
 
   const provider = ((
     resourceID: string,
-    props: ResourceProps
+    props: ResourceProps,
   ): Promise<Resource<string>> => {
     const scope = _Scope.current;
 
@@ -116,7 +116,7 @@ export function Resource<
       if (otherResource?.Kind !== type) {
         scope.fail();
         throw new Error(
-          `Resource ${resourceID} already exists in the stack and is of a different type: '${otherResource?.Kind}' !== '${type}'`
+          `Resource ${resourceID} already exists in the stack and is of a different type: '${otherResource?.Kind}' !== '${type}'`,
         );
       }
       // console.warn(

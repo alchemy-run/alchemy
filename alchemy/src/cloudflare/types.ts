@@ -62,9 +62,8 @@ export async function extractCloudflareError(
     const data = (await response.json()) as CloudflareApiResponse<any>;
     if (data.errors && data.errors.length > 0) {
       return data.errors.map((e) => `Error ${e.code}: ${e.message}`).join(", ");
-    } else {
-      return `HTTP ${response.status}: ${response.statusText}`;
     }
+    return `HTTP ${response.status}: ${response.statusText}`;
   } catch (e) {
     return `HTTP ${response.status}: ${response.statusText}`;
   }

@@ -1,3 +1,5 @@
+import { dedent } from "../../util/dedent.js";
+
 /**
  * TanStackStart server functions and middleware run in Node.js intead of Miniflare when using `vite dev`.
  *
@@ -13,12 +15,11 @@ export function cloudflareWorkersDevEnvironmentShim() {
     },
     load(id: string) {
       if (id === "cloudflare:workers")
-        return `
-import { getPlatformProxy } from "wrangler";
-// TODO: should we export default cloudflare; ??
-const cloudflare = await getPlatformProxy();
-export const env = cloudflare.env;
-`;
+        return dedent`
+          import { getPlatformProxy } from "wrangler";
+          // TODO: should we export default cloudflare; ??
+          const cloudflare = await getPlatformProxy();
+          export const env = cloudflare.env;`;
     },
   } as const;
 }

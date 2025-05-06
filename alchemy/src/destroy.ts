@@ -39,7 +39,7 @@ export async function destroy<Type extends string>(
         ...orphan.output,
         Scope: scope,
       })),
-      options
+      options,
     );
     // finally, destroy the scope container
     await scope.deinit();
@@ -64,7 +64,7 @@ export async function destroy<Type extends string>(
   const Provider: Provider<Type> | undefined = PROVIDERS.get(instance.Kind);
   if (!Provider) {
     throw new Error(
-      `Cannot destroy resource "${instance.FQN}" type ${instance.Kind} - no provider found. You may need to import the provider in your alchemy.config.ts.`
+      `Cannot destroy resource "${instance.FQN}" type ${instance.Kind} - no provider found. You may need to import the provider in your alchemy.config.ts.`,
     );
   }
 
@@ -112,7 +112,7 @@ export async function destroy<Type extends string>(
         async (scope) => {
           nestedScope = scope;
           return await Provider.handler.bind(ctx)(instance.ID, state.props);
-        }
+        },
       );
     } catch (err) {
       if (err instanceof DestroyedSignal) {
@@ -146,7 +146,7 @@ export namespace destroy {
       }
     } else {
       await Promise.all(
-        resources.map((resource) => destroy(resource, options))
+        resources.map((resource) => destroy(resource, options)),
       );
     }
   }

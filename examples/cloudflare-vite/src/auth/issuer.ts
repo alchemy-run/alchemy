@@ -3,7 +3,7 @@ import { issuer as openauthIssuer } from "@openauthjs/openauth";
 import { GithubProvider } from "@openauthjs/openauth/provider/github";
 import { CloudflareStorage } from "@openauthjs/openauth/storage/cloudflare";
 import { env } from "cloudflare:workers";
-import { Subjects } from "../auth/subjects";
+import { Subjects } from "../auth/subjects.js";
 
 const storage = CloudflareStorage({
   namespace: env.AUTH_STORE as any, // TODO: what is openauth doing weird with types?

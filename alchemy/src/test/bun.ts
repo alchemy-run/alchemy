@@ -10,7 +10,7 @@ import type { StateStoreType } from "../state.js";
 /**
  * Extend the Alchemy interface to include test functionality
  */
-declare module "../alchemy" {
+declare module "../alchemy.js" {
   interface Alchemy {
     test: typeof test;
   }
@@ -71,7 +71,7 @@ type test = {
     name: string,
     options: TestOptions,
     fn: (scope: Scope) => Promise<any>,
-    timeout?: number
+    timeout?: number,
   ): void;
 
   /**
@@ -142,6 +142,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     scopeName: `${defaultOptions.prefix ? `${defaultOptions.prefix}-` : ""}${path.basename(meta.filename)}`,
     // parent: globalTestScope,
     stateStore: defaultOptions?.stateStore,
+    phase: "up",
   });
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {
@@ -173,8 +174,8 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
       obj && typeof obj === "object"
         ? Object.fromEntries(
             Object.entries(obj).flatMap(([k, v]) =>
-              v !== undefined ? [[k, v]] : []
-            )
+              v !== undefined ? [[k, v]] : [],
+            ),
           )
         : {};
 
@@ -198,16 +199,11 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
             parent: scope,
           },
           async (scope) => {
-            try {
-              // Enter test scope since bun calls from different scope
-              await scope.run(() => fn(scope));
-            } catch (err) {
-              console.error(err);
-              throw err;
-            }
-          }
+            // Enter test scope since bun calls from different scope
+            await scope.run(() => fn(scope));
+          },
         ),
-      timeout
+      timeout,
     );
   }
 }

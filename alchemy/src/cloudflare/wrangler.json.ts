@@ -67,7 +67,7 @@ export const WranglerJson = Resource(
   async function (
     this: Context<WranglerJson>,
     id: string,
-    props: WranglerJsonProps
+    props: WranglerJsonProps,
   ): Promise<WranglerJson> {
     // Default path is wrangler.json in current directory
     const filePath = props.path || "wrangler.jsonc";
@@ -78,7 +78,7 @@ export const WranglerJson = Resource(
 
     if (props.worker.entrypoint === undefined) {
       throw new Error(
-        "Worker must have an entrypoint to generate a wrangler.json"
+        "Worker must have an entrypoint to generate a wrangler.json",
       );
     }
 
@@ -113,7 +113,7 @@ export const WranglerJson = Resource(
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
-  }
+  },
 );
 
 /**
@@ -149,6 +149,13 @@ export interface WranglerJsonSpec {
    * Routes to attach to the worker
    */
   routes?: string[];
+
+  /**
+   * AI bindings
+   */
+  ai?: {
+    binding: string;
+  };
 
   /**
    * Browser bindings
@@ -271,7 +278,7 @@ export interface WranglerJsonSpec {
 function processBindings(
   spec: WranglerJsonSpec,
   bindings: Bindings,
-  eventSources: EventSource[] | undefined
+  eventSources: EventSource[] | undefined,
 ): void {
   // Arrays to collect different binding types
   const kvNamespaces: { binding: string; id: string }[] = [];
@@ -398,6 +405,13 @@ function processBindings(
         throw new Error(`Browser already bound to ${spec.browser.binding}`);
       }
       spec.browser = {
+        binding: bindingName,
+      };
+    } else if (binding.type === "ai") {
+      if (spec.ai) {
+        throw new Error(`AI already bound to ${spec.ai.binding}`);
+      }
+      spec.ai = {
         binding: bindingName,
       };
     }

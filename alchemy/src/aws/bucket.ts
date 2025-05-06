@@ -136,99 +136,96 @@ export const Bucket = Resource(
         client.send(
           new DeleteBucketCommand({
             Bucket: props.bucketName,
-          })
-        )
+          }),
+        ),
       );
       return this.destroy();
-    } else {
-      try {
-        // Check if bucket exists
-        await client.send(
-          new HeadBucketCommand({
-            Bucket: props.bucketName,
-          })
-        );
+    }
+    try {
+      // Check if bucket exists
+      await client.send(
+        new HeadBucketCommand({
+          Bucket: props.bucketName,
+        }),
+      );
 
-        // Update tags if they changed and bucket exists
-        if (this.phase === "update" && props.tags) {
-          await client.send(
-            new PutBucketTaggingCommand({
-              Bucket: props.bucketName,
+      // Update tags if they changed and bucket exists
+      if (this.phase === "update" && props.tags) {
+        await client.send(
+          new PutBucketTaggingCommand({
+            Bucket: props.bucketName,
+            Tagging: {
+              TagSet: Object.entries(props.tags).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
+            },
+          }),
+        );
+      }
+    } catch (error: any) {
+      if (error.name === "NotFound") {
+        // Create bucket if it doesn't exist
+        await client.send(
+          new CreateBucketCommand({
+            Bucket: props.bucketName,
+            // Add tags during creation if specified
+            ...(props.tags && {
               Tagging: {
                 TagSet: Object.entries(props.tags).map(([Key, Value]) => ({
                   Key,
                   Value,
                 })),
               },
-            })
-          );
-        }
+            }),
+          }),
+        );
+      } else {
+        throw error;
+      }
+    }
+
+    // Get bucket details
+    const [locationResponse, versioningResponse, aclResponse] =
+      await Promise.all([
+        client.send(new GetBucketLocationCommand({ Bucket: props.bucketName })),
+        client.send(
+          new GetBucketVersioningCommand({ Bucket: props.bucketName }),
+        ),
+        client.send(new GetBucketAclCommand({ Bucket: props.bucketName })),
+      ]);
+
+    const region = locationResponse.LocationConstraint || "us-east-1";
+
+    // Get tags if they exist
+    let tags = props.tags;
+    if (!tags) {
+      try {
+        const taggingResponse = await client.send(
+          new GetBucketTaggingCommand({ Bucket: props.bucketName }),
+        );
+        tags = Object.fromEntries(
+          taggingResponse.TagSet?.map(({ Key, Value }) => [Key, Value]) || [],
+        );
       } catch (error: any) {
-        if (error.name === "NotFound") {
-          // Create bucket if it doesn't exist
-          await client.send(
-            new CreateBucketCommand({
-              Bucket: props.bucketName,
-              // Add tags during creation if specified
-              ...(props.tags && {
-                Tagging: {
-                  TagSet: Object.entries(props.tags).map(([Key, Value]) => ({
-                    Key,
-                    Value,
-                  })),
-                },
-              }),
-            })
-          );
-        } else {
+        if (error.name !== "NoSuchTagSet") {
           throw error;
         }
       }
-
-      // Get bucket details
-      const [locationResponse, versioningResponse, aclResponse] =
-        await Promise.all([
-          client.send(
-            new GetBucketLocationCommand({ Bucket: props.bucketName })
-          ),
-          client.send(
-            new GetBucketVersioningCommand({ Bucket: props.bucketName })
-          ),
-          client.send(new GetBucketAclCommand({ Bucket: props.bucketName })),
-        ]);
-
-      const region = locationResponse.LocationConstraint || "us-east-1";
-
-      // Get tags if they exist
-      let tags = props.tags;
-      if (!tags) {
-        try {
-          const taggingResponse = await client.send(
-            new GetBucketTaggingCommand({ Bucket: props.bucketName })
-          );
-          tags = Object.fromEntries(
-            taggingResponse.TagSet?.map(({ Key, Value }) => [Key, Value]) || []
-          );
-        } catch (error: any) {
-          if (error.name !== "NoSuchTagSet") {
-            throw error;
-          }
-        }
-      }
-
-      return this({
-        bucketName: props.bucketName,
-        arn: `arn:aws:s3:::${props.bucketName}`,
-        bucketDomainName: `${props.bucketName}.s3.amazonaws.com`,
-        bucketRegionalDomainName: `${props.bucketName}.s3.${region}.amazonaws.com`,
-        region,
-        hostedZoneId: getHostedZoneId(region),
-        versioningEnabled: versioningResponse.Status === "Enabled",
-        acl: aclResponse.Grants?.[0]?.Permission?.toLowerCase(),
-        ...(tags && { tags }),
-      });
     }
-  }
+
+    return this({
+      bucketName: props.bucketName,
+      arn: `arn:aws:s3:::${props.bucketName}`,
+      bucketDomainName: `${props.bucketName}.s3.amazonaws.com`,
+      bucketRegionalDomainName: `${props.bucketName}.s3.${region}.amazonaws.com`,
+      region,
+      hostedZoneId: getHostedZoneId(region),
+      versioningEnabled: versioningResponse.Status === "Enabled",
+      acl: aclResponse.Grants?.[0]?.Permission?.toLowerCase(),
+      ...(tags && { tags }),
+    });
+  },
 );
 
 /**

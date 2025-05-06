@@ -161,7 +161,7 @@ export const SES = Resource(
   async function (
     this: Context<SES>,
     id: string,
-    props: SESProps
+    props: SESProps,
   ): Promise<SES> {
     // Create SES client
     const client = new SESv2Client({});
@@ -180,8 +180,8 @@ export const SES = Resource(
           client.send(
             new DeleteConfigurationSetCommand({
               ConfigurationSetName: output.configurationSetName,
-            })
-          )
+            }),
+          ),
         );
       }
 
@@ -191,8 +191,8 @@ export const SES = Resource(
           client.send(
             new DeleteEmailIdentityCommand({
               EmailIdentity: output.emailIdentity,
-            })
-          )
+            }),
+          ),
         );
       }
 
@@ -214,7 +214,7 @@ export const SES = Resource(
         await client.send(
           new GetConfigurationSetCommand({
             ConfigurationSetName: props.configurationSetName,
-          })
+          }),
         );
         configSetExists = true;
       } catch (error) {
@@ -232,7 +232,7 @@ export const SES = Resource(
             new PutConfigurationSetSendingOptionsCommand({
               ConfigurationSetName: props.configurationSetName,
               SendingEnabled: props.sendingOptions.SendingEnabled,
-            })
+            }),
           );
         }
 
@@ -242,7 +242,7 @@ export const SES = Resource(
               ConfigurationSetName: props.configurationSetName,
               ReputationMetricsEnabled:
                 props.reputationOptions.ReputationMetricsEnabled,
-            })
+            }),
           );
         }
 
@@ -251,7 +251,7 @@ export const SES = Resource(
             new PutConfigurationSetTrackingOptionsCommand({
               ConfigurationSetName: props.configurationSetName,
               CustomRedirectDomain: props.trackingOptions.CustomRedirectDomain,
-            })
+            }),
           );
         }
 
@@ -260,7 +260,7 @@ export const SES = Resource(
             new PutConfigurationSetSuppressionOptionsCommand({
               ConfigurationSetName: props.configurationSetName,
               SuppressedReasons: props.suppressionOptions.SuppressedReasons,
-            })
+            }),
           );
         }
 
@@ -270,7 +270,7 @@ export const SES = Resource(
               ConfigurationSetName: props.configurationSetName,
               TlsPolicy: props.deliveryOptions.TlsPolicy,
               SendingPoolName: props.deliveryOptions.SendingPoolName,
-            })
+            }),
           );
         }
 
@@ -290,7 +290,7 @@ export const SES = Resource(
               Key,
               Value,
             })),
-          })
+          }),
         );
 
         // In SESv2, the ARN isn't directly returned in the response
@@ -306,7 +306,7 @@ export const SES = Resource(
         getIdentityResult = await client.send(
           new GetEmailIdentityCommand({
             EmailIdentity: props.emailIdentity,
-          })
+          }),
         );
       } catch (error) {
         if (error instanceof NotFoundException) {
@@ -325,7 +325,7 @@ export const SES = Resource(
               Key,
               Value,
             })),
-          })
+          }),
         );
 
         // If it's an email address, we don't need to explicitly verify in v2
@@ -350,7 +350,7 @@ export const SES = Resource(
               new PutEmailIdentityDkimAttributesCommand({
                 EmailIdentity: props.emailIdentity,
                 SigningEnabled: true,
-              })
+              }),
             );
 
             // We can check the current status of DKIM
@@ -360,7 +360,7 @@ export const SES = Resource(
             const updatedIdentity = await client.send(
               new GetEmailIdentityCommand({
                 EmailIdentity: props.emailIdentity,
-              })
+              }),
             );
 
             if (updatedIdentity.DkimAttributes?.Status) {
@@ -379,5 +379,5 @@ export const SES = Resource(
       emailIdentityVerificationStatus,
       dkimVerificationStatus,
     });
-  }
+  },
 );

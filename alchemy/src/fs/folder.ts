@@ -61,24 +61,23 @@ export const Folder = Resource(
   async function (
     this: Context<Folder>,
     id: string,
-    props?: FolderProps
+    props?: FolderProps,
   ): Promise<Folder> {
     const dirPath = props?.path ?? id;
     if (this.phase === "delete") {
       if (props?.delete !== false) {
         // we just do a best effort attempt
         await ignore(["ENOENT", "ENOTEMPTY"], async () =>
-          fs.promises.rmdir(dirPath, { recursive: props?.clean ?? false })
+          fs.promises.rmdir(dirPath, { recursive: props?.clean ?? false }),
         );
       }
       return this.destroy();
-    } else {
-      await ignore("EEXIST", async () =>
-        fs.promises.mkdir(dirPath, { recursive: props?.recursive ?? true })
-      );
     }
+    await ignore("EEXIST", async () =>
+      fs.promises.mkdir(dirPath, { recursive: props?.recursive ?? true }),
+    );
     return this({
       path: dirPath,
     });
-  }
+  },
 );

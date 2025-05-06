@@ -134,7 +134,7 @@ export const ImportDnsRecords = Resource(
   async function (
     this: Context<ImportDnsRecords>,
     id: string,
-    props: ImportDnsRecordsProps
+    props: ImportDnsRecordsProps,
   ): Promise<ImportDnsRecords> {
     // For delete phase, just return destroyed state since this is a read-only resource
     if (this.phase === "delete") {
@@ -152,7 +152,7 @@ export const ImportDnsRecords = Resource(
             headers: {
               accept: "application/dns-json",
             },
-          }
+          },
         );
 
         if (!res.ok) {
@@ -182,7 +182,7 @@ export const ImportDnsRecords = Resource(
                 // Join the rest as hostname in case there are spaces
                 const hostname = parts.slice(1).join(" ");
 
-                if (!isNaN(priority)) {
+                if (!Number.isNaN(priority)) {
                   result.priority = priority;
                   result.content = hostname;
                 }
@@ -197,7 +197,7 @@ export const ImportDnsRecords = Resource(
       } catch (error) {
         console.warn(
           `Failed to fetch ${type} records for ${props.domain}:`,
-          error
+          error,
         );
       }
     }
@@ -209,5 +209,5 @@ export const ImportDnsRecords = Resource(
       records: allRecords,
       importedAt: Date.now(),
     });
-  }
+  },
 );

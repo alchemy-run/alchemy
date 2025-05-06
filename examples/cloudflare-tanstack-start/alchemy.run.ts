@@ -14,7 +14,7 @@ const app = await alchemy("cloudflare-tanstack", {
 });
 
 export const website = await TanStackStart(
-  `cloudflare-tanstack-website${BRANCH_PREFIX}`
+  `cloudflare-tanstack-website${BRANCH_PREFIX}`,
 );
 
 console.log({

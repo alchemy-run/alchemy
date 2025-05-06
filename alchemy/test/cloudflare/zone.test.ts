@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { createCloudflareApi } from "../../src/cloudflare/api";
-import { Zone } from "../../src/cloudflare/zone";
-import { destroy } from "../../src/destroy";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { Zone } from "../../src/cloudflare/zone.js";
+import { destroy } from "../../src/destroy.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const api = await createCloudflareApi();
 

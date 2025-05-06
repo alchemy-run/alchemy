@@ -4,12 +4,12 @@ import {
   ResourceNotFoundException,
 } from "@aws-sdk/client-dynamodb";
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { Table } from "../../src/aws/table";
-import { destroy } from "../../src/destroy";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { Table } from "../../src/aws/table.js";
+import { destroy } from "../../src/destroy.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta);
 
@@ -37,7 +37,7 @@ describe("AWS Resources", () => {
       try {
         expect(table.tableName).toBe(tableName);
         expect(table.arn).toMatch(
-          new RegExp(`^arn:aws:dynamodb:[a-z0-9-]+:\\d+:table\\/${tableName}$`)
+          new RegExp(`^arn:aws:dynamodb:[a-z0-9-]+:\\d+:table\\/${tableName}$`),
         );
         expect(table.tableId).toBeTruthy();
         expect(table.partitionKey).toEqual({
@@ -56,7 +56,7 @@ describe("AWS Resources", () => {
         const describeResponse = await dynamo.send(
           new DescribeTableCommand({
             TableName: tableName,
-          })
+          }),
         );
         expect(describeResponse.Table?.TableStatus).toBe("ACTIVE");
       } finally {
@@ -75,7 +75,7 @@ async function assertTableNotExists(tableName: string) {
     dynamo.send(
       new DescribeTableCommand({
         TableName: tableName,
-      })
-    )
+      }),
+    ),
   ).rejects.toThrow(ResourceNotFoundException);
 }

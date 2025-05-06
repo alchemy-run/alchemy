@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { BrowserRendering } from "../../src/cloudflare/browser-rendering";
-import { KVNamespace } from "../../src/cloudflare/kv-namespace";
-import { Worker } from "../../src/cloudflare/worker";
-import { destroy } from "../../src/destroy";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { BrowserRendering } from "../../src/cloudflare/browser-rendering.js";
+import { KVNamespace } from "../../src/cloudflare/kv-namespace.js";
+import { Worker } from "../../src/cloudflare/worker.js";
+import { destroy } from "../../src/destroy.js";
+import { BRANCH_PREFIX } from "../util.js";
 
 import path from "node:path";
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -62,14 +62,14 @@ describe("Browser Rendering Resource", () => {
       // Test fetching from cache
       console.log("Testing cached screenshot...");
       const cachedResponse = await fetch(
-        `${worker.url}?url=https://google.com`
+        `${worker.url}?url=https://google.com`,
       );
       expect(cachedResponse.status).toEqual(200);
 
       // Take a screenshot of a different URL
       console.log("Testing screenshot of a different URL...");
       const anotherResponse = await fetch(
-        `${worker.url}?url=https://example.com`
+        `${worker.url}?url=https://example.com`,
       );
       expect(anotherResponse.status).toEqual(200);
 
@@ -79,7 +79,7 @@ describe("Browser Rendering Resource", () => {
       expect(errorResponse.status).toEqual(200); // The worker returns 200 even for the error case
       const errorText = await errorResponse.text();
       expect(errorText).toEqual(
-        "Please add an ?url=https://example.com/ parameter"
+        "Please add an ?url=https://example.com/ parameter",
       );
     } finally {
       await destroy(scope);

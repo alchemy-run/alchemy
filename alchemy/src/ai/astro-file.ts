@@ -159,7 +159,7 @@ export const AstroFile = Resource(
   async function (
     this: Context<AstroFile>,
     id: string,
-    props: AstroFileProps
+    props: AstroFileProps,
   ): Promise<AstroFile> {
     // Handle deletion phase
     if (this.phase === "delete") {
@@ -201,7 +201,7 @@ export const AstroFile = Resource(
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid Astro code: ${retryResult.error}`
+          `Failed to generate valid Astro code: ${retryResult.error}`,
         );
       }
 
@@ -233,7 +233,7 @@ export const AstroFile = Resource(
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
-  }
+  },
 );
 
 /**
@@ -244,7 +244,7 @@ export const AstroFile = Resource(
  * @returns The extracted Astro code or error message
  */
 async function extractAstroCode(
-  text: string
+  text: string,
 ): Promise<{ code: string; error?: string }> {
   const astroCodeRegex = /```astro\s*([\s\S]*?)```/g;
   const matches = Array.from(text.matchAll(astroCodeRegex));

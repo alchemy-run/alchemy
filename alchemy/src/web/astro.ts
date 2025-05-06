@@ -196,7 +196,7 @@ export const AstroProject = Resource(
   async function (
     this: Context<AstroProject>,
     id: string,
-    props: AstroProjectProps
+    props: AstroProjectProps,
   ): Promise<AstroProject> {
     const dir = props.dir ?? props.name;
 
@@ -394,7 +394,7 @@ export const AstroProject = Resource(
 export default defineConfig({${integrationsStr}${vitePluginsStr}
   site: "https://example.com",
   output: "static"
-});`
+});`,
       );
     }
 
@@ -425,14 +425,14 @@ pnpm-debug.log*
 # macOS-specific files
 .DS_Store
 .astro/
-`
+`,
       );
 
       // Create .env.d.ts
       await StaticTextFile(
         path.join(dir, "src", "env.d.ts"),
         `/// <reference types="astro/client" />
-`
+`,
       );
 
       // Create a basic layout
@@ -476,7 +476,7 @@ const { title, description = "Welcome to my Astro site" } = Astro.props;
       Bitstream Vera Sans Mono, Courier New, monospace;
   }
 </style>
-`
+`,
       );
 
       // Create a basic index page
@@ -530,7 +530,7 @@ import Layout from '../layouts/Layout.astro';
     padding: 0.3em 0.45em;
   }
 </style>
-`
+`,
       );
 
       // Create public/favicon.svg
@@ -546,7 +546,7 @@ import Layout from '../layouts/Layout.astro';
     </linearGradient>
   </defs>
 </svg>
-`
+`,
       );
     }
 
@@ -588,7 +588,7 @@ import Layout from '../layouts/Layout.astro';
               `@tailwind base;
 @tailwind components;
 @tailwind utilities;
-`
+`,
             );
             break;
           case "mdx":
@@ -618,7 +618,7 @@ import Layout from '../layouts/Layout.astro';
       const exec = (command: string) => execAsync(command, { cwd });
 
       // Install Astro and general dependencies
-      await exec(`bun add astro`);
+      await exec("bun add astro");
 
       // Install dev dependencies
       const devDepsEntries = Object.entries(props.devDependencies || {});
@@ -638,5 +638,5 @@ import Layout from '../layouts/Layout.astro';
         await exec(`bun add ${depsArg}`);
       }
     }
-  }
+  },
 );

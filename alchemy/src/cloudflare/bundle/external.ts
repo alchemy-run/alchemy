@@ -5,13 +5,14 @@ const nodejs_compat = [
   "node:buffer",
   "node:console",
   "node:crypto",
+  "node:debug",
   "node:diagnostics_channel",
   "node:dns",
   "node:events",
   "node:inspector",
   "node:net",
   "node:path",
-  "node:perf_hooks",
+  "node:perf_hooks", // partially supported
   "node:process",
   "node:querystring",
   "node:stream",
@@ -21,10 +22,19 @@ const nodejs_compat = [
   "node:url",
   "node:util",
   "node:zlib",
+  // "node:*",
 ];
 
 export const external = [
   ...nodejs_compat,
   ...nodejs_compat.map((p) => p.split(":")[1]),
   "cloudflare:workers",
+  // "cloudflare:*",
+];
+
+export const external_als = [
+  //
+  "node:async_hooks",
+  "async_hooks",
+  "cloudflare:*",
 ];

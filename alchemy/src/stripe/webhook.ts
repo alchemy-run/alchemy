@@ -136,7 +136,7 @@ export const WebhookEndpoint = Resource(
   async function (
     this: Context<WebhookEndpoint>,
     id: string,
-    props: WebhookEndpointProps
+    props: WebhookEndpointProps,
   ) {
     // Get Stripe API key from context or environment
     const apiKey = process.env.STRIPE_API_KEY;
@@ -159,65 +159,64 @@ export const WebhookEndpoint = Resource(
       }
 
       return this.destroy();
-    } else {
-      try {
-        let webhook: Stripe.WebhookEndpoint;
-
-        if (this.phase === "update" && this.output?.id) {
-          // Update existing webhook
-          webhook = await stripe.webhookEndpoints.update(this.output.id, {
-            url: props.url,
-            enabled_events: props.enabledEvents,
-            description: props.description,
-            disabled: props.active === false,
-            metadata: props.metadata,
-          });
-        } else {
-          // Create new webhook
-          webhook = await stripe.webhookEndpoints.create({
-            url: props.url,
-            enabled_events: props.enabledEvents,
-            description: props.description,
-            metadata: props.metadata,
-          });
-
-          // For connect parameter, need to handle it separately if it exists
-          if (props.connect !== undefined) {
-            // Note: connect is specified at creation time and cannot be updated
-            console.log(
-              "Note: 'connect' parameter will be applied at creation time only"
-            );
-          }
-        }
-
-        // Store the secret if available
-        let secret = "";
-        if (webhook.secret) {
-          secret = webhook.secret;
-        } else if (this.phase === "update" && this.output?.secret) {
-          secret = this.output.secret;
-        }
-
-        return this({
-          id: webhook.id,
-          url: webhook.url,
-          enabledEvents: webhook.enabled_events as EnabledEvent[],
-          description: webhook.description || undefined,
-          active: webhook.status === "enabled",
-          apiVersion: webhook.api_version || undefined,
-          // connect: !!webhook.connect,
-          metadata: webhook.metadata || undefined,
-          secret: secret,
-          application: webhook.application || undefined,
-          createdAt: webhook.created,
-          livemode: webhook.livemode,
-          updatedAt: webhook.created, // Using created timestamp as updated
-          status: webhook.status,
-        });
-      } catch (error) {
-        console.error("Error creating/updating webhook:", error);
-        throw error;
-      }
     }
-  }
+    try {
+      let webhook: Stripe.WebhookEndpoint;
+
+      if (this.phase === "update" && this.output?.id) {
+        // Update existing webhook
+        webhook = await stripe.webhookEndpoints.update(this.output.id, {
+          url: props.url,
+          enabled_events: props.enabledEvents,
+          description: props.description,
+          disabled: props.active === false,
+          metadata: props.metadata,
+        });
+      } else {
+        // Create new webhook
+        webhook = await stripe.webhookEndpoints.create({
+          url: props.url,
+          enabled_events: props.enabledEvents,
+          description: props.description,
+          metadata: props.metadata,
+        });
+
+        // For connect parameter, need to handle it separately if it exists
+        if (props.connect !== undefined) {
+          // Note: connect is specified at creation time and cannot be updated
+          console.log(
+            "Note: 'connect' parameter will be applied at creation time only",
+          );
+        }
+      }
+
+      // Store the secret if available
+      let secret = "";
+      if (webhook.secret) {
+        secret = webhook.secret;
+      } else if (this.phase === "update" && this.output?.secret) {
+        secret = this.output.secret;
+      }
+
+      return this({
+        id: webhook.id,
+        url: webhook.url,
+        enabledEvents: webhook.enabled_events as EnabledEvent[],
+        description: webhook.description || undefined,
+        active: webhook.status === "enabled",
+        apiVersion: webhook.api_version || undefined,
+        // connect: !!webhook.connect,
+        metadata: webhook.metadata || undefined,
+        secret: secret,
+        application: webhook.application || undefined,
+        createdAt: webhook.created,
+        livemode: webhook.livemode,
+        updatedAt: webhook.created, // Using created timestamp as updated
+        status: webhook.status,
+      });
+    } catch (error) {
+      console.error("Error creating/updating webhook:", error);
+      throw error;
+    }
+  },
 );

@@ -72,7 +72,7 @@ The serialization system properly handles complex object structures including:
 The serialization system is primarily used by Alchemy's state store implementations but can be useful in custom resources too:
 
 ```typescript
-import { serialize, deserialize } from "alchemy/serde";
+import { serialize, deserialize } from "alchemy";
 
 // Serialize an object
 const serializedData = await serialize(scope, complexObject);

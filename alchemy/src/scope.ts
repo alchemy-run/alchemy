@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { Phase } from "./alchemy.js";
 import { destroy } from "./destroy.js";
 import { FileSystemStateStore } from "./fs/file-system-state-store.js";
 import type { PendingResource, ResourceID } from "./resource.js";
@@ -14,6 +15,7 @@ export type ScopeOptions = {
   password?: string;
   stateStore?: StateStoreType;
   quiet?: boolean;
+  phase?: Phase;
 };
 
 // TODO: support browser
@@ -39,11 +41,13 @@ export class Scope {
   public readonly parent: Scope | undefined;
   public readonly password: string | undefined;
   public readonly state: StateStore;
+  public readonly stateStore: StateStoreType;
   public readonly quiet: boolean;
+  public readonly phase: Phase;
 
   private isErrored = false;
 
-  constructor(options: ScopeOptions) {
+  constructor(private readonly options: ScopeOptions) {
     this.appName = options.appName;
     this.stage = options?.stage ?? DEFAULT_STAGE;
     this.scopeName = options.scopeName ?? null;
@@ -53,9 +57,16 @@ export class Scope {
       throw new Error("Scope name is required when creating a child scope");
     }
     this.password = options.password ?? this.parent?.password;
-    this.state = options.stateStore
-      ? options.stateStore(this)
-      : new FileSystemStateStore(this);
+    this.stateStore =
+      options.stateStore ??
+      this.parent?.stateStore ??
+      ((scope) => new FileSystemStateStore(scope));
+    this.state = this.stateStore(this);
+    const phase = options.phase ?? this.parent?.phase;
+    if (phase === undefined) {
+      throw new Error("Phase is required");
+    }
+    this.phase = phase;
   }
 
   public async delete(resourceID: ResourceID) {
@@ -74,9 +85,8 @@ export class Scope {
     const app = this.appName ? [this.appName] : [];
     if (this.parent) {
       return [...this.parent.chain, ...thisScope];
-    } else {
-      return [...app, this.stage, ...thisScope];
     }
+    return [...app, this.stage, ...thisScope];
   }
 
   public fail() {
@@ -110,15 +120,18 @@ export class Scope {
   }
 
   public async finalize() {
+    if (this.phase === "read") {
+      return;
+    }
     if (!this.isErrored) {
       // TODO: need to detect if it is in error
       const resourceIds = await this.state.list();
       const aliveIds = new Set(this.resources.keys());
       const orphanIds = Array.from(
-        resourceIds.filter((id) => !aliveIds.has(id))
+        resourceIds.filter((id) => !aliveIds.has(id)),
       );
       const orphans = await Promise.all(
-        orphanIds.map(async (id) => (await this.state.get(id))!.output)
+        orphanIds.map(async (id) => (await this.state.get(id))!.output),
       );
       await destroy.all(orphans, {
         quiet: this.quiet,

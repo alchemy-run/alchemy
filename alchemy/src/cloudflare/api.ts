@@ -1,6 +1,11 @@
+import { alchemy } from "../alchemy.js";
 import type { Secret } from "../secret.js";
 import { withExponentialBackoff } from "../util/retry.js";
-import { getCloudflareAuthHeaders, getCloudflareUserInfo } from "./auth.js";
+import {
+  getCloudflareAuthHeaders,
+  type CloudflareAuthOptions,
+} from "./auth.js";
+import { getCloudflareUserInfo, getUserEmailFromApiKey } from "./user.js";
 
 /**
  * Options for Cloudflare API requests
@@ -30,11 +35,6 @@ export interface CloudflareApiOptions {
   accountId?: string;
 
   /**
-   * Zone ID to use (overrides CLOUDFLARE_ZONE_ID env var)
-   */
-  zoneId?: string;
-
-  /**
    * Email to use with API Key authentication
    * If not provided, will attempt to discover from Cloudflare API
    */
@@ -48,16 +48,43 @@ export interface CloudflareApiOptions {
  * @returns Promise resolving to a CloudflareApi instance
  */
 export async function createCloudflareApi(
-  options: Partial<CloudflareApiOptions> = {}
+  options: Partial<CloudflareApiOptions> = {},
 ): Promise<CloudflareApi> {
-  const userInfo = await getCloudflareUserInfo(options);
+  const apiKey =
+    options.apiKey ??
+    (process.env.CLOUDFLARE_API_KEY
+      ? alchemy.secret(process.env.CLOUDFLARE_API_KEY)
+      : undefined);
+  const apiToken =
+    options.apiToken ??
+    (process.env.CLOUDFLARE_API_TOKEN
+      ? alchemy.secret(process.env.CLOUDFLARE_API_TOKEN)
+      : undefined);
+  let email = options.email ?? process.env.CLOUDFLARE_EMAIL;
+  if (apiKey && !email) {
+    email = await getUserEmailFromApiKey(apiKey.unencrypted);
+  }
+  const accountId =
+    options.accountId ??
+    process.env.CLOUDFLARE_ACCOUNT_ID ??
+    (
+      await getCloudflareUserInfo({
+        apiKey,
+        apiToken,
+        email,
+      } as CloudflareAuthOptions)
+    ).accounts[0]?.id;
+  if (accountId === undefined) {
+    throw new Error(
+      "Either accountId or CLOUDFLARE_ACCOUNT_ID must be provided",
+    );
+  }
   return new CloudflareApi({
     baseUrl: options.baseUrl,
-    accountId: options.accountId ?? userInfo.accounts[0].id!,
-    email: userInfo.email!,
-    apiKey: userInfo.apiKey,
-    apiToken: userInfo.apiToken,
-    zoneId: options.zoneId,
+    accountId,
+    email,
+    apiKey,
+    apiToken,
   });
 }
 
@@ -67,6 +94,11 @@ export async function createCloudflareApi(
 export class CloudflareApi {
   public readonly accountId: string;
   public readonly baseUrl: string;
+  public readonly apiKey: Secret | undefined;
+  public readonly apiToken: Secret | undefined;
+  public readonly email: string | undefined;
+  public readonly authOptions: CloudflareAuthOptions;
+
   /**
    * Create a new Cloudflare API client
    * Use createCloudflareApi factory function instead of direct constructor
@@ -75,12 +107,29 @@ export class CloudflareApi {
    * @param options API options
    */
   constructor(
-    private readonly options: CloudflareApiOptions & {
+    options: CloudflareApiOptions & {
       accountId: string;
-    }
+    },
   ) {
     this.accountId = options.accountId;
     this.baseUrl = options.baseUrl ?? "https://api.cloudflare.com/client/v4";
+    this.apiKey = options.apiKey;
+    this.apiToken = options.apiToken;
+    this.email = options.email;
+
+    if (this.apiKey && this.apiToken) {
+      throw new Error("'apiKey' and 'apiToken' cannot both be provided");
+    } else if (this.apiKey && !this.email) {
+      throw new Error("'email' must be provided if 'apiKey' is provided");
+    }
+    this.authOptions = this.apiKey
+      ? {
+          apiKey: this.apiKey,
+          email: this.email!,
+        }
+      : {
+          apiToken: this.apiToken,
+        };
   }
 
   /**
@@ -106,7 +155,7 @@ export class CloudflareApi {
       headers = init.headers;
     }
     headers = {
-      ...(await getCloudflareAuthHeaders(this.options)),
+      ...(await getCloudflareAuthHeaders(this.authOptions)),
       ...headers,
     };
 
@@ -130,7 +179,7 @@ export class CloudflareApi {
       // transient errors should be retried aggressively
       (error) => error instanceof InternalError,
       5, // Maximum 5 attempts (1 initial + 4 retries)
-      1000 // Start with 1s delay, will exponentially increase
+      1000, // Start with 1s delay, will exponentially increase
     );
   }
 
@@ -153,7 +202,7 @@ export class CloudflareApi {
   async post(
     path: string,
     body: any,
-    init: RequestInit = {}
+    init: RequestInit = {},
   ): Promise<Response> {
     const requestBody =
       body instanceof FormData
@@ -170,7 +219,7 @@ export class CloudflareApi {
   async put(
     path: string,
     body: any,
-    init: RequestInit = {}
+    init: RequestInit = {},
   ): Promise<Response> {
     const requestBody = body instanceof FormData ? body : JSON.stringify(body);
     return this.fetch(path, { ...init, method: "PUT", body: requestBody });
@@ -182,7 +231,7 @@ export class CloudflareApi {
   async patch(
     path: string,
     body: any,
-    init: RequestInit = {}
+    init: RequestInit = {},
   ): Promise<Response> {
     return this.fetch(path, {
       ...init,
@@ -199,8 +248,4 @@ export class CloudflareApi {
   }
 }
 
-class InternalError extends Error {
-  constructor(message: string) {
-    super(message);
-  }
-}
+class InternalError extends Error {}

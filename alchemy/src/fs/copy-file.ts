@@ -64,7 +64,7 @@ export const CopyFile = Resource(
   async function (
     this: Context<CopyFile>,
     id: string,
-    props: CopyFileProps
+    props: CopyFileProps,
   ): Promise<CopyFile> {
     const { src, dest, overwrite = true } = props;
 
@@ -72,44 +72,43 @@ export const CopyFile = Resource(
       // When deleting, remove the destination file
       await ignore("ENOENT", async () => fs.promises.unlink(dest));
       return this.destroy();
-    } else {
-      try {
-        // Check if source file exists
-        await fs.promises.access(src, fs.constants.F_OK);
-
-        // If this is an update and the destination has changed, delete the old file
-        if (
-          this.phase === "update" &&
-          this.output?.dest &&
-          this.output.dest !== dest
-        ) {
-          await ignore("ENOENT", async () =>
-            fs.promises.unlink(this.output.dest)
-          );
-        }
-
-        // Check if destination file exists
-        const destinationExists = await fs.promises
-          .access(dest, fs.constants.F_OK)
-          .then(() => true)
-          .catch(() => false);
-
-        // Copy file if destination doesn't exist or overwrite is true
-        if (!destinationExists || overwrite) {
-          await fs.promises.copyFile(src, dest);
-        }
-
-        return this({
-          src,
-          dest,
-          overwrite,
-          copied: true,
-          createdAt: Date.now(),
-        });
-      } catch (error) {
-        console.error(`Error copying file from ${src} to ${dest}:`, error);
-        throw error;
-      }
     }
-  }
+    try {
+      // Check if source file exists
+      await fs.promises.access(src, fs.constants.F_OK);
+
+      // If this is an update and the destination has changed, delete the old file
+      if (
+        this.phase === "update" &&
+        this.output?.dest &&
+        this.output.dest !== dest
+      ) {
+        await ignore("ENOENT", async () =>
+          fs.promises.unlink(this.output.dest),
+        );
+      }
+
+      // Check if destination file exists
+      const destinationExists = await fs.promises
+        .access(dest, fs.constants.F_OK)
+        .then(() => true)
+        .catch(() => false);
+
+      // Copy file if destination doesn't exist or overwrite is true
+      if (!destinationExists || overwrite) {
+        await fs.promises.copyFile(src, dest);
+      }
+
+      return this({
+        src,
+        dest,
+        overwrite,
+        copied: true,
+        createdAt: Date.now(),
+      });
+    } catch (error) {
+      console.error(`Error copying file from ${src} to ${dest}:`, error);
+      throw error;
+    }
+  },
 );

@@ -15,7 +15,7 @@ const app = await alchemy("cloudflare-nuxt-pipeline", {
 });
 
 const bucket = await R2Bucket(
-  `cloudflare-nuxt-pipeline-bucket${BRANCH_PREFIX}`
+  `cloudflare-nuxt-pipeline-bucket${BRANCH_PREFIX}`,
 );
 
 const pipeline = await Pipeline(
@@ -39,7 +39,7 @@ const pipeline = await Pipeline(
         maxRows: 100,
       },
     },
-  }
+  },
 );
 
 export const website = await Nuxt(
@@ -49,7 +49,7 @@ export const website = await Nuxt(
       R2_BUCKET: bucket,
       PIPELINE: pipeline,
     },
-  }
+  },
 );
 
 console.log({

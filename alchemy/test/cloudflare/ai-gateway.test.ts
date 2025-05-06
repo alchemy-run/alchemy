@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { AiGateway } from "../../src/cloudflare/ai-gateway";
-import { createCloudflareApi } from "../../src/cloudflare/api";
-import { destroy } from "../../src/destroy";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { AiGateway } from "../../src/cloudflare/ai-gateway.js";
+import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { destroy } from "../../src/destroy.js";
+import { BRANCH_PREFIX } from "../util.js";
 // must import this or else alchemy.test won't exist
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 // Create API client for verification
 const api = await createCloudflareApi();
@@ -33,7 +33,7 @@ describe("AiGateway Resource", () => {
 
       // Verify gateway was created by querying the API directly
       const getResponse = await api.get(
-        `/accounts/${api.accountId}/ai-gateway/gateways/${testId}`
+        `/accounts/${api.accountId}/ai-gateway/gateways/${testId}`,
       );
       expect(getResponse.status).toEqual(200);
 
@@ -58,7 +58,7 @@ describe("AiGateway Resource", () => {
 
       // Verify gateway was updated
       const getUpdatedResponse = await api.get(
-        `/accounts/${api.accountId}/ai-gateway/gateways/${testId}`
+        `/accounts/${api.accountId}/ai-gateway/gateways/${testId}`,
       );
       const updatedData = await getUpdatedResponse.json();
       expect(updatedData.result.id).toEqual(testId);
@@ -76,7 +76,7 @@ describe("AiGateway Resource", () => {
 
       // Verify gateway was deleted
       const getDeletedResponse = await api.get(
-        `/accounts/${api.accountId}/ai-gateway/gateways/${testId}`
+        `/accounts/${api.accountId}/ai-gateway/gateways/${testId}`,
       );
       expect(getDeletedResponse.status).toEqual(404);
     }
@@ -86,21 +86,21 @@ describe("AiGateway Resource", () => {
     let gateway: AiGateway | undefined;
     try {
       // Create a test AI Gateway with authentication and logging
-      gateway = await AiGateway(testId + "-auth", {
+      gateway = await AiGateway(`${testId}-auth`, {
         collectLogs: true,
         authentication: true,
         logManagement: 10000,
         logManagementStrategy: "DELETE_OLDEST",
       });
 
-      expect(gateway.id).toEqual(testId + "-auth");
+      expect(gateway.id).toEqual(`${testId}-auth`);
       expect(gateway.authentication).toEqual(true);
       expect(gateway.logManagement).toEqual(10000);
       expect(gateway.logManagementStrategy).toEqual("DELETE_OLDEST");
 
       // Verify gateway was created with correct settings
       const getResponse = await api.get(
-        `/accounts/${api.accountId}/ai-gateway/gateways/${testId}-auth`
+        `/accounts/${api.accountId}/ai-gateway/gateways/${testId}-auth`,
       );
       expect(getResponse.status).toEqual(200);
 
@@ -108,7 +108,7 @@ describe("AiGateway Resource", () => {
       expect(responseData.result.authentication).toEqual(true);
       expect(responseData.result.log_management).toEqual(10000);
       expect(responseData.result.log_management_strategy).toEqual(
-        "DELETE_OLDEST"
+        "DELETE_OLDEST",
       );
     } finally {
       // Always clean up
@@ -116,7 +116,7 @@ describe("AiGateway Resource", () => {
 
       // Verify gateway was deleted
       const getDeletedResponse = await api.get(
-        `/accounts/${api.accountId}/ai-gateway/gateways/${testId}-auth`
+        `/accounts/${api.accountId}/ai-gateway/gateways/${testId}-auth`,
       );
       expect(getDeletedResponse.status).toEqual(404);
     }
@@ -126,14 +126,14 @@ describe("AiGateway Resource", () => {
     let gateway: AiGateway | undefined;
     try {
       // Create a test AI Gateway with rate limiting
-      gateway = await AiGateway(testId + "-ratelimit", {
+      gateway = await AiGateway(`${testId}-ratelimit`, {
         rateLimitingInterval: 30,
         rateLimitingLimit: 50,
         rateLimitingTechnique: "sliding",
         cacheInvalidateOnUpdate: true,
       });
 
-      expect(gateway.id).toEqual(testId + "-ratelimit");
+      expect(gateway.id).toEqual(`${testId}-ratelimit`);
       expect(gateway.rateLimitingInterval).toEqual(30);
       expect(gateway.rateLimitingLimit).toEqual(50);
       expect(gateway.rateLimitingTechnique).toEqual("sliding");
@@ -141,7 +141,7 @@ describe("AiGateway Resource", () => {
 
       // Verify gateway was created with correct rate limiting settings
       const getResponse = await api.get(
-        `/accounts/${api.accountId}/ai-gateway/gateways/${testId}-ratelimit`
+        `/accounts/${api.accountId}/ai-gateway/gateways/${testId}-ratelimit`,
       );
       expect(getResponse.status).toEqual(200);
 
@@ -155,7 +155,7 @@ describe("AiGateway Resource", () => {
 
       // Verify gateway was deleted
       const getDeletedResponse = await api.get(
-        `/accounts/${api.accountId}/ai-gateway/gateways/${testId}-ratelimit`
+        `/accounts/${api.accountId}/ai-gateway/gateways/${testId}-ratelimit`,
       );
       expect(getDeletedResponse.status).toEqual(404);
     }

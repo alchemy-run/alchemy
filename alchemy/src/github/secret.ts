@@ -135,7 +135,7 @@ export const GitHubSecret = Resource(
   async function (
     this: Context<GitHubSecretOutput>,
     id: string,
-    props: GitHubSecretProps
+    props: GitHubSecretProps,
   ): Promise<GitHubSecretOutput> {
     // Create authenticated Octokit client - will automatically handle token resolution
     /// TODO: use fetch
@@ -181,133 +181,128 @@ export const GitHubSecret = Resource(
 
       // Return void (a deleted resource has no content)
       return this.destroy();
-    } else {
-      try {
-        // Check if we're transitioning between secret types (repo <-> environment)
-        if (this.phase === "update") {
-          const wasEnvironmentSecret = !!this.output.environment;
-          const secretTypeChanged =
-            isEnvironmentSecret !== wasEnvironmentSecret;
+    }
+    try {
+      // Check if we're transitioning between secret types (repo <-> environment)
+      if (this.phase === "update") {
+        const wasEnvironmentSecret = !!this.output.environment;
+        const secretTypeChanged = isEnvironmentSecret !== wasEnvironmentSecret;
 
-          // If secret type changed, we need to delete the old one first
-          if (secretTypeChanged) {
-            console.log(
-              `Secret type changed from ${wasEnvironmentSecret ? "environment" : "repository"} to ${isEnvironmentSecret ? "environment" : "repository"} secret. Deleting the old secret first.`
-            );
+        // If secret type changed, we need to delete the old one first
+        if (secretTypeChanged) {
+          console.log(
+            `Secret type changed from ${wasEnvironmentSecret ? "environment" : "repository"} to ${isEnvironmentSecret ? "environment" : "repository"} secret. Deleting the old secret first.`,
+          );
 
-            try {
-              if (wasEnvironmentSecret) {
-                // Delete the old environment secret
-                await octokit.rest.actions.deleteEnvironmentSecret({
-                  owner: this.output.owner,
-                  repo: this.output.repository,
-                  environment_name: this.output.environment!,
-                  secret_name: this.output.name,
-                });
-              } else {
-                // Delete the old repository secret
-                await octokit.rest.actions.deleteRepoSecret({
-                  owner: this.output.owner,
-                  repo: this.output.repository,
-                  secret_name: this.output.name,
-                });
-              }
-            } catch (error: any) {
-              // Log but don't fail if the old secret doesn't exist or can't be deleted
-              if (error.status === 404) {
-                console.log(
-                  "Old secret not found, continuing with creation of new secret"
-                );
-              } else {
-                throw error;
-              }
+          try {
+            if (wasEnvironmentSecret) {
+              // Delete the old environment secret
+              await octokit.rest.actions.deleteEnvironmentSecret({
+                owner: this.output.owner,
+                repo: this.output.repository,
+                environment_name: this.output.environment!,
+                secret_name: this.output.name,
+              });
+            } else {
+              // Delete the old repository secret
+              await octokit.rest.actions.deleteRepoSecret({
+                owner: this.output.owner,
+                repo: this.output.repository,
+                secret_name: this.output.name,
+              });
+            }
+          } catch (error: any) {
+            // Log but don't fail if the old secret doesn't exist or can't be deleted
+            if (error.status === 404) {
+              console.log(
+                "Old secret not found, continuing with creation of new secret",
+              );
+            } else {
+              throw error;
             }
           }
         }
-
-        let publicKey;
-
-        // Get the appropriate public key for encrypting secrets
-        if (isEnvironmentSecret) {
-          // Get the environment's public key
-          const { data } = await octokit.rest.actions.getEnvironmentPublicKey({
-            owner: props.owner,
-            repo: props.repository,
-            environment_name: props.environment!,
-          });
-          publicKey = data;
-        } else {
-          // Get the repository's public key
-          const { data } = await octokit.rest.actions.getRepoPublicKey({
-            owner: props.owner,
-            repo: props.repository,
-          });
-          publicKey = data;
-        }
-
-        // Encrypt the secret value using libsodium
-        const encryptedValue = await encryptString(
-          props.value.unencrypted,
-          publicKey.key
-        );
-
-        // Create or update the secret with the encrypted value and key_id
-        if (isEnvironmentSecret) {
-          await octokit.rest.actions.createOrUpdateEnvironmentSecret({
-            owner: props.owner,
-            repo: props.repository,
-            environment_name: props.environment!,
-            secret_name: props.name,
-            encrypted_value: encryptedValue,
-            key_id: publicKey.key_id,
-          });
-        } else {
-          await octokit.rest.actions.createOrUpdateRepoSecret({
-            owner: props.owner,
-            repo: props.repository,
-            secret_name: props.name,
-            encrypted_value: encryptedValue,
-            key_id: publicKey.key_id,
-          });
-        }
-
-        // GitHub doesn't return the secret details on create/update, so we need to construct it
-        const idParts = [props.owner, props.repository];
-        if (isEnvironmentSecret) {
-          idParts.push(props.environment!);
-        }
-        idParts.push(props.name);
-
-        return this({
-          id: idParts.join("/"),
-          owner: props.owner,
-          repository: props.repository,
-          name: props.name,
-          environment: props.environment,
-          token: props.token,
-          updatedAt: new Date().toISOString(),
-        });
-      } catch (error: any) {
-        if (
-          error.status === 403 &&
-          error.message?.includes("Must have admin rights")
-        ) {
-          console.error(
-            "\n⚠️ Error creating/updating GitHub secret: You must have admin rights to the repository."
-          );
-          console.error(
-            "Make sure your GitHub token has the required permissions (repo scope for private repos).\n"
-          );
-        } else {
-          console.error(
-            "Error creating/updating GitHub secret:",
-            error.message
-          );
-        }
-        throw error;
       }
+
+      let publicKey;
+
+      // Get the appropriate public key for encrypting secrets
+      if (isEnvironmentSecret) {
+        // Get the environment's public key
+        const { data } = await octokit.rest.actions.getEnvironmentPublicKey({
+          owner: props.owner,
+          repo: props.repository,
+          environment_name: props.environment!,
+        });
+        publicKey = data;
+      } else {
+        // Get the repository's public key
+        const { data } = await octokit.rest.actions.getRepoPublicKey({
+          owner: props.owner,
+          repo: props.repository,
+        });
+        publicKey = data;
+      }
+
+      // Encrypt the secret value using libsodium
+      const encryptedValue = await encryptString(
+        props.value.unencrypted,
+        publicKey.key,
+      );
+
+      // Create or update the secret with the encrypted value and key_id
+      if (isEnvironmentSecret) {
+        await octokit.rest.actions.createOrUpdateEnvironmentSecret({
+          owner: props.owner,
+          repo: props.repository,
+          environment_name: props.environment!,
+          secret_name: props.name,
+          encrypted_value: encryptedValue,
+          key_id: publicKey.key_id,
+        });
+      } else {
+        await octokit.rest.actions.createOrUpdateRepoSecret({
+          owner: props.owner,
+          repo: props.repository,
+          secret_name: props.name,
+          encrypted_value: encryptedValue,
+          key_id: publicKey.key_id,
+        });
+      }
+
+      // GitHub doesn't return the secret details on create/update, so we need to construct it
+      const idParts = [props.owner, props.repository];
+      if (isEnvironmentSecret) {
+        idParts.push(props.environment!);
+      }
+      idParts.push(props.name);
+
+      return this({
+        id: idParts.join("/"),
+        owner: props.owner,
+        repository: props.repository,
+        name: props.name,
+        environment: props.environment,
+        token: props.token,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      if (
+        error.status === 403 &&
+        error.message?.includes("Must have admin rights")
+      ) {
+        console.error(
+          "\n⚠️ Error creating/updating GitHub secret: You must have admin rights to the repository.",
+        );
+        console.error(
+          "Make sure your GitHub token has the required permissions (repo scope for private repos).\n",
+        );
+      } else {
+        console.error("Error creating/updating GitHub secret:", error.message);
+      }
+      throw error;
     }
-  }
+  },
 );
 
 /**
@@ -320,7 +315,7 @@ export const GitHubSecret = Resource(
  */
 async function encryptString(
   value: string,
-  publicKey: string
+  publicKey: string,
 ): Promise<string> {
   // Initialize libsodium
   await sodium.ready;

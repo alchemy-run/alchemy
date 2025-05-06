@@ -14,7 +14,7 @@ export async function encrypt(value: string, key: string): Promise<string> {
   // Derive a key from the passphrase
   const cryptoKey = sodium.crypto_generichash(
     sodium.crypto_secretbox_KEYBYTES,
-    sodium.from_string(key)
+    sodium.from_string(key),
   );
 
   // Generate a random nonce
@@ -24,7 +24,7 @@ export async function encrypt(value: string, key: string): Promise<string> {
   const encryptedBin = sodium.crypto_secretbox_easy(
     sodium.from_string(value),
     nonce,
-    cryptoKey
+    cryptoKey,
   );
 
   // Combine nonce and ciphertext, then encode to base64
@@ -44,7 +44,7 @@ export async function encrypt(value: string, key: string): Promise<string> {
  */
 export async function decryptWithKey(
   encryptedValue: string,
-  key: string
+  key: string,
 ): Promise<string> {
   // Initialize libsodium
   await sodium.ready;
@@ -52,13 +52,13 @@ export async function decryptWithKey(
   // Derive a key from the passphrase
   const cryptoKey = sodium.crypto_generichash(
     sodium.crypto_secretbox_KEYBYTES,
-    sodium.from_string(key)
+    sodium.from_string(key),
   );
 
   // Decode the base64 combined value
   const combined = sodium.from_base64(
     encryptedValue,
-    sodium.base64_variants.ORIGINAL
+    sodium.base64_variants.ORIGINAL,
   );
 
   // Extract nonce and ciphertext
@@ -69,7 +69,7 @@ export async function decryptWithKey(
   const decryptedBin = sodium.crypto_secretbox_open_easy(
     ciphertext,
     nonce,
-    cryptoKey
+    cryptoKey,
   );
 
   return sodium.to_string(decryptedBin);

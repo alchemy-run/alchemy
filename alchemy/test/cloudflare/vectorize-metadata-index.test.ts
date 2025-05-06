@@ -1,14 +1,14 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { createCloudflareApi } from "../../src/cloudflare/api";
-import { VectorizeIndex } from "../../src/cloudflare/vectorize-index";
+import { alchemy } from "../../src/alchemy.js";
+import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { VectorizeIndex } from "../../src/cloudflare/vectorize-index.js";
 import {
   VectorizeMetadataIndex,
   listMetadataIndexes,
-} from "../../src/cloudflare/vectorize-metadata-index";
-import { BRANCH_PREFIX } from "../util";
+} from "../../src/cloudflare/vectorize-metadata-index.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -90,7 +90,7 @@ describe("Vectorize Metadata Index Resource", async () => {
           index: vectorIndex,
           propertyName: "tag",
           indexType: "boolean", // Change the type
-        })
+        }),
       ).rejects.toThrow("Updating Vectorize metadata indexes is not supported");
     } finally {
       await alchemy.destroy(scope);
@@ -100,19 +100,19 @@ describe("Vectorize Metadata Index Resource", async () => {
 
 async function assertMetadataIndexDeleted(
   indexName: string,
-  propertyName: string
+  propertyName: string,
 ) {
   const api = await createCloudflareApi();
   try {
     // List metadata indexes and check if our index is still there
     const metadataIndexes = await listMetadataIndexes(api, indexName);
     const foundIndex = metadataIndexes.find(
-      (idx) => idx.propertyName === propertyName
+      (idx) => idx.propertyName === propertyName,
     );
 
     if (foundIndex) {
       throw new Error(
-        `Metadata index ${propertyName} was not deleted as expected`
+        `Metadata index ${propertyName} was not deleted as expected`,
       );
     }
   } catch (error: any) {

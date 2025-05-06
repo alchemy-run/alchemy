@@ -7,15 +7,15 @@ import {
 } from "@aws-sdk/client-lambda";
 import { describe, expect } from "bun:test";
 import path from "node:path";
-import { alchemy } from "../../src/alchemy";
-import { Function } from "../../src/aws/function";
-import type { PolicyDocument } from "../../src/aws/policy";
-import { Role } from "../../src/aws/role";
-import { destroy } from "../../src/destroy";
+import { alchemy } from "../../src/alchemy.js";
+import { Function } from "../../src/aws/function.js";
+import type { PolicyDocument } from "../../src/aws/policy.js";
+import { Role } from "../../src/aws/role.js";
+import { destroy } from "../../src/destroy.js";
 import { Bundle } from "../../src/esbuild";
-import { BRANCH_PREFIX } from "../util";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -60,7 +60,7 @@ const invokeLambda = async (functionName: string, event: any) => {
     new InvokeCommand({
       FunctionName: functionName,
       Payload: JSON.stringify(event),
-    })
+    }),
   );
 
   const responsePayload = new TextDecoder().decode(invokeResponse.Payload);
@@ -106,7 +106,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -115,15 +115,15 @@ describe("AWS Resources", () => {
 
         expect(func.arn).toMatch(
           new RegExp(
-            `^arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}$`
-          )
+            `^arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}$`,
+          ),
         );
         expect(func.state).toBe("Active");
         expect(func.lastUpdateStatus).toBe("Successful");
         expect(func.invokeArn).toMatch(
           new RegExp(
-            `^arn:aws:apigateway:[a-z0-9-]+:lambda:path\\/2015-03-31\\/functions\\/arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}\\/invocations$`
-          )
+            `^arn:aws:apigateway:[a-z0-9-]+:lambda:path\\/2015-03-31\\/functions\\/arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}\\/invocations$`,
+          ),
         );
 
         // Immediately apply again to test stabilization logic
@@ -136,12 +136,12 @@ describe("AWS Resources", () => {
           new InvokeCommand({
             FunctionName: functionName,
             Payload: JSON.stringify(testEvent),
-          })
+          }),
         );
 
         // Parse the response
         const responsePayload = new TextDecoder().decode(
-          invokeResponse.Payload
+          invokeResponse.Payload,
         );
         const response = JSON.parse(responsePayload);
         expect(response.statusCode).toBe(200);
@@ -157,8 +157,8 @@ describe("AWS Resources", () => {
             lambda.send(
               new GetFunctionCommand({
                 FunctionName: functionName,
-              })
-            )
+              }),
+            ),
           ).rejects.toThrow(ResourceNotFoundException);
         }
       }
@@ -201,7 +201,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -219,14 +219,14 @@ describe("AWS Resources", () => {
         // Verify function was created with URL
         expect(func.arn).toMatch(
           new RegExp(
-            `^arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}$`
-          )
+            `^arn:aws:lambda:[a-z0-9-]+:\\d+:function:${functionName}$`,
+          ),
         );
         expect(func.state).toBe("Active");
         expect(func.lastUpdateStatus).toBe("Successful");
         expect(func.functionUrl).toBeTruthy();
         expect(func.functionUrl).toMatch(
-          /^https:\/\/.+\.lambda-url\..+\.on\.aws\/?$/
+          /^https:\/\/.+\.lambda-url\..+\.on\.aws\/?$/,
         );
 
         // Test function URL by making an HTTP request
@@ -250,7 +250,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -269,8 +269,8 @@ describe("AWS Resources", () => {
             lambda.send(
               new GetFunctionCommand({
                 FunctionName: functionName,
-              })
-            )
+              }),
+            ),
           ).rejects.toThrow(ResourceNotFoundException);
         }
       }
@@ -292,7 +292,7 @@ describe("AWS Resources", () => {
             format: "cjs",
             platform: "node",
             target: "node18",
-          }
+          },
         );
 
         role = await Role(roleName, {
@@ -315,7 +315,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -365,7 +365,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -416,7 +416,7 @@ describe("AWS Resources", () => {
             format: "cjs",
             platform: "node",
             target: "node18",
-          }
+          },
         );
 
         role = await Role(roleName, {
@@ -439,7 +439,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -466,7 +466,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -484,7 +484,7 @@ describe("AWS Resources", () => {
         // Verify URL was added
         expect(func.functionUrl).toBeTruthy();
         expect(func.functionUrl).toMatch(
-          /^https:\/\/.+\.lambda-url\..+\.on\.aws\/?$/
+          /^https:\/\/.+\.lambda-url\..+\.on\.aws\/?$/,
         );
 
         // Test function URL invocation
@@ -532,7 +532,7 @@ describe("AWS Resources", () => {
             format: "cjs",
             platform: "node",
             target: "node18",
-          }
+          },
         );
 
         role = await Role(roleName, {
@@ -555,7 +555,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -596,7 +596,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -620,7 +620,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -656,7 +656,7 @@ describe("AWS Resources", () => {
         const urlConfig = await lambda.send(
           new GetFunctionUrlConfigCommand({
             FunctionName: functionName,
-          })
+          }),
         );
 
         // Verify that the invokeMode property is set to RESPONSE_STREAM in the Lambda URL config
@@ -687,12 +687,12 @@ describe("AWS Resources", () => {
             expect(chunkCount).toBeGreaterThan(0);
 
             // Try to parse the complete data
-            if (receivedData && receivedData.trim()) {
+            if (receivedData?.trim()) {
               try {
                 const responseBody = JSON.parse(receivedData);
                 if (responseBody.message) {
                   expect(responseBody.message).toBe(
-                    "Hello from bundled handler!"
+                    "Hello from bundled handler!",
                   );
                 }
                 if (responseBody.event) {
@@ -712,7 +712,7 @@ describe("AWS Resources", () => {
           }
         } else {
           console.log(
-            "No response body stream available - using text() method"
+            "No response body stream available - using text() method",
           );
 
           // Fall back to response.text() if no stream is available
@@ -741,10 +741,81 @@ describe("AWS Resources", () => {
             lambda.send(
               new GetFunctionCommand({
                 FunctionName: functionName,
-              })
-            )
+              }),
+            ),
           ).rejects.toThrow(ResourceNotFoundException);
         }
+      }
+    });
+
+    test("create function with handler containing _, 0-9, and A-Z", async (scope) => {
+      // Define resources that need to be cleaned up
+      let role: Role | undefined = undefined;
+      let func: Function | null = null;
+
+      try {
+        let bundle = await Bundle("bundle", {
+          entryPoint: path.join(__dirname, "..", "handler.ts"),
+          outdir: ".out",
+          format: "cjs",
+          platform: "node",
+          target: "node18",
+        });
+
+        role = await Role("role", {
+          roleName: `${BRANCH_PREFIX}-alchemy-test-lambda-handler-special-chars-role`,
+          assumeRolePolicy: LAMBDA_ASSUME_ROLE_POLICY,
+          policies: [
+            {
+              policyName: "logs",
+              policyDocument: LAMBDA_LOGS_POLICY,
+            },
+          ],
+          tags: {
+            Environment: "test",
+          },
+        });
+
+        // Create the Lambda function with BUFFERED invoke mode (default)
+        func = await Function("function", {
+          functionName: `${BRANCH_PREFIX}-alchemy-test-func-handler-special-chars`,
+          bundle,
+          roleArn: role.arn,
+          handler: "index._myHandler012",
+          runtime: "nodejs20.x",
+          tags: {
+            Environment: "test",
+          },
+          url: {
+            authType: "NONE",
+            // Default invokeMode is BUFFERED if not specified
+            cors: {
+              allowOrigins: ["*"],
+              allowMethods: ["GET", "POST"],
+              allowHeaders: ["Content-Type"],
+            },
+          },
+        });
+
+        // Verify function was created successfully
+        expect(func.arn).toBeTruthy();
+        expect(func.state).toBe("Active");
+        expect(func.functionUrl).toMatch(
+          /^https:\/\/.+\.lambda-url\..+\.on\.aws\/?$/,
+        );
+
+        // Test function invocation via URL
+        const response = await fetch(func.functionUrl!, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ test: "special-handler" }),
+        });
+
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.message).toBe("Hello from bundled handler!");
+      } finally {
+        await destroy(scope);
       }
     });
   });

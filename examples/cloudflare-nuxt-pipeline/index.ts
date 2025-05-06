@@ -7,7 +7,7 @@ export default {
   async fetch(
     request: Request,
     environment: WorkerEnv,
-    ctx: ExecutionContext
+    ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
 

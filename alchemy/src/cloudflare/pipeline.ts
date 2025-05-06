@@ -3,7 +3,7 @@ import { Resource } from "../resource.js";
 import type { Secret } from "../secret.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
-  CloudflareApi,
+  type CloudflareApi,
   createCloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
@@ -332,50 +332,49 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
 
     // Return void (a deleted pipeline has no content)
     return this.destroy();
-  } else {
-    let pipelineData: CloudflarePipelineResponse;
-
-    if (this.phase === "create") {
-      pipelineData = await createPipeline(api, pipelineName, props);
-    } else {
-      // Update operation
-      if (this.output?.id) {
-        // Check if name is being changed, which is not allowed
-        if (props.name !== this.output.name) {
-          throw new Error(
-            "Cannot update Pipeline name after creation. Pipeline name is immutable."
-          );
-        }
-
-        // Update the pipeline with new settings
-        pipelineData = await updatePipeline(api, pipelineName, props);
-      } else {
-        // If no ID exists, fall back to creating a new pipeline
-        console.log(
-          "No existing Pipeline ID found, creating new Cloudflare Pipeline:",
-          pipelineName
-        );
-        pipelineData = await createPipeline(api, pipelineName, props);
-      }
-    }
-
-    return this({
-      type: "pipeline",
-      id: pipelineData.result.id,
-      name: pipelineName,
-      endpoint: pipelineData.result.endpoint,
-      version: pipelineData.result.version,
-      source: pipelineData.result.source!.map((s) => ({
-        type: s.type as "http" | "binding",
-        format: s.format as "json",
-        authentication: s.authentication,
-        cors: s.cors,
-      })),
-      destination: props.destination, // Use the input destination, not the API response
-      compression: props.compression,
-      accountId: api.accountId,
-    });
   }
+  let pipelineData: CloudflarePipelineResponse;
+
+  if (this.phase === "create") {
+    pipelineData = await createPipeline(api, pipelineName, props);
+  } else {
+    // Update operation
+    if (this.output?.id) {
+      // Check if name is being changed, which is not allowed
+      if (props.name !== this.output.name) {
+        throw new Error(
+          "Cannot update Pipeline name after creation. Pipeline name is immutable.",
+        );
+      }
+
+      // Update the pipeline with new settings
+      pipelineData = await updatePipeline(api, pipelineName, props);
+    } else {
+      // If no ID exists, fall back to creating a new pipeline
+      console.log(
+        "No existing Pipeline ID found, creating new Cloudflare Pipeline:",
+        pipelineName,
+      );
+      pipelineData = await createPipeline(api, pipelineName, props);
+    }
+  }
+
+  return this({
+    type: "pipeline",
+    id: pipelineData.result.id,
+    name: pipelineName,
+    endpoint: pipelineData.result.endpoint,
+    version: pipelineData.result.version,
+    source: pipelineData.result.source!.map((s) => ({
+      type: s.type as "http" | "binding",
+      format: s.format as "json",
+      authentication: s.authentication,
+      cors: s.cors,
+    })),
+    destination: props.destination, // Use the input destination, not the API response
+    compression: props.compression,
+    accountId: api.accountId,
+  });
 });
 
 interface CloudflarePipelineResponse {
@@ -421,10 +420,10 @@ interface CloudflarePipelineResponse {
  */
 export async function getPipeline(
   api: CloudflareApi,
-  pipelineName: string
+  pipelineName: string,
 ): Promise<CloudflarePipelineResponse> {
   const response = await api.get(
-    `/accounts/${api.accountId}/pipelines/${pipelineName}`
+    `/accounts/${api.accountId}/pipelines/${pipelineName}`,
   );
 
   if (!response.ok) {
@@ -439,11 +438,11 @@ export async function getPipeline(
  */
 export async function deletePipeline(
   api: CloudflareApi,
-  pipelineName: string
+  pipelineName: string,
 ): Promise<void> {
   // Delete Pipeline
   const deleteResponse = await api.delete(
-    `/accounts/${api.accountId}/pipelines/${pipelineName}`
+    `/accounts/${api.accountId}/pipelines/${pipelineName}`,
   );
 
   if (!deleteResponse.ok && deleteResponse.status !== 404) {
@@ -452,7 +451,7 @@ export async function deletePipeline(
     }));
     throw new CloudflareApiError(
       `Error deleting Cloudflare Pipeline '${pipelineName}': ${errorData.errors?.[0]?.message || deleteResponse.statusText}`,
-      deleteResponse
+      deleteResponse,
     );
   }
 }
@@ -463,14 +462,14 @@ export async function deletePipeline(
 export async function createPipeline(
   api: CloudflareApi,
   pipelineName: string,
-  props: PipelineProps
+  props: PipelineProps,
 ): Promise<CloudflarePipelineResponse> {
   // Prepare the create payload
   const createPayload = preparePipelinePayload(api, pipelineName, props);
 
   const createResponse = await api.post(
     `/accounts/${api.accountId}/pipelines`,
-    createPayload
+    createPayload,
   );
 
   if (!createResponse.ok) {
@@ -478,7 +477,7 @@ export async function createPipeline(
       createResponse,
       "creating",
       "Pipeline",
-      pipelineName
+      pipelineName,
     );
   }
 
@@ -491,7 +490,7 @@ export async function createPipeline(
 export async function updatePipeline(
   api: CloudflareApi,
   pipelineName: string,
-  props: PipelineProps
+  props: PipelineProps,
 ): Promise<CloudflarePipelineResponse> {
   // Get current pipeline to build update payload
   const currentPipeline = await getPipeline(api, pipelineName);
@@ -501,12 +500,12 @@ export async function updatePipeline(
     api,
     pipelineName,
     props,
-    currentPipeline
+    currentPipeline,
   );
 
   const updateResponse = await api.put(
     `/accounts/${api.accountId}/pipelines/${pipelineName}`,
-    updatePayload
+    updatePayload,
   );
 
   if (!updateResponse.ok) {
@@ -514,7 +513,7 @@ export async function updatePipeline(
       updateResponse,
       "updating",
       "Pipeline",
-      pipelineName
+      pipelineName,
     );
   }
 
@@ -528,7 +527,7 @@ function preparePipelinePayload(
   api: CloudflareApi,
   pipelineName: string,
   props: PipelineProps,
-  currentPipeline?: CloudflarePipelineResponse
+  currentPipeline?: CloudflarePipelineResponse,
 ): any {
   // Prepare the payload with name and source
   const payload: any = {
@@ -568,7 +567,7 @@ function preparePipelinePayload(
     payload.destination = currentPipeline.result.destination;
   } else if (!props.destination && !currentPipeline) {
     throw new Error(
-      "An R2 destination is required for creating/updating a pipeline"
+      "An R2 destination is required for creating/updating a pipeline",
     );
   }
 
@@ -584,14 +583,14 @@ function preparePipelinePayload(
  * List all pipelines in an account
  */
 export async function listPipelines(
-  api: CloudflareApi
+  api: CloudflareApi,
 ): Promise<{ name: string; id: string }[]> {
   const response = await api.get(`/accounts/${api.accountId}/pipelines`);
 
   if (!response.ok) {
     throw new CloudflareApiError(
       `Failed to list pipelines: ${response.statusText}`,
-      response
+      response,
     );
   }
 

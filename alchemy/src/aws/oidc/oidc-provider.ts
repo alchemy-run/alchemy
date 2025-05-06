@@ -121,7 +121,7 @@ export const OIDCProvider = Resource(
   async function (
     this: Context<OIDCProvider>,
     id: string,
-    props: OIDCProviderProps
+    props: OIDCProviderProps,
   ) {
     // Initialize AWS SDK client
     const client = new IAMClient({
@@ -135,24 +135,24 @@ export const OIDCProvider = Resource(
           const getRole = await client.send(
             new GetRoleCommand({
               RoleName: props.roleArn.split("/").pop(),
-            })
+            }),
           );
 
           if (getRole.Role?.AssumeRolePolicyDocument) {
             const policy = JSON.parse(
-              decodeURIComponent(getRole.Role.AssumeRolePolicyDocument)
+              decodeURIComponent(getRole.Role.AssumeRolePolicyDocument),
             );
 
             // Remove our specific statement while preserving others
             policy.Statement = policy.Statement.filter(
-              (stmt: any) => stmt.Sid !== TRUST_POLICY_SID
+              (stmt: any) => stmt.Sid !== TRUST_POLICY_SID,
             );
 
             await client.send(
               new UpdateAssumeRolePolicyCommand({
                 RoleName: props.roleArn.split("/").pop(),
                 PolicyDocument: JSON.stringify(policy),
-              })
+              }),
             );
           }
 
@@ -160,7 +160,7 @@ export const OIDCProvider = Resource(
           const provider = await client.send(
             new GetOpenIDConnectProviderCommand({
               OpenIDConnectProviderArn: this.output.providerArn,
-            })
+            }),
           );
 
           // Only delete the provider if it exists and has no other tags
@@ -168,7 +168,7 @@ export const OIDCProvider = Resource(
             await client.send(
               new DeleteOpenIDConnectProviderCommand({
                 OpenIDConnectProviderArn: this.output.providerArn,
-              })
+              }),
             );
           }
         } catch (error) {
@@ -197,7 +197,7 @@ export const OIDCProvider = Resource(
                 Value: "alchemy",
               },
             ] as Tag[],
-          })
+          }),
         );
         providerArn = createProvider.OpenIDConnectProviderArn!;
       } catch (error: any) {
@@ -213,13 +213,13 @@ export const OIDCProvider = Resource(
       const getRole = await client.send(
         new GetRoleCommand({
           RoleName: props.roleArn.split("/").pop(),
-        })
+        }),
       );
 
       let policy: any;
       if (getRole.Role?.AssumeRolePolicyDocument) {
         policy = JSON.parse(
-          decodeURIComponent(getRole.Role.AssumeRolePolicyDocument)
+          decodeURIComponent(getRole.Role.AssumeRolePolicyDocument),
         );
       } else {
         policy = {
@@ -240,7 +240,7 @@ export const OIDCProvider = Resource(
         conditions.StringEquals["token.actions.githubusercontent.com:sub"] =
           props.branches.map(
             (branch) =>
-              `repo:${props.owner}/${props.repository}:ref:refs/heads/${branch}`
+              `repo:${props.owner}/${props.repository}:ref:refs/heads/${branch}`,
           );
       }
 
@@ -248,7 +248,7 @@ export const OIDCProvider = Resource(
         conditions.StringEquals["token.actions.githubusercontent.com:sub"] =
           props.environments.map(
             (env) =>
-              `repo:${props.owner}/${props.repository}:environment:${env}`
+              `repo:${props.owner}/${props.repository}:environment:${env}`,
           );
       }
 
@@ -266,7 +266,7 @@ export const OIDCProvider = Resource(
       // Remove any existing statement with our SID and add the new one
       policy.Statement = [
         ...policy.Statement.filter(
-          (stmt: any) => stmt.Sid !== TRUST_POLICY_SID
+          (stmt: any) => stmt.Sid !== TRUST_POLICY_SID,
         ),
         ourStatement,
       ];
@@ -276,7 +276,7 @@ export const OIDCProvider = Resource(
         new UpdateAssumeRolePolicyCommand({
           RoleName: props.roleArn.split("/").pop(),
           PolicyDocument: JSON.stringify(policy),
-        })
+        }),
       );
 
       return this({
@@ -288,5 +288,5 @@ export const OIDCProvider = Resource(
       console.error("Error configuring OIDC provider:", error);
       throw error;
     }
-  }
+  },
 );

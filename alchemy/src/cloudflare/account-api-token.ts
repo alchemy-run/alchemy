@@ -1,9 +1,9 @@
 import { alchemy } from "../alchemy.js";
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
-import { Secret } from "../secret.js";
+import type { Secret } from "../secret.js";
 import { sha256 } from "../util/sha256.js";
-import { createCloudflareApi, type CloudflareApiOptions } from "./api.js";
+import { type CloudflareApiOptions, createCloudflareApi } from "./api.js";
 
 /**
  * Permission group for a token policy
@@ -223,7 +223,7 @@ export const AccountApiToken = Resource(
   async function (
     this: Context<AccountApiToken>,
     id: string,
-    props: AccountApiTokenProps
+    props: AccountApiTokenProps,
   ): Promise<AccountApiToken> {
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
@@ -233,7 +233,7 @@ export const AccountApiToken = Resource(
       if (this.output?.id) {
         try {
           const deleteResponse = await api.delete(
-            `/accounts/${api.accountId}/tokens/${this.output.id}`
+            `/accounts/${api.accountId}/tokens/${this.output.id}`,
           );
 
           if (!deleteResponse.ok && deleteResponse.status !== 404) {
@@ -291,20 +291,20 @@ export const AccountApiToken = Resource(
       return dateStr.replace(/\.\d{3}Z$/, "Z");
     }
 
-    let response;
-    let tokenValue;
+    let response: Response;
+    let tokenValue: Secret | undefined;
 
     if (this.phase === "update" && this.output?.id) {
       // Update existing token
       response = await api.put(
         `/accounts/${api.accountId}/tokens/${this.output.id}`,
-        apiPayload
+        apiPayload,
       );
     } else {
       // Create new token
       response = await api.post(
         `/accounts/${api.accountId}/tokens`,
-        apiPayload
+        apiPayload,
       );
     }
 
@@ -316,7 +316,7 @@ export const AccountApiToken = Resource(
       throw new Error(
         `Error ${this.phase === "update" ? "updating" : "creating"} token '${props.name}': ${
           errorData.errors?.[0]?.message || response.statusText
-        }`
+        }`,
       );
     }
 
@@ -328,7 +328,7 @@ export const AccountApiToken = Resource(
     } else {
       if (!this.output?.value) {
         throw new Error(
-          `Token '${props.name}' was created but we have no record of its value. Try deleting and recreating the token.`
+          `Token '${props.name}' was created but we have no record of its value. Try deleting and recreating the token.`,
         );
       }
       tokenValue = this.output?.value;
@@ -365,5 +365,5 @@ export const AccountApiToken = Resource(
       accessKeyId: tokenData.id,
       secretAccessKey: sha256(tokenValue.unencrypted),
     });
-  }
+  },
 );

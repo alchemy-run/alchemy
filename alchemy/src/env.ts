@@ -11,21 +11,21 @@ export const env = new Proxy(_env, {
 async function _env<T = string>(
   name: string,
   value?: T | undefined,
-  error?: string
+  error?: string,
 ): Promise<T> {
   if (value !== undefined) {
     return value;
-  } else if (typeof process !== undefined) {
+  }
+  if (typeof process !== "undefined") {
     // we are in a node environment
     return process.env[name]! as T;
-  } else {
-    // we are in a browser environment
-    try {
-      const { env } = await import("cloudflare:workers");
-      if (name in env) {
-        return env[name as keyof typeof env] as T;
-      }
-    } catch (error) {}
   }
+  // we are in a browser environment
+  try {
+    const { env } = await import("cloudflare:workers");
+    if (name in env) {
+      return env[name as keyof typeof env] as T;
+    }
+  } catch (error) {}
   throw new Error(error ?? `Environment variable ${name} is not set`);
 }

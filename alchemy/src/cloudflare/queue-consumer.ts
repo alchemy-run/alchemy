@@ -2,8 +2,8 @@ import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
-  CloudflareApi,
   createCloudflareApi,
+  type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
 import type { Queue } from "./queue.js";
@@ -139,7 +139,7 @@ export const QueueConsumer = Resource(
   async function (
     this: Context<QueueConsumer>,
     id: string,
-    props: QueueConsumerProps
+    props: QueueConsumerProps,
   ): Promise<QueueConsumer> {
     const api = await createCloudflareApi(props);
 
@@ -159,48 +159,41 @@ export const QueueConsumer = Resource(
 
       // Return void (a deleted consumer has no content)
       return this.destroy();
-    } else {
-      let consumerData: CloudflareQueueConsumerResponse;
-
-      if (this.phase === "create") {
-        console.log(`Creating Queue Consumer for queue ${queueId}`);
-        consumerData = await createQueueConsumer(api, queueId, props);
-      } else if (this.output?.id) {
-        console.log(`Updating Queue Consumer ${this.output.id}`);
-        consumerData = await updateQueueConsumer(
-          api,
-          queueId,
-          this.output.id,
-          props
-        );
-      } else {
-        // If no ID exists, fall back to creating a new consumer
-        console.log(
-          `No existing Consumer ID found, creating new Queue Consumer for queue ${queueId}`
-        );
-        consumerData = await createQueueConsumer(api, queueId, props);
-      }
-
-      return this({
-        id: consumerData.result.consumer_id,
-        queueId,
-        queue: props.queue,
-        type: "worker",
-        scriptName: props.scriptName,
-        settings: consumerData.result.settings
-          ? {
-              batchSize: consumerData.result.settings.batch_size,
-              maxConcurrency: consumerData.result.settings.max_concurrency,
-              maxRetries: consumerData.result.settings.max_retries,
-              maxWaitTimeMs: consumerData.result.settings.max_wait_time_ms,
-              retryDelay: consumerData.result.settings.retry_delay,
-            }
-          : undefined,
-        createdOn: consumerData.result.created_on,
-        accountId: api.accountId,
-      });
     }
-  }
+    let consumerData: CloudflareQueueConsumerResponse;
+
+    if (this.phase === "create") {
+      consumerData = await createQueueConsumer(api, queueId, props);
+    } else if (this.output?.id) {
+      consumerData = await updateQueueConsumer(
+        api,
+        queueId,
+        this.output.id,
+        props,
+      );
+    } else {
+      consumerData = await createQueueConsumer(api, queueId, props);
+    }
+
+    return this({
+      id: consumerData.result.consumer_id,
+      queueId,
+      queue: props.queue,
+      type: "worker",
+      scriptName: props.scriptName,
+      settings: consumerData.result.settings
+        ? {
+            batchSize: consumerData.result.settings.batch_size,
+            maxConcurrency: consumerData.result.settings.max_concurrency,
+            maxRetries: consumerData.result.settings.max_retries,
+            maxWaitTimeMs: consumerData.result.settings.max_wait_time_ms,
+            retryDelay: consumerData.result.settings.retry_delay,
+          }
+        : undefined,
+      createdOn: consumerData.result.created_on,
+      accountId: api.accountId,
+    });
+  },
 );
 
 /**
@@ -232,7 +225,7 @@ interface CloudflareQueueConsumerResponse {
 export async function createQueueConsumer(
   api: CloudflareApi,
   queueId: string,
-  props: QueueConsumerProps
+  props: QueueConsumerProps,
 ): Promise<CloudflareQueueConsumerResponse> {
   // Prepare the create payload
   const createPayload: any = {
@@ -267,7 +260,7 @@ export async function createQueueConsumer(
 
   const createResponse = await api.post(
     `/accounts/${api.accountId}/queues/${queueId}/consumers`,
-    createPayload
+    createPayload,
   );
 
   if (!createResponse.ok) {
@@ -275,7 +268,7 @@ export async function createQueueConsumer(
       createResponse,
       "creating",
       "Queue Consumer",
-      `for queue ${queueId}`
+      `for queue ${queueId}`,
     );
   }
 
@@ -288,10 +281,10 @@ export async function createQueueConsumer(
 export async function deleteQueueConsumer(
   api: CloudflareApi,
   queueId: string,
-  consumerId: string
+  consumerId: string,
 ): Promise<void> {
   const deleteResponse = await api.delete(
-    `/accounts/${api.accountId}/queues/${queueId}/consumers/${consumerId}`
+    `/accounts/${api.accountId}/queues/${queueId}/consumers/${consumerId}`,
   );
 
   if (!deleteResponse.ok && deleteResponse.status !== 404) {
@@ -300,7 +293,7 @@ export async function deleteQueueConsumer(
     }));
     throw new CloudflareApiError(
       `Error deleting Queue Consumer '${consumerId}': ${errorData.errors?.[0]?.message || deleteResponse.statusText}`,
-      deleteResponse
+      deleteResponse,
     );
   }
 }
@@ -312,7 +305,7 @@ async function updateQueueConsumer(
   api: CloudflareApi,
   queueId: string,
   consumerId: string,
-  props: QueueConsumerProps
+  props: QueueConsumerProps,
 ): Promise<CloudflareQueueConsumerResponse> {
   // Prepare the update payload
   const updatePayload: any = {
@@ -348,7 +341,7 @@ async function updateQueueConsumer(
   // Use PUT to update the consumer
   const updateResponse = await api.put(
     `/accounts/${api.accountId}/queues/${queueId}/consumers/${consumerId}`,
-    updatePayload
+    updatePayload,
   );
 
   if (!updateResponse.ok) {
@@ -356,7 +349,7 @@ async function updateQueueConsumer(
       updateResponse,
       "updating",
       "Queue Consumer",
-      consumerId
+      consumerId,
     );
   }
 
@@ -376,16 +369,16 @@ export interface ListQueueConsumersResponse {
  */
 export async function listQueueConsumers(
   api: CloudflareApi,
-  queueId: string
+  queueId: string,
 ): Promise<ListQueueConsumersResponse[]> {
   const response = await api.get(
-    `/accounts/${api.accountId}/queues/${queueId}/consumers`
+    `/accounts/${api.accountId}/queues/${queueId}/consumers`,
   );
 
   if (!response.ok) {
     throw new CloudflareApiError(
       `Failed to list queue consumers: ${response.statusText}`,
-      response
+      response,
     );
   }
 

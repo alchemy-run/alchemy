@@ -1,7 +1,7 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs/promises";
 import type { Context } from "../context.js";
-import { Bundle, type BundleProps } from "../esbuild/bundle.js";
+import type { BundleProps } from "../esbuild/bundle.js";
 import { Resource } from "../resource.js";
 import { getContentType } from "../util/content-type.js";
 import { withExponentialBackoff } from "../util/retry.js";
@@ -15,9 +15,9 @@ import {
 import type { Assets } from "./assets.js";
 import type { Bindings, WorkerBindingSpec } from "./bindings.js";
 import type { Bound } from "./bound.js";
+import { bundleWorkerScript } from "./bundle/bundle-worker.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
 import { type EventSource, isQueueEventSource } from "./event-source.js";
-import { external } from "./external.js";
 import {
   QueueConsumer,
   deleteQueueConsumer,
@@ -85,21 +85,31 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * Path to the entry point file
+   *
    * Will be bundled using esbuild
+   *
    * One of script, entryPoint, or bundle must be provided
    */
   entrypoint?: string;
 
   /**
+   * The project root directory used to resolve aliases.
+   *
+   * @default process.cwd()
+   */
+  projectRoot?: string;
+
+  /**
    * Bundle options when using entryPoint
+   *
    * Ignored if bundle is provided
    */
   bundle?: Omit<BundleProps, "entryPoint">;
 
   /**
    * Module format for the worker script
-   * 'esm' - ECMAScript modules (default)
-   * 'cjs' - CommonJS modules
+   * - 'esm' - ECMAScript modules (default)
+   * - 'cjs' - CommonJS modules
    * @default 'esm'
    */
   format?: "esm" | "cjs";
@@ -118,6 +128,7 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * Environment variables to attach to the worker
+   *
    * These will be converted to plain_text bindings
    */
   env?: {
@@ -126,6 +137,7 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * Whether to enable a workers.dev URL for this worker
+   *
    * If true, the worker will be available at {name}.{subdomain}.workers.dev
    * @default false
    */
@@ -133,6 +145,7 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * Observability configuration for the worker
+   *
    * Controls whether worker logs are enabled
    * @default { enabled: true }
    */
@@ -172,7 +185,9 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * Cron expressions for the trigger.
+   *
    * Uses standard cron syntax (e.g. "0 0 * * *" for daily at midnight)
+   *
    * To clear all cron triggers, pass an empty array.
    *
    * @see https://developers.cloudflare.com/workers/configuration/cron-triggers/#examples
@@ -181,6 +196,7 @@ export interface WorkerProps<B extends Bindings = Bindings>
 
   /**
    * Event sources that this worker will consume.
+   *
    * Can include queues, streams, or other event sources.
    */
   eventSources?: EventSource[];
@@ -340,7 +356,7 @@ export const Worker = Resource(
   async function <const B extends Bindings>(
     this: Context<Worker<NoInfer<B>>>,
     id: string,
-    props: WorkerProps<B>
+    props: WorkerProps<B>,
   ): Promise<Worker<B>> {
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
@@ -356,7 +372,8 @@ export const Worker = Resource(
     if (this.phase === "delete") {
       await deleteWorker(this, api, workerName);
       return this.destroy();
-    } else if (this.phase === "create") {
+    }
+    if (this.phase === "create") {
       if (!props.adopt) {
         await assertWorkerDoesNotExist(this, api, workerName);
       }
@@ -364,8 +381,17 @@ export const Worker = Resource(
 
     const oldBindings = await this.get<Bindings>("bindings");
 
+    const compatibilityDate = props.compatibilityDate ?? "2025-04-20";
+    const compatibilityFlags = props.compatibilityFlags ?? [];
+
     // Get the script content - either from props.script, or by bundling
-    const scriptContent = props.script ?? (await bundleWorkerScript(props));
+    const scriptContent =
+      props.script ??
+      (await bundleWorkerScript({
+        ...props,
+        compatibilityDate,
+        compatibilityFlags,
+      }));
 
     // Find any assets bindings
     const assetsBindings: { name: string; assets: Assets }[] = [];
@@ -395,12 +421,9 @@ export const Worker = Resource(
         api,
         workerName,
         assetBinding.assets,
-        props.assets
+        props.assets,
       );
     }
-
-    const compatibilityDate = props.compatibilityDate ?? "2025-04-20";
-    const compatibilityFlags = props.compatibilityFlags ?? [];
 
     // Prepare metadata with bindings
     const scriptMetadata = await prepareWorkerMetadata(
@@ -411,7 +434,7 @@ export const Worker = Resource(
         compatibilityDate,
         compatibilityFlags,
       },
-      assetUploadResult
+      assetUploadResult,
     );
 
     await putWorker(api, workerName, scriptContent, scriptMetadata);
@@ -436,10 +459,9 @@ export const Worker = Resource(
               ? eventSource.settings
               : undefined,
           });
-        } else {
-          throw new Error(`Unsupported event source type: ${eventSource}`);
         }
-      }) ?? []
+        throw new Error(`Unsupported event source type: ${eventSource}`);
+      }) ?? [],
     );
 
     // TODO: it is less than ideal that this can fail, resulting in state problem
@@ -450,7 +472,7 @@ export const Worker = Resource(
       this,
       api,
       workerName,
-      props.url ?? false
+      props.url ?? false,
     );
 
     // Get current timestamp
@@ -460,7 +482,7 @@ export const Worker = Resource(
     if (props.crons) {
       const res = await api.put(
         `/accounts/${api.accountId}/workers/scripts/${workerName}/schedules`,
-        props.crons.map((cron) => ({ cron }))
+        props.crons.map((cron) => ({ cron })),
       );
 
       if (!res.ok) {
@@ -468,7 +490,7 @@ export const Worker = Resource(
           res,
           "updating cron triggers",
           "worker",
-          workerName
+          workerName,
         );
       }
     }
@@ -498,20 +520,20 @@ export const Worker = Resource(
       // phantom property
       Env: undefined!,
     });
-  }
+  },
 );
 
 async function deleteWorker<B extends Bindings>(
   ctx: Context<Worker<B>>,
   api: CloudflareApi,
-  workerName: string
+  workerName: string,
 ) {
   // Delete any queue consumers attached to this worker first
   await deleteQueueConsumers(ctx, api, workerName);
 
   // Delete worker
   const deleteResponse = await api.delete(
-    `/accounts/${api.accountId}/workers/scripts/${workerName}`
+    `/accounts/${api.accountId}/workers/scripts/${workerName}`,
   );
 
   // Check for success (2xx status code)
@@ -521,7 +543,7 @@ async function deleteWorker<B extends Bindings>(
       .catch(() => ({ errors: [{ message: deleteResponse.statusText }] }));
     console.error(
       "Error deleting worker:",
-      errorData.errors?.[0]?.message || deleteResponse.statusText
+      errorData.errors?.[0]?.message || deleteResponse.statusText,
     );
   }
 
@@ -533,7 +555,7 @@ async function deleteWorker<B extends Bindings>(
         JSON.stringify({ enabled: false }),
         {
           headers: { "Content-Type": "application/json" },
-        }
+        },
       );
     } catch (error) {
       console.warn("Failed to disable worker URL during deletion:", error);
@@ -548,7 +570,7 @@ async function putWorker(
   api: CloudflareApi,
   workerName: string,
   scriptContent: string,
-  scriptMetadata: WorkerMetadata
+  scriptMetadata: WorkerMetadata,
 ) {
   return withExponentialBackoff(
     async () => {
@@ -566,7 +588,7 @@ async function putWorker(
             ? "application/javascript+module"
             : "application/javascript",
         }),
-        scriptName
+        scriptName,
       );
 
       // Add metadata as JSON
@@ -574,7 +596,7 @@ async function putWorker(
         "metadata",
         new Blob([JSON.stringify(scriptMetadata)], {
           type: "application/json",
-        })
+        }),
       );
 
       // Upload worker script with bindings
@@ -585,7 +607,7 @@ async function putWorker(
           headers: {
             "Content-Type": "multipart/form-data",
           },
-        }
+        },
       );
 
       // Check if the upload was successful
@@ -594,7 +616,7 @@ async function putWorker(
           uploadResponse,
           "uploading worker script",
           "worker",
-          workerName
+          workerName,
         );
       }
 
@@ -602,7 +624,7 @@ async function putWorker(
     },
     (err) => err.status === 404 || err.status === 500 || err.status === 503,
     10,
-    100
+    100,
   );
 }
 
@@ -677,7 +699,7 @@ async function prepareWorkerMetadata<B extends Bindings>(
     compatibilityDate: string;
     compatibilityFlags: string[];
   },
-  assetUploadResult?: AssetUploadResult
+  assetUploadResult?: AssetUploadResult,
 ): Promise<WorkerMetadata> {
   // Prepare metadata with bindings
   const meta: WorkerMetadata = {
@@ -822,6 +844,11 @@ async function prepareWorkerMetadata<B extends Bindings>(
         type: "browser",
         name: bindingName,
       });
+    } else if (binding.type === "ai") {
+      meta.bindings.push({
+        type: "ai",
+        name: bindingName,
+      });
     } else {
       // @ts-expect-error - we should never reach here
       throw new Error(`Unsupported binding type: ${binding.type}`);
@@ -831,14 +858,14 @@ async function prepareWorkerMetadata<B extends Bindings>(
   function configureClassMigration(
     binding: DurableObjectNamespace | Workflow,
     stableId: string,
-    className: string
+    className: string,
   ) {
     const oldBinding: DurableObjectNamespace | Workflow | undefined =
       Object.values(oldBindings ?? {})
         ?.filter(
           (b) =>
             typeof b === "object" &&
-            (b.type === "durable_object_namespace" || b.type === "workflow")
+            (b.type === "durable_object_namespace" || b.type === "workflow"),
         )
         ?.find((b) => b.id === stableId);
 
@@ -888,10 +915,10 @@ async function prepareWorkerMetadata<B extends Bindings>(
 async function assertWorkerDoesNotExist<B extends Bindings>(
   ctx: Context<Worker<B>>,
   api: CloudflareApi,
-  workerName: string
+  workerName: string,
 ) {
   const response = await api.get(
-    `/accounts/${api.accountId}/workers/scripts/${workerName}`
+    `/accounts/${api.accountId}/workers/scripts/${workerName}`,
   );
   if (response.status === 404) {
     return true;
@@ -901,70 +928,32 @@ async function assertWorkerDoesNotExist<B extends Bindings>(
 
     if (!metadata) {
       throw new Error(
-        `Worker exists but failed to fetch metadata: ${response.status} ${response.statusText}`
+        `Worker exists but failed to fetch metadata: ${response.status} ${response.statusText}`,
       );
     }
 
     if (
       metadata.default_environment?.script.tags.includes(
-        `alchemy:id:${slugify(ctx.fqn)}`
+        `alchemy:id:${slugify(ctx.fqn)}`,
       )
     ) {
       return true;
     }
 
     throw new Error(
-      `Worker with name '${workerName}' already exists. Please use a unique name.`
-    );
-  } else {
-    throw new Error(
-      `Error checking if worker exists: ${response.status} ${response.statusText} ${await response.text()}`
+      `Worker with name '${workerName}' already exists. Please use a unique name.`,
     );
   }
-}
-
-async function bundleWorkerScript<B extends Bindings>(props: WorkerProps) {
-  const bundle = await Bundle("bundle", {
-    entryPoint: props.entrypoint!,
-    format: props.format === "cjs" ? "cjs" : "esm", // Use the specified format or default to ESM
-    target: "esnext",
-    platform: "neutral",
-    minify: true,
-    ...(props.bundle || {}),
-    options: {
-      ...(props.bundle?.options || {}),
-      keepNames: true, // Important for Durable Object classes
-      loader: {
-        ".sql": "text",
-        ".json": "json",
-      },
-    },
-    external: [
-      ...external,
-      ...(props.bundle?.external ?? []),
-      ...(props.bundle?.options?.external ?? []),
-    ],
-  });
-
-  try {
-    if (bundle.content) {
-      return bundle.content;
-    } else if (bundle.path) {
-      return await fs.readFile(bundle.path, "utf-8");
-    } else {
-      throw new Error("Failed to create bundle");
-    }
-  } catch (error) {
-    console.error("Error reading bundle:", error);
-    throw new Error("Error reading bundle");
-  }
+  throw new Error(
+    `Error checking if worker exists: ${response.status} ${response.statusText} ${await response.text()}`,
+  );
 }
 
 async function configureURL<B extends Bindings>(
   ctx: Context<Worker<B>>,
   api: CloudflareApi,
   workerName: string,
-  url: boolean
+  url: boolean,
 ) {
   let workerUrl;
   if (url) {
@@ -974,17 +963,17 @@ async function configureURL<B extends Bindings>(
       { enabled: true, previews_enabled: true },
       {
         headers: { "Content-Type": "application/json" },
-      }
+      },
     );
 
     // Get the account's workers.dev subdomain
     const subdomainResponse = await api.get(
-      `/accounts/${api.accountId}/workers/subdomain`
+      `/accounts/${api.accountId}/workers/subdomain`,
     );
 
     if (!subdomainResponse.ok) {
       throw new Error(
-        `Could not fetch workers.dev subdomain: ${subdomainResponse.status} ${subdomainResponse.statusText}`
+        `Could not fetch workers.dev subdomain: ${subdomainResponse.status} ${subdomainResponse.statusText}`,
       );
     }
     const subdomainData: {
@@ -1011,11 +1000,11 @@ async function configureURL<B extends Bindings>(
       JSON.stringify({ enabled: false }),
       {
         headers: { "Content-Type": "application/json" },
-      }
+      },
     );
     if (!response.ok) {
       throw new Error(
-        `Failed to disable worker URL: ${response.status} ${response.statusText}`
+        `Failed to disable worker URL: ${response.status} ${response.statusText}`,
       );
     }
   }
@@ -1024,17 +1013,17 @@ async function configureURL<B extends Bindings>(
 
 async function getWorkerScriptMetadata(
   api: CloudflareApi,
-  workerName: string
+  workerName: string,
 ): Promise<WorkerScriptMetadata | undefined> {
   const response = await api.get(
-    `/accounts/${api.accountId}/workers/services/${workerName}`
+    `/accounts/${api.accountId}/workers/services/${workerName}`,
   );
   if (response.status === 404) {
     return undefined;
   }
   if (!response.ok) {
     throw new Error(
-      `Error getting worker script metadata: ${response.status} ${response.statusText}`
+      `Error getting worker script metadata: ${response.status} ${response.statusText}`,
     );
   }
   return ((await response.json()) as any).result as WorkerScriptMetadata;
@@ -1043,7 +1032,7 @@ async function getWorkerScriptMetadata(
 async function getWorkerBindings(
   api: CloudflareApi,
   workerName: string,
-  environment = "production"
+  environment = "production",
 ) {
   const response = await api.get(
     `/accounts/${api.accountId}/workers/services/${workerName}/environments/${environment}/bindings`,
@@ -1052,7 +1041,7 @@ async function getWorkerBindings(
         Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
         "Content-Type": "application/json",
       },
-    }
+    },
   );
 
   if (response.status === 404) {
@@ -1061,7 +1050,7 @@ async function getWorkerBindings(
 
   if (!response.ok) {
     throw new Error(
-      `Failed to fetch bindings: ${response.status} ${response.statusText}`
+      `Failed to fetch bindings: ${response.status} ${response.statusText}`,
     );
   }
 
@@ -1117,7 +1106,7 @@ async function uploadAssets(
   api: CloudflareApi,
   workerName: string,
   assets: Assets,
-  assetConfig?: WorkerProps["assets"]
+  assetConfig?: WorkerProps["assets"],
 ): Promise<AssetUploadResult> {
   // Process the assets configuration once at the beginning
   const processedConfig = createAssetConfig(assetConfig);
@@ -1140,12 +1129,12 @@ async function uploadAssets(
     JSON.stringify({ manifest: fileMetadata }),
     {
       headers: { "Content-Type": "application/json" },
-    }
+    },
   );
 
   if (!uploadSessionResponse.ok) {
     throw new Error(
-      `Failed to start assets upload session: ${uploadSessionResponse.status} ${uploadSessionResponse.statusText}`
+      `Failed to start assets upload session: ${uploadSessionResponse.status} ${uploadSessionResponse.statusText}`,
     );
   }
 
@@ -1205,12 +1194,12 @@ async function uploadAssets(
           Authorization: `Bearer ${completionToken}`,
           "Content-Type": "multipart/form-data",
         },
-      }
+      },
     );
 
     if (!uploadResponse.ok) {
       throw new Error(
-        `Failed to upload asset files: ${uploadResponse.status} ${uploadResponse.statusText}`
+        `Failed to upload asset files: ${uploadResponse.status} ${uploadResponse.statusText}`,
       );
     }
 
@@ -1235,7 +1224,7 @@ async function uploadAssets(
  * @returns Hash (first 32 chars of SHA-256) and size of the file
  */
 async function calculateFileMetadata(
-  filePath: string
+  filePath: string,
 ): Promise<{ hash: string; size: number }> {
   const hash = crypto.createHash("sha256");
   const fileContent = await fs.readFile(filePath);
@@ -1258,7 +1247,7 @@ async function calculateFileMetadata(
 async function deleteQueueConsumers<B extends Bindings>(
   ctx: Context<Worker<B>>,
   api: CloudflareApi,
-  workerName: string
+  workerName: string,
 ): Promise<void> {
   const eventSources = ctx.output?.eventSources || [];
 
@@ -1266,7 +1255,8 @@ async function deleteQueueConsumers<B extends Bindings>(
   const queueIds = eventSources.flatMap((eventSource) => {
     if (isQueue(eventSource)) {
       return [eventSource.id];
-    } else if (isQueueEventSource(eventSource)) {
+    }
+    if (isQueueEventSource(eventSource)) {
       return [eventSource.queue.id];
     }
     return [];
@@ -1281,18 +1271,18 @@ async function deleteQueueConsumers<B extends Bindings>(
 
         // Filter consumers by worker name
         const workerConsumers = consumers.filter(
-          (consumer) => consumer.scriptName === workerName
+          (consumer) => consumer.scriptName === workerName,
         );
 
         // Delete all consumers for this worker in parallel
         await Promise.all(
           workerConsumers.map(async (consumer) => {
             console.log(
-              `Deleting queue consumer ${consumer.id} for worker ${workerName}`
+              `Deleting queue consumer ${consumer.id} for worker ${workerName}`,
             );
             // Use the deleteQueueConsumer function from queue-consumer.ts
             await deleteQueueConsumer(api, consumer.queueId, consumer.id);
-          })
+          }),
         );
       } catch (err) {
         if (err instanceof CloudflareApiError && err.status === 404) {
@@ -1301,6 +1291,6 @@ async function deleteQueueConsumers<B extends Bindings>(
           throw err;
         }
       }
-    })
+    }),
   );
 }

@@ -289,7 +289,7 @@ export const JSONFile = Resource("ai::JSONFile", async function <
  * @returns The extracted JSON or error message
  */
 async function extractJSONContent(
-  text: string
+  text: string,
 ): Promise<{ content: string; error?: string }> {
   const jsonCodeRegex = /```json\s*([\s\S]*?)```/g;
   const matches = Array.from(text.matchAll(jsonCodeRegex));

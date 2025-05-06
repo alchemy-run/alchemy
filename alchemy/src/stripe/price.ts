@@ -180,7 +180,7 @@ export const Price = Resource(
   async function (
     this: Context<Price>,
     id: string,
-    props: PriceProps
+    props: PriceProps,
   ): Promise<Price> {
     // Get Stripe API key from context or environment
     const apiKey = process.env.STRIPE_API_KEY;
@@ -203,87 +203,84 @@ export const Price = Resource(
       }
 
       return this.destroy();
-    } else {
-      try {
-        let price: Stripe.Price;
+    }
+    try {
+      let price: Stripe.Price;
 
-        if (this.phase === "update" && this.output?.id) {
-          // Update existing price (limited properties can be updated)
-          price = await stripe.prices.update(this.output.id, {
-            active: props.active,
-            metadata: props.metadata,
-            nickname: props.nickname,
-          });
-        } else {
-          // Create new price
-          const createParams: Stripe.PriceCreateParams = {
-            currency: props.currency,
-            product: props.product,
-            active: props.active,
-            billing_scheme: props.billingScheme,
-            nickname: props.nickname,
-            metadata: props.metadata,
-            tax_behavior: props.taxBehavior,
-          };
+      if (this.phase === "update" && this.output?.id) {
+        // Update existing price (limited properties can be updated)
+        price = await stripe.prices.update(this.output.id, {
+          active: props.active,
+          metadata: props.metadata,
+          nickname: props.nickname,
+        });
+      } else {
+        // Create new price
+        const createParams: Stripe.PriceCreateParams = {
+          currency: props.currency,
+          product: props.product,
+          active: props.active,
+          billing_scheme: props.billingScheme,
+          nickname: props.nickname,
+          metadata: props.metadata,
+          tax_behavior: props.taxBehavior,
+        };
 
-          // Add unit amount fields
-          if (props.unitAmount !== undefined) {
-            createParams.unit_amount = props.unitAmount;
-          } else if (props.unitAmountDecimal !== undefined) {
-            createParams.unit_amount_decimal = props.unitAmountDecimal;
-          }
-
-          // Add recurring parameters if present
-          if (props.recurring) {
-            createParams.recurring = {
-              interval: props.recurring.interval,
-              interval_count: props.recurring.intervalCount,
-              usage_type: props.recurring.usageType,
-              aggregate_usage: props.recurring.aggregateUsage,
-            };
-          }
-
-          price = await stripe.prices.create(createParams);
+        // Add unit amount fields
+        if (props.unitAmount !== undefined) {
+          createParams.unit_amount = props.unitAmount;
+        } else if (props.unitAmountDecimal !== undefined) {
+          createParams.unit_amount_decimal = props.unitAmountDecimal;
         }
 
-        // Transform Stripe recurring object to our format
-        const recurring = price.recurring
-          ? {
-              interval: price.recurring
-                .interval as Stripe.PriceCreateParams.Recurring.Interval,
-              intervalCount: price.recurring.interval_count,
-              usageType: price.recurring
-                .usage_type as Stripe.PriceCreateParams.Recurring.UsageType,
-              aggregateUsage: price.recurring
-                .aggregate_usage as Stripe.PriceCreateParams.Recurring.AggregateUsage,
-            }
-          : undefined;
+        // Add recurring parameters if present
+        if (props.recurring) {
+          createParams.recurring = {
+            interval: props.recurring.interval,
+            interval_count: props.recurring.intervalCount,
+            usage_type: props.recurring.usageType,
+            aggregate_usage: props.recurring.aggregateUsage,
+          };
+        }
 
-        // Map Stripe API response to our output format
-        return this({
-          id: price.id,
-          product:
-            typeof price.product === "string"
-              ? price.product
-              : price.product.id,
-          currency: price.currency,
-          unitAmount: price.unit_amount || undefined,
-          unitAmountDecimal: price.unit_amount_decimal || undefined,
-          active: price.active,
-          billingScheme: price.billing_scheme as BillingScheme,
-          nickname: price.nickname || undefined,
-          recurring: recurring,
-          metadata: price.metadata || undefined,
-          taxBehavior: price.tax_behavior as TaxBehavior,
-          createdAt: price.created,
-          livemode: price.livemode,
-          type: price.type as Stripe.Price.Type,
-          lookupKey: price.lookup_key || undefined,
-        });
-      } catch (error) {
-        console.error("Error creating/updating price:", error);
-        throw error;
+        price = await stripe.prices.create(createParams);
       }
+
+      // Transform Stripe recurring object to our format
+      const recurring = price.recurring
+        ? {
+            interval: price.recurring
+              .interval as Stripe.PriceCreateParams.Recurring.Interval,
+            intervalCount: price.recurring.interval_count,
+            usageType: price.recurring
+              .usage_type as Stripe.PriceCreateParams.Recurring.UsageType,
+            aggregateUsage: price.recurring
+              .aggregate_usage as Stripe.PriceCreateParams.Recurring.AggregateUsage,
+          }
+        : undefined;
+
+      // Map Stripe API response to our output format
+      return this({
+        id: price.id,
+        product:
+          typeof price.product === "string" ? price.product : price.product.id,
+        currency: price.currency,
+        unitAmount: price.unit_amount || undefined,
+        unitAmountDecimal: price.unit_amount_decimal || undefined,
+        active: price.active,
+        billingScheme: price.billing_scheme as BillingScheme,
+        nickname: price.nickname || undefined,
+        recurring: recurring,
+        metadata: price.metadata || undefined,
+        taxBehavior: price.tax_behavior as TaxBehavior,
+        createdAt: price.created,
+        livemode: price.livemode,
+        type: price.type as Stripe.Price.Type,
+        lookupKey: price.lookup_key || undefined,
+      });
+    } catch (error) {
+      console.error("Error creating/updating price:", error);
+      throw error;
     }
-  }
+  },
 );

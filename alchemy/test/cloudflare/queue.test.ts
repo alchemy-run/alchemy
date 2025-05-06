@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { createCloudflareApi } from "../../src/cloudflare/api";
-import { Queue, listQueues } from "../../src/cloudflare/queue";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { Queue, listQueues } from "../../src/cloudflare/queue.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -121,7 +121,7 @@ describe("Cloudflare Queue Resource", async () => {
       await expect(
         Queue(immutableQueueName, {
           name: newQueueName, // Different from original
-        })
+        }),
       ).rejects.toThrow("Cannot update Queue name");
     } finally {
       await alchemy.destroy(scope);

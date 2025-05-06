@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { createCloudflareApi } from "../../src/cloudflare/api";
+import { alchemy } from "../../src/alchemy.js";
+import { createCloudflareApi } from "../../src/cloudflare/api.js";
 import {
   VectorizeIndex,
   listIndexes,
-} from "../../src/cloudflare/vectorize-index";
-import { BRANCH_PREFIX } from "../util";
+} from "../../src/cloudflare/vectorize-index.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -74,9 +74,9 @@ describe("Vectorize Index Resource", async () => {
           dimensions: 768,
           metric: "cosine",
           adopt: true,
-        })
+        }),
       ).rejects.toThrow(
-        "Updating Vectorize indexes is not supported by the Cloudflare API"
+        "Updating Vectorize indexes is not supported by the Cloudflare API",
       );
     } finally {
       await alchemy.destroy(scope);
@@ -89,7 +89,7 @@ async function assertIndexDeleted(index: VectorizeIndex) {
   try {
     // Try to get the index
     const response = await api.get(
-      `/accounts/${api.accountId}/vectorize/v2/indexes/${index.name}`
+      `/accounts/${api.accountId}/vectorize/v2/indexes/${index.name}`,
     );
 
     // If we get a 200, the index still exists

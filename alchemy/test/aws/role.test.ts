@@ -5,13 +5,13 @@ import {
   NoSuchEntityException,
 } from "@aws-sdk/client-iam";
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import type { PolicyDocument } from "../../src/aws/policy";
-import { Role, type RoleProps } from "../../src/aws/role";
-import { destroy } from "../../src/destroy";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import type { PolicyDocument } from "../../src/aws/policy.js";
+import { Role, type RoleProps } from "../../src/aws/role.js";
+import { destroy } from "../../src/destroy.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -70,8 +70,8 @@ describe("AWS Resources", () => {
         expect(role.roleName).toBe(`${BRANCH_PREFIX}-test-create-role`);
         expect(role.arn).toMatch(
           new RegExp(
-            `^arn:aws:iam::\\d+:role/${BRANCH_PREFIX.replace(/\//g, "\\/")}-test-create-role$`
-          )
+            `^arn:aws:iam::\\d+:role/${BRANCH_PREFIX.replace(/\//g, "\\/")}-test-create-role$`,
+          ),
         );
         expect(role.uniqueId).toBeTruthy();
         expect(role.roleId).toBeTruthy();
@@ -168,21 +168,21 @@ describe("AWS Resources", () => {
         expect(role.roleName).toBe(roleName);
         expect(role.arn).toMatch(
           new RegExp(
-            `^arn:aws:iam::\\d+:role/${BRANCH_PREFIX.replace(/\//g, "\\/")}-test-managed-policy-role$`
-          )
+            `^arn:aws:iam::\\d+:role/${BRANCH_PREFIX.replace(/\//g, "\\/")}-test-managed-policy-role$`,
+          ),
         );
 
         // Verify managed policy is attached
         const attachedPoliciesResponse = await iam.send(
           new ListAttachedRolePoliciesCommand({
             RoleName: roleName,
-          })
+          }),
         );
 
         expect(attachedPoliciesResponse.AttachedPolicies).toBeTruthy();
         expect(attachedPoliciesResponse.AttachedPolicies?.length).toBe(1);
         expect(attachedPoliciesResponse.AttachedPolicies?.[0].PolicyArn).toBe(
-          managedPolicyArn
+          managedPolicyArn,
         );
       } finally {
         await destroy(scope);
@@ -208,13 +208,13 @@ describe("AWS Resources", () => {
         const updatedPolicies = await iam.send(
           new ListAttachedRolePoliciesCommand({
             RoleName: roleName,
-          })
+          }),
         );
 
         expect(updatedPolicies.AttachedPolicies).toBeTruthy();
         expect(updatedPolicies.AttachedPolicies?.length).toBe(1);
         expect(updatedPolicies.AttachedPolicies?.[0].PolicyArn).toBe(
-          updatedPolicyArn
+          updatedPolicyArn,
         );
       } finally {
         await destroy(scope);
@@ -247,13 +247,13 @@ describe("AWS Resources", () => {
         let attachedPolicies = await iam.send(
           new ListAttachedRolePoliciesCommand({
             RoleName: roleName,
-          })
+          }),
         );
 
         expect(attachedPolicies.AttachedPolicies).toBeTruthy();
         expect(attachedPolicies.AttachedPolicies?.length).toBe(1);
         expect(attachedPolicies.AttachedPolicies?.[0].PolicyArn).toBe(
-          managedPolicyArn
+          managedPolicyArn,
         );
 
         // Update role WITHOUT specifying managedPolicyArns (undefined)
@@ -271,7 +271,7 @@ describe("AWS Resources", () => {
         attachedPolicies = await iam.send(
           new ListAttachedRolePoliciesCommand({
             RoleName: roleName,
-          })
+          }),
         );
 
         expect(attachedPolicies.AttachedPolicies).toBeTruthy();
@@ -290,7 +290,7 @@ async function assertRoleNotExists(roleName: string) {
     iam.send(
       new GetRoleCommand({
         RoleName: roleName,
-      })
-    )
+      }),
+    ),
   ).rejects.toThrow(NoSuchEntityException);
 }

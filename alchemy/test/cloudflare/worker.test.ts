@@ -1,20 +1,20 @@
 import { describe, expect } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { alchemy } from "../../src/alchemy";
-import { createCloudflareApi } from "../../src/cloudflare/api";
-import { Assets } from "../../src/cloudflare/assets";
-import { R2Bucket } from "../../src/cloudflare/bucket";
-import { D1Database } from "../../src/cloudflare/d1-database";
-import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace";
-import { KVNamespace } from "../../src/cloudflare/kv-namespace";
-import { Queue } from "../../src/cloudflare/queue";
-import { Worker } from "../../src/cloudflare/worker";
-import { Workflow } from "../../src/cloudflare/workflow";
-import { destroy } from "../../src/destroy";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { Assets } from "../../src/cloudflare/assets.js";
+import { R2Bucket } from "../../src/cloudflare/bucket.js";
+import { D1Database } from "../../src/cloudflare/d1-database.js";
+import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.js";
+import { KVNamespace } from "../../src/cloudflare/kv-namespace.js";
+import { Queue } from "../../src/cloudflare/queue.js";
+import { Worker } from "../../src/cloudflare/worker.js";
+import { Workflow } from "../../src/cloudflare/workflow.js";
+import { destroy } from "../../src/destroy.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -27,7 +27,7 @@ const api = await createCloudflareApi();
 async function assertWorkerDoesNotExist(workerName: string) {
   try {
     const response = await api.get(
-      `/accounts/${api.accountId}/workers/scripts/${workerName}`
+      `/accounts/${api.accountId}/workers/scripts/${workerName}`,
     );
     expect(response.status).toEqual(404);
   } catch (error) {
@@ -412,7 +412,7 @@ describe("Worker Resource", () => {
         format: "cjs",
       });
       await expect(duplicateWorker).rejects.toThrow(
-        `Worker with name '${workerName}' already exists. Please use a unique name.`
+        `Worker with name '${workerName}' already exists. Please use a unique name.`,
       );
     } finally {
       await destroy(scope);
@@ -442,7 +442,7 @@ describe("Worker Resource", () => {
         {
           className: "Counter",
           scriptName: workerName,
-        }
+        },
       );
 
       // Update the worker with the DO binding
@@ -508,7 +508,7 @@ describe("Worker Resource", () => {
       {
         className: "Counter",
         scriptName: workerName,
-      }
+      },
     );
 
     // Create a KV namespace
@@ -608,6 +608,8 @@ describe("Worker Resource", () => {
         url: true,
       });
 
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
       expect(worker.id).toEqual(worker.id);
       expect(worker.env?.TEST_API_KEY).toEqual("updated-key-456");
       expect(worker.env?.NODE_ENV).toEqual("production");
@@ -660,7 +662,7 @@ describe("Worker Resource", () => {
         {
           className: "Counter",
           scriptName: workerName,
-        }
+        },
       );
 
       // Update worker with the original Counter binding
@@ -681,7 +683,7 @@ describe("Worker Resource", () => {
         {
           className: "CounterV2",
           scriptName: workerName,
-        }
+        },
       );
 
       // Update worker with the migrated binding
@@ -722,7 +724,7 @@ describe("Worker Resource", () => {
         {
           className: "Counter",
           scriptName: workerName,
-        }
+        },
       );
 
       // Update the worker with the DO binding
@@ -788,23 +790,21 @@ describe("Worker Resource", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
       expect(worker.bindings).toBeDefined();
       expect(worker.bindings!.STORAGE).toBeDefined();
 
-      if (worker.url) {
-        // Test that the R2 binding is accessible in the worker
-        const response = await fetch(`${worker.url}/r2-info`);
-        expect(response.status).toEqual(200);
-        const data = (await response.json()) as {
-          hasR2: boolean;
-          bucketName: string;
-        };
-        expect(data.hasR2).toEqual(true);
-      }
+      // Test that the R2 binding is accessible in the worker
+      const response = await fetch(`${worker.url}/r2-info`);
+      expect(response.status).toEqual(200);
+      const data = (await response.json()) as {
+        hasR2: boolean;
+        bucketName: string;
+      };
+      expect(data.hasR2).toEqual(true);
     } finally {
       await destroy(scope);
       await assertWorkerDoesNotExist(workerName);
@@ -875,7 +875,7 @@ describe("Worker Resource", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
@@ -888,7 +888,7 @@ describe("Worker Resource", () => {
           console.log(
             response.status,
             response.statusText,
-            await response.text()
+            await response.text(),
           );
         }
         expect(response.status).toEqual(200);
@@ -915,8 +915,6 @@ describe("Worker Resource", () => {
 
       const apiCall = await get(`${worker.url}/api/data`);
       expect(apiCall).toEqual("Worker with assets is running!");
-    } catch (err) {
-      throw err;
     } finally {
       // Clean up temporary directory
       if (tempDir) {
@@ -1063,7 +1061,7 @@ describe("Worker Resource", () => {
       // expect(worker.assets?._redirects).toEqual(redirectsConfig);
       expect(worker.assets?.html_handling).toEqual("auto-trailing-slash");
       expect(worker.assets?.not_found_handling).toEqual(
-        "single-page-application"
+        "single-page-application",
       );
       expect(worker.assets?.run_worker_first).toEqual(false);
 
@@ -1076,14 +1074,14 @@ describe("Worker Resource", () => {
       expect(indexResponse.headers.get("ABC")).toEqual("456");
       expect(indexResponse.headers.get("X-Frame-Options")).toEqual("DENY");
       expect(indexResponse.headers.get("X-Content-Type-Options")).toEqual(
-        "nosniff"
+        "nosniff",
       );
 
       // Test that custom headers are applied
       const cssResponse = await fetch(`${worker.url}/styles.css`);
       expect(cssResponse.status).toEqual(200);
       expect(cssResponse.headers.get("Cache-Control")).toEqual(
-        "public, max-age=86400"
+        "public, max-age=86400",
       );
       expect(cssResponse.headers.get("XYZ")).toEqual("123");
 
@@ -1267,7 +1265,7 @@ describe("Worker Resource", () => {
         url: true, // Enable workers.dev URL to test the workflow
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
@@ -1309,14 +1307,14 @@ describe("Worker Resource", () => {
         url: true,
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       expect(worker.bindings).toBeDefined();
       expect(Object.keys(worker.bindings || {})).toHaveLength(2);
 
       // Test triggering the second workflow
       const orderResponse = await fetch(
-        `${worker.url!}/trigger-order-workflow`
+        `${worker.url!}/trigger-order-workflow`,
       );
       const orderResult = await orderResponse.json();
       console.log("Order workflow response:", orderResult);
@@ -1427,7 +1425,7 @@ describe("Worker Resource", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
@@ -1436,23 +1434,21 @@ describe("Worker Resource", () => {
       expect(worker.bindings!.DATABASE.id).toEqual(db.id);
       expect(worker.url).toBeTruthy();
 
-      if (worker.url) {
-        // Initialize the database with a table and data
-        const initResponse = await fetch(`${worker.url}/init-db`);
-        expect(initResponse.status).toEqual(200);
-        const initText = await initResponse.text();
-        expect(initText).toEqual("Database initialized successfully!");
+      // Initialize the database with a table and data
+      const initResponse = await fetch(`${worker.url}/init-db`);
+      expect(initResponse.status).toEqual(200);
+      const initText = await initResponse.text();
+      expect(initText).toEqual("Database initialized successfully!");
 
-        // Query data from the database
-        const queryResponse = await fetch(`${worker.url}/query-db`);
-        expect(queryResponse.status).toEqual(200);
-        const queryData = await queryResponse.json();
-        expect(queryData.success).toEqual(true);
-        expect(queryData.data).toBeArray();
-        expect(queryData.data.length).toBeGreaterThan(0);
-        expect(queryData.data[0].name).toEqual("Test User");
-        expect(queryData.data[0].email).toEqual("test@example.com");
-      }
+      // Query data from the database
+      const queryResponse = await fetch(`${worker.url}/query-db`);
+      expect(queryResponse.status).toEqual(200);
+      const queryData = await queryResponse.json();
+      expect(queryData.success).toEqual(true);
+      expect(queryData.data).toBeArray();
+      expect(queryData.data.length).toBeGreaterThan(0);
+      expect(queryData.data[0].name).toEqual("Test User");
+      expect(queryData.data[0].email).toEqual("test@example.com");
     } finally {
       await destroy(scope);
       await assertWorkerDoesNotExist(workerName);
@@ -1530,7 +1526,7 @@ describe("Worker Resource", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
@@ -1609,7 +1605,7 @@ describe("Worker Resource", () => {
         url: true, // Enable workers.dev URL to test the worker
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Verify the worker was created correctly
       expect(worker.id).toBeTruthy();
@@ -1617,20 +1613,18 @@ describe("Worker Resource", () => {
       expect(worker.format).toEqual("esm");
       expect(worker.url).toBeTruthy();
 
-      if (worker.url) {
-        // Test that the worker is running correctly
-        const response = await fetch(worker.url);
-        expect(response.status).toEqual(200);
-        const text = await response.text();
-        expect(text).toEqual("Hello from entrypoint file!");
+      // Test that the worker is running correctly
+      const response = await fetch(worker.url!);
+      expect(response.status).toEqual(200);
+      const text = await response.text();
+      expect(text).toEqual("Hello from entrypoint file!");
 
-        // Test the JSON endpoint
-        const jsonResponse = await fetch(`${worker.url}/data`);
-        expect(jsonResponse.status).toEqual(200);
-        const data = await jsonResponse.json();
-        expect(data.message).toEqual("Hello from bundled worker!");
-        expect(data.version).toEqual("1.0.0");
-      }
+      // Test the JSON endpoint
+      const jsonResponse = await fetch(`${worker.url}/data`);
+      expect(jsonResponse.status).toEqual(200);
+      const data = await jsonResponse.json();
+      expect(data.message).toEqual("Hello from bundled worker!");
+      expect(data.version).toEqual("1.0.0");
 
       // Update the worker script file
       const updatedWorkerScript = `
@@ -1664,6 +1658,8 @@ describe("Worker Resource", () => {
         format: "esm",
         url: true,
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       if (worker.url) {
         // Test that the worker was updated correctly
@@ -1714,7 +1710,7 @@ describe("Worker Resource", () => {
 
       // Verify the worker exists via API
       const getResponse = await api.get(
-        `/accounts/${api.accountId}/workers/scripts/${workerName}`
+        `/accounts/${api.accountId}/workers/scripts/${workerName}`,
       );
       expect(getResponse.status).toEqual(200);
 

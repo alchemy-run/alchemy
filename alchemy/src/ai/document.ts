@@ -222,7 +222,7 @@ export const Document = Resource(
   async function (
     this: Context<Document>,
     id: string,
-    props: DocumentProps
+    props: DocumentProps,
   ): Promise<Document> {
     // Validate that either prompt or messages are provided
     if (!props.prompt && !props.messages) {
@@ -289,7 +289,7 @@ export const Document = Resource(
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid markdown content: ${retryResult.error}\n${retryText}`
+          `Failed to generate valid markdown content: ${retryResult.error}\n${retryText}`,
         );
       }
 
@@ -319,7 +319,7 @@ export const Document = Resource(
 
     // Return the resource
     return this(result as Document);
-  }
+  },
 );
 
 /**

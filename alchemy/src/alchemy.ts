@@ -98,10 +98,12 @@ async function _alchemy(
 ): Promise<Scope | string | never> {
   if (typeof args[0] === "string") {
     const [appName, options] = args as [string, AlchemyOptions?];
+    const phase = options?.phase ?? "up";
     const root = new Scope({
       ...options,
       appName,
       stage: options?.stage,
+      phase,
     });
     root.enter();
     if (options?.phase === "destroy") {
@@ -109,117 +111,122 @@ async function _alchemy(
       return process.exit(0);
     }
     return root;
-  } else {
-    const [template, ...values] = args;
-    const [, secondLine] = template[0].split("\n");
-    const leadingSpaces = secondLine
-      ? secondLine.match(/^(\s*)/)?.[1]?.length || 0
-      : 0;
-    const indent = " ".repeat(leadingSpaces);
-
-    const [{ isFileRef }, { isFileCollection }] = await Promise.all([
-      import("./fs/file-ref"),
-      import("./fs/file-collection"),
-    ]);
-
-    const appendices: Record<string, string> = {};
-
-    const stringValues = await Promise.all(
-      values.map(async function resolve(value): Promise<string> {
-        if (typeof value === "string") {
-          return indent + value;
-        } else if (value === null) {
-          return "null";
-        } else if (value === undefined) {
-          return "undefined";
-        } else if (
-          typeof value === "number" ||
-          typeof value === "boolean" ||
-          typeof value === "bigint"
-        ) {
-          return value.toString();
-        } else if (value instanceof Promise) {
-          return resolve(await value);
-        } else if (isFileRef(value)) {
-          if (!(value.path in appendices)) {
-            appendices[value.path] = await fs.readFile(value.path, "utf-8");
-          }
-          return `[${path.basename(value.path)}](${value.path})`;
-        } else if (isFileCollection(value)) {
-          return Object.entries(value.files)
-            .map(([filePath, content]) => {
-              appendices[filePath] = content;
-              return `[${path.basename(filePath)}](${filePath})`;
-            })
-            .join("\n\n");
-        } else if (Array.isArray(value)) {
-          return (
-            await Promise.all(
-              value.map(async (value, i) => `${i}. ${await resolve(value)}`)
-            )
-          ).join("\n");
-        } else if (
-          typeof value === "object" &&
-          typeof value.path === "string"
-        ) {
-          if (typeof value.content === "string") {
-            appendices[value.path] = value.content;
-            return `[${path.basename(value.path)}](${value.path})`;
-          } else {
-            appendices[value.path] = await fs.readFile(value.path, "utf-8");
-            return `[${path.basename(value.path)}](${value.path})`;
-          }
-        } else if (typeof value === "object") {
-          return (
-            await Promise.all(
-              Object.entries(value).map(async ([key, value]) => {
-                return `* ${key}: ${await resolve(value)}`;
-              })
-            )
-          ).join("\n");
-        } else {
-          // TODO: support other types
-          console.log(value);
-          throw new Error(`Unsupported value type: ${value}`);
-        }
-      })
-    );
-
-    // Construct the string template by joining template parts with interpolated values
-    const lines = template
-      .map((part) =>
-        part
-          .split("\n")
-          .map((line) =>
-            line.startsWith(indent) ? line.slice(indent.length) : line
-          )
-          .join("\n")
-      )
-      .flatMap((part, i) =>
-        i < stringValues.length ? [part, stringValues[i] ?? ""] : [part]
-      )
-      .join("")
-      .split("\n");
-
-    // Collect and sort appendices by file path
-    return [
-      // format the user prompt and trim the first line if it's empty
-      lines.length > 1 && lines[0].replaceAll(" ", "").length === 0
-        ? lines.slice(1).join("\n")
-        : lines.join("\n"),
-
-      // sort appendices by path and include at the end of the prompt
-      Object.entries(appendices)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([filePath, content]) => {
-          const extension = path.extname(filePath).slice(1);
-          const codeTag = extension ? extension : "";
-          return `// ${filePath}\n\`\`\`${codeTag}\n${content}\n\`\`\``;
-        })
-        .join("\n\n"),
-    ].join("\n");
   }
+  const [template, ...values] = args;
+  const [, secondLine] = template[0].split("\n");
+  const leadingSpaces = secondLine
+    ? secondLine.match(/^(\s*)/)?.[1]?.length || 0
+    : 0;
+  const indent = " ".repeat(leadingSpaces);
+
+  const [{ isFileRef }, { isFileCollection }] = await Promise.all([
+    import("./fs/file-ref.js"),
+    import("./fs/file-collection.js"),
+  ]);
+
+  const appendices: Record<string, string> = {};
+
+  const stringValues = await Promise.all(
+    values.map(async function resolve(value): Promise<string> {
+      if (typeof value === "string") {
+        return indent + value;
+      }
+      if (value === null) {
+        return "null";
+      }
+      if (value === undefined) {
+        return "undefined";
+      }
+      if (
+        typeof value === "number" ||
+        typeof value === "boolean" ||
+        typeof value === "bigint"
+      ) {
+        return value.toString();
+      }
+      if (value instanceof Promise) {
+        return resolve(await value);
+      }
+      if (isFileRef(value)) {
+        if (!(value.path in appendices)) {
+          appendices[value.path] = await fs.readFile(value.path, "utf-8");
+        }
+        return `[${path.basename(value.path)}](${value.path})`;
+      }
+      if (isFileCollection(value)) {
+        return Object.entries(value.files)
+          .map(([filePath, content]) => {
+            appendices[filePath] = content;
+            return `[${path.basename(filePath)}](${filePath})`;
+          })
+          .join("\n\n");
+      }
+      if (Array.isArray(value)) {
+        return (
+          await Promise.all(
+            value.map(async (value, i) => `${i}. ${await resolve(value)}`),
+          )
+        ).join("\n");
+      }
+      if (typeof value === "object" && typeof value.path === "string") {
+        if (typeof value.content === "string") {
+          appendices[value.path] = value.content;
+          return `[${path.basename(value.path)}](${value.path})`;
+        }
+        appendices[value.path] = await fs.readFile(value.path, "utf-8");
+        return `[${path.basename(value.path)}](${value.path})`;
+      }
+      if (typeof value === "object") {
+        return (
+          await Promise.all(
+            Object.entries(value).map(async ([key, value]) => {
+              return `* ${key}: ${await resolve(value)}`;
+            }),
+          )
+        ).join("\n");
+      }
+      // TODO: support other types
+      console.log(value);
+      throw new Error(`Unsupported value type: ${value}`);
+    }),
+  );
+
+  // Construct the string template by joining template parts with interpolated values
+  const lines = template
+    .map((part) =>
+      part
+        .split("\n")
+        .map((line) =>
+          line.startsWith(indent) ? line.slice(indent.length) : line,
+        )
+        .join("\n"),
+    )
+    .flatMap((part, i) =>
+      i < stringValues.length ? [part, stringValues[i] ?? ""] : [part],
+    )
+    .join("")
+    .split("\n");
+
+  // Collect and sort appendices by file path
+  return [
+    // format the user prompt and trim the first line if it's empty
+    lines.length > 1 && lines[0].replaceAll(" ", "").length === 0
+      ? lines.slice(1).join("\n")
+      : lines.join("\n"),
+
+    // sort appendices by path and include at the end of the prompt
+    Object.entries(appendices)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([filePath, content]) => {
+        const extension = path.extname(filePath).slice(1);
+        const codeTag = extension ? extension : "";
+        return `// ${filePath}\n\`\`\`${codeTag}\n${content}\n\`\`\``;
+      })
+      .join("\n\n"),
+  ].join("\n");
 }
+
+export type Phase = "up" | "destroy" | "read";
 
 export interface AlchemyOptions {
   /**
@@ -231,7 +238,7 @@ export interface AlchemyOptions {
    *
    * @default "up"
    */
-  phase?: "up" | "destroy";
+  phase?: Phase;
   /**
    * Name to scope the resource state under (e.g. `.alchemy/{stage}/..`).
    *
@@ -337,7 +344,7 @@ async function run<T>(
       await _scope.parent!.state.set(id, resource);
       _scope.parent!.resources.set(
         id,
-        Object.assign(Promise.resolve(resource), output) as PendingResource
+        Object.assign(Promise.resolve(resource), output) as PendingResource,
       );
     }
     return await _scope.run(async () => fn.bind(_scope)(_scope));

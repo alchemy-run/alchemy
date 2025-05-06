@@ -4,11 +4,11 @@ import "../alchemy/src/fs";
 import "../alchemy/src/web/vitepress";
 
 import alchemy from "../alchemy/src";
-import { CopyFile } from "../alchemy/src/fs/copy-file";
-import { Folder } from "../alchemy/src/fs/folder";
-import { Providers } from "../alchemy/src/internal/docs/providers";
+import { CopyFile } from "../alchemy/src/fs/copy-file.js";
+import { Folder } from "../alchemy/src/fs/folder.js";
+import { Providers } from "../alchemy/src/internal/docs/providers.js";
 import { VitepressProject } from "../alchemy/src/web/vitepress";
-import env from "./env";
+import env from "./env.js";
 
 const app = await alchemy("alchemy:docs", env);
 
@@ -55,9 +55,9 @@ await Providers({
     process.argv[filterIdx + 1] === "true"
       ? true
       : filterIdx > -1
-        ? isNaN(parseInt(process.argv[filterIdx + 1]))
+        ? Number.isNaN(Number.parseInt(process.argv[filterIdx + 1]))
           ? false
-          : parseInt(process.argv[filterIdx + 1])
+          : Number.parseInt(process.argv[filterIdx + 1])
         : false,
 });
 

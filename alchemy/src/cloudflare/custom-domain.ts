@@ -2,7 +2,7 @@ import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import { handleApiError } from "./api-error.js";
 import {
-  CloudflareApi,
+  type CloudflareApi,
   createCloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
@@ -91,7 +91,7 @@ export const CustomDomain = Resource(
   async function (
     this: Context<CustomDomain>,
     logicalId: string, // Changed param name from id to logicalId for clarity
-    props: CustomDomainProps
+    props: CustomDomainProps,
   ): Promise<CustomDomain> {
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
@@ -110,11 +110,10 @@ export const CustomDomain = Resource(
     if (this.phase === "delete") {
       await deleteCustomDomain(this, api, logicalId, props);
       return this.destroy();
-    } else {
-      // Create or Update phase
-      return await ensureCustomDomain(this, api, logicalId, props);
     }
-  }
+    // Create or Update phase
+    return await ensureCustomDomain(this, api, logicalId, props);
+  },
 );
 
 // Helper function to delete the custom domain binding
@@ -122,29 +121,29 @@ async function deleteCustomDomain(
   context: Context<CustomDomain>,
   api: CloudflareApi,
   logicalId: string,
-  props: CustomDomainProps
+  props: CustomDomainProps,
 ): Promise<void> {
   const domainHostname = props.name;
   const domainIdToDelete = context.output?.id;
 
   if (!domainIdToDelete) {
     console.warn(
-      `Cannot delete CustomDomain ${logicalId} (${domainHostname}): Missing domain ID in state. Assuming already deleted.`
+      `Cannot delete CustomDomain ${logicalId} (${domainHostname}): Missing domain ID in state. Assuming already deleted.`,
     );
     return; // Exit early if no ID
   }
 
   console.log(
-    `Deleting CustomDomain binding ${domainIdToDelete} for ${domainHostname}`
+    `Deleting CustomDomain binding ${domainIdToDelete} for ${domainHostname}`,
   );
   const response = await api.delete(
-    `/accounts/${api.accountId}/workers/domains/${domainIdToDelete}`
+    `/accounts/${api.accountId}/workers/domains/${domainIdToDelete}`,
   );
 
   console.log(
     `Delete result for ${domainIdToDelete} (${domainHostname}):`,
     response.status,
-    response.statusText
+    response.statusText,
   );
 
   // 404 is acceptable during deletion for idempotency
@@ -153,11 +152,11 @@ async function deleteCustomDomain(
       response,
       "deleting",
       "custom domain binding",
-      domainIdToDelete
+      domainIdToDelete,
     );
     // Throw after handling to ensure failure is reported
     throw new Error(
-      `Failed to delete custom domain binding ${domainIdToDelete}: ${response.statusText}`
+      `Failed to delete custom domain binding ${domainIdToDelete}: ${response.statusText}`,
     );
   }
 }
@@ -167,7 +166,7 @@ async function ensureCustomDomain(
   context: Context<CustomDomain>,
   api: CloudflareApi,
   logicalId: string,
-  props: CustomDomainProps
+  props: CustomDomainProps,
 ): Promise<CustomDomain> {
   const environment = props.environment || "production";
   const domainHostname = props.name;
@@ -175,7 +174,7 @@ async function ensureCustomDomain(
   // Check if domain binding already exists for this account
   console.log(`Checking existing domain bindings for account ${api.accountId}`);
   const listResponse = await api.get(
-    `/accounts/${api.accountId}/workers/domains`
+    `/accounts/${api.accountId}/workers/domains`,
   );
 
   if (!listResponse.ok) {
@@ -184,11 +183,11 @@ async function ensureCustomDomain(
       listResponse,
       "listing",
       "worker domains",
-      `Account ${api.accountId}`
+      `Account ${api.accountId}`,
     );
     // If listing fails, we cannot proceed reliably
     throw new Error(
-      `Failed to list worker domains for account ${api.accountId}: ${listResponse.statusText}`
+      `Failed to list worker domains for account ${api.accountId}: ${listResponse.statusText}`,
     );
   }
 
@@ -199,13 +198,13 @@ async function ensureCustomDomain(
 
   if (!listData.success || !listData.result) {
     throw new Error(
-      `Failed to parse list worker domains response: ${JSON.stringify(listData)}`
+      `Failed to parse list worker domains response: ${JSON.stringify(listData)}`,
     );
   }
 
   // Find the specific binding by hostname AND zoneId
   const existingBinding = listData.result.find(
-    (b) => b.hostname === domainHostname && b.zone_id === props.zoneId
+    (b) => b.hostname === domainHostname && b.zone_id === props.zoneId,
   );
 
   let currentDomainId = existingBinding?.id;
@@ -215,7 +214,7 @@ async function ensureCustomDomain(
     `Domain binding status for ${domainHostname} (Zone: ${props.zoneId}):`,
     bindingExists
       ? `Found (ID: ${currentDomainId}, Worker: ${existingBinding.service}, Env: ${existingBinding.environment})`
-      : "Not found"
+      : "Not found",
   );
 
   // Determine if we need to update (binding exists but has different service or environment)
@@ -232,7 +231,7 @@ async function ensureCustomDomain(
   if (!bindingExists || needsUpdate) {
     operationPerformed = bindingExists ? "update" : "create";
     console.log(
-      `${operationPerformed === "update" ? "Updating" : "Creating"} domain binding: ${domainHostname} (Zone: ${props.zoneId}) → ${props.workerName}:${environment}`
+      `${operationPerformed === "update" ? "Updating" : "Creating"} domain binding: ${domainHostname} (Zone: ${props.zoneId}) → ${props.workerName}:${environment}`,
     );
 
     const putPayload = {
@@ -244,7 +243,7 @@ async function ensureCustomDomain(
 
     const putResponse = await api.put(
       `/accounts/${api.accountId}/workers/domains`,
-      putPayload
+      putPayload,
     );
 
     if (!putResponse.ok) {
@@ -252,11 +251,11 @@ async function ensureCustomDomain(
         putResponse,
         operationPerformed === "update" ? "updating" : "creating",
         "custom domain binding",
-        domainHostname
+        domainHostname,
       );
       // Throw after handling to prevent inconsistent state
       throw new Error(
-        `Failed to ${operationPerformed} custom domain binding: ${putResponse.statusText}`
+        `Failed to ${operationPerformed} custom domain binding: ${putResponse.statusText}`,
       );
     }
 
@@ -267,18 +266,18 @@ async function ensureCustomDomain(
 
     if (!putResult.success || !putResult.result) {
       throw new Error(
-        `Failed to parse ${operationPerformed} domain binding response: ${JSON.stringify(putResult)}`
+        `Failed to parse ${operationPerformed} domain binding response: ${JSON.stringify(putResult)}`,
       );
     }
 
     resultantBinding = putResult.result;
     currentDomainId = resultantBinding.id; // Update ID from the PUT response
     console.log(
-      `Successfully ${operationPerformed}d binding, new ID: ${currentDomainId}`
+      `Successfully ${operationPerformed}d binding, new ID: ${currentDomainId}`,
     );
   } else {
     console.log(
-      `Domain binding already exists and is up to date: ${domainHostname} (ID: ${currentDomainId}) → ${props.workerName}:${environment}`
+      `Domain binding already exists and is up to date: ${domainHostname} (ID: ${currentDomainId}) → ${props.workerName}:${environment}`,
     );
   }
 
@@ -291,7 +290,7 @@ async function ensureCustomDomain(
       currentDomainId,
     });
     throw new Error(
-      `Failed to get final state for custom domain ${domainHostname}`
+      `Failed to get final state for custom domain ${domainHostname}`,
     );
   }
 

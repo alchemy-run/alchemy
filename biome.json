@@ -1,14 +1,74 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.5.3/schema.json",
-  "organizeImports": {
-    "enabled": true
+  "files": {
+    "includes": [
+      "./alchemy/src/**",
+      "./alchemy/test/**",
+      "./scripts/**",
+      "./examples/*/src/**",
+      "./examples/*/alchemy.run.ts",
+      "!**/node_modules"
+    ]
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "off"
+      }
+    }
   },
   "linter": {
-    "enabled": false,
+    "enabled": true,
     "rules": {
       "recommended": true,
+      "correctness": {
+        "useImportExtensions": {
+          "level": "error",
+          "options": {
+            "forceJsExtensions": true
+          }
+        },
+        "noUnsafeFinally": "off",
+        "noChildrenProp": "off"
+      },
+      "a11y": {
+        "useButtonType": "off",
+        "useHtmlLang": "off"
+      },
+      "performance": {
+        "noAccumulatingSpread": "off"
+      },
+      "complexity": {
+        "noBannedTypes": "off"
+      },
       "suspicious": {
-        "noExplicitAny": "off"
+        "noExplicitAny": "off",
+        "noImplicitAnyLet": "off",
+        "noAssignInExpressions": "off",
+        "noShadowRestrictedNames": "off"
+      },
+      "style": {
+        "useLiteralEnumMembers": "error",
+        "noCommaOperator": "error",
+        "useNodejsImportProtocol": "error",
+        "useAsConstAssertion": "error",
+        "useNumericLiterals": "error",
+        "useEnumInitializers": "error",
+        "useSelfClosingElements": "error",
+        "useConst": "off",
+        "useSingleVarDeclarator": "error",
+        "noUnusedTemplateLiteral": "error",
+        "useNumberNamespace": "error",
+        "noInferrableTypes": "error",
+        "useExponentiationOperator": "error",
+        "useTemplate": "error",
+        "noParameterAssign": "off",
+        "noNonNullAssertion": "off",
+        "useDefaultParameterLast": "error",
+        "noArguments": "error",
+        "useImportType": "error",
+        "useExportType": "error",
+        "noUselessElse": "off",
+        "useShorthandFunctionType": "error"
       }
     }
   },
@@ -19,7 +79,7 @@
     "indentWidth": 2,
     "lineWidth": 80,
     "lineEnding": "lf",
-    "ignore": []
+    "includes": ["**", "!**/node_modules/**"]
   },
   "javascript": {
     "formatter": {

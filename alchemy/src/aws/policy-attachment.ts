@@ -66,7 +66,7 @@ export const PolicyAttachment = Resource(
   async function (
     this: Context<PolicyAttachment>,
     id: string,
-    props: PolicyAttachmentProps
+    props: PolicyAttachmentProps,
   ) {
     const client = new IAMClient({});
 
@@ -76,19 +76,18 @@ export const PolicyAttachment = Resource(
           new DetachRolePolicyCommand({
             PolicyArn: props.policyArn,
             RoleName: props.roleName,
-          })
-        )
+          }),
+        ),
       );
       return this.destroy();
-    } else {
-      await client.send(
-        new AttachRolePolicyCommand({
-          PolicyArn: props.policyArn,
-          RoleName: props.roleName,
-        })
-      );
     }
+    await client.send(
+      new AttachRolePolicyCommand({
+        PolicyArn: props.policyArn,
+        RoleName: props.roleName,
+      }),
+    );
 
     return this(props);
-  }
+  },
 );

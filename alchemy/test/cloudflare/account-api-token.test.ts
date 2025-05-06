@@ -1,11 +1,14 @@
 import { beforeAll, describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { AccountApiToken } from "../../src/cloudflare/account-api-token";
-import { CloudflareApi, createCloudflareApi } from "../../src/cloudflare/api";
-import { destroy } from "../../src/destroy";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { AccountApiToken } from "../../src/cloudflare/account-api-token.js";
+import {
+  type CloudflareApi,
+  createCloudflareApi,
+} from "../../src/cloudflare/api.js";
+import { destroy } from "../../src/destroy.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 // Create API client for verification
 let api: CloudflareApi;
@@ -54,7 +57,7 @@ describe("AccountApiToken Resource", () => {
 
       // Verify token was created by querying the API directly
       const getResponse = await api.get(
-        `/accounts/${api.accountId}/tokens/${tokenId}`
+        `/accounts/${api.accountId}/tokens/${tokenId}`,
       );
       expect(getResponse.status).toEqual(200);
 
@@ -83,7 +86,7 @@ describe("AccountApiToken Resource", () => {
 
       // Verify token was updated
       const getUpdatedResponse = await api.get(
-        `/accounts/${api.accountId}/tokens/${tokenId}`
+        `/accounts/${api.accountId}/tokens/${tokenId}`,
       );
       const updatedData = await getUpdatedResponse.json();
       expect(updatedData.result.name).toEqual(`Updated Token ${testId}`);
@@ -98,7 +101,7 @@ describe("AccountApiToken Resource", () => {
       // Verify token was deleted if it was created
       if (token?.id) {
         const getDeletedResponse = await api.get(
-          `/accounts/${api.accountId}/tokens/${token.id}`
+          `/accounts/${api.accountId}/tokens/${token.id}`,
         );
         expect(getDeletedResponse.status).toEqual(404);
       }

@@ -35,13 +35,13 @@ export function createNeonApi(options: Partial<NeonApiOptions> = {}): NeonApi {
  * @returns Headers for authentication
  */
 export async function getNeonAuthHeaders(
-  options: Partial<NeonApiOptions>
+  options: Partial<NeonApiOptions>,
 ): Promise<Record<string, string>> {
   const apiKey = options.apiKey?.unencrypted ?? process.env.NEON_API_KEY;
 
   if (!apiKey) {
     throw new Error(
-      "Neon API key is required. Set NEON_API_KEY environment variable or provide apiKey option."
+      "Neon API key is required. Set NEON_API_KEY environment variable or provide apiKey option.",
     );
   }
 
@@ -114,7 +114,7 @@ export class NeonApi {
         return isNetworkError || error?.status?.toString().startsWith("5");
       },
       5, // Maximum 5 attempts (1 initial + 4 retries)
-      1000 // Start with 1s delay, will exponentially increase
+      1000, // Start with 1s delay, will exponentially increase
     );
   }
 
@@ -131,7 +131,7 @@ export class NeonApi {
   async post(
     path: string,
     body: any,
-    init: RequestInit = {}
+    init: RequestInit = {},
   ): Promise<Response> {
     const requestBody =
       body instanceof FormData
@@ -148,7 +148,7 @@ export class NeonApi {
   async put(
     path: string,
     body: any,
-    init: RequestInit = {}
+    init: RequestInit = {},
   ): Promise<Response> {
     const requestBody = body instanceof FormData ? body : JSON.stringify(body);
     return this.fetch(path, { ...init, method: "PUT", body: requestBody });
@@ -160,7 +160,7 @@ export class NeonApi {
   async patch(
     path: string,
     body: any,
-    init: RequestInit = {}
+    init: RequestInit = {},
   ): Promise<Response> {
     return this.fetch(path, {
       ...init,

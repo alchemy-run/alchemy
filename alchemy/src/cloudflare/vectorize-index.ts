@@ -111,7 +111,7 @@ export const VectorizeIndex = Resource(
   async function (
     this: Context<VectorizeIndex>,
     id: string,
-    props: VectorizeIndexProps
+    props: VectorizeIndexProps,
   ): Promise<VectorizeIndex> {
     const api = await createCloudflareApi(props);
     const indexName = props.name || id;
@@ -125,56 +125,55 @@ export const VectorizeIndex = Resource(
 
       // Return void (a deleted index has no content)
       return this.destroy();
-    } else {
-      let indexData: CloudflareVectorizeResponse;
-
-      if (this.phase === "create") {
-        console.log("Creating Vectorize index:", indexName);
-        try {
-          indexData = await createIndex(api, indexName, {
-            ...props,
-            name: indexName,
-          });
-        } catch (error) {
-          // Check if this is a "index already exists" error and adopt is enabled
-          if (
-            props.adopt &&
-            error instanceof CloudflareApiError &&
-            error.message.includes("already exists")
-          ) {
-            console.log(`Index ${indexName} already exists, adopting it`);
-            // Find the existing index
-            indexData = await getIndex(api, indexName);
-          } else {
-            // Re-throw the error if adopt is false or it's not a "index already exists" error
-            throw error;
-          }
-        }
-      } else {
-        // Update operation is not supported by Vectorize API
-        throw new Error(
-          "Updating Vectorize indexes is not supported by the Cloudflare API. " +
-            "To change an index, delete it and create a new one with the desired configuration."
-        );
-      }
-
-      return this({
-        type: "vectorize",
-        id: indexName,
-        name: indexName,
-        description: props.description,
-        dimensions: indexData.result.config.dimensions,
-        metric: indexData.result.config.metric as
-          | "cosine"
-          | "euclidean"
-          | "dot_product",
-        accountId: api.accountId,
-        createdAt: indexData.result.created_on
-          ? new Date(indexData.result.created_on).getTime()
-          : undefined,
-      });
     }
-  }
+    let indexData: CloudflareVectorizeResponse;
+
+    if (this.phase === "create") {
+      console.log("Creating Vectorize index:", indexName);
+      try {
+        indexData = await createIndex(api, indexName, {
+          ...props,
+          name: indexName,
+        });
+      } catch (error) {
+        // Check if this is a "index already exists" error and adopt is enabled
+        if (
+          props.adopt &&
+          error instanceof CloudflareApiError &&
+          error.message.includes("already exists")
+        ) {
+          console.log(`Index ${indexName} already exists, adopting it`);
+          // Find the existing index
+          indexData = await getIndex(api, indexName);
+        } else {
+          // Re-throw the error if adopt is false or it's not a "index already exists" error
+          throw error;
+        }
+      }
+    } else {
+      // Update operation is not supported by Vectorize API
+      throw new Error(
+        "Updating Vectorize indexes is not supported by the Cloudflare API. " +
+          "To change an index, delete it and create a new one with the desired configuration.",
+      );
+    }
+
+    return this({
+      type: "vectorize",
+      id: indexName,
+      name: indexName,
+      description: props.description,
+      dimensions: indexData.result.config.dimensions,
+      metric: indexData.result.config.metric as
+        | "cosine"
+        | "euclidean"
+        | "dot_product",
+      accountId: api.accountId,
+      createdAt: indexData.result.created_on
+        ? new Date(indexData.result.created_on).getTime()
+        : undefined,
+    });
+  },
 );
 
 interface CloudflareVectorizeResponse {
@@ -198,7 +197,7 @@ interface CloudflareVectorizeResponse {
 export async function createIndex(
   api: CloudflareApi,
   indexName: string,
-  props: VectorizeIndexProps
+  props: VectorizeIndexProps,
 ): Promise<CloudflareVectorizeResponse> {
   // Create new Vectorize index
   const createPayload: any = {
@@ -215,7 +214,7 @@ export async function createIndex(
 
   const createResponse = await api.post(
     `/accounts/${api.accountId}/vectorize/v2/indexes`,
-    createPayload
+    createPayload,
   );
 
   if (!createResponse.ok) {
@@ -223,7 +222,7 @@ export async function createIndex(
       createResponse,
       "creating",
       "Vectorize index",
-      indexName
+      indexName,
     );
   }
 
@@ -235,10 +234,10 @@ export async function createIndex(
  */
 export async function getIndex(
   api: CloudflareApi,
-  indexName: string
+  indexName: string,
 ): Promise<CloudflareVectorizeResponse> {
   const response = await api.get(
-    `/accounts/${api.accountId}/vectorize/v2/indexes/${indexName}`
+    `/accounts/${api.accountId}/vectorize/v2/indexes/${indexName}`,
   );
 
   if (!response.ok) {
@@ -246,7 +245,7 @@ export async function getIndex(
       response,
       "getting",
       "Vectorize index",
-      indexName
+      indexName,
     );
   }
 
@@ -258,11 +257,11 @@ export async function getIndex(
  */
 export async function deleteIndex(
   api: CloudflareApi,
-  indexName: string
+  indexName: string,
 ): Promise<void> {
   // Delete Vectorize index
   const deleteResponse = await api.delete(
-    `/accounts/${api.accountId}/vectorize/v2/indexes/${indexName}`
+    `/accounts/${api.accountId}/vectorize/v2/indexes/${indexName}`,
   );
 
   if (!deleteResponse.ok && deleteResponse.status !== 404) {
@@ -271,7 +270,7 @@ export async function deleteIndex(
     }));
     throw new CloudflareApiError(
       `Error deleting Vectorize index '${indexName}': ${errorData.errors?.[0]?.message || deleteResponse.statusText}`,
-      deleteResponse
+      deleteResponse,
     );
   }
 }
@@ -280,16 +279,16 @@ export async function deleteIndex(
  * List all Vectorize indexes in an account
  */
 export async function listIndexes(
-  api: CloudflareApi
+  api: CloudflareApi,
 ): Promise<{ name: string; description?: string }[]> {
   const response = await api.get(
-    `/accounts/${api.accountId}/vectorize/v2/indexes`
+    `/accounts/${api.accountId}/vectorize/v2/indexes`,
   );
 
   if (!response.ok) {
     throw new CloudflareApiError(
       `Failed to list indexes: ${response.statusText}`,
-      response
+      response,
     );
   }
 
@@ -323,9 +322,9 @@ export async function listIndexes(
 export async function updateIndex(
   api: CloudflareApi,
   indexName: string,
-  props: VectorizeIndexProps
+  props: VectorizeIndexProps,
 ): Promise<CloudflareVectorizeResponse> {
   throw new Error(
-    "Updating Vectorize indexes is not supported by the Cloudflare API. To change an index, delete it and create a new one."
+    "Updating Vectorize indexes is not supported by the Cloudflare API. To change an index, delete it and create a new one.",
   );
 }

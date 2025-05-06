@@ -82,7 +82,7 @@ export const TailwindConfig = Resource(
   async function (
     this: Context<TailwindConfig>,
     id: string,
-    props: TailwindConfigProps
+    props: TailwindConfigProps,
   ): Promise<TailwindConfig> {
     if (this.phase === "delete") {
       // Nothing to clean up specifically for Tailwind
@@ -139,7 +139,6 @@ export const TailwindConfig = Resource(
           return ["@astrojs/tailwind"];
         case "next":
           return [];
-        case "standalone":
         default:
           return [];
       }
@@ -164,5 +163,5 @@ export const TailwindConfig = Resource(
       // Create CSS file with Tailwind directives
       await StaticTextFile(cssPath, tailwindDirectives);
     }
-  }
+  },
 );

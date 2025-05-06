@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { createCloudflareApi } from "../../src/cloudflare/api";
+import { alchemy } from "../../src/alchemy.js";
+import { createCloudflareApi } from "../../src/cloudflare/api.js";
 import {
   createR2Client,
   getBucket,
@@ -8,10 +8,10 @@ import {
   listObjects,
   R2Bucket,
   withJurisdiction,
-} from "../../src/cloudflare/bucket";
-import { BRANCH_PREFIX } from "../util";
+} from "../../src/cloudflare/bucket.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -53,7 +53,7 @@ describe("R2 Bucket Resource", async () => {
       });
 
       const publicAccessResponse = await api.get(
-        `/accounts/${api.accountId}/r2/buckets/${testId}/domains/managed`
+        `/accounts/${api.accountId}/r2/buckets/${testId}/domains/managed`,
       );
       const publicAccessData = await publicAccessResponse.json();
       expect(publicAccessData.result.enabled).toEqual(true);
@@ -115,11 +115,11 @@ describe("R2 Bucket Resource", async () => {
 
       // Put object with jurisdiction header
       const putUrl = new URL(
-        `https://${r2Client.accountId}.r2.cloudflarestorage.com/${bucketName}/${testKey}`
+        `https://${r2Client.accountId}.r2.cloudflarestorage.com/${bucketName}/${testKey}`,
       );
       const putHeaders = withJurisdiction(
         { "Content-Type": "text/plain" },
-        bucket.jurisdiction
+        bucket.jurisdiction,
       );
       const putResponse = await r2Client.fetch(putUrl.toString(), {
         method: "PUT",
@@ -133,14 +133,14 @@ describe("R2 Bucket Resource", async () => {
         r2Client,
         bucketName,
         undefined,
-        bucket.jurisdiction
+        bucket.jurisdiction,
       );
       expect(objects.length).toBeGreaterThan(0);
       expect(objects.some((obj) => obj.Key === testKey)).toBe(true);
 
       // For extra verification, directly fetch the file content
       const getUrl = new URL(
-        `https://${r2Client.accountId}.r2.cloudflarestorage.com/${bucketName}/${testKey}`
+        `https://${r2Client.accountId}.r2.cloudflarestorage.com/${bucketName}/${testKey}`,
       );
       const getHeaders = withJurisdiction({}, bucket.jurisdiction);
       const getResponse = await r2Client.fetch(getUrl.toString(), {
@@ -156,7 +156,7 @@ describe("R2 Bucket Resource", async () => {
       // Even after emptying the bucket, the API sometimes reports it's not empty
       // This is a known issue with R2 buckets containing certain object types
       console.log(
-        "Skipping bucket deletion test due to Cloudflare R2 API limitation"
+        "Skipping bucket deletion test due to Cloudflare R2 API limitation",
       );
     } finally {
       // Destroy the bucket which should empty it first
@@ -164,7 +164,7 @@ describe("R2 Bucket Resource", async () => {
 
       console.log(
         "Note: Manual cleanup may be needed for bucket:",
-        bucket?.name
+        bucket?.name,
       );
       console.log("Visit the Cloudflare dashboard to verify bucket deletion");
     }

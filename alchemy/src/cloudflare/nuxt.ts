@@ -47,7 +47,7 @@ export type Nuxt<B extends Bindings> = B extends { ASSETS: any }
  */
 export async function Nuxt<B extends Bindings>(
   id: string,
-  props?: Partial<NuxtProps<B>>
+  props?: Partial<NuxtProps<B>>,
 ): Promise<Nuxt<B>> {
   // Call the underlying Website resource with Nuxt defaults
   return Website(id, {

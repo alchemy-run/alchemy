@@ -1,4 +1,4 @@
-import { exec } from "child_process";
+import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -108,7 +108,7 @@ export const VitepressProject = Resource(
   async function (
     this: Context<VitePressProject>,
     id: string,
-    props: VitePressProjectProps
+    props: VitePressProjectProps,
   ): Promise<VitePressProject> {
     const dir = props.dir ?? props.name;
     if (this.phase === "delete") {
@@ -133,7 +133,7 @@ export const VitepressProject = Resource(
           path: dir,
           delete: props.delete,
         })
-      ).path
+      ).path,
     );
 
     // Initialize package.json
@@ -166,7 +166,7 @@ export const VitepressProject = Resource(
     await Folder(path.join(cwd, ".vitepress", "theme"));
 
     await Promise.all([
-      StaticTextFile(path.join(cwd, ".gitignore"), `.vitepress/cache\n`),
+      StaticTextFile(path.join(cwd, ".gitignore"), ".vitepress/cache\n"),
       // StaticJsonFile(path.join(cwd, "tsconfig.json"), {
       //   extends: props.tsconfig?.extends,
       //   references: props.tsconfig?.references?.map((path) => ({ path })),
@@ -217,7 +217,7 @@ export default {
     ctx.app.use(TwoslashFloatingVue);
   },
 } satisfies ThemeConfig;
-  `
+  `,
       ),
       StaticTextFile(
         path.join(cwd, ".vitepress", "theme", "style.css"),
@@ -359,7 +359,7 @@ export default {
 .DocSearch {
   --docsearch-primary-color: var(--vp-c-brand-1) !important;
 }
-`
+`,
       ),
     ]);
 
@@ -367,5 +367,5 @@ export default {
       ...props,
       dir,
     });
-  }
+  },
 );

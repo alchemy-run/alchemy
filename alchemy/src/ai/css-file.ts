@@ -152,7 +152,7 @@ export const CSSFile = Resource(
   async function (
     this: Context<CSSFile>,
     id: string,
-    props: CSSFileProps
+    props: CSSFileProps,
   ): Promise<CSSFile> {
     // Handle deletion phase
     if (this.phase === "delete") {
@@ -194,7 +194,7 @@ export const CSSFile = Resource(
 
       if (retryResult.error) {
         throw new Error(
-          `Failed to generate valid CSS code: ${retryResult.error}\n${retryText}`
+          `Failed to generate valid CSS code: ${retryResult.error}\n${retryText}`,
         );
       }
 
@@ -211,7 +211,7 @@ export const CSSFile = Resource(
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
-  }
+  },
 );
 
 /**
@@ -222,7 +222,7 @@ export const CSSFile = Resource(
  * @returns The extracted CSS code or error message
  */
 async function extractCSSCode(
-  text: string
+  text: string,
 ): Promise<{ code: string; error?: string }> {
   const cssCodeRegex = /```css\s*([\s\S]*?)```/g;
   const matches = Array.from(text.matchAll(cssCodeRegex));
