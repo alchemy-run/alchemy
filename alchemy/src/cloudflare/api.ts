@@ -67,6 +67,7 @@ export async function createCloudflareApi(
   const accountId =
     options.accountId ??
     process.env.CLOUDFLARE_ACCOUNT_ID ??
+    process.env.CF_ACCOUNT_ID ??
     (
       await getCloudflareUserInfo({
         apiKey,
