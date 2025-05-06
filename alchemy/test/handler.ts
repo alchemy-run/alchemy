@@ -16,3 +16,5 @@ export async function handler(event: any) {
     }),
   };
 }
+// test case for handlers with _, 0-9, and A-Z
+export const _myHandler012 = handler;

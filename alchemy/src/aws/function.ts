@@ -721,7 +721,7 @@ async function waitForFunctionStabilization(
   }
 }
 
-const handlerRegex = /^(.*)\.([a-z]+)$/;
+const handlerRegex = /^(.*)\.([A-Za-z0-9_]+)$/;
 
 function parseFile(handler: string): string {
   const match = handler.match(handlerRegex);
@@ -737,6 +737,9 @@ async function zipCode(props: FunctionProps): Promise<Buffer> {
   const fileName =
     parseFile(props.handler) +
     (props.bundle.format === "cjs" ? ".cjs" : ".mjs");
+
+  console.log("fileName", fileName);
+  console.log("props.handler", props.handler);
 
   // Create a zip buffer in memory
   const zip = new (await import("jszip")).default();

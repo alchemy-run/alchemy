@@ -747,5 +747,76 @@ describe("AWS Resources", () => {
         }
       }
     });
+
+    test("create function with handler containing _, 0-9, and A-Z", async (scope) => {
+      // Define resources that need to be cleaned up
+      let role: Role | undefined = undefined;
+      let func: Function | null = null;
+
+      try {
+        let bundle = await Bundle("bundle", {
+          entryPoint: path.join(__dirname, "..", "handler.ts"),
+          outdir: ".out",
+          format: "cjs",
+          platform: "node",
+          target: "node18",
+        });
+
+        role = await Role("role", {
+          roleName: `${BRANCH_PREFIX}-alchemy-test-lambda-handler-special-chars-role`,
+          assumeRolePolicy: LAMBDA_ASSUME_ROLE_POLICY,
+          policies: [
+            {
+              policyName: "logs",
+              policyDocument: LAMBDA_LOGS_POLICY,
+            },
+          ],
+          tags: {
+            Environment: "test",
+          },
+        });
+
+        // Create the Lambda function with BUFFERED invoke mode (default)
+        func = await Function("function", {
+          functionName: `${BRANCH_PREFIX}-alchemy-test-func-handler-special-chars`,
+          bundle,
+          roleArn: role.arn,
+          handler: "index._myHandler012",
+          runtime: "nodejs20.x",
+          tags: {
+            Environment: "test",
+          },
+          url: {
+            authType: "NONE",
+            // Default invokeMode is BUFFERED if not specified
+            cors: {
+              allowOrigins: ["*"],
+              allowMethods: ["GET", "POST"],
+              allowHeaders: ["Content-Type"],
+            },
+          },
+        });
+
+        // Verify function was created successfully
+        expect(func.arn).toBeTruthy();
+        expect(func.state).toBe("Active");
+        expect(func.functionUrl).toMatch(
+          /^https:\/\/.+\.lambda-url\..+\.on\.aws\/?$/,
+        );
+
+        // Test function invocation via URL
+        const response = await fetch(func.functionUrl!, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ test: "special-handler" }),
+        });
+
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.message).toBe("Hello from bundled handler!");
+      } finally {
+        await destroy(scope);
+      }
+    });
   });
 });
