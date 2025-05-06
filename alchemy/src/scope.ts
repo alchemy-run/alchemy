@@ -41,12 +41,13 @@ export class Scope {
   public readonly parent: Scope | undefined;
   public readonly password: string | undefined;
   public readonly state: StateStore;
+  public readonly stateStore: StateStoreType;
   public readonly quiet: boolean;
   public readonly phase: Phase;
 
   private isErrored = false;
 
-  constructor(options: ScopeOptions) {
+  constructor(private readonly options: ScopeOptions) {
     this.appName = options.appName;
     this.stage = options?.stage ?? DEFAULT_STAGE;
     this.scopeName = options.scopeName ?? null;
@@ -56,9 +57,11 @@ export class Scope {
       throw new Error("Scope name is required when creating a child scope");
     }
     this.password = options.password ?? this.parent?.password;
-    this.state = options.stateStore
-      ? options.stateStore(this)
-      : new FileSystemStateStore(this);
+    this.stateStore =
+      options.stateStore ??
+      this.parent?.stateStore ??
+      ((scope) => new FileSystemStateStore(scope));
+    this.state = this.stateStore(this);
     const phase = options.phase ?? this.parent?.phase;
     if (phase === undefined) {
       throw new Error("Phase is required");
