@@ -738,9 +738,6 @@ async function zipCode(props: FunctionProps): Promise<Buffer> {
     parseFile(props.handler) +
     (props.bundle.format === "cjs" ? ".cjs" : ".mjs");
 
-  console.log("fileName", fileName);
-  console.log("props.handler", props.handler);
-
   // Create a zip buffer in memory
   const zip = new (await import("jszip")).default();
   zip.file(fileName, fileContent);
