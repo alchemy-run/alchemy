@@ -106,7 +106,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -201,7 +201,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -250,7 +250,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -315,7 +315,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -365,7 +365,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -439,7 +439,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -466,7 +466,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -555,7 +555,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -596,7 +596,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
@@ -620,7 +620,7 @@ describe("AWS Resources", () => {
           functionName,
           bundle,
           roleArn: role.arn,
-          handler: "handler.handler",
+          handler: "index.handler",
           runtime: "nodejs20.x",
           tags: {
             Environment: "test",
