@@ -36,6 +36,14 @@ for dir in "$EXAMPLES_DIR"/*/; do
       if [ -f "../../.env" ]; then
         bun --env-file ../../.env ./alchemy.run.ts
         bun --env-file ../../.env ./alchemy.run.ts --destroy
+      # If we're using Cloudflare state store in CI, verify .alchemy/ folder doesn't exist
+      if [ "$ALCHEMY_STATE_STORE" = "cloudflare" ] && [ "$CI" = "true" ]; then
+        echo "  Verifying no local state files were created..."
+        if [ -d ".alchemy" ]; then
+          echo "  Error: .alchemy/ directory exists when using Cloudflare state store in CI"
+          exit 1
+        fi
+      fi
       else
         bun ./alchemy.run.ts
         bun ./alchemy.run.ts --destroy
