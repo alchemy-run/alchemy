@@ -112,6 +112,7 @@ export class R2RestStateStore implements StateStore {
       const params = new URLSearchParams({
         prefix: this.prefix,
         limit: "1000",
+        delimiter: "/",
       });
 
       if (cursor) {
