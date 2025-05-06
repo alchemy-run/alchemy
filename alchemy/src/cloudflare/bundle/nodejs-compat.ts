@@ -4,9 +4,12 @@
 
 import type { Plugin, PluginBuild } from "esbuild";
 import assert from "node:assert";
-import { builtinModules } from "node:module";
+import { builtinModules, createRequire } from "node:module";
 import nodePath from "node:path";
 import { dedent } from "../../util/dedent.js";
+
+const _require =
+  typeof require === "undefined" ? createRequire(import.meta.url) : require;
 
 const REQUIRED_NODE_BUILT_IN_NAMESPACE = "node-built-in-modules";
 const REQUIRED_UNENV_ALIAS_NAMESPACE = "required-unenv-alias";
@@ -118,7 +121,7 @@ function handleUnenvAliasedPackages(
   const aliasAbsolute: Record<string, string> = {};
   for (const [module, unresolvedAlias] of Object.entries(alias)) {
     try {
-      aliasAbsolute[module] = require.resolve(unresolvedAlias);
+      aliasAbsolute[module] = _require.resolve(unresolvedAlias);
     } catch (e) {
       // this is an alias for package that is not installed in the current app => ignore
     }
@@ -221,7 +224,7 @@ function handleNodeJSGlobals(
     // Inject the virtual modules
     ...virtualModulePathToSpecifier.keys(),
     // Inject the polyfills - needs an absolute path
-    ...polyfill.map((m) => require.resolve(m)),
+    ...polyfill.map((m) => _require.resolve(m)),
   ];
 
   build.onResolve({ filter: UNENV_VIRTUAL_MODULE_RE }, ({ path }) => ({
