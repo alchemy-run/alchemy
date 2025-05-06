@@ -5,7 +5,7 @@ import {
   getCloudflareAuthHeaders,
   type CloudflareAuthOptions,
 } from "./auth.js";
-import { getCloudflareUserInfo, getUserEmailFromApiKey } from "./user.js";
+import { getCloudflareAccounts, getUserEmailFromApiKey } from "./user.js";
 
 /**
  * Options for Cloudflare API requests
@@ -69,12 +69,12 @@ export async function createCloudflareApi(
     process.env.CLOUDFLARE_ACCOUNT_ID ??
     process.env.CF_ACCOUNT_ID ??
     (
-      await getCloudflareUserInfo({
+      await getCloudflareAccounts({
         apiKey,
         apiToken,
         email,
       } as CloudflareAuthOptions)
-    ).accounts[0]?.id;
+    )[0]?.id;
   if (accountId === undefined) {
     throw new Error(
       "Either accountId or CLOUDFLARE_ACCOUNT_ID must be provided",

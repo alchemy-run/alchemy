@@ -54,43 +54,33 @@ export interface CloudflareOrganization {
   roles: string[];
 }
 
-const userInfoCache: Record<string, CloudflareUserInfo> = {};
+const accountCache: Record<string, CloudflareAccount[]> = {};
 
-export async function getCloudflareUserInfo(
+export async function getCloudflareAccounts(
   options: CloudflareAuthOptions,
-): Promise<CloudflareUserInfo> {
+): Promise<CloudflareAccount[]> {
   const cacheKey = JSON.stringify({
     apiKey: options.apiKey?.unencrypted,
     apiToken: options.apiToken?.unencrypted,
     email: options.email,
   });
-  if (userInfoCache[cacheKey]) {
-    return userInfoCache[cacheKey];
+  if (accountCache[cacheKey]) {
+    return accountCache[cacheKey];
   }
+
   const headers = await getCloudflareAuthHeaders(options);
-  const user = await fetch("https://api.cloudflare.com/client/v4/user", {
-    headers,
-  });
-  if (!user.ok) {
-    if (user.status === 403) {
-      throw new Error(
-        "Cloudflare authentication required. Did you forget to login with `wrangler login` or set CLOUDFLARE_API_TOKEN, CLOUDFLARE_API_KEY, or CLOUDFLARE_EMAIL, or CLOUDFLARE_API_KEY?",
-      );
-    }
-    await handleApiError(user, "get", "user", "user");
-  }
   const accounts = await fetch(
     "https://api.cloudflare.com/client/v4/accounts",
     {
       headers,
     },
   );
-  const userInfo: CloudflareUserInfo = {
-    ...((await user.json()) as any).result,
-    accounts: ((await accounts.json()) as any).result,
-  };
-  userInfoCache[cacheKey] = userInfo;
-  return userInfo;
+
+  if (accounts.ok) {
+    return (accountCache[cacheKey] ??= ((await accounts.json()) as any).result);
+  } else {
+    return await handleApiError(accounts, "get", "accounts");
+  }
 }
 
 const emailCache: Record<string, string> = {};
