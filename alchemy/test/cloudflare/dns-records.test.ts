@@ -1,4 +1,4 @@
-import { afterEach, describe, expect } from "bun:test";
+import { afterAll, describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy.js";
 import { createCloudflareApi } from "../../src/cloudflare/api.js";
 import { DnsRecords } from "../../src/cloudflare/dns-records.js";
@@ -23,7 +23,7 @@ test.beforeAll(async (_scope) => {
   scope = _scope;
 });
 
-afterEach(async () => {
+afterAll(async () => {
   if (scope) {
     await destroy(scope);
   }
