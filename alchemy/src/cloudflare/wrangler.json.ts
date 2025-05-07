@@ -1,7 +1,7 @@
 import type { Context } from "../context.js";
 import { StaticJsonFile } from "../fs/static-json-file.js";
 import { Resource } from "../resource.js";
-import type { Bindings } from "./bindings.js";
+import { Self, type Bindings } from "./bindings.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
 import type { EventSource } from "./event-source.js";
 import { isQueueEventSource } from "./event-source.js";
@@ -340,6 +340,18 @@ function processBindings(
         spec.vars = {};
       }
       spec.vars[bindingName] = binding;
+    } else if (binding === Self) {
+      // Self(service) binding
+      services.push({
+        binding: bindingName,
+        service: bindingName,
+      });
+    } else if (binding.type === "service") {
+      // Service binding
+      services.push({
+        binding: bindingName,
+        service: binding.id,
+      });
     } else if (binding.type === "kv_namespace") {
       // KV Namespace binding
       kvNamespaces.push({
@@ -362,12 +374,6 @@ function processBindings(
       r2Buckets.push({
         binding: bindingName,
         bucket_name: binding.name,
-      });
-    } else if (binding.type === "service") {
-      // Service binding
-      services.push({
-        binding: bindingName,
-        service: binding.id,
       });
     } else if (binding.type === "secret") {
       // Secret binding

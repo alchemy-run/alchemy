@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { alchemy } from "../../src/alchemy.js";
 import { createCloudflareApi } from "../../src/cloudflare/api.js";
 import { Assets } from "../../src/cloudflare/assets.js";
+import { Self } from "../../src/cloudflare/bindings.js";
 import { R2Bucket } from "../../src/cloudflare/bucket.js";
 import { D1Database } from "../../src/cloudflare/d1-database.js";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.js";
@@ -1560,6 +1561,96 @@ describe("Worker Resource", () => {
       await assertWorkerDoesNotExist(workerName);
     }
   }, 120000); // Increased timeout for Queue operations
+
+  test("create and test worker with Self binding", async (scope) => {
+    // Sample ESM worker script with Self binding functionality
+
+    const workerName = `${BRANCH_PREFIX}-test-worker-self`;
+
+    let worker: Worker | undefined = undefined;
+
+    try {
+      // Create a worker with the Self binding
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              const url = new URL(request.url);
+              
+              // Echo endpoint
+              if (url.pathname.startsWith('/echo/')) {
+                const message = url.pathname.split('/echo/')[1];
+                return new Response('Echo: ' + message, {
+                  status: 200,
+                  headers: { 'Content-Type': 'text/plain' }
+                });
+              }
+              
+              // Recursive endpoint that calls itself
+              if (url.pathname.startsWith('/recursive/')) {
+                const parts = url.pathname.split('/recursive/')[1].split('/');
+                const message = parts[0] || '';
+                const count = parseInt(parts[1] || '0', 10);
+                
+                if (count <= 0) {
+                  return new Response('Final result: ' + message, {
+                    status: 200,
+                    headers: { 'Content-Type': 'text/plain' }
+                  });
+                }
+                
+                // Call self using the SELF binding
+                try {
+                  const response = await env.SELF.fetch(
+                    new URL(\`/recursive/\${message}-\${count}/\${count - 1}\`, request.url)
+                  );
+                  return response;
+                } catch (error) {
+                  return new Response('Error calling self: ' + error.message, {
+                    status: 500,
+                    headers: { 'Content-Type': 'text/plain' }
+                  });
+                }
+              }
+              
+              return new Response('Self-binding Worker is running!', {
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            }
+          };
+        `,
+        format: "esm",
+        url: true, // Enable workers.dev URL to test the worker
+        bindings: {
+          SELF: Self, // Bind the worker to itself
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+      expect(worker.url).toBeTruthy();
+
+      // Test the echo endpoint
+      const echoResponse = await fetch(`${worker.url}/echo/hello-world`);
+      expect(echoResponse.status).toEqual(200);
+      const echoText = await echoResponse.text();
+      expect(echoText).toEqual("Echo: hello-world");
+
+      // Test the recursive endpoint with a count of 3
+      const recursiveResponse = await fetch(`${worker.url}/recursive/start/3`);
+      expect(recursiveResponse.status).toEqual(200);
+      const recursiveText = await recursiveResponse.text();
+      expect(recursiveText).toEqual("Final result: start-3-2-1");
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(workerName);
+    }
+  }, 60000); // Increased timeout for Self binding operations
 
   // Test for worker creation using an entrypoint file instead of an inline script
   test("create, update, and delete worker using entrypoint file", async (scope) => {
