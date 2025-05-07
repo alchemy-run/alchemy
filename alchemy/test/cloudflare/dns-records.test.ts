@@ -9,7 +9,9 @@ import { BRANCH_PREFIX } from "../util.js";
 import type { Scope } from "../../src/scope.js";
 import "../../src/test/bun.js";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 const testDomain = `${BRANCH_PREFIX}-test-2.com`;
 
