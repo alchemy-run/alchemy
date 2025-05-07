@@ -1,5 +1,6 @@
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
+import { handleApiError } from "./api-error.js";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.js";
 import type {
   AlwaysUseHTTPSValue,
@@ -312,15 +313,14 @@ export const Zone = Resource(
 
     if (this.phase === "delete") {
       if (this.output?.id && props.delete !== false) {
-        // Delete zone
         const deleteResponse = await api.delete(`/zones/${this.output.id}`);
 
         if (!deleteResponse.ok && deleteResponse.status !== 404) {
-          const errorData: any = await deleteResponse.json().catch(() => ({
-            errors: [{ message: deleteResponse.statusText }],
-          }));
-          throw new Error(
-            `Error deleting zone '${props.name}': ${errorData.errors?.[0]?.message || deleteResponse.statusText}`,
+          await handleApiError(
+            deleteResponse,
+            "delete",
+            "zone",
+            this.output.id,
           );
         }
       } else {
