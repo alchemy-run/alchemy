@@ -1,6 +1,6 @@
 # Route
 
-The Route resource lets you map URL patterns to [Cloudflare Workers](https://developers.cloudflare.com/workers/configuration/routes/).
+The Route resource lets you map URL patterns to [Cloudflare Workers](https://developers.cloudflare.com/workers/configuration/routing/routes/).
 
 # Minimal Example
 
