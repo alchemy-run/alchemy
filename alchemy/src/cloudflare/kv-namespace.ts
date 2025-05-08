@@ -3,8 +3,8 @@ import { Resource } from "../resource.js";
 import { withExponentialBackoff } from "../util/retry.js";
 import { handleApiError } from "./api-error.js";
 import {
-  type CloudflareApi,
   createCloudflareApi,
+  type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
 
@@ -22,6 +22,14 @@ export interface KVNamespaceProps extends CloudflareApiOptions {
    * Only used for initial setup or updates
    */
   values?: KVPair[];
+
+  /**
+   * Whether to adopt an existing namespace with the same title if it exists
+   * If true and a namespace with the same title exists, it will be adopted rather than creating a new one
+   *
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -145,10 +153,39 @@ export const KVNamespace = Resource(
     if (this.phase === "update" && namespaceId) {
       // Can't update a KV namespace title directly, just work with existing ID
     } else {
-      // TODO: if it already exists, then check the tags to see if we own it and continue
-      const { id } = await createKVNamespace(api, props);
-      createdAt = Date.now();
-      namespaceId = id;
+      try {
+        // Try to create the KV namespace
+        const { id } = await createKVNamespace(api, props);
+        createdAt = Date.now();
+        namespaceId = id;
+      } catch (error) {
+        // Check if this is a "namespace already exists" error and adopt is enabled
+        if (
+          props.adopt &&
+          error instanceof Error &&
+          error.message.includes("already exists")
+        ) {
+          console.log(`Namespace '${props.title}' already exists, adopting it`);
+          // Find the existing namespace by title
+          const existingNamespace = await findKVNamespaceByTitle(
+            api,
+            props.title,
+          );
+
+          if (!existingNamespace) {
+            throw new Error(
+              `Failed to find existing namespace '${props.title}' for adoption`,
+            );
+          }
+
+          // Use the existing namespace ID
+          namespaceId = existingNamespace.id;
+          createdAt = existingNamespace.createdAt || Date.now();
+        } else {
+          // Re-throw the error if adopt is false or it's not a "namespace already exists" error
+          throw error;
+        }
+      }
     }
 
     await insertKVRecords(api, namespaceId, props);
@@ -232,37 +269,100 @@ export async function insertKVRecords(
         return item;
       });
 
-      try {
-        await withExponentialBackoff(
-          async () => {
-            const bulkResponse = await api.put(
-              `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}/bulk`,
-              bulkPayload,
-            );
+      await withExponentialBackoff(
+        async () => {
+          const bulkResponse = await api.put(
+            `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}/bulk`,
+            bulkPayload,
+          );
 
-            if (!bulkResponse.ok) {
-              const errorData: any = await bulkResponse.json().catch(() => ({
-                errors: [{ message: bulkResponse.statusText }],
-              }));
-              const errorMessage =
-                errorData.errors?.[0]?.message || bulkResponse.statusText;
+          if (!bulkResponse.ok) {
+            const errorData: any = await bulkResponse.json().catch(() => ({
+              errors: [{ message: bulkResponse.statusText }],
+            }));
+            const errorMessage =
+              errorData.errors?.[0]?.message || bulkResponse.statusText;
 
-              // Throw error to trigger retry
-              throw new Error(`Error writing KV batch: ${errorMessage}`);
-            }
+            // Throw error to trigger retry
+            throw new Error(`Error writing KV batch: ${errorMessage}`);
+          }
 
-            return bulkResponse;
-          },
-          (error) => {
-            // Retry on "namespace not found" errors as they're likely propagation delays
-            return error.message?.includes("not found");
-          },
-          5, // 5 retry attempts
-          1000, // Start with 1 second delay
-        );
-      } catch (error: any) {
-        console.warn(error.message);
-      }
+          return bulkResponse;
+        },
+        (error) => {
+          // Retry on "namespace not found" errors as they're likely propagation delays
+          return error.message?.includes("not found");
+        },
+        5, // 5 retry attempts
+        1000, // Start with 1 second delay
+      );
     }
   }
+}
+
+/**
+ * Interface representing a KV namespace as returned by Cloudflare API
+ */
+interface CloudflareKVNamespace {
+  id: string;
+  title: string;
+  supports_url_encoding?: boolean;
+  created_on?: string;
+}
+
+/**
+ * Find a KV namespace by title with pagination support
+ */
+export async function findKVNamespaceByTitle(
+  api: CloudflareApi,
+  title: string,
+): Promise<{ id: string; createdAt?: number } | null> {
+  let page = 1;
+  const perPage = 100; // Maximum allowed by API
+  let hasMorePages = true;
+
+  while (hasMorePages) {
+    const response = await api.get(
+      `/accounts/${api.accountId}/storage/kv/namespaces?page=${page}&per_page=${perPage}`,
+    );
+
+    if (!response.ok) {
+      await handleApiError(response, "list", "kv_namespace", "all");
+    }
+
+    const data = (await response.json()) as {
+      result: CloudflareKVNamespace[];
+      result_info: {
+        count: number;
+        page: number;
+        per_page: number;
+        total_count: number;
+      };
+      success: boolean;
+      errors: any[];
+    };
+
+    const namespaces = data.result;
+    const resultInfo = data.result_info;
+
+    // Look for a namespace with matching title
+    const match = namespaces.find((ns) => ns.title === title);
+    if (match) {
+      return {
+        id: match.id,
+        // Convert ISO string to timestamp if available, otherwise use current time
+        createdAt: match.created_on
+          ? new Date(match.created_on).getTime()
+          : undefined,
+      };
+    }
+
+    // Check if we've seen all pages
+    hasMorePages =
+      resultInfo.page * resultInfo.per_page < resultInfo.total_count;
+    page++;
+  }
+
+  // No matching namespace found
+  return null;
 }

@@ -87,6 +87,25 @@ describe("KV Namespace Resource", () => {
     }
   });
 
+  test("adopt existing namespace", async (scope) => {
+    try {
+      const kvNamespace = await KVNamespace("kv", {
+        title: `${testId}-adopt`,
+      });
+
+      await alchemy.run("nested", async () => {
+        const adoptedNamespace = await KVNamespace("kv", {
+          title: `${testId}-adopt`,
+          adopt: true,
+        });
+
+        expect(adoptedNamespace.namespaceId).toEqual(kvNamespace.namespaceId);
+      });
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  });
+
   async function getKVValue(namespaceId: string, key: string): Promise<string> {
     const api = await createCloudflareApi();
     const response = await api.get(
