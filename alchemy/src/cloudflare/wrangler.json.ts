@@ -269,6 +269,15 @@ export interface WranglerJsonSpec {
   };
 
   /**
+   * Migrations
+   */
+  migrations?: {
+    tag: string;
+    new_sqlite_classes?: string[];
+    new_classes?: string[];
+  }[];
+
+  /**
    * Workflow bindings
    */
   wasm_modules?: Record<string, string>;
@@ -327,6 +336,9 @@ function processBindings(
     consumers: [],
   };
 
+  const new_sqlite_classes: string[] = [];
+  const new_classes: string[] = [];
+
   const vectorizeIndexes: { binding: string; index_name: string }[] = [];
 
   for (const eventSource of eventSources ?? []) {
@@ -383,6 +395,11 @@ function processBindings(
         script_name: doBinding.scriptName,
         environment: doBinding.environment,
       });
+      if (doBinding.sqlite) {
+        new_sqlite_classes.push(doBinding.className);
+      } else {
+        new_classes.push(doBinding.className);
+      }
     } else if (binding.type === "r2_bucket") {
       r2Buckets.push({
         binding: bindingName,
@@ -465,5 +482,15 @@ function processBindings(
 
   if (vectorizeIndexes.length > 0) {
     spec.vectorize_indexes = vectorizeIndexes;
+  }
+
+  if (new_sqlite_classes.length > 0 || new_classes.length > 0) {
+    spec.migrations = [
+      {
+        tag: "v1",
+        new_sqlite_classes,
+        new_classes,
+      },
+    ];
   }
 }
