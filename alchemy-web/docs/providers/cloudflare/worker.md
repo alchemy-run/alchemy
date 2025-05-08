@@ -89,3 +89,25 @@ const frontend = await Worker("frontend", {
   }
 });
 ```
+
+# With Custom Domain Routing
+
+```ts
+import { Worker, Route, Zone } from "alchemy/cloudflare";
+
+const zone = await Zone("example-zone", {
+  name: "example.com",
+  type: "full",
+});
+
+const api = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts"
+});
+
+const route = await Route("route", {
+  zoneId: zone.id,
+  worker: api,
+  pattern: "api.example.com/*"
+});
+```

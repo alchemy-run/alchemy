@@ -275,6 +275,12 @@ export interface Worker<B extends Bindings = Bindings>
  *   url: true
  * });
  *
+ * await Route("route", {
+ *   zoneId: zone.zoneId,
+ *   worker: api,
+ *   pattern: "api.example.com/*",
+ * });
+ *
  * @example
  * // Create a real-time chat worker using Durable Objects
  * // for state management:
