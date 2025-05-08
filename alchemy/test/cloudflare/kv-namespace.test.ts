@@ -76,20 +76,15 @@ describe("KV Namespace Resource", () => {
       await alchemy.destroy(scope);
       if (kvNamespace) {
         // Verify namespace was deleted
-        const api = await createCloudflareApi();
-        const response = await api.get(
-          `/accounts/${api.accountId}/storage/kv/namespaces/${kvNamespace.namespaceId}`,
-        );
-
-        // Should be a 404 if properly deleted
-        expect(response.status).toEqual(404);
+        await assertKvNamespaceNotExists(kvNamespace.namespaceId);
       }
     }
   });
 
   test("adopt existing namespace", async (scope) => {
+    let kvNamespace: KVNamespace | undefined;
     try {
-      const kvNamespace = await KVNamespace("kv", {
+      kvNamespace = await KVNamespace("kv", {
         title: `${testId}-adopt`,
       });
 
@@ -99,10 +94,35 @@ describe("KV Namespace Resource", () => {
           adopt: true,
         });
 
-        expect(adoptedNamespace.namespaceId).toEqual(kvNamespace.namespaceId);
+        expect(adoptedNamespace.namespaceId).toEqual(kvNamespace!.namespaceId);
       });
     } finally {
       await alchemy.destroy(scope);
+      await assertKvNamespaceNotExists(kvNamespace!.namespaceId);
+    }
+  });
+
+  test("adopt existing namespace with delete false", async (scope) => {
+    let kvNamespace: KVNamespace | undefined;
+    try {
+      kvNamespace = await KVNamespace("kv", {
+        title: `${testId}-adopt`,
+      });
+
+      await alchemy.run("nested", async (scope) => {
+        const adoptedNamespace = await KVNamespace("kv", {
+          title: `${testId}-adopt`,
+          adopt: true,
+          delete: false,
+        });
+
+        expect(adoptedNamespace.namespaceId).toEqual(kvNamespace!.namespaceId);
+        await alchemy.destroy(scope);
+        await assertKvNamespaceExists(adoptedNamespace.namespaceId);
+      });
+    } finally {
+      await alchemy.destroy(scope);
+      await assertKvNamespaceNotExists(kvNamespace!.namespaceId);
     }
   });
 
@@ -114,6 +134,28 @@ describe("KV Namespace Resource", () => {
 
     expect(response.ok).toBe(true);
     return await response.text();
+  }
+
+  async function assertKvNamespaceExists(namespaceId: string): Promise<void> {
+    const api = await createCloudflareApi();
+    const response = await api.get(
+      `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}`,
+    );
+
+    expect(response.ok).toBe(true);
+    const data = await response.json();
+    expect(data.result.id).toEqual(namespaceId);
+  }
+
+  async function assertKvNamespaceNotExists(
+    namespaceId: string,
+  ): Promise<void> {
+    const api = await createCloudflareApi();
+    const response = await api.get(
+      `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}`,
+    );
+
+    expect(response.status).toEqual(404);
   }
 
   async function verifyKVValue(

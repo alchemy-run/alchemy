@@ -30,6 +30,14 @@ export interface KVNamespaceProps extends CloudflareApiOptions {
    * @default false
    */
   adopt?: boolean;
+
+  /**
+   * Whether to delete the namespace.
+   * If set to false, the namespace will remain but the resource will be removed from state
+   *
+   * @default true
+   */
+  delete?: boolean;
 }
 
 /**
@@ -120,6 +128,24 @@ export interface KVNamespace
  *     }
  *   }]
  * });
+ *
+ * @example
+ * // Adopt an existing namespace if it already exists instead of failing
+ * const existingNamespace = await KVNamespace("existing-ns", {
+ *   title: "existing-namespace",
+ *   adopt: true,
+ *   values: [{
+ *     key: "config",
+ *     value: { setting: "updated-value" }
+ *   }]
+ * });
+ *
+ * @example
+ * // When removing from Alchemy state, keep the namespace in Cloudflare
+ * const preservedNamespace = await KVNamespace("preserve-ns", {
+ *   title: "preserved-namespace",
+ *   delete: false
+ * });
  */
 export const KVNamespace = Resource(
   "cloudflare::KVNamespace",
@@ -134,7 +160,7 @@ export const KVNamespace = Resource(
     if (this.phase === "delete") {
       // For delete operations, we need to check if the namespace ID exists in the output
       const namespaceId = this.output?.namespaceId;
-      if (namespaceId) {
+      if (namespaceId && props.delete !== false) {
         await deleteKVNamespace(api, namespaceId);
       }
 

@@ -47,10 +47,15 @@ export class Scope {
 
   private isErrored = false;
 
-  constructor(private readonly options: ScopeOptions) {
+  constructor(options: ScopeOptions) {
     this.appName = options.appName;
     this.stage = options?.stage ?? DEFAULT_STAGE;
     this.scopeName = options.scopeName ?? null;
+    if (this.scopeName?.includes(":")) {
+      throw new Error(
+        `Scope name ${this.scopeName} cannot contain double colons`,
+      );
+    }
     this.parent = options.parent ?? Scope.get();
     this.quiet = options.quiet ?? this.parent?.quiet ?? false;
     if (this.parent && !this.scopeName) {
