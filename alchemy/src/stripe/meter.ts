@@ -1,6 +1,6 @@
 import Stripe from "stripe";
-import type { Context } from "../context";
-import { Resource } from "../resource";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
 
 /**
  * Properties for creating or updating a Stripe Meter.
@@ -252,7 +252,7 @@ export const Meter = Resource(
       ) {
         throw new Error(
           `Attempted to update immutable properties for Stripe Meter ${currentOutputId}. ` +
-            `displayName, eventName, defaultAggregation, customerMapping, and valueSettings cannot be changed.`,
+            "displayName, eventName, defaultAggregation, customerMapping, and valueSettings cannot be changed.",
         );
       }
 
