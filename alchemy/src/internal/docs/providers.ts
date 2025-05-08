@@ -125,7 +125,7 @@ async function generateProviderDocs({
         reasoningEffort: "high",
       },
     },
-    freeze: onlyProviderName === undefined || onlyProviderName === providerName,
+    freeze: onlyProviderName === undefined || onlyProviderName !== providerName,
     temperature: 0.1,
     schema: type({
       groups: type({
@@ -186,7 +186,7 @@ async function generateProviderDocs({
         `${g.filename.replace(".ts", "").replace(".md", "")}.md`,
       ),
       freeze:
-        onlyResourceName === undefined || onlyResourceName !== g.identifier,
+        onlyResourceName !== undefined && onlyResourceName !== g.identifier,
       model: {
         id: "claude-3-5-sonnet-latest",
         provider: "anthropic",
