@@ -1,14 +1,14 @@
 import { afterAll, describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy";
-import { createCloudflareApi } from "../../src/cloudflare/api";
-import { Route } from "../../src/cloudflare/route";
-import { Worker } from "../../src/cloudflare/worker";
-import { Zone } from "../../src/cloudflare/zone";
-import { destroy } from "../../src/destroy";
-import type { Scope } from "../../src/scope";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.js";
+import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { Route } from "../../src/cloudflare/route.js";
+import { Worker } from "../../src/cloudflare/worker.js";
+import { Zone } from "../../src/cloudflare/zone.js";
+import { destroy } from "../../src/destroy.js";
+import type { Scope } from "../../src/scope.js";
+import { BRANCH_PREFIX } from "../util.js";
 // must import this or else alchemy.test won't exist
-import "../../src/test/bun";
+import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
