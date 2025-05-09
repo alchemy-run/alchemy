@@ -94,8 +94,6 @@ describe("Stripe Meter Resource", () => {
       const fetchedMeterReactivated =
         await stripeClient.billing.meters.retrieve(meterOutput.id);
       expect(fetchedMeterReactivated.status).toEqual("active");
-    } catch (err) {
-      throw err;
     } finally {
       await destroy(scope);
       if (meterOutput?.id) {
