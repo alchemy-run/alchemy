@@ -415,8 +415,8 @@ function processBindings(
       };
     } else if (binding.type === "workflow") {
       workflows.push({
-        name: bindingName,
-        binding: binding.id,
+        name: binding.workflowName,
+        binding: bindingName,
         class_name: binding.className,
       });
     } else if (binding.type === "d1") {
@@ -492,5 +492,9 @@ function processBindings(
         new_classes,
       },
     ];
+  }
+
+  if (workflows.length > 0) {
+    spec.workflows = workflows;
   }
 }

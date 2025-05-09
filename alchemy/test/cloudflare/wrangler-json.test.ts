@@ -9,6 +9,7 @@ import { WranglerJson } from "../../src/cloudflare/wrangler.json.js";
 import { destroy } from "../../src/destroy.js";
 import { BRANCH_PREFIX } from "../util.js";
 
+import { Workflow } from "../../src/cloudflare/workflow.js";
 import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
@@ -70,6 +71,39 @@ const doWorkerScript = `
       return new Response('Hello DO world!', { status: 200 });
     }
   };
+`;
+
+const wfWorkerScript = `
+// Import the Workflow definition
+import {
+  WorkflowEntrypoint,
+  type WorkflowEvent,
+  type WorkflowStep,
+} from "cloudflare:workers";
+// just to test bundling
+import { NonRetryableError } from "cloudflare:workflows";
+
+// Create your own class that implements a Workflow
+export class TestWorkflow extends WorkflowEntrypoint<any, any> {
+  // Define a run() method
+  async run(_event: WorkflowEvent<any>, step: WorkflowStep) {
+    // Define one or more steps that optionally return state.
+    await step.do("first step", async () => {
+      console.log("WORKFLOW STEP 1");
+    });
+    await step.do("second step", async () => {
+      console.log("WORKFLOW STEP 2");
+    });
+
+    return { status: "completed" };
+  }
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    return new Response('Hello Workflow world!', { status: 200 });
+  }
+};
 `;
 
 describe("WranglerJson Resource", () => {
@@ -270,6 +304,47 @@ describe("WranglerJson Resource", () => {
           "SqliteCounter",
         );
         expect(spec.migrations?.[0].new_sqlite_classes?.length).toEqual(1);
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        await destroy(scope);
+      }
+    });
+
+    test("with workflows", async (scope) => {
+      const name = `${BRANCH_PREFIX}-test-worker-wf`;
+      const tempDir = path.join(".out", "alchemy-wf-test");
+      const entrypoint = path.join(tempDir, "worker.ts");
+
+      try {
+        // Create a temporary directory for the entrypoint file
+        await fs.rm(tempDir, { recursive: true, force: true });
+        await fs.mkdir(tempDir, { recursive: true });
+        await fs.writeFile(entrypoint, wfWorkerScript);
+
+        // Create durable object namespaces
+        const workflow = new Workflow("test-workflow", {
+          className: "TestWorkflow",
+          workflowName: "test-workflow",
+        });
+
+        const worker = await Worker(name, {
+          format: "esm",
+          entrypoint,
+          bindings: {
+            WF: workflow,
+          },
+        });
+
+        const { spec } = await WranglerJson(
+          `${BRANCH_PREFIX}-test-wrangler-json-wf`,
+          { worker },
+        );
+
+        expect(spec.workflows).toBeDefined();
+        expect(spec.workflows?.length).toEqual(1);
+        expect(spec.workflows?.[0].name).toEqual("test-workflow");
+        expect(spec.workflows?.[0].binding).toEqual("WF");
+        expect(spec.workflows?.[0].class_name).toEqual("TestWorkflow");
       } finally {
         await fs.rm(tempDir, { recursive: true, force: true });
         await destroy(scope);
