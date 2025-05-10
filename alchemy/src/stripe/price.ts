@@ -93,6 +93,19 @@ export interface PriceProps {
    * One of inclusive, exclusive, or unspecified.
    */
   taxBehavior?: TaxBehavior;
+
+  /**
+   * A lookup key to uniquely identify this price.
+   * This key can be used to retrieve the price object without needing its ID.
+   * It must be unique across all prices in your Stripe account, otherwise creation will fail.
+   * If you want to transfer the lookup key from another price, set `transferLookupKey` to true
+   */
+  lookupKey?: string;
+
+  /**
+   * If set to true, will atomically transfer the lookup key from an existing price to this price.
+   */
+  transferLookupKey?: boolean;
 }
 
 /**
@@ -213,6 +226,8 @@ export const Price = Resource(
           active: props.active,
           metadata: props.metadata,
           nickname: props.nickname,
+          lookup_key: props.lookupKey,
+          transfer_lookup_key: props.transferLookupKey,
         });
       } else {
         // Create new price
@@ -224,6 +239,8 @@ export const Price = Resource(
           nickname: props.nickname,
           metadata: props.metadata,
           tax_behavior: props.taxBehavior,
+          lookup_key: props.lookupKey,
+          transfer_lookup_key: props.transferLookupKey,
         };
 
         // Add unit amount fields

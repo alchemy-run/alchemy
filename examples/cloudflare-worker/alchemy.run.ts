@@ -1,9 +1,11 @@
 import alchemy from "../../alchemy/src";
 import {
+  DurableObjectNamespace,
   Queue,
   R2Bucket,
   R2RestStateStore,
   Worker,
+  Workflow,
   WranglerJson,
 } from "../../alchemy/src/cloudflare";
 
@@ -29,12 +31,28 @@ export const worker = await Worker(`cloudflare-worker-worker${BRANCH_PREFIX}`, {
       adopt: true,
     }),
     QUEUE: queue,
+    WORKFLOW: new Workflow("OFACWorkflow", {
+      className: "OFACWorkflow",
+      workflowName: "ofac-workflow",
+    }),
+    DO: new DurableObjectNamespace("HelloWorldDO", {
+      className: "HelloWorldDO",
+      sqlite: true,
+    }),
   },
-  // eventSources: [queue],
+  url: true,
+  eventSources: [queue],
+  bundle: {
+    metafile: true,
+    format: "esm",
+    target: "es2020",
+  },
 });
 
 await WranglerJson("wrangler.jsonc", {
   worker,
 });
+
+console.log(worker.url);
 
 await app.finalize();

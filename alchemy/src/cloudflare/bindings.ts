@@ -49,7 +49,11 @@ export type Binding =
   | VectorizeIndex
   | Worker
   | Workflow
-  | BrowserRendering;
+  | BrowserRendering
+  | Self;
+
+export type Self = typeof Self;
+export const Self = Symbol.for("Self");
 
 /**
  * Union type for all Worker binding types (API spec)

@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test";
+import { afterAll, describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy.js";
 import { createCloudflareApi } from "../../src/cloudflare/api.js";
 import { DnsRecords } from "../../src/cloudflare/dns-records.js";
@@ -6,18 +6,29 @@ import { Zone } from "../../src/cloudflare/zone.js";
 import { destroy } from "../../src/destroy.js";
 import { BRANCH_PREFIX } from "../util.js";
 
+import type { Scope } from "../../src/scope.js";
 import "../../src/test/bun.js";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 const testDomain = `${BRANCH_PREFIX}-test-2.com`;
 
 let zone: Zone;
 
-test.beforeAll(async () => {
+let scope: Scope | undefined;
+test.beforeAll(async (_scope) => {
   zone = await Zone(`${BRANCH_PREFIX}-zone`, {
     name: testDomain,
   });
+  scope = _scope;
+});
+
+afterAll(async () => {
+  if (scope) {
+    await destroy(scope);
+  }
 });
 
 describe("DnsRecords Resource", async () => {

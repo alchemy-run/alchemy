@@ -133,6 +133,11 @@ export interface FunctionProps {
       maxAge?: number;
     };
   };
+
+  /**
+   * Lambda layers for the function. Use the layer ARN
+   */
+  layers?: string[];
 }
 
 /**
@@ -371,6 +376,7 @@ export const Function = Resource(
             Environment: props.environment
               ? { Variables: props.environment }
               : undefined,
+            Layers: props.layers,
           }),
         );
 
@@ -551,6 +557,7 @@ export const Function = Resource(
                   ? [props.architecture]
                   : [Architecture.x86_64],
                 Tags: props.tags,
+                Layers: props.layers,
               }),
             );
             break; // Success - exit retry loop
@@ -721,12 +728,21 @@ async function waitForFunctionStabilization(
   }
 }
 
+const handlerRegex = /^(.*)\.([A-Za-z0-9_]+)$/;
+
+function parseFile(handler: string): string {
+  const match = handler.match(handlerRegex);
+  if (!match) {
+    throw new Error(`Invalid handler: ${handler}`);
+  }
+  return match[1];
+}
+
 // Helper to zip the code
 async function zipCode(props: FunctionProps): Promise<Buffer> {
   const fileContent = props.bundle.content;
-
   const fileName =
-    props.handler.split(".").reverse().slice(0, -1).reverse().join(".") +
+    parseFile(props.handler) +
     (props.bundle.format === "cjs" ? ".cjs" : ".mjs");
 
   // Create a zip buffer in memory

@@ -79,12 +79,21 @@ export class R2RestStateStore implements StateStore {
     } catch (error) {
       // If not, create the alchemy state bucket
       if (error instanceof CloudflareApiError && error.status === 404) {
-        await withExponentialBackoff(
-          () => createBucket(this.api, this.bucketName),
-          isRetryableError,
-          5,
-          1000,
-        );
+        try {
+          await withExponentialBackoff(
+            () => createBucket(this.api, this.bucketName),
+            isRetryableError,
+            5,
+            1000,
+          );
+        } catch (error) {
+          // this can happen when the bucket is being created in parallel
+          if (error instanceof CloudflareApiError && error.status === 409) {
+            // Bucket already exists, continue
+          } else {
+            throw error;
+          }
+        }
       }
     }
 
@@ -112,6 +121,7 @@ export class R2RestStateStore implements StateStore {
       const params = new URLSearchParams({
         prefix: this.prefix,
         limit: "1000",
+        delimiter: "/",
       });
 
       if (cursor) {

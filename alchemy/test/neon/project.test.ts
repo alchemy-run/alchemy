@@ -58,7 +58,6 @@ describe("NeonProject Resource", () => {
       expect(endpoint.branch_id).toBeTruthy();
       expect(endpoint.project_id).toEqual(project.id);
 
-      console.log(project.connection_uris);
       expect(project.connection_uris).toBeTruthy();
       expect(
         project.connection_uris![0].connection_uri.unencrypted,

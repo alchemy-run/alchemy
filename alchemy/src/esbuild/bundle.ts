@@ -126,7 +126,6 @@ export const Bundle = Resource(
     props: Props,
   ): Promise<Bundle<Props>> {
     if (this.phase === "delete") {
-      console.log("delete", this.output.path);
       if (this.output.path) {
         try {
           await fs.rm(this.output.path, { force: true });

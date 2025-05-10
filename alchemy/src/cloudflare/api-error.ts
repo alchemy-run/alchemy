@@ -58,6 +58,6 @@ export async function handleApiError(
   const errors: { message: string }[] = json?.errors || [
     { message: response.statusText },
   ];
-  const errorMessage = `Error ${action} ${resourceType} '${resourceName}': ${errors[0]?.message || response.statusText}`;
+  const errorMessage = `Error ${response.status} ${action} ${resourceType} '${resourceName}': ${errors[0]?.message || response.statusText}`;
   throw new CloudflareApiError(errorMessage, response, errors);
 }

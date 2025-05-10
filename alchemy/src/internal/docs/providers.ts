@@ -6,6 +6,14 @@ import { Document } from "../../ai/document.js";
 import { alchemy } from "../../alchemy.js";
 import { Folder } from "../../fs/folder.js";
 
+function getArg(arg: string) {
+  const idx = process.argv.findIndex((a) => a === arg);
+  return idx > -1 ? process.argv[idx + 1] : undefined;
+}
+
+const onlyProviderName = getArg("--provider");
+const onlyResourceName = getArg("--resource");
+
 export interface DocsProps {
   /**
    * The output directory for the docs.
@@ -117,7 +125,7 @@ async function generateProviderDocs({
         reasoningEffort: "high",
       },
     },
-    freeze: false,
+    freeze: onlyProviderName === undefined || onlyProviderName !== providerName,
     temperature: 0.1,
     schema: type({
       groups: type({
@@ -177,7 +185,8 @@ async function generateProviderDocs({
         providerDocsDir,
         `${g.filename.replace(".ts", "").replace(".md", "")}.md`,
       ),
-      freeze: false,
+      freeze:
+        onlyResourceName !== undefined && onlyResourceName !== g.identifier,
       model: {
         id: "claude-3-5-sonnet-latest",
         provider: "anthropic",

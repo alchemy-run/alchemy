@@ -41,6 +41,7 @@ export class Scope {
   public readonly parent: Scope | undefined;
   public readonly password: string | undefined;
   public readonly state: StateStore;
+  public readonly stateStore: StateStoreType;
   public readonly quiet: boolean;
   public readonly phase: Phase;
 
@@ -50,15 +51,22 @@ export class Scope {
     this.appName = options.appName;
     this.stage = options?.stage ?? DEFAULT_STAGE;
     this.scopeName = options.scopeName ?? null;
+    if (this.scopeName?.includes(":")) {
+      throw new Error(
+        `Scope name ${this.scopeName} cannot contain double colons`,
+      );
+    }
     this.parent = options.parent ?? Scope.get();
     this.quiet = options.quiet ?? this.parent?.quiet ?? false;
     if (this.parent && !this.scopeName) {
       throw new Error("Scope name is required when creating a child scope");
     }
     this.password = options.password ?? this.parent?.password;
-    this.state = options.stateStore
-      ? options.stateStore(this)
-      : new FileSystemStateStore(this);
+    this.stateStore =
+      options.stateStore ??
+      this.parent?.stateStore ??
+      ((scope) => new FileSystemStateStore(scope));
+    this.state = this.stateStore(this);
     const phase = options.phase ?? this.parent?.phase;
     if (phase === undefined) {
       throw new Error("Phase is required");

@@ -23,6 +23,7 @@ export * from "./queue-consumer.js";
 export * from "./queue.js";
 export * from "./r2-rest-state-store.js";
 export * from "./redwood.js";
+export * from "./route.js";
 export * from "./tanstack-start.js";
 export * from "./vectorize-index.js";
 export * from "./vectorize-metadata-index.js";

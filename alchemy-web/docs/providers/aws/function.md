@@ -30,7 +30,6 @@ const func = await Function("api", {
   environment: {
     TABLE_NAME: table.name,
     QUEUE_URL: queue.url,
-    API_KEY: alchemy.secret(process.env.API_KEY)
   }
 });
 ```

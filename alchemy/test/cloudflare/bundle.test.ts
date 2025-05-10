@@ -71,7 +71,7 @@ describe("Bundle Worker Test", () => {
           compatibilityFlags: ["nodejs_compat"],
         }),
       ).rejects.toThrow(
-        "You must set your compatibilty date >= 2025-09-23 when using 'nodejs_compat' compatibility flag",
+        "You must set your compatibilty date >= 2024-09-23 when using 'nodejs_compat' compatibility flag",
       );
     } finally {
       // Clean up the worker
