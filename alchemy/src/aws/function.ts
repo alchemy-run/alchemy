@@ -133,6 +133,11 @@ export interface FunctionProps {
       maxAge?: number;
     };
   };
+
+  /**
+   * Lambda layers for the function. Use the layer ARN
+   */
+  layers?: string[];
 }
 
 /**
@@ -371,6 +376,7 @@ export const Function = Resource(
             Environment: props.environment
               ? { Variables: props.environment }
               : undefined,
+            Layers: props.layers,
           }),
         );
 
@@ -551,6 +557,7 @@ export const Function = Resource(
                   ? [props.architecture]
                   : [Architecture.x86_64],
                 Tags: props.tags,
+                Layers: props.layers,
               }),
             );
             break; // Success - exit retry loop
