@@ -141,29 +141,42 @@ async function request(
   region: string,
   method: string,
   action: string,
-  body?: any,
+  params?: any,
   maxRetries = 3
 ): Promise<any> {
-  const url = new URL(`https://cloudcontrol.${region}.amazonaws.com/v1/`);
+  // Build the raw URL string without any encoding
+  const baseUrl = `https://cloudcontrolapi.${region}.amazonaws.com/`;
+  const queryString = `Action=${action}&Version=2021-09-30`;
+
+  // Build additional parameters without any encoding
+  const additionalParams = params
+    ? Object.entries(params)
+        .map(([key, value]) => {
+          return `${key}=${value}`;
+        })
+        .join("&")
+    : "";
+
+  // Combine all parts without any encoding
+  const urlStr =
+    baseUrl +
+    "?" +
+    queryString +
+    (additionalParams ? "&" + additionalParams : "");
+
   let lastError: CloudControlError | undefined;
   let attempt = 0;
 
   while (attempt <= maxRetries) {
     try {
-      const init: RequestInit = {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          "X-Amz-Target": `CloudControl_20210730.${action}`,
-        },
-      };
+      const signedRequest = await client.sign(urlStr, {
+        method: "POST",
+      });
 
-      if (body) {
-        init.body = JSON.stringify(body);
-      }
-
-      const signedRequest = await client.sign(url.toString(), init);
+      console.log("signedRequest__", await signedRequest.clone().text());
       const response = await fetch(signedRequest);
+
+      console.log("response__", response);
 
       if (!response.ok) {
         const errorData = (await response.json().catch(() => ({
@@ -334,6 +347,8 @@ export function createCloudControlClient(options: CloudControlOptions = {}) {
     secretAccessKey:
       options.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY || "",
     sessionToken: options.sessionToken || process.env.AWS_SESSION_TOKEN,
+    service: "cloudcontrolapi",
+    region: region,
   });
 
   return {
@@ -351,10 +366,12 @@ export function createCloudControlClient(options: CloudControlOptions = {}) {
         "CreateResource",
         {
           TypeName: typeName,
-          DesiredState: desiredState,
+          DesiredState: JSON.stringify(desiredState),
         },
         maxRetries
       );
+
+      console.log("createResource__response__", response);
 
       return pollOperation(client, region, response.ProgressEvent.operationId, {
         maxPollingAttempts,
