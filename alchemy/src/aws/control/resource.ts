@@ -1,8 +1,8 @@
+import { compare } from "fast-json-patch";
 import type { Context } from "../../context.js";
 import { Resource } from "../../resource.js";
 import { createCloudControlClient, type ProgressEvent } from "./client.js";
 import { AlreadyExistsError } from "./error.js";
-
 /**
  * Properties for creating or updating a Cloud Control resource
  */
@@ -86,7 +86,7 @@ export function createResourceType(typeName: string) {
   return (resourceHandlers[typeName] ??= Resource(
     typeName,
     function (
-      this: Context<CloudControlResource>,
+      this: Context<CloudControlResource, CloudControlResourceProps>,
       id: string,
       props: Omit<CloudControlResourceProps, "typeName">,
     ) {
@@ -154,7 +154,7 @@ export const CloudControlResource = Resource(
 );
 
 async function CloudControlLifecycle(
-  this: Context<CloudControlResource>,
+  this: Context<CloudControlResource, CloudControlResourceProps>,
   id: string,
   props: CloudControlResourceProps,
 ) {
@@ -183,8 +183,7 @@ async function CloudControlLifecycle(
     response = await client.updateResource(
       props.typeName,
       this.output.id,
-      // TODO: use fast-json-patch to compute a diff of properties
-      props.desiredState,
+      compare(this.output.desiredState, props.desiredState),
     );
   } else {
     // Create new resource
@@ -197,11 +196,18 @@ async function CloudControlLifecycle(
       if (error instanceof AlreadyExistsError) {
         console.log("Resource already exists, updating", error.progressEvent);
 
+        const resource = await client.getResource(
+          props.typeName,
+          error.progressEvent.Identifier!,
+        );
+
         response = await client.updateResource(
           props.typeName,
           error.progressEvent.Identifier!,
-          // TODO: use fast-json-patch to compute a diff of properties
-          // props.desiredState,
+          // TODO(sam): some of these properties may be "output" properties
+          // This will corrupt the diff. Should we change code-gen to emit
+          // these proeprties per resource? How much will that affect bundle size?
+          compare(resource, props.desiredState),
         );
       } else {
         throw error;
@@ -219,5 +225,6 @@ async function CloudControlLifecycle(
     ...props,
     id: response.Identifier!,
     createdAt: Date.now(),
+    ...(await client.getResource(props.typeName, response.Identifier!)),
   });
 }

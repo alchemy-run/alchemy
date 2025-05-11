@@ -17,6 +17,11 @@ export class RequestError extends CloudControlError {
     super(response.statusText);
   }
 }
+export class UpdateFailedError extends CloudControlError {
+  constructor(public readonly progressEvent: ProgressEvent) {
+    super(progressEvent.StatusMessage!);
+  }
+}
 export class AlreadyExistsError extends CloudControlError {
   constructor(public readonly progressEvent: ProgressEvent) {
     super(progressEvent.StatusMessage!);
