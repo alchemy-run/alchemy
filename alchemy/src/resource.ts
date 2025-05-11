@@ -19,7 +19,7 @@ export type ResourceKind = string;
 export type WildcardDeletionHandler = (
   this: Context<any>,
   pattern: string,
-  options?: { quiet?: boolean }
+  options?: { quiet?: boolean },
 ) => Promise<void>;
 
 /**
@@ -29,11 +29,11 @@ export type WildcardDeletionHandler = (
  */
 export function registerDeletionHandler(
   pattern: string,
-  handler: WildcardDeletionHandler
+  handler: WildcardDeletionHandler,
 ): void {
   if (WILDCARD_DELETION_HANDLERS.has(pattern)) {
     throw new Error(
-      `Wildcard deletion handler for pattern '${pattern}' already registered`
+      `Wildcard deletion handler for pattern '${pattern}' already registered`,
     );
   }
   WILDCARD_DELETION_HANDLERS.set(pattern, handler);
@@ -100,7 +100,7 @@ type IsClass = {
 type ResourceLifecycleHandler = (
   this: Context<any, any>,
   id: string,
-  props: any
+  props: any,
 ) => Promise<Resource<string>>;
 
 // see: https://x.com/samgoodwin89/status/1904640134097887653
@@ -131,7 +131,7 @@ export function Resource<
 
   const provider = ((
     resourceID: string,
-    props: ResourceProps
+    props: ResourceProps,
   ): Promise<Resource<string>> => {
     const scope = _Scope.current;
 
@@ -160,7 +160,7 @@ export function Resource<
               replace: () => {
                 throw new Error(
                   "Cannot replace a resource during wildcard deletion. " +
-                    "The wildcardDelete handler should handle cleanup of matching resources."
+                    "The wildcardDelete handler should handle cleanup of matching resources.",
                 );
               },
             });
@@ -170,8 +170,8 @@ export function Resource<
 
         throw new Error(
           `No wildcard deletion handler registered for pattern '${isWildcardType ? type : resourceID}'. ` +
-            `To handle wildcard deletions, register a handler using registerDeletionHandler(). ` +
-            `This is required for resource type '${type}' to support cleanup of multiple resources.`
+            "To handle wildcard deletions, register a handler using registerDeletionHandler(). " +
+            `This is required for resource type '${type}' to support cleanup of multiple resources.`,
         );
       }
     }
@@ -188,7 +188,7 @@ export function Resource<
       if (otherResource?.Kind !== type) {
         scope.fail();
         throw new Error(
-          `Resource ${resourceID} already exists in the stack and is of a different type: '${otherResource?.Kind}' !== '${type}'`
+          `Resource ${resourceID} already exists in the stack and is of a different type: '${otherResource?.Kind}' !== '${type}'`,
         );
       }
       // console.warn(

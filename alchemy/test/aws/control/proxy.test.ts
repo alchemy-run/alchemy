@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../../src/alchemy";
+import { alchemy } from "../../../src/alchemy.js";
 import AWS from "../../../src/aws/control";
-import { destroy } from "../../../src/destroy";
-import { BRANCH_PREFIX } from "../../util";
+import { destroy } from "../../../src/destroy.js";
+import { BRANCH_PREFIX } from "../../util.js";
 // must import this or else alchemy.test won't exist
-import "../../../src/test/bun";
+import "../../../src/test/bun.js";
 
 const test = alchemy.test(import.meta);
 

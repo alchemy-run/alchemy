@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../../src/alchemy";
-import { createCloudControlClient } from "../../../src/aws/control/client";
-import { CloudControlResource } from "../../../src/aws/control/resource";
-import { destroy } from "../../../src/destroy";
-import { BRANCH_PREFIX } from "../../util";
+import { alchemy } from "../../../src/alchemy.js";
+import { createCloudControlClient } from "../../../src/aws/control/client.js";
+import { CloudControlResource } from "../../../src/aws/control/resource.js";
+import { destroy } from "../../../src/destroy.js";
+import { BRANCH_PREFIX } from "../../util.js";
 // must import this or else alchemy.test won't exist
 import "../../../src/test/bun";
 
-const client = createCloudControlClient();
+const client = await createCloudControlClient();
 
 const test = alchemy.test(import.meta);
 
@@ -34,7 +34,7 @@ describe("CloudControlResource", () => {
       // Verify bucket was created by querying the API directly
       const getResponse = await client.getResource(
         "AWS::S3::Bucket",
-        resource.id
+        resource.id,
       );
       expect(getResponse.BucketName).toEqual(testId);
       expect(getResponse.VersioningConfiguration.Status).toEqual("Enabled");
@@ -55,15 +55,11 @@ describe("CloudControlResource", () => {
       // Verify bucket was updated
       const getUpdatedResponse = await client.getResource(
         "AWS::S3::Bucket",
-        resource.id
+        resource.id,
       );
       expect(getUpdatedResponse.VersioningConfiguration.Status).toEqual(
-        "Suspended"
+        "Suspended",
       );
-    } catch (err) {
-      // log the error or else it's silently swallowed by destroy errors
-      console.log(err);
-      throw err;
     } finally {
       // Always clean up, even if test assertions fail
       await destroy(scope);
@@ -98,7 +94,7 @@ describe("CloudControlResource", () => {
       for (const resource of resources) {
         const getResponse = await client.getResource(
           "AWS::S3::Bucket",
-          resource.id
+          resource.id,
         );
         expect(getResponse.BucketName).toBeTruthy();
       }
