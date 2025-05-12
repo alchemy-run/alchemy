@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Nuxt, Pipeline, R2Bucket, R2RestStateStore } from "alchemy/cloudflare";
+import { Nuxt, R2RestStateStore } from "alchemy/cloudflare";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 

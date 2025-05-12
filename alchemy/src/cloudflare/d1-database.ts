@@ -1,9 +1,10 @@
+import { bind, type Bound } from "../bootstrap/bind.js";
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
-  type CloudflareApi,
   createCloudflareApi,
+  type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
 import { applyMigrations, listMigrationsFiles } from "./d1-migrations.js";
@@ -84,7 +85,7 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
 /**
  * Output returned after D1 Database creation/update
  */
-export type D1Database = Resource<"cloudflare::D1Database"> &
+export type D1DatabaseResource = Resource<"cloudflare::D1Database"> &
   D1DatabaseProps & {
     type: "d1";
     /**
@@ -123,18 +124,32 @@ export type D1Database = Resource<"cloudflare::D1Database"> &
     };
   };
 
+export type D1Database = D1DatabaseResource & Bound<D1DatabaseResource>;
+
 export async function D1Database(
   id: string,
   props: Omit<D1DatabaseProps, "migrationsFiles">,
-) {
+): Promise<D1Database> {
   const migrationsFiles = props.migrationsDir
     ? await listMigrationsFiles(props.migrationsDir)
     : [];
 
-  return D1DatabaseResource(id, {
+  const db = await _D1Database(id, {
     ...props,
     migrationsFiles,
   });
+  const binding = await bind(db);
+  return {
+    ...db,
+    batch: binding.batch,
+    exec: binding.exec,
+    prepare: binding.prepare,
+    withSession: binding.withSession,
+    /**
+     * @deprecated
+     */
+    dump: binding.dump,
+  };
 }
 
 /**
@@ -175,13 +190,13 @@ export async function D1Database(
  *
  * @see https://developers.cloudflare.com/d1/
  */
-export const D1DatabaseResource = Resource(
+const _D1Database = Resource(
   "cloudflare::D1Database",
   async function (
-    this: Context<D1Database>,
+    this: Context<D1DatabaseResource>,
     id: string,
     props: D1DatabaseProps = {},
-  ): Promise<D1Database> {
+  ): Promise<D1DatabaseResource> {
     const api = await createCloudflareApi(props);
     const databaseName = props.name ?? id;
 

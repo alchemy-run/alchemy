@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Phase } from "./alchemy.js";
-import { destroy } from "./destroy.js";
+import { destroyAll } from "./destroy.js";
 import { FileSystemStateStore } from "./fs/file-system-state-store.js";
 import type { PendingResource, ResourceID } from "./resource.js";
 import type { StateStore, StateStoreType } from "./state.js";
@@ -138,7 +138,7 @@ export class Scope {
       const orphans = await Promise.all(
         orphanIds.map(async (id) => (await this.state.get(id))!.output),
       );
-      await destroy.all(orphans, {
+      await destroyAll(orphans, {
         quiet: this.quiet,
         strategy: "sequential",
       });

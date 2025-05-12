@@ -72,33 +72,8 @@ export interface AssetsConfig {
   serve_directly?: boolean;
 }
 
-/**
- * Properties for creating or updating a Worker
- */
-export interface WorkerProps<B extends Bindings = Bindings>
+export interface BaseWorkerProps<B extends Bindings = Bindings>
   extends CloudflareApiOptions {
-  /**
-   * The worker script content (JavaScript or WASM)
-   * One of script, entryPoint, or bundle must be provided
-   */
-  script?: string;
-
-  /**
-   * Path to the entry point file
-   *
-   * Will be bundled using esbuild
-   *
-   * One of script, entryPoint, or bundle must be provided
-   */
-  entrypoint?: string;
-
-  /**
-   * The project root directory used to resolve aliases.
-   *
-   * @default process.cwd()
-   */
-  projectRoot?: string;
-
   /**
    * Bundle options when using entryPoint
    *
@@ -202,64 +177,116 @@ export interface WorkerProps<B extends Bindings = Bindings>
   eventSources?: EventSource[];
 }
 
+export interface InlineWorkerProps<B extends Bindings = Bindings>
+  extends BaseWorkerProps<B> {
+  script: string;
+
+  // never
+  entrypoint?: undefined;
+  meta?: undefined;
+  fetch?: undefined;
+}
+
+export interface EntrypointWorkerProps<B extends Bindings = Bindings>
+  extends BaseWorkerProps<B> {
+  entrypoint: string;
+
+  // never
+  script?: undefined;
+  meta?: undefined;
+  fetch?: undefined;
+}
+
+export interface ImportMetaWorkerProps<B extends Bindings = Bindings>
+  extends BaseWorkerProps<B> {
+  meta?: ImportMeta;
+  fetch: (request: Request) => Promise<Response>;
+
+  // never
+  script?: undefined;
+  entrypoint?: undefined;
+}
+
+/**
+ * Properties for creating or updating a Worker
+ */
+export type WorkerProps<B extends Bindings = Bindings> =
+  | InlineWorkerProps<B>
+  | EntrypointWorkerProps<B>
+  | ImportMetaWorkerProps<B>;
+
 /**
  * Output returned after Worker creation/update
  */
-export interface Worker<B extends Bindings = Bindings>
-  extends Resource<"cloudflare::Worker">,
-    Omit<WorkerProps<B>, "url" | "script"> {
-  type: "service";
+export type Worker<B extends Bindings = Bindings> =
+  Resource<"cloudflare::Worker"> &
+    Omit<WorkerProps<B>, "url" | "script"> & {
+      type: "service";
 
-  /**
-   * The ID of the worker
-   */
-  id: string;
+      /**
+       * The ID of the worker
+       */
+      id: string;
 
-  /**
-   * The name of the worker
-   */
-  name: string;
+      /**
+       * The name of the worker
+       */
+      name: string;
 
-  /**
-   * Time at which the worker was created
-   */
-  createdAt: number;
+      /**
+       * Time at which the worker was created
+       */
+      createdAt: number;
 
-  /**
-   * Time at which the worker was last updated
-   */
-  updatedAt: number;
+      /**
+       * Time at which the worker was last updated
+       */
+      updatedAt: number;
 
-  /**
-   * The worker's URL if enabled
-   * Format: {name}.{subdomain}.workers.dev
-   */
-  url?: string;
+      /**
+       * The worker's URL if enabled
+       * Format: {name}.{subdomain}.workers.dev
+       */
+      url?: string;
 
-  /**
-   * The bindings that were created
-   */
-  bindings: B | undefined;
+      /**
+       * The bindings that were created
+       */
+      bindings: B | undefined;
 
-  /**
-   * Configuration for static assets
-   */
-  assets?: AssetsConfig;
+      /**
+       * Configuration for static assets
+       */
+      assets?: AssetsConfig;
 
-  // phantom property (for typeof myWorker.Env)
-  Env: {
-    [bindingName in keyof B]: Bound<B[bindingName]>;
-  };
+      // phantom property (for typeof myWorker.Env)
+      Env: {
+        [bindingName in keyof B]: Bound<B[bindingName]>;
+      };
 
-  /**
-   * The compatibility date for the worker
-   */
-  compatibilityDate: string;
+      /**
+       * The compatibility date for the worker
+       */
+      compatibilityDate: string;
 
-  /**
-   * The compatibility flags for the worker
-   */
-  compatibilityFlags: string[];
+      /**
+       * The compatibility flags for the worker
+       */
+      compatibilityFlags: string[];
+    };
+
+export function Worker<const B extends Bindings>(
+  ...args:
+    | [id: string, props: WorkerProps<B>]
+    | [id: string, meta: ImportMeta, props: WorkerProps<B>]
+): Promise<Worker<B>> {
+  const [id, meta, props] =
+    args.length === 2 ? [args[0], undefined, args[1]] : args;
+  // @ts-expect-error discriminate union error
+  return _Worker(id, {
+    meta,
+    ...props,
+  });
 }
 
 /**
@@ -354,7 +381,7 @@ export interface Worker<B extends Bindings = Bindings>
  * @see
  * https://developers.cloudflare.com/workers/
  */
-export const Worker = Resource(
+export const _Worker = Resource(
   "cloudflare::Worker",
   {
     alwaysUpdate: true,

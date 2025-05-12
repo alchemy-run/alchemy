@@ -48,6 +48,7 @@ export async function bundleWorkerScript<B extends Bindings>(
           ".json": "json",
         },
         plugins: [
+          ...(props.bundle?.plugins ?? []),
           ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
           ...(props.bundle?.alias
             ? [

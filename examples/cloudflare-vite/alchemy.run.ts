@@ -1,12 +1,7 @@
 /// <reference types="node" />
 
 import alchemy from "../../alchemy/src/";
-import {
-  KVNamespace,
-  R2Bucket,
-  R2RestStateStore,
-  Vite,
-} from "../../alchemy/src/cloudflare";
+import { R2RestStateStore, Vite } from "../../alchemy/src/cloudflare";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 const app = await alchemy("cloudflare-vite", {

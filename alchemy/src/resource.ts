@@ -8,11 +8,16 @@ export type ResourceID = string;
 export type ResourceFQN = string;
 export type ResourceKind = string;
 
-export interface ProviderOptions {
+export interface ProviderOptions<Output = Resource> {
   /**
    * If true, the resource will be updated even if the inputs have not changed.
    */
   alwaysUpdate: boolean;
+
+  /**
+   * Binds the resource to the provider.
+   */
+  bind?(resource: Output): void;
 }
 
 export type ResourceProps = {

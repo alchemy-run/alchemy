@@ -1,11 +1,13 @@
+import { bind } from "../bootstrap/bind.js";
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
-  type CloudflareApi,
   createCloudflareApi,
+  type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
+import type { Bound } from "./bound.js";
 
 /**
  * Settings for a Cloudflare Queue
@@ -58,14 +60,14 @@ export interface QueueProps extends CloudflareApiOptions {
   delete?: boolean;
 }
 
-export function isQueue(eventSource: any): eventSource is Queue {
+export function isQueue(eventSource: any): eventSource is QueueResource {
   return "Kind" in eventSource && eventSource.Kind === "cloudflare::Queue";
 }
 
 /**
  * Output returned after Cloudflare Queue creation/update
  */
-export interface Queue<Body = unknown>
+export interface QueueResource<Body = unknown>
   extends Resource<"cloudflare::Queue">,
     QueueProps {
   /**
@@ -101,22 +103,8 @@ export interface Queue<Body = unknown>
   Batch: MessageBatch<Body>;
 }
 
-interface CloudflareQueueResponse {
-  result: {
-    queue_id?: string;
-    queue_name: string;
-    created_on?: string;
-    modified_on?: string;
-    settings?: {
-      delivery_delay?: number;
-      delivery_paused?: boolean;
-      message_retention_period?: number;
-    };
-  };
-  success: boolean;
-  errors: Array<{ code: number; message: string }>;
-  messages: string[];
-}
+export type Queue<Body = unknown> = QueueResource<Body> &
+  Bound<QueueResource<Body>>;
 
 /**
  * Creates and manages Cloudflare Queues.
@@ -151,10 +139,23 @@ interface CloudflareQueueResponse {
  *
  * @see https://developers.cloudflare.com/queues/
  */
-export const Queue = Resource("cloudflare::Queue", async function <
+export async function Queue<Body = unknown>(
+  name: string,
+  props: QueueProps = {},
+): Promise<Queue<Body>> {
+  const queue = await _Queue(name, props);
+  const binding = await bind(queue);
+  return {
+    ...queue,
+    send: binding.send,
+    sendBatch: binding.sendBatch,
+  } as Queue<Body>;
+}
+
+const _Queue = Resource("cloudflare::Queue", async function <
   T = unknown,
->(this: Context<Queue<T>>, id: string, props: QueueProps = {}): Promise<
-  Queue<T>
+>(this: Context<QueueResource<T>>, id: string, props: QueueProps = {}): Promise<
+  QueueResource<T>
 > {
   const api = await createCloudflareApi(props);
   const queueName = props.name ?? id;
@@ -218,6 +219,23 @@ export const Queue = Resource("cloudflare::Queue", async function <
     Batch: undefined! as MessageBatch<T>,
   });
 });
+
+interface CloudflareQueueResponse {
+  result: {
+    queue_id?: string;
+    queue_name: string;
+    created_on?: string;
+    modified_on?: string;
+    settings?: {
+      delivery_delay?: number;
+      delivery_paused?: boolean;
+      message_retention_period?: number;
+    };
+  };
+  success: boolean;
+  errors: Array<{ code: number; message: string }>;
+  messages: string[];
+}
 
 /**
  * Create a new Cloudflare Queue

@@ -1,0 +1,889 @@
+{
+  "inputs": {
+    "node_modules/aws4fetch/dist/aws4fetch.esm.mjs": {
+      "bytes": 11283,
+      "imports": [
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/alchemy.ts": {
+      "bytes": 28,
+      "imports": [
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/encrypt.ts": {
+      "bytes": 1244,
+      "imports": [
+        {
+          "path": "libsodium-wrappers",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/secret.ts": {
+      "bytes": 1201,
+      "imports": [
+        {
+          "path": "alchemy/src/alchemy.ts",
+          "kind": "import-statement",
+          "original": "./alchemy.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/serde.ts": {
+      "bytes": 3594,
+      "imports": [
+        {
+          "path": "alchemy/src/encrypt.ts",
+          "kind": "import-statement",
+          "original": "./encrypt.js"
+        },
+        {
+          "path": "alchemy/src/scope.ts",
+          "kind": "import-statement",
+          "original": "./scope.js"
+        },
+        {
+          "path": "alchemy/src/secret.ts",
+          "kind": "import-statement",
+          "original": "./secret.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/util/ignore.ts": {
+      "bytes": 377,
+      "imports": [
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/fs/file-system-state-store.ts": {
+      "bytes": 3381,
+      "imports": [
+        {
+          "path": "node:fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "alchemy/src/serde.ts",
+          "kind": "import-statement",
+          "original": "../serde.js"
+        },
+        {
+          "path": "alchemy/src/util/ignore.ts",
+          "kind": "import-statement",
+          "original": "../util/ignore.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/scope.ts": {
+      "bytes": 4724,
+      "imports": [
+        {
+          "path": "node:async_hooks",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "alchemy/src/destroy.ts",
+          "kind": "import-statement",
+          "original": "./destroy.js"
+        },
+        {
+          "path": "alchemy/src/fs/file-system-state-store.ts",
+          "kind": "import-statement",
+          "original": "./fs/file-system-state-store.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/destroy.ts": {
+      "bytes": 4067,
+      "imports": [
+        {
+          "path": "alchemy/src/alchemy.ts",
+          "kind": "import-statement",
+          "original": "./alchemy.js"
+        },
+        {
+          "path": "alchemy/src/context.ts",
+          "kind": "import-statement",
+          "original": "./context.js"
+        },
+        {
+          "path": "alchemy/src/resource.ts",
+          "kind": "import-statement",
+          "original": "./resource.js"
+        },
+        {
+          "path": "alchemy/src/scope.ts",
+          "kind": "import-statement",
+          "original": "./scope.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/context.ts": {
+      "bytes": 3057,
+      "imports": [
+        {
+          "path": "alchemy/src/destroy.ts",
+          "kind": "import-statement",
+          "original": "./destroy.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/apply.ts": {
+      "bytes": 3984,
+      "imports": [
+        {
+          "path": "alchemy/src/alchemy.ts",
+          "kind": "import-statement",
+          "original": "./alchemy.js"
+        },
+        {
+          "path": "alchemy/src/context.ts",
+          "kind": "import-statement",
+          "original": "./context.js"
+        },
+        {
+          "path": "alchemy/src/resource.ts",
+          "kind": "import-statement",
+          "original": "./resource.js"
+        },
+        {
+          "path": "alchemy/src/serde.ts",
+          "kind": "import-statement",
+          "original": "./serde.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/resource.ts": {
+      "bytes": 1846,
+      "imports": [
+        {
+          "path": "alchemy/src/apply.ts",
+          "kind": "import-statement",
+          "original": "./apply.js"
+        },
+        {
+          "path": "alchemy/src/scope.ts",
+          "kind": "import-statement",
+          "original": "./scope.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/cloudflare/api-error.ts": {
+      "bytes": 1198,
+      "imports": [
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/util/retry.ts": {
+      "bytes": 693,
+      "imports": [
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "node_modules/@iarna/toml/lib/parser.js": {
+      "bytes": 3203,
+      "imports": [
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/@iarna/toml/lib/create-datetime.js": {
+      "bytes": 191,
+      "imports": [],
+      "format": "cjs"
+    },
+    "node_modules/@iarna/toml/lib/format-num.js": {
+      "bytes": 127,
+      "imports": [],
+      "format": "cjs"
+    },
+    "node_modules/@iarna/toml/lib/create-datetime-float.js": {
+      "bytes": 686,
+      "imports": [
+        {
+          "path": "node_modules/@iarna/toml/lib/format-num.js",
+          "kind": "require-call",
+          "original": "./format-num.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/@iarna/toml/lib/create-date.js": {
+      "bytes": 499,
+      "imports": [
+        {
+          "path": "node_modules/@iarna/toml/lib/format-num.js",
+          "kind": "require-call",
+          "original": "./format-num.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/@iarna/toml/lib/create-time.js": {
+      "bytes": 521,
+      "imports": [
+        {
+          "path": "node_modules/@iarna/toml/lib/format-num.js",
+          "kind": "require-call",
+          "original": "./format-num.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/@iarna/toml/lib/toml-parser.js": {
+      "bytes": 51684,
+      "imports": [
+        {
+          "path": "node_modules/@iarna/toml/lib/parser.js",
+          "kind": "require-call",
+          "original": "./parser.js"
+        },
+        {
+          "path": "node_modules/@iarna/toml/lib/create-datetime.js",
+          "kind": "require-call",
+          "original": "./create-datetime.js"
+        },
+        {
+          "path": "node_modules/@iarna/toml/lib/create-datetime-float.js",
+          "kind": "require-call",
+          "original": "./create-datetime-float.js"
+        },
+        {
+          "path": "node_modules/@iarna/toml/lib/create-date.js",
+          "kind": "require-call",
+          "original": "./create-date.js"
+        },
+        {
+          "path": "node_modules/@iarna/toml/lib/create-time.js",
+          "kind": "require-call",
+          "original": "./create-time.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/@iarna/toml/parse-pretty-error.js": {
+      "bytes": 1124,
+      "imports": [
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/@iarna/toml/parse-string.js": {
+      "bytes": 449,
+      "imports": [
+        {
+          "path": "node_modules/@iarna/toml/lib/toml-parser.js",
+          "kind": "require-call",
+          "original": "./lib/toml-parser.js"
+        },
+        {
+          "path": "node_modules/@iarna/toml/parse-pretty-error.js",
+          "kind": "require-call",
+          "original": "./parse-pretty-error.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/@iarna/toml/parse-async.js": {
+      "bytes": 964,
+      "imports": [
+        {
+          "path": "node_modules/@iarna/toml/lib/toml-parser.js",
+          "kind": "require-call",
+          "original": "./lib/toml-parser.js"
+        },
+        {
+          "path": "node_modules/@iarna/toml/parse-pretty-error.js",
+          "kind": "require-call",
+          "original": "./parse-pretty-error.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/@iarna/toml/parse-stream.js": {
+      "bytes": 1911,
+      "imports": [
+        {
+          "path": "stream",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node_modules/@iarna/toml/lib/toml-parser.js",
+          "kind": "require-call",
+          "original": "./lib/toml-parser.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/@iarna/toml/parse.js": {
+      "bytes": 232,
+      "imports": [
+        {
+          "path": "node_modules/@iarna/toml/parse-string.js",
+          "kind": "require-call",
+          "original": "./parse-string.js"
+        },
+        {
+          "path": "node_modules/@iarna/toml/parse-async.js",
+          "kind": "require-call",
+          "original": "./parse-async.js"
+        },
+        {
+          "path": "node_modules/@iarna/toml/parse-stream.js",
+          "kind": "require-call",
+          "original": "./parse-stream.js"
+        },
+        {
+          "path": "node_modules/@iarna/toml/parse-pretty-error.js",
+          "kind": "require-call",
+          "original": "./parse-pretty-error.js"
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/@iarna/toml/stringify.js": {
+      "bytes": 8556,
+      "imports": [
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/@iarna/toml/toml.js": {
+      "bytes": 100,
+      "imports": [
+        {
+          "path": "node_modules/@iarna/toml/parse.js",
+          "kind": "require-call",
+          "original": "./parse.js"
+        },
+        {
+          "path": "node_modules/@iarna/toml/stringify.js",
+          "kind": "require-call",
+          "original": "./stringify.js"
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/xdg-app-paths/dist/cjs/lib/XDGAppPaths.js": {
+      "bytes": 3616,
+      "imports": [
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/xdg-portable/dist/cjs/lib/XDG.js": {
+      "bytes": 5275,
+      "imports": [
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/os-paths/dist/cjs/lib/OSPaths.js": {
+      "bytes": 4054,
+      "imports": [
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/os-paths/dist/cjs/platform-adapters/node.js": {
+      "bytes": 1277,
+      "imports": [
+        {
+          "path": "os",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/os-paths/dist/cjs/mod.cjs.js": {
+      "bytes": 182,
+      "imports": [
+        {
+          "path": "node_modules/os-paths/dist/cjs/lib/OSPaths.js",
+          "kind": "require-call",
+          "original": "./lib/OSPaths.js"
+        },
+        {
+          "path": "node_modules/os-paths/dist/cjs/platform-adapters/node.js",
+          "kind": "require-call",
+          "original": "./platform-adapters/node.js"
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/xdg-portable/dist/cjs/platform-adapters/node.js": {
+      "bytes": 1468,
+      "imports": [
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node_modules/os-paths/dist/cjs/mod.cjs.js",
+          "kind": "require-call",
+          "original": "os-paths"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/xdg-portable/dist/cjs/mod.cjs.js": {
+      "bytes": 166,
+      "imports": [
+        {
+          "path": "node_modules/xdg-portable/dist/cjs/lib/XDG.js",
+          "kind": "require-call",
+          "original": "./lib/XDG.js"
+        },
+        {
+          "path": "node_modules/xdg-portable/dist/cjs/platform-adapters/node.js",
+          "kind": "require-call",
+          "original": "./platform-adapters/node.js"
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/xdg-app-paths/dist/cjs/platform-adapters/node.js": {
+      "bytes": 2006,
+      "imports": [
+        {
+          "path": "path",
+          "kind": "require-call",
+          "external": true
+        },
+        {
+          "path": "node_modules/xdg-portable/dist/cjs/mod.cjs.js",
+          "kind": "require-call",
+          "original": "xdg-portable"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/xdg-app-paths/dist/cjs/mod.cjs.js": {
+      "bytes": 198,
+      "imports": [
+        {
+          "path": "node_modules/xdg-app-paths/dist/cjs/lib/XDGAppPaths.js",
+          "kind": "require-call",
+          "original": "./lib/XDGAppPaths.js"
+        },
+        {
+          "path": "node_modules/xdg-app-paths/dist/cjs/platform-adapters/node.js",
+          "kind": "require-call",
+          "original": "./platform-adapters/node.js"
+        }
+      ],
+      "format": "cjs"
+    },
+    "node_modules/xdg-app-paths/dist/cjs/esm-wrapper/mod.esm.js": {
+      "bytes": 80,
+      "imports": [
+        {
+          "path": "node_modules/xdg-app-paths/dist/cjs/mod.cjs.js",
+          "kind": "import-statement",
+          "original": "../mod.cjs.js"
+        },
+        {
+          "path": "node_modules/xdg-app-paths/dist/cjs/mod.cjs.js",
+          "kind": "import-statement",
+          "original": "../mod.cjs.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/cloudflare/auth.ts": {
+      "bytes": 5562,
+      "imports": [
+        {
+          "path": "node:fs/promises",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:os",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node_modules/@iarna/toml/toml.js",
+          "kind": "dynamic-import",
+          "original": "@iarna/toml"
+        },
+        {
+          "path": "node_modules/xdg-app-paths/dist/cjs/esm-wrapper/mod.esm.js",
+          "kind": "dynamic-import",
+          "original": "xdg-app-paths"
+        },
+        {
+          "path": "node_modules/@iarna/toml/toml.js",
+          "kind": "dynamic-import",
+          "original": "@iarna/toml"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/neon/api-error.ts": {
+      "bytes": 1583,
+      "imports": [
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/cloudflare/user.ts": {
+      "bytes": 3505,
+      "imports": [
+        {
+          "path": "alchemy/src/neon/api-error.ts",
+          "kind": "import-statement",
+          "original": "../neon/api-error.js"
+        },
+        {
+          "path": "alchemy/src/cloudflare/auth.ts",
+          "kind": "import-statement",
+          "original": "./auth.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/cloudflare/api.ts": {
+      "bytes": 5192,
+      "imports": [
+        {
+          "path": "alchemy/src/alchemy.ts",
+          "kind": "import-statement",
+          "original": "../alchemy.js"
+        },
+        {
+          "path": "alchemy/src/util/retry.ts",
+          "kind": "import-statement",
+          "original": "../util/retry.js"
+        },
+        {
+          "path": "alchemy/src/cloudflare/auth.ts",
+          "kind": "import-statement",
+          "original": "./auth.js"
+        },
+        {
+          "path": "alchemy/src/cloudflare/user.ts",
+          "kind": "import-statement",
+          "original": "./user.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/src/cloudflare/bucket.ts": {
+      "bytes": 12358,
+      "imports": [
+        {
+          "path": "node_modules/aws4fetch/dist/aws4fetch.esm.mjs",
+          "kind": "import-statement",
+          "original": "aws4fetch"
+        },
+        {
+          "path": "alchemy/src/resource.ts",
+          "kind": "import-statement",
+          "original": "../resource.js"
+        },
+        {
+          "path": "alchemy/src/cloudflare/api-error.ts",
+          "kind": "import-statement",
+          "original": "./api-error.js"
+        },
+        {
+          "path": "alchemy/src/cloudflare/api.ts",
+          "kind": "import-statement",
+          "original": "./api.js"
+        },
+        {
+          "path": "<runtime>",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "format": "esm"
+    },
+    "alchemy/test/bootstrap/app.ts": {
+      "bytes": 100,
+      "imports": [
+        {
+          "path": "alchemy/src/cloudflare/bucket.ts",
+          "kind": "import-statement",
+          "original": "../../src/cloudflare/bucket.js"
+        }
+      ],
+      "format": "esm"
+    }
+  },
+  "outputs": {
+    "alchemy/test/bootstrap/app.js": {
+      "imports": [
+        {
+          "path": "node:async_hooks",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:fs",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "libsodium-wrappers",
+          "kind": "import-statement",
+          "external": true
+        },
+        {
+          "path": "node:path",
+          "kind": "import-statement",
+          "external": true
+        }
+      ],
+      "exports": [],
+      "entryPoint": "alchemy/test/bootstrap/app.ts",
+      "inputs": {
+        "node_modules/aws4fetch/dist/aws4fetch.esm.mjs": {
+          "bytesInOutput": 33
+        },
+        "alchemy/src/alchemy.ts": {
+          "bytesInOutput": 51
+        },
+        "alchemy/src/scope.ts": {
+          "bytesInOutput": 3309
+        },
+        "alchemy/src/fs/file-system-state-store.ts": {
+          "bytesInOutput": 2479
+        },
+        "alchemy/src/encrypt.ts": {
+          "bytesInOutput": 1204
+        },
+        "alchemy/src/secret.ts": {
+          "bytesInOutput": 840
+        },
+        "alchemy/src/serde.ts": {
+          "bytesInOutput": 3125
+        },
+        "alchemy/src/util/ignore.ts": {
+          "bytesInOutput": 292
+        },
+        "alchemy/src/destroy.ts": {
+          "bytesInOutput": 3274
+        },
+        "alchemy/src/context.ts": {
+          "bytesInOutput": 996
+        },
+        "alchemy/src/resource.ts": {
+          "bytesInOutput": 43
+        },
+        "alchemy/src/cloudflare/auth.ts": {
+          "bytesInOutput": 31
+        },
+        "alchemy/src/cloudflare/bucket.ts": {
+          "bytesInOutput": 74
+        },
+        "alchemy/test/bootstrap/app.ts": {
+          "bytesInOutput": 39
+        }
+      },
+      "bytes": 16608
+    }
+  }
+}

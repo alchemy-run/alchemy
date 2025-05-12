@@ -6,7 +6,7 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
-import type { VectorizeIndex } from "./vectorize-index.js";
+import type { VectorizeIndexResource } from "./vectorize-index.js";
 
 /**
  * Properties for creating or deleting a Vectorize Metadata Index
@@ -15,7 +15,7 @@ export interface VectorizeMetadataIndexProps extends CloudflareApiOptions {
   /**
    * Parent Vectorize Index
    */
-  index: VectorizeIndex;
+  index: VectorizeIndexResource;
 
   /**
    * Name of the property in the metadata to create an index for

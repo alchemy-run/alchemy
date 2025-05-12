@@ -9,8 +9,7 @@ import { AccountId, Role } from "../alchemy/src/aws";
 import { GitHubOIDCProvider } from "../alchemy/src/aws/oidc";
 import {
   AccountApiToken,
-  PermissionGroups,
-  R2Bucket,
+  PermissionGroups
 } from "../alchemy/src/cloudflare";
 import { GitHubSecret, RepositoryEnvironment } from "../alchemy/src/github";
 import env, {

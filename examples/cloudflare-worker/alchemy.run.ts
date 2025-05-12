@@ -11,6 +11,7 @@ import {
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 const app = await alchemy("cloudflare-worker", {
+  stage: BRANCH_PREFIX || undefined,
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   stateStore:
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
