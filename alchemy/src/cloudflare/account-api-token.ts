@@ -297,11 +297,14 @@ export const AccountApiToken = Resource(
                 meta: pg.meta || {},
               },
         ),
-        resources: Object.entries(policy.resources).map(([key, value]) => ({
-          [key === "com.cloudflare.api.account"
-            ? `com.cloudflare.api.account.${api.accountId}`
-            : key]: value,
-        })),
+        resources: Object.fromEntries(
+          Object.entries(policy.resources).map(([key, value]) => {
+            if (key === "com.cloudflare.api.account") {
+              return [`com.cloudflare.api.account.${api.accountId}`, value];
+            }
+            return [key, value];
+          }),
+        ),
       })),
       // Format dates for Cloudflare API (removing milliseconds)
       ...(props.expiresOn
