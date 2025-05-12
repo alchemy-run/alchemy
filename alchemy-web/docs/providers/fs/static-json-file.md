@@ -1,3 +1,8 @@
+---
+title: Managing Static JSON Files with Alchemy FS Provider
+description: Learn how to create and manage static JSON (.json) files with proper formatting using Alchemy's FS provider.
+---
+
 # StaticJsonFile
 
 The StaticJsonFile resource creates formatted JSON files using [Prettier](https://prettier.io/) for consistent formatting.

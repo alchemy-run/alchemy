@@ -1,3 +1,8 @@
+---
+title: Managing Cloudflare Permission Groups with Alchemy
+description: Learn how to retrieve Cloudflare API Permission Groups using Alchemy to help construct API token policies.
+---
+
 # PermissionGroups
 
 Lists all permission groups available for a Cloudflare account and returns a typed map of permission names to their IDs. Used when creating API tokens for Cloudflare services like R2.

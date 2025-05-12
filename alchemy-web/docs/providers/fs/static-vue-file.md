@@ -1,3 +1,8 @@
+---
+title: Managing Static Vue Files with Alchemy FS Provider
+description: Learn how to create and manage static Vue (.vue) single-file components with proper formatting using Alchemy's FS provider.
+---
+
 # StaticVueFile
 
 The StaticVueFile resource creates [Vue.js](https://vuejs.org/) single-file component files (.vue) with template, script and style sections.

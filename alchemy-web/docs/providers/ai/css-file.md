@@ -1,4 +1,9 @@
-# CSSFile
+---
+title: Managing CSS Files with AI in Alchemy
+description: Learn how to use Alchemy's AI provider to create, update, and manage CSS (.css) files within your projects.
+---
+
+# CSS File
 
 The CSSFile resource lets you generate CSS files using AI models like [OpenAI GPT-4](https://platform.openai.com/docs/models/gpt-4) or [Anthropic Claude](https://www.anthropic.com/claude).
 

@@ -1,3 +1,8 @@
+---
+title: Managing Cloudflare Pipelines with Alchemy
+description: Learn how to define and manage Cloudflare Pipelines using Alchemy for orchestrating complex data workflows.
+---
+
 # Pipeline
 
 The [Pipeline](https://developers.cloudflare.com/workers/configuration/pipelines/) resource lets you create and manage Cloudflare Pipelines for collecting, transforming and routing data.

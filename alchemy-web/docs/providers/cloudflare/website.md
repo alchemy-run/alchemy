@@ -1,3 +1,8 @@
+---
+title: Managing Cloudflare Pages Websites with Alchemy
+description: Learn how to deploy and manage Cloudflare Pages websites using Alchemy for static and dynamic site hosting.
+---
+
 # Website
 
 The Website resource deploys a static website to Cloudflare Pages with an optional Worker for server-side functionality.

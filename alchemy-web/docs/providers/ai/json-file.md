@@ -1,3 +1,8 @@
+---
+title: Managing JSON Files with AI in Alchemy
+description: Learn how to use Alchemy's AI provider to create, update, and manage JSON (.json) files with schema validation.
+---
+
 # JSONFile
 
 The JSONFile resource lets you generate JSON files using AI models with optional schema validation.

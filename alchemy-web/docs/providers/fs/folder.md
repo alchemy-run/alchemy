@@ -1,3 +1,8 @@
+---
+title: Managing Folders (Directories) with Alchemy FS Provider
+description: Learn how to create, manage, and delete folders (directories) using Alchemy's FS (File System) provider.
+---
+
 # Folder
 
 The Folder resource creates and manages directories in the filesystem with automatic parent directory creation and cleanup on deletion.

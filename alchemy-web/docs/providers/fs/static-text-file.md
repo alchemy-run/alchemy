@@ -1,3 +1,8 @@
+---
+title: Managing Static Text Files with Alchemy FS Provider
+description: Learn how to create and manage static text (.txt) files using Alchemy's FS provider.
+---
+
 # StaticTextFile
 
 The StaticTextFile resource creates and manages plain text files in the filesystem using [Alchemy's File System](https://alchemy.run/docs/concepts/fs) capabilities.

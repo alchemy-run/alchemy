@@ -1,3 +1,8 @@
+---
+title: Managing Cloudflare AI Gateway with Alchemy
+description: Learn how to create and configure Cloudflare AI Gateway using Alchemy to route and manage AI requests.
+---
+
 # AiGateway
 
 The AiGateway resource lets you create and manage [Cloudflare AI Gateway](https://developers.cloudflare.com/workers-ai/get-started/workers-ai-gateway/) configurations for accessing AI models through Cloudflare Workers.

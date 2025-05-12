@@ -1,3 +1,8 @@
+---
+title: Copying Files with Alchemy FS Provider
+description: Learn how to copy files and directories within your project using Alchemy's FS (File System) provider.
+---
+
 # CopyFile
 
 The CopyFile resource lets you copy files from one location to another in the filesystem.

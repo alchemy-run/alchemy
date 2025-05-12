@@ -1,3 +1,8 @@
+---
+title: Managing HTML Files with AI in Alchemy
+description: Learn how to use Alchemy's AI provider to create, update, and manage HTML (.html) files within your projects.
+---
+
 # HTMLFile
 
 The HTMLFile resource lets you generate HTML files using AI models like [OpenAI GPT-4](https://platform.openai.com/docs/models/gpt-4) or [Anthropic Claude](https://www.anthropic.com/claude).

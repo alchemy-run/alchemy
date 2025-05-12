@@ -1,3 +1,8 @@
+---
+title: Managing Stripe Meters with Alchemy
+description: Learn how to create and manage Stripe Meters for usage-based billing using Alchemy in your applications.
+---
+
 # Meter
 
 The Meter resource lets you create and manage [Stripe Billing Meters](https://stripe.com/docs/billing/usage-based-billing/meters) for your Stripe account. Meters define how usage of a product is measured and aggregated for billing purposes.

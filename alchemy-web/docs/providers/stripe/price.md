@@ -1,3 +1,8 @@
+---
+title: Managing Stripe Prices with Alchemy
+description: Learn how to create and manage Stripe Prices for your products and subscriptions using Alchemy.
+---
+
 # Price
 
 The Price resource lets you create and manage [Stripe Prices](https://stripe.com/docs/api/prices) for products.

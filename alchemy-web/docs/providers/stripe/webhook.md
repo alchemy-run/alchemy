@@ -1,3 +1,8 @@
+---
+title: Managing Stripe Webhooks with Alchemy
+description: Learn how to create and manage Stripe Webhook Endpoints using Alchemy to receive events from Stripe.
+---
+
 # WebhookEndpoint
 
 The WebhookEndpoint resource lets you create and manage [Stripe Webhook Endpoints](https://stripe.com/docs/api/webhook_endpoints) to receive notifications about events in your Stripe account.

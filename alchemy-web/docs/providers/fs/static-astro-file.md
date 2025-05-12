@@ -1,3 +1,8 @@
+---
+title: Managing Static Astro Files with Alchemy FS Provider
+description: Learn how to create and manage static Astro (.astro) files with proper formatting using Alchemy's FS provider.
+---
+
 # StaticAstroFile
 
 The StaticAstroFile resource lets you create [Astro](https://astro.build) component files with automatic formatting and directory creation.

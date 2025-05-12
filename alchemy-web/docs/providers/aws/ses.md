@@ -1,3 +1,8 @@
+---
+title: Managing AWS SES with Alchemy
+description: Learn how to configure AWS Simple Email Service (SES) for sending emails using Alchemy in your applications.
+---
+
 # SES
 
 The SES resource lets you create and manage [Amazon Simple Email Service (SES)](https://docs.aws.amazon.com/ses/latest/dg/Welcome.html) configuration sets and email identities.

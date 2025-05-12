@@ -1,6 +1,6 @@
 ---
-title: File Resource in Alchemy
-description: Create, update, and delete files with Alchemy's filesystem provider. Learn how to manage content, handle nested directories, and update file paths dynamically.
+title: Managing Files with Alchemy FS Provider
+description: Learn how to create, read, update, and delete files using Alchemy's FS (File System) provider in your projects.
 ---
 
 # File

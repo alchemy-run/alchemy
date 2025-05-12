@@ -1,6 +1,6 @@
 ---
-title: Cloudflare Workers in Alchemy
-description: Deploy serverless functions to Cloudflare's global network. Learn how to configure Workers with bindings, assets, CRON triggers, and custom domains.
+title: Managing Cloudflare Workers with Alchemy
+description: Learn how to deploy, configure, and manage Cloudflare Workers using Alchemy for serverless functions at the edge.
 ---
 
 # Worker

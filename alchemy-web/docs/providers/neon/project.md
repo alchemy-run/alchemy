@@ -1,3 +1,8 @@
+---
+title: Managing Neon Serverless Postgres Projects with Alchemy
+description: Learn how to create, configure, and manage Neon serverless Postgres projects and databases using Alchemy.
+---
+
 # NeonProject
 
 The NeonProject resource lets you create and manage [Neon serverless PostgreSQL](https://neon.tech) projects.

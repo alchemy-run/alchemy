@@ -1,3 +1,8 @@
+---
+title: Managing Documents with AI in Alchemy
+description: Learn how to use Alchemy's AI provider to generate document content (like markdown, text) based on prompts.
+---
+
 # Document
 
 The Document resource lets you generate markdown documentation using [AI models](https://platform.openai.com/docs/models) like GPT-4 and Claude.
