@@ -44,6 +44,49 @@ const db = await D1Database("eu-db", {
 });
 ```
 
+# Cloning Databases
+
+Create a database by cloning data from an existing database. There are three ways to specify the source database:
+
+## Clone by Database ID
+
+```ts
+import { D1Database } from "alchemy/cloudflare";
+
+const clonedDb = await D1Database("clone-db", {
+  name: "clone-db",
+  clone: { id: "existing-db-uuid" }
+});
+```
+
+## Clone by Database Name
+
+```ts
+import { D1Database } from "alchemy/cloudflare";
+
+const clonedDb = await D1Database("clone-db", {
+  name: "clone-db",
+  clone: { name: "source-db-name" }
+});
+```
+
+## Clone from an Existing D1Database
+
+```ts
+import { D1Database } from "alchemy/cloudflare";
+
+// First create or get the source database
+const sourceDb = await D1Database("source-db", {
+  name: "source-db"
+});
+
+// Then create a new database as a clone of the source
+const clonedDb = await D1Database("clone-db", {
+  name: "clone-db",
+  clone: sourceDb
+});
+```
+
 # Bind to a Worker
 
 ```ts
