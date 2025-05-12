@@ -73,7 +73,7 @@ const accountAccessToken = await AccountApiToken("account-access-token", {
       effect: "allow",
       permissionGroups: ["Workers R2 Storage Write"],
       resources: {
-        [`com.cloudflare.api.account.${CLOUDFLARE_ACCOUNT_ID}`]: "*",
+        "com.cloudflare.api.account": "*",
       },
     },
   ],
@@ -102,7 +102,7 @@ await Promise.all([
       owner: "sam-goodwin",
       repository: "alchemy",
       name,
-      value: typeof value === "string" ? alchemy.secret(value) : await value!,
+      value: typeof value === "string" ? alchemy.secret(value) : value!,
     };
     return [
       GitHubSecret(`github-secret-${name}`, {

@@ -41,8 +41,21 @@ export interface TokenPolicy {
   /**
    * Resources the policy applies to
    */
-  resources: Record<string, string>;
+  resources: {
+    [key in TokenPolicyResourceKey]?: string;
+  };
 }
+
+/**
+ * @see https://developers.cloudflare.com/fundamentals/api/reference/permissions/
+ */
+type TokenPolicyResourceKey =
+  | `com.cloudflare.api.account`
+  | `com.cloudflare.api.account.${string}`
+  // | `com.cloudflare.api.account.zone`
+  | `com.cloudflare.api.account.zone.${string}`
+  // | `com.cloudflare.api.user`
+  | `com.cloudflare.api.user.${string}`;
 
 /**
  * Condition for token usage (e.g., IP restrictions)
@@ -124,14 +137,18 @@ interface CloudflareApiToken {
  * Output returned after Account API Token creation/update
  */
 export interface AccountApiToken
-  extends Resource<"cloudflare::AccountApiToken">,
-    AccountApiTokenProps {
+  extends Resource<"cloudflare::AccountApiToken"> {
   /**
    * The ID of the token
    *
    * Equiv. to ACCESS_KEY_ID
    */
   id: string;
+
+  /**
+   * Name of the token
+   */
+  name: string;
 
   /**
    * Status of the token
@@ -151,7 +168,7 @@ export interface AccountApiToken
    *
    * An alias of {@link id}
    */
-  accessKeyId: string;
+  accessKeyId: Secret;
 
   /**
    * Secret access key for the token
@@ -160,7 +177,7 @@ export interface AccountApiToken
    *
    * @see https://developers.cloudflare.com/r2/api/tokens/#get-s3-api-credentials-from-an-api-token
    */
-  secretAccessKey: string;
+  secretAccessKey: Secret;
 }
 
 /**
@@ -173,21 +190,13 @@ export interface AccountApiToken
  * @see https://developers.cloudflare.com/api/resources/accounts/subresources/tokens/methods/create/
  *
  * @example
- * // First, fetch all permission groups
- * const permissions = await PermissionGroups("cloudflare-permissions", {
- *   accountId: cfAccountId,
- * });
- *
  * // Create a token with read-only permissions for specific zones
  * const readOnlyToken = await AccountApiToken("readonly-token", {
  *   name: "Readonly Zone Token",
  *   policies: [
  *     {
  *       effect: "allow",
- *       permissionGroups: [
- *         { id: permissions["Zone Read"].id },
- *         { id: permissions["Analytics Read"].id }
- *       ],
+ *       permissionGroups: ["Zone Read", "Analytics Read"],
  *       resources: {
  *         "com.cloudflare.api.account.zone.22b1de5f1c0e4b3ea97bb1e963b06a43": "*",
  *         "com.cloudflare.api.account.zone.eb78d65290b24279ba6f44721b3ea3c4": "*"
@@ -204,9 +213,7 @@ export interface AccountApiToken
  *   policies: [
  *     {
  *       effect: "allow",
- *       permissionGroups: [
- *         { id: permissions["Worker Routes Edit"].id }
- *       ],
+ *       permissionGroups: ["Worker Routes Edit"],
  *       resources: {
  *         "com.cloudflare.api.account.worker.route.*": "*"
  *       }
@@ -220,6 +227,21 @@ export interface AccountApiToken
  *       notIn: ["192.168.1.100/32"]
  *     }
  *   }
+ * });
+ *
+ * @example
+ * // Create a token with bucket access permissions
+ * const storageToken = await AccountApiToken("account-access-token", {
+ *   name: "alchemy-account-access-token",
+ *   policies: [
+ *     {
+ *       effect: "allow",
+ *       permissionGroups: ["Workers R2 Storage Write"],
+ *       resources: {
+ *         "com.cloudflare.api.account": "*",
+ *       },
+ *     },
+ *   ],
  * });
  */
 export const AccountApiToken = Resource(
@@ -275,7 +297,11 @@ export const AccountApiToken = Resource(
                 meta: pg.meta || {},
               },
         ),
-        resources: policy.resources,
+        resources: Object.entries(policy.resources).map(([key, value]) => ({
+          [key === "com.cloudflare.api.account"
+            ? `com.cloudflare.api.account.${api.accountId}`
+            : key]: value,
+        })),
       })),
       // Format dates for Cloudflare API (removing milliseconds)
       ...(props.expiresOn
@@ -354,14 +380,6 @@ export const AccountApiToken = Resource(
       id: tokenData.id,
       name: tokenData.name,
       status: tokenData.status,
-      policies: tokenData.policies.map((policy) => ({
-        effect: policy.effect,
-        permissionGroups: policy.permission_groups.map((pg) => ({
-          id: pg.id,
-          meta: pg.meta,
-        })),
-        resources: policy.resources,
-      })),
       ...(tokenData.expires_on ? { expiresOn: tokenData.expires_on } : {}),
       ...(tokenData.not_before ? { notBefore: tokenData.not_before } : {}),
       ...(tokenData.condition
@@ -377,8 +395,8 @@ export const AccountApiToken = Resource(
           }
         : {}),
       value: tokenValue,
-      accessKeyId: tokenData.id,
-      secretAccessKey: sha256(tokenValue.unencrypted),
+      accessKeyId: alchemy.secret(tokenData.id),
+      secretAccessKey: alchemy.secret(sha256(tokenValue.unencrypted)),
     });
   },
 );
