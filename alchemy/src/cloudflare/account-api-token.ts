@@ -3,12 +3,16 @@ import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import type { Secret } from "../secret.js";
 import { sha256 } from "../util/sha256.js";
-import { type CloudflareApiOptions, createCloudflareApi } from "./api.js";
+import { createCloudflareApi, type CloudflareApiOptions } from "./api.js";
+import {
+  PermissionGroups,
+  type PermissionGroupName,
+} from "./permission-groups.js";
 
 /**
  * Permission group for a token policy
  */
-export interface TokenPolicyPermissionGroup {
+export type TokenPolicyPermissionGroup = {
   /**
    * ID of the permission group
    */
@@ -18,7 +22,7 @@ export interface TokenPolicyPermissionGroup {
    * Optional metadata for the permission group
    */
   meta?: Record<string, any>;
-}
+};
 
 /**
  * Policy that defines what the token can access
@@ -32,7 +36,7 @@ export interface TokenPolicy {
   /**
    * Permission groups to include in the policy
    */
-  permissionGroups: TokenPolicyPermissionGroup[];
+  permissionGroups: (PermissionGroupName | TokenPolicyPermissionGroup)[];
 
   /**
    * Resources the policy applies to
@@ -251,15 +255,26 @@ export const AccountApiToken = Resource(
       return this.destroy();
     }
 
+    const permissionGroups = await PermissionGroups(
+      "cloudflare-permission-groups",
+      props,
+    );
+
     // Transform our properties to API format
     const apiPayload = {
       name: props.name,
       policies: props.policies.map((policy) => ({
         effect: policy.effect,
-        permission_groups: policy.permissionGroups.map((pg) => ({
-          id: pg.id,
-          meta: pg.meta || {},
-        })),
+        permission_groups: policy.permissionGroups.map((pg) =>
+          typeof pg === "string"
+            ? {
+                id: permissionGroups[pg].id,
+              }
+            : {
+                id: pg.id,
+                meta: pg.meta || {},
+              },
+        ),
         resources: policy.resources,
       })),
       // Format dates for Cloudflare API (removing milliseconds)
