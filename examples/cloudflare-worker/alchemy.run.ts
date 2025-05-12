@@ -1,4 +1,3 @@
-import alchemy from "../../alchemy/src";
 import {
   DurableObjectNamespace,
   Queue,
@@ -8,6 +7,7 @@ import {
   Workflow,
   WranglerJson,
 } from "../../alchemy/src/cloudflare";
+import alchemy from "../../alchemy/src/index.js";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 const app = await alchemy("cloudflare-worker", {

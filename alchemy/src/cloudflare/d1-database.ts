@@ -2,8 +2,8 @@ import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
-  type CloudflareApi,
   createCloudflareApi,
+  type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
 import { applyMigrations, listMigrationsFiles } from "./d1-migrations.js";
@@ -123,20 +123,6 @@ export type D1Database = Resource<"cloudflare::D1Database"> &
     };
   };
 
-export async function D1Database(
-  id: string,
-  props: Omit<D1DatabaseProps, "migrationsFiles">,
-) {
-  const migrationsFiles = props.migrationsDir
-    ? await listMigrationsFiles(props.migrationsDir)
-    : [];
-
-  return D1DatabaseResource(id, {
-    ...props,
-    migrationsFiles,
-  });
-}
-
 /**
  * Creates and manages Cloudflare D1 Databases.
  *
@@ -175,6 +161,20 @@ export async function D1Database(
  *
  * @see https://developers.cloudflare.com/d1/
  */
+export async function D1Database(
+  id: string,
+  props: Omit<D1DatabaseProps, "migrationsFiles">,
+) {
+  const migrationsFiles = props.migrationsDir
+    ? await listMigrationsFiles(props.migrationsDir)
+    : [];
+
+  return D1DatabaseResource(id, {
+    ...props,
+    migrationsFiles,
+  });
+}
+
 export const D1DatabaseResource = Resource(
   "cloudflare::D1Database",
   async function (
