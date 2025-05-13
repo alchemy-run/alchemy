@@ -1,6 +1,15 @@
 import { alchemy } from "./alchemy.js";
 import { context } from "./context.js";
-import { PROVIDERS, type Provider, type Resource } from "./resource.js";
+import {
+  PROVIDERS,
+  ResourceFQN,
+  ResourceID,
+  ResourceKind,
+  ResourceScope,
+  ResourceSeq,
+  type Provider,
+  type Resource,
+} from "./resource.js";
 import { Scope } from "./scope.js";
 
 export class DestroyedSignal extends Error {}
@@ -52,34 +61,36 @@ export async function destroy<Type extends string>(
     return;
   }
 
-  if (instance.Kind === Scope.KIND) {
+  if (instance[ResourceKind] === Scope.KIND) {
     const scope = new Scope({
-      parent: instance.Scope,
-      scopeName: instance.ID,
+      parent: instance[ResourceScope],
+      scopeName: instance[ResourceID],
     });
     console.log("Destroying scope", scope.chain.join("/"));
     return await destroy(scope, options);
   }
 
-  const Provider: Provider<Type> | undefined = PROVIDERS.get(instance.Kind);
+  const Provider: Provider<Type> | undefined = PROVIDERS.get(
+    instance[ResourceKind],
+  );
   if (!Provider) {
     throw new Error(
-      `Cannot destroy resource "${instance.FQN}" type ${instance.Kind} - no provider found. You may need to import the provider in your alchemy.config.ts.`,
+      `Cannot destroy resource "${instance[ResourceFQN]}" type ${instance[ResourceKind]} - no provider found. You may need to import the provider in your alchemy.config.ts.`,
     );
   }
 
-  const scope = instance.Scope;
+  const scope = instance[ResourceScope];
   if (!scope) {
-    console.warn(`Resource "${instance.FQN}" has no scope`);
+    console.warn(`Resource "${instance[ResourceFQN]}" has no scope`);
   }
   const quiet = options?.quiet ?? scope.quiet;
 
   try {
     if (!quiet) {
-      console.log(`Delete:  "${instance.FQN}"`);
+      console.log(`Delete:  "${instance[ResourceFQN]}"`);
     }
 
-    const state = await scope.state.get(instance.ID);
+    const state = await scope.state.get(instance[ResourceID]);
 
     if (state === undefined) {
       return;
@@ -88,10 +99,10 @@ export async function destroy<Type extends string>(
     const ctx = context({
       scope,
       phase: "delete",
-      kind: instance.Kind,
-      id: instance.ID,
-      fqn: instance.FQN,
-      seq: instance.Seq,
+      kind: instance[ResourceKind],
+      id: instance[ResourceID],
+      fqn: instance[ResourceFQN],
+      seq: instance[ResourceSeq],
       props: state.props,
       state,
       replace: () => {
@@ -103,15 +114,18 @@ export async function destroy<Type extends string>(
     try {
       // BUG: this does not restore persisted scope
       await alchemy.run(
-        instance.ID,
+        instance[ResourceID],
         {
           // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
-          isResource: instance.Kind !== "alchemy::Scope",
+          isResource: instance[ResourceKind] !== "alchemy::Scope",
           parent: scope,
         },
         async (scope) => {
           nestedScope = scope;
-          return await Provider.handler.bind(ctx)(instance.ID, state.props);
+          return await Provider.handler.bind(ctx)(
+            instance[ResourceID],
+            state.props,
+          );
         },
       );
     } catch (err) {
@@ -126,10 +140,10 @@ export async function destroy<Type extends string>(
       await destroy(nestedScope, options);
     }
 
-    await scope.delete(instance.ID);
+    await scope.delete(instance[ResourceID]);
 
     if (!quiet) {
-      console.log(`Deleted: "${instance.FQN}"`);
+      console.log(`Deleted: "${instance[ResourceFQN]}"`);
     }
   } catch (error) {
     console.error(error);
@@ -140,7 +154,7 @@ export async function destroy<Type extends string>(
 export namespace destroy {
   export async function all(resources: Resource[], options?: DestroyOptions) {
     if (options?.strategy !== "parallel") {
-      const sorted = resources.sort((a, b) => b.Seq - a.Seq);
+      const sorted = resources.sort((a, b) => b[ResourceSeq] - a[ResourceSeq]);
       for (const resource of sorted) {
         await destroy(resource, options);
       }

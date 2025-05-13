@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { Phase } from "./alchemy.js";
 import { destroy } from "./destroy.js";
 import { FileSystemStateStore } from "./fs/file-system-state-store.js";
-import type { PendingResource, ResourceID } from "./resource.js";
+import { ResourceID, type PendingResource } from "./resource.js";
 import type { StateStore, StateStoreType } from "./state.js";
 
 const scopeStorage = new AsyncLocalStorage<Scope>();
@@ -157,7 +157,7 @@ export class Scope {
     return `Scope(
   chain=${this.chain.join("/")},
   resources=[${Array.from(this.resources.values())
-    .map((r) => r.ID)
+    .map((r) => r[ResourceID])
     .join(",\n  ")}]
 )`;
   }

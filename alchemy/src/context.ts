@@ -1,10 +1,12 @@
 import { DestroyedSignal } from "./destroy.js";
-import type {
-  Resource,
+import {
   ResourceFQN,
   ResourceID,
   ResourceKind,
-  ResourceProps,
+  ResourceScope,
+  ResourceSeq,
+  type Resource,
+  type ResourceProps,
 } from "./resource.js";
 import type { Scope } from "./scope.js";
 import type { State } from "./state.js";
@@ -108,11 +110,11 @@ export function context<
 
     return {
       ...props,
-      Kind: kind,
-      ID,
-      FQN: fqn,
-      Scope: scope,
-      Seq: seq,
+      [ResourceKind]: kind,
+      [ResourceID]: ID,
+      [ResourceFQN]: fqn,
+      [ResourceScope]: scope,
+      [ResourceSeq]: seq,
     } as Out;
   }
   return Object.assign(create, {
@@ -138,5 +140,5 @@ export function context<
       throw new DestroyedSignal();
     },
     create,
-  }) as Context<Out>;
+  }) as unknown as Context<Out>;
 }

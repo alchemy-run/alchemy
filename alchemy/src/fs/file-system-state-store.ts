@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { ResourceScope } from "../resource.js";
 import type { Scope } from "../scope.js";
 import { deserialize, serialize } from "../serde.js";
 import type { State, StateStore } from "../state.js";
@@ -57,7 +58,7 @@ export class FileSystemStateStore implements StateStore {
       if (state.output === undefined) {
         state.output = {} as any;
       }
-      state.output.Scope = this.scope;
+      state.output[ResourceScope] = this.scope;
       return state;
     } catch (error: any) {
       if (error.code === "ENOENT") {

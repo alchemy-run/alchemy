@@ -1,3 +1,4 @@
+import { ResourceScope } from "../resource.js";
 import type { Scope } from "../scope.js";
 import { deserialize, serialize } from "../serde.js";
 import type { State, StateStore } from "../state.js";
@@ -219,7 +220,7 @@ export class R2RestStateStore implements StateStore {
         ...state,
         output: {
           ...(state.output || {}),
-          Scope: this.scope,
+          [ResourceScope]: this.scope,
         },
       };
     } catch (error: any) {

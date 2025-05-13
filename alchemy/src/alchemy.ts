@@ -3,7 +3,14 @@ import path from "node:path";
 
 import { destroy, DestroyedSignal } from "./destroy.js";
 import { env } from "./env.js";
-import type { PendingResource } from "./resource.js";
+import {
+  ResourceFQN,
+  ResourceID,
+  ResourceKind,
+  ResourceScope,
+  ResourceSeq,
+  type PendingResource,
+} from "./resource.js";
 import { Scope } from "./scope.js";
 import { secret } from "./secret.js";
 import type { StateStoreType } from "./state.js";
@@ -325,11 +332,11 @@ async function run<T>(
       // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
       const seq = _scope.parent.seq();
       const output = {
-        ID: id,
-        FQN: "",
-        Kind: Scope.KIND,
-        Scope: _scope,
-        Seq: seq,
+        [ResourceID]: id,
+        [ResourceFQN]: "",
+        [ResourceKind]: Scope.KIND,
+        [ResourceScope]: _scope,
+        [ResourceSeq]: seq,
       } as const;
       const resource = {
         kind: Scope.KIND,
