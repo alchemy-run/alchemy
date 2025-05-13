@@ -98,12 +98,18 @@ export function context<
   state: State<Kind, Props, Out>;
   replace: () => void;
 }): Context<Out> {
-  function create(props: Omit<Out, "Kind" | "ID" | "Scope">): Out;
-  function create(id: string, props: Omit<Out, "Kind" | "ID" | "Scope">): Out;
+  type InternalSymbols =
+    | typeof ResourceID
+    | typeof ResourceKind
+    | typeof ResourceFQN
+    | typeof ResourceSeq
+    | typeof ResourceScope;
+  function create(props: Omit<Out, InternalSymbols>): Out;
+  function create(id: string, props: Omit<Out, InternalSymbols>): Out;
   function create(
     ...args:
-      | [props: Omit<Out, "Kind" | "ID" | "Scope">]
-      | [id: string, props: Omit<Out, "Kind" | "ID" | "Scope">]
+      | [props: Omit<Out, InternalSymbols>]
+      | [id: string, props: Omit<Out, InternalSymbols>]
   ): Out {
     const [ID, props] =
       typeof args[0] === "string" ? (args as [string, any]) : [id, args[0]];
