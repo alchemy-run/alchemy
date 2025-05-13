@@ -131,11 +131,11 @@ export function Resource<
     // get a sequence number (unique within the scope) for the resource
     const seq = scope.seq();
     const meta = {
-      Kind: type,
-      ID: resourceID,
-      FQN: scope.fqn(resourceID),
-      Seq: seq,
-      Scope: scope,
+      [ResourceKind]: type,
+      [ResourceID]: resourceID,
+      [ResourceFQN]: scope.fqn(resourceID),
+      [ResourceSeq]: seq,
+      [ResourceScope]: scope,
     } as any as PendingResource<Out>;
     const promise = apply(meta, props, options);
     const resource = Object.assign(promise, meta);

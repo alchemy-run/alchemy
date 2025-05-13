@@ -1,7 +1,7 @@
 import { ResourceScope } from "../resource.js";
 import type { Scope } from "../scope.js";
-import { deserialize, serialize } from "../serde.js";
-import type { State, StateStore } from "../state.js";
+import { serialize } from "../serde.js";
+import { deserializeState, type State, type StateStore } from "../state.js";
 import { withExponentialBackoff } from "../util/retry.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
@@ -212,8 +212,7 @@ export class R2RestStateStore implements StateStore {
       }
 
       // Parse and deserialize the state data
-      const rawData = await response.json();
-      const state = (await deserialize(this.scope, rawData)) as State;
+      const state = await deserializeState(this.scope, await response.text());
 
       // Create a new state object with proper output
       return {

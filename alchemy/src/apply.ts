@@ -151,6 +151,7 @@ export async function apply<Out extends Resource>(
     // }
     return output as any;
   } catch (error) {
+    console.log(resource);
     scope.fail();
     throw error;
   }
