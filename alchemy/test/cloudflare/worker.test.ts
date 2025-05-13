@@ -1840,4 +1840,182 @@ describe("Worker Resource", () => {
       await assertWorkerDoesNotExist(workerName);
     }
   }, 60000); // Increase timeout for Worker operations
+
+  test("create and test worker with worker-to-worker binding", async (scope) => {
+    // Create names for both workers
+    const targetWorkerName = `${BRANCH_PREFIX}-target-worker`;
+    const callerWorkerName = `${BRANCH_PREFIX}-caller-worker`;
+
+    // Sample script for the target worker
+    const targetWorkerScript = `
+      export default {
+        async fetch(request, env, ctx) {
+          const url = new URL(request.url);
+          
+          if (url.pathname === '/api/data') {
+            return Response.json({
+              workerName: "${targetWorkerName}",
+              message: "Hello from target worker!",
+              timestamp: Date.now()
+            });
+          }
+
+          if (url.pathname === '/api/echo') {
+            const body = await request.json();
+            return Response.json({
+              workerName: "${targetWorkerName}",
+              echo: body,
+              received: true
+            });
+          }
+
+          return new Response('Target Worker is running!', {
+            status: 200,
+            headers: { 'Content-Type': 'text/plain' }
+          });
+        }
+      };
+    `;
+
+    // Sample script for the caller worker that will use the worker binding
+    const callerWorkerScript = `
+      export default {
+        async fetch(request, env, ctx) {
+          const url = new URL(request.url);
+          
+          // Call the target worker via binding
+          if (url.pathname === '/call-target') {
+            try {
+              const targetResponse = await env.TARGET_WORKER.fetch(
+                new Request('https://example.com/api/data')
+              );
+              
+              const targetData = await targetResponse.json();
+              
+              return Response.json({
+                success: true,
+                callerName: "${callerWorkerName}",
+                targetResponse: targetData
+              });
+            } catch (error) {
+              return Response.json({
+                success: false,
+                error: error.message
+              }, { status: 500 });
+            }
+          }
+
+          // Echo test with payload to verify data passing works
+          if (url.pathname === '/echo-test') {
+            try {
+              const testPayload = {
+                message: "Test message from caller",
+                timestamp: Date.now()
+              };
+              
+              const targetResponse = await env.TARGET_WORKER.fetch(
+                new Request('https://example.com/api/echo', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(testPayload)
+                })
+              );
+              
+              const echoResponse = await targetResponse.json();
+              
+              return Response.json({
+                success: true,
+                callerName: "${callerWorkerName}",
+                echoResponse
+              });
+            } catch (error) {
+              return Response.json({
+                success: false,
+                error: error.message
+              }, { status: 500 });
+            }
+          }
+
+          return new Response('Caller Worker is running!', {
+            status: 200,
+            headers: { 'Content-Type': 'text/plain' }
+          });
+        }
+      };
+    `;
+
+    let targetWorker: Worker | undefined = undefined;
+    let callerWorker: Worker | undefined = undefined;
+
+    try {
+      // First create the target worker
+      targetWorker = await Worker(targetWorkerName, {
+        name: targetWorkerName,
+        script: targetWorkerScript,
+        format: "esm",
+        url: true, // Enable workers.dev URL
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      expect(targetWorker.id).toBeTruthy();
+      expect(targetWorker.name).toEqual(targetWorkerName);
+      expect(targetWorker.url).toBeTruthy();
+
+      // Create the caller worker with a binding to the target worker
+      callerWorker = await Worker(callerWorkerName, {
+        name: callerWorkerName,
+        script: callerWorkerScript,
+        format: "esm",
+        url: true, // Enable workers.dev URL
+        bindings: {
+          TARGET_WORKER: targetWorker, // Bind to the target worker
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      expect(callerWorker.id).toBeTruthy();
+      expect(callerWorker.name).toEqual(callerWorkerName);
+      expect(callerWorker.url).toBeTruthy();
+      expect(callerWorker.bindings?.TARGET_WORKER).toBeDefined();
+
+      // Test direct access to target worker works
+      const targetResponse = await fetch(targetWorker.url!);
+      expect(targetResponse.status).toEqual(200);
+      const targetText = await targetResponse.text();
+      expect(targetText).toEqual("Target Worker is running!");
+
+      // Test caller worker can access the target worker through binding
+      const callerResponse = await fetch(`${callerWorker.url}/call-target`);
+      expect(callerResponse.status).toEqual(200);
+      const callerData = await callerResponse.json();
+
+      expect(callerData.success).toEqual(true);
+      expect(callerData.callerName).toEqual(callerWorkerName);
+      expect(callerData.targetResponse).toBeDefined();
+      expect(callerData.targetResponse.workerName).toEqual(targetWorkerName);
+      expect(callerData.targetResponse.message).toEqual(
+        "Hello from target worker!",
+      );
+
+      // Test echo functionality to verify data passing works
+      const echoResponse = await fetch(`${callerWorker.url}/echo-test`);
+      expect(echoResponse.status).toEqual(200);
+      const echoData = await echoResponse.json();
+
+      expect(echoData.success).toEqual(true);
+      expect(echoData.echoResponse).toBeDefined();
+      expect(echoData.echoResponse.workerName).toEqual(targetWorkerName);
+      expect(echoData.echoResponse.received).toEqual(true);
+      expect(echoData.echoResponse.echo.message).toEqual(
+        "Test message from caller",
+      );
+    } finally {
+      await destroy(scope);
+      // Verify both workers were deleted
+      await assertWorkerDoesNotExist(targetWorkerName);
+      await assertWorkerDoesNotExist(callerWorkerName);
+    }
+  }, 60000); // Increase timeout for Worker operations
 });
