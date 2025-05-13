@@ -52,7 +52,7 @@ export async function destroy<Type extends string>(
     return;
   }
 
-  if (instance.Kind === "alchemy::Scope") {
+  if (instance.Kind === Scope.KIND) {
     const scope = new Scope({
       parent: instance.Scope,
       scopeName: instance.ID,

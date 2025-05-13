@@ -327,12 +327,12 @@ async function run<T>(
       const output = {
         ID: id,
         FQN: "",
-        Kind: "alchemy::Scope",
+        Kind: Scope.KIND,
         Scope: _scope,
         Seq: seq,
       } as const;
       const resource = {
-        kind: "scope",
+        kind: Scope.KIND,
         id,
         seq,
         data: {},
@@ -341,7 +341,18 @@ async function run<T>(
         status: "created",
         output,
       } as const;
-      await _scope.parent!.state.set(id, resource);
+      const prev = await _scope.parent!.state.get(id);
+      if (!prev) {
+        await _scope.parent!.state.set(id, resource);
+      } else if (prev.kind !== Scope.KIND) {
+        throw new Error(
+          `Tried to create a Scope that conflicts with a Resource (${prev.kind}): ${id}`,
+        );
+      } else if (_scope.phase === "read") {
+        throw new Error(
+          `Tried to create a non-existend Scope (${id}) in read mode`,
+        );
+      }
       _scope.parent!.resources.set(
         id,
         Object.assign(Promise.resolve(resource), output) as PendingResource,

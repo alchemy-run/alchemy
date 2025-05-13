@@ -22,6 +22,8 @@ export type ScopeOptions = {
 const DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
 
 export class Scope {
+  public static readonly KIND = "alchemy::Scope" as const;
+
   public static get(): Scope | undefined {
     return scopeStorage.getStore();
   }
