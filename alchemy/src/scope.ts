@@ -46,6 +46,9 @@ export class Scope {
   public readonly phase: Phase;
 
   private isErrored = false;
+  private finalized = false;
+
+  private deferred: Promise<any>[] = [];
 
   constructor(options: ScopeOptions) {
     this.appName = options.appName;
@@ -128,6 +131,12 @@ export class Scope {
     if (this.phase === "read") {
       return;
     }
+    if (this.finalized) {
+      return;
+    }
+    this.finalized = true;
+    // trigger and await all deferred promises
+    await Promise.all(this.deferred);
     if (!this.isErrored) {
       // TODO: need to detect if it is in error
       const resourceIds = await this.state.list();
@@ -145,6 +154,30 @@ export class Scope {
     } else {
       console.warn("Scope is in error, skipping finalize");
     }
+  }
+
+  /**
+   * Defers execution of a function until the Alchemy application finalizes.
+   */
+  public defer<T>(fn: () => Promise<T>): Promise<T> {
+    let _resolve: (value: T) => void;
+    let _reject: (reason?: any) => void;
+    const promise = new Promise<T>((resolve, reject) => {
+      _resolve = resolve;
+      _reject = reject;
+    });
+    // biome-ignore lint/suspicious/noThenProperty: we are constructing a Lazy Promise
+    promise.then = (onfulfilled, onrejected) => {
+      if (!this.finalized) {
+        throw new Error(
+          "Attempted to await a deferred Promise before finalization",
+        );
+      }
+      // lazily trigger the worker on first await
+      return fn().then(onfulfilled, onrejected);
+    };
+    this.deferred.push(promise);
+    return promise;
   }
 
   /**

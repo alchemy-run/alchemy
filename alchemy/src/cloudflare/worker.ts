@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import type { Context } from "../context.js";
 import type { BundleProps } from "../esbuild/bundle.js";
 import { Resource } from "../resource.js";
+import { Scope } from "../scope.js";
 import { getContentType } from "../util/content-type.js";
 import { withExponentialBackoff } from "../util/retry.js";
 import { slugify } from "../util/slugify.js";
@@ -296,7 +297,18 @@ export function Worker<const B extends Bindings>(
 ): Promise<Worker<B>> {
   const [id, meta, props] =
     args.length === 2 ? [args[0], undefined, args[1]] : args;
-  // @ts-expect-error discriminate union error
+
+  if (meta) {
+    const scope = Scope.current;
+    // defer construction of this worker until the app is about to finaloze
+    // this ensures that the Worker's dependencies are instantiated before we bundle
+    // it is then safe to bundle and import the Worker to detect which resources need to be auto-bound
+    return scope.defer(() => _Worker(id, {
+      meta,
+      ...(props as ImportMetaWorkerProps<B>),
+    }));
+  }
+
   return _Worker(id, {
     meta,
     ...props,
