@@ -1,3 +1,5 @@
+import { R2Bucket } from "../cloudflare/bucket.js";
+import { Queue } from "../cloudflare/queue.js";
 import { Worker } from "../cloudflare/worker.js";
 
 export const messages = await Queue<string>("queue");

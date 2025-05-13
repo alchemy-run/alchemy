@@ -1,4 +1,4 @@
-import { Worker } from "../cloudflare/worker";
+import { Worker } from "../cloudflare/worker.js";
 import { Scope } from "../scope.js";
 import { env } from "./env.js";
 import { bootstrapPlugin } from "./plugin.js";
@@ -50,10 +50,10 @@ export async function Function<Fn extends (...args: any[]) => any>(
 
   return new Proxy(() => {}, {
     apply(target, thisArg, argumentsList) {
-      if (phase === "build") {
-        return worker.fetch(new Request(argumentsList[0]));
-      }
-      return worker.fetch(new Request(argumentsList[0]));
+      // if (phase === "build") {
+      //   return worker.fetch(new Request(argumentsList[0]));
+      // }
+      // return worker.fetch(new Request(argumentsList[0]));
     },
     get(target, prop, receiver) {
       if (prop === "fetch") {

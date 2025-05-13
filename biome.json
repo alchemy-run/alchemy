@@ -46,7 +46,8 @@
         "noImplicitAnyLet": "off",
         "noAssignInExpressions": "off",
         "noShadowRestrictedNames": "off",
-        "noEmptyInterface": "off"
+        "noEmptyInterface": "off",
+        "noRedeclare": "off"
       },
       "style": {
         "useLiteralEnumMembers": "error",

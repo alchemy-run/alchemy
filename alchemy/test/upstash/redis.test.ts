@@ -1,7 +1,11 @@
 import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy.js";
 import { destroy } from "../../src/destroy.js";
-import { UpstashApi, UpstashError, UpstashRedis } from "../../src/upstash";
+import {
+  UpstashApi,
+  UpstashError,
+  UpstashRedis,
+} from "../../src/upstash/index.js";
 import { getRedisDatabase } from "../../src/upstash/redis.js";
 import { BRANCH_PREFIX } from "../util.js";
 // must import this or else alchemy.test won't exist

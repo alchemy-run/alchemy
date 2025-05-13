@@ -82,6 +82,11 @@ export interface BaseWorkerProps<B extends Bindings = Bindings>
   bundle?: Omit<BundleProps, "entryPoint">;
 
   /**
+   * The root directory of the project
+   */
+  projectRoot?: string;
+
+  /**
    * Module format for the worker script
    * - 'esm' - ECMAScript modules (default)
    * - 'cjs' - CommonJS modules
@@ -275,6 +280,15 @@ export type Worker<B extends Bindings = Bindings> =
       compatibilityFlags: string[];
     };
 
+export function Worker<const B extends Bindings>(
+  id: string,
+  props: WorkerProps<B>,
+): Promise<Worker<B>>;
+export function Worker<const B extends Bindings>(
+  id: string,
+  meta: ImportMeta,
+  props: WorkerProps<B>,
+): Promise<Worker<B>>;
 export function Worker<const B extends Bindings>(
   ...args:
     | [id: string, props: WorkerProps<B>]
@@ -1102,7 +1116,7 @@ async function getWorkerScriptMetadata(
   return ((await response.json()) as any).result as WorkerScriptMetadata;
 }
 
-async function getWorkerBindings(
+async function _getWorkerBindings(
   api: CloudflareApi,
   workerName: string,
   environment = "production",
@@ -1230,8 +1244,6 @@ async function uploadAssets(
   for (const bucket of buckets) {
     const formData = new FormData();
 
-    let totalBytes = 0;
-
     // Add each file in the bucket to the form
     for (const fileHash of bucket) {
       // Find the file with this hash
@@ -1254,7 +1266,6 @@ async function uploadAssets(
       const blob = new Blob([base64Content], {
         type: getContentType(file.filePath),
       });
-      totalBytes += blob.size;
       formData.append(fileHash, blob, fileHash);
     }
 
