@@ -69,7 +69,7 @@ export class FileSystemStateStore implements StateStore {
     await this.init();
     await fs.promises.writeFile(
       this.getPath(key),
-      await serialize(this.scope, value),
+      JSON.stringify(await serialize(this.scope, value), null, 2),
     );
   }
 

@@ -7,7 +7,7 @@ import {
   type Resource,
   type ResourceProps,
 } from "./resource.js";
-import type { Scope } from "./scope.js";
+import { Scope } from "./scope.js";
 import { deserialize } from "./serde.js";
 
 export type State<
@@ -67,6 +67,10 @@ export async function deserializeState(
   delete output.FQN;
   delete output.Scope;
   delete output.Seq;
+  // fix this bug
+  if (state.kind === "scope") {
+    state.kind = Scope.KIND;
+  }
   output[ResourceKind] = state.kind;
   output[ResourceID] = state.id;
   output[ResourceFQN] = state.fqn;
