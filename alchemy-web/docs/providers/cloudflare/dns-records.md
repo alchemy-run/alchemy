@@ -1,8 +1,13 @@
+---
+title: Managing Cloudflare DNS Records with Alchemy
+description: Learn how to create, update, and manage Cloudflare DNS Records for your domains using Alchemy.
+---
+
 # DnsRecords
 
 Manages DNS records in a Cloudflare zone using the [Cloudflare DNS API](https://developers.cloudflare.com/api/operations/dns-records-for-a-zone-list-dns-records).
 
-# Minimal Example
+## Minimal Example
 
 Create a basic A record pointing to an IP address.
 
@@ -20,7 +25,7 @@ const records = await DnsRecords("example-dns", {
 });
 ```
 
-# Email Records
+## Email Records
 
 Create MX and TXT records for email routing.
 
@@ -45,7 +50,7 @@ const emailRecords = await DnsRecords("email-dns", {
 });
 ```
 
-# Proxied Records
+## Proxied Records
 
 Create proxied records to take advantage of Cloudflare's CDN and security features.
 

@@ -1,5 +1,7 @@
 ---
 order: 5
+title: Durable Object
+description: Create, bind, and use Cloudflare Durable Objects in your Worker applications. Learn how to implement stateful microservices with persistent storage in Cloudflare Workers.
 ---
 
 # Durable Object

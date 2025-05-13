@@ -1,6 +1,7 @@
 ---
 layout: home
 title: Alchemy
+description: TypeScript-native Infrastructure-as-Code without the dead weight. Create, Update, Delete resources with pure async TypeScript.
 
 hero:
   name: Alchemy

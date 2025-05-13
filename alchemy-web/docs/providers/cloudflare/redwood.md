@@ -1,8 +1,13 @@
+---
+title: Deploying RedwoodJS Applications to Cloudflare with Alchemy
+description: Learn how to deploy RedwoodJS applications to Cloudflare Pages/Workers using Alchemy for full-stack serverless.
+---
+
 # Redwood
 
 Deploy a RedwoodJS application to Cloudflare Pages with automatically configured defaults. This resource handles the deployment of RedwoodJS applications with optimized settings for Cloudflare Workers.
 
-# Minimal Example
+## Minimal Example
 
 Deploy a basic RedwoodJS application with default settings:
 
@@ -12,7 +17,7 @@ import { Redwood } from "alchemy/cloudflare";
 const redwoodApp = await Redwood("my-redwood-app");
 ```
 
-# With Database Binding
+## With Database Binding
 
 Add a D1 database binding to your RedwoodJS application:
 
@@ -28,7 +33,7 @@ const redwoodApp = await Redwood("redwood-with-db", {
 });
 ```
 
-# Custom Build Configuration
+## Custom Build Configuration
 
 Deploy with custom build command and environment variables:
 
@@ -47,7 +52,7 @@ const redwoodApp = await Redwood("custom-redwood", {
 });
 ```
 
-# Bind to a Worker
+## Bind to a Worker
 
 Bind a RedwoodJS application to a Worker:
 

@@ -1,5 +1,7 @@
 ---
 order: 4
+title: Secret
+description: Best practices for handling sensitive information in your infrastructure. Learn how to encrypt API keys, passwords, and credentials in Alchemy state files.
 ---
 
 # Secret

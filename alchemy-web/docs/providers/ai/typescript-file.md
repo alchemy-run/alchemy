@@ -1,8 +1,13 @@
+---
+title: Managing TypeScript Files with AI in Alchemy
+description: Learn how to use Alchemy's AI provider to create, update, and manage TypeScript (.ts, .tsx) files within your projects.
+---
+
 # TypeScriptFile
 
 The TypeScriptFile resource lets you generate TypeScript code files using AI models like [OpenAI GPT-4](https://platform.openai.com/docs/models/gpt-4) or [Anthropic Claude](https://www.anthropic.com/claude).
 
-# Minimal Example
+## Minimal Example
 
 Generate a simple TypeScript utility file:
 
@@ -15,7 +20,7 @@ const utils = await TypeScriptFile("string-utils", {
 });
 ```
 
-# Generate with Context
+## Generate with Context
 
 Use alchemy template literals to include file context:
 
@@ -32,7 +37,7 @@ const service = await TypeScriptFile("user-service", {
 });
 ```
 
-# Custom Formatting
+## Custom Formatting
 
 Configure Prettier formatting options:
 
@@ -50,7 +55,7 @@ const component = await TypeScriptFile("button", {
 });
 ```
 
-# Custom Model
+## Custom Model
 
 Use a specific AI model and provider:
 

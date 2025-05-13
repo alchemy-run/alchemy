@@ -1,8 +1,13 @@
+---
+title: Managing Cloudflare AI Gateway with Alchemy
+description: Learn how to create and configure Cloudflare AI Gateway using Alchemy to route and manage AI requests.
+---
+
 # AiGateway
 
 The AiGateway resource lets you create and manage [Cloudflare AI Gateway](https://developers.cloudflare.com/workers-ai/get-started/workers-ai-gateway/) configurations for accessing AI models through Cloudflare Workers.
 
-# Minimal Example
+## Minimal Example
 
 Create a basic AI Gateway with default settings:
 
@@ -14,7 +19,7 @@ const gateway = await AiGateway("my-ai-gateway", {
 });
 ```
 
-# With Authentication and Rate Limiting
+## With Authentication and Rate Limiting
 
 Configure an AI Gateway with authentication and rate limiting:
 
@@ -30,7 +35,7 @@ const secureGateway = await AiGateway("secure-gateway", {
 });
 ```
 
-# With Logging and Logpush
+## With Logging and Logpush
 
 Create an AI Gateway with logging and logpush enabled:
 
@@ -45,7 +50,7 @@ const loggingGateway = await AiGateway("logging-gateway", {
 });
 ```
 
-# Bind to a Worker
+## Bind to a Worker
 
 Use the AI Gateway in a Cloudflare Worker:
 

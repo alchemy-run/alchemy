@@ -10,6 +10,7 @@ import {
 import { processFrontmatterFiles } from "../../alchemy/src/web/vitepress";
 
 const description = "Alchemy: Typescript-native Infrastructure-as-Code";
+const SITE_URL = "https://alchemy.run";
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
@@ -18,17 +19,7 @@ export default defineConfig({
   head: [
     ["link", { rel: "icon", type: "image/png", href: "/potion.png" }],
     ["meta", { property: "og:type", content: "website" }],
-    ["meta", { property: "og:title", content: "Alchemy" }],
-    ["meta", { property: "og:description", content: description }],
-    ["meta", { property: "og:url", content: "https://alchemy.run" }],
-    ["meta", { name: "twitter:title", content: "Alchemy" }],
-    [
-      "meta",
-      {
-        name: "twitter:description",
-        content: description,
-      },
-    ],
+    // Base meta tags are now added by transformPageData
   ],
   markdown: {
     // @ts-ignore
@@ -58,6 +49,52 @@ export default defineConfig({
       await generateProvidersSidebar(),
     ],
     search: { provider: "local" },
+  },
+  // Add transformPageData hook for dynamic meta tags
+  transformPageData(pageData) {
+    // Get page-specific details
+    const pageTitle = pageData.title || "Alchemy";
+    const pageDescription = pageData.frontmatter?.description || description;
+
+    // Generate canonical URL
+    let pagePath = pageData.filePath
+      ? "/" +
+        path
+          .relative(path.join(process.cwd()), pageData.filePath)
+          .replace(/^alchemy-web\//, "")
+          .replace(/\.(md|html)$/, "")
+      : "/";
+
+    // Handle index files
+    pagePath = pagePath.replace(/\/index$/, "/");
+
+    const canonicalUrl = `${SITE_URL}${pagePath}`;
+
+    // Initialize frontmatter.head if not exists
+    pageData.frontmatter.head = pageData.frontmatter.head || [];
+
+    // Add dynamic meta tags
+    pageData.frontmatter.head.push(
+      // Basic SEO
+      ["meta", { name: "description", content: pageDescription }],
+
+      // Open Graph
+      ["meta", { property: "og:title", content: pageTitle }],
+      ["meta", { property: "og:description", content: pageDescription }],
+      ["meta", { property: "og:url", content: canonicalUrl }],
+      ["meta", { property: "og:site_name", content: "Alchemy" }],
+
+      // Twitter
+      ["meta", { name: "twitter:card", content: "summary_large_image" }],
+      ["meta", { name: "twitter:site", content: "@samgoodwin89" }],
+      ["meta", { name: "twitter:title", content: pageTitle }],
+      ["meta", { name: "twitter:description", content: pageDescription }],
+
+      // Canonical URL
+      ["link", { rel: "canonical", href: canonicalUrl }]
+    );
+
+    return pageData;
   },
 });
 

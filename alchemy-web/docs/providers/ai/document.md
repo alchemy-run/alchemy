@@ -1,8 +1,13 @@
+---
+title: Managing Documents with AI in Alchemy
+description: Learn how to use Alchemy's AI provider to generate document content (like markdown, text) based on prompts.
+---
+
 # Document
 
 The Document resource lets you generate markdown documentation using [AI models](https://platform.openai.com/docs/models) like GPT-4 and Claude.
 
-# Minimal Example
+## Minimal Example
 
 Creates a markdown document from a prompt.
 
@@ -17,7 +22,7 @@ const docs = await Document("api-docs", {
 console.log(docs.content); // Generated markdown content
 ```
 
-# Generate Documentation from Source Files
+## Generate Documentation from Source Files
 
 Uses alchemy template literals to include file context in the prompt.
 
@@ -39,7 +44,7 @@ const apiDocs = await Document("api-docs", {
 });
 ```
 
-# Iterative Document Generation
+## Iterative Document Generation
 
 Uses message history for back-and-forth document generation.
 

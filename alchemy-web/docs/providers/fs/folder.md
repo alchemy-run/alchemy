@@ -1,8 +1,13 @@
+---
+title: Managing Folders (Directories) with Alchemy FS Provider
+description: Learn how to create, manage, and delete folders (directories) using Alchemy's FS (File System) provider.
+---
+
 # Folder
 
 The Folder resource creates and manages directories in the filesystem with automatic parent directory creation and cleanup on deletion.
 
-# Minimal Example
+## Minimal Example
 
 Create a directory using the ID as the path:
 
@@ -12,7 +17,7 @@ import { Folder } from "alchemy/fs";
 const dir = await Folder("uploads");
 ```
 
-# Custom Path
+## Custom Path
 
 Create a directory with an explicit path:
 
@@ -24,7 +29,7 @@ const logs = await Folder("logs", {
 });
 ```
 
-# Recursive Creation
+## Recursive Creation
 
 Create nested directories with recursive creation enabled (default):
 
@@ -37,7 +42,7 @@ const nested = await Folder("nested", {
 });
 ```
 
-# Cleanup Options
+## Cleanup Options
 
 Control folder deletion behavior:
 

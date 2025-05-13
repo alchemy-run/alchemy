@@ -163,6 +163,156 @@ describe("D1 Database Resource", async () => {
       }
     }
   });
+
+  test("clone from existing database by ID", async (scope) => {
+    const sourceDb = `${testId}-source-for-clone`;
+    const targetDb = `${testId}-cloned-from-id`;
+
+    try {
+      // Create a source database with test data
+      const source = await D1Database(sourceDb, {
+        name: sourceDb,
+        adopt: true,
+      });
+
+      // Add test data to the source database
+      await api.post(
+        `/accounts/${api.accountId}/d1/database/${source.id}/query`,
+        {
+          sql: `
+            CREATE TABLE test_clone (id INTEGER PRIMARY KEY, name TEXT);
+            INSERT INTO test_clone (id, name) VALUES (1, 'test-data');
+          `,
+        },
+      );
+
+      // Create a target database as a clone of the source by ID
+      const cloned = await D1Database(targetDb, {
+        name: targetDb,
+        clone: { id: source.id },
+        adopt: true,
+      });
+
+      expect(cloned.name).toEqual(targetDb);
+      expect(cloned.id).toBeTruthy();
+
+      // Verify the cloned data exists in the target database
+      const resp = await api.post(
+        `/accounts/${api.accountId}/d1/database/${cloned.id}/query`,
+        {
+          sql: "SELECT * FROM test_clone WHERE id = 1;",
+        },
+      );
+
+      const data = await resp.json();
+      const results = data.result?.[0]?.results || [];
+
+      expect(results.length).toEqual(1);
+      expect(results[0].name).toEqual("test-data");
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  });
+
+  test("clone from existing database by name", async (scope) => {
+    const sourceDb = `${testId}-source-by-name`;
+    const targetDb = `${testId}-cloned-from-name`;
+
+    try {
+      // Create a source database with test data
+      const source = await D1Database(sourceDb, {
+        name: sourceDb,
+        adopt: true,
+      });
+
+      // Add test data to the source database
+      await api.post(
+        `/accounts/${api.accountId}/d1/database/${source.id}/query`,
+        {
+          sql: `
+            CREATE TABLE test_clone_by_name (id INTEGER PRIMARY KEY, value TEXT);
+            INSERT INTO test_clone_by_name (id, value) VALUES (1, 'name-lookup-test');
+          `,
+        },
+      );
+
+      // Create a target database as a clone of the source by name
+      const cloned = await D1Database(targetDb, {
+        name: targetDb,
+        clone: { name: sourceDb },
+        adopt: true,
+      });
+
+      expect(cloned.name).toEqual(targetDb);
+      expect(cloned.id).toBeTruthy();
+
+      // Verify the cloned data exists in the target database
+      const resp = await api.post(
+        `/accounts/${api.accountId}/d1/database/${cloned.id}/query`,
+        {
+          sql: "SELECT * FROM test_clone_by_name WHERE id = 1;",
+        },
+      );
+
+      const data = await resp.json();
+      const results = data.result?.[0]?.results || [];
+
+      expect(results.length).toEqual(1);
+      expect(results[0].value).toEqual("name-lookup-test");
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  });
+
+  test("clone by passing the source database object directly", async (scope) => {
+    const sourceDbId = `${testId}-source-direct`;
+    const targetDbId = `${testId}-cloned-direct`;
+
+    try {
+      // Create a source database with test data
+      const sourceDb = await D1Database(sourceDbId, {
+        name: sourceDbId,
+        adopt: true,
+      });
+
+      // Add test data to the source database
+      await api.post(
+        `/accounts/${api.accountId}/d1/database/${sourceDb.id}/query`,
+        {
+          sql: `
+            CREATE TABLE direct_clone_test (id INTEGER PRIMARY KEY, data TEXT);
+            INSERT INTO direct_clone_test (id, data) VALUES (1, 'direct-clone-data');
+          `,
+        },
+      );
+
+      // Create a target database as a clone by passing the source database object directly
+      const clonedDb = await D1Database(targetDbId, {
+        name: targetDbId,
+        clone: sourceDb, // Pass the D1Database object directly
+        adopt: true,
+      });
+
+      expect(clonedDb.name).toEqual(targetDbId);
+      expect(clonedDb.id).toBeTruthy();
+
+      // Verify the cloned data exists in the target database
+      const resp = await api.post(
+        `/accounts/${api.accountId}/d1/database/${clonedDb.id}/query`,
+        {
+          sql: "SELECT * FROM direct_clone_test WHERE id = 1;",
+        },
+      );
+
+      const data = await resp.json();
+      const results = data.result?.[0]?.results || [];
+
+      expect(results.length).toEqual(1);
+      expect(results[0].data).toEqual("direct-clone-data");
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  });
 });
 
 async function assertDatabaseDeleted(database: D1Database) {

@@ -1,3 +1,8 @@
+---
+title: Managing AWS IAM Policy Attachments with Alchemy
+description: Learn how to attach AWS IAM Policies to Roles, Users, or Groups using Alchemy to manage permissions effectively.
+---
+
 # PolicyAttachment
 
 The PolicyAttachment resource lets you attach [AWS IAM policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) to IAM roles.

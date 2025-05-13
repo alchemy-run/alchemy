@@ -1,8 +1,13 @@
+---
+title: Deploying Nuxt Applications to Cloudflare with Alchemy
+description: Learn how to deploy Nuxt.js applications to Cloudflare Pages/Workers using Alchemy for a seamless experience.
+---
+
 # Nuxt
 
 Deploy a [Nuxt](https://nuxt.com) application to Cloudflare Pages with automatically configured defaults.
 
-# Minimal Example
+## Minimal Example
 
 Deploy a basic Nuxt site with default settings.
 
@@ -12,7 +17,7 @@ import { Nuxt } from "alchemy/cloudflare";
 const nuxtSite = await Nuxt("my-nuxt-app");
 ```
 
-# Custom Bindings
+## Custom Bindings
 
 Add database and other bindings to your Nuxt app.
 
@@ -31,7 +36,7 @@ const nuxtSiteWithDb = await Nuxt("my-nuxt-app-with-db", {
 });
 ```
 
-# Bind to a Worker
+## Bind to a Worker
 
 Bind a Nuxt app to a Cloudflare Worker.
 

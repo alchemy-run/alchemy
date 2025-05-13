@@ -1,8 +1,13 @@
+---
+title: Managing Astro Files with AI in Alchemy
+description: Learn how to use Alchemy's AI provider to create, update, and manage Astro (.astro) files within your projects.
+---
+
 # AstroFile
 
 The AstroFile resource lets you generate [Astro](https://astro.build) components using AI models.
 
-# Minimal Example
+## Minimal Example
 
 Create a simple Astro component with basic content.
 
@@ -15,7 +20,7 @@ const header = await AstroFile("header", {
 });
 ```
 
-# Generate Component with Data Types
+## Generate Component with Data Types
 
 Generate an Astro component that uses TypeScript types.
 
@@ -37,7 +42,7 @@ const blogPost = await AstroFile("blog-post", {
 });
 ```
 
-# Custom System Prompt
+## Custom System Prompt
 
 Use a custom system prompt to control the AI model's output.
 

@@ -1,8 +1,13 @@
+---
+title: Managing Cloudflare R2 Buckets with Alchemy
+description: Learn how to create, configure, and manage Cloudflare R2 Buckets using Alchemy for scalable object storage.
+---
+
 # R2Bucket
 
 Creates and manages [Cloudflare R2 Buckets](https://developers.cloudflare.com/r2/buckets/) for object storage with S3 compatibility.
 
-# Minimal Example
+## Minimal Example
 
 Create a basic R2 bucket with default settings:
 
@@ -14,7 +19,7 @@ const bucket = await R2Bucket("my-bucket", {
 });
 ```
 
-# With Location Hint
+## With Location Hint
 
 Create a bucket with location hint for optimal performance:
 
@@ -28,7 +33,7 @@ const euBucket = await R2Bucket("eu-bucket", {
 });
 ```
 
-# With Public Access
+## With Public Access
 
 Create a development bucket with public access enabled:
 
@@ -41,7 +46,7 @@ const publicBucket = await R2Bucket("public-assets", {
 });
 ```
 
-# With Auto-Emptying
+## With Auto-Emptying
 
 Create a bucket that will be automatically emptied when deleted:
 
@@ -54,7 +59,7 @@ const tempBucket = await R2Bucket("temp-storage", {
 });
 ```
 
-# Bind to a Worker
+## Bind to a Worker
 
 ```ts
 import { Worker, R2Bucket } from "alchemy/cloudflare";
