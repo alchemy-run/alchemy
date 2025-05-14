@@ -81,6 +81,7 @@ describe("D1 Database Resource", async () => {
       let database = await D1Database(replicationDb, {
         name: replicationDb,
         adopt: true,
+        primaryLocationHint: "wnam",
       });
 
       expect(database.name).toEqual(replicationDb);
@@ -93,10 +94,23 @@ describe("D1 Database Resource", async () => {
           mode: "disabled",
         },
         adopt: true,
+        primaryLocationHint: "wnam",
       });
 
       // Verify the update
       expect(database.readReplication?.mode).toEqual("disabled");
+
+      // Update the database with disabled read replication
+      database = await D1Database(replicationDb, {
+        name: replicationDb,
+        readReplication: {
+          mode: "auto",
+        },
+        adopt: true,
+        primaryLocationHint: "wnam",
+      });
+
+      expect(database.readReplication?.mode).toEqual("auto");
     } finally {
       await alchemy.destroy(scope);
     }
