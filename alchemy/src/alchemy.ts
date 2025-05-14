@@ -3,7 +3,14 @@ import path from "node:path";
 
 import { destroy, DestroyedSignal } from "./destroy.js";
 import { env } from "./env.js";
-import type { PendingResource } from "./resource.js";
+import {
+  ResourceFQN,
+  ResourceID,
+  ResourceKind,
+  ResourceScope,
+  ResourceSeq,
+  type PendingResource,
+} from "./resource.js";
 import { Scope } from "./scope.js";
 import { secret } from "./secret.js";
 import type { StateStoreType } from "./state.js";
@@ -325,14 +332,14 @@ async function run<T>(
       // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
       const seq = _scope.parent.seq();
       const output = {
-        ID: id,
-        FQN: "",
-        Kind: "alchemy::Scope",
-        Scope: _scope,
-        Seq: seq,
+        [ResourceID]: id,
+        [ResourceFQN]: "",
+        [ResourceKind]: Scope.KIND,
+        [ResourceScope]: _scope,
+        [ResourceSeq]: seq,
       } as const;
       const resource = {
-        kind: "scope",
+        kind: Scope.KIND,
         id,
         seq,
         data: {},
@@ -341,7 +348,18 @@ async function run<T>(
         status: "created",
         output,
       } as const;
-      await _scope.parent!.state.set(id, resource);
+      const prev = await _scope.parent!.state.get(id);
+      if (!prev) {
+        await _scope.parent!.state.set(id, resource);
+      } else if (prev.kind !== Scope.KIND) {
+        throw new Error(
+          `Tried to create a Scope that conflicts with a Resource (${prev.kind}): ${id}`,
+        );
+      } else if (_scope.phase === "read") {
+        throw new Error(
+          `Tried to create a non-existend Scope (${id}) in read mode`,
+        );
+      }
       _scope.parent!.resources.set(
         id,
         Object.assign(Promise.resolve(resource), output) as PendingResource,

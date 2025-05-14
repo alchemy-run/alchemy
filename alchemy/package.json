@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "0.15.13",
+  "version": "0.16.1",
   "type": "module",
   "module": "./lib/index.js",
   "scripts": {

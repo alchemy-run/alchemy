@@ -1,6 +1,6 @@
 import { bind } from "../bootstrap/bind.js";
 import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
+import { Resource, ResourceKind } from "../resource.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
   createCloudflareApi,
@@ -60,8 +60,11 @@ export interface QueueProps extends CloudflareApiOptions {
   delete?: boolean;
 }
 
-export function isQueue(eventSource: any): eventSource is QueueResource {
-  return "Kind" in eventSource && eventSource.Kind === "cloudflare::Queue";
+export function isQueue(eventSource: any): eventSource is Queue {
+  return (
+    ResourceKind in eventSource &&
+    eventSource[ResourceKind] === "cloudflare::Queue"
+  );
 }
 
 /**
