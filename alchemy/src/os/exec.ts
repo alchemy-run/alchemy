@@ -23,6 +23,19 @@ export interface ExecProps {
    * 1. The command string changes, or
    * 2. The contents of any files matching the glob patterns change
    *
+   * ⚠️ **Important Note**: When using memoization with build commands, the build outputs
+   * will not be produced if the command is memoized. This is because the command is not
+   * actually executed when memoized. Consider disabling memoization in CI environments:
+   *
+   * @example
+   * // Disable memoization in CI to ensure build outputs are always produced
+   * await Exec("build", {
+   *   command: "vite build",
+   *   memoize: process.env.CI ? false : {
+   *     patterns: ["./src/**"]
+   *   }
+   * });
+   *
    * @default false
    */
   memoize?: boolean | { patterns: string[] };
@@ -121,6 +134,26 @@ export interface Exec extends Resource<"os::Exec">, ExecProps {
  * await Exec("status-check", {
  *   command: "git status",
  *   memoize: true
+ * });
+ *
+ * @example
+ * // Memoize a build command with file patterns, but disable in CI
+ * // This ensures build outputs are always produced in CI
+ * const build = await Exec("build", {
+ *   command: "vite build",
+ *   memoize: process.env.CI ? false : {
+ *     patterns: ["./src/**"]
+ *   }
+ * });
+ *
+ * @example
+ * // Memoize a database migration command based on schema files
+ * // This is safe to memoize since it's idempotent
+ * const migrate = await Exec("db-migrate", {
+ *   command: "drizzle-kit push:pg",
+ *   memoize: {
+ *     patterns: ["./src/db/schema/**"]
+ *   }
  * });
  */
 export const Exec = Resource(
