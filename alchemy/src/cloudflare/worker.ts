@@ -303,10 +303,12 @@ export function Worker<const B extends Bindings>(
     // defer construction of this worker until the app is about to finaloze
     // this ensures that the Worker's dependencies are instantiated before we bundle
     // it is then safe to bundle and import the Worker to detect which resources need to be auto-bound
-    return scope.defer(() => _Worker(id, {
-      meta,
-      ...(props as ImportMetaWorkerProps<B>),
-    }));
+    return scope.defer(() =>
+      _Worker(id, {
+        meta,
+        ...(props as ImportMetaWorkerProps<B>),
+      }),
+    );
   }
 
   return _Worker(id, {

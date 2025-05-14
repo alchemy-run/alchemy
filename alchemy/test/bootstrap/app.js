@@ -1,9 +1,9 @@
 var __defProp = Object.defineProperty;
-var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+var __name = (target, value) =>
+  __defProp(target, "name", { value, configurable: true });
 
 // alchemy/src/alchemy.ts
-function alchemy() {
-}
+function alchemy() {}
 __name(alchemy, "alchemy");
 
 // node_modules/aws4fetch/dist/aws4fetch.esm.mjs
@@ -38,7 +38,7 @@ __name(secret, "secret");
 ((secret2) => {
   secret2.env = new Proxy(_env, {
     get: /* @__PURE__ */ __name((_, name) => _env(name), "get"),
-    apply: /* @__PURE__ */ __name((_, __, args) => _env(...args), "apply")
+    apply: /* @__PURE__ */ __name((_, __, args) => _env(...args), "apply"),
   });
   async function _env(name, value, error) {
     const result = await alchemy.env(name, value, error);
@@ -64,8 +64,7 @@ import path2 from "node:path";
 var R2Bucket = /* @__PURE__ */ __name((id) => STATE.get(id), "R2Bucket");
 
 // alchemy/test/bootstrap/app.ts
-var app = await (async () => {
-});
+var app = await (async () => {});
 var bucket = await R2Bucket("bucket");
 /*! Bundled license information:
 

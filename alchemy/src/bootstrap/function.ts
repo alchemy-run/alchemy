@@ -1,4 +1,5 @@
 import { Worker } from "../cloudflare/worker.js";
+import { ResourceFQN } from "../resource.js";
 import { Scope } from "../scope.js";
 import { env } from "./env.js";
 import { bootstrapPlugin } from "./plugin.js";
@@ -42,7 +43,7 @@ export async function Function<Fn extends (...args: any[]) => any>(
       ...options?.bindings,
     },
   });
-  const slug = worker.FQN.replace(/[^A-Za-z0-9_]/g, "_");
+  const slug = worker[ResourceFQN].replace(/[^A-Za-z0-9_]/g, "_");
 
   const { env } = await import("./env.js");
 
