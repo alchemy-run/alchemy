@@ -80,6 +80,17 @@ var STATE = {
         ],
       },
       external: [
+        ...(props.fetch
+          ? [
+              // for alchemy
+              "@swc/*",
+              "esbuild",
+              // TODO(sam): this is for fetch, why is it a package?
+              "undici",
+              // TODO(sam): no idea where this came from, feels dangerous to externalize it
+              "ws",
+            ]
+          : []),
         ...(nodeJsCompatMode === "als" ? external_als : external),
         ...(props.bundle?.external ?? []),
         ...(props.bundle?.options?.external ?? []),
