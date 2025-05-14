@@ -1,5 +1,10 @@
 import { alchemy } from "../../src/alchemy.js";
-import { Pipeline, Queue, R2Bucket, Worker } from "../../src/cloudflare";
+import {
+  Pipeline,
+  Queue,
+  R2Bucket,
+  Worker,
+} from "../../src/cloudflare/index.js";
 
 const app = await alchemy("my-app");
 

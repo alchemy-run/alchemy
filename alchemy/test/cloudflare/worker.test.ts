@@ -1922,8 +1922,8 @@ describe("Worker Resource", () => {
       };
     `;
 
-    let targetWorker: Worker | undefined = undefined;
-    let callerWorker: Worker | undefined = undefined;
+    let targetWorker: Worker | undefined;
+    let callerWorker: Worker | undefined;
 
     try {
       // First create the target worker
