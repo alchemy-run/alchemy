@@ -301,12 +301,28 @@ export async function exec(
 }
 
 async function hashInputs(cwd: string, patterns: string[]) {
-  const hash = createHash("sha256");
-  for (const pattern of patterns) {
-    for await (const file of glob(pattern, { cwd })) {
-      const content = await readFile(join(cwd, file), "utf-8");
-      hash.update(content);
-    }
+  const hashes: { file: string; hash: string }[] = [];
+
+  await Promise.all(
+    patterns.flatMap(async (pattern) => {
+      const files = await Array.fromAsync(glob(pattern, { cwd }));
+      return Promise.all(
+        files.map(async (file: string) => {
+          const content = await readFile(join(cwd, file));
+          hashes.push({
+            file,
+            hash: createHash("sha256").update(content).digest("hex"),
+          });
+        }),
+      );
+    }),
+  );
+
+  hashes.sort((a, b) => a.file.localeCompare(b.file));
+
+  const finalHash = createHash("sha256");
+  for (const { hash } of hashes) {
+    finalHash.update(hash);
   }
-  return hash.digest("hex");
+  return finalHash.digest("hex");
 }
