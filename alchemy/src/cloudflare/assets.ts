@@ -121,7 +121,7 @@ export const Assets = Resource(
       return {
         path: normalizedPath,
         filePath,
-        contentType: getContentType(filePath),
+        contentType: getContentType(filePath) ?? "application/null",
       };
     });
 
