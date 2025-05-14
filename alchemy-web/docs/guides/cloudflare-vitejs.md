@@ -65,8 +65,8 @@ import { Vite } from "alchemy/cloudflare";
 export const website = await Vite("website", {
   // command to build the vite site (run vite build)
   command: "bun run build",
-  // where the build command will store the assets
-  assets: "./dist",
+  // OPTIONAL: override where the dist is, it defaults to ./dist/client
+  // assets: "./dist/client",
 });
 ```
 
