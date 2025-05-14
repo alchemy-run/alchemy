@@ -7,8 +7,6 @@ import type {
   TsType,
   VariableDeclaration,
 } from "@swc/core";
-import { parse, print } from "@swc/core";
-import { Visitor } from "@swc/core/Visitor.js";
 import type { Plugin } from "esbuild";
 import fs from "node:fs/promises";
 
@@ -25,19 +23,6 @@ import fs from "node:fs/promises";
  * @param file the `.ts` file containing an `export default function`
  */
 export function bundleEntrypoint(file: string) {}
-
-async function expr(expr: string) {
-  return (
-    (await parse(`const __temp__ = ${expr}`)).body[0] as VariableDeclaration
-  ).declarations[0].init!;
-}
-async function decl(decl: string) {
-  return (await parse(decl)).body[0] as Declaration;
-}
-
-const Provider = await decl("async function Resource() {}");
-const Resource = await expr("(id) => STATE.get(id)");
-const alchemy = await expr("(async () => {})");
 
 /**
  * This is a plugin that bootstraps Alchemy Infrastructure into Runtime by replacing Resources
@@ -60,8 +45,23 @@ const alchemy = await expr("(async () => {})");
  */
 export const bootstrapPlugin: Plugin = {
   name: "alchemy-bootstrap",
-  setup(build) {
-    console.log("setup");
+  async setup(build) {
+    const { parse, print } = await import("@swc/core");
+    const { Visitor } = await import("@swc/core/Visitor.js");
+
+    async function expr(expr: string) {
+      return (
+        (await parse(`const __temp__ = ${expr}`)).body[0] as VariableDeclaration
+      ).declarations[0].init!;
+    }
+    async function decl(decl: string) {
+      return (await parse(decl)).body[0] as Declaration;
+    }
+
+    const Provider = await decl("async function Resource() {}");
+    const Resource = await expr("(id) => STATE.get(id)");
+    const alchemy = await expr("(async () => {})");
+
     // Add a global STATE object to bundle for resource lookup
     build.onLoad(
       {
@@ -82,13 +82,6 @@ export const bootstrapPlugin: Plugin = {
                   ? "jsx"
                   : "js",
             } as const;
-          }
-
-          if (
-            args.path.endsWith("alchemy.ts") ||
-            args.path.endsWith("alchemy.js")
-          ) {
-            return transformed("export function alchemy() {}");
           }
 
           // Parse the source code using SWC
@@ -131,11 +124,11 @@ export const bootstrapPlugin: Plugin = {
                 expr.arguments.length >= 2
               ) {
                 return Resource;
-              } else if (
-                expr.callee.type === "Identifier" &&
-                expr.callee.value === "alchemy"
-              ) {
-                return alchemy;
+                // } else if (
+                //   expr.callee.type === "Identifier" &&
+                //   expr.callee.value === "alchemy"
+                // ) {
+                //   return alchemy;
               }
 
               return super.visitCallExpression(expr);

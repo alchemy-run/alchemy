@@ -182,7 +182,7 @@ const _R2Bucket = Resource(
   "cloudflare::R2Bucket",
   async function (
     this: Context<R2BucketResource>,
-    id: string,
+    _id: string,
     props: BucketProps = {},
   ): Promise<R2BucketResource> {
     const api = await createCloudflareApi(props);

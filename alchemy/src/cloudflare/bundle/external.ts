@@ -31,6 +31,14 @@ export const external = [
   "cloudflare:workers",
   "cloudflare:workflows",
   "cloudflare:*",
+  "libsodium*",
+  // for alchemy
+  "@swc/*",
+  "esbuild",
+  // TODO(sam): this is for fetch, why is it a package?
+  "undici",
+  // TODO(sam): no idea where this came from, feels dangerous to externalize it
+  "ws",
 ];
 
 export const external_als = [

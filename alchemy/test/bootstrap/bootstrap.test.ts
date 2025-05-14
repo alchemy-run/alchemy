@@ -9,18 +9,19 @@ import "../../src/test/bun.js";
 const test = alchemy.test(import.meta);
 
 describe("bootstrap", () => {
-  test("should replace Resources", async () => {
+  test("bundleWorkerScript should replace Resources", async () => {
     const bundle = await bundleWorkerScript({
       compatibilityDate: "2025-05-09",
-      compatibilityFlags: [],
+      compatibilityFlags: ["nodejs_compat"],
       format: "esm",
       entrypoint: path.join(import.meta.dir, "app.ts"),
       bundle: {
+        bundle: true,
         plugins: [bootstrapPlugin],
         platform: "node",
-        external: ["libsodium*"],
+        external: ["libsodium*", "@swc/*", "esbuild", "undici", "ws"],
         metafile: true,
-        outdir: import.meta.dir,
+        outfile: path.join(import.meta.dir, "app.js"),
         treeShaking: true,
       },
     });

@@ -1,5 +1,6 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs/promises";
+import { isRuntime } from "../bootstrap/env.js";
 import type { Context } from "../context.js";
 import type { BundleProps } from "../esbuild/bundle.js";
 import { Resource } from "../resource.js";
@@ -281,42 +282,6 @@ export type Worker<B extends Bindings = Bindings> =
       compatibilityFlags: string[];
     };
 
-export function Worker<const B extends Bindings>(
-  id: string,
-  props: WorkerProps<B>,
-): Promise<Worker<B>>;
-export function Worker<const B extends Bindings>(
-  id: string,
-  meta: ImportMeta,
-  props: WorkerProps<B>,
-): Promise<Worker<B>>;
-export function Worker<const B extends Bindings>(
-  ...args:
-    | [id: string, props: WorkerProps<B>]
-    | [id: string, meta: ImportMeta, props: WorkerProps<B>]
-): Promise<Worker<B>> {
-  const [id, meta, props] =
-    args.length === 2 ? [args[0], undefined, args[1]] : args;
-
-  if (meta) {
-    const scope = Scope.current;
-    // defer construction of this worker until the app is about to finaloze
-    // this ensures that the Worker's dependencies are instantiated before we bundle
-    // it is then safe to bundle and import the Worker to detect which resources need to be auto-bound
-    return scope.defer(() =>
-      _Worker(id, {
-        meta,
-        ...(props as ImportMetaWorkerProps<B>),
-      }),
-    );
-  }
-
-  return _Worker(id, {
-    meta,
-    ...props,
-  });
-}
-
 /**
  * A Cloudflare Worker is a serverless function that can be deployed to the Cloudflare network.
  *
@@ -409,6 +374,55 @@ export function Worker<const B extends Bindings>(
  * @see
  * https://developers.cloudflare.com/workers/
  */
+export function Worker<const B extends Bindings>(
+  id: string,
+  props: WorkerProps<B>,
+): Promise<Worker<B>>;
+export function Worker<const B extends Bindings>(
+  id: string,
+  meta: ImportMeta,
+  props: WorkerProps<B>,
+): Promise<Worker<B>>;
+export function Worker<const B extends Bindings>(
+  ...args:
+    | [id: string, props: WorkerProps<B>]
+    | [id: string, meta: ImportMeta, props: WorkerProps<B>]
+): Promise<Worker<B>> {
+  const [id, meta, props] =
+    args.length === 2 ? [args[0], undefined, args[1]] : args;
+  if (props.fetch) {
+    const scope = Scope.current;
+    // defer construction of this worker until the app is about to finaloze
+    // this ensures that the Worker's dependencies are instantiated before we bundle
+    // it is then safe to bundle and import the Worker to detect which resources need to be auto-bound
+    const promise = scope.defer(() =>
+      _Worker(id, {
+        meta,
+        ...(props as ImportMetaWorkerProps<B>),
+      }),
+    );
+
+    if (isRuntime) {
+      promise.fetch = props.fetch;
+    } else {
+      promise.fetch = async (request: Request) => {
+        console.log("fetch", request);
+        const worker = await promise;
+        console.log("worker", worker);
+        if (worker.url === undefined) {
+          throw new Error("Worker URL is not available in runtime");
+        }
+        const workerURL = new URL(worker.url);
+        const requestURL = new URL(request.url);
+        requestURL.host = workerURL.host;
+        return fetch(requestURL, request);
+      };
+    }
+    return promise;
+  }
+  return _Worker(id, props);
+}
+
 export const _Worker = Resource(
   "cloudflare::Worker",
   {
@@ -419,11 +433,6 @@ export const _Worker = Resource(
     id: string,
     props: WorkerProps<B>,
   ): Promise<Worker<B>> {
-    // Validate input - we need either script, entryPoint, or bundle
-    if (!props.script && !props.entrypoint) {
-      throw new Error("One of script or entryPoint must be provided");
-    }
-
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
 
@@ -587,6 +596,14 @@ export const _Worker = Resource(
 
       return this.destroy();
     }
+    // Validate input - we need either script, entryPoint, or bundle
+    if (!props.script && !props.entrypoint && !props.fetch) {
+      throw new Error("One of script, entryPoint or fetch must be provided");
+    }
+    if (props.fetch && !props.meta) {
+      throw new Error("meta is required when using fetch");
+    }
+
     if (this.phase === "create") {
       if (!props.adopt) {
         await assertWorkerDoesNotExist(this, api, workerName);

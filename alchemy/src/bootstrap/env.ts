@@ -26,3 +26,9 @@ export const env: Env = new Proxy(
     },
   },
 );
+
+declare global {
+  const __ALCHEMY_ENV__: Record<string, any>;
+}
+
+export const isRuntime = typeof __ALCHEMY_ENV__ !== "undefined";

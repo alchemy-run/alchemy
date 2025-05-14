@@ -5,8 +5,6 @@ import { FileSystemStateStore } from "./fs/file-system-state-store.js";
 import { ResourceID, type PendingResource } from "./resource.js";
 import type { StateStore, StateStoreType } from "./state.js";
 
-const scopeStorage = new AsyncLocalStorage<Scope>();
-
 export type ScopeOptions = {
   appName?: string;
   stage?: string;
@@ -24,13 +22,19 @@ const DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
 export class Scope {
   public static readonly KIND = "alchemy::Scope" as const;
 
+  public static storage = new AsyncLocalStorage<Scope>();
+  public static globals: Scope[] = [];
+
   public static get(): Scope | undefined {
-    return scopeStorage.getStore();
+    return Scope.storage.getStore();
   }
 
   public static get current(): Scope {
     const scope = Scope.get();
     if (!scope) {
+      if (Scope.globals.length > 0) {
+        return Scope.globals[Scope.globals.length - 1];
+      }
       throw new Error("Not running within an Alchemy Scope");
     }
     return scope;
@@ -105,10 +109,6 @@ export class Scope {
     this.isErrored = true;
   }
 
-  public enter() {
-    scopeStorage.enterWith(this);
-  }
-
   public async init() {
     await this.state.init?.();
   }
@@ -123,7 +123,7 @@ export class Scope {
   }
 
   public async run<T>(fn: (scope: Scope) => Promise<T>): Promise<T> {
-    return scopeStorage.run(this, () => fn(this));
+    return Scope.storage.run(this, () => fn(this));
   }
 
   [Symbol.asyncDispose]() {
@@ -137,8 +137,17 @@ export class Scope {
     if (this.finalized) {
       return;
     }
+    if (this.parent === undefined && Scope.globals.length > 0) {
+      const last = Scope.globals.pop();
+      if (last !== this) {
+        throw new Error(
+          "Running in AsyncLocaStorage.enterWith emultation mode and attempted to finalize a global Scope that wasn't top of the stack",
+        );
+      }
+    }
     this.finalized = true;
     // trigger and await all deferred promises
+    console.log("finalize", this.scopeName, this.deferred.length);
     await Promise.all(this.deferred);
     if (!this.isErrored) {
       // TODO: need to detect if it is in error
@@ -163,6 +172,7 @@ export class Scope {
    * Defers execution of a function until the Alchemy application finalizes.
    */
   public defer<T>(fn: () => Promise<T>): Promise<T> {
+    console.log("defer", this.scopeName, this.deferred.length);
     let _resolve: (value: T) => void;
     let _reject: (reason?: any) => void;
     const promise = new Promise<T>((resolve, reject) => {
@@ -177,7 +187,7 @@ export class Scope {
         );
       }
       // lazily trigger the worker on first await
-      return fn().then(onfulfilled, onrejected);
+      return this.run(() => fn()).then(onfulfilled, onrejected);
     };
     this.deferred.push(promise);
     return promise;

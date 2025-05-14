@@ -42,9 +42,10 @@ export async function bind<T extends Resource>(
   return new Proxy(() => {}, {
     get: (target: any, prop: string) => {
       if (prop in target) {
+        return (resource as T)[prop as keyof T];
+      } else if (prop === "then" || prop === "catch" || prop === "finally") {
         return target[prop];
       }
-      // assume it's a method
       return (...args: any[]) => {
         const rt = runtime();
         if (rt === undefined) {
@@ -59,8 +60,8 @@ export async function bind<T extends Resource>(
         return method(...args);
       };
     },
-    apply: (target, thisArg, argArray) => {
-      return target(thisArg, ...argArray);
-    },
+    // apply: (target, thisArg, argArray) => {
+    //   return target(thisArg, ...argArray);
+    // },
   }) as T & Bound<T>;
 }

@@ -146,7 +146,7 @@ export async function Queue<Body = unknown>(
   name: string,
   props: QueueProps = {},
 ): Promise<Queue<Body>> {
-  const queue = await _Queue(name, props);
+  const queue = await _Queue<Body>(name, props);
   const binding = await bind(queue);
   return {
     ...queue,
@@ -167,6 +167,9 @@ const _Queue = Resource("cloudflare::Queue", async function <
     console.log("Deleting Cloudflare Queue:", queueName);
     if (props.delete !== false) {
       // Delete Queue
+      if (!this.output?.id) {
+        console.log(this.output);
+      }
       await deleteQueue(api, this.output?.id);
     }
 

@@ -1,6 +1,6 @@
 import { apply } from "./apply.js";
 import type { Context } from "./context.js";
-import { Scope as _Scope } from "./scope.js";
+import { Scope as _Scope, type Scope } from "./scope.js";
 
 export const PROVIDERS = new Map<ResourceKind, Provider<string, any>>();
 
@@ -11,6 +11,7 @@ export const ResourceFQN = Symbol.for("alchemy::ResourceFQN");
 export type ResourceKind = string;
 export const ResourceKind = Symbol.for("alchemy::ResourceKind");
 export const ResourceScope = Symbol.for("alchemy::ResourceScope");
+export const InnerResourceScope = Symbol.for("alchemy::InnerResourceScope");
 export const ResourceSeq = Symbol.for("alchemy::ResourceSeq");
 
 export interface ProviderOptions<Output = Resource> {
@@ -52,6 +53,7 @@ export type PendingResource<
   [ResourceFQN]: FQN;
   [ResourceScope]: Scope;
   [ResourceSeq]: Seq;
+  [InnerResourceScope]: Promise<Scope>;
 };
 
 export interface Resource<
@@ -107,7 +109,7 @@ export function Resource<
 
   type Out = Awaited<ReturnType<F>>;
 
-  const provider = ((
+  const provider = (async (
     resourceID: string,
     props: ResourceProps,
   ): Promise<Resource<string>> => {
@@ -135,14 +137,21 @@ export function Resource<
 
     // get a sequence number (unique within the scope) for the resource
     const seq = scope.seq();
+    let resolveInnerScope: ((scope: Scope) => void) | undefined;
     const meta = {
       [ResourceKind]: type,
       [ResourceID]: resourceID,
       [ResourceFQN]: scope.fqn(resourceID),
       [ResourceSeq]: seq,
       [ResourceScope]: scope,
+      [InnerResourceScope]: new Promise<Scope>((resolve) => {
+        resolveInnerScope = resolve;
+      }),
     } as any as PendingResource<Out>;
-    const promise = apply(meta, props, options);
+    const promise = apply(meta, props, {
+      ...options,
+      resolveInnerScope,
+    });
     const resource = Object.assign(promise, meta);
     scope.resources.set(resourceID, resource);
     return resource;
