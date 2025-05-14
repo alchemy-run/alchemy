@@ -1,6 +1,5 @@
 import { spawn, type SpawnOptions } from "node:child_process";
 import { createHash } from "node:crypto";
-import { glob, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
@@ -301,6 +300,8 @@ export async function exec(
 }
 
 async function hashInputs(cwd: string, patterns: string[]) {
+  const { glob, readFile } = await import("node:fs/promises");
+
   const hashes = new Map<string, string>();
 
   await Promise.all(
