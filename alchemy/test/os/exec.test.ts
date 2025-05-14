@@ -1,4 +1,7 @@
 import { describe, expect } from "bun:test";
+import { mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { alchemy } from "../../src/alchemy.js";
 import { destroy } from "../../src/destroy.js";
 import { Exec } from "../../src/os/exec.js";
@@ -113,6 +116,89 @@ describe("Exec Resource", () => {
       // This should execute and have different output
       expect(thirdRun.stdout).not.toBe(secondRun.stdout);
       expect(thirdRun.executedAt).not.toBe(secondRun.executedAt);
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("memoize a command with file patterns - no changes", async (scope) => {
+    try {
+      // Create a temporary directory for our test files
+      const testDir = join(tmpdir(), `alchemy-test-${Date.now()}`);
+      await mkdir(testDir, { recursive: true });
+
+      // Create an initial test file
+      const testFile = join(testDir, "test.txt");
+      await writeFile(testFile, "initial content");
+
+      // First execution
+      const firstRun = await Exec("file-memoize-test", {
+        command: `cat ${testFile}`,
+        cwd: testDir,
+        memoize: { patterns: ["test.txt"] },
+        inheritStdio: false,
+      });
+
+      expect(firstRun.exitCode).toBe(0);
+      expect(firstRun.stdout.trim()).toBe("initial content");
+
+      // Small delay to ensure we can detect if it re-runs
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // Second execution with the same file content
+      const secondRun = await Exec("file-memoize-test", {
+        command: `cat ${testFile}`,
+        cwd: testDir,
+        memoize: { patterns: ["test.txt"] },
+        inheritStdio: false,
+      });
+
+      // Should be memoized since file hasn't changed
+      expect(secondRun.stdout).toBe(firstRun.stdout);
+      expect(secondRun.executedAt).toBe(firstRun.executedAt);
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("memoize a command with file patterns - with changes", async (scope) => {
+    try {
+      // Create a temporary directory for our test files
+      const testDir = join(tmpdir(), `alchemy-test-${Date.now()}`);
+      await mkdir(testDir, { recursive: true });
+
+      // Create an initial test file
+      const testFile = join(testDir, "test.txt");
+      await writeFile(testFile, "initial content");
+
+      // First execution
+      const firstRun = await Exec("file-memoize-test", {
+        command: `cat ${testFile}`,
+        cwd: testDir,
+        memoize: { patterns: ["test.txt"] },
+        inheritStdio: false,
+      });
+
+      expect(firstRun.exitCode).toBe(0);
+      expect(firstRun.stdout.trim()).toBe("initial content");
+
+      // Small delay to ensure we can detect if it re-runs
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // Modify the file
+      await writeFile(testFile, "modified content");
+
+      // Second execution with modified file
+      const secondRun = await Exec("file-memoize-test", {
+        command: `cat ${testFile}`,
+        cwd: testDir,
+        memoize: { patterns: ["test.txt"] },
+        inheritStdio: false,
+      });
+
+      // Should re-run since file has changed
+      expect(secondRun.stdout.trim()).toBe("modified content");
+      expect(secondRun.executedAt).not.toBe(firstRun.executedAt);
     } finally {
       await destroy(scope);
     }

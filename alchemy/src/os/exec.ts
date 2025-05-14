@@ -1,4 +1,7 @@
 import { spawn, type SpawnOptions } from "node:child_process";
+import { createHash } from "node:crypto";
+import { glob, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 
@@ -14,9 +17,15 @@ export interface ExecProps {
   /**
    * Whether to memoize the command (only re-run if the command changes)
    *
+   * When set to `true`, the command will only be re-executed if the command string changes.
+   *
+   * When set to an object with `patterns`, the command will be re-executed if either:
+   * 1. The command string changes, or
+   * 2. The contents of any files matching the glob patterns change
+   *
    * @default false
    */
-  memoize?: boolean;
+  memoize?: boolean | { patterns: string[] };
 
   /**
    * Working directory for the command
@@ -68,6 +77,11 @@ export interface Exec extends Resource<"os::Exec">, ExecProps {
    * Whether the command has completed execution
    */
   completed: boolean;
+
+  /**
+   * Hash of the command inputs
+   */
+  hash?: string;
 }
 
 /**
@@ -123,14 +137,23 @@ export const Exec = Resource(
       // Nothing to actually delete for an exec command
       return this.destroy();
     }
+
+    const hash =
+      typeof props.memoize === "object"
+        ? await hashInputs(props.cwd ?? process.cwd(), props.memoize.patterns)
+        : undefined;
+
     if (
       this.phase === "update" &&
       props.memoize &&
-      this.output?.command === props.command
+      this.output?.command === props.command &&
+      (typeof props.memoize === "boolean" ||
+        (hash && this.output?.hash === hash))
     ) {
       // If memoize is enabled and the command hasn't changed, return the existing output
       return this.output;
     }
+
     // Default values
     let stdout = "";
     let stderr = "";
@@ -198,6 +221,7 @@ export const Exec = Resource(
       stderr,
       executedAt: Date.now(),
       completed: true,
+      hash,
     });
   },
 );
@@ -241,4 +265,15 @@ export async function exec(
       reject(err);
     });
   });
+}
+
+async function hashInputs(cwd: string, patterns: string[]) {
+  const hash = createHash("sha256");
+  for (const pattern of patterns) {
+    for await (const file of glob(pattern, { cwd })) {
+      const content = await readFile(join(cwd, file), "utf-8");
+      hash.update(content);
+    }
+  }
+  return hash.digest("hex");
 }
