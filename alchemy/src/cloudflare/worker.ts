@@ -1,5 +1,6 @@
-import * as crypto from "node:crypto";
-import * as fs from "node:fs/promises";
+import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { isRuntime } from "../bootstrap/env.js";
 import type { Context } from "../context.js";
 import type { BundleProps } from "../esbuild/bundle.js";
@@ -1295,7 +1296,8 @@ async function uploadAssets(
 
       // Add the file to the form with the hash as the key and set the correct content type
       const blob = new Blob([base64Content], {
-        type: getContentType(file.filePath),
+        // if you set application/octet-stream, you get weird `-1` errors with a message to contact support
+        type: getContentType(file.filePath) ?? "application/null",
       });
       formData.append(fileHash, blob, fileHash);
     }
@@ -1319,6 +1321,15 @@ async function uploadAssets(
     }
 
     const uploadData = (await uploadResponse.json()) as UploadResponse;
+    if (!uploadData.success) {
+      const error = uploadData.errors[0];
+      const message = error.message;
+      const code = error.code;
+      throw new Error(
+        `Failed to upload asset files: ${message} (Code: ${code})`,
+      );
+    }
+
     // Update the completion token for the next batch
     if (uploadData.result.jwt) {
       completionToken = uploadData.result.jwt;
@@ -1341,15 +1352,17 @@ async function uploadAssets(
 async function calculateFileMetadata(
   filePath: string,
 ): Promise<{ hash: string; size: number }> {
-  const hash = crypto.createHash("sha256");
-  const fileContent = await fs.readFile(filePath);
+  const contents = await fs.readFile(filePath);
 
-  hash.update(fileContent);
-  const fileHash = hash.digest("hex").substring(0, 32); // First 32 chars of hash
+  const hash = crypto.createHash("sha256");
+  hash.update(contents);
+
+  const extension = path.extname(filePath).substring(1);
+  hash.update(extension);
 
   return {
-    hash: fileHash,
-    size: fileContent.length,
+    hash: hash.digest("hex").slice(0, 32),
+    size: contents.length,
   };
 }
 
