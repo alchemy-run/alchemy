@@ -2,7 +2,12 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { Phase } from "./alchemy.js";
 import { destroyAll } from "./destroy.js";
 import { FileSystemStateStore } from "./fs/file-system-state-store.js";
-import { ResourceID, type PendingResource } from "./resource.js";
+import {
+  InnerResourceScope,
+  ResourceID,
+  type PendingResource,
+} from "./resource.js";
+import { serialize } from "./serde.js";
 import type { StateStore, StateStoreType } from "./state.js";
 
 export type ScopeOptions = {
@@ -199,5 +204,50 @@ export class Scope {
     .map((r) => r[ResourceID])
     .join(",\n  ")}]
 )`;
+  }
+}
+
+export type SerializedScope = {
+  [id: string]: {
+    state: string;
+    children?: SerializedScope;
+  };
+};
+
+export function serializeScope(scope: Scope) {
+  let root = scope;
+  while (root.parent) {
+    root = root.parent;
+  }
+  return _serializeScope(root);
+
+  async function _serializeScope(scope: Scope): Promise<SerializedScope> {
+    return Object.fromEntries(
+      await Promise.all(
+        Array.from(scope.resources.values()).map(async (resource) => {
+          const innerScope = resource[InnerResourceScope];
+          if (innerScope === undefined) {
+            // TODO(sam): better error
+            throw new Error(
+              `Resource has no inner scope: ${resource[ResourceID]}`,
+            );
+          }
+          return [
+            resource[ResourceID],
+            {
+              state: await serialize(
+                scope,
+                await scope.state.get(resource[ResourceID]),
+                {
+                  // TODO(sam): we need to move them to Secet bindings
+                  encrypt: false,
+                },
+              ),
+              children: await _serializeScope(await innerScope),
+            },
+          ];
+        }),
+      ),
+    );
   }
 }

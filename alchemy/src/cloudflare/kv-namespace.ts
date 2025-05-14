@@ -172,7 +172,7 @@ const _KVNamespace = Resource(
   "cloudflare::KVNamespace",
   async function (
     this: Context<KVNamespaceResource>,
-    id: string,
+    _id: string,
     props: KVNamespaceProps,
   ): Promise<KVNamespaceResource> {
     // Create Cloudflare API client with automatic account discovery

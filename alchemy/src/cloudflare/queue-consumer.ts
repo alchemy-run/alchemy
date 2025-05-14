@@ -138,7 +138,7 @@ export const QueueConsumer = Resource(
   "cloudflare::QueueConsumer",
   async function (
     this: Context<QueueConsumer>,
-    id: string,
+    _id: string,
     props: QueueConsumerProps,
   ): Promise<QueueConsumer> {
     const api = await createCloudflareApi(props);

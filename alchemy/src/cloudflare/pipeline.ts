@@ -223,7 +223,7 @@ export interface PipelineRecord {
 /**
  * Output returned after Pipeline creation/update
  */
-export interface PipelineResource<T extends PipelineRecord = PipelineRecord>
+export interface PipelineResource<_T extends PipelineRecord = PipelineRecord>
   extends Resource<"cloudflare::Pipeline">,
     PipelineProps {
   /**

@@ -82,7 +82,7 @@ export const VectorizeMetadataIndex = Resource(
   "cloudflare::VectorizeMetadataIndex",
   async function (
     this: Context<VectorizeMetadataIndex>,
-    id: string,
+    _id: string,
     props: VectorizeMetadataIndexProps,
   ): Promise<VectorizeMetadataIndex> {
     const api = await createCloudflareApi(props);

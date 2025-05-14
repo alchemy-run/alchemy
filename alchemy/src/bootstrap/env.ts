@@ -1,3 +1,9 @@
+declare global {
+  const __ALCHEMY_ENV__: Record<string, any>;
+}
+
+export const isRuntime = typeof __ALCHEMY_ENV__ !== "undefined";
+
 /**
  * The env (for module augmentation)
  */
@@ -21,14 +27,9 @@ async function resolveEnv() {
 export const env: Env = new Proxy(
   {},
   {
-    get(target, prop, receiver) {
+    get(_target, prop, _receiver) {
+      // TODO: instantiate bindings
       return _env[prop as keyof typeof _env];
     },
   },
 );
-
-declare global {
-  const __ALCHEMY_ENV__: Record<string, any>;
-}
-
-export const isRuntime = typeof __ALCHEMY_ENV__ !== "undefined";

@@ -173,7 +173,7 @@ export const RepositoryEnvironment = Resource(
   "github::RepositoryEnvironment",
   async function (
     this: Context<RepositoryEnvironment>,
-    id: string,
+    _id: string,
     props: RepositoryEnvironmentProps,
   ): Promise<RepositoryEnvironment> {
     // Create authenticated Octokit client

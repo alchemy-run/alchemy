@@ -342,9 +342,9 @@ export async function listIndexes(
  * This function will always throw an error.
  */
 export async function updateIndex(
-  api: CloudflareApi,
-  indexName: string,
-  props: VectorizeIndexProps,
+  _api: CloudflareApi,
+  _indexName: string,
+  _props: VectorizeIndexProps,
 ): Promise<CloudflareVectorizeResponse> {
   throw new Error(
     "Updating Vectorize indexes is not supported by the Cloudflare API. To change an index, delete it and create a new one.",

@@ -3,7 +3,6 @@ import type {
   Declaration,
   Expression,
   FunctionDeclaration,
-  HasSpan,
   TsType,
   VariableDeclaration,
 } from "@swc/core";
@@ -22,7 +21,7 @@ import fs from "node:fs/promises";
  *
  * @param file the `.ts` file containing an `export default function`
  */
-export function bundleEntrypoint(file: string) {}
+export function bundleEntrypoint(_file: string) {}
 
 /**
  * This is a plugin that bootstraps Alchemy Infrastructure into Runtime by replacing Resources
@@ -60,7 +59,7 @@ export const bootstrapPlugin: Plugin = {
 
     const Provider = await decl("async function Resource() {}");
     const Resource = await expr("(id) => STATE.get(id)");
-    const alchemy = await expr("(async () => {})");
+    // const alchemy = await expr("(async () => {})");
 
     // Add a global STATE object to bundle for resource lookup
     build.onLoad(
@@ -92,12 +91,12 @@ export const bootstrapPlugin: Plugin = {
             dynamicImport: true,
           });
 
-          function text({ span }: HasSpan) {
-            return source.slice(
-              span.start - ast.span.start,
-              span.end - ast.span.start,
-            );
-          }
+          // function text({ span }: HasSpan) {
+          //   return source.slice(
+          //     span.start - ast.span.start,
+          //     span.end - ast.span.start,
+          //   );
+          // }
 
           // Create visitor to transform Resource calls
           class ResourceTransformer extends Visitor {

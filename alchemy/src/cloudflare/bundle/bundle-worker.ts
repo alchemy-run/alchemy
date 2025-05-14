@@ -1,8 +1,7 @@
 import fs from "node:fs/promises";
 import { bootstrapPlugin } from "../../bootstrap/plugin.js";
 import { Bundle } from "../../esbuild/bundle.js";
-import { InnerResourceScope, ResourceID } from "../../resource.js";
-import { Scope } from "../../scope.js";
+import { Scope, serializeScope } from "../../scope.js";
 import type { Bindings } from "../bindings.js";
 import type { WorkerProps } from "../worker.js";
 import { createAliasPlugin } from "./alias-plugin.js";
@@ -35,40 +34,6 @@ export async function bundleWorkerScript<B extends Bindings>(
   const main = props.entrypoint ?? props.meta?.path;
   if (!main) {
     throw new Error("One of entrypoint or meta.file must be provided");
-  }
-
-  function serializeScope(scope: Scope) {
-    let root = scope;
-    while (root.parent) {
-      root = root.parent;
-    }
-    return _serializeScope(root);
-
-    type Tree = {
-      [id: string]: { state: string; children?: Tree };
-    };
-    async function _serializeScope(scope: Scope): Promise<Tree> {
-      return Object.fromEntries(
-        await Promise.all(
-          Array.from(scope.resources.values()).map(async (resource) => {
-            const innerScope = resource[InnerResourceScope];
-            if (innerScope === undefined) {
-              // TODO(sam): better error
-              throw new Error(
-                `Resource has no inner scope: ${resource[ResourceID]}`,
-              );
-            }
-            return [
-              resource[ResourceID],
-              {
-                state: await scope.state.get(resource[ResourceID]),
-                children: await _serializeScope(await innerScope),
-              },
-            ];
-          }),
-        ),
-      );
-    }
   }
 
   try {
