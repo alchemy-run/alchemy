@@ -400,15 +400,15 @@ export function Worker<const B extends Bindings>(
         meta,
         ...(props as ImportMetaWorkerProps<B>),
       }),
-    );
+    ) as Promise<Worker<B>> & {
+      fetch: (request: Request) => Promise<Response>;
+    };
 
     if (isRuntime) {
       promise.fetch = props.fetch;
     } else {
       promise.fetch = async (request: Request) => {
-        console.log("fetch", request);
         const worker = await promise;
-        console.log("worker", worker);
         if (worker.url === undefined) {
           throw new Error("Worker URL is not available in runtime");
         }
