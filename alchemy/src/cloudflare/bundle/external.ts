@@ -31,7 +31,6 @@ export const external = [
   "cloudflare:workers",
   "cloudflare:workflows",
   "cloudflare:*",
-  "libsodium*",
 ];
 
 export const external_als = [

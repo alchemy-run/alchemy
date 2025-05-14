@@ -83,6 +83,7 @@ var STATE = {
         ...(props.fetch
           ? [
               // for alchemy
+              "libsodium*",
               "@swc/*",
               "esbuild",
               // TODO(sam): this is for fetch, why is it a package?

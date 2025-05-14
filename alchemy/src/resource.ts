@@ -14,16 +14,11 @@ export const ResourceScope = Symbol.for("alchemy::ResourceScope");
 export const InnerResourceScope = Symbol.for("alchemy::InnerResourceScope");
 export const ResourceSeq = Symbol.for("alchemy::ResourceSeq");
 
-export interface ProviderOptions<Output = Resource> {
+export interface ProviderOptions {
   /**
    * If true, the resource will be updated even if the inputs have not changed.
    */
   alwaysUpdate: boolean;
-
-  /**
-   * Binds the resource to the provider.
-   */
-  bind?(resource: Output): void;
 }
 
 export type ResourceProps = {

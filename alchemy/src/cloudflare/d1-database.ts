@@ -146,7 +146,7 @@ export async function D1Database(
     ? await listMigrationsFiles(props.migrationsDir)
     : [];
 
-  const db = await _D1Database(id, {
+  const db = await D1DatabaseResource(id, {
     ...props,
     migrationsFiles,
   });
@@ -223,7 +223,7 @@ export async function D1Database(
  *
  * @see https://developers.cloudflare.com/d1/
  */
-const _D1Database = Resource(
+const D1DatabaseResource = Resource(
   "cloudflare::D1Database",
   async function (
     this: Context<D1DatabaseResource>,

@@ -1967,7 +1967,7 @@ describe("Worker Resource", () => {
       // Test caller worker can access the target worker through binding
       const callerResponse = await fetch(`${callerWorker.url}/call-target`);
       expect(callerResponse.status).toEqual(200);
-      const callerData = await callerResponse.json();
+      const callerData: any = await callerResponse.json();
 
       expect(callerData.success).toEqual(true);
       expect(callerData.callerName).toEqual(callerWorkerName);
@@ -1980,7 +1980,7 @@ describe("Worker Resource", () => {
       // Test echo functionality to verify data passing works
       const echoResponse = await fetch(`${callerWorker.url}/echo-test`);
       expect(echoResponse.status).toEqual(200);
-      const echoData = await echoResponse.json();
+      const echoData: any = await echoResponse.json();
 
       expect(echoData.success).toEqual(true);
       expect(echoData.echoResponse).toBeDefined();

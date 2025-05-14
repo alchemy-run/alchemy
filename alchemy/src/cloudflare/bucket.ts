@@ -164,7 +164,7 @@ export async function R2Bucket(
   name: string,
   props: BucketProps = {},
 ): Promise<R2Bucket> {
-  const bucket = await _R2Bucket(name, props);
+  const bucket = await R2BucketResource(name, props);
   const binding = await bind(bucket);
   return {
     ...bucket,
@@ -178,7 +178,7 @@ export async function R2Bucket(
   };
 }
 
-const _R2Bucket = Resource(
+const R2BucketResource = Resource(
   "cloudflare::R2Bucket",
   async function (
     this: Context<R2BucketResource>,

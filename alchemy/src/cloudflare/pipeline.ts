@@ -325,7 +325,7 @@ export async function Pipeline<T extends PipelineRecord = PipelineRecord>(
   name: string,
   props: PipelineProps,
 ): Promise<Pipeline<T>> {
-  const pipeline = await _Pipeline(name, props);
+  const pipeline = await PipelineResource(name, props);
   const binding = await bind(pipeline);
   return {
     ...pipeline,
@@ -333,7 +333,7 @@ export async function Pipeline<T extends PipelineRecord = PipelineRecord>(
   };
 }
 
-const _Pipeline = Resource("cloudflare::Pipeline", async function <
+const PipelineResource = Resource("cloudflare::Pipeline", async function <
   T extends PipelineRecord = PipelineRecord,
 >(this: Context<PipelineResource<T>>, id: string, props: PipelineProps): Promise<
   PipelineResource<T>

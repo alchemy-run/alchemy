@@ -146,7 +146,7 @@ export async function Queue<Body = unknown>(
   name: string,
   props: QueueProps = {},
 ): Promise<Queue<Body>> {
-  const queue = await _Queue<Body>(name, props);
+  const queue = await QueueResource<Body>(name, props);
   const binding = await bind(queue);
   return {
     ...queue,
@@ -155,7 +155,7 @@ export async function Queue<Body = unknown>(
   } as Queue<Body>;
 }
 
-const _Queue = Resource("cloudflare::Queue", async function <
+const QueueResource = Resource("cloudflare::Queue", async function <
   T = unknown,
 >(this: Context<QueueResource<T>>, id: string, props: QueueProps = {}): Promise<
   QueueResource<T>

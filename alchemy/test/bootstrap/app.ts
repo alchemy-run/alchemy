@@ -1,4 +1,3 @@
-import type { R2Object } from "@cloudflare/workers-types";
 import { alchemy } from "../../src/alchemy.js";
 import { isRuntime } from "../../src/bootstrap/env.js";
 import { R2Bucket } from "../../src/cloudflare/bucket.js";
@@ -19,11 +18,13 @@ const app = await alchemy("my-bootstrap-ap", {
     : undefined,
 });
 
-const queue = await Queue<R2Object>("my-bootstrap-queue");
+const queue = await Queue<string>("my-bootstrap-queue");
 
 const bucket = await R2Bucket("my-bootstrap-bucket");
 
-const pipeline = await Pipeline<R2Object>("my-bootstrap-pipeline", {
+const pipeline = await Pipeline<{
+  key: string;
+}>("my-bootstrap-pipeline", {
   source: [{ type: "binding", format: "json" }],
   destination: {
     type: "r2",
@@ -57,8 +58,12 @@ export default Worker("worker", import.meta, {
     if (!obj) {
       return new Response("Failed to upload object", { status: 500 });
     }
-    await queue.send(obj);
-    await pipeline.send([obj]);
+    await queue.send(obj.key);
+    await pipeline.send([
+      {
+        key: obj.key,
+      },
+    ]);
     return new Response(
       JSON.stringify({
         key: obj.key,
