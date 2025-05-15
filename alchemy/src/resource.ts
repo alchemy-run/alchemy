@@ -35,36 +35,21 @@ export type Provider<
     handler: F;
   };
 
-export type PendingResource<
-  Out = unknown,
-  Kind extends ResourceKind = ResourceKind,
-  ID extends ResourceID = ResourceID,
-  FQN extends ResourceFQN = ResourceFQN,
-  Scope extends _Scope = _Scope,
-  Seq extends number = number,
-> = Promise<Out> & {
-  [ResourceKind]: Kind;
-  [ResourceID]: ID;
-  [ResourceFQN]: FQN;
+export interface PendingResource<Out = unknown> extends Promise<Out> {
+  [ResourceKind]: ResourceKind;
+  [ResourceID]: ResourceID;
+  [ResourceFQN]: ResourceFQN;
   [ResourceScope]: Scope;
-  [ResourceSeq]: Seq;
+  [ResourceSeq]: number;
   [InnerResourceScope]: Promise<Scope>;
-};
+}
 
-export interface Resource<
-  // give each name types for syntax highlighting (differentiation)
-  Kind extends ResourceKind = ResourceKind,
-  ID extends ResourceID = ResourceID,
-  FQN extends ResourceFQN = ResourceFQN,
-  Scope extends _Scope = _Scope,
-  Seq extends number = number,
-> {
-  // use capital letters to avoid collision with conventional camelCase typescript properties
+export interface Resource<Kind extends ResourceKind = ResourceKind> {
   [ResourceKind]: Kind;
-  [ResourceID]: ID;
-  [ResourceFQN]: FQN;
+  [ResourceID]: ResourceID;
+  [ResourceFQN]: ResourceFQN;
   [ResourceScope]: Scope;
-  [ResourceSeq]: Seq;
+  [ResourceSeq]: number;
 }
 
 // helper for semantic syntax highlighting (color as a type/class instead of function/value)
@@ -125,9 +110,6 @@ export function Resource<
           `Resource ${resourceID} already exists in the stack and is of a different type: '${otherResource?.[ResourceKind]}' !== '${type}'`,
         );
       }
-      // console.warn(
-      //   `Resource ${resourceID} already exists in the stack: ${scope.chain.join("/")}`,
-      // );
     }
 
     // get a sequence number (unique within the scope) for the resource

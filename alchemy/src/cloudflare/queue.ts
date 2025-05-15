@@ -187,9 +187,9 @@ const QueueResource = Resource("cloudflare::Queue", async function <
       console.log("Updating Cloudflare Queue:", queueName);
 
       // Check if name is being changed, which is not allowed
-      if (props.name !== this.output.name) {
+      if (queueName !== this.output.name) {
         throw new Error(
-          "Cannot update Queue name after creation. Queue name is immutable.",
+          `Cannot update Queue name after creation. Queue name is immutable. Before: ${this.output.name}, After: ${queueName}`,
         );
       }
 

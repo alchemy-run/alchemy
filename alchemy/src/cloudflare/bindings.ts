@@ -17,6 +17,7 @@ import type { KVNamespaceResource } from "./kv-namespace.js";
 import type { PipelineResource } from "./pipeline.js";
 import type { QueueResource } from "./queue.js";
 import type { VectorizeIndexResource } from "./vectorize-index.js";
+import type { WorkerStub } from "./worker-stub.js";
 import type { Worker } from "./worker.js";
 import type { Workflow } from "./workflow.js";
 
@@ -48,6 +49,7 @@ export type Binding =
   | string
   | VectorizeIndexResource
   | Worker
+  | WorkerStub
   | Workflow
   | BrowserRendering
   | Self;

@@ -1,11 +1,12 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { getBindKey } from "../bootstrap/bind.js";
 import { isRuntime } from "../bootstrap/env.js";
 import type { Context } from "../context.js";
 import type { BundleProps } from "../esbuild/bundle.js";
 import { Resource } from "../resource.js";
-import { Scope } from "../scope.js";
+import { Scope, walkScope } from "../scope.js";
 import { getContentType } from "../util/content-type.js";
 import { withExponentialBackoff } from "../util/retry.js";
 import { slugify } from "../util/slugify.js";
@@ -16,7 +17,12 @@ import {
   createCloudflareApi,
 } from "./api.js";
 import type { Assets } from "./assets.js";
-import { type Bindings, Self, type WorkerBindingSpec } from "./bindings.js";
+import {
+  type Binding,
+  type Bindings,
+  Self,
+  type WorkerBindingSpec,
+} from "./bindings.js";
 import type { Bound } from "./bound.js";
 import { bundleWorkerScript } from "./bundle/bundle-worker.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
@@ -29,6 +35,7 @@ import {
 import { isQueue } from "./queue.js";
 import type { WorkerScriptMetadata } from "./worker-metadata.js";
 import type { SingleStepMigration } from "./worker-migration.js";
+import { WorkerStub, isWorkerStub } from "./worker-stub.js";
 import { type Workflow, upsertWorkflow } from "./workflow.js";
 
 /**
@@ -393,14 +400,51 @@ export function Worker<const B extends Bindings>(
     args.length === 2 ? [args[0], undefined, args[1]] : args;
   if (props.fetch) {
     const scope = Scope.current;
+
+    const workerName = props.name ?? id;
+
+    // we need to make sure the worker exists
+    const stub = WorkerStub(`${id}/stub`, {
+      name: workerName,
+      accountId: props.accountId,
+      apiKey: props.apiKey,
+      apiToken: props.apiToken,
+      baseUrl: props.baseUrl,
+      email: props.email,
+    });
+
+    const deferred = scope.defer(async () => {
+      const autoBindings: Record<string, Binding> = {};
+      for await (const pendingResource of walkScope(scope)) {
+        const resource: Resource = await pendingResource;
+        if (isQueue(resource)) {
+          autoBindings[getBindKey(resource)] = resource;
+        } else if (isWorkerStub(resource)) {
+          autoBindings[getBindKey(resource)] = resource;
+        } // else if (isPipeline(...))
+        // TODO(sam): make this generic/pluggable
+      }
+
+      // TODO(sam): now find all secretrs
+
+      return _Worker(id, {
+        meta,
+        ...(props as ImportMetaWorkerProps<B>),
+        name: workerName,
+        bindings: {
+          ...props.bindings,
+          __ALCHEMY_WORKER_NAME__: workerName,
+          // TODO(sam): prune un-needed bindings
+          ...autoBindings,
+        },
+      });
+    }) as Promise<Worker<B>>;
+
     // defer construction of this worker until the app is about to finaloze
     // this ensures that the Worker's dependencies are instantiated before we bundle
     // it is then safe to bundle and import the Worker to detect which resources need to be auto-bound
-    const promise = scope.defer(() =>
-      _Worker(id, {
-        meta,
-        ...(props as ImportMetaWorkerProps<B>),
-      }),
+    const promise = Promise.all([deferred, stub]).then(
+      ([worker]) => worker,
     ) as Promise<Worker<B>> & {
       fetch: (request: Request) => Promise<Response>;
     };
@@ -409,6 +453,7 @@ export function Worker<const B extends Bindings>(
       promise.fetch = props.fetch;
     } else {
       promise.fetch = async (request: Request) => {
+        console.log(request);
         const worker = await promise;
         if (worker.url === undefined) {
           throw new Error("Worker URL is not available in runtime");

@@ -49,7 +49,7 @@ export async function bundleWorkerScript<B extends Bindings>(
         ? {
             js: `import { env as __ALCHEMY_ENV__ } from "cloudflare:workers";
 
-var __ALCHEMY_STATE__ = ${JSON.stringify(await serializeScope(Scope.current))};
+var __ALCHEMY_STATE__ = ${JSON.stringify(await serializeScope(Scope.root))};
 
 var STATE = {
   get: (id) => Promise.resolve(null),

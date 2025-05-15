@@ -34,6 +34,10 @@ export class Scope {
     return Scope.storage.getStore();
   }
 
+  public static get root(): Scope {
+    return Scope.current.root;
+  }
+
   public static get current(): Scope {
     const scope = Scope.get();
     if (!scope) {
@@ -87,6 +91,14 @@ export class Scope {
       this.parent?.stateStore ??
       ((scope) => new FileSystemStateStore(scope));
     this.state = this.stateStore(this);
+  }
+
+  public get root(): Scope {
+    let root: Scope = this;
+    while (root.parent) {
+      root = root.parent;
+    }
+    return root;
   }
 
   public async delete(resourceID: ResourceID) {
@@ -214,40 +226,44 @@ export type SerializedScope = {
   };
 };
 
-export function serializeScope(scope: Scope) {
-  let root = scope;
-  while (root.parent) {
-    root = root.parent;
-  }
-  return _serializeScope(root);
+export async function serializeScope(scope: Scope): Promise<SerializedScope> {
+  return Object.fromEntries(
+    await Promise.all(
+      Array.from(scope.resources.values()).map(async (resource) => {
+        const innerScope = resource[InnerResourceScope];
+        if (innerScope === undefined) {
+          // TODO(sam): better error
+          throw new Error(
+            `Resource has no inner scope: ${resource[ResourceID]}`,
+          );
+        }
+        return [
+          resource[ResourceID],
+          {
+            state: await serialize(
+              scope,
+              await scope.state.get(resource[ResourceID]),
+              {
+                // TODO(sam): we need to move them to Secet bindings
+                encrypt: false,
+              },
+            ),
+            children: await serializeScope(await innerScope),
+          },
+        ];
+      }),
+    ),
+  );
+}
 
-  async function _serializeScope(scope: Scope): Promise<SerializedScope> {
-    return Object.fromEntries(
-      await Promise.all(
-        Array.from(scope.resources.values()).map(async (resource) => {
-          const innerScope = resource[InnerResourceScope];
-          if (innerScope === undefined) {
-            // TODO(sam): better error
-            throw new Error(
-              `Resource has no inner scope: ${resource[ResourceID]}`,
-            );
-          }
-          return [
-            resource[ResourceID],
-            {
-              state: await serialize(
-                scope,
-                await scope.state.get(resource[ResourceID]),
-                {
-                  // TODO(sam): we need to move them to Secet bindings
-                  encrypt: false,
-                },
-              ),
-              children: await _serializeScope(await innerScope),
-            },
-          ];
-        }),
-      ),
-    );
+export async function* walkScope(
+  scope: Scope,
+): AsyncGenerator<PendingResource<any>> {
+  for (const resource of scope.resources.values()) {
+    yield resource;
+    const innerScope = resource[InnerResourceScope];
+    if (innerScope) {
+      yield* walkScope(await innerScope);
+    }
   }
 }
