@@ -1,4 +1,6 @@
 import { spawn, type SpawnOptions } from "node:child_process";
+import { createHash } from "node:crypto";
+import { join } from "node:path";
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 
@@ -14,9 +16,28 @@ export interface ExecProps {
   /**
    * Whether to memoize the command (only re-run if the command changes)
    *
+   * When set to `true`, the command will only be re-executed if the command string changes.
+   *
+   * When set to an object with `patterns`, the command will be re-executed if either:
+   * 1. The command string changes, or
+   * 2. The contents of any files matching the glob patterns change
+   *
+   * ⚠️ **Important Note**: When using memoization with build commands, the build outputs
+   * will not be produced if the command is memoized. This is because the command is not
+   * actually executed when memoized. Consider disabling memoization in CI environments:
+   *
+   * @example
+   * // Disable memoization in CI to ensure build outputs are always produced
+   * await Exec("build", {
+   *   command: "vite build",
+   *   memoize: process.env.CI ? false : {
+   *     patterns: ["./src/**"]
+   *   }
+   * });
+   *
    * @default false
    */
-  memoize?: boolean;
+  memoize?: boolean | { patterns: string[] };
 
   /**
    * Working directory for the command
@@ -68,6 +89,11 @@ export interface Exec extends Resource<"os::Exec">, ExecProps {
    * Whether the command has completed execution
    */
   completed: boolean;
+
+  /**
+   * Hash of the command inputs
+   */
+  hash?: string;
 }
 
 /**
@@ -108,6 +134,26 @@ export interface Exec extends Resource<"os::Exec">, ExecProps {
  *   command: "git status",
  *   memoize: true
  * });
+ *
+ * @example
+ * // Memoize a build command with file patterns, but disable in CI
+ * // This ensures build outputs are always produced in CI
+ * const build = await Exec("build", {
+ *   command: "vite build",
+ *   memoize: process.env.CI ? false : {
+ *     patterns: ["./src/**"]
+ *   }
+ * });
+ *
+ * @example
+ * // Memoize a database migration command based on schema files
+ * // This is safe to memoize since it's idempotent
+ * const migrate = await Exec("db-migrate", {
+ *   command: "drizzle-kit push:pg",
+ *   memoize: {
+ *     patterns: ["./src/db/schema/**"]
+ *   }
+ * });
  */
 export const Exec = Resource(
   "os::Exec",
@@ -123,14 +169,23 @@ export const Exec = Resource(
       // Nothing to actually delete for an exec command
       return this.destroy();
     }
+
+    const hash =
+      typeof props.memoize === "object"
+        ? await hashInputs(props.cwd ?? process.cwd(), props.memoize.patterns)
+        : undefined;
+
     if (
       this.phase === "update" &&
       props.memoize &&
-      this.output?.command === props.command
+      this.output?.command === props.command &&
+      (typeof props.memoize === "boolean" ||
+        (hash && this.output?.hash === hash))
     ) {
       // If memoize is enabled and the command hasn't changed, return the existing output
       return this.output;
     }
+
     // Default values
     let stdout = "";
     let stderr = "";
@@ -198,6 +253,7 @@ export const Exec = Resource(
       stderr,
       executedAt: Date.now(),
       completed: true,
+      hash,
     });
   },
 );
@@ -241,4 +297,33 @@ export async function exec(
       reject(err);
     });
   });
+}
+
+async function hashInputs(cwd: string, patterns: string[]) {
+  const { glob, readFile } = await import("node:fs/promises");
+
+  const hashes = new Map<string, string>();
+
+  await Promise.all(
+    patterns.flatMap(async (pattern) => {
+      const files = await Array.fromAsync(glob(pattern, { cwd }));
+      return Promise.all(
+        files.map(async (file: string) => {
+          const path = join(cwd, file);
+          const content = await readFile(path);
+          hashes.set(path, createHash("sha256").update(content).digest("hex"));
+        }),
+      );
+    }),
+  );
+
+  const sortedHashes = Array.from(hashes.entries()).sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  );
+
+  const finalHash = createHash("sha256");
+  for (const [, hash] of sortedHashes) {
+    finalHash.update(hash);
+  }
+  return finalHash.digest("hex");
 }

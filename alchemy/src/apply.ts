@@ -2,6 +2,11 @@ import { alchemy } from "./alchemy.js";
 import { context } from "./context.js";
 import {
   PROVIDERS,
+  ResourceFQN,
+  ResourceID,
+  ResourceKind,
+  ResourceScope,
+  ResourceSeq,
   type PendingResource,
   type Provider,
   type Resource,
@@ -20,42 +25,44 @@ export async function apply<Out extends Resource>(
   props: ResourceProps | undefined,
   options?: ApplyOptions,
 ): Promise<Awaited<Out>> {
-  const scope = resource.Scope;
+  const scope = resource[ResourceScope];
   try {
     const quiet = props?.quiet ?? scope.quiet;
     await scope.init();
-    let state: State | undefined = (await scope.state.get(resource.ID))!;
-    const provider: Provider = PROVIDERS.get(resource.Kind);
+    let state: State | undefined = (await scope.state.get(
+      resource[ResourceID],
+    ))!;
+    const provider: Provider = PROVIDERS.get(resource[ResourceKind]);
     if (provider === undefined) {
-      throw new Error(`Provider "${resource.Kind}" not found`);
+      throw new Error(`Provider "${resource[ResourceKind]}" not found`);
     }
     if (scope.phase === "read") {
       if (state === undefined) {
         throw new Error(
-          `Resource "${resource.FQN}" not found and running in 'read' phase.`,
+          `Resource "${resource[ResourceFQN]}" not found and running in 'read' phase.`,
         );
       }
       return state.output as Awaited<Out>;
     }
     if (state === undefined) {
       state = {
-        kind: resource.Kind,
-        id: resource.ID,
-        fqn: resource.FQN,
-        seq: resource.Seq,
+        kind: resource[ResourceKind],
+        id: resource[ResourceID],
+        fqn: resource[ResourceFQN],
+        seq: resource[ResourceSeq],
         status: "creating",
         data: {},
         output: {
-          ID: resource.ID,
-          FQN: resource.FQN,
-          Kind: resource.Kind,
-          Scope: scope,
-          Seq: resource.Seq,
+          [ResourceID]: resource[ResourceID],
+          [ResourceFQN]: resource[ResourceFQN],
+          [ResourceKind]: resource[ResourceKind],
+          [ResourceScope]: scope,
+          [ResourceSeq]: resource[ResourceSeq],
         },
         // deps: [...deps],
         props,
       };
-      await scope.state.set(resource.ID, state);
+      await scope.state.set(resource[ResourceID], state);
     }
 
     const alwaysUpdate =
@@ -87,27 +94,27 @@ export async function apply<Out extends Resource>(
 
     if (!quiet) {
       console.log(
-        `${phase === "create" ? "Create" : "Update"}:  "${resource.FQN}"`,
+        `${phase === "create" ? "Create" : "Update"}:  "${resource[ResourceFQN]}"`,
       );
     }
 
-    await scope.state.set(resource.ID, state);
+    await scope.state.set(resource[ResourceID], state);
 
     let isReplaced = false;
 
     const ctx = context({
       scope,
       phase,
-      kind: resource.Kind,
-      id: resource.ID,
-      fqn: resource.FQN,
-      seq: resource.Seq,
+      kind: resource[ResourceKind],
+      id: resource[ResourceID],
+      fqn: resource[ResourceFQN],
+      seq: resource[ResourceSeq],
       props: state.oldProps,
       state,
       replace: () => {
         if (isReplaced) {
           console.warn(
-            `Resource ${resource.Kind} ${resource.FQN} is already marked as REPLACE`,
+            `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} is already marked as REPLACE`,
           );
           return;
         }
@@ -116,23 +123,23 @@ export async function apply<Out extends Resource>(
     });
 
     const output = await alchemy.run(
-      resource.ID,
+      resource[ResourceID],
       {
         isResource: true,
       },
-      async () => provider.handler.bind(ctx)(resource.ID, props),
+      async () => provider.handler.bind(ctx)(resource[ResourceID], props),
     );
     if (!quiet) {
       console.log(
-        `${phase === "create" ? "Created" : "Updated"}: "${resource.FQN}"`,
+        `${phase === "create" ? "Created" : "Updated"}: "${resource[ResourceFQN]}"`,
       );
     }
 
-    await scope.state.set(resource.ID, {
-      kind: resource.Kind,
-      id: resource.ID,
-      fqn: resource.FQN,
-      seq: resource.Seq,
+    await scope.state.set(resource[ResourceID], {
+      kind: resource[ResourceKind],
+      id: resource[ResourceID],
+      fqn: resource[ResourceFQN],
+      seq: resource[ResourceSeq],
       data: state.data,
       status: phase === "create" ? "created" : "updated",
       output,

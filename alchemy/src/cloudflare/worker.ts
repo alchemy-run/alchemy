@@ -814,7 +814,7 @@ async function prepareWorkerMetadata<B extends Bindings>(
       meta.bindings.push({
         type: "service",
         name: bindingName,
-        service: binding.id,
+        service: binding.name,
       });
     } else if (binding.type === "durable_object_namespace") {
       meta.bindings.push({

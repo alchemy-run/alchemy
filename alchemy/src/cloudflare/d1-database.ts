@@ -276,6 +276,15 @@ export const D1DatabaseResource = Resource(
     } else {
       // Update operation
       if (this.output?.id) {
+        // Only read_replication can be modified in update
+        if (
+          props.primaryLocationHint &&
+          props.primaryLocationHint !== this.output?.primaryLocationHint
+        ) {
+          throw new Error(
+            `Cannot update primaryLocationHint from '${this.output.primaryLocationHint}' to '${props.primaryLocationHint}' after database creation.`,
+          );
+        }
         console.log("Updating D1 database:", databaseName);
         // Update the database with new properties
         dbData = await updateDatabase(api, this.output.id, props);
@@ -480,19 +489,6 @@ export async function updateDatabase(
   databaseId: string,
   props: D1DatabaseProps,
 ): Promise<CloudflareD1Response> {
-  // Get current database state to check for non-mutable changes
-  const currentDB = await getDatabase(api, databaseId);
-
-  // Only read_replication can be modified in update
-  if (
-    props.primaryLocationHint &&
-    props.primaryLocationHint !== currentDB.result.primary_location_hint
-  ) {
-    throw new Error(
-      "Cannot update primaryLocationHint after database creation. Only readReplication.mode can be modified.",
-    );
-  }
-
   const updatePayload: any = {};
 
   // Only include read_replication in update payload
