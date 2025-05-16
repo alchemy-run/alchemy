@@ -808,7 +808,8 @@ async function prepareWorkerMetadata<B extends Bindings>(
       meta.bindings.push({
         type: "kv_namespace",
         name: bindingName,
-        namespace_id: binding.namespaceId,
+        namespace_id:
+          "namespaceId" in binding ? binding.namespaceId : binding.id,
       });
     } else if (binding.type === "service") {
       meta.bindings.push({
