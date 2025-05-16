@@ -218,7 +218,7 @@ export const KVNamespace = Resource(
 
     return this({
       type: "kv_namespace",
-      namespaceId: namespaceId,
+      namespaceId,
       title: props.title,
       values: props.values,
       createdAt: createdAt,

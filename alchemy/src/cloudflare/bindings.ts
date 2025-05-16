@@ -13,7 +13,6 @@ import type { R2Bucket } from "./bucket.js";
 import type { D1Database } from "./d1-database.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
 import type { Hyperdrive } from "./hyperdrive.js";
-import type { KVNamespace } from "./kv-namespace.js";
 import type { Pipeline } from "./pipeline.js";
 import type { Queue } from "./queue.js";
 import type { VectorizeIndex } from "./vectorize-index.js";
@@ -40,7 +39,10 @@ export type Binding =
   | D1Database
   | DurableObjectNamespace
   | Hyperdrive
-  | KVNamespace
+  | {
+      type: "kv_namespace";
+      namespaceId: string;
+    }
   | Pipeline
   | Queue
   | R2Bucket
