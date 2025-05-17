@@ -1,8 +1,13 @@
+---
+title: Managing Cloudflare KV Namespaces with Alchemy
+description: Learn how to create and manage Cloudflare KV Namespaces using Alchemy for key-value data storage at the edge.
+---
+
 # KVNamespace
 
 A [Cloudflare KV Namespace](https://developers.cloudflare.com/kv/concepts/kv-namespaces/) is a key-value store that can be used to store data for your application.
 
-# Minimal Example
+## Minimal Example
 
 Create a basic KV namespace for storing user data.
 
@@ -14,7 +19,7 @@ const users = await KVNamespace("users", {
 });
 ```
 
-# With Initial Values and TTL
+## With Initial Values and TTL
 
 Create a KV namespace with initial values and expiration.
 
@@ -31,7 +36,7 @@ const sessions = await KVNamespace("sessions", {
 });
 ```
 
-# With Metadata
+## With Metadata
 
 Create a KV namespace with metadata for caching.
 
@@ -51,7 +56,7 @@ const assets = await KVNamespace("assets", {
 });
 ```
 
-# Bind to a Worker
+## Bind to a Worker
 
 Bind a KV namespace to a Worker for data access.
 

@@ -1,3 +1,8 @@
+---
+title: Getting Started with Alchemy
+description: Quick start guide to using Alchemy, the TypeScript-native Infrastructure-as-Code library. Learn how to install, create resources, and manage their lifecycle.
+---
+
 # Getting Started with Alchemy
 
 > [!TIP]

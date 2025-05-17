@@ -32,6 +32,14 @@ interface PermissionGroupsResponse {
   messages: any[];
 }
 
+export type PermissionGroupName = R2PermissionGroups;
+
+export type R2PermissionGroups =
+  | "Workers R2 Storage Write"
+  | "Workers R2 Storage Read"
+  | "Workers R2 Storage Bucket Item Write"
+  | "Workers R2 Storage Bucket Item Read";
+
 /**
  * All Cloudflare permission groups mapped by name to ID
  *

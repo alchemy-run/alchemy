@@ -1,8 +1,13 @@
+---
+title: Importing DNS Records into Alchemy
+description: Learn how to import existing DNS records from your provider into Alchemy for management with Infrastructure-as-Code.
+---
+
 # ImportDnsRecords
 
 The ImportDnsRecords resource lets you import DNS records from any domain using [Cloudflare's DNS-over-HTTPS API](https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/).
 
-# Minimal Example
+## Minimal Example
 
 Import all default DNS record types for a domain.
 
@@ -14,7 +19,7 @@ const dnsRecords = await ImportDnsRecords("example-com", {
 });
 ```
 
-# Import Specific Record Types
+## Import Specific Record Types
 
 Import only specified DNS record types.
 
@@ -27,7 +32,7 @@ const records = await ImportDnsRecords("example-com", {
 });
 ```
 
-# Transfer Records to Cloudflare
+## Transfer Records to Cloudflare
 
 Import DNS records and transfer them to a Cloudflare zone.
 

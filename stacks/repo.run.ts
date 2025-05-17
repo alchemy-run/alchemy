@@ -7,11 +7,7 @@ import "../alchemy/src/os";
 import alchemy from "../alchemy/src";
 import { AccountId, Role } from "../alchemy/src/aws";
 import { GitHubOIDCProvider } from "../alchemy/src/aws/oidc";
-import {
-  AccountApiToken,
-  PermissionGroups,
-  R2Bucket,
-} from "../alchemy/src/cloudflare";
+import { AccountApiToken, R2Bucket } from "../alchemy/src/cloudflare";
 import { GitHubSecret, RepositoryEnvironment } from "../alchemy/src/github";
 import env, {
   CLOUDFLARE_ACCOUNT_ID,
@@ -20,6 +16,7 @@ import env, {
   NEON_API_KEY,
   OPENAI_API_KEY,
   STRIPE_API_KEY,
+  UPSTASH_API_KEY,
 } from "./env.js";
 
 const app = await alchemy("alchemy:repo", env);
@@ -67,19 +64,14 @@ const testEnvironment = await RepositoryEnvironment("test environment", {
   },
 });
 
-const permissions = await PermissionGroups("cloudflare-permissions", {
-  // TODO: remove this once we have a way to get the account ID from the API
-  accountId: CLOUDFLARE_ACCOUNT_ID,
-});
-
 const accountAccessToken = await AccountApiToken("account-access-token", {
   name: "alchemy-account-access-token",
   policies: [
     {
       effect: "allow",
-      permissionGroups: [{ id: permissions["Workers R2 Storage Write"].id }],
+      permissionGroups: ["Workers R2 Storage Write"],
       resources: {
-        [`com.cloudflare.api.account.${CLOUDFLARE_ACCOUNT_ID}`]: "*",
+        "com.cloudflare.api.account": "*",
       },
     },
   ],
@@ -103,12 +95,14 @@ await Promise.all([
     R2_ACCESS_KEY_ID: accountAccessToken.accessKeyId,
     R2_SECRET_ACCESS_KEY: accountAccessToken.secretAccessKey,
     SECRET_PASSPHRASE: alchemy.secret(process.env.SECRET_PASSPHRASE!),
+    UPSTASH_API_KEY,
+    UPSTASH_EMAIL: "sam@alchemy.run",
   }).flatMap(async ([name, value]) => {
     const props = {
       owner: "sam-goodwin",
       repository: "alchemy",
       name,
-      value: typeof value === "string" ? alchemy.secret(value) : await value!,
+      value: typeof value === "string" ? alchemy.secret(value) : value!,
     };
     return [
       GitHubSecret(`github-secret-${name}`, {

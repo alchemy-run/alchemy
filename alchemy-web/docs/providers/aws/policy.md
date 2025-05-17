@@ -1,8 +1,13 @@
+---
+title: Managing AWS IAM Policies with Alchemy
+description: Learn how to create, update, and manage AWS IAM Policies using Alchemy to define permissions for your AWS resources.
+---
+
 # Policy
 
 The Policy resource lets you create and manage [AWS IAM Policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) that define permissions for AWS services and resources.
 
-# Minimal Example
+## Minimal Example
 
 Create a basic policy that allows S3 bucket access:
 
@@ -25,7 +30,7 @@ const s3Policy = await Policy("bucket-access", {
 });
 ```
 
-# Multiple Statements
+## Multiple Statements
 
 Create a policy with multiple statements and conditions:
 
@@ -67,7 +72,7 @@ const apiPolicy = await Policy("api-access", {
 });
 ```
 
-# Deny Policy
+## Deny Policy
 
 Create a policy that denies access based on tags:
 

@@ -1,3 +1,8 @@
+---
+title: Managing Generic Data with AI in Alchemy
+description: Learn how to use Alchemy's AI provider to generate structured data (like JSON, YAML) based on prompts and schemas.
+---
+
 # Data
 
 The Data resource uses AI models to generate structured content based on a schema. It leverages the [Vercel AI SDK](https://sdk.vercel.ai/docs) for content generation with type validation.

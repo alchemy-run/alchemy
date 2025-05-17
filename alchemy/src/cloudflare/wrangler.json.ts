@@ -381,7 +381,7 @@ function processBindings(
       // KV Namespace binding
       kvNamespaces.push({
         binding: bindingName,
-        id: binding.namespaceId,
+        id: "namespaceId" in binding ? binding.namespaceId : binding.id,
       });
     } else if (
       typeof binding === "object" &&

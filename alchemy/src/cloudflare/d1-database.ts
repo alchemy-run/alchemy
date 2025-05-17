@@ -2,10 +2,11 @@ import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
-  type CloudflareApi,
   createCloudflareApi,
+  type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
+import { cloneD1Database } from "./d1-clone.js";
 import { applyMigrations, listMigrationsFiles } from "./d1-migrations.js";
 
 /**
@@ -60,6 +61,17 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
    * @default false
    */
   adopt?: boolean;
+
+  /**
+   * Clone data from an existing database to this new database.
+   * Only applicable during creation phase.
+   *
+   * Can be specified as:
+   * - A D1Database object
+   * - An object with an id property
+   * - An object with a name property (will look up the ID by name)
+   */
+  clone?: D1Database | { id: string } | { name: string };
 
   /**
    * These files will be generated internally with the D1Database wrapper function when migrationsDir is specified
@@ -123,20 +135,6 @@ export type D1Database = Resource<"cloudflare::D1Database"> &
     };
   };
 
-export async function D1Database(
-  id: string,
-  props: Omit<D1DatabaseProps, "migrationsFiles">,
-) {
-  const migrationsFiles = props.migrationsDir
-    ? await listMigrationsFiles(props.migrationsDir)
-    : [];
-
-  return D1DatabaseResource(id, {
-    ...props,
-    migrationsFiles,
-  });
-}
-
 /**
  * Creates and manages Cloudflare D1 Databases.
  *
@@ -173,8 +171,43 @@ export async function D1Database(
  *   migrationsDir: "./migrations",
  * });
  *
+ * @example
+ * // Clone an existing database by ID
+ * const clonedDb = await D1Database("cloned-db", {
+ *   name: "cloned-db",
+ *   clone: otherDb
+ * });
+ *
+ * @example
+ * // Clone an existing database by ID
+ * const clonedDb = await D1Database("cloned-db", {
+ *   name: "cloned-db",
+ *   clone: { id: "existing-db-uuid" }
+ * });
+ *
+ * @example
+ * // Clone an existing database by name
+ * const clonedDb = await D1Database("cloned-db", {
+ *   name: "cloned-db",
+ *   clone: { name: "existing-db-name" }
+ * });
+ *
  * @see https://developers.cloudflare.com/d1/
  */
+export async function D1Database(
+  id: string,
+  props: Omit<D1DatabaseProps, "migrationsFiles">,
+) {
+  const migrationsFiles = props.migrationsDir
+    ? await listMigrationsFiles(props.migrationsDir)
+    : [];
+
+  return D1DatabaseResource(id, {
+    ...props,
+    migrationsFiles,
+  });
+}
+
 export const D1DatabaseResource = Resource(
   "cloudflare::D1Database",
   async function (
@@ -202,6 +235,11 @@ export const D1DatabaseResource = Resource(
       console.log("Creating D1 database:", databaseName);
       try {
         dbData = await createDatabase(api, databaseName, props);
+
+        // If clone property is provided, perform cloning after database creation
+        if (props.clone && dbData.result.uuid) {
+          await cloneDb(api, props.clone, dbData.result.uuid);
+        }
       } catch (error) {
         // Check if this is a "database already exists" error and adopt is enabled
         if (
@@ -238,6 +276,15 @@ export const D1DatabaseResource = Resource(
     } else {
       // Update operation
       if (this.output?.id) {
+        // Only read_replication can be modified in update
+        if (
+          props.primaryLocationHint &&
+          props.primaryLocationHint !== this.output?.primaryLocationHint
+        ) {
+          throw new Error(
+            `Cannot update primaryLocationHint from '${this.output.primaryLocationHint}' to '${props.primaryLocationHint}' after database creation.`,
+          );
+        }
         console.log("Updating D1 database:", databaseName);
         // Update the database with new properties
         dbData = await updateDatabase(api, this.output.id, props);
@@ -442,19 +489,6 @@ export async function updateDatabase(
   databaseId: string,
   props: D1DatabaseProps,
 ): Promise<CloudflareD1Response> {
-  // Get current database state to check for non-mutable changes
-  const currentDB = await getDatabase(api, databaseId);
-
-  // Only read_replication can be modified in update
-  if (
-    props.primaryLocationHint &&
-    props.primaryLocationHint !== currentDB.result.primary_location_hint
-  ) {
-    throw new Error(
-      "Cannot update primaryLocationHint after database creation. Only readReplication.mode can be modified.",
-    );
-  }
-
   const updatePayload: any = {};
 
   // Only include read_replication in update payload
@@ -479,4 +513,50 @@ export async function updateDatabase(
   }
 
   return (await updateResponse.json()) as CloudflareD1Response;
+}
+
+/**
+ * Helper function to clone data from a source database to a target database
+ * Resolves the source database ID from different input formats and performs the cloning operation
+ *
+ * @param api CloudflareApi instance
+ * @param sourceDb Source database specification (can be an ID, a name, or a D1Database object)
+ * @param targetDbId Target database ID
+ */
+async function cloneDb(
+  api: CloudflareApi,
+  sourceDb: D1Database | { id: string } | { name: string },
+  targetDbId: string,
+): Promise<void> {
+  let sourceId: string;
+
+  // Determine source database ID
+  if ("id" in sourceDb && sourceDb.id) {
+    // Use provided ID directly
+    sourceId = sourceDb.id;
+  } else if ("name" in sourceDb && sourceDb.name) {
+    // Look up ID by name
+    const databases = await listDatabases(api, sourceDb.name);
+    const foundDb = databases.find((db) => db.name === sourceDb.name);
+
+    if (!foundDb) {
+      throw new Error(
+        `Source database with name '${sourceDb.name}' not found for cloning`,
+      );
+    }
+
+    sourceId = foundDb.id;
+  } else if ("type" in sourceDb && sourceDb.type === "d1" && "id" in sourceDb) {
+    // It's a D1Database object
+    sourceId = sourceDb.id;
+  } else {
+    throw new Error("Invalid clone property: must provide either id or name");
+  }
+
+  // Perform the cloning
+  console.log(`Cloning data from database ${sourceId} to ${targetDbId}`);
+  await cloneD1Database(api, {
+    sourceDatabaseId: sourceId,
+    targetDatabaseId: targetDbId,
+  });
 }

@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { Phase } from "./alchemy.js";
 import { destroy } from "./destroy.js";
 import { FileSystemStateStore } from "./fs/file-system-state-store.js";
-import type { PendingResource, ResourceID } from "./resource.js";
+import { ResourceID, type PendingResource } from "./resource.js";
 import type { StateStore, StateStoreType } from "./state.js";
 
 const scopeStorage = new AsyncLocalStorage<Scope>();
@@ -22,6 +22,8 @@ export type ScopeOptions = {
 const DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
 
 export class Scope {
+  public static readonly KIND = "alchemy::Scope" as const;
+
   public static get(): Scope | undefined {
     return scopeStorage.getStore();
   }
@@ -62,16 +64,17 @@ export class Scope {
       throw new Error("Scope name is required when creating a child scope");
     }
     this.password = options.password ?? this.parent?.password;
-    this.stateStore =
-      options.stateStore ??
-      this.parent?.stateStore ??
-      ((scope) => new FileSystemStateStore(scope));
-    this.state = this.stateStore(this);
     const phase = options.phase ?? this.parent?.phase;
     if (phase === undefined) {
       throw new Error("Phase is required");
     }
     this.phase = phase;
+
+    this.stateStore =
+      options.stateStore ??
+      this.parent?.stateStore ??
+      ((scope) => new FileSystemStateStore(scope));
+    this.state = this.stateStore(this);
   }
 
   public async delete(resourceID: ResourceID) {
@@ -154,7 +157,7 @@ export class Scope {
     return `Scope(
   chain=${this.chain.join("/")},
   resources=[${Array.from(this.resources.values())
-    .map((r) => r.ID)
+    .map((r) => r[ResourceID])
     .join(",\n  ")}]
 )`;
   }

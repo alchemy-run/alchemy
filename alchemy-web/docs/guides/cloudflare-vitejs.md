@@ -1,5 +1,7 @@
 ---
 order: 1
+title: Vite.js
+description: Step-by-step guide to deploying Vite.js React applications with API endpoints to Cloudflare Workers using Alchemy's Infrastructure-as-Code approach.
 ---
 
 # Vite
@@ -21,15 +23,14 @@ Install `cloudflare` and `alchemy`:
 bun add alchemy cloudflare
 ```
 
-Update your `tsconfig.json` to register `@cloudflare/workers-types` globally:
+Update your `tsconfig.node.json` to register `@cloudflare/workers-types` globally:
 
 ```json
 {
   "compilerOptions": {
     // make sure to register this globally
     "types": ["@cloudflare/workers-types",],
-  },
-  "include": ["src/**/*.ts", "src/**/*.tsx"]
+  }
 }
 ```
 
@@ -63,8 +64,8 @@ import { Vite } from "alchemy/cloudflare";
 export const website = await Vite("website", {
   // command to build the vite site (run vite build)
   command: "bun run build",
-  // where the build command will store the assets
-  assets: "./dist",
+  // OPTIONAL: override where the dist is, it defaults to ./dist/client
+  // assets: "./dist/client",
 });
 ```
 

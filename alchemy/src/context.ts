@@ -1,10 +1,12 @@
 import { DestroyedSignal } from "./destroy.js";
-import type {
-  Resource,
+import {
   ResourceFQN,
   ResourceID,
   ResourceKind,
-  ResourceProps,
+  ResourceScope,
+  ResourceSeq,
+  type Resource,
+  type ResourceProps,
 } from "./resource.js";
 import type { Scope } from "./scope.js";
 import type { State } from "./state.js";
@@ -96,23 +98,29 @@ export function context<
   state: State<Kind, Props, Out>;
   replace: () => void;
 }): Context<Out> {
-  function create(props: Omit<Out, "Kind" | "ID" | "Scope">): Out;
-  function create(id: string, props: Omit<Out, "Kind" | "ID" | "Scope">): Out;
+  type InternalSymbols =
+    | typeof ResourceID
+    | typeof ResourceKind
+    | typeof ResourceFQN
+    | typeof ResourceSeq
+    | typeof ResourceScope;
+  function create(props: Omit<Out, InternalSymbols>): Out;
+  function create(id: string, props: Omit<Out, InternalSymbols>): Out;
   function create(
     ...args:
-      | [props: Omit<Out, "Kind" | "ID" | "Scope">]
-      | [id: string, props: Omit<Out, "Kind" | "ID" | "Scope">]
+      | [props: Omit<Out, InternalSymbols>]
+      | [id: string, props: Omit<Out, InternalSymbols>]
   ): Out {
     const [ID, props] =
       typeof args[0] === "string" ? (args as [string, any]) : [id, args[0]];
 
     return {
       ...props,
-      Kind: kind,
-      ID,
-      FQN: fqn,
-      Scope: scope,
-      Seq: seq,
+      [ResourceKind]: kind,
+      [ResourceID]: ID,
+      [ResourceFQN]: fqn,
+      [ResourceScope]: scope,
+      [ResourceSeq]: seq,
     } as Out;
   }
   return Object.assign(create, {
@@ -138,5 +146,5 @@ export function context<
       throw new DestroyedSignal();
     },
     create,
-  }) as Context<Out>;
+  }) as unknown as Context<Out>;
 }

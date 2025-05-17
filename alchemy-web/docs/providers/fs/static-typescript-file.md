@@ -1,8 +1,13 @@
+---
+title: Managing Static TypeScript Files with Alchemy FS Provider
+description: Learn how to create and manage static TypeScript (.ts, .tsx) files with proper formatting using Alchemy's FS provider.
+---
+
 # StaticTypeScriptFile
 
 Creates formatted TypeScript files using [Prettier](https://prettier.io/) for consistent code style.
 
-# Minimal Example
+## Minimal Example
 
 Creates a TypeScript file with automatic formatting.
 
@@ -18,7 +23,7 @@ const file = await StaticTypeScriptFile("types.ts", `
 `);
 ```
 
-# Create File with Custom Path
+## Create File with Custom Path
 
 Creates a TypeScript file at a specific path.
 
@@ -37,7 +42,7 @@ const component = await StaticTypeScriptFile("components/Button.tsx", `
 `);
 ```
 
-# Create React Component
+## Create React Component
 
 Creates a TypeScript React component with proper formatting.
 

@@ -1,8 +1,13 @@
+---
+title: Managing Static HTML Files with Alchemy FS Provider
+description: Learn how to create and manage static HTML (.html) files with proper formatting using Alchemy's FS provider.
+---
+
 # StaticHTMLFile
 
 The StaticHTMLFile resource creates static HTML files with automatic directory creation and cleanup.
 
-# Minimal Example
+## Minimal Example
 
 Creates a basic HTML file:
 
@@ -18,7 +23,7 @@ const page = await StaticHTMLFile("index.html", `
 `);
 ```
 
-# Custom Path
+## Custom Path
 
 Creates an HTML file at a specific path:
 

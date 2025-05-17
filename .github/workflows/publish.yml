@@ -57,3 +57,5 @@ jobs:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           SECRET_PASSPHRASE: ${{ secrets.SECRET_PASSPHRASE }}
+          UPSTASH_API_KEY: ${{ secrets.UPSTASH_API_KEY }}
+          UPSTASH_EMAIL: sam@alchemy.run

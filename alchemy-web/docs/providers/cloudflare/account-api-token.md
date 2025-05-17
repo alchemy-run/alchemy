@@ -1,24 +1,24 @@
+---
+title: Managing Cloudflare Account API Tokens with Alchemy
+description: Learn how to create and manage Cloudflare Account API Tokens using Alchemy for secure access to the Cloudflare API.
+---
+
 # AccountApiToken
 
 Creates a [Cloudflare API Token](https://developers.cloudflare.com/api/tokens/) with specified permissions and access controls.
 
-# Minimal Example
+## Minimal Example
 
 Create a basic API token with read-only permissions.
 
 ```ts
-import { AccountApiToken, PermissionGroups } from "alchemy/cloudflare";
-
-const permissions = await PermissionGroups("cloudflare-permissions");
+import { AccountApiToken } from "alchemy/cloudflare";
 
 const token = await AccountApiToken("readonly-token", {
   name: "Readonly Zone Token",
   policies: [{
     effect: "allow",
-    permissionGroups: [
-      { id: permissions["Zone Read"].id },
-      { id: permissions["Analytics Read"].id }
-    ],
+    permissionGroups: ["Zone Read", "Analytics Read"],
     resources: {
       "com.cloudflare.api.account.zone.*": "*"
     }
@@ -26,7 +26,7 @@ const token = await AccountApiToken("readonly-token", {
 });
 ```
 
-# With Time and IP Restrictions
+## With Time and IP Restrictions
 
 Create a token with time-based and IP address restrictions.
 
@@ -37,9 +37,7 @@ const restrictedToken = await AccountApiToken("restricted-token", {
   name: "Restricted Access Token", 
   policies: [{
     effect: "allow",
-    permissionGroups: [
-      { id: permissions["Worker Routes Edit"].id }
-    ],
+    permissionGroups: ["Worker Routes Edit"],
     resources: {
       "com.cloudflare.api.account.worker.route.*": "*"
     }
@@ -55,7 +53,28 @@ const restrictedToken = await AccountApiToken("restricted-token", {
 });
 ```
 
-# Bind to a Worker
+## R2 Storage Access Token
+
+Create a token with R2 storage write permissions.
+
+```ts
+import { AccountApiToken } from "alchemy/cloudflare";
+
+const storageToken = await AccountApiToken("account-access-token", {
+  name: "alchemy-account-access-token",
+  policies: [
+    {
+      effect: "allow",
+      permissionGroups: ["Workers R2 Storage Write"],
+      resources: {
+        "com.cloudflare.api.account": "*",
+      },
+    },
+  ],
+});
+```
+
+## Bind to a Worker
 
 Use the token in a Worker binding.
 
@@ -66,9 +85,7 @@ const token = await AccountApiToken("api-token", {
   name: "Worker API Token",
   policies: [{
     effect: "allow", 
-    permissionGroups: [
-      { id: permissions["Zone Read"].id }
-    ],
+    permissionGroups: ["Zone Read"],
     resources: {
       "com.cloudflare.api.account.zone.*": "*" 
     }

@@ -9,3 +9,6 @@ lib/
 .alchemy/
 # !.alchemy/github:alchemy/
 # examples/*/.alchemy
+
+.repomix-output.txt
+alchemy-web/public/og-images/

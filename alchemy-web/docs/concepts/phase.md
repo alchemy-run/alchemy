@@ -1,5 +1,7 @@
 ---
 order: 2
+title: Phase
+description: Master the three execution phases in Alchemy - up, destroy, and read. Learn when to use each phase for deploying, tearing down, or accessing your infrastructure.
 ---
 
 # Phase

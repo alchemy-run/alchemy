@@ -1,8 +1,13 @@
+---
+title: Managing YAML Files with AI in Alchemy
+description: Learn how to use Alchemy's AI provider to create, update, and manage YAML (.yaml, .yml) files with schema validation.
+---
+
 # YAMLFile
 
 The YAMLFile resource lets you generate [YAML](https://yaml.org/) files using AI models with optional schema validation.
 
-# Minimal Example
+## Minimal Example
 
 Generate a simple YAML configuration file:
 
@@ -15,7 +20,7 @@ const config = await YAMLFile("config", {
 });
 ```
 
-# Schema Validation
+## Schema Validation
 
 Use a schema to validate and type the generated YAML:
 
@@ -41,7 +46,7 @@ const config = await YAMLFile("config", {
 console.log(config.yaml.server.port); // number
 ```
 
-# Custom System Prompt
+## Custom System Prompt
 
 Customize the AI's behavior with a system prompt:
 

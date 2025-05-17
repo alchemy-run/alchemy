@@ -1,8 +1,13 @@
+---
+title: Managing Stripe Prices with Alchemy
+description: Learn how to create and manage Stripe Prices for your products and subscriptions using Alchemy.
+---
+
 # Price
 
 The Price resource lets you create and manage [Stripe Prices](https://stripe.com/docs/api/prices) for products.
 
-# Minimal Example
+## Minimal Example
 
 Create a one-time fixed price for a product:
 
@@ -16,7 +21,7 @@ const price = await Price("basic-license", {
 });
 ```
 
-# Recurring Subscription Price
+## Recurring Subscription Price
 
 Create a recurring subscription price with fixed monthly billing:
 
@@ -34,7 +39,7 @@ const subscriptionPrice = await Price("pro-monthly", {
 });
 ```
 
-# Metered Usage Price
+## Metered Usage Price
 
 Create a metered price for usage-based billing:
 

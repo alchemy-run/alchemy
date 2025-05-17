@@ -1,8 +1,13 @@
+---
+title: Managing Static YAML Files with Alchemy FS Provider
+description: Learn how to create and manage static YAML (.yaml, .yml) files with proper formatting using Alchemy's FS provider.
+---
+
 # StaticYamlFile
 
 The StaticYamlFile resource creates YAML files with formatted content using the [YAML](https://yaml.org/) format.
 
-# Minimal Example
+## Minimal Example
 
 Creates a simple YAML configuration file.
 
@@ -17,7 +22,7 @@ const config = await StaticYamlFile("config.yaml", {
 });
 ```
 
-# Nested Configuration
+## Nested Configuration
 
 Creates a YAML file with nested configuration objects.
 
@@ -39,7 +44,7 @@ const config = await StaticYamlFile("config.yaml", {
 });
 ```
 
-# Custom Path
+## Custom Path
 
 Creates a YAML file at a specific path.
 

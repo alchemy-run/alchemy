@@ -1,8 +1,13 @@
+---
+title: Managing Stripe Products with Alchemy
+description: Learn how to create and manage Stripe Products and SKUs using Alchemy for your e-commerce or subscription service.
+---
+
 # Product
 
 The Product resource lets you create and manage [Stripe Products](https://stripe.com/docs/api/products) for your Stripe account.
 
-# Minimal Example
+## Minimal Example
 
 Create a basic digital product:
 
@@ -15,7 +20,7 @@ const product = await Product("basic-software", {
 });
 ```
 
-# Physical Product
+## Physical Product
 
 Create a physical product with shipping details:
 
@@ -32,7 +37,7 @@ const product = await Product("premium-hardware", {
 });
 ```
 
-# Service Product
+## Service Product
 
 Create a service product with tax code:
 

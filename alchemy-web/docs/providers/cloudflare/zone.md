@@ -1,8 +1,13 @@
+---
+title: Managing Cloudflare Zones (Domains) with Alchemy
+description: Learn how to manage your Cloudflare Zones (domains) including DNS settings and other configurations using Alchemy.
+---
+
 # Zone
 
 The Zone resource lets you manage [Cloudflare DNS zones](https://developers.cloudflare.com/dns/zone-setups/) and their configuration settings.
 
-# Minimal Example
+## Minimal Example
 
 Create a basic DNS zone with default settings.
 
@@ -16,7 +21,7 @@ const zone = await Zone("example-zone", {
 });
 ```
 
-# Enhanced Security Settings
+## Enhanced Security Settings
 
 Configure a zone with strict SSL and enhanced security settings.
 
@@ -32,7 +37,7 @@ const secureZone = await Zone("secure-zone", {
 });
 ```
 
-# Performance Optimization
+## Performance Optimization
 
 Create a zone optimized for performance with HTTP/3 and caching.
 
@@ -48,7 +53,7 @@ const fastZone = await Zone("fast-zone", {
 });
 ```
 
-# Development Mode
+## Development Mode
 
 Configure a zone for development with specific features enabled.
 

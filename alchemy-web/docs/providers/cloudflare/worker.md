@@ -1,8 +1,13 @@
+---
+title: Managing Cloudflare Workers with Alchemy
+description: Learn how to deploy, configure, and manage Cloudflare Workers using Alchemy for serverless functions at the edge.
+---
+
 # Worker
 
 A [Cloudflare Worker](https://developers.cloudflare.com/workers/) is a serverless function that runs on Cloudflare's global network.
 
-# Minimal Example
+## Minimal Example
 
 Create a basic HTTP handler worker:
 
@@ -15,7 +20,7 @@ const worker = await Worker("api", {
 });
 ```
 
-# With Bindings
+## With Bindings
 
 Attach resources like KV, R2, or Durable Objects:
 
@@ -35,7 +40,7 @@ const worker = await Worker("api", {
 });
 ```
 
-# With Static Assets
+## With Static Assets
 
 Serve static files from a directory:
 
@@ -55,7 +60,7 @@ const worker = await Worker("frontend", {
 });
 ```
 
-# With Cron Triggers
+## With Cron Triggers
 
 Schedule recurring tasks:
 
@@ -69,7 +74,7 @@ const worker = await Worker("cron", {
 });
 ```
 
-# Bind to a Worker
+## Bind to a Worker
 
 Use a worker as a binding in another worker:
 
@@ -90,7 +95,7 @@ const frontend = await Worker("frontend", {
 });
 ```
 
-# With Custom Domain Routing
+## With Custom Domain Routing
 
 ```ts
 import { Worker, Route, Zone } from "alchemy/cloudflare";

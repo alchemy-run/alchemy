@@ -41,6 +41,10 @@ export type Binding =
   | DurableObjectNamespace
   | Hyperdrive
   | KVNamespace
+  | {
+      type: "kv_namespace";
+      id: string;
+    }
   | Pipeline
   | Queue
   | R2Bucket

@@ -1,5 +1,7 @@
 ---
 order: 3
+title: Redwood
+description: Deploy RedwoodJS applications with Drizzle ORM and D1 database to Cloudflare Workers using Alchemy. Includes schema migration and local development setup.
 ---
 
 # Redwood

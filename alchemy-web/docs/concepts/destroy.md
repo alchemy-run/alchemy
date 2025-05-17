@@ -1,5 +1,7 @@
 ---
 order: 9
+title: Destroy
+description: Learn how to safely destroy infrastructure resources with Alchemy. Master application teardown, targeted resource cleanup, and proper destruction order.
 ---
 # Destroy
 

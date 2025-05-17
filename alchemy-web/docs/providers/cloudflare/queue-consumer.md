@@ -1,8 +1,13 @@
+---
+title: Managing Cloudflare Queue Consumers with Alchemy
+description: Learn how to configure Cloudflare Queue Consumers using Alchemy to process messages from your Cloudflare Queues.
+---
+
 # QueueConsumer
 
 Creates a consumer for a [Cloudflare Queue](https://developers.cloudflare.com/queues/platform/consumers/) that processes messages using a Worker.
 
-# Minimal Example
+## Minimal Example
 
 Create a basic queue consumer with default settings.
 
@@ -19,7 +24,7 @@ const consumer = await QueueConsumer("notification-processor", {
 });
 ```
 
-# Custom Settings
+## Custom Settings
 
 Configure batch size, concurrency, retries and other settings.
 
@@ -39,7 +44,7 @@ const consumer = await QueueConsumer("batch-processor", {
 });
 ```
 
-# Bind to a Worker
+## Bind to a Worker
 
 Bind a queue consumer to a worker.
 

@@ -4,6 +4,7 @@
       "./alchemy/src/**",
       "./alchemy/test/**",
       "./scripts/**",
+      "./stacks/**",
       "./examples/*/src/**",
       "./examples/*/alchemy.run.ts",
       "!**/node_modules"

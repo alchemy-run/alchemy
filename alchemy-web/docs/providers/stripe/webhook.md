@@ -1,8 +1,13 @@
+---
+title: Managing Stripe Webhooks with Alchemy
+description: Learn how to create and manage Stripe Webhook Endpoints using Alchemy to receive events from Stripe.
+---
+
 # WebhookEndpoint
 
 The WebhookEndpoint resource lets you create and manage [Stripe Webhook Endpoints](https://stripe.com/docs/api/webhook_endpoints) to receive notifications about events in your Stripe account.
 
-# Minimal Example
+## Minimal Example
 
 Create a basic webhook endpoint to receive payment notifications:
 
@@ -16,7 +21,7 @@ const webhook = await WebhookEndpoint("payments", {
 });
 ```
 
-# Subscription Events
+## Subscription Events
 
 Create a webhook to monitor subscription lifecycle events:
 
@@ -38,7 +43,7 @@ const webhook = await WebhookEndpoint("subscriptions", {
 });
 ```
 
-# Connect Platform Events
+## Connect Platform Events
 
 Create a webhook for Stripe Connect platform events:
 

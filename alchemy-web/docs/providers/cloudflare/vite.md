@@ -1,8 +1,13 @@
+---
+title: Deploying Vite Applications to Cloudflare with Alchemy
+description: Learn how to deploy Vite.js applications to Cloudflare Pages/Workers using Alchemy for fast and efficient builds.
+---
+
 # Vite
 
 Deploy a [Vite](https://vitejs.dev/) application to Cloudflare Workers with automatic configuration.
 
-# Minimal Example
+## Minimal Example
 
 Deploy a basic Vite app with default settings.
 
@@ -15,7 +20,7 @@ const app = await Vite("my-vite-app", {
 });
 ```
 
-# With Custom Bindings
+## With Custom Bindings
 
 Add database and environment bindings to the Vite app.
 
@@ -35,7 +40,7 @@ const app = await Vite("my-vite-app", {
 });
 ```
 
-# With Custom Build Configuration
+## With Custom Build Configuration
 
 Customize the build command and output paths.
 
