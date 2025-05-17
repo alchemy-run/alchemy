@@ -9,7 +9,7 @@ import "../../../src/test/bun.js";
 const test = alchemy.test(import.meta);
 
 describe("AWS Cloud Control Proxy", () => {
-  const testId = `${BRANCH_PREFIX}-test-bucket`;
+  const testId = `${BRANCH_PREFIX}-test-bucket-${Date.now()}`;
 
   test("create, update, and delete S3 bucket using proxy interface", async (scope) => {
     let bucket: any;
