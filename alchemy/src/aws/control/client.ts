@@ -157,7 +157,7 @@ const getRegion = loadConfig({
  * Create a Cloud Control API client
  */
 export async function createCloudControlClient(
-  options: CloudControlOptions = {},
+  options: CloudControlOptions = {}
 ) {
   const credentials = await fromNodeProviderChain()();
 
@@ -179,7 +179,7 @@ export class CloudControlClient {
 
   constructor(
     private readonly client: AwsClient,
-    options: CloudControlOptions,
+    options: CloudControlOptions
   ) {
     this.region = options.region || "us-east-1";
     this.maxPollingAttempts = options.maxPollingAttempts || 30;
@@ -194,7 +194,7 @@ export class CloudControlClient {
    */
   public async createResource(
     typeName: string,
-    desiredState: Record<string, any>,
+    desiredState: Record<string, any>
   ): Promise<ProgressEvent> {
     return this.sync("CreateResource", {
       TypeName: typeName,
@@ -207,7 +207,7 @@ export class CloudControlClient {
    */
   public async getResource(
     typeName: string,
-    identifier: string,
+    identifier: string
   ): Promise<Record<string, any>> {
     return JSON.parse(
       (
@@ -219,7 +219,7 @@ export class CloudControlClient {
           TypeName: typeName,
           Identifier: identifier,
         })
-      ).ResourceDescription.Properties,
+      ).ResourceDescription.Properties
     );
   }
 
@@ -229,7 +229,7 @@ export class CloudControlClient {
   public async updateResource(
     typeName: string,
     identifier: string,
-    patchDocument: Record<string, any>,
+    patchDocument: Record<string, any>
   ): Promise<ProgressEvent> {
     return this.sync("UpdateResource", {
       TypeName: typeName,
@@ -243,7 +243,7 @@ export class CloudControlClient {
    */
   public async deleteResource(
     typeName: string,
-    identifier: string,
+    identifier: string
   ): Promise<ProgressEvent> {
     return this.sync("DeleteResource", {
       TypeName: typeName,
@@ -281,7 +281,7 @@ export class CloudControlClient {
         throw new TimeoutError(
           `Operation ${ProgressEvent.Operation} timed out after ${
             this.operationTimeout / 1000
-          } seconds`,
+          } seconds`
         );
       }
 
@@ -323,7 +323,7 @@ export class CloudControlClient {
         // );
 
         await new Promise((resolve) =>
-          setTimeout(resolve, Math.min(delay * 2, this.maxPollingDelay)),
+          setTimeout(resolve, Math.min(delay * 2, this.maxPollingDelay))
         );
         delay = Math.min(delay * 2, this.maxPollingDelay);
         attempts++;
@@ -331,7 +331,7 @@ export class CloudControlClient {
     }
 
     throw new CloudControlError(
-      `Exceeded maximum attempts (${this.maxPollingAttempts})`,
+      `Exceeded maximum attempts (${this.maxPollingAttempts})`
     );
   }
 
@@ -340,10 +340,9 @@ export class CloudControlClient {
     params?: any,
     options?: {
       maxRetries?: number;
-    },
+    }
   ): Promise<T> {
     let attempt = 0;
-    // TODO: maxRetries 3
     const maxRetries = options?.maxRetries || this.maxRetries;
 
     while (true) {
@@ -378,7 +377,7 @@ export class CloudControlClient {
           continue;
         }
         throw new NetworkError(
-          error.message || "Network error during Cloud Control API request",
+          error.message || "Network error during Cloud Control API request"
         );
       }
     }
