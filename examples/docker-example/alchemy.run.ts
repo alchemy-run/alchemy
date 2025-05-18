@@ -10,8 +10,8 @@ const app = await alchemy("docker-example", {
 });
 
 // Get configuration values (matching the provided Pulumi config)
-const frontendPort = 3000;
-const backendPort = 3001;
+const frontendPort = 3001;
+const backendPort = 3000;
 const mongoPort = 27017;
 const mongoHost = process.env.mongoHost!;
 const database = process.env.database!;
