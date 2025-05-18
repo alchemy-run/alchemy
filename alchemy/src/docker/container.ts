@@ -45,6 +45,21 @@ export interface VolumeMapping {
 }
 
 /**
+ * Network mapping configuration
+ */
+export interface NetworkMapping {
+  /**
+   * Network name or ID
+   */
+  name: string;
+
+  /**
+   * Aliases for the container in the network
+   */
+  aliases?: string[];
+}
+
+/**
  * Properties for creating a Docker container
  */
 export interface DockerContainerProps {
@@ -87,7 +102,7 @@ export interface DockerContainerProps {
   /**
    * Networks to connect to
    */
-  networks?: (DockerNetwork | string)[];
+  networks?: NetworkMapping[];
 
   /**
    * Whether to remove the container when it exits
@@ -241,8 +256,10 @@ export const DockerContainer = Resource(
         // Connect to networks if specified
         if (props.networks) {
           for (const network of props.networks) {
-            const networkId = typeof network === "string" ? network : network.id;
-            await api.connectNetwork(containerId, networkId);
+            const networkId = typeof network === "string" ? network : network.name;
+            await api.connectNetwork(containerId, networkId, {
+              aliases: network.aliases
+            });
           }
         }
 

@@ -235,8 +235,21 @@ export class DockerApi {
    * @param containerId Container ID or name
    * @param networkId Network ID or name
    */
-  async connectNetwork(containerId: string, networkId: string): Promise<void> {
-    await this.exec(["network", "connect", networkId, containerId]);
+  async connectNetwork(
+    containerId: string,
+    networkId: string,
+    options: {
+      aliases?: string[];
+    } = {}
+  ): Promise<void> {
+    const args = ["network", "connect"];
+    if (options.aliases) {
+      for (const alias of options.aliases) {
+        args.push("--alias", alias);
+      }
+    }
+    args.push(networkId, containerId);
+    await this.exec(args);
   }
 
   /**

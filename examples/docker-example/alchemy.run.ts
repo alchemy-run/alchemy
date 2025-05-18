@@ -49,7 +49,12 @@ const mongoContainer = await DockerContainer("mongoContainer", {
   ports: [
     { external: mongoPort, internal: mongoPort }
   ],
-  networks: [network],
+  networks: [
+    {
+      name: network.name,
+      aliases: ["mongo"]
+    }
+  ],
   restart: "always",
   start: true
 });
