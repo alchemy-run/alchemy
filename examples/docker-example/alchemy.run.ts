@@ -53,7 +53,7 @@ const mongoContainer = await DockerContainer("mongoContainer", {
   ports: [
     { external: mongoPort, internal: mongoPort }
   ],
-  networks: [`services-${stack}`],
+  networks: [network],
   restart: "always",
   start: true
 });
@@ -70,7 +70,7 @@ const backendContainer = await DockerContainer("backendContainer", {
     DATABASE_NAME: database,
     NODE_ENV: nodeEnvironment
   },
-  networks: [`services-${stack}`],
+  networks: [network],
   restart: "always",
   start: true
 });
@@ -87,7 +87,7 @@ const frontendContainer = await DockerContainer("frontendContainer", {
     HTTP_PROXY: `backend-${stack}:${backendPort}`,
     PROXY_PROTOCOL: protocol
   },
-  networks: [`services-${stack}`],
+  networks: [network],
   restart: "always",
   start: true
 });

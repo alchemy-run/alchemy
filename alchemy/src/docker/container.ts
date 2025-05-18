@@ -2,6 +2,7 @@ import type { Context } from "../context";
 import { Resource } from "../resource";
 import { DockerApi } from "./api";
 import { DockerImage } from "./image";
+import type { DockerNetwork } from "./network";
 
 /**
  * Port mapping configuration
@@ -86,7 +87,7 @@ export interface DockerContainerProps {
   /**
    * Networks to connect to
    */
-  networks?: string[];
+  networks?: (DockerNetwork | string)[];
 
   /**
    * Whether to remove the container when it exits
@@ -240,7 +241,8 @@ export const DockerContainer = Resource(
         // Connect to networks if specified
         if (props.networks) {
           for (const network of props.networks) {
-            await api.connectNetwork(containerId, network);
+            const networkId = typeof network === "string" ? network : network.id;
+            await api.connectNetwork(containerId, networkId);
           }
         }
 
