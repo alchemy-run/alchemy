@@ -32,7 +32,7 @@ export interface DockerNetworkProps {
 /**
  * Docker Network resource
  */
-export interface DockerNetwork extends DockerNetworkProps {
+export interface DockerNetwork extends Resource<"docker::Network">, DockerNetworkProps {
   /**
    * Network ID
    */

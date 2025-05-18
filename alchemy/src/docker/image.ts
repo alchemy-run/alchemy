@@ -47,7 +47,7 @@ export interface DockerImageProps {
 /**
  * Docker Image resource
  */
-export interface DockerImage extends DockerImageProps {
+export interface DockerImage extends Resource<"docker::Image">, DockerImageProps {
   /**
    * Full image reference (name:tag)
    */

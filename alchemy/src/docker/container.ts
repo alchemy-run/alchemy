@@ -102,7 +102,7 @@ export interface DockerContainerProps {
 /**
  * Docker Container resource
  */
-export interface DockerContainer extends DockerContainerProps {
+export interface DockerContainer extends Resource<"docker::Container">, DockerContainerProps {
   /**
    * Container ID
    */
@@ -201,7 +201,7 @@ export const DockerContainer = Resource(
     } else {
       try {
         let containerId = "";
-        let containerState = "created";
+        let containerState: NonNullable<DockerContainer["state"]> = "created";
 
         // Check if container already exists (for update)
         const containerExists = await api.containerExists(containerName);
@@ -247,7 +247,7 @@ export const DockerContainer = Resource(
         // Start container if requested
         if (props.start) {
           await api.startContainer(containerId);
-          containerState = "running" as const;
+          containerState = "running";
         }
 
         // Return the resource using this() to construct output
