@@ -47,6 +47,8 @@ export interface DockerNetwork extends Resource<"docker::Network">, DockerNetwor
 /**
  * Create and manage a Docker Network
  * 
+ * @see https://docs.docker.com/engine/network/
+ * 
  * @example
  * // Create a simple bridge network
  * const appNetwork = await DockerNetwork("app-network", {
