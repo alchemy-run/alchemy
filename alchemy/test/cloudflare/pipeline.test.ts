@@ -109,7 +109,7 @@ describe("Pipeline Resource", () => {
       const exists = await assertPipelineExists(pipelineName);
       expect(exists).toEqual(false);
     }
-  }, 60000); // Increase timeout for pipeline operations
+  }, 120000); // Increase timeout for pipeline operations
 
   test("create pipeline with R2 bucket destination and custom settings", async (scope) => {
     const pipelineName = `${BRANCH_PREFIX}-r2-pipeline`;
@@ -179,7 +179,7 @@ describe("Pipeline Resource", () => {
     } finally {
       await destroy(scope);
     }
-  }, 60000); // Increase timeout for pipeline operations
+  }, 120000); // Increase timeout for pipeline operations
 
   test("update pipeline settings", async (scope) => {
     const pipelineName = `${BRANCH_PREFIX}-update-pipeline`;
@@ -271,7 +271,7 @@ describe("Pipeline Resource", () => {
     } finally {
       await destroy(scope);
     }
-  }, 60000); // Increase timeout for pipeline operations
+  }, 120000); // Increase timeout for pipeline operations
 
   test("create worker with pipeline binding and send records", async (scope) => {
     const pipelineName = `${BRANCH_PREFIX}-worker-pipeline`;

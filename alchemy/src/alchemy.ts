@@ -361,10 +361,6 @@ async function run<T>(
         throw new Error(
           `Tried to create a Scope that conflicts with a Resource (${prev.kind}): ${id}`,
         );
-      } else if (_scope.phase === "read") {
-        throw new Error(
-          `Tried to create a non-existend Scope (${id}) in read mode`,
-        );
       }
       _scope.parent!.resources.set(
         id,

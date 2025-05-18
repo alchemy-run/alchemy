@@ -86,3 +86,5 @@ jobs:
           SECRET_PASSPHRASE: ${{ secrets.SECRET_PASSPHRASE }}
           UPSTASH_API_KEY: ${{ secrets.UPSTASH_API_KEY }}
           UPSTASH_EMAIL: sam@alchemy.run
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
