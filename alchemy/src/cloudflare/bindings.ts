@@ -45,7 +45,6 @@ export type Binding =
   | PipelineResource
   | QueueResource
   | R2BucketResource
-  | KVNamespace
   | {
       type: "kv_namespace";
       id: string;

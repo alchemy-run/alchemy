@@ -375,7 +375,7 @@ function processBindings(
       // Service binding
       services.push({
         binding: bindingName,
-        service: binding.id,
+        service: binding.name,
       });
     } else if (binding.type === "kv_namespace") {
       // KV Namespace binding
