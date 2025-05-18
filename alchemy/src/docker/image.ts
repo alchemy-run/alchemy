@@ -5,7 +5,7 @@ import { DockerApi } from "./api";
 /**
  * Properties for creating a Docker image
  */
-export interface DockerImageProps {
+export interface DockerRemoteImageProps {
   /**
    * Docker image name (e.g., "nginx")
    */
@@ -17,37 +17,15 @@ export interface DockerImageProps {
   tag?: string;
 
   /**
-   * Path to build context (directory containing Dockerfile)
-   * If provided, image will be built rather than pulled
-   */
-  build?: {
-    /**
-     * Path to build context
-     */
-    context: string;
-    
-    /**
-     * Path to Dockerfile (relative to context)
-     * Defaults to "Dockerfile" in context directory
-     */
-    dockerfile?: string;
-
-    /**
-     * Build arguments
-     */
-    args?: Record<string, string>;
-  };
-
-  /**
-   * Always attempt to pull or build the image, even if it exists locally
+   * Always attempt to pull the image, even if it exists locally
    */
   alwaysPull?: boolean;
 }
 
 /**
- * Docker Image resource
+ * Docker Remote Image resource
  */
-export interface DockerImage extends Resource<"docker::Image">, DockerImageProps {
+export interface DockerRemoteImage extends Resource<"docker::RemoteImage">, DockerRemoteImageProps {
   /**
    * Full image reference (name:tag)
    */
@@ -60,31 +38,19 @@ export interface DockerImage extends Resource<"docker::Image">, DockerImageProps
 }
 
 /**
- * Create or reference a Docker Image
+ * Create or reference a Docker Remote Image
  * 
  * @example
  * // Pull the nginx image
- * const nginxImage = await DockerImage("nginx", {
+ * const nginxImage = await DockerRemoteImage("nginx", {
  *   name: "nginx",
  *   tag: "latest"
  * });
  * 
- * @example
- * // Build a custom image from a Dockerfile
- * const customImage = await DockerImage("my-app", {
- *   name: "my-app",
- *   tag: "v1",
- *   build: {
- *     context: "./app",
- *     args: {
- *       NODE_ENV: "production"
- *     }
- *   }
- * });
  */
-export const DockerImage = Resource(
-  "docker::Image",
-  async function(this: Context<DockerImage>, id: string, props: DockerImageProps): Promise<DockerImage> {
+export const DockerRemoteImage = Resource(
+  "docker::RemoteImage",
+  async function(this: Context<DockerRemoteImage>, id: string, props: DockerRemoteImageProps): Promise<DockerRemoteImage> {
     // Initialize Docker API client
     const api = new DockerApi();
     
@@ -110,16 +76,8 @@ export const DockerImage = Resource(
       return this.destroy();
     } else {
       try {
-        if (props.build) {
-          // Build image from Dockerfile
-          const { context, dockerfile = "Dockerfile", args = {} } = props.build;
-          
-          // Build the image
-          await api.buildImage(context, imageRef, args);
-        } else {
-          // Pull image
-          await api.pullImage(imageRef);
-        }
+        // Pull image
+        await api.pullImage(imageRef);
 
         // Return the resource using this() to construct output
         return this({

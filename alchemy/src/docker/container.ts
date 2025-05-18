@@ -1,8 +1,7 @@
 import type { Context } from "../context";
 import { Resource } from "../resource";
 import { DockerApi } from "./api";
-import { DockerImage } from "./image";
-import type { DockerNetwork } from "./network";
+import { DockerRemoteImage } from "./image";
 
 /**
  * Port mapping configuration
@@ -65,9 +64,9 @@ export interface NetworkMapping {
 export interface DockerContainerProps {
   /**
    * Image to use for the container
-   * Can be an Alchemy DockerImage resource or a string image reference
+   * Can be an Alchemy DockerRemoteImage resource or a string image reference
    */
-  image: DockerImage | string;
+  image: DockerRemoteImage | string;
 
   /**
    * Container name
@@ -151,7 +150,7 @@ export interface DockerContainer extends Resource<"docker::Container">, DockerCo
  * @example
  * // Create a container with environment variables and volume mounts
  * const appContainer = await DockerContainer("app", {
- *   image: customImage, // Using an Alchemy DockerImage resource
+ *   image: customImage, // Using an Alchemy DockerRemoteImage resource
  *   environment: {
  *     NODE_ENV: "production",
  *     API_KEY: "secret-key"

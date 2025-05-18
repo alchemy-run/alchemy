@@ -1,17 +1,17 @@
 import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy.js";
 import { destroy } from "../../src/destroy.js";
-import { DockerImage } from "../../src/docker/image.js";
+import { DockerRemoteImage } from "../../src/docker/image.js";
 
 import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta);
 
-describe("DockerImage", () => {
+describe("DockerRemoteImage", () => {
   test("should pull a small test image", async (scope) => {
     try {
       // Use a small test image to avoid long download times
-      const image = await DockerImage("hello-world-image", {
+      const image = await DockerRemoteImage("hello-world-image", {
         name: "hello-world",
         tag: "latest"
       });
@@ -27,7 +27,7 @@ describe("DockerImage", () => {
   test("should fail when using a non-existent tag", async (scope) => {
     expect.assertions(1);
     try {
-      await DockerImage("non-existent-image", {
+      await DockerRemoteImage("non-existent-image", {
         name: "non-existent",
         tag: "test-tag-123",
       });

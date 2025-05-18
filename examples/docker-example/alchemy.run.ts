@@ -1,5 +1,5 @@
 import { alchemy } from "../../alchemy/src/alchemy";
-import { DockerImage, DockerContainer, DockerNetwork } from "../../alchemy/src/docker";
+import { DockerContainer, DockerNetwork, DockerRemoteImage } from "../../alchemy/src/docker";
 
 // Initialize Alchemy
 const app = await alchemy("docker-example", {
@@ -28,15 +28,15 @@ const network = await DockerNetwork("network", {
 
 // Pull the images in parallel
 const [backend, frontend, mongoImage] = await Promise.all([
-  DockerImage(`backendImage`, {
+  DockerRemoteImage(`backendImage`, {
     name: "pulumi/tutorial-pulumi-fundamentals-backend",
     tag: "latest"
   }),
-  DockerImage(`frontendImage`, {
+  DockerRemoteImage(`frontendImage`, {
     name: "pulumi/tutorial-pulumi-fundamentals-frontend",
     tag: "latest"
   }),
-  DockerImage("mongoImage", {
+  DockerRemoteImage("mongoImage", {
     name: "pulumi/tutorial-pulumi-fundamentals-database",
     tag: "latest"
   })
@@ -96,6 +96,6 @@ const frontendContainer = await DockerContainer("frontendContainer", {
 await app.finalize();
 
 // Export relevant information
-export { network, mongoContainer, backendContainer, frontendContainer };
+export { backendContainer, frontendContainer, mongoContainer, network };
 export const frontendUrl = `http://localhost:${frontendPort}`;
 export const backendUrl = `http://localhost:${backendPort}`;
