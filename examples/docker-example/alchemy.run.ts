@@ -26,25 +26,21 @@ const network = await DockerNetwork("network", {
   driver: "bridge"
 });
 
-// Pull the backend image
-const backendImageName = "backend";
-const backend = await DockerImage(`${backendImageName}Image`, {
-  name: "pulumi/tutorial-pulumi-fundamentals-backend",
-  tag: "latest"
-});
-
-// Pull the frontend image
-const frontendImageName = "frontend";
-const frontend = await DockerImage(`${frontendImageName}Image`, {
-  name: "pulumi/tutorial-pulumi-fundamentals-frontend",
-  tag: "latest"
-});
-
-// Pull the MongoDB image
-const mongoImage = await DockerImage("mongoImage", {
-  name: "pulumi/tutorial-pulumi-fundamentals-database",
-  tag: "latest"
-});
+// Pull the images in parallel
+const [backend, frontend, mongoImage] = await Promise.all([
+  DockerImage(`backendImage`, {
+    name: "pulumi/tutorial-pulumi-fundamentals-backend",
+    tag: "latest"
+  }),
+  DockerImage(`frontendImage`, {
+    name: "pulumi/tutorial-pulumi-fundamentals-frontend",
+    tag: "latest"
+  }),
+  DockerImage("mongoImage", {
+    name: "pulumi/tutorial-pulumi-fundamentals-database",
+    tag: "latest"
+  })
+]);
 
 // Create the MongoDB container
 const mongoContainer = await DockerContainer("mongoContainer", {
