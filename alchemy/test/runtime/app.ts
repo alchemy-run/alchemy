@@ -13,11 +13,7 @@ const app = await alchemy("my-bootstrap-ap", {
 
 const queue = await Queue<string>("my-bootstrap-queue");
 
-const bucket = await R2Bucket("my-bootstrap-bucket", {
-  adopt: true,
-});
-
-// console.log(bucket);
+const bucket = await R2Bucket("my-bootstrap-bucket");
 
 const pipeline = await Pipeline<{
   key: string;
@@ -43,7 +39,6 @@ const pipeline = await Pipeline<{
 });
 
 export default Worker("worker", import.meta, {
-  compatibilityFlags: ["nodejs_compat"],
   bundle: {
     outfile: alchemy.isRuntime
       ? undefined

@@ -330,7 +330,9 @@ export async function Pipeline<T extends PipelineRecord = PipelineRecord>(
   props: PipelineProps,
 ): Promise<Pipeline<T>> {
   const pipeline = await PipelineResource(name, props);
-  const binding = await bind(pipeline);
+  const binding = await bind(pipeline, {
+    bindThis: false,
+  });
   return {
     ...pipeline,
     send: binding.send,

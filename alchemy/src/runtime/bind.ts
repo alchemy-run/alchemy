@@ -32,15 +32,21 @@ export type Bound<T> = T extends CloudflareBinding ? CloudflareBound<T> : T;
  */
 export async function bind<T extends Resource>(
   resource: T | Promise<T>,
-  reify?: (value: T, key: string) => Bound<T>,
+  options?: {
+    reify?: (value: T, key: string) => Bound<T>;
+    /** @default true */
+    bindThis?: boolean;
+  },
 ): Promise<Bound<T>> {
   if (isPromise(resource)) {
-    return resource.then((r) => bind(r, reify)) as Promise<Bound<T>>;
+    return resource.then((r) => bind(r, options)) as Promise<Bound<T>>;
   }
   let _runtime: [Bound<T>] | undefined;
   const runtime = (): any =>
     (_runtime ??= [
-      reify ? reify(resource, getBindKey(resource)) : getBinding(resource),
+      options?.reify
+        ? options.reify(resource, getBindKey(resource))
+        : getBinding(resource),
     ])[0];
 
   return new Proxy(() => {}, {
@@ -61,7 +67,10 @@ export async function bind<T extends Resource>(
             `Method ${prop} on '${resource[ResourceFQN]}' is not a function`,
           );
         }
-        return method.bind(rt)(...args);
+        if (options?.bindThis !== false) {
+          return method.bind(rt)(...args);
+        }
+        return method(...args);
       };
     },
     // apply: (target, thisArg, argArray) => {

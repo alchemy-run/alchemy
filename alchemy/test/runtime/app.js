@@ -2980,13 +2980,13 @@ function getBindKey(resource) {
   return key;
 }
 __name(getBindKey, "getBindKey");
-async function bind(resource, reify) {
+async function bind(resource, options) {
   if (isPromise(resource)) {
-    return resource.then((r) => bind(r, reify));
+    return resource.then((r) => bind(r, options));
   }
   let _runtime;
   const runtime = /* @__PURE__ */ __name(() => (_runtime ??= [
-    reify ? reify(resource, getBindKey(resource)) : getBinding(resource)
+    options?.reify ? options.reify(resource, getBindKey(resource)) : getBinding(resource)
   ])[0], "runtime");
   return new Proxy(() => {
   }, {
@@ -3005,7 +3005,10 @@ async function bind(resource, reify) {
         if (typeof method !== "function") {
           throw new Error(`Method ${prop} on '${resource[ResourceFQN]}' is not a function`);
         }
-        return method.bind(rt)(...args);
+        if (options?.bindThis !== false) {
+          return method.bind(rt)(...args);
+        }
+        return method(...args);
       };
     }, "get")
   });
@@ -3304,7 +3307,9 @@ function isPipeline(resource) {
 __name(isPipeline, "isPipeline");
 async function Pipeline(name, props) {
   const pipeline2 = await PipelineResource(name, props);
-  const binding2 = await bind(pipeline2);
+  const binding2 = await bind(pipeline2, {
+    bindThis: false
+  });
   return {
     ...pipeline2,
     send: binding2.send
@@ -3436,6 +3441,10 @@ function Worker(...args) {
       };
       return _Worker(id, {
         ...props,
+        compatibilityFlags: [
+          "nodejs_compat",
+          ...props.compatibilityFlags ?? []
+        ],
         entrypoint: meta.filename,
         name: workerName,
         adopt: true,
@@ -3512,9 +3521,7 @@ var app = await alchemy("my-bootstrap-ap", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up"
 });
 var queue = await Queue("my-bootstrap-queue");
-var bucket = await R2Bucket("my-bootstrap-bucket", {
-  adopt: true
-});
+var bucket = await R2Bucket("my-bootstrap-bucket");
 var pipeline = await Pipeline("my-bootstrap-pipeline", {
   source: [
     {
@@ -3540,9 +3547,6 @@ var pipeline = await Pipeline("my-bootstrap-pipeline", {
   }
 });
 var app_default = Worker("worker", import.meta, {
-  compatibilityFlags: [
-    "nodejs_compat"
-  ],
   bundle: {
     outfile: alchemy.isRuntime ? void 0 : path8.join(import.meta.dirname, "app.js"),
     minify: false
