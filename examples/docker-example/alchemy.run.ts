@@ -13,10 +13,10 @@ const app = await alchemy("docker-example", {
 const frontendPort = 3000;
 const backendPort = 3001;
 const mongoPort = 27017;
-const mongoHost = process.env.mongoHost;
-const database = process.env.database;
-const nodeEnvironment = process.env.nodeEnvironment;
-const protocol = process.env.protocol;
+const mongoHost = process.env.mongoHost!;
+const database = process.env.database!;
+const nodeEnvironment = process.env.nodeEnvironment!;
+const protocol = process.env.protocol!;
 
 const stack = app.stage || "dev";
 
@@ -80,7 +80,7 @@ const frontendContainer = await DockerContainer("frontendContainer", {
   ],
   environment: {
     PORT: frontendPort.toString(),
-    HTTP_PROXY: `backend-${stack}:${backendPort}`,
+    HTTP_PROXY: `${backendContainer.name}:${backendPort}`,
     PROXY_PROTOCOL: protocol
   },
   networks: [network],
