@@ -15,10 +15,8 @@ describe("DockerNetwork", () => {
         name: networkName
       });
 
-      // Use type assertion for tests
-      const typedNetwork = network as any;
-      expect(typedNetwork.name).toBe(networkName);
-      expect(typedNetwork.driver).toBe("bridge"); // default value
+      expect(network.name).toBe(networkName);
+      expect(network.driver).toBe("bridge"); // default value
     } finally {
       await destroy(scope);
     }

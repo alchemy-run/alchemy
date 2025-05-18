@@ -15,7 +15,7 @@ export interface DockerNetworkProps {
    * Network driver to use
    * @default "bridge"
    */
-  driver?: "bridge" | "host" | "none" | "overlay" | "macvlan" | string;
+  driver?: "bridge" | "host" | "none" | "overlay" | "macvlan" | (string & {});
 
   /**
    * Enable IPv6 on the network
@@ -98,8 +98,8 @@ export const DockerNetwork = Resource(
     } else {
       try {
         // Create the network
-        const driver = props.driver || "bridge";
-        const networkId = await api.createNetwork(props.name, driver);
+        props.driver = props.driver || "bridge";
+        const networkId = await api.createNetwork(props.name, props.driver);
 
         // Return the resource using this() to construct output
         return this({

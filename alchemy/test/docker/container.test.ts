@@ -17,10 +17,8 @@ describe("DockerContainer", () => {
         start: false
       });
 
-      // Use type assertion since TypeScript doesn't recognize the properties
-      const typedContainer = container as any;
-      expect(typedContainer.name).toBe("alchemy-test-container");
-      expect(typedContainer.state).toBe("created");
+      expect(container.name).toBe("alchemy-test-container");
+      expect(container.state).toBe("created");
     } finally {
       await destroy(scope);
     }
