@@ -1,10 +1,12 @@
+import path from "node:path";
 import type { Context } from "../context.js";
 import type { BundleProps } from "../esbuild/bundle.js";
 import { InnerResourceScope, Resource } from "../resource.js";
 import { getBindKey } from "../runtime/bind.js";
 import { isRuntime } from "../runtime/global.js";
+import { bootstrapPlugin } from "../runtime/plugin.js";
 import { Scope } from "../scope.js";
-import { Secret } from "../secret.js";
+import { Secret, secret } from "../secret.js";
 import { serializeScope } from "../serde.js";
 import { withExponentialBackoff } from "../util/retry.js";
 import { slugify } from "../util/slugify.js";
@@ -15,7 +17,7 @@ import {
   createCloudflareApi,
 } from "./api.js";
 import type { Assets } from "./assets.js";
-import { type Binding, type Bindings, Json, Self } from "./bindings.js";
+import { type Binding, type Bindings, Json } from "./bindings.js";
 import type { Bound } from "./bound.js";
 import { isBucket } from "./bucket.js";
 import { bundleWorkerScript } from "./bundle/bundle-worker.js";
@@ -193,31 +195,13 @@ export interface BaseWorkerProps<B extends Bindings = Bindings>
 export interface InlineWorkerProps<B extends Bindings = Bindings>
   extends BaseWorkerProps<B> {
   script: string;
-
-  // never
   entrypoint?: undefined;
-  meta?: undefined;
-  fetch?: undefined;
 }
 
 export interface EntrypointWorkerProps<B extends Bindings = Bindings>
   extends BaseWorkerProps<B> {
   entrypoint: string;
-
-  // never
   script?: undefined;
-  meta?: undefined;
-  fetch?: undefined;
-}
-
-export interface ImportMetaWorkerProps<B extends Bindings = Bindings>
-  extends BaseWorkerProps<B> {
-  meta?: ImportMeta;
-  fetch: (request: Request) => Promise<Response>;
-
-  // never
-  script?: undefined;
-  entrypoint?: undefined;
 }
 
 /**
@@ -225,8 +209,17 @@ export interface ImportMetaWorkerProps<B extends Bindings = Bindings>
  */
 export type WorkerProps<B extends Bindings = Bindings> =
   | InlineWorkerProps<B>
-  | EntrypointWorkerProps<B>
-  | ImportMetaWorkerProps<B>;
+  | EntrypointWorkerProps<B>;
+
+export interface FetchWorkerProps<B extends Bindings = Bindings>
+  extends Omit<WorkerProps<B>, "entrypoint"> {
+  /**
+   * A function that will be used to fetch the worker script.
+   *
+   * This is only used when using the fetch property.
+   */
+  fetch(request: Request): Promise<Response>;
+}
 
 /**
  * Output returned after Worker creation/update
@@ -387,16 +380,16 @@ export function Worker<const B extends Bindings>(
 export function Worker<const B extends Bindings>(
   id: string,
   meta: ImportMeta,
-  props: WorkerProps<B>,
+  props: FetchWorkerProps<B>,
 ): Promise<Worker<B>>;
 export function Worker<const B extends Bindings>(
   ...args:
     | [id: string, props: WorkerProps<B>]
-    | [id: string, meta: ImportMeta, props: WorkerProps<B>]
+    | [id: string, meta: ImportMeta, props: FetchWorkerProps<B>]
 ): Promise<Worker<B>> {
   const [id, meta, props] =
     args.length === 2 ? [args[0], undefined, args[1]] : args;
-  if (props.fetch) {
+  if ("fetch" in props && props.fetch) {
     const scope = Scope.current;
 
     const workerName = props.name ?? id;
@@ -449,17 +442,56 @@ export function Worker<const B extends Bindings>(
         ...props.bindings,
         __ALCHEMY_WORKER_NAME__: workerName,
         __ALCHEMY_SERIALIZED_SCOPE__: Json(await serializeScope(scope)),
+        ALCHEMY_STAGE: scope.stage,
+        ALCHEMY_PASSWORD: secret(scope.password),
         // TODO(sam): prune un-needed bindings
         ...autoBindings,
       };
 
       return _Worker(id, {
-        meta,
-        ...(props as ImportMetaWorkerProps<B>),
+        ...(props as any),
+        entrypoint: meta!.filename,
         name: workerName,
         // adopt because the stub guarnatees that the worker exists
         adopt: true,
         bindings,
+        bundle: {
+          ...props.bundle,
+          plugins: [bootstrapPlugin],
+          external: [
+            // for alchemy
+            "libsodium*",
+            "@swc/*",
+            "esbuild",
+            // TODO(sam): this is for fetch, why is it a package?
+            "undici",
+            // TODO(sam): no idea where this came from, feels dangerous to externalize it
+            "ws",
+          ],
+          banner: {
+            js: `import { env as __ALCHEMY_ENV__ } from "cloudflare:workers";
+var __ALCHEMY_RUNTIME__ = true;
+var __ALCHEMY_SERIALIZED_SCOPE__ = JSON.parse(__ALCHEMY_ENV__.__ALCHEMY_SERIALIZED_SCOPE__);
+
+var STATE = {
+  get(id) {
+    const fqn = globalThis.__ALCHEMY_SCOPE__.current.fqn(id);
+    const state = __ALCHEMY_SERIALIZED_SCOPE__[fqn];
+    if (!state) {
+      throw new Error(
+        \`Resource \${fqn} not found in __ALCHEMY_SERIALIZED_SCOPE__\n\${JSON.stringify(__ALCHEMY_SERIALIZED_SCOPE__, null, 2)}\`
+      );
+    }
+    // TODO(sam): deserialize
+    return state;
+  },
+};`,
+          },
+          inject: [
+            ...(props.bundle?.inject ?? []),
+            path.resolve(import.meta.dirname, "..", "runtime", "shims.js"),
+          ],
+        },
       });
     }) as Promise<Worker<B>>;
 
@@ -473,23 +505,42 @@ export function Worker<const B extends Bindings>(
     };
 
     if (isRuntime) {
-      promise.fetch = props.fetch;
+      promise.fetch = async (request: Request) => {
+        try {
+          return await props.fetch(request);
+        } catch (err: any) {
+          return new Response(err.message, {
+            status: 500,
+          });
+        }
+      };
     } else {
       promise.fetch = async (request: Request) => {
-        console.log(request);
         const worker = await promise;
         if (worker.url === undefined) {
           throw new Error("Worker URL is not available in runtime");
         }
         const workerURL = new URL(worker.url);
-        const requestURL = new URL(request.url);
-        requestURL.host = workerURL.host;
-        return fetch(requestURL, request);
+        const requestURL = new URL(workerURL, request.url);
+        request.headers.set("host", workerURL.host);
+        try {
+          return await fetch(requestURL.toString(), {
+            ...(request as any),
+            body: request.body,
+            headers: request.headers,
+            method: request.method,
+            url: requestURL,
+          });
+        } catch (err: any) {
+          return new Response(err.message, {
+            status: 500,
+          });
+        }
       };
     }
     return promise;
   }
-  return _Worker(id, props);
+  return _Worker(id, props as WorkerProps<B>);
 }
 
 export const _Worker = Resource(
@@ -632,19 +683,11 @@ export const _Worker = Resource(
     };
 
     if (this.phase === "delete") {
-      if (
-        Object.values(props.bindings ?? {}).some((binding) => binding === Self)
-      ) {
-        // remove the Self bindings or else we can't remove (LOL)
-        await uploadWorkerScript({
-          ...props,
-          bindings: Object.fromEntries(
-            Object.entries(props.bindings ?? {}).filter(
-              ([_, binding]) => binding !== Self,
-            ),
-          ) as B,
-        });
-      }
+      await uploadWorkerScript({
+        ...props,
+        // clear the bindings so that we can delete the worker
+        bindings: {} as B,
+      });
 
       await withExponentialBackoff(
         () =>
@@ -666,11 +709,8 @@ export const _Worker = Resource(
       return this.destroy();
     }
     // Validate input - we need either script, entryPoint, or bundle
-    if (!props.script && !props.entrypoint && !props.fetch) {
-      throw new Error("One of script, entryPoint or fetch must be provided");
-    }
-    if (props.fetch && !props.meta) {
-      throw new Error("meta is required when using fetch");
+    if (!props.script && !props.entrypoint) {
+      throw new Error("One of script or entrypoint must be provided");
     }
 
     if (this.phase === "create") {

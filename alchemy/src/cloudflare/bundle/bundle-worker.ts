@@ -1,8 +1,5 @@
 import fs from "node:fs/promises";
 import { Bundle } from "../../esbuild/bundle.js";
-import { bootstrapPlugin } from "../../runtime/plugin.js";
-import { Scope } from "../../scope.js";
-import { serializeScope } from "../../serde.js";
 import type { Bindings } from "../bindings.js";
 import type { WorkerProps } from "../worker.js";
 import { createAliasPlugin } from "./alias-plugin.js";
@@ -16,6 +13,7 @@ import { nodeJsCompatPlugin } from "./nodejs-compat.js";
 
 export async function bundleWorkerScript<B extends Bindings>(
   props: WorkerProps<B> & {
+    entrypoint: string;
     compatibilityDate: string;
     compatibilityFlags: string[];
   },
@@ -32,10 +30,7 @@ export async function bundleWorkerScript<B extends Bindings>(
       "You must set your compatibilty date >= 2024-09-23 when using 'nodejs_compat' compatibility flag",
     );
   }
-  const main = props.entrypoint ?? props.meta?.filename;
-  if (!main) {
-    throw new Error("One of entrypoint or meta.file must be provided");
-  }
+  const main = props.entrypoint;
 
   try {
     const bundle = await Bundle("bundle", {
@@ -46,18 +41,6 @@ export async function bundleWorkerScript<B extends Bindings>(
       minify: false,
       ...(props.bundle || {}),
       conditions: ["workerd", "worker", "browser"],
-      banner: props.fetch
-        ? {
-            js: `import { env as __ALCHEMY_ENV__ } from "cloudflare:workers";
-
-var __ALCHEMY_STATE__ = ${JSON.stringify(await serializeScope(Scope.root))};
-
-var STATE = {
-  get: (id) => Promise.resolve(null),
-  // get: (id) => __ALCHEMY_ENV__.STATE.get(id),
-}`,
-          }
-        : undefined,
       options: {
         absWorkingDir: projectRoot,
         ...(props.bundle?.options || {}),
@@ -67,7 +50,6 @@ var STATE = {
           ".json": "json",
         },
         plugins: [
-          ...(props.fetch ? [bootstrapPlugin] : []),
           ...(props.bundle?.plugins ?? []),
           ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
           ...(props.bundle?.alias
@@ -81,18 +63,6 @@ var STATE = {
         ],
       },
       external: [
-        ...(props.fetch
-          ? [
-              // for alchemy
-              "libsodium*",
-              "@swc/*",
-              "esbuild",
-              // TODO(sam): this is for fetch, why is it a package?
-              "undici",
-              // TODO(sam): no idea where this came from, feels dangerous to externalize it
-              "ws",
-            ]
-          : []),
         ...(nodeJsCompatMode === "als" ? external_als : external),
         ...(props.bundle?.external ?? []),
         ...(props.bundle?.options?.external ?? []),

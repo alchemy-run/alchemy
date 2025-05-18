@@ -1,11 +1,21 @@
 import { env as __ALCHEMY_ENV__ } from "cloudflare:workers";
-
-var __ALCHEMY_STATE__ = {"my-bootstrap-queue":{"state":{"Symbol(alchemy::ResourceKind)":"cloudflare::Queue","Symbol(alchemy::ResourceID)":"my-bootstrap-queue","Symbol(alchemy::ResourceFQN)":"my-bootstrap-ap/samgoodwin/my-bootstrap-queue","Symbol(alchemy::ResourceSeq)":0,"Symbol(alchemy::ResourceScope)":{"@scope":null}}},"my-bootstrap-bucket":{"state":{"Symbol(alchemy::ResourceKind)":"cloudflare::R2Bucket","Symbol(alchemy::ResourceID)":"my-bootstrap-bucket","Symbol(alchemy::ResourceFQN)":"my-bootstrap-ap/samgoodwin/my-bootstrap-bucket","Symbol(alchemy::ResourceSeq)":1,"Symbol(alchemy::ResourceScope)":{"@scope":null}}},"worker":{"state":{"Symbol(alchemy::ResourceKind)":"cloudflare::Worker","Symbol(alchemy::ResourceID)":"worker","Symbol(alchemy::ResourceFQN)":"my-bootstrap-ap/samgoodwin/worker","Symbol(alchemy::ResourceSeq)":2,"Symbol(alchemy::ResourceScope)":{"@scope":null}}}};
+var __ALCHEMY_RUNTIME__ = true;
+var __ALCHEMY_SERIALIZED_SCOPE__ = JSON.parse(__ALCHEMY_ENV__.__ALCHEMY_SERIALIZED_SCOPE__);
 
 var STATE = {
-  get: (id) => Promise.resolve(null),
-  // get: (id) => __ALCHEMY_ENV__.STATE.get(id),
-}
+  get(id) {
+    const fqn = globalThis.__ALCHEMY_SCOPE__.current.fqn(id);
+    const state = __ALCHEMY_SERIALIZED_SCOPE__[fqn];
+    if (!state) {
+      throw new Error(
+        `Resource ${fqn} not found in __ALCHEMY_SERIALIZED_SCOPE__
+${JSON.stringify(__ALCHEMY_SERIALIZED_SCOPE__, null, 2)}`
+      );
+    }
+    // TODO(sam): deserialize
+    return state;
+  },
+};
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
@@ -22,6 +32,15 @@ var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
 };
+
+// alchemy/src/runtime/shims.js
+import { env } from "cloudflare:workers";
+var init_shims = __esm({
+  "alchemy/src/runtime/shims.js"() {
+    "use strict";
+    globalThis.process.env = env;
+  }
+});
 
 // node_modules/unenv/dist/runtime/_internal/utils.mjs
 // @__NO_SIDE_EFFECTS__
@@ -53,6 +72,7 @@ function notImplementedClass(name) {
 }
 var init_utils = __esm({
   "node_modules/unenv/dist/runtime/_internal/utils.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -67,6 +87,7 @@ var init_utils = __esm({
 var _timeOrigin, _performanceNow, nodeTiming, PerformanceEntry, PerformanceMark, PerformanceMeasure, PerformanceResourceTiming, PerformanceObserverEntryList, Performance, PerformanceObserver, performance;
 var init_performance = __esm({
   "node_modules/unenv/dist/runtime/node/internal/perf_hooks/performance.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -313,6 +334,7 @@ var init_performance = __esm({
 // node_modules/unenv/dist/runtime/node/perf_hooks.mjs
 var init_perf_hooks = __esm({
   "node_modules/unenv/dist/runtime/node/perf_hooks.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -339,6 +361,7 @@ var init_performance2 = __esm({
 var noop_default;
 var init_noop = __esm({
   "node_modules/unenv/dist/runtime/mock/noop.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -352,6 +375,7 @@ import { Writable } from "node:stream";
 var _console, _ignoreErrors, _stderr, _stdout, log, info, trace, debug, table, error, warn, createTask, clear, count, countReset, dir, dirxml, group, groupEnd, groupCollapsed, profile, profileEnd, time, timeEnd, timeLog, timeStamp, Console, _times, _stdoutErrorHandler, _stderrErrorHandler;
 var init_console = __esm({
   "node_modules/unenv/dist/runtime/node/console.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -394,6 +418,7 @@ var init_console = __esm({
 var workerdConsole, assert, clear2, context, count2, countReset2, createTask2, debug2, dir2, dirxml2, error2, group2, groupCollapsed2, groupEnd2, info2, log2, profile2, profileEnd2, table2, time2, timeEnd2, timeLog2, timeStamp2, trace2, warn2, console_default;
 var init_console2 = __esm({
   "node_modules/@cloudflare/unenv-preset/dist/runtime/node/console.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -456,6 +481,7 @@ var init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console = __
 var hrtime;
 var init_hrtime = __esm({
   "node_modules/unenv/dist/runtime/node/internal/process/hrtime.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -483,6 +509,7 @@ var init_hrtime = __esm({
 var WriteStream;
 var init_write_stream = __esm({
   "node_modules/unenv/dist/runtime/node/internal/tty/write-stream.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -541,6 +568,7 @@ var init_write_stream = __esm({
 var ReadStream;
 var init_read_stream = __esm({
   "node_modules/unenv/dist/runtime/node/internal/tty/read-stream.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -565,6 +593,7 @@ var init_read_stream = __esm({
 // node_modules/unenv/dist/runtime/node/tty.mjs
 var init_tty = __esm({
   "node_modules/unenv/dist/runtime/node/tty.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -578,6 +607,7 @@ import { EventEmitter } from "node:events";
 var Process;
 var init_process = __esm({
   "node_modules/unenv/dist/runtime/node/internal/process/process.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -810,9 +840,10 @@ var init_process = __esm({
 });
 
 // node_modules/@cloudflare/unenv-preset/dist/runtime/node/process.mjs
-var globalProcess, getBuiltinModule, exit, platform, nextTick, unenvProcess, abort, addListener, allowedNodeEnvironmentFlags, hasUncaughtExceptionCaptureCallback, setUncaughtExceptionCaptureCallback, loadEnvFile, sourceMapsEnabled, arch, argv, argv0, chdir, config, connected, constrainedMemory, availableMemory, cpuUsage, cwd, debugPort, dlopen, disconnect, emit, emitWarning, env, eventNames, execArgv, execPath, finalization, features, getActiveResourcesInfo, getMaxListeners, hrtime3, kill, listeners, listenerCount, memoryUsage, on, off, once, pid, ppid, prependListener, prependOnceListener, rawListeners, release, removeAllListeners, removeListener, report, resourceUsage, setMaxListeners, setSourceMapsEnabled, stderr, stdin, stdout, title, throwDeprecation, traceDeprecation, umask, uptime, version, versions, domain, initgroups, moduleLoadList, reallyExit, openStdin, assert2, binding, send, exitCode, channel, getegid, geteuid, getgid, getgroups, getuid, setegid, seteuid, setgid, setgroups, setuid, permission, mainModule, _events, _eventsCount, _exiting, _maxListeners, _debugEnd, _debugProcess, _fatalException, _getActiveHandles, _getActiveRequests, _kill, _preload_modules, _rawDebug, _startProfilerIdleNotifier, _stopProfilerIdleNotifier, _tickCallback, _disconnect, _handleQueue, _pendingMessage, _channel, _send, _linkedBinding, _process, process_default;
+var globalProcess, getBuiltinModule, exit, platform, nextTick, unenvProcess, abort, addListener, allowedNodeEnvironmentFlags, hasUncaughtExceptionCaptureCallback, setUncaughtExceptionCaptureCallback, loadEnvFile, sourceMapsEnabled, arch, argv, argv0, chdir, config, connected, constrainedMemory, availableMemory, cpuUsage, cwd, debugPort, dlopen, disconnect, emit, emitWarning, env2, eventNames, execArgv, execPath, finalization, features, getActiveResourcesInfo, getMaxListeners, hrtime3, kill, listeners, listenerCount, memoryUsage, on, off, once, pid, ppid, prependListener, prependOnceListener, rawListeners, release, removeAllListeners, removeListener, report, resourceUsage, setMaxListeners, setSourceMapsEnabled, stderr, stdin, stdout, title, throwDeprecation, traceDeprecation, umask, uptime, version, versions, domain, initgroups, moduleLoadList, reallyExit, openStdin, assert2, binding, send, exitCode, channel, getegid, geteuid, getgid, getgroups, getuid, setegid, seteuid, setgid, setgroups, setuid, permission, mainModule, _events, _eventsCount, _exiting, _maxListeners, _debugEnd, _debugProcess, _fatalException, _getActiveHandles, _getActiveRequests, _kill, _preload_modules, _rawDebug, _startProfilerIdleNotifier, _stopProfilerIdleNotifier, _tickCallback, _disconnect, _handleQueue, _pendingMessage, _channel, _send, _linkedBinding, _process, process_default;
 var init_process2 = __esm({
   "node_modules/@cloudflare/unenv-preset/dist/runtime/node/process.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -851,7 +882,7 @@ var init_process2 = __esm({
       disconnect,
       emit,
       emitWarning,
-      env,
+      env: env2,
       eventNames,
       execArgv,
       execPath,
@@ -956,7 +987,7 @@ var init_process2 = __esm({
       disconnect,
       emit,
       emitWarning,
-      env,
+      env: env2,
       eventNames,
       execArgv,
       execPath,
@@ -1059,6 +1090,7 @@ var init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process = __
 var access, copyFile, cp, open, opendir, rename, truncate, rm, rmdir, mkdir, readdir, readlink, symlink, lstat, stat, link, unlink, chmod, lchmod, lchown, chown, utimes, lutimes, realpath, mkdtemp, writeFile, appendFile, readFile, watch, statfs, glob;
 var init_promises = __esm({
   "node_modules/unenv/dist/runtime/node/internal/fs/promises.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1162,6 +1194,7 @@ __export(constants_exports, {
 var UV_FS_SYMLINK_DIR, UV_FS_SYMLINK_JUNCTION, O_RDONLY, O_WRONLY, O_RDWR, UV_DIRENT_UNKNOWN, UV_DIRENT_FILE, UV_DIRENT_DIR, UV_DIRENT_LINK, UV_DIRENT_FIFO, UV_DIRENT_SOCKET, UV_DIRENT_CHAR, UV_DIRENT_BLOCK, EXTENSIONLESS_FORMAT_JAVASCRIPT, EXTENSIONLESS_FORMAT_WASM, S_IFMT, S_IFREG, S_IFDIR, S_IFCHR, S_IFBLK, S_IFIFO, S_IFLNK, S_IFSOCK, O_CREAT, O_EXCL, UV_FS_O_FILEMAP, O_NOCTTY, O_TRUNC, O_APPEND, O_DIRECTORY, O_NOATIME, O_NOFOLLOW, O_SYNC, O_DSYNC, O_DIRECT, O_NONBLOCK, S_IRWXU, S_IRUSR, S_IWUSR, S_IXUSR, S_IRWXG, S_IRGRP, S_IWGRP, S_IXGRP, S_IRWXO, S_IROTH, S_IWOTH, S_IXOTH, F_OK, R_OK, W_OK, X_OK, UV_FS_COPYFILE_EXCL, COPYFILE_EXCL, UV_FS_COPYFILE_FICLONE, COPYFILE_FICLONE, UV_FS_COPYFILE_FICLONE_FORCE, COPYFILE_FICLONE_FORCE;
 var init_constants = __esm({
   "node_modules/unenv/dist/runtime/node/internal/fs/constants.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1230,6 +1263,7 @@ var init_constants = __esm({
 var promises_default;
 var init_promises2 = __esm({
   "node_modules/unenv/dist/runtime/node/fs/promises.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1277,6 +1311,7 @@ var init_promises2 = __esm({
 var Dir, Dirent, Stats, ReadStream2, WriteStream2, FileReadStream, FileWriteStream;
 var init_classes = __esm({
   "node_modules/unenv/dist/runtime/node/internal/fs/classes.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1304,6 +1339,7 @@ function callbackify(fn) {
 var access2, appendFile2, chown2, chmod2, copyFile2, cp2, lchown2, lchmod2, link2, lstat2, lutimes2, mkdir2, mkdtemp2, realpath2, open2, opendir2, readdir2, readFile2, readlink2, rename2, rm2, rmdir2, stat2, symlink2, truncate2, unlink2, utimes2, writeFile2, statfs2, close, createReadStream, createWriteStream, exists, fchown, fchmod, fdatasync, fstat, fsync, ftruncate, futimes, lstatSync, read, readv, realpathSync, statSync, unwatchFile, watch2, watchFile, write, writev, _toUnixTimestamp, openAsBlob, glob2, appendFileSync, accessSync, chownSync, chmodSync, closeSync, copyFileSync, cpSync, existsSync, fchownSync, fchmodSync, fdatasyncSync, fstatSync, fsyncSync, ftruncateSync, futimesSync, lchownSync, lchmodSync, linkSync, lutimesSync, mkdirSync, mkdtempSync, openSync, opendirSync, readdirSync, readSync, readvSync, readFileSync, readlinkSync, renameSync, rmSync, rmdirSync, symlinkSync, truncateSync, unlinkSync, utimesSync, writeFileSync, writeSync, writevSync, statfsSync, globSync;
 var init_fs = __esm({
   "node_modules/unenv/dist/runtime/node/internal/fs/fs.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1410,6 +1446,7 @@ var init_fs = __esm({
 var fs_default;
 var init_fs2 = __esm({
   "node_modules/unenv/dist/runtime/node/fs.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1542,6 +1579,7 @@ function isFileRef(value) {
 var init_file_ref = __esm({
   "alchemy/src/fs/file-ref.ts"() {
     "use strict";
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1560,6 +1598,7 @@ function isFileCollection(value) {
 var init_file_collection = __esm({
   "alchemy/src/fs/file-collection.ts"() {
     "use strict";
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1570,6 +1609,7 @@ var init_file_collection = __esm({
 // node_modules/unenv/dist/runtime/node/os.mjs
 var init_os = __esm({
   "node_modules/unenv/dist/runtime/node/os.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1580,6 +1620,7 @@ var init_os = __esm({
 var subtle;
 var init_web = __esm({
   "node_modules/unenv/dist/runtime/node/internal/crypto/web.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1591,6 +1632,7 @@ var init_web = __esm({
 var webcrypto;
 var init_node = __esm({
   "node_modules/unenv/dist/runtime/node/internal/crypto/node.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1609,6 +1651,7 @@ var init_node = __esm({
 // node_modules/unenv/dist/runtime/node/crypto.mjs
 var init_crypto = __esm({
   "node_modules/unenv/dist/runtime/node/crypto.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1621,6 +1664,7 @@ var init_crypto = __esm({
 var workerdCrypto, Certificate, checkPrime, checkPrimeSync, Cipheriv, createCipheriv, createDecipheriv, createDiffieHellman, createDiffieHellmanGroup, createECDH, createHash, createHmac, createPrivateKey, createPublicKey, createSecretKey, createSign, createVerify, Decipheriv, diffieHellman, DiffieHellman, DiffieHellmanGroup, ECDH, fips, generateKey, generateKeyPair, generateKeyPairSync, generateKeySync, generatePrime, generatePrimeSync, getCipherInfo, getCiphers, getCurves, getDiffieHellman, getFips, getHashes, getRandomValues, hash, Hash, hkdf, hkdfSync, Hmac, KeyObject, pbkdf2, pbkdf2Sync, privateDecrypt, privateEncrypt, publicDecrypt, publicEncrypt, randomBytes, randomFill, randomFillSync, randomInt, randomUUID, scrypt, scryptSync, secureHeapUsed, setEngine, setFips, sign, Sign, subtle2, timingSafeEqual, verify, Verify, X509Certificate, webcrypto2;
 var init_crypto2 = __esm({
   "node_modules/@cloudflare/unenv-preset/dist/runtime/node/crypto.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1712,6 +1756,7 @@ var init_crypto2 = __esm({
 var _extensions, constants2, builtinModules;
 var init_module = __esm({
   "node_modules/unenv/dist/runtime/node/module.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1804,6 +1849,7 @@ var init_module = __esm({
 var workerdModule, createRequire;
 var init_module2 = __esm({
   "node_modules/@cloudflare/unenv-preset/dist/runtime/node/module.mjs"() {
+    init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
@@ -1827,13 +1873,15 @@ var init_module2 = __esm({
   }
 });
 
-// alchemy/test/bootstrap/app.ts
+// alchemy/test/runtime/app.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
-import path6 from "path";
+import path8 from "node:path";
 
 // alchemy/src/alchemy.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
@@ -1841,31 +1889,59 @@ init_promises2();
 import path2 from "node:path";
 
 // alchemy/src/destroy.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
 // alchemy/src/context.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
 // alchemy/src/resource.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
 // alchemy/src/apply.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
+// alchemy/src/scope.ts
+init_shims();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
+// node_modules/@cloudflare/unenv-preset/dist/runtime/node/async_hooks.mjs
+init_shims();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+var workerdAsyncHooks = process.getBuiltinModule("node:async_hooks");
+var { AsyncLocalStorage, AsyncResource } = workerdAsyncHooks;
+
+// alchemy/src/fs/file-system-state-store.ts
+init_shims();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+init_fs2();
+import path from "node:path";
+
 // alchemy/src/serde.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
 // alchemy/src/encrypt.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
@@ -1893,26 +1969,184 @@ async function decryptWithKey(encryptedValue, key) {
 }
 __name(decryptWithKey, "decryptWithKey");
 
-// alchemy/src/scope.ts
+// alchemy/src/secret.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
+var globalSecrets = {};
+var i = 0;
+function nextName() {
+  return `secret-${i++}`;
+}
+__name(nextName, "nextName");
+var Secret = class {
+  constructor(unencrypted, name = nextName()) {
+    this.unencrypted = unencrypted;
+    this.name = name;
+    if (name in globalSecrets) {
+      throw new Error(`Secret ${name} already exists`);
+    }
+    globalSecrets[name] = this;
+  }
+  static {
+    __name(this, "Secret");
+  }
+  static all() {
+    return Object.values(globalSecrets);
+  }
+  type = "secret";
+};
+function secret(unencrypted, name) {
+  if (unencrypted === void 0) {
+    throw new Error("Secret cannot be undefined");
+  }
+  return new Secret(unencrypted, name);
+}
+__name(secret, "secret");
+((secret2) => {
+  secret2.env = new Proxy(_env2, {
+    get: /* @__PURE__ */ __name((_, name) => _env2(name), "get"),
+    apply: /* @__PURE__ */ __name((_, __, args) => _env2(...args), "apply")
+  });
+  async function _env2(name, value, error3) {
+    const result = await alchemy.env(name, value, error3);
+    if (typeof result === "string") {
+      return secret2(result, name);
+    }
+    throw new Error(`Secret environment variable ${name} is not a string`);
+  }
+  __name(_env2, "_env");
+})(secret || (secret = {}));
 
-// node_modules/@cloudflare/unenv-preset/dist/runtime/node/async_hooks.mjs
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-var workerdAsyncHooks = process.getBuiltinModule("node:async_hooks");
-var { AsyncLocalStorage, AsyncResource } = workerdAsyncHooks;
-
-// alchemy/src/fs/file-system-state-store.ts
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-init_fs2();
-import path from "node:path";
+// alchemy/src/serde.ts
+function isType(value) {
+  return value && typeof value === "object" && typeof value.toJsonSchema === "function";
+}
+__name(isType, "isType");
+async function serializeScope(scope, map = {}, secrets = []) {
+  await Promise.all(Array.from(scope.resources.values()).map(async (resource) => {
+    if (resource[ResourceKind] === Scope.KIND) {
+      return;
+    }
+    map[resource[ResourceFQN]] = await serialize(scope, await resource, {
+      transform: /* @__PURE__ */ __name((value) => {
+        if (value instanceof Secret) {
+          secrets.push(value);
+        }
+        return value;
+      }, "transform")
+    });
+    const innerScope = await resource[InnerResourceScope];
+    if (innerScope) {
+      await serializeScope(innerScope, map);
+    }
+  }));
+  await Promise.all(Array.from(scope.children.values()).map((scope2) => serializeScope(scope2, map)));
+  return map;
+}
+__name(serializeScope, "serializeScope");
+async function serialize(scope, value, options) {
+  if (options?.transform) {
+    value = options.transform(value);
+  }
+  if (Array.isArray(value)) {
+    return Promise.all(value.map((value2) => serialize(scope, value2, options)));
+  } else if (value instanceof Secret) {
+    if (!scope.password) {
+      throw new Error("Cannot serialize secret without password");
+    }
+    return {
+      "@secret": options?.encrypt !== false ? await encrypt(value.unencrypted, scope.password) : value.unencrypted
+    };
+  } else if (isType(value)) {
+    return {
+      "@schema": value.toJSON()
+    };
+  } else if (value instanceof Date) {
+    return {
+      "@date": value.toISOString()
+    };
+  } else if (typeof value === "symbol") {
+    assertNotUniqueSymbol(value);
+    return {
+      "@symbol": value.toString()
+    };
+  } else if (value instanceof Scope) {
+    return {
+      "@scope": null
+    };
+  } else if (isImportMeta(value)) {
+    return Object.fromEntries(Object.keys(Object.getPrototypeOf(value)).filter((prop) => prop === "env").map((prop) => [
+      prop,
+      value[prop]
+    ]));
+  } else if (value && typeof value === "object") {
+    for (const symbol of Object.getOwnPropertySymbols(value)) {
+      assertNotUniqueSymbol(symbol);
+    }
+    return Object.fromEntries(await Promise.all([
+      ...Object.getOwnPropertySymbols(value),
+      ...Object.keys(value)
+    ].map(async (key) => [
+      key.toString(),
+      await serialize(scope, value[key], options)
+    ])));
+  } else if (typeof value === "function") {
+    return void 0;
+  }
+  return value;
+}
+__name(serialize, "serialize");
+function isImportMeta(value) {
+  return value && typeof value === "object" && typeof value.dirname === "string" && typeof value.filename === "string" && typeof value.url === "string";
+}
+__name(isImportMeta, "isImportMeta");
+async function deserialize(scope, value) {
+  if (Array.isArray(value)) {
+    return await Promise.all(value.map(async (item) => await deserialize(scope, item)));
+  }
+  if (value && typeof value === "object") {
+    if (typeof value["@secret"] === "string") {
+      if (!scope.password) {
+        throw new Error("Cannot deserialize secret without password");
+      }
+      return new Secret(await decryptWithKey(value["@secret"], scope.password));
+    } else if ("@schema" in value) {
+      return value["@schema"];
+    } else if ("@date" in value) {
+      return new Date(value["@date"]);
+    } else if ("@symbol" in value) {
+      return parseSymbol(value["@symbol"]);
+    } else if ("@scope" in value) {
+      return scope;
+    }
+    return Object.fromEntries(await Promise.all(Object.entries(value).map(async ([key, value2]) => [
+      parseSymbol(key) ?? key,
+      await deserialize(scope, value2)
+    ])));
+  }
+  return value;
+}
+__name(deserialize, "deserialize");
+var symbolPattern = /^Symbol\((.*)\)$/;
+function parseSymbol(value) {
+  const match = value.match(symbolPattern);
+  if (!match) {
+    return void 0;
+  }
+  return Symbol.for(match[1]);
+}
+__name(parseSymbol, "parseSymbol");
+function assertNotUniqueSymbol(symbol) {
+  if (symbol.description === void 0 || symbol !== Symbol.for(symbol.description)) {
+    throw new Error(`Cannot serialize unique symbol: ${symbol.description}`);
+  }
+}
+__name(assertNotUniqueSymbol, "assertNotUniqueSymbol");
 
 // alchemy/src/state.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
@@ -1940,49 +2174,9 @@ async function deserializeState(scope, content) {
   return state;
 }
 __name(deserializeState, "deserializeState");
-var ReadOnlyMemoryStateStore = class {
-  constructor(scope, states) {
-    this.scope = scope;
-    this.states = states;
-  }
-  static {
-    __name(this, "ReadOnlyMemoryStateStore");
-  }
-  async count() {
-    return Object.keys(await this.list()).length;
-  }
-  async list() {
-    return Object.keys(this.states);
-  }
-  async get(key) {
-    return this.states[key];
-  }
-  async set(key, _state) {
-    throw new Error(`Tried to set '${key}' in read-only memory store`);
-  }
-  async delete(key) {
-    throw new Error(`Tried to delete '${key}' in read-only memory store`);
-  }
-  async all() {
-    return this.getBatch(await this.list());
-  }
-  async getBatch(ids) {
-    return Object.fromEntries((await Promise.all(Array.from(ids).flatMap(async (id) => {
-      const s = await this.get(id);
-      if (s === void 0) {
-        return [];
-      }
-      return [
-        [
-          id,
-          s
-        ]
-      ];
-    }))).flat());
-  }
-};
 
 // alchemy/src/util/ignore.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
@@ -2109,6 +2303,9 @@ var Scope = class _Scope2 {
   static get() {
     return _Scope2.storage.getStore();
   }
+  static get root() {
+    return _Scope2.current.root;
+  }
   static get current() {
     const scope = _Scope2.get();
     if (!scope) {
@@ -2120,6 +2317,7 @@ var Scope = class _Scope2 {
     return scope;
   }
   resources = /* @__PURE__ */ new Map();
+  children = /* @__PURE__ */ new Map();
   appName;
   stage;
   scopeName;
@@ -2140,18 +2338,26 @@ var Scope = class _Scope2 {
       throw new Error(`Scope name ${this.scopeName} cannot contain double colons`);
     }
     this.parent = options.parent ?? _Scope2.get();
+    this.parent?.children.set(this.scopeName, this);
     this.quiet = options.quiet ?? this.parent?.quiet ?? false;
     if (this.parent && !this.scopeName) {
       throw new Error("Scope name is required when creating a child scope");
     }
     this.password = options.password ?? this.parent?.password;
-    const phase2 = options.phase ?? this.parent?.phase;
-    if (phase2 === void 0) {
+    const phase = options.phase ?? this.parent?.phase;
+    if (phase === void 0) {
       throw new Error("Phase is required");
     }
-    this.phase = phase2;
+    this.phase = phase;
     this.stateStore = options.stateStore ?? this.parent?.stateStore ?? ((scope) => new FileSystemStateStore(scope));
     this.state = this.stateStore(this);
+  }
+  get root() {
+    let root = this;
+    while (root.parent) {
+      root = root.parent;
+    }
+    return root;
   }
   async delete(resourceID) {
     await this.state.delete(resourceID);
@@ -2217,7 +2423,7 @@ var Scope = class _Scope2 {
       }
     }
     this.finalized = true;
-    await Promise.all(this.deferred);
+    await Promise.all(this.deferred.map((fn) => fn()));
     if (!this.isErrored) {
       const resourceIds = await this.state.list();
       const aliveIds = new Set(this.resources.keys());
@@ -2238,13 +2444,12 @@ var Scope = class _Scope2 {
       _resolve = resolve;
       _reject = reject;
     });
-    promise.then = (onfulfilled, onrejected) => {
+    this.deferred.push(() => {
       if (!this.finalized) {
         throw new Error("Attempted to await a deferred Promise before finalization");
       }
-      return fn().then(onfulfilled, onrejected);
-    };
-    this.deferred.push(promise);
+      return this.run(() => fn()).then(_resolve, _reject);
+    });
     return promise;
   }
   toString() {
@@ -2254,138 +2459,7 @@ var Scope = class _Scope2 {
 )`;
   }
 };
-
-// alchemy/src/secret.ts
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-var Secret = class {
-  constructor(unencrypted) {
-    this.unencrypted = unencrypted;
-  }
-  static {
-    __name(this, "Secret");
-  }
-  type = "secret";
-};
-function secret(unencrypted) {
-  if (unencrypted === void 0) {
-    throw new Error("Secret cannot be undefined");
-  }
-  return new Secret(unencrypted);
-}
-__name(secret, "secret");
-((secret2) => {
-  secret2.env = new Proxy(_env3, {
-    get: /* @__PURE__ */ __name((_, name) => _env3(name), "get"),
-    apply: /* @__PURE__ */ __name((_, __, args) => _env3(...args), "apply")
-  });
-  async function _env3(name, value, error3) {
-    const result = await alchemy.env(name, value, error3);
-    if (typeof result === "string") {
-      return secret2(result);
-    }
-    throw new Error(`Secret environment variable ${name} is not a string`);
-  }
-  __name(_env3, "_env");
-})(secret || (secret = {}));
-
-// alchemy/src/serde.ts
-function isType(value) {
-  return value && typeof value === "object" && typeof value.toJsonSchema === "function";
-}
-__name(isType, "isType");
-async function serialize(scope, value, options) {
-  if (Array.isArray(value)) {
-    return Promise.all(value.map((value2) => serialize(scope, value2, options)));
-  } else if (value instanceof Secret) {
-    if (!scope.password) {
-      throw new Error("Cannot serialize secret without password");
-    }
-    return {
-      "@secret": options?.encrypt !== false ? await encrypt(value.unencrypted, scope.password) : value.unencrypted
-    };
-  } else if (isType(value)) {
-    return {
-      "@schema": value.toJSON()
-    };
-  } else if (value instanceof Date) {
-    return {
-      "@date": value.toISOString()
-    };
-  } else if (typeof value === "symbol") {
-    assertNotUniqueSymbol(value);
-    return {
-      "@symbol": value.toString()
-    };
-  } else if (value instanceof Scope) {
-    return {
-      "@scope": null
-    };
-  } else if (value && typeof value === "object") {
-    for (const symbol of Object.getOwnPropertySymbols(value)) {
-      assertNotUniqueSymbol(symbol);
-    }
-    for (const key of Object.keys(value)) {
-      if (parseSymbol(key)) {
-        throw new Error(`Cannot serialize property '${key}' because it looks like a stringified symbol.`);
-      }
-    }
-    return Object.fromEntries(await Promise.all([
-      ...Object.getOwnPropertySymbols(value),
-      ...Object.keys(value)
-    ].map(async (key) => [
-      key.toString(),
-      await serialize(scope, value[key], options)
-    ])));
-  } else if (typeof value === "function") {
-    return void 0;
-  }
-  return value;
-}
-__name(serialize, "serialize");
-async function deserialize(scope, value) {
-  if (Array.isArray(value)) {
-    return await Promise.all(value.map(async (item) => await deserialize(scope, item)));
-  }
-  if (value && typeof value === "object") {
-    if (typeof value["@secret"] === "string") {
-      if (!scope.password) {
-        throw new Error("Cannot deserialize secret without password");
-      }
-      return new Secret(await decryptWithKey(value["@secret"], scope.password));
-    } else if ("@schema" in value) {
-      return value["@schema"];
-    } else if ("@date" in value) {
-      return new Date(value["@date"]);
-    } else if ("@symbol" in value) {
-      return parseSymbol(value["@symbol"]);
-    } else if ("@scope" in value) {
-      return scope;
-    }
-    return Object.fromEntries(await Promise.all(Object.entries(value).map(async ([key, value2]) => [
-      parseSymbol(key) ?? key,
-      await deserialize(scope, value2)
-    ])));
-  }
-  return value;
-}
-__name(deserialize, "deserialize");
-var symbolPattern = /^Symbol\((.*)\)$/;
-function parseSymbol(value) {
-  const match = value.match(symbolPattern);
-  if (!match) {
-    return void 0;
-  }
-  return Symbol.for(match[1]);
-}
-__name(parseSymbol, "parseSymbol");
-function assertNotUniqueSymbol(symbol) {
-  if (symbol.description === void 0 || symbol !== Symbol.for(symbol.description)) {
-    throw new Error(`Cannot serialize unique symbol: ${symbol.description}`);
-  }
-}
-__name(assertNotUniqueSymbol, "assertNotUniqueSymbol");
+globalThis.__ALCHEMY_SCOPE__ = Scope;
 
 // alchemy/src/resource.ts
 var PROVIDERS = /* @__PURE__ */ new Map();
@@ -2393,10 +2467,11 @@ var ResourceID = Symbol.for("alchemy::ResourceID");
 var ResourceFQN = Symbol.for("alchemy::ResourceFQN");
 var ResourceKind = Symbol.for("alchemy::ResourceKind");
 var ResourceScope = Symbol.for("alchemy::ResourceScope");
+var InnerResourceScope = Symbol.for("alchemy::InnerResourceScope");
 var ResourceSeq = Symbol.for("alchemy::ResourceSeq");
 
 // alchemy/src/context.ts
-function context2({ scope, phase: phase2, kind, id, fqn, seq, state, replace }) {
+function context2({ scope, phase, kind, id, fqn, seq, state, replace }) {
   function create(...args) {
     const [ID, props] = typeof args[0] === "string" ? args : [
       id,
@@ -2417,7 +2492,7 @@ function context2({ scope, phase: phase2, kind, id, fqn, seq, state, replace }) 
     scope,
     id,
     fqn,
-    phase: phase2,
+    phase,
     output: state.output,
     props: state.props,
     replace,
@@ -2548,10 +2623,11 @@ async function destroyAll(resources, options) {
 __name(destroyAll, "destroyAll");
 
 // alchemy/src/env.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
-var env2 = new Proxy(_env, {
+var env3 = new Proxy(_env, {
   get: /* @__PURE__ */ __name((_, name) => _env(name), "get"),
   apply: /* @__PURE__ */ __name((_, __, args) => _env(...args), "apply")
 });
@@ -2559,35 +2635,52 @@ async function _env(name, value, error3) {
   if (value !== void 0) {
     return value;
   }
-  if (typeof process !== "undefined") {
-    return process.env[name];
-  }
-  try {
-    const { env: env4 } = await import("cloudflare:workers");
-    if (name in env4) {
-      return env4[name];
-    }
-  } catch (error4) {
+  const env4 = await resolveEnv();
+  if (name in env4) {
+    return env4[name];
   }
   throw new Error(error3 ?? `Environment variable ${name} is not set`);
 }
 __name(_env, "_env");
+async function resolveEnv() {
+  if (typeof process !== "undefined") {
+    return process.env;
+  }
+  try {
+    const { env: env4 } = await import("cloudflare:workers");
+    return env4;
+  } catch (_error) {
+  }
+  if (typeof import.meta !== "undefined") {
+    return import.meta.env;
+  }
+  throw new Error("No environment found");
+}
+__name(resolveEnv, "resolveEnv");
+
+// alchemy/src/runtime/global.ts
+init_shims();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+var isRuntime = typeof __ALCHEMY_RUNTIME__ !== "undefined";
 
 // alchemy/src/alchemy.ts
 var alchemy = _alchemy;
 _alchemy.destroy = destroy;
 _alchemy.run = run;
 _alchemy.secret = secret;
-_alchemy.env = env2;
+_alchemy.env = env3;
 async function _alchemy(...args) {
   if (typeof args[0] === "string") {
     const [appName, options] = args;
-    const phase2 = options?.phase ?? "up";
+    const phase = options?.phase ?? "up";
     const root = new Scope({
       ...options,
       appName,
-      stage: options?.stage,
-      phase: phase2
+      stage: options?.stage ?? process.env.ALCHEMY_STAGE,
+      phase: isRuntime ? "read" : phase,
+      password: options?.password ?? process.env.ALCHEMY_PASSWORD
     });
     try {
       Scope.storage.enterWith(root);
@@ -2638,7 +2731,7 @@ async function _alchemy(...args) {
       }).join("\n\n");
     }
     if (Array.isArray(value)) {
-      return (await Promise.all(value.map(async (value2, i) => `${i}. ${await resolve(value2)}`))).join("\n");
+      return (await Promise.all(value.map(async (value2, i2) => `${i2}. ${await resolve(value2)}`))).join("\n");
     }
     if (typeof value === "object" && typeof value.path === "string") {
       if (typeof value.content === "string") {
@@ -2656,9 +2749,9 @@ async function _alchemy(...args) {
     console.log(value);
     throw new Error(`Unsupported value type: ${value}`);
   }, "resolve")));
-  const lines = template.map((part) => part.split("\n").map((line) => line.startsWith(indent) ? line.slice(indent.length) : line).join("\n")).flatMap((part, i) => i < stringValues.length ? [
+  const lines = template.map((part) => part.split("\n").map((line) => line.startsWith(indent) ? line.slice(indent.length) : line).join("\n")).flatMap((part, i2) => i2 < stringValues.length ? [
     part,
-    stringValues[i] ?? ""
+    stringValues[i2] ?? ""
   ] : [
     part
   ]).join("").split("\n");
@@ -2710,8 +2803,6 @@ async function run(...args) {
         await _scope.parent.state.set(id, resource);
       } else if (prev.kind !== Scope.KIND) {
         throw new Error(`Tried to create a Scope that conflicts with a Resource (${prev.kind}): ${id}`);
-      } else if (_scope.phase === "read") {
-        throw new Error(`Tried to create a non-existend Scope (${id}) in read mode`);
       }
       _scope.parent.resources.set(id, Object.assign(Promise.resolve(resource), output));
     }
@@ -2729,46 +2820,24 @@ async function run(...args) {
 __name(run, "run");
 
 // alchemy/src/cloudflare/bucket.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
 // node_modules/aws4fetch/dist/aws4fetch.esm.mjs
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 var encoder = new TextEncoder();
 
-// alchemy/src/bootstrap/bind.ts
+// alchemy/src/runtime/bind.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 import { isPromise } from "node:util/types";
-
-// alchemy/src/bootstrap/env.ts
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-var _env2 = await resolveEnv();
-async function resolveEnv() {
-  if (typeof process !== "undefined") {
-    return process.env;
-  }
-  try {
-    const worker = await import("cloudflare:workers");
-    return worker.env;
-  } catch {
-  }
-  return import.meta.env;
-}
-__name(resolveEnv, "resolveEnv");
-var env3 = new Proxy({}, {
-  get(target, prop, receiver) {
-    return _env2[prop];
-  }
-});
-
-// alchemy/src/bootstrap/bind.ts
 function getBinding(resource) {
   return env3[getBindKey(resource)];
 }
@@ -2810,21 +2879,25 @@ async function bind(resource, reify) {
 __name(bind, "bind");
 
 // alchemy/src/cloudflare/api-error.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
 // alchemy/src/cloudflare/api.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
 // alchemy/src/util/retry.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
 // alchemy/src/cloudflare/auth.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
@@ -2833,18 +2906,24 @@ init_os();
 import path3 from "node:path";
 
 // alchemy/src/cloudflare/user.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
 // alchemy/src/neon/api-error.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
 // alchemy/src/cloudflare/bucket.ts
+function isBucket(resource) {
+  return resource[ResourceKind] === "cloudflare::R2Bucket";
+}
+__name(isBucket, "isBucket");
 async function R2Bucket(name, props = {}) {
-  const bucket2 = await _R2Bucket(name, props);
+  const bucket2 = await R2BucketResource(name, props);
   const binding2 = await bind(bucket2);
   return {
     ...bucket2,
@@ -2858,66 +2937,129 @@ async function R2Bucket(name, props = {}) {
   };
 }
 __name(R2Bucket, "R2Bucket");
-var _R2Bucket = /* @__PURE__ */ __name((id) => STATE.get(id), "_R2Bucket");
-
-// alchemy/src/cloudflare/pipeline.ts
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-
-// alchemy/src/cloudflare/queue.ts
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-async function Queue(name, props = {}) {
-  const queue2 = await _Queue(name, props);
-  const binding2 = await bind(queue2);
-  return {
-    ...queue2,
-    send: binding2.send,
-    sendBatch: binding2.sendBatch
-  };
-}
-__name(Queue, "Queue");
-var _Queue = /* @__PURE__ */ __name((id) => STATE.get(id), "_Queue");
+var R2BucketResource = /* @__PURE__ */ __name((id) => STATE.get(id), "R2BucketResource");
 
 // alchemy/src/cloudflare/worker.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
-init_crypto2();
-init_promises2();
+import path7 from "node:path";
 
-// alchemy/src/util/content-type.ts
+// alchemy/src/runtime/plugin.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
-import path4 from "node:path";
+init_promises2();
+var bootstrapPlugin = {
+  name: "alchemy-bootstrap",
+  async setup(build) {
+    const { parse, print } = await import("@swc/core");
+    const { Visitor } = await import("@swc/core/Visitor.js");
+    async function expr(expr2) {
+      return (await parse(`const __temp__ = ${expr2}`)).body[0].declarations[0].init;
+    }
+    __name(expr, "expr");
+    async function decl(decl2) {
+      return (await parse(decl2)).body[0];
+    }
+    __name(decl, "decl");
+    const Provider = await decl("async function Resource() {}");
+    const Resource8 = await expr("(id) => STATE.get(id)");
+    build.onLoad({
+      filter: /.*\.(ts|js)x?/
+    }, async (args) => {
+      try {
+        let transformed2 = function(code2) {
+          return {
+            contents: code2,
+            loader: args.path.endsWith(".ts") ? args.path.endsWith(".tsx") ? "tsx" : "ts" : args.path.endsWith(".jsx") ? "jsx" : "js"
+          };
+        };
+        var transformed = transformed2;
+        __name(transformed2, "transformed");
+        const source = await promises_default.readFile(args.path, "utf-8");
+        const ast = await parse(source, {
+          syntax: "typescript",
+          tsx: args.path.endsWith(".tsx"),
+          decorators: true,
+          dynamicImport: true
+        });
+        class ResourceTransformer extends Visitor {
+          static {
+            __name(this, "ResourceTransformer");
+          }
+          visitTsType(n) {
+            return n;
+          }
+          visitFunctionDeclaration(decl2) {
+            const param = decl2.params[0];
+            if (decl2.identifier.value === "Resource" && param?.pat.type === "Identifier" && param.pat.value === "type" && decl2.body) {
+              return Provider;
+            }
+            return decl2;
+          }
+          visitCallExpression(expr2) {
+            if (expr2.callee.type === "Identifier" && expr2.callee.value === "Resource" && expr2.arguments.length >= 2) {
+              return Resource8;
+            }
+            return super.visitCallExpression(expr2);
+          }
+        }
+        const visitor = new ResourceTransformer();
+        const program = visitor.visitProgram(ast);
+        const { code } = await print(program, {
+          sourceMaps: true,
+          minify: false
+        });
+        return transformed2(code);
+      } catch (error3) {
+        console.error(`Error transforming ${args.path}:`, error3);
+        return {
+          errors: [
+            {
+              text: `Failed to transform: ${error3 instanceof Error ? error3.message : String(error3)}`,
+              location: {
+                file: args.path
+              }
+            }
+          ]
+        };
+      }
+    });
+  }
+};
 
 // alchemy/src/util/slugify.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
 // alchemy/src/cloudflare/bindings.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 var Self = Symbol.for("Self");
+function Json(value) {
+  return {
+    type: "json",
+    json: value
+  };
+}
+__name(Json, "Json");
 
 // alchemy/src/cloudflare/bundle/bundle-worker.ts
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-init_promises2();
-
-// alchemy/src/bootstrap/plugin.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 init_promises2();
 
 // alchemy/src/esbuild/bundle.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
@@ -2926,11 +3068,13 @@ init_promises2();
 import "node:path";
 
 // alchemy/src/cloudflare/bundle/alias-plugin.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
 // alchemy/src/cloudflare/bundle/build-failures.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
@@ -2938,6 +3082,7 @@ init_module2();
 var nodeBuiltinResolveErrorText = new RegExp('^Could not resolve "(' + builtinModules.join("|") + "|" + builtinModules.map((module) => `node:${module}`).join("|") + ')"$');
 
 // alchemy/src/cloudflare/bundle/external.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
@@ -2970,20 +3115,17 @@ var external = [
   ...nodejs_compat.map((p) => p.split(":")[1]),
   "cloudflare:workers",
   "cloudflare:workflows",
-  "cloudflare:*",
-  "libsodium*",
-  "@swc/*",
-  "esbuild",
-  "undici",
-  "ws"
+  "cloudflare:*"
 ];
 
 // alchemy/src/cloudflare/bundle/nodejs-compat-mode.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
 // alchemy/src/cloudflare/bundle/nodejs-compat.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
@@ -2992,6 +3134,7 @@ import assert3 from "node:assert";
 import nodePath from "node:path";
 
 // alchemy/src/util/dedent.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
@@ -3001,16 +3144,62 @@ var _require = typeof __require === "undefined" ? createRequire(import.meta.url)
 var NODEJS_MODULES_RE = new RegExp(`^(node:)?(${builtinModules.join("|")})$`);
 
 // alchemy/src/cloudflare/event-source.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
 // alchemy/src/cloudflare/queue-consumer.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
+// alchemy/src/cloudflare/queue.ts
+init_shims();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+function isQueue(eventSource) {
+  return ResourceKind in eventSource && eventSource[ResourceKind] === "cloudflare::Queue";
+}
+__name(isQueue, "isQueue");
+
+// alchemy/src/cloudflare/worker-assets.ts
+init_shims();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+init_crypto2();
+init_promises2();
+import path6 from "node:path";
+
+// alchemy/src/util/content-type.ts
+init_shims();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+import path5 from "node:path";
+
+// alchemy/src/cloudflare/worker-metadata.ts
+init_shims();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
+// alchemy/src/cloudflare/worker-stub.ts
+init_shims();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+function isWorkerStub(resource) {
+  return resource[ResourceKind] === "cloudflare::WorkerStub";
+}
+__name(isWorkerStub, "isWorkerStub");
+var WorkerStub = /* @__PURE__ */ __name((id) => STATE.get(id), "WorkerStub");
+
 // alchemy/src/cloudflare/workflow.ts
+init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
@@ -3022,55 +3211,146 @@ function Worker(...args) {
     void 0,
     args[1]
   ] : args;
-  if (meta) {
+  if ("fetch" in props && props.fetch) {
     const scope = Scope.current;
-    const promise = scope.defer(() => _Worker(id, {
-      meta,
-      ...props
-    }));
-    promise.fetch = props.fetch;
+    const workerName = props.name ?? id;
+    const stub = WorkerStub(`${id}/stub`, {
+      name: workerName,
+      accountId: props.accountId,
+      apiKey: props.apiKey,
+      apiToken: props.apiToken,
+      baseUrl: props.baseUrl,
+      email: props.email
+    });
+    async function collectResources(scope2) {
+      if (!scope2) {
+        return [];
+      }
+      return (await Promise.all(Array.from(scope2.resources.values()).map(async (resource) => [
+        await resource,
+        ...await collectResources(await resource[InnerResourceScope])
+      ]))).flat();
+    }
+    __name(collectResources, "collectResources");
+    const deferred = scope.defer(async () => {
+      const autoBindings = {};
+      for (const resource of await collectResources(Scope.root)) {
+        if (isQueue(resource)) {
+          autoBindings[getBindKey(resource)] = resource;
+        } else if (isWorkerStub(resource)) {
+          autoBindings[getBindKey(resource)] = resource;
+        } else if (isBucket(resource)) {
+          autoBindings[getBindKey(resource)] = resource;
+        }
+      }
+      for (const secret2 of Secret.all()) {
+        autoBindings[secret2.name] = secret2;
+      }
+      const bindings = {
+        ...props.bindings,
+        __ALCHEMY_WORKER_NAME__: workerName,
+        __ALCHEMY_SERIALIZED_SCOPE__: Json(await serializeScope(scope)),
+        ALCHEMY_STAGE: scope.stage,
+        ALCHEMY_PASSWORD: secret(scope.password),
+        ...autoBindings
+      };
+      return _Worker(id, {
+        ...props,
+        entrypoint: meta.filename,
+        name: workerName,
+        adopt: true,
+        bindings,
+        bundle: {
+          ...props.bundle,
+          plugins: [
+            bootstrapPlugin
+          ],
+          external: [
+            "libsodium*",
+            "@swc/*",
+            "esbuild",
+            "undici",
+            "ws"
+          ],
+          banner: {
+            js: `import { env as __ALCHEMY_ENV__ } from "cloudflare:workers";
+var __ALCHEMY_RUNTIME__ = true;
+var __ALCHEMY_SERIALIZED_SCOPE__ = JSON.parse(__ALCHEMY_ENV__.__ALCHEMY_SERIALIZED_SCOPE__);
+
+var STATE = {
+  get(id) {
+    const fqn = globalThis.__ALCHEMY_SCOPE__.current.fqn(id);
+    const state = __ALCHEMY_SERIALIZED_SCOPE__[fqn];
+    if (!state) {
+      throw new Error(
+        \`Resource \${fqn} not found in __ALCHEMY_SERIALIZED_SCOPE__
+\${JSON.stringify(__ALCHEMY_SERIALIZED_SCOPE__, null, 2)}\`
+      );
+    }
+    // TODO(sam): deserialize
+    return state;
+  },
+};`
+          },
+          inject: [
+            ...props.bundle?.inject ?? [],
+            path7.resolve(import.meta.dirname, "..", "runtime", "shims.js")
+          ]
+        }
+      });
+    });
+    const promise = Promise.all([
+      deferred,
+      stub
+    ]).then(([worker]) => worker);
+    if (isRuntime) {
+      promise.fetch = props.fetch;
+    } else {
+      promise.fetch = async (request) => {
+        console.log(request);
+        const worker = await promise;
+        if (worker.url === void 0) {
+          throw new Error("Worker URL is not available in runtime");
+        }
+        const workerURL = new URL(worker.url);
+        const requestURL = new URL(request.url);
+        requestURL.host = workerURL.host;
+        return fetch(requestURL, request);
+      };
+    }
     return promise;
   }
-  return _Worker(id, {
-    meta,
-    ...props
-  });
+  return _Worker(id, props);
 }
 __name(Worker, "Worker");
 var _Worker = /* @__PURE__ */ __name((id) => STATE.get(id), "_Worker");
 
-// alchemy/test/bootstrap/app.ts
-var isRuntime = typeof __ALCHEMY_ENV__ !== "undefined";
-var phase = isRuntime ? "read" : process.argv.includes("--destroy") ? "destroy" : "up";
-console.log(phase);
+// alchemy/src/cloudflare/pipeline.ts
+init_shims();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
+// alchemy/test/runtime/app.ts
 var app = await alchemy("my-bootstrap-ap", {
-  phase,
-  password: "TODO",
-  stateStore: isRuntime ? (scope) => new ReadOnlyMemoryStateStore(scope, __ALCHEMY_ENV__) : void 0
+  phase: process.argv.includes("--destroy") ? "destroy" : "up"
 });
-var queue = await Queue("my-bootstrap-queue");
-var bucket = await R2Bucket("my-bootstrap-bucket");
+var bucket = await R2Bucket("my-bootstrap-bucket", {
+  adopt: true
+});
+console.log(bucket);
 var app_default = Worker("worker", import.meta, {
   compatibilityFlags: [
     "nodejs_compat"
   ],
   bundle: {
-    outfile: path6.join(import.meta.dirname, "app.js"),
+    outfile: path8.join(import.meta.dirname, "app.js"),
     minify: false
   },
+  url: true,
   async fetch(request) {
     const key = new URL(request.url).pathname;
-    const obj = await bucket.put(key, request.body);
-    if (!obj) {
-      return new Response("Failed to upload object", {
-        status: 500
-      });
-    }
-    await queue.send(obj);
-    return new Response(JSON.stringify({
-      key: obj.key,
-      etag: obj.etag
-    }));
+    return new Response(JSON.stringify(__ALCHEMY_SERIALIZED_SCOPE__, null, 2));
   }
 });
 await app.finalize();

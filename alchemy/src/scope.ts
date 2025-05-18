@@ -215,3 +215,11 @@ export class Scope {
 )`;
   }
 }
+
+declare global {
+  // for runtime
+  // TODO(sam): maybe inject is a better way to achieve this
+  var __ALCHEMY_SCOPE__: typeof Scope;
+}
+
+globalThis.__ALCHEMY_SCOPE__ = Scope;

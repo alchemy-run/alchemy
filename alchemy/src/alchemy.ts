@@ -110,8 +110,9 @@ async function _alchemy(
     const root = new Scope({
       ...options,
       appName,
-      stage: options?.stage,
+      stage: options?.stage ?? process.env.ALCHEMY_STAGE,
       phase: isRuntime ? "read" : phase,
+      password: options?.password ?? process.env.ALCHEMY_PASSWORD,
     });
     try {
       Scope.storage.enterWith(root);

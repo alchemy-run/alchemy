@@ -136,6 +136,15 @@ export async function serialize(
     return {
       "@scope": null,
     };
+  } else if (isImportMeta(value)) {
+    // ImportMeta serialized as {}, so we are mapping it
+    // TODO(sam):
+    return Object.fromEntries(
+      Object.keys(Object.getPrototypeOf(value))
+        // exlcude import.meta.env
+        .filter((prop) => prop === "env")
+        .map((prop) => [prop, (value as any)[prop]]),
+    );
   } else if (value && typeof value === "object") {
     for (const symbol of Object.getOwnPropertySymbols(value)) {
       assertNotUniqueSymbol(symbol);
@@ -155,6 +164,16 @@ export async function serialize(
     return undefined;
   }
   return value;
+}
+
+function isImportMeta(value: any): value is ImportMeta {
+  return (
+    value &&
+    typeof value === "object" &&
+    typeof value.dirname === "string" &&
+    typeof value.filename === "string" &&
+    typeof value.url === "string"
+  );
 }
 
 export async function deserialize(scope: Scope, value: any): Promise<any> {

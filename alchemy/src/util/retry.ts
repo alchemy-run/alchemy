@@ -22,6 +22,7 @@ export async function withExponentialBackoff<T>(
     try {
       return await operation();
     } catch (error) {
+      console.log("error", error);
       attempt++;
       if (attempt >= maxAttempts || !isRetryable(error)) {
         console.warn("Failed after ", attempt, " attempts");

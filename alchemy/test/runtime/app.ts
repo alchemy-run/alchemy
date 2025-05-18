@@ -3,19 +3,19 @@ import { R2Bucket } from "../../src/cloudflare/bucket.js";
 import { Worker } from "../../src/cloudflare/worker.js";
 
 import "../../src/cloudflare/pipeline.js";
+import { Queue } from "../../src/cloudflare/queue.js";
 
 const app = await alchemy("my-bootstrap-ap", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
-  password: "TODO",
 });
 
-// const queue = await Queue<string>("my-bootstrap-queue");
+const queue = await Queue<string>("my-bootstrap-queue");
 
 const bucket = await R2Bucket("my-bootstrap-bucket", {
   adopt: true,
 });
 
-console.log(bucket);
+// console.log(bucket);
 
 // const pipeline = await Pipeline<{
 //   key: string;
@@ -49,23 +49,27 @@ export default Worker("worker", import.meta, {
   url: true,
   async fetch(request) {
     const key = new URL(request.url).pathname;
-    // const obj = await bucket.put(key, request.body);
-    // if (!obj) {
-    //   return new Response("Failed to upload object", { status: 500 });
-    // }
+    const obj = await bucket.put(key, request.body);
+    if (!obj) {
+      return new Response("Failed to upload object", { status: 500 });
+    }
     // await queue.send(obj.key);
     // await pipeline.send([
     //   {
     //     key: obj.key,
     //   },
     // ]);
-    // return new Response(
-    //   JSON.stringify({
-    //     key: obj.key,
-    //     etag: obj.etag,
-    //   }),
-    // );
-    return new Response(JSON.stringify(__ALCHEMY_STATE__));
+    return new Response(
+      JSON.stringify(
+        {
+          queue: queue.name,
+          bucket: bucket.name,
+          key: obj.key,
+        },
+        null,
+        2,
+      ),
+    );
   },
 });
 
