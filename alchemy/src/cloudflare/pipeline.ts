@@ -1,5 +1,5 @@
 import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
+import { Resource, ResourceKind } from "../resource.js";
 import { bind } from "../runtime/bind.js";
 import type { Secret } from "../secret.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
@@ -250,6 +250,10 @@ export interface PipelineResource<_T extends PipelineRecord = PipelineRecord>
    * Version of the pipeline
    */
   version: number;
+}
+
+export function isPipeline(resource: Resource): resource is PipelineResource {
+  return resource[ResourceKind] === "cloudflare::Pipeline";
 }
 
 export type Pipeline<T extends PipelineRecord = PipelineRecord> =

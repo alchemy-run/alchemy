@@ -22,6 +22,7 @@ import type { Bound } from "./bound.js";
 import { isBucket } from "./bucket.js";
 import { bundleWorkerScript } from "./bundle/bundle-worker.js";
 import { type EventSource, isQueueEventSource } from "./event-source.js";
+import { isPipeline } from "./pipeline.js";
 import {
   QueueConsumer,
   deleteQueueConsumer,
@@ -429,7 +430,9 @@ export function Worker<const B extends Bindings>(
           autoBindings[getBindKey(resource)] = resource;
         } else if (isBucket(resource)) {
           autoBindings[getBindKey(resource)] = resource;
-        } // else if (isPipeline(...))
+        } else if (isPipeline(resource)) {
+          autoBindings[getBindKey(resource)] = resource;
+        }
         // TODO(sam): make this generic/pluggable
       }
 
@@ -469,23 +472,7 @@ export function Worker<const B extends Bindings>(
             "ws",
           ],
           banner: {
-            js: `import { env as __ALCHEMY_ENV__ } from "cloudflare:workers";
-var __ALCHEMY_RUNTIME__ = true;
-var __ALCHEMY_SERIALIZED_SCOPE__ = JSON.parse(__ALCHEMY_ENV__.__ALCHEMY_SERIALIZED_SCOPE__);
-
-var STATE = {
-  get(id) {
-    const fqn = globalThis.__ALCHEMY_SCOPE__.current.fqn(id);
-    const state = __ALCHEMY_SERIALIZED_SCOPE__[fqn];
-    if (!state) {
-      throw new Error(
-        \`Resource \${fqn} not found in __ALCHEMY_SERIALIZED_SCOPE__\n\${JSON.stringify(__ALCHEMY_SERIALIZED_SCOPE__, null, 2)}\`
-      );
-    }
-    // TODO(sam): deserialize
-    return state;
-  },
-};`,
+            js: "var __ALCHEMY_RUNTIME__ = true;",
           },
           inject: [
             ...(props.bundle?.inject ?? []),
@@ -509,7 +496,7 @@ var STATE = {
         try {
           return await props.fetch(request);
         } catch (err: any) {
-          return new Response(err.message, {
+          return new Response(err.message + err.stack, {
             status: 500,
           });
         }
@@ -517,24 +504,30 @@ var STATE = {
     } else {
       promise.fetch = async (request: Request) => {
         const worker = await promise;
-        if (worker.url === undefined) {
+        if (!worker.url)
           throw new Error("Worker URL is not available in runtime");
-        }
-        const workerURL = new URL(worker.url);
-        const requestURL = new URL(workerURL, request.url);
-        request.headers.set("host", workerURL.host);
+
+        const origin = new URL(worker.url);
+        const incoming = new URL(request.url);
+        const proxyURL = new URL(
+          `${incoming.pathname}${incoming.search}${incoming.hash}`,
+          origin,
+        );
+
+        const headers = new Headers(request.headers);
+        headers.set("host", origin.host);
+
         try {
-          return await fetch(requestURL.toString(), {
-            ...(request as any),
-            body: request.body,
-            headers: request.headers,
-            method: request.method,
-            url: requestURL,
-          });
+          return await fetch(
+            new Request(proxyURL, {
+              method: request.method,
+              body: request.body,
+              headers,
+              redirect: "manual",
+            }),
+          );
         } catch (err: any) {
-          return new Response(err.message, {
-            status: 500,
-          });
+          return new Response(err.message ?? "proxy error", { status: 500 });
         }
       };
     }

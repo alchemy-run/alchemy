@@ -59,6 +59,11 @@ export interface Alchemy {
    */
   secret: typeof secret;
   /**
+   * Whether the current runtime is the Cloudflare Workers runtime.
+   */
+  isRuntime: boolean;
+
+  /**
    * Creates a new application scope with the given name and options.
    * Used to create and manage resources with proper secret handling.
    *
@@ -94,6 +99,7 @@ _alchemy.destroy = destroy;
 _alchemy.run = run;
 _alchemy.secret = secret;
 _alchemy.env = env;
+_alchemy.isRuntime = isRuntime;
 
 /**
  * Implementation of the alchemy function that handles both application scoping

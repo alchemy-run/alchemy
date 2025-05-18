@@ -2,7 +2,7 @@ import { isPromise } from "node:util/types";
 import type { Binding as CloudflareBinding } from "../cloudflare/bindings.js";
 import type { Bound as CloudflareBound } from "../cloudflare/bound.js";
 import { env } from "../env.js";
-import { ResourceFQN, type Resource } from "../resource.js";
+import { ResourceFQN, ResourceScope, type Resource } from "../resource.js";
 
 /**
  * Get a Resource's Binding from the Environment.
@@ -15,7 +15,11 @@ export function getBinding<T extends Resource>(resource: T): Bound<T> {
  * Compute a unique key for where to store a Resource's Binding.
  */
 export function getBindKey(resource: Resource): string {
-  return resource[ResourceFQN].replace(/[^a-zA-Z0-9]/g, "_");
+  const fqn = resource[ResourceFQN];
+  const scope = resource[ResourceScope];
+  const prefix = `${scope.appName}/${scope.stage}`;
+  const key = fqn.slice(prefix.length + 1).replace(/[^a-zA-Z0-9-_]/g, "_");
+  return key;
 }
 
 export type Bound<T> = T extends CloudflareBinding ? CloudflareBound<T> : T;
@@ -46,8 +50,8 @@ export async function bind<T extends Resource>(
       } else if (prop === "then" || prop === "catch" || prop === "finally") {
         return target[prop];
       }
-      return (...args: any[]) => {
-        const rt = runtime();
+      return async (...args: any[]) => {
+        const rt = await runtime();
         if (rt === undefined) {
           throw new Error(`Resource ${resource[ResourceFQN]} is not bound`);
         }
@@ -57,7 +61,7 @@ export async function bind<T extends Resource>(
             `Method ${prop} on '${resource[ResourceFQN]}' is not a function`,
           );
         }
-        return method(...args);
+        return method.bind(rt)(...args);
       };
     },
     // apply: (target, thisArg, argArray) => {

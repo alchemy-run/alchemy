@@ -2,7 +2,9 @@ import { alchemy } from "../../src/alchemy.js";
 import { R2Bucket } from "../../src/cloudflare/bucket.js";
 import { Worker } from "../../src/cloudflare/worker.js";
 
+import path from "node:path";
 import "../../src/cloudflare/pipeline.js";
+import { Pipeline } from "../../src/cloudflare/pipeline.js";
 import { Queue } from "../../src/cloudflare/queue.js";
 
 const app = await alchemy("my-bootstrap-ap", {
@@ -17,33 +19,35 @@ const bucket = await R2Bucket("my-bootstrap-bucket", {
 
 // console.log(bucket);
 
-// const pipeline = await Pipeline<{
-//   key: string;
-// }>("my-bootstrap-pipeline", {
-//   source: [{ type: "binding", format: "json" }],
-//   destination: {
-//     type: "r2",
-//     format: "json",
-//     path: {
-//       bucket: bucket.name,
-//     },
-//     credentials: {
-//       accessKeyId: await alchemy.secret.env.R2_ACCESS_KEY_ID,
-//       secretAccessKey: await alchemy.secret.env.R2_SECRET_ACCESS_KEY,
-//     },
-//     batch: {
-//       maxMb: 10,
-//       // testing value. recommended - 300
-//       maxSeconds: 5,
-//       maxRows: 100,
-//     },
-//   },
-// });
+const pipeline = await Pipeline<{
+  key: string;
+}>("my-bootstrap-pipeline", {
+  source: [{ type: "binding", format: "json" }],
+  destination: {
+    type: "r2",
+    format: "json",
+    path: {
+      bucket: bucket.name,
+    },
+    credentials: {
+      accessKeyId: await alchemy.secret.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: await alchemy.secret.env.R2_SECRET_ACCESS_KEY,
+    },
+    batch: {
+      maxMb: 10,
+      // testing value. recommended - 300
+      maxSeconds: 5,
+      maxRows: 100,
+    },
+  },
+});
 
 export default Worker("worker", import.meta, {
   compatibilityFlags: ["nodejs_compat"],
   bundle: {
-    // outfile: path.join(import.meta.dirname, "app.js"),
+    outfile: alchemy.isRuntime
+      ? undefined
+      : path.join(import.meta.dirname, "app.js"),
     minify: false,
   },
   url: true,
@@ -53,18 +57,17 @@ export default Worker("worker", import.meta, {
     if (!obj) {
       return new Response("Failed to upload object", { status: 500 });
     }
-    // await queue.send(obj.key);
-    // await pipeline.send([
-    //   {
-    //     key: obj.key,
-    //   },
-    // ]);
+    await queue.send(obj.key);
+    await pipeline.send([
+      {
+        key: "value",
+      },
+    ]);
     return new Response(
       JSON.stringify(
         {
-          queue: queue.name,
-          bucket: bucket.name,
           key: obj.key,
+          etag: obj.etag,
         },
         null,
         2,

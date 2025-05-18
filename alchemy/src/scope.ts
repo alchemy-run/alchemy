@@ -63,7 +63,6 @@ export class Scope {
 
   constructor(options: ScopeOptions) {
     this.appName = options.appName;
-    this.stage = options?.stage ?? DEFAULT_STAGE;
     this.scopeName = options.scopeName ?? null;
     if (this.scopeName?.includes(":")) {
       throw new Error(
@@ -71,6 +70,7 @@ export class Scope {
       );
     }
     this.parent = options.parent ?? Scope.get();
+    this.stage = options?.stage ?? this.parent?.stage ?? DEFAULT_STAGE;
     this.parent?.children.set(this.scopeName!, this);
     this.quiet = options.quiet ?? this.parent?.quiet ?? false;
     if (this.parent && !this.scopeName) {

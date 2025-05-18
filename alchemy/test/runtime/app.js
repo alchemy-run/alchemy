@@ -1,21 +1,4 @@
-import { env as __ALCHEMY_ENV__ } from "cloudflare:workers";
 var __ALCHEMY_RUNTIME__ = true;
-var __ALCHEMY_SERIALIZED_SCOPE__ = JSON.parse(__ALCHEMY_ENV__.__ALCHEMY_SERIALIZED_SCOPE__);
-
-var STATE = {
-  get(id) {
-    const fqn = globalThis.__ALCHEMY_SCOPE__.current.fqn(id);
-    const state = __ALCHEMY_SERIALIZED_SCOPE__[fqn];
-    if (!state) {
-      throw new Error(
-        `Resource ${fqn} not found in __ALCHEMY_SERIALIZED_SCOPE__
-${JSON.stringify(__ALCHEMY_SERIALIZED_SCOPE__, null, 2)}`
-      );
-    }
-    // TODO(sam): deserialize
-    return state;
-  },
-};
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
@@ -32,15 +15,6 @@ var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
 };
-
-// alchemy/src/runtime/shims.js
-import { env } from "cloudflare:workers";
-var init_shims = __esm({
-  "alchemy/src/runtime/shims.js"() {
-    "use strict";
-    globalThis.process.env = env;
-  }
-});
 
 // node_modules/unenv/dist/runtime/_internal/utils.mjs
 // @__NO_SIDE_EFFECTS__
@@ -840,7 +814,7 @@ var init_process = __esm({
 });
 
 // node_modules/@cloudflare/unenv-preset/dist/runtime/node/process.mjs
-var globalProcess, getBuiltinModule, exit, platform, nextTick, unenvProcess, abort, addListener, allowedNodeEnvironmentFlags, hasUncaughtExceptionCaptureCallback, setUncaughtExceptionCaptureCallback, loadEnvFile, sourceMapsEnabled, arch, argv, argv0, chdir, config, connected, constrainedMemory, availableMemory, cpuUsage, cwd, debugPort, dlopen, disconnect, emit, emitWarning, env2, eventNames, execArgv, execPath, finalization, features, getActiveResourcesInfo, getMaxListeners, hrtime3, kill, listeners, listenerCount, memoryUsage, on, off, once, pid, ppid, prependListener, prependOnceListener, rawListeners, release, removeAllListeners, removeListener, report, resourceUsage, setMaxListeners, setSourceMapsEnabled, stderr, stdin, stdout, title, throwDeprecation, traceDeprecation, umask, uptime, version, versions, domain, initgroups, moduleLoadList, reallyExit, openStdin, assert2, binding, send, exitCode, channel, getegid, geteuid, getgid, getgroups, getuid, setegid, seteuid, setgid, setgroups, setuid, permission, mainModule, _events, _eventsCount, _exiting, _maxListeners, _debugEnd, _debugProcess, _fatalException, _getActiveHandles, _getActiveRequests, _kill, _preload_modules, _rawDebug, _startProfilerIdleNotifier, _stopProfilerIdleNotifier, _tickCallback, _disconnect, _handleQueue, _pendingMessage, _channel, _send, _linkedBinding, _process, process_default;
+var globalProcess, getBuiltinModule, exit, platform, nextTick, unenvProcess, abort, addListener, allowedNodeEnvironmentFlags, hasUncaughtExceptionCaptureCallback, setUncaughtExceptionCaptureCallback, loadEnvFile, sourceMapsEnabled, arch, argv, argv0, chdir, config, connected, constrainedMemory, availableMemory, cpuUsage, cwd, debugPort, dlopen, disconnect, emit, emitWarning, env, eventNames, execArgv, execPath, finalization, features, getActiveResourcesInfo, getMaxListeners, hrtime3, kill, listeners, listenerCount, memoryUsage, on, off, once, pid, ppid, prependListener, prependOnceListener, rawListeners, release, removeAllListeners, removeListener, report, resourceUsage, setMaxListeners, setSourceMapsEnabled, stderr, stdin, stdout, title, throwDeprecation, traceDeprecation, umask, uptime, version, versions, domain, initgroups, moduleLoadList, reallyExit, openStdin, assert2, binding, send, exitCode, channel, getegid, geteuid, getgid, getgroups, getuid, setegid, seteuid, setgid, setgroups, setuid, permission, mainModule, _events, _eventsCount, _exiting, _maxListeners, _debugEnd, _debugProcess, _fatalException, _getActiveHandles, _getActiveRequests, _kill, _preload_modules, _rawDebug, _startProfilerIdleNotifier, _stopProfilerIdleNotifier, _tickCallback, _disconnect, _handleQueue, _pendingMessage, _channel, _send, _linkedBinding, _process, process_default;
 var init_process2 = __esm({
   "node_modules/@cloudflare/unenv-preset/dist/runtime/node/process.mjs"() {
     init_shims();
@@ -882,7 +856,7 @@ var init_process2 = __esm({
       disconnect,
       emit,
       emitWarning,
-      env: env2,
+      env,
       eventNames,
       execArgv,
       execPath,
@@ -987,7 +961,7 @@ var init_process2 = __esm({
       disconnect,
       emit,
       emitWarning,
-      env: env2,
+      env,
       eventNames,
       execArgv,
       execPath,
@@ -1083,6 +1057,19 @@ var init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process = __
   "alchemy/src/cloudflare/bundle/_virtual_unenv_global_polyfill-@cloudflare-unenv-preset-node-process"() {
     init_process2();
     globalThis.process = process_default;
+  }
+});
+
+// node_modules/@cloudflare/unenv-preset/dist/runtime/node/async_hooks.mjs
+var workerdAsyncHooks, AsyncLocalStorage, AsyncResource;
+var init_async_hooks = __esm({
+  "node_modules/@cloudflare/unenv-preset/dist/runtime/node/async_hooks.mjs"() {
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    workerdAsyncHooks = process.getBuiltinModule("node:async_hooks");
+    ({ AsyncLocalStorage, AsyncResource } = workerdAsyncHooks);
   }
 });
 
@@ -1304,6 +1291,728 @@ var init_promises2 = __esm({
       watch,
       writeFile
     };
+  }
+});
+
+// alchemy/src/env.ts
+async function _env(name, value, error3) {
+  if (value !== void 0) {
+    return value;
+  }
+  const env4 = await resolveEnv();
+  if (name in env4) {
+    return env4[name];
+  }
+  throw new Error(error3 ?? `Environment variable ${name} is not set`);
+}
+async function resolveEnv() {
+  if (typeof process !== "undefined") {
+    return process.env;
+  }
+  try {
+    const { env: env4 } = await import("cloudflare:workers");
+    return env4;
+  } catch (_error) {
+  }
+  if (typeof import.meta !== "undefined") {
+    return import.meta.env;
+  }
+  throw new Error("No environment found");
+}
+var env2;
+var init_env = __esm({
+  "alchemy/src/env.ts"() {
+    "use strict";
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    env2 = new Proxy(_env, {
+      get: /* @__PURE__ */ __name((_, name) => _env(name), "get"),
+      apply: /* @__PURE__ */ __name((_, __, args) => _env(...args), "apply")
+    });
+    __name(_env, "_env");
+    __name(resolveEnv, "resolveEnv");
+  }
+});
+
+// alchemy/src/context.ts
+function context2({ scope, phase, kind, id, fqn, seq, state, replace }) {
+  function create(...args) {
+    const [ID, props] = typeof args[0] === "string" ? args : [
+      id,
+      args[0]
+    ];
+    return {
+      ...props,
+      [ResourceKind]: kind,
+      [ResourceID]: ID,
+      [ResourceFQN]: fqn,
+      [ResourceScope]: scope,
+      [ResourceSeq]: seq
+    };
+  }
+  __name(create, "create");
+  return Object.assign(create, {
+    stage: scope.stage,
+    scope,
+    id,
+    fqn,
+    phase,
+    output: state.output,
+    props: state.props,
+    replace,
+    get: /* @__PURE__ */ __name((key) => state.data[key], "get"),
+    set: /* @__PURE__ */ __name(async (key, value) => {
+      state.data[key] = value;
+    }, "set"),
+    delete: /* @__PURE__ */ __name(async (key) => {
+      const value = state.data[key];
+      delete state.data[key];
+      return value;
+    }, "delete"),
+    quiet: scope.quiet,
+    destroy: /* @__PURE__ */ __name(() => {
+      throw new DestroyedSignal();
+    }, "destroy"),
+    create
+  });
+}
+var init_context = __esm({
+  "alchemy/src/context.ts"() {
+    "use strict";
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_destroy();
+    init_resource();
+    __name(context2, "context");
+  }
+});
+
+// alchemy/src/encrypt.ts
+async function encrypt(value, key) {
+  const sodium = (await import("libsodium-wrappers")).default;
+  await sodium.ready;
+  const cryptoKey = sodium.crypto_generichash(sodium.crypto_secretbox_KEYBYTES, sodium.from_string(key));
+  const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
+  const encryptedBin = sodium.crypto_secretbox_easy(sodium.from_string(value), nonce, cryptoKey);
+  const combined = new Uint8Array(nonce.length + encryptedBin.length);
+  combined.set(nonce);
+  combined.set(encryptedBin, nonce.length);
+  return sodium.to_base64(combined, sodium.base64_variants.ORIGINAL);
+}
+async function decryptWithKey(encryptedValue, key) {
+  const sodium = (await import("libsodium-wrappers")).default;
+  await sodium.ready;
+  const cryptoKey = sodium.crypto_generichash(sodium.crypto_secretbox_KEYBYTES, sodium.from_string(key));
+  const combined = sodium.from_base64(encryptedValue, sodium.base64_variants.ORIGINAL);
+  const nonce = combined.slice(0, sodium.crypto_secretbox_NONCEBYTES);
+  const ciphertext = combined.slice(sodium.crypto_secretbox_NONCEBYTES);
+  const decryptedBin = sodium.crypto_secretbox_open_easy(ciphertext, nonce, cryptoKey);
+  return sodium.to_string(decryptedBin);
+}
+var init_encrypt = __esm({
+  "alchemy/src/encrypt.ts"() {
+    "use strict";
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    __name(encrypt, "encrypt");
+    __name(decryptWithKey, "decryptWithKey");
+  }
+});
+
+// alchemy/src/secret.ts
+function nextName() {
+  return `secret-${i++}`;
+}
+function secret(unencrypted, name) {
+  if (unencrypted === void 0) {
+    throw new Error("Secret cannot be undefined");
+  }
+  return new Secret(unencrypted, name);
+}
+var globalSecrets, i, Secret;
+var init_secret = __esm({
+  "alchemy/src/secret.ts"() {
+    "use strict";
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_alchemy();
+    globalSecrets = {};
+    i = 0;
+    __name(nextName, "nextName");
+    Secret = class {
+      constructor(unencrypted, name = nextName()) {
+        this.unencrypted = unencrypted;
+        this.name = name;
+        if (name in globalSecrets) {
+          throw new Error(`Secret ${name} already exists`);
+        }
+        globalSecrets[name] = this;
+      }
+      static {
+        __name(this, "Secret");
+      }
+      static all() {
+        return Object.values(globalSecrets);
+      }
+      type = "secret";
+    };
+    __name(secret, "secret");
+    ((secret2) => {
+      secret2.env = new Proxy(_env2, {
+        get: /* @__PURE__ */ __name((_, name) => _env2(name), "get"),
+        apply: /* @__PURE__ */ __name((_, __, args) => _env2(...args), "apply")
+      });
+      async function _env2(name, value, error3) {
+        const result = await alchemy.env(name, value, error3);
+        if (typeof result === "string") {
+          return secret2(result, name);
+        }
+        throw new Error(`Secret environment variable ${name} is not a string`);
+      }
+      __name(_env2, "_env");
+    })(secret || (secret = {}));
+  }
+});
+
+// alchemy/src/serde.ts
+function isType(value) {
+  return value && typeof value === "object" && typeof value.toJsonSchema === "function";
+}
+async function serializeScope(scope) {
+  const map = {};
+  return serializeScope2(scope);
+  async function serializeScope2(scope2) {
+    await Promise.all(Array.from(scope2.resources.values()).map(async (resource) => {
+      if (resource[ResourceKind] === Scope.KIND) {
+        return;
+      }
+      map[resource[ResourceFQN]] = await serialize(scope2, await resource, {
+        transform: /* @__PURE__ */ __name((value) => {
+          if (value instanceof Secret) {
+            return {
+              "@secret-env": value.name
+            };
+          }
+          return value;
+        }, "transform")
+      });
+      const innerScope = await resource[InnerResourceScope];
+      if (innerScope) {
+        await serializeScope2(innerScope);
+      }
+    }));
+    await Promise.all(Array.from(scope2.children.values()).map((scope3) => serializeScope2(scope3)));
+    return map;
+  }
+  __name(serializeScope2, "serializeScope");
+}
+async function serialize(scope, value, options) {
+  if (options?.transform) {
+    value = options.transform(value);
+  }
+  if (Array.isArray(value)) {
+    return Promise.all(value.map((value2) => serialize(scope, value2, options)));
+  } else if (value instanceof Secret) {
+    if (!scope.password) {
+      throw new Error("Cannot serialize secret without password");
+    }
+    return {
+      "@secret": options?.encrypt !== false ? await encrypt(value.unencrypted, scope.password) : value.unencrypted
+    };
+  } else if (isType(value)) {
+    return {
+      "@schema": value.toJSON()
+    };
+  } else if (value instanceof Date) {
+    return {
+      "@date": value.toISOString()
+    };
+  } else if (typeof value === "symbol") {
+    assertNotUniqueSymbol(value);
+    return {
+      "@symbol": value.toString()
+    };
+  } else if (value instanceof Scope) {
+    return {
+      "@scope": null
+    };
+  } else if (isImportMeta(value)) {
+    return Object.fromEntries(Object.keys(Object.getPrototypeOf(value)).filter((prop) => prop === "env").map((prop) => [
+      prop,
+      value[prop]
+    ]));
+  } else if (value && typeof value === "object") {
+    for (const symbol of Object.getOwnPropertySymbols(value)) {
+      assertNotUniqueSymbol(symbol);
+    }
+    return Object.fromEntries(await Promise.all([
+      ...Object.getOwnPropertySymbols(value),
+      ...Object.keys(value)
+    ].map(async (key) => [
+      key.toString(),
+      await serialize(scope, value[key], options)
+    ])));
+  } else if (typeof value === "function") {
+    return void 0;
+  }
+  return value;
+}
+function isImportMeta(value) {
+  return value && typeof value === "object" && typeof value.dirname === "string" && typeof value.filename === "string" && typeof value.url === "string";
+}
+async function deserialize(scope, value, options) {
+  const replacement = options?.transform?.(value);
+  if (replacement) {
+    return replacement.value;
+  }
+  if (Array.isArray(value)) {
+    return await Promise.all(value.map(async (item) => await deserialize(scope, item, options)));
+  }
+  if (value && typeof value === "object") {
+    if (typeof value["@secret"] === "string") {
+      if (!scope.password) {
+        throw new Error("Cannot deserialize secret without password");
+      }
+      return new Secret(await decryptWithKey(value["@secret"], scope.password));
+    } else if ("@schema" in value) {
+      return value["@schema"];
+    } else if ("@date" in value) {
+      return new Date(value["@date"]);
+    } else if ("@symbol" in value) {
+      return parseSymbol(value["@symbol"]);
+    } else if ("@scope" in value) {
+      return scope;
+    }
+    return Object.fromEntries(await Promise.all(Object.entries(value).map(async ([key, value2]) => [
+      parseSymbol(key) ?? key,
+      await deserialize(scope, value2, options)
+    ])));
+  }
+  return value;
+}
+function parseSymbol(value) {
+  const match = value.match(symbolPattern);
+  if (!match) {
+    return void 0;
+  }
+  return Symbol.for(match[1]);
+}
+function assertNotUniqueSymbol(symbol) {
+  if (symbol.description === void 0 || symbol !== Symbol.for(symbol.description)) {
+    throw new Error(`Cannot serialize unique symbol: ${symbol.description}`);
+  }
+}
+var symbolPattern;
+var init_serde = __esm({
+  "alchemy/src/serde.ts"() {
+    "use strict";
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_encrypt();
+    init_resource();
+    init_scope();
+    init_secret();
+    __name(isType, "isType");
+    __name(serializeScope, "serializeScope");
+    __name(serialize, "serialize");
+    __name(isImportMeta, "isImportMeta");
+    __name(deserialize, "deserialize");
+    symbolPattern = /^Symbol\((.*)\)$/;
+    __name(parseSymbol, "parseSymbol");
+    __name(assertNotUniqueSymbol, "assertNotUniqueSymbol");
+  }
+});
+
+// alchemy/src/apply.ts
+var init_apply = __esm({
+  "alchemy/src/apply.ts"() {
+    "use strict";
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_alchemy();
+    init_context();
+    init_resource();
+    init_scope();
+    init_serde();
+  }
+});
+
+// alchemy/src/resource.ts
+var PROVIDERS, ResourceID, ResourceFQN, ResourceKind, ResourceScope, InnerResourceScope, ResourceSeq;
+var init_resource = __esm({
+  "alchemy/src/resource.ts"() {
+    "use strict";
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_apply();
+    init_scope();
+    PROVIDERS = /* @__PURE__ */ new Map();
+    ResourceID = Symbol.for("alchemy::ResourceID");
+    ResourceFQN = Symbol.for("alchemy::ResourceFQN");
+    ResourceKind = Symbol.for("alchemy::ResourceKind");
+    ResourceScope = Symbol.for("alchemy::ResourceScope");
+    InnerResourceScope = Symbol.for("alchemy::InnerResourceScope");
+    ResourceSeq = Symbol.for("alchemy::ResourceSeq");
+  }
+});
+
+// alchemy/src/runtime/global.ts
+var isRuntime;
+var init_global = __esm({
+  "alchemy/src/runtime/global.ts"() {
+    "use strict";
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    isRuntime = typeof __ALCHEMY_RUNTIME__ !== "undefined";
+  }
+});
+
+// alchemy/src/fs/file-ref.ts
+var file_ref_exports = {};
+__export(file_ref_exports, {
+  isFileRef: () => isFileRef
+});
+function isFileRef(value) {
+  return typeof value === "object" && value !== null && "kind" in value && value.kind === "fs::FileRef";
+}
+var init_file_ref = __esm({
+  "alchemy/src/fs/file-ref.ts"() {
+    "use strict";
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    __name(isFileRef, "isFileRef");
+  }
+});
+
+// alchemy/src/fs/file-collection.ts
+var file_collection_exports = {};
+__export(file_collection_exports, {
+  isFileCollection: () => isFileCollection
+});
+function isFileCollection(value) {
+  return typeof value === "object" && value !== null && "type" in value && value.type === "fs::FileCollection";
+}
+var init_file_collection = __esm({
+  "alchemy/src/fs/file-collection.ts"() {
+    "use strict";
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    __name(isFileCollection, "isFileCollection");
+  }
+});
+
+// alchemy/src/alchemy.ts
+import path from "node:path";
+async function _alchemy(...args) {
+  if (typeof args[0] === "string") {
+    const [appName, options] = args;
+    const phase = options?.phase ?? "up";
+    const root = new Scope({
+      ...options,
+      appName,
+      stage: options?.stage ?? process.env.ALCHEMY_STAGE,
+      phase: isRuntime ? "read" : phase,
+      password: options?.password ?? process.env.ALCHEMY_PASSWORD
+    });
+    try {
+      Scope.storage.enterWith(root);
+    } catch {
+      Scope.globals.push(root);
+    }
+    if (options?.phase === "destroy") {
+      await destroy(root);
+      return process.exit(0);
+    }
+    return root;
+  }
+  const [template, ...values] = args;
+  const [, secondLine] = template[0].split("\n");
+  const leadingSpaces = secondLine ? secondLine.match(/^(\s*)/)?.[1]?.length || 0 : 0;
+  const indent = " ".repeat(leadingSpaces);
+  const [{ isFileRef: isFileRef2 }, { isFileCollection: isFileCollection2 }] = await Promise.all([
+    Promise.resolve().then(() => (init_file_ref(), file_ref_exports)),
+    Promise.resolve().then(() => (init_file_collection(), file_collection_exports))
+  ]);
+  const appendices = {};
+  const stringValues = await Promise.all(values.map(/* @__PURE__ */ __name(async function resolve(value) {
+    if (typeof value === "string") {
+      return indent + value;
+    }
+    if (value === null) {
+      return "null";
+    }
+    if (value === void 0) {
+      return "undefined";
+    }
+    if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+      return value.toString();
+    }
+    if (value instanceof Promise) {
+      return resolve(await value);
+    }
+    if (isFileRef2(value)) {
+      if (!(value.path in appendices)) {
+        appendices[value.path] = await promises_default.readFile(value.path, "utf-8");
+      }
+      return `[${path.basename(value.path)}](${value.path})`;
+    }
+    if (isFileCollection2(value)) {
+      return Object.entries(value.files).map(([filePath, content]) => {
+        appendices[filePath] = content;
+        return `[${path.basename(filePath)}](${filePath})`;
+      }).join("\n\n");
+    }
+    if (Array.isArray(value)) {
+      return (await Promise.all(value.map(async (value2, i2) => `${i2}. ${await resolve(value2)}`))).join("\n");
+    }
+    if (typeof value === "object" && typeof value.path === "string") {
+      if (typeof value.content === "string") {
+        appendices[value.path] = value.content;
+        return `[${path.basename(value.path)}](${value.path})`;
+      }
+      appendices[value.path] = await promises_default.readFile(value.path, "utf-8");
+      return `[${path.basename(value.path)}](${value.path})`;
+    }
+    if (typeof value === "object") {
+      return (await Promise.all(Object.entries(value).map(async ([key, value2]) => {
+        return `* ${key}: ${await resolve(value2)}`;
+      }))).join("\n");
+    }
+    console.log(value);
+    throw new Error(`Unsupported value type: ${value}`);
+  }, "resolve")));
+  const lines = template.map((part) => part.split("\n").map((line) => line.startsWith(indent) ? line.slice(indent.length) : line).join("\n")).flatMap((part, i2) => i2 < stringValues.length ? [
+    part,
+    stringValues[i2] ?? ""
+  ] : [
+    part
+  ]).join("").split("\n");
+  return [
+    lines.length > 1 && lines[0].replaceAll(" ", "").length === 0 ? lines.slice(1).join("\n") : lines.join("\n"),
+    Object.entries(appendices).sort(([a], [b]) => a.localeCompare(b)).map(([filePath, content]) => {
+      const extension = path.extname(filePath).slice(1);
+      const codeTag = extension ? extension : "";
+      return `// ${filePath}
+\`\`\`${codeTag}
+${content}
+\`\`\``;
+    }).join("\n\n")
+  ].join("\n");
+}
+async function run(...args) {
+  const [id, options, fn] = typeof args[1] === "function" ? [
+    args[0],
+    void 0,
+    args[1]
+  ] : args;
+  const _scope = new Scope({
+    ...options,
+    scopeName: id
+  });
+  try {
+    if (options?.isResource !== true && _scope.parent) {
+      const seq = _scope.parent.seq();
+      const output = {
+        [ResourceID]: id,
+        [ResourceFQN]: "",
+        [ResourceKind]: Scope.KIND,
+        [ResourceScope]: _scope,
+        [ResourceSeq]: seq
+      };
+      const resource = {
+        kind: Scope.KIND,
+        id,
+        seq,
+        data: {},
+        fqn: "",
+        props: {},
+        status: "created",
+        output
+      };
+      const prev = await _scope.parent.state.get(id);
+      if (!prev) {
+        await _scope.parent.state.set(id, resource);
+      } else if (prev.kind !== Scope.KIND) {
+        throw new Error(`Tried to create a Scope that conflicts with a Resource (${prev.kind}): ${id}`);
+      }
+      _scope.parent.resources.set(id, Object.assign(Promise.resolve(resource), output));
+    }
+    return await _scope.run(async () => fn.bind(_scope)(_scope));
+  } catch (error3) {
+    if (!(error3 instanceof DestroyedSignal)) {
+      console.log(error3);
+      _scope.fail();
+    }
+    throw error3;
+  } finally {
+    await _scope.finalize();
+  }
+}
+var alchemy;
+var init_alchemy = __esm({
+  "alchemy/src/alchemy.ts"() {
+    "use strict";
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_promises2();
+    init_destroy();
+    init_env();
+    init_resource();
+    init_global();
+    init_scope();
+    init_secret();
+    alchemy = _alchemy;
+    _alchemy.destroy = destroy;
+    _alchemy.run = run;
+    _alchemy.secret = secret;
+    _alchemy.env = env2;
+    _alchemy.isRuntime = isRuntime;
+    __name(_alchemy, "_alchemy");
+    __name(run, "run");
+  }
+});
+
+// alchemy/src/destroy.ts
+function isScopeArgs(a) {
+  return a[0] instanceof Scope;
+}
+async function destroy(...args) {
+  if (isScopeArgs(args)) {
+    const [scope2] = args;
+    const options2 = {
+      strategy: "sequential",
+      ...args[1] ?? {}
+    };
+    await destroyAll(Array.from(scope2.resources.values()), options2);
+    const orphans = await scope2.state.all();
+    await destroyAll(Object.values(orphans).map((orphan) => ({
+      ...orphan.output,
+      Scope: scope2
+    })), options2);
+    await scope2.deinit();
+    return;
+  }
+  const [instance, options] = args;
+  if (!instance) {
+    return;
+  }
+  if (instance[ResourceKind] === Scope.KIND) {
+    const scope2 = new Scope({
+      parent: instance[ResourceScope],
+      scopeName: instance[ResourceID]
+    });
+    console.log("Destroying scope", scope2.chain.join("/"));
+    return await destroy(scope2, options);
+  }
+  const Provider = PROVIDERS.get(instance[ResourceKind]);
+  if (!Provider) {
+    throw new Error(`Cannot destroy resource "${instance[ResourceFQN]}" type ${instance[ResourceKind]} - no provider found. You may need to import the provider in your alchemy.config.ts.`);
+  }
+  const scope = instance[ResourceScope];
+  if (!scope) {
+    console.warn(`Resource "${instance[ResourceFQN]}" has no scope`);
+  }
+  const quiet = options?.quiet ?? scope.quiet;
+  try {
+    if (!quiet) {
+      console.log(`Delete:  "${instance[ResourceFQN]}"`);
+    }
+    const state = await scope.state.get(instance[ResourceID]);
+    if (state === void 0) {
+      return;
+    }
+    const ctx = context2({
+      scope,
+      phase: "delete",
+      kind: instance[ResourceKind],
+      id: instance[ResourceID],
+      fqn: instance[ResourceFQN],
+      seq: instance[ResourceSeq],
+      props: state.props,
+      state,
+      replace: /* @__PURE__ */ __name(() => {
+        throw new Error("Cannot replace a resource that is being deleted");
+      }, "replace")
+    });
+    let nestedScope;
+    try {
+      await alchemy.run(instance[ResourceID], {
+        isResource: instance[ResourceKind] !== "alchemy::Scope",
+        parent: scope
+      }, async (scope2) => {
+        nestedScope = scope2;
+        return await Provider.handler.bind(ctx)(instance[ResourceID], state.props);
+      });
+    } catch (err) {
+      if (err instanceof DestroyedSignal) {
+      } else {
+        throw err;
+      }
+    }
+    if (nestedScope) {
+      await destroy(nestedScope, options);
+    }
+    await scope.delete(instance[ResourceID]);
+    if (!quiet) {
+      console.log(`Deleted: "${instance[ResourceFQN]}"`);
+    }
+  } catch (error3) {
+    console.error(error3);
+    throw error3;
+  }
+}
+async function destroyAll(resources, options) {
+  if (options?.strategy !== "parallel") {
+    const sorted = resources.sort((a, b) => b[ResourceSeq] - a[ResourceSeq]);
+    for (const resource of sorted) {
+      await destroy(resource, options);
+    }
+  } else {
+    await Promise.all(resources.map((resource) => destroy(resource, options)));
+  }
+}
+var DestroyedSignal;
+var init_destroy = __esm({
+  "alchemy/src/destroy.ts"() {
+    "use strict";
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_alchemy();
+    init_context();
+    init_resource();
+    init_scope();
+    DestroyedSignal = class extends Error {
+      static {
+        __name(this, "DestroyedSignal");
+      }
+    };
+    __name(isScopeArgs, "isScopeArgs");
+    __name(destroy, "destroy");
+    __name(destroyAll, "destroyAll");
   }
 });
 
@@ -1568,41 +2277,396 @@ var init_fs2 = __esm({
   }
 });
 
-// alchemy/src/fs/file-ref.ts
-var file_ref_exports = {};
-__export(file_ref_exports, {
-  isFileRef: () => isFileRef
-});
-function isFileRef(value) {
-  return typeof value === "object" && value !== null && "kind" in value && value.kind === "fs::FileRef";
+// alchemy/src/state.ts
+async function deserializeState(scope, content) {
+  const state = await deserialize(scope, JSON.parse(content));
+  if (ResourceID in state.output) {
+    return state;
+  }
+  const output = state.output;
+  delete output.Kind;
+  delete output.ID;
+  delete output.FQN;
+  delete output.Scope;
+  delete output.Seq;
+  if (state.kind === "scope") {
+    state.kind = Scope.KIND;
+  }
+  output[ResourceKind] = state.kind;
+  output[ResourceID] = state.id;
+  output[ResourceFQN] = state.fqn;
+  output[ResourceScope] = scope;
+  output[ResourceSeq] = state.seq;
+  state.output = output;
+  await scope.state.set(state.id, state);
+  return state;
 }
-var init_file_ref = __esm({
-  "alchemy/src/fs/file-ref.ts"() {
+var init_state = __esm({
+  "alchemy/src/state.ts"() {
     "use strict";
     init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
-    __name(isFileRef, "isFileRef");
+    init_resource();
+    init_scope();
+    init_serde();
+    __name(deserializeState, "deserializeState");
   }
 });
 
-// alchemy/src/fs/file-collection.ts
-var file_collection_exports = {};
-__export(file_collection_exports, {
-  isFileCollection: () => isFileCollection
-});
-function isFileCollection(value) {
-  return typeof value === "object" && value !== null && "type" in value && value.type === "fs::FileCollection";
+// alchemy/src/util/ignore.ts
+async function ignore(codes, fn) {
+  try {
+    return await fn();
+  } catch (error3) {
+    const errorCode = error3.code || error3.name;
+    if (Array.isArray(codes) ? codes.includes(errorCode) : errorCode === codes) {
+      return void 0;
+    }
+    throw error3;
+  }
 }
-var init_file_collection = __esm({
-  "alchemy/src/fs/file-collection.ts"() {
+var init_ignore = __esm({
+  "alchemy/src/util/ignore.ts"() {
     "use strict";
     init_shims();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
     init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
     init_performance2();
-    __name(isFileCollection, "isFileCollection");
+    __name(ignore, "ignore");
+  }
+});
+
+// alchemy/src/fs/file-system-state-store.ts
+import path2 from "node:path";
+var stateRootDir, FileSystemStateStore;
+var init_file_system_state_store = __esm({
+  "alchemy/src/fs/file-system-state-store.ts"() {
+    "use strict";
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_fs2();
+    init_resource();
+    init_serde();
+    init_state();
+    init_ignore();
+    stateRootDir = path2.join(process.cwd(), ".alchemy");
+    FileSystemStateStore = class {
+      constructor(scope) {
+        this.scope = scope;
+        this.dir = path2.join(stateRootDir, ...scope.chain);
+      }
+      static {
+        __name(this, "FileSystemStateStore");
+      }
+      dir;
+      initialized = false;
+      async init() {
+        if (this.initialized) {
+          return;
+        }
+        this.initialized = true;
+        await fs_default.promises.mkdir(this.dir, {
+          recursive: true
+        });
+      }
+      async deinit() {
+        await ignore("ENOENT", () => fs_default.promises.rmdir(this.dir));
+      }
+      async count() {
+        return Object.keys(await this.list()).length;
+      }
+      async list() {
+        try {
+          const files = await fs_default.promises.readdir(this.dir, {
+            withFileTypes: true
+          });
+          return files.filter((dirent) => dirent.isFile() && dirent.name.endsWith(".json")).map((dirent) => dirent.name.replace(/\.json$/, "")).map((key) => key.replaceAll(":", "/"));
+        } catch (error3) {
+          if (error3.code === "ENOENT") {
+            return [];
+          }
+          throw error3;
+        }
+      }
+      async get(key) {
+        try {
+          const content = await fs_default.promises.readFile(this.getPath(key), "utf8");
+          const state = await deserializeState(this.scope, content);
+          if (state.output === void 0) {
+            state.output = {};
+          }
+          state.output[ResourceScope] = this.scope;
+          return state;
+        } catch (error3) {
+          if (error3.code === "ENOENT") {
+            return void 0;
+          }
+          throw error3;
+        }
+      }
+      async set(key, value) {
+        await this.init();
+        await fs_default.promises.writeFile(this.getPath(key), JSON.stringify(await serialize(this.scope, value), null, 2));
+      }
+      async delete(key) {
+        try {
+          return await fs_default.promises.unlink(this.getPath(key));
+        } catch (error3) {
+          if (error3.code === "ENOENT") {
+            return;
+          }
+          throw error3;
+        }
+      }
+      async all() {
+        return this.getBatch(await this.list());
+      }
+      async getBatch(ids) {
+        return Object.fromEntries((await Promise.all(Array.from(ids).flatMap(async (id) => {
+          const s = await this.get(id);
+          if (s === void 0) {
+            return [];
+          }
+          return [
+            [
+              id,
+              s
+            ]
+          ];
+        }))).flat());
+      }
+      getPath(key) {
+        if (key.includes(":")) {
+          throw new Error(`ID cannot include colons: ${key}`);
+        }
+        if (key.includes("/")) {
+          key = key.replaceAll("/", ":");
+        }
+        return path2.join(this.dir, `${key}.json`);
+      }
+    };
+  }
+});
+
+// alchemy/src/scope.ts
+var DEFAULT_STAGE, Scope;
+var init_scope = __esm({
+  "alchemy/src/scope.ts"() {
+    "use strict";
+    init_shims();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_async_hooks();
+    init_destroy();
+    init_file_system_state_store();
+    init_resource();
+    DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
+    Scope = class _Scope2 {
+      static {
+        __name(this, "Scope");
+      }
+      static KIND = "alchemy::Scope";
+      static storage = new AsyncLocalStorage();
+      static globals = [];
+      static get() {
+        return _Scope2.storage.getStore();
+      }
+      static get root() {
+        return _Scope2.current.root;
+      }
+      static get current() {
+        const scope = _Scope2.get();
+        if (!scope) {
+          if (_Scope2.globals.length > 0) {
+            return _Scope2.globals[_Scope2.globals.length - 1];
+          }
+          throw new Error("Not running within an Alchemy Scope");
+        }
+        return scope;
+      }
+      resources = /* @__PURE__ */ new Map();
+      children = /* @__PURE__ */ new Map();
+      appName;
+      stage;
+      scopeName;
+      parent;
+      password;
+      state;
+      stateStore;
+      quiet;
+      phase;
+      isErrored = false;
+      finalized = false;
+      deferred = [];
+      constructor(options) {
+        this.appName = options.appName;
+        this.scopeName = options.scopeName ?? null;
+        if (this.scopeName?.includes(":")) {
+          throw new Error(`Scope name ${this.scopeName} cannot contain double colons`);
+        }
+        this.parent = options.parent ?? _Scope2.get();
+        this.stage = options?.stage ?? this.parent?.stage ?? DEFAULT_STAGE;
+        this.parent?.children.set(this.scopeName, this);
+        this.quiet = options.quiet ?? this.parent?.quiet ?? false;
+        if (this.parent && !this.scopeName) {
+          throw new Error("Scope name is required when creating a child scope");
+        }
+        this.password = options.password ?? this.parent?.password;
+        const phase = options.phase ?? this.parent?.phase;
+        if (phase === void 0) {
+          throw new Error("Phase is required");
+        }
+        this.phase = phase;
+        this.stateStore = options.stateStore ?? this.parent?.stateStore ?? ((scope) => new FileSystemStateStore(scope));
+        this.state = this.stateStore(this);
+      }
+      get root() {
+        let root = this;
+        while (root.parent) {
+          root = root.parent;
+        }
+        return root;
+      }
+      async delete(resourceID) {
+        await this.state.delete(resourceID);
+        this.resources.delete(resourceID);
+      }
+      _seq = 0;
+      seq() {
+        return this._seq++;
+      }
+      get chain() {
+        const thisScope = this.scopeName ? [
+          this.scopeName
+        ] : [];
+        const app2 = this.appName ? [
+          this.appName
+        ] : [];
+        if (this.parent) {
+          return [
+            ...this.parent.chain,
+            ...thisScope
+          ];
+        }
+        return [
+          ...app2,
+          this.stage,
+          ...thisScope
+        ];
+      }
+      fail() {
+        console.error("Scope failed", this.chain.join("/"));
+        this.isErrored = true;
+      }
+      async init() {
+        await this.state.init?.();
+      }
+      async deinit() {
+        await this.parent?.state.delete(this.scopeName);
+        await this.state.deinit?.();
+      }
+      fqn(resourceID) {
+        return [
+          ...this.chain,
+          resourceID
+        ].join("/");
+      }
+      async run(fn) {
+        return _Scope2.storage.run(this, () => fn(this));
+      }
+      [Symbol.asyncDispose]() {
+        return this.finalize();
+      }
+      async finalize() {
+        if (this.phase === "read") {
+          return;
+        }
+        if (this.finalized) {
+          return;
+        }
+        if (this.parent === void 0 && _Scope2.globals.length > 0) {
+          const last = _Scope2.globals.pop();
+          if (last !== this) {
+            throw new Error("Running in AsyncLocaStorage.enterWith emultation mode and attempted to finalize a global Scope that wasn't top of the stack");
+          }
+        }
+        this.finalized = true;
+        await Promise.all(this.deferred.map((fn) => fn()));
+        if (!this.isErrored) {
+          const resourceIds = await this.state.list();
+          const aliveIds = new Set(this.resources.keys());
+          const orphanIds = Array.from(resourceIds.filter((id) => !aliveIds.has(id)));
+          const orphans = await Promise.all(orphanIds.map(async (id) => (await this.state.get(id)).output));
+          await destroyAll(orphans, {
+            quiet: this.quiet,
+            strategy: "sequential"
+          });
+        } else {
+          console.warn("Scope is in error, skipping finalize");
+        }
+      }
+      defer(fn) {
+        let _resolve;
+        let _reject;
+        const promise = new Promise((resolve, reject) => {
+          _resolve = resolve;
+          _reject = reject;
+        });
+        this.deferred.push(() => {
+          if (!this.finalized) {
+            throw new Error("Attempted to await a deferred Promise before finalization");
+          }
+          return this.run(() => fn()).then(_resolve, _reject);
+        });
+        return promise;
+      }
+      toString() {
+        return `Scope(
+  chain=${this.chain.join("/")},
+  resources=[${Array.from(this.resources.values()).map((r) => r[ResourceID]).join(",\n  ")}]
+)`;
+      }
+    };
+    globalThis.__ALCHEMY_SCOPE__ = Scope;
+  }
+});
+
+// alchemy/src/runtime/shims.js
+import { env as env3 } from "cloudflare:workers";
+var __ALCHEMY_RUNTIME__, __ALCHEMY_SERIALIZED_SCOPE__, STATE;
+var init_shims = __esm({
+  "alchemy/src/runtime/shims.js"() {
+    "use strict";
+    init_scope();
+    init_secret();
+    init_serde();
+    globalThis.process.env = env3;
+    __ALCHEMY_RUNTIME__ = true;
+    __ALCHEMY_SERIALIZED_SCOPE__ = JSON.parse(env3.__ALCHEMY_SERIALIZED_SCOPE__);
+    STATE = {
+      async get(id) {
+        const fqn = globalThis.__ALCHEMY_SCOPE__.current.fqn(id);
+        const state = __ALCHEMY_SERIALIZED_SCOPE__[fqn];
+        if (!state) {
+          throw new Error(`Resource ${fqn} not found in __ALCHEMY_SERIALIZED_SCOPE__
+${JSON.stringify(__ALCHEMY_SERIALIZED_SCOPE__, null, 2)}`);
+        }
+        return await deserialize(Scope.current, state, {
+          transform: /* @__PURE__ */ __name((value) => {
+            if (value && typeof value === "object" && value["@secret-env"]) {
+              return {
+                value: new Secret(env3[value["@secret-env"]])
+              };
+            }
+          }, "transform")
+        });
+      }
+    };
   }
 });
 
@@ -1878,946 +2942,7 @@ init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
-import path8 from "node:path";
-
-// alchemy/src/alchemy.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-init_promises2();
-import path2 from "node:path";
-
-// alchemy/src/destroy.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-
-// alchemy/src/context.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-
-// alchemy/src/resource.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-
-// alchemy/src/apply.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-
-// alchemy/src/scope.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-
-// node_modules/@cloudflare/unenv-preset/dist/runtime/node/async_hooks.mjs
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-var workerdAsyncHooks = process.getBuiltinModule("node:async_hooks");
-var { AsyncLocalStorage, AsyncResource } = workerdAsyncHooks;
-
-// alchemy/src/fs/file-system-state-store.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-init_fs2();
-import path from "node:path";
-
-// alchemy/src/serde.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-
-// alchemy/src/encrypt.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-async function encrypt(value, key) {
-  const sodium = (await import("libsodium-wrappers")).default;
-  await sodium.ready;
-  const cryptoKey = sodium.crypto_generichash(sodium.crypto_secretbox_KEYBYTES, sodium.from_string(key));
-  const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
-  const encryptedBin = sodium.crypto_secretbox_easy(sodium.from_string(value), nonce, cryptoKey);
-  const combined = new Uint8Array(nonce.length + encryptedBin.length);
-  combined.set(nonce);
-  combined.set(encryptedBin, nonce.length);
-  return sodium.to_base64(combined, sodium.base64_variants.ORIGINAL);
-}
-__name(encrypt, "encrypt");
-async function decryptWithKey(encryptedValue, key) {
-  const sodium = (await import("libsodium-wrappers")).default;
-  await sodium.ready;
-  const cryptoKey = sodium.crypto_generichash(sodium.crypto_secretbox_KEYBYTES, sodium.from_string(key));
-  const combined = sodium.from_base64(encryptedValue, sodium.base64_variants.ORIGINAL);
-  const nonce = combined.slice(0, sodium.crypto_secretbox_NONCEBYTES);
-  const ciphertext = combined.slice(sodium.crypto_secretbox_NONCEBYTES);
-  const decryptedBin = sodium.crypto_secretbox_open_easy(ciphertext, nonce, cryptoKey);
-  return sodium.to_string(decryptedBin);
-}
-__name(decryptWithKey, "decryptWithKey");
-
-// alchemy/src/secret.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-var globalSecrets = {};
-var i = 0;
-function nextName() {
-  return `secret-${i++}`;
-}
-__name(nextName, "nextName");
-var Secret = class {
-  constructor(unencrypted, name = nextName()) {
-    this.unencrypted = unencrypted;
-    this.name = name;
-    if (name in globalSecrets) {
-      throw new Error(`Secret ${name} already exists`);
-    }
-    globalSecrets[name] = this;
-  }
-  static {
-    __name(this, "Secret");
-  }
-  static all() {
-    return Object.values(globalSecrets);
-  }
-  type = "secret";
-};
-function secret(unencrypted, name) {
-  if (unencrypted === void 0) {
-    throw new Error("Secret cannot be undefined");
-  }
-  return new Secret(unencrypted, name);
-}
-__name(secret, "secret");
-((secret2) => {
-  secret2.env = new Proxy(_env2, {
-    get: /* @__PURE__ */ __name((_, name) => _env2(name), "get"),
-    apply: /* @__PURE__ */ __name((_, __, args) => _env2(...args), "apply")
-  });
-  async function _env2(name, value, error3) {
-    const result = await alchemy.env(name, value, error3);
-    if (typeof result === "string") {
-      return secret2(result, name);
-    }
-    throw new Error(`Secret environment variable ${name} is not a string`);
-  }
-  __name(_env2, "_env");
-})(secret || (secret = {}));
-
-// alchemy/src/serde.ts
-function isType(value) {
-  return value && typeof value === "object" && typeof value.toJsonSchema === "function";
-}
-__name(isType, "isType");
-async function serializeScope(scope, map = {}, secrets = []) {
-  await Promise.all(Array.from(scope.resources.values()).map(async (resource) => {
-    if (resource[ResourceKind] === Scope.KIND) {
-      return;
-    }
-    map[resource[ResourceFQN]] = await serialize(scope, await resource, {
-      transform: /* @__PURE__ */ __name((value) => {
-        if (value instanceof Secret) {
-          secrets.push(value);
-        }
-        return value;
-      }, "transform")
-    });
-    const innerScope = await resource[InnerResourceScope];
-    if (innerScope) {
-      await serializeScope(innerScope, map);
-    }
-  }));
-  await Promise.all(Array.from(scope.children.values()).map((scope2) => serializeScope(scope2, map)));
-  return map;
-}
-__name(serializeScope, "serializeScope");
-async function serialize(scope, value, options) {
-  if (options?.transform) {
-    value = options.transform(value);
-  }
-  if (Array.isArray(value)) {
-    return Promise.all(value.map((value2) => serialize(scope, value2, options)));
-  } else if (value instanceof Secret) {
-    if (!scope.password) {
-      throw new Error("Cannot serialize secret without password");
-    }
-    return {
-      "@secret": options?.encrypt !== false ? await encrypt(value.unencrypted, scope.password) : value.unencrypted
-    };
-  } else if (isType(value)) {
-    return {
-      "@schema": value.toJSON()
-    };
-  } else if (value instanceof Date) {
-    return {
-      "@date": value.toISOString()
-    };
-  } else if (typeof value === "symbol") {
-    assertNotUniqueSymbol(value);
-    return {
-      "@symbol": value.toString()
-    };
-  } else if (value instanceof Scope) {
-    return {
-      "@scope": null
-    };
-  } else if (isImportMeta(value)) {
-    return Object.fromEntries(Object.keys(Object.getPrototypeOf(value)).filter((prop) => prop === "env").map((prop) => [
-      prop,
-      value[prop]
-    ]));
-  } else if (value && typeof value === "object") {
-    for (const symbol of Object.getOwnPropertySymbols(value)) {
-      assertNotUniqueSymbol(symbol);
-    }
-    return Object.fromEntries(await Promise.all([
-      ...Object.getOwnPropertySymbols(value),
-      ...Object.keys(value)
-    ].map(async (key) => [
-      key.toString(),
-      await serialize(scope, value[key], options)
-    ])));
-  } else if (typeof value === "function") {
-    return void 0;
-  }
-  return value;
-}
-__name(serialize, "serialize");
-function isImportMeta(value) {
-  return value && typeof value === "object" && typeof value.dirname === "string" && typeof value.filename === "string" && typeof value.url === "string";
-}
-__name(isImportMeta, "isImportMeta");
-async function deserialize(scope, value) {
-  if (Array.isArray(value)) {
-    return await Promise.all(value.map(async (item) => await deserialize(scope, item)));
-  }
-  if (value && typeof value === "object") {
-    if (typeof value["@secret"] === "string") {
-      if (!scope.password) {
-        throw new Error("Cannot deserialize secret without password");
-      }
-      return new Secret(await decryptWithKey(value["@secret"], scope.password));
-    } else if ("@schema" in value) {
-      return value["@schema"];
-    } else if ("@date" in value) {
-      return new Date(value["@date"]);
-    } else if ("@symbol" in value) {
-      return parseSymbol(value["@symbol"]);
-    } else if ("@scope" in value) {
-      return scope;
-    }
-    return Object.fromEntries(await Promise.all(Object.entries(value).map(async ([key, value2]) => [
-      parseSymbol(key) ?? key,
-      await deserialize(scope, value2)
-    ])));
-  }
-  return value;
-}
-__name(deserialize, "deserialize");
-var symbolPattern = /^Symbol\((.*)\)$/;
-function parseSymbol(value) {
-  const match = value.match(symbolPattern);
-  if (!match) {
-    return void 0;
-  }
-  return Symbol.for(match[1]);
-}
-__name(parseSymbol, "parseSymbol");
-function assertNotUniqueSymbol(symbol) {
-  if (symbol.description === void 0 || symbol !== Symbol.for(symbol.description)) {
-    throw new Error(`Cannot serialize unique symbol: ${symbol.description}`);
-  }
-}
-__name(assertNotUniqueSymbol, "assertNotUniqueSymbol");
-
-// alchemy/src/state.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-async function deserializeState(scope, content) {
-  const state = await deserialize(scope, JSON.parse(content));
-  if (ResourceID in state.output) {
-    return state;
-  }
-  const output = state.output;
-  delete output.Kind;
-  delete output.ID;
-  delete output.FQN;
-  delete output.Scope;
-  delete output.Seq;
-  if (state.kind === "scope") {
-    state.kind = Scope.KIND;
-  }
-  output[ResourceKind] = state.kind;
-  output[ResourceID] = state.id;
-  output[ResourceFQN] = state.fqn;
-  output[ResourceScope] = scope;
-  output[ResourceSeq] = state.seq;
-  state.output = output;
-  await scope.state.set(state.id, state);
-  return state;
-}
-__name(deserializeState, "deserializeState");
-
-// alchemy/src/util/ignore.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-async function ignore(codes, fn) {
-  try {
-    return await fn();
-  } catch (error3) {
-    const errorCode = error3.code || error3.name;
-    if (Array.isArray(codes) ? codes.includes(errorCode) : errorCode === codes) {
-      return void 0;
-    }
-    throw error3;
-  }
-}
-__name(ignore, "ignore");
-
-// alchemy/src/fs/file-system-state-store.ts
-var stateRootDir = path.join(process.cwd(), ".alchemy");
-var FileSystemStateStore = class {
-  constructor(scope) {
-    this.scope = scope;
-    this.dir = path.join(stateRootDir, ...scope.chain);
-  }
-  static {
-    __name(this, "FileSystemStateStore");
-  }
-  dir;
-  initialized = false;
-  async init() {
-    if (this.initialized) {
-      return;
-    }
-    this.initialized = true;
-    await fs_default.promises.mkdir(this.dir, {
-      recursive: true
-    });
-  }
-  async deinit() {
-    await ignore("ENOENT", () => fs_default.promises.rmdir(this.dir));
-  }
-  async count() {
-    return Object.keys(await this.list()).length;
-  }
-  async list() {
-    try {
-      const files = await fs_default.promises.readdir(this.dir, {
-        withFileTypes: true
-      });
-      return files.filter((dirent) => dirent.isFile() && dirent.name.endsWith(".json")).map((dirent) => dirent.name.replace(/\.json$/, "")).map((key) => key.replaceAll(":", "/"));
-    } catch (error3) {
-      if (error3.code === "ENOENT") {
-        return [];
-      }
-      throw error3;
-    }
-  }
-  async get(key) {
-    try {
-      const content = await fs_default.promises.readFile(this.getPath(key), "utf8");
-      const state = await deserializeState(this.scope, content);
-      if (state.output === void 0) {
-        state.output = {};
-      }
-      state.output[ResourceScope] = this.scope;
-      return state;
-    } catch (error3) {
-      if (error3.code === "ENOENT") {
-        return void 0;
-      }
-      throw error3;
-    }
-  }
-  async set(key, value) {
-    await this.init();
-    await fs_default.promises.writeFile(this.getPath(key), JSON.stringify(await serialize(this.scope, value), null, 2));
-  }
-  async delete(key) {
-    try {
-      return await fs_default.promises.unlink(this.getPath(key));
-    } catch (error3) {
-      if (error3.code === "ENOENT") {
-        return;
-      }
-      throw error3;
-    }
-  }
-  async all() {
-    return this.getBatch(await this.list());
-  }
-  async getBatch(ids) {
-    return Object.fromEntries((await Promise.all(Array.from(ids).flatMap(async (id) => {
-      const s = await this.get(id);
-      if (s === void 0) {
-        return [];
-      }
-      return [
-        [
-          id,
-          s
-        ]
-      ];
-    }))).flat());
-  }
-  getPath(key) {
-    if (key.includes(":")) {
-      throw new Error(`ID cannot include colons: ${key}`);
-    }
-    if (key.includes("/")) {
-      key = key.replaceAll("/", ":");
-    }
-    return path.join(this.dir, `${key}.json`);
-  }
-};
-
-// alchemy/src/scope.ts
-var DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
-var Scope = class _Scope2 {
-  static {
-    __name(this, "Scope");
-  }
-  static KIND = "alchemy::Scope";
-  static storage = new AsyncLocalStorage();
-  static globals = [];
-  static get() {
-    return _Scope2.storage.getStore();
-  }
-  static get root() {
-    return _Scope2.current.root;
-  }
-  static get current() {
-    const scope = _Scope2.get();
-    if (!scope) {
-      if (_Scope2.globals.length > 0) {
-        return _Scope2.globals[_Scope2.globals.length - 1];
-      }
-      throw new Error("Not running within an Alchemy Scope");
-    }
-    return scope;
-  }
-  resources = /* @__PURE__ */ new Map();
-  children = /* @__PURE__ */ new Map();
-  appName;
-  stage;
-  scopeName;
-  parent;
-  password;
-  state;
-  stateStore;
-  quiet;
-  phase;
-  isErrored = false;
-  finalized = false;
-  deferred = [];
-  constructor(options) {
-    this.appName = options.appName;
-    this.stage = options?.stage ?? DEFAULT_STAGE;
-    this.scopeName = options.scopeName ?? null;
-    if (this.scopeName?.includes(":")) {
-      throw new Error(`Scope name ${this.scopeName} cannot contain double colons`);
-    }
-    this.parent = options.parent ?? _Scope2.get();
-    this.parent?.children.set(this.scopeName, this);
-    this.quiet = options.quiet ?? this.parent?.quiet ?? false;
-    if (this.parent && !this.scopeName) {
-      throw new Error("Scope name is required when creating a child scope");
-    }
-    this.password = options.password ?? this.parent?.password;
-    const phase = options.phase ?? this.parent?.phase;
-    if (phase === void 0) {
-      throw new Error("Phase is required");
-    }
-    this.phase = phase;
-    this.stateStore = options.stateStore ?? this.parent?.stateStore ?? ((scope) => new FileSystemStateStore(scope));
-    this.state = this.stateStore(this);
-  }
-  get root() {
-    let root = this;
-    while (root.parent) {
-      root = root.parent;
-    }
-    return root;
-  }
-  async delete(resourceID) {
-    await this.state.delete(resourceID);
-    this.resources.delete(resourceID);
-  }
-  _seq = 0;
-  seq() {
-    return this._seq++;
-  }
-  get chain() {
-    const thisScope = this.scopeName ? [
-      this.scopeName
-    ] : [];
-    const app2 = this.appName ? [
-      this.appName
-    ] : [];
-    if (this.parent) {
-      return [
-        ...this.parent.chain,
-        ...thisScope
-      ];
-    }
-    return [
-      ...app2,
-      this.stage,
-      ...thisScope
-    ];
-  }
-  fail() {
-    console.error("Scope failed", this.chain.join("/"));
-    this.isErrored = true;
-  }
-  async init() {
-    await this.state.init?.();
-  }
-  async deinit() {
-    await this.parent?.state.delete(this.scopeName);
-    await this.state.deinit?.();
-  }
-  fqn(resourceID) {
-    return [
-      ...this.chain,
-      resourceID
-    ].join("/");
-  }
-  async run(fn) {
-    return _Scope2.storage.run(this, () => fn(this));
-  }
-  [Symbol.asyncDispose]() {
-    return this.finalize();
-  }
-  async finalize() {
-    if (this.phase === "read") {
-      return;
-    }
-    if (this.finalized) {
-      return;
-    }
-    if (this.parent === void 0 && _Scope2.globals.length > 0) {
-      const last = _Scope2.globals.pop();
-      if (last !== this) {
-        throw new Error("Running in AsyncLocaStorage.enterWith emultation mode and attempted to finalize a global Scope that wasn't top of the stack");
-      }
-    }
-    this.finalized = true;
-    await Promise.all(this.deferred.map((fn) => fn()));
-    if (!this.isErrored) {
-      const resourceIds = await this.state.list();
-      const aliveIds = new Set(this.resources.keys());
-      const orphanIds = Array.from(resourceIds.filter((id) => !aliveIds.has(id)));
-      const orphans = await Promise.all(orphanIds.map(async (id) => (await this.state.get(id)).output));
-      await destroyAll(orphans, {
-        quiet: this.quiet,
-        strategy: "sequential"
-      });
-    } else {
-      console.warn("Scope is in error, skipping finalize");
-    }
-  }
-  defer(fn) {
-    let _resolve;
-    let _reject;
-    const promise = new Promise((resolve, reject) => {
-      _resolve = resolve;
-      _reject = reject;
-    });
-    this.deferred.push(() => {
-      if (!this.finalized) {
-        throw new Error("Attempted to await a deferred Promise before finalization");
-      }
-      return this.run(() => fn()).then(_resolve, _reject);
-    });
-    return promise;
-  }
-  toString() {
-    return `Scope(
-  chain=${this.chain.join("/")},
-  resources=[${Array.from(this.resources.values()).map((r) => r[ResourceID]).join(",\n  ")}]
-)`;
-  }
-};
-globalThis.__ALCHEMY_SCOPE__ = Scope;
-
-// alchemy/src/resource.ts
-var PROVIDERS = /* @__PURE__ */ new Map();
-var ResourceID = Symbol.for("alchemy::ResourceID");
-var ResourceFQN = Symbol.for("alchemy::ResourceFQN");
-var ResourceKind = Symbol.for("alchemy::ResourceKind");
-var ResourceScope = Symbol.for("alchemy::ResourceScope");
-var InnerResourceScope = Symbol.for("alchemy::InnerResourceScope");
-var ResourceSeq = Symbol.for("alchemy::ResourceSeq");
-
-// alchemy/src/context.ts
-function context2({ scope, phase, kind, id, fqn, seq, state, replace }) {
-  function create(...args) {
-    const [ID, props] = typeof args[0] === "string" ? args : [
-      id,
-      args[0]
-    ];
-    return {
-      ...props,
-      [ResourceKind]: kind,
-      [ResourceID]: ID,
-      [ResourceFQN]: fqn,
-      [ResourceScope]: scope,
-      [ResourceSeq]: seq
-    };
-  }
-  __name(create, "create");
-  return Object.assign(create, {
-    stage: scope.stage,
-    scope,
-    id,
-    fqn,
-    phase,
-    output: state.output,
-    props: state.props,
-    replace,
-    get: /* @__PURE__ */ __name((key) => state.data[key], "get"),
-    set: /* @__PURE__ */ __name(async (key, value) => {
-      state.data[key] = value;
-    }, "set"),
-    delete: /* @__PURE__ */ __name(async (key) => {
-      const value = state.data[key];
-      delete state.data[key];
-      return value;
-    }, "delete"),
-    quiet: scope.quiet,
-    destroy: /* @__PURE__ */ __name(() => {
-      throw new DestroyedSignal();
-    }, "destroy"),
-    create
-  });
-}
-__name(context2, "context");
-
-// alchemy/src/destroy.ts
-var DestroyedSignal = class extends Error {
-  static {
-    __name(this, "DestroyedSignal");
-  }
-};
-function isScopeArgs(a) {
-  return a[0] instanceof Scope;
-}
-__name(isScopeArgs, "isScopeArgs");
-async function destroy(...args) {
-  if (isScopeArgs(args)) {
-    const [scope2] = args;
-    const options2 = {
-      strategy: "sequential",
-      ...args[1] ?? {}
-    };
-    await destroyAll(Array.from(scope2.resources.values()), options2);
-    const orphans = await scope2.state.all();
-    await destroyAll(Object.values(orphans).map((orphan) => ({
-      ...orphan.output,
-      Scope: scope2
-    })), options2);
-    await scope2.deinit();
-    return;
-  }
-  const [instance, options] = args;
-  if (!instance) {
-    return;
-  }
-  if (instance[ResourceKind] === Scope.KIND) {
-    const scope2 = new Scope({
-      parent: instance[ResourceScope],
-      scopeName: instance[ResourceID]
-    });
-    console.log("Destroying scope", scope2.chain.join("/"));
-    return await destroy(scope2, options);
-  }
-  const Provider = PROVIDERS.get(instance[ResourceKind]);
-  if (!Provider) {
-    throw new Error(`Cannot destroy resource "${instance[ResourceFQN]}" type ${instance[ResourceKind]} - no provider found. You may need to import the provider in your alchemy.config.ts.`);
-  }
-  const scope = instance[ResourceScope];
-  if (!scope) {
-    console.warn(`Resource "${instance[ResourceFQN]}" has no scope`);
-  }
-  const quiet = options?.quiet ?? scope.quiet;
-  try {
-    if (!quiet) {
-      console.log(`Delete:  "${instance[ResourceFQN]}"`);
-    }
-    const state = await scope.state.get(instance[ResourceID]);
-    if (state === void 0) {
-      return;
-    }
-    const ctx = context2({
-      scope,
-      phase: "delete",
-      kind: instance[ResourceKind],
-      id: instance[ResourceID],
-      fqn: instance[ResourceFQN],
-      seq: instance[ResourceSeq],
-      props: state.props,
-      state,
-      replace: /* @__PURE__ */ __name(() => {
-        throw new Error("Cannot replace a resource that is being deleted");
-      }, "replace")
-    });
-    let nestedScope;
-    try {
-      await alchemy.run(instance[ResourceID], {
-        isResource: instance[ResourceKind] !== "alchemy::Scope",
-        parent: scope
-      }, async (scope2) => {
-        nestedScope = scope2;
-        return await Provider.handler.bind(ctx)(instance[ResourceID], state.props);
-      });
-    } catch (err) {
-      if (err instanceof DestroyedSignal) {
-      } else {
-        throw err;
-      }
-    }
-    if (nestedScope) {
-      await destroy(nestedScope, options);
-    }
-    await scope.delete(instance[ResourceID]);
-    if (!quiet) {
-      console.log(`Deleted: "${instance[ResourceFQN]}"`);
-    }
-  } catch (error3) {
-    console.error(error3);
-    throw error3;
-  }
-}
-__name(destroy, "destroy");
-async function destroyAll(resources, options) {
-  if (options?.strategy !== "parallel") {
-    const sorted = resources.sort((a, b) => b[ResourceSeq] - a[ResourceSeq]);
-    for (const resource of sorted) {
-      await destroy(resource, options);
-    }
-  } else {
-    await Promise.all(resources.map((resource) => destroy(resource, options)));
-  }
-}
-__name(destroyAll, "destroyAll");
-
-// alchemy/src/env.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-var env3 = new Proxy(_env, {
-  get: /* @__PURE__ */ __name((_, name) => _env(name), "get"),
-  apply: /* @__PURE__ */ __name((_, __, args) => _env(...args), "apply")
-});
-async function _env(name, value, error3) {
-  if (value !== void 0) {
-    return value;
-  }
-  const env4 = await resolveEnv();
-  if (name in env4) {
-    return env4[name];
-  }
-  throw new Error(error3 ?? `Environment variable ${name} is not set`);
-}
-__name(_env, "_env");
-async function resolveEnv() {
-  if (typeof process !== "undefined") {
-    return process.env;
-  }
-  try {
-    const { env: env4 } = await import("cloudflare:workers");
-    return env4;
-  } catch (_error) {
-  }
-  if (typeof import.meta !== "undefined") {
-    return import.meta.env;
-  }
-  throw new Error("No environment found");
-}
-__name(resolveEnv, "resolveEnv");
-
-// alchemy/src/runtime/global.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-var isRuntime = typeof __ALCHEMY_RUNTIME__ !== "undefined";
-
-// alchemy/src/alchemy.ts
-var alchemy = _alchemy;
-_alchemy.destroy = destroy;
-_alchemy.run = run;
-_alchemy.secret = secret;
-_alchemy.env = env3;
-async function _alchemy(...args) {
-  if (typeof args[0] === "string") {
-    const [appName, options] = args;
-    const phase = options?.phase ?? "up";
-    const root = new Scope({
-      ...options,
-      appName,
-      stage: options?.stage ?? process.env.ALCHEMY_STAGE,
-      phase: isRuntime ? "read" : phase,
-      password: options?.password ?? process.env.ALCHEMY_PASSWORD
-    });
-    try {
-      Scope.storage.enterWith(root);
-    } catch {
-      Scope.globals.push(root);
-    }
-    if (options?.phase === "destroy") {
-      await destroy(root);
-      return process.exit(0);
-    }
-    return root;
-  }
-  const [template, ...values] = args;
-  const [, secondLine] = template[0].split("\n");
-  const leadingSpaces = secondLine ? secondLine.match(/^(\s*)/)?.[1]?.length || 0 : 0;
-  const indent = " ".repeat(leadingSpaces);
-  const [{ isFileRef: isFileRef2 }, { isFileCollection: isFileCollection2 }] = await Promise.all([
-    Promise.resolve().then(() => (init_file_ref(), file_ref_exports)),
-    Promise.resolve().then(() => (init_file_collection(), file_collection_exports))
-  ]);
-  const appendices = {};
-  const stringValues = await Promise.all(values.map(/* @__PURE__ */ __name(async function resolve(value) {
-    if (typeof value === "string") {
-      return indent + value;
-    }
-    if (value === null) {
-      return "null";
-    }
-    if (value === void 0) {
-      return "undefined";
-    }
-    if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
-      return value.toString();
-    }
-    if (value instanceof Promise) {
-      return resolve(await value);
-    }
-    if (isFileRef2(value)) {
-      if (!(value.path in appendices)) {
-        appendices[value.path] = await promises_default.readFile(value.path, "utf-8");
-      }
-      return `[${path2.basename(value.path)}](${value.path})`;
-    }
-    if (isFileCollection2(value)) {
-      return Object.entries(value.files).map(([filePath, content]) => {
-        appendices[filePath] = content;
-        return `[${path2.basename(filePath)}](${filePath})`;
-      }).join("\n\n");
-    }
-    if (Array.isArray(value)) {
-      return (await Promise.all(value.map(async (value2, i2) => `${i2}. ${await resolve(value2)}`))).join("\n");
-    }
-    if (typeof value === "object" && typeof value.path === "string") {
-      if (typeof value.content === "string") {
-        appendices[value.path] = value.content;
-        return `[${path2.basename(value.path)}](${value.path})`;
-      }
-      appendices[value.path] = await promises_default.readFile(value.path, "utf-8");
-      return `[${path2.basename(value.path)}](${value.path})`;
-    }
-    if (typeof value === "object") {
-      return (await Promise.all(Object.entries(value).map(async ([key, value2]) => {
-        return `* ${key}: ${await resolve(value2)}`;
-      }))).join("\n");
-    }
-    console.log(value);
-    throw new Error(`Unsupported value type: ${value}`);
-  }, "resolve")));
-  const lines = template.map((part) => part.split("\n").map((line) => line.startsWith(indent) ? line.slice(indent.length) : line).join("\n")).flatMap((part, i2) => i2 < stringValues.length ? [
-    part,
-    stringValues[i2] ?? ""
-  ] : [
-    part
-  ]).join("").split("\n");
-  return [
-    lines.length > 1 && lines[0].replaceAll(" ", "").length === 0 ? lines.slice(1).join("\n") : lines.join("\n"),
-    Object.entries(appendices).sort(([a], [b]) => a.localeCompare(b)).map(([filePath, content]) => {
-      const extension = path2.extname(filePath).slice(1);
-      const codeTag = extension ? extension : "";
-      return `// ${filePath}
-\`\`\`${codeTag}
-${content}
-\`\`\``;
-    }).join("\n\n")
-  ].join("\n");
-}
-__name(_alchemy, "_alchemy");
-async function run(...args) {
-  const [id, options, fn] = typeof args[1] === "function" ? [
-    args[0],
-    void 0,
-    args[1]
-  ] : args;
-  const _scope = new Scope({
-    ...options,
-    scopeName: id
-  });
-  try {
-    if (options?.isResource !== true && _scope.parent) {
-      const seq = _scope.parent.seq();
-      const output = {
-        [ResourceID]: id,
-        [ResourceFQN]: "",
-        [ResourceKind]: Scope.KIND,
-        [ResourceScope]: _scope,
-        [ResourceSeq]: seq
-      };
-      const resource = {
-        kind: Scope.KIND,
-        id,
-        seq,
-        data: {},
-        fqn: "",
-        props: {},
-        status: "created",
-        output
-      };
-      const prev = await _scope.parent.state.get(id);
-      if (!prev) {
-        await _scope.parent.state.set(id, resource);
-      } else if (prev.kind !== Scope.KIND) {
-        throw new Error(`Tried to create a Scope that conflicts with a Resource (${prev.kind}): ${id}`);
-      }
-      _scope.parent.resources.set(id, Object.assign(Promise.resolve(resource), output));
-    }
-    return await _scope.run(async () => fn.bind(_scope)(_scope));
-  } catch (error3) {
-    if (!(error3 instanceof DestroyedSignal)) {
-      console.log(error3);
-      _scope.fail();
-    }
-    throw error3;
-  } finally {
-    await _scope.finalize();
-  }
-}
-__name(run, "run");
+init_alchemy();
 
 // alchemy/src/cloudflare/bucket.ts
 init_shims();
@@ -2832,18 +2957,27 @@ init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 var encoder = new TextEncoder();
 
+// alchemy/src/cloudflare/bucket.ts
+init_resource();
+
 // alchemy/src/runtime/bind.ts
 init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
+init_env();
+init_resource();
 import { isPromise } from "node:util/types";
 function getBinding(resource) {
-  return env3[getBindKey(resource)];
+  return env2[getBindKey(resource)];
 }
 __name(getBinding, "getBinding");
 function getBindKey(resource) {
-  return resource[ResourceFQN].replace(/[^a-zA-Z0-9]/g, "_");
+  const fqn = resource[ResourceFQN];
+  const scope = resource[ResourceScope];
+  const prefix = `${scope.appName}/${scope.stage}`;
+  const key = fqn.slice(prefix.length + 1).replace(/[^a-zA-Z0-9-_]/g, "_");
+  return key;
 }
 __name(getBindKey, "getBindKey");
 async function bind(resource, reify) {
@@ -2862,8 +2996,8 @@ async function bind(resource, reify) {
       } else if (prop === "then" || prop === "catch" || prop === "finally") {
         return target[prop];
       }
-      return (...args) => {
-        const rt = runtime();
+      return async (...args) => {
+        const rt = await runtime();
         if (rt === void 0) {
           throw new Error(`Resource ${resource[ResourceFQN]} is not bound`);
         }
@@ -2871,7 +3005,7 @@ async function bind(resource, reify) {
         if (typeof method !== "function") {
           throw new Error(`Method ${prop} on '${resource[ResourceFQN]}' is not a function`);
         }
-        return method(...args);
+        return method.bind(rt)(...args);
       };
     }, "get")
   });
@@ -2889,6 +3023,7 @@ init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
+init_alchemy();
 
 // alchemy/src/util/retry.ts
 init_shims();
@@ -2944,7 +3079,9 @@ init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
+init_resource();
 import path7 from "node:path";
+init_global();
 
 // alchemy/src/runtime/plugin.ts
 init_shims();
@@ -3031,6 +3168,11 @@ var bootstrapPlugin = {
   }
 };
 
+// alchemy/src/cloudflare/worker.ts
+init_scope();
+init_secret();
+init_serde();
+
 // alchemy/src/util/slugify.ts
 init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
@@ -3065,6 +3207,7 @@ init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 init_crypto2();
 init_promises2();
+init_resource();
 import "node:path";
 
 // alchemy/src/cloudflare/bundle/alias-plugin.ts
@@ -3149,21 +3292,55 @@ init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 
+// alchemy/src/cloudflare/pipeline.ts
+init_shims();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+init_resource();
+function isPipeline(resource) {
+  return resource[ResourceKind] === "cloudflare::Pipeline";
+}
+__name(isPipeline, "isPipeline");
+async function Pipeline(name, props) {
+  const pipeline2 = await PipelineResource(name, props);
+  const binding2 = await bind(pipeline2);
+  return {
+    ...pipeline2,
+    send: binding2.send
+  };
+}
+__name(Pipeline, "Pipeline");
+var PipelineResource = /* @__PURE__ */ __name((id) => STATE.get(id), "PipelineResource");
+
 // alchemy/src/cloudflare/queue-consumer.ts
 init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
+init_resource();
 
 // alchemy/src/cloudflare/queue.ts
 init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
+init_resource();
 function isQueue(eventSource) {
   return ResourceKind in eventSource && eventSource[ResourceKind] === "cloudflare::Queue";
 }
 __name(isQueue, "isQueue");
+async function Queue(name, props = {}) {
+  const queue2 = await QueueResource(name, props);
+  const binding2 = await bind(queue2);
+  return {
+    ...queue2,
+    send: binding2.send,
+    sendBatch: binding2.sendBatch
+  };
+}
+__name(Queue, "Queue");
+var QueueResource = /* @__PURE__ */ __name((id) => STATE.get(id), "QueueResource");
 
 // alchemy/src/cloudflare/worker-assets.ts
 init_shims();
@@ -3192,6 +3369,7 @@ init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
+init_resource();
 function isWorkerStub(resource) {
   return resource[ResourceKind] === "cloudflare::WorkerStub";
 }
@@ -3241,6 +3419,8 @@ function Worker(...args) {
           autoBindings[getBindKey(resource)] = resource;
         } else if (isBucket(resource)) {
           autoBindings[getBindKey(resource)] = resource;
+        } else if (isPipeline(resource)) {
+          autoBindings[getBindKey(resource)] = resource;
         }
       }
       for (const secret2 of Secret.all()) {
@@ -3273,24 +3453,7 @@ function Worker(...args) {
             "ws"
           ],
           banner: {
-            js: `import { env as __ALCHEMY_ENV__ } from "cloudflare:workers";
-var __ALCHEMY_RUNTIME__ = true;
-var __ALCHEMY_SERIALIZED_SCOPE__ = JSON.parse(__ALCHEMY_ENV__.__ALCHEMY_SERIALIZED_SCOPE__);
-
-var STATE = {
-  get(id) {
-    const fqn = globalThis.__ALCHEMY_SCOPE__.current.fqn(id);
-    const state = __ALCHEMY_SERIALIZED_SCOPE__[fqn];
-    if (!state) {
-      throw new Error(
-        \`Resource \${fqn} not found in __ALCHEMY_SERIALIZED_SCOPE__
-\${JSON.stringify(__ALCHEMY_SERIALIZED_SCOPE__, null, 2)}\`
-      );
-    }
-    // TODO(sam): deserialize
-    return state;
-  },
-};`
+            js: "var __ALCHEMY_RUNTIME__ = true;"
           },
           inject: [
             ...props.bundle?.inject ?? [],
@@ -3304,18 +3467,36 @@ var STATE = {
       stub
     ]).then(([worker]) => worker);
     if (isRuntime) {
-      promise.fetch = props.fetch;
+      promise.fetch = async (request) => {
+        try {
+          return await props.fetch(request);
+        } catch (err) {
+          return new Response(err.message + err.stack, {
+            status: 500
+          });
+        }
+      };
     } else {
       promise.fetch = async (request) => {
-        console.log(request);
         const worker = await promise;
-        if (worker.url === void 0) {
-          throw new Error("Worker URL is not available in runtime");
+        if (!worker.url) throw new Error("Worker URL is not available in runtime");
+        const origin = new URL(worker.url);
+        const incoming = new URL(request.url);
+        const proxyURL = new URL(`${incoming.pathname}${incoming.search}${incoming.hash}`, origin);
+        const headers = new Headers(request.headers);
+        headers.set("host", origin.host);
+        try {
+          return await fetch(new Request(proxyURL, {
+            method: request.method,
+            body: request.body,
+            headers,
+            redirect: "manual"
+          }));
+        } catch (err) {
+          return new Response(err.message ?? "proxy error", {
+            status: 500
+          });
         }
-        const workerURL = new URL(worker.url);
-        const requestURL = new URL(request.url);
-        requestURL.host = workerURL.host;
-        return fetch(requestURL, request);
       };
     }
     return promise;
@@ -3325,32 +3506,66 @@ var STATE = {
 __name(Worker, "Worker");
 var _Worker = /* @__PURE__ */ __name((id) => STATE.get(id), "_Worker");
 
-// alchemy/src/cloudflare/pipeline.ts
-init_shims();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
-init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
-init_performance2();
-
 // alchemy/test/runtime/app.ts
+import path8 from "node:path";
 var app = await alchemy("my-bootstrap-ap", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up"
 });
+var queue = await Queue("my-bootstrap-queue");
 var bucket = await R2Bucket("my-bootstrap-bucket", {
   adopt: true
 });
-console.log(bucket);
+var pipeline = await Pipeline("my-bootstrap-pipeline", {
+  source: [
+    {
+      type: "binding",
+      format: "json"
+    }
+  ],
+  destination: {
+    type: "r2",
+    format: "json",
+    path: {
+      bucket: bucket.name
+    },
+    credentials: {
+      accessKeyId: await alchemy.secret.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: await alchemy.secret.env.R2_SECRET_ACCESS_KEY
+    },
+    batch: {
+      maxMb: 10,
+      maxSeconds: 5,
+      maxRows: 100
+    }
+  }
+});
 var app_default = Worker("worker", import.meta, {
   compatibilityFlags: [
     "nodejs_compat"
   ],
   bundle: {
-    outfile: path8.join(import.meta.dirname, "app.js"),
+    outfile: alchemy.isRuntime ? void 0 : path8.join(import.meta.dirname, "app.js"),
     minify: false
   },
   url: true,
   async fetch(request) {
     const key = new URL(request.url).pathname;
-    return new Response(JSON.stringify(__ALCHEMY_SERIALIZED_SCOPE__, null, 2));
+    const obj = await bucket.put(key, request.body);
+    if (!obj) {
+      return new Response("Failed to upload object", {
+        status: 500
+      });
+    }
+    await queue.send(obj.key);
+    await pipeline.send([
+      {
+        key: "value"
+      }
+    ]);
+    return new Response(JSON.stringify({
+      key: obj.key,
+      etag: obj.etag
+    }, null, 2));
   }
 });
 await app.finalize();

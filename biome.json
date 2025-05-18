@@ -2,6 +2,7 @@
   "files": {
     "includes": [
       "./alchemy/src/**/*.ts",
+      "./alchemy/src/**/*.js",
       "./alchemy/test/**/*.ts",
       "./scripts/**/*.ts",
       "./stacks/**/*.ts",

@@ -63,36 +63,38 @@ export type SerializedScope = {
   [fqn: ResourceFQN]: Serialized<Resource>;
 };
 
-export async function serializeScope(
-  scope: Scope,
-  map: SerializedScope = {},
-  secrets: Secret[] = [],
-): Promise<SerializedScope> {
-  await Promise.all(
-    Array.from(scope.resources.values()).map(async (resource) => {
-      if (resource[ResourceKind] === Scope.KIND) {
-        return;
-      }
-      map[resource[ResourceFQN]] = await serialize(scope, await resource, {
-        transform: (value) => {
-          if (value instanceof Secret) {
-            secrets.push(value);
-          }
-          return value;
-        },
-      });
-      const innerScope = await resource[InnerResourceScope];
-      if (innerScope) {
-        await serializeScope(innerScope, map);
-      }
-    }),
-  );
-  await Promise.all(
-    Array.from(scope.children.values()).map((scope) =>
-      serializeScope(scope, map),
-    ),
-  );
-  return map;
+export async function serializeScope(scope: Scope): Promise<SerializedScope> {
+  const map: SerializedScope = {};
+
+  return serializeScope(scope);
+
+  async function serializeScope(scope: Scope): Promise<SerializedScope> {
+    await Promise.all(
+      Array.from(scope.resources.values()).map(async (resource) => {
+        if (resource[ResourceKind] === Scope.KIND) {
+          return;
+        }
+        map[resource[ResourceFQN]] = await serialize(scope, await resource, {
+          transform: (value) => {
+            if (value instanceof Secret) {
+              return {
+                "@secret-env": value.name,
+              };
+            }
+            return value;
+          },
+        });
+        const innerScope = await resource[InnerResourceScope];
+        if (innerScope) {
+          await serializeScope(innerScope);
+        }
+      }),
+    );
+    await Promise.all(
+      Array.from(scope.children.values()).map((scope) => serializeScope(scope)),
+    );
+    return map;
+  }
 }
 
 export async function serialize(
@@ -176,10 +178,25 @@ function isImportMeta(value: any): value is ImportMeta {
   );
 }
 
-export async function deserialize(scope: Scope, value: any): Promise<any> {
+export async function deserialize(
+  scope: Scope,
+  value: any,
+  options?: {
+    transform?: (value: any) =>
+      | undefined
+      | {
+          value: any;
+        };
+  },
+): Promise<any> {
+  const replacement = options?.transform?.(value);
+  if (replacement) {
+    return replacement.value;
+  }
+
   if (Array.isArray(value)) {
     return await Promise.all(
-      value.map(async (item) => await deserialize(scope, item)),
+      value.map(async (item) => await deserialize(scope, item, options)),
     );
   }
   if (value && typeof value === "object") {
@@ -202,7 +219,7 @@ export async function deserialize(scope: Scope, value: any): Promise<any> {
       await Promise.all(
         Object.entries(value).map(async ([key, value]) => [
           parseSymbol(key) ?? key,
-          await deserialize(scope, value),
+          await deserialize(scope, value, options),
         ]),
       ),
     );
