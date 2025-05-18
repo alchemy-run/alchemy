@@ -1,5 +1,4 @@
-import { exec } from "../os/exec";
-import { spawn as nodeSpawn } from "node:child_process";
+import { exec } from "../os/exec.js";
 
 /**
  * Options for Docker API requests
@@ -34,42 +33,14 @@ export class DockerApi {
    * @returns Result of the command
    */
   async exec(args: string[]): Promise<{ stdout: string; stderr: string }> {
-    const fullCommand = [this.dockerPath, ...args].join(' ');
+    const command = `${this.dockerPath} ${args.join(" ")}`;
+    const result = await exec(command, {
+      captureOutput: true,
+      shell: true,
+      env: process.env
+    }) as { stdout: string; stderr: string };
     
-    try {
-      // We'll use Node.js spawn to capture stdout and stderr
-      return new Promise((resolve, reject) => {
-        const process = nodeSpawn(this.dockerPath, args, {
-          shell: true,
-          stdio: 'pipe'
-        });
-        
-        let stdout = '';
-        let stderr = '';
-        
-        process.stdout?.on('data', (data) => {
-          stdout += data.toString();
-        });
-        
-        process.stderr?.on('data', (data) => {
-          stderr += data.toString();
-        });
-        
-        process.on('close', (code) => {
-          if (code === 0 || code === null) {
-            resolve({ stdout, stderr });
-          } else {
-            reject(new Error(`Docker command failed with exit code ${code}: ${stderr || stdout}`));
-          }
-        });
-        
-        process.on('error', (err) => {
-          reject(new Error(`Failed to execute Docker command: ${err.message}`));
-        });
-      });
-    } catch (error) {
-      throw new Error(`Failed to execute Docker command: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    return result;
   }
 
   /**
