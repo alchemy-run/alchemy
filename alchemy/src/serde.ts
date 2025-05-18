@@ -1,4 +1,10 @@
 import { decryptWithKey, encrypt } from "./encrypt.js";
+import {
+  InnerResourceScope,
+  ResourceFQN,
+  ResourceKind,
+  type Resource,
+} from "./resource.js";
 import { Scope } from "./scope.js";
 import { Secret } from "./secret.js";
 
@@ -13,13 +19,94 @@ function isType(value: any): value is Type<any, any> {
   );
 }
 
+export type Serialized<T> = T extends
+  | undefined
+  | null
+  | boolean
+  | number
+  | string
+  | bigint
+  ? T
+  : T extends Type<any, any>
+    ? {
+        "@schema": string;
+      }
+    : T extends Secret
+      ? {
+          "@secret": string;
+        }
+      : T extends Date
+        ? {
+            "@date": string;
+          }
+        : T extends Symbol
+          ? {
+              "@symbol": string;
+            }
+          : T extends Scope
+            ? {
+                "@scope": null;
+              }
+            : T extends Function
+              ? undefined
+              : T extends Array<infer U>
+                ? Array<Serialized<U>>
+                : T extends object
+                  ? {
+                      [K in keyof T as K extends symbol
+                        ? string
+                        : K]: Serialized<T[K]>;
+                    }
+                  : T;
+
+export type SerializedScope = {
+  [fqn: ResourceFQN]: Serialized<Resource>;
+};
+
+export async function serializeScope(
+  scope: Scope,
+  map: SerializedScope = {},
+  secrets: Secret[] = [],
+): Promise<SerializedScope> {
+  await Promise.all(
+    Array.from(scope.resources.values()).map(async (resource) => {
+      if (resource[ResourceKind] === Scope.KIND) {
+        return;
+      }
+      map[resource[ResourceFQN]] = await serialize(scope, await resource, {
+        transform: (value) => {
+          if (value instanceof Secret) {
+            secrets.push(value);
+          }
+          return value;
+        },
+      });
+      const innerScope = await resource[InnerResourceScope];
+      if (innerScope) {
+        await serializeScope(innerScope, map);
+      }
+    }),
+  );
+  await Promise.all(
+    Array.from(scope.children.values()).map((scope) =>
+      serializeScope(scope, map),
+    ),
+  );
+  return map;
+}
+
 export async function serialize(
   scope: Scope,
   value: any,
   options?: {
     encrypt?: boolean;
+    transform?: (value: any) => any;
   },
 ): Promise<any> {
+  if (options?.transform) {
+    value = options.transform(value);
+  }
+
   if (Array.isArray(value)) {
     return Promise.all(value.map((value) => serialize(scope, value, options)));
   } else if (value instanceof Secret) {
@@ -52,13 +139,6 @@ export async function serialize(
   } else if (value && typeof value === "object") {
     for (const symbol of Object.getOwnPropertySymbols(value)) {
       assertNotUniqueSymbol(symbol);
-    }
-    for (const key of Object.keys(value)) {
-      if (parseSymbol(key)) {
-        throw new Error(
-          `Cannot serialize property '${key}' because it looks like a stringified symbol.`,
-        );
-      }
     }
     return Object.fromEntries(
       await Promise.all(

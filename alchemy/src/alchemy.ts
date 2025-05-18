@@ -11,6 +11,7 @@ import {
   ResourceSeq,
   type PendingResource,
 } from "./resource.js";
+import { isRuntime } from "./runtime/global.js";
 import { Scope } from "./scope.js";
 import { secret } from "./secret.js";
 import type { StateStoreType } from "./state.js";
@@ -110,7 +111,7 @@ async function _alchemy(
       ...options,
       appName,
       stage: options?.stage,
-      phase,
+      phase: isRuntime ? "read" : phase,
     });
     try {
       Scope.storage.enterWith(root);

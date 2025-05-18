@@ -1,14 +1,14 @@
 import { isPromise } from "node:util/types";
 import type { Binding as CloudflareBinding } from "../cloudflare/bindings.js";
 import type { Bound as CloudflareBound } from "../cloudflare/bound.js";
+import { env } from "../env.js";
 import { ResourceFQN, type Resource } from "../resource.js";
-import { env } from "./env.js";
 
 /**
  * Get a Resource's Binding from the Environment.
  */
 export function getBinding<T extends Resource>(resource: T): Bound<T> {
-  return env[getBindKey(resource)];
+  return env[getBindKey(resource)] as Bound<T>;
 }
 
 /**

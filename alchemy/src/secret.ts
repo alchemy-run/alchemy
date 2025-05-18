@@ -1,5 +1,15 @@
 import { alchemy } from "./alchemy.js";
 
+// a global registry of all secrets that we will use when serializing an application
+const globalSecrets: {
+  [name: string]: Secret;
+} = {};
+
+let i = 0;
+function nextName() {
+  return `secret-${i++}`;
+}
+
 /**
  * Internal wrapper for sensitive values like API keys and credentials.
  * When stored in alchemy state files, the value is automatically encrypted
@@ -36,11 +46,23 @@ import { alchemy } from "./alchemy.js";
  * }
  */
 export class Secret {
+  /**
+   * @internal
+   */
+  public static all(): Secret[] {
+    return Object.values(globalSecrets);
+  }
+
   public readonly type = "secret";
   constructor(
     readonly unencrypted: string,
-    readonly name?: string,
-  ) {}
+    readonly name: string = nextName(),
+  ) {
+    if (name in globalSecrets) {
+      throw new Error(`Secret ${name} already exists`);
+    }
+    globalSecrets[name] = this;
+  }
 }
 
 /**

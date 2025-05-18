@@ -3,7 +3,7 @@ import type { Secret } from "../secret.js";
 import type { AiGatewayResource as _AiGateway } from "./ai-gateway.js";
 import type { Ai as _Ai } from "./ai.js";
 import type { Assets } from "./assets.js";
-import type { Binding, Self } from "./bindings.js";
+import type { Binding, Json, Self } from "./bindings.js";
 import type { BrowserRendering } from "./browser-rendering.js";
 import type { R2BucketResource as _R2Bucket } from "./bucket.js";
 import type { D1DatabaseResource } from "./d1-database.js";
@@ -49,4 +49,6 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace
                                 ? Ai<M>
                                 : T extends Self
                                   ? Service
-                                  : Service;
+                                  : T extends Json<infer T>
+                                    ? T
+                                    : Service;

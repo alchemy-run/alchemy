@@ -1,26 +1,21 @@
 import { alchemy } from "../../src/alchemy.js";
-import { isRuntime } from "../../src/bootstrap/env.js";
 import { R2Bucket } from "../../src/cloudflare/bucket.js";
-import "../../src/cloudflare/pipeline.js";
-import { Queue } from "../../src/cloudflare/queue.js";
 import { Worker } from "../../src/cloudflare/worker.js";
-import { ReadOnlyMemoryStateStore } from "../../src/state.js";
+
+import "../../src/cloudflare/pipeline.js";
 
 const app = await alchemy("my-bootstrap-ap", {
-  phase: isRuntime
-    ? "read"
-    : process.argv.includes("--destroy")
-      ? "destroy"
-      : "up",
+  phase: process.argv.includes("--destroy") ? "destroy" : "up",
   password: "TODO",
-  stateStore: isRuntime
-    ? (scope) => new ReadOnlyMemoryStateStore(scope, __ALCHEMY_ENV__)
-    : undefined,
 });
 
-const queue = await Queue<string>("my-bootstrap-queue");
+// const queue = await Queue<string>("my-bootstrap-queue");
 
-const bucket = await R2Bucket("my-bootstrap-bucket");
+const bucket = await R2Bucket("my-bootstrap-bucket", {
+  adopt: true,
+});
+
+console.log(bucket);
 
 // const pipeline = await Pipeline<{
 //   key: string;
@@ -54,22 +49,23 @@ export default Worker("worker", import.meta, {
   url: true,
   async fetch(request) {
     const key = new URL(request.url).pathname;
-    const obj = await bucket.put(key, request.body);
-    if (!obj) {
-      return new Response("Failed to upload object", { status: 500 });
-    }
-    await queue.send(obj.key);
+    // const obj = await bucket.put(key, request.body);
+    // if (!obj) {
+    //   return new Response("Failed to upload object", { status: 500 });
+    // }
+    // await queue.send(obj.key);
     // await pipeline.send([
     //   {
     //     key: obj.key,
     //   },
     // ]);
-    return new Response(
-      JSON.stringify({
-        key: obj.key,
-        etag: obj.etag,
-      }),
-    );
+    // return new Response(
+    //   JSON.stringify({
+    //     key: obj.key,
+    //     etag: obj.etag,
+    //   }),
+    // );
+    return new Response(JSON.stringify(__ALCHEMY_STATE__));
   },
 });
 

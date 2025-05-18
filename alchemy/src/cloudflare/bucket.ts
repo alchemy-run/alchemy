@@ -1,7 +1,7 @@
 import { AwsClient } from "aws4fetch";
-import { bind } from "../bootstrap/bind.js";
 import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
+import { Resource, ResourceKind } from "../resource.js";
+import { bind } from "../runtime/bind.js";
 import type { Secret } from "../secret.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import { type CloudflareApi, createCloudflareApi } from "./api.js";
@@ -113,6 +113,10 @@ export type R2BucketResource = Resource<"cloudflare::R2Bucket"> &
      */
     creationDate: Date;
   };
+
+export function isBucket(resource: Resource): resource is R2BucketResource {
+  return resource[ResourceKind] === "cloudflare::R2Bucket";
+}
 
 export type R2Bucket = R2BucketResource & Bound<R2BucketResource>;
 

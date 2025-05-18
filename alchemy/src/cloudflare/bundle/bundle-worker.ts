@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
-import { bootstrapPlugin } from "../../bootstrap/plugin.js";
 import { Bundle } from "../../esbuild/bundle.js";
-import { Scope, serializeScope } from "../../scope.js";
+import { bootstrapPlugin } from "../../runtime/plugin.js";
+import { Scope } from "../../scope.js";
+import { serializeScope } from "../../serde.js";
 import type { Bindings } from "../bindings.js";
 import type { WorkerProps } from "../worker.js";
 import { createAliasPlugin } from "./alias-plugin.js";
@@ -31,7 +32,7 @@ export async function bundleWorkerScript<B extends Bindings>(
       "You must set your compatibilty date >= 2024-09-23 when using 'nodejs_compat' compatibility flag",
     );
   }
-  const main = props.entrypoint ?? props.meta?.path;
+  const main = props.entrypoint ?? props.meta?.filename;
   if (!main) {
     throw new Error("One of entrypoint or meta.file must be provided");
   }

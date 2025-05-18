@@ -1,6 +1,6 @@
-import { bind, type Bound } from "../bootstrap/bind.js";
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
+import { bind, type Bound } from "../runtime/bind.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
   createCloudflareApi,

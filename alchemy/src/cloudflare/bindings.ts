@@ -56,10 +56,23 @@ export type Binding =
   | WorkerStub
   | Workflow
   | BrowserRendering
-  | Self;
+  | Self
+  | Json;
 
 export type Self = typeof Self;
 export const Self = Symbol.for("Self");
+
+export type Json<T = any> = {
+  type: "json";
+  json: T;
+};
+
+export function Json<const T>(value: T): Json<T> {
+  return {
+    type: "json",
+    json: value,
+  };
+}
 
 /**
  * Union type for all Worker binding types (API spec)
@@ -201,7 +214,7 @@ export interface WorkerBindingJson {
   /** Type identifier for JSON binding */
   type: "json";
   /** JSON value */
-  json: any;
+  json: string;
 }
 
 /**

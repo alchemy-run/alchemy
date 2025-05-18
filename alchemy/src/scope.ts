@@ -2,12 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { Phase } from "./alchemy.js";
 import { destroyAll } from "./destroy.js";
 import { FileSystemStateStore } from "./fs/file-system-state-store.js";
-import {
-  InnerResourceScope,
-  ResourceID,
-  type PendingResource,
-} from "./resource.js";
-import { serialize } from "./serde.js";
+import { ResourceID, type PendingResource } from "./resource.js";
 import type { StateStore, StateStoreType } from "./state.js";
 
 export type ScopeOptions = {
@@ -50,6 +45,7 @@ export class Scope {
   }
 
   public readonly resources = new Map<ResourceID, PendingResource>();
+  public readonly children: Map<ResourceID, Scope> = new Map();
   public readonly appName: string | undefined;
   public readonly stage: string;
   public readonly scopeName: string | null;
@@ -75,6 +71,7 @@ export class Scope {
       );
     }
     this.parent = options.parent ?? Scope.get();
+    this.parent?.children.set(this.scopeName!, this);
     this.quiet = options.quiet ?? this.parent?.quiet ?? false;
     if (this.parent && !this.scopeName) {
       throw new Error("Scope name is required when creating a child scope");
@@ -216,54 +213,5 @@ export class Scope {
     .map((r) => r[ResourceID])
     .join(",\n  ")}]
 )`;
-  }
-}
-
-export type SerializedScope = {
-  [id: string]: {
-    state: string;
-    children?: SerializedScope;
-  };
-};
-
-export async function serializeScope(scope: Scope): Promise<SerializedScope> {
-  return Object.fromEntries(
-    await Promise.all(
-      Array.from(scope.resources.values()).map(async (resource) => {
-        const innerScope = resource[InnerResourceScope];
-        if (innerScope === undefined) {
-          // TODO(sam): better error
-          throw new Error(
-            `Resource has no inner scope: ${resource[ResourceID]}`,
-          );
-        }
-        return [
-          resource[ResourceID],
-          {
-            state: await serialize(
-              scope,
-              await scope.state.get(resource[ResourceID]),
-              {
-                // TODO(sam): we need to move them to Secet bindings
-                encrypt: false,
-              },
-            ),
-            children: await serializeScope(await innerScope),
-          },
-        ];
-      }),
-    ),
-  );
-}
-
-export async function* walkScope(
-  scope: Scope,
-): AsyncGenerator<PendingResource<any>> {
-  for (const resource of scope.resources.values()) {
-    yield resource;
-    const innerScope = resource[InnerResourceScope];
-    if (innerScope) {
-      yield* walkScope(await innerScope);
-    }
   }
 }

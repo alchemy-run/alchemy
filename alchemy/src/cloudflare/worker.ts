@@ -1,13 +1,11 @@
-import crypto from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { getBindKey } from "../bootstrap/bind.js";
-import { isRuntime } from "../bootstrap/env.js";
 import type { Context } from "../context.js";
 import type { BundleProps } from "../esbuild/bundle.js";
-import { Resource } from "../resource.js";
-import { Scope, walkScope } from "../scope.js";
-import { getContentType } from "../util/content-type.js";
+import { InnerResourceScope, Resource } from "../resource.js";
+import { getBindKey } from "../runtime/bind.js";
+import { isRuntime } from "../runtime/global.js";
+import { Scope } from "../scope.js";
+import { Secret } from "../secret.js";
+import { serializeScope } from "../serde.js";
 import { withExponentialBackoff } from "../util/retry.js";
 import { slugify } from "../util/slugify.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
@@ -17,15 +15,10 @@ import {
   createCloudflareApi,
 } from "./api.js";
 import type { Assets } from "./assets.js";
-import {
-  type Binding,
-  type Bindings,
-  Self,
-  type WorkerBindingSpec,
-} from "./bindings.js";
+import { type Binding, type Bindings, Json, Self } from "./bindings.js";
 import type { Bound } from "./bound.js";
+import { isBucket } from "./bucket.js";
 import { bundleWorkerScript } from "./bundle/bundle-worker.js";
-import type { DurableObjectNamespace } from "./durable-object-namespace.js";
 import { type EventSource, isQueueEventSource } from "./event-source.js";
 import {
   QueueConsumer,
@@ -33,7 +26,12 @@ import {
   listQueueConsumers,
 } from "./queue-consumer.js";
 import { isQueue } from "./queue.js";
-import type { WorkerScriptMetadata } from "./worker-metadata.js";
+import { type AssetUploadResult, uploadAssets } from "./worker-assets.js";
+import {
+  type WorkerMetadata,
+  type WorkerScriptMetadata,
+  prepareWorkerMetadata,
+} from "./worker-metadata.js";
 import type { SingleStepMigration } from "./worker-migration.js";
 import { WorkerStub, isWorkerStub } from "./worker-stub.js";
 import { type Workflow, upsertWorkflow } from "./workflow.js";
@@ -413,30 +411,55 @@ export function Worker<const B extends Bindings>(
       email: props.email,
     });
 
+    async function collectResources(
+      scope: Scope | undefined,
+    ): Promise<Resource[]> {
+      if (!scope) {
+        return [];
+      }
+      return (
+        await Promise.all(
+          Array.from(scope.resources.values()).map(async (resource) => [
+            (await resource) as Resource,
+            ...(await collectResources(await resource[InnerResourceScope])),
+          ]),
+        )
+      ).flat();
+    }
+
     const deferred = scope.defer(async () => {
       const autoBindings: Record<string, Binding> = {};
-      for await (const pendingResource of walkScope(scope)) {
-        const resource: Resource = await pendingResource;
+      for (const resource of await collectResources(Scope.root)) {
         if (isQueue(resource)) {
           autoBindings[getBindKey(resource)] = resource;
         } else if (isWorkerStub(resource)) {
+          autoBindings[getBindKey(resource)] = resource;
+        } else if (isBucket(resource)) {
           autoBindings[getBindKey(resource)] = resource;
         } // else if (isPipeline(...))
         // TODO(sam): make this generic/pluggable
       }
 
-      // TODO(sam): now find all secretrs
+      // TODO(sam): prune to only needed secrets
+      for (const secret of Secret.all()) {
+        autoBindings[secret.name] = secret;
+      }
+
+      const bindings = {
+        ...props.bindings,
+        __ALCHEMY_WORKER_NAME__: workerName,
+        __ALCHEMY_SERIALIZED_SCOPE__: Json(await serializeScope(scope)),
+        // TODO(sam): prune un-needed bindings
+        ...autoBindings,
+      };
 
       return _Worker(id, {
         meta,
         ...(props as ImportMetaWorkerProps<B>),
         name: workerName,
-        bindings: {
-          ...props.bindings,
-          __ALCHEMY_WORKER_NAME__: workerName,
-          // TODO(sam): prune un-needed bindings
-          ...autoBindings,
-        },
+        // adopt because the stub guarnatees that the worker exists
+        adopt: true,
+        bindings,
       });
     }) as Promise<Worker<B>>;
 
@@ -685,7 +708,7 @@ export const _Worker = Resource(
   },
 );
 
-async function deleteWorker<B extends Bindings>(
+export async function deleteWorker<B extends Bindings>(
   ctx: Context<Worker<B>>,
   api: CloudflareApi,
   props: WorkerProps<B> & { workerName: string },
@@ -723,7 +746,7 @@ async function deleteWorker<B extends Bindings>(
   return;
 }
 
-async function putWorker(
+export async function putWorker(
   api: CloudflareApi,
   workerName: string,
   scriptContent: string,
@@ -785,299 +808,7 @@ async function putWorker(
   );
 }
 
-interface WorkerMetadata {
-  compatibility_date: string;
-  compatibility_flags?: string[];
-  bindings: WorkerBindingSpec[];
-  observability: {
-    enabled: boolean;
-  };
-  migrations?: SingleStepMigration;
-  main_module?: string;
-  body_part?: string;
-  tags?: string[];
-  assets?: {
-    jwt?: string;
-    keep_assets?: boolean;
-    config?: AssetsConfig;
-  };
-  cron_triggers?: {
-    cron: string;
-    suspended: boolean;
-  }[];
-}
-
-interface AssetUploadResult {
-  completionToken: string;
-  assetConfig?: AssetsConfig;
-}
-
-/**
- * Creates asset configuration object from provided config or defaults
- */
-function createAssetConfig(config?: AssetsConfig): AssetsConfig {
-  const assetConfig: AssetsConfig = {
-    html_handling: "auto-trailing-slash",
-  };
-
-  if (config) {
-    if (config._headers !== undefined) {
-      assetConfig._headers = config._headers;
-    }
-
-    if (config._redirects !== undefined) {
-      assetConfig._redirects = config._redirects;
-    }
-
-    if (config.html_handling !== undefined) {
-      assetConfig.html_handling = config.html_handling;
-    }
-
-    if (config.not_found_handling !== undefined) {
-      assetConfig.not_found_handling = config.not_found_handling;
-    }
-
-    if (config.run_worker_first !== undefined) {
-      assetConfig.run_worker_first = config.run_worker_first;
-    }
-
-    if (config.serve_directly !== undefined) {
-      assetConfig.serve_directly = config.serve_directly;
-    }
-  }
-
-  return assetConfig;
-}
-
-async function prepareWorkerMetadata<B extends Bindings>(
-  ctx: Context<Worker<B>>,
-  oldBindings: Bindings | undefined,
-  props: WorkerProps & {
-    compatibilityDate: string;
-    compatibilityFlags: string[];
-    workerName: string;
-  },
-  assetUploadResult?: AssetUploadResult,
-): Promise<WorkerMetadata> {
-  // Prepare metadata with bindings
-  const meta: WorkerMetadata = {
-    compatibility_date: props.compatibilityDate,
-    compatibility_flags: props.compatibilityFlags,
-    bindings: [],
-    observability: {
-      enabled: props.observability?.enabled !== false,
-    },
-    // TODO(sam): base64 encode instead? 0 collision risk vs readability.
-    tags: [`alchemy:id:${slugify(ctx.fqn)}`],
-    migrations: {
-      new_classes: props.migrations?.new_classes ?? [],
-      deleted_classes: props.migrations?.deleted_classes ?? [],
-      renamed_classes: props.migrations?.renamed_classes ?? [],
-      transferred_classes: props.migrations?.transferred_classes ?? [],
-      new_sqlite_classes: props.migrations?.new_sqlite_classes ?? [],
-    },
-  };
-
-  // If we have asset upload results, add them to the metadata
-  if (assetUploadResult) {
-    meta.assets = {
-      jwt: assetUploadResult.completionToken,
-    };
-
-    // Initialize config from assetUploadResult if it exists
-    if (assetUploadResult.assetConfig) {
-      meta.assets.config = {
-        ...assetUploadResult.assetConfig,
-      };
-    }
-
-    // If there's no config from assetUploadResult but we have props.assets,
-    // we need to create the config ourselves (this handles the case when no assets were uploaded)
-    if (!meta.assets.config && props.assets) {
-      meta.assets.config = createAssetConfig(props.assets);
-    }
-  }
-
-  const bindings = (props.bindings ?? {}) as Bindings;
-
-  // Convert bindings to the format expected by the API
-  for (const [bindingName, binding] of Object.entries(bindings)) {
-    // Create a copy of the binding to avoid modifying the original
-
-    if (typeof binding === "string") {
-      meta.bindings.push({
-        type: "plain_text",
-        name: bindingName,
-        text: binding,
-      });
-    } else if (binding === Self) {
-      meta.bindings.push({
-        type: "service",
-        name: bindingName,
-        service: props.workerName,
-      });
-    } else if (binding.type === "d1") {
-      meta.bindings.push({
-        type: "d1",
-        name: bindingName,
-        id: binding.id,
-      });
-    } else if (binding.type === "kv_namespace") {
-      meta.bindings.push({
-        type: "kv_namespace",
-        name: bindingName,
-        namespace_id:
-          "namespaceId" in binding ? binding.namespaceId : binding.id,
-      });
-    } else if (binding.type === "service") {
-      meta.bindings.push({
-        type: "service",
-        name: bindingName,
-        service: binding.name,
-      });
-    } else if (binding.type === "durable_object_namespace") {
-      meta.bindings.push({
-        type: "durable_object_namespace",
-        name: bindingName,
-        class_name: binding.className,
-        script_name: binding.scriptName,
-        environment: binding.environment,
-        namespace_id: binding.namespaceId,
-      });
-      configureClassMigration(binding, binding.id, binding.className);
-    } else if (binding.type === "r2_bucket") {
-      meta.bindings.push({
-        type: "r2_bucket",
-        name: bindingName,
-        bucket_name: binding.name,
-      });
-    } else if (binding.type === "assets") {
-      meta.bindings.push({
-        type: "assets",
-        name: bindingName,
-      });
-    } else if (binding.type === "secret") {
-      meta.bindings.push({
-        type: "secret_text",
-        name: bindingName,
-        text: binding.unencrypted,
-      });
-    } else if (binding.type === "workflow") {
-      meta.bindings.push({
-        type: "workflow",
-        name: bindingName,
-        workflow_name: binding.workflowName,
-        class_name: binding.className,
-        // this should be set if the Workflow is in another script ...
-        // script_name: ??,
-      });
-      // it's unclear whether this is needed, but it works both ways
-      // configureClassMigration(binding, binding.id, binding.className);
-    } else if (binding.type === "queue") {
-      meta.bindings.push({
-        type: "queue",
-        name: bindingName,
-        queue_name: binding.name,
-      });
-    } else if (binding.type === "pipeline") {
-      meta.bindings.push({
-        type: "pipelines",
-        name: bindingName,
-        pipeline: binding.name,
-      });
-    } else if (binding.type === "vectorize") {
-      meta.bindings.push({
-        type: "vectorize",
-        name: bindingName,
-        index_name: binding.name,
-      });
-    } else if (binding.type === "ai_gateway") {
-      // AI Gateway binding - just needs the name property
-      meta.bindings.push({
-        type: "ai",
-        name: bindingName,
-      });
-    } else if (binding.type === "hyperdrive") {
-      // Hyperdrive binding
-      meta.bindings.push({
-        type: "hyperdrive",
-        name: bindingName,
-        id: binding.hyperdriveId,
-      });
-    } else if (binding.type === "browser") {
-      meta.bindings.push({
-        type: "browser",
-        name: bindingName,
-      });
-    } else if (binding.type === "ai") {
-      meta.bindings.push({
-        type: "ai",
-        name: bindingName,
-      });
-    } else {
-      // @ts-expect-error - we should never reach here
-      throw new Error(`Unsupported binding type: ${binding.type}`);
-    }
-  }
-
-  function configureClassMigration(
-    binding: DurableObjectNamespace | Workflow,
-    stableId: string,
-    className: string,
-  ) {
-    const oldBinding: DurableObjectNamespace | Workflow | undefined =
-      Object.values(oldBindings ?? {})
-        ?.filter(
-          (b) =>
-            typeof b === "object" &&
-            (b.type === "durable_object_namespace" || b.type === "workflow"),
-        )
-        ?.find((b) => b.id === stableId);
-
-    if (!oldBinding) {
-      if (binding.type === "durable_object_namespace" && binding.sqlite) {
-        meta.migrations!.new_sqlite_classes!.push(className);
-      } else {
-        meta.migrations!.new_classes!.push(className);
-      }
-    } else if (oldBinding.className !== className) {
-      meta.migrations!.renamed_classes!.push({
-        from: oldBinding.className,
-        to: className,
-      });
-    }
-  }
-
-  // Convert env variables to plain_text bindings
-  // TODO(sam): remove Worker.env in favor of always bindings
-  if (props.env) {
-    for (const [key, value] of Object.entries(props.env)) {
-      meta.bindings.push({
-        name: key,
-        type: "plain_text",
-        text: value,
-      });
-    }
-  }
-
-  // Determine if we're using ESM or service worker format
-  const isEsModule = props.format !== "cjs"; // Default to ESM unless CJS is specified
-  const scriptName = isEsModule ? "worker.js" : "script";
-
-  if (isEsModule) {
-    // For ES modules format
-    meta.main_module = scriptName;
-  } else {
-    // For service worker format (CJS)
-    meta.body_part = scriptName;
-  }
-  if (process.env.DEBUG) {
-    console.log(meta);
-  }
-  return meta;
-}
-
-async function assertWorkerDoesNotExist<B extends Bindings>(
+export async function assertWorkerDoesNotExist<B extends Bindings>(
   ctx: Context<Worker<B>>,
   api: CloudflareApi,
   workerName: string,
@@ -1114,7 +845,7 @@ async function assertWorkerDoesNotExist<B extends Bindings>(
   );
 }
 
-async function configureURL<B extends Bindings>(
+export async function configureURL<B extends Bindings>(
   ctx: Context<Worker<B>>,
   api: CloudflareApi,
   workerName: string,
@@ -1176,7 +907,7 @@ async function configureURL<B extends Bindings>(
   return workerUrl;
 }
 
-async function getWorkerScriptMetadata(
+export async function getWorkerScriptMetadata(
   api: CloudflareApi,
   workerName: string,
 ): Promise<WorkerScriptMetadata | undefined> {
@@ -1194,7 +925,7 @@ async function getWorkerScriptMetadata(
   return ((await response.json()) as any).result as WorkerScriptMetadata;
 }
 
-async function _getWorkerBindings(
+export async function _getWorkerBindings(
   api: CloudflareApi,
   workerName: string,
   environment = "production",
@@ -1222,194 +953,6 @@ async function _getWorkerBindings(
   const data: any = await response.json();
 
   return data.result;
-}
-
-/**
- * Interface for a file's metadata to be uploaded
- */
-interface FileMetadata {
-  hash: string;
-  size: number;
-}
-
-/**
- * Response from the assets upload session API
- */
-interface UploadSessionResponse {
-  result: {
-    jwt: string;
-    buckets: string[][];
-  };
-  success: boolean;
-  errors: any[];
-  messages: any[];
-}
-
-/**
- * Response from the file upload API
- */
-interface UploadResponse {
-  result: {
-    jwt: string;
-    buckets?: string[][];
-  };
-  success: boolean;
-  errors: any[];
-  messages: any[];
-}
-
-/**
- * Uploads assets to Cloudflare and returns a completion token
- *
- * @param api CloudflareApi instance
- * @param workerName Name of the worker
- * @param assets Assets resource containing files to upload
- * @param assetConfig Configuration for the assets
- * @returns Completion token for the assets upload
- */
-async function uploadAssets(
-  api: CloudflareApi,
-  workerName: string,
-  assets: Assets,
-  assetConfig?: WorkerProps["assets"],
-): Promise<AssetUploadResult> {
-  // Process the assets configuration once at the beginning
-  const processedConfig = createAssetConfig(assetConfig);
-
-  // Generate the file manifest
-  const fileMetadata: Record<string, FileMetadata> = {};
-
-  // Process each file in the assets
-  for (const file of assets.files) {
-    const { hash, size } = await calculateFileMetadata(file.filePath);
-    // Use the relative path as the key, ensuring it starts with a slash
-    const key = file.path.startsWith("/") ? file.path : `/${file.path}`;
-    fileMetadata[key] = { hash, size };
-  }
-
-  // Start the upload session
-  const uploadSessionUrl = `/accounts/${api.accountId}/workers/scripts/${workerName}/assets-upload-session`;
-  const uploadSessionResponse = await api.post(
-    uploadSessionUrl,
-    JSON.stringify({ manifest: fileMetadata }),
-    {
-      headers: { "Content-Type": "application/json" },
-    },
-  );
-
-  if (!uploadSessionResponse.ok) {
-    throw new Error(
-      `Failed to start assets upload session: ${uploadSessionResponse.status} ${uploadSessionResponse.statusText}`,
-    );
-  }
-
-  const sessionData =
-    (await uploadSessionResponse.json()) as UploadSessionResponse;
-
-  // If there are no buckets, assets are already uploaded or empty
-  if (!sessionData.result.buckets || sessionData.result.buckets.length === 0) {
-    return {
-      completionToken: sessionData.result.jwt,
-      assetConfig: processedConfig,
-    };
-  }
-
-  // Upload the files in batches as specified by the API
-  let completionToken = sessionData.result.jwt;
-  const buckets = sessionData.result.buckets;
-
-  // Process each bucket of files
-  for (const bucket of buckets) {
-    const formData = new FormData();
-
-    // Add each file in the bucket to the form
-    for (const fileHash of bucket) {
-      // Find the file with this hash
-      const file = assets.files.find((f) => {
-        const filePath = f.path.startsWith("/") ? f.path : `/${f.path}`;
-        return fileMetadata[filePath]?.hash === fileHash;
-      });
-
-      if (!file) {
-        throw new Error(`Could not find file with hash ${fileHash}`);
-      }
-
-      // Read the file content
-      const fileContent = await fs.readFile(file.filePath);
-
-      // Convert to base64 as required by the API when using base64=true
-      const base64Content = fileContent.toString("base64");
-
-      // Add the file to the form with the hash as the key and set the correct content type
-      const blob = new Blob([base64Content], {
-        // if you set application/octet-stream, you get weird `-1` errors with a message to contact support
-        type: getContentType(file.filePath) ?? "application/null",
-      });
-      formData.append(fileHash, blob, fileHash);
-    }
-
-    // Upload this batch of files
-    const uploadResponse = await api.post(
-      `/accounts/${api.accountId}/workers/assets/upload?base64=true`,
-      formData,
-      {
-        headers: {
-          Authorization: `Bearer ${completionToken}`,
-          "Content-Type": "multipart/form-data",
-        },
-      },
-    );
-
-    if (!uploadResponse.ok) {
-      throw new Error(
-        `Failed to upload asset files: ${uploadResponse.status} ${uploadResponse.statusText}`,
-      );
-    }
-
-    const uploadData = (await uploadResponse.json()) as UploadResponse;
-    if (!uploadData.success) {
-      const error = uploadData.errors[0];
-      const message = error.message;
-      const code = error.code;
-      throw new Error(
-        `Failed to upload asset files: ${message} (Code: ${code})`,
-      );
-    }
-
-    // Update the completion token for the next batch
-    if (uploadData.result.jwt) {
-      completionToken = uploadData.result.jwt;
-    }
-  }
-
-  // Return the final completion token with asset configuration
-  return {
-    completionToken,
-    assetConfig: processedConfig,
-  };
-}
-
-/**
- * Calculate the SHA-256 hash and size of a file
- *
- * @param filePath Path to the file
- * @returns Hash (first 32 chars of SHA-256) and size of the file
- */
-async function calculateFileMetadata(
-  filePath: string,
-): Promise<{ hash: string; size: number }> {
-  const contents = await fs.readFile(filePath);
-
-  const hash = crypto.createHash("sha256");
-  hash.update(contents);
-
-  const extension = path.extname(filePath).substring(1);
-  hash.update(extension);
-
-  return {
-    hash: hash.digest("hex").slice(0, 32),
-    size: contents.length,
-  };
 }
 
 /**
