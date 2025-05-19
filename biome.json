@@ -7,7 +7,7 @@
       "./scripts/**/*.ts",
       "./stacks/**/*.ts",
       "./examples/*/src/**/*.ts",
-      "./examples/*/alchemy.run.ts",
+      "./examples/*/*.ts",
       "!**/node_modules"
     ]
   },

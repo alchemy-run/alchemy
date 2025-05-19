@@ -22,7 +22,11 @@ import type { Bound } from "./bound.js";
 import { isBucket } from "./bucket.js";
 import { bundleWorkerScript } from "./bundle/bundle-worker.js";
 import { isD1Database } from "./d1-database.js";
-import { type EventSource, isQueueEventSource } from "./event-source.js";
+import {
+  type EventSource,
+  type QueueEventSource,
+  isQueueEventSource,
+} from "./event-source.js";
 import { isKVNamespace } from "./kv-namespace.js";
 import { isPipeline } from "./pipeline.js";
 import {
@@ -30,7 +34,7 @@ import {
   deleteQueueConsumer,
   listQueueConsumers,
 } from "./queue-consumer.js";
-import { isQueue } from "./queue.js";
+import { type QueueResource, isQueue } from "./queue.js";
 import { isVectorizeIndex } from "./vectorize-index.js";
 import { type AssetUploadResult, uploadAssets } from "./worker-assets.js";
 import {
@@ -215,15 +219,44 @@ export type WorkerProps<B extends Bindings = Bindings> =
   | InlineWorkerProps<B>
   | EntrypointWorkerProps<B>;
 
-export interface FetchWorkerProps<B extends Bindings = Bindings>
-  extends Omit<WorkerProps<B>, "entrypoint"> {
+export type FetchWorkerProps<
+  B extends Bindings = Bindings,
+  E extends EventSource[] = EventSource[],
+> = Omit<WorkerProps<B>, "entrypoint" | "eventSources"> & {
   /**
    * A function that will be used to fetch the worker script.
    *
    * This is only used when using the fetch property.
    */
-  fetch(request: Request): Promise<Response>;
-}
+  fetch?(
+    request: Request,
+    env: Bindings.Runtime<B>,
+    ctx: ExecutionContext,
+  ): Promise<Response>;
+  /**
+   * Event sources that this worker will consume.
+   *
+   * Can include queues, streams, or other event sources.
+   */
+  eventSources?: E;
+
+  /**
+   * A function that will be used to queue the worker script.
+   *
+   * This is only used when using the queue property.
+   */
+  queue?(
+    batch: QueueBatch<E>,
+    env: Bindings.Runtime<B>,
+    ctx: ExecutionContext,
+  ): Promise<void>;
+};
+
+type QueueBatch<E extends EventSource[]> = E[number] extends QueueEventSource
+  ? any
+  : E[number] extends QueueResource<infer Body>
+    ? MessageBatch<Body>
+    : MessageBatch<unknown>;
 
 export function isWorker(resource: Resource): resource is Worker<any> {
   return resource[ResourceKind] === "cloudflare::Worker";
@@ -386,11 +419,11 @@ export function Worker<const B extends Bindings>(
   id: string,
   props: WorkerProps<B>,
 ): Promise<Worker<B>>;
-export function Worker<const B extends Bindings>(
+export function Worker<const B extends Bindings, const E extends EventSource[]>(
   id: string,
   meta: ImportMeta,
-  props: FetchWorkerProps<B>,
-): Promise<Worker<B>>;
+  props: FetchWorkerProps<B, E>,
+): Promise<Worker<B>> & globalThis.Service;
 export function Worker<const B extends Bindings>(
   ...args:
     | [id: string, props: WorkerProps<B>]
@@ -398,7 +431,7 @@ export function Worker<const B extends Bindings>(
 ): Promise<Worker<B>> {
   const [id, meta, props] =
     args.length === 2 ? [args[0], undefined, args[1]] : args;
-  if ("fetch" in props && props.fetch) {
+  if (("fetch" in props && props.fetch) || ("queue" in props && props.queue)) {
     const scope = Scope.current;
 
     const workerName = props.name ?? id;
@@ -504,47 +537,80 @@ export function Worker<const B extends Bindings>(
     const promise = Promise.all([deferred, stub]).then(
       ([worker]) => worker,
     ) as Promise<Worker<B>> & {
-      fetch: (request: Request) => Promise<Response>;
+      fetch?: (...args: any[]) => Promise<Response>;
+      queue?: (
+        batch: QueueBatch<any>,
+        env: Bindings.Runtime<B>,
+        ctx: ExecutionContext,
+      ) => Promise<void>;
     };
 
     if (isRuntime) {
-      promise.fetch = async (request: Request) => {
-        try {
-          return await props.fetch(request);
-        } catch (err: any) {
-          return new Response(err.message + err.stack, {
-            status: 500,
-          });
-        }
-      };
+      if (props.fetch) {
+        promise.fetch = async (
+          request: Request,
+          env: Bindings.Runtime<B>,
+          ctx: ExecutionContext,
+        ) => {
+          try {
+            return await props.fetch!(request, env as any, ctx);
+          } catch (err: any) {
+            return new Response(err.message + err.stack, {
+              status: 500,
+            });
+          }
+        };
+      }
+      if (props.queue) {
+        promise.queue = async (
+          batch: QueueBatch<any>,
+          env: Bindings.Runtime<B>,
+          ctx: ExecutionContext,
+        ) => {
+          return await props.queue!(batch, env, ctx);
+        };
+      }
     } else {
-      promise.fetch = async (request: Request) => {
+      promise.fetch = async (
+        request: string | URL | Request,
+        init?: RequestInit,
+      ) => {
         const worker = await promise;
         if (!worker.url) {
           throw new Error("Worker URL is not available in runtime");
         }
-
-        const origin = new URL(worker.url);
-        const incoming = new URL(request.url);
-        const proxyURL = new URL(
-          `${incoming.pathname}${incoming.search}${incoming.hash}`,
-          origin,
-        );
-
-        const headers = new Headers(request.headers);
-        headers.set("host", origin.host);
-
-        try {
-          return await fetch(
-            new Request(proxyURL, {
-              method: request.method,
-              body: request.body,
-              headers,
-              redirect: "manual",
-            }),
+        if (request instanceof Request) {
+          const origin = new URL(worker.url);
+          const incoming = request.url.startsWith("/")
+            ? new URL(`${worker.url}${request.url}`)
+            : new URL(request.url);
+          console.log(incoming);
+          const proxyURL = new URL(
+            `${incoming.pathname}${incoming.search}${incoming.hash}`,
+            origin,
           );
-        } catch (err: any) {
-          return new Response(err.message ?? "proxy error", { status: 500 });
+
+          const headers = new Headers(request.headers);
+          headers.set("host", origin.host);
+
+          try {
+            return await fetch(
+              new Request(proxyURL, {
+                method: request.method,
+                body: request.body,
+                headers,
+                // TODO(sam): do we need this? GPT added it ...
+                // redirect: "manual",
+              }),
+            );
+          } catch (err: any) {
+            return new Response(err.message ?? "proxy error", { status: 500 });
+          }
+        } else {
+          if (typeof request === "string" && request.startsWith("/")) {
+            request = new URL(`${worker.url}${request}`);
+          }
+          return await fetch(request, init);
         }
       };
     }
