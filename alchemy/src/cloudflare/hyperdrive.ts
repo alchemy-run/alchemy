@@ -1,8 +1,10 @@
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
+import { tryGetBinding } from "../runtime/bind.js";
 import type { Secret } from "../secret.js";
 import { handleApiError } from "./api-error.js";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.js";
+import type { Bound } from "./bound.js";
 
 /**
  * Origin configuration for a PostgreSQL database connection
@@ -153,7 +155,7 @@ export interface HyperdriveProps extends CloudflareApiOptions {
  * Output returned after Cloudflare Hyperdrive creation/update.
  * IMPORTANT: The interface name MUST match the exported resource name.
  */
-export interface Hyperdrive
+export interface HyperdriveResource
   extends Resource<"cloudflare::Hyperdrive">,
     Omit<HyperdriveProps, "origin"> {
   /**
@@ -177,6 +179,8 @@ export interface Hyperdrive
    */
   type: "hyperdrive";
 }
+
+export type Hyperdrive = HyperdriveResource & Bound<HyperdriveResource>;
 
 /**
  * Represents a Cloudflare Hyperdrive configuration.
@@ -242,13 +246,24 @@ export interface Hyperdrive
  *   }
  * });
  */
-export const Hyperdrive = Resource(
+export async function Hyperdrive(
+  name: string,
+  props: HyperdriveProps,
+): Promise<Hyperdrive> {
+  const resource = await HyperdriveResource(name, props);
+  return {
+    ...resource,
+    ...tryGetBinding(resource),
+  } as Hyperdrive;
+}
+
+const HyperdriveResource = Resource(
   "cloudflare::Hyperdrive",
   async function (
-    this: Context<Hyperdrive>,
+    this: Context<HyperdriveResource>,
     id: string,
     props: HyperdriveProps,
-  ): Promise<Hyperdrive> {
+  ): Promise<HyperdriveResource> {
     const api = await createCloudflareApi(props);
     const configsPath = `/accounts/${api.accountId}/hyperdrive/configs`;
 

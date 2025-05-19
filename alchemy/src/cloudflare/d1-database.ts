@@ -1,5 +1,5 @@
 import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
+import { Resource, ResourceKind } from "../resource.js";
 import { bind, type Bound } from "../runtime/bind.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
@@ -92,6 +92,12 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
    * This is analogous to wrangler's `migrations_dir`.
    */
   migrationsDir?: string;
+}
+
+export function isD1Database(
+  resource: Resource,
+): resource is D1DatabaseResource {
+  return resource[ResourceKind] === "cloudflare::D1Database";
 }
 
 /**

@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy.js";
 import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { Hyperdrive } from "../../src/cloudflare/hyperdrive.js";
+import type { HyperdriveResource } from "../../src/cloudflare/hyperdrive.js";
 import { Worker } from "../../src/cloudflare/worker.js";
 import { destroy } from "../../src/destroy.js";
 import { NeonProject } from "../../src/neon/project.js";
@@ -19,7 +19,7 @@ describe("Hyperdrive Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-hyperdrive`;
 
   test("create, update, and delete hyperdrive with Neon project", async (scope) => {
-    let hyperdrive: Hyperdrive | undefined;
+    let hyperdrive: HyperdriveResource | undefined;
     let project: NeonProject | undefined;
     let worker: Worker | undefined;
 

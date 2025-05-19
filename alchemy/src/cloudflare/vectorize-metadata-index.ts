@@ -1,5 +1,5 @@
 import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
+import { Resource, ResourceKind } from "../resource.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
   createCloudflareApi,
@@ -26,6 +26,12 @@ export interface VectorizeMetadataIndexProps extends CloudflareApiOptions {
    * Type of the metadata index
    */
   indexType: "string" | "number" | "boolean";
+}
+
+export function isVectorizeMetadataIndex(
+  resource: Resource,
+): resource is VectorizeMetadataIndex {
+  return resource[ResourceKind] === "cloudflare::VectorizeMetadataIndex";
 }
 
 /**

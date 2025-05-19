@@ -1,5 +1,5 @@
 import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
+import { Resource, ResourceKind } from "../resource.js";
 import { bind } from "../runtime/bind.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
@@ -48,6 +48,12 @@ export interface VectorizeIndexProps extends CloudflareApiOptions {
    * @default false
    */
   adopt?: boolean;
+}
+
+export function isVectorizeIndex(
+  resource: Resource,
+): resource is VectorizeIndexResource {
+  return resource[ResourceKind] === "cloudflare::VectorizeIndex";
 }
 
 /**

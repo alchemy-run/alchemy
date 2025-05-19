@@ -7,7 +7,7 @@ const globalSecrets: {
 
 let i = 0;
 function nextName() {
-  return `secret-${i++}`;
+  return `alchemy:anonymous-secret-${i++}`;
 }
 
 /**

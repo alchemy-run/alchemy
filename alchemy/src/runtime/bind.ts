@@ -1,20 +1,35 @@
 import { isPromise } from "node:util/types";
 import type { Binding as CloudflareBinding } from "../cloudflare/bindings.js";
 import type { Bound as CloudflareBound } from "../cloudflare/bound.js";
+import { isWorkerStub } from "../cloudflare/worker-stub.js";
+import { isWorker } from "../cloudflare/worker.js";
 import { env } from "../env.js";
 import { ResourceFQN, ResourceScope, type Resource } from "../resource.js";
+import { isRuntime } from "./global.js";
 
 /**
  * Get a Resource's Binding from the Environment.
  */
-export function getBinding<T extends Resource>(resource: T): Bound<T> {
-  return env[getBindKey(resource)] as Bound<T>;
+export function getBinding<T extends Resource>(resource: T): Promise<Bound<T>> {
+  return env[getBindKey(resource)] as Promise<Bound<T>>;
+}
+
+export function tryGetBinding<T extends Resource>(
+  resource: T,
+): Promise<Bound<T>> | undefined {
+  if (isRuntime) {
+    return getBinding(resource);
+  }
+  return undefined;
 }
 
 /**
  * Compute a unique key for where to store a Resource's Binding.
  */
 export function getBindKey(resource: Resource): string {
+  if (isWorker(resource) || isWorkerStub(resource)) {
+    return `worker:${resource.name}`;
+  }
   const fqn = resource[ResourceFQN];
   const scope = resource[ResourceScope];
   const prefix = `${scope.appName}/${scope.stage}`;
@@ -33,7 +48,7 @@ export type Bound<T> = T extends CloudflareBinding ? CloudflareBound<T> : T;
 export async function bind<T extends Resource>(
   resource: T | Promise<T>,
   options?: {
-    reify?: (value: T, key: string) => Bound<T>;
+    reify?: (value: T, key: string) => Promise<Bound<T>>;
     /** @default true */
     bindThis?: boolean;
   },
@@ -42,11 +57,11 @@ export async function bind<T extends Resource>(
     return resource.then((r) => bind(r, options)) as Promise<Bound<T>>;
   }
   let _runtime: [Bound<T>] | undefined;
-  const runtime = (): any =>
+  const runtime = async (): Promise<Bound<T>> =>
     (_runtime ??= [
-      options?.reify
+      await (options?.reify
         ? options.reify(resource, getBindKey(resource))
-        : getBinding(resource),
+        : getBinding(resource)),
     ])[0];
 
   return new Proxy(() => {}, {
@@ -57,11 +72,11 @@ export async function bind<T extends Resource>(
         return target[prop];
       }
       return async (...args: any[]) => {
-        const rt = await runtime();
+        const rt: Bound<T> = await runtime();
         if (rt === undefined) {
           throw new Error(`Resource ${resource[ResourceFQN]} is not bound`);
         }
-        const method = rt[prop];
+        const method = rt[prop as keyof Bound<T>];
         if (typeof method !== "function") {
           throw new Error(
             `Method ${prop} on '${resource[ResourceFQN]}' is not a function`,

@@ -1,8 +1,8 @@
 import path from "node:path";
 import type { Context } from "../context.js";
 import type { BundleProps } from "../esbuild/bundle.js";
-import { InnerResourceScope, Resource } from "../resource.js";
-import { getBindKey } from "../runtime/bind.js";
+import { InnerResourceScope, Resource, ResourceKind } from "../resource.js";
+import { getBindKey, tryGetBinding } from "../runtime/bind.js";
 import { isRuntime } from "../runtime/global.js";
 import { bootstrapPlugin } from "../runtime/plugin.js";
 import { Scope } from "../scope.js";
@@ -21,7 +21,9 @@ import { type Binding, type Bindings, Json } from "./bindings.js";
 import type { Bound } from "./bound.js";
 import { isBucket } from "./bucket.js";
 import { bundleWorkerScript } from "./bundle/bundle-worker.js";
+import { isD1Database } from "./d1-database.js";
 import { type EventSource, isQueueEventSource } from "./event-source.js";
+import { isKVNamespace } from "./kv-namespace.js";
 import { isPipeline } from "./pipeline.js";
 import {
   QueueConsumer,
@@ -29,6 +31,7 @@ import {
   listQueueConsumers,
 } from "./queue-consumer.js";
 import { isQueue } from "./queue.js";
+import { isVectorizeIndex } from "./vectorize-index.js";
 import { type AssetUploadResult, uploadAssets } from "./worker-assets.js";
 import {
   type WorkerMetadata,
@@ -222,12 +225,17 @@ export interface FetchWorkerProps<B extends Bindings = Bindings>
   fetch(request: Request): Promise<Response>;
 }
 
+export function isWorker(resource: Resource): resource is Worker<any> {
+  return resource[ResourceKind] === "cloudflare::Worker";
+}
+
 /**
  * Output returned after Worker creation/update
  */
 export type Worker<B extends Bindings = Bindings> =
   Resource<"cloudflare::Worker"> &
-    Omit<WorkerProps<B>, "url" | "script"> & {
+    Omit<WorkerProps<B>, "url" | "script"> &
+    globalThis.Service & {
       type: "service";
 
       /**
@@ -424,16 +432,19 @@ export function Worker<const B extends Bindings>(
     const deferred = scope.defer(async () => {
       const autoBindings: Record<string, Binding> = {};
       for (const resource of await collectResources(Scope.root)) {
-        if (isQueue(resource)) {
-          autoBindings[getBindKey(resource)] = resource;
-        } else if (isWorkerStub(resource)) {
-          autoBindings[getBindKey(resource)] = resource;
-        } else if (isBucket(resource)) {
-          autoBindings[getBindKey(resource)] = resource;
-        } else if (isPipeline(resource)) {
+        if (
+          isQueue(resource) ||
+          isWorkerStub(resource) ||
+          isWorker(resource) ||
+          isD1Database(resource) ||
+          isBucket(resource) ||
+          isPipeline(resource) ||
+          isVectorizeIndex(resource) ||
+          isKVNamespace(resource)
+        ) {
+          // TODO(sam): make this generic/pluggable
           autoBindings[getBindKey(resource)] = resource;
         }
-        // TODO(sam): make this generic/pluggable
       }
 
       // TODO(sam): prune to only needed secrets
@@ -453,6 +464,7 @@ export function Worker<const B extends Bindings>(
 
       return _Worker(id, {
         ...(props as any),
+        url: true,
         compatibilityFlags: [
           "nodejs_compat",
           ...(props.compatibilityFlags ?? []),
@@ -508,8 +520,9 @@ export function Worker<const B extends Bindings>(
     } else {
       promise.fetch = async (request: Request) => {
         const worker = await promise;
-        if (!worker.url)
+        if (!worker.url) {
           throw new Error("Worker URL is not available in runtime");
+        }
 
         const origin = new URL(worker.url);
         const incoming = new URL(request.url);
@@ -537,7 +550,15 @@ export function Worker<const B extends Bindings>(
     }
     return promise;
   }
-  return _Worker(id, props as WorkerProps<B>);
+  return _Worker(id, props as WorkerProps<B>).then(async (worker) => {
+    const binding = await tryGetBinding(worker);
+    if (binding) {
+      worker.fetch = (request: Request) => binding.fetch(request);
+      worker.connect = (address: SocketAddress, options: SocketOptions) =>
+        binding.connect(address, options);
+    }
+    return worker;
+  });
 }
 
 export const _Worker = Resource(
@@ -741,7 +762,7 @@ export const _Worker = Resource(
       crons: props.crons,
       // phantom property
       Env: undefined!,
-    });
+    } as unknown as Worker<B>);
   },
 );
 

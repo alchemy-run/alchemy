@@ -12,7 +12,7 @@ import type { BrowserRendering } from "./browser-rendering.js";
 import type { R2BucketResource } from "./bucket.js";
 import type { D1DatabaseResource } from "./d1-database.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
-import type { Hyperdrive } from "./hyperdrive.js";
+import type { HyperdriveResource } from "./hyperdrive.js";
 import type { KVNamespaceResource } from "./kv-namespace.js";
 import type { PipelineResource } from "./pipeline.js";
 import type { QueueResource } from "./queue.js";
@@ -40,7 +40,7 @@ export type Binding =
   | Assets
   | D1DatabaseResource
   | DurableObjectNamespace
-  | Hyperdrive
+  | HyperdriveResource
   | KVNamespaceResource
   | PipelineResource
   | QueueResource

@@ -1,5 +1,5 @@
 import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
+import { Resource, ResourceKind } from "../resource.js";
 import { bind } from "../runtime/bind.js";
 import { withExponentialBackoff } from "../util/retry.js";
 import { handleApiError } from "./api-error.js";
@@ -17,7 +17,7 @@ export interface KVNamespaceProps extends CloudflareApiOptions {
   /**
    * Title of the namespace
    */
-  title: string;
+  title?: string;
 
   /**
    * KV pairs to store in the namespace
@@ -70,6 +70,12 @@ export interface KVPair {
    * Optional metadata for the key
    */
   metadata?: any;
+}
+
+export function isKVNamespace(
+  resource: Resource,
+): resource is KVNamespaceResource {
+  return resource[ResourceKind] === "cloudflare::KVNamespace";
 }
 
 /**
@@ -154,7 +160,7 @@ export type KVNamespace = KVNamespaceResource & Bound<KVNamespaceResource>;
 
 export async function KVNamespace(
   name: string,
-  props: KVNamespaceProps,
+  props: KVNamespaceProps = {},
 ): Promise<KVNamespace> {
   const kv = await _KVNamespace(name, props);
   const binding = await bind(kv);
@@ -172,11 +178,13 @@ const _KVNamespace = Resource(
   "cloudflare::KVNamespace",
   async function (
     this: Context<KVNamespaceResource>,
-    _id: string,
+    id: string,
     props: KVNamespaceProps,
   ): Promise<KVNamespaceResource> {
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
+
+    const title = props.title ?? id;
 
     if (this.phase === "delete") {
       // For delete operations, we need to check if the namespace ID exists in the output
@@ -202,7 +210,10 @@ const _KVNamespace = Resource(
     } else {
       try {
         // Try to create the KV namespace
-        const { id } = await createKVNamespace(api, props);
+        const { id } = await createKVNamespace(api, {
+          ...props,
+          title,
+        });
         createdAt = Date.now();
         namespaceId = id;
       } catch (error) {
@@ -212,16 +223,13 @@ const _KVNamespace = Resource(
           error instanceof Error &&
           error.message.includes("already exists")
         ) {
-          console.log(`Namespace '${props.title}' already exists, adopting it`);
+          console.log(`Namespace '${title}' already exists, adopting it`);
           // Find the existing namespace by title
-          const existingNamespace = await findKVNamespaceByTitle(
-            api,
-            props.title,
-          );
+          const existingNamespace = await findKVNamespaceByTitle(api, title);
 
           if (!existingNamespace) {
             throw new Error(
-              `Failed to find existing namespace '${props.title}' for adoption`,
+              `Failed to find existing namespace '${title}' for adoption`,
             );
           }
 
@@ -250,7 +258,9 @@ const _KVNamespace = Resource(
 
 export async function createKVNamespace(
   api: CloudflareApi,
-  props: KVNamespaceProps,
+  props: KVNamespaceProps & {
+    title: string;
+  },
 ): Promise<{ id: string }> {
   const createResponse = await api.post(
     `/accounts/${api.accountId}/storage/kv/namespaces`,

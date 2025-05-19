@@ -1,11 +1,10 @@
 import { alchemy } from "../../src/alchemy.js";
 import { R2Bucket } from "../../src/cloudflare/bucket.js";
-import { Worker } from "../../src/cloudflare/worker.js";
-
-import path from "node:path";
+import { KVNamespace } from "../../src/cloudflare/kv-namespace.js";
 import "../../src/cloudflare/pipeline.js";
 import { Pipeline } from "../../src/cloudflare/pipeline.js";
 import { Queue } from "../../src/cloudflare/queue.js";
+import { Worker } from "../../src/cloudflare/worker.js";
 
 const app = await alchemy("my-bootstrap-ap", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
@@ -14,6 +13,8 @@ const app = await alchemy("my-bootstrap-ap", {
 const queue = await Queue<string>("my-bootstrap-queue");
 
 const bucket = await R2Bucket("my-bootstrap-bucket");
+
+const kv = await KVNamespace("my-bootstrap-kv");
 
 const pipeline = await Pipeline<{
   key: string;
@@ -38,14 +39,17 @@ const pipeline = await Pipeline<{
   },
 });
 
+const otherWorker = await Worker("other-worker", {
+  script: `
+    export default {
+      fetch(request) {
+        return new Response(request.body);
+      }
+    }
+  `,
+});
+
 export default Worker("worker", import.meta, {
-  bundle: {
-    outfile: alchemy.isRuntime
-      ? undefined
-      : path.join(import.meta.dirname, "app.js"),
-    minify: false,
-  },
-  url: true,
   async fetch(request) {
     const key = new URL(request.url).pathname;
     const obj = await bucket.put(key, request.body);
@@ -58,15 +62,22 @@ export default Worker("worker", import.meta, {
         key: "value",
       },
     ]);
-    return new Response(
-      JSON.stringify(
-        {
-          key: obj.key,
-          etag: obj.etag,
+    await kv.put("key", "value");
+    return otherWorker.fetch(
+      new Request("https://example.com/post", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-        null,
-        2,
-      ),
+        body: JSON.stringify(
+          {
+            key: obj.key,
+            etag: obj.etag,
+          },
+          null,
+          2,
+        ),
+      }),
     );
   },
 });
