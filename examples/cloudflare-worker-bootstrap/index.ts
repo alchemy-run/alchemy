@@ -98,6 +98,7 @@ if (!alchemy.isRuntime) {
       console.log("message traveled end to end");
       break;
     } else if (response.status === 404) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       continue;
     }
     throw new Error("Failed to receive message");
