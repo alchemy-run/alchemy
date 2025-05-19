@@ -55,6 +55,10 @@
       "bun": "./src/dns/index.ts",
       "import": "./lib/dns/index.js"
     },
+    "./docker": {
+      "bun": "./src/docker/index.ts",
+      "import": "./lib/docker/index.js"
+    },
     "./esbuild": {
       "bun": "./src/esbuild/index.ts",
       "import": "./lib/esbuild/index.js"
