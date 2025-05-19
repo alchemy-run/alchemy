@@ -279,16 +279,16 @@ export interface ExecOptions extends Partial<SpawnOptions> {
 
 /**
  * Execute a shell command.
- * 
+ *
  * @param command The command to execute
  * @param options Options for the command execution
- * @returns Promise that resolves when the command completes. 
+ * @returns Promise that resolves when the command completes.
  *          If captureOutput is true, resolves with { stdout, stderr } strings.
  */
 export async function exec(
   command: string,
   options?: ExecOptions,
-): Promise<{ stdout: string; stderr: string } | void> {
+): Promise<{ stdout: string; stderr: string } | undefined> {
   const [cmd, ...args] = command.split(/\s+/);
   const captureOutput = options?.captureOutput === true;
 
@@ -301,20 +301,20 @@ export async function exec(
         ...defaultOptions.env,
         ...options?.env,
       },
-      stdio: captureOutput ? 'pipe' : defaultOptions.stdio,
+      stdio: captureOutput ? "pipe" : defaultOptions.stdio,
     };
 
     const child = spawn(cmd, args, spawnOptions);
-    
-    let stdout = '';
-    let stderr = '';
+
+    let stdout = "";
+    let stderr = "";
 
     if (captureOutput) {
-      child.stdout?.on('data', (data) => {
+      child.stdout?.on("data", (data) => {
         stdout += data.toString();
       });
-      
-      child.stderr?.on('data', (data) => {
+
+      child.stderr?.on("data", (data) => {
         stderr += data.toString();
       });
     }
@@ -327,7 +327,11 @@ export async function exec(
           resolve(undefined);
         }
       } else {
-        reject(new Error(`Command failed with exit code ${code}${stderr ? `: ${stderr}` : ''}`));
+        reject(
+          new Error(
+            `Command failed with exit code ${code}${stderr ? `: ${stderr}` : ""}`,
+          ),
+        );
       }
     });
 

@@ -12,7 +12,7 @@ describe("DockerNetwork", () => {
     try {
       const networkName = `alchemy-test-network-${Date.now()}`;
       const network = await DockerNetwork("test-network", {
-        name: networkName
+        name: networkName,
       });
 
       expect(network.name).toBe(networkName);

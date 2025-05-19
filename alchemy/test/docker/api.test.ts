@@ -30,7 +30,7 @@ describe("DockerApi", () => {
     try {
       const dockerApi = new DockerApi();
       const result = await dockerApi.exec(["--version"]);
-      
+
       expect(result).toHaveProperty("stdout");
       expect(result).toHaveProperty("stderr");
       // Docker version output should contain the word "Docker"
@@ -44,7 +44,7 @@ describe("DockerApi", () => {
     try {
       const dockerApi = new DockerApi();
       const isRunning = await dockerApi.isRunning();
-      
+
       // This might be true or false depending on whether Docker is installed and running
       // Just ensure it returns a boolean
       expect(typeof isRunning).toBe("boolean");
@@ -53,4 +53,3 @@ describe("DockerApi", () => {
     }
   });
 });
-

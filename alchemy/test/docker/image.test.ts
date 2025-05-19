@@ -13,7 +13,7 @@ describe("DockerRemoteImage", () => {
       // Use a small test image to avoid long download times
       const image = await DockerRemoteImage("hello-world-image", {
         name: "hello-world",
-        tag: "latest"
+        tag: "latest",
       });
 
       expect(image.name).toBe("hello-world");

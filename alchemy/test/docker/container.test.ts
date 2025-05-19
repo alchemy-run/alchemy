@@ -14,7 +14,7 @@ describe("DockerContainer", () => {
       const container = await DockerContainer("test-container", {
         image: "hello-world:latest",
         name: "alchemy-test-container",
-        start: false
+        start: false,
       });
 
       expect(container.name).toBe("alchemy-test-container");
@@ -24,4 +24,3 @@ describe("DockerContainer", () => {
     }
   });
 });
-
