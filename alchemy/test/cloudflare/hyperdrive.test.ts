@@ -1,7 +1,10 @@
 import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy.js";
 import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import type { HyperdriveResource } from "../../src/cloudflare/hyperdrive.js";
+import {
+  Hyperdrive,
+  type HyperdriveResource,
+} from "../../src/cloudflare/hyperdrive.js";
 import { Worker } from "../../src/cloudflare/worker.js";
 import { destroy } from "../../src/destroy.js";
 import { NeonProject } from "../../src/neon/project.js";
