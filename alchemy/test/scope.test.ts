@@ -62,57 +62,52 @@ describe("Scope", () => {
       });
 
       const serialized: any = await serializeScope(scope.root);
+
+      const fqn = scope.chain.join("/");
+
       expect(serialized).toEqual({
-        "samgoodwin/samgoodwin-scope.test.ts/serialized scope should be equal to the original scope/foo":
-          {
-            "Symbol(alchemy::ResourceKind)": "fs::File",
-            "Symbol(alchemy::ResourceID)": "foo",
-            "Symbol(alchemy::ResourceFQN)":
-              "samgoodwin/samgoodwin-scope.test.ts/serialized scope should be equal to the original scope/foo",
-            "Symbol(alchemy::ResourceScope)": {
-              "@scope": null,
-            },
-            "Symbol(alchemy::ResourceSeq)": 0,
-            path: "test2.txt",
-            content: "Hello World",
+        [`${fqn}/foo`]: {
+          "Symbol(alchemy::ResourceKind)": "fs::File",
+          "Symbol(alchemy::ResourceID)": "foo",
+          "Symbol(alchemy::ResourceFQN)": `${fqn}/foo`,
+          "Symbol(alchemy::ResourceScope)": {
+            "@scope": null,
           },
-        "samgoodwin/samgoodwin-scope.test.ts/serialized scope should be equal to the original scope/bar/baz":
-          {
-            "Symbol(alchemy::ResourceKind)": "fs::File",
-            "Symbol(alchemy::ResourceID)": "baz",
-            "Symbol(alchemy::ResourceFQN)":
-              "samgoodwin/samgoodwin-scope.test.ts/serialized scope should be equal to the original scope/bar/baz",
-            "Symbol(alchemy::ResourceScope)": {
-              "@scope": null,
-            },
-            "Symbol(alchemy::ResourceSeq)": 0,
-            path: "test3.txt",
-            content: "Hello World",
+          "Symbol(alchemy::ResourceSeq)": 0,
+          path: "test2.txt",
+          content: "Hello World",
+        },
+        [`${fqn}/bar/baz`]: {
+          "Symbol(alchemy::ResourceKind)": "fs::File",
+          "Symbol(alchemy::ResourceID)": "baz",
+          "Symbol(alchemy::ResourceFQN)": `${fqn}/bar/baz`,
+          "Symbol(alchemy::ResourceScope)": {
+            "@scope": null,
           },
-        "samgoodwin/samgoodwin-scope.test.ts/serialized scope should be equal to the original scope/bar/gaz":
-          {
-            "Symbol(alchemy::ResourceKind)": "Nested",
-            "Symbol(alchemy::ResourceID)": "gaz",
-            "Symbol(alchemy::ResourceFQN)":
-              "samgoodwin/samgoodwin-scope.test.ts/serialized scope should be equal to the original scope/bar/gaz",
-            "Symbol(alchemy::ResourceScope)": {
-              "@scope": null,
-            },
-            "Symbol(alchemy::ResourceSeq)": 1,
+          "Symbol(alchemy::ResourceSeq)": 0,
+          path: "test3.txt",
+          content: "Hello World",
+        },
+        [`${fqn}/bar/gaz`]: {
+          "Symbol(alchemy::ResourceKind)": "Nested",
+          "Symbol(alchemy::ResourceID)": "gaz",
+          "Symbol(alchemy::ResourceFQN)": `${fqn}/bar/gaz`,
+          "Symbol(alchemy::ResourceScope)": {
+            "@scope": null,
           },
-        "samgoodwin/samgoodwin-scope.test.ts/serialized scope should be equal to the original scope/bar/gaz/file":
-          {
-            "Symbol(alchemy::ResourceKind)": "fs::File",
-            "Symbol(alchemy::ResourceID)": "file",
-            "Symbol(alchemy::ResourceFQN)":
-              "samgoodwin/samgoodwin-scope.test.ts/serialized scope should be equal to the original scope/bar/gaz/file",
-            "Symbol(alchemy::ResourceScope)": {
-              "@scope": null,
-            },
-            "Symbol(alchemy::ResourceSeq)": 0,
-            path: "test4.txt",
-            content: "Hello World",
+          "Symbol(alchemy::ResourceSeq)": 1,
+        },
+        [`${fqn}/bar/gaz/file`]: {
+          "Symbol(alchemy::ResourceKind)": "fs::File",
+          "Symbol(alchemy::ResourceID)": "file",
+          "Symbol(alchemy::ResourceFQN)": `${fqn}/bar/gaz/file`,
+          "Symbol(alchemy::ResourceScope)": {
+            "@scope": null,
           },
+          "Symbol(alchemy::ResourceSeq)": 0,
+          path: "test4.txt",
+          content: "Hello World",
+        },
       });
     } finally {
       await destroy(scope);
