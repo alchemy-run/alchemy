@@ -701,6 +701,9 @@ export const _Worker = Resource(
     };
 
     if (this.phase === "delete") {
+      // Delete any queue consumers attached to this worker first
+      await deleteQueueConsumers(this, api, workerName);
+
       await uploadWorkerScript({
         ...props,
         entrypoint: undefined,
@@ -776,8 +779,6 @@ export async function deleteWorker<B extends Bindings>(
   props: WorkerProps<B> & { workerName: string },
 ) {
   const workerName = props.workerName;
-  // Delete any queue consumers attached to this worker first
-  await deleteQueueConsumers(ctx, api, workerName);
 
   // Delete worker
   const deleteResponse = await api.delete(
