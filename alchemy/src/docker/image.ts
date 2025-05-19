@@ -1,6 +1,6 @@
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import { DockerApi } from "./api";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { DockerApi } from "./api.js";
 
 /**
  * Properties for creating a Docker image
@@ -25,7 +25,9 @@ export interface DockerRemoteImageProps {
 /**
  * Docker Remote Image resource
  */
-export interface DockerRemoteImage extends Resource<"docker::RemoteImage">, DockerRemoteImageProps {
+export interface DockerRemoteImage
+  extends Resource<"docker::RemoteImage">,
+    DockerRemoteImageProps {
   /**
    * Full image reference (name:tag)
    */
@@ -39,21 +41,25 @@ export interface DockerRemoteImage extends Resource<"docker::RemoteImage">, Dock
 
 /**
  * Create or reference a Docker Remote Image
- * 
+ *
  * @example
  * // Pull the nginx image
  * const nginxImage = await DockerRemoteImage("nginx", {
  *   name: "nginx",
  *   tag: "latest"
  * });
- * 
+ *
  */
 export const DockerRemoteImage = Resource(
   "docker::RemoteImage",
-  async function(this: Context<DockerRemoteImage>, id: string, props: DockerRemoteImageProps): Promise<DockerRemoteImage> {
+  async function (
+    this: Context<DockerRemoteImage>,
+    id: string,
+    props: DockerRemoteImageProps,
+  ): Promise<DockerRemoteImage> {
     // Initialize Docker API client
     const api = new DockerApi();
-    
+
     // Normalize properties
     const tag = props.tag || "latest";
     const imageRef = `${props.name}:${tag}`;
@@ -61,12 +67,14 @@ export const DockerRemoteImage = Resource(
     // Check if Docker daemon is running
     const isRunning = await api.isRunning();
     if (!isRunning) {
-      console.warn("⚠️ Docker daemon is not running. Creating a mock image resource.");
+      console.warn(
+        "⚠️ Docker daemon is not running. Creating a mock image resource.",
+      );
       // Return a mock image resource
       return this({
         ...props,
         imageRef,
-        createdAt: Date.now()
+        createdAt: Date.now(),
       });
     }
 
@@ -90,5 +98,5 @@ export const DockerRemoteImage = Resource(
         throw error;
       }
     }
-  }
+  },
 );

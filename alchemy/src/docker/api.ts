@@ -34,18 +34,18 @@ export class DockerApi {
    */
   async exec(args: string[]): Promise<{ stdout: string; stderr: string }> {
     const command = `${this.dockerPath} ${args.join(" ")}`;
-    const result = await exec(command, {
+    const result = (await exec(command, {
       captureOutput: true,
       shell: true,
-      env: process.env
-    }) as { stdout: string; stderr: string };
-    
+      env: process.env,
+    })) as { stdout: string; stderr: string };
+
     return result;
   }
 
   /**
    * Check if Docker daemon is running
-   * 
+   *
    * @returns True if Docker daemon is running
    */
   async isRunning(): Promise<boolean> {
@@ -54,14 +54,16 @@ export class DockerApi {
       await this.exec(["version", "--format", "{{.Server.Version}}"]);
       return true;
     } catch (error) {
-      console.log(`Docker daemon not running: ${error instanceof Error ? error.message : String(error)}`);
+      console.log(
+        `Docker daemon not running: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return false;
     }
   }
-  
+
   /**
    * Pull Docker image
-   * 
+   *
    * @param image Image name and tag
    * @returns Result of the pull command
    */
@@ -71,25 +73,29 @@ export class DockerApi {
 
   /**
    * Build Docker image
-   * 
+   *
    * @param path Path to Dockerfile directory
    * @param tag Tag for the image
    * @param buildArgs Build arguments
    * @returns Result of the build command
    */
-  async buildImage(path: string, tag: string, buildArgs: Record<string, string> = {}): Promise<{ stdout: string; stderr: string }> {
+  async buildImage(
+    path: string,
+    tag: string,
+    buildArgs: Record<string, string> = {},
+  ): Promise<{ stdout: string; stderr: string }> {
     const args = ["build", "-t", tag, path];
-    
+
     for (const [key, value] of Object.entries(buildArgs)) {
       args.push("--build-arg", `${key}=${value}`);
     }
-    
+
     return this.exec(args);
   }
 
   /**
    * List Docker images
-   * 
+   *
    * @returns JSON string containing image list
    */
   async listImages(): Promise<string> {
@@ -99,59 +105,59 @@ export class DockerApi {
 
   /**
    * Create Docker container
-   * 
+   *
    * @param image Image name
    * @param name Container name
    * @param options Container options
    * @returns Container ID
    */
   async createContainer(
-    image: string, 
-    name: string, 
+    image: string,
+    name: string,
     options: {
       ports?: Record<string, string>;
       env?: Record<string, string>;
       volumes?: Record<string, string>;
       cmd?: string[];
-    } = {}
+    } = {},
   ): Promise<string> {
     const args = ["create", "--name", name];
-    
+
     // Add port mappings
     if (options.ports) {
       for (const [hostPort, containerPort] of Object.entries(options.ports)) {
         args.push("-p", `${hostPort}:${containerPort}`);
       }
     }
-    
+
     // Add environment variables
     if (options.env) {
       for (const [key, value] of Object.entries(options.env)) {
         args.push("-e", `${key}=${value}`);
       }
     }
-    
+
     // Add volume mappings
     if (options.volumes) {
       for (const [hostPath, containerPath] of Object.entries(options.volumes)) {
         args.push("-v", `${hostPath}:${containerPath}`);
       }
     }
-    
+
     args.push(image);
-    
+
     // Add command if specified
     if (options.cmd && options.cmd.length > 0) {
       args.push(...options.cmd);
     }
-    
+
     const { stdout } = await this.exec(args);
     return stdout.trim();
   }
 
   /**
    * Start Docker container
-   * 
+   *
    * @param containerId Container ID or name
    */
   async startContainer(containerId: string): Promise<void> {
@@ -160,7 +166,7 @@ export class DockerApi {
 
   /**
    * Stop Docker container
-   * 
+   *
    * @param containerId Container ID or name
    */
   async stopContainer(containerId: string): Promise<void> {
@@ -169,7 +175,7 @@ export class DockerApi {
 
   /**
    * Remove Docker container
-   * 
+   *
    * @param containerId Container ID or name
    * @param force Force removal
    */
@@ -184,7 +190,7 @@ export class DockerApi {
 
   /**
    * Get container logs
-   * 
+   *
    * @param containerId Container ID or name
    * @returns Container logs
    */
@@ -195,7 +201,7 @@ export class DockerApi {
 
   /**
    * Check if a container exists
-   * 
+   *
    * @param containerId Container ID or name
    * @returns True if container exists
    */
@@ -210,19 +216,25 @@ export class DockerApi {
 
   /**
    * Create Docker network
-   * 
+   *
    * @param name Network name
    * @param driver Network driver
    * @returns Network ID
    */
   async createNetwork(name: string, driver = "bridge"): Promise<string> {
-    const { stdout } = await this.exec(["network", "create", "--driver", driver, name]);
+    const { stdout } = await this.exec([
+      "network",
+      "create",
+      "--driver",
+      driver,
+      name,
+    ]);
     return stdout.trim();
   }
 
   /**
    * Remove Docker network
-   * 
+   *
    * @param networkId Network ID or name
    */
   async removeNetwork(networkId: string): Promise<void> {
@@ -231,7 +243,7 @@ export class DockerApi {
 
   /**
    * Connect container to network
-   * 
+   *
    * @param containerId Container ID or name
    * @param networkId Network ID or name
    */
@@ -240,7 +252,7 @@ export class DockerApi {
     networkId: string,
     options: {
       aliases?: string[];
-    } = {}
+    } = {},
   ): Promise<void> {
     const args = ["network", "connect"];
     if (options.aliases) {
@@ -254,11 +266,14 @@ export class DockerApi {
 
   /**
    * Disconnect container from network
-   * 
+   *
    * @param containerId Container ID or name
    * @param networkId Network ID or name
    */
-  async disconnectNetwork(containerId: string, networkId: string): Promise<void> {
+  async disconnectNetwork(
+    containerId: string,
+    networkId: string,
+  ): Promise<void> {
     await this.exec(["network", "disconnect", networkId, containerId]);
   }
 }

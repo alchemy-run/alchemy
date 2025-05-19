@@ -1,6 +1,6 @@
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import { DockerApi } from "./api";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { DockerApi } from "./api.js";
 
 /**
  * Properties for creating a Docker network
@@ -32,7 +32,9 @@ export interface DockerNetworkProps {
 /**
  * Docker Network resource
  */
-export interface DockerNetwork extends Resource<"docker::Network">, DockerNetworkProps {
+export interface DockerNetwork
+  extends Resource<"docker::Network">,
+    DockerNetworkProps {
   /**
    * Network ID
    */
@@ -46,15 +48,15 @@ export interface DockerNetwork extends Resource<"docker::Network">, DockerNetwor
 
 /**
  * Create and manage a Docker Network
- * 
+ *
  * @see https://docs.docker.com/engine/network/
- * 
+ *
  * @example
  * // Create a simple bridge network
  * const appNetwork = await DockerNetwork("app-network", {
  *   name: "app-network"
  * });
- * 
+ *
  * @example
  * // Create a custom network with driver
  * const overlayNetwork = await DockerNetwork("overlay-network", {
@@ -68,19 +70,25 @@ export interface DockerNetwork extends Resource<"docker::Network">, DockerNetwor
  */
 export const DockerNetwork = Resource(
   "docker::Network",
-  async function(this: Context<DockerNetwork>, id: string, props: DockerNetworkProps): Promise<DockerNetwork> {
+  async function (
+    this: Context<DockerNetwork>,
+    id: string,
+    props: DockerNetworkProps,
+  ): Promise<DockerNetwork> {
     // Initialize Docker API client
     const api = new DockerApi();
 
     // Check if Docker daemon is running
     const isRunning = await api.isRunning();
     if (!isRunning) {
-      console.warn("⚠️ Docker daemon is not running. Creating a mock network resource.");
+      console.warn(
+        "⚠️ Docker daemon is not running. Creating a mock network resource.",
+      );
       // Return a mock network resource
       return this({
         ...props,
         id: `mock-${props.name}-${Date.now()}`,
-        createdAt: Date.now()
+        createdAt: Date.now(),
       });
     }
 
@@ -107,12 +115,12 @@ export const DockerNetwork = Resource(
         return this({
           ...props,
           id: networkId,
-          createdAt: Date.now()
+          createdAt: Date.now(),
         });
       } catch (error) {
         console.error("Error creating network:", error);
         throw error;
       }
     }
-  }
+  },
 );

@@ -1,5 +1,9 @@
-import { alchemy } from "../../alchemy/src/alchemy";
-import { DockerContainer, DockerNetwork, DockerRemoteImage } from "../../alchemy/src/docker";
+import alchemy from "alchemy";
+import {
+  DockerContainer,
+  DockerNetwork,
+  DockerRemoteImage,
+} from "alchemy/docker";
 
 // Initialize Alchemy
 const app = await alchemy("docker-example", {
@@ -23,74 +27,68 @@ const stack = app.stage || "dev";
 // Create a Docker network
 const network = await DockerNetwork("network", {
   name: `services-${stack}`,
-  driver: "bridge"
+  driver: "bridge",
 });
 
 // Pull the images in parallel
 const [backend, frontend, mongoImage] = await Promise.all([
-  DockerRemoteImage(`backendImage`, {
+  DockerRemoteImage("backendImage", {
     name: "pulumi/tutorial-pulumi-fundamentals-backend",
-    tag: "latest"
+    tag: "latest",
   }),
-  DockerRemoteImage(`frontendImage`, {
+  DockerRemoteImage("frontendImage", {
     name: "pulumi/tutorial-pulumi-fundamentals-frontend",
-    tag: "latest"
+    tag: "latest",
   }),
   DockerRemoteImage("mongoImage", {
     name: "pulumi/tutorial-pulumi-fundamentals-database",
-    tag: "latest"
-  })
+    tag: "latest",
+  }),
 ]);
 
 // Create the MongoDB container
 const mongoContainer = await DockerContainer("mongoContainer", {
   image: mongoImage,
   name: `mongo-${stack}`,
-  ports: [
-    { external: mongoPort, internal: mongoPort }
-  ],
+  ports: [{ external: mongoPort, internal: mongoPort }],
   networks: [
     {
       name: network.name,
-      aliases: ["mongo"]
-    }
+      aliases: ["mongo"],
+    },
   ],
   restart: "always",
-  start: true
+  start: true,
 });
 
 // Create the backend container
 const backendContainer = await DockerContainer("backendContainer", {
   image: backend,
   name: `backend-${stack}`,
-  ports: [
-    { external: backendPort, internal: backendPort }
-  ],
+  ports: [{ external: backendPort, internal: backendPort }],
   environment: {
     DATABASE_HOST: mongoHost,
     DATABASE_NAME: database,
-    NODE_ENV: nodeEnvironment
+    NODE_ENV: nodeEnvironment,
   },
   networks: [network],
   restart: "always",
-  start: true
+  start: true,
 });
 
 // Create the frontend container
 const frontendContainer = await DockerContainer("frontendContainer", {
   image: frontend,
   name: `frontend-${stack}`,
-  ports: [
-    { external: frontendPort, internal: frontendPort }
-  ],
+  ports: [{ external: frontendPort, internal: frontendPort }],
   environment: {
     PORT: frontendPort.toString(),
     HTTP_PROXY: `${backendContainer.name}:${backendPort}`,
-    PROXY_PROTOCOL: protocol
+    PROXY_PROTOCOL: protocol,
   },
   networks: [network],
   restart: "always",
-  start: true
+  start: true,
 });
 
 await app.finalize();

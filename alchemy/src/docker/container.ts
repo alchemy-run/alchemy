@@ -1,7 +1,7 @@
-import type { Context } from "../context";
-import { Resource } from "../resource";
-import { DockerApi } from "./api";
-import { DockerRemoteImage } from "./image";
+import type { Context } from "../context.js";
+import { Resource } from "../resource.js";
+import { DockerApi } from "./api.js";
+import type { DockerRemoteImage } from "./image.js";
 
 /**
  * Port mapping configuration
@@ -117,7 +117,9 @@ export interface DockerContainerProps {
 /**
  * Docker Container resource
  */
-export interface DockerContainer extends Resource<"docker::Container">, DockerContainerProps {
+export interface DockerContainer
+  extends Resource<"docker::Container">,
+    DockerContainerProps {
   /**
    * Container ID
    */
@@ -136,7 +138,7 @@ export interface DockerContainer extends Resource<"docker::Container">, DockerCo
 
 /**
  * Create and manage a Docker Container
- * 
+ *
  * @example
  * // Create a simple Nginx container
  * const webContainer = await DockerContainer("web", {
@@ -146,7 +148,7 @@ export interface DockerContainer extends Resource<"docker::Container">, DockerCo
  *   ],
  *   start: true
  * });
- * 
+ *
  * @example
  * // Create a container with environment variables and volume mounts
  * const appContainer = await DockerContainer("app", {
@@ -167,29 +169,37 @@ export interface DockerContainer extends Resource<"docker::Container">, DockerCo
  */
 export const DockerContainer = Resource(
   "docker::Container",
-  async function(this: Context<DockerContainer>, id: string, props: DockerContainerProps): Promise<DockerContainer> {
+  async function (
+    this: Context<DockerContainer>,
+    id: string,
+    props: DockerContainerProps,
+  ): Promise<DockerContainer> {
     // Initialize Docker API client
     const api = new DockerApi();
-    
+
     // Get image reference
-    const imageRef = typeof props.image === "string" 
-      ? props.image 
-      : props.image.imageRef;
+    const imageRef =
+      typeof props.image === "string" ? props.image : props.image.imageRef;
 
     // Use provided name or generate one based on resource ID
-    const containerName = props.name || `alchemy-${id.replace(/[^a-zA-Z0-9_.-]/g, "-")}`;  
+    const containerName =
+      props.name || `alchemy-${id.replace(/[^a-zA-Z0-9_.-]/g, "-")}`;
 
     // Check if Docker daemon is running
     const isRunning = await api.isRunning();
     if (!isRunning) {
-      console.warn("⚠️ Docker daemon is not running. Creating a mock container resource.");
+      console.warn(
+        "⚠️ Docker daemon is not running. Creating a mock container resource.",
+      );
       // Return a mock container resource with properly typed state
-      const containerState: "created" | "running" = props.start ? "running" : "created";
+      const containerState: "created" | "running" = props.start
+        ? "running"
+        : "created";
       return this({
         ...props,
         id: `mock-${containerName}-${Date.now()}`,
         state: containerState,
-        createdAt: Date.now()
+        createdAt: Date.now(),
       });
     }
 
@@ -240,7 +250,8 @@ export const DockerContainer = Resource(
         if (props.volumes) {
           for (const volume of props.volumes) {
             const readOnlyFlag = volume.readOnly ? ":ro" : "";
-            volumeMappings[volume.hostPath] = `${volume.containerPath}${readOnlyFlag}`;
+            volumeMappings[volume.hostPath] =
+              `${volume.containerPath}${readOnlyFlag}`;
           }
         }
 
@@ -249,15 +260,16 @@ export const DockerContainer = Resource(
           ports: portMappings,
           env: props.environment,
           volumes: volumeMappings,
-          cmd: props.command
+          cmd: props.command,
         });
 
         // Connect to networks if specified
         if (props.networks) {
           for (const network of props.networks) {
-            const networkId = typeof network === "string" ? network : network.name;
+            const networkId =
+              typeof network === "string" ? network : network.name;
             await api.connectNetwork(containerId, networkId, {
-              aliases: network.aliases
+              aliases: network.aliases,
             });
           }
         }
@@ -280,5 +292,5 @@ export const DockerContainer = Resource(
         throw error;
       }
     }
-  }
+  },
 );
