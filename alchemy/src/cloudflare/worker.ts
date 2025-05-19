@@ -703,6 +703,9 @@ export const _Worker = Resource(
     if (this.phase === "delete") {
       await uploadWorkerScript({
         ...props,
+        entrypoint: undefined,
+        script:
+          "export default { fetch(request) { return new Response('hello world'); } }",
         // clear the bindings so that we can delete the worker
         bindings: {} as B,
       });

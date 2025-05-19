@@ -12,7 +12,11 @@ const app = await alchemy("my-bootstrap-ap", {
 
 const queue = await Queue<string>("my-bootstrap-queue");
 
-const bucket = await R2Bucket("my-bootstrap-bucket");
+const bucket = await R2Bucket("my-bootstrap-bucket", {
+  accessKey: await alchemy.secret.env.R2_ACCESS_KEY_ID,
+  secretAccessKey: await alchemy.secret.env.R2_SECRET_ACCESS_KEY,
+  empty: true,
+});
 
 const kv = await KVNamespace("my-bootstrap-kv");
 
@@ -63,12 +67,9 @@ export default Worker("worker", import.meta, {
       },
     ]);
     await kv.put("key", "value");
-    return otherWorker.fetch(
+    await otherWorker.fetch(
       new Request("https://example.com/post", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(
           {
             key: obj.key,
@@ -79,6 +80,7 @@ export default Worker("worker", import.meta, {
         ),
       }),
     );
+    return new Response("hello world");
   },
 });
 

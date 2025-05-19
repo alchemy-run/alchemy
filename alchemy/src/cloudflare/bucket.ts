@@ -199,6 +199,9 @@ const R2BucketResource = Resource(
           const r2Client = await createR2Client({
             ...props,
             accountId: api.accountId,
+            accessKeyId: props.accessKey ?? this.output.accessKey,
+            secretAccessKey:
+              props.secretAccessKey ?? this.output.secretAccessKey,
           });
           // Empty the bucket first by deleting all objects
           await emptyBucket(r2Client, bucketName, props.jurisdiction);

@@ -58,9 +58,6 @@ export class Secret {
     readonly unencrypted: string,
     readonly name: string = nextName(),
   ) {
-    if (name in globalSecrets) {
-      throw new Error(`Secret ${name} already exists`);
-    }
     globalSecrets[name] = this;
   }
 }
