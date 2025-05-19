@@ -110,10 +110,6 @@ describe("NeonProject Resource", () => {
       const getUpdatedResponse = await api.get(`/projects/${project.id}`);
       const updatedData: any = await getUpdatedResponse.json();
       expect(updatedData.project.name).toEqual(updatedName);
-    } catch (err) {
-      // log the error or else it's silently swallowed by destroy errors
-      console.log(err);
-      throw err;
     } finally {
       // Always clean up, even if test assertions fail
       await destroy(scope);

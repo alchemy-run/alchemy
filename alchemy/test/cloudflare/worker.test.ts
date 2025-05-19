@@ -629,6 +629,7 @@ describe("Worker Resource", () => {
         name: workerName,
         script: doMigrationWorkerScriptV1,
         format: "esm",
+        adopt: true,
       });
 
       // Apply to create the worker first

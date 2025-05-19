@@ -66,10 +66,6 @@ describe("AiGateway Resource", () => {
       expect(updatedData.result.rate_limiting_technique).toEqual("sliding");
       expect(updatedData.result.rate_limiting_interval).toEqual(60);
       expect(updatedData.result.rate_limiting_limit).toEqual(100);
-    } catch (err) {
-      // log the error or else it's silently swallowed by destroy errors
-      console.log(err);
-      throw err;
     } finally {
       // Always clean up, even if test assertions fail
       await destroy(scope);

@@ -194,6 +194,19 @@ export async function prepareWorkerMetadata<B extends Bindings>(
   },
   assetUploadResult?: AssetUploadResult,
 ): Promise<WorkerMetadata> {
+  const deletedClasses = Object.entries(oldBindings ?? {})
+    .filter(([key]) => !props.bindings?.[key])
+    .flatMap(([_, binding]) => {
+      if (
+        binding &&
+        typeof binding === "object" &&
+        binding.type === "durable_object_namespace"
+      ) {
+        return [binding.className];
+      }
+      return [];
+    });
+
   // Prepare metadata with bindings
   const meta: WorkerMetadata = {
     compatibility_date: props.compatibilityDate,
@@ -206,7 +219,10 @@ export async function prepareWorkerMetadata<B extends Bindings>(
     tags: [`alchemy:id:${slugify(ctx.fqn)}`],
     migrations: {
       new_classes: props.migrations?.new_classes ?? [],
-      deleted_classes: props.migrations?.deleted_classes ?? [],
+      deleted_classes: [
+        ...deletedClasses,
+        ...(props.migrations?.deleted_classes ?? []),
+      ],
       renamed_classes: props.migrations?.renamed_classes ?? [],
       transferred_classes: props.migrations?.transferred_classes ?? [],
       new_sqlite_classes: props.migrations?.new_sqlite_classes ?? [],

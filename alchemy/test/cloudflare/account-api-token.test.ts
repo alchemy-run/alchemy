@@ -90,10 +90,6 @@ describe("AccountApiToken Resource", () => {
       );
       const updatedData: any = await getUpdatedResponse.json();
       expect(updatedData.result.name).toEqual(`Updated Token ${testId}`);
-    } catch (err) {
-      // Log the error or else it's silently swallowed by destroy errors
-      console.log(err);
-      throw err;
     } finally {
       // Always clean up, even if test assertions fail
       await destroy(scope);

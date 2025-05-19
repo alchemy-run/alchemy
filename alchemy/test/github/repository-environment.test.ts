@@ -99,10 +99,6 @@ describe("RepositoryEnvironment Resource", () => {
             (rule) => rule.type === "wait_timer",
           );
         expect((updatedWaitTimerRule as any)?.wait_timer).toEqual(10);
-      } catch (err) {
-        // log the error or else it's silently swallowed by destroy errors
-        console.log(err);
-        throw err;
       } finally {
         // Always clean up, even if test assertions fail
         await destroy(scope);
@@ -282,9 +278,6 @@ describe("RepositoryEnvironment Resource", () => {
           (rule) => rule.type === "branch_policy",
         );
         expect(hasBranchPolicy).toBeTruthy();
-      } catch (err) {
-        console.log(err);
-        throw err;
       } finally {
         await destroy(scope);
 
@@ -367,9 +360,6 @@ describe("RepositoryEnvironment Resource", () => {
         );
 
       expect(updatedReviewerRules?.length).toBeGreaterThan(0);
-    } catch (err) {
-      console.log(err);
-      throw err;
     } finally {
       await destroy(scope);
 

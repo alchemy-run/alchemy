@@ -138,10 +138,6 @@ describe("Zone Resource", () => {
       expect(getSetting("development_mode")).toEqual("on");
       expect(getSetting("ipv6")).toEqual("on");
       expect(getSetting("websockets")).toEqual("on");
-    } catch (err) {
-      // log the error or else it's silently swallowed by destroy errors
-      console.log(err);
-      throw err;
     } finally {
       // Always clean up, even if test assertions fail
       await destroy(scope);

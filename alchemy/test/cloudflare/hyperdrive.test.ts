@@ -120,10 +120,6 @@ describe("Hyperdrive Resource", () => {
         `updated-hyperdrive-${BRANCH_PREFIX}`,
       );
       expect(updatedData.result.caching.disabled).toEqual(true);
-    } catch (err) {
-      // log the error or else it's silently swallowed by destroy errors
-      console.log(err);
-      throw err;
     } finally {
       // Always clean up, even if test assertions fail
       await destroy(scope);

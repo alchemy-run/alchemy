@@ -577,12 +577,12 @@ export const _Worker = Resource(
     // Use the provided name
     const workerName = props.name ?? id;
 
-    const oldBindings = await this.get<Bindings>("bindings");
-
     const compatibilityDate = props.compatibilityDate ?? "2025-04-20";
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
     const uploadWorkerScript = async (props: WorkerProps<B>) => {
+      const oldBindings = await this.get<Bindings>("bindings");
+
       // Get the script content - either from props.script, or by bundling
       const scriptContent =
         props.script ??
@@ -639,6 +639,9 @@ export const _Worker = Resource(
 
       await putWorker(api, workerName, scriptContent, scriptMetadata);
 
+      // TODO: it is less than ideal that this can fail, resulting in state problem
+      await this.set("bindings", props.bindings);
+
       for (const workflow of workflowsBindings) {
         await upsertWorkflow(api, {
           workflowName: workflow.workflowName,
@@ -665,9 +668,6 @@ export const _Worker = Resource(
           throw new Error(`Unsupported event source type: ${eventSource}`);
         }) ?? [],
       );
-
-      // TODO: it is less than ideal that this can fail, resulting in state problem
-      await this.set("bindings", props.bindings);
 
       // Handle worker URL if requested
       const workerUrl = await configureURL(
@@ -697,7 +697,7 @@ export const _Worker = Resource(
         }
       }
 
-      return { scriptMetadata, workerUrl, now };
+      return { scriptContent, scriptMetadata, workerUrl, now };
     };
 
     if (this.phase === "delete") {
@@ -705,8 +705,9 @@ export const _Worker = Resource(
         ...props,
         entrypoint: undefined,
         script:
-          "export default { fetch(request) { return new Response('hello world'); } }",
-        // clear the bindings so that we can delete the worker
+          props.format === "cjs"
+            ? "addEventListener('fetch', event => { event.respondWith(new Response('hello world')); });"
+            : "export default { fetch(request) { return new Response('hello world'); } }",
         bindings: {} as B,
       });
 
