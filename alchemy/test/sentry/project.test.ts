@@ -37,7 +37,7 @@ describe("Project Resource", () => {
         name: `Test Project ${testId}`,
         slug: testId,
         platform: "node-express",
-        team: team.slug,
+        team: team.slug!,
         organization,
       });
 
@@ -45,7 +45,7 @@ describe("Project Resource", () => {
       expect(project.name).toEqual(`Test Project ${testId}`);
 
       // Verify project was created by querying the API directly
-      const getResponse = await api.get(
+      const getResponse: any = await api.get(
         `/projects/${project.organization}/${project.slug}/`,
       );
       expect(getResponse.status).toEqual(200);
@@ -58,7 +58,7 @@ describe("Project Resource", () => {
         name: `Updated Project ${testId}`,
         slug: testId,
         platform: "node-express",
-        team: team.slug,
+        team: team.slug!,
         organization,
       });
 
@@ -69,7 +69,7 @@ describe("Project Resource", () => {
       const getUpdatedResponse = await api.get(
         `/projects/${project.organization}/${project.slug}/`,
       );
-      const updatedData = await getUpdatedResponse.json();
+      const updatedData: any = await getUpdatedResponse.json();
       expect(updatedData.name).toEqual(`Updated Project ${testId}`);
     } catch (err) {
       // log the error or else it's silently swallowed by destroy errors
@@ -105,7 +105,7 @@ describe("Project Resource", () => {
         name: `Test Project ${testId}`,
         slug: testId,
         platform: "node-express",
-        team: team.slug,
+        team: team.slug!,
         organization,
       });
 
@@ -114,7 +114,7 @@ describe("Project Resource", () => {
         name: `Test Project ${testId}`,
         slug: testId,
         platform: "node-express",
-        team: team.slug,
+        team: team.slug!,
         organization,
         adopt: true,
       });

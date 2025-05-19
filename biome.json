@@ -8,7 +8,9 @@
       "./stacks/**/*.ts",
       "./examples/*/src/**/*.ts",
       "./examples/*/*.ts",
-      "!**/node_modules"
+      "!**/node_modules",
+      "!examples/cloudflare-tanstack-start/src/routeTree.gen.ts",
+      "!examples/cloudflare-redwood/worker-configuration.d.ts"
     ]
   },
   "assist": {

@@ -40,14 +40,14 @@ describe("ClientKey Resource", () => {
         name: `Test Project ${projectId}`,
         slug: projectId,
         platform: "node-express",
-        team: team.slug,
+        team: team.slug!,
         organization,
       });
 
       // Create a test client key
       key = await ClientKey(testId, {
         name: `Test Key ${testId}`,
-        project: project.slug,
+        project: project.slug!,
         organization,
       });
 
@@ -60,13 +60,13 @@ describe("ClientKey Resource", () => {
       );
       expect(getResponse.status).toEqual(200);
 
-      const responseData = await getResponse.json();
+      const responseData: any = await getResponse.json();
       expect(responseData.name).toEqual(`Test Key ${testId}`);
 
       // Update the key
       key = await ClientKey(testId, {
         name: `Updated Key ${testId}`,
-        project: project.slug,
+        project: project.slug!,
         organization,
       });
 
@@ -77,7 +77,7 @@ describe("ClientKey Resource", () => {
       const getUpdatedResponse = await api.get(
         `/projects/${key.organization}/${key.project}/keys/${key.id}/`,
       );
-      const updatedData = await getUpdatedResponse.json();
+      const updatedData: any = await getUpdatedResponse.json();
       expect(updatedData.name).toEqual(`Updated Key ${testId}`);
     } catch (err) {
       // log the error or else it's silently swallowed by destroy errors
@@ -114,21 +114,21 @@ describe("ClientKey Resource", () => {
         name: `Test Project ${projectId}`,
         slug: projectId,
         platform: "node-express",
-        team: team.slug,
+        team: team.slug!,
         organization,
       });
 
       // Create a test client key
       key = await ClientKey(testId, {
         name: `Test Key ${testId}`,
-        project: project.slug,
+        project: project.slug!,
         organization,
       });
 
       // Try to create the same key with adopt=true
       const adoptedKey = await ClientKey(testId, {
         name: `Test Key ${testId}`,
-        project: project.slug,
+        project: project.slug!,
         organization,
         adopt: true,
       });
