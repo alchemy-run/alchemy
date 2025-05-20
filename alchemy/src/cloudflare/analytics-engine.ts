@@ -1,35 +1,26 @@
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import type { CloudflareApiOptions } from "./api.js";
-
-/**
- * Properties for creating an Analytics Engine binding
- */
-export interface AnalyticsEngineProps extends CloudflareApiOptions {
+export interface AnalyticsEngineDatasetProps {
   /**
-   * The name of the dataset to bind to
+   * The name of the dataset to bind to -
+   * becomes the table name to query via the api in the FROM clause
    */
   dataset: string;
 }
 
-export interface AnalyticsEngine
-  extends Resource<"cloudflare::AnalyticsEngineBinding">,
-    AnalyticsEngineProps {
-  type: "analytics_engine";
-}
+/**
+ * @example
+ * // Create a binding for an Analytics Engine dataset
+ * const dataset = new AnalyticsEngineDataset("ae-dataset", {
+ *   dataset: "WEATHER",
+ * });
+ */
+export class AnalyticsEngineDataset {
+  public readonly type = "analytics_engine" as const;
+  public readonly dataset: string;
 
-export const AnalyticsEngine = Resource(
-  "cloudflare::AnalyticsEngine",
-  async function (
-    this: Context<AnalyticsEngine>,
-    id: string,
-    props: AnalyticsEngineProps,
-  ): Promise<AnalyticsEngine> {
-    // Analytics engine datasets are not created or deleted by the api
-    // they are created when used, and removed when the data becomes 3 months old
-    return this({
-      type: "analytics_engine",
-      dataset: props.dataset,
-    });
-  },
-);
+  constructor(
+    public readonly id: string,
+    input: AnalyticsEngineDatasetProps,
+  ) {
+    this.dataset = input.dataset;
+  }
+}
