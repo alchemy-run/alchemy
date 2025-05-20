@@ -1,6 +1,7 @@
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import { DockerApi } from "./api.js";
+import type { DockerImage } from "./image.js";
 import type { DockerRemoteImage } from "./remote-image.js";
 
 /**
@@ -64,9 +65,9 @@ export interface NetworkMapping {
 export interface DockerContainerProps {
   /**
    * Image to use for the container
-   * Can be an Alchemy DockerRemoteImage resource or a string image reference
+   * Can be an Alchemy DockerImage or DockerRemoteImage resource or a string image reference
    */
-  image: DockerRemoteImage | string;
+  image: DockerImage | DockerRemoteImage | string;
 
   /**
    * Container name
