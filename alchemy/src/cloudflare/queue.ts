@@ -58,6 +58,14 @@ export interface QueueProps extends CloudflareApiOptions {
    * @default true
    */
   delete?: boolean;
+
+  /**
+   * Whether to adopt an existing queue with the same name if it exists
+   * If true, during creation, if a queue with the same name exists, it will be adopted instead of creating a new one
+   *
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 export function isQueue(eventSource: any): eventSource is Queue {
@@ -180,7 +188,26 @@ const QueueResource = Resource("cloudflare::Queue", async function <
 
   if (this.phase === "create") {
     console.log("Creating Cloudflare Queue:", queueName);
-    queueData = await createQueue(api, queueName, props);
+    try {
+      queueData = await createQueue(api, queueName, props);
+    } catch (error) {
+      if (error instanceof CloudflareApiError && error.status === 409) {
+        if (!props.adopt) {
+          throw error;
+        }
+        // Queue already exists, try to find it by name
+        const existingQueue = await findQueueByName(api, queueName);
+        if (!existingQueue) {
+          throw new Error(
+            `Queue with name ${queueName} not found despite 409 conflict`,
+          );
+        }
+        queueData = existingQueue;
+        queueData = await updateQueue(api, queueData.result.queue_id!, props);
+      } else {
+        throw error;
+      }
+    }
   } else {
     // Update operation
     if (this.output?.id) {
@@ -411,4 +438,57 @@ export async function listQueues(
     name: queue.queue_name,
     id: queue.queue_id,
   }));
+}
+
+/**
+ * Find a Cloudflare Queue by name
+ */
+export async function findQueueByName(
+  api: CloudflareApi,
+  queueName: string,
+): Promise<CloudflareQueueResponse | null> {
+  const response = await api.get(`/accounts/${api.accountId}/queues`);
+
+  if (!response.ok) {
+    return await handleApiError(response, "listing", "Queues", "");
+  }
+
+  const data = (await response.json()) as {
+    success: boolean;
+    errors?: Array<{ code: number; message: string }>;
+    result?: Array<{
+      queue_name: string;
+      queue_id: string;
+      created_on?: string;
+      modified_on?: string;
+      settings?: {
+        delivery_delay?: number;
+        delivery_paused?: boolean;
+        message_retention_period?: number;
+      };
+    }>;
+  };
+
+  if (!data.success) {
+    const errorMessage = data.errors?.[0]?.message || "Unknown error";
+    throw new Error(`Failed to list queues: ${errorMessage}`);
+  }
+
+  const queue = data.result?.find((q) => q.queue_name === queueName);
+  if (!queue) {
+    return null;
+  }
+
+  return {
+    result: {
+      queue_id: queue.queue_id,
+      queue_name: queue.queue_name,
+      created_on: queue.created_on,
+      modified_on: queue.modified_on,
+      settings: queue.settings,
+    },
+    success: true,
+    errors: [],
+    messages: [],
+  };
 }

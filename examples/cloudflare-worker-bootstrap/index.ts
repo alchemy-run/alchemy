@@ -36,9 +36,12 @@ const bucket = await R2Bucket("bucket", {
   empty: true,
 });
 
-const queue = await Queue<Message>("queue");
+const queue = await Queue<Message>("queue", {
+  name: `cloudflare-worker-bootstrap-queue-${BRANCH_PREFIX}`,
+});
 
 const worker = Worker("queue-consumer", import.meta, {
+  name: `cloudflare-worker-bootstrap-${BRANCH_PREFIX}`,
   async fetch(request) {
     const url = new URL(request.url);
     if (url.pathname === "/send") {
