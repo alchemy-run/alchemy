@@ -6,7 +6,7 @@ import {
 } from "alchemy/docker";
 
 // Initialize Alchemy
-const app = await alchemy("docker-example", {
+const app = await alchemy("docker", {
   // Determine the phase based on command line arguments
   phase: process.argv[2] === "destroy" ? "destroy" : "up",
   stage: process.argv[3],

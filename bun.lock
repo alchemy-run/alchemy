@@ -290,8 +290,8 @@
         "alchemy": "workspace:*",
       },
     },
-    "examples/docker-example": {
-      "name": "docker-example",
+    "examples/docker": {
+      "name": "docker",
       "version": "0.0.0",
     },
   },
@@ -2040,7 +2040,7 @@
 
     "dofs": ["dofs@0.0.1", "", { "peerDependencies": { "hono": "^4.7.10" } }, "sha512-vNfYmLREQNQRE0R+ZiUuoW4VkxLZm/M6PHxAlTE5YDwrDIYdSTA0rfZ3Rgp7g2Tkvv5VI9xTt7pUtdMD46eM1Q=="],
 
-    "docker-example": ["docker-example@workspace:examples/docker-example"],
+    "docker": ["docker@workspace:examples/docker"],
 
     "dom-serializer": ["dom-serializer@2.0.0", "", { "dependencies": { "domelementtype": "^2.3.0", "domhandler": "^5.0.2", "entities": "^4.2.0" } }, "sha512-wIkAryiqt/nV5EQKqQpo3SToSOV9J0DnbJqwK7Wv/Trc92zIAYZ4FlMu+JPFW1DfGFt81ZTCGgDEabffXeLyJg=="],
 

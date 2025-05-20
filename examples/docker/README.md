@@ -35,7 +35,7 @@ You can modify these values to customize the application behavior.
 
 1. Navigate to the example directory:
    ```bash
-   cd examples/docker-example
+   cd examples/docker
    ```
 
 2. Run the example with Alchemy:

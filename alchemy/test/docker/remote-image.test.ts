@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy.js";
 import { destroy } from "../../src/destroy.js";
-import { DockerRemoteImage } from "../../src/docker/image.js";
+import { DockerRemoteImage } from "../../src/docker/remote-image.js";
 
 import "../../src/test/bun.js";
 

@@ -1,7 +1,7 @@
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import { DockerApi } from "./api.js";
-import type { DockerRemoteImage } from "./image.js";
+import type { DockerRemoteImage } from "./remote-image.js";
 
 /**
  * Port mapping configuration
