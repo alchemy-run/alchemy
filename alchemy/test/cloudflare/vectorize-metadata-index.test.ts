@@ -96,6 +96,43 @@ describe("Vectorize Metadata Index Resource", async () => {
       await alchemy.destroy(scope);
     }
   });
+
+  test("allows no-op update with same properties", async (scope) => {
+    try {
+      // First create a parent vectorize index
+      const vectorIndex = await VectorizeIndex(`${testId}-parent-noop`, {
+        name: `${testId}-parent-noop`,
+        dimensions: 768,
+        metric: "cosine",
+        adopt: true,
+      });
+
+      // Create a metadata index
+      const metadataIndex = await VectorizeMetadataIndex(`${testId}-noop`, {
+        index: vectorIndex,
+        propertyName: "noop",
+        indexType: "string",
+      });
+
+      expect(metadataIndex.propertyName).toEqual("noop");
+
+      // Attempt a no-op update with the same properties
+      const updatedIndex = await VectorizeMetadataIndex(`${testId}-noop`, {
+        index: vectorIndex,
+        propertyName: "noop",
+        indexType: "string",
+        // @ts-expect-error - Adding a non-existent property to test no-op behavior
+        nonExistentProperty: "test",
+      });
+
+      // Verify the index remains unchanged
+      expect(updatedIndex.propertyName).toEqual("noop");
+      expect(updatedIndex.indexType).toEqual("string");
+      expect(updatedIndex.id).toEqual(metadataIndex.id);
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  });
 });
 
 async function assertMetadataIndexDeleted(

@@ -87,6 +87,7 @@ export function context<
   seq,
   state,
   replace,
+  props,
 }: {
   scope: Scope;
   phase: "create" | "update" | "delete";
@@ -130,7 +131,7 @@ export function context<
     fqn: fqn,
     phase,
     output: state.output,
-    props: state.props,
+    props,
     replace,
     get: (key: string) => state.data[key],
     set: async (key: string, value: any) => {
