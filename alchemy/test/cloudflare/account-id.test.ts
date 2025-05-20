@@ -6,7 +6,9 @@ import { BRANCH_PREFIX } from "../util.js";
 
 import "../../src/test/bun.js";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("Cloudflare Account ID", () => {
   let expectedAccountId: string;
