@@ -46,11 +46,6 @@ export interface Team extends Resource<"sentry::Team">, TeamProps {
   id: string;
 
   /**
-   * Uniquely identifies a team and is used for the interface
-   */
-  slug?: string;
-
-  /**
    * Time at which the team was created
    */
   dateCreated: string;
@@ -131,7 +126,7 @@ export const Team = Resource(
   "sentry::Team",
   async function (
     this: Context<Team>,
-    _id: string,
+    id: string,
     props: TeamProps,
   ): Promise<Team> {
     const api = new SentryApi({ authToken: props.authToken });

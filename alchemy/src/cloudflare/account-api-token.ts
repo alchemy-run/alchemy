@@ -50,12 +50,15 @@ export interface TokenPolicy {
  * @see https://developers.cloudflare.com/fundamentals/api/reference/permissions/
  */
 type TokenPolicyResourceKey =
+  | "com.cloudflare.edge.r2.bucket"
+  | `com.cloudflare.edge.r2.bucket.${string}`
   | `com.cloudflare.api.account`
   | `com.cloudflare.api.account.${string}`
   // | `com.cloudflare.api.account.zone`
   | `com.cloudflare.api.account.zone.${string}`
   // | `com.cloudflare.api.user`
-  | `com.cloudflare.api.user.${string}`;
+  | `com.cloudflare.api.user.${string}`
+  | (string & {});
 
 /**
  * Condition for token usage (e.g., IP restrictions)

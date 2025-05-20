@@ -32,7 +32,7 @@ interface PermissionGroupsResponse {
   messages: any[];
 }
 
-export type PermissionGroupName = R2PermissionGroups;
+export type PermissionGroupName = R2PermissionGroups | (string & {});
 
 export type R2PermissionGroups =
   | "Workers R2 Storage Write"

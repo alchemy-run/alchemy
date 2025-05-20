@@ -102,6 +102,7 @@ await Promise.all([
     UPSTASH_EMAIL: "sam@alchemy.run",
     SENTRY_AUTH_TOKEN: await alchemy.secret.env.SENTRY_AUTH_TOKEN,
     SENTRY_ORG: await alchemy.secret.env.SENTRY_ORG,
+    VERCEL_ACCESS_TOKEN: await alchemy.secret.env.VERCEL_ACCESS_TOKEN,
   }).flatMap(async ([name, value]) => {
     const props = {
       owner: "sam-goodwin",

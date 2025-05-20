@@ -16,10 +16,7 @@
     },
     "alchemy": {
       "name": "alchemy",
-      "version": "0.16.6",
-      "dependencies": {
-        "unenv": "2.0.0-rc.15",
-      },
+      "version": "0.16.7",
       "devDependencies": {
         "@ai-sdk/anthropic": "^1.1.6",
         "@ai-sdk/openai": "^1.1.9",
