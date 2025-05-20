@@ -276,4 +276,76 @@ export class DockerApi {
   ): Promise<void> {
     await this.exec(["network", "disconnect", networkId, containerId]);
   }
+
+  /**
+   * Create Docker volume
+   *
+   * @param name Volume name
+   * @param driver Volume driver
+   * @param driverOpts Driver options
+   * @param labels Volume labels
+   * @returns Volume name
+   */
+  async createVolume(
+    name: string,
+    driver = "local",
+    driverOpts: Record<string, string> = {},
+    labels: Record<string, string> = {},
+  ): Promise<string> {
+    const args = ["volume", "create", "--name", name, "--driver", driver];
+
+    // Add driver options
+    for (const [key, value] of Object.entries(driverOpts)) {
+      args.push("--opt", `${key}=${value}`);
+    }
+
+    // Add labels
+    for (const [key, value] of Object.entries(labels)) {
+      args.push("--label", `${key}=${value}`);
+    }
+
+    const { stdout } = await this.exec(args);
+    return stdout.trim();
+  }
+
+  /**
+   * Remove Docker volume
+   *
+   * @param volumeName Volume name
+   * @param force Force removal of the volume
+   */
+  async removeVolume(volumeName: string, force = false): Promise<void> {
+    const args = ["volume", "rm"];
+    if (force) {
+      args.push("--force");
+    }
+    args.push(volumeName);
+    await this.exec(args);
+  }
+
+  /**
+   * Get Docker volume information
+   *
+   * @param volumeName Volume name
+   * @returns Volume details in JSON format
+   */
+  async inspectVolume(volumeName: string): Promise<string> {
+    const { stdout } = await this.exec(["volume", "inspect", volumeName]);
+    return stdout.trim();
+  }
+
+  /**
+   * Check if a volume exists
+   *
+   * @param volumeName Volume name
+   * @returns True if volume exists
+   */
+  async volumeExists(volumeName: string): Promise<boolean> {
+    try {
+      await this.inspectVolume(volumeName);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
 }

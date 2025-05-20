@@ -17,7 +17,7 @@ function getFixturePath(fixtureName: string): string {
     "test",
     "docker",
     "fixtures",
-    fixtureName
+    fixtureName,
   );
 }
 
@@ -25,11 +25,11 @@ describe("DockerImage", () => {
   test("should build a simple image", async (scope) => {
     try {
       const contextPath = getFixturePath("simple-image");
-      
+
       // Ensure the context path exists
       expect(fs.existsSync(contextPath)).toBe(true);
       expect(fs.existsSync(path.join(contextPath, "Dockerfile"))).toBe(true);
-      
+
       const image = await DockerImage("test-simple-image", {
         name: "alchemy-test",
         tag: "simple",
@@ -55,11 +55,11 @@ describe("DockerImage", () => {
   test("should handle build arguments", async (scope) => {
     try {
       const contextPath = getFixturePath("build-args");
-      
+
       // Ensure the context path exists
       expect(fs.existsSync(contextPath)).toBe(true);
       expect(fs.existsSync(path.join(contextPath, "Dockerfile"))).toBe(true);
-      
+
       const image = await DockerImage("test-build-args", {
         name: "alchemy-test",
         tag: "args",
@@ -67,8 +67,8 @@ describe("DockerImage", () => {
           context: contextPath,
           buildArgs: {
             MESSAGE: "Hello from Alchemy",
-            VERSION: "2.0"
-          }
+            VERSION: "2.0",
+          },
         },
         skipPush: true,
       });
@@ -77,7 +77,7 @@ describe("DockerImage", () => {
       expect(image.tag).toBe("args");
       expect(image.build.buildArgs).toEqual({
         MESSAGE: "Hello from Alchemy",
-        VERSION: "2.0"
+        VERSION: "2.0",
       });
     } finally {
       await destroy(scope);
@@ -87,17 +87,17 @@ describe("DockerImage", () => {
   test("should support multi-stage builds with target", async (scope) => {
     try {
       const contextPath = getFixturePath("multi-stage");
-      
+
       // Ensure the context path exists
       expect(fs.existsSync(contextPath)).toBe(true);
       expect(fs.existsSync(path.join(contextPath, "Dockerfile"))).toBe(true);
-      
+
       const image = await DockerImage("test-multi-stage", {
         name: "alchemy-test",
         tag: "multi",
         build: {
           context: contextPath,
-          target: "builder" // Target the builder stage
+          target: "builder", // Target the builder stage
         },
         skipPush: true,
       });
