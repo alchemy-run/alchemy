@@ -66,7 +66,7 @@ describe("Project Resource", () => {
       const getResponse = await api.get(`/projects/${project.id}`);
       expect(getResponse.status).toEqual(200);
 
-      const responseData = await getResponse.json();
+      const responseData: any = await getResponse.json();
       expect(responseData.name).toEqual(testId);
 
       // Update the project
@@ -90,7 +90,7 @@ describe("Project Resource", () => {
 
       // Verify project was updated
       const getUpdatedResponse = await api.get(`/projects/${project.id}`);
-      const updatedData = await getUpdatedResponse.json();
+      const updatedData: any = await getUpdatedResponse.json();
       expect(updatedData.name).toEqual(testId);
       expect(updatedData.buildCommand).toEqual("next build");
     } catch (err) {

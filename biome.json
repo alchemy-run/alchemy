@@ -57,7 +57,6 @@
         "noCommaOperator": "error",
         "useNodejsImportProtocol": "error",
         "useAsConstAssertion": "error",
-        "useNumericLiterals": "error",
         "useEnumInitializers": "error",
         "useSelfClosingElements": "error",
         "useConst": "off",

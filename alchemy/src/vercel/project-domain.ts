@@ -122,7 +122,7 @@ export const ProjectDomain = Resource(
   "vercel::ProjectDomain",
   async function (
     this: Context<ProjectDomain>,
-    id: string,
+    _id: string,
     { accessToken, ...props }: ProjectDomainProps & { accessToken?: Secret },
   ): Promise<ProjectDomain> {
     switch (this.phase) {
