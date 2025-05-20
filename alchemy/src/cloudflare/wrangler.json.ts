@@ -236,7 +236,7 @@ export interface WranglerJsonSpec {
   /**
    * Vectorize index bindings
    */
-  vectorize_indexes?: {
+  vectorize?: {
     binding: string;
     index_name: string;
   }[];
@@ -481,7 +481,7 @@ function processBindings(
   }
 
   if (vectorizeIndexes.length > 0) {
-    spec.vectorize_indexes = vectorizeIndexes;
+    spec.vectorize = vectorizeIndexes;
   }
 
   if (new_sqlite_classes.length > 0 || new_classes.length > 0) {
