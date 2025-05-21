@@ -61,3 +61,18 @@ await WranglerJson("wrangler", {
   worker
 });
 ```
+
+## With Cron Triggers
+
+If the Worker has scheduled crons, they are written to `wrangler.json` under the
+`triggers` field:
+
+```ts
+const worker = await Worker("cron", {
+  name: "cron-worker",
+  entrypoint: "./src/cron.ts",
+  crons: ["*/3 * * * *", "0 15 1 * *", "59 23 LW * *"],
+});
+
+await WranglerJson("wrangler", { worker });
+```

@@ -103,6 +103,10 @@ export const WranglerJson = Resource(
       spec.vars = { ...worker.env };
     }
 
+    if (worker.crons && worker.crons.length > 0) {
+      spec.triggers = { crons: worker.crons };
+    }
+
     await StaticJsonFile(filePath, spec);
 
     // Return the resource
@@ -149,6 +153,13 @@ export interface WranglerJsonSpec {
    * Routes to attach to the worker
    */
   routes?: string[];
+
+  /**
+   * Scheduled triggers for the worker
+   */
+  triggers?: {
+    crons: string[];
+  };
 
   /**
    * AI bindings
