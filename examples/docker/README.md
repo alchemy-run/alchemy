@@ -59,7 +59,7 @@ The example demonstrates key Alchemy concepts:
 
 1. **Resource Dependencies**: The frontend, backend, and MongoDB containers are deployed in an order that maintains their dependencies. Environment variables are used to connect the containers (like setting `DATABASE_HOST` and `HTTP_PROXY`).
 
-2. **Container Images**: Shows how to pull and use Docker images with the `DockerImage` resource.
+2. **Container Images**: Shows how to pull and use Docker images with the `Image` resource.
 
 3. **Networking**: Creates a Docker network and connects all containers to it, allowing inter-container communication.
 

@@ -20,7 +20,7 @@ export interface VolumeLabel {
 /**
  * Properties for creating a Docker volume
  */
-export interface DockerVolumeProps {
+export interface VolumeProps {
   /**
    * Volume name
    */
@@ -46,9 +46,7 @@ export interface DockerVolumeProps {
 /**
  * Docker Volume resource
  */
-export interface DockerVolume
-  extends Resource<"docker::Volume">,
-    DockerVolumeProps {
+export interface Volume extends Resource<"docker::Volume">, VolumeProps {
   /**
    * Volume ID (same as name for Docker volumes)
    */
@@ -72,13 +70,13 @@ export interface DockerVolume
  *
  * @example
  * // Create a simple Docker volume
- * const dataVolume = await DockerVolume("data-volume", {
+ * const dataVolume = await Volume("data-volume", {
  *   name: "data-volume"
  * });
  *
  * @example
  * // Create a Docker volume with custom driver and options
- * const dbVolume = await DockerVolume("db-data", {
+ * const dbVolume = await Volume("db-data", {
  *   name: "db-data",
  *   driver: "local",
  *   driverOpts: {
@@ -92,13 +90,13 @@ export interface DockerVolume
  *   ]
  * });
  */
-export const DockerVolume = Resource(
+export const Volume = Resource(
   "docker::Volume",
   async function (
-    this: Context<DockerVolume>,
+    this: Context<Volume>,
     id: string,
-    props: DockerVolumeProps,
-  ): Promise<DockerVolume> {
+    props: VolumeProps,
+  ): Promise<Volume> {
     // Initialize Docker API client
     const api = new DockerApi();
 

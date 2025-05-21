@@ -1,8 +1,8 @@
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import { DockerApi } from "./api.js";
-import type { DockerImage } from "./image.js";
-import type { DockerRemoteImage } from "./remote-image.js";
+import type { Image } from "./image.js";
+import type { RemoteImage } from "./remote-image.js";
 
 /**
  * Port mapping configuration
@@ -62,12 +62,12 @@ export interface NetworkMapping {
 /**
  * Properties for creating a Docker container
  */
-export interface DockerContainerProps {
+export interface ContainerProps {
   /**
    * Image to use for the container
-   * Can be an Alchemy DockerImage or DockerRemoteImage resource or a string image reference
+   * Can be an Alchemy Image or RemoteImage resource or a string image reference
    */
-  image: DockerImage | DockerRemoteImage | string;
+  image: Image | RemoteImage | string;
 
   /**
    * Container name
@@ -118,9 +118,9 @@ export interface DockerContainerProps {
 /**
  * Docker Container resource
  */
-export interface DockerContainer
+export interface Container
   extends Resource<"docker::Container">,
-    DockerContainerProps {
+    ContainerProps {
   /**
    * Container ID
    */
@@ -142,7 +142,7 @@ export interface DockerContainer
  *
  * @example
  * // Create a simple Nginx container
- * const webContainer = await DockerContainer("web", {
+ * const webContainer = await Container("web", {
  *   image: "nginx:latest",
  *   ports: [
  *     { external: 8080, internal: 80 }
@@ -152,8 +152,8 @@ export interface DockerContainer
  *
  * @example
  * // Create a container with environment variables and volume mounts
- * const appContainer = await DockerContainer("app", {
- *   image: customImage, // Using an Alchemy DockerRemoteImage resource
+ * const appContainer = await Container("app", {
+ *   image: customImage, // Using an Alchemy RemoteImage resource
  *   environment: {
  *     NODE_ENV: "production",
  *     API_KEY: "secret-key"
@@ -168,13 +168,13 @@ export interface DockerContainer
  *   start: true
  * });
  */
-export const DockerContainer = Resource(
+export const Container = Resource(
   "docker::Container",
   async function (
-    this: Context<DockerContainer>,
+    this: Context<Container>,
     id: string,
-    props: DockerContainerProps,
-  ): Promise<DockerContainer> {
+    props: ContainerProps,
+  ): Promise<Container> {
     // Initialize Docker API client
     const api = new DockerApi();
 
@@ -227,7 +227,7 @@ export const DockerContainer = Resource(
     } else {
       try {
         let containerId = "";
-        let containerState: NonNullable<DockerContainer["state"]> = "created";
+        let containerState: NonNullable<Container["state"]> = "created";
 
         // Check if container already exists (for update)
         const containerExists = await api.containerExists(containerName);

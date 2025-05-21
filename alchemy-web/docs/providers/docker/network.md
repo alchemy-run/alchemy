@@ -1,18 +1,18 @@
 ---
-title: DockerNetwork
+title: Network
 description: Create and manage Docker networks with Alchemy
 ---
 
-# DockerNetwork
+# Network
 
-The `DockerNetwork` resource allows you to create and manage Docker networks using Alchemy, enabling container-to-container communication.
+The `Network` resource allows you to create and manage Docker networks using Alchemy, enabling container-to-container communication.
 
 ## Usage
 
 ```typescript
-import { DockerNetwork } from "alchemy/docker";
+import * as docker from "alchemy/docker";
 
-const network = await DockerNetwork("app-network", {
+const network = await docker.Network("app-network", {
   name: "app-network"
 });
 ```
@@ -36,15 +36,15 @@ const network = await DockerNetwork("app-network", {
 ## Example
 
 ```typescript
-import { DockerNetwork, DockerContainer, DockerRemoteImage } from "alchemy/docker";
+import * as docker from "alchemy/docker";
 
 // Create a simple bridge network
-const appNetwork = await DockerNetwork("app-network", {
+const appNetwork = await docker.Network("app-network", {
   name: "app-network"
 });
 
 // Create a custom network with driver
-const overlayNetwork = await DockerNetwork("overlay-network", {
+const overlayNetwork = await docker.Network("overlay-network", {
   name: "overlay-network",
   driver: "overlay",
   enableIPv6: true,
@@ -54,14 +54,14 @@ const overlayNetwork = await DockerNetwork("overlay-network", {
 });
 
 // Create containers connected to the network
-const service1 = await DockerContainer("service1", {
+const service1 = await docker.Container("service1", {
   image: "service1:latest",
   name: "service1",
   networks: [{ name: appNetwork.name }],
   start: true
 });
 
-const service2 = await DockerContainer("service2", {
+const service2 = await docker.Container("service2", {
   image: "service2:latest",
   name: "service2",
   networks: [{ name: appNetwork.name }],
@@ -78,14 +78,14 @@ const service2 = await DockerContainer("service2", {
 When containers are connected to the same Docker network, they can communicate with each other using the container names as hostnames. This built-in DNS resolution simplifies service discovery in multi-container applications.
 
 ```typescript
-const service1 = await DockerContainer("service1", {
+const service1 = await docker.Container("service1", {
   image: "service1:latest",
   name: "service1",
   networks: [{ name: appNetwork.name }],
   start: true
 });
 
-const service2 = await DockerContainer("service2", {
+const service2 = await docker.Container("service2", {
   image: "service2:latest",
   name: "service2",
   networks: [{ name: appNetwork.name }],
@@ -100,14 +100,14 @@ const service2 = await DockerContainer("service2", {
 Or, you can set aliases for the container to make it accessible by multiple names:
 
 ```typescript
-const service1 = await DockerContainer("service1", {
+const service1 = await docker.Container("service1", {
   image: "service1:latest",
   name: "service1",
   networks: [{ name: appNetwork.name, aliases: ["api"] }],
   start: true
 });
 
-const service2 = await DockerContainer("service2", {
+const service2 = await docker.Container("service2", {
   image: "service2:latest",
   name: "service2",
   networks: [{ name: appNetwork.name }],

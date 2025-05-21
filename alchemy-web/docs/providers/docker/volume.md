@@ -1,18 +1,18 @@
 ---
-title: DockerVolume
+title: Volume
 description: Create and manage Docker volumes with Alchemy
 ---
 
-# DockerVolume
+# Volume
 
-The `DockerVolume` resource allows you to create and manage persistent Docker volumes using Alchemy.
+The `Volume` resource allows you to create and manage persistent Docker volumes using Alchemy.
 
 ## Usage
 
 ```typescript
-import { DockerVolume } from "alchemy/docker";
+import * as docker from "alchemy/docker";
 
-const myVolume = await DockerVolume("data-volume", {
+const myVolume = await docker.Volume("data-volume", {
   name: "app-data",
   driver: "local"
 });
@@ -46,15 +46,15 @@ interface VolumeLabel {
 ## Example
 
 ```typescript
-import { DockerVolume, DockerContainer } from "alchemy/docker";
+import * as docker from "alchemy/docker";
 
 // Create a simple Docker volume for persistent data
-const dataVolume = await DockerVolume("data-volume", {
+const dataVolume = await docker.Volume("data-volume", {
   name: "postgres-data"
 });
 
 // Create a Docker volume with custom driver options
-const dbVolume = await DockerVolume("db-data", {
+const dbVolume = await docker.Volume("db-data", {
   name: "mysql-data",
   driver: "local",
   driverOpts: {
@@ -65,7 +65,7 @@ const dbVolume = await DockerVolume("db-data", {
 });
 
 // Create a volume with labels (array format)
-const logsVolume = await DockerVolume("logs-volume", {
+const logsVolume = await docker.Volume("logs-volume", {
   name: "app-logs",
   labels: [
     { name: "com.example.environment", value: "production" },
@@ -74,7 +74,7 @@ const logsVolume = await DockerVolume("logs-volume", {
 });
 
 // Create a volume with labels (record format)
-const configVolume = await DockerVolume("config-volume", {
+const configVolume = await docker.Volume("config-volume", {
   name: "app-config",
   labels: {
     "com.example.environment": "staging",
@@ -83,7 +83,7 @@ const configVolume = await DockerVolume("config-volume", {
 });
 
 // Use volumes with a container
-const dbContainer = await DockerContainer("database", {
+const dbContainer = await docker.Container("database", {
   image: "postgres:14",
   name: "postgres",
   volumes: [

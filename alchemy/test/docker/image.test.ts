@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { destroy } from "../../src/destroy.js";
-import { DockerImage } from "../../src/docker/image.js";
 import fs from "node:fs";
 import path from "node:path";
+import { alchemy } from "../../src/alchemy.js";
+import { destroy } from "../../src/destroy.js";
+import { Image } from "../../src/docker/image.js";
 
 import "../../src/test/bun.js";
 
@@ -21,7 +21,7 @@ function getFixturePath(fixtureName: string): string {
   );
 }
 
-describe("DockerImage", () => {
+describe("Image", () => {
   test("should build a simple image", async (scope) => {
     try {
       const contextPath = getFixturePath("simple-image");
@@ -30,7 +30,7 @@ describe("DockerImage", () => {
       expect(fs.existsSync(contextPath)).toBe(true);
       expect(fs.existsSync(path.join(contextPath, "Dockerfile"))).toBe(true);
 
-      const image = await DockerImage("test-simple-image", {
+      const image = await Image("test-simple-image", {
         name: "alchemy-test",
         tag: "simple",
         build: {
@@ -60,7 +60,7 @@ describe("DockerImage", () => {
       expect(fs.existsSync(contextPath)).toBe(true);
       expect(fs.existsSync(path.join(contextPath, "Dockerfile"))).toBe(true);
 
-      const image = await DockerImage("test-build-args", {
+      const image = await Image("test-build-args", {
         name: "alchemy-test",
         tag: "args",
         build: {
@@ -92,7 +92,7 @@ describe("DockerImage", () => {
       expect(fs.existsSync(contextPath)).toBe(true);
       expect(fs.existsSync(path.join(contextPath, "Dockerfile"))).toBe(true);
 
-      const image = await DockerImage("test-multi-stage", {
+      const image = await Image("test-multi-stage", {
         name: "alchemy-test",
         tag: "multi",
         build: {
@@ -113,7 +113,7 @@ describe("DockerImage", () => {
   test("should handle invalid context path", async (scope) => {
     expect.assertions(1);
     try {
-      await DockerImage("test-invalid-context", {
+      await Image("test-invalid-context", {
         name: "alchemy-test",
         tag: "invalid",
         build: {

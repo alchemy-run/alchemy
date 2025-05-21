@@ -1,9 +1,5 @@
 import alchemy from "alchemy";
-import {
-  DockerContainer,
-  DockerNetwork,
-  DockerRemoteImage,
-} from "alchemy/docker";
+import * as docker from "alchemy/docker";
 
 // Initialize Alchemy
 const app = await alchemy("docker", {
@@ -25,29 +21,29 @@ const protocol = process.env.protocol!;
 const stack = app.stage || "dev";
 
 // Create a Docker network
-const network = await DockerNetwork("network", {
+const network = await docker.Network("network", {
   name: `services-${stack}`,
   driver: "bridge",
 });
 
 // Pull the images in parallel
 const [backend, frontend, mongoImage] = await Promise.all([
-  DockerRemoteImage("backendImage", {
+  docker.RemoteImage("backendImage", {
     name: "pulumi/tutorial-pulumi-fundamentals-backend",
     tag: "latest",
   }),
-  DockerRemoteImage("frontendImage", {
+  docker.RemoteImage("frontendImage", {
     name: "pulumi/tutorial-pulumi-fundamentals-frontend",
     tag: "latest",
   }),
-  DockerRemoteImage("mongoImage", {
+  docker.RemoteImage("mongoImage", {
     name: "pulumi/tutorial-pulumi-fundamentals-database",
     tag: "latest",
   }),
 ]);
 
 // Create the MongoDB container
-const mongoContainer = await DockerContainer("mongoContainer", {
+const mongoContainer = await docker.Container("mongoContainer", {
   image: mongoImage,
   name: `mongo-${stack}`,
   ports: [{ external: mongoPort, internal: mongoPort }],
@@ -62,7 +58,7 @@ const mongoContainer = await DockerContainer("mongoContainer", {
 });
 
 // Create the backend container
-const backendContainer = await DockerContainer("backendContainer", {
+const backendContainer = await docker.Container("backendContainer", {
   image: backend,
   name: `backend-${stack}`,
   ports: [{ external: backendPort, internal: backendPort }],
@@ -77,7 +73,7 @@ const backendContainer = await DockerContainer("backendContainer", {
 });
 
 // Create the frontend container
-const frontendContainer = await DockerContainer("frontendContainer", {
+const frontendContainer = await docker.Container("frontendContainer", {
   image: frontend,
   name: `frontend-${stack}`,
   ports: [{ external: frontendPort, internal: frontendPort }],

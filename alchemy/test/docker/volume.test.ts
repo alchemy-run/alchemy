@@ -1,17 +1,17 @@
 import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy.js";
 import { destroy } from "../../src/destroy.js";
-import { DockerVolume } from "../../src/docker/volume.js";
+import { Volume } from "../../src/docker/volume.js";
 
 import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta);
 
-describe("DockerVolume", () => {
+describe("Volume", () => {
   test("should create a volume with default driver", async (scope) => {
     try {
       const volumeName = `alchemy-test-volume-${Date.now()}`;
-      const volume = await DockerVolume("test-volume", {
+      const volume = await Volume("test-volume", {
         name: volumeName,
       });
 
@@ -26,7 +26,7 @@ describe("DockerVolume", () => {
   test("should create a volume with custom driver and options", async (scope) => {
     try {
       const volumeName = `alchemy-test-volume-custom-${Date.now()}`;
-      const volume = await DockerVolume("test-volume-custom", {
+      const volume = await Volume("test-volume-custom", {
         name: volumeName,
         driver: "local",
         driverOpts: {
@@ -51,7 +51,7 @@ describe("DockerVolume", () => {
   test("should create a volume with labels", async (scope) => {
     try {
       const volumeName = `alchemy-test-volume-labels-${Date.now()}`;
-      const volume = await DockerVolume("test-volume-labels", {
+      const volume = await Volume("test-volume-labels", {
         name: volumeName,
         labels: [
           { name: "com.example.usage", value: "test-volume" },
@@ -72,7 +72,7 @@ describe("DockerVolume", () => {
   test("should create a volume with labels as record", async (scope) => {
     try {
       const volumeName = `alchemy-test-volume-record-labels-${Date.now()}`;
-      const volume = await DockerVolume("test-volume-record-labels", {
+      const volume = await Volume("test-volume-record-labels", {
         name: volumeName,
         labels: {
           "com.example.usage": "test-volume",

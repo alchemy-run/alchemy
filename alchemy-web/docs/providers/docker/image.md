@@ -1,18 +1,18 @@
 ---
-title: DockerImage
+title: Image
 description: Build and manage Docker images with Alchemy
 ---
 
-# DockerImage
+# Image
 
-The `DockerImage` resource allows you to build and manage Docker images from local Dockerfiles using Alchemy.
+The `Image` resource allows you to build and manage Docker images from local Dockerfiles using Alchemy.
 
 ## Usage
 
 ```typescript
-import { DockerImage } from "alchemy/docker";
+import * as docker from "alchemy/docker";
 
-const myImage = await DockerImage("app-image", {
+const myImage = await docker.Image("app-image", {
   name: "my-app",
   tag: "v1.0",
   build: {
@@ -45,10 +45,10 @@ const myImage = await DockerImage("app-image", {
 ## Example
 
 ```typescript
-import { DockerImage, DockerContainer } from "alchemy/docker";
+import * as docker from "alchemy/docker";
 
 // Build a Docker image from a Dockerfile
-const appImage = await DockerImage("app-image", {
+const appImage = await docker.Image("app-image", {
   name: "my-node-app",
   tag: "1.0",
   build: {
@@ -62,7 +62,7 @@ const appImage = await DockerImage("app-image", {
 });
 
 // Use the built image in a container
-const appContainer = await DockerContainer("app", {
+const appContainer = await docker.Container("app", {
   image: appImage,
   ports: [{ external: 3000, internal: 3000 }],
   restart: "always",
@@ -70,7 +70,7 @@ const appContainer = await DockerContainer("app", {
 });
 
 // For multi-stage builds, you can target a specific stage
-const builderImage = await DockerImage("builder", {
+const builderImage = await docker.Image("builder", {
   name: "app-builder",
   tag: "latest",
   build: {

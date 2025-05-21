@@ -11,26 +11,26 @@ The Docker provider allows you to create, manage, and orchestrate Docker resourc
 
 The Docker provider includes the following resources:
 
-- [DockerRemoteImage](./remote-image.md) - Pull and manage Docker images
-- [DockerImage](./image.md) - Build Docker images from local Dockerfiles
-- [DockerContainer](./container.md) - Run and manage Docker containers
-- [DockerNetwork](./network.md) - Create and manage Docker networks
-- [DockerVolume](./volume.md) - Create and manage persistent Docker volumes
+- [RemoteImage](./remote-image.md) - Pull and manage Docker images
+- [Image](./image.md) - Build Docker images from local Dockerfiles
+- [Container](./container.md) - Run and manage Docker containers
+- [Network](./network.md) - Create and manage Docker networks
+- [Volume](./volume.md) - Create and manage persistent Docker volumes
 
 ## Example
 
 Here's a complete example of using the Docker provider to create a web application with Redis, custom images, and persistent volumes:
 
 ```typescript
-import { DockerContainer, DockerRemoteImage, DockerNetwork, DockerImage, DockerVolume } from "alchemy/docker";
+import * as docker from "alchemy/docker";
 
 // Create a Docker network
-const network = await DockerNetwork("app-network", {
+const network = await docker.Network("app-network", {
   name: "my-application-network"
 });
 
 // Create a persistent volume for Redis data
-const redisVolume = await DockerVolume("redis-data", {
+const redisVolume = await docker.Volume("redis-data", {
   name: "redis-data",
   labels: [
     { name: "app", value: "my-application" },
@@ -39,13 +39,13 @@ const redisVolume = await DockerVolume("redis-data", {
 });
 
 // Pull Redis image
-const redisImage = await DockerRemoteImage("redis-image", {
+const redisImage = await docker.RemoteImage("redis-image", {
   name: "redis",
   tag: "alpine"
 });
 
 // Run Redis container with persistent volume
-const redis = await DockerContainer("redis", {
+const redis = await docker.Container("redis", {
   image: redisImage.imageRef,
   name: "redis",
   networks: [{ name: network.name }],
@@ -59,7 +59,7 @@ const redis = await DockerContainer("redis", {
 });
 
 // Build a custom application image from local Dockerfile
-const appImage = await DockerImage("app-image", {
+const appImage = await docker.Image("app-image", {
   name: "my-web-app",
   tag: "latest",
   build: {
@@ -71,7 +71,7 @@ const appImage = await DockerImage("app-image", {
 });
 
 // Create a volume for application logs
-const logsVolume = await DockerVolume("logs-volume", {
+const logsVolume = await docker.Volume("logs-volume", {
   name: "app-logs",
   labels: {
     "com.example.environment": "production",
@@ -80,7 +80,7 @@ const logsVolume = await DockerVolume("logs-volume", {
 });
 
 // Run the application container
-const app = await DockerContainer("app", {
+const app = await docker.Container("app", {
   image: appImage,  // Using the custom built image
   name: "web-app",
   ports: [{ external: 3000, internal: 3000 }],

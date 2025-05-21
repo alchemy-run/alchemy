@@ -1,8 +1,8 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
 import { DockerApi } from "./api.js";
-import path from "node:path";
-import fs from "node:fs";
 
 /**
  * Options for building a Docker image
@@ -42,7 +42,7 @@ export interface DockerBuildOptions {
 /**
  * Properties for creating a Docker image
  */
-export interface DockerImageProps {
+export interface ImageProps {
   /**
    * Repository name for the image (e.g., "username/image")
    */
@@ -67,9 +67,7 @@ export interface DockerImageProps {
 /**
  * Docker Image resource
  */
-export interface DockerImage
-  extends Resource<"docker::Image">,
-    DockerImageProps {
+export interface Image extends Resource<"docker::Image">, ImageProps {
   /**
    * Full image reference (name:tag)
    */
@@ -96,7 +94,7 @@ export interface DockerImage
  *
  * @example
  * // Build a Docker image from a Dockerfile
- * const appImage = await DockerImage("app-image", {
+ * const appImage = await Image("app-image", {
  *   name: "myapp",
  *   tag: "latest",
  *   build: {
@@ -108,13 +106,13 @@ export interface DockerImage
  *   }
  * });
  */
-export const DockerImage = Resource(
+export const Image = Resource(
   "docker::Image",
   async function (
-    this: Context<DockerImage>,
+    this: Context<Image>,
     id: string,
-    props: DockerImageProps,
-  ): Promise<DockerImage> {
+    props: ImageProps,
+  ): Promise<Image> {
     // Initialize Docker API client
     const api = new DockerApi();
 

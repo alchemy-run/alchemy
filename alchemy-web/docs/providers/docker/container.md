@@ -1,18 +1,18 @@
 ---
-title: DockerContainer
+title: Container
 description: Deploy and manage Docker containers with Alchemy
 ---
 
-# DockerContainer
+# Container
 
-The `DockerContainer` resource allows you to create and manage Docker containers using Alchemy.
+The `Container` resource allows you to create and manage Docker containers using Alchemy.
 
 ## Usage
 
 ```typescript
-import { DockerContainer } from "alchemy/docker";
+import * as docker from "alchemy/docker";
 
-const myContainer = await DockerContainer("my-container", {
+const myContainer = await docker.Container("my-container", {
   image: "nginx:latest",
   name: "web-server",
   ports: [{ external: 80, internal: 80 }],
@@ -24,7 +24,7 @@ const myContainer = await DockerContainer("my-container", {
 
 | Name | Type | Required | Description |
 |------|------|----------|--------------|
-| `image` | `DockerRemoteImage \| string` | Yes | Docker image to use for the container |
+| `image` | `RemoteImage \| string` | Yes | Docker image to use for the container |
 | `name` | `string` | No | Name for the container |
 | `command` | `string[]` | No | Command to run in the container |
 | `environment` | `Record<string, string>` | No | Environment variables for the container |
@@ -46,21 +46,21 @@ const myContainer = await DockerContainer("my-container", {
 ## Example
 
 ```typescript
-import { DockerContainer, DockerRemoteImage, DockerNetwork } from "alchemy/docker";
+import * as docker from "alchemy/docker";
 
 // Create a Docker network
-const network = await DockerNetwork("app-network", {
+const network = await docker.Network("app-network", {
   name: "microservices-network"
 });
 
 // Pull the Redis image
-const redisImage = await DockerRemoteImage("redis-image", {
+const redisImage = await docker.RemoteImage("redis-image", {
   name: "redis",
   tag: "alpine"
 });
 
 // Run Redis container
-const redis = await DockerContainer("redis", {
+const redis = await docker.Container("redis", {
   image: redisImage.imageRef,
   name: "redis",
   networks: [{ name: network.name }],
@@ -68,7 +68,7 @@ const redis = await DockerContainer("redis", {
 });
 
 // Run the application container
-const app = await DockerContainer("app", {
+const app = await docker.Container("app", {
   image: "my-node-app:latest",
   name: "web-app",
   ports: [{ external: 3000, internal: 3000 }],

@@ -5,7 +5,7 @@ import { DockerApi } from "./api.js";
 /**
  * Properties for creating a Docker network
  */
-export interface DockerNetworkProps {
+export interface NetworkProps {
   /**
    * Network name
    */
@@ -32,9 +32,7 @@ export interface DockerNetworkProps {
 /**
  * Docker Network resource
  */
-export interface DockerNetwork
-  extends Resource<"docker::Network">,
-    DockerNetworkProps {
+export interface Network extends Resource<"docker::Network">, NetworkProps {
   /**
    * Network ID
    */
@@ -53,13 +51,13 @@ export interface DockerNetwork
  *
  * @example
  * // Create a simple bridge network
- * const appNetwork = await DockerNetwork("app-network", {
+ * const appNetwork = await Network("app-network", {
  *   name: "app-network"
  * });
  *
  * @example
  * // Create a custom network with driver
- * const overlayNetwork = await DockerNetwork("overlay-network", {
+ * const overlayNetwork = await Network("overlay-network", {
  *   name: "overlay-network",
  *   driver: "overlay",
  *   enableIPv6: true,
@@ -68,13 +66,13 @@ export interface DockerNetwork
  *   }
  * });
  */
-export const DockerNetwork = Resource(
+export const Network = Resource(
   "docker::Network",
   async function (
-    this: Context<DockerNetwork>,
+    this: Context<Network>,
     id: string,
-    props: DockerNetworkProps,
-  ): Promise<DockerNetwork> {
+    props: NetworkProps,
+  ): Promise<Network> {
     // Initialize Docker API client
     const api = new DockerApi();
 

@@ -5,7 +5,7 @@ import { DockerApi } from "./api.js";
 /**
  * Properties for creating a Docker image
  */
-export interface DockerRemoteImageProps {
+export interface RemoteImageProps {
   /**
    * Docker image name (e.g., "nginx")
    */
@@ -25,9 +25,9 @@ export interface DockerRemoteImageProps {
 /**
  * Docker Remote Image resource
  */
-export interface DockerRemoteImage
+export interface RemoteImage
   extends Resource<"docker::RemoteImage">,
-    DockerRemoteImageProps {
+    RemoteImageProps {
   /**
    * Full image reference (name:tag)
    */
@@ -44,19 +44,19 @@ export interface DockerRemoteImage
  *
  * @example
  * // Pull the nginx image
- * const nginxImage = await DockerRemoteImage("nginx", {
+ * const nginxImage = await RemoteImage("nginx", {
  *   name: "nginx",
  *   tag: "latest"
  * });
  *
  */
-export const DockerRemoteImage = Resource(
+export const RemoteImage = Resource(
   "docker::RemoteImage",
   async function (
-    this: Context<DockerRemoteImage>,
+    this: Context<RemoteImage>,
     id: string,
-    props: DockerRemoteImageProps,
-  ): Promise<DockerRemoteImage> {
+    props: RemoteImageProps,
+  ): Promise<RemoteImage> {
     // Initialize Docker API client
     const api = new DockerApi();
 

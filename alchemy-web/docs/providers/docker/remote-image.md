@@ -1,18 +1,18 @@
 ---
-title: DockerRemoteImage
+title: RemoteImage
 description: Pull and manage Docker images with Alchemy
 ---
 
-# DockerRemoteImage
+# RemoteImage
 
-The `DockerRemoteImage` resource allows you to pull and manage Docker images using Alchemy.
+The `RemoteImage` resource allows you to pull and manage Docker images using Alchemy.
 
 ## Usage
 
 ```typescript
-import { DockerRemoteImage } from "alchemy/docker";
+import * as docker from "alchemy/docker";
 
-const myImage = await DockerRemoteImage("nginx", {
+const myImage = await docker.RemoteImage("nginx", {
   name: "nginx",
   tag: "latest",
 });
@@ -36,16 +36,16 @@ const myImage = await DockerRemoteImage("nginx", {
 ## Example
 
 ```typescript
-import { DockerRemoteImage } from "alchemy/docker";
+import * as docker from "alchemy/docker";
 
 // Pull the nginx image
-const nginxImage = await DockerRemoteImage("nginx", {
+const nginxImage = await docker.RemoteImage("nginx", {
   name: "nginx",
   tag: "latest"
 });
 
 // Pull a specific version of Node.js
-const nodeImage = await DockerRemoteImage("node-app", {
+const nodeImage = await docker.RemoteImage("node-app", {
   name: "node",
   tag: "16-alpine",
   alwaysPull: true
