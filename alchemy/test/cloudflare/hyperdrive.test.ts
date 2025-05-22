@@ -1,7 +1,10 @@
 import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy.js";
 import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { Hyperdrive } from "../../src/cloudflare/hyperdrive.js";
+import {
+  Hyperdrive,
+  type HyperdriveResource,
+} from "../../src/cloudflare/hyperdrive.js";
 import { Worker } from "../../src/cloudflare/worker.js";
 import { destroy } from "../../src/destroy.js";
 import { NeonProject } from "../../src/neon/project.js";
@@ -19,7 +22,7 @@ describe("Hyperdrive Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-hyperdrive`;
 
   test("create, update, and delete hyperdrive with Neon project", async (scope) => {
-    let hyperdrive: Hyperdrive | undefined;
+    let hyperdrive: HyperdriveResource | undefined;
     let project: NeonProject | undefined;
     let worker: Worker | undefined;
 
@@ -56,7 +59,7 @@ describe("Hyperdrive Resource", () => {
       );
       expect(getResponse.status).toEqual(200);
 
-      const responseData = await getResponse.json();
+      const responseData: any = await getResponse.json();
       expect(responseData.result.name).toEqual(
         `test-hyperdrive-${BRANCH_PREFIX}`,
       );
@@ -112,15 +115,11 @@ describe("Hyperdrive Resource", () => {
       const getUpdatedResponse = await api.get(
         `/accounts/${api.accountId}/hyperdrive/configs/${hyperdrive.hyperdriveId}`,
       );
-      const updatedData = await getUpdatedResponse.json();
+      const updatedData: any = await getUpdatedResponse.json();
       expect(updatedData.result.name).toEqual(
         `updated-hyperdrive-${BRANCH_PREFIX}`,
       );
       expect(updatedData.result.caching.disabled).toEqual(true);
-    } catch (err) {
-      // log the error or else it's silently swallowed by destroy errors
-      console.log(err);
-      throw err;
     } finally {
       // Always clean up, even if test assertions fail
       await destroy(scope);

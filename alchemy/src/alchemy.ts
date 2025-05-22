@@ -1,16 +1,17 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { destroy, DestroyedSignal } from "./destroy.js";
+import { DestroyedSignal, destroy } from "./destroy.js";
 import { env } from "./env.js";
 import {
+  type PendingResource,
   ResourceFQN,
   ResourceID,
   ResourceKind,
   ResourceScope,
   ResourceSeq,
-  type PendingResource,
 } from "./resource.js";
+import { isRuntime } from "./runtime/global.js";
 import { Scope } from "./scope.js";
 import { secret } from "./secret.js";
 import type { StateStoreType } from "./state.js";
@@ -58,6 +59,11 @@ export interface Alchemy {
    */
   secret: typeof secret;
   /**
+   * Whether the current runtime is the Cloudflare Workers runtime.
+   */
+  isRuntime: boolean;
+
+  /**
    * Creates a new application scope with the given name and options.
    * Used to create and manage resources with proper secret handling.
    *
@@ -93,6 +99,7 @@ _alchemy.destroy = destroy;
 _alchemy.run = run;
 _alchemy.secret = secret;
 _alchemy.env = env;
+_alchemy.isRuntime = isRuntime;
 
 /**
  * Implementation of the alchemy function that handles both application scoping
@@ -109,10 +116,17 @@ async function _alchemy(
     const root = new Scope({
       ...options,
       appName,
-      stage: options?.stage,
-      phase,
+      stage: options?.stage ?? process.env.ALCHEMY_STAGE,
+      phase: isRuntime ? "read" : phase,
+      password: options?.password ?? process.env.ALCHEMY_PASSWORD,
     });
-    root.enter();
+    try {
+      Scope.storage.enterWith(root);
+    } catch {
+      // we are in Cloudflare Workers, we will emulate the enterWith behavior
+      // see Scope.finalize for where we pop the global scope
+      Scope.globals.push(root);
+    }
     if (options?.phase === "destroy") {
       await destroy(root);
       return process.exit(0);

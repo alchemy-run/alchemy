@@ -38,7 +38,7 @@ describe("Team Resource", () => {
       );
       expect(getResponse.status).toEqual(200);
 
-      const responseData = await getResponse.json();
+      const responseData: any = await getResponse.json();
       expect(responseData.name).toEqual(`Test Team ${testId}`);
 
       // Update the team
@@ -55,7 +55,7 @@ describe("Team Resource", () => {
       const getUpdatedResponse = await api.get(
         `/teams/${team.organization}/${team.slug}/`,
       );
-      const updatedData = await getUpdatedResponse.json();
+      const updatedData: any = await getUpdatedResponse.json();
       expect(updatedData.name).toEqual(`Updated Team ${testId}`);
     } catch (err) {
       // log the error or else it's silently swallowed by destroy errors

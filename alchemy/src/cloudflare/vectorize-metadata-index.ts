@@ -1,12 +1,12 @@
 import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
+import { Resource, ResourceKind } from "../resource.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
-import type { VectorizeIndex } from "./vectorize-index.js";
+import type { VectorizeIndexResource } from "./vectorize-index.js";
 
 /**
  * Properties for creating or deleting a Vectorize Metadata Index
@@ -15,7 +15,7 @@ export interface VectorizeMetadataIndexProps extends CloudflareApiOptions {
   /**
    * Parent Vectorize Index
    */
-  index: VectorizeIndex;
+  index: VectorizeIndexResource;
 
   /**
    * Name of the property in the metadata to create an index for
@@ -26,6 +26,12 @@ export interface VectorizeMetadataIndexProps extends CloudflareApiOptions {
    * Type of the metadata index
    */
   indexType: "string" | "number" | "boolean";
+}
+
+export function isVectorizeMetadataIndex(
+  resource: Resource,
+): resource is VectorizeMetadataIndex {
+  return resource[ResourceKind] === "cloudflare::VectorizeMetadataIndex";
 }
 
 /**
@@ -82,7 +88,7 @@ export const VectorizeMetadataIndex = Resource(
   "cloudflare::VectorizeMetadataIndex",
   async function (
     this: Context<VectorizeMetadataIndex>,
-    id: string,
+    _id: string,
     props: VectorizeMetadataIndexProps,
   ): Promise<VectorizeMetadataIndex> {
     const api = await createCloudflareApi(props);

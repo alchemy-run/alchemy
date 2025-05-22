@@ -44,7 +44,7 @@ describe("ProjectDomain Resource", () => {
       );
       expect(getResponse.status).toEqual(200);
 
-      const responseData = await getResponse.json();
+      const responseData: any = await getResponse.json();
       expect(responseData.name).toEqual(`test-${testId}.example.com`);
 
       // Update the domain
@@ -61,7 +61,7 @@ describe("ProjectDomain Resource", () => {
       const getUpdatedResponse = await api.get(
         `/projects/${project.name}/domains/${domain.name}`,
       );
-      const updatedData = await getUpdatedResponse.json();
+      const updatedData: any = await getUpdatedResponse.json();
       expect(updatedData.name).toEqual(`test-${testId}.example.com`);
       expect(updatedData.gitBranch).toEqual("main");
     } catch (err) {

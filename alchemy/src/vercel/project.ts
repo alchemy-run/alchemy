@@ -400,7 +400,7 @@ export const Project = Resource(
 
         // 409 Conflict: Can't update name, so remove it from the props
         // 400 Invalid Request: Should NOT have additional property `environmentVariables`
-        const { name, environmentVariables, gitRepository, ...rest } = props;
+        const { environmentVariables, ...rest } = props;
         const response = await api.patch(`/projects/${this.output.id}`, rest);
         const data = (await response.json()) as Project;
 

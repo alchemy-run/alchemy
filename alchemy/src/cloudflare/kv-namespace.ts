@@ -1,5 +1,6 @@
 import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
+import { Resource, ResourceKind } from "../resource.js";
+import { bind } from "../runtime/bind.js";
 import { withExponentialBackoff } from "../util/retry.js";
 import { handleApiError } from "./api-error.js";
 import {
@@ -7,6 +8,7 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
+import type { Bound } from "./bound.js";
 
 /**
  * Properties for creating or updating a KV Namespace
@@ -15,7 +17,7 @@ export interface KVNamespaceProps extends CloudflareApiOptions {
   /**
    * Title of the namespace
    */
-  title: string;
+  title?: string;
 
   /**
    * KV pairs to store in the namespace
@@ -70,12 +72,18 @@ export interface KVPair {
   metadata?: any;
 }
 
+export function isKVNamespace(
+  resource: Resource,
+): resource is KVNamespaceResource {
+  return resource[ResourceKind] === "cloudflare::KVNamespace";
+}
+
 /**
  * Output returned after KV Namespace creation/update
  */
-export interface KVNamespace
+export interface KVNamespaceResource
   extends Resource<"cloudflare::KVNamespace">,
-    KVNamespaceProps {
+    Omit<KVNamespaceProps, "delete"> {
   type: "kv_namespace";
   /**
    * The ID of the namespace
@@ -92,6 +100,8 @@ export interface KVNamespace
    */
   modifiedAt: number;
 }
+
+export type KVNamespace = KVNamespaceResource & Bound<KVNamespaceResource>;
 
 /**
  * A Cloudflare KV Namespace is a key-value store that can be used to store data for your application.
@@ -147,15 +157,34 @@ export interface KVNamespace
  *   delete: false
  * });
  */
-export const KVNamespace = Resource(
+
+export async function KVNamespace(
+  name: string,
+  props: KVNamespaceProps = {},
+): Promise<KVNamespace> {
+  const kv = await _KVNamespace(name, props);
+  const binding = await bind(kv);
+  return {
+    ...kv,
+    delete: binding.delete,
+    get: binding.get,
+    getWithMetadata: binding.getWithMetadata,
+    list: binding.list,
+    put: binding.put,
+  };
+}
+
+const _KVNamespace = Resource(
   "cloudflare::KVNamespace",
   async function (
-    this: Context<KVNamespace>,
+    this: Context<KVNamespaceResource>,
     id: string,
     props: KVNamespaceProps,
-  ) {
+  ): Promise<KVNamespaceResource> {
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
+
+    const title = props.title ?? id;
 
     if (this.phase === "delete") {
       // For delete operations, we need to check if the namespace ID exists in the output
@@ -181,7 +210,10 @@ export const KVNamespace = Resource(
     } else {
       try {
         // Try to create the KV namespace
-        const { id } = await createKVNamespace(api, props);
+        const { id } = await createKVNamespace(api, {
+          ...props,
+          title,
+        });
         createdAt = Date.now();
         namespaceId = id;
       } catch (error) {
@@ -191,16 +223,13 @@ export const KVNamespace = Resource(
           error instanceof Error &&
           error.message.includes("already exists")
         ) {
-          console.log(`Namespace '${props.title}' already exists, adopting it`);
+          console.log(`Namespace '${title}' already exists, adopting it`);
           // Find the existing namespace by title
-          const existingNamespace = await findKVNamespaceByTitle(
-            api,
-            props.title,
-          );
+          const existingNamespace = await findKVNamespaceByTitle(api, title);
 
           if (!existingNamespace) {
             throw new Error(
-              `Failed to find existing namespace '${props.title}' for adoption`,
+              `Failed to find existing namespace '${title}' for adoption`,
             );
           }
 
@@ -229,7 +258,9 @@ export const KVNamespace = Resource(
 
 export async function createKVNamespace(
   api: CloudflareApi,
-  props: KVNamespaceProps,
+  props: KVNamespaceProps & {
+    title: string;
+  },
 ): Promise<{ id: string }> {
   const createResponse = await api.post(
     `/accounts/${api.accountId}/storage/kv/namespaces`,

@@ -3,8 +3,8 @@
 
 // Read-only properties for AWS resources
 const properties = {
-  "ACMPCA": {
-    "Certificate": [
+  ACMPCA: {
+    Certificate: [
       "ApiPassthrough",
       "Arn",
       "Certificate",
@@ -13,9 +13,9 @@ const properties = {
       "SigningAlgorithm",
       "TemplateArn",
       "Validity",
-      "ValidityNotBefore"
+      "ValidityNotBefore",
     ],
-    "CertificateAuthority": [
+    CertificateAuthority: [
       "Arn",
       "CertificateSigningRequest",
       "CsrExtensions",
@@ -24,57 +24,33 @@ const properties = {
       "SigningAlgorithm",
       "Subject",
       "Type",
-      "UsageMode"
+      "UsageMode",
     ],
-    "CertificateAuthorityActivation": [
+    CertificateAuthorityActivation: [
       "CertificateAuthorityArn",
-      "CompleteCertificateChain"
+      "CompleteCertificateChain",
     ],
-    "Permission": [
+    Permission: [
       "Actions",
       "CertificateAuthorityArn",
       "Principal",
-      "SourceAccount"
-    ]
-  },
-  "APS": {
-    "RuleGroupsNamespace": [
-      "Arn",
-      "Name",
-      "Workspace"
+      "SourceAccount",
     ],
-    "Scraper": [
-      "Arn",
-      "RoleArn",
-      "ScraperId",
-      "Source"
-    ],
-    "Workspace": [
-      "Arn",
-      "KmsKeyArn",
-      "PrometheusEndpoint",
-      "WorkspaceId"
-    ]
   },
-  "ARCZonalShift": {
-    "AutoshiftObserverNotificationStatus": [
-      "AccountId",
-      "Region",
-      "Status"
-    ],
-    "ZonalAutoshiftConfiguration": [
-      "ResourceIdentifier"
-    ]
+  APS: {
+    RuleGroupsNamespace: ["Arn", "Name", "Workspace"],
+    Scraper: ["Arn", "RoleArn", "ScraperId", "Source"],
+    Workspace: ["Arn", "KmsKeyArn", "PrometheusEndpoint", "WorkspaceId"],
   },
-  "AccessAnalyzer": {
-    "Analyzer": [
-      "AnalyzerName",
-      "Arn",
-      "Type"
-    ]
+  ARCZonalShift: {
+    AutoshiftObserverNotificationStatus: ["AccountId", "Region", "Status"],
+    ZonalAutoshiftConfiguration: ["ResourceIdentifier"],
   },
-  "AmazonMQ": {
-    "Broker": [
+  AccessAnalyzer: {
+    Analyzer: ["AnalyzerName", "Arn", "Type"],
+  },
+  AmazonMQ: {
+    Broker: [
       "AmqpEndpoints",
       "Arn",
       "AuthenticationStrategy",
@@ -91,35 +67,23 @@ const properties = {
       "StompEndpoints",
       "StorageType",
       "SubnetIds",
-      "WssEndpoints"
+      "WssEndpoints",
     ],
-    "Configuration": [
+    Configuration: [
       "Arn",
       "AuthenticationStrategy",
       "EngineType",
       "EngineVersion",
       "Id",
       "Name",
-      "Revision"
+      "Revision",
     ],
-    "ConfigurationAssociation": [
-      "Broker"
-    ]
+    ConfigurationAssociation: ["Broker"],
   },
-  "Amplify": {
-    "App": [
-      "AppId",
-      "AppName",
-      "Arn",
-      "DefaultDomain"
-    ],
-    "Branch": [
-      "AppId",
-      "Arn",
-      "BranchName",
-      "BranchName"
-    ],
-    "Domain": [
+  Amplify: {
+    App: ["AppId", "AppName", "Arn", "DefaultDomain"],
+    Branch: ["AppId", "Arn", "BranchName", "BranchName"],
+    Domain: [
       "AppId",
       "Arn",
       "AutoSubDomainCreationPatterns",
@@ -134,210 +98,86 @@ const properties = {
       "DomainStatus",
       "EnableAutoSubDomain",
       "StatusReason",
-      "UpdateStatus"
-    ]
+      "UpdateStatus",
+    ],
   },
-  "AmplifyUIBuilder": {
-    "Component": [
-      "AppId",
-      "CreatedAt",
-      "EnvironmentName",
-      "Id",
-      "ModifiedAt"
-    ],
-    "Form": [
-      "AppId",
-      "EnvironmentName",
-      "Id"
-    ],
-    "Theme": [
-      "AppId",
-      "CreatedAt",
-      "EnvironmentName",
-      "Id",
-      "ModifiedAt"
-    ]
+  AmplifyUIBuilder: {
+    Component: ["AppId", "CreatedAt", "EnvironmentName", "Id", "ModifiedAt"],
+    Form: ["AppId", "EnvironmentName", "Id"],
+    Theme: ["AppId", "CreatedAt", "EnvironmentName", "Id", "ModifiedAt"],
   },
-  "ApiGateway": {
-    "Account": [
-      "Id"
-    ],
-    "ApiKey": [
-      "APIKeyId",
-      "GenerateDistinctId",
-      "Name",
-      "Value"
-    ],
-    "Authorizer": [
-      "AuthorizerId",
-      "RestApiId"
-    ],
-    "BasePathMapping": [
-      "BasePath",
-      "DomainName"
-    ],
-    "BasePathMappingV2": [
-      "BasePath",
-      "BasePathMappingArn",
-      "DomainNameArn"
-    ],
-    "ClientCertificate": [
-      "ClientCertificateId"
-    ],
-    "Deployment": [
-      "DeploymentCanarySettings",
-      "DeploymentId",
-      "RestApiId"
-    ],
-    "DocumentationPart": [
-      "DocumentationPartId",
-      "Location",
-      "RestApiId"
-    ],
-    "DocumentationVersion": [
-      "DocumentationVersion",
-      "RestApiId"
-    ],
-    "DomainName": [
+  ApiGateway: {
+    Account: ["Id"],
+    ApiKey: ["APIKeyId", "GenerateDistinctId", "Name", "Value"],
+    Authorizer: ["AuthorizerId", "RestApiId"],
+    BasePathMapping: ["BasePath", "DomainName"],
+    BasePathMappingV2: ["BasePath", "BasePathMappingArn", "DomainNameArn"],
+    ClientCertificate: ["ClientCertificateId"],
+    Deployment: ["DeploymentCanarySettings", "DeploymentId", "RestApiId"],
+    DocumentationPart: ["DocumentationPartId", "Location", "RestApiId"],
+    DocumentationVersion: ["DocumentationVersion", "RestApiId"],
+    DomainName: [
       "DistributionDomainName",
       "DistributionHostedZoneId",
       "DomainName",
       "RegionalDomainName",
-      "RegionalHostedZoneId"
+      "RegionalHostedZoneId",
     ],
-    "DomainNameAccessAssociation": [
+    DomainNameAccessAssociation: [
       "AccessAssociationSource",
       "AccessAssociationSourceType",
       "DomainNameAccessAssociationArn",
       "DomainNameArn",
-      "Tags"
+      "Tags",
     ],
-    "DomainNameV2": [
+    DomainNameV2: [
       "DomainName",
       "DomainNameArn",
       "DomainNameId",
       "EndpointConfiguration",
-      "SecurityPolicy"
+      "SecurityPolicy",
     ],
-    "GatewayResponse": [
-      "Id",
-      "ResponseType",
-      "RestApiId"
-    ],
-    "Method": [
-      "HttpMethod",
-      "ResourceId",
-      "RestApiId"
-    ],
-    "Model": [
-      "ContentType",
-      "Name",
-      "RestApiId"
-    ],
-    "RequestValidator": [
-      "Name",
-      "RequestValidatorId",
-      "RestApiId"
-    ],
-    "Resource": [
-      "ParentId",
-      "PathPart",
-      "ResourceId",
-      "RestApiId"
-    ],
-    "RestApi": [
-      "RestApiId",
-      "RootResourceId"
-    ],
-    "Stage": [
-      "RestApiId",
-      "StageName"
-    ],
-    "UsagePlan": [
-      "Id"
-    ],
-    "UsagePlanKey": [
-      "Id",
-      "KeyId",
-      "KeyType",
-      "UsagePlanId"
-    ],
-    "VpcLink": [
-      "TargetArns",
-      "VpcLinkId"
-    ]
+    GatewayResponse: ["Id", "ResponseType", "RestApiId"],
+    Method: ["HttpMethod", "ResourceId", "RestApiId"],
+    Model: ["ContentType", "Name", "RestApiId"],
+    RequestValidator: ["Name", "RequestValidatorId", "RestApiId"],
+    Resource: ["ParentId", "PathPart", "ResourceId", "RestApiId"],
+    RestApi: ["RestApiId", "RootResourceId"],
+    Stage: ["RestApiId", "StageName"],
+    UsagePlan: ["Id"],
+    UsagePlanKey: ["Id", "KeyId", "KeyType", "UsagePlanId"],
+    VpcLink: ["TargetArns", "VpcLinkId"],
   },
-  "ApiGatewayV2": {
-    "Api": [
-      "ApiEndpoint",
-      "ApiId",
-      "ProtocolType"
-    ],
-    "ApiGatewayManagedOverrides": [
-      "ApiId"
-    ],
-    "ApiMapping": [
-      "ApiMappingId",
-      "DomainName"
-    ],
-    "Authorizer": [
-      "ApiId",
-      "AuthorizerId"
-    ],
-    "Deployment": [
-      "ApiId",
-      "DeploymentId"
-    ],
-    "DomainName": [
+  ApiGatewayV2: {
+    Api: ["ApiEndpoint", "ApiId", "ProtocolType"],
+    ApiGatewayManagedOverrides: ["ApiId"],
+    ApiMapping: ["ApiMappingId", "DomainName"],
+    Authorizer: ["ApiId", "AuthorizerId"],
+    Deployment: ["ApiId", "DeploymentId"],
+    DomainName: [
       "DomainName",
       "DomainNameArn",
       "RegionalDomainName",
-      "RegionalHostedZoneId"
+      "RegionalHostedZoneId",
     ],
-    "Integration": [
-      "ApiId",
-      "IntegrationId"
-    ],
-    "IntegrationResponse": [
-      "ApiId",
-      "IntegrationId",
-      "IntegrationResponseId"
-    ],
-    "Model": [
-      "ApiId",
-      "ModelId"
-    ],
-    "Route": [
-      "ApiId",
-      "RouteId"
-    ],
-    "RouteResponse": [
-      "ApiId",
-      "RouteId",
-      "RouteResponseId"
-    ],
-    "Stage": [
-      "ApiId",
-      "StageName"
-    ],
-    "VpcLink": [
-      "SecurityGroupIds",
-      "SubnetIds",
-      "VpcLinkId"
-    ]
+    Integration: ["ApiId", "IntegrationId"],
+    IntegrationResponse: ["ApiId", "IntegrationId", "IntegrationResponseId"],
+    Model: ["ApiId", "ModelId"],
+    Route: ["ApiId", "RouteId"],
+    RouteResponse: ["ApiId", "RouteId", "RouteResponseId"],
+    Stage: ["ApiId", "StageName"],
+    VpcLink: ["SecurityGroupIds", "SubnetIds", "VpcLinkId"],
   },
-  "AppConfig": {
-    "Application": [
-      "ApplicationId"
-    ],
-    "ConfigurationProfile": [
+  AppConfig: {
+    Application: ["ApplicationId"],
+    ConfigurationProfile: [
       "ApplicationId",
       "ConfigurationProfileId",
       "KmsKeyArn",
       "LocationUri",
-      "Type"
+      "Type",
     ],
-    "Deployment": [
+    Deployment: [
       "ApplicationId",
       "ConfigurationProfileId",
       "ConfigurationVersion",
@@ -347,33 +187,21 @@ const properties = {
       "DynamicExtensionParameters",
       "EnvironmentId",
       "KmsKeyIdentifier",
-      "Tags"
+      "Tags",
     ],
-    "DeploymentStrategy": [
-      "Id",
-      "Name",
-      "ReplicateTo"
-    ],
-    "Environment": [
-      "ApplicationId",
-      "EnvironmentId"
-    ],
-    "Extension": [
-      "Arn",
-      "Id",
-      "Name",
-      "VersionNumber"
-    ],
-    "ExtensionAssociation": [
+    DeploymentStrategy: ["Id", "Name", "ReplicateTo"],
+    Environment: ["ApplicationId", "EnvironmentId"],
+    Extension: ["Arn", "Id", "Name", "VersionNumber"],
+    ExtensionAssociation: [
       "Arn",
       "ExtensionArn",
       "ExtensionIdentifier",
       "ExtensionVersionNumber",
       "Id",
       "ResourceArn",
-      "ResourceIdentifier"
+      "ResourceIdentifier",
     ],
-    "HostedConfigurationVersion": [
+    HostedConfigurationVersion: [
       "ApplicationId",
       "ConfigurationProfileId",
       "Content",
@@ -381,48 +209,38 @@ const properties = {
       "Description",
       "LatestVersionNumber",
       "VersionLabel",
-      "VersionNumber"
-    ]
-  },
-  "AppFlow": {
-    "Connector": [
-      "ConnectorArn",
-      "ConnectorLabel"
+      "VersionNumber",
     ],
-    "ConnectorProfile": [
+  },
+  AppFlow: {
+    Connector: ["ConnectorArn", "ConnectorLabel"],
+    ConnectorProfile: [
       "ConnectorLabel",
       "ConnectorProfileArn",
       "ConnectorProfileName",
       "ConnectorType",
-      "CredentialsArn"
+      "CredentialsArn",
     ],
-    "Flow": [
-      "FlowArn",
-      "FlowName",
-      "KMSArn"
-    ]
+    Flow: ["FlowArn", "FlowName", "KMSArn"],
   },
-  "AppIntegrations": {
-    "Application": [
-      "ApplicationArn",
-      "Id"
-    ],
-    "DataIntegration": [
+  AppIntegrations: {
+    Application: ["ApplicationArn", "Id"],
+    DataIntegration: [
       "DataIntegrationArn",
       "Id",
       "KmsKey",
       "ScheduleConfig",
-      "SourceURI"
+      "SourceURI",
     ],
-    "EventIntegration": [
+    EventIntegration: [
       "EventBridgeBus",
       "EventFilter",
       "EventIntegrationArn",
-      "Name"
-    ]
+      "Name",
+    ],
   },
-  "AppMesh": {
-    "GatewayRoute": [
+  AppMesh: {
+    GatewayRoute: [
       "Arn",
       "GatewayRouteName",
       "GatewayRouteName",
@@ -433,17 +251,10 @@ const properties = {
       "ResourceOwner",
       "Uid",
       "VirtualGatewayName",
-      "VirtualGatewayName"
+      "VirtualGatewayName",
     ],
-    "Mesh": [
-      "Arn",
-      "MeshName",
-      "MeshName",
-      "MeshOwner",
-      "ResourceOwner",
-      "Uid"
-    ],
-    "Route": [
+    Mesh: ["Arn", "MeshName", "MeshName", "MeshOwner", "ResourceOwner", "Uid"],
+    Route: [
       "Arn",
       "MeshName",
       "MeshName",
@@ -454,9 +265,9 @@ const properties = {
       "RouteName",
       "Uid",
       "VirtualRouterName",
-      "VirtualRouterName"
+      "VirtualRouterName",
     ],
-    "VirtualGateway": [
+    VirtualGateway: [
       "Arn",
       "MeshName",
       "MeshName",
@@ -465,9 +276,9 @@ const properties = {
       "ResourceOwner",
       "Uid",
       "VirtualGatewayName",
-      "VirtualGatewayName"
+      "VirtualGatewayName",
     ],
-    "VirtualNode": [
+    VirtualNode: [
       "Arn",
       "MeshName",
       "MeshName",
@@ -476,9 +287,9 @@ const properties = {
       "ResourceOwner",
       "Uid",
       "VirtualNodeName",
-      "VirtualNodeName"
+      "VirtualNodeName",
     ],
-    "VirtualRouter": [
+    VirtualRouter: [
       "Arn",
       "MeshName",
       "MeshName",
@@ -487,9 +298,9 @@ const properties = {
       "ResourceOwner",
       "Uid",
       "VirtualRouterName",
-      "VirtualRouterName"
+      "VirtualRouterName",
     ],
-    "VirtualService": [
+    VirtualService: [
       "Arn",
       "MeshName",
       "MeshName",
@@ -498,11 +309,11 @@ const properties = {
       "ResourceOwner",
       "Uid",
       "VirtualServiceName",
-      "VirtualServiceName"
-    ]
+      "VirtualServiceName",
+    ],
   },
-  "AppRunner": {
-    "AutoScalingConfiguration": [
+  AppRunner: {
+    AutoScalingConfiguration: [
       "AutoScalingConfigurationArn",
       "AutoScalingConfigurationName",
       "AutoScalingConfigurationRevision",
@@ -510,43 +321,43 @@ const properties = {
       "MaxConcurrency",
       "MaxSize",
       "MinSize",
-      "Tags"
+      "Tags",
     ],
-    "ObservabilityConfiguration": [
+    ObservabilityConfiguration: [
       "Latest",
       "ObservabilityConfigurationArn",
       "ObservabilityConfigurationName",
       "ObservabilityConfigurationRevision",
       "Tags",
-      "TraceConfiguration"
+      "TraceConfiguration",
     ],
-    "Service": [
+    Service: [
       "EncryptionConfiguration",
       "ServiceArn",
       "ServiceId",
       "ServiceName",
       "ServiceUrl",
-      "Status"
+      "Status",
     ],
-    "VpcConnector": [
+    VpcConnector: [
       "SecurityGroups",
       "Subnets",
       "Tags",
       "VpcConnectorArn",
       "VpcConnectorName",
-      "VpcConnectorRevision"
+      "VpcConnectorRevision",
     ],
-    "VpcIngressConnection": [
+    VpcIngressConnection: [
       "DomainName",
       "ServiceArn",
       "Status",
       "Tags",
       "VpcIngressConnectionArn",
-      "VpcIngressConnectionName"
-    ]
+      "VpcIngressConnectionName",
+    ],
   },
-  "AppStream": {
-    "AppBlock": [
+  AppStream: {
+    AppBlock: [
       "Arn",
       "CreatedTime",
       "Description",
@@ -555,129 +366,82 @@ const properties = {
       "PackagingType",
       "PostSetupScriptDetails",
       "SetupScriptDetails",
-      "SourceS3Location"
+      "SourceS3Location",
     ],
-    "AppBlockBuilder": [
-      "Arn",
-      "CreatedTime",
-      "Name"
-    ],
-    "Application": [
+    AppBlockBuilder: ["Arn", "CreatedTime", "Name"],
+    Application: [
       "Arn",
       "CreatedTime",
       "InstanceFamilies",
       "Name",
-      "Platforms"
+      "Platforms",
     ],
-    "ApplicationEntitlementAssociation": [
+    ApplicationEntitlementAssociation: [
       "ApplicationIdentifier",
       "EntitlementName",
-      "StackName"
+      "StackName",
     ],
-    "ApplicationFleetAssociation": [
-      "ApplicationArn",
-      "FleetName"
-    ],
-    "DirectoryConfig": [
-      "DirectoryName"
-    ],
-    "Entitlement": [
-      "CreatedTime",
-      "LastModifiedTime",
-      "Name",
-      "StackName"
-    ],
-    "Fleet": [
-      "FleetType",
-      "Name"
-    ],
-    "ImageBuilder": [
-      "StreamingUrl"
-    ],
-    "Stack": [
-      "Name"
-    ],
-    "StackUserAssociation": [
+    ApplicationFleetAssociation: ["ApplicationArn", "FleetName"],
+    DirectoryConfig: ["DirectoryName"],
+    Entitlement: ["CreatedTime", "LastModifiedTime", "Name", "StackName"],
+    Fleet: ["FleetType", "Name"],
+    ImageBuilder: ["StreamingUrl"],
+    Stack: ["Name"],
+    StackUserAssociation: [
       "AuthenticationType",
       "SendEmailNotification",
       "StackName",
-      "UserName"
+      "UserName",
     ],
-    "User": [
+    User: [
       "AuthenticationType",
       "FirstName",
       "LastName",
       "MessageAction",
-      "UserName"
-    ]
+      "UserName",
+    ],
   },
-  "AppSync": {
-    "Api": [
-      "ApiArn",
-      "ApiId",
-      "Dns",
-      "Dns.Http",
-      "Dns.Realtime"
-    ],
-    "ApiCache": [
-      "ApiId"
-    ],
-    "ApiKey": [
-      "ApiId",
-      "ApiKey",
-      "Arn"
-    ],
-    "ChannelNamespace": [
-      "ApiId",
-      "ChannelNamespaceArn",
-      "Name"
-    ],
-    "DataSource": [
-      "ApiId",
-      "DataSourceArn",
-      "Name",
-      "Name"
-    ],
-    "DomainName": [
+  AppSync: {
+    Api: ["ApiArn", "ApiId", "Dns", "Dns.Http", "Dns.Realtime"],
+    ApiCache: ["ApiId"],
+    ApiKey: ["ApiId", "ApiKey", "Arn"],
+    ChannelNamespace: ["ApiId", "ChannelNamespaceArn", "Name"],
+    DataSource: ["ApiId", "DataSourceArn", "Name", "Name"],
+    DomainName: [
       "AppSyncDomainName",
       "CertificateArn",
       "DomainName",
       "DomainName",
       "DomainNameArn",
-      "HostedZoneId"
+      "HostedZoneId",
     ],
-    "DomainNameApiAssociation": [
-      "ApiAssociationIdentifier",
-      "DomainName"
-    ],
-    "FunctionConfiguration": [
+    DomainNameApiAssociation: ["ApiAssociationIdentifier", "DomainName"],
+    FunctionConfiguration: [
       "ApiId",
       "DataSourceName",
       "FunctionArn",
       "FunctionId",
-      "Name"
+      "Name",
     ],
-    "GraphQLApi": [
+    GraphQLApi: [
       "ApiId",
       "Arn",
       "GraphQLDns",
       "GraphQLEndpointArn",
       "GraphQLUrl",
       "RealtimeDns",
-      "RealtimeUrl"
+      "RealtimeUrl",
     ],
-    "GraphQLSchema": [
-      "ApiId"
-    ],
-    "Resolver": [
+    GraphQLSchema: ["ApiId"],
+    Resolver: [
       "ApiId",
       "FieldName",
       "FieldName",
       "ResolverArn",
       "TypeName",
-      "TypeName"
+      "TypeName",
     ],
-    "SourceApiAssociation": [
+    SourceApiAssociation: [
       "AssociationArn",
       "AssociationId",
       "LastSuccessfulMergeDate",
@@ -688,11 +452,11 @@ const properties = {
       "SourceApiAssociationStatus",
       "SourceApiAssociationStatusDetail",
       "SourceApiId",
-      "SourceApiIdentifier"
-    ]
+      "SourceApiIdentifier",
+    ],
   },
-  "AppTest": {
-    "TestCase": [
+  AppTest: {
+    TestCase: [
       "CreationTime",
       "LastUpdateTime",
       "LatestVersion",
@@ -702,89 +466,75 @@ const properties = {
       "Status",
       "TestCaseArn",
       "TestCaseId",
-      "TestCaseVersion"
-    ]
+      "TestCaseVersion",
+    ],
   },
-  "ApplicationAutoScaling": {
-    "ScalableTarget": [
+  ApplicationAutoScaling: {
+    ScalableTarget: [
       "Id",
       "ResourceId",
       "ScalableDimension",
-      "ServiceNamespace"
+      "ServiceNamespace",
     ],
-    "ScalingPolicy": [
+    ScalingPolicy: [
       "Arn",
       "PolicyName",
       "ResourceId",
       "ScalableDimension",
       "ScalingTargetId",
-      "ServiceNamespace"
-    ]
-  },
-  "ApplicationInsights": {
-    "Application": [
-      "ApplicationARN",
-      "GroupingType",
-      "ResourceGroupName"
-    ]
-  },
-  "ApplicationSignals": {
-    "Discovery": [
-      "AccountId"
+      "ServiceNamespace",
     ],
-    "ServiceLevelObjective": [
+  },
+  ApplicationInsights: {
+    Application: ["ApplicationARN", "GroupingType", "ResourceGroupName"],
+  },
+  ApplicationSignals: {
+    Discovery: ["AccountId"],
+    ServiceLevelObjective: [
       "Arn",
       "CreatedTime",
       "EvaluationType",
       "LastUpdatedTime",
-      "Name"
-    ]
+      "Name",
+    ],
   },
-  "Athena": {
-    "CapacityReservation": [
+  Athena: {
+    CapacityReservation: [
       "AllocatedDpus",
       "Arn",
       "CreationTime",
       "LastSuccessfulAllocationTime",
       "Name",
-      "Status"
+      "Status",
     ],
-    "DataCatalog": [
-      "Name"
-    ],
-    "NamedQuery": [
+    DataCatalog: ["Name"],
+    NamedQuery: [
       "Database",
       "Description",
       "Name",
       "NamedQueryId",
       "QueryString",
-      "WorkGroup"
+      "WorkGroup",
     ],
-    "PreparedStatement": [
-      "StatementName",
-      "WorkGroup"
-    ],
-    "WorkGroup": [
+    PreparedStatement: ["StatementName", "WorkGroup"],
+    WorkGroup: [
       "CreationTime",
       "Name",
-      "WorkGroupConfiguration.EngineVersion.EffectiveEngineVersion"
-    ]
+      "WorkGroupConfiguration.EngineVersion.EffectiveEngineVersion",
+    ],
   },
-  "AuditManager": {
-    "Assessment": [
+  AuditManager: {
+    Assessment: [
       "Arn",
       "AssessmentId",
       "AwsAccount",
       "CreationTime",
-      "FrameworkId"
-    ]
-  },
-  "AutoScaling": {
-    "AutoScalingGroup": [
-      "AutoScalingGroupName",
-      "InstanceId"
+      "FrameworkId",
     ],
-    "LaunchConfiguration": [
+  },
+  AutoScaling: {
+    AutoScalingGroup: ["AutoScalingGroupName", "InstanceId"],
+    LaunchConfiguration: [
       "AssociatePublicIpAddress",
       "BlockDeviceMappings",
       "ClassicLinkVPCId",
@@ -803,40 +553,25 @@ const properties = {
       "RamDiskId",
       "SecurityGroups",
       "SpotPrice",
-      "UserData"
+      "UserData",
     ],
-    "LifecycleHook": [
-      "AutoScalingGroupName",
-      "LifecycleHookName"
-    ],
-    "ScalingPolicy": [
-      "Arn",
-      "AutoScalingGroupName",
-      "PolicyName"
-    ],
-    "ScheduledAction": [
-      "AutoScalingGroupName",
-      "ScheduledActionName"
-    ],
-    "WarmPool": [
-      "AutoScalingGroupName"
-    ]
+    LifecycleHook: ["AutoScalingGroupName", "LifecycleHookName"],
+    ScalingPolicy: ["Arn", "AutoScalingGroupName", "PolicyName"],
+    ScheduledAction: ["AutoScalingGroupName", "ScheduledActionName"],
+    WarmPool: ["AutoScalingGroupName"],
   },
-  "AutoScalingPlans": {
-    "ScalingPlan": [
-      "ScalingPlanName",
-      "ScalingPlanVersion"
-    ]
+  AutoScalingPlans: {
+    ScalingPlan: ["ScalingPlanName", "ScalingPlanVersion"],
   },
-  "B2BI": {
-    "Capability": [
+  B2BI: {
+    Capability: [
       "CapabilityArn",
       "CapabilityId",
       "CreatedAt",
       "ModifiedAt",
-      "Type"
+      "Type",
     ],
-    "Partnership": [
+    Partnership: [
       "CreatedAt",
       "Email",
       "ModifiedAt",
@@ -844,118 +579,86 @@ const properties = {
       "PartnershipId",
       "Phone",
       "ProfileId",
-      "TradingPartnerId"
+      "TradingPartnerId",
     ],
-    "Profile": [
+    Profile: [
       "CreatedAt",
       "LogGroupName",
       "Logging",
       "ModifiedAt",
       "ProfileArn",
-      "ProfileId"
+      "ProfileId",
     ],
-    "Transformer": [
-      "CreatedAt",
-      "ModifiedAt",
-      "TransformerArn",
-      "TransformerId"
-    ]
+    Transformer: ["CreatedAt", "ModifiedAt", "TransformerArn", "TransformerId"],
   },
-  "BCMDataExports": {
-    "Export": [
-      "ExportArn"
-    ]
+  BCMDataExports: {
+    Export: ["ExportArn"],
   },
-  "Backup": {
-    "BackupPlan": [
-      "BackupPlanArn",
-      "BackupPlanId",
-      "VersionId"
-    ],
-    "BackupSelection": [
+  Backup: {
+    BackupPlan: ["BackupPlanArn", "BackupPlanId", "VersionId"],
+    BackupSelection: [
       "BackupPlanId",
       "BackupPlanId",
       "BackupSelection",
       "Id",
-      "SelectionId"
+      "SelectionId",
     ],
-    "BackupVault": [
+    BackupVault: [
       "BackupVaultArn",
       "BackupVaultName",
       "BackupVaultName",
-      "EncryptionKeyArn"
+      "EncryptionKeyArn",
     ],
-    "Framework": [
+    Framework: [
       "CreationTime",
       "DeploymentStatus",
       "FrameworkArn",
       "FrameworkName",
-      "FrameworkStatus"
+      "FrameworkStatus",
     ],
-    "LogicallyAirGappedBackupVault": [
+    LogicallyAirGappedBackupVault: [
       "BackupVaultArn",
       "BackupVaultName",
       "EncryptionKeyArn",
       "MaxRetentionDays",
       "MinRetentionDays",
       "VaultState",
-      "VaultType"
+      "VaultType",
     ],
-    "ReportPlan": [
-      "ReportPlanArn",
-      "ReportPlanName"
-    ],
-    "RestoreTestingPlan": [
-      "RestoreTestingPlanArn",
-      "RestoreTestingPlanName"
-    ],
-    "RestoreTestingSelection": [
+    ReportPlan: ["ReportPlanArn", "ReportPlanName"],
+    RestoreTestingPlan: ["RestoreTestingPlanArn", "RestoreTestingPlanName"],
+    RestoreTestingSelection: [
       "ProtectedResourceType",
       "RestoreTestingPlanName",
-      "RestoreTestingSelectionName"
-    ]
+      "RestoreTestingSelectionName",
+    ],
   },
-  "BackupGateway": {
-    "Hypervisor": [
-      "HypervisorArn",
-      "KmsKeyArn",
-      "Tags"
-    ]
+  BackupGateway: {
+    Hypervisor: ["HypervisorArn", "KmsKeyArn", "Tags"],
   },
-  "Batch": {
-    "ComputeEnvironment": [
+  Batch: {
+    ComputeEnvironment: [
       "ComputeEnvironmentArn",
       "ComputeEnvironmentName",
       "EksConfiguration",
       "Tags",
-      "Type"
+      "Type",
     ],
-    "ConsumableResource": [
+    ConsumableResource: [
       "AvailableQuantity",
       "ConsumableResourceArn",
       "ConsumableResourceName",
       "CreatedAt",
       "InUseQuantity",
       "ResourceType",
-      "Tags"
+      "Tags",
     ],
-    "JobDefinition": [
-      "JobDefinitionArn",
-      "JobDefinitionName"
-    ],
-    "JobQueue": [
-      "JobQueueArn",
-      "JobQueueName",
-      "Tags"
-    ],
-    "SchedulingPolicy": [
-      "Arn",
-      "Name",
-      "Tags"
-    ]
+    JobDefinition: ["JobDefinitionArn", "JobDefinitionName"],
+    JobQueue: ["JobQueueArn", "JobQueueName", "Tags"],
+    SchedulingPolicy: ["Arn", "Name", "Tags"],
   },
-  "Bedrock": {
-    "Agent": [
+  Bedrock: {
+    Agent: [
       "AgentArn",
       "AgentId",
       "AgentStatus",
@@ -964,18 +667,18 @@ const properties = {
       "FailureReasons",
       "PreparedAt",
       "RecommendedActions",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "AgentAlias": [
+    AgentAlias: [
       "AgentAliasArn",
       "AgentAliasHistoryEvents",
       "AgentAliasId",
       "AgentAliasStatus",
       "AgentId",
       "CreatedAt",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "ApplicationInferenceProfile": [
+    ApplicationInferenceProfile: [
       "CreatedAt",
       "Description",
       "InferenceProfileArn",
@@ -986,51 +689,44 @@ const properties = {
       "Models",
       "Status",
       "Type",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "Blueprint": [
+    Blueprint: [
       "BlueprintArn",
       "BlueprintName",
       "BlueprintStage",
       "CreationTime",
       "LastModifiedTime",
-      "Type"
+      "Type",
     ],
-    "DataAutomationProject": [
+    DataAutomationProject: [
       "CreationTime",
       "LastModifiedTime",
       "ProjectArn",
       "ProjectName",
       "ProjectStage",
-      "Status"
+      "Status",
     ],
-    "DataSource": [
+    DataSource: [
       "CreatedAt",
       "DataSourceConfiguration.WebConfiguration.CrawlerConfiguration.UserAgentHeader",
       "DataSourceId",
       "DataSourceStatus",
       "FailureReasons",
       "KnowledgeBaseId",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "Flow": [
+    Flow: [
       "Arn",
       "CreatedAt",
       "Id",
       "Status",
       "UpdatedAt",
       "Validations",
-      "Version"
+      "Version",
     ],
-    "FlowAlias": [
-      "Arn",
-      "CreatedAt",
-      "FlowArn",
-      "FlowId",
-      "Id",
-      "UpdatedAt"
-    ],
-    "FlowVersion": [
+    FlowAlias: ["Arn", "CreatedAt", "FlowArn", "FlowId", "Id", "UpdatedAt"],
+    FlowVersion: [
       "CreatedAt",
       "CustomerEncryptionKeyArn",
       "Definition",
@@ -1042,9 +738,9 @@ const properties = {
       "FlowId",
       "Name",
       "Status",
-      "Version"
+      "Version",
     ],
-    "Guardrail": [
+    Guardrail: [
       "CreatedAt",
       "FailureRecommendations",
       "GuardrailArn",
@@ -1052,32 +748,26 @@ const properties = {
       "Status",
       "StatusReasons",
       "UpdatedAt",
-      "Version"
+      "Version",
     ],
-    "GuardrailVersion": [
+    GuardrailVersion: [
       "Description",
       "GuardrailArn",
       "GuardrailId",
       "GuardrailIdentifier",
-      "Version"
+      "Version",
     ],
-    "KnowledgeBase": [
+    KnowledgeBase: [
       "CreatedAt",
       "FailureReasons",
       "KnowledgeBaseArn",
       "KnowledgeBaseId",
       "Status",
       "StorageConfiguration",
-      "UpdatedAt"
-    ],
-    "Prompt": [
-      "Arn",
-      "CreatedAt",
-      "Id",
       "UpdatedAt",
-      "Version"
     ],
-    "PromptVersion": [
+    Prompt: ["Arn", "CreatedAt", "Id", "UpdatedAt", "Version"],
+    PromptVersion: [
       "Arn",
       "CreatedAt",
       "CustomerEncryptionKeyArn",
@@ -1089,20 +779,20 @@ const properties = {
       "Tags",
       "UpdatedAt",
       "Variants",
-      "Version"
-    ]
+      "Version",
+    ],
   },
-  "BillingConductor": {
-    "BillingGroup": [
+  BillingConductor: {
+    BillingGroup: [
       "Arn",
       "CreationTime",
       "LastModifiedTime",
       "PrimaryAccountId",
       "Size",
       "Status",
-      "StatusReason"
+      "StatusReason",
     ],
-    "CustomLineItem": [
+    CustomLineItem: [
       "AccountId",
       "Arn",
       "AssociationSize",
@@ -1110,15 +800,10 @@ const properties = {
       "CreationTime",
       "CurrencyCode",
       "LastModifiedTime",
-      "ProductCode"
+      "ProductCode",
     ],
-    "PricingPlan": [
-      "Arn",
-      "CreationTime",
-      "LastModifiedTime",
-      "Size"
-    ],
-    "PricingRule": [
+    PricingPlan: ["Arn", "CreationTime", "LastModifiedTime", "Size"],
+    PricingRule: [
       "Arn",
       "AssociatedPricingPlanCount",
       "BillingEntity",
@@ -1127,21 +812,15 @@ const properties = {
       "Operation",
       "Scope",
       "Service",
-      "UsageType"
-    ]
-  },
-  "Budgets": {
-    "Budget": [
-      "NotificationsWithSubscribers"
+      "UsageType",
     ],
-    "BudgetsAction": [
-      "ActionId",
-      "ActionType",
-      "BudgetName"
-    ]
   },
-  "CE": {
-    "AnomalyMonitor": [
+  Budgets: {
+    Budget: ["NotificationsWithSubscribers"],
+    BudgetsAction: ["ActionId", "ActionType", "BudgetName"],
+  },
+  CE: {
+    AnomalyMonitor: [
       "CreationDate",
       "DimensionalValueCount",
       "LastEvaluatedDate",
@@ -1150,40 +829,30 @@ const properties = {
       "MonitorDimension",
       "MonitorSpecification",
       "MonitorType",
-      "ResourceTags"
-    ],
-    "AnomalySubscription": [
-      "AccountId",
       "ResourceTags",
-      "SubscriptionArn"
     ],
-    "CostCategory": [
-      "Arn",
-      "EffectiveStart",
-      "Name"
-    ]
+    AnomalySubscription: ["AccountId", "ResourceTags", "SubscriptionArn"],
+    CostCategory: ["Arn", "EffectiveStart", "Name"],
   },
-  "CUR": {
-    "ReportDefinition": [
+  CUR: {
+    ReportDefinition: [
       "AdditionalSchemaElements",
       "BillingViewArn",
       "ReportName",
       "ReportVersioning",
-      "TimeUnit"
-    ]
-  },
-  "Cassandra": {
-    "Keyspace": [
-      "KeyspaceName"
+      "TimeUnit",
     ],
-    "Table": [
+  },
+  Cassandra: {
+    Keyspace: ["KeyspaceName"],
+    Table: [
       "ClientSideTimestampsEnabled",
       "ClusteringKeyColumns",
       "KeyspaceName",
       "PartitionKeyColumns",
-      "TableName"
+      "TableName",
     ],
-    "Type": [
+    Type: [
       "DirectParentTypes",
       "DirectReferringTables",
       "Fields",
@@ -1191,41 +860,32 @@ const properties = {
       "KeyspaceName",
       "LastModifiedTimestamp",
       "MaxNestingDepth",
-      "TypeName"
-    ]
-  },
-  "CertificateManager": {
-    "Account": [
-      "AccountId"
+      "TypeName",
     ],
-    "Certificate": [
+  },
+  CertificateManager: {
+    Account: ["AccountId"],
+    Certificate: [
       "CertificateAuthorityArn",
       "DomainName",
       "DomainValidationOptions",
       "KeyAlgorithm",
       "SubjectAlternativeNames",
-      "ValidationMethod"
-    ]
-  },
-  "Chatbot": {
-    "CustomAction": [
-      "ActionName",
-      "CustomActionArn"
+      "ValidationMethod",
     ],
-    "MicrosoftTeamsChannelConfiguration": [
+  },
+  Chatbot: {
+    CustomAction: ["ActionName", "CustomActionArn"],
+    MicrosoftTeamsChannelConfiguration: [
       "Arn",
       "ConfigurationName",
       "TeamId",
-      "TeamsTenantId"
+      "TeamsTenantId",
     ],
-    "SlackChannelConfiguration": [
-      "Arn",
-      "ConfigurationName",
-      "SlackWorkspaceId"
-    ]
+    SlackChannelConfiguration: ["Arn", "ConfigurationName", "SlackWorkspaceId"],
   },
-  "CleanRooms": {
-    "AnalysisTemplate": [
+  CleanRooms: {
+    AnalysisTemplate: [
       "AnalysisParameters",
       "AnalysisTemplateIdentifier",
       "Arn",
@@ -1236,9 +896,9 @@ const properties = {
       "MembershipIdentifier",
       "Name",
       "Schema",
-      "Source"
+      "Source",
     ],
-    "Collaboration": [
+    Collaboration: [
       "Arn",
       "CollaborationIdentifier",
       "CreatorDisplayName",
@@ -1248,22 +908,22 @@ const properties = {
       "DataEncryptionMetadata",
       "JobLogStatus",
       "Members",
-      "QueryLogStatus"
+      "QueryLogStatus",
     ],
-    "ConfiguredTable": [
+    ConfiguredTable: [
       "AllowedColumns",
       "Arn",
       "ConfiguredTableIdentifier",
-      "TableReference"
+      "TableReference",
     ],
-    "ConfiguredTableAssociation": [
+    ConfiguredTableAssociation: [
       "Arn",
       "ConfiguredTableAssociationIdentifier",
       "ConfiguredTableIdentifier",
       "MembershipIdentifier",
-      "Name"
+      "Name",
     ],
-    "IdMappingTable": [
+    IdMappingTable: [
       "Arn",
       "CollaborationArn",
       "CollaborationIdentifier",
@@ -1273,9 +933,9 @@ const properties = {
       "InputReferenceProperties.IdMappingTableInputSource",
       "MembershipArn",
       "MembershipIdentifier",
-      "Name"
+      "Name",
     ],
-    "IdNamespaceAssociation": [
+    IdNamespaceAssociation: [
       "Arn",
       "CollaborationArn",
       "CollaborationIdentifier",
@@ -1285,16 +945,16 @@ const properties = {
       "InputReferenceProperties.IdMappingWorkflowsSupported",
       "InputReferenceProperties.IdNamespaceType",
       "MembershipArn",
-      "MembershipIdentifier"
+      "MembershipIdentifier",
     ],
-    "Membership": [
+    Membership: [
       "Arn",
       "CollaborationArn",
       "CollaborationCreatorAccountId",
       "CollaborationIdentifier",
-      "MembershipIdentifier"
+      "MembershipIdentifier",
     ],
-    "PrivacyBudgetTemplate": [
+    PrivacyBudgetTemplate: [
       "Arn",
       "AutoRefresh",
       "CollaborationArn",
@@ -1302,21 +962,21 @@ const properties = {
       "MembershipArn",
       "MembershipIdentifier",
       "PrivacyBudgetTemplateIdentifier",
-      "PrivacyBudgetType"
-    ]
+      "PrivacyBudgetType",
+    ],
   },
-  "CleanRoomsML": {
-    "TrainingDataset": [
+  CleanRoomsML: {
+    TrainingDataset: [
       "Description",
       "Name",
       "RoleArn",
       "Status",
       "TrainingData",
-      "TrainingDatasetArn"
-    ]
+      "TrainingDatasetArn",
+    ],
   },
-  "Cloud9": {
-    "EnvironmentEC2": [
+  Cloud9: {
+    EnvironmentEC2: [
       "Arn",
       "AutomaticStopTimeMinutes",
       "ConnectionType",
@@ -1325,26 +985,15 @@ const properties = {
       "Name",
       "OwnerArn",
       "Repositories",
-      "SubnetId"
-    ]
+      "SubnetId",
+    ],
   },
-  "CloudFormation": {
-    "CustomResource": [
-      "ServiceToken"
-    ],
-    "GuardHook": [
-      "Alias",
-      "ExecutionRole",
-      "HookArn"
-    ],
-    "HookDefaultVersion": [
-      "Arn"
-    ],
-    "HookTypeConfig": [
-      "ConfigurationAlias",
-      "ConfigurationArn"
-    ],
-    "HookVersion": [
+  CloudFormation: {
+    CustomResource: ["ServiceToken"],
+    GuardHook: ["Alias", "ExecutionRole", "HookArn"],
+    HookDefaultVersion: ["Arn"],
+    HookTypeConfig: ["ConfigurationAlias", "ConfigurationArn"],
+    HookVersion: [
       "Arn",
       "ExecutionRoleArn",
       "IsDefaultVersion",
@@ -1353,21 +1002,12 @@ const properties = {
       "TypeArn",
       "TypeName",
       "VersionId",
-      "Visibility"
+      "Visibility",
     ],
-    "LambdaHook": [
-      "Alias",
-      "HookArn"
-    ],
-    "Macro": [
-      "Name"
-    ],
-    "ModuleDefaultVersion": [
-      "Arn",
-      "ModuleName",
-      "VersionId"
-    ],
-    "ModuleVersion": [
+    LambdaHook: ["Alias", "HookArn"],
+    Macro: ["Name"],
+    ModuleDefaultVersion: ["Arn", "ModuleName", "VersionId"],
+    ModuleVersion: [
       "Arn",
       "Description",
       "DocumentationUrl",
@@ -1377,9 +1017,9 @@ const properties = {
       "Schema",
       "TimeCreated",
       "VersionId",
-      "Visibility"
+      "Visibility",
     ],
-    "PublicTypeVersion": [
+    PublicTypeVersion: [
       "Arn",
       "LogDeliveryBucket",
       "PublicTypeArn",
@@ -1387,20 +1027,18 @@ const properties = {
       "PublisherId",
       "Type",
       "TypeName",
-      "TypeVersionArn"
+      "TypeVersionArn",
     ],
-    "Publisher": [
+    Publisher: [
       "AcceptTermsAndConditions",
       "ConnectionArn",
       "IdentityProvider",
       "PublisherId",
       "PublisherProfile",
-      "PublisherStatus"
+      "PublisherStatus",
     ],
-    "ResourceDefaultVersion": [
-      "Arn"
-    ],
-    "ResourceVersion": [
+    ResourceDefaultVersion: ["Arn"],
+    ResourceVersion: [
       "Arn",
       "ExecutionRoleArn",
       "IsDefaultVersion",
@@ -1410,23 +1048,14 @@ const properties = {
       "TypeArn",
       "TypeName",
       "VersionId",
-      "Visibility"
+      "Visibility",
     ],
-    "StackSet": [
-      "PermissionModel",
-      "StackSetId",
-      "StackSetName"
-    ],
-    "TypeActivation": [
-      "Arn",
-      "LoggingConfig"
-    ],
-    "WaitCondition": [
-      "Data"
-    ]
+    StackSet: ["PermissionModel", "StackSetId", "StackSetName"],
+    TypeActivation: ["Arn", "LoggingConfig"],
+    WaitCondition: ["Data"],
   },
-  "CloudFront": {
-    "AnycastIpList": [
+  CloudFront: {
+    AnycastIpList: [
       "AnycastIpList",
       "AnycastIpList.AnycastIps",
       "AnycastIpList.Arn",
@@ -1439,17 +1068,11 @@ const properties = {
       "Id",
       "IpCount",
       "Name",
-      "Tags"
+      "Tags",
     ],
-    "CachePolicy": [
-      "Id",
-      "LastModifiedTime"
-    ],
-    "CloudFrontOriginAccessIdentity": [
-      "Id",
-      "S3CanonicalUserId"
-    ],
-    "ConnectionGroup": [
+    CachePolicy: ["Id", "LastModifiedTime"],
+    CloudFrontOriginAccessIdentity: ["Id", "S3CanonicalUserId"],
+    ConnectionGroup: [
       "Arn",
       "CreatedTime",
       "ETag",
@@ -1458,17 +1081,11 @@ const properties = {
       "LastModifiedTime",
       "Name",
       "RoutingEndpoint",
-      "Status"
+      "Status",
     ],
-    "ContinuousDeploymentPolicy": [
-      "Id",
-      "LastModifiedTime"
-    ],
-    "Distribution": [
-      "DomainName",
-      "Id"
-    ],
-    "DistributionTenant": [
+    ContinuousDeploymentPolicy: ["Id", "LastModifiedTime"],
+    Distribution: ["DomainName", "Id"],
+    DistributionTenant: [
       "Arn",
       "CreatedTime",
       "DomainResults",
@@ -1477,214 +1094,120 @@ const properties = {
       "LastModifiedTime",
       "ManagedCertificateRequest",
       "Name",
-      "Status"
+      "Status",
     ],
-    "Function": [
-      "FunctionARN",
-      "FunctionMetadata.FunctionARN",
-      "Stage"
-    ],
-    "KeyGroup": [
-      "Id",
-      "LastModifiedTime"
-    ],
-    "KeyValueStore": [
-      "Arn",
-      "Id",
-      "Name",
-      "Status"
-    ],
-    "MonitoringSubscription": [
-      "DistributionId"
-    ],
-    "OriginAccessControl": [
-      "Id"
-    ],
-    "OriginRequestPolicy": [
-      "Id",
-      "LastModifiedTime"
-    ],
-    "PublicKey": [
-      "CreatedTime",
-      "Id"
-    ],
-    "RealtimeLogConfig": [
-      "Arn",
-      "Name"
-    ],
-    "ResponseHeadersPolicy": [
-      "Id",
-      "LastModifiedTime"
-    ],
-    "StreamingDistribution": [
-      "DomainName"
-    ],
-    "VpcOrigin": [
-      "Arn",
-      "CreatedTime",
-      "Id",
-      "LastModifiedTime",
-      "Status"
-    ]
+    Function: ["FunctionARN", "FunctionMetadata.FunctionARN", "Stage"],
+    KeyGroup: ["Id", "LastModifiedTime"],
+    KeyValueStore: ["Arn", "Id", "Name", "Status"],
+    MonitoringSubscription: ["DistributionId"],
+    OriginAccessControl: ["Id"],
+    OriginRequestPolicy: ["Id", "LastModifiedTime"],
+    PublicKey: ["CreatedTime", "Id"],
+    RealtimeLogConfig: ["Arn", "Name"],
+    ResponseHeadersPolicy: ["Id", "LastModifiedTime"],
+    StreamingDistribution: ["DomainName"],
+    VpcOrigin: ["Arn", "CreatedTime", "Id", "LastModifiedTime", "Status"],
   },
-  "CloudTrail": {
-    "Channel": [
-      "ChannelArn",
-      "Source"
-    ],
-    "Dashboard": [
+  CloudTrail: {
+    Channel: ["ChannelArn", "Source"],
+    Dashboard: [
       "CreatedTimestamp",
       "DashboardArn",
       "Status",
       "Type",
-      "UpdatedTimestamp"
+      "UpdatedTimestamp",
     ],
-    "EventDataStore": [
+    EventDataStore: [
       "CreatedTimestamp",
       "EventDataStoreArn",
       "Status",
-      "UpdatedTimestamp"
+      "UpdatedTimestamp",
     ],
-    "ResourcePolicy": [
-      "ResourceArn"
-    ],
-    "Trail": [
-      "Arn",
-      "SnsTopicArn",
-      "TrailName"
-    ]
+    ResourcePolicy: ["ResourceArn"],
+    Trail: ["Arn", "SnsTopicArn", "TrailName"],
   },
-  "CloudWatch": {
-    "Alarm": [
-      "AlarmName",
-      "Arn"
-    ],
-    "AnomalyDetector": [
+  CloudWatch: {
+    Alarm: ["AlarmName", "Arn"],
+    AnomalyDetector: [
       "Dimensions",
       "MetricCharacteristics",
       "MetricMathAnomalyDetector",
       "MetricName",
       "Namespace",
       "SingleMetricAnomalyDetector",
-      "Stat"
+      "Stat",
     ],
-    "CompositeAlarm": [
-      "AlarmName",
-      "Arn"
-    ],
-    "Dashboard": [
-      "DashboardName"
-    ],
-    "InsightRule": [
-      "Arn",
-      "RuleName",
-      "RuleName"
-    ],
-    "MetricStream": [
-      "Arn",
-      "CreationDate",
-      "LastUpdateDate",
-      "Name",
-      "State"
-    ]
+    CompositeAlarm: ["AlarmName", "Arn"],
+    Dashboard: ["DashboardName"],
+    InsightRule: ["Arn", "RuleName", "RuleName"],
+    MetricStream: ["Arn", "CreationDate", "LastUpdateDate", "Name", "State"],
   },
-  "CodeArtifact": {
-    "Domain": [
+  CodeArtifact: {
+    Domain: [
       "Arn",
       "DomainName",
       "EncryptionKey",
       "EncryptionKey",
       "Name",
-      "Owner"
+      "Owner",
     ],
-    "PackageGroup": [
-      "Arn",
-      "DomainName",
-      "Pattern"
-    ],
-    "Repository": [
+    PackageGroup: ["Arn", "DomainName", "Pattern"],
+    Repository: [
       "Arn",
       "DomainName",
       "DomainName",
       "DomainOwner",
       "DomainOwner",
       "Name",
-      "RepositoryName"
-    ]
-  },
-  "CodeBuild": {
-    "Fleet": [
-      "Arn"
+      "RepositoryName",
     ],
-    "Project": [
-      "Arn",
-      "Name"
-    ],
-    "ReportGroup": [
-      "Arn",
-      "Name",
-      "Type"
-    ],
-    "SourceCredential": [
-      "ServerType"
-    ]
   },
-  "CodeCommit": {
-    "Repository": [
-      "Arn",
-      "CloneUrlHttp",
-      "CloneUrlSsh",
-      "KmsKeyId",
-      "Name"
-    ]
+  CodeBuild: {
+    Fleet: ["Arn"],
+    Project: ["Arn", "Name"],
+    ReportGroup: ["Arn", "Name", "Type"],
+    SourceCredential: ["ServerType"],
   },
-  "CodeConnections": {
-    "Connection": [
+  CodeCommit: {
+    Repository: ["Arn", "CloneUrlHttp", "CloneUrlSsh", "KmsKeyId", "Name"],
+  },
+  CodeConnections: {
+    Connection: [
       "ConnectionArn",
       "ConnectionName",
       "ConnectionStatus",
       "HostArn",
       "OwnerAccountId",
-      "ProviderType"
-    ]
-  },
-  "CodeDeploy": {
-    "Application": [
-      "ApplicationName",
-      "ComputePlatform"
+      "ProviderType",
     ],
-    "DeploymentConfig": [
+  },
+  CodeDeploy: {
+    Application: ["ApplicationName", "ComputePlatform"],
+    DeploymentConfig: [
       "ComputePlatform",
       "DeploymentConfigName",
       "MinimumHealthyHosts",
       "TrafficRoutingConfig",
-      "ZonalConfig"
+      "ZonalConfig",
     ],
-    "DeploymentGroup": [
-      "ApplicationName",
-      "DeploymentGroupName"
-    ]
+    DeploymentGroup: ["ApplicationName", "DeploymentGroupName"],
   },
-  "CodeGuruProfiler": {
-    "ProfilingGroup": [
-      "Arn",
-      "ComputePlatform",
-      "ProfilingGroupName"
-    ]
+  CodeGuruProfiler: {
+    ProfilingGroup: ["Arn", "ComputePlatform", "ProfilingGroupName"],
   },
-  "CodeGuruReviewer": {
-    "RepositoryAssociation": [
+  CodeGuruReviewer: {
+    RepositoryAssociation: [
       "AssociationArn",
       "BucketName",
       "ConnectionArn",
       "Name",
       "Owner",
       "Tags",
-      "Type"
-    ]
+      "Type",
+    ],
   },
-  "CodePipeline": {
-    "CustomActionType": [
+  CodePipeline: {
+    CustomActionType: [
       "Category",
       "ConfigurationProperties",
       "Id",
@@ -1692,109 +1215,59 @@ const properties = {
       "OutputArtifactDetails",
       "Provider",
       "Settings",
-      "Version"
+      "Version",
     ],
-    "Pipeline": [
-      "Name",
-      "Version"
-    ],
-    "Webhook": [
-      "Name",
-      "Url"
-    ]
+    Pipeline: ["Name", "Version"],
+    Webhook: ["Name", "Url"],
   },
-  "CodeStarConnections": {
-    "Connection": [
+  CodeStarConnections: {
+    Connection: [
       "ConnectionArn",
       "ConnectionName",
       "ConnectionStatus",
       "HostArn",
       "OwnerAccountId",
-      "ProviderType"
+      "ProviderType",
     ],
-    "RepositoryLink": [
+    RepositoryLink: [
       "OwnerId",
       "ProviderType",
       "RepositoryLinkArn",
       "RepositoryLinkId",
-      "RepositoryName"
+      "RepositoryName",
     ],
-    "SyncConfiguration": [
+    SyncConfiguration: [
       "OwnerId",
       "ProviderType",
       "RepositoryName",
       "ResourceName",
-      "SyncType"
-    ]
+      "SyncType",
+    ],
   },
-  "CodeStarNotifications": {
-    "NotificationRule": [
-      "Arn",
-      "Resource"
-    ]
+  CodeStarNotifications: {
+    NotificationRule: ["Arn", "Resource"],
   },
-  "Cognito": {
-    "IdentityPool": [
-      "Id",
-      "Name"
-    ],
-    "IdentityPoolPrincipalTag": [
-      "IdentityPoolId",
-      "IdentityProviderName"
-    ],
-    "IdentityPoolRoleAttachment": [
-      "Id",
-      "IdentityPoolId"
-    ],
-    "LogDeliveryConfiguration": [
-      "Id",
-      "UserPoolId"
-    ],
-    "ManagedLoginBranding": [
-      "ClientId",
-      "ManagedLoginBrandingId",
-      "UserPoolId"
-    ],
-    "UserPool": [
-      "Arn",
-      "ProviderName",
-      "ProviderURL",
-      "UserPoolId"
-    ],
-    "UserPoolClient": [
+  Cognito: {
+    IdentityPool: ["Id", "Name"],
+    IdentityPoolPrincipalTag: ["IdentityPoolId", "IdentityProviderName"],
+    IdentityPoolRoleAttachment: ["Id", "IdentityPoolId"],
+    LogDeliveryConfiguration: ["Id", "UserPoolId"],
+    ManagedLoginBranding: ["ClientId", "ManagedLoginBrandingId", "UserPoolId"],
+    UserPool: ["Arn", "ProviderName", "ProviderURL", "UserPoolId"],
+    UserPoolClient: [
       "ClientId",
       "ClientSecret",
       "GenerateSecret",
       "Name",
-      "UserPoolId"
+      "UserPoolId",
     ],
-    "UserPoolDomain": [
-      "CloudFrontDistribution",
-      "Domain",
-      "UserPoolId"
-    ],
-    "UserPoolGroup": [
-      "GroupName",
-      "UserPoolId"
-    ],
-    "UserPoolIdentityProvider": [
-      "ProviderName",
-      "ProviderType",
-      "UserPoolId"
-    ],
-    "UserPoolResourceServer": [
-      "Identifier",
-      "UserPoolId"
-    ],
-    "UserPoolRiskConfigurationAttachment": [
-      "ClientId",
-      "UserPoolId"
-    ],
-    "UserPoolUICustomizationAttachment": [
-      "ClientId",
-      "UserPoolId"
-    ],
-    "UserPoolUser": [
+    UserPoolDomain: ["CloudFrontDistribution", "Domain", "UserPoolId"],
+    UserPoolGroup: ["GroupName", "UserPoolId"],
+    UserPoolIdentityProvider: ["ProviderName", "ProviderType", "UserPoolId"],
+    UserPoolResourceServer: ["Identifier", "UserPoolId"],
+    UserPoolRiskConfigurationAttachment: ["ClientId", "UserPoolId"],
+    UserPoolUICustomizationAttachment: ["ClientId", "UserPoolId"],
+    UserPoolUser: [
       "ClientMetadata",
       "DesiredDeliveryMediums",
       "ForceAliasCreation",
@@ -1802,16 +1275,12 @@ const properties = {
       "UserAttributes",
       "UserPoolId",
       "Username",
-      "ValidationData"
+      "ValidationData",
     ],
-    "UserPoolUserToGroupAttachment": [
-      "GroupName",
-      "UserPoolId",
-      "Username"
-    ]
+    UserPoolUserToGroupAttachment: ["GroupName", "UserPoolId", "Username"],
   },
-  "Comprehend": {
-    "DocumentClassifier": [
+  Comprehend: {
+    DocumentClassifier: [
       "Arn",
       "DataAccessRoleArn",
       "DocumentClassifierName",
@@ -1822,92 +1291,51 @@ const properties = {
       "OutputDataConfig",
       "VersionName",
       "VolumeKmsKeyId",
-      "VpcConfig"
+      "VpcConfig",
     ],
-    "Flywheel": [
+    Flywheel: [
       "Arn",
       "DataLakeS3Uri",
       "FlywheelName",
       "ModelType",
-      "TaskConfig"
-    ]
+      "TaskConfig",
+    ],
   },
-  "Config": {
-    "AggregationAuthorization": [
+  Config: {
+    AggregationAuthorization: [
       "AggregationAuthorizationArn",
       "AuthorizedAccountId",
-      "AuthorizedAwsRegion"
+      "AuthorizedAwsRegion",
     ],
-    "ConfigRule": [
-      "Arn",
-      "Compliance.Type",
-      "ConfigRuleId",
-      "ConfigRuleName"
-    ],
-    "ConfigurationAggregator": [
+    ConfigRule: ["Arn", "Compliance.Type", "ConfigRuleId", "ConfigRuleName"],
+    ConfigurationAggregator: [
       "ConfigurationAggregatorArn",
-      "ConfigurationAggregatorName"
+      "ConfigurationAggregatorName",
     ],
-    "ConfigurationRecorder": [
-      "Name"
-    ],
-    "ConformancePack": [
-      "ConformancePackName"
-    ],
-    "DeliveryChannel": [
-      "Name"
-    ],
-    "OrganizationConfigRule": [
-      "OrganizationConfigRuleName"
-    ],
-    "OrganizationConformancePack": [
-      "OrganizationConformancePackName"
-    ],
-    "RemediationConfiguration": [
-      "ConfigRuleName"
-    ],
-    "StoredQuery": [
-      "QueryArn",
-      "QueryId",
-      "QueryName"
-    ]
+    ConfigurationRecorder: ["Name"],
+    ConformancePack: ["ConformancePackName"],
+    DeliveryChannel: ["Name"],
+    OrganizationConfigRule: ["OrganizationConfigRuleName"],
+    OrganizationConformancePack: ["OrganizationConformancePackName"],
+    RemediationConfiguration: ["ConfigRuleName"],
+    StoredQuery: ["QueryArn", "QueryId", "QueryName"],
   },
-  "Connect": {
-    "AgentStatus": [
-      "AgentStatusArn",
-      "LastModifiedRegion",
-      "LastModifiedTime"
-    ],
-    "ApprovedOrigin": [
-      "InstanceId",
-      "Origin"
-    ],
-    "ContactFlow": [
-      "ContactFlowArn",
-      "Type"
-    ],
-    "ContactFlowModule": [
-      "ContactFlowModuleArn",
-      "Status"
-    ],
-    "ContactFlowVersion": [
+  Connect: {
+    AgentStatus: ["AgentStatusArn", "LastModifiedRegion", "LastModifiedTime"],
+    ApprovedOrigin: ["InstanceId", "Origin"],
+    ContactFlow: ["ContactFlowArn", "Type"],
+    ContactFlowModule: ["ContactFlowModuleArn", "Status"],
+    ContactFlowVersion: [
       "ContactFlowId",
       "ContactFlowVersionARN",
       "Description",
       "FlowContentSha256",
-      "Version"
+      "Version",
     ],
-    "EmailAddress": [
-      "EmailAddress",
-      "EmailAddressArn"
-    ],
-    "EvaluationForm": [
-      "EvaluationFormArn"
-    ],
-    "HoursOfOperation": [
-      "HoursOfOperationArn"
-    ],
-    "Instance": [
+    EmailAddress: ["EmailAddress", "EmailAddressArn"],
+    EvaluationForm: ["EvaluationFormArn"],
+    HoursOfOperation: ["HoursOfOperationArn"],
+    Instance: [
       "Arn",
       "CreatedTime",
       "DirectoryId",
@@ -1915,135 +1343,85 @@ const properties = {
       "IdentityManagementType",
       "InstanceAlias",
       "InstanceStatus",
-      "ServiceRole"
+      "ServiceRole",
     ],
-    "InstanceStorageConfig": [
-      "AssociationId",
-      "InstanceArn",
-      "ResourceType"
-    ],
-    "IntegrationAssociation": [
+    InstanceStorageConfig: ["AssociationId", "InstanceArn", "ResourceType"],
+    IntegrationAssociation: [
       "InstanceId",
       "IntegrationArn",
       "IntegrationAssociationId",
-      "IntegrationType"
+      "IntegrationType",
     ],
-    "PhoneNumber": [
+    PhoneNumber: [
       "Address",
       "CountryCode",
       "PhoneNumberArn",
       "Prefix",
       "SourcePhoneNumberArn",
-      "Type"
+      "Type",
     ],
-    "PredefinedAttribute": [
+    PredefinedAttribute: [
       "InstanceArn",
       "LastModifiedRegion",
       "LastModifiedTime",
-      "Name"
+      "Name",
     ],
-    "Prompt": [
-      "PromptArn"
-    ],
-    "Queue": [
-      "QueueArn",
-      "Type"
-    ],
-    "QuickConnect": [
-      "QuickConnectArn",
-      "QuickConnectType"
-    ],
-    "RoutingProfile": [
-      "RoutingProfileArn"
-    ],
-    "Rule": [
-      "InstanceArn",
-      "RuleArn",
-      "TriggerEventSource"
-    ],
-    "SecurityKey": [
-      "AssociationId",
-      "InstanceId",
-      "Key"
-    ],
-    "SecurityProfile": [
+    Prompt: ["PromptArn"],
+    Queue: ["QueueArn", "Type"],
+    QuickConnect: ["QuickConnectArn", "QuickConnectType"],
+    RoutingProfile: ["RoutingProfileArn"],
+    Rule: ["InstanceArn", "RuleArn", "TriggerEventSource"],
+    SecurityKey: ["AssociationId", "InstanceId", "Key"],
+    SecurityProfile: [
       "InstanceArn",
       "LastModifiedRegion",
       "LastModifiedTime",
       "SecurityProfileArn",
-      "SecurityProfileName"
+      "SecurityProfileName",
     ],
-    "TaskTemplate": [
-      "Arn"
-    ],
-    "TrafficDistributionGroup": [
+    TaskTemplate: ["Arn"],
+    TrafficDistributionGroup: [
       "Description",
       "IsDefault",
       "Name",
       "Status",
-      "TrafficDistributionGroupArn"
+      "TrafficDistributionGroupArn",
     ],
-    "User": [
-      "UserArn"
-    ],
-    "UserHierarchyGroup": [
-      "ParentGroupArn",
-      "UserHierarchyGroupArn"
-    ],
-    "UserHierarchyStructure": [
-      "InstanceArn",
-      "UserHierarchyStructureArn"
-    ],
-    "View": [
-      "ViewArn",
-      "ViewContentSha256",
-      "ViewId"
-    ],
-    "ViewVersion": [
-      "Version",
-      "ViewArn",
-      "ViewContentSha256",
-      "ViewVersionArn"
-    ]
+    User: ["UserArn"],
+    UserHierarchyGroup: ["ParentGroupArn", "UserHierarchyGroupArn"],
+    UserHierarchyStructure: ["InstanceArn", "UserHierarchyStructureArn"],
+    View: ["ViewArn", "ViewContentSha256", "ViewId"],
+    ViewVersion: ["Version", "ViewArn", "ViewContentSha256", "ViewVersionArn"],
   },
-  "ConnectCampaigns": {
-    "Campaign": [
-      "Arn",
-      "ConnectInstanceArn"
-    ]
+  ConnectCampaigns: {
+    Campaign: ["Arn", "ConnectInstanceArn"],
   },
-  "ConnectCampaignsV2": {
-    "Campaign": [
-      "Arn",
-      "ConnectInstanceId"
-    ]
+  ConnectCampaignsV2: {
+    Campaign: ["Arn", "ConnectInstanceId"],
   },
-  "ControlTower": {
-    "EnabledBaseline": [
+  ControlTower: {
+    EnabledBaseline: [
       "BaselineIdentifier",
       "EnabledBaselineIdentifier",
-      "TargetIdentifier"
+      "TargetIdentifier",
     ],
-    "EnabledControl": [
-      "ControlIdentifier",
-      "TargetIdentifier"
-    ],
-    "LandingZone": [
+    EnabledControl: ["ControlIdentifier", "TargetIdentifier"],
+    LandingZone: [
       "Arn",
       "DriftStatus",
       "LandingZoneIdentifier",
       "LatestAvailableVersion",
-      "Status"
-    ]
+      "Status",
+    ],
   },
-  "CustomerProfiles": {
-    "CalculatedAttributeDefinition": [
+  CustomerProfiles: {
+    CalculatedAttributeDefinition: [
       "CalculatedAttributeName",
       "CreatedAt",
       "DomainName",
-      "LastUpdatedAt"
+      "LastUpdatedAt",
     ],
-    "Domain": [
+    Domain: [
       "CreatedAt",
       "DomainName",
       "LastUpdatedAt",
@@ -2052,9 +1430,9 @@ const properties = {
       "Stats.MeteringProfileCount",
       "Stats.ObjectCount",
       "Stats.ProfileCount",
-      "Stats.TotalSize"
+      "Stats.TotalSize",
     ],
-    "EventStream": [
+    EventStream: [
       "CreatedAt",
       "DestinationDetails",
       "DestinationDetails.Status",
@@ -2063,37 +1441,27 @@ const properties = {
       "EventStreamArn",
       "EventStreamName",
       "State",
-      "Uri"
+      "Uri",
     ],
-    "EventTrigger": [
+    EventTrigger: [
       "CreatedAt",
       "DomainName",
       "EventTriggerName",
-      "LastUpdatedAt"
-    ],
-    "Integration": [
-      "CreatedAt",
-      "DomainName",
       "LastUpdatedAt",
-      "Uri"
     ],
-    "ObjectType": [
-      "CreatedAt",
-      "DomainName",
-      "LastUpdatedAt",
-      "ObjectTypeName"
-    ],
-    "SegmentDefinition": [
+    Integration: ["CreatedAt", "DomainName", "LastUpdatedAt", "Uri"],
+    ObjectType: ["CreatedAt", "DomainName", "LastUpdatedAt", "ObjectTypeName"],
+    SegmentDefinition: [
       "CreatedAt",
       "DisplayName",
       "DomainName",
       "SegmentDefinitionArn",
       "SegmentDefinitionName",
-      "SegmentGroups"
-    ]
+      "SegmentGroups",
+    ],
   },
-  "DAX": {
-    "Cluster": [
+  DAX: {
+    Cluster: [
       "Arn",
       "ClusterDiscoveryEndpoint",
       "ClusterDiscoveryEndpointURL",
@@ -2102,195 +1470,127 @@ const properties = {
       "IAMRoleARN",
       "NodeType",
       "SSESpecification",
-      "SubnetGroupName"
+      "SubnetGroupName",
     ],
-    "ParameterGroup": [
-      "ParameterGroupName"
-    ],
-    "SubnetGroup": [
-      "SubnetGroupName"
-    ]
+    ParameterGroup: ["ParameterGroupName"],
+    SubnetGroup: ["SubnetGroupName"],
   },
-  "DLM": {
-    "LifecyclePolicy": [
-      "Arn"
-    ]
+  DLM: {
+    LifecyclePolicy: ["Arn"],
   },
-  "DMS": {
-    "Certificate": [
+  DMS: {
+    Certificate: [
       "CertificateIdentifier",
       "CertificatePem",
-      "CertificateWallet"
+      "CertificateWallet",
     ],
-    "DataMigration": [
-      "DataMigrationArn",
-      "DataMigrationCreateTime"
-    ],
-    "DataProvider": [
-      "DataProviderArn",
-      "DataProviderCreationTime"
-    ],
-    "Endpoint": [
-      "ExternalId",
-      "KmsKeyId",
-      "ResourceIdentifier"
-    ],
-    "EventSubscription": [
-      "SourceIds",
-      "SubscriptionName"
-    ],
-    "InstanceProfile": [
-      "InstanceProfileArn",
-      "InstanceProfileCreationTime"
-    ],
-    "MigrationProject": [
-      "MigrationProjectArn"
-    ],
-    "ReplicationConfig": [
-      "ReplicationConfigArn",
-      "ResourceIdentifier"
-    ],
-    "ReplicationInstance": [
+    DataMigration: ["DataMigrationArn", "DataMigrationCreateTime"],
+    DataProvider: ["DataProviderArn", "DataProviderCreationTime"],
+    Endpoint: ["ExternalId", "KmsKeyId", "ResourceIdentifier"],
+    EventSubscription: ["SourceIds", "SubscriptionName"],
+    InstanceProfile: ["InstanceProfileArn", "InstanceProfileCreationTime"],
+    MigrationProject: ["MigrationProjectArn"],
+    ReplicationConfig: ["ReplicationConfigArn", "ResourceIdentifier"],
+    ReplicationInstance: [
       "DnsNameServers",
       "KmsKeyId",
       "PubliclyAccessible",
       "ReplicationInstancePrivateIpAddresses",
       "ReplicationInstancePublicIpAddresses",
       "ReplicationSubnetGroupIdentifier",
-      "ResourceIdentifier"
+      "ResourceIdentifier",
     ],
-    "ReplicationSubnetGroup": [
-      "ReplicationSubnetGroupIdentifier"
-    ],
-    "ReplicationTask": [
+    ReplicationSubnetGroup: ["ReplicationSubnetGroupIdentifier"],
+    ReplicationTask: [
       "ReplicationInstanceArn",
       "ResourceIdentifier",
       "SourceEndpointArn",
-      "TargetEndpointArn"
-    ]
+      "TargetEndpointArn",
+    ],
   },
-  "DSQL": {
-    "Cluster": [
+  DSQL: {
+    Cluster: [
       "CreationTime",
       "Identifier",
       "ResourceArn",
       "Status",
-      "VpcEndpointServiceName"
-    ]
+      "VpcEndpointServiceName",
+    ],
   },
-  "DataBrew": {
-    "Dataset": [
-      "Name"
-    ],
-    "Job": [
-      "Name",
-      "Type"
-    ],
-    "Project": [
-      "Name"
-    ],
-    "Recipe": [
-      "Name"
-    ],
-    "Ruleset": [
-      "Name",
-      "TargetArn"
-    ],
-    "Schedule": [
-      "Name"
-    ]
+  DataBrew: {
+    Dataset: ["Name"],
+    Job: ["Name", "Type"],
+    Project: ["Name"],
+    Recipe: ["Name"],
+    Ruleset: ["Name", "TargetArn"],
+    Schedule: ["Name"],
   },
-  "DataPipeline": {
-    "Pipeline": [
-      "Description",
-      "Name",
-      "PipelineId"
-    ]
+  DataPipeline: {
+    Pipeline: ["Description", "Name", "PipelineId"],
   },
-  "DataSync": {
-    "Agent": [
+  DataSync: {
+    Agent: [
       "ActivationKey",
       "AgentArn",
       "EndpointType",
       "SecurityGroupArns",
       "SubnetArns",
-      "VpcEndpointId"
+      "VpcEndpointId",
     ],
-    "LocationAzureBlob": [
-      "AzureBlobContainerUrl",
-      "LocationArn",
-      "LocationUri"
-    ],
-    "LocationEFS": [
+    LocationAzureBlob: ["AzureBlobContainerUrl", "LocationArn", "LocationUri"],
+    LocationEFS: [
       "Ec2Config",
       "EfsFilesystemArn",
       "LocationArn",
-      "LocationUri"
-    ],
-    "LocationFSxLustre": [
-      "FsxFilesystemArn",
-      "LocationArn",
       "LocationUri",
-      "SecurityGroupArns"
     ],
-    "LocationFSxONTAP": [
+    LocationFSxLustre: [
       "FsxFilesystemArn",
       "LocationArn",
       "LocationUri",
       "SecurityGroupArns",
-      "StorageVirtualMachineArn"
     ],
-    "LocationFSxOpenZFS": [
+    LocationFSxONTAP: [
       "FsxFilesystemArn",
       "LocationArn",
       "LocationUri",
-      "SecurityGroupArns"
+      "SecurityGroupArns",
+      "StorageVirtualMachineArn",
     ],
-    "LocationFSxWindows": [
+    LocationFSxOpenZFS: [
       "FsxFilesystemArn",
       "LocationArn",
       "LocationUri",
-      "SecurityGroupArns"
+      "SecurityGroupArns",
     ],
-    "LocationHDFS": [
-      "LocationArn",
-      "LocationUri"
-    ],
-    "LocationNFS": [
-      "LocationArn",
-      "LocationUri"
-    ],
-    "LocationObjectStorage": [
-      "BucketName",
-      "LocationArn",
-      "LocationUri"
-    ],
-    "LocationS3": [
+    LocationFSxWindows: [
+      "FsxFilesystemArn",
       "LocationArn",
       "LocationUri",
-      "S3BucketArn"
+      "SecurityGroupArns",
     ],
-    "LocationSMB": [
-      "LocationArn",
-      "LocationUri"
-    ],
-    "StorageSystem": [
+    LocationHDFS: ["LocationArn", "LocationUri"],
+    LocationNFS: ["LocationArn", "LocationUri"],
+    LocationObjectStorage: ["BucketName", "LocationArn", "LocationUri"],
+    LocationS3: ["LocationArn", "LocationUri", "S3BucketArn"],
+    LocationSMB: ["LocationArn", "LocationUri"],
+    StorageSystem: [
       "ConnectivityStatus",
       "SecretsManagerArn",
-      "StorageSystemArn"
+      "StorageSystemArn",
     ],
-    "Task": [
+    Task: [
       "DestinationLocationArn",
       "DestinationNetworkInterfaceArns",
       "SourceLocationArn",
       "SourceNetworkInterfaceArns",
       "Status",
       "TaskArn",
-      "TaskMode"
-    ]
+      "TaskMode",
+    ],
   },
-  "DataZone": {
-    "Connection": [
+  DataZone: {
+    Connection: [
       "ConnectionId",
       "DomainId",
       "DomainIdentifier",
@@ -2300,9 +1600,9 @@ const properties = {
       "EnvironmentUserRole",
       "Name",
       "ProjectId",
-      "Type"
+      "Type",
     ],
-    "DataSource": [
+    DataSource: [
       "ConnectionId",
       "ConnectionIdentifier",
       "CreatedAt",
@@ -2318,9 +1618,9 @@ const properties = {
       "ProjectIdentifier",
       "Status",
       "Type",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "Domain": [
+    Domain: [
       "Arn",
       "CreatedAt",
       "DomainVersion",
@@ -2330,9 +1630,9 @@ const properties = {
       "ManagedAccountId",
       "PortalUrl",
       "RootDomainUnitId",
-      "Status"
+      "Status",
     ],
-    "Environment": [
+    Environment: [
       "AwsAccountId",
       "AwsAccountRegion",
       "CreatedAt",
@@ -2350,24 +1650,24 @@ const properties = {
       "Provider",
       "Status",
       "UpdatedAt",
-      "UserParameters"
+      "UserParameters",
     ],
-    "EnvironmentActions": [
+    EnvironmentActions: [
       "DomainId",
       "DomainIdentifier",
       "EnvironmentId",
       "EnvironmentIdentifier",
-      "Id"
+      "Id",
     ],
-    "EnvironmentBlueprintConfiguration": [
+    EnvironmentBlueprintConfiguration: [
       "CreatedAt",
       "DomainId",
       "DomainIdentifier",
       "EnvironmentBlueprintId",
       "EnvironmentBlueprintIdentifier",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "EnvironmentProfile": [
+    EnvironmentProfile: [
       "CreatedAt",
       "CreatedBy",
       "DomainId",
@@ -2377,29 +1677,25 @@ const properties = {
       "Id",
       "ProjectId",
       "ProjectIdentifier",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "GroupProfile": [
+    GroupProfile: [
       "DomainId",
       "DomainIdentifier",
       "GroupIdentifier",
       "GroupName",
-      "Id"
+      "Id",
     ],
-    "Project": [
+    Project: [
       "CreatedAt",
       "CreatedBy",
       "DomainId",
       "DomainIdentifier",
       "Id",
-      "LastUpdatedAt"
+      "LastUpdatedAt",
     ],
-    "ProjectMembership": [
-      "DomainIdentifier",
-      "Member",
-      "ProjectIdentifier"
-    ],
-    "SubscriptionTarget": [
+    ProjectMembership: ["DomainIdentifier", "Member", "ProjectIdentifier"],
+    SubscriptionTarget: [
       "CreatedAt",
       "CreatedBy",
       "DomainId",
@@ -2410,9 +1706,9 @@ const properties = {
       "ProjectId",
       "Type",
       "UpdatedAt",
-      "UpdatedBy"
+      "UpdatedBy",
     ],
-    "UserProfile": [
+    UserProfile: [
       "Details",
       "Details.Iam",
       "Details.Iam.Arn",
@@ -2425,16 +1721,12 @@ const properties = {
       "Id",
       "Type",
       "UserIdentifier",
-      "UserType"
-    ]
-  },
-  "Deadline": {
-    "Farm": [
-      "Arn",
-      "FarmId",
-      "KmsKeyArn"
+      "UserType",
     ],
-    "Fleet": [
+  },
+  Deadline: {
+    Farm: ["Arn", "FarmId", "KmsKeyArn"],
+    Fleet: [
       "Arn",
       "Capabilities",
       "Capabilities.Amounts",
@@ -2442,9 +1734,9 @@ const properties = {
       "FarmId",
       "FleetId",
       "Status",
-      "WorkerCount"
+      "WorkerCount",
     ],
-    "LicenseEndpoint": [
+    LicenseEndpoint: [
       "Arn",
       "DnsName",
       "LicenseEndpointId",
@@ -2452,82 +1744,42 @@ const properties = {
       "Status",
       "StatusMessage",
       "SubnetIds",
-      "VpcId"
+      "VpcId",
     ],
-    "Limit": [
-      "AmountRequirementName",
-      "CurrentCount",
-      "FarmId",
-      "LimitId"
-    ],
-    "MeteredProduct": [
+    Limit: ["AmountRequirementName", "CurrentCount", "FarmId", "LimitId"],
+    MeteredProduct: [
       "Arn",
       "Family",
       "LicenseEndpointId",
       "Port",
       "ProductId",
-      "Vendor"
+      "Vendor",
     ],
-    "Monitor": [
+    Monitor: [
       "Arn",
       "IdentityCenterApplicationArn",
       "IdentityCenterInstanceArn",
       "MonitorId",
-      "Url"
+      "Url",
     ],
-    "Queue": [
-      "Arn",
-      "FarmId",
-      "QueueId"
-    ],
-    "QueueEnvironment": [
-      "FarmId",
-      "Name",
-      "QueueEnvironmentId",
-      "QueueId"
-    ],
-    "QueueFleetAssociation": [
-      "FarmId",
-      "FleetId",
-      "QueueId"
-    ],
-    "QueueLimitAssociation": [
-      "FarmId",
-      "LimitId",
-      "QueueId"
-    ],
-    "StorageProfile": [
-      "FarmId",
-      "StorageProfileId"
-    ]
+    Queue: ["Arn", "FarmId", "QueueId"],
+    QueueEnvironment: ["FarmId", "Name", "QueueEnvironmentId", "QueueId"],
+    QueueFleetAssociation: ["FarmId", "FleetId", "QueueId"],
+    QueueLimitAssociation: ["FarmId", "LimitId", "QueueId"],
+    StorageProfile: ["FarmId", "StorageProfileId"],
   },
-  "Detective": {
-    "Graph": [
-      "Arn"
-    ],
-    "MemberInvitation": [
-      "GraphArn",
-      "MemberId"
-    ],
-    "OrganizationAdmin": [
-      "AccountId",
-      "GraphArn"
-    ]
+  Detective: {
+    Graph: ["Arn"],
+    MemberInvitation: ["GraphArn", "MemberId"],
+    OrganizationAdmin: ["AccountId", "GraphArn"],
   },
-  "DevOpsGuru": {
-    "LogAnomalyDetectionIntegration": [
-      "AccountId"
-    ],
-    "NotificationChannel": [
-      "Config",
-      "Id"
-    ],
-    "ResourceCollection": [
-      "ResourceCollectionType"
-    ]
+  DevOpsGuru: {
+    LogAnomalyDetectionIntegration: ["AccountId"],
+    NotificationChannel: ["Config", "Id"],
+    ResourceCollection: ["ResourceCollectionType"],
   },
-  "DirectoryService": {
-    "MicrosoftAD": [
+  DirectoryService: {
+    MicrosoftAD: [
       "Alias",
       "CreateAlias",
       "DnsIpAddresses",
@@ -2535,9 +1787,9 @@ const properties = {
       "Name",
       "Password",
       "ShortName",
-      "VpcSettings"
+      "VpcSettings",
     ],
-    "SimpleAD": [
+    SimpleAD: [
       "Alias",
       "CreateAlias",
       "Description",
@@ -2547,11 +1799,11 @@ const properties = {
       "Password",
       "ShortName",
       "Size",
-      "VpcSettings"
-    ]
+      "VpcSettings",
+    ],
   },
-  "DocDB": {
-    "DBCluster": [
+  DocDB: {
+    DBCluster: [
       "AvailabilityZones",
       "ClusterResourceId",
       "DBClusterIdentifier",
@@ -2563,57 +1815,48 @@ const properties = {
       "ReadEndpoint",
       "SnapshotIdentifier",
       "SourceDBClusterIdentifier",
-      "StorageEncrypted"
+      "StorageEncrypted",
     ],
-    "DBClusterParameterGroup": [
-      "Description",
-      "Family",
-      "Name"
-    ],
-    "DBInstance": [
+    DBClusterParameterGroup: ["Description", "Family", "Name"],
+    DBInstance: [
       "AvailabilityZone",
       "DBClusterIdentifier",
       "DBInstanceIdentifier",
       "Endpoint",
-      "Port"
+      "Port",
     ],
-    "DBSubnetGroup": [
-      "DBSubnetGroupName"
-    ],
-    "EventSubscription": [
-      "SnsTopicArn",
-      "SubscriptionName"
-    ]
+    DBSubnetGroup: ["DBSubnetGroupName"],
+    EventSubscription: ["SnsTopicArn", "SubscriptionName"],
   },
-  "DocDBElastic": {
-    "Cluster": [
+  DocDBElastic: {
+    Cluster: [
       "AdminUserName",
       "AuthType",
       "ClusterArn",
       "ClusterEndpoint",
       "ClusterName",
-      "KmsKeyId"
-    ]
+      "KmsKeyId",
+    ],
   },
-  "DynamoDB": {
-    "GlobalTable": [
+  DynamoDB: {
+    GlobalTable: [
       "Arn",
       "KeySchema",
       "LocalSecondaryIndexes",
       "StreamArn",
       "TableId",
-      "TableName"
+      "TableName",
     ],
-    "Table": [
+    Table: [
       "Arn",
       "ImportSourceSpecification",
       "KeySchema",
       "StreamArn",
-      "TableName"
-    ]
+      "TableName",
+    ],
   },
-  "EC2": {
-    "CapacityReservation": [
+  EC2: {
+    CapacityReservation: [
       "AvailabilityZone",
       "AvailabilityZone",
       "AvailabilityZoneId",
@@ -2641,65 +1884,57 @@ const properties = {
       "TagSpecifications",
       "Tenancy",
       "Tenancy",
-      "TotalInstanceCount"
+      "TotalInstanceCount",
     ],
-    "CapacityReservationFleet": [
+    CapacityReservationFleet: [
       "AllocationStrategy",
       "CapacityReservationFleetId",
       "EndDate",
       "InstanceMatchCriteria",
       "InstanceTypeSpecifications",
       "TagSpecifications",
-      "Tenancy"
+      "Tenancy",
     ],
-    "CarrierGateway": [
-      "CarrierGatewayId",
-      "OwnerId",
-      "State",
-      "VpcId"
-    ],
-    "ClientVpnAuthorizationRule": [
+    CarrierGateway: ["CarrierGatewayId", "OwnerId", "State", "VpcId"],
+    ClientVpnAuthorizationRule: [
       "AccessGroupId",
       "AuthorizeAllGroups",
       "ClientVpnEndpointId",
       "Description",
-      "TargetNetworkCidr"
+      "TargetNetworkCidr",
     ],
-    "ClientVpnEndpoint": [
+    ClientVpnEndpoint: [
       "AuthenticationOptions",
       "ClientCidrBlock",
       "TagSpecifications",
-      "TransportProtocol"
+      "TransportProtocol",
     ],
-    "ClientVpnRoute": [
+    ClientVpnRoute: [
       "ClientVpnEndpointId",
       "Description",
       "DestinationCidrBlock",
-      "TargetVpcSubnetId"
+      "TargetVpcSubnetId",
     ],
-    "ClientVpnTargetNetworkAssociation": [
-      "ClientVpnEndpointId",
-      "SubnetId"
-    ],
-    "CustomerGateway": [
+    ClientVpnTargetNetworkAssociation: ["ClientVpnEndpointId", "SubnetId"],
+    CustomerGateway: [
       "BgpAsn",
       "BgpAsnExtended",
       "CertificateArn",
       "CustomerGatewayId",
       "DeviceName",
       "IpAddress",
-      "Type"
+      "Type",
     ],
-    "DHCPOptions": [
+    DHCPOptions: [
       "DhcpOptionsId",
       "DomainName",
       "DomainNameServers",
       "Ipv6AddressPreferredLeaseTime",
       "NetbiosNameServers",
       "NetbiosNodeType",
-      "NtpServers"
+      "NtpServers",
     ],
-    "EC2Fleet": [
+    EC2Fleet: [
       "FleetId",
       "LaunchTemplateConfigs",
       "OnDemandOptions",
@@ -2709,36 +1944,33 @@ const properties = {
       "TerminateInstancesWithExpiration",
       "Type",
       "ValidFrom",
-      "ValidUntil"
+      "ValidUntil",
     ],
-    "EIP": [
+    EIP: [
       "Address",
       "AllocationId",
       "Domain",
       "IpamPoolId",
       "NetworkBorderGroup",
       "PublicIp",
-      "TransferAddress"
+      "TransferAddress",
     ],
-    "EIPAssociation": [
+    EIPAssociation: [
       "AllocationId",
       "Id",
       "InstanceId",
       "NetworkInterfaceId",
-      "PrivateIpAddress"
+      "PrivateIpAddress",
     ],
-    "EgressOnlyInternetGateway": [
-      "Id",
-      "VpcId"
-    ],
-    "EnclaveCertificateIamRoleAssociation": [
+    EgressOnlyInternetGateway: ["Id", "VpcId"],
+    EnclaveCertificateIamRoleAssociation: [
       "CertificateArn",
       "CertificateS3BucketName",
       "CertificateS3ObjectKey",
       "EncryptionKmsKeyId",
-      "RoleArn"
+      "RoleArn",
     ],
-    "FlowLog": [
+    FlowLog: [
       "DeliverCrossAccountRole",
       "DeliverLogsPermissionArn",
       "DestinationOptions",
@@ -2750,21 +1982,18 @@ const properties = {
       "MaxAggregationInterval",
       "ResourceId",
       "ResourceType",
-      "TrafficType"
+      "TrafficType",
     ],
-    "GatewayRouteTableAssociation": [
-      "AssociationId",
-      "GatewayId"
-    ],
-    "Host": [
+    GatewayRouteTableAssociation: ["AssociationId", "GatewayId"],
+    Host: [
       "AssetId",
       "AvailabilityZone",
       "HostId",
       "InstanceFamily",
       "InstanceType",
-      "OutpostArn"
+      "OutpostArn",
     ],
-    "IPAM": [
+    IPAM: [
       "Arn",
       "DefaultResourceDiscoveryAssociationId",
       "DefaultResourceDiscoveryId",
@@ -2772,16 +2001,16 @@ const properties = {
       "PrivateDefaultScopeId",
       "PublicDefaultScopeId",
       "ResourceDiscoveryAssociationCount",
-      "ScopeCount"
+      "ScopeCount",
     ],
-    "IPAMAllocation": [
+    IPAMAllocation: [
       "Cidr",
       "Description",
       "IpamPoolAllocationId",
       "IpamPoolId",
-      "NetmaskLength"
+      "NetmaskLength",
     ],
-    "IPAMPool": [
+    IPAMPool: [
       "AddressFamily",
       "Arn",
       "AwsService",
@@ -2797,24 +2026,24 @@ const properties = {
       "SourceIpamPoolId",
       "SourceResource",
       "State",
-      "StateMessage"
+      "StateMessage",
     ],
-    "IPAMPoolCidr": [
+    IPAMPoolCidr: [
       "Cidr",
       "IpamPoolCidrId",
       "IpamPoolId",
       "NetmaskLength",
-      "State"
+      "State",
     ],
-    "IPAMResourceDiscovery": [
+    IPAMResourceDiscovery: [
       "IpamResourceDiscoveryArn",
       "IpamResourceDiscoveryId",
       "IpamResourceDiscoveryRegion",
       "IsDefault",
       "OwnerId",
-      "State"
+      "State",
     ],
-    "IPAMResourceDiscoveryAssociation": [
+    IPAMResourceDiscoveryAssociation: [
       "IpamArn",
       "IpamId",
       "IpamRegion",
@@ -2824,18 +2053,18 @@ const properties = {
       "IsDefault",
       "OwnerId",
       "ResourceDiscoveryStatus",
-      "State"
+      "State",
     ],
-    "IPAMScope": [
+    IPAMScope: [
       "Arn",
       "IpamArn",
       "IpamId",
       "IpamScopeId",
       "IpamScopeType",
       "IsDefault",
-      "PoolCount"
+      "PoolCount",
     ],
-    "Instance": [
+    Instance: [
       "AvailabilityZone",
       "AvailabilityZone",
       "CpuOptions",
@@ -2863,90 +2092,80 @@ const properties = {
       "State.Code",
       "State.Name",
       "SubnetId",
-      "VpcId"
+      "VpcId",
     ],
-    "InstanceConnectEndpoint": [
+    InstanceConnectEndpoint: [
       "ClientToken",
       "Id",
       "PreserveClientIp",
       "SecurityGroupIds",
-      "SubnetId"
+      "SubnetId",
     ],
-    "InternetGateway": [
-      "InternetGatewayId"
-    ],
-    "KeyPair": [
+    InternetGateway: ["InternetGatewayId"],
+    KeyPair: [
       "KeyFingerprint",
       "KeyFormat",
       "KeyName",
       "KeyPairId",
       "KeyType",
       "PublicKeyMaterial",
-      "Tags"
+      "Tags",
     ],
-    "LaunchTemplate": [
+    LaunchTemplate: [
       "DefaultVersionNumber",
       "LatestVersionNumber",
       "LaunchTemplateId",
-      "LaunchTemplateName"
+      "LaunchTemplateName",
     ],
-    "LocalGatewayRoute": [
+    LocalGatewayRoute: [
       "DestinationCidrBlock",
       "LocalGatewayRouteTableId",
       "State",
-      "Type"
+      "Type",
     ],
-    "LocalGatewayRouteTable": [
+    LocalGatewayRouteTable: [
       "LocalGatewayId",
       "LocalGatewayRouteTableArn",
       "LocalGatewayRouteTableId",
       "Mode",
       "OutpostArn",
       "OwnerId",
-      "State"
+      "State",
     ],
-    "LocalGatewayRouteTableVPCAssociation": [
+    LocalGatewayRouteTableVPCAssociation: [
       "LocalGatewayId",
       "LocalGatewayRouteTableId",
       "LocalGatewayRouteTableVpcAssociationId",
       "State",
-      "VpcId"
+      "VpcId",
     ],
-    "LocalGatewayRouteTableVirtualInterfaceGroupAssociation": [
+    LocalGatewayRouteTableVirtualInterfaceGroupAssociation: [
       "LocalGatewayId",
       "LocalGatewayRouteTableArn",
       "LocalGatewayRouteTableId",
       "LocalGatewayRouteTableVirtualInterfaceGroupAssociationId",
       "LocalGatewayVirtualInterfaceGroupId",
       "OwnerId",
-      "State"
+      "State",
     ],
-    "NatGateway": [
+    NatGateway: [
       "AllocationId",
       "ConnectivityType",
       "NatGatewayId",
       "PrivateIpAddress",
-      "SubnetId"
+      "SubnetId",
     ],
-    "NetworkAcl": [
-      "Id",
-      "VpcId"
-    ],
-    "NetworkAclEntry": [
-      "Egress",
-      "Id",
-      "NetworkAclId",
-      "RuleNumber"
-    ],
-    "NetworkInsightsAccessScope": [
+    NetworkAcl: ["Id", "VpcId"],
+    NetworkAclEntry: ["Egress", "Id", "NetworkAclId", "RuleNumber"],
+    NetworkInsightsAccessScope: [
       "CreatedDate",
       "ExcludePaths",
       "MatchPaths",
       "NetworkInsightsAccessScopeArn",
       "NetworkInsightsAccessScopeId",
-      "UpdatedDate"
+      "UpdatedDate",
     ],
-    "NetworkInsightsAccessScopeAnalysis": [
+    NetworkInsightsAccessScopeAnalysis: [
       "AnalyzedEniCount",
       "EndDate",
       "FindingsFound",
@@ -2955,9 +2174,9 @@ const properties = {
       "NetworkInsightsAccessScopeId",
       "StartDate",
       "Status",
-      "StatusMessage"
+      "StatusMessage",
     ],
-    "NetworkInsightsAnalysis": [
+    NetworkInsightsAnalysis: [
       "AlternatePathHints",
       "Explanations",
       "FilterInArns",
@@ -2970,9 +2189,9 @@ const properties = {
       "StartDate",
       "Status",
       "StatusMessage",
-      "SuggestedAccounts"
+      "SuggestedAccounts",
     ],
-    "NetworkInsightsPath": [
+    NetworkInsightsPath: [
       "CreatedDate",
       "Destination",
       "DestinationArn",
@@ -2985,9 +2204,9 @@ const properties = {
       "Protocol",
       "Source",
       "SourceArn",
-      "SourceIp"
+      "SourceIp",
     ],
-    "NetworkInterface": [
+    NetworkInterface: [
       "Id",
       "InterfaceType",
       "PrimaryIpv6Address",
@@ -2995,64 +2214,52 @@ const properties = {
       "PrivateIpAddress",
       "SecondaryPrivateIpAddresses",
       "SubnetId",
-      "VpcId"
+      "VpcId",
     ],
-    "NetworkInterfaceAttachment": [
+    NetworkInterfaceAttachment: [
       "AttachmentId",
       "DeviceIndex",
       "InstanceId",
-      "NetworkInterfaceId"
+      "NetworkInterfaceId",
     ],
-    "NetworkInterfacePermission": [
+    NetworkInterfacePermission: [
       "AwsAccountId",
       "NetworkInterfaceId",
-      "Permission"
+      "Permission",
     ],
-    "NetworkPerformanceMetricSubscription": [
+    NetworkPerformanceMetricSubscription: [
       "Destination",
       "Metric",
       "Source",
-      "Statistic"
+      "Statistic",
     ],
-    "PlacementGroup": [
+    PlacementGroup: [
       "GroupName",
       "PartitionCount",
       "SpreadLevel",
       "Strategy",
-      "Tags"
+      "Tags",
     ],
-    "PrefixList": [
-      "Arn",
-      "OwnerId",
-      "PrefixListId",
-      "Version"
-    ],
-    "Route": [
+    PrefixList: ["Arn", "OwnerId", "PrefixListId", "Version"],
+    Route: [
       "CidrBlock",
       "DestinationCidrBlock",
       "DestinationIpv6CidrBlock",
       "DestinationPrefixListId",
-      "RouteTableId"
+      "RouteTableId",
     ],
-    "RouteServer": [
-      "AmazonSideAsn",
-      "Arn",
-      "Id"
-    ],
-    "RouteServerAssociation": [
-      "RouteServerId",
-      "VpcId"
-    ],
-    "RouteServerEndpoint": [
+    RouteServer: ["AmazonSideAsn", "Arn", "Id"],
+    RouteServerAssociation: ["RouteServerId", "VpcId"],
+    RouteServerEndpoint: [
       "Arn",
       "EniAddress",
       "EniId",
       "Id",
       "RouteServerId",
       "SubnetId",
-      "VpcId"
+      "VpcId",
     ],
-    "RouteServerPeer": [
+    RouteServerPeer: [
       "Arn",
       "BgpOptions",
       "EndpointEniAddress",
@@ -3062,25 +2269,19 @@ const properties = {
       "RouteServerEndpointId",
       "RouteServerId",
       "SubnetId",
-      "VpcId"
+      "VpcId",
     ],
-    "RouteServerPropagation": [
-      "RouteServerId",
-      "RouteTableId"
-    ],
-    "RouteTable": [
-      "RouteTableId",
-      "VpcId"
-    ],
-    "SecurityGroup": [
+    RouteServerPropagation: ["RouteServerId", "RouteTableId"],
+    RouteTable: ["RouteTableId", "VpcId"],
+    SecurityGroup: [
       "GroupDescription",
       "GroupId",
       "GroupName",
       "Id",
       "VpcId",
-      "VpcId"
+      "VpcId",
     ],
-    "SecurityGroupEgress": [
+    SecurityGroupEgress: [
       "CidrIp",
       "CidrIpv6",
       "DestinationPrefixListId",
@@ -3089,9 +2290,9 @@ const properties = {
       "GroupId",
       "Id",
       "IpProtocol",
-      "ToPort"
+      "ToPort",
     ],
-    "SecurityGroupIngress": [
+    SecurityGroupIngress: [
       "CidrIp",
       "CidrIpv6",
       "FromPort",
@@ -3103,22 +2304,18 @@ const properties = {
       "SourceSecurityGroupId",
       "SourceSecurityGroupName",
       "SourceSecurityGroupOwnerId",
-      "ToPort"
+      "ToPort",
     ],
-    "SecurityGroupVpcAssociation": [
+    SecurityGroupVpcAssociation: [
       "GroupId",
       "State",
       "StateReason",
       "VpcId",
-      "VpcOwnerId"
+      "VpcOwnerId",
     ],
-    "SnapshotBlockPublicAccess": [
-      "AccountId"
-    ],
-    "SpotFleet": [
-      "Id"
-    ],
-    "Subnet": [
+    SnapshotBlockPublicAccess: ["AccountId"],
+    SpotFleet: ["Id"],
+    Subnet: [
       "AvailabilityZone",
       "AvailabilityZone",
       "AvailabilityZoneId",
@@ -3136,77 +2333,59 @@ const properties = {
       "OutpostArn",
       "SubnetId",
       "VpcId",
-      "VpcId"
+      "VpcId",
     ],
-    "SubnetCidrBlock": [
+    SubnetCidrBlock: [
       "Id",
       "IpSource",
       "Ipv6AddressAttribute",
       "Ipv6CidrBlock",
       "Ipv6IpamPoolId",
       "Ipv6NetmaskLength",
-      "SubnetId"
+      "SubnetId",
     ],
-    "SubnetNetworkAclAssociation": [
-      "AssociationId",
-      "NetworkAclId",
-      "SubnetId"
-    ],
-    "SubnetRouteTableAssociation": [
-      "Id",
-      "RouteTableId",
-      "SubnetId"
-    ],
-    "TrafficMirrorFilter": [
-      "Description"
-    ],
-    "TrafficMirrorFilterRule": [
-      "TrafficMirrorFilterId"
-    ],
-    "TrafficMirrorSession": [
-      "NetworkInterfaceId"
-    ],
-    "TrafficMirrorTarget": [
+    SubnetNetworkAclAssociation: ["AssociationId", "NetworkAclId", "SubnetId"],
+    SubnetRouteTableAssociation: ["Id", "RouteTableId", "SubnetId"],
+    TrafficMirrorFilter: ["Description"],
+    TrafficMirrorFilterRule: ["TrafficMirrorFilterId"],
+    TrafficMirrorSession: ["NetworkInterfaceId"],
+    TrafficMirrorTarget: [
       "Description",
       "GatewayLoadBalancerEndpointId",
       "NetworkInterfaceId",
-      "NetworkLoadBalancerArn"
+      "NetworkLoadBalancerArn",
     ],
-    "TransitGateway": [
+    TransitGateway: [
       "AmazonSideAsn",
       "Id",
       "MulticastSupport",
-      "TransitGatewayArn"
+      "TransitGatewayArn",
     ],
-    "TransitGatewayAttachment": [
-      "Id",
-      "TransitGatewayId",
-      "VpcId"
-    ],
-    "TransitGatewayConnect": [
+    TransitGatewayAttachment: ["Id", "TransitGatewayId", "VpcId"],
+    TransitGatewayConnect: [
       "CreationTime",
       "Options",
       "State",
       "TransitGatewayAttachmentId",
       "TransitGatewayId",
-      "TransportTransitGatewayAttachmentId"
+      "TransportTransitGatewayAttachmentId",
     ],
-    "TransitGatewayMulticastDomain": [
+    TransitGatewayMulticastDomain: [
       "CreationTime",
       "State",
       "TransitGatewayId",
       "TransitGatewayMulticastDomainArn",
-      "TransitGatewayMulticastDomainId"
+      "TransitGatewayMulticastDomainId",
     ],
-    "TransitGatewayMulticastDomainAssociation": [
+    TransitGatewayMulticastDomainAssociation: [
       "ResourceId",
       "ResourceType",
       "State",
       "SubnetId",
       "TransitGatewayAttachmentId",
-      "TransitGatewayMulticastDomainId"
+      "TransitGatewayMulticastDomainId",
     ],
-    "TransitGatewayMulticastGroupMember": [
+    TransitGatewayMulticastGroupMember: [
       "GroupIpAddress",
       "GroupMember",
       "GroupSource",
@@ -3216,9 +2395,9 @@ const properties = {
       "ResourceType",
       "SubnetId",
       "TransitGatewayAttachmentId",
-      "TransitGatewayMulticastDomainId"
+      "TransitGatewayMulticastDomainId",
     ],
-    "TransitGatewayMulticastGroupSource": [
+    TransitGatewayMulticastGroupSource: [
       "GroupIpAddress",
       "GroupMember",
       "GroupSource",
@@ -3228,9 +2407,9 @@ const properties = {
       "SourceType",
       "SubnetId",
       "TransitGatewayAttachmentId",
-      "TransitGatewayMulticastDomainId"
+      "TransitGatewayMulticastDomainId",
     ],
-    "TransitGatewayPeeringAttachment": [
+    TransitGatewayPeeringAttachment: [
       "CreationTime",
       "PeerAccountId",
       "PeerRegion",
@@ -3240,33 +2419,33 @@ const properties = {
       "Status.Code",
       "Status.Message",
       "TransitGatewayAttachmentId",
-      "TransitGatewayId"
+      "TransitGatewayId",
     ],
-    "TransitGatewayRoute": [
+    TransitGatewayRoute: [
       "Blackhole",
       "DestinationCidrBlock",
       "TransitGatewayAttachmentId",
-      "TransitGatewayRouteTableId"
+      "TransitGatewayRouteTableId",
     ],
-    "TransitGatewayRouteTable": [
+    TransitGatewayRouteTable: [
       "TransitGatewayId",
-      "TransitGatewayRouteTableId"
+      "TransitGatewayRouteTableId",
     ],
-    "TransitGatewayRouteTableAssociation": [
+    TransitGatewayRouteTableAssociation: [
       "TransitGatewayAttachmentId",
-      "TransitGatewayRouteTableId"
+      "TransitGatewayRouteTableId",
     ],
-    "TransitGatewayRouteTablePropagation": [
+    TransitGatewayRouteTablePropagation: [
       "TransitGatewayAttachmentId",
-      "TransitGatewayRouteTableId"
+      "TransitGatewayRouteTableId",
     ],
-    "TransitGatewayVpcAttachment": [
+    TransitGatewayVpcAttachment: [
       "Id",
       "SubnetIds",
       "TransitGatewayId",
-      "VpcId"
+      "VpcId",
     ],
-    "VPC": [
+    VPC: [
       "CidrBlock",
       "CidrBlock",
       "CidrBlockAssociations",
@@ -3275,17 +2454,11 @@ const properties = {
       "Ipv4IpamPoolId",
       "Ipv4NetmaskLength",
       "Ipv6CidrBlocks",
-      "VpcId"
+      "VpcId",
     ],
-    "VPCBlockPublicAccessExclusion": [
-      "ExclusionId",
-      "SubnetId",
-      "VpcId"
-    ],
-    "VPCBlockPublicAccessOptions": [
-      "AccountId"
-    ],
-    "VPCCidrBlock": [
+    VPCBlockPublicAccessExclusion: ["ExclusionId", "SubnetId", "VpcId"],
+    VPCBlockPublicAccessOptions: ["AccountId"],
+    VPCCidrBlock: [
       "AmazonProvidedIpv6CidrBlock",
       "CidrBlock",
       "Id",
@@ -3298,13 +2471,10 @@ const properties = {
       "Ipv6IpamPoolId",
       "Ipv6NetmaskLength",
       "Ipv6Pool",
-      "VpcId"
+      "VpcId",
     ],
-    "VPCDHCPOptionsAssociation": [
-      "DhcpOptionsId",
-      "VpcId"
-    ],
-    "VPCEndpoint": [
+    VPCDHCPOptionsAssociation: ["DhcpOptionsId", "VpcId"],
+    VPCEndpoint: [
       "CreationTimestamp",
       "DnsEntries",
       "Id",
@@ -3314,32 +2484,25 @@ const properties = {
       "ServiceNetworkArn",
       "ServiceRegion",
       "VpcEndpointType",
-      "VpcId"
+      "VpcId",
     ],
-    "VPCEndpointConnectionNotification": [
+    VPCEndpointConnectionNotification: [
       "ServiceId",
       "VPCEndpointConnectionNotificationId",
-      "VPCEndpointId"
+      "VPCEndpointId",
     ],
-    "VPCEndpointService": [
-      "ServiceId"
-    ],
-    "VPCEndpointServicePermissions": [
-      "ServiceId"
-    ],
-    "VPCGatewayAttachment": [
-      "AttachmentType",
-      "VpcId"
-    ],
-    "VPCPeeringConnection": [
+    VPCEndpointService: ["ServiceId"],
+    VPCEndpointServicePermissions: ["ServiceId"],
+    VPCGatewayAttachment: ["AttachmentType", "VpcId"],
+    VPCPeeringConnection: [
       "Id",
       "PeerOwnerId",
       "PeerRegion",
       "PeerRoleArn",
       "PeerVpcId",
-      "VpcId"
+      "VpcId",
     ],
-    "VPNConnection": [
+    VPNConnection: [
       "CustomerGatewayId",
       "EnableAcceleration",
       "LocalIpv4NetworkCidr",
@@ -3354,21 +2517,12 @@ const properties = {
       "Type",
       "VpnConnectionId",
       "VpnGatewayId",
-      "VpnTunnelOptionsSpecifications"
+      "VpnTunnelOptionsSpecifications",
     ],
-    "VPNConnectionRoute": [
-      "DestinationCidrBlock",
-      "VpnConnectionId"
-    ],
-    "VPNGateway": [
-      "AmazonSideAsn",
-      "Type",
-      "VPNGatewayId"
-    ],
-    "VPNGatewayRoutePropagation": [
-      "Id"
-    ],
-    "VerifiedAccessEndpoint": [
+    VPNConnectionRoute: ["DestinationCidrBlock", "VpnConnectionId"],
+    VPNGateway: ["AmazonSideAsn", "Type", "VPNGatewayId"],
+    VPNGatewayRoutePropagation: ["Id"],
+    VerifiedAccessEndpoint: [
       "ApplicationDomain",
       "AttachmentType",
       "CreationTime",
@@ -3381,22 +2535,22 @@ const properties = {
       "SecurityGroupIds",
       "Status",
       "VerifiedAccessEndpointId",
-      "VerifiedAccessInstanceId"
+      "VerifiedAccessInstanceId",
     ],
-    "VerifiedAccessGroup": [
+    VerifiedAccessGroup: [
       "CreationTime",
       "LastUpdatedTime",
       "Owner",
       "VerifiedAccessGroupArn",
-      "VerifiedAccessGroupId"
+      "VerifiedAccessGroupId",
     ],
-    "VerifiedAccessInstance": [
+    VerifiedAccessInstance: [
       "CidrEndpointsCustomSubDomainNameServers",
       "CreationTime",
       "LastUpdatedTime",
-      "VerifiedAccessInstanceId"
+      "VerifiedAccessInstanceId",
     ],
-    "VerifiedAccessTrustProvider": [
+    VerifiedAccessTrustProvider: [
       "CreationTime",
       "DeviceOptions",
       "DeviceTrustProviderType",
@@ -3404,67 +2558,38 @@ const properties = {
       "PolicyReferenceName",
       "TrustProviderType",
       "UserTrustProviderType",
-      "VerifiedAccessTrustProviderId"
+      "VerifiedAccessTrustProviderId",
     ],
-    "Volume": [
-      "VolumeId"
-    ],
-    "VolumeAttachment": [
-      "Device",
-      "InstanceId",
-      "VolumeId"
-    ]
+    Volume: ["VolumeId"],
+    VolumeAttachment: ["Device", "InstanceId", "VolumeId"],
   },
-  "ECR": {
-    "PublicRepository": [
-      "Arn",
-      "RepositoryName"
-    ],
-    "PullThroughCacheRule": [
+  ECR: {
+    PublicRepository: ["Arn", "RepositoryName"],
+    PullThroughCacheRule: [
       "CredentialArn",
       "CustomRoleArn",
       "EcrRepositoryPrefix",
       "UpstreamRegistry",
       "UpstreamRegistryUrl",
-      "UpstreamRepositoryPrefix"
+      "UpstreamRepositoryPrefix",
     ],
-    "RegistryPolicy": [
-      "RegistryId"
-    ],
-    "RegistryScanningConfiguration": [
-      "RegistryId"
-    ],
-    "ReplicationConfiguration": [
-      "RegistryId"
-    ],
-    "Repository": [
+    RegistryPolicy: ["RegistryId"],
+    RegistryScanningConfiguration: ["RegistryId"],
+    ReplicationConfiguration: ["RegistryId"],
+    Repository: [
       "Arn",
       "EncryptionConfiguration",
       "RepositoryName",
-      "RepositoryUri"
+      "RepositoryUri",
     ],
-    "RepositoryCreationTemplate": [
-      "CreatedAt",
-      "Prefix",
-      "UpdatedAt"
-    ]
+    RepositoryCreationTemplate: ["CreatedAt", "Prefix", "UpdatedAt"],
   },
-  "ECS": {
-    "CapacityProvider": [
-      "Name"
-    ],
-    "Cluster": [
-      "Arn",
-      "ClusterName"
-    ],
-    "ClusterCapacityProviderAssociations": [
-      "Cluster"
-    ],
-    "PrimaryTaskSet": [
-      "Cluster",
-      "Service"
-    ],
-    "Service": [
+  ECS: {
+    CapacityProvider: ["Name"],
+    Cluster: ["Arn", "ClusterName"],
+    ClusterCapacityProviderAssociations: ["Cluster"],
+    PrimaryTaskSet: ["Cluster", "Service"],
+    Service: [
       "Cluster",
       "DeploymentController",
       "LaunchType",
@@ -3472,9 +2597,9 @@ const properties = {
       "Role",
       "SchedulingStrategy",
       "ServiceArn",
-      "ServiceName"
+      "ServiceName",
     ],
-    "TaskDefinition": [
+    TaskDefinition: [
       "ContainerDefinitions",
       "Cpu",
       "EnableFaultInjection",
@@ -3492,9 +2617,9 @@ const properties = {
       "RuntimePlatform",
       "TaskDefinitionArn",
       "TaskRoleArn",
-      "Volumes"
+      "Volumes",
     ],
-    "TaskSet": [
+    TaskSet: [
       "CapacityProviderStrategy",
       "Cluster",
       "ExternalId",
@@ -3505,47 +2630,32 @@ const properties = {
       "PlatformVersion",
       "Service",
       "ServiceRegistries",
-      "TaskDefinition"
-    ]
+      "TaskDefinition",
+    ],
   },
-  "EFS": {
-    "AccessPoint": [
+  EFS: {
+    AccessPoint: [
       "AccessPointId",
       "Arn",
       "ClientToken",
       "FileSystemId",
       "PosixUser",
-      "RootDirectory"
+      "RootDirectory",
     ],
-    "FileSystem": [
+    FileSystem: [
       "Arn",
       "AvailabilityZoneName",
       "Encrypted",
       "FileSystemId",
       "KmsKeyId",
-      "PerformanceMode"
+      "PerformanceMode",
     ],
-    "MountTarget": [
-      "FileSystemId",
-      "Id",
-      "IpAddress",
-      "IpAddress",
-      "SubnetId"
-    ]
+    MountTarget: ["FileSystemId", "Id", "IpAddress", "IpAddress", "SubnetId"],
   },
-  "EKS": {
-    "AccessEntry": [
-      "AccessEntryArn",
-      "ClusterName",
-      "PrincipalArn",
-      "Type"
-    ],
-    "Addon": [
-      "AddonName",
-      "Arn",
-      "ClusterName"
-    ],
-    "Cluster": [
+  EKS: {
+    AccessEntry: ["AccessEntryArn", "ClusterName", "PrincipalArn", "Type"],
+    Addon: ["AddonName", "Arn", "ClusterName"],
+    Cluster: [
       "Arn",
       "BootstrapSelfManagedAddons",
       "CertificateAuthorityData",
@@ -3558,24 +2668,24 @@ const properties = {
       "Name",
       "OpenIdConnectIssuerUrl",
       "OutpostConfig",
-      "RoleArn"
+      "RoleArn",
     ],
-    "FargateProfile": [
+    FargateProfile: [
       "Arn",
       "ClusterName",
       "FargateProfileName",
       "PodExecutionRoleArn",
       "Selectors",
-      "Subnets"
+      "Subnets",
     ],
-    "IdentityProviderConfig": [
+    IdentityProviderConfig: [
       "ClusterName",
       "IdentityProviderConfigArn",
       "IdentityProviderConfigName",
       "Oidc",
-      "Type"
+      "Type",
     ],
-    "Nodegroup": [
+    Nodegroup: [
       "AmiType",
       "Arn",
       "CapacityType",
@@ -3588,18 +2698,18 @@ const properties = {
       "NodegroupName",
       "NodegroupName",
       "RemoteAccess",
-      "Subnets"
+      "Subnets",
     ],
-    "PodIdentityAssociation": [
+    PodIdentityAssociation: [
       "AssociationArn",
       "AssociationId",
       "ClusterName",
       "Namespace",
-      "ServiceAccount"
-    ]
+      "ServiceAccount",
+    ],
   },
-  "EMR": {
-    "Cluster": [
+  EMR: {
+    Cluster: [
       "AdditionalInfo",
       "Applications",
       "AutoScalingRole",
@@ -3621,15 +2731,15 @@ const properties = {
       "ScaleDownBehavior",
       "SecurityConfiguration",
       "ServiceRole",
-      "Steps"
+      "Steps",
     ],
-    "InstanceFleetConfig": [
+    InstanceFleetConfig: [
       "ClusterId",
       "InstanceFleetType",
       "LaunchSpecifications",
-      "Name"
+      "Name",
     ],
-    "InstanceGroupConfig": [
+    InstanceGroupConfig: [
       "BidPrice",
       "Configurations",
       "CustomAmiId",
@@ -3638,20 +2748,11 @@ const properties = {
       "InstanceType",
       "JobFlowId",
       "Market",
-      "Name"
-    ],
-    "SecurityConfiguration": [
       "Name",
-      "SecurityConfiguration"
     ],
-    "Step": [
-      "ActionOnFailure",
-      "HadoopJarStep",
-      "Id",
-      "JobFlowId",
-      "Name"
-    ],
-    "Studio": [
+    SecurityConfiguration: ["Name", "SecurityConfiguration"],
+    Step: ["ActionOnFailure", "HadoopJarStep", "Id", "JobFlowId", "Name"],
+    Studio: [
       "Arn",
       "AuthMode",
       "EncryptionKeyArn",
@@ -3664,35 +2765,19 @@ const properties = {
       "Url",
       "UserRole",
       "VpcId",
-      "WorkspaceSecurityGroupId"
+      "WorkspaceSecurityGroupId",
     ],
-    "StudioSessionMapping": [
-      "IdentityName",
-      "IdentityType",
-      "StudioId"
-    ],
-    "WALWorkspace": [
-      "WALWorkspaceName"
-    ]
+    StudioSessionMapping: ["IdentityName", "IdentityType", "StudioId"],
+    WALWorkspace: ["WALWorkspaceName"],
   },
-  "EMRContainers": {
-    "VirtualCluster": [
-      "Arn",
-      "ContainerProvider",
-      "Id",
-      "Name"
-    ]
+  EMRContainers: {
+    VirtualCluster: ["Arn", "ContainerProvider", "Id", "Name"],
   },
-  "EMRServerless": {
-    "Application": [
-      "ApplicationId",
-      "Arn",
-      "Name",
-      "Type"
-    ]
+  EMRServerless: {
+    Application: ["ApplicationId", "Arn", "Name", "Type"],
   },
-  "ElastiCache": {
-    "CacheCluster": [
+  ElastiCache: {
+    CacheCluster: [
       "CacheSubnetGroupName",
       "ClusterName",
       "ConfigurationEndpoint.Address",
@@ -3703,17 +2788,11 @@ const properties = {
       "RedisEndpoint.Address",
       "RedisEndpoint.Port",
       "SnapshotArns",
-      "SnapshotName"
+      "SnapshotName",
     ],
-    "GlobalReplicationGroup": [
-      "GlobalReplicationGroupId",
-      "Status"
-    ],
-    "ParameterGroup": [
-      "CacheParameterGroupFamily",
-      "CacheParameterGroupName"
-    ],
-    "ReplicationGroup": [
+    GlobalReplicationGroup: ["GlobalReplicationGroupId", "Status"],
+    ParameterGroup: ["CacheParameterGroupFamily", "CacheParameterGroupName"],
+    ReplicationGroup: [
       "AtRestEncryptionEnabled",
       "CacheSubnetGroupName",
       "ConfigurationEndPoint.Address",
@@ -3735,9 +2814,9 @@ const properties = {
       "ReplicasPerNodeGroup",
       "ReplicationGroupId",
       "SnapshotArns",
-      "SnapshotName"
+      "SnapshotName",
     ],
-    "ServerlessCache": [
+    ServerlessCache: [
       "ARN",
       "CreateTime",
       "Endpoint.Address",
@@ -3749,73 +2828,47 @@ const properties = {
       "ServerlessCacheName",
       "SnapshotArnsToRestore",
       "Status",
-      "SubnetIds"
+      "SubnetIds",
     ],
-    "SubnetGroup": [
-      "CacheSubnetGroupName"
-    ],
-    "User": [
-      "Arn",
-      "Status",
-      "UserId",
-      "UserName"
-    ],
-    "UserGroup": [
-      "Arn",
-      "Status",
-      "UserGroupId"
-    ]
+    SubnetGroup: ["CacheSubnetGroupName"],
+    User: ["Arn", "Status", "UserId", "UserName"],
+    UserGroup: ["Arn", "Status", "UserGroupId"],
   },
-  "ElasticBeanstalk": {
-    "Application": [
-      "ApplicationName"
-    ],
-    "ApplicationVersion": [
-      "ApplicationName",
-      "Id",
-      "SourceBundle"
-    ],
-    "ConfigurationTemplate": [
+  ElasticBeanstalk: {
+    Application: ["ApplicationName"],
+    ApplicationVersion: ["ApplicationName", "Id", "SourceBundle"],
+    ConfigurationTemplate: [
       "ApplicationName",
       "EnvironmentId",
       "PlatformArn",
       "SolutionStackName",
       "SourceConfiguration",
-      "TemplateName"
+      "TemplateName",
     ],
-    "Environment": [
+    Environment: [
       "ApplicationName",
       "CNAMEPrefix",
       "EndpointURL",
       "EnvironmentName",
-      "SolutionStackName"
-    ]
+      "SolutionStackName",
+    ],
   },
-  "ElasticLoadBalancing": {
-    "LoadBalancer": [
+  ElasticLoadBalancing: {
+    LoadBalancer: [
       "CanonicalHostedZoneName",
       "CanonicalHostedZoneNameID",
       "DNSName",
       "LoadBalancerName",
       "Scheme",
       "SourceSecurityGroup.GroupName",
-      "SourceSecurityGroup.OwnerAlias"
-    ]
+      "SourceSecurityGroup.OwnerAlias",
+    ],
   },
-  "ElasticLoadBalancingV2": {
-    "Listener": [
-      "ListenerArn",
-      "LoadBalancerArn"
-    ],
-    "ListenerCertificate": [
-      "ListenerArn"
-    ],
-    "ListenerRule": [
-      "IsDefault",
-      "ListenerArn",
-      "RuleArn"
-    ],
-    "LoadBalancer": [
+  ElasticLoadBalancingV2: {
+    Listener: ["ListenerArn", "LoadBalancerArn"],
+    ListenerCertificate: ["ListenerArn"],
+    ListenerRule: ["IsDefault", "ListenerArn", "RuleArn"],
+    LoadBalancer: [
       "CanonicalHostedZoneID",
       "DNSName",
       "LoadBalancerArn",
@@ -3824,9 +2877,9 @@ const properties = {
       "Name",
       "Scheme",
       "SecurityGroups",
-      "Type"
+      "Type",
     ],
-    "TargetGroup": [
+    TargetGroup: [
       "IpAddressType",
       "LoadBalancerArns",
       "Name",
@@ -3837,179 +2890,104 @@ const properties = {
       "TargetGroupFullName",
       "TargetGroupName",
       "TargetType",
-      "VpcId"
+      "VpcId",
     ],
-    "TrustStore": [
-      "Name",
-      "NumberOfCaCertificates",
-      "Status",
-      "TrustStoreArn"
-    ],
-    "TrustStoreRevocation": [
+    TrustStore: ["Name", "NumberOfCaCertificates", "Status", "TrustStoreArn"],
+    TrustStoreRevocation: [
       "RevocationContents",
       "RevocationId",
       "TrustStoreArn",
-      "TrustStoreRevocations"
-    ]
+      "TrustStoreRevocations",
+    ],
   },
-  "Elasticsearch": {
-    "Domain": [
-      "Arn",
-      "DomainArn",
-      "DomainEndpoint",
-      "DomainName"
-    ]
+  Elasticsearch: {
+    Domain: ["Arn", "DomainArn", "DomainEndpoint", "DomainName"],
   },
-  "EntityResolution": {
-    "IdMappingWorkflow": [
+  EntityResolution: {
+    IdMappingWorkflow: [
       "CreatedAt",
       "UpdatedAt",
       "WorkflowArn",
-      "WorkflowName"
+      "WorkflowName",
     ],
-    "IdNamespace": [
+    IdNamespace: [
       "CreatedAt",
       "IdNamespaceArn",
       "IdNamespaceName",
-      "UpdatedAt"
-    ],
-    "MatchingWorkflow": [
-      "CreatedAt",
       "UpdatedAt",
-      "WorkflowArn",
-      "WorkflowName"
     ],
-    "PolicyStatement": [
-      "Arn",
-      "StatementId"
-    ],
-    "SchemaMapping": [
+    MatchingWorkflow: ["CreatedAt", "UpdatedAt", "WorkflowArn", "WorkflowName"],
+    PolicyStatement: ["Arn", "StatementId"],
+    SchemaMapping: [
       "CreatedAt",
       "HasWorkflows",
       "SchemaArn",
       "SchemaName",
-      "UpdatedAt"
-    ]
+      "UpdatedAt",
+    ],
   },
-  "EventSchemas": {
-    "Discoverer": [
-      "DiscovererArn",
-      "DiscovererId",
-      "SourceArn",
-      "State"
-    ],
-    "Registry": [
-      "RegistryArn",
-      "RegistryName",
-      "RegistryName"
-    ],
-    "RegistryPolicy": [
-      "Id"
-    ],
-    "Schema": [
+  EventSchemas: {
+    Discoverer: ["DiscovererArn", "DiscovererId", "SourceArn", "State"],
+    Registry: ["RegistryArn", "RegistryName", "RegistryName"],
+    RegistryPolicy: ["Id"],
+    Schema: [
       "LastModified",
       "RegistryName",
       "SchemaArn",
       "SchemaName",
       "SchemaName",
       "SchemaVersion",
-      "VersionCreatedDate"
-    ]
+      "VersionCreatedDate",
+    ],
   },
-  "Events": {
-    "ApiDestination": [
-      "Arn",
-      "ArnForPolicy",
-      "Name"
-    ],
-    "Archive": [
-      "ArchiveName",
-      "Arn",
-      "SourceArn"
-    ],
-    "Connection": [
+  Events: {
+    ApiDestination: ["Arn", "ArnForPolicy", "Name"],
+    Archive: ["ArchiveName", "Arn", "SourceArn"],
+    Connection: [
       "Arn",
       "ArnForPolicy",
       "AuthParameters.ConnectivityParameters.ResourceParameters.ResourceAssociationArn",
       "InvocationConnectivityParameters.ResourceParameters.ResourceAssociationArn",
       "Name",
-      "SecretArn"
+      "SecretArn",
     ],
-    "Endpoint": [
+    Endpoint: [
       "Arn",
       "EndpointId",
       "EndpointUrl",
       "Name",
       "State",
-      "StateReason"
+      "StateReason",
     ],
-    "EventBus": [
-      "Arn",
-      "Name",
-      "Name"
-    ],
-    "EventBusPolicy": [
-      "EventBusName",
-      "StatementId"
-    ],
-    "Rule": [
-      "Arn",
-      "Name"
-    ]
+    EventBus: ["Arn", "Name", "Name"],
+    EventBusPolicy: ["EventBusName", "StatementId"],
+    Rule: ["Arn", "Name"],
   },
-  "Evidently": {
-    "Experiment": [
-      "Arn",
-      "Name",
-      "Project"
-    ],
-    "Feature": [
-      "Arn",
-      "Name",
-      "Project"
-    ],
-    "Launch": [
-      "Arn",
-      "Name",
-      "Project"
-    ],
-    "Project": [
-      "Arn",
-      "Name"
-    ],
-    "Segment": [
-      "Arn"
-    ]
+  Evidently: {
+    Experiment: ["Arn", "Name", "Project"],
+    Feature: ["Arn", "Name", "Project"],
+    Launch: ["Arn", "Name", "Project"],
+    Project: ["Arn", "Name"],
+    Segment: ["Arn"],
   },
-  "FIS": {
-    "ExperimentTemplate": [
-      "Id",
-      "Tags"
-    ],
-    "TargetAccountConfiguration": [
-      "AccountId",
-      "ExperimentTemplateId"
-    ]
+  FIS: {
+    ExperimentTemplate: ["Id", "Tags"],
+    TargetAccountConfiguration: ["AccountId", "ExperimentTemplateId"],
   },
-  "FMS": {
-    "Policy": [
-      "Arn",
-      "Id"
-    ],
-    "ResourceSet": [
-      "Id"
-    ]
+  FMS: {
+    Policy: ["Arn", "Id"],
+    ResourceSet: ["Id"],
   },
-  "FSx": {
-    "DataRepositoryAssociation": [
+  FSx: {
+    DataRepositoryAssociation: [
       "AssociationId",
       "BatchImportMetaDataOnCreate",
       "DataRepositoryPath",
       "FileSystemId",
       "FileSystemPath",
-      "ResourceARN"
+      "ResourceARN",
     ],
-    "FileSystem": [
+    FileSystem: [
       "BackupId",
       "DNSName",
       "FileSystemType",
@@ -4018,30 +2996,21 @@ const properties = {
       "ResourceARN",
       "RootVolumeId",
       "SecurityGroupIds",
-      "SubnetIds"
+      "SubnetIds",
     ],
-    "Snapshot": [
-      "ResourceARN",
-      "VolumeId"
-    ],
-    "StorageVirtualMachine": [
+    Snapshot: ["ResourceARN", "VolumeId"],
+    StorageVirtualMachine: [
       "FileSystemId",
       "Name",
       "ResourceARN",
       "RootVolumeSecurityStyle",
       "StorageVirtualMachineId",
-      "UUID"
-    ],
-    "Volume": [
-      "BackupId",
-      "ResourceARN",
       "UUID",
-      "VolumeId",
-      "VolumeType"
-    ]
+    ],
+    Volume: ["BackupId", "ResourceARN", "UUID", "VolumeId", "VolumeType"],
   },
-  "FinSpace": {
-    "Environment": [
+  FinSpace: {
+    Environment: [
       "AwsAccountId",
       "DedicatedServiceAccountId",
       "EnvironmentArn",
@@ -4052,21 +3021,15 @@ const properties = {
       "SageMakerStudioDomainUrl",
       "Status",
       "SuperuserParameters",
-      "Tags"
-    ]
-  },
-  "Forecast": {
-    "Dataset": [
-      "Arn",
-      "DatasetName"
+      "Tags",
     ],
-    "DatasetGroup": [
-      "DatasetGroupArn",
-      "DatasetGroupName"
-    ]
   },
-  "FraudDetector": {
-    "Detector": [
+  Forecast: {
+    Dataset: ["Arn", "DatasetName"],
+    DatasetGroup: ["DatasetGroupArn", "DatasetGroupName"],
+  },
+  FraudDetector: {
+    Detector: [
       "Arn",
       "CreatedTime",
       "DetectorId",
@@ -4074,58 +3037,25 @@ const properties = {
       "EventType.Arn",
       "EventType.CreatedTime",
       "EventType.LastUpdatedTime",
-      "LastUpdatedTime"
-    ],
-    "EntityType": [
-      "Arn",
-      "CreatedTime",
       "LastUpdatedTime",
-      "Name"
     ],
-    "EventType": [
-      "Arn",
-      "CreatedTime",
-      "LastUpdatedTime",
-      "Name"
-    ],
-    "Label": [
-      "Arn",
-      "CreatedTime",
-      "LastUpdatedTime",
-      "Name"
-    ],
-    "List": [
-      "Arn",
-      "CreatedTime",
-      "LastUpdatedTime",
-      "Name"
-    ],
-    "Outcome": [
-      "Arn",
-      "CreatedTime",
-      "LastUpdatedTime",
-      "Name"
-    ],
-    "Variable": [
-      "Arn",
-      "CreatedTime",
-      "LastUpdatedTime",
-      "Name"
-    ]
+    EntityType: ["Arn", "CreatedTime", "LastUpdatedTime", "Name"],
+    EventType: ["Arn", "CreatedTime", "LastUpdatedTime", "Name"],
+    Label: ["Arn", "CreatedTime", "LastUpdatedTime", "Name"],
+    List: ["Arn", "CreatedTime", "LastUpdatedTime", "Name"],
+    Outcome: ["Arn", "CreatedTime", "LastUpdatedTime", "Name"],
+    Variable: ["Arn", "CreatedTime", "LastUpdatedTime", "Name"],
   },
-  "GameLift": {
-    "Alias": [
-      "AliasArn",
-      "AliasId"
-    ],
-    "Build": [
+  GameLift: {
+    Alias: ["AliasArn", "AliasId"],
+    Build: [
       "BuildArn",
       "BuildId",
       "OperatingSystem",
       "ServerSdkVersion",
-      "StorageLocation"
+      "StorageLocation",
     ],
-    "ContainerFleet": [
+    ContainerFleet: [
       "BillingType",
       "CreationTime",
       "DeploymentDetails",
@@ -4137,18 +3067,18 @@ const properties = {
       "Locations",
       "MaximumGameServerContainerGroupsPerInstance",
       "PerInstanceContainerGroupDefinitionArn",
-      "Status"
+      "Status",
     ],
-    "ContainerGroupDefinition": [
+    ContainerGroupDefinition: [
       "ContainerGroupDefinitionArn",
       "ContainerGroupType",
       "CreationTime",
       "Name",
       "Status",
       "StatusReason",
-      "VersionNumber"
+      "VersionNumber",
     ],
-    "Fleet": [
+    Fleet: [
       "ApplyCapacity",
       "BuildId",
       "CertificateConfiguration",
@@ -4160,138 +3090,56 @@ const properties = {
       "InstanceRoleCredentialsProvider",
       "PeerVpcAwsAccountId",
       "PeerVpcId",
-      "ScriptId"
+      "ScriptId",
     ],
-    "GameServerGroup": [
-      "AutoScalingGroupArn",
-      "GameServerGroupArn"
-    ],
-    "GameSessionQueue": [
-      "Arn",
-      "Name",
-      "Name"
-    ],
-    "Location": [
-      "LocationArn",
-      "LocationName"
-    ],
-    "MatchmakingConfiguration": [
-      "Arn",
-      "Name",
-      "Name"
-    ],
-    "MatchmakingRuleSet": [
-      "Arn",
-      "CreationTime",
-      "Name",
-      "Name",
-      "RuleSetBody"
-    ],
-    "Script": [
-      "Arn",
-      "CreationTime",
-      "Id",
-      "SizeOnDisk"
-    ]
+    GameServerGroup: ["AutoScalingGroupArn", "GameServerGroupArn"],
+    GameSessionQueue: ["Arn", "Name", "Name"],
+    Location: ["LocationArn", "LocationName"],
+    MatchmakingConfiguration: ["Arn", "Name", "Name"],
+    MatchmakingRuleSet: ["Arn", "CreationTime", "Name", "Name", "RuleSetBody"],
+    Script: ["Arn", "CreationTime", "Id", "SizeOnDisk"],
   },
-  "GlobalAccelerator": {
-    "Accelerator": [
+  GlobalAccelerator: {
+    Accelerator: [
       "AcceleratorArn",
       "DnsName",
       "DualStackDnsName",
       "Ipv4Addresses",
-      "Ipv6Addresses"
+      "Ipv6Addresses",
     ],
-    "CrossAccountAttachment": [
-      "AttachmentArn"
-    ],
-    "EndpointGroup": [
-      "EndpointGroupArn",
-      "EndpointGroupRegion",
-      "ListenerArn"
-    ],
-    "Listener": [
-      "AcceleratorArn",
-      "ListenerArn"
-    ]
+    CrossAccountAttachment: ["AttachmentArn"],
+    EndpointGroup: ["EndpointGroupArn", "EndpointGroupRegion", "ListenerArn"],
+    Listener: ["AcceleratorArn", "ListenerArn"],
   },
-  "Glue": {
-    "Connection": [
-      "CatalogId"
-    ],
-    "Crawler": [
-      "Name"
-    ],
-    "DataCatalogEncryptionSettings": [
-      "CatalogId"
-    ],
-    "Database": [
-      "DatabaseName"
-    ],
-    "DevEndpoint": [
-      "EndpointName"
-    ],
-    "Job": [
-      "Name"
-    ],
-    "MLTransform": [
-      "InputRecordTables"
-    ],
-    "Partition": [
-      "CatalogId",
-      "DatabaseName",
-      "TableName"
-    ],
-    "Registry": [
-      "Arn",
-      "Name"
-    ],
-    "Schema": [
+  Glue: {
+    Connection: ["CatalogId"],
+    Crawler: ["Name"],
+    DataCatalogEncryptionSettings: ["CatalogId"],
+    Database: ["DatabaseName"],
+    DevEndpoint: ["EndpointName"],
+    Job: ["Name"],
+    MLTransform: ["InputRecordTables"],
+    Partition: ["CatalogId", "DatabaseName", "TableName"],
+    Registry: ["Arn", "Name"],
+    Schema: [
       "Arn",
       "DataFormat",
       "InitialSchemaVersionId",
       "Name",
       "Registry",
-      "SchemaDefinition"
-    ],
-    "SchemaVersion": [
-      "Schema",
       "SchemaDefinition",
-      "VersionId"
     ],
-    "SchemaVersionMetadata": [
-      "Key",
-      "SchemaVersionId",
-      "Value"
-    ],
-    "SecurityConfiguration": [
-      "Name"
-    ],
-    "Table": [
-      "CatalogId",
-      "DatabaseName"
-    ],
-    "TableOptimizer": [
-      "CatalogId",
-      "DatabaseName",
-      "TableName",
-      "Type"
-    ],
-    "Trigger": [
-      "Name",
-      "Type",
-      "WorkflowName"
-    ],
-    "UsageProfile": [
-      "CreatedOn",
-      "Name"
-    ],
-    "Workflow": [
-      "Name"
-    ]
+    SchemaVersion: ["Schema", "SchemaDefinition", "VersionId"],
+    SchemaVersionMetadata: ["Key", "SchemaVersionId", "Value"],
+    SecurityConfiguration: ["Name"],
+    Table: ["CatalogId", "DatabaseName"],
+    TableOptimizer: ["CatalogId", "DatabaseName", "TableName", "Type"],
+    Trigger: ["Name", "Type", "WorkflowName"],
+    UsageProfile: ["CreatedOn", "Name"],
+    Workflow: ["Name"],
   },
-  "Grafana": {
-    "Workspace": [
+  Grafana: {
+    Workspace: [
       "ClientToken",
       "CreationTimestamp",
       "Endpoint",
@@ -4300,65 +3148,50 @@ const properties = {
       "ModificationTimestamp",
       "SamlConfigurationStatus",
       "SsoClientId",
-      "Status"
-    ]
+      "Status",
+    ],
   },
-  "Greengrass": {
-    "ConnectorDefinition": [
+  Greengrass: {
+    ConnectorDefinition: [
       "Arn",
       "Id",
       "InitialVersion",
       "LatestVersionArn",
-      "Name"
+      "Name",
     ],
-    "ConnectorDefinitionVersion": [
-      "ConnectorDefinitionId",
-      "Connectors"
-    ],
-    "CoreDefinition": [
+    ConnectorDefinitionVersion: ["ConnectorDefinitionId", "Connectors"],
+    CoreDefinition: ["Arn", "Id", "InitialVersion", "LatestVersionArn", "Name"],
+    CoreDefinitionVersion: ["CoreDefinitionId", "Cores"],
+    DeviceDefinition: [
       "Arn",
       "Id",
       "InitialVersion",
       "LatestVersionArn",
-      "Name"
+      "Name",
     ],
-    "CoreDefinitionVersion": [
-      "CoreDefinitionId",
-      "Cores"
-    ],
-    "DeviceDefinition": [
+    DeviceDefinitionVersion: ["DeviceDefinitionId", "Devices"],
+    FunctionDefinition: [
       "Arn",
       "Id",
       "InitialVersion",
       "LatestVersionArn",
-      "Name"
+      "Name",
     ],
-    "DeviceDefinitionVersion": [
-      "DeviceDefinitionId",
-      "Devices"
-    ],
-    "FunctionDefinition": [
-      "Arn",
-      "Id",
-      "InitialVersion",
-      "LatestVersionArn",
-      "Name"
-    ],
-    "FunctionDefinitionVersion": [
+    FunctionDefinitionVersion: [
       "DefaultConfig",
       "FunctionDefinitionId",
-      "Functions"
+      "Functions",
     ],
-    "Group": [
+    Group: [
       "Arn",
       "Id",
       "InitialVersion",
       "LatestVersionArn",
       "Name",
       "RoleArn",
-      "RoleAttachedAt"
+      "RoleAttachedAt",
     ],
-    "GroupVersion": [
+    GroupVersion: [
       "ConnectorDefinitionVersionArn",
       "CoreDefinitionVersionArn",
       "DeviceDefinitionVersionArn",
@@ -4366,122 +3199,88 @@ const properties = {
       "GroupId",
       "LoggerDefinitionVersionArn",
       "ResourceDefinitionVersionArn",
-      "SubscriptionDefinitionVersionArn"
+      "SubscriptionDefinitionVersionArn",
     ],
-    "LoggerDefinition": [
+    LoggerDefinition: [
       "Arn",
       "Id",
       "InitialVersion",
       "LatestVersionArn",
-      "Name"
+      "Name",
     ],
-    "LoggerDefinitionVersion": [
-      "LoggerDefinitionId",
-      "Loggers"
-    ],
-    "ResourceDefinition": [
+    LoggerDefinitionVersion: ["LoggerDefinitionId", "Loggers"],
+    ResourceDefinition: [
       "Arn",
       "Id",
       "InitialVersion",
       "LatestVersionArn",
-      "Name"
+      "Name",
     ],
-    "ResourceDefinitionVersion": [
-      "ResourceDefinitionId",
-      "Resources"
-    ],
-    "SubscriptionDefinition": [
+    ResourceDefinitionVersion: ["ResourceDefinitionId", "Resources"],
+    SubscriptionDefinition: [
       "Arn",
       "Id",
       "InitialVersion",
       "LatestVersionArn",
-      "Name"
+      "Name",
     ],
-    "SubscriptionDefinitionVersion": [
+    SubscriptionDefinitionVersion: [
       "SubscriptionDefinitionId",
-      "Subscriptions"
-    ]
+      "Subscriptions",
+    ],
   },
-  "GreengrassV2": {
-    "ComponentVersion": [
+  GreengrassV2: {
+    ComponentVersion: [
       "Arn",
       "ComponentName",
       "ComponentVersion",
       "InlineRecipe",
-      "LambdaFunction"
+      "LambdaFunction",
     ],
-    "Deployment": [
+    Deployment: [
       "Components",
       "DeploymentId",
       "DeploymentName",
       "DeploymentPolicies",
       "IotJobConfiguration",
       "ParentTargetArn",
-      "TargetArn"
-    ]
-  },
-  "GroundStation": {
-    "Config": [
-      "Arn",
-      "Id",
-      "Type"
+      "TargetArn",
     ],
-    "DataflowEndpointGroup": [
+  },
+  GroundStation: {
+    Config: ["Arn", "Id", "Type"],
+    DataflowEndpointGroup: [
       "Arn",
       "ContactPostPassDurationSeconds",
       "ContactPrePassDurationSeconds",
       "EndpointDetails",
-      "Id"
-    ],
-    "MissionProfile": [
-      "Arn",
       "Id",
-      "Region"
-    ]
+    ],
+    MissionProfile: ["Arn", "Id", "Region"],
   },
-  "GuardDuty": {
-    "Detector": [
-      "Id"
-    ],
-    "Filter": [
-      "DetectorId",
-      "Name"
-    ],
-    "IPSet": [
-      "DetectorId",
-      "Format",
-      "Id"
-    ],
-    "MalwareProtectionPlan": [
+  GuardDuty: {
+    Detector: ["Id"],
+    Filter: ["DetectorId", "Name"],
+    IPSet: ["DetectorId", "Format", "Id"],
+    MalwareProtectionPlan: [
       "Arn",
       "CreatedAt",
       "MalwareProtectionPlanId",
       "Status",
-      "StatusReasons"
+      "StatusReasons",
     ],
-    "Master": [
-      "DetectorId",
-      "InvitationId",
-      "MasterId"
-    ],
-    "Member": [
-      "DetectorId",
-      "MemberId"
-    ],
-    "PublishingDestination": [
+    Master: ["DetectorId", "InvitationId", "MasterId"],
+    Member: ["DetectorId", "MemberId"],
+    PublishingDestination: [
       "DetectorId",
       "Id",
       "PublishingFailureStartTimestamp",
-      "Status"
+      "Status",
     ],
-    "ThreatIntelSet": [
-      "DetectorId",
-      "Format",
-      "Id"
-    ]
+    ThreatIntelSet: ["DetectorId", "Format", "Id"],
   },
-  "HealthImaging": {
-    "Datastore": [
+  HealthImaging: {
+    Datastore: [
       "CreatedAt",
       "DatastoreArn",
       "DatastoreId",
@@ -4489,11 +3288,11 @@ const properties = {
       "DatastoreStatus",
       "KmsKeyArn",
       "Tags",
-      "UpdatedAt"
-    ]
+      "UpdatedAt",
+    ],
   },
-  "HealthLake": {
-    "FHIRDatastore": [
+  HealthLake: {
+    FHIRDatastore: [
       "CreatedAt",
       "CreatedAt.Nanos",
       "CreatedAt.Seconds",
@@ -4505,29 +3304,15 @@ const properties = {
       "DatastoreTypeVersion",
       "IdentityProviderConfiguration",
       "PreloadDataConfig",
-      "SseConfiguration"
-    ]
+      "SseConfiguration",
+    ],
   },
-  "IAM": {
-    "AccessKey": [
-      "SecretAccessKey",
-      "Serial",
-      "UserName"
-    ],
-    "Group": [
-      "Arn",
-      "GroupName"
-    ],
-    "GroupPolicy": [
-      "GroupName",
-      "PolicyName"
-    ],
-    "InstanceProfile": [
-      "Arn",
-      "InstanceProfileName",
-      "Path"
-    ],
-    "ManagedPolicy": [
+  IAM: {
+    AccessKey: ["SecretAccessKey", "Serial", "UserName"],
+    Group: ["Arn", "GroupName"],
+    GroupPolicy: ["GroupName", "PolicyName"],
+    InstanceProfile: ["Arn", "InstanceProfileName", "Path"],
+    ManagedPolicy: [
       "AttachmentCount",
       "CreateDate",
       "DefaultVersionId",
@@ -4538,70 +3323,35 @@ const properties = {
       "PermissionsBoundaryUsageCount",
       "PolicyArn",
       "PolicyId",
-      "UpdateDate"
+      "UpdateDate",
     ],
-    "OIDCProvider": [
-      "Arn",
-      "Url"
-    ],
-    "Policy": [
-      "Id"
-    ],
-    "Role": [
-      "Arn",
-      "Path",
-      "RoleId",
-      "RoleName"
-    ],
-    "RolePolicy": [
-      "PolicyName",
-      "RoleName"
-    ],
-    "SAMLProvider": [
+    OIDCProvider: ["Arn", "Url"],
+    Policy: ["Id"],
+    Role: ["Arn", "Path", "RoleId", "RoleName"],
+    RolePolicy: ["PolicyName", "RoleName"],
+    SAMLProvider: [
       "AddPrivateKey",
       "Arn",
       "Name",
       "RemovePrivateKey",
-      "SamlProviderUUID"
+      "SamlProviderUUID",
     ],
-    "ServerCertificate": [
+    ServerCertificate: [
       "Arn",
       "CertificateBody",
       "CertificateChain",
       "PrivateKey",
-      "ServerCertificateName"
+      "ServerCertificateName",
     ],
-    "ServiceLinkedRole": [
-      "AWSServiceName",
-      "CustomSuffix",
-      "RoleName"
-    ],
-    "User": [
-      "Arn",
-      "UserName"
-    ],
-    "UserPolicy": [
-      "PolicyName",
-      "UserName"
-    ],
-    "VirtualMFADevice": [
-      "Path",
-      "SerialNumber",
-      "VirtualMfaDeviceName"
-    ]
+    ServiceLinkedRole: ["AWSServiceName", "CustomSuffix", "RoleName"],
+    User: ["Arn", "UserName"],
+    UserPolicy: ["PolicyName", "UserName"],
+    VirtualMFADevice: ["Path", "SerialNumber", "VirtualMfaDeviceName"],
   },
-  "IVS": {
-    "Channel": [
-      "Arn",
-      "IngestEndpoint",
-      "PlaybackUrl"
-    ],
-    "EncoderConfiguration": [
-      "Arn",
-      "Name",
-      "Video"
-    ],
-    "IngestConfiguration": [
+  IVS: {
+    Channel: ["Arn", "IngestEndpoint", "PlaybackUrl"],
+    EncoderConfiguration: ["Arn", "Name", "Video"],
+    IngestConfiguration: [
       "Arn",
       "IngestProtocol",
       "InsecureIngest",
@@ -4609,72 +3359,34 @@ const properties = {
       "ParticipantId",
       "State",
       "StreamKey",
-      "UserId"
+      "UserId",
     ],
-    "PlaybackKeyPair": [
-      "Arn",
-      "Fingerprint",
-      "Name",
-      "PublicKeyMaterial"
-    ],
-    "PlaybackRestrictionPolicy": [
-      "Arn"
-    ],
-    "PublicKey": [
-      "Arn",
-      "Fingerprint",
-      "Name",
-      "PublicKeyMaterial"
-    ],
-    "RecordingConfiguration": [
+    PlaybackKeyPair: ["Arn", "Fingerprint", "Name", "PublicKeyMaterial"],
+    PlaybackRestrictionPolicy: ["Arn"],
+    PublicKey: ["Arn", "Fingerprint", "Name", "PublicKeyMaterial"],
+    RecordingConfiguration: [
       "Arn",
       "DestinationConfiguration",
       "Name",
       "RecordingReconnectWindowSeconds",
       "RenditionConfiguration",
       "State",
-      "ThumbnailConfiguration"
+      "ThumbnailConfiguration",
     ],
-    "Stage": [
-      "ActiveSessionId",
-      "Arn"
-    ],
-    "StorageConfiguration": [
-      "Arn",
-      "Name",
-      "S3"
-    ],
-    "StreamKey": [
-      "Arn",
-      "ChannelArn",
-      "Value"
-    ]
+    Stage: ["ActiveSessionId", "Arn"],
+    StorageConfiguration: ["Arn", "Name", "S3"],
+    StreamKey: ["Arn", "ChannelArn", "Value"],
   },
-  "IVSChat": {
-    "LoggingConfiguration": [
-      "Arn",
-      "Id",
-      "State"
-    ],
-    "Room": [
-      "Arn",
-      "Id"
-    ]
+  IVSChat: {
+    LoggingConfiguration: ["Arn", "Id", "State"],
+    Room: ["Arn", "Id"],
   },
-  "IdentityStore": {
-    "Group": [
-      "GroupId",
-      "IdentityStoreId"
-    ],
-    "GroupMembership": [
-      "GroupId",
-      "IdentityStoreId",
-      "MemberId",
-      "MembershipId"
-    ]
+  IdentityStore: {
+    Group: ["GroupId", "IdentityStoreId"],
+    GroupMembership: ["GroupId", "IdentityStoreId", "MemberId", "MembershipId"],
   },
-  "ImageBuilder": {
-    "Component": [
+  ImageBuilder: {
+    Component: [
       "Arn",
       "ChangeDescription",
       "Data",
@@ -4688,9 +3400,9 @@ const properties = {
       "Tags",
       "Type",
       "Uri",
-      "Version"
+      "Version",
     ],
-    "ContainerRecipe": [
+    ContainerRecipe: [
       "Arn",
       "Components",
       "ContainerType",
@@ -4707,14 +3419,10 @@ const properties = {
       "Tags",
       "TargetRepository",
       "Version",
-      "WorkingDirectory"
+      "WorkingDirectory",
     ],
-    "DistributionConfiguration": [
-      "Arn",
-      "Name",
-      "Name"
-    ],
-    "Image": [
+    DistributionConfiguration: ["Arn", "Name", "Name"],
+    Image: [
       "Arn",
       "ContainerRecipeArn",
       "DistributionConfigurationArn",
@@ -4727,14 +3435,10 @@ const properties = {
       "InfrastructureConfigurationArn",
       "Name",
       "Tags",
-      "Workflows"
+      "Workflows",
     ],
-    "ImagePipeline": [
-      "Arn",
-      "Name",
-      "Name"
-    ],
-    "ImageRecipe": [
+    ImagePipeline: ["Arn", "Name", "Name"],
+    ImageRecipe: [
       "Arn",
       "BlockDeviceMappings",
       "Components",
@@ -4744,18 +3448,11 @@ const properties = {
       "ParentImage",
       "Tags",
       "Version",
-      "WorkingDirectory"
+      "WorkingDirectory",
     ],
-    "InfrastructureConfiguration": [
-      "Arn",
-      "Name",
-      "Name"
-    ],
-    "LifecyclePolicy": [
-      "Arn",
-      "Name"
-    ],
-    "Workflow": [
+    InfrastructureConfiguration: ["Arn", "Name", "Name"],
+    LifecyclePolicy: ["Arn", "Name"],
+    Workflow: [
       "Arn",
       "ChangeDescription",
       "Data",
@@ -4765,101 +3462,62 @@ const properties = {
       "Tags",
       "Type",
       "Uri",
-      "Version"
-    ]
-  },
-  "Inspector": {
-    "AssessmentTarget": [
-      "Arn",
-      "AssessmentTargetName"
+      "Version",
     ],
-    "AssessmentTemplate": [
+  },
+  Inspector: {
+    AssessmentTarget: ["Arn", "AssessmentTargetName"],
+    AssessmentTemplate: [
       "Arn",
       "AssessmentTargetArn",
       "AssessmentTemplateName",
       "DurationInSeconds",
       "RulesPackageArns",
-      "UserAttributesForFindings"
+      "UserAttributesForFindings",
     ],
-    "ResourceGroup": [
-      "Arn",
-      "ResourceGroupTags"
-    ]
+    ResourceGroup: ["Arn", "ResourceGroupTags"],
   },
-  "InspectorV2": {
-    "CisScanConfiguration": [
-      "Arn"
-    ],
-    "Filter": [
-      "Arn"
-    ]
+  InspectorV2: {
+    CisScanConfiguration: ["Arn"],
+    Filter: ["Arn"],
   },
-  "InternetMonitor": {
-    "Monitor": [
+  InternetMonitor: {
+    Monitor: [
       "CreatedAt",
       "ModifiedAt",
       "MonitorArn",
       "MonitorName",
       "ProcessingStatus",
-      "ProcessingStatusInfo"
-    ]
+      "ProcessingStatusInfo",
+    ],
   },
-  "Invoicing": {
-    "InvoiceUnit": [
-      "InvoiceReceiver",
-      "InvoiceUnitArn",
-      "LastModified",
-      "Name"
-    ]
+  Invoicing: {
+    InvoiceUnit: ["InvoiceReceiver", "InvoiceUnitArn", "LastModified", "Name"],
   },
-  "IoT": {
-    "AccountAuditConfiguration": [
-      "AccountId"
-    ],
-    "Authorizer": [
-      "Arn",
-      "AuthorizerName",
-      "SigningDisabled"
-    ],
-    "BillingGroup": [
-      "Arn",
-      "BillingGroupName",
-      "Id"
-    ],
-    "CACertificate": [
+  IoT: {
+    AccountAuditConfiguration: ["AccountId"],
+    Authorizer: ["Arn", "AuthorizerName", "SigningDisabled"],
+    BillingGroup: ["Arn", "BillingGroupName", "Id"],
+    CACertificate: [
       "Arn",
       "CACertificatePem",
       "CertificateMode",
       "Id",
-      "VerificationCertificatePem"
+      "VerificationCertificatePem",
     ],
-    "Certificate": [
+    Certificate: [
       "Arn",
       "CACertificatePem",
       "CertificateMode",
       "CertificatePem",
       "CertificateSigningRequest",
-      "Id"
+      "Id",
     ],
-    "CertificateProvider": [
-      "Arn",
-      "CertificateProviderName"
-    ],
-    "Command": [
-      "CommandArn",
-      "CommandId"
-    ],
-    "CustomMetric": [
-      "MetricArn",
-      "MetricName",
-      "MetricType"
-    ],
-    "Dimension": [
-      "Arn",
-      "Name",
-      "Type"
-    ],
-    "DomainConfiguration": [
+    CertificateProvider: ["Arn", "CertificateProviderName"],
+    Command: ["CommandArn", "CommandId"],
+    CustomMetric: ["MetricArn", "MetricName", "MetricType"],
+    Dimension: ["Arn", "Name", "Type"],
+    DomainConfiguration: [
       "Arn",
       "DomainConfigurationName",
       "DomainName",
@@ -4867,16 +3525,16 @@ const properties = {
       "ServerCertificateArns",
       "ServerCertificates",
       "ServiceType",
-      "ValidationCertificateArn"
+      "ValidationCertificateArn",
     ],
-    "FleetMetric": [
+    FleetMetric: [
       "CreationDate",
       "LastModifiedDate",
       "MetricArn",
       "MetricName",
-      "Version"
+      "Version",
     ],
-    "JobTemplate": [
+    JobTemplate: [
       "AbortConfig",
       "Arn",
       "Description",
@@ -4890,130 +3548,62 @@ const properties = {
       "MaintenanceWindows",
       "PresignedUrlConfig",
       "Tags",
-      "TimeoutConfig"
+      "TimeoutConfig",
     ],
-    "Logging": [
-      "AccountId"
-    ],
-    "MitigationAction": [
+    Logging: ["AccountId"],
+    MitigationAction: [
       "ActionName",
       "MitigationActionArn",
-      "MitigationActionId"
+      "MitigationActionId",
     ],
-    "Policy": [
-      "Arn",
-      "Id",
-      "PolicyName"
-    ],
-    "PolicyPrincipalAttachment": [
-      "PolicyName",
-      "Principal"
-    ],
-    "ProvisioningTemplate": [
-      "TemplateArn",
-      "TemplateName",
-      "TemplateType"
-    ],
-    "ResourceSpecificLogging": [
-      "TargetId",
-      "TargetName",
-      "TargetType"
-    ],
-    "RoleAlias": [
-      "RoleAlias",
-      "RoleAliasArn"
-    ],
-    "ScheduledAudit": [
-      "ScheduledAuditArn",
-      "ScheduledAuditName"
-    ],
-    "SecurityProfile": [
-      "SecurityProfileArn",
-      "SecurityProfileName"
-    ],
-    "SoftwarePackage": [
-      "PackageArn",
-      "PackageName"
-    ],
-    "SoftwarePackageVersion": [
+    Policy: ["Arn", "Id", "PolicyName"],
+    PolicyPrincipalAttachment: ["PolicyName", "Principal"],
+    ProvisioningTemplate: ["TemplateArn", "TemplateName", "TemplateType"],
+    ResourceSpecificLogging: ["TargetId", "TargetName", "TargetType"],
+    RoleAlias: ["RoleAlias", "RoleAliasArn"],
+    ScheduledAudit: ["ScheduledAuditArn", "ScheduledAuditName"],
+    SecurityProfile: ["SecurityProfileArn", "SecurityProfileName"],
+    SoftwarePackage: ["PackageArn", "PackageName"],
+    SoftwarePackageVersion: [
       "ErrorReason",
       "PackageName",
       "PackageVersionArn",
       "SbomValidationStatus",
       "Status",
-      "VersionName"
+      "VersionName",
     ],
-    "Thing": [
-      "Arn",
-      "Id",
-      "ThingName"
-    ],
-    "ThingGroup": [
-      "Arn",
-      "Id",
-      "ParentGroupName",
-      "ThingGroupName"
-    ],
-    "ThingPrincipalAttachment": [
-      "Principal",
-      "ThingName"
-    ],
-    "ThingType": [
-      "Arn",
-      "Id",
-      "ThingTypeName"
-    ],
-    "TopicRule": [
-      "Arn",
-      "RuleName"
-    ],
-    "TopicRuleDestination": [
+    Thing: ["Arn", "Id", "ThingName"],
+    ThingGroup: ["Arn", "Id", "ParentGroupName", "ThingGroupName"],
+    ThingPrincipalAttachment: ["Principal", "ThingName"],
+    ThingType: ["Arn", "Id", "ThingTypeName"],
+    TopicRule: ["Arn", "RuleName"],
+    TopicRuleDestination: [
       "Arn",
       "HttpUrlProperties",
       "StatusReason",
-      "VpcProperties"
-    ]
+      "VpcProperties",
+    ],
   },
-  "IoTAnalytics": {
-    "Channel": [
-      "ChannelName",
-      "Id"
-    ],
-    "Dataset": [
-      "DatasetName",
-      "Id"
-    ],
-    "Datastore": [
-      "DatastoreName",
-      "Id"
-    ],
-    "Pipeline": [
-      "Id",
-      "PipelineName"
-    ]
+  IoTAnalytics: {
+    Channel: ["ChannelName", "Id"],
+    Dataset: ["DatasetName", "Id"],
+    Datastore: ["DatastoreName", "Id"],
+    Pipeline: ["Id", "PipelineName"],
   },
-  "IoTCoreDeviceAdvisor": {
-    "SuiteDefinition": [
+  IoTCoreDeviceAdvisor: {
+    SuiteDefinition: [
       "SuiteDefinitionArn",
       "SuiteDefinitionId",
-      "SuiteDefinitionVersion"
-    ]
-  },
-  "IoTEvents": {
-    "AlarmModel": [
-      "AlarmModelName",
-      "Key"
+      "SuiteDefinitionVersion",
     ],
-    "DetectorModel": [
-      "DetectorModelName",
-      "Key"
-    ],
-    "Input": [
-      "InputName"
-    ]
   },
-  "IoTFleetHub": {
-    "Application": [
+  IoTEvents: {
+    AlarmModel: ["AlarmModelName", "Key"],
+    DetectorModel: ["DetectorModelName", "Key"],
+    Input: ["InputName"],
+  },
+  IoTFleetHub: {
+    Application: [
       "ApplicationArn",
       "ApplicationCreationDate",
       "ApplicationId",
@@ -5021,11 +3611,11 @@ const properties = {
       "ApplicationState",
       "ApplicationUrl",
       "ErrorMessage",
-      "SsoClientId"
-    ]
+      "SsoClientId",
+    ],
   },
-  "IoTFleetWise": {
-    "Campaign": [
+  IoTFleetWise: {
+    Campaign: [
       "Arn",
       "CollectionScheme",
       "Compression",
@@ -5041,29 +3631,24 @@ const properties = {
       "SpoolingMode",
       "StartTime",
       "Status",
-      "TargetArn"
+      "TargetArn",
     ],
-    "DecoderManifest": [
+    DecoderManifest: [
       "Arn",
       "CreationTime",
       "LastModificationTime",
       "ModelManifestArn",
-      "Name"
+      "Name",
     ],
-    "Fleet": [
+    Fleet: [
       "Arn",
       "CreationTime",
       "Id",
       "LastModificationTime",
-      "SignalCatalogArn"
+      "SignalCatalogArn",
     ],
-    "ModelManifest": [
-      "Arn",
-      "CreationTime",
-      "LastModificationTime",
-      "Name"
-    ],
-    "SignalCatalog": [
+    ModelManifest: ["Arn", "CreationTime", "LastModificationTime", "Name"],
+    SignalCatalog: [
       "Arn",
       "CreationTime",
       "LastModificationTime",
@@ -5072,67 +3657,37 @@ const properties = {
       "NodeCounts.TotalAttributes",
       "NodeCounts.TotalBranches",
       "NodeCounts.TotalNodes",
-      "NodeCounts.TotalSensors"
+      "NodeCounts.TotalSensors",
     ],
-    "StateTemplate": [
+    StateTemplate: [
       "Arn",
       "CreationTime",
       "Id",
       "LastModificationTime",
       "Name",
-      "SignalCatalogArn"
+      "SignalCatalogArn",
     ],
-    "Vehicle": [
-      "Arn",
-      "CreationTime",
-      "LastModificationTime",
-      "Name"
-    ]
+    Vehicle: ["Arn", "CreationTime", "LastModificationTime", "Name"],
   },
-  "IoTSiteWise": {
-    "AccessPolicy": [
-      "AccessPolicyArn",
-      "AccessPolicyId"
-    ],
-    "Asset": [
-      "AssetArn",
-      "AssetId"
-    ],
-    "AssetModel": [
-      "AssetModelArn",
-      "AssetModelId",
-      "AssetModelType"
-    ],
-    "Dashboard": [
-      "DashboardArn",
-      "DashboardId",
-      "ProjectId"
-    ],
-    "Dataset": [
-      "DatasetArn",
-      "DatasetId"
-    ],
-    "Gateway": [
-      "GatewayId",
-      "GatewayPlatform",
-      "GatewayVersion"
-    ],
-    "Portal": [
+  IoTSiteWise: {
+    AccessPolicy: ["AccessPolicyArn", "AccessPolicyId"],
+    Asset: ["AssetArn", "AssetId"],
+    AssetModel: ["AssetModelArn", "AssetModelId", "AssetModelType"],
+    Dashboard: ["DashboardArn", "DashboardId", "ProjectId"],
+    Dataset: ["DatasetArn", "DatasetId"],
+    Gateway: ["GatewayId", "GatewayPlatform", "GatewayVersion"],
+    Portal: [
       "PortalArn",
       "PortalAuthMode",
       "PortalClientId",
       "PortalId",
       "PortalStartUrl",
-      "PortalType"
+      "PortalType",
     ],
-    "Project": [
-      "PortalId",
-      "ProjectArn",
-      "ProjectId"
-    ]
+    Project: ["PortalId", "ProjectArn", "ProjectId"],
   },
-  "IoTTwinMaker": {
-    "ComponentType": [
+  IoTTwinMaker: {
+    ComponentType: [
       "Arn",
       "ComponentTypeId",
       "CreationDateTime",
@@ -5144,9 +3699,9 @@ const properties = {
       "Status.Error.Message",
       "Status.State",
       "UpdateDateTime",
-      "WorkspaceId"
+      "WorkspaceId",
     ],
-    "Entity": [
+    Entity: [
       "Arn",
       "CreationDateTime",
       "EntityId",
@@ -5155,17 +3710,17 @@ const properties = {
       "Status.Error",
       "Status.State",
       "UpdateDateTime",
-      "WorkspaceId"
+      "WorkspaceId",
     ],
-    "Scene": [
+    Scene: [
       "Arn",
       "CreationDateTime",
       "GeneratedSceneMetadata",
       "SceneId",
       "UpdateDateTime",
-      "WorkspaceId"
+      "WorkspaceId",
     ],
-    "SyncJob": [
+    SyncJob: [
       "Arn",
       "CreationDateTime",
       "State",
@@ -5173,49 +3728,24 @@ const properties = {
       "SyncSource",
       "Tags",
       "UpdateDateTime",
-      "WorkspaceId"
+      "WorkspaceId",
     ],
-    "Workspace": [
-      "Arn",
-      "CreationDateTime",
-      "UpdateDateTime",
-      "WorkspaceId"
-    ]
+    Workspace: ["Arn", "CreationDateTime", "UpdateDateTime", "WorkspaceId"],
   },
-  "IoTWireless": {
-    "Destination": [
-      "Arn",
-      "Name"
-    ],
-    "DeviceProfile": [
-      "Arn",
-      "Id",
-      "LoRaWAN",
-      "Name"
-    ],
-    "FuotaTask": [
-      "Arn",
-      "FuotaTaskStatus",
-      "Id",
-      "LoRaWAN.StartTime"
-    ],
-    "MulticastGroup": [
+  IoTWireless: {
+    Destination: ["Arn", "Name"],
+    DeviceProfile: ["Arn", "Id", "LoRaWAN", "Name"],
+    FuotaTask: ["Arn", "FuotaTaskStatus", "Id", "LoRaWAN.StartTime"],
+    MulticastGroup: [
       "Arn",
       "Id",
       "LoRaWAN.NumberOfDevicesInGroup",
       "LoRaWAN.NumberOfDevicesRequested",
-      "Status"
+      "Status",
     ],
-    "NetworkAnalyzerConfiguration": [
-      "Arn",
-      "Name"
-    ],
-    "PartnerAccount": [
-      "Arn",
-      "Fingerprint",
-      "PartnerAccountId"
-    ],
-    "ServiceProfile": [
+    NetworkAnalyzerConfiguration: ["Arn", "Name"],
+    PartnerAccount: ["Arn", "Fingerprint", "PartnerAccountId"],
+    ServiceProfile: [
       "Arn",
       "Id",
       "LoRaWAN",
@@ -5235,18 +3765,11 @@ const properties = {
       "LoRaWAN.UlBucketSize",
       "LoRaWAN.UlRate",
       "LoRaWAN.UlRatePolicy",
-      "Name"
+      "Name",
     ],
-    "TaskDefinition": [
-      "Arn",
-      "Id"
-    ],
-    "WirelessDevice": [
-      "Arn",
-      "Id",
-      "ThingName"
-    ],
-    "WirelessDeviceImportTask": [
+    TaskDefinition: ["Arn", "Id"],
+    WirelessDevice: ["Arn", "Id", "ThingName"],
+    WirelessDeviceImportTask: [
       "Arn",
       "CreationDate",
       "FailedImportedDevicesCount",
@@ -5256,29 +3779,17 @@ const properties = {
       "PendingImportedDevicesCount",
       "Sidewalk.DeviceCreationFileList",
       "Status",
-      "StatusReason"
+      "StatusReason",
     ],
-    "WirelessGateway": [
-      "Arn",
-      "Id"
-    ]
+    WirelessGateway: ["Arn", "Id"],
   },
-  "KMS": {
-    "Alias": [
-      "AliasName"
-    ],
-    "Key": [
-      "Arn",
-      "KeyId"
-    ],
-    "ReplicaKey": [
-      "Arn",
-      "KeyId",
-      "PrimaryKeyArn"
-    ]
+  KMS: {
+    Alias: ["AliasName"],
+    Key: ["Arn", "KeyId"],
+    ReplicaKey: ["Arn", "KeyId", "PrimaryKeyArn"],
   },
-  "KafkaConnect": {
-    "Connector": [
+  KafkaConnect: {
+    Connector: [
       "ConnectorArn",
       "ConnectorDescription",
       "ConnectorName",
@@ -5289,9 +3800,9 @@ const properties = {
       "LogDelivery",
       "Plugins",
       "ServiceExecutionRoleArn",
-      "WorkerConfiguration"
+      "WorkerConfiguration",
     ],
-    "CustomPlugin": [
+    CustomPlugin: [
       "ContentType",
       "CustomPluginArn",
       "Description",
@@ -5300,23 +3811,19 @@ const properties = {
       "FileDescription.FileSize",
       "Location",
       "Name",
-      "Revision"
+      "Revision",
     ],
-    "WorkerConfiguration": [
+    WorkerConfiguration: [
       "Description",
       "Name",
       "PropertiesFileContent",
       "Revision",
-      "WorkerConfigurationArn"
-    ]
-  },
-  "Kendra": {
-    "DataSource": [
-      "Arn",
-      "Id",
-      "Type"
+      "WorkerConfigurationArn",
     ],
-    "Faq": [
+  },
+  Kendra: {
+    DataSource: ["Arn", "Id", "Type"],
+    Faq: [
       "Arn",
       "Description",
       "FileFormat",
@@ -5324,138 +3831,86 @@ const properties = {
       "IndexId",
       "Name",
       "RoleArn",
-      "S3Path"
+      "S3Path",
     ],
-    "Index": [
-      "Arn",
-      "Edition",
-      "Id",
-      "ServerSideEncryptionConfiguration"
-    ]
+    Index: ["Arn", "Edition", "Id", "ServerSideEncryptionConfiguration"],
   },
-  "KendraRanking": {
-    "ExecutionPlan": [
-      "Arn",
-      "Id"
-    ]
+  KendraRanking: {
+    ExecutionPlan: ["Arn", "Id"],
   },
-  "Kinesis": {
-    "ResourcePolicy": [
-      "ResourceArn"
-    ],
-    "Stream": [
-      "Arn",
-      "Name"
-    ],
-    "StreamConsumer": [
+  Kinesis: {
+    ResourcePolicy: ["ResourceArn"],
+    Stream: ["Arn", "Name"],
+    StreamConsumer: [
       "ConsumerARN",
       "ConsumerCreationTimestamp",
       "ConsumerName",
       "ConsumerName",
       "ConsumerStatus",
       "StreamARN",
-      "StreamARN"
-    ]
+      "StreamARN",
+    ],
   },
-  "KinesisAnalytics": {
-    "Application": [
-      "ApplicationName"
-    ],
-    "ApplicationOutput": [
-      "ApplicationName"
-    ],
-    "ApplicationReferenceDataSource": [
-      "ApplicationName"
-    ]
+  KinesisAnalytics: {
+    Application: ["ApplicationName"],
+    ApplicationOutput: ["ApplicationName"],
+    ApplicationReferenceDataSource: ["ApplicationName"],
   },
-  "KinesisAnalyticsV2": {
-    "Application": [
-      "ApplicationMode",
-      "ApplicationName"
-    ],
-    "ApplicationCloudWatchLoggingOption": [
-      "ApplicationName"
-    ],
-    "ApplicationOutput": [
-      "ApplicationName"
-    ],
-    "ApplicationReferenceDataSource": [
-      "ApplicationName"
-    ]
+  KinesisAnalyticsV2: {
+    Application: ["ApplicationMode", "ApplicationName"],
+    ApplicationCloudWatchLoggingOption: ["ApplicationName"],
+    ApplicationOutput: ["ApplicationName"],
+    ApplicationReferenceDataSource: ["ApplicationName"],
   },
-  "KinesisFirehose": {
-    "DeliveryStream": [
+  KinesisFirehose: {
+    DeliveryStream: [
       "Arn",
       "DatabaseSourceConfiguration",
       "DeliveryStreamName",
       "DeliveryStreamType",
       "DirectPutSourceConfiguration",
       "KinesisStreamSourceConfiguration",
-      "MSKSourceConfiguration"
-    ]
-  },
-  "KinesisVideo": {
-    "SignalingChannel": [
-      "Arn",
-      "Name"
+      "MSKSourceConfiguration",
     ],
-    "Stream": [
-      "Arn",
-      "Name"
-    ]
   },
-  "LakeFormation": {
-    "DataCellsFilter": [
+  KinesisVideo: {
+    SignalingChannel: ["Arn", "Name"],
+    Stream: ["Arn", "Name"],
+  },
+  LakeFormation: {
+    DataCellsFilter: [
       "ColumnNames",
       "ColumnWildcard",
       "DatabaseName",
       "Name",
       "RowFilter",
       "TableCatalogId",
-      "TableName"
+      "TableName",
     ],
-    "Permissions": [
-      "DataLakePrincipal",
-      "Resource"
-    ],
-    "PrincipalPermissions": [
+    Permissions: ["DataLakePrincipal", "Resource"],
+    PrincipalPermissions: [
       "Catalog",
       "Permissions",
       "PermissionsWithGrantOption",
       "Principal",
       "PrincipalIdentifier",
       "Resource",
-      "ResourceIdentifier"
+      "ResourceIdentifier",
     ],
-    "Resource": [
-      "ResourceArn"
-    ],
-    "Tag": [
-      "CatalogId",
-      "TagKey"
-    ],
-    "TagAssociation": [
+    Resource: ["ResourceArn"],
+    Tag: ["CatalogId", "TagKey"],
+    TagAssociation: [
       "LFTags",
       "Resource",
       "ResourceIdentifier",
-      "TagsIdentifier"
-    ]
+      "TagsIdentifier",
+    ],
   },
-  "Lambda": {
-    "Alias": [
-      "AliasArn",
-      "FunctionName",
-      "Name"
-    ],
-    "CodeSigningConfig": [
-      "CodeSigningConfigArn",
-      "CodeSigningConfigId"
-    ],
-    "EventInvokeConfig": [
-      "FunctionName",
-      "Qualifier"
-    ],
-    "EventSourceMapping": [
+  Lambda: {
+    Alias: ["AliasArn", "FunctionName", "Name"],
+    CodeSigningConfig: ["CodeSigningConfigArn", "CodeSigningConfigId"],
+    EventInvokeConfig: ["FunctionName", "Qualifier"],
+    EventSourceMapping: [
       "AmazonManagedKafkaEventSourceConfig",
       "EventSourceArn",
       "EventSourceMappingArn",
@@ -5463,33 +3918,33 @@ const properties = {
       "SelfManagedEventSource",
       "SelfManagedKafkaEventSourceConfig",
       "StartingPosition",
-      "StartingPositionTimestamp"
+      "StartingPositionTimestamp",
     ],
-    "Function": [
+    Function: [
       "Arn",
       "FunctionName",
       "PackageType",
       "SnapStartResponse",
       "SnapStartResponse.ApplyOn",
-      "SnapStartResponse.OptimizationStatus"
+      "SnapStartResponse.OptimizationStatus",
     ],
-    "LayerVersion": [
+    LayerVersion: [
       "CompatibleArchitectures",
       "CompatibleRuntimes",
       "Content",
       "Description",
       "LayerName",
       "LayerVersionArn",
-      "LicenseInfo"
+      "LicenseInfo",
     ],
-    "LayerVersionPermission": [
+    LayerVersionPermission: [
       "Action",
       "Id",
       "LayerVersionArn",
       "OrganizationId",
-      "Principal"
+      "Principal",
     ],
-    "Permission": [
+    Permission: [
       "Action",
       "EventSourceToken",
       "FunctionName",
@@ -5498,26 +3953,21 @@ const properties = {
       "Principal",
       "PrincipalOrgID",
       "SourceAccount",
-      "SourceArn"
+      "SourceArn",
     ],
-    "Url": [
-      "FunctionArn",
-      "FunctionUrl",
-      "Qualifier",
-      "TargetFunctionArn"
-    ],
-    "Version": [
+    Url: ["FunctionArn", "FunctionUrl", "Qualifier", "TargetFunctionArn"],
+    Version: [
       "CodeSha256",
       "Description",
       "FunctionArn",
       "FunctionName",
       "ProvisionedConcurrencyConfig",
       "RuntimePolicy",
-      "Version"
-    ]
+      "Version",
+    ],
   },
-  "LaunchWizard": {
-    "Deployment": [
+  LaunchWizard: {
+    Deployment: [
       "Arn",
       "CreatedAt",
       "DeletedAt",
@@ -5526,77 +3976,52 @@ const properties = {
       "Name",
       "ResourceGroup",
       "Status",
-      "WorkloadName"
-    ]
+      "WorkloadName",
+    ],
   },
-  "Lex": {
-    "Bot": [
-      "Arn",
-      "Id"
-    ],
-    "BotAlias": [
-      "Arn",
-      "BotAliasId",
-      "BotAliasStatus",
-      "BotId"
-    ],
-    "BotVersion": [
-      "BotId",
-      "BotVersion"
-    ],
-    "ResourcePolicy": [
-      "Id",
-      "RevisionId"
-    ]
+  Lex: {
+    Bot: ["Arn", "Id"],
+    BotAlias: ["Arn", "BotAliasId", "BotAliasStatus", "BotId"],
+    BotVersion: ["BotId", "BotVersion"],
+    ResourcePolicy: ["Id", "RevisionId"],
   },
-  "LicenseManager": {
-    "Grant": [
-      "GrantArn",
-      "Version"
-    ],
-    "License": [
-      "LicenseArn",
-      "Version"
-    ]
+  LicenseManager: {
+    Grant: ["GrantArn", "Version"],
+    License: ["LicenseArn", "Version"],
   },
-  "Lightsail": {
-    "Alarm": [
+  Lightsail: {
+    Alarm: [
       "AlarmArn",
       "AlarmName",
       "MetricName",
       "MonitoredResourceName",
-      "State"
+      "State",
     ],
-    "Bucket": [
-      "AbleToUpdateBundle",
-      "BucketArn",
-      "BucketName",
-      "Url"
-    ],
-    "Certificate": [
+    Bucket: ["AbleToUpdateBundle", "BucketArn", "BucketName", "Url"],
+    Certificate: [
       "CertificateArn",
       "CertificateName",
       "DomainName",
       "Status",
-      "SubjectAlternativeNames"
+      "SubjectAlternativeNames",
     ],
-    "Container": [
+    Container: [
       "ContainerArn",
       "PrincipalArn",
       "PrivateRegistryAccess.EcrImagePullerRole.PrincipalArn",
       "ServiceName",
-      "Url"
+      "Url",
     ],
-    "Database": [
+    Database: [
       "AvailabilityZone",
       "DatabaseArn",
       "MasterDatabaseName",
       "MasterUsername",
       "RelationalDatabaseBlueprintId",
       "RelationalDatabaseBundleId",
-      "RelationalDatabaseName"
+      "RelationalDatabaseName",
     ],
-    "Disk": [
+    Disk: [
       "AttachedTo",
       "AttachmentState",
       "AvailabilityZone",
@@ -5610,16 +4035,16 @@ const properties = {
       "ResourceType",
       "SizeInGb",
       "State",
-      "SupportCode"
+      "SupportCode",
     ],
-    "Distribution": [
+    Distribution: [
       "AbleToUpdateBundle",
       "DistributionArn",
       "DistributionName",
       "IpAddressType",
-      "Status"
+      "Status",
     ],
-    "Instance": [
+    Instance: [
       "AvailabilityZone",
       "BlueprintId",
       "BundleId",
@@ -5639,194 +4064,139 @@ const properties = {
       "State.Code",
       "State.Name",
       "SupportCode",
-      "UserName"
+      "UserName",
     ],
-    "LoadBalancer": [
+    LoadBalancer: [
       "InstancePort",
       "IpAddressType",
       "LoadBalancerArn",
-      "LoadBalancerName"
+      "LoadBalancerName",
     ],
-    "LoadBalancerTlsCertificate": [
+    LoadBalancerTlsCertificate: [
       "CertificateAlternativeNames",
       "CertificateDomainName",
       "CertificateName",
       "LoadBalancerName",
       "LoadBalancerTlsCertificateArn",
-      "Status"
+      "Status",
     ],
-    "StaticIp": [
-      "IpAddress",
-      "IsAttached",
-      "StaticIpArn",
-      "StaticIpName"
-    ]
+    StaticIp: ["IpAddress", "IsAttached", "StaticIpArn", "StaticIpName"],
   },
-  "Location": {
-    "APIKey": [
-      "Arn",
-      "CreateTime",
-      "KeyArn",
-      "KeyName",
-      "UpdateTime"
-    ],
-    "GeofenceCollection": [
+  Location: {
+    APIKey: ["Arn", "CreateTime", "KeyArn", "KeyName", "UpdateTime"],
+    GeofenceCollection: [
       "Arn",
       "CollectionArn",
       "CollectionName",
       "CreateTime",
       "KmsKeyId",
-      "UpdateTime"
+      "UpdateTime",
     ],
-    "Map": [
+    Map: [
       "Arn",
       "Configuration",
       "CreateTime",
       "MapArn",
       "MapName",
-      "UpdateTime"
+      "UpdateTime",
     ],
-    "PlaceIndex": [
+    PlaceIndex: [
       "Arn",
       "CreateTime",
       "DataSource",
       "IndexArn",
       "IndexName",
-      "UpdateTime"
+      "UpdateTime",
     ],
-    "RouteCalculator": [
+    RouteCalculator: [
       "Arn",
       "CalculatorArn",
       "CalculatorName",
       "CreateTime",
       "DataSource",
-      "UpdateTime"
+      "UpdateTime",
     ],
-    "Tracker": [
+    Tracker: [
       "Arn",
       "CreateTime",
       "KmsKeyId",
       "TrackerArn",
       "TrackerName",
-      "UpdateTime"
+      "UpdateTime",
     ],
-    "TrackerConsumer": [
-      "ConsumerArn",
-      "TrackerName"
-    ]
+    TrackerConsumer: ["ConsumerArn", "TrackerName"],
   },
-  "Logs": {
-    "AccountPolicy": [
-      "AccountId",
-      "PolicyName",
-      "PolicyType"
-    ],
-    "Delivery": [
+  Logs: {
+    AccountPolicy: ["AccountId", "PolicyName", "PolicyType"],
+    Delivery: [
       "Arn",
       "DeliveryDestinationArn",
       "DeliveryDestinationType",
       "DeliveryId",
-      "DeliverySourceName"
+      "DeliverySourceName",
     ],
-    "DeliveryDestination": [
+    DeliveryDestination: [
       "Arn",
       "DeliveryDestinationType",
       "DestinationResourceArn",
       "Name",
-      "OutputFormat"
+      "OutputFormat",
     ],
-    "DeliverySource": [
-      "Arn",
-      "Name",
-      "ResourceArns",
-      "Service"
-    ],
-    "Destination": [
-      "Arn",
-      "DestinationName"
-    ],
-    "Integration": [
+    DeliverySource: ["Arn", "Name", "ResourceArns", "Service"],
+    Destination: ["Arn", "DestinationName"],
+    Integration: [
       "IntegrationName",
       "IntegrationStatus",
       "IntegrationType",
-      "ResourceConfig"
+      "ResourceConfig",
     ],
-    "LogAnomalyDetector": [
+    LogAnomalyDetector: [
       "AnomalyDetectorArn",
       "AnomalyDetectorStatus",
       "CreationTimeStamp",
-      "LastModifiedTimeStamp"
+      "LastModifiedTimeStamp",
     ],
-    "LogGroup": [
-      "Arn",
-      "LogGroupName"
-    ],
-    "LogStream": [
-      "LogGroupName",
-      "LogStreamName"
-    ],
-    "MetricFilter": [
-      "FilterName",
-      "LogGroupName"
-    ],
-    "QueryDefinition": [
-      "QueryDefinitionId"
-    ],
-    "ResourcePolicy": [
-      "PolicyName"
-    ],
-    "SubscriptionFilter": [
-      "FilterName",
-      "LogGroupName"
-    ],
-    "Transformer": [
-      "LogGroupIdentifier"
-    ]
+    LogGroup: ["Arn", "LogGroupName"],
+    LogStream: ["LogGroupName", "LogStreamName"],
+    MetricFilter: ["FilterName", "LogGroupName"],
+    QueryDefinition: ["QueryDefinitionId"],
+    ResourcePolicy: ["PolicyName"],
+    SubscriptionFilter: ["FilterName", "LogGroupName"],
+    Transformer: ["LogGroupIdentifier"],
   },
-  "LookoutEquipment": {
-    "InferenceScheduler": [
+  LookoutEquipment: {
+    InferenceScheduler: [
       "InferenceSchedulerArn",
       "InferenceSchedulerName",
       "ModelName",
-      "ServerSideKmsKeyId"
-    ]
+      "ServerSideKmsKeyId",
+    ],
   },
-  "LookoutMetrics": {
-    "Alert": [
+  LookoutMetrics: {
+    Alert: [
       "Action",
       "AlertDescription",
       "AlertName",
       "AlertSensitivityThreshold",
       "AnomalyDetectorArn",
-      "Arn"
-    ],
-    "AnomalyDetector": [
-      "AnomalyDetectorName",
-      "Arn"
-    ]
-  },
-  "LookoutVision": {
-    "Project": [
       "Arn",
-      "ProjectName"
-    ]
+    ],
+    AnomalyDetector: ["AnomalyDetectorName", "Arn"],
   },
-  "M2": {
-    "Application": [
+  LookoutVision: {
+    Project: ["Arn", "ProjectName"],
+  },
+  M2: {
+    Application: [
       "ApplicationArn",
       "ApplicationId",
       "EngineType",
       "KmsKeyId",
       "Name",
-      "RoleArn"
+      "RoleArn",
     ],
-    "Deployment": [
-      "ApplicationId",
-      "DeploymentId",
-      "EnvironmentId",
-      "Status"
-    ],
-    "Environment": [
+    Deployment: ["ApplicationId", "DeploymentId", "EnvironmentId", "Status"],
+    Environment: [
       "Description",
       "EngineType",
       "EnvironmentArn",
@@ -5837,55 +4207,47 @@ const properties = {
       "PubliclyAccessible",
       "SecurityGroupIds",
       "StorageConfigurations",
-      "SubnetIds"
-    ]
+      "SubnetIds",
+    ],
   },
-  "MSK": {
-    "BatchScramSecret": [
-      "ClusterArn"
-    ],
-    "Cluster": [
-      "Arn",
-      "ClusterName"
-    ],
-    "ClusterPolicy": [
-      "ClusterArn",
-      "CurrentVersion"
-    ],
-    "Configuration": [
+  MSK: {
+    BatchScramSecret: ["ClusterArn"],
+    Cluster: ["Arn", "ClusterName"],
+    ClusterPolicy: ["ClusterArn", "CurrentVersion"],
+    Configuration: [
       "Arn",
       "KafkaVersionsList",
       "LatestRevision.CreationTime",
       "LatestRevision.Description",
       "LatestRevision.Revision",
-      "Name"
+      "Name",
     ],
-    "Replicator": [
+    Replicator: [
       "CurrentVersion",
       "Description",
       "KafkaClusters",
       "ReplicatorArn",
       "ReplicatorName",
-      "ServiceExecutionRoleArn"
+      "ServiceExecutionRoleArn",
     ],
-    "ServerlessCluster": [
+    ServerlessCluster: [
       "Arn",
       "ClientAuthentication",
       "ClusterName",
       "Tags",
-      "VpcConfigs"
+      "VpcConfigs",
     ],
-    "VpcConnection": [
+    VpcConnection: [
       "Arn",
       "Authentication",
       "ClientSubnets",
       "SecurityGroups",
       "TargetClusterArn",
-      "VpcId"
-    ]
+      "VpcId",
+    ],
   },
-  "MWAA": {
-    "Environment": [
+  MWAA: {
+    Environment: [
       "Arn",
       "CeleryExecutorQueue",
       "DatabaseVpcEndpointService",
@@ -5898,16 +4260,12 @@ const properties = {
       "LoggingConfiguration.WorkerLogs.CloudWatchLogGroupArn",
       "Name",
       "WebserverUrl",
-      "WebserverVpcEndpointService"
-    ]
-  },
-  "Macie": {
-    "AllowList": [
-      "Arn",
-      "Id",
-      "Status"
+      "WebserverVpcEndpointService",
     ],
-    "CustomDataIdentifier": [
+  },
+  Macie: {
+    AllowList: ["Arn", "Id", "Status"],
+    CustomDataIdentifier: [
       "Arn",
       "Description",
       "Id",
@@ -5915,53 +4273,29 @@ const properties = {
       "Keywords",
       "MaximumMatchDistance",
       "Name",
-      "Regex"
+      "Regex",
     ],
-    "FindingsFilter": [
-      "Arn",
-      "Id"
-    ],
-    "Session": [
-      "AutomatedDiscoveryStatus",
-      "AwsAccountId",
-      "ServiceRole"
-    ]
+    FindingsFilter: ["Arn", "Id"],
+    Session: ["AutomatedDiscoveryStatus", "AwsAccountId", "ServiceRole"],
   },
-  "ManagedBlockchain": {
-    "Accessor": [
+  ManagedBlockchain: {
+    Accessor: [
       "AccessorType",
       "Arn",
       "BillingToken",
       "CreationDate",
       "Id",
       "NetworkType",
-      "Status"
+      "Status",
     ],
-    "Member": [
-      "MemberId",
-      "NetworkId"
-    ],
-    "Node": [
-      "Arn",
-      "MemberId",
-      "NetworkId",
-      "NodeId"
-    ]
+    Member: ["MemberId", "NetworkId"],
+    Node: ["Arn", "MemberId", "NetworkId", "NodeId"],
   },
-  "MediaConnect": {
-    "Bridge": [
-      "BridgeArn",
-      "BridgeState"
-    ],
-    "BridgeOutput": [
-      "BridgeArn",
-      "Name"
-    ],
-    "BridgeSource": [
-      "BridgeArn",
-      "Name"
-    ],
-    "Flow": [
+  MediaConnect: {
+    Bridge: ["BridgeArn", "BridgeState"],
+    BridgeOutput: ["BridgeArn", "Name"],
+    BridgeSource: ["BridgeArn", "Name"],
+    Flow: [
       "AvailabilityZone",
       "EgressIp",
       "FlowArn",
@@ -5970,149 +4304,97 @@ const properties = {
       "Name",
       "Source.IngestIp",
       "Source.SourceArn",
-      "Source.SourceIngestPort"
+      "Source.SourceIngestPort",
     ],
-    "FlowEntitlement": [
+    FlowEntitlement: [
       "DataTransferSubscriberFeePercent",
       "EntitlementArn",
-      "Name"
-    ],
-    "FlowOutput": [
       "Name",
-      "OutputArn"
     ],
-    "FlowSource": [
-      "IngestIp",
-      "Name",
-      "SourceArn",
-      "SourceIngestPort"
-    ],
-    "FlowVpcInterface": [
-      "FlowArn",
-      "Name",
-      "NetworkInterfaceIds"
-    ],
-    "Gateway": [
+    FlowOutput: ["Name", "OutputArn"],
+    FlowSource: ["IngestIp", "Name", "SourceArn", "SourceIngestPort"],
+    FlowVpcInterface: ["FlowArn", "Name", "NetworkInterfaceIds"],
+    Gateway: [
       "EgressCidrBlocks",
       "GatewayArn",
       "GatewayState",
       "Name",
-      "Networks"
-    ]
+      "Networks",
+    ],
   },
-  "MediaConvert": {
-    "JobTemplate": [
-      "Arn",
-      "Name",
-      "Name"
-    ],
-    "Preset": [
-      "Arn",
-      "Name",
-      "Name"
-    ],
-    "Queue": [
-      "Arn",
-      "Name",
-      "Name"
-    ]
+  MediaConvert: {
+    JobTemplate: ["Arn", "Name", "Name"],
+    Preset: ["Arn", "Name", "Name"],
+    Queue: ["Arn", "Name", "Name"],
   },
-  "MediaLive": {
-    "Channel": [
-      "AnywhereSettings",
-      "Arn",
-      "Inputs",
-      "Vpc"
-    ],
-    "ChannelPlacementGroup": [
-      "Arn",
-      "Channels",
-      "ClusterId",
-      "Id",
-      "State"
-    ],
-    "CloudWatchAlarmTemplate": [
+  MediaLive: {
+    Channel: ["AnywhereSettings", "Arn", "Inputs", "Vpc"],
+    ChannelPlacementGroup: ["Arn", "Channels", "ClusterId", "Id", "State"],
+    CloudWatchAlarmTemplate: [
       "Arn",
       "CreatedAt",
       "GroupId",
       "Id",
       "Identifier",
       "ModifiedAt",
-      "Tags"
+      "Tags",
     ],
-    "CloudWatchAlarmTemplateGroup": [
+    CloudWatchAlarmTemplateGroup: [
       "Arn",
       "CreatedAt",
       "Id",
       "Identifier",
       "ModifiedAt",
       "Name",
-      "Tags"
+      "Tags",
     ],
-    "Cluster": [
+    Cluster: [
       "Arn",
       "ChannelIds",
       "ClusterType",
       "Id",
       "InstanceRoleArn",
-      "State"
+      "State",
     ],
-    "EventBridgeRuleTemplate": [
+    EventBridgeRuleTemplate: [
       "Arn",
       "CreatedAt",
       "GroupId",
       "Id",
       "Identifier",
       "ModifiedAt",
-      "Tags"
+      "Tags",
     ],
-    "EventBridgeRuleTemplateGroup": [
+    EventBridgeRuleTemplateGroup: [
       "Arn",
       "CreatedAt",
       "Id",
       "Identifier",
       "ModifiedAt",
       "Name",
-      "Tags"
+      "Tags",
     ],
-    "Input": [
+    Input: [
       "Arn",
       "Destinations",
       "InputNetworkLocation",
       "Sources",
       "Type",
-      "Vpc"
+      "Vpc",
     ],
-    "InputSecurityGroup": [
-      "Arn",
-      "Tags"
-    ],
-    "Multiplex": [
+    InputSecurityGroup: ["Arn", "Tags"],
+    Multiplex: [
       "Arn",
       "AvailabilityZones",
       "Id",
       "PipelinesRunningCount",
       "ProgramCount",
-      "State"
+      "State",
     ],
-    "Multiplexprogram": [
-      "ChannelId",
-      "MultiplexId",
-      "ProgramName"
-    ],
-    "Network": [
-      "Arn",
-      "AssociatedClusterIds",
-      "Id",
-      "State"
-    ],
-    "SdiSource": [
-      "Arn",
-      "Id",
-      "Inputs",
-      "State"
-    ],
-    "SignalMap": [
+    Multiplexprogram: ["ChannelId", "MultiplexId", "ProgramName"],
+    Network: ["Arn", "AssociatedClusterIds", "Id", "State"],
+    SdiSource: ["Arn", "Id", "Inputs", "State"],
+    SignalMap: [
       "Arn",
       "CloudWatchAlarmTemplateGroupIds",
       "CreatedAt",
@@ -6133,37 +4415,18 @@ const properties = {
       "MonitorDeployment.ErrorMessage",
       "MonitorDeployment.Status",
       "Status",
-      "Tags"
-    ]
+      "Tags",
+    ],
   },
-  "MediaPackage": {
-    "Asset": [
-      "Arn",
-      "CreatedAt"
-    ],
-    "Channel": [
-      "Arn",
-      "Id",
-      "Tags"
-    ],
-    "OriginEndpoint": [
-      "Arn",
-      "Id",
-      "Url"
-    ],
-    "PackagingConfiguration": [
-      "Arn",
-      "Id"
-    ],
-    "PackagingGroup": [
-      "Arn",
-      "DomainName",
-      "Id",
-      "Tags"
-    ]
+  MediaPackage: {
+    Asset: ["Arn", "CreatedAt"],
+    Channel: ["Arn", "Id", "Tags"],
+    OriginEndpoint: ["Arn", "Id", "Url"],
+    PackagingConfiguration: ["Arn", "Id"],
+    PackagingGroup: ["Arn", "DomainName", "Id", "Tags"],
   },
-  "MediaPackageV2": {
-    "Channel": [
+  MediaPackageV2: {
+    Channel: [
       "Arn",
       "ChannelGroupName",
       "ChannelName",
@@ -6171,20 +4434,17 @@ const properties = {
       "IngestEndpointUrls",
       "IngestEndpoints",
       "InputType",
-      "ModifiedAt"
+      "ModifiedAt",
     ],
-    "ChannelGroup": [
+    ChannelGroup: [
       "Arn",
       "ChannelGroupName",
       "CreatedAt",
       "EgressDomain",
-      "ModifiedAt"
+      "ModifiedAt",
     ],
-    "ChannelPolicy": [
-      "ChannelGroupName",
-      "ChannelName"
-    ],
-    "OriginEndpoint": [
+    ChannelPolicy: ["ChannelGroupName", "ChannelName"],
+    OriginEndpoint: [
       "Arn",
       "ChannelGroupName",
       "ChannelName",
@@ -6193,59 +4453,35 @@ const properties = {
       "HlsManifestUrls",
       "LowLatencyHlsManifestUrls",
       "ModifiedAt",
-      "OriginEndpointName"
+      "OriginEndpointName",
     ],
-    "OriginEndpointPolicy": [
+    OriginEndpointPolicy: [
       "ChannelGroupName",
       "ChannelName",
-      "OriginEndpointName"
-    ]
+      "OriginEndpointName",
+    ],
   },
-  "MediaStore": {
-    "Container": [
-      "ContainerName",
-      "Endpoint"
-    ]
+  MediaStore: {
+    Container: ["ContainerName", "Endpoint"],
   },
-  "MediaTailor": {
-    "Channel": [
-      "Arn",
-      "ChannelName",
-      "Tier"
-    ],
-    "ChannelPolicy": [
-      "ChannelName"
-    ],
-    "LiveSource": [
-      "Arn",
-      "LiveSourceName",
-      "SourceLocationName"
-    ],
-    "PlaybackConfiguration": [
+  MediaTailor: {
+    Channel: ["Arn", "ChannelName", "Tier"],
+    ChannelPolicy: ["ChannelName"],
+    LiveSource: ["Arn", "LiveSourceName", "SourceLocationName"],
+    PlaybackConfiguration: [
       "DashConfiguration.ManifestEndpointPrefix",
       "HlsConfiguration.ManifestEndpointPrefix",
       "Name",
       "PlaybackConfigurationArn",
       "PlaybackEndpointPrefix",
-      "SessionInitializationEndpointPrefix"
+      "SessionInitializationEndpointPrefix",
     ],
-    "SourceLocation": [
-      "Arn",
-      "SourceLocationName"
-    ],
-    "VodSource": [
-      "Arn",
-      "SourceLocationName",
-      "VodSourceName"
-    ]
+    SourceLocation: ["Arn", "SourceLocationName"],
+    VodSource: ["Arn", "SourceLocationName", "VodSourceName"],
   },
-  "MemoryDB": {
-    "ACL": [
-      "ACLName",
-      "Arn",
-      "Status"
-    ],
-    "Cluster": [
+  MemoryDB: {
+    ACL: ["ACLName", "Arn", "Status"],
+    Cluster: [
       "ARN",
       "ClusterEndpoint.Address",
       "ClusterEndpoint.Port",
@@ -6260,36 +4496,23 @@ const properties = {
       "SnapshotName",
       "Status",
       "SubnetGroupName",
-      "TLSEnabled"
+      "TLSEnabled",
     ],
-    "MultiRegionCluster": [
+    MultiRegionCluster: [
       "ARN",
       "EngineVersion",
       "MultiRegionClusterName",
       "MultiRegionClusterNameSuffix",
       "MultiRegionParameterGroupName",
       "Status",
-      "TLSEnabled"
+      "TLSEnabled",
     ],
-    "ParameterGroup": [
-      "ARN",
-      "Description",
-      "Family",
-      "ParameterGroupName"
-    ],
-    "SubnetGroup": [
-      "ARN",
-      "SubnetGroupName",
-      "SupportedNetworkTypes"
-    ],
-    "User": [
-      "Arn",
-      "Status",
-      "UserName"
-    ]
+    ParameterGroup: ["ARN", "Description", "Family", "ParameterGroupName"],
+    SubnetGroup: ["ARN", "SubnetGroupName", "SupportedNetworkTypes"],
+    User: ["Arn", "Status", "UserName"],
   },
-  "Neptune": {
-    "DBCluster": [
+  Neptune: {
+    DBCluster: [
       "AvailabilityZones",
       "ClusterResourceId",
       "DBClusterIdentifier",
@@ -6303,84 +4526,69 @@ const properties = {
       "SnapshotIdentifier",
       "SourceDBClusterIdentifier",
       "StorageEncrypted",
-      "UseLatestRestorableTime"
+      "UseLatestRestorableTime",
     ],
-    "DBClusterParameterGroup": [
-      "Description",
-      "Family",
-      "Name"
-    ],
-    "DBInstance": [
+    DBClusterParameterGroup: ["Description", "Family", "Name"],
+    DBInstance: [
       "AvailabilityZone",
       "DBClusterIdentifier",
       "DBInstanceIdentifier",
       "DBSnapshotIdentifier",
       "DBSubnetGroupName",
       "Endpoint",
-      "Port"
+      "Port",
     ],
-    "DBParameterGroup": [
-      "Description",
-      "Family",
-      "Name"
-    ],
-    "DBSubnetGroup": [
-      "DBSubnetGroupName"
-    ],
-    "EventSubscription": [
-      "SnsTopicArn"
-    ]
+    DBParameterGroup: ["Description", "Family", "Name"],
+    DBSubnetGroup: ["DBSubnetGroupName"],
+    EventSubscription: ["SnsTopicArn"],
   },
-  "NeptuneGraph": {
-    "Graph": [
+  NeptuneGraph: {
+    Graph: [
       "Endpoint",
       "GraphArn",
       "GraphId",
       "GraphName",
       "ReplicaCount",
-      "VectorSearchConfiguration"
+      "VectorSearchConfiguration",
     ],
-    "PrivateGraphEndpoint": [
+    PrivateGraphEndpoint: [
       "GraphIdentifier",
       "PrivateGraphEndpointIdentifier",
       "SecurityGroupIds",
       "SubnetIds",
       "VpcEndpointId",
-      "VpcId"
-    ]
+      "VpcId",
+    ],
   },
-  "NetworkFirewall": {
-    "Firewall": [
+  NetworkFirewall: {
+    Firewall: [
       "EndpointIds",
       "FirewallArn",
       "FirewallId",
       "FirewallName",
-      "VpcId"
+      "VpcId",
     ],
-    "FirewallPolicy": [
+    FirewallPolicy: [
       "FirewallPolicyArn",
       "FirewallPolicyId",
-      "FirewallPolicyName"
+      "FirewallPolicyName",
     ],
-    "LoggingConfiguration": [
-      "FirewallArn",
-      "FirewallName"
-    ],
-    "RuleGroup": [
+    LoggingConfiguration: ["FirewallArn", "FirewallName"],
+    RuleGroup: [
       "Capacity",
       "RuleGroupArn",
       "RuleGroupId",
       "RuleGroupName",
-      "Type"
+      "Type",
     ],
-    "TLSInspectionConfiguration": [
+    TLSInspectionConfiguration: [
       "TLSInspectionConfigurationArn",
       "TLSInspectionConfigurationId",
-      "TLSInspectionConfigurationName"
-    ]
+      "TLSInspectionConfigurationName",
+    ],
   },
-  "NetworkManager": {
-    "ConnectAttachment": [
+  NetworkManager: {
+    ConnectAttachment: [
       "AttachmentId",
       "AttachmentPolicyRuleNumber",
       "AttachmentType",
@@ -6394,9 +4602,9 @@ const properties = {
       "SegmentName",
       "State",
       "TransportAttachmentId",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "ConnectPeer": [
+    ConnectPeer: [
       "BgpOptions",
       "Configuration",
       "Configuration.BgpConfigurations",
@@ -6413,9 +4621,9 @@ const properties = {
       "InsideCidrBlocks",
       "PeerAddress",
       "State",
-      "SubnetArn"
+      "SubnetArn",
     ],
-    "CoreNetwork": [
+    CoreNetwork: [
       "CoreNetworkArn",
       "CoreNetworkId",
       "CreatedAt",
@@ -6424,22 +4632,16 @@ const properties = {
       "NetworkFunctionGroups",
       "OwnerAccount",
       "Segments",
-      "State"
+      "State",
     ],
-    "CustomerGatewayAssociation": [
+    CustomerGatewayAssociation: [
       "CustomerGatewayArn",
       "DeviceId",
       "GlobalNetworkId",
-      "LinkId"
+      "LinkId",
     ],
-    "Device": [
-      "CreatedAt",
-      "DeviceArn",
-      "DeviceId",
-      "GlobalNetworkId",
-      "State"
-    ],
-    "DirectConnectGatewayAttachment": [
+    Device: ["CreatedAt", "DeviceArn", "DeviceId", "GlobalNetworkId", "State"],
+    DirectConnectGatewayAttachment: [
       "AttachmentId",
       "AttachmentPolicyRuleNumber",
       "AttachmentType",
@@ -6452,33 +4654,20 @@ const properties = {
       "ResourceArn",
       "SegmentName",
       "State",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "GlobalNetwork": [
-      "Arn",
-      "Id"
-    ],
-    "Link": [
+    GlobalNetwork: ["Arn", "Id"],
+    Link: [
       "CreatedAt",
       "GlobalNetworkId",
       "LinkArn",
       "LinkId",
       "SiteId",
-      "State"
+      "State",
     ],
-    "LinkAssociation": [
-      "DeviceId",
-      "GlobalNetworkId",
-      "LinkId"
-    ],
-    "Site": [
-      "CreatedAt",
-      "GlobalNetworkId",
-      "SiteArn",
-      "SiteId",
-      "State"
-    ],
-    "SiteToSiteVpnAttachment": [
+    LinkAssociation: ["DeviceId", "GlobalNetworkId", "LinkId"],
+    Site: ["CreatedAt", "GlobalNetworkId", "SiteArn", "SiteId", "State"],
+    SiteToSiteVpnAttachment: [
       "AttachmentId",
       "AttachmentPolicyRuleNumber",
       "AttachmentType",
@@ -6491,9 +4680,9 @@ const properties = {
       "SegmentName",
       "State",
       "UpdatedAt",
-      "VpnConnectionArn"
+      "VpnConnectionArn",
     ],
-    "TransitGatewayPeering": [
+    TransitGatewayPeering: [
       "CoreNetworkArn",
       "CoreNetworkId",
       "CreatedAt",
@@ -6504,13 +4693,10 @@ const properties = {
       "ResourceArn",
       "State",
       "TransitGatewayArn",
-      "TransitGatewayPeeringAttachmentId"
+      "TransitGatewayPeeringAttachmentId",
     ],
-    "TransitGatewayRegistration": [
-      "GlobalNetworkId",
-      "TransitGatewayArn"
-    ],
-    "TransitGatewayRouteTableAttachment": [
+    TransitGatewayRegistration: ["GlobalNetworkId", "TransitGatewayArn"],
+    TransitGatewayRouteTableAttachment: [
       "AttachmentId",
       "AttachmentPolicyRuleNumber",
       "AttachmentType",
@@ -6524,9 +4710,9 @@ const properties = {
       "SegmentName",
       "State",
       "TransitGatewayRouteTableArn",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "VpcAttachment": [
+    VpcAttachment: [
       "AttachmentId",
       "AttachmentPolicyRuleNumber",
       "AttachmentType",
@@ -6540,47 +4726,39 @@ const properties = {
       "SegmentName",
       "State",
       "UpdatedAt",
-      "VpcArn"
-    ]
-  },
-  "Notifications": {
-    "ChannelAssociation": [
-      "Arn",
-      "NotificationConfigurationArn"
+      "VpcArn",
     ],
-    "EventRule": [
+  },
+  Notifications: {
+    ChannelAssociation: ["Arn", "NotificationConfigurationArn"],
+    EventRule: [
       "Arn",
       "CreationTime",
       "EventType",
       "ManagedRules",
       "NotificationConfigurationArn",
       "Source",
-      "StatusSummaryByRegion"
+      "StatusSummaryByRegion",
     ],
-    "ManagedNotificationAccountContactAssociation": [
+    ManagedNotificationAccountContactAssociation: [
       "ContactIdentifier",
-      "ManagedNotificationConfigurationArn"
+      "ManagedNotificationConfigurationArn",
     ],
-    "ManagedNotificationAdditionalChannelAssociation": [
+    ManagedNotificationAdditionalChannelAssociation: [
       "ChannelArn",
-      "ManagedNotificationConfigurationArn"
+      "ManagedNotificationConfigurationArn",
     ],
-    "NotificationConfiguration": [
-      "Arn",
-      "CreationTime",
-      "Status",
-      "Tags"
-    ],
-    "NotificationHub": [
+    NotificationConfiguration: ["Arn", "CreationTime", "Status", "Tags"],
+    NotificationHub: [
       "CreationTime",
       "NotificationHubStatusSummary",
       "NotificationHubStatusSummary.NotificationHubStatus",
       "NotificationHubStatusSummary.NotificationHubStatusReason",
-      "Region"
-    ]
+      "Region",
+    ],
   },
-  "NotificationsContacts": {
-    "EmailContact": [
+  NotificationsContacts: {
+    EmailContact: [
       "Arn",
       "EmailAddress",
       "EmailContact",
@@ -6591,32 +4769,24 @@ const properties = {
       "EmailContact.Status",
       "EmailContact.UpdateTime",
       "Name",
-      "Tags"
-    ]
+      "Tags",
+    ],
   },
-  "OSIS": {
-    "Pipeline": [
+  OSIS: {
+    Pipeline: [
       "IngestEndpointUrls",
       "PipelineArn",
       "PipelineName",
       "VpcEndpointService",
-      "VpcEndpoints"
-    ]
-  },
-  "Oam": {
-    "Link": [
-      "Arn",
-      "Label",
-      "LabelTemplate",
-      "SinkIdentifier"
+      "VpcEndpoints",
     ],
-    "Sink": [
-      "Arn",
-      "Name"
-    ]
   },
-  "Omics": {
-    "AnnotationStore": [
+  Oam: {
+    Link: ["Arn", "Label", "LabelTemplate", "SinkIdentifier"],
+    Sink: ["Arn", "Name"],
+  },
+  Omics: {
+    AnnotationStore: [
       "CreationTime",
       "Id",
       "Name",
@@ -6629,23 +4799,19 @@ const properties = {
       "StoreOptions",
       "StoreSizeBytes",
       "Tags",
-      "UpdateTime"
+      "UpdateTime",
     ],
-    "ReferenceStore": [
+    ReferenceStore: [
       "Arn",
       "CreationTime",
       "Description",
       "Name",
       "ReferenceStoreId",
       "SseConfig",
-      "Tags"
+      "Tags",
     ],
-    "RunGroup": [
-      "Arn",
-      "CreationTime",
-      "Id"
-    ],
-    "SequenceStore": [
+    RunGroup: ["Arn", "CreationTime", "Id"],
+    SequenceStore: [
       "Arn",
       "CreationTime",
       "ETagAlgorithmFamily",
@@ -6655,9 +4821,9 @@ const properties = {
       "SseConfig",
       "Status",
       "StatusMessage",
-      "UpdateTime"
+      "UpdateTime",
     ],
-    "VariantStore": [
+    VariantStore: [
       "CreationTime",
       "Id",
       "Name",
@@ -6668,9 +4834,9 @@ const properties = {
       "StoreArn",
       "StoreSizeBytes",
       "Tags",
-      "UpdateTime"
+      "UpdateTime",
     ],
-    "Workflow": [
+    Workflow: [
       "Accelerators",
       "Arn",
       "CreationTime",
@@ -6681,57 +4847,36 @@ const properties = {
       "ParameterTemplate",
       "Status",
       "StorageCapacity",
-      "Type"
-    ]
-  },
-  "OpenSearchServerless": {
-    "AccessPolicy": [
-      "Name",
-      "Type"
+      "Type",
     ],
-    "Collection": [
+  },
+  OpenSearchServerless: {
+    AccessPolicy: ["Name", "Type"],
+    Collection: [
       "Arn",
       "CollectionEndpoint",
       "DashboardEndpoint",
       "Id",
       "Name",
       "Tags",
-      "Type"
+      "Type",
     ],
-    "Index": [
-      "CollectionEndpoint",
-      "IndexName",
-      "Uuid"
-    ],
-    "LifecyclePolicy": [
-      "Name",
-      "Type"
-    ],
-    "SecurityConfig": [
+    Index: ["CollectionEndpoint", "IndexName", "Uuid"],
+    LifecyclePolicy: ["Name", "Type"],
+    SecurityConfig: [
       "IamIdentityCenterOptions.ApplicationArn",
       "IamIdentityCenterOptions.ApplicationDescription",
       "IamIdentityCenterOptions.ApplicationName",
       "Id",
       "Name",
-      "Type"
+      "Type",
     ],
-    "SecurityPolicy": [
-      "Name",
-      "Type"
-    ],
-    "VpcEndpoint": [
-      "Id",
-      "Name",
-      "VpcId"
-    ]
+    SecurityPolicy: ["Name", "Type"],
+    VpcEndpoint: ["Id", "Name", "VpcId"],
   },
-  "OpenSearchService": {
-    "Application": [
-      "Arn",
-      "Id",
-      "Name"
-    ],
-    "Domain": [
+  OpenSearchService: {
+    Application: ["Arn", "Id", "Name"],
+    Domain: [
       "AdvancedSecurityOptions.AnonymousAuthDisableDate",
       "Arn",
       "DomainArn",
@@ -6750,15 +4895,12 @@ const properties = {
       "ServiceSoftwareOptions.NewVersion",
       "ServiceSoftwareOptions.OptionalDeployment",
       "ServiceSoftwareOptions.UpdateAvailable",
-      "ServiceSoftwareOptions.UpdateStatus"
-    ]
-  },
-  "OpsWorks": {
-    "App": [
-      "Shortname",
-      "StackId"
+      "ServiceSoftwareOptions.UpdateStatus",
     ],
-    "Instance": [
+  },
+  OpsWorks: {
+    App: ["Shortname", "StackId"],
+    Instance: [
       "AutoScalingType",
       "AvailabilityZone",
       "AvailabilityZone",
@@ -6773,30 +4915,21 @@ const properties = {
       "SubnetId",
       "Tenancy",
       "TimeBasedAutoScaling",
-      "VirtualizationType"
+      "VirtualizationType",
     ],
-    "Layer": [
-      "StackId",
-      "Type"
-    ],
-    "Stack": [
+    Layer: ["StackId", "Type"],
+    Stack: [
       "CloneAppIds",
       "ClonePermissions",
       "ServiceRoleArn",
       "SourceStackId",
-      "VpcId"
+      "VpcId",
     ],
-    "UserProfile": [
-      "IamUserArn",
-      "SshUsername"
-    ],
-    "Volume": [
-      "Ec2VolumeId",
-      "StackId"
-    ]
+    UserProfile: ["IamUserArn", "SshUsername"],
+    Volume: ["Ec2VolumeId", "StackId"],
   },
-  "OpsWorksCM": {
-    "Server": [
+  OpsWorksCM: {
+    Server: [
       "Arn",
       "AssociatePublicIpAddress",
       "BackupId",
@@ -6813,72 +4946,38 @@ const properties = {
       "SecurityGroupIds",
       "ServerName",
       "ServiceRoleArn",
-      "SubnetIds"
-    ]
-  },
-  "Organizations": {
-    "Account": [
-      "AccountId",
-      "Arn",
-      "JoinedMethod",
-      "JoinedTimestamp",
-      "Status"
+      "SubnetIds",
     ],
-    "Organization": [
+  },
+  Organizations: {
+    Account: ["AccountId", "Arn", "JoinedMethod", "JoinedTimestamp", "Status"],
+    Organization: [
       "Arn",
       "Id",
       "ManagementAccountArn",
       "ManagementAccountEmail",
       "ManagementAccountId",
-      "RootId"
+      "RootId",
     ],
-    "OrganizationalUnit": [
-      "Arn",
-      "Id",
-      "ParentId"
-    ],
-    "Policy": [
-      "Arn",
-      "AwsManaged",
-      "Id",
-      "Type"
-    ],
-    "ResourcePolicy": [
-      "Arn",
-      "Id"
-    ]
+    OrganizationalUnit: ["Arn", "Id", "ParentId"],
+    Policy: ["Arn", "AwsManaged", "Id", "Type"],
+    ResourcePolicy: ["Arn", "Id"],
   },
-  "PCAConnectorAD": {
-    "Connector": [
+  PCAConnectorAD: {
+    Connector: [
       "CertificateAuthorityArn",
       "ConnectorArn",
       "DirectoryId",
-      "VpcInformation"
+      "VpcInformation",
     ],
-    "DirectoryRegistration": [
-      "DirectoryId",
-      "DirectoryRegistrationArn"
-    ],
-    "ServicePrincipalName": [
-      "ConnectorArn",
-      "DirectoryRegistrationArn"
-    ],
-    "Template": [
-      "ConnectorArn",
-      "Name",
-      "TemplateArn"
-    ],
-    "TemplateGroupAccessControlEntry": [
-      "GroupSecurityIdentifier",
-      "TemplateArn"
-    ]
+    DirectoryRegistration: ["DirectoryId", "DirectoryRegistrationArn"],
+    ServicePrincipalName: ["ConnectorArn", "DirectoryRegistrationArn"],
+    Template: ["ConnectorArn", "Name", "TemplateArn"],
+    TemplateGroupAccessControlEntry: ["GroupSecurityIdentifier", "TemplateArn"],
   },
-  "PCAConnectorSCEP": {
-    "Challenge": [
-      "ChallengeArn",
-      "ConnectorArn"
-    ],
-    "Connector": [
+  PCAConnectorSCEP: {
+    Challenge: ["ChallengeArn", "ConnectorArn"],
+    Connector: [
       "CertificateAuthorityArn",
       "ConnectorArn",
       "Endpoint",
@@ -6887,11 +4986,11 @@ const properties = {
       "OpenIdConfiguration.Audience",
       "OpenIdConfiguration.Issuer",
       "OpenIdConfiguration.Subject",
-      "Type"
-    ]
+      "Type",
+    ],
   },
-  "PCS": {
-    "Cluster": [
+  PCS: {
+    Cluster: [
       "Arn",
       "Endpoints",
       "ErrorInfo",
@@ -6901,28 +5000,21 @@ const properties = {
       "Scheduler",
       "Size",
       "SlurmConfiguration",
-      "Status"
+      "Status",
     ],
-    "ComputeNodeGroup": [
+    ComputeNodeGroup: [
       "Arn",
       "ClusterId",
       "ErrorInfo",
       "Id",
       "InstanceConfigs",
       "Name",
-      "Status"
+      "Status",
     ],
-    "Queue": [
-      "Arn",
-      "ClusterId",
-      "ErrorInfo",
-      "Id",
-      "Name",
-      "Status"
-    ]
+    Queue: ["Arn", "ClusterId", "ErrorInfo", "Id", "Name", "Status"],
   },
-  "Panorama": {
-    "ApplicationInstance": [
+  Panorama: {
+    ApplicationInstance: [
       "ApplicationInstanceId",
       "ApplicationInstanceIdToReplace",
       "Arn",
@@ -6937,9 +5029,9 @@ const properties = {
       "Name",
       "RuntimeRoleArn",
       "Status",
-      "StatusDescription"
+      "StatusDescription",
     ],
-    "Package": [
+    Package: [
       "Arn",
       "CreatedTime",
       "PackageId",
@@ -6948,9 +5040,9 @@ const properties = {
       "StorageLocation.Bucket",
       "StorageLocation.GeneratedPrefixLocation",
       "StorageLocation.ManifestPrefixLocation",
-      "StorageLocation.RepoPrefixLocation"
+      "StorageLocation.RepoPrefixLocation",
     ],
-    "PackageVersion": [
+    PackageVersion: [
       "IsLatestPatch",
       "OwnerAccount",
       "PackageArn",
@@ -6960,41 +5052,24 @@ const properties = {
       "PatchVersion",
       "RegisteredTime",
       "Status",
-      "StatusDescription"
-    ]
-  },
-  "PaymentCryptography": {
-    "Alias": [
-      "AliasName"
+      "StatusDescription",
     ],
-    "Key": [
-      "KeyIdentifier",
-      "KeyOrigin",
-      "KeyState"
-    ]
   },
-  "Personalize": {
-    "Dataset": [
+  PaymentCryptography: {
+    Alias: ["AliasName"],
+    Key: ["KeyIdentifier", "KeyOrigin", "KeyState"],
+  },
+  Personalize: {
+    Dataset: [
       "DatasetArn",
       "DatasetGroupArn",
       "DatasetType",
       "Name",
-      "SchemaArn"
+      "SchemaArn",
     ],
-    "DatasetGroup": [
-      "DatasetGroupArn",
-      "Domain",
-      "KmsKeyArn",
-      "Name",
-      "RoleArn"
-    ],
-    "Schema": [
-      "Domain",
-      "Name",
-      "Schema",
-      "SchemaArn"
-    ],
-    "Solution": [
+    DatasetGroup: ["DatasetGroupArn", "Domain", "KmsKeyArn", "Name", "RoleArn"],
+    Schema: ["Domain", "Name", "Schema", "SchemaArn"],
+    Solution: [
       "DatasetGroupArn",
       "EventType",
       "Name",
@@ -7002,130 +5077,65 @@ const properties = {
       "PerformHPO",
       "RecipeArn",
       "SolutionArn",
-      "SolutionConfig"
-    ]
+      "SolutionConfig",
+    ],
   },
-  "Pinpoint": {
-    "ADMChannel": [
-      "ApplicationId"
-    ],
-    "APNSChannel": [
-      "ApplicationId"
-    ],
-    "APNSSandboxChannel": [
-      "ApplicationId"
-    ],
-    "APNSVoipChannel": [
-      "ApplicationId"
-    ],
-    "APNSVoipSandboxChannel": [
-      "ApplicationId"
-    ],
-    "App": [
-      "Arn",
-      "Name"
-    ],
-    "ApplicationSettings": [
-      "ApplicationId"
-    ],
-    "BaiduChannel": [
-      "ApplicationId"
-    ],
-    "Campaign": [
-      "ApplicationId",
-      "Arn",
-      "CampaignId"
-    ],
-    "EmailChannel": [
-      "ApplicationId"
-    ],
-    "EmailTemplate": [
-      "Arn",
-      "TemplateName"
-    ],
-    "EventStream": [
-      "ApplicationId"
-    ],
-    "GCMChannel": [
-      "ApplicationId"
-    ],
-    "InAppTemplate": [
-      "Arn",
-      "TemplateName"
-    ],
-    "PushTemplate": [
-      "Arn",
-      "TemplateName"
-    ],
-    "SMSChannel": [
-      "ApplicationId"
-    ],
-    "Segment": [
-      "ApplicationId",
-      "Arn",
-      "SegmentId"
-    ],
-    "SmsTemplate": [
-      "Arn",
-      "TemplateName"
-    ],
-    "VoiceChannel": [
-      "ApplicationId"
-    ]
+  Pinpoint: {
+    ADMChannel: ["ApplicationId"],
+    APNSChannel: ["ApplicationId"],
+    APNSSandboxChannel: ["ApplicationId"],
+    APNSVoipChannel: ["ApplicationId"],
+    APNSVoipSandboxChannel: ["ApplicationId"],
+    App: ["Arn", "Name"],
+    ApplicationSettings: ["ApplicationId"],
+    BaiduChannel: ["ApplicationId"],
+    Campaign: ["ApplicationId", "Arn", "CampaignId"],
+    EmailChannel: ["ApplicationId"],
+    EmailTemplate: ["Arn", "TemplateName"],
+    EventStream: ["ApplicationId"],
+    GCMChannel: ["ApplicationId"],
+    InAppTemplate: ["Arn", "TemplateName"],
+    PushTemplate: ["Arn", "TemplateName"],
+    SMSChannel: ["ApplicationId"],
+    Segment: ["ApplicationId", "Arn", "SegmentId"],
+    SmsTemplate: ["Arn", "TemplateName"],
+    VoiceChannel: ["ApplicationId"],
   },
-  "PinpointEmail": {
-    "ConfigurationSet": [
-      "Name"
-    ],
-    "ConfigurationSetEventDestination": [
+  PinpointEmail: {
+    ConfigurationSet: ["Name"],
+    ConfigurationSetEventDestination: [
       "ConfigurationSetName",
-      "EventDestinationName"
+      "EventDestinationName",
     ],
-    "DedicatedIpPool": [
-      "PoolName"
-    ],
-    "Identity": [
+    DedicatedIpPool: ["PoolName"],
+    Identity: [
       "IdentityDNSRecordName1",
       "IdentityDNSRecordName2",
       "IdentityDNSRecordName3",
       "IdentityDNSRecordValue1",
       "IdentityDNSRecordValue2",
       "IdentityDNSRecordValue3",
-      "Name"
-    ]
+      "Name",
+    ],
   },
-  "Pipes": {
-    "Pipe": [
+  Pipes: {
+    Pipe: [
       "Arn",
       "CreationTime",
       "CurrentState",
       "LastModifiedTime",
       "Name",
       "Source",
-      "StateReason"
-    ]
-  },
-  "Proton": {
-    "EnvironmentAccountConnection": [
-      "Arn",
-      "Id",
-      "Status"
+      "StateReason",
     ],
-    "EnvironmentTemplate": [
-      "Arn",
-      "EncryptionKey",
-      "Name",
-      "Provisioning"
-    ],
-    "ServiceTemplate": [
-      "Arn",
-      "EncryptionKey",
-      "Name",
-      "PipelineProvisioning"
-    ]
   },
-  "QBusiness": {
-    "Application": [
+  Proton: {
+    EnvironmentAccountConnection: ["Arn", "Id", "Status"],
+    EnvironmentTemplate: ["Arn", "EncryptionKey", "Name", "Provisioning"],
+    ServiceTemplate: ["Arn", "EncryptionKey", "Name", "PipelineProvisioning"],
+  },
+  QBusiness: {
+    Application: [
       "ApplicationArn",
       "ApplicationId",
       "ClientIdsForOIDC",
@@ -7136,18 +5146,18 @@ const properties = {
       "IdentityType",
       "QuickSightConfiguration",
       "Status",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "DataAccessor": [
+    DataAccessor: [
       "ApplicationId",
       "CreatedAt",
       "DataAccessorArn",
       "DataAccessorId",
       "IdcApplicationArn",
       "Principal",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "DataSource": [
+    DataSource: [
       "ApplicationId",
       "CreatedAt",
       "DataSourceArn",
@@ -7155,9 +5165,9 @@ const properties = {
       "IndexId",
       "Status",
       "Type",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "Index": [
+    Index: [
       "ApplicationId",
       "CreatedAt",
       "IndexArn",
@@ -7168,47 +5178,40 @@ const properties = {
       "IndexStatistics.TextDocumentStatistics.IndexedTextDocumentCount",
       "Status",
       "Type",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "Permission": [
-      "Actions",
-      "ApplicationId",
-      "Principal",
-      "StatementId"
-    ],
-    "Plugin": [
+    Permission: ["Actions", "ApplicationId", "Principal", "StatementId"],
+    Plugin: [
       "ApplicationId",
       "BuildStatus",
       "CreatedAt",
       "PluginArn",
       "PluginId",
       "Type",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "Retriever": [
+    Retriever: [
       "ApplicationId",
       "CreatedAt",
       "RetrieverArn",
       "RetrieverId",
       "Status",
       "Type",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "WebExperience": [
+    WebExperience: [
       "ApplicationId",
       "CreatedAt",
       "DefaultEndpoint",
       "Status",
       "UpdatedAt",
       "WebExperienceArn",
-      "WebExperienceId"
-    ]
-  },
-  "QLDB": {
-    "Ledger": [
-      "Name"
+      "WebExperienceId",
     ],
-    "Stream": [
+  },
+  QLDB: {
+    Ledger: ["Name"],
+    Stream: [
       "Arn",
       "ExclusiveEndTime",
       "Id",
@@ -7216,24 +5219,20 @@ const properties = {
       "KinesisConfiguration",
       "LedgerName",
       "RoleArn",
-      "StreamName"
-    ]
+      "StreamName",
+    ],
   },
-  "QuickSight": {
-    "Analysis": [
+  QuickSight: {
+    Analysis: [
       "AnalysisId",
       "Arn",
       "AwsAccountId",
       "CreatedTime",
       "DataSetArns",
-      "LastUpdatedTime"
+      "LastUpdatedTime",
     ],
-    "CustomPermissions": [
-      "Arn",
-      "AwsAccountId",
-      "CustomPermissionsName"
-    ],
-    "Dashboard": [
+    CustomPermissions: ["Arn", "AwsAccountId", "CustomPermissionsName"],
+    Dashboard: [
       "Arn",
       "AwsAccountId",
       "CreatedTime",
@@ -7250,27 +5249,27 @@ const properties = {
       "Version.SourceEntityArn",
       "Version.Status",
       "Version.ThemeArn",
-      "Version.VersionNumber"
+      "Version.VersionNumber",
     ],
-    "DataSet": [
+    DataSet: [
       "Arn",
       "AwsAccountId",
       "ConsumedSpiceCapacityInBytes",
       "CreatedTime",
       "DataSetId",
       "LastUpdatedTime",
-      "OutputColumns"
+      "OutputColumns",
     ],
-    "DataSource": [
+    DataSource: [
       "Arn",
       "AwsAccountId",
       "CreatedTime",
       "DataSourceId",
       "LastUpdatedTime",
       "Status",
-      "Type"
+      "Type",
     ],
-    "Folder": [
+    Folder: [
       "Arn",
       "AwsAccountId",
       "CreatedTime",
@@ -7278,14 +5277,10 @@ const properties = {
       "FolderType",
       "LastUpdatedTime",
       "ParentFolderArn",
-      "SharingModel"
+      "SharingModel",
     ],
-    "RefreshSchedule": [
-      "Arn",
-      "AwsAccountId",
-      "DataSetId"
-    ],
-    "Template": [
+    RefreshSchedule: ["Arn", "AwsAccountId", "DataSetId"],
+    Template: [
       "Arn",
       "AwsAccountId",
       "CreatedTime",
@@ -7300,9 +5295,9 @@ const properties = {
       "Version.SourceEntityArn",
       "Version.Status",
       "Version.ThemeArn",
-      "Version.VersionNumber"
+      "Version.VersionNumber",
     ],
-    "Theme": [
+    Theme: [
       "Arn",
       "AwsAccountId",
       "CreatedTime",
@@ -7321,15 +5316,10 @@ const properties = {
       "Version.Description",
       "Version.Errors",
       "Version.Status",
-      "Version.VersionNumber"
+      "Version.VersionNumber",
     ],
-    "Topic": [
-      "Arn",
-      "AwsAccountId",
-      "FolderArns",
-      "TopicId"
-    ],
-    "VPCConnection": [
+    Topic: ["Arn", "AwsAccountId", "FolderArns", "TopicId"],
+    VPCConnection: [
       "Arn",
       "AwsAccountId",
       "CreatedTime",
@@ -7337,25 +5327,23 @@ const properties = {
       "NetworkInterfaces",
       "Status",
       "VPCConnectionId",
-      "VPCId"
-    ]
+      "VPCId",
+    ],
   },
-  "RAM": {
-    "Permission": [
+  RAM: {
+    Permission: [
       "Arn",
       "IsResourceTypeDefault",
       "Name",
       "PermissionType",
       "PolicyTemplate",
       "ResourceType",
-      "Version"
+      "Version",
     ],
-    "ResourceShare": [
-      "Arn"
-    ]
+    ResourceShare: ["Arn"],
   },
-  "RDS": {
-    "CustomDBEngineVersion": [
+  RDS: {
+    CustomDBEngineVersion: [
       "DBEngineVersionArn",
       "DatabaseInstallationFilesS3BucketName",
       "DatabaseInstallationFilesS3Prefix",
@@ -7365,9 +5353,9 @@ const properties = {
       "KMSKeyId",
       "Manifest",
       "SourceCustomDbEngineVersionIdentifier",
-      "UseAwsProvidedLatestImage"
+      "UseAwsProvidedLatestImage",
     ],
-    "DBCluster": [
+    DBCluster: [
       "AvailabilityZones",
       "ClusterScalabilityType",
       "DBClusterArn",
@@ -7392,14 +5380,14 @@ const properties = {
       "SourceRegion",
       "StorageEncrypted",
       "StorageThroughput",
-      "UseLatestRestorableTime"
+      "UseLatestRestorableTime",
     ],
-    "DBClusterParameterGroup": [
+    DBClusterParameterGroup: [
       "DBClusterParameterGroupName",
       "Description",
-      "Family"
+      "Family",
     ],
-    "DBInstance": [
+    DBInstance: [
       "CertificateDetails",
       "CertificateDetails.CAIdentifier",
       "CertificateDetails.ValidTill",
@@ -7423,93 +5411,73 @@ const properties = {
       "NcharCharacterSetName",
       "SourceRegion",
       "StorageEncrypted",
-      "Timezone"
+      "Timezone",
     ],
-    "DBParameterGroup": [
+    DBParameterGroup: [
       "DBParameterGroupName",
       "DBParameterGroupName",
       "Description",
-      "Family"
+      "Family",
     ],
-    "DBProxy": [
+    DBProxy: [
       "DBProxyArn",
       "DBProxyName",
       "Endpoint",
       "EngineFamily",
       "VpcId",
-      "VpcSubnetIds"
+      "VpcSubnetIds",
     ],
-    "DBProxyEndpoint": [
+    DBProxyEndpoint: [
       "DBProxyEndpointArn",
       "DBProxyEndpointName",
       "DBProxyName",
       "Endpoint",
       "IsDefault",
       "VpcId",
-      "VpcSubnetIds"
+      "VpcSubnetIds",
     ],
-    "DBProxyTargetGroup": [
-      "DBProxyName",
-      "TargetGroupArn",
-      "TargetGroupName"
-    ],
-    "DBSecurityGroup": [
-      "EC2VpcId",
-      "GroupDescription"
-    ],
-    "DBShardGroup": [
+    DBProxyTargetGroup: ["DBProxyName", "TargetGroupArn", "TargetGroupName"],
+    DBSecurityGroup: ["EC2VpcId", "GroupDescription"],
+    DBShardGroup: [
       "DBClusterIdentifier",
       "DBShardGroupIdentifier",
       "DBShardGroupResourceId",
       "Endpoint",
-      "PubliclyAccessible"
+      "PubliclyAccessible",
     ],
-    "DBSubnetGroup": [
-      "DBSubnetGroupName"
-    ],
-    "EventSubscription": [
-      "SnsTopicArn",
-      "SubscriptionName"
-    ],
-    "GlobalCluster": [
+    DBSubnetGroup: ["DBSubnetGroupName"],
+    EventSubscription: ["SnsTopicArn", "SubscriptionName"],
+    GlobalCluster: [
       "Engine",
       "GlobalClusterIdentifier",
       "GlobalEndpoint",
       "GlobalEndpoint.Address",
       "SourceDBClusterIdentifier",
-      "StorageEncrypted"
+      "StorageEncrypted",
     ],
-    "Integration": [
+    Integration: [
       "AdditionalEncryptionContext",
       "CreateTime",
       "IntegrationArn",
       "KMSKeyId",
       "SourceArn",
-      "TargetArn"
+      "TargetArn",
     ],
-    "OptionGroup": [
+    OptionGroup: [
       "EngineName",
       "MajorEngineVersion",
       "OptionGroupDescription",
-      "OptionGroupName"
-    ]
+      "OptionGroupName",
+    ],
   },
-  "RUM": {
-    "AppMonitor": [
-      "Id",
-      "Name"
-    ]
+  RUM: {
+    AppMonitor: ["Id", "Name"],
   },
-  "Rbin": {
-    "Rule": [
-      "Arn",
-      "Identifier",
-      "LockState",
-      "ResourceType"
-    ]
+  Rbin: {
+    Rule: ["Arn", "Identifier", "LockState", "ResourceType"],
   },
-  "Redshift": {
-    "Cluster": [
+  Redshift: {
+    Cluster: [
       "ClusterIdentifier",
       "ClusterNamespaceArn",
       "ClusterSubnetGroupName",
@@ -7521,26 +5489,22 @@ const properties = {
       "MasterUsername",
       "OwnerAccount",
       "SnapshotClusterIdentifier",
-      "SnapshotIdentifier"
+      "SnapshotIdentifier",
     ],
-    "ClusterParameterGroup": [
+    ClusterParameterGroup: [
       "Description",
       "ParameterGroupFamily",
-      "ParameterGroupName"
+      "ParameterGroupName",
     ],
-    "ClusterSecurityGroup": [
-      "Description"
-    ],
-    "ClusterSecurityGroupIngress": [
+    ClusterSecurityGroup: ["Description"],
+    ClusterSecurityGroupIngress: [
       "CIDRIP",
       "ClusterSecurityGroupName",
       "EC2SecurityGroupName",
-      "EC2SecurityGroupOwnerId"
+      "EC2SecurityGroupOwnerId",
     ],
-    "ClusterSubnetGroup": [
-      "ClusterSubnetGroupName"
-    ],
-    "EndpointAccess": [
+    ClusterSubnetGroup: ["ClusterSubnetGroupName"],
+    EndpointAccess: [
       "Address",
       "ClusterIdentifier",
       "EndpointCreateTime",
@@ -7553,9 +5517,9 @@ const properties = {
       "VpcEndpoint.NetworkInterfaces",
       "VpcEndpoint.VpcEndpointId",
       "VpcEndpoint.VpcId",
-      "VpcSecurityGroups"
+      "VpcSecurityGroups",
     ],
-    "EndpointAuthorization": [
+    EndpointAuthorization: [
       "Account",
       "AllowedAllVPCs",
       "AllowedVPCs",
@@ -7565,33 +5529,29 @@ const properties = {
       "EndpointCount",
       "Grantee",
       "Grantor",
-      "Status"
+      "Status",
     ],
-    "EventSubscription": [
+    EventSubscription: [
       "CustSubscriptionId",
       "CustomerAwsId",
       "EventCategoriesList",
       "SourceIdsList",
       "Status",
       "SubscriptionCreationTime",
-      "SubscriptionName"
+      "SubscriptionName",
     ],
-    "Integration": [
+    Integration: [
       "AdditionalEncryptionContext",
       "CreateTime",
       "IntegrationArn",
       "KMSKeyId",
       "SourceArn",
-      "TargetArn"
+      "TargetArn",
     ],
-    "ScheduledAction": [
-      "NextInvocations",
-      "ScheduledActionName",
-      "State"
-    ]
+    ScheduledAction: ["NextInvocations", "ScheduledActionName", "State"],
   },
-  "RedshiftServerless": {
-    "Namespace": [
+  RedshiftServerless: {
+    Namespace: [
       "Namespace",
       "Namespace.AdminPasswordSecretArn",
       "Namespace.AdminPasswordSecretKmsKeyId",
@@ -7606,9 +5566,9 @@ const properties = {
       "Namespace.NamespaceId",
       "Namespace.NamespaceName",
       "Namespace.Status",
-      "NamespaceName"
+      "NamespaceName",
     ],
-    "Workgroup": [
+    Workgroup: [
       "NamespaceName",
       "Workgroup.BaseCapacity",
       "Workgroup.CreationDate",
@@ -7625,11 +5585,11 @@ const properties = {
       "Workgroup.WorkgroupArn",
       "Workgroup.WorkgroupId",
       "Workgroup.WorkgroupName",
-      "WorkgroupName"
-    ]
+      "WorkgroupName",
+    ],
   },
-  "RefactorSpaces": {
-    "Application": [
+  RefactorSpaces: {
+    Application: [
       "ApiGatewayId",
       "ApiGatewayProxy",
       "ApplicationIdentifier",
@@ -7642,26 +5602,26 @@ const properties = {
       "ProxyUrl",
       "StageName",
       "VpcId",
-      "VpcLinkId"
+      "VpcLinkId",
     ],
-    "Environment": [
+    Environment: [
       "Arn",
       "Description",
       "EnvironmentIdentifier",
       "Name",
       "NetworkFabricType",
-      "TransitGatewayId"
+      "TransitGatewayId",
     ],
-    "Route": [
+    Route: [
       "ApplicationIdentifier",
       "Arn",
       "EnvironmentIdentifier",
       "PathResourceToId",
       "RouteIdentifier",
       "RouteType",
-      "ServiceIdentifier"
+      "ServiceIdentifier",
     ],
-    "Service": [
+    Service: [
       "ApplicationIdentifier",
       "Arn",
       "Description",
@@ -7671,19 +5631,13 @@ const properties = {
       "Name",
       "ServiceIdentifier",
       "UrlEndpoint",
-      "VpcId"
-    ]
+      "VpcId",
+    ],
   },
-  "Rekognition": {
-    "Collection": [
-      "Arn",
-      "CollectionId"
-    ],
-    "Project": [
-      "Arn",
-      "ProjectName"
-    ],
-    "StreamProcessor": [
+  Rekognition: {
+    Collection: ["Arn", "CollectionId"],
+    Project: ["Arn", "ProjectName"],
+    StreamProcessor: [
       "Arn",
       "BoundingBoxRegionsOfInterest",
       "ConnectedHomeSettings",
@@ -7698,39 +5652,21 @@ const properties = {
       "RoleArn",
       "S3Destination",
       "Status",
-      "StatusMessage"
-    ]
+      "StatusMessage",
+    ],
   },
-  "ResilienceHub": {
-    "App": [
-      "AppArn",
-      "DriftStatus",
-      "Name"
-    ],
-    "ResiliencyPolicy": [
-      "PolicyArn"
-    ]
+  ResilienceHub: {
+    App: ["AppArn", "DriftStatus", "Name"],
+    ResiliencyPolicy: ["PolicyArn"],
   },
-  "ResourceExplorer2": {
-    "DefaultViewAssociation": [
-      "AssociatedAwsPrincipal"
-    ],
-    "Index": [
-      "Arn",
-      "IndexState"
-    ],
-    "View": [
-      "Scope",
-      "ViewArn",
-      "ViewName"
-    ]
+  ResourceExplorer2: {
+    DefaultViewAssociation: ["AssociatedAwsPrincipal"],
+    Index: ["Arn", "IndexState"],
+    View: ["Scope", "ViewArn", "ViewName"],
   },
-  "ResourceGroups": {
-    "Group": [
-      "Arn",
-      "Name"
-    ],
-    "TagSyncTask": [
+  ResourceGroups: {
+    Group: ["Arn", "Name"],
+    TagSyncTask: [
       "Group",
       "GroupArn",
       "GroupName",
@@ -7738,160 +5674,78 @@ const properties = {
       "Status",
       "TagKey",
       "TagValue",
-      "TaskArn"
-    ]
+      "TaskArn",
+    ],
   },
-  "RoboMaker": {
-    "Fleet": [
-      "Arn",
-      "Name"
-    ],
-    "Robot": [
-      "Architecture",
-      "Arn",
-      "Fleet",
-      "GreengrassGroupId",
-      "Name"
-    ],
-    "RobotApplication": [
-      "Arn",
-      "CurrentRevisionId",
-      "Name"
-    ],
-    "RobotApplicationVersion": [
+  RoboMaker: {
+    Fleet: ["Arn", "Name"],
+    Robot: ["Architecture", "Arn", "Fleet", "GreengrassGroupId", "Name"],
+    RobotApplication: ["Arn", "CurrentRevisionId", "Name"],
+    RobotApplicationVersion: [
       "Application",
       "ApplicationVersion",
       "Arn",
-      "CurrentRevisionId"
-    ],
-    "SimulationApplication": [
-      "Arn",
       "CurrentRevisionId",
-      "Name"
     ],
-    "SimulationApplicationVersion": [
+    SimulationApplication: ["Arn", "CurrentRevisionId", "Name"],
+    SimulationApplicationVersion: [
       "Application",
       "ApplicationVersion",
       "Arn",
-      "CurrentRevisionId"
-    ]
+      "CurrentRevisionId",
+    ],
   },
-  "RolesAnywhere": {
-    "CRL": [
-      "CrlId"
-    ],
-    "Profile": [
-      "ProfileArn",
-      "ProfileId",
-      "RequireInstanceProperties"
-    ],
-    "TrustAnchor": [
-      "TrustAnchorArn",
-      "TrustAnchorId"
-    ]
+  RolesAnywhere: {
+    CRL: ["CrlId"],
+    Profile: ["ProfileArn", "ProfileId", "RequireInstanceProperties"],
+    TrustAnchor: ["TrustAnchorArn", "TrustAnchorId"],
   },
-  "Route53": {
-    "CidrCollection": [
-      "Arn",
-      "Id",
-      "Name"
-    ],
-    "DNSSEC": [
-      "HostedZoneId"
-    ],
-    "HealthCheck": [
-      "HealthCheckId"
-    ],
-    "HostedZone": [
-      "Id",
-      "Name",
-      "NameServers"
-    ],
-    "KeySigningKey": [
-      "HostedZoneId",
-      "KeyManagementServiceArn",
-      "Name"
-    ],
-    "RecordSet": [
-      "HostedZoneId",
-      "HostedZoneName",
-      "Name"
-    ],
-    "RecordSetGroup": [
-      "HostedZoneId",
-      "HostedZoneName"
-    ]
+  Route53: {
+    CidrCollection: ["Arn", "Id", "Name"],
+    DNSSEC: ["HostedZoneId"],
+    HealthCheck: ["HealthCheckId"],
+    HostedZone: ["Id", "Name", "NameServers"],
+    KeySigningKey: ["HostedZoneId", "KeyManagementServiceArn", "Name"],
+    RecordSet: ["HostedZoneId", "HostedZoneName", "Name"],
+    RecordSetGroup: ["HostedZoneId", "HostedZoneName"],
   },
-  "Route53Profiles": {
-    "Profile": [
-      "Arn",
-      "ClientToken",
-      "Id",
-      "Name"
-    ],
-    "ProfileAssociation": [
-      "Id",
-      "Name",
-      "ProfileId",
-      "ResourceId"
-    ],
-    "ProfileResourceAssociation": [
+  Route53Profiles: {
+    Profile: ["Arn", "ClientToken", "Id", "Name"],
+    ProfileAssociation: ["Id", "Name", "ProfileId", "ResourceId"],
+    ProfileResourceAssociation: [
       "Id",
       "Name",
       "ProfileId",
       "ResourceArn",
-      "ResourceType"
-    ]
-  },
-  "Route53RecoveryControl": {
-    "Cluster": [
-      "ClusterArn",
-      "ClusterEndpoints",
-      "Name",
-      "Status",
-      "Tags"
+      "ResourceType",
     ],
-    "ControlPanel": [
+  },
+  Route53RecoveryControl: {
+    Cluster: ["ClusterArn", "ClusterEndpoints", "Name", "Status", "Tags"],
+    ControlPanel: [
       "ClusterArn",
       "ControlPanelArn",
       "DefaultControlPanel",
       "RoutingControlCount",
       "Status",
-      "Tags"
+      "Tags",
     ],
-    "RoutingControl": [
+    RoutingControl: [
       "ClusterArn",
       "ControlPanelArn",
       "RoutingControlArn",
-      "Status"
+      "Status",
     ],
-    "SafetyRule": [
-      "SafetyRuleArn",
-      "Status"
-    ]
+    SafetyRule: ["SafetyRuleArn", "Status"],
   },
-  "Route53RecoveryReadiness": {
-    "Cell": [
-      "CellArn",
-      "CellName",
-      "ParentReadinessScopes"
-    ],
-    "ReadinessCheck": [
-      "ReadinessCheckArn",
-      "ReadinessCheckName"
-    ],
-    "RecoveryGroup": [
-      "RecoveryGroupArn",
-      "RecoveryGroupName"
-    ],
-    "ResourceSet": [
-      "ResourceSetArn",
-      "ResourceSetName",
-      "ResourceSetType"
-    ]
+  Route53RecoveryReadiness: {
+    Cell: ["CellArn", "CellName", "ParentReadinessScopes"],
+    ReadinessCheck: ["ReadinessCheckArn", "ReadinessCheckName"],
+    RecoveryGroup: ["RecoveryGroupArn", "RecoveryGroupName"],
+    ResourceSet: ["ResourceSetArn", "ResourceSetName", "ResourceSetType"],
   },
-  "Route53Resolver": {
-    "FirewallDomainList": [
+  Route53Resolver: {
+    FirewallDomainList: [
       "Arn",
       "CreationTime",
       "CreatorRequestId",
@@ -7901,9 +5755,9 @@ const properties = {
       "ModificationTime",
       "Name",
       "Status",
-      "StatusMessage"
+      "StatusMessage",
     ],
-    "FirewallRuleGroup": [
+    FirewallRuleGroup: [
       "Arn",
       "CreationTime",
       "CreatorRequestId",
@@ -7914,9 +5768,9 @@ const properties = {
       "RuleCount",
       "ShareStatus",
       "Status",
-      "StatusMessage"
+      "StatusMessage",
     ],
-    "FirewallRuleGroupAssociation": [
+    FirewallRuleGroupAssociation: [
       "Arn",
       "CreationTime",
       "CreatorRequestId",
@@ -7926,9 +5780,9 @@ const properties = {
       "ModificationTime",
       "Status",
       "StatusMessage",
-      "VpcId"
+      "VpcId",
     ],
-    "OutpostResolver": [
+    OutpostResolver: [
       "Arn",
       "CreationTime",
       "CreatorRequestId",
@@ -7936,22 +5790,17 @@ const properties = {
       "ModificationTime",
       "OutpostArn",
       "Status",
-      "StatusMessage"
+      "StatusMessage",
     ],
-    "ResolverConfig": [
+    ResolverConfig: [
       "AutodefinedReverse",
       "AutodefinedReverseFlag",
       "Id",
       "OwnerId",
-      "ResourceId"
-    ],
-    "ResolverDNSSECConfig": [
-      "Id",
-      "OwnerId",
       "ResourceId",
-      "ValidationStatus"
     ],
-    "ResolverEndpoint": [
+    ResolverDNSSECConfig: ["Id", "OwnerId", "ResourceId", "ValidationStatus"],
+    ResolverEndpoint: [
       "Arn",
       "Direction",
       "Direction",
@@ -7964,9 +5813,9 @@ const properties = {
       "PreferredInstanceType",
       "ResolverEndpointId",
       "ResolverEndpointType",
-      "SecurityGroupIds"
+      "SecurityGroupIds",
     ],
-    "ResolverQueryLoggingConfig": [
+    ResolverQueryLoggingConfig: [
       "Arn",
       "AssociationCount",
       "CreationTime",
@@ -7977,55 +5826,55 @@ const properties = {
       "OwnerId",
       "ShareStatus",
       "Status",
-      "Tags"
+      "Tags",
     ],
-    "ResolverQueryLoggingConfigAssociation": [
+    ResolverQueryLoggingConfigAssociation: [
       "CreationTime",
       "Error",
       "ErrorMessage",
       "Id",
       "ResolverQueryLogConfigId",
       "ResourceId",
-      "Status"
+      "Status",
     ],
-    "ResolverRule": [
+    ResolverRule: [
       "Arn",
       "DomainName",
       "Name",
       "ResolverEndpointId",
       "ResolverRuleId",
       "RuleType",
-      "TargetIps"
+      "TargetIps",
     ],
-    "ResolverRuleAssociation": [
+    ResolverRuleAssociation: [
       "Name",
       "Name",
       "ResolverRuleAssociationId",
       "ResolverRuleId",
       "ResolverRuleId",
       "VPCId",
-      "VPCId"
-    ]
+      "VPCId",
+    ],
   },
-  "S3": {
-    "AccessGrant": [
+  S3: {
+    AccessGrant: [
       "AccessGrantArn",
       "AccessGrantId",
       "GrantScope",
       "S3PrefixType",
-      "Tags"
+      "Tags",
     ],
-    "AccessGrantsInstance": [
+    AccessGrantsInstance: [
       "AccessGrantsInstanceArn",
       "AccessGrantsInstanceId",
-      "Tags"
+      "Tags",
     ],
-    "AccessGrantsLocation": [
+    AccessGrantsLocation: [
       "AccessGrantsLocationArn",
       "AccessGrantsLocationId",
-      "Tags"
+      "Tags",
     ],
-    "AccessPoint": [
+    AccessPoint: [
       "Alias",
       "Arn",
       "Bucket",
@@ -8033,9 +5882,9 @@ const properties = {
       "Name",
       "Name",
       "NetworkOrigin",
-      "VpcConfiguration"
+      "VpcConfiguration",
     ],
-    "Bucket": [
+    Bucket: [
       "Arn",
       "BucketName",
       "DomainName",
@@ -8043,45 +5892,36 @@ const properties = {
       "MetadataTableConfiguration.S3TablesDestination.TableArn",
       "MetadataTableConfiguration.S3TablesDestination.TableNamespace",
       "RegionalDomainName",
-      "WebsiteURL"
+      "WebsiteURL",
     ],
-    "BucketPolicy": [
-      "Bucket"
-    ],
-    "MultiRegionAccessPoint": [
+    BucketPolicy: ["Bucket"],
+    MultiRegionAccessPoint: [
       "Alias",
       "CreatedAt",
       "Name",
       "PublicAccessBlockConfiguration",
-      "Regions"
+      "Regions",
     ],
-    "MultiRegionAccessPointPolicy": [
+    MultiRegionAccessPointPolicy: [
       "MrapName",
       "PolicyStatus",
-      "PolicyStatus.IsPublic"
+      "PolicyStatus.IsPublic",
     ],
-    "StorageLens": [
-      "StorageLensConfiguration.StorageLensArn"
-    ],
-    "StorageLensGroup": [
-      "Name",
-      "StorageLensGroupArn"
-    ]
+    StorageLens: ["StorageLensConfiguration.StorageLensArn"],
+    StorageLensGroup: ["Name", "StorageLensGroupArn"],
   },
-  "S3Express": {
-    "BucketPolicy": [
-      "Bucket"
-    ],
-    "DirectoryBucket": [
+  S3Express: {
+    BucketPolicy: ["Bucket"],
+    DirectoryBucket: [
       "Arn",
       "AvailabilityZoneName",
       "BucketName",
       "DataRedundancy",
-      "LocationName"
-    ]
+      "LocationName",
+    ],
   },
-  "S3ObjectLambda": {
-    "AccessPoint": [
+  S3ObjectLambda: {
+    AccessPoint: [
       "Alias",
       "Alias.Status",
       "Alias.Value",
@@ -8092,28 +5932,15 @@ const properties = {
       "PublicAccessBlockConfiguration.BlockPublicAcls",
       "PublicAccessBlockConfiguration.BlockPublicPolicy",
       "PublicAccessBlockConfiguration.IgnorePublicAcls",
-      "PublicAccessBlockConfiguration.RestrictPublicBuckets"
+      "PublicAccessBlockConfiguration.RestrictPublicBuckets",
     ],
-    "AccessPointPolicy": [
-      "ObjectLambdaAccessPoint"
-    ]
+    AccessPointPolicy: ["ObjectLambdaAccessPoint"],
   },
-  "S3Outposts": {
-    "AccessPoint": [
-      "Arn",
-      "Bucket",
-      "Name",
-      "VpcConfiguration"
-    ],
-    "Bucket": [
-      "Arn",
-      "BucketName",
-      "OutpostId"
-    ],
-    "BucketPolicy": [
-      "Bucket"
-    ],
-    "Endpoint": [
+  S3Outposts: {
+    AccessPoint: ["Arn", "Bucket", "Name", "VpcConfiguration"],
+    Bucket: ["Arn", "BucketName", "OutpostId"],
+    BucketPolicy: ["Bucket"],
+    Endpoint: [
       "AccessType",
       "Arn",
       "CidrBlock",
@@ -8124,154 +5951,80 @@ const properties = {
       "OutpostId",
       "SecurityGroupId",
       "Status",
-      "SubnetId"
-    ]
+      "SubnetId",
+    ],
   },
-  "S3Tables": {
-    "TableBucket": [
-      "TableBucketARN",
-      "TableBucketName"
-    ],
-    "TableBucketPolicy": [
-      "TableBucketARN"
-    ]
+  S3Tables: {
+    TableBucket: ["TableBucketARN", "TableBucketName"],
+    TableBucketPolicy: ["TableBucketARN"],
   },
-  "SES": {
-    "ConfigurationSet": [
-      "Name"
-    ],
-    "ConfigurationSetEventDestination": [
-      "ConfigurationSetName",
-      "Id"
-    ],
-    "ContactList": [
-      "ContactListName"
-    ],
-    "DedicatedIpPool": [
-      "PoolName"
-    ],
-    "EmailIdentity": [
+  SES: {
+    ConfigurationSet: ["Name"],
+    ConfigurationSetEventDestination: ["ConfigurationSetName", "Id"],
+    ContactList: ["ContactListName"],
+    DedicatedIpPool: ["PoolName"],
+    EmailIdentity: [
       "DkimDNSTokenName1",
       "DkimDNSTokenName2",
       "DkimDNSTokenName3",
       "DkimDNSTokenValue1",
       "DkimDNSTokenValue2",
       "DkimDNSTokenValue3",
-      "EmailIdentity"
+      "EmailIdentity",
     ],
-    "MailManagerAddonInstance": [
+    MailManagerAddonInstance: [
       "AddonInstanceArn",
       "AddonInstanceId",
       "AddonName",
-      "AddonSubscriptionId"
+      "AddonSubscriptionId",
     ],
-    "MailManagerAddonSubscription": [
+    MailManagerAddonSubscription: [
       "AddonName",
       "AddonSubscriptionArn",
-      "AddonSubscriptionId"
+      "AddonSubscriptionId",
     ],
-    "MailManagerArchive": [
+    MailManagerArchive: [
       "ArchiveArn",
       "ArchiveId",
       "ArchiveState",
-      "KmsKeyArn"
+      "KmsKeyArn",
     ],
-    "MailManagerIngressPoint": [
+    MailManagerIngressPoint: [
       "ARecord",
       "IngressPointArn",
       "IngressPointId",
       "NetworkConfiguration",
       "Status",
-      "Type"
-    ],
-    "MailManagerRelay": [
-      "RelayArn",
-      "RelayId"
-    ],
-    "MailManagerRuleSet": [
-      "RuleSetArn",
-      "RuleSetId"
-    ],
-    "MailManagerTrafficPolicy": [
-      "TrafficPolicyArn",
-      "TrafficPolicyId"
-    ],
-    "ReceiptFilter": [
-      "Filter"
-    ],
-    "ReceiptRule": [
-      "RuleSetName"
-    ],
-    "ReceiptRuleSet": [
-      "RuleSetName"
-    ],
-    "Template": [
-      "Id"
-    ],
-    "VdmAttributes": [
-      "VdmAttributesResourceId"
-    ]
-  },
-  "SNS": {
-    "Subscription": [
-      "Arn",
-      "Endpoint",
-      "Protocol",
-      "TopicArn"
-    ],
-    "Topic": [
-      "FifoTopic",
-      "TopicArn",
-      "TopicName",
-      "TopicName"
-    ],
-    "TopicInlinePolicy": [
-      "TopicArn"
-    ],
-    "TopicPolicy": [
-      "Id"
-    ]
-  },
-  "SQS": {
-    "Queue": [
-      "Arn",
-      "FifoQueue",
-      "QueueName",
-      "QueueName",
-      "QueueUrl"
-    ],
-    "QueueInlinePolicy": [
-      "Queue"
-    ],
-    "QueuePolicy": [
-      "Id"
-    ]
-  },
-  "SSM": {
-    "Association": [
-      "AssociationId"
-    ],
-    "Document": [
-      "DocumentType",
-      "Name"
-    ],
-    "MaintenanceWindowTarget": [
-      "WindowId"
-    ],
-    "MaintenanceWindowTask": [
-      "TaskType",
-      "WindowId"
-    ],
-    "Parameter": [
-      "Name",
       "Type",
-      "Value"
     ],
-    "PatchBaseline": [
-      "Id",
-      "OperatingSystem"
-    ],
-    "ResourceDataSync": [
+    MailManagerRelay: ["RelayArn", "RelayId"],
+    MailManagerRuleSet: ["RuleSetArn", "RuleSetId"],
+    MailManagerTrafficPolicy: ["TrafficPolicyArn", "TrafficPolicyId"],
+    ReceiptFilter: ["Filter"],
+    ReceiptRule: ["RuleSetName"],
+    ReceiptRuleSet: ["RuleSetName"],
+    Template: ["Id"],
+    VdmAttributes: ["VdmAttributesResourceId"],
+  },
+  SNS: {
+    Subscription: ["Arn", "Endpoint", "Protocol", "TopicArn"],
+    Topic: ["FifoTopic", "TopicArn", "TopicName", "TopicName"],
+    TopicInlinePolicy: ["TopicArn"],
+    TopicPolicy: ["Id"],
+  },
+  SQS: {
+    Queue: ["Arn", "FifoQueue", "QueueName", "QueueName", "QueueUrl"],
+    QueueInlinePolicy: ["Queue"],
+    QueuePolicy: ["Id"],
+  },
+  SSM: {
+    Association: ["AssociationId"],
+    Document: ["DocumentType", "Name"],
+    MaintenanceWindowTarget: ["WindowId"],
+    MaintenanceWindowTask: ["TaskType", "WindowId"],
+    Parameter: ["Name", "Type", "Value"],
+    PatchBaseline: ["Id", "OperatingSystem"],
+    ResourceDataSync: [
       "BucketName",
       "BucketPrefix",
       "BucketRegion",
@@ -8279,113 +6032,65 @@ const properties = {
       "S3Destination",
       "SyncFormat",
       "SyncName",
-      "SyncType"
+      "SyncType",
     ],
-    "ResourcePolicy": [
-      "PolicyHash",
-      "PolicyId",
-      "ResourceArn"
-    ]
+    ResourcePolicy: ["PolicyHash", "PolicyId", "ResourceArn"],
   },
-  "SSMContacts": {
-    "Contact": [
-      "Alias",
-      "Arn",
-      "Type"
-    ],
-    "ContactChannel": [
-      "Arn",
-      "ChannelType",
-      "ContactId"
-    ],
-    "Plan": [
-      "Arn",
-      "ContactId"
-    ],
-    "Rotation": [
-      "Arn"
-    ]
+  SSMContacts: {
+    Contact: ["Alias", "Arn", "Type"],
+    ContactChannel: ["Arn", "ChannelType", "ContactId"],
+    Plan: ["Arn", "ContactId"],
+    Rotation: ["Arn"],
   },
-  "SSMIncidents": {
-    "ReplicationSet": [
-      "Arn"
-    ],
-    "ResponsePlan": [
-      "Arn",
-      "Name"
-    ]
+  SSMIncidents: {
+    ReplicationSet: ["Arn"],
+    ResponsePlan: ["Arn", "Name"],
   },
-  "SSMQuickSetup": {
-    "ConfigurationManager": [
+  SSMQuickSetup: {
+    ConfigurationManager: [
       "CreatedAt",
       "LastModifiedAt",
       "ManagerArn",
-      "StatusSummaries"
-    ]
+      "StatusSummaries",
+    ],
   },
-  "SSO": {
-    "Application": [
-      "ApplicationArn",
-      "ApplicationProviderArn",
-      "InstanceArn"
-    ],
-    "ApplicationAssignment": [
-      "ApplicationArn",
-      "PrincipalId",
-      "PrincipalType"
-    ],
-    "Assignment": [
+  SSO: {
+    Application: ["ApplicationArn", "ApplicationProviderArn", "InstanceArn"],
+    ApplicationAssignment: ["ApplicationArn", "PrincipalId", "PrincipalType"],
+    Assignment: [
       "InstanceArn",
       "PermissionSetArn",
       "PrincipalId",
       "PrincipalType",
       "TargetId",
-      "TargetType"
+      "TargetType",
     ],
-    "Instance": [
-      "IdentityStoreId",
-      "InstanceArn",
-      "OwnerAccountId",
-      "Status"
-    ],
-    "InstanceAccessControlAttributeConfiguration": [
-      "InstanceArn"
-    ],
-    "PermissionSet": [
-      "InstanceArn",
-      "Name",
-      "PermissionSetArn"
-    ]
+    Instance: ["IdentityStoreId", "InstanceArn", "OwnerAccountId", "Status"],
+    InstanceAccessControlAttributeConfiguration: ["InstanceArn"],
+    PermissionSet: ["InstanceArn", "Name", "PermissionSetArn"],
   },
-  "SageMaker": {
-    "App": [
+  SageMaker: {
+    App: [
       "AppArn",
       "AppName",
       "AppType",
       "DomainId",
       "ResourceSpec",
       "Tags",
-      "UserProfileName"
+      "UserProfileName",
     ],
-    "AppImageConfig": [
-      "AppImageConfigArn",
-      "AppImageConfigName",
-      "Tags"
-    ],
-    "Cluster": [
+    AppImageConfig: ["AppImageConfigArn", "AppImageConfigName", "Tags"],
+    Cluster: [
       "ClusterArn",
       "ClusterName",
       "ClusterStatus",
       "CreationTime",
       "FailureMessage",
       "Orchestrator",
-      "VpcConfig"
+      "VpcConfig",
     ],
-    "CodeRepository": [
-      "CodeRepositoryName",
-      "CodeRepositoryName"
-    ],
-    "DataQualityJobDefinition": [
+    CodeRepository: ["CodeRepositoryName", "CodeRepositoryName"],
+    DataQualityJobDefinition: [
       "CreationTime",
       "DataQualityAppSpecification",
       "DataQualityBaselineConfig",
@@ -8398,12 +6103,10 @@ const properties = {
       "NetworkConfig",
       "RoleArn",
       "StoppingCondition",
-      "Tags"
+      "Tags",
     ],
-    "DeviceFleet": [
-      "DeviceFleetName"
-    ],
-    "Domain": [
+    DeviceFleet: ["DeviceFleetName"],
+    Domain: [
       "AuthMode",
       "DomainArn",
       "DomainId",
@@ -8415,13 +6118,10 @@ const properties = {
       "SingleSignOnManagedApplicationInstanceId",
       "Tags",
       "Url",
-      "VpcId"
+      "VpcId",
     ],
-    "Endpoint": [
-      "EndpointName",
-      "EndpointName"
-    ],
-    "EndpointConfig": [
+    Endpoint: ["EndpointName", "EndpointName"],
+    EndpointConfig: [
       "AsyncInferenceConfig",
       "DataCaptureConfig",
       "EnableNetworkIsolation",
@@ -8432,9 +6132,9 @@ const properties = {
       "KmsKeyId",
       "ProductionVariants",
       "ShadowProductionVariants",
-      "VpcConfig"
+      "VpcConfig",
     ],
-    "FeatureGroup": [
+    FeatureGroup: [
       "CreationTime",
       "Description",
       "EventTimeFeatureName",
@@ -8443,21 +6143,18 @@ const properties = {
       "OfflineStoreConfig",
       "RecordIdentifierFeatureName",
       "RoleArn",
-      "Tags"
+      "Tags",
     ],
-    "Image": [
-      "ImageArn",
-      "ImageName"
-    ],
-    "ImageVersion": [
+    Image: ["ImageArn", "ImageName"],
+    ImageVersion: [
       "BaseImage",
       "ContainerImage",
       "ImageArn",
       "ImageName",
       "ImageVersionArn",
-      "Version"
+      "Version",
     ],
-    "InferenceComponent": [
+    InferenceComponent: [
       "CreationTime",
       "FailureReason",
       "InferenceComponentArn",
@@ -8468,9 +6165,9 @@ const properties = {
       "Specification.Container.DeployedImage",
       "Specification.Container.DeployedImage.ResolutionTime",
       "Specification.Container.DeployedImage.ResolvedImage",
-      "Specification.Container.DeployedImage.SpecifiedImage"
+      "Specification.Container.DeployedImage.SpecifiedImage",
     ],
-    "InferenceExperiment": [
+    InferenceExperiment: [
       "Arn",
       "CreationTime",
       "EndpointMetadata",
@@ -8483,13 +6180,10 @@ const properties = {
       "Name",
       "RoleArn",
       "Status",
-      "Type"
+      "Type",
     ],
-    "MlflowTrackingServer": [
-      "TrackingServerArn",
-      "TrackingServerName"
-    ],
-    "Model": [
+    MlflowTrackingServer: ["TrackingServerArn", "TrackingServerName"],
+    Model: [
       "Containers",
       "EnableNetworkIsolation",
       "ExecutionRoleArn",
@@ -8497,9 +6191,9 @@ const properties = {
       "ModelName",
       "ModelName",
       "PrimaryContainer",
-      "VpcConfig"
+      "VpcConfig",
     ],
-    "ModelBiasJobDefinition": [
+    ModelBiasJobDefinition: [
       "CreationTime",
       "EndpointName",
       "JobDefinitionArn",
@@ -8512,9 +6206,9 @@ const properties = {
       "NetworkConfig",
       "RoleArn",
       "StoppingCondition",
-      "Tags"
+      "Tags",
     ],
-    "ModelCard": [
+    ModelCard: [
       "CreatedBy.DomainId",
       "CreatedBy.UserProfileArn",
       "CreatedBy.UserProfileName",
@@ -8527,9 +6221,9 @@ const properties = {
       "ModelCardName",
       "ModelCardProcessingStatus",
       "ModelCardVersion",
-      "SecurityConfig"
+      "SecurityConfig",
     ],
-    "ModelExplainabilityJobDefinition": [
+    ModelExplainabilityJobDefinition: [
       "CreationTime",
       "EndpointName",
       "JobDefinitionArn",
@@ -8542,9 +6236,9 @@ const properties = {
       "NetworkConfig",
       "RoleArn",
       "StoppingCondition",
-      "Tags"
+      "Tags",
     ],
-    "ModelPackage": [
+    ModelPackage: [
       "ClientToken",
       "CreationTime",
       "Domain",
@@ -8560,16 +6254,16 @@ const properties = {
       "SecurityConfig",
       "SourceAlgorithmSpecification",
       "Task",
-      "ValidationSpecification"
+      "ValidationSpecification",
     ],
-    "ModelPackageGroup": [
+    ModelPackageGroup: [
       "CreationTime",
       "ModelPackageGroupArn",
       "ModelPackageGroupDescription",
       "ModelPackageGroupName",
-      "ModelPackageGroupStatus"
+      "ModelPackageGroupStatus",
     ],
-    "ModelQualityJobDefinition": [
+    ModelQualityJobDefinition: [
       "CreationTime",
       "EndpointName",
       "JobDefinitionArn",
@@ -8582,40 +6276,38 @@ const properties = {
       "NetworkConfig",
       "RoleArn",
       "StoppingCondition",
-      "Tags"
+      "Tags",
     ],
-    "MonitoringSchedule": [
+    MonitoringSchedule: [
       "CreationTime",
       "LastModifiedTime",
       "MonitoringScheduleArn",
-      "MonitoringScheduleName"
+      "MonitoringScheduleName",
     ],
-    "NotebookInstance": [
+    NotebookInstance: [
       "DirectInternetAccess",
       "KmsKeyId",
       "NotebookInstanceName",
       "NotebookInstanceName",
       "PlatformIdentifier",
       "SecurityGroupIds",
-      "SubnetId"
+      "SubnetId",
     ],
-    "NotebookInstanceLifecycleConfig": [
+    NotebookInstanceLifecycleConfig: [
       "NotebookInstanceLifecycleConfigName",
-      "NotebookInstanceLifecycleConfigName"
+      "NotebookInstanceLifecycleConfigName",
     ],
-    "PartnerApp": [
+    PartnerApp: [
       "Arn",
       "AuthType",
       "BaseUrl",
       "ExecutionRoleArn",
       "KmsKeyId",
       "Name",
-      "Type"
+      "Type",
     ],
-    "Pipeline": [
-      "PipelineName"
-    ],
-    "Project": [
+    Pipeline: ["PipelineName"],
+    Project: [
       "CreationTime",
       "ProjectArn",
       "ProjectDescription",
@@ -8623,393 +6315,248 @@ const properties = {
       "ProjectName",
       "ProjectStatus",
       "ServiceCatalogProvisioningDetails",
-      "Tags"
+      "Tags",
     ],
-    "Space": [
+    Space: [
       "DomainId",
       "OwnershipSettings",
       "SpaceArn",
       "SpaceName",
       "SpaceSharingSettings",
-      "Url"
+      "Url",
     ],
-    "StudioLifecycleConfig": [
+    StudioLifecycleConfig: [
       "StudioLifecycleConfigAppType",
       "StudioLifecycleConfigArn",
       "StudioLifecycleConfigContent",
       "StudioLifecycleConfigName",
-      "Tags"
+      "Tags",
     ],
-    "UserProfile": [
+    UserProfile: [
       "DomainId",
       "SingleSignOnUserIdentifier",
       "SingleSignOnUserValue",
       "Tags",
       "UserProfileArn",
-      "UserProfileName"
+      "UserProfileName",
     ],
-    "Workteam": [
-      "WorkforceName",
-      "WorkteamName",
-      "WorkteamName"
-    ]
+    Workteam: ["WorkforceName", "WorkteamName", "WorkteamName"],
   },
-  "Scheduler": {
-    "Schedule": [
-      "Arn",
-      "Name"
-    ],
-    "ScheduleGroup": [
+  Scheduler: {
+    Schedule: ["Arn", "Name"],
+    ScheduleGroup: [
       "Arn",
       "CreationDate",
       "LastModificationDate",
       "Name",
-      "State"
-    ]
+      "State",
+    ],
   },
-  "SecretsManager": {
-    "ResourcePolicy": [
-      "Id",
-      "SecretId"
-    ],
-    "RotationSchedule": [
-      "Id",
-      "SecretId"
-    ],
-    "Secret": [
-      "Id",
-      "Name"
-    ],
-    "SecretTargetAttachment": [
-      "Id",
-      "SecretId"
-    ]
+  SecretsManager: {
+    ResourcePolicy: ["Id", "SecretId"],
+    RotationSchedule: ["Id", "SecretId"],
+    Secret: ["Id", "Name"],
+    SecretTargetAttachment: ["Id", "SecretId"],
   },
-  "SecurityHub": {
-    "AutomationRule": [
-      "CreatedAt",
-      "CreatedBy",
-      "RuleArn",
-      "UpdatedAt"
-    ],
-    "ConfigurationPolicy": [
+  SecurityHub: {
+    AutomationRule: ["CreatedAt", "CreatedBy", "RuleArn", "UpdatedAt"],
+    ConfigurationPolicy: [
       "Arn",
       "CreatedAt",
       "Id",
       "ServiceEnabled",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "DelegatedAdmin": [
-      "AdminAccountId",
-      "DelegatedAdminIdentifier",
-      "Status"
-    ],
-    "FindingAggregator": [
-      "FindingAggregationRegion",
-      "FindingAggregatorArn"
-    ],
-    "Hub": [
-      "ARN",
-      "SubscribedAt"
-    ],
-    "Insight": [
-      "InsightArn"
-    ],
-    "OrganizationConfiguration": [
+    DelegatedAdmin: ["AdminAccountId", "DelegatedAdminIdentifier", "Status"],
+    FindingAggregator: ["FindingAggregationRegion", "FindingAggregatorArn"],
+    Hub: ["ARN", "SubscribedAt"],
+    Insight: ["InsightArn"],
+    OrganizationConfiguration: [
       "MemberAccountLimitReached",
       "OrganizationConfigurationIdentifier",
       "Status",
-      "StatusMessage"
+      "StatusMessage",
     ],
-    "PolicyAssociation": [
+    PolicyAssociation: [
       "AssociationIdentifier",
       "AssociationStatus",
       "AssociationStatusMessage",
       "AssociationType",
       "TargetId",
       "TargetType",
-      "UpdatedAt"
+      "UpdatedAt",
     ],
-    "ProductSubscription": [
-      "ProductArn",
-      "ProductSubscriptionArn"
-    ],
-    "SecurityControl": [
-      "SecurityControlId"
-    ],
-    "Standard": [
-      "StandardsArn",
-      "StandardsSubscriptionArn"
-    ]
+    ProductSubscription: ["ProductArn", "ProductSubscriptionArn"],
+    SecurityControl: ["SecurityControlId"],
+    Standard: ["StandardsArn", "StandardsSubscriptionArn"],
   },
-  "SecurityLake": {
-    "AwsLogSource": [
-      "DataLakeArn",
-      "SourceName",
-      "SourceVersion"
-    ],
-    "DataLake": [
-      "Arn",
-      "S3BucketArn"
-    ],
-    "Subscriber": [
+  SecurityLake: {
+    AwsLogSource: ["DataLakeArn", "SourceName", "SourceVersion"],
+    DataLake: ["Arn", "S3BucketArn"],
+    Subscriber: [
       "DataLakeArn",
       "ResourceShareArn",
       "ResourceShareName",
       "S3BucketArn",
       "SubscriberArn",
-      "SubscriberRoleArn"
+      "SubscriberRoleArn",
     ],
-    "SubscriberNotification": [
-      "SubscriberArn",
-      "SubscriberEndpoint"
-    ]
+    SubscriberNotification: ["SubscriberArn", "SubscriberEndpoint"],
   },
-  "ServiceCatalog": {
-    "AcceptedPortfolioShare": [
-      "AcceptLanguage",
-      "PortfolioId"
-    ],
-    "CloudFormationProduct": [
+  ServiceCatalog: {
+    AcceptedPortfolioShare: ["AcceptLanguage", "PortfolioId"],
+    CloudFormationProduct: [
       "ProductName",
       "ProvisioningArtifactIds",
-      "ProvisioningArtifactNames"
+      "ProvisioningArtifactNames",
     ],
-    "CloudFormationProvisionedProduct": [
+    CloudFormationProvisionedProduct: [
       "CloudformationStackArn",
       "NotificationArns",
       "Outputs",
       "ProvisionedProductId",
       "ProvisionedProductName",
-      "RecordId"
+      "RecordId",
     ],
-    "LaunchNotificationConstraint": [
-      "PortfolioId",
-      "ProductId"
-    ],
-    "LaunchRoleConstraint": [
-      "PortfolioId",
-      "ProductId"
-    ],
-    "LaunchTemplateConstraint": [
-      "PortfolioId",
-      "ProductId"
-    ],
-    "Portfolio": [
-      "PortfolioName"
-    ],
-    "PortfolioPrincipalAssociation": [
+    LaunchNotificationConstraint: ["PortfolioId", "ProductId"],
+    LaunchRoleConstraint: ["PortfolioId", "ProductId"],
+    LaunchTemplateConstraint: ["PortfolioId", "ProductId"],
+    Portfolio: ["PortfolioName"],
+    PortfolioPrincipalAssociation: [
       "AcceptLanguage",
       "PortfolioId",
       "PrincipalARN",
-      "PrincipalType"
+      "PrincipalType",
     ],
-    "PortfolioProductAssociation": [
+    PortfolioProductAssociation: [
       "AcceptLanguage",
       "PortfolioId",
       "ProductId",
-      "SourcePortfolioId"
+      "SourcePortfolioId",
     ],
-    "PortfolioShare": [
-      "AcceptLanguage",
-      "AccountId",
-      "PortfolioId"
-    ],
-    "ResourceUpdateConstraint": [
-      "PortfolioId",
-      "ProductId"
-    ],
-    "ServiceAction": [
-      "Id"
-    ],
-    "ServiceActionAssociation": [
+    PortfolioShare: ["AcceptLanguage", "AccountId", "PortfolioId"],
+    ResourceUpdateConstraint: ["PortfolioId", "ProductId"],
+    ServiceAction: ["Id"],
+    ServiceActionAssociation: [
       "ProductId",
       "ProvisioningArtifactId",
-      "ServiceActionId"
+      "ServiceActionId",
     ],
-    "StackSetConstraint": [
-      "PortfolioId",
-      "ProductId"
-    ],
-    "TagOption": [
-      "Key",
-      "Value"
-    ],
-    "TagOptionAssociation": [
-      "ResourceId",
-      "TagOptionId"
-    ]
+    StackSetConstraint: ["PortfolioId", "ProductId"],
+    TagOption: ["Key", "Value"],
+    TagOptionAssociation: ["ResourceId", "TagOptionId"],
   },
-  "ServiceCatalogAppRegistry": {
-    "Application": [
+  ServiceCatalogAppRegistry: {
+    Application: [
       "ApplicationName",
       "ApplicationTagKey",
       "ApplicationTagValue",
       "Arn",
-      "Id"
+      "Id",
     ],
-    "AttributeGroup": [
-      "Arn",
-      "Id"
-    ],
-    "AttributeGroupAssociation": [
+    AttributeGroup: ["Arn", "Id"],
+    AttributeGroupAssociation: [
       "Application",
       "ApplicationArn",
       "AttributeGroup",
-      "AttributeGroupArn"
+      "AttributeGroupArn",
     ],
-    "ResourceAssociation": [
+    ResourceAssociation: [
       "Application",
       "ApplicationArn",
       "Resource",
       "ResourceArn",
-      "ResourceType"
-    ]
+      "ResourceType",
+    ],
   },
-  "ServiceDiscovery": {
-    "HttpNamespace": [
-      "Arn",
-      "Id",
-      "Name"
-    ],
-    "Instance": [
-      "InstanceId",
-      "ServiceId"
-    ],
-    "PrivateDnsNamespace": [
-      "Arn",
-      "HostedZoneId",
-      "Id",
-      "Name",
-      "Vpc"
-    ],
-    "PublicDnsNamespace": [
-      "Arn",
-      "HostedZoneId",
-      "Id",
-      "Name"
-    ],
-    "Service": [
+  ServiceDiscovery: {
+    HttpNamespace: ["Arn", "Id", "Name"],
+    Instance: ["InstanceId", "ServiceId"],
+    PrivateDnsNamespace: ["Arn", "HostedZoneId", "Id", "Name", "Vpc"],
+    PublicDnsNamespace: ["Arn", "HostedZoneId", "Id", "Name"],
+    Service: [
       "Arn",
       "HealthCheckCustomConfig",
       "Id",
       "Name",
       "Name",
       "NamespaceId",
-      "Type"
-    ]
+      "Type",
+    ],
   },
-  "Shield": {
-    "DRTAccess": [
-      "AccountId"
-    ],
-    "ProactiveEngagement": [
-      "AccountId"
-    ],
-    "Protection": [
-      "Name",
-      "ProtectionArn",
-      "ProtectionId",
-      "ResourceArn"
-    ],
-    "ProtectionGroup": [
-      "ProtectionGroupArn",
-      "ProtectionGroupId"
-    ]
+  Shield: {
+    DRTAccess: ["AccountId"],
+    ProactiveEngagement: ["AccountId"],
+    Protection: ["Name", "ProtectionArn", "ProtectionId", "ResourceArn"],
+    ProtectionGroup: ["ProtectionGroupArn", "ProtectionGroupId"],
   },
-  "Signer": {
-    "ProfilePermission": [
+  Signer: {
+    ProfilePermission: [
       "Action",
       "Principal",
       "ProfileName",
       "ProfileVersion",
-      "StatementId"
+      "StatementId",
     ],
-    "SigningProfile": [
+    SigningProfile: [
       "Arn",
       "PlatformId",
       "ProfileName",
       "ProfileVersion",
       "ProfileVersionArn",
-      "SignatureValidityPeriod"
-    ]
+      "SignatureValidityPeriod",
+    ],
   },
-  "SimSpaceWeaver": {
-    "Simulation": [
+  SimSpaceWeaver: {
+    Simulation: [
       "DescribePayload",
       "MaximumDuration",
       "Name",
       "RoleArn",
       "SchemaS3Location",
-      "SnapshotS3Location"
-    ]
-  },
-  "StepFunctions": {
-    "Activity": [
-      "Arn",
-      "EncryptionConfiguration",
-      "Name",
-      "Name"
+      "SnapshotS3Location",
     ],
-    "StateMachine": [
+  },
+  StepFunctions: {
+    Activity: ["Arn", "EncryptionConfiguration", "Name", "Name"],
+    StateMachine: [
       "Arn",
       "Name",
       "StateMachineName",
       "StateMachineRevisionId",
-      "StateMachineType"
+      "StateMachineType",
     ],
-    "StateMachineAlias": [
-      "Arn",
-      "Name"
-    ],
-    "StateMachineVersion": [
+    StateMachineAlias: ["Arn", "Name"],
+    StateMachineVersion: [
       "Arn",
       "Description",
       "StateMachineArn",
-      "StateMachineRevisionId"
-    ]
-  },
-  "SupportApp": {
-    "AccountAlias": [
-      "AccountAliasResourceId"
+      "StateMachineRevisionId",
     ],
-    "SlackChannelConfiguration": [
-      "ChannelId",
-      "TeamId"
-    ],
-    "SlackWorkspaceConfiguration": [
-      "TeamId"
-    ]
   },
-  "Synthetics": {
-    "Canary": [
-      "Code.SourceLocationArn",
-      "Id",
-      "Name",
-      "State"
-    ],
-    "Group": [
-      "Id",
-      "Name"
-    ]
+  SupportApp: {
+    AccountAlias: ["AccountAliasResourceId"],
+    SlackChannelConfiguration: ["ChannelId", "TeamId"],
+    SlackWorkspaceConfiguration: ["TeamId"],
   },
-  "SystemsManagerSAP": {
-    "Application": [
+  Synthetics: {
+    Canary: ["Code.SourceLocationArn", "Id", "Name", "State"],
+    Group: ["Id", "Name"],
+  },
+  SystemsManagerSAP: {
+    Application: [
       "Arn",
       "ComponentsInfo",
       "Credentials",
       "DatabaseArn",
       "Instances",
       "SapInstanceNumber",
-      "Sid"
-    ]
-  },
-  "Timestream": {
-    "Database": [
-      "Arn",
-      "DatabaseName"
+      "Sid",
     ],
-    "InfluxDBInstance": [
+  },
+  Timestream: {
+    Database: ["Arn", "DatabaseName"],
+    InfluxDBInstance: [
       "AllocatedStorage",
       "Arn",
       "AvailabilityZone",
@@ -9027,9 +6574,9 @@ const properties = {
       "Status",
       "Username",
       "VpcSecurityGroupIds",
-      "VpcSubnetIds"
+      "VpcSubnetIds",
     ],
-    "ScheduledQuery": [
+    ScheduledQuery: [
       "Arn",
       "ClientToken",
       "ErrorReportConfiguration",
@@ -9047,22 +6594,13 @@ const properties = {
       "ScheduleConfiguration",
       "ScheduledQueryExecutionRoleArn",
       "ScheduledQueryName",
-      "TargetConfiguration"
+      "TargetConfiguration",
     ],
-    "Table": [
-      "Arn",
-      "DatabaseName",
-      "Name",
-      "TableName"
-    ]
+    Table: ["Arn", "DatabaseName", "Name", "TableName"],
   },
-  "Transfer": {
-    "Agreement": [
-      "AgreementId",
-      "Arn",
-      "ServerId"
-    ],
-    "Certificate": [
+  Transfer: {
+    Agreement: ["AgreementId", "Arn", "ServerId"],
+    Certificate: [
       "Arn",
       "Certificate",
       "CertificateChain",
@@ -9072,84 +6610,46 @@ const properties = {
       "PrivateKey",
       "Serial",
       "Status",
-      "Type"
+      "Type",
     ],
-    "Connector": [
-      "Arn",
-      "ConnectorId",
-      "ServiceManagedEgressIpAddresses"
-    ],
-    "Profile": [
-      "Arn",
-      "ProfileId",
-      "ProfileType"
-    ],
-    "Server": [
+    Connector: ["Arn", "ConnectorId", "ServiceManagedEgressIpAddresses"],
+    Profile: ["Arn", "ProfileId", "ProfileType"],
+    Server: [
       "Arn",
       "As2ServiceManagedEgressIpAddresses",
       "Domain",
       "IdentityProviderType",
       "ServerId",
-      "State"
+      "State",
     ],
-    "User": [
-      "Arn",
-      "ServerId",
-      "ServerId",
-      "UserName",
-      "UserName"
-    ],
-    "WebApp": [
+    User: ["Arn", "ServerId", "ServerId", "UserName", "UserName"],
+    WebApp: [
       "Arn",
       "IdentityProviderDetails.ApplicationArn",
       "WebAppEndpointPolicy",
-      "WebAppId"
+      "WebAppId",
     ],
-    "Workflow": [
-      "Arn",
-      "Description",
-      "OnExceptionSteps",
-      "Steps",
-      "WorkflowId"
-    ]
+    Workflow: ["Arn", "Description", "OnExceptionSteps", "Steps", "WorkflowId"],
   },
-  "VerifiedPermissions": {
-    "IdentitySource": [
-      "IdentitySourceId",
-      "PolicyStoreId"
-    ],
-    "Policy": [
-      "PolicyId",
-      "PolicyStoreId",
-      "PolicyType"
-    ],
-    "PolicyStore": [
-      "Arn",
-      "PolicyStoreId"
-    ],
-    "PolicyTemplate": [
-      "PolicyStoreId",
-      "PolicyTemplateId"
-    ]
+  VerifiedPermissions: {
+    IdentitySource: ["IdentitySourceId", "PolicyStoreId"],
+    Policy: ["PolicyId", "PolicyStoreId", "PolicyType"],
+    PolicyStore: ["Arn", "PolicyStoreId"],
+    PolicyTemplate: ["PolicyStoreId", "PolicyTemplateId"],
   },
-  "VoiceID": {
-    "Domain": [
-      "DomainId"
-    ]
+  VoiceID: {
+    Domain: ["DomainId"],
   },
-  "VpcLattice": {
-    "AccessLogSubscription": [
+  VpcLattice: {
+    AccessLogSubscription: [
       "Arn",
       "Id",
       "ResourceArn",
       "ResourceId",
-      "ResourceIdentifier"
-    ],
-    "AuthPolicy": [
       "ResourceIdentifier",
-      "State"
     ],
-    "Listener": [
+    AuthPolicy: ["ResourceIdentifier", "State"],
+    Listener: [
       "Arn",
       "Id",
       "Name",
@@ -9157,35 +6657,27 @@ const properties = {
       "Protocol",
       "ServiceArn",
       "ServiceId",
-      "ServiceIdentifier"
+      "ServiceIdentifier",
     ],
-    "ResourceConfiguration": [
+    ResourceConfiguration: [
       "Arn",
       "Id",
       "ProtocolType",
       "ResourceConfigurationAuthType",
       "ResourceConfigurationType",
-      "ResourceGatewayId"
+      "ResourceGatewayId",
     ],
-    "ResourceGateway": [
+    ResourceGateway: [
       "Arn",
       "Id",
       "IpAddressType",
       "Name",
       "SubnetIds",
-      "VpcIdentifier"
+      "VpcIdentifier",
     ],
-    "ResourcePolicy": [
-      "ResourceArn"
-    ],
-    "Rule": [
-      "Arn",
-      "Id",
-      "ListenerIdentifier",
-      "Name",
-      "ServiceIdentifier"
-    ],
-    "Service": [
+    ResourcePolicy: ["ResourceArn"],
+    Rule: ["Arn", "Id", "ListenerIdentifier", "Name", "ServiceIdentifier"],
+    Service: [
       "Arn",
       "CreatedAt",
       "CustomDomainName",
@@ -9194,22 +6686,16 @@ const properties = {
       "Id",
       "LastUpdatedAt",
       "Name",
-      "Status"
+      "Status",
     ],
-    "ServiceNetwork": [
-      "Arn",
-      "CreatedAt",
-      "Id",
-      "LastUpdatedAt",
-      "Name"
-    ],
-    "ServiceNetworkResourceAssociation": [
+    ServiceNetwork: ["Arn", "CreatedAt", "Id", "LastUpdatedAt", "Name"],
+    ServiceNetworkResourceAssociation: [
       "Arn",
       "Id",
       "ResourceConfigurationId",
-      "ServiceNetworkId"
+      "ServiceNetworkId",
     ],
-    "ServiceNetworkServiceAssociation": [
+    ServiceNetworkServiceAssociation: [
       "Arn",
       "CreatedAt",
       "DnsEntry.DomainName",
@@ -9223,9 +6709,9 @@ const properties = {
       "ServiceNetworkId",
       "ServiceNetworkIdentifier",
       "ServiceNetworkName",
-      "Status"
+      "Status",
     ],
-    "ServiceNetworkVpcAssociation": [
+    ServiceNetworkVpcAssociation: [
       "Arn",
       "CreatedAt",
       "Id",
@@ -9235,122 +6721,50 @@ const properties = {
       "ServiceNetworkName",
       "Status",
       "VpcId",
-      "VpcIdentifier"
+      "VpcIdentifier",
     ],
-    "TargetGroup": [
+    TargetGroup: [
       "Arn",
       "CreatedAt",
       "Id",
       "LastUpdatedAt",
       "Name",
       "Status",
-      "Type"
-    ]
+      "Type",
+    ],
   },
-  "WAF": {
-    "ByteMatchSet": [
-      "Name"
-    ],
-    "IPSet": [
-      "Name"
-    ],
-    "Rule": [
-      "MetricName",
-      "Name"
-    ],
-    "SizeConstraintSet": [
-      "Name"
-    ],
-    "SqlInjectionMatchSet": [
-      "Name"
-    ],
-    "WebACL": [
-      "MetricName",
-      "Name"
-    ],
-    "XssMatchSet": [
-      "Name"
-    ]
+  WAF: {
+    ByteMatchSet: ["Name"],
+    IPSet: ["Name"],
+    Rule: ["MetricName", "Name"],
+    SizeConstraintSet: ["Name"],
+    SqlInjectionMatchSet: ["Name"],
+    WebACL: ["MetricName", "Name"],
+    XssMatchSet: ["Name"],
   },
-  "WAFRegional": {
-    "ByteMatchSet": [
-      "Name"
-    ],
-    "GeoMatchSet": [
-      "Name"
-    ],
-    "IPSet": [
-      "Name"
-    ],
-    "RateBasedRule": [
-      "MetricName",
-      "Name",
-      "RateKey"
-    ],
-    "RegexPatternSet": [
-      "Name"
-    ],
-    "Rule": [
-      "MetricName",
-      "Name"
-    ],
-    "SizeConstraintSet": [
-      "Name"
-    ],
-    "SqlInjectionMatchSet": [
-      "Name"
-    ],
-    "WebACL": [
-      "MetricName",
-      "Name"
-    ],
-    "WebACLAssociation": [
-      "ResourceArn",
-      "WebACLId"
-    ],
-    "XssMatchSet": [
-      "Name"
-    ]
+  WAFRegional: {
+    ByteMatchSet: ["Name"],
+    GeoMatchSet: ["Name"],
+    IPSet: ["Name"],
+    RateBasedRule: ["MetricName", "Name", "RateKey"],
+    RegexPatternSet: ["Name"],
+    Rule: ["MetricName", "Name"],
+    SizeConstraintSet: ["Name"],
+    SqlInjectionMatchSet: ["Name"],
+    WebACL: ["MetricName", "Name"],
+    WebACLAssociation: ["ResourceArn", "WebACLId"],
+    XssMatchSet: ["Name"],
   },
-  "WAFv2": {
-    "IPSet": [
-      "Arn",
-      "Id",
-      "Name",
-      "Scope"
-    ],
-    "LoggingConfiguration": [
-      "ManagedByFirewallManager",
-      "ResourceArn"
-    ],
-    "RegexPatternSet": [
-      "Arn",
-      "Id",
-      "Name",
-      "Scope"
-    ],
-    "RuleGroup": [
-      "Arn",
-      "Id",
-      "LabelNamespace",
-      "Name",
-      "Scope"
-    ],
-    "WebACL": [
-      "Arn",
-      "Capacity",
-      "Id",
-      "LabelNamespace",
-      "Name",
-      "Scope"
-    ],
-    "WebACLAssociation": [
-      "ResourceArn",
-      "WebACLArn"
-    ]
+  WAFv2: {
+    IPSet: ["Arn", "Id", "Name", "Scope"],
+    LoggingConfiguration: ["ManagedByFirewallManager", "ResourceArn"],
+    RegexPatternSet: ["Arn", "Id", "Name", "Scope"],
+    RuleGroup: ["Arn", "Id", "LabelNamespace", "Name", "Scope"],
+    WebACL: ["Arn", "Capacity", "Id", "LabelNamespace", "Name", "Scope"],
+    WebACLAssociation: ["ResourceArn", "WebACLArn"],
   },
-  "Wisdom": {
-    "AIAgent": [
+  Wisdom: {
+    AIAgent: [
       "AIAgentArn",
       "AIAgentId",
       "AssistantArn",
@@ -9358,35 +6772,35 @@ const properties = {
       "ModifiedTimeSeconds",
       "Name",
       "Tags",
-      "Type"
+      "Type",
     ],
-    "AIAgentVersion": [
+    AIAgentVersion: [
       "AIAgentArn",
       "AIAgentId",
       "AIAgentVersionId",
       "AssistantArn",
       "AssistantId",
       "ModifiedTimeSeconds",
-      "VersionNumber"
+      "VersionNumber",
     ],
-    "AIGuardrail": [
+    AIGuardrail: [
       "AIGuardrailArn",
       "AIGuardrailId",
       "AssistantArn",
       "AssistantId",
       "Name",
-      "Tags"
+      "Tags",
     ],
-    "AIGuardrailVersion": [
+    AIGuardrailVersion: [
       "AIGuardrailArn",
       "AIGuardrailId",
       "AIGuardrailVersionId",
       "AssistantArn",
       "AssistantId",
       "ModifiedTimeSeconds",
-      "VersionNumber"
+      "VersionNumber",
     ],
-    "AIPrompt": [
+    AIPrompt: [
       "AIPromptArn",
       "AIPromptId",
       "ApiFormat",
@@ -9397,36 +6811,36 @@ const properties = {
       "Name",
       "Tags",
       "TemplateType",
-      "Type"
+      "Type",
     ],
-    "AIPromptVersion": [
+    AIPromptVersion: [
       "AIPromptArn",
       "AIPromptId",
       "AIPromptVersionId",
       "AssistantArn",
       "AssistantId",
       "ModifiedTimeSeconds",
-      "VersionNumber"
+      "VersionNumber",
     ],
-    "Assistant": [
+    Assistant: [
       "AssistantArn",
       "AssistantId",
       "Description",
       "Name",
       "ServerSideEncryptionConfiguration",
       "Tags",
-      "Type"
+      "Type",
     ],
-    "AssistantAssociation": [
+    AssistantAssociation: [
       "AssistantArn",
       "AssistantAssociationArn",
       "AssistantAssociationId",
       "AssistantId",
       "Association",
       "AssociationType",
-      "Tags"
+      "Tags",
     ],
-    "KnowledgeBase": [
+    KnowledgeBase: [
       "Description",
       "KnowledgeBaseArn",
       "KnowledgeBaseId",
@@ -9434,41 +6848,34 @@ const properties = {
       "Name",
       "ServerSideEncryptionConfiguration",
       "SourceConfiguration",
-      "Tags"
+      "Tags",
     ],
-    "MessageTemplate": [
+    MessageTemplate: [
       "ChannelSubtype",
       "KnowledgeBaseArn",
       "MessageTemplateArn",
       "MessageTemplateContentSha256",
-      "MessageTemplateId"
+      "MessageTemplateId",
     ],
-    "MessageTemplateVersion": [
+    MessageTemplateVersion: [
       "MessageTemplateArn",
       "MessageTemplateVersionArn",
-      "MessageTemplateVersionNumber"
-    ]
+      "MessageTemplateVersionNumber",
+    ],
   },
-  "WorkSpaces": {
-    "ConnectionAlias": [
+  WorkSpaces: {
+    ConnectionAlias: [
       "AliasId",
       "Associations",
       "ConnectionAliasState",
       "ConnectionString",
-      "Tags"
+      "Tags",
     ],
-    "Workspace": [
-      "UserName"
-    ],
-    "WorkspacesPool": [
-      "CreatedAt",
-      "PoolArn",
-      "PoolId",
-      "PoolName"
-    ]
+    Workspace: ["UserName"],
+    WorkspacesPool: ["CreatedAt", "PoolArn", "PoolId", "PoolName"],
   },
-  "WorkSpacesThinClient": {
-    "Environment": [
+  WorkSpacesThinClient: {
+    Environment: [
       "ActivationCode",
       "Arn",
       "CreatedAt",
@@ -9480,39 +6887,33 @@ const properties = {
       "PendingSoftwareSetVersion",
       "RegisteredDevicesCount",
       "SoftwareSetComplianceStatus",
-      "UpdatedAt"
-    ]
+      "UpdatedAt",
+    ],
   },
-  "WorkSpacesWeb": {
-    "BrowserSettings": [
+  WorkSpacesWeb: {
+    BrowserSettings: [
       "AdditionalEncryptionContext",
       "AssociatedPortalArns",
       "BrowserSettingsArn",
-      "CustomerManagedKey"
+      "CustomerManagedKey",
     ],
-    "DataProtectionSettings": [
+    DataProtectionSettings: [
       "AdditionalEncryptionContext",
       "AssociatedPortalArns",
       "CreationDate",
       "CustomerManagedKey",
-      "DataProtectionSettingsArn"
+      "DataProtectionSettingsArn",
     ],
-    "IdentityProvider": [
-      "IdentityProviderArn",
-      "PortalArn"
-    ],
-    "IpAccessSettings": [
+    IdentityProvider: ["IdentityProviderArn", "PortalArn"],
+    IpAccessSettings: [
       "AdditionalEncryptionContext",
       "AssociatedPortalArns",
       "CreationDate",
       "CustomerManagedKey",
-      "IpAccessSettingsArn"
+      "IpAccessSettingsArn",
     ],
-    "NetworkSettings": [
-      "AssociatedPortalArns",
-      "NetworkSettingsArn"
-    ],
-    "Portal": [
+    NetworkSettings: ["AssociatedPortalArns", "NetworkSettingsArn"],
+    Portal: [
       "AdditionalEncryptionContext",
       "BrowserType",
       "CreationDate",
@@ -9522,40 +6923,24 @@ const properties = {
       "PortalStatus",
       "RendererType",
       "ServiceProviderSamlMetadata",
-      "StatusReason"
+      "StatusReason",
     ],
-    "TrustStore": [
+    TrustStore: ["AssociatedPortalArns", "TrustStoreArn"],
+    UserAccessLoggingSettings: [
       "AssociatedPortalArns",
-      "TrustStoreArn"
+      "UserAccessLoggingSettingsArn",
     ],
-    "UserAccessLoggingSettings": [
-      "AssociatedPortalArns",
-      "UserAccessLoggingSettingsArn"
-    ],
-    "UserSettings": [
-      "AssociatedPortalArns",
-      "UserSettingsArn"
-    ]
+    UserSettings: ["AssociatedPortalArns", "UserSettingsArn"],
   },
-  "XRay": {
-    "Group": [
-      "GroupARN"
-    ],
-    "ResourcePolicy": [
-      "PolicyName"
-    ],
-    "SamplingRule": [
-      "RuleARN"
-    ],
-    "TransactionSearchConfig": [
-      "AccountId"
-    ]
+  XRay: {
+    Group: ["GroupARN"],
+    ResourcePolicy: ["PolicyName"],
+    SamplingRule: ["RuleARN"],
+    TransactionSearchConfig: ["AccountId"],
   },
-  "Alexa": {
-    "ASK": [
-      "VendorId"
-    ]
-  }
+  Alexa: {
+    ASK: ["VendorId"],
+  },
 };
 
 export default properties;

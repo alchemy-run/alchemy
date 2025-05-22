@@ -46,6 +46,7 @@ jobs:
         env:
           CI: true
           ALCHEMY_STATE_STORE: cloudflare
+          ALCHEMY_PASSWORD: ${{ secrets.ALCHEMY_PASSWORD }}
           AWS_REGION: us-west-2
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}

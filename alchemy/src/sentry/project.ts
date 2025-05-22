@@ -281,7 +281,7 @@ export const Project = Resource(
   "sentry::Project",
   async function (
     this: Context<Project>,
-    id: string,
+    _id: string,
     props: ProjectProps,
   ): Promise<Project> {
     const api = new SentryApi({ authToken: props.authToken });

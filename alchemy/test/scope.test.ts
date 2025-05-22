@@ -7,6 +7,8 @@ import { File } from "../src/fs/file.js";
 import { Scope } from "../src/scope.js";
 import { BRANCH_PREFIX } from "./util.js";
 
+import { Resource } from "../src/resource.js";
+import { serializeScope } from "../src/serde.js";
 import "../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
@@ -44,4 +46,79 @@ describe("Scope", () => {
     });
     expect(observedPhase).toBe("read");
   });
+
+  test("serialized scope should be equal to the original scope", async (scope) => {
+    try {
+      await File("foo", {
+        path: "test2.txt",
+        content: "Hello World",
+      });
+      await alchemy.run("bar", async () => {
+        await File("baz", {
+          path: "test3.txt",
+          content: "Hello World",
+        });
+        await Nested("gaz");
+      });
+
+      const serialized: any = await serializeScope(scope.root);
+
+      const fqn = scope.chain.join("/");
+
+      expect(serialized).toEqual({
+        [`${fqn}/foo`]: {
+          "Symbol(alchemy::ResourceKind)": "fs::File",
+          "Symbol(alchemy::ResourceID)": "foo",
+          "Symbol(alchemy::ResourceFQN)": `${fqn}/foo`,
+          "Symbol(alchemy::ResourceScope)": {
+            "@scope": null,
+          },
+          "Symbol(alchemy::ResourceSeq)": 0,
+          path: "test2.txt",
+          content: "Hello World",
+        },
+        [`${fqn}/bar/baz`]: {
+          "Symbol(alchemy::ResourceKind)": "fs::File",
+          "Symbol(alchemy::ResourceID)": "baz",
+          "Symbol(alchemy::ResourceFQN)": `${fqn}/bar/baz`,
+          "Symbol(alchemy::ResourceScope)": {
+            "@scope": null,
+          },
+          "Symbol(alchemy::ResourceSeq)": 0,
+          path: "test3.txt",
+          content: "Hello World",
+        },
+        [`${fqn}/bar/gaz`]: {
+          "Symbol(alchemy::ResourceKind)": "Nested",
+          "Symbol(alchemy::ResourceID)": "gaz",
+          "Symbol(alchemy::ResourceFQN)": `${fqn}/bar/gaz`,
+          "Symbol(alchemy::ResourceScope)": {
+            "@scope": null,
+          },
+          "Symbol(alchemy::ResourceSeq)": 1,
+        },
+        [`${fqn}/bar/gaz/file`]: {
+          "Symbol(alchemy::ResourceKind)": "fs::File",
+          "Symbol(alchemy::ResourceID)": "file",
+          "Symbol(alchemy::ResourceFQN)": `${fqn}/bar/gaz/file`,
+          "Symbol(alchemy::ResourceScope)": {
+            "@scope": null,
+          },
+          "Symbol(alchemy::ResourceSeq)": 0,
+          path: "test4.txt",
+          content: "Hello World",
+        },
+      });
+    } finally {
+      await destroy(scope);
+    }
+  });
+});
+
+const Nested = Resource("Nested", async function (this, _id: string) {
+  await File("file", {
+    path: "test4.txt",
+    content: "Hello World",
+  });
+  return this({});
 });

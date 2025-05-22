@@ -3,7 +3,7 @@ import tsConfigPaths from "vite-tsconfig-paths";
 import {
   cloudflareWorkersDevEnvironmentShim,
   external,
-} from "../../alchemy/src/cloudflare";
+} from "../../alchemy/src/cloudflare/index.js";
 
 export default defineConfig({
   tsr: {

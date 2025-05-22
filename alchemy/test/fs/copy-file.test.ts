@@ -29,7 +29,7 @@ describe("CopyFile Resource", () => {
     try {
       await fs.promises.unlink(sourceFilePath);
       await fs.promises.unlink(destinationFilePath);
-    } catch (error) {
+    } catch (_error) {
       // Ignore errors if files don't exist
     }
   });
@@ -84,10 +84,6 @@ describe("CopyFile Resource", () => {
 
       // Clean up the new destination file
       await fs.promises.unlink(newDestinationPath);
-    } catch (err) {
-      // log the error or else it's silently swallowed by destroy errors
-      console.log(err);
-      throw err;
     } finally {
       // Always clean up, even if test assertions fail
       await destroy(scope);
@@ -123,9 +119,6 @@ describe("CopyFile Resource", () => {
       // Verify original file content was preserved
       const content = await fs.promises.readFile(destinationFilePath, "utf-8");
       expect(content).toBe("This is the original file");
-    } catch (err) {
-      console.log(err);
-      throw err;
     } finally {
       await destroy(scope);
     }

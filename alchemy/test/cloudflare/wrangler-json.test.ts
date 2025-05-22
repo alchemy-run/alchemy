@@ -373,7 +373,7 @@ describe("WranglerJson Resource", () => {
         );
 
         expect(spec.triggers).toBeDefined();
-        expect(spec.triggers?.crons).toEqual(worker.crons);
+        expect(spec.triggers?.crons).toEqual(worker.crons!);
       } finally {
         await fs.rm(tempDir, { recursive: true, force: true });
         await destroy(scope);

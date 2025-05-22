@@ -32,7 +32,7 @@ async function assertWorkerDoesNotExist(workerName: string) {
       `/accounts/${api.accountId}/workers/scripts/${workerName}`,
     );
     expect(response.status).toEqual(404);
-  } catch (error) {
+  } catch {
     // 404 is expected, so we can ignore it
     return;
   }
@@ -262,32 +262,10 @@ describe("Worker Resource", () => {
     };
   `;
 
-  // Sample worker script with scheduled handler and KV namespace
-  const cronKvWorkerScript = `
-    export default {
-      async fetch(request, env, ctx) {
-        // Use the KV binding
-        if (request.url.includes('/last-run')) {
-          const value = await env.CRON_STATS.get('last_run');
-          return new Response('Last scheduled run: ' + (value || 'never'), { status: 200 });
-        }
-        return new Response('Worker with cron and KV is running!', { status: 200 });
-      },
-      async scheduled(event, env, ctx) {
-        // Log event to KV
-        await env.CRON_STATS.put('last_run', new Date().toISOString());
-        await env.CRON_STATS.put(\`run_\${Date.now()}\`, JSON.stringify({
-          cron: event.cron,
-          scheduledTime: event.scheduledTime
-        }));
-      },
-    };
-  `;
-
   test("create, update, and delete worker (CJS format)", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-cjs-1`;
 
-    let worker: Worker | undefined = undefined;
+    let worker: Worker | undefined;
     try {
       // Create a worker with an explicit name
       worker = await Worker(workerName, {
@@ -324,7 +302,7 @@ describe("Worker Resource", () => {
   test("create, update, and delete worker (ESM format)", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-esm-1`;
 
-    let worker: Worker | undefined = undefined;
+    let worker: Worker | undefined;
     try {
       // Create a worker with ESM format
       worker = await Worker(workerName, {
@@ -363,7 +341,7 @@ describe("Worker Resource", () => {
   test("convert between ESM and CJS formats", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-format-conversion-convert-1`;
 
-    let worker: Worker | undefined = undefined;
+    let worker: Worker | undefined;
     try {
       // First create with ESM format
       worker = await Worker(workerName, {
@@ -424,7 +402,7 @@ describe("Worker Resource", () => {
   test("create and delete worker with Durable Object binding", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-do-binding-do-1`;
 
-    let worker: Worker | undefined = undefined;
+    let worker: Worker | undefined;
     try {
       // First create the worker without the DO binding
       worker = await Worker(workerName, {
@@ -469,8 +447,8 @@ describe("Worker Resource", () => {
   test("create and delete worker with KV Namespace binding", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-kv-binding-kv-1`;
 
-    let worker: Worker | undefined = undefined;
-    let testKv: KVNamespace | undefined = undefined;
+    let worker: Worker | undefined;
+    let testKv: KVNamespace | undefined;
     try {
       // Create a KV namespace with initial values
       testKv = await KVNamespace("test-kv-namespace", {
@@ -524,7 +502,7 @@ describe("Worker Resource", () => {
       ],
     });
 
-    let worker: Worker | undefined = undefined;
+    let worker: Worker | undefined;
 
     try {
       // First create the worker without bindings
@@ -561,7 +539,7 @@ describe("Worker Resource", () => {
   // Add a new test for environment variables
   test("create and test worker with environment variables", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-env-vars-env-1`;
-    let worker: Worker | undefined = undefined;
+    let worker: Worker | undefined;
     try {
       // Create a worker with environment variables
       worker = await Worker(workerName, {
@@ -645,13 +623,14 @@ describe("Worker Resource", () => {
 
   test("migrate durable object by renaming class", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-do-migration-migrate-1`;
-    let worker: Worker | undefined = undefined;
+    let worker: Worker | undefined;
     try {
       // First create the worker with the original Counter class
       worker = await Worker(workerName, {
         name: workerName,
         script: doMigrationWorkerScriptV1,
         format: "esm",
+        adopt: true,
       });
 
       // Apply to create the worker first
@@ -708,7 +687,7 @@ describe("Worker Resource", () => {
   test("add environment variables to worker with durable object", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-do-with-env-doenv-1`;
 
-    let worker: Worker | undefined = undefined;
+    let worker: Worker | undefined;
     try {
       // First create a worker with a Durable Object but no env vars
       worker = await Worker(workerName, {
@@ -816,7 +795,7 @@ describe("Worker Resource", () => {
   // Test for static assets
   test("create and test worker with static assets", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-assets`;
-    let tempDir: string | undefined = undefined;
+    let tempDir: string | undefined;
 
     try {
       // Create a temporary directory to store test assets
@@ -932,7 +911,7 @@ describe("Worker Resource", () => {
   // Test for worker with assets configuration
   test("create worker with assets configuration options", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-assets-config`;
-    let tempDir: string | undefined = undefined;
+    let tempDir: string | undefined;
 
     try {
       // Create a temporary directory to store test assets
@@ -1109,7 +1088,7 @@ describe("Worker Resource", () => {
       // Test the worker's API endpoint
       const apiResponse = await fetch(`${worker.url}/api/status`);
       expect(apiResponse.status).toEqual(200);
-      const apiData = await apiResponse.json();
+      const apiData: any = await apiResponse.json();
       expect(apiData.status).toEqual("ok");
       expect(apiData.worker).toEqual(workerName);
     } finally {
@@ -1248,7 +1227,7 @@ describe("Worker Resource", () => {
       };
     `;
 
-    let worker: Worker | undefined = undefined;
+    let worker: Worker | undefined;
     try {
       // Create a workflow instance
       const emailWorkflow = new Workflow("email-notifier", {
@@ -1276,7 +1255,7 @@ describe("Worker Resource", () => {
 
       // Test triggering the first workflow
       const response = await fetch(`${worker.url!}/trigger-email-workflow`);
-      const result = await response.json();
+      const result: any = await response.json();
       console.log("Email workflow response:", result);
 
       expect(response.status).toEqual(200);
@@ -1318,7 +1297,7 @@ describe("Worker Resource", () => {
       const orderResponse = await fetch(
         `${worker.url!}/trigger-order-workflow`,
       );
-      const orderResult = await orderResponse.json();
+      const orderResult: any = await orderResponse.json();
       console.log("Order workflow response:", orderResult);
 
       expect(orderResponse.status).toEqual(200);
@@ -1403,8 +1382,8 @@ describe("Worker Resource", () => {
 
     const workerName = `${BRANCH_PREFIX}-test-worker-d1`;
 
-    let worker: Worker<{ DATABASE: D1Database }> | undefined = undefined;
-    let db: D1Database | undefined = undefined;
+    let worker: Worker<{ DATABASE: D1Database }> | undefined;
+    let db: D1Database | undefined;
 
     try {
       // Create a D1 database
@@ -1445,7 +1424,7 @@ describe("Worker Resource", () => {
       // Query data from the database
       const queryResponse = await fetch(`${worker.url}/query-db`);
       expect(queryResponse.status).toEqual(200);
-      const queryData = await queryResponse.json();
+      const queryData: any = await queryResponse.json();
       expect(queryData.success).toEqual(true);
       expect(queryData.data).toBeArray();
       expect(queryData.data.length).toBeGreaterThan(0);
@@ -1500,8 +1479,8 @@ describe("Worker Resource", () => {
     const workerName = `${BRANCH_PREFIX}-test-worker-queue`;
     const queueName = `${BRANCH_PREFIX}-test-queue`;
 
-    let worker: Worker<{ MESSAGE_QUEUE: Queue }> | undefined = undefined;
-    let queue: Queue | undefined = undefined;
+    let worker: Worker<{ MESSAGE_QUEUE: Queue }> | undefined;
+    let queue: Queue | undefined;
 
     try {
       // Create a Queue
@@ -1553,7 +1532,7 @@ describe("Worker Resource", () => {
         });
 
         expect(sendResponse.status).toEqual(200);
-        const responseData = await sendResponse.json();
+        const responseData: any = await sendResponse.json();
         expect(responseData.success).toEqual(true);
         expect(responseData.message).toEqual("Message sent successfully");
       }
@@ -1568,7 +1547,7 @@ describe("Worker Resource", () => {
 
     const workerName = `${BRANCH_PREFIX}-test-worker-self`;
 
-    let worker: Worker | undefined = undefined;
+    let worker: Worker | undefined;
 
     try {
       // Create a worker with the Self binding
@@ -1714,7 +1693,7 @@ describe("Worker Resource", () => {
       // Test the JSON endpoint
       const jsonResponse = await fetch(`${worker.url}/data`);
       expect(jsonResponse.status).toEqual(200);
-      const data = await jsonResponse.json();
+      const data: any = await jsonResponse.json();
       expect(data.message).toEqual("Hello from bundled worker!");
       expect(data.version).toEqual("1.0.0");
 
@@ -1763,7 +1742,7 @@ describe("Worker Resource", () => {
         // Test the updated JSON endpoint
         const jsonResponse = await fetch(`${worker.url}/data`);
         expect(jsonResponse.status).toEqual(200);
-        const data = await jsonResponse.json();
+        const data: any = await jsonResponse.json();
         expect(data.message).toEqual("Hello from updated bundled worker!");
         expect(data.version).toEqual("2.0.0");
       }
@@ -1780,7 +1759,7 @@ describe("Worker Resource", () => {
   test("create and test worker with cron triggers", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-cron`;
 
-    let worker: Worker | undefined = undefined;
+    let worker: Worker | undefined;
     try {
       // Create a worker with cron triggers
       worker = await Worker(workerName, {
@@ -1945,8 +1924,8 @@ describe("Worker Resource", () => {
       };
     `;
 
-    let targetWorker: Worker | undefined = undefined;
-    let callerWorker: Worker | undefined = undefined;
+    let targetWorker: Worker | undefined;
+    let callerWorker: Worker | undefined;
 
     try {
       // First create the target worker
@@ -1990,7 +1969,7 @@ describe("Worker Resource", () => {
       // Test caller worker can access the target worker through binding
       const callerResponse = await fetch(`${callerWorker.url}/call-target`);
       expect(callerResponse.status).toEqual(200);
-      const callerData = await callerResponse.json();
+      const callerData: any = await callerResponse.json();
 
       expect(callerData.success).toEqual(true);
       expect(callerData.callerName).toEqual(callerWorkerName);
@@ -2003,7 +1982,7 @@ describe("Worker Resource", () => {
       // Test echo functionality to verify data passing works
       const echoResponse = await fetch(`${callerWorker.url}/echo-test`);
       expect(echoResponse.status).toEqual(200);
-      const echoData = await echoResponse.json();
+      const echoData: any = await echoResponse.json();
 
       expect(echoData.success).toEqual(true);
       expect(echoData.echoResponse).toBeDefined();
@@ -2070,8 +2049,8 @@ describe("Worker Resource", () => {
       };
     `;
 
-    let worker: Worker | undefined = undefined;
-    let dataset: AnalyticsEngineDataset | undefined = undefined;
+    let worker: Worker | undefined;
+    let dataset: AnalyticsEngineDataset | undefined;
 
     try {
       // Create an Analytics Engine dataset
@@ -2106,7 +2085,7 @@ describe("Worker Resource", () => {
       // Test that the binding exists in the worker
       const response = await fetch(`${worker.url}/check-binding`);
       expect(response.status).toEqual(200);
-      const data = await response.json();
+      const data: any = await response.json();
       expect(data.success).toEqual(true);
       expect(data.hasBinding).toEqual(true);
 
@@ -2126,7 +2105,7 @@ describe("Worker Resource", () => {
       });
 
       expect(logResponse.status).toEqual(200);
-      const logData = await logResponse.json();
+      const logData: any = await logResponse.json();
       expect(logData.success).toEqual(true);
       expect(logData.message).toEqual("Event logged successfully");
     } finally {

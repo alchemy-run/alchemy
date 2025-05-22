@@ -1,11 +1,13 @@
 import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
+import { Resource, ResourceKind } from "../resource.js";
+import { bind } from "../runtime/bind.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
+import type { Bound } from "./bound.js";
 
 /**
  * Properties for creating or updating a Vectorize Index
@@ -48,10 +50,16 @@ export interface VectorizeIndexProps extends CloudflareApiOptions {
   adopt?: boolean;
 }
 
+export function isVectorizeIndex(
+  resource: Resource,
+): resource is VectorizeIndexResource {
+  return resource[ResourceKind] === "cloudflare::VectorizeIndex";
+}
+
 /**
  * Output returned after Vectorize Index creation/update
  */
-export interface VectorizeIndex
+export interface VectorizeIndexResource
   extends Resource<"cloudflare::VectorizeIndex">,
     VectorizeIndexProps {
   type: "vectorize";
@@ -66,6 +74,9 @@ export interface VectorizeIndex
    */
   createdAt?: number;
 }
+
+export type VectorizeIndex = VectorizeIndexResource &
+  Bound<VectorizeIndexResource>;
 
 /**
  * Creates and manages Cloudflare Vectorize Indexes.
@@ -106,13 +117,30 @@ export interface VectorizeIndex
  *
  * @see https://developers.cloudflare.com/vectorize/
  */
-export const VectorizeIndex = Resource(
+export async function VectorizeIndex(
+  name: string,
+  props: VectorizeIndexProps,
+): Promise<VectorizeIndex> {
+  const index = await _VectorizeIndex(name, props);
+  const binding = await bind(index);
+  return {
+    ...index,
+    describe: binding.describe,
+    query: binding.query,
+    insert: binding.insert,
+    upsert: binding.upsert,
+    deleteByIds: binding.deleteByIds,
+    getByIds: binding.getByIds,
+  };
+}
+
+const _VectorizeIndex = Resource(
   "cloudflare::VectorizeIndex",
   async function (
-    this: Context<VectorizeIndex>,
+    this: Context<VectorizeIndexResource>,
     id: string,
     props: VectorizeIndexProps,
-  ): Promise<VectorizeIndex> {
+  ): Promise<VectorizeIndexResource> {
     const api = await createCloudflareApi(props);
     const indexName = props.name || id;
 
@@ -348,9 +376,9 @@ export async function listIndexes(
  * This function will always throw an error.
  */
 export async function updateIndex(
-  api: CloudflareApi,
-  indexName: string,
-  props: VectorizeIndexProps,
+  _api: CloudflareApi,
+  _indexName: string,
+  _props: VectorizeIndexProps,
 ): Promise<CloudflareVectorizeResponse> {
   throw new Error(
     "Updating Vectorize indexes is not supported by the Cloudflare API. To change an index, delete it and create a new one.",

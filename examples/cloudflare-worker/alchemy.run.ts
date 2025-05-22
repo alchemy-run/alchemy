@@ -11,6 +11,7 @@ import alchemy from "../../alchemy/src/index.js";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 const app = await alchemy("cloudflare-worker", {
+  stage: BRANCH_PREFIX || undefined,
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   stateStore:
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
@@ -21,7 +22,10 @@ const app = await alchemy("cloudflare-worker", {
 export const queue = await Queue<{
   name: string;
   email: string;
-}>(`cloudflare-worker-queue${BRANCH_PREFIX}`);
+}>(`cloudflare-worker-queue${BRANCH_PREFIX}`, {
+  name: `cloudflare-worker-queue${BRANCH_PREFIX}`,
+  adopt: true,
+});
 
 export const worker = await Worker(`cloudflare-worker-worker${BRANCH_PREFIX}`, {
   entrypoint: "./src/worker.ts",
@@ -47,6 +51,7 @@ export const worker = await Worker(`cloudflare-worker-worker${BRANCH_PREFIX}`, {
     format: "esm",
     target: "es2020",
   },
+  adopt: true,
 });
 
 await WranglerJson("wrangler.jsonc", {

@@ -16,16 +16,23 @@ async function _env<T = string>(
   if (value !== undefined) {
     return value;
   }
-  if (typeof process !== "undefined") {
-    // we are in a node environment
-    return process.env[name]! as T;
+  const env = await resolveEnv();
+  if (name in env) {
+    return env[name] as T;
   }
-  // we are in a browser environment
+  throw new Error(error ?? `Environment variable ${name} is not set`);
+}
+
+async function resolveEnv(): Promise<Record<string, any>> {
+  if (typeof process !== "undefined") {
+    return process.env;
+  }
   try {
     const { env } = await import("cloudflare:workers");
-    if (name in env) {
-      return env[name as keyof typeof env] as T;
-    }
-  } catch (error) {}
-  throw new Error(error ?? `Environment variable ${name} is not set`);
+    return env;
+  } catch (_error) {}
+  if (typeof import.meta !== "undefined") {
+    return import.meta.env;
+  }
+  throw new Error("No environment found");
 }

@@ -179,7 +179,7 @@ export const ClientKey = Resource(
   "sentry::ClientKey",
   async function (
     this: Context<ClientKey>,
-    id: string,
+    _id: string,
     props: ClientKeyProps,
   ): Promise<ClientKey> {
     const api = new SentryApi({ authToken: props.authToken });

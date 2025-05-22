@@ -4,20 +4,21 @@
  * https://developers.cloudflare.com/api/resources/workers/subresources/scripts/methods/update/
  */
 import type { Secret } from "../secret.js";
-import type { AiGateway } from "./ai-gateway.js";
+import type { AiGatewayResource } from "./ai-gateway.js";
 import type { Ai } from "./ai.js";
 import type { AnalyticsEngineDataset } from "./analytics-engine.js";
 import type { Assets } from "./assets.js";
 import type { Bound } from "./bound.js";
 import type { BrowserRendering } from "./browser-rendering.js";
-import type { R2Bucket } from "./bucket.js";
-import type { D1Database } from "./d1-database.js";
+import type { R2BucketResource } from "./bucket.js";
+import type { D1DatabaseResource } from "./d1-database.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
-import type { Hyperdrive } from "./hyperdrive.js";
-import type { KVNamespace } from "./kv-namespace.js";
-import type { Pipeline } from "./pipeline.js";
-import type { Queue } from "./queue.js";
-import type { VectorizeIndex } from "./vectorize-index.js";
+import type { HyperdriveResource } from "./hyperdrive.js";
+import type { KVNamespaceResource } from "./kv-namespace.js";
+import type { PipelineResource } from "./pipeline.js";
+import type { QueueResource } from "./queue.js";
+import type { VectorizeIndexResource } from "./vectorize-index.js";
+import type { WorkerStub } from "./worker-stub.js";
 import type { Worker } from "./worker.js";
 import type { Workflow } from "./workflow.js";
 
@@ -36,30 +37,44 @@ export declare namespace Bindings {
  */
 export type Binding =
   | Ai
-  | AiGateway
+  | AiGatewayResource
   | Assets
+  | D1DatabaseResource
   | AnalyticsEngineDataset
-  | D1Database
   | DurableObjectNamespace
-  | Hyperdrive
-  | KVNamespace
+  | HyperdriveResource
+  | KVNamespaceResource
+  | PipelineResource
+  | QueueResource
+  | R2BucketResource
   | {
       type: "kv_namespace";
       id: string;
     }
-  | Pipeline
-  | Queue
-  | R2Bucket
   | Secret
   | string
-  | VectorizeIndex
+  | VectorizeIndexResource
   | Worker
+  | WorkerStub
   | Workflow
   | BrowserRendering
-  | Self;
+  | Self
+  | Json;
 
 export type Self = typeof Self;
 export const Self = Symbol.for("Self");
+
+export type Json<T = any> = {
+  type: "json";
+  json: T;
+};
+
+export function Json<const T>(value: T): Json<T> {
+  return {
+    type: "json",
+    json: value,
+  };
+}
 
 /**
  * Union type for all Worker binding types (API spec)
@@ -201,7 +216,7 @@ export interface WorkerBindingJson {
   /** Type identifier for JSON binding */
   type: "json";
   /** JSON value */
-  json: any;
+  json: string;
 }
 
 /**

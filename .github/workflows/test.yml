@@ -71,6 +71,7 @@ jobs:
         env:
           CI: true
           ALCHEMY_STATE_STORE: cloudflare
+          ALCHEMY_PASSWORD: ${{ secrets.ALCHEMY_PASSWORD }}
           AWS_REGION: us-west-2
           BRANCH_PREFIX: pr-${{ github.event_name == 'pull_request_target' && github.event.pull_request.number || github.ref_name }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

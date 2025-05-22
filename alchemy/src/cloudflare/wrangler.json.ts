@@ -67,7 +67,7 @@ export const WranglerJson = Resource(
   "cloudflare::WranglerJson",
   async function (
     this: Context<WranglerJson>,
-    id: string,
+    _id: string,
     props: WranglerJsonProps,
   ): Promise<WranglerJson> {
     // Default path is wrangler.json in current directory
@@ -409,7 +409,7 @@ function processBindings(
       // Service binding
       services.push({
         binding: bindingName,
-        service: binding.id,
+        service: binding.name,
       });
     } else if (binding.type === "kv_namespace") {
       // KV Namespace binding
@@ -506,6 +506,8 @@ function processBindings(
         binding: bindingName,
         pipeline: binding.name,
       });
+    } else if (binding.type === "json") {
+      // TODO(sam): anything to do here? not sure wrangler.json supports this
     } else {
       // biome-ignore lint/correctness/noVoidTypeReturn: it returns never
       return assertNever(binding);

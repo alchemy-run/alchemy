@@ -1,11 +1,13 @@
 import type { Context } from "../context.js";
 import { Resource, ResourceKind } from "../resource.js";
+import { bind } from "../runtime/bind.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.js";
+import type { Bound } from "./bound.js";
 
 /**
  * Settings for a Cloudflare Queue
@@ -56,6 +58,14 @@ export interface QueueProps extends CloudflareApiOptions {
    * @default true
    */
   delete?: boolean;
+
+  /**
+   * Whether to adopt an existing queue with the same name if it exists
+   * If true, during creation, if a queue with the same name exists, it will be adopted instead of creating a new one
+   *
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 export function isQueue(eventSource: any): eventSource is Queue {
@@ -68,7 +78,7 @@ export function isQueue(eventSource: any): eventSource is Queue {
 /**
  * Output returned after Cloudflare Queue creation/update
  */
-export interface Queue<Body = unknown>
+export interface QueueResource<Body = unknown>
   extends Resource<"cloudflare::Queue">,
     QueueProps {
   /**
@@ -104,22 +114,8 @@ export interface Queue<Body = unknown>
   Batch: MessageBatch<Body>;
 }
 
-interface CloudflareQueueResponse {
-  result: {
-    queue_id?: string;
-    queue_name: string;
-    created_on?: string;
-    modified_on?: string;
-    settings?: {
-      delivery_delay?: number;
-      delivery_paused?: boolean;
-      message_retention_period?: number;
-    };
-  };
-  success: boolean;
-  errors: Array<{ code: number; message: string }>;
-  messages: string[];
-}
+export type Queue<Body = unknown> = QueueResource<Body> &
+  Bound<QueueResource<Body>>;
 
 /**
  * Creates and manages Cloudflare Queues.
@@ -154,10 +150,23 @@ interface CloudflareQueueResponse {
  *
  * @see https://developers.cloudflare.com/queues/
  */
-export const Queue = Resource("cloudflare::Queue", async function <
+export async function Queue<Body = unknown>(
+  name: string,
+  props: QueueProps = {},
+): Promise<Queue<Body>> {
+  const queue = await QueueResource<Body>(name, props);
+  const binding = await bind(queue);
+  return {
+    ...queue,
+    send: binding.send,
+    sendBatch: binding.sendBatch,
+  } as Queue<Body>;
+}
+
+const QueueResource = Resource("cloudflare::Queue", async function <
   T = unknown,
->(this: Context<Queue<T>>, id: string, props: QueueProps = {}): Promise<
-  Queue<T>
+>(this: Context<QueueResource<T>>, id: string, props: QueueProps = {}): Promise<
+  QueueResource<T>
 > {
   const api = await createCloudflareApi(props);
   const queueName = props.name ?? id;
@@ -166,6 +175,9 @@ export const Queue = Resource("cloudflare::Queue", async function <
     console.log("Deleting Cloudflare Queue:", queueName);
     if (props.delete !== false) {
       // Delete Queue
+      if (!this.output?.id) {
+        console.log(this.output);
+      }
       await deleteQueue(api, this.output?.id);
     }
 
@@ -176,16 +188,35 @@ export const Queue = Resource("cloudflare::Queue", async function <
 
   if (this.phase === "create") {
     console.log("Creating Cloudflare Queue:", queueName);
-    queueData = await createQueue(api, queueName, props);
+    try {
+      queueData = await createQueue(api, queueName, props);
+    } catch (error) {
+      if (error instanceof CloudflareApiError && error.status === 409) {
+        if (!props.adopt) {
+          throw error;
+        }
+        // Queue already exists, try to find it by name
+        const existingQueue = await findQueueByName(api, queueName);
+        if (!existingQueue) {
+          throw new Error(
+            `Queue with name ${queueName} not found despite 409 conflict`,
+          );
+        }
+        queueData = existingQueue;
+        queueData = await updateQueue(api, queueData.result.queue_id!, props);
+      } else {
+        throw error;
+      }
+    }
   } else {
     // Update operation
     if (this.output?.id) {
       console.log("Updating Cloudflare Queue:", queueName);
 
       // Check if name is being changed, which is not allowed
-      if (props.name !== this.output.name) {
+      if (queueName !== this.output.name) {
         throw new Error(
-          "Cannot update Queue name after creation. Queue name is immutable.",
+          `Cannot update Queue name after creation. Queue name is immutable. Before: ${this.output.name}, After: ${queueName}`,
         );
       }
 
@@ -221,6 +252,23 @@ export const Queue = Resource("cloudflare::Queue", async function <
     Batch: undefined! as MessageBatch<T>,
   });
 });
+
+interface CloudflareQueueResponse {
+  result: {
+    queue_id?: string;
+    queue_name: string;
+    created_on?: string;
+    modified_on?: string;
+    settings?: {
+      delivery_delay?: number;
+      delivery_paused?: boolean;
+      message_retention_period?: number;
+    };
+  };
+  success: boolean;
+  errors: Array<{ code: number; message: string }>;
+  messages: string[];
+}
 
 /**
  * Create a new Cloudflare Queue
@@ -390,4 +438,57 @@ export async function listQueues(
     name: queue.queue_name,
     id: queue.queue_id,
   }));
+}
+
+/**
+ * Find a Cloudflare Queue by name
+ */
+export async function findQueueByName(
+  api: CloudflareApi,
+  queueName: string,
+): Promise<CloudflareQueueResponse | null> {
+  const response = await api.get(`/accounts/${api.accountId}/queues`);
+
+  if (!response.ok) {
+    return await handleApiError(response, "listing", "Queues", "");
+  }
+
+  const data = (await response.json()) as {
+    success: boolean;
+    errors?: Array<{ code: number; message: string }>;
+    result?: Array<{
+      queue_name: string;
+      queue_id: string;
+      created_on?: string;
+      modified_on?: string;
+      settings?: {
+        delivery_delay?: number;
+        delivery_paused?: boolean;
+        message_retention_period?: number;
+      };
+    }>;
+  };
+
+  if (!data.success) {
+    const errorMessage = data.errors?.[0]?.message || "Unknown error";
+    throw new Error(`Failed to list queues: ${errorMessage}`);
+  }
+
+  const queue = data.result?.find((q) => q.queue_name === queueName);
+  if (!queue) {
+    return null;
+  }
+
+  return {
+    result: {
+      queue_id: queue.queue_id,
+      queue_name: queue.queue_name,
+      created_on: queue.created_on,
+      modified_on: queue.modified_on,
+      settings: queue.settings,
+    },
+    success: true,
+    errors: [],
+    messages: [],
+  };
 }

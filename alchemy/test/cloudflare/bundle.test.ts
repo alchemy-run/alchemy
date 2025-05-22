@@ -26,6 +26,8 @@ describe("Bundle Worker Test", () => {
         compatibilityFlags: ["nodejs_compat"],
       });
 
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
       const response = await fetch(worker.url!);
       expect(response.status).toEqual(200);
       const text = await response.text();
@@ -47,6 +49,8 @@ describe("Bundle Worker Test", () => {
         url: true, // Enable workers.dev URL to test the worker
         compatibilityFlags: ["nodejs_als"],
       });
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       const response = await fetch(worker.url!);
       expect(response.status).toEqual(200);

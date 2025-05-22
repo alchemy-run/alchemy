@@ -3,6 +3,8 @@ import {
   DeleteQueueCommand,
   GetQueueAttributesCommand,
   GetQueueUrlCommand,
+  QueueDeletedRecently,
+  QueueDoesNotExist,
   SQSClient,
 } from "@aws-sdk/client-sqs";
 import type { Context } from "../context.js";
@@ -136,7 +138,7 @@ export const Queue = Resource(
   "sqs::Queue",
   async function (
     this: Context<Queue>,
-    id: string,
+    _id: string,
     props: QueueProps,
   ): Promise<Queue> {
     const client = new SQSClient({});
@@ -176,7 +178,7 @@ export const Queue = Resource(
             // If we get here, queue still exists
             await new Promise((resolve) => setTimeout(resolve, 1000));
           } catch (error: any) {
-            if (error.name === "QueueDoesNotExist") {
+            if (isQueueDoesNotExist(error)) {
               queueDeleted = true;
             } else {
               throw error;
@@ -184,7 +186,7 @@ export const Queue = Resource(
           }
         }
       } catch (error: any) {
-        if (error.name !== "QueueDoesNotExist") {
+        if (!isQueueDoesNotExist(error)) {
           throw error;
         }
       }
@@ -258,37 +260,18 @@ export const Queue = Resource(
         url: createResponse.QueueUrl!,
       });
     } catch (error: any) {
-      if (error.name === "QueueAlreadyExists") {
-        // Get existing queue URL
-        const urlResponse = await client.send(
-          new GetQueueUrlCommand({
-            QueueName: queueName,
-          }),
+      if (isQueueDeletedRecently(error)) {
+        console.log(
+          `Queue "${queueName}" was recently deleted and can't be re-created. Waiting and retrying...`,
         );
-
-        // Get queue attributes
-        const attributesResponse = await client.send(
-          new GetQueueAttributesCommand({
-            QueueUrl: urlResponse.QueueUrl,
-            AttributeNames: ["QueueArn"],
-          }),
-        );
-
-        return this({
-          ...props,
-          arn: attributesResponse.Attributes!.QueueArn!,
-          url: urlResponse.QueueUrl!,
-        });
-      }
-      if (error.name === "QueueDeletedRecently") {
         // Queue was recently deleted, wait and retry
-        const maxRetries = 3;
+        const maxRetries = 61;
         let retryCount = 0;
 
         while (retryCount < maxRetries) {
           try {
-            // Wait for 60 seconds before retrying
-            await new Promise((resolve) => setTimeout(resolve, 61000));
+            // Wait for 1 second before retrying
+            await new Promise((resolve) => setTimeout(resolve, 1000));
 
             // Retry creating the queue
             const createResponse = await client.send(
@@ -314,7 +297,7 @@ export const Queue = Resource(
             });
           } catch (retryError: any) {
             if (
-              retryError.name !== "QueueDeletedRecently" ||
+              !isQueueDeletedRecently(retryError) ||
               retryCount === maxRetries - 1
             ) {
               throw retryError;
@@ -327,3 +310,19 @@ export const Queue = Resource(
     }
   },
 );
+
+function isQueueDoesNotExist(error: any): error is QueueDoesNotExist {
+  return (
+    error.name === "QueueDoesNotExist" ||
+    error.Code === "AWS.SimpleQueueService.NonExistentQueue" ||
+    error instanceof QueueDoesNotExist
+  );
+}
+
+function isQueueDeletedRecently(error: any): error is QueueDeletedRecently {
+  return (
+    error instanceof QueueDeletedRecently ||
+    error.Code === "AWS.SimpleQueueService.QueueDeletedRecently" ||
+    error.name === "QueueDeletedRecently"
+  );
+}

@@ -19,7 +19,7 @@ describe("D1 Database Resource", async () => {
 
   test("create and delete database", async (scope) => {
     // Create a test database
-    let database: D1Database | undefined = undefined;
+    let database: D1Database | undefined;
 
     try {
       database = await D1Database(testId, {
@@ -68,6 +68,36 @@ describe("D1 Database Resource", async () => {
       const databases = await listDatabases(api);
       const foundDatabase = databases.find((db) => db.name === locationDb);
       expect(foundDatabase).toBeTruthy();
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  });
+
+  test("create database with read replication", async (scope) => {
+    const replicationCreateDb = `${testId}-replication-create`;
+
+    try {
+      // Create a database with read replication enabled from the start
+      const database = await D1Database(replicationCreateDb, {
+        name: replicationCreateDb,
+        readReplication: {
+          mode: "auto",
+        },
+        adopt: true,
+      });
+
+      expect(database.name).toEqual(replicationCreateDb);
+      expect(database.id).toBeTruthy();
+      expect(database.readReplication?.mode).toEqual("auto");
+
+      // Verify the read replication setting by fetching the database directly from API
+      const getResponse = await api.get(
+        `/accounts/${api.accountId}/d1/database/${database.id}`,
+      );
+      expect(getResponse.ok).toBe(true);
+
+      const dbData: any = await getResponse.json();
+      expect(dbData.result.read_replication?.mode).toEqual("auto");
     } finally {
       await alchemy.destroy(scope);
     }
@@ -146,7 +176,7 @@ describe("D1 Database Resource", async () => {
 
   test("create database with migrationsDir applies migrations", async (scope) => {
     const migrationsDb = `${testId}-with-migrations`;
-    let database: D1Database | undefined = undefined;
+    let database: D1Database | undefined;
 
     try {
       database = await D1Database(migrationsDb, {
@@ -165,7 +195,7 @@ describe("D1 Database Resource", async () => {
           sql: "SELECT name FROM sqlite_master WHERE type='table' AND name='test_migrations_table';",
         },
       );
-      const data = await resp.json();
+      const data: any = await resp.json();
       const tables = data.result?.results || data.result?.[0]?.results || [];
 
       expect(tables.length).toBeGreaterThan(0);
@@ -218,7 +248,7 @@ describe("D1 Database Resource", async () => {
         },
       );
 
-      const data = await resp.json();
+      const data: any = await resp.json();
       const results = data.result?.[0]?.results || [];
 
       expect(results.length).toEqual(1);
@@ -268,7 +298,7 @@ describe("D1 Database Resource", async () => {
         },
       );
 
-      const data = await resp.json();
+      const data: any = await resp.json();
       const results = data.result?.[0]?.results || [];
 
       expect(results.length).toEqual(1);
@@ -318,7 +348,7 @@ describe("D1 Database Resource", async () => {
         },
       );
 
-      const data = await resp.json();
+      const data: any = await resp.json();
       const results = data.result?.[0]?.results || [];
 
       expect(results.length).toEqual(1);

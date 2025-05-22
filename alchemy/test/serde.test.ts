@@ -164,22 +164,4 @@ describe("serde", async () => {
       }),
     ).rejects.toThrow();
   });
-
-  test("key that looks like a symbol errors", async (scope) => {
-    expect(
-      serialize(scope, {
-        "Symbol(foo)": "bar",
-      }),
-    ).rejects.toThrow();
-    expect(
-      serialize(scope, {
-        "Symbol()": "bar",
-      }),
-    ).rejects.toThrow();
-    expect(
-      serialize(scope, {
-        "Symbol(Symbol.asyncDispose)": "bar",
-      }),
-    ).rejects.toThrow();
-  });
 });

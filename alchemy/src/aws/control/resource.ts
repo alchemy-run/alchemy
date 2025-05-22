@@ -9,69 +9,58 @@ import readOnlyPropertiesMap from "./properties.js";
  * Properties for creating or updating a Cloud Control resource
  */
 export interface CloudControlResourceProps {
-	/**
-	 * The type name of the resource (e.g. AWS::S3::Bucket)
-	 */
-	typeName: string;
+  /**
+   * The type name of the resource (e.g. AWS::S3::Bucket)
+   */
+  typeName: string;
 
-	/**
-	 * The desired state of the resource
-	 */
-	desiredState: Record<string, any>;
+  /**
+   * The desired state of the resource
+   */
+  desiredState: Record<string, any>;
 
-	/**
-	 * If true, adopt existing resource instead of failing when resource already exists
-	 */
-	adopt?: boolean;
+  /**
+   * If true, adopt existing resource instead of failing when resource already exists
+   */
+  adopt?: boolean;
 
-	/**
-	 * Optional AWS region
-	 * @default AWS_REGION environment variable
-	 */
-	region?: string;
+  /**
+   * Optional AWS region
+   * @default AWS_REGION environment variable
+   */
+  region?: string;
 
-	/**
-	 * AWS access key ID (overrides environment variable)
-	 */
-	accessKeyId?: string;
+  /**
+   * AWS access key ID (overrides environment variable)
+   */
+  accessKeyId?: string;
 
-	/**
-	 * AWS secret access key (overrides environment variable)
-	 */
-	secretAccessKey?: string;
+  /**
+   * AWS secret access key (overrides environment variable)
+   */
+  secretAccessKey?: string;
 
-	/**
-	 * AWS session token for temporary credentials
-	 */
-	sessionToken?: string;
+  /**
+   * AWS session token for temporary credentials
+   */
+  sessionToken?: string;
 }
 
 /**
  * Output returned after Cloud Control resource creation/update
  */
 export interface CloudControlResource
-	extends Resource<"aws::CloudControlResource">,
-		CloudControlResourceProps {
-	/**
-	 * The identifier of the resource
-	 */
-	id: string;
+  extends Resource<"aws::CloudControlResource">,
+    CloudControlResourceProps {
+  /**
+   * The identifier of the resource
+   */
+  id: string;
 
-	/**
-	 * Time at which the resource was created
-	 */
-	createdAt: number;
-}
-
-interface CloudControlResourceInfo {
-	identifier: string;
-	typeName: string;
-	properties: Record<string, any>;
-}
-
-interface CloudControlError {
-	code?: string;
-	message?: string;
+  /**
+   * Time at which the resource was created
+   */
+  createdAt: number;
 }
 
 // Register wildcard deletion handler for AWS::* pattern
@@ -90,22 +79,22 @@ const resourceHandlers: Record<string, any> = {};
  * @returns Filtered state object without read-only properties
  */
 function filterReadOnlyProperties(
-	typeName: string,
-	state: Record<string, any>,
+  typeName: string,
+  state: Record<string, any>,
 ): Record<string, any> {
-	// Parse the type name to get service and resource
-	const [service, resource] = typeName.replace("AWS::", "").split("::");
-	const readOnlyProps =
-		(readOnlyPropertiesMap as any)[service]?.[resource] || [];
+  // Parse the type name to get service and resource
+  const [service, resource] = typeName.replace("AWS::", "").split("::");
+  const readOnlyProps =
+    (readOnlyPropertiesMap as any)[service]?.[resource] || [];
 
-	const filtered: Record<string, any> = {};
-	for (const [key, value] of Object.entries(state)) {
-		if (!readOnlyProps.includes(key)) {
-			filtered[key] = value;
-		}
-	}
+  const filtered: Record<string, any> = {};
+  for (const [key, value] of Object.entries(state)) {
+    if (!readOnlyProps.includes(key)) {
+      filtered[key] = value;
+    }
+  }
 
-	return filtered;
+  return filtered;
 }
 
 /**
@@ -115,40 +104,40 @@ function filterReadOnlyProperties(
  * @returns A memoized Resource handler for the specified type
  */
 export function createResourceType(typeName: string) {
-	return (resourceHandlers[typeName] ??= Resource(
-		typeName,
-		function (
-			this: Context<CloudControlResource, CloudControlResourceProps>,
-			id: string,
-			props: Record<string, any> & {
-				adopt?: boolean;
-				region?: string;
-				accessKeyId?: string;
-				secretAccessKey?: string;
-				sessionToken?: string;
-			},
-		) {
-			// Extract Alchemy-specific properties
-			const {
-				adopt,
-				region,
-				accessKeyId,
-				secretAccessKey,
-				sessionToken,
-				...desiredState
-			} = props;
+  return (resourceHandlers[typeName] ??= Resource(
+    typeName,
+    function (
+      this: Context<CloudControlResource, CloudControlResourceProps>,
+      id: string,
+      props: Record<string, any> & {
+        adopt?: boolean;
+        region?: string;
+        accessKeyId?: string;
+        secretAccessKey?: string;
+        sessionToken?: string;
+      },
+    ) {
+      // Extract Alchemy-specific properties
+      const {
+        adopt,
+        region,
+        accessKeyId,
+        secretAccessKey,
+        sessionToken,
+        ...desiredState
+      } = props;
 
-			return CloudControlLifecycle.bind(this)(id, {
-				typeName,
-				desiredState,
-				adopt,
-				region,
-				accessKeyId,
-				secretAccessKey,
-				sessionToken,
-			});
-		},
-	));
+      return CloudControlLifecycle.bind(this)(id, {
+        typeName,
+        desiredState,
+        adopt,
+        region,
+        accessKeyId,
+        secretAccessKey,
+        sessionToken,
+      });
+    },
+  ));
 }
 
 /**
@@ -202,89 +191,89 @@ export function createResourceType(typeName: string) {
  * });
  */
 export const CloudControlResource = Resource(
-	"aws::CloudControlResource",
-	CloudControlLifecycle,
+  "aws::CloudControlResource",
+  CloudControlLifecycle,
 );
 
 async function CloudControlLifecycle(
-	this: Context<CloudControlResource, CloudControlResourceProps>,
-	id: string,
-	props: CloudControlResourceProps,
+  this: Context<CloudControlResource, CloudControlResourceProps>,
+  id: string,
+  props: CloudControlResourceProps,
 ) {
-	const client = await createCloudControlClient({
-		region: props.region,
-		accessKeyId: props.accessKeyId,
-		secretAccessKey: props.secretAccessKey,
-		sessionToken: props.sessionToken,
-	});
+  const client = await createCloudControlClient({
+    region: props.region,
+    accessKeyId: props.accessKeyId,
+    secretAccessKey: props.secretAccessKey,
+    sessionToken: props.sessionToken,
+  });
 
-	if (this.phase === "delete") {
-		if (this.output?.id) {
-			try {
-				await client.deleteResource(props.typeName, this.output.id);
-			} catch (error) {
-				// Log but don't throw on cleanup errors
-				console.error(`Error deleting resource ${id}:`, error);
-			}
-		}
-		return this.destroy();
-	}
+  if (this.phase === "delete") {
+    if (this.output?.id) {
+      try {
+        await client.deleteResource(props.typeName, this.output.id);
+      } catch (error) {
+        // Log but don't throw on cleanup errors
+        console.error(`Error deleting resource ${id}:`, error);
+      }
+    }
+    return this.destroy();
+  }
 
-	let response: ProgressEvent | undefined;
-	if (this.phase === "update" && this.output?.id) {
-		// Update existing resource
-		// Filter out read-only properties from the previous state to avoid patch conflicts
-		const filteredPreviousState = filterReadOnlyProperties(
-			props.typeName,
-			this.output.desiredState,
-		);
+  let response: ProgressEvent | undefined;
+  if (this.phase === "update" && this.output?.id) {
+    // Update existing resource
+    // Filter out read-only properties from the previous state to avoid patch conflicts
+    const filteredPreviousState = filterReadOnlyProperties(
+      props.typeName,
+      this.output.desiredState,
+    );
 
-		response = await client.updateResource(
-			props.typeName,
-			this.output.id,
-			compare(filteredPreviousState, props.desiredState),
-		);
-	} else {
-		// Create new resource
-		try {
-			response = await client.createResource(
-				props.typeName,
-				props.desiredState,
-			);
-		} catch (error) {
-			if (error instanceof AlreadyExistsError && props.adopt) {
-				const resource = (await client.getResource(
-					props.typeName,
-					error.progressEvent.Identifier!,
-				))!;
+    response = await client.updateResource(
+      props.typeName,
+      this.output.id,
+      compare(filteredPreviousState, props.desiredState),
+    );
+  } else {
+    // Create new resource
+    try {
+      response = await client.createResource(
+        props.typeName,
+        props.desiredState,
+      );
+    } catch (error) {
+      if (error instanceof AlreadyExistsError && props.adopt) {
+        const resource = (await client.getResource(
+          props.typeName,
+          error.progressEvent.Identifier!,
+        ))!;
 
-				// Filter out read-only properties to avoid patch conflicts
-				const filteredCurrentState = filterReadOnlyProperties(
-					props.typeName,
-					resource,
-				);
+        // Filter out read-only properties to avoid patch conflicts
+        const filteredCurrentState = filterReadOnlyProperties(
+          props.typeName,
+          resource,
+        );
 
-				response = await client.updateResource(
-					props.typeName,
-					error.progressEvent.Identifier!,
-					compare(filteredCurrentState, props.desiredState),
-				);
-			} else {
-				throw error;
-			}
-		}
-	}
+        response = await client.updateResource(
+          props.typeName,
+          error.progressEvent.Identifier!,
+          compare(filteredCurrentState, props.desiredState),
+        );
+      } else {
+        throw error;
+      }
+    }
+  }
 
-	if (response.OperationStatus === "FAILED") {
-		throw new Error(
-			`Failed to ${this.phase} resource ${id}: ${response.ErrorCode}`,
-		);
-	}
+  if (response.OperationStatus === "FAILED") {
+    throw new Error(
+      `Failed to ${this.phase} resource ${id}: ${response.ErrorCode}`,
+    );
+  }
 
-	return this({
-		...props,
-		id: response.Identifier!,
-		createdAt: Date.now(),
-		...(await client.getResource(props.typeName, response.Identifier!)),
-	});
+  return this({
+    ...props,
+    id: response.Identifier!,
+    createdAt: Date.now(),
+    ...(await client.getResource(props.typeName, response.Identifier!)),
+  });
 }
