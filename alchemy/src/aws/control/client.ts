@@ -126,7 +126,7 @@ export interface CloudControlOptions {
 const getRegion = loadConfig({
   environmentVariableSelector: (env) =>
     env.AWS_REGION || env.AWS_DEFAULT_REGION,
-  configFileSelector: (profile) => profile.AWS_PROFILE,
+  configFileSelector: (profile) => profile.region,
   default: undefined,
 });
 
@@ -138,18 +138,27 @@ export async function createCloudControlClient(
 ) {
   const credentials = await fromNodeProviderChain()();
 
+  const region =
+    options.region ?? // 1. favor explicit region passed in
+    (await getRegion()) ?? // 2-4. resolve from AWS profile, loadConfig, and environment
+    process.env.AWS_REGION ??
+    process.env.AWS_DEFAULT_REGION;
+
+  if (!region) {
+    throw new Error(
+      "No region found. Please set AWS_REGION or AWS_DEFAULT_REGION in the environment or in your AWS profile.",
+    );
+  }
+
   const client = new AwsClient({
     ...credentials,
     service: "cloudcontrolapi",
-    region:
-      options.region ??
-      process.env.AWS_REGION ??
-      process.env.AWS_DEFAULT_REGION ??
-      (await getRegion()),
+    region,
   });
 
   return new CloudControlClient(client, options);
 }
+
 export class CloudControlClient {
   private region: string;
   private initialPollingDelay: number;
