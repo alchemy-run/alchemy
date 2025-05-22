@@ -96,6 +96,7 @@ export async function Website<B extends Bindings>(
               name: id,
               main: wranglerMain,
               compatibility_date: new Date().toISOString().split("T")[0],
+              compatibility_flags: props.compatibilityFlags ?? [],
             },
             null,
             2,
@@ -105,6 +106,7 @@ export async function Website<B extends Bindings>(
     }
 
     await Exec("build", {
+      cwd,
       command: props.command,
     });
 

@@ -2,6 +2,7 @@ import type { Pipeline } from "cloudflare:pipelines";
 import type { Secret } from "../secret.js";
 import type { AiGatewayResource as _AiGateway } from "./ai-gateway.js";
 import type { Ai as _Ai } from "./ai.js";
+import type { AnalyticsEngineDataset as _AnalyticsEngineDataset } from "./analytics-engine.js";
 import type { Assets } from "./assets.js";
 import type { Binding, Json, Self } from "./bindings.js";
 import type { BrowserRendering } from "./browser-rendering.js";
@@ -38,16 +39,18 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace
                       ? VectorizeIndex
                       : T extends _Queue<infer Body>
                         ? Queue<Body>
-                        : T extends _Pipeline<infer R>
-                          ? Pipeline<R>
-                          : T extends string
-                            ? string
-                            : T extends BrowserRendering
-                              ? Fetcher
-                              : T extends _Ai<infer M>
-                                ? Ai<M>
-                                : T extends Self
-                                  ? Service
-                                  : T extends Json<infer T>
-                                    ? T
-                                    : Service;
+                        : T extends _AnalyticsEngineDataset
+                          ? AnalyticsEngineDataset
+                          : T extends _Pipeline<infer R>
+                            ? Pipeline<R>
+                            : T extends string
+                              ? string
+                              : T extends BrowserRendering
+                                ? Fetcher
+                                : T extends _Ai<infer M>
+                                  ? Ai<M>
+                                  : T extends Self
+                                    ? Service
+                                    : T extends Json<infer T>
+                                      ? T
+                                      : Service;
