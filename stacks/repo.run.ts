@@ -103,6 +103,7 @@ await Promise.all([
     SENTRY_AUTH_TOKEN: await alchemy.secret.env.SENTRY_AUTH_TOKEN,
     SENTRY_ORG: await alchemy.secret.env.SENTRY_ORG,
     VERCEL_ACCESS_TOKEN: await alchemy.secret.env.VERCEL_ACCESS_TOKEN,
+    ALCHEMY_PASSWORD: await alchemy.secret.env.ALCHEMY_PASSWORD,
   }).flatMap(async ([name, value]) => {
     const props = {
       owner: "sam-goodwin",
