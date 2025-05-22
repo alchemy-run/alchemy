@@ -89,6 +89,7 @@ describe("CloudControlResource", () => {
 						Status: "Enabled",
 					},
 				},
+				adopt: true,
 			});
 
 			expect(firstResource.id).toBeTruthy();
@@ -173,12 +174,9 @@ describe("CloudControlResource", () => {
 
 			// Verify all buckets were deleted
 			for (const resource of resources) {
-				try {
-					await client.getResource("AWS::S3::Bucket", resource.id);
-					throw new Error("Bucket should have been deleted");
-				} catch (error: any) {
-					expect(error.code).toEqual("ResourceNotFoundException");
-				}
+				expect(
+					await client.getResource("AWS::S3::Bucket", resource.id),
+				).toBeUndefined();
 			}
 		} catch (err) {
 			console.log(err);

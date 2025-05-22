@@ -77,9 +77,6 @@ describe("AWS Cloud Control Proxy", () => {
 			// Note: We can't directly compare IDs here since the proxy interface
 			// doesn't expose the internal resource ID, but we can verify the
 			// bucket name and that the configuration was updated
-		} catch (err) {
-			console.log(err);
-			throw err;
 		} finally {
 			// Clean up
 			await destroy(scope);
