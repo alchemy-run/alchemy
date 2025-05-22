@@ -7,6 +7,7 @@ const CFN_SPEC_URL =
 	"https://d1uauaxba7bl26.cloudfront.net/latest/gzip/CloudFormationResourceSpecification.json";
 const OUTPUT_FILE = "alchemy/src/aws/control/types.d.ts";
 const PROPERTIES_FILE = "alchemy/src/aws/control/properties.ts";
+const DOCS_BASE_DIR = "alchemy-web/docs/providers/aws-control";
 
 interface ResourceTypeProperty {
 	Documentation?: string;
@@ -218,6 +219,439 @@ function sanitizeTypeName(typeName: string | undefined): string {
 		.replace(/\./g, "_")
 		.replace(/[^a-zA-Z0-9_]/g, "_")
 		.replace(/^(\d)/, "_$1"); // Ensure it doesn't start with a number
+}
+
+function toKebabCase(str: string): string {
+	return str
+		.replace(/([a-z])([A-Z])/g, "$1-$2")
+		.toLowerCase()
+		.replace(/[^a-z0-9]/g, "-")
+		.replace(/-+/g, "-")
+		.replace(/^-|-$/g, "");
+}
+
+function sanitizeVariableName(name: string): string {
+	// List of JavaScript reserved words and keywords that can't be used as variable names
+	const reservedWords = new Set([
+		"abstract",
+		"arguments",
+		"await",
+		"boolean",
+		"break",
+		"byte",
+		"case",
+		"catch",
+		"char",
+		"class",
+		"const",
+		"continue",
+		"debugger",
+		"default",
+		"delete",
+		"do",
+		"double",
+		"else",
+		"enum",
+		"eval",
+		"export",
+		"extends",
+		"false",
+		"final",
+		"finally",
+		"float",
+		"for",
+		"function",
+		"goto",
+		"if",
+		"implements",
+		"import",
+		"in",
+		"instanceof",
+		"int",
+		"interface",
+		"let",
+		"long",
+		"native",
+		"new",
+		"null",
+		"package",
+		"private",
+		"protected",
+		"public",
+		"return",
+		"short",
+		"static",
+		"super",
+		"switch",
+		"synchronized",
+		"this",
+		"throw",
+		"throws",
+		"transient",
+		"true",
+		"try",
+		"typeof",
+		"var",
+		"void",
+		"volatile",
+		"while",
+		"with",
+		"yield",
+	]);
+
+	const lowerName = name.toLowerCase();
+
+	// If it's a reserved word, prefix with "aws"
+	if (reservedWords.has(lowerName)) {
+		return `aws${name.charAt(0).toUpperCase()}${name.slice(1).toLowerCase()}`;
+	}
+
+	return lowerName;
+}
+
+function getAwsDocsUrl(service: string, resource: string): string {
+	const serviceMap: Record<string, string> = {
+		EC2: "ec2",
+		S3: "s3",
+		IAM: "iam",
+		Lambda: "lambda",
+		DynamoDB: "dynamodb",
+		CloudFormation: "cloudformation",
+		RDS: "rds",
+		ECS: "ecs",
+		EKS: "eks",
+		SNS: "sns",
+		SQS: "sqs",
+		CloudWatch: "cloudwatch",
+		ElastiCache: "elasticache",
+		ElasticLoadBalancing: "elasticloadbalancing",
+		ElasticLoadBalancingV2: "elasticloadbalancing",
+		Route53: "route53",
+		CloudFront: "cloudfront",
+		APIGateway: "apigateway",
+		Cognito: "cognito",
+		StepFunctions: "stepfunctions",
+		EventBridge: "eventbridge",
+		KMS: "kms",
+		SecretsManager: "secretsmanager",
+		Systems: "systems-manager",
+		CodeBuild: "codebuild",
+		CodeDeploy: "codedeploy",
+		CodePipeline: "codepipeline",
+	};
+
+	const serviceName = serviceMap[service] || service.toLowerCase();
+	const baseUrl = "https://docs.aws.amazon.com";
+
+	// For most services, use the general pattern
+	return `${baseUrl}/${serviceName}/latest/userguide/`;
+}
+
+async function generateMinimalExample(
+	service: string,
+	resource: string,
+	resourceType: ResourceType,
+): Promise<string> {
+	const resourceVar = sanitizeVariableName(resource.toLowerCase());
+	const exampleId = `${resourceVar}-example`;
+
+	// Find required properties for the minimal example
+	const requiredProps: string[] = [];
+	const exampleProps: Record<string, any> = {};
+
+	for (const [propName, prop] of Object.entries(resourceType.Properties)) {
+		if (prop.Required) {
+			requiredProps.push(propName);
+			exampleProps[propName] = generateExampleValue(prop, propName, resource);
+		}
+	}
+
+	// Add a few common optional properties for better examples
+	const commonOptional = ["Tags", "Description"];
+	for (const propName of commonOptional) {
+		if (
+			resourceType.Properties[propName] &&
+			!requiredProps.includes(propName)
+		) {
+			exampleProps[propName] = generateExampleValue(
+				resourceType.Properties[propName],
+				propName,
+				resource,
+			);
+		}
+	}
+
+	const codeTemplate = `import AWS from "alchemy/aws/control";
+
+const ${resourceVar} = await AWS.${service}.${resource}("${exampleId}", ${JSON.stringify(exampleProps)});`;
+
+	const formattedCode = await prettier.format(codeTemplate, {
+		parser: "typescript",
+		semi: true,
+		singleQuote: false,
+		trailingComma: "es5",
+		printWidth: 100,
+		tabWidth: 2,
+		useTabs: false,
+	});
+
+	return `\`\`\`ts
+${formattedCode.trim()}
+\`\`\``;
+}
+
+function generateExampleValue(
+	prop: ResourceTypeProperty,
+	propName: string,
+	resourceName: string,
+): any {
+	// Handle specific property names with better defaults
+	const lowerPropName = propName.toLowerCase();
+	const lowerResourceName = resourceName.toLowerCase();
+
+	if (lowerPropName.includes("name")) {
+		return `${lowerResourceName}-${lowerPropName.replace("name", "")}`;
+	}
+
+	if (lowerPropName.includes("description")) {
+		return `A ${resourceName.toLowerCase()} resource managed by Alchemy`;
+	}
+
+	if (lowerPropName === "tags") {
+		return {
+			Environment: "production",
+			ManagedBy: "Alchemy",
+		};
+	}
+
+	// Handle by type
+	if (prop.PrimitiveType) {
+		switch (prop.PrimitiveType.toLowerCase()) {
+			case "string":
+				return `example-${lowerPropName}`;
+			case "integer":
+			case "double":
+				return lowerPropName.includes("port") ? 443 : 1;
+			case "boolean":
+				return true;
+			case "json":
+				return {};
+		}
+	}
+
+	if (prop.Type === "List" || prop.Type === "Array") {
+		if (prop.PrimitiveItemType === "String") {
+			return [`example-${lowerPropName}-1`];
+		}
+		return [];
+	}
+
+	if (prop.Type === "Map") {
+		return {};
+	}
+
+	// Default fallback
+	return `example-${lowerPropName}`;
+}
+
+async function generateSecondExample(
+	service: string,
+	resource: string,
+	resourceType: ResourceType,
+): Promise<string | null> {
+	const resourceVar = sanitizeVariableName(resource.toLowerCase());
+
+	// Generate a more advanced example with additional properties
+	const exampleProps: Record<string, any> = {};
+	let hasAdvancedFeatures = false;
+
+	// Include some required properties
+	for (const [propName, prop] of Object.entries(resourceType.Properties)) {
+		if (prop.Required) {
+			exampleProps[propName] = generateExampleValue(prop, propName, resource);
+		}
+	}
+
+	// Add some interesting optional properties
+	const interestingProps = [
+		"Tags",
+		"Description",
+		"Policy",
+		"Configuration",
+		"Settings",
+		"Encryption",
+		"Monitoring",
+		"Logging",
+		"AccessControl",
+	];
+
+	for (const propName of interestingProps) {
+		if (resourceType.Properties[propName] && !exampleProps[propName]) {
+			exampleProps[propName] = generateAdvancedExampleValue(
+				resourceType.Properties[propName],
+				propName,
+				resource,
+			);
+			hasAdvancedFeatures = true;
+		}
+	}
+
+	if (!hasAdvancedFeatures) {
+		return null;
+	}
+
+	const codeTemplate = `import AWS from "alchemy/aws/control";
+
+const advanced${resource} = await AWS.${service}.${resource}("advanced-${resourceVar}", ${JSON.stringify(exampleProps)});`;
+
+	const formattedCode = await prettier.format(codeTemplate, {
+		parser: "typescript",
+		semi: true,
+		singleQuote: false,
+		trailingComma: "es5",
+		printWidth: 100,
+		tabWidth: 2,
+		useTabs: false,
+	});
+
+	return `## Advanced Configuration
+
+Create a ${resource.toLowerCase()} with additional configuration:
+
+\`\`\`ts
+${formattedCode.trim()}
+\`\`\``;
+}
+
+function generateAdvancedExampleValue(
+	prop: ResourceTypeProperty,
+	propName: string,
+	resourceName: string,
+): any {
+	const lowerPropName = propName.toLowerCase();
+
+	if (lowerPropName === "tags") {
+		return {
+			Environment: "production",
+			Team: "DevOps",
+			Project: "MyApp",
+			CostCenter: "Engineering",
+			ManagedBy: "Alchemy",
+		};
+	}
+
+	if (lowerPropName.includes("policy")) {
+		return {
+			Version: "2012-10-17",
+			Statement: [
+				{
+					Effect: "Allow",
+					Action: ["s3:GetObject"],
+					Resource: "*",
+				},
+			],
+		};
+	}
+
+	if (lowerPropName.includes("encryption")) {
+		return {
+			Enabled: true,
+			KmsKeyId: "alias/aws/s3",
+		};
+	}
+
+	if (lowerPropName.includes("monitoring")) {
+		return {
+			Enabled: true,
+			LoggingLevel: "INFO",
+		};
+	}
+
+	// Fall back to the regular example value
+	return generateExampleValue(prop, propName, resourceName);
+}
+
+async function generateResourceDocumentation(
+	service: string,
+	resource: string,
+	resourceType: ResourceType,
+): Promise<string> {
+	const serviceName =
+		service === "ElasticLoadBalancingV2"
+			? "Application Load Balancer"
+			: service;
+	const title = `Managing AWS ${serviceName} ${resource}s with Alchemy`;
+	const description = `Learn how to create, update, and manage AWS ${serviceName} ${resource}s using Alchemy Cloud Control.`;
+	const docsUrl = getAwsDocsUrl(service, resource);
+
+	let content = `---
+title: ${title}
+description: ${description}
+---
+
+# ${resource}
+
+The ${resource} resource lets you create and manage [AWS ${serviceName} ${resource}s](${docsUrl}) using AWS Cloud Control API.
+
+`;
+
+	if (resourceType.Documentation) {
+		content += `${resourceType.Documentation}\n\n`;
+	}
+
+	const minimalExample = await generateMinimalExample(
+		service,
+		resource,
+		resourceType,
+	);
+	content += `## Minimal Example
+
+${minimalExample}
+
+`;
+
+	const secondExample = await generateSecondExample(
+		service,
+		resource,
+		resourceType,
+	);
+	if (secondExample) {
+		content += `${secondExample}\n\n`;
+	}
+
+	return content;
+}
+
+async function generateDocumentation(
+	resourceTypesByService: Record<string, Record<string, ResourceType>>,
+): Promise<void> {
+	console.log("Generating documentation...");
+
+	for (const [service, resources] of Object.entries(resourceTypesByService)) {
+		const serviceDirName = toKebabCase(service);
+		const serviceDir = `${DOCS_BASE_DIR}/${serviceDirName}`;
+
+		// Create service directory
+		await mkdir(serviceDir, { recursive: true });
+
+		for (const [resource, resourceType] of Object.entries(resources)) {
+			const resourceFileName = toKebabCase(resource);
+			const filePath = `${serviceDir}/${resourceFileName}.md`;
+
+			const documentation = await generateResourceDocumentation(
+				service,
+				resource,
+				resourceType,
+			);
+			await writeFile(filePath, documentation);
+		}
+
+		console.log(
+			`Generated documentation for ${service} (${Object.keys(resources).length} resources)`,
+		);
+	}
+
+	console.log("Successfully generated all documentation");
 }
 
 function generatePropertyTypeInterface(
@@ -455,8 +889,11 @@ try {
 	const properties = generateReadOnlyPropertiesObject(resourceTypesByService);
 	await writeProperties(properties);
 
+	// Generate documentation
+	await generateDocumentation(resourceTypesByService);
+
 	console.log(
-		"Successfully generated AWS CloudFormation type definitions and properties",
+		"Successfully generated AWS CloudFormation type definitions, properties, and documentation",
 	);
 } catch (error) {
 	console.error("Error generating type definitions:", error);
