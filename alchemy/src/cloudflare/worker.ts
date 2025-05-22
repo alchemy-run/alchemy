@@ -519,6 +519,7 @@ export function Worker<const B extends Bindings>(
             "undici",
             // TODO(sam): no idea where this came from, feels dangerous to externalize it
             "ws",
+            "miniflare",
           ],
           banner: {
             js: "var __ALCHEMY_RUNTIME__ = true;",
