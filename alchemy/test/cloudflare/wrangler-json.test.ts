@@ -344,11 +344,11 @@ describe("WranglerJson Resource", () => {
         expect(spec.workflows?.length).toEqual(1);
         expect(spec.workflows?.[0].name).toEqual("test-workflow");
         expect(spec.workflows?.[0].binding).toEqual("WF");
-      expect(spec.workflows?.[0].class_name).toEqual("TestWorkflow");
-    } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
-      await destroy(scope);
-    }
+        expect(spec.workflows?.[0].class_name).toEqual("TestWorkflow");
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        await destroy(scope);
+      }
     });
 
     test("with cron triggers", async (scope) => {
