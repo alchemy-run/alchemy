@@ -45,8 +45,13 @@ for dir in "$EXAMPLES_DIR"/*/; do
         fi
       fi
       else
-        bun run deploy
-        bun run destroy
+        if [ -f "./alchemy.run.ts" ]; then
+          bun ./alchemy.run.ts
+          bun ./alchemy.run.ts --destroy
+        else
+          bun ./index.ts
+          bun ./index.ts --destroy
+        fi
       fi
     ) # Run in a subshell to automatically return to the original directory
 
