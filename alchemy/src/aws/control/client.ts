@@ -156,7 +156,10 @@ export async function createCloudControlClient(
     region,
   });
 
-  return new CloudControlClient(client, options);
+  return new CloudControlClient(client, {
+    ...options,
+    region,
+  });
 }
 
 export class CloudControlClient {
