@@ -350,7 +350,7 @@ export class CloudControlClient {
           ) {
             throw new ResourceNotFoundException(response);
           }
-          throw new RequestError(response);
+          throw new RequestError(response, data);
         }
 
         return (await response.json()) as T;

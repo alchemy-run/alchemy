@@ -65,7 +65,10 @@ jobs:
           fi
 
           echo "Running tests changed since commit: $BASE_COMMIT"
-          bun run test --since "$BASE_COMMIT"
+          # bun run test --since "$BASE_COMMIT"
+
+          # TODO(sam): revert this once we are done testing why CI fails
+          bun test ./alchemy/test/aws/control/proxy.test.ts
 
           bun run test:smoke
         env:

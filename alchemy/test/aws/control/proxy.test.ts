@@ -6,7 +6,9 @@ import { BRANCH_PREFIX } from "../../util.js";
 // must import this or else alchemy.test won't exist
 import "../../../src/test/bun.js";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("AWS Cloud Control Proxy", () => {
   const testId = `${BRANCH_PREFIX}-test-bucket`;

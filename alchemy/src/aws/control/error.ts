@@ -13,8 +13,11 @@ export class CloudControlError extends Error {
 }
 export class NetworkError extends CloudControlError {}
 export class RequestError extends CloudControlError {
-  constructor(public readonly response: Response) {
-    super(response.statusText);
+  constructor(
+    response: Response,
+    public readonly data: any,
+  ) {
+    super(response.statusText, response);
   }
 }
 export class UpdateFailedError extends CloudControlError {

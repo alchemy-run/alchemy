@@ -9,7 +9,9 @@ import "../../../src/test/bun.js";
 
 const client = await createCloudControlClient();
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("CloudControlResource", () => {
   const testId = `${BRANCH_PREFIX}-test-bucket`;
