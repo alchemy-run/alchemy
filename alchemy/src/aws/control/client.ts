@@ -123,19 +123,6 @@ export interface CloudControlOptions {
   maxRetries?: number;
 }
 
-// List of retryable error codes
-// TODO(sam): apply these
-const _RETRYABLE_ERRORS = new Set([
-  "ThrottlingException",
-  "ServiceUnavailable",
-  "InternalFailure",
-  "TooManyRequestsException",
-  "RequestLimitExceeded",
-  "Throttling",
-  "ThrottlingException",
-  "LimitExceededException",
-]);
-
 const getRegion = loadConfig({
   environmentVariableSelector: (env) =>
     env.AWS_REGION || env.AWS_DEFAULT_REGION,
@@ -154,7 +141,11 @@ export async function createCloudControlClient(
   const client = new AwsClient({
     ...credentials,
     service: "cloudcontrolapi",
-    region: options.region ?? (await getRegion()),
+    region:
+      options.region ??
+      process.env.AWS_REGION ??
+      process.env.AWS_DEFAULT_REGION ??
+      (await getRegion()),
   });
 
   return new CloudControlClient(client, options);
