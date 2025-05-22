@@ -304,6 +304,7 @@ export class CloudControlClient {
         await new Promise((resolve) => setTimeout(resolve, waitTime));
         delay = Math.min(delay * 2, this.maxPollingDelay);
       } catch (error: any) {
+        console.log(error);
         if (error instanceof NotFoundError && action === "DeleteResource") {
           return error.progressEvent;
         } else if (error instanceof CloudControlError) {
