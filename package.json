@@ -1,39 +1,40 @@
 {
-  "name": "alchemy-mono",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "module": "./lib/index.js",
-  "license": "Apache-2.0",
-  "scripts": {
-    "build": "tsc -b",
-    "check": "tsc -b ./tsconfig.json && biome check",
-    "fix": "biome check --write",
-    "deploy:repo": "bun ./stacks/repo.run.ts",
-    "deploy:website": "bun ./stacks/website.run.ts",
-    "generate:docs": "bun ./stacks/docs.run.ts",
-    "publish:npm": "bun run --filter alchemy publish:npm",
-    "test": "bun ./alchemy/test/run.ts",
-    "test:smoke": "./scripts/smoke.sh"
-  },
-  "workspaces": [
-    "alchemy",
-    "alchemy-web",
-    "examples/aws-app",
-    "examples/cloudflare-vite",
-    "examples/cloudflare-worker",
-    "examples/cloudflare-nuxt-pipeline",
-    "examples/cloudflare-redwood",
-    "examples/cloudflare-worker"
-  ],
-  "devDependencies": {
-    "@biomejs/biome": "beta",
-    "@types/bun": "latest",
-    "@types/node": "latest",
-    "aws4fetch": "^1.0.20",
-    "braintrust": "*",
-    "json-schema-to-typescript": "^15.0.4",
-    "typescript": "latest",
-    "yaml": "^2.7.1"
-  }
+	"name": "alchemy-mono",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"module": "./lib/index.js",
+	"license": "Apache-2.0",
+	"scripts": {
+		"build": "tsc -b",
+		"check": "tsc -b ./tsconfig.json && biome check",
+		"fix": "biome check --write",
+		"deploy:repo": "bun ./stacks/repo.run.ts",
+		"deploy:website": "bun ./stacks/website.run.ts",
+		"generate:docs": "bun ./stacks/docs.run.ts",
+		"generate:aws-control": "bun ./scripts/generate-aws-control.ts",
+		"publish:npm": "bun run --filter alchemy publish:npm",
+		"test": "bun ./alchemy/test/run.ts",
+		"test:smoke": "./scripts/smoke.sh"
+	},
+	"workspaces": [
+		"alchemy",
+		"alchemy-web",
+		"examples/aws-app",
+		"examples/cloudflare-vite",
+		"examples/cloudflare-worker",
+		"examples/cloudflare-nuxt-pipeline",
+		"examples/cloudflare-redwood",
+		"examples/cloudflare-worker"
+	],
+	"devDependencies": {
+		"@biomejs/biome": "beta",
+		"@types/bun": "latest",
+		"@types/node": "latest",
+		"aws4fetch": "^1.0.20",
+		"braintrust": "*",
+		"json-schema-to-typescript": "^15.0.4",
+		"typescript": "latest",
+		"yaml": "^2.7.1"
+	}
 }
