@@ -1,6 +1,7 @@
 import type { Context } from "../context.js";
 import { StaticJsonFile } from "../fs/static-json-file.js";
 import { Resource } from "../resource.js";
+import { assertNever } from "../util/assert-never.js";
 import { Self, type Bindings } from "./bindings.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
 import type { EventSource } from "./event-source.js";
@@ -291,6 +292,21 @@ export interface WranglerJsonSpec {
    * Whether to minify the worker script
    */
   minify?: boolean;
+
+  /**
+   * Analytics Engine datasets
+   */
+  analytics_engine_datasets?: { binding: string; dataset: string }[];
+
+  /**
+   * Hyperdrive bindings
+   */
+  hyperdrive?: { binding: string; id: string; localConnectionString: string }[];
+
+  /**
+   * Pipelines
+   */
+  pipelines?: { binding: string; pipeline: string }[];
 }
 
 /**
@@ -340,6 +356,13 @@ function processBindings(
   const new_classes: string[] = [];
 
   const vectorizeIndexes: { binding: string; index_name: string }[] = [];
+  const analyticsEngineDatasets: { binding: string; dataset: string }[] = [];
+  const hyperdrive: {
+    binding: string;
+    id: string;
+    localConnectionString: string;
+  }[] = [];
+  const pipelines: { binding: string; pipeline: string }[] = [];
 
   for (const eventSource of eventSources ?? []) {
     if (isQueueEventSource(eventSource)) {
@@ -450,6 +473,31 @@ function processBindings(
       spec.ai = {
         binding: bindingName,
       };
+    } else if (binding.type === "analytics_engine") {
+      analyticsEngineDatasets.push({
+        binding: bindingName,
+        dataset: binding.dataset,
+      });
+    } else if (binding.type === "ai_gateway") {
+      // no-op
+    } else if (binding.type === "hyperdrive") {
+      const password =
+        "password" in binding.origin
+          ? binding.origin.password.unencrypted
+          : binding.origin.access_client_secret.unencrypted;
+      hyperdrive.push({
+        binding: bindingName,
+        id: binding.hyperdriveId,
+        localConnectionString: `${binding.origin.scheme || "postgres"}://${binding.origin.user}:${password}@${binding.origin.host}:${binding.origin.port || 5432}/${binding.origin.database}`,
+      });
+    } else if (binding.type === "pipeline") {
+      pipelines.push({
+        binding: bindingName,
+        pipeline: binding.name,
+      });
+    } else {
+      // biome-ignore lint/correctness/noVoidTypeReturn: it returns never
+      return assertNever(binding);
     }
   }
 
@@ -496,5 +544,17 @@ function processBindings(
 
   if (workflows.length > 0) {
     spec.workflows = workflows;
+  }
+
+  if (analyticsEngineDatasets.length > 0) {
+    spec.analytics_engine_datasets = analyticsEngineDatasets;
+  }
+
+  if (hyperdrive.length > 0) {
+    spec.hyperdrive = hyperdrive;
+  }
+
+  if (pipelines.length > 0) {
+    spec.pipelines = pipelines;
   }
 }
