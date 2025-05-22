@@ -16,6 +16,7 @@ const app = await alchemy("cloudflare-worker", {
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
       ? (scope) => new R2RestStateStore(scope)
       : undefined,
+  password: process.env.ALCHEMY_PASSWORD,
 });
 
 type Message = typeof Message.infer;
