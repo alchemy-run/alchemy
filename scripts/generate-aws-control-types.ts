@@ -645,10 +645,6 @@ async function generateDocumentation(
 			);
 			await writeFile(filePath, documentation);
 		}
-
-		console.log(
-			`Generated documentation for ${service} (${Object.keys(resources).length} resources)`,
-		);
 	}
 
 	console.log("Successfully generated all documentation");
@@ -892,8 +888,19 @@ try {
 	// Generate documentation
 	await generateDocumentation(resourceTypesByService);
 
+	// Emit metrics
+	const totalServices = Object.keys(resourceTypesByService).length;
+	const totalResources = Object.values(resourceTypesByService).reduce(
+		(total, serviceResources) => total + Object.keys(serviceResources).length,
+		0,
+	);
+
+	console.log("\n=== AWS Cloud Control API Coverage Metrics ===");
+	console.log(`Total Services: ${totalServices}`);
+	console.log(`Total Resources: ${totalResources}`);
+
 	console.log(
-		"Successfully generated AWS CloudFormation type definitions, properties, and documentation",
+		"\nSuccessfully generated AWS CloudFormation type definitions, properties, and documentation",
 	);
 } catch (error) {
 	console.error("Error generating type definitions:", error);
