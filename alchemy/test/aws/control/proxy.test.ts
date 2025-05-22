@@ -41,6 +41,51 @@ describe("AWS Cloud Control Proxy", () => {
 		}
 	});
 
+	test("adopt existing resource with different ID using proxy", async (scope) => {
+		const bucketName = `${testId}-adopt-proxy-test`;
+		const firstId = `${testId}-proxy-first`;
+		const secondId = `${testId}-proxy-second`;
+
+		let firstBucket: any;
+		let secondBucket: any;
+
+		try {
+			// Create first bucket using proxy interface
+			firstBucket = await AWS.S3.Bucket(firstId, {
+				BucketName: bucketName,
+				VersioningConfiguration: {
+					Status: "Enabled",
+				},
+			});
+
+			expect(firstBucket.BucketName).toEqual(bucketName);
+			expect(firstBucket.VersioningConfiguration.Status).toEqual("Enabled");
+
+			// Try to create second bucket with same name but different ID - should adopt the existing one
+			secondBucket = await AWS.S3.Bucket(secondId, {
+				BucketName: bucketName, // Same bucket name
+				VersioningConfiguration: {
+					Status: "Suspended", // Different config
+				},
+				adopt: true, // Enable adoption
+			});
+
+			expect(secondBucket.BucketName).toEqual(bucketName);
+			expect(secondBucket.VersioningConfiguration.Status).toEqual("Suspended");
+
+			// Both should reference the same underlying AWS resource
+			// Note: We can't directly compare IDs here since the proxy interface
+			// doesn't expose the internal resource ID, but we can verify the
+			// bucket name and that the configuration was updated
+		} catch (err) {
+			console.log(err);
+			throw err;
+		} finally {
+			// Clean up
+			await destroy(scope);
+		}
+	});
+
 	test("proxy returns same handler for same resource type", async (scope) => {
 		const handler1 = AWS.S3.Bucket;
 		const handler2 = AWS.S3.Bucket;

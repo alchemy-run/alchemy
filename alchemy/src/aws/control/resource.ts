@@ -3,68 +3,75 @@ import type { Context } from "../../context.js";
 import { Resource } from "../../resource.js";
 import { createCloudControlClient, type ProgressEvent } from "./client.js";
 import { AlreadyExistsError } from "./error.js";
+import readOnlyPropertiesMap from "./properties.js";
+
 /**
  * Properties for creating or updating a Cloud Control resource
  */
 export interface CloudControlResourceProps {
-  /**
-   * The type name of the resource (e.g. AWS::S3::Bucket)
-   */
-  typeName: string;
+	/**
+	 * The type name of the resource (e.g. AWS::S3::Bucket)
+	 */
+	typeName: string;
 
-  /**
-   * The desired state of the resource
-   */
-  desiredState: Record<string, any>;
+	/**
+	 * The desired state of the resource
+	 */
+	desiredState: Record<string, any>;
 
-  /**
-   * Optional AWS region
-   * @default AWS_REGION environment variable
-   */
-  region?: string;
+	/**
+	 * If true, adopt existing resource instead of failing when resource already exists
+	 */
+	adopt?: boolean;
 
-  /**
-   * AWS access key ID (overrides environment variable)
-   */
-  accessKeyId?: string;
+	/**
+	 * Optional AWS region
+	 * @default AWS_REGION environment variable
+	 */
+	region?: string;
 
-  /**
-   * AWS secret access key (overrides environment variable)
-   */
-  secretAccessKey?: string;
+	/**
+	 * AWS access key ID (overrides environment variable)
+	 */
+	accessKeyId?: string;
 
-  /**
-   * AWS session token for temporary credentials
-   */
-  sessionToken?: string;
+	/**
+	 * AWS secret access key (overrides environment variable)
+	 */
+	secretAccessKey?: string;
+
+	/**
+	 * AWS session token for temporary credentials
+	 */
+	sessionToken?: string;
 }
 
 /**
  * Output returned after Cloud Control resource creation/update
  */
 export interface CloudControlResource
-  extends Resource<"aws::CloudControlResource">,
-    CloudControlResourceProps {
-  /**
-   * The identifier of the resource
-   */
-  id: string;
+	extends Resource<"aws::CloudControlResource">,
+		CloudControlResourceProps {
+	/**
+	 * The identifier of the resource
+	 */
+	id: string;
 
-  /**
-   * Time at which the resource was created
-   */
-  createdAt: number;
+	/**
+	 * Time at which the resource was created
+	 */
+	createdAt: number;
 }
 
 interface CloudControlResourceInfo {
-  identifier: string;
-  typeName: string;
-  properties: Record<string, any>;
+	identifier: string;
+	typeName: string;
+	properties: Record<string, any>;
 }
 
 interface CloudControlError {
-  code?: string;
-  message?: string;
+	code?: string;
+	message?: string;
 }
 
 // Register wildcard deletion handler for AWS::* pattern
@@ -77,25 +84,71 @@ interface CloudControlError {
 const resourceHandlers: Record<string, any> = {};
 
 /**
+ * Filters out read-only properties from a resource state
+ * @param typeName AWS resource type name (e.g., "AWS::S3::Bucket")
+ * @param state Resource state object
+ * @returns Filtered state object without read-only properties
+ */
+function filterReadOnlyProperties(
+	typeName: string,
+	state: Record<string, any>,
+): Record<string, any> {
+	// Parse the type name to get service and resource
+	const [service, resource] = typeName.replace("AWS::", "").split("::");
+	const readOnlyProps =
+		(readOnlyPropertiesMap as any)[service]?.[resource] || [];
+
+	const filtered: Record<string, any> = {};
+	for (const [key, value] of Object.entries(state)) {
+		if (!readOnlyProps.includes(key)) {
+			filtered[key] = value;
+		}
+	}
+
+	return filtered;
+}
+
+/**
  * Creates a memoized Resource handler for a CloudFormation resource type
  *
  * @param typeName CloudFormation resource type (e.g., "AWS::S3::Bucket")
  * @returns A memoized Resource handler for the specified type
  */
 export function createResourceType(typeName: string) {
-  return (resourceHandlers[typeName] ??= Resource(
-    typeName,
-    function (
-      this: Context<CloudControlResource, CloudControlResourceProps>,
-      id: string,
-      props: Omit<CloudControlResourceProps, "typeName">,
-    ) {
-      return CloudControlLifecycle.bind(this)(id, {
-        typeName,
-        desiredState: props,
-      });
-    },
-  ));
+	return (resourceHandlers[typeName] ??= Resource(
+		typeName,
+		function (
+			this: Context<CloudControlResource, CloudControlResourceProps>,
+			id: string,
+			props: Record<string, any> & {
+				adopt?: boolean;
+				region?: string;
+				accessKeyId?: string;
+				secretAccessKey?: string;
+				sessionToken?: string;
+			},
+		) {
+			// Extract Alchemy-specific properties
+			const {
+				adopt,
+				region,
+				accessKeyId,
+				secretAccessKey,
+				sessionToken,
+				...desiredState
+			} = props;
+
+			return CloudControlLifecycle.bind(this)(id, {
+				typeName,
+				desiredState,
+				adopt,
+				region,
+				accessKeyId,
+				secretAccessKey,
+				sessionToken,
+			});
+		},
+	));
 }
 
 /**
@@ -149,82 +202,89 @@ export function createResourceType(typeName: string) {
  * });
  */
 export const CloudControlResource = Resource(
-  "aws::CloudControlResource",
-  CloudControlLifecycle,
+	"aws::CloudControlResource",
+	CloudControlLifecycle,
 );
 
 async function CloudControlLifecycle(
-  this: Context<CloudControlResource, CloudControlResourceProps>,
-  id: string,
-  props: CloudControlResourceProps,
+	this: Context<CloudControlResource, CloudControlResourceProps>,
+	id: string,
+	props: CloudControlResourceProps,
 ) {
-  const client = await createCloudControlClient({
-    region: props.region,
-    accessKeyId: props.accessKeyId,
-    secretAccessKey: props.secretAccessKey,
-    sessionToken: props.sessionToken,
-  });
+	const client = await createCloudControlClient({
+		region: props.region,
+		accessKeyId: props.accessKeyId,
+		secretAccessKey: props.secretAccessKey,
+		sessionToken: props.sessionToken,
+	});
 
-  if (this.phase === "delete") {
-    if (this.output?.id) {
-      try {
-        await client.deleteResource(props.typeName, this.output.id);
-      } catch (error) {
-        // Log but don't throw on cleanup errors
-        console.error(`Error deleting resource ${id}:`, error);
-      }
-    }
-    return this.destroy();
-  }
+	if (this.phase === "delete") {
+		if (this.output?.id) {
+			try {
+				await client.deleteResource(props.typeName, this.output.id);
+			} catch (error) {
+				// Log but don't throw on cleanup errors
+				console.error(`Error deleting resource ${id}:`, error);
+			}
+		}
+		return this.destroy();
+	}
 
-  let response: ProgressEvent | undefined;
-  if (this.phase === "update" && this.output?.id) {
-    // Update existing resource
-    response = await client.updateResource(
-      props.typeName,
-      this.output.id,
-      compare(this.output.desiredState, props.desiredState),
-    );
-  } else {
-    // Create new resource
-    try {
-      response = await client.createResource(
-        props.typeName,
-        props.desiredState,
-      );
-    } catch (error) {
-      if (error instanceof AlreadyExistsError) {
-        console.log("Resource already exists, updating", error.progressEvent);
+	let response: ProgressEvent | undefined;
+	if (this.phase === "update" && this.output?.id) {
+		// Update existing resource
+		// Filter out read-only properties from the previous state to avoid patch conflicts
+		const filteredPreviousState = filterReadOnlyProperties(
+			props.typeName,
+			this.output.desiredState,
+		);
 
-        const resource = await client.getResource(
-          props.typeName,
-          error.progressEvent.Identifier!,
-        );
+		response = await client.updateResource(
+			props.typeName,
+			this.output.id,
+			compare(filteredPreviousState, props.desiredState),
+		);
+	} else {
+		// Create new resource
+		try {
+			response = await client.createResource(
+				props.typeName,
+				props.desiredState,
+			);
+		} catch (error) {
+			if (error instanceof AlreadyExistsError && props.adopt) {
+				const resource = (await client.getResource(
+					props.typeName,
+					error.progressEvent.Identifier!,
+				))!;
 
-        response = await client.updateResource(
-          props.typeName,
-          error.progressEvent.Identifier!,
-          // TODO(sam): some of these properties may be "output" properties
-          // This will corrupt the diff. Should we change code-gen to emit
-          // these proeprties per resource? How much will that affect bundle size?
-          compare(resource, props.desiredState),
-        );
-      } else {
-        throw error;
-      }
-    }
-  }
+				// Filter out read-only properties to avoid patch conflicts
+				const filteredCurrentState = filterReadOnlyProperties(
+					props.typeName,
+					resource,
+				);
 
-  if (response.OperationStatus === "FAILED") {
-    throw new Error(
-      `Failed to ${this.phase} resource ${id}: ${response.ErrorCode}`,
-    );
-  }
+				response = await client.updateResource(
+					props.typeName,
+					error.progressEvent.Identifier!,
+					compare(filteredCurrentState, props.desiredState),
+				);
+			} else {
+				throw error;
+			}
+		}
+	}
 
-  return this({
-    ...props,
-    id: response.Identifier!,
-    createdAt: Date.now(),
-    ...(await client.getResource(props.typeName, response.Identifier!)),
-  });
+	if (response.OperationStatus === "FAILED") {
+		throw new Error(
+			`Failed to ${this.phase} resource ${id}: ${response.ErrorCode}`,
+		);
+	}
+
+	return this({
+		...props,
+		id: response.Identifier!,
+		createdAt: Date.now(),
+		...(await client.getResource(props.typeName, response.Identifier!)),
+	});
 }

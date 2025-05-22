@@ -6,7 +6,9 @@ import {
 	AlreadyExistsError,
 	CloudControlError,
 	NetworkError,
+	NotFoundError,
 	RequestError,
+	ResourceNotFoundException,
 	UpdateFailedError,
 } from "./error";
 
@@ -192,19 +194,26 @@ export class CloudControlClient {
 	public async getResource(
 		typeName: string,
 		identifier: string,
-	): Promise<Record<string, any>> {
-		return JSON.parse(
-			(
-				await this.fetch<{
-					ResourceDescription: {
-						Properties: string;
-					};
-				}>("GetResource", {
-					TypeName: typeName,
-					Identifier: identifier,
-				})
-			).ResourceDescription.Properties,
-		);
+	): Promise<Record<string, any> | undefined> {
+		try {
+			return JSON.parse(
+				(
+					await this.fetch<{
+						ResourceDescription: {
+							Properties: string;
+						};
+					}>("GetResource", {
+						TypeName: typeName,
+						Identifier: identifier,
+					})
+				).ResourceDescription.Properties,
+			);
+		} catch (error: any) {
+			if (error instanceof ResourceNotFoundException) {
+				return undefined;
+			}
+			throw error;
+		}
 	}
 
 	/**
@@ -251,7 +260,10 @@ export class CloudControlClient {
 		});
 	}
 
-	public async sync(action: string, props?: any): Promise<ProgressEvent> {
+	public async sync(
+		action: "CreateResource" | "UpdateResource" | "DeleteResource",
+		props?: any,
+	): Promise<ProgressEvent> {
 		const { ProgressEvent } = await this.fetch<{
 			ProgressEvent: ProgressEvent;
 		}>(action, props);
@@ -271,10 +283,14 @@ export class CloudControlClient {
 				}
 
 				if (response.ProgressEvent.OperationStatus === "FAILED") {
-					if (response.ProgressEvent.ErrorCode === "AlreadyExists") {
-						throw new AlreadyExistsError(response.ProgressEvent);
+					const errorCode = response.ProgressEvent.ErrorCode;
+					const progressEvent = response.ProgressEvent;
+					if (errorCode === "AlreadyExists") {
+						throw new AlreadyExistsError(progressEvent);
+					} else if (errorCode === "NotFound") {
+						throw new NotFoundError(progressEvent);
 					}
-					throw new UpdateFailedError(response.ProgressEvent);
+					throw new UpdateFailedError(progressEvent);
 				}
 
 				// Use the suggested retry delay if provided
@@ -285,7 +301,9 @@ export class CloudControlClient {
 				await new Promise((resolve) => setTimeout(resolve, waitTime));
 				delay = Math.min(delay * 2, this.maxPollingDelay);
 			} catch (error: any) {
-				if (error instanceof CloudControlError) {
+				if (error instanceof NotFoundError && action === "DeleteResource") {
+					return error.progressEvent;
+				} else if (error instanceof CloudControlError) {
 					throw error;
 				}
 
@@ -325,12 +343,19 @@ export class CloudControlClient {
 				const response = await fetch(signedRequest);
 
 				if (!response.ok) {
+					const data: any = await response.json();
+					if (
+						data.__type ===
+						"com.amazon.cloudapiservice#ResourceNotFoundException"
+					) {
+						throw new ResourceNotFoundException(response);
+					}
 					throw new RequestError(response);
 				}
 
 				return (await response.json()) as T;
 			} catch (error: any) {
-				if (error instanceof RequestError) {
+				if (error instanceof CloudControlError) {
 					throw error;
 				}
 				if (attempt < maxRetries) {
