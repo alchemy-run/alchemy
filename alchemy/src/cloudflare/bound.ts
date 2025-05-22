@@ -2,6 +2,7 @@ import type { Pipeline } from "cloudflare:pipelines";
 import type { Secret } from "../secret.js";
 import type { AiGateway as _AiGateway } from "./ai-gateway.js";
 import type { Ai as _Ai } from "./ai.js";
+import type { AnalyticsEngineDataset as _AnalyticsEngineDataset } from "./analytics-engine.js";
 import type { Assets } from "./assets.js";
 import type { Binding, Self } from "./bindings.js";
 import type { BrowserRendering } from "./browser-rendering.js";
@@ -41,12 +42,14 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace
                         ? Queue<Body>
                         : T extends _Pipeline<infer R>
                           ? Pipeline<R>
-                          : T extends string
-                            ? string
-                            : T extends BrowserRendering
-                              ? Fetcher
-                              : T extends _Ai<infer M>
-                                ? Ai<M>
-                                : T extends Self
-                                  ? Service
-                                  : Service;
+                          : T extends _AnalyticsEngineDataset
+                            ? AnalyticsEngineDataset
+                            : T extends string
+                              ? string
+                              : T extends BrowserRendering
+                                ? Fetcher
+                                : T extends _Ai<infer M>
+                                  ? Ai<M>
+                                  : T extends Self
+                                    ? Service
+                                    : Service;

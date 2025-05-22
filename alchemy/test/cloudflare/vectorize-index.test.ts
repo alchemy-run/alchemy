@@ -82,6 +82,76 @@ describe("Vectorize Index Resource", async () => {
       await alchemy.destroy(scope);
     }
   });
+
+  test("allows no-op update with same properties", async (scope) => {
+    const noopIndex = `${testId}-noop`;
+
+    try {
+      // Create an index
+      const index = await VectorizeIndex(noopIndex, {
+        name: noopIndex,
+        dimensions: 768,
+        metric: "cosine",
+        adopt: true,
+      });
+
+      expect(index.name).toEqual(noopIndex);
+      expect(index.dimensions).toEqual(768);
+
+      // Attempt a no-op update with the same properties
+      const updatedIndex = await VectorizeIndex(noopIndex, {
+        name: noopIndex,
+        dimensions: 768,
+        metric: "cosine",
+        adopt: true,
+        // @ts-expect-error - Adding a non-existent property to test no-op behavior
+        nonExistentProperty: "test",
+      });
+
+      // Verify the index remains unchanged
+      expect(updatedIndex.name).toEqual(noopIndex);
+      expect(updatedIndex.dimensions).toEqual(768);
+      expect(updatedIndex.metric).toEqual("cosine");
+      expect(updatedIndex.id).toEqual(index.id);
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  });
+
+  test("allows updating delete property", async (scope) => {
+    const deleteIndex = `${testId}-delete`;
+
+    try {
+      // Create an index
+      const index = await VectorizeIndex(deleteIndex, {
+        name: deleteIndex,
+        dimensions: 768,
+        metric: "cosine",
+        adopt: true,
+      });
+
+      expect(index.name).toEqual(deleteIndex);
+      expect(index.delete).toBeUndefined(); // Default is true
+
+      // Update only the delete property
+      const updatedIndex = await VectorizeIndex(deleteIndex, {
+        name: deleteIndex,
+        dimensions: 768,
+        metric: "cosine",
+        adopt: true,
+        delete: false,
+      });
+
+      // Verify only the delete property changed
+      expect(updatedIndex.name).toEqual(deleteIndex);
+      expect(updatedIndex.dimensions).toEqual(768);
+      expect(updatedIndex.metric).toEqual("cosine");
+      expect(updatedIndex.id).toEqual(index.id);
+      expect(updatedIndex.delete).toEqual(false);
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  });
 });
 
 async function assertIndexDeleted(index: VectorizeIndex) {

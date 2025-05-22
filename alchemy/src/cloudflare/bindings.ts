@@ -6,6 +6,7 @@
 import type { Secret } from "../secret.js";
 import type { AiGateway } from "./ai-gateway.js";
 import type { Ai } from "./ai.js";
+import type { AnalyticsEngineDataset } from "./analytics-engine.js";
 import type { Assets } from "./assets.js";
 import type { Bound } from "./bound.js";
 import type { BrowserRendering } from "./browser-rendering.js";
@@ -37,6 +38,7 @@ export type Binding =
   | Ai
   | AiGateway
   | Assets
+  | AnalyticsEngineDataset
   | D1Database
   | DurableObjectNamespace
   | Hyperdrive

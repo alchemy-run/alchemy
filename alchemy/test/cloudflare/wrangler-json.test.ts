@@ -350,5 +350,34 @@ describe("WranglerJson Resource", () => {
         await destroy(scope);
       }
     });
+
+    test("with cron triggers", async (scope) => {
+      const name = `${BRANCH_PREFIX}-test-worker-cron-json`;
+      const tempDir = path.join(".out", "alchemy-cron-json-test");
+      const entrypoint = path.join(tempDir, "worker.ts");
+
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        await fs.mkdir(tempDir, { recursive: true });
+        await fs.writeFile(entrypoint, esmWorkerScript);
+
+        const worker = await Worker(name, {
+          format: "esm",
+          entrypoint,
+          crons: ["*/3 * * * *", "0 15 1 * *", "59 23 LW * *"],
+        });
+
+        const { spec } = await WranglerJson(
+          `${BRANCH_PREFIX}-test-wrangler-json-cron`,
+          { worker },
+        );
+
+        expect(spec.triggers).toBeDefined();
+        expect(spec.triggers?.crons).toEqual(worker.crons);
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        await destroy(scope);
+      }
+    });
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { alchemy } from "../../src/alchemy.js";
+import { AnalyticsEngineDataset } from "../../src/cloudflare/analytics-engine.js";
 import { createCloudflareApi } from "../../src/cloudflare/api.js";
 import { Assets } from "../../src/cloudflare/assets.js";
 import { Self } from "../../src/cloudflare/bindings.js";
@@ -2016,6 +2017,121 @@ describe("Worker Resource", () => {
       // Verify both workers were deleted
       await assertWorkerDoesNotExist(targetWorkerName);
       await assertWorkerDoesNotExist(callerWorkerName);
+    }
+  }, 60000); // Increase timeout for Worker operations
+
+  test("create and delete worker with Analytics Engine binding", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-analytics-engine`;
+
+    // Sample worker script that uses Analytics Engine
+    const analyticsWorkerScript = `
+      export default {
+        async fetch(request, env, ctx) {
+          const url = new URL(request.url);
+          
+          // Log an event to the analytics engine
+          if (url.pathname === '/log-event') {
+            try {
+              const body = await request.json();
+              
+              // Write an event to the analytics dataset
+              env.ANALYTICS.writeDataPoint({
+                blobs: [body.action, body.category, body.details || ""],
+                doubles: [body.value || 1.0],
+                indexes: [body.userId || "anonymous"]
+              });
+              
+              return Response.json({
+                success: true,
+                message: "Event logged successfully"
+              });
+            } catch (error) {
+              return Response.json({
+                success: false,
+                error: error.message || "Unknown error"
+              }, { status: 500 });
+            }
+          }
+          
+          // Confirm binding exists
+          if (url.pathname === '/check-binding') {
+            return Response.json({
+              hasBinding: !!env.ANALYTICS,
+              bindingType: typeof env.ANALYTICS,
+              success: true
+            });
+          }
+          
+          return new Response('Analytics Engine Worker is running!', {
+            status: 200,
+            headers: { 'Content-Type': 'text/plain' }
+          });
+        }
+      };
+    `;
+
+    let worker: Worker | undefined = undefined;
+    let dataset: AnalyticsEngineDataset | undefined = undefined;
+
+    try {
+      // Create an Analytics Engine dataset
+      dataset = new AnalyticsEngineDataset("test-analytics-dataset", {
+        dataset: `${BRANCH_PREFIX}-test-analytics-dataset`,
+      });
+
+      expect(dataset.id).toBeTruthy();
+      expect(dataset.dataset).toEqual(
+        `${BRANCH_PREFIX}-test-analytics-dataset`,
+      );
+
+      // Create a worker with the analytics engine binding
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: analyticsWorkerScript,
+        format: "esm",
+        url: true, // Enable workers.dev URL to test the worker
+        bindings: {
+          ANALYTICS: dataset,
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+      expect(worker.bindings!.ANALYTICS).toBeDefined();
+      expect(worker.url).toBeTruthy();
+
+      // Test that the binding exists in the worker
+      const response = await fetch(`${worker.url}/check-binding`);
+      expect(response.status).toEqual(200);
+      const data = await response.json();
+      expect(data.success).toEqual(true);
+      expect(data.hasBinding).toEqual(true);
+
+      // Test logging an event
+      const logResponse = await fetch(`${worker.url}/log-event`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "page_view",
+          category: "documentation",
+          details: "analytics_engine_page",
+          value: 1.0,
+          userId: "test-user-123",
+        }),
+      });
+
+      expect(logResponse.status).toEqual(200);
+      const logData = await logResponse.json();
+      expect(logData.success).toEqual(true);
+      expect(logData.message).toEqual("Event logged successfully");
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(workerName);
     }
   }, 60000); // Increase timeout for Worker operations
 });

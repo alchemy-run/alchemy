@@ -107,6 +107,20 @@ export const VectorizeMetadataIndex = Resource(
       return this.destroy();
     }
     if (this.phase === "update") {
+      if (
+        props.email === this.props.email &&
+        props.index?.id === this.props.index?.id &&
+        props.propertyName === this.props.propertyName &&
+        props.indexType === this.props.indexType
+      ) {
+        // Update operation is not supported
+        if (!this.scope.quiet) {
+          console.warn(
+            `Attempted to update Vectorize metadata index ${this.props.propertyName} but it was a no-op.`,
+          );
+        }
+        return this(this.output);
+      }
       // Update operation is not supported
       throw new Error(
         "Updating Vectorize metadata indexes is not supported by the Cloudflare API. " +

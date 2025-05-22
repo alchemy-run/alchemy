@@ -151,6 +151,34 @@ export const VectorizeIndex = Resource(
         }
       }
     } else {
+      if (props.delete !== this.props.delete) {
+        // Only allow changing the delete property
+        if (!this.quiet) {
+          console.warn(
+            `Attempted to update Vectorize index ${indexName} but only the delete property can be changed.`,
+          );
+        }
+        return this({
+          ...this.output,
+          delete: props.delete,
+        });
+      }
+
+      // Check if this is a no-op update
+      if (
+        props.name === this.props.name &&
+        props.description === this.props.description &&
+        props.dimensions === this.props.dimensions &&
+        props.metric === this.props.metric
+      ) {
+        if (!this.quiet) {
+          console.warn(
+            `Attempted to update Vectorize index ${indexName} but it was a no-op.`,
+          );
+        }
+        return this(this.output);
+      }
+
       // Update operation is not supported by Vectorize API
       throw new Error(
         "Updating Vectorize indexes is not supported by the Cloudflare API. " +
