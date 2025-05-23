@@ -406,43 +406,41 @@ export class CloudControlClient {
 
         return (await response.json()) as T;
       } catch (error: any) {
-        // Handle throttling with exponential backoff
-        if (error instanceof ThrottlingException) {
-          if (attempt < maxRetries) {
-            // Use exponential backoff with jitter for throttling
-            const baseDelay = Math.min(2 ** attempt * 1000, 3000); // Cap at 3 seconds
-            const jitter = Math.random() * 0.1 * baseDelay; // Add 10% jitter
-            const retryDelay = baseDelay + jitter;
-
-            console.log(
-              `Throttling detected, retrying in ${Math.round(retryDelay)}ms (attempt ${attempt + 1}/${maxRetries + 1})`,
-            );
-            await new Promise((resolve) => setTimeout(resolve, retryDelay));
-            attempt++;
-            continue;
-          } else {
-            console.error(
-              `Max retries (${maxRetries}) exceeded for throttling exception`,
-            );
-            throw error;
-          }
-        }
-
-        // Handle other CloudControl errors (don't retry)
-        if (error instanceof CloudControlError) {
+        // Handle other CloudControl errors (don't retry, except ThrottlingException)
+        if (
+          error instanceof CloudControlError &&
+          !(error instanceof ThrottlingException)
+        ) {
           throw error;
         }
 
-        // Handle network errors with shorter backoff
+        // Handle retryable errors (throttling and network errors)
         if (attempt < maxRetries) {
-          const retryDelay = Math.min(2 ** attempt * 100, 5000);
+          // Use exponential backoff with jitter, capped at 3 seconds
+          const baseDelay = Math.min(2 ** attempt * 1000, 3000);
+          const jitter = Math.random() * 0.1 * baseDelay;
+          const retryDelay = baseDelay + jitter;
+
+          const errorType =
+            error instanceof ThrottlingException
+              ? "Throttling"
+              : "Network error";
           console.log(
-            `Network error, retrying in ${retryDelay}ms (attempt ${attempt + 1}/${maxRetries + 1})`,
+            `${errorType} detected, retrying in ${Math.round(retryDelay)}ms (attempt ${attempt + 1}/${maxRetries + 1})`,
           );
           await new Promise((resolve) => setTimeout(resolve, retryDelay));
           attempt++;
           continue;
         }
+
+        // Max retries exceeded
+        if (error instanceof ThrottlingException) {
+          console.error(
+            `Max retries (${maxRetries}) exceeded for throttling exception`,
+          );
+          throw error;
+        }
+
         throw new NetworkError(
           error.message || "Network error during Cloud Control API request",
         );

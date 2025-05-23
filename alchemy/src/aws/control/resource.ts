@@ -226,16 +226,12 @@ async function CloudControlLifecycle(
   let response: ProgressEvent | undefined;
   if (this.phase === "update" && this.output?.id) {
     // Update existing resource
-    // Filter out read-only properties from the previous state to avoid patch conflicts
-    const filteredPreviousState = filterReadOnlyProperties(
-      props.typeName,
-      this.output.desiredState,
-    );
-
-    response = await client.updateResource(
+    response = await updateResourceWithPatch(
+      client,
       props.typeName,
       this.output.id,
-      compare(filteredPreviousState, props.desiredState),
+      this.output.desiredState,
+      props.desiredState,
     );
   } else {
     // Create new resource
@@ -251,16 +247,12 @@ async function CloudControlLifecycle(
           error.progressEvent.Identifier!,
         ))!;
 
-        // Filter out read-only properties to avoid patch conflicts
-        const filteredCurrentState = filterReadOnlyProperties(
-          props.typeName,
-          resource,
-        );
-
-        response = await client.updateResource(
+        response = await updateResourceWithPatch(
+          client,
           props.typeName,
           error.progressEvent.Identifier!,
-          compare(filteredCurrentState, props.desiredState),
+          resource,
+          props.desiredState,
         );
       } else if (error instanceof ConcurrentOperationError) {
         console.log(error);
@@ -281,17 +273,13 @@ async function CloudControlLifecycle(
             concurrentResult.Identifier!,
           ))!;
 
-          // Filter out read-only properties to avoid patch conflicts
-          const filteredCurrentState = filterReadOnlyProperties(
-            props.typeName,
-            resource,
-          );
-
           // Apply our desired state as a patch to the existing resource
-          response = await client.updateResource(
+          response = await updateResourceWithPatch(
+            client,
             props.typeName,
             concurrentResult.Identifier!,
-            compare(filteredCurrentState, props.desiredState),
+            resource,
+            props.desiredState,
           );
         } catch (pollError) {
           // If the concurrent operation failed, we can try to create the resource ourselves
@@ -322,4 +310,22 @@ async function CloudControlLifecycle(
     createdAt: Date.now(),
     ...(await client.getResource(props.typeName, response.Identifier!)),
   });
+}
+
+async function updateResourceWithPatch(
+  client: any,
+  typeName: string,
+  resourceId: string,
+  currentState: Record<string, any>,
+  desiredState: Record<string, any>,
+): Promise<ProgressEvent> {
+  // Filter out read-only properties to avoid patch conflicts
+  const filteredCurrentState = filterReadOnlyProperties(typeName, currentState);
+
+  // Create and apply patch
+  return await client.updateResource(
+    typeName,
+    resourceId,
+    compare(filteredCurrentState, desiredState),
+  );
 }
