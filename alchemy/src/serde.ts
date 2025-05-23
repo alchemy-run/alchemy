@@ -113,7 +113,10 @@ export async function serialize(
     return Promise.all(value.map((value) => serialize(scope, value, options)));
   } else if (value instanceof Secret) {
     if (!scope.password) {
-      throw new Error("Cannot serialize secret without password");
+      throw new Error(
+        "Cannot serialize secret without password, did you forget to set password when initializing your alchemy app?\n" +
+          "See: https://alchemy.dev/docs/getting-started/setup#password",
+      );
     }
     return {
       "@secret":
@@ -202,7 +205,10 @@ export async function deserialize(
   if (value && typeof value === "object") {
     if (typeof value["@secret"] === "string") {
       if (!scope.password) {
-        throw new Error("Cannot deserialize secret without password");
+        throw new Error(
+          "Cannot deserialize secret without password, did you forget to set password when initializing your alchemy app?\n" +
+            "See: https://alchemy.dev/docs/getting-started/setup#password",
+        );
       }
       return new Secret(await decryptWithKey(value["@secret"], scope.password));
     } else if ("@schema" in value) {
