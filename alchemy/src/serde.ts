@@ -115,7 +115,7 @@ export async function serialize(
     if (!scope.password) {
       throw new Error(
         "Cannot serialize secret without password, did you forget to set password when initializing your alchemy app?\n" +
-          "See: https://alchemy.dev/docs/getting-started/setup#password",
+          "See: https://alchemy.run/docs/concepts/secret.html#encryption-password",
       );
     }
     return {
@@ -207,7 +207,7 @@ export async function deserialize(
       if (!scope.password) {
         throw new Error(
           "Cannot deserialize secret without password, did you forget to set password when initializing your alchemy app?\n" +
-            "See: https://alchemy.dev/docs/getting-started/setup#password",
+            "See: https://alchemy.run/docs/concepts/secret.html#encryption-password",
         );
       }
       return new Secret(await decryptWithKey(value["@secret"], scope.password));
