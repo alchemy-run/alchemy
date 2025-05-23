@@ -1,6 +1,10 @@
 import { compare } from "fast-json-patch";
 import type { Context } from "../../context.js";
-import { Resource } from "../../resource.js";
+import {
+  registerDynamicResource,
+  Resource,
+  type Provider,
+} from "../../resource.js";
 import { createCloudControlClient, type ProgressEvent } from "./client.js";
 import {
   AlreadyExistsError,
@@ -199,6 +203,14 @@ export const CloudControlResource = Resource(
   CloudControlLifecycle,
 );
 
+// register a catch-all for AWS::* resources (Resources created with the Control API)
+registerDynamicResource((typeName) => {
+  if (typeName.startsWith("AWS::")) {
+    return Resource(typeName, CloudControlLifecycle) as unknown as Provider;
+  }
+  return undefined;
+});
+
 async function CloudControlLifecycle(
   this: Context<CloudControlResource, CloudControlResourceProps>,
   id: string,
@@ -255,12 +267,15 @@ async function CloudControlLifecycle(
           props.desiredState,
         );
       } else if (error instanceof ConcurrentOperationError) {
-        console.log(error);
         // Handle concurrent operation exception
+        console.log(error.message);
         if (!props.adopt) {
           // If adopt is not true, concurrent operations are an error
           throw error;
         }
+        console.log(
+          `Waiting for concurrent operation with request token '${error.requestToken}' to complete`,
+        );
 
         // Wait for the concurrent operation to complete by polling it
         try {
