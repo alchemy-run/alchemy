@@ -36,7 +36,7 @@ await Worker("my-worker", {
 ```
 
 > [!CAUTION]
-> To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts//secret.md#encryption-password).
+> To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts/secret.md#encryption-password).
 
 ## OAuth Token
 
@@ -83,7 +83,7 @@ await Worker("my-worker", {
 
 
 > [!CAUTION]
-> To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts//secret.md#encryption-password).
+> To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts/secret.md#encryption-password).
 
 ## Email
 
@@ -106,7 +106,7 @@ await Worker("my-worker", {
 
 
 > [!CAUTION]
-> To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts//secret.md#encryption-password).
+> To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts/secret.md#encryption-password).
 
 
 ## Account ID
