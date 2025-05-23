@@ -1,6 +1,8 @@
 {
   "files": {
     "includes": [
+      "./**/package.json",
+      "./**/biome.json",
       "./alchemy/src/**/*.ts",
       "./alchemy/src/**/*.js",
       "./alchemy/test/**/*.ts",
