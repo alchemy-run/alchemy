@@ -100,20 +100,6 @@ export const Volume = Resource(
     // Initialize Docker API client
     const api = new DockerApi();
 
-    // Check if Docker daemon is running
-    const isRunning = await api.isRunning();
-    if (!isRunning) {
-      console.warn(
-        "⚠️ Docker daemon is not running. Creating a mock volume resource.",
-      );
-      // Return a mock volume resource
-      return this({
-        ...props,
-        id: `mock-${props.name}-${Date.now()}`,
-        createdAt: Date.now(),
-      });
-    }
-
     // Process labels to ensure consistent format
     const processedLabels: Record<string, string> = {};
     if (props.labels) {
@@ -130,56 +116,43 @@ export const Volume = Resource(
 
     // Handle delete phase
     if (this.phase === "delete") {
-      try {
-        if (this.output?.name) {
-          // Remove volume
-          await api.removeVolume(this.output.name);
-        }
-      } catch (error) {
-        console.error("Error deleting volume:", error);
+      if (this.output?.name) {
+        // Remove volume
+        await api.removeVolume(this.output.name);
       }
 
       // Return destroyed state
       return this.destroy();
     } else {
-      try {
-        // Set default driver if not provided
-        props.driver = props.driver || "local";
-        const driverOpts = props.driverOpts || {};
+      // Set default driver if not provided
+      props.driver = props.driver || "local";
+      const driverOpts = props.driverOpts || {};
 
-        // Create the volume
-        const volumeName = await api.createVolume(
-          props.name,
-          props.driver,
-          driverOpts,
-          processedLabels,
-        );
+      // Create the volume
+      const volumeName = await api.createVolume(
+        props.name,
+        props.driver,
+        driverOpts,
+        processedLabels,
+      );
 
-        // Get volume details to retrieve mountpoint
-        let mountpoint: string | undefined;
-        try {
-          const volumeInfo = await api.inspectVolume(volumeName);
-          const volumeData = JSON.parse(volumeInfo);
-          if (Array.isArray(volumeData) && volumeData.length > 0) {
-            mountpoint = volumeData[0].Mountpoint;
-          }
-        } catch (error) {
-          console.warn("Could not get volume mountpoint:", error);
-        }
-
-        // Return the resource using this() to construct output
-        return this({
-          ...props,
-          id: volumeName,
-          mountpoint,
-          createdAt: Date.now(),
-          labels: Array.isArray(props.labels) ? props.labels : undefined,
-          driverOpts: props.driverOpts,
-        });
-      } catch (error) {
-        console.error("Error creating volume:", error);
-        throw error;
+      // Get volume details to retrieve mountpoint
+      let mountpoint: string | undefined;
+      const volumeInfo = await api.inspectVolume(volumeName);
+      const volumeData = JSON.parse(volumeInfo);
+      if (Array.isArray(volumeData) && volumeData.length > 0) {
+        mountpoint = volumeData[0].Mountpoint;
       }
+
+      // Return the resource using this() to construct output
+      return this({
+        ...props,
+        id: volumeName,
+        mountpoint,
+        createdAt: Date.now(),
+        labels: Array.isArray(props.labels) ? props.labels : undefined,
+        driverOpts: props.driverOpts,
+      });
     }
   },
 );

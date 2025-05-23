@@ -186,112 +186,85 @@ export const Container = Resource(
     const containerName =
       props.name || `alchemy-${id.replace(/[^a-zA-Z0-9_.-]/g, "-")}`;
 
-    // Check if Docker daemon is running
-    const isRunning = await api.isRunning();
-    if (!isRunning) {
-      console.warn(
-        "⚠️ Docker daemon is not running. Creating a mock container resource.",
-      );
-      // Return a mock container resource with properly typed state
-      const containerState: "created" | "running" = props.start
-        ? "running"
-        : "created";
-      return this({
-        ...props,
-        id: `mock-${containerName}-${Date.now()}`,
-        state: containerState,
-        createdAt: Date.now(),
-      });
-    }
-
     // Handle delete phase
     if (this.phase === "delete") {
-      try {
-        if (this.output?.id) {
-          // Stop container if running
-          try {
-            await api.stopContainer(this.output.id);
-          } catch (error) {
-            // Ignore errors on stop (container might already be stopped)
-          }
-
-          // Remove container
-          await api.removeContainer(this.output.id, true);
+      if (this.output?.id) {
+        // Stop container if running
+        try {
+          await api.stopContainer(this.output.id);
+        } catch (error) {
+          // Ignore errors on stop (container might already be stopped)
         }
-      } catch (error) {
-        console.error("Error deleting container:", error);
+
+        // Remove container
+        await api.removeContainer(this.output.id, true);
       }
 
       // Return destroyed state
       return this.destroy();
     } else {
-      try {
-        let containerId = "";
-        let containerState: NonNullable<Container["state"]> = "created";
+      let containerId = "";
+      let containerState: NonNullable<Container["state"]> = "created";
 
-        // Check if container already exists (for update)
-        const containerExists = await api.containerExists(containerName);
+      // Check if container already exists (for update)
+      const containerExists = await api.containerExists(containerName);
 
-        if (this.phase === "update" && containerExists) {
-          // Remove existing container for update
-          await api.removeContainer(containerName, true);
-        }
-
-        // Prepare port mappings
-        const portMappings: Record<string, string> = {};
-        if (props.ports) {
-          for (const port of props.ports) {
-            const protocol = port.protocol || "tcp";
-            portMappings[`${port.external}`] = `${port.internal}/${protocol}`;
-          }
-        }
-
-        // Prepare volume mappings
-        const volumeMappings: Record<string, string> = {};
-        if (props.volumes) {
-          for (const volume of props.volumes) {
-            const readOnlyFlag = volume.readOnly ? ":ro" : "";
-            volumeMappings[volume.hostPath] =
-              `${volume.containerPath}${readOnlyFlag}`;
-          }
-        }
-
-        // Create new container
-        containerId = await api.createContainer(imageRef, containerName, {
-          ports: portMappings,
-          env: props.environment,
-          volumes: volumeMappings,
-          cmd: props.command,
-        });
-
-        // Connect to networks if specified
-        if (props.networks) {
-          for (const network of props.networks) {
-            const networkId =
-              typeof network === "string" ? network : network.name;
-            await api.connectNetwork(containerId, networkId, {
-              aliases: network.aliases,
-            });
-          }
-        }
-
-        // Start container if requested
-        if (props.start) {
-          await api.startContainer(containerId);
-          containerState = "running";
-        }
-
-        // Return the resource using this() to construct output
-        return this({
-          ...props,
-          id: containerId,
-          state: containerState,
-          createdAt: Date.now(),
-        });
-      } catch (error) {
-        console.error("Error creating/updating container:", error);
-        throw error;
+      if (this.phase === "update" && containerExists) {
+        // Remove existing container for update
+        await api.removeContainer(containerName, true);
       }
+
+      // Prepare port mappings
+      const portMappings: Record<string, string> = {};
+      if (props.ports) {
+        for (const port of props.ports) {
+          const protocol = port.protocol || "tcp";
+          portMappings[`${port.external}`] = `${port.internal}/${protocol}`;
+        }
+      }
+
+      // Prepare volume mappings
+      const volumeMappings: Record<string, string> = {};
+      if (props.volumes) {
+        for (const volume of props.volumes) {
+          const readOnlyFlag = volume.readOnly ? ":ro" : "";
+          volumeMappings[volume.hostPath] =
+            `${volume.containerPath}${readOnlyFlag}`;
+        }
+      }
+
+      // Create new container
+      containerId = await api.createContainer(imageRef, containerName, {
+        ports: portMappings,
+        env: props.environment,
+        volumes: volumeMappings,
+        cmd: props.command,
+      });
+
+      // Connect to networks if specified
+      if (props.networks) {
+        for (const network of props.networks) {
+          const networkId =
+            typeof network === "string" ? network : network.name;
+          await api.connectNetwork(containerId, networkId, {
+            aliases: network.aliases,
+          });
+        }
+      }
+
+      // Start container if requested
+      if (props.start) {
+        await api.startContainer(containerId);
+        containerState = "running";
+      }
+
+      // Return the resource using this() to construct output
+      return this({
+        ...props,
+        id: containerId,
+        state: containerState,
+        createdAt: Date.now(),
+      });
     }
   },
 );

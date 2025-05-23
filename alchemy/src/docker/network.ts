@@ -76,49 +76,26 @@ export const Network = Resource(
     // Initialize Docker API client
     const api = new DockerApi();
 
-    // Check if Docker daemon is running
-    const isRunning = await api.isRunning();
-    if (!isRunning) {
-      console.warn(
-        "⚠️ Docker daemon is not running. Creating a mock network resource.",
-      );
-      // Return a mock network resource
-      return this({
-        ...props,
-        id: `mock-${props.name}-${Date.now()}`,
-        createdAt: Date.now(),
-      });
-    }
-
     // Handle delete phase
     if (this.phase === "delete") {
-      try {
-        if (this.output?.id) {
-          // Remove network
-          await api.removeNetwork(this.output.id);
-        }
-      } catch (error) {
-        console.error("Error deleting network:", error);
+      if (this.output?.id) {
+        // Remove network
+        await api.removeNetwork(this.output.id);
       }
 
       // Return destroyed state
       return this.destroy();
     } else {
-      try {
-        // Create the network
-        props.driver = props.driver || "bridge";
-        const networkId = await api.createNetwork(props.name, props.driver);
+      // Create the network
+      props.driver = props.driver || "bridge";
+      const networkId = await api.createNetwork(props.name, props.driver);
 
-        // Return the resource using this() to construct output
-        return this({
-          ...props,
-          id: networkId,
-          createdAt: Date.now(),
-        });
-      } catch (error) {
-        console.error("Error creating network:", error);
-        throw error;
-      }
+      // Return the resource using this() to construct output
+      return this({
+        ...props,
+        id: networkId,
+        createdAt: Date.now(),
+      });
     }
   },
 );

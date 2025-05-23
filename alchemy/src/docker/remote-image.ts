@@ -64,39 +64,20 @@ export const RemoteImage = Resource(
     const tag = props.tag || "latest";
     const imageRef = `${props.name}:${tag}`;
 
-    // Check if Docker daemon is running
-    const isRunning = await api.isRunning();
-    if (!isRunning) {
-      console.warn(
-        "⚠️ Docker daemon is not running. Creating a mock image resource.",
-      );
-      // Return a mock image resource
-      return this({
-        ...props,
-        imageRef,
-        createdAt: Date.now(),
-      });
-    }
-
     if (this.phase === "delete") {
       // No action needed for delete as Docker images aren't automatically removed
       // This is intentional as other resources might depend on the same image
       return this.destroy();
     } else {
-      try {
-        // Pull image
-        await api.pullImage(imageRef);
+      // Pull image
+      await api.pullImage(imageRef);
 
-        // Return the resource using this() to construct output
-        return this({
-          ...props,
-          imageRef,
-          createdAt: Date.now(),
-        });
-      } catch (error) {
-        console.error("Error creating Docker image:", error);
-        throw error;
-      }
+      // Return the resource using this() to construct output
+      return this({
+        ...props,
+        imageRef,
+        createdAt: Date.now(),
+      });
     }
   },
 );
