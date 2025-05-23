@@ -10,7 +10,9 @@ import { BRANCH_PREFIX } from "../util.js";
 import { CloudflareApiError } from "../../src/cloudflare/api-error.js";
 import "../../src/test/bun.js";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 const api = await createCloudflareApi({});
 

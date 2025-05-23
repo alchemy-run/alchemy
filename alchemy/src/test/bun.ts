@@ -99,7 +99,9 @@ type test = {
  *
  * @example
  * ```typescript
- * const test = alchemy.test(import.meta);
+ * const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX
+});
  *
  * describe("My Resource", () => {
  *   test("create and delete", async (scope) => {

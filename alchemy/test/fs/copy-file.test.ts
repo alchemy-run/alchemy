@@ -8,7 +8,9 @@ import { BRANCH_PREFIX } from "../util.js";
 
 import "../../src/test/bun.js";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("CopyFile Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names

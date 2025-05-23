@@ -358,7 +358,9 @@ import { describe, expect } from "bun:test";
 import { alchemy } from "alchemy";
 import { InMemoryStateStore } from "./in-memory-state-store";
 
-const test = alchemy.test(import.meta)
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX
+})
 
 describe("InMemoryStateStore", () => {
   

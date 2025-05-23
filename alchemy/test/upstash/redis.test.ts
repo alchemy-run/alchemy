@@ -13,7 +13,9 @@ import "../../src/test/bun.js";
 
 const api = new UpstashApi();
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("UpstashRedis Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-redis`;

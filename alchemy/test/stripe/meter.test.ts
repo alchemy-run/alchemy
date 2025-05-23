@@ -13,7 +13,9 @@ const BRANCH_PREFIX = process.env.BRANCH_PREFIX || "local";
 
 let stripeClient: Stripe;
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("Stripe Meter Resource", () => {
   const testRunSuffix = Date.now();

@@ -146,7 +146,9 @@ import { alchemy } from "../../src/alchemy";
 import "../../src/test/bun";
 
 // Create test scope from filename
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX
+});
 
 // Each test gets an isolated sub-scope
 test("create resource", async (scope) => {

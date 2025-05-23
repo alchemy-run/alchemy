@@ -445,7 +445,9 @@ import "../../src/test/bun";
 
 const api = new {{ServiceName}}Api();
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX
+});
 
 describe("{{ResourceName}} Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
@@ -501,7 +503,9 @@ describe("{{ResourceName}} Resource", () => {
 
 ### Important Notes on Testing
 
-1. **Test Scope**: Use `alchemy.test(import.meta)` to create a test with proper scope management.
+1. **Test Scope**: Use `alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX
+})` to create a test with proper scope management.
 
 2. **Resource Cleanup**:
 

@@ -10,7 +10,9 @@ import "../../src/test/bun.js";
 
 const api = new SentryApi();
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("Project Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names

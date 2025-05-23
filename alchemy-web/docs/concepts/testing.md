@@ -27,7 +27,9 @@ Create a `test` function at the top of your test suite:
 
 ```typescript
 // Create test scope using filename
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX
+});
 ```
 
 We pass `import.meta` so that all the resources created in this test suite will be isolated from other tests.

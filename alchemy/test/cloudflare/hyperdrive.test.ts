@@ -15,7 +15,9 @@ import "../../src/test/bun.js";
 // Create API client for verification
 const api = await createCloudflareApi();
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("Hyperdrive Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
