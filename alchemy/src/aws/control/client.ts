@@ -5,11 +5,14 @@ import { AwsClient } from "aws4fetch";
 import {
   AlreadyExistsError,
   CloudControlError,
+  ConcurrentOperationError,
   NetworkError,
   NotFoundError,
   RequestError,
   ResourceNotFoundException,
+  ThrottlingException,
   UpdateFailedError,
+  ValidationException,
 } from "./error.js";
 
 /**
@@ -263,22 +266,22 @@ export class CloudControlClient {
     });
   }
 
-  public async sync(
-    action: "CreateResource" | "UpdateResource" | "DeleteResource",
-    props?: any,
+  /**
+   * Poll an operation until it completes
+   */
+  public async poll(
+    requestToken: string,
+    action?: "CreateResource" | "UpdateResource" | "DeleteResource",
   ): Promise<ProgressEvent> {
-    const { ProgressEvent } = await this.fetch<{
-      ProgressEvent: ProgressEvent;
-    }>(action, props);
-
     let delay = this.initialPollingDelay;
+    let logged = false;
 
     while (true) {
       try {
         const response = await this.fetch<{
           ProgressEvent: ProgressEvent;
         }>("GetResourceRequestStatus", {
-          RequestToken: ProgressEvent.RequestToken,
+          RequestToken: requestToken,
         });
 
         if (response.ProgressEvent.OperationStatus === "SUCCESS") {
@@ -298,16 +301,24 @@ export class CloudControlClient {
 
         // Use the suggested retry delay if provided
         const waitTime = response.ProgressEvent.RetryAfter
-          ? Math.max(0, response.ProgressEvent.RetryAfter * 1000 - Date.now())
+          ? Math.max(100, response.ProgressEvent.RetryAfter * 1000 - Date.now())
           : delay;
+
+        if (!logged) {
+          logged = true;
+          console.log(
+            `Polling for ${response.ProgressEvent.Identifier} (${response.ProgressEvent.TypeName}) to stabilize`,
+          );
+        }
 
         await new Promise((resolve) => setTimeout(resolve, waitTime));
         delay = Math.min(delay * 2, this.maxPollingDelay);
       } catch (error: any) {
-        console.log(error);
         if (error instanceof NotFoundError && action === "DeleteResource") {
           return error.progressEvent;
         } else if (error instanceof CloudControlError) {
+          throw error;
+        } else if (error instanceof ValidationException) {
           throw error;
         }
 
@@ -318,6 +329,17 @@ export class CloudControlClient {
         delay = Math.min(delay * 2, this.maxPollingDelay);
       }
     }
+  }
+
+  public async sync(
+    action: "CreateResource" | "UpdateResource" | "DeleteResource",
+    props?: any,
+  ): Promise<ProgressEvent> {
+    const { ProgressEvent } = await this.fetch<{
+      ProgressEvent: ProgressEvent;
+    }>(action, props);
+
+    return this.poll(ProgressEvent.RequestToken, action);
   }
 
   public async fetch<T>(
@@ -354,16 +376,69 @@ export class CloudControlClient {
           ) {
             throw new ResourceNotFoundException(response);
           }
+          if (
+            data.__type ===
+            "com.amazon.cloudapiservice#ConcurrentOperationException"
+          ) {
+            // Extract request token from message
+            const message = data.Message || "";
+            const requestTokenMatch = message.match(
+              /RequestToken\s+([a-fA-F0-9-]+)/,
+            );
+            if (!requestTokenMatch) {
+              throw new RequestError(response, {
+                ...data,
+                message: `ConcurrentOperationException without request token: ${message}`,
+              });
+            }
+            throw new ConcurrentOperationError(message, requestTokenMatch[1]);
+          }
+          if (
+            data.__type === "com.amazon.coral.availability#ThrottlingException"
+          ) {
+            throw new ThrottlingException(response, data);
+          }
+          if (data.__type === "com.amazon.coral.validate#ValidationException") {
+            throw new ValidationException(response, data);
+          }
           throw new RequestError(response, data);
         }
 
         return (await response.json()) as T;
       } catch (error: any) {
+        // Handle throttling with exponential backoff
+        if (error instanceof ThrottlingException) {
+          if (attempt < maxRetries) {
+            // Use exponential backoff with jitter for throttling
+            const baseDelay = Math.min(2 ** attempt * 1000, 3000); // Cap at 3 seconds
+            const jitter = Math.random() * 0.1 * baseDelay; // Add 10% jitter
+            const retryDelay = baseDelay + jitter;
+
+            console.log(
+              `Throttling detected, retrying in ${Math.round(retryDelay)}ms (attempt ${attempt + 1}/${maxRetries + 1})`,
+            );
+            await new Promise((resolve) => setTimeout(resolve, retryDelay));
+            attempt++;
+            continue;
+          } else {
+            console.error(
+              `Max retries (${maxRetries}) exceeded for throttling exception`,
+            );
+            throw error;
+          }
+        }
+
+        // Handle other CloudControl errors (don't retry)
         if (error instanceof CloudControlError) {
           throw error;
         }
+
+        // Handle network errors with shorter backoff
         if (attempt < maxRetries) {
           const retryDelay = Math.min(2 ** attempt * 100, 5000);
+          console.log(
+            `Network error, retrying in ${retryDelay}ms (attempt ${attempt + 1}/${maxRetries + 1})`,
+          );
           await new Promise((resolve) => setTimeout(resolve, retryDelay));
           attempt++;
           continue;

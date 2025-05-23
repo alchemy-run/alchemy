@@ -4,6 +4,7 @@ import AWS from "../../../src/aws/control/index.js";
 import { destroy } from "../../../src/destroy.js";
 import { BRANCH_PREFIX } from "../../util.js";
 // must import this or else alchemy.test won't exist
+import { ValidationException } from "../../../src/aws/control/error.js";
 import "../../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
@@ -22,6 +23,7 @@ describe("AWS Cloud Control Proxy", () => {
         VersioningConfiguration: {
           Status: "Enabled",
         },
+        adopt: true,
       });
 
       expect(bucket.BucketName).toEqual(testId);
@@ -58,6 +60,7 @@ describe("AWS Cloud Control Proxy", () => {
         VersioningConfiguration: {
           Status: "Enabled",
         },
+        adopt: true,
       });
 
       expect(firstBucket.BucketName).toEqual(bucketName);
@@ -108,6 +111,7 @@ describe("AWS Cloud Control Proxy", () => {
             },
           ],
         },
+        adopt: true,
       });
 
       expect(role.RoleName).toEqual(testRoleId);
@@ -124,10 +128,11 @@ describe("AWS Cloud Control Proxy", () => {
         VersioningConfiguration: {
           Status: "InvalidStatus", // Invalid versioning status
         },
+        adopt: true,
       });
       throw new Error("Should have thrown an error");
     } catch (error: any) {
-      expect(error.message).toContain("Bad Request");
+      expect(error).toBeInstanceOf(ValidationException);
     } finally {
       await destroy(scope);
     }
@@ -154,6 +159,7 @@ describe("AWS Cloud Control Proxy", () => {
           ReadCapacityUnits: 1,
           WriteCapacityUnits: 1,
         },
+        adopt: true,
       });
 
       expect(table.TableName).toEqual(tableId);
@@ -187,6 +193,7 @@ describe("AWS Cloud Control Proxy", () => {
         ManagedPolicyArns: [
           "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
         ],
+        adopt: true,
       });
 
       // Create Lambda function after ensuring role exists
@@ -198,6 +205,7 @@ describe("AWS Cloud Control Proxy", () => {
         },
         Handler: "index.handler",
         Runtime: "nodejs20.x",
+        adopt: true,
       });
 
       expect(func.FunctionName).toEqual(functionId);

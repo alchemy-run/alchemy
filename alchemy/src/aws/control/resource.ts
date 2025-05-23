@@ -2,7 +2,11 @@ import { compare } from "fast-json-patch";
 import type { Context } from "../../context.js";
 import { Resource } from "../../resource.js";
 import { createCloudControlClient, type ProgressEvent } from "./client.js";
-import { AlreadyExistsError } from "./error.js";
+import {
+  AlreadyExistsError,
+  ConcurrentOperationError,
+  UpdateFailedError,
+} from "./error.js";
 import readOnlyPropertiesMap from "./properties.js";
 
 /**
@@ -258,6 +262,48 @@ async function CloudControlLifecycle(
           error.progressEvent.Identifier!,
           compare(filteredCurrentState, props.desiredState),
         );
+      } else if (error instanceof ConcurrentOperationError) {
+        console.log(error);
+        // Handle concurrent operation exception
+        if (!props.adopt) {
+          // If adopt is not true, concurrent operations are an error
+          throw error;
+        }
+
+        // Wait for the concurrent operation to complete by polling it
+        try {
+          // Poll the concurrent operation until it completes
+          const concurrentResult = await client.poll(error.requestToken);
+
+          // The concurrent operation succeeded, now adopt the resource
+          const resource = (await client.getResource(
+            props.typeName,
+            concurrentResult.Identifier!,
+          ))!;
+
+          // Filter out read-only properties to avoid patch conflicts
+          const filteredCurrentState = filterReadOnlyProperties(
+            props.typeName,
+            resource,
+          );
+
+          // Apply our desired state as a patch to the existing resource
+          response = await client.updateResource(
+            props.typeName,
+            concurrentResult.Identifier!,
+            compare(filteredCurrentState, props.desiredState),
+          );
+        } catch (pollError) {
+          // If the concurrent operation failed, we can try to create the resource ourselves
+          if (pollError instanceof UpdateFailedError) {
+            response = await client.createResource(
+              props.typeName,
+              props.desiredState,
+            );
+          } else {
+            throw pollError;
+          }
+        }
       } else {
         throw error;
       }
