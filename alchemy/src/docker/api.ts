@@ -10,6 +10,16 @@ export interface DockerApiOptions {
   dockerPath?: string;
 }
 
+type VolumeInfo = {
+  CreatedAt: string;
+  Driver: string;
+  Labels: Record<string, string>;
+  Mountpoint: string;
+  Name: string;
+  Options: Record<string, string>;
+  Scope: string;
+};
+
 /**
  * Docker API client that wraps Docker CLI commands
  */
@@ -329,9 +339,13 @@ export class DockerApi {
    * @param volumeName Volume name
    * @returns Volume details in JSON format
    */
-  async inspectVolume(volumeName: string): Promise<string> {
+  async inspectVolume(volumeName: string): Promise<VolumeInfo[]> {
     const { stdout } = await this.exec(["volume", "inspect", volumeName]);
-    return stdout.trim();
+    try {
+      return JSON.parse(stdout.trim()) as VolumeInfo[];
+    } catch (error) {
+      return [];
+    }
   }
 
   /**

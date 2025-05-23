@@ -60,15 +60,15 @@ export const RemoteImage = Resource(
     // Initialize Docker API client
     const api = new DockerApi();
 
-    // Normalize properties
-    const tag = props.tag || "latest";
-    const imageRef = `${props.name}:${tag}`;
-
     if (this.phase === "delete") {
       // No action needed for delete as Docker images aren't automatically removed
       // This is intentional as other resources might depend on the same image
       return this.destroy();
     } else {
+      // Normalize properties
+      const tag = props.tag || "latest";
+      const imageRef = `${props.name}:${tag}`;
+
       // Pull image
       await api.pullImage(imageRef);
 

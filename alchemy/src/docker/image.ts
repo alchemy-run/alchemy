@@ -1,4 +1,4 @@
-import fs from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "../context.js";
 import { Resource } from "../resource.js";
@@ -116,27 +116,24 @@ export const Image = Resource(
     // Initialize Docker API client
     const api = new DockerApi();
 
-    // Normalize properties
-    const tag = props.tag || "latest";
-    const imageRef = `${props.name}:${tag}`;
-
     if (this.phase === "delete") {
       // No action needed for delete as Docker images aren't automatically removed
       // This is intentional as other resources might depend on the same image
       return this.destroy();
     } else {
+      // Normalize properties
+      const tag = props.tag || "latest";
+      const imageRef = `${props.name}:${tag}`;
+
       // Validate build context
       const { context } = props.build;
-      if (!fs.existsSync(context)) {
-        throw new Error(`Build context path does not exist: ${context}`);
-      }
+      await fs.exists(context);
 
       // Determine Dockerfile path
       const dockerfile = props.build.dockerfile || "Dockerfile";
       const dockerfilePath = path.join(context, dockerfile);
-      if (!fs.existsSync(dockerfilePath)) {
-        throw new Error(`Dockerfile does not exist: ${dockerfilePath}`);
-      }
+      await fs.exists(dockerfilePath);
+
       // Prepare build options
       const buildOptions: Record<string, string> = props.build.buildArgs || {};
 
@@ -174,7 +171,7 @@ export const Image = Resource(
 
       // Execute build command
       console.log(`Building Docker image: ${imageRef}`);
-      const { stdout, stderr } = await api.exec(buildArgs);
+      const { stdout } = await api.exec(buildArgs);
 
       // Extract image ID from build output if available
       const imageIdMatch = /Successfully built ([a-f0-9]+)/.exec(stdout);

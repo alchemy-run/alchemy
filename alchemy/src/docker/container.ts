@@ -190,11 +190,7 @@ export const Container = Resource(
     if (this.phase === "delete") {
       if (this.output?.id) {
         // Stop container if running
-        try {
-          await api.stopContainer(this.output.id);
-        } catch (error) {
-          // Ignore errors on stop (container might already be stopped)
-        }
+        await api.stopContainer(this.output.id);
 
         // Remove container
         await api.removeContainer(this.output.id, true);
@@ -203,15 +199,16 @@ export const Container = Resource(
       // Return destroyed state
       return this.destroy();
     } else {
-      let containerId = "";
       let containerState: NonNullable<Container["state"]> = "created";
 
-      // Check if container already exists (for update)
-      const containerExists = await api.containerExists(containerName);
+      if (this.phase === "update") {
+        // Check if container already exists (for update)
+        const containerExists = await api.containerExists(containerName);
 
-      if (this.phase === "update" && containerExists) {
-        // Remove existing container for update
-        await api.removeContainer(containerName, true);
+        if (containerExists) {
+          // Remove existing container for update
+          await api.removeContainer(containerName, true);
+        }
       }
 
       // Prepare port mappings
@@ -234,7 +231,7 @@ export const Container = Resource(
       }
 
       // Create new container
-      containerId = await api.createContainer(imageRef, containerName, {
+      const containerId = await api.createContainer(imageRef, containerName, {
         ports: portMappings,
         env: props.environment,
         volumes: volumeMappings,

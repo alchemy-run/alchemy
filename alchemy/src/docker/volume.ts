@@ -137,12 +137,8 @@ export const Volume = Resource(
       );
 
       // Get volume details to retrieve mountpoint
-      let mountpoint: string | undefined;
-      const volumeInfo = await api.inspectVolume(volumeName);
-      const volumeData = JSON.parse(volumeInfo);
-      if (Array.isArray(volumeData) && volumeData.length > 0) {
-        mountpoint = volumeData[0].Mountpoint;
-      }
+      const volumeInfos = await api.inspectVolume(volumeName);
+      const mountpoint = volumeInfos[0].Mountpoint;
 
       // Return the resource using this() to construct output
       return this({
