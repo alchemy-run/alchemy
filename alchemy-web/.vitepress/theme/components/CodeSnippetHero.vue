@@ -92,23 +92,36 @@ function copyCode() {
 
 <style scoped>
 /* Root font size is typically 16px in browsers, so 1rem = 16px */
+
+/* Prevent excessive zoom-out issues */
+:global(html) {
+  min-width: 320px;
+}
+
+:global(body) {
+  min-width: 320px;
+  overflow-x: hidden;
+}
+
 /* Base styles for all screen sizes */
 .vp-hero {
   padding: 3rem 0rem 4.5rem;
   width: 100%;
+  max-width: 100vw;
   position: relative;
   min-height: calc(100vh - 4rem);
   display: flex;
   align-items: flex-start;
-  overflow: visible;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .gradient-bg {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
+  width: 100vw;
+  height: 100vh;
   pointer-events: none;
   opacity: 0.4;
   z-index: -1;
@@ -145,6 +158,7 @@ function copyCode() {
 .vp-hero-content {
   margin: 0 auto;
   max-width: 90rem;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 3rem;
