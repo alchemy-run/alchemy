@@ -19,7 +19,7 @@ describe("Cloudflare Queue Resource", async () => {
 
   test("create and delete queue", async (scope) => {
     // Create a test queue
-    let queue: Queue | undefined = undefined;
+    let queue: Queue | undefined;
 
     try {
       queue = await Queue(testId, {
@@ -123,6 +123,52 @@ describe("Cloudflare Queue Resource", async () => {
           name: newQueueName, // Different from original
         }),
       ).rejects.toThrow("Cannot update Queue name");
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  }, 120000);
+
+  test("adopts existing queue with same name", async (scope) => {
+    const adoptQueueName = `${testId}-adopt`;
+    const firstId = `${testId}-first`;
+    const secondId = `${testId}-second`;
+
+    try {
+      // Create first queue
+      const firstQueue = await Queue(firstId, {
+        name: adoptQueueName,
+        settings: {
+          deliveryDelay: 5,
+          deliveryPaused: false,
+        },
+      });
+
+      expect(firstQueue.name).toEqual(adoptQueueName);
+      expect(firstQueue.id).toBeTruthy();
+      expect(firstQueue.settings?.deliveryDelay).toEqual(5);
+      expect(firstQueue.settings?.deliveryPaused).toEqual(false);
+
+      // Create second queue with same name but different ID and adopt: true
+      const secondQueue = await Queue(secondId, {
+        name: adoptQueueName,
+        adopt: true,
+        settings: {
+          deliveryDelay: 10,
+          deliveryPaused: true,
+        },
+      });
+
+      // Verify second queue adopted the first queue's ID
+      expect(secondQueue.name).toEqual(adoptQueueName);
+      expect(secondQueue.id).toEqual(firstQueue.id);
+      expect(secondQueue.settings?.deliveryDelay).toEqual(10);
+      expect(secondQueue.settings?.deliveryPaused).toEqual(true);
+
+      // Verify only one queue exists with this name
+      const queues = await listQueues(api);
+      const matchingQueues = queues.filter((q) => q.name === adoptQueueName);
+      expect(matchingQueues.length).toEqual(1);
+      expect(matchingQueues[0].id).toEqual(firstQueue.id);
     } finally {
       await alchemy.destroy(scope);
     }

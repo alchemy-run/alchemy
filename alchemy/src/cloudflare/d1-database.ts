@@ -1,5 +1,6 @@
 import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
+import { Resource, ResourceKind } from "../resource.js";
+import { bind, type Bound } from "../runtime/bind.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
 import {
   createCloudflareApi,
@@ -93,10 +94,16 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
   migrationsDir?: string;
 }
 
+export function isD1Database(
+  resource: Resource,
+): resource is D1DatabaseResource {
+  return resource[ResourceKind] === "cloudflare::D1Database";
+}
+
 /**
  * Output returned after D1 Database creation/update
  */
-export type D1Database = Resource<"cloudflare::D1Database"> &
+export type D1DatabaseResource = Resource<"cloudflare::D1Database"> &
   D1DatabaseProps & {
     type: "d1";
     /**
@@ -134,6 +141,34 @@ export type D1Database = Resource<"cloudflare::D1Database"> &
       mode: "auto" | "disabled";
     };
   };
+
+export type D1Database = D1DatabaseResource & Bound<D1DatabaseResource>;
+
+export async function D1Database(
+  id: string,
+  props: Omit<D1DatabaseProps, "migrationsFiles">,
+): Promise<D1Database> {
+  const migrationsFiles = props.migrationsDir
+    ? await listMigrationsFiles(props.migrationsDir)
+    : [];
+
+  const db = await D1DatabaseResource(id, {
+    ...props,
+    migrationsFiles,
+  });
+  const binding = await bind(db);
+  return {
+    ...db,
+    batch: binding.batch,
+    exec: binding.exec,
+    prepare: binding.prepare,
+    withSession: binding.withSession,
+    /**
+     * @deprecated
+     */
+    dump: binding.dump,
+  };
+}
 
 /**
  * Creates and manages Cloudflare D1 Databases.
@@ -194,27 +229,13 @@ export type D1Database = Resource<"cloudflare::D1Database"> &
  *
  * @see https://developers.cloudflare.com/d1/
  */
-export async function D1Database(
-  id: string,
-  props: Omit<D1DatabaseProps, "migrationsFiles">,
-) {
-  const migrationsFiles = props.migrationsDir
-    ? await listMigrationsFiles(props.migrationsDir)
-    : [];
-
-  return D1DatabaseResource(id, {
-    ...props,
-    migrationsFiles,
-  });
-}
-
-export const D1DatabaseResource = Resource(
+const D1DatabaseResource = Resource(
   "cloudflare::D1Database",
   async function (
-    this: Context<D1Database>,
+    this: Context<D1DatabaseResource>,
     id: string,
     props: D1DatabaseProps = {},
-  ): Promise<D1Database> {
+  ): Promise<D1DatabaseResource> {
     const api = await createCloudflareApi(props);
     const databaseName = props.name ?? id;
 
@@ -235,6 +256,11 @@ export const D1DatabaseResource = Resource(
       console.log("Creating D1 database:", databaseName);
       try {
         dbData = await createDatabase(api, databaseName, props);
+
+        // Read replication cannot be set during creation, so update it after creation
+        if (props.readReplication && dbData.result.uuid) {
+          dbData = await updateDatabase(api, dbData.result.uuid, props);
+        }
 
         // If clone property is provided, perform cloning after database creation
         if (props.clone && dbData.result.uuid) {

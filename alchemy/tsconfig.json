@@ -10,6 +10,7 @@
     "declarationMap": true,
     "module": "Preserve",
     "moduleResolution": "Bundler",
-    "target": "ESNext"
+    "target": "ESNext",
+    "allowJs": true
   }
 }

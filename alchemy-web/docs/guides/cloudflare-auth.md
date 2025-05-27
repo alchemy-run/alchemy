@@ -35,6 +35,9 @@ await Worker("my-worker", {
 });
 ```
 
+> [!CAUTION]
+> To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts/secret.md#encryption-password).
+
 ## OAuth Token
 
 If you don't specify `CLOUDFLARE_API_KEY` or `CLOUDFLARE_API_TOKEN`, then Alchemy will use the OAuth Token and Refresh Token to authenticate with Cloudflare.
@@ -78,6 +81,10 @@ await Worker("my-worker", {
 });
 ```
 
+
+> [!CAUTION]
+> To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts/secret.md#encryption-password).
+
 ## Email
 
 When using [Global API Keys](#global-api-key), Alchemy must be configured with the API Key's email.
@@ -96,6 +103,11 @@ await Worker("my-worker", {
   email: "me@example.com"
 });
 ```
+
+
+> [!CAUTION]
+> To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts/secret.md#encryption-password).
+
 
 ## Account ID
 

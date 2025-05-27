@@ -13,7 +13,9 @@ import "../../src/test/bun.js";
 
 const api = new UpstashApi();
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("UpstashRedis Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-redis`;
@@ -79,9 +81,6 @@ describe("UpstashRedis Resource", () => {
       expect(updatedData.database_name).toEqual(`${testId}-updated`);
       expect(updatedData.read_regions).toEqual(["us-west-1"]);
       expect(updatedData.eviction).toEqual(false);
-    } catch (err) {
-      console.log(err);
-      throw err;
     } finally {
       // Always clean up, even if test assertions fail
       await destroy(scope);

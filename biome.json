@@ -1,14 +1,21 @@
 {
   "files": {
     "includes": [
-      "./alchemy/src/**",
-      "./alchemy/test/**",
-      "./scripts/**",
-      "./stacks/**",
-      "./examples/*/src/**",
-      "./examples/*/alchemy.run.ts",
-      "!**/node_modules"
-    ]
+      "./**/package.json",
+      "./**/biome.json",
+      "./alchemy/src/**/*.ts",
+      "./alchemy/src/**/*.js",
+      "./alchemy/test/**/*.ts",
+      "./scripts/**/*.ts",
+      "./stacks/**/*.ts",
+      "./examples/*/src/**/*.ts",
+      "./examples/*/*.ts",
+      "!**/node_modules",
+      "!examples/cloudflare-tanstack-start/src/routeTree.gen.ts",
+      "!examples/cloudflare-redwood/worker-configuration.d.ts",
+      "!./alchemy/src/aws/control/types.d.ts"
+    ],
+    "maxSize": 10000000
   },
   "assist": {
     "actions": {
@@ -45,14 +52,15 @@
         "noExplicitAny": "off",
         "noImplicitAnyLet": "off",
         "noAssignInExpressions": "off",
-        "noShadowRestrictedNames": "off"
+        "noShadowRestrictedNames": "off",
+        "noEmptyInterface": "off",
+        "noRedeclare": "off"
       },
       "style": {
         "useLiteralEnumMembers": "error",
         "noCommaOperator": "error",
         "useNodejsImportProtocol": "error",
         "useAsConstAssertion": "error",
-        "useNumericLiterals": "error",
         "useEnumInitializers": "error",
         "useSelfClosingElements": "error",
         "useConst": "off",
@@ -80,7 +88,7 @@
     "indentWidth": 2,
     "lineWidth": 80,
     "lineEnding": "lf",
-    "includes": ["**", "!**/node_modules/**"]
+    "includes": ["**", "!**/node_modules/**", "!**/*.d.ts"]
   },
   "javascript": {
     "formatter": {

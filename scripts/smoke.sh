@@ -34,8 +34,8 @@ for dir in "$EXAMPLES_DIR"/*/; do
       cd "$dir"
       echo "  Running deploy..."
       if [ -f "../../.env" ]; then
-        bun --env-file ../../.env ./alchemy.run.ts
-        bun --env-file ../../.env ./alchemy.run.ts --destroy
+        bun run deploy
+        bun run destroy
       # If we're using Cloudflare state store in CI, verify .alchemy/ folder doesn't exist
       if [ "$ALCHEMY_STATE_STORE" = "cloudflare" ] && [ "$CI" = "true" ]; then
         echo "  Verifying no local state files were created..."
@@ -45,8 +45,13 @@ for dir in "$EXAMPLES_DIR"/*/; do
         fi
       fi
       else
-        bun ./alchemy.run.ts
-        bun ./alchemy.run.ts --destroy
+        if [ -f "./alchemy.run.ts" ]; then
+          bun ./alchemy.run.ts
+          bun ./alchemy.run.ts --destroy
+        else
+          bun ./index.ts
+          bun ./index.ts --destroy
+        fi
       fi
     ) # Run in a subshell to automatically return to the original directory
 

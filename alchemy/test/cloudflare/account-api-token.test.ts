@@ -13,7 +13,9 @@ import "../../src/test/bun.js";
 // Create API client for verification
 let api: CloudflareApi;
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("AccountApiToken Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
@@ -61,7 +63,7 @@ describe("AccountApiToken Resource", () => {
       );
       expect(getResponse.status).toEqual(200);
 
-      const responseData = await getResponse.json();
+      const responseData: any = await getResponse.json();
       expect(responseData.result.name).toEqual(`Test Token ${testId}`);
 
       // Update the token
@@ -88,12 +90,8 @@ describe("AccountApiToken Resource", () => {
       const getUpdatedResponse = await api.get(
         `/accounts/${api.accountId}/tokens/${tokenId}`,
       );
-      const updatedData = await getUpdatedResponse.json();
+      const updatedData: any = await getUpdatedResponse.json();
       expect(updatedData.result.name).toEqual(`Updated Token ${testId}`);
-    } catch (err) {
-      // Log the error or else it's silently swallowed by destroy errors
-      console.log(err);
-      throw err;
     } finally {
       // Always clean up, even if test assertions fail
       await destroy(scope);

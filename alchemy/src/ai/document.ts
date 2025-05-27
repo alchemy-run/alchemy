@@ -329,7 +329,7 @@ export const Document = Resource(
  * @param text The text to extract markdown content from
  * @returns The extracted markdown content or error message
  */
-function extractMarkdownContent(text: string): {
+export function extractMarkdownContent(text: string): {
   content: string;
   error?: string;
 } {

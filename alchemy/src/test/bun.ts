@@ -99,7 +99,9 @@ type test = {
  *
  * @example
  * ```typescript
- * const test = alchemy.test(import.meta);
+ * const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX
+});
  *
  * describe("My Resource", () => {
  *   test("create and delete", async (scope) => {
@@ -132,7 +134,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
   test.skipIf = (condition: boolean) => {
     if (condition) {
       // TODO: proxy through to bun:test.skipIf
-      return (...args: any[]) => {};
+      return (..._args: any[]) => {};
     }
     return test;
   };
@@ -191,7 +193,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
 
     return it(
       testName,
-      async () =>
+      () =>
         alchemy.run(
           testName,
           {
@@ -199,7 +201,6 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
             parent: scope,
           },
           async (scope) => {
-            // Enter test scope since bun calls from different scope
             await scope.run(() => fn(scope));
           },
         ),

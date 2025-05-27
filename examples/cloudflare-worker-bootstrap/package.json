@@ -1,0 +1,9 @@
+{
+  "name": "cloudflare-worker-bootstrap",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "bun --env-file ../../.env ./index.ts",
+    "destroy": "bun --env-file ../../.env ./index.ts --destroy"
+  }
+}

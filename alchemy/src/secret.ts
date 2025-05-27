@@ -1,5 +1,15 @@
 import { alchemy } from "./alchemy.js";
 
+// a global registry of all secrets that we will use when serializing an application
+const globalSecrets: {
+  [name: string]: Secret;
+} = {};
+
+let i = 0;
+function nextName() {
+  return `alchemy:anonymous-secret-${i++}`;
+}
+
 /**
  * Internal wrapper for sensitive values like API keys and credentials.
  * When stored in alchemy state files, the value is automatically encrypted
@@ -36,8 +46,20 @@ import { alchemy } from "./alchemy.js";
  * }
  */
 export class Secret {
+  /**
+   * @internal
+   */
+  public static all(): Secret[] {
+    return Object.values(globalSecrets);
+  }
+
   public readonly type = "secret";
-  constructor(readonly unencrypted: string) {}
+  constructor(
+    readonly unencrypted: string,
+    readonly name: string = nextName(),
+  ) {
+    globalSecrets[name] = this;
+  }
 }
 
 /**
@@ -79,11 +101,14 @@ export function isSecret(binding: any): binding is Secret {
  * @throws {Error} If the value is undefined
  * @throws {Error} If no password is set in the alchemy application options or current scope
  */
-export function secret<S extends string | undefined>(unencrypted: S): Secret {
+export function secret<S extends string | undefined>(
+  unencrypted: S,
+  name?: string,
+): Secret {
   if (unencrypted === undefined) {
     throw new Error("Secret cannot be undefined");
   }
-  return new Secret(unencrypted);
+  return new Secret(unencrypted, name);
 }
 
 export namespace secret {
@@ -104,7 +129,7 @@ export namespace secret {
   ): Promise<Secret> {
     const result = await alchemy.env(name, value, error);
     if (typeof result === "string") {
-      return secret(result);
+      return secret(result, name);
     }
     throw new Error(`Secret environment variable ${name} is not a string`);
   }

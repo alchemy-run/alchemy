@@ -1,11 +1,7 @@
 import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
 import { VectorizeIndex } from "../../src/cloudflare/vectorize-index.js";
-import {
-  VectorizeMetadataIndex,
-  listMetadataIndexes,
-} from "../../src/cloudflare/vectorize-metadata-index.js";
+import { VectorizeMetadataIndex } from "../../src/cloudflare/vectorize-metadata-index.js";
 import { BRANCH_PREFIX } from "../util.js";
 
 import "../../src/test/bun.js";
@@ -18,9 +14,6 @@ describe("Vectorize Metadata Index Resource", async () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
   const testId = `${BRANCH_PREFIX}-meta-test`;
 
-  // Create Cloudflare API client for direct verification
-  const api = await createCloudflareApi();
-
   test("create and delete metadata index", async (scope) => {
     // First create a parent vectorize index
     const vectorIndex = await VectorizeIndex(`${testId}-parent`, {
@@ -31,7 +24,7 @@ describe("Vectorize Metadata Index Resource", async () => {
     });
 
     // Then create a metadata index
-    let metadataIndex: VectorizeMetadataIndex | undefined = undefined;
+    let metadataIndex: VectorizeMetadataIndex | undefined;
 
     try {
       metadataIndex = await VectorizeMetadataIndex(`${testId}-category`, {
@@ -96,31 +89,41 @@ describe("Vectorize Metadata Index Resource", async () => {
       await alchemy.destroy(scope);
     }
   });
+
+  test("allows no-op update with same properties", async (scope) => {
+    try {
+      // First create a parent vectorize index
+      const vectorIndex = await VectorizeIndex(`${testId}-parent-noop`, {
+        name: `${testId}-parent-noop`,
+        dimensions: 768,
+        metric: "cosine",
+        adopt: true,
+      });
+
+      // Create a metadata index
+      const metadataIndex = await VectorizeMetadataIndex(`${testId}-noop`, {
+        index: vectorIndex,
+        propertyName: "noop",
+        indexType: "string",
+      });
+
+      expect(metadataIndex.propertyName).toEqual("noop");
+
+      // Attempt a no-op update with the same properties
+      const updatedIndex = await VectorizeMetadataIndex(`${testId}-noop`, {
+        index: vectorIndex,
+        propertyName: "noop",
+        indexType: "string",
+        // @ts-expect-error - Adding a non-existent property to test no-op behavior
+        nonExistentProperty: "test",
+      });
+
+      // Verify the index remains unchanged
+      expect(updatedIndex.propertyName).toEqual("noop");
+      expect(updatedIndex.indexType).toEqual("string");
+      expect(updatedIndex.id).toEqual(metadataIndex.id);
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  });
 });
-
-async function assertMetadataIndexDeleted(
-  indexName: string,
-  propertyName: string,
-) {
-  const api = await createCloudflareApi();
-  try {
-    // List metadata indexes and check if our index is still there
-    const metadataIndexes = await listMetadataIndexes(api, indexName);
-    const foundIndex = metadataIndexes.find(
-      (idx) => idx.propertyName === propertyName,
-    );
-
-    if (foundIndex) {
-      throw new Error(
-        `Metadata index ${propertyName} was not deleted as expected`,
-      );
-    }
-  } catch (error: any) {
-    // If we get a 404, the parent index itself might have been deleted (which is fine)
-    if (error.status === 404 || error.status === 410) {
-      return; // This is expected
-    } else {
-      throw new Error(`Unexpected error type: ${error}`);
-    }
-  }
-}

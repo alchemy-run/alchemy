@@ -16,7 +16,9 @@ import "../../src/test/bun.js";
 // Create API client for verification
 const api = createNeonApi();
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("NeonProject Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
@@ -85,7 +87,7 @@ describe("NeonProject Resource", () => {
       const getResponse = await api.get(`/projects/${project.id}`);
       expect(getResponse.status).toEqual(200);
 
-      const responseData = await getResponse.json();
+      const responseData: any = await getResponse.json();
       expect(responseData.project.name).toEqual(projectName);
 
       // Check if the branch is in ready state, confirming operations were waited for
@@ -108,12 +110,8 @@ describe("NeonProject Resource", () => {
 
       // Verify project was updated
       const getUpdatedResponse = await api.get(`/projects/${project.id}`);
-      const updatedData = await getUpdatedResponse.json();
+      const updatedData: any = await getUpdatedResponse.json();
       expect(updatedData.project.name).toEqual(updatedName);
-    } catch (err) {
-      // log the error or else it's silently swallowed by destroy errors
-      console.log(err);
-      throw err;
     } finally {
       // Always clean up, even if test assertions fail
       await destroy(scope);

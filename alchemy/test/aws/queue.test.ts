@@ -64,7 +64,6 @@ describe("AWS Resources", () => {
       } finally {
         // Always clean up, even if test assertions fail
         await destroy(scope);
-
         // Verify queue is gone (this will throw if queue doesn't exist)
         await expect(
           sqs.send(
@@ -122,7 +121,7 @@ describe("AWS Resources", () => {
       }
     });
 
-    test("create queue, send message, delete, and recreate", async (scope) => {
+    test("create quee, send message, delete, and recreate", async (scope) => {
       // Create initial queue
       const queueName = `${BRANCH_PREFIX}-alchemy-test-queue-recreate`;
 

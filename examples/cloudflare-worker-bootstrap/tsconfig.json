@@ -1,0 +1,12 @@
+{
+  "include": ["index.ts"],
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types", "@types/node"]
+  },
+  "references": [
+    {
+      "path": "../../alchemy/tsconfig.json"
+    }
+  ]
+}

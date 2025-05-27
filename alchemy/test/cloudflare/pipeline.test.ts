@@ -26,7 +26,7 @@ async function assertPipelineExists(pipelineName: string): Promise<boolean> {
       `/accounts/${api.accountId}/pipelines/${pipelineName}`,
     );
     return response.status === 200;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -38,7 +38,7 @@ async function assertWorkerDoesNotExist(workerName: string) {
       `/accounts/${api.accountId}/workers/scripts/${workerName}`,
     );
     expect(response.status).toEqual(404);
-  } catch (error) {
+  } catch {
     // 404 is expected, so we can ignore it
     return;
   }
@@ -54,8 +54,8 @@ describe("Pipeline Resource", () => {
     const pipelineName = `${BRANCH_PREFIX}-test-pipeline`;
     const bucketName = `${BRANCH_PREFIX.toLowerCase()}-basic-bucket`;
 
-    let pipeline: Pipeline | undefined = undefined;
-    let bucket: R2Bucket | undefined = undefined;
+    let pipeline: Pipeline | undefined;
+    let bucket: R2Bucket | undefined;
 
     try {
       // Create an R2 bucket
@@ -109,15 +109,15 @@ describe("Pipeline Resource", () => {
       const exists = await assertPipelineExists(pipelineName);
       expect(exists).toEqual(false);
     }
-  }, 60000); // Increase timeout for pipeline operations
+  }, 120000); // Increase timeout for pipeline operations
 
   test("create pipeline with R2 bucket destination and custom settings", async (scope) => {
     const pipelineName = `${BRANCH_PREFIX}-r2-pipeline`;
     const bucketName = `${BRANCH_PREFIX.toLowerCase()}-pipeline-bucket`;
     const prefix = "test-logs";
 
-    let pipeline: Pipeline | undefined = undefined;
-    let bucket: R2Bucket | undefined = undefined;
+    let pipeline: Pipeline | undefined;
+    let bucket: R2Bucket | undefined;
 
     try {
       // Create an R2 bucket
@@ -179,14 +179,14 @@ describe("Pipeline Resource", () => {
     } finally {
       await destroy(scope);
     }
-  }, 60000); // Increase timeout for pipeline operations
+  }, 120000); // Increase timeout for pipeline operations
 
   test("update pipeline settings", async (scope) => {
     const pipelineName = `${BRANCH_PREFIX}-update-pipeline`;
     const bucketName = `${BRANCH_PREFIX.toLowerCase()}-update-bucket`;
 
-    let pipeline: Pipeline | undefined = undefined;
-    let bucket: R2Bucket | undefined = undefined;
+    let pipeline: Pipeline | undefined;
+    let bucket: R2Bucket | undefined;
 
     try {
       // Create an R2 bucket
@@ -271,7 +271,7 @@ describe("Pipeline Resource", () => {
     } finally {
       await destroy(scope);
     }
-  }, 60000); // Increase timeout for pipeline operations
+  }, 120000); // Increase timeout for pipeline operations
 
   test("create worker with pipeline binding and send records", async (scope) => {
     const pipelineName = `${BRANCH_PREFIX}-worker-pipeline`;
@@ -331,10 +331,9 @@ describe("Pipeline Resource", () => {
       };
     `;
 
-    let pipeline: Pipeline<TestRecord> | undefined = undefined;
-    let bucket: R2Bucket | undefined = undefined;
-    let worker: Worker<{ DATA_PIPELINE: Pipeline<TestRecord> }> | undefined =
-      undefined;
+    let pipeline: Pipeline<TestRecord> | undefined;
+    let bucket: R2Bucket | undefined;
+    let worker: Worker<{ DATA_PIPELINE: Pipeline<TestRecord> }> | undefined;
 
     try {
       // Create an R2 bucket
@@ -427,7 +426,7 @@ describe("Pipeline Resource", () => {
           body: JSON.stringify(testRecords),
         });
 
-        const responseData = await sendResponse.json();
+        const responseData: any = await sendResponse.json();
         console.log(responseData);
 
         expect(sendResponse.status).toEqual(200);

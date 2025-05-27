@@ -5,10 +5,13 @@ import { join } from "node:path";
 import { alchemy } from "../../src/alchemy.js";
 import { destroy } from "../../src/destroy.js";
 import { Exec } from "../../src/os/exec.js";
+import { BRANCH_PREFIX } from "../util.js";
 
 import "../../src/test/bun.js";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("Exec Resource", () => {
   test("execute a simple command", async (scope) => {

@@ -1,6 +1,7 @@
 import type { Context } from "../context.js";
 import { StaticJsonFile } from "../fs/static-json-file.js";
 import { Resource } from "../resource.js";
+import { assertNever } from "../util/assert-never.js";
 import { Self, type Bindings } from "./bindings.js";
 import type { DurableObjectNamespace } from "./durable-object-namespace.js";
 import type { EventSource } from "./event-source.js";
@@ -66,7 +67,7 @@ export const WranglerJson = Resource(
   "cloudflare::WranglerJson",
   async function (
     this: Context<WranglerJson>,
-    id: string,
+    _id: string,
     props: WranglerJsonProps,
   ): Promise<WranglerJson> {
     // Default path is wrangler.json in current directory
@@ -101,6 +102,10 @@ export const WranglerJson = Resource(
     // Add environment variables as vars
     if (worker.env) {
       spec.vars = { ...worker.env };
+    }
+
+    if (worker.crons && worker.crons.length > 0) {
+      spec.triggers = { crons: worker.crons };
     }
 
     await StaticJsonFile(filePath, spec);
@@ -149,6 +154,13 @@ export interface WranglerJsonSpec {
    * Routes to attach to the worker
    */
   routes?: string[];
+
+  /**
+   * Scheduled triggers for the worker
+   */
+  triggers?: {
+    crons: string[];
+  };
 
   /**
    * AI bindings
@@ -236,7 +248,7 @@ export interface WranglerJsonSpec {
   /**
    * Vectorize index bindings
    */
-  vectorize_indexes?: {
+  vectorize?: {
     binding: string;
     index_name: string;
   }[];
@@ -291,6 +303,21 @@ export interface WranglerJsonSpec {
    * Whether to minify the worker script
    */
   minify?: boolean;
+
+  /**
+   * Analytics Engine datasets
+   */
+  analytics_engine_datasets?: { binding: string; dataset: string }[];
+
+  /**
+   * Hyperdrive bindings
+   */
+  hyperdrive?: { binding: string; id: string; localConnectionString: string }[];
+
+  /**
+   * Pipelines
+   */
+  pipelines?: { binding: string; pipeline: string }[];
 }
 
 /**
@@ -340,6 +367,13 @@ function processBindings(
   const new_classes: string[] = [];
 
   const vectorizeIndexes: { binding: string; index_name: string }[] = [];
+  const analyticsEngineDatasets: { binding: string; dataset: string }[] = [];
+  const hyperdrive: {
+    binding: string;
+    id: string;
+    localConnectionString: string;
+  }[] = [];
+  const pipelines: { binding: string; pipeline: string }[] = [];
 
   for (const eventSource of eventSources ?? []) {
     if (isQueueEventSource(eventSource)) {
@@ -375,13 +409,13 @@ function processBindings(
       // Service binding
       services.push({
         binding: bindingName,
-        service: binding.id,
+        service: binding.name,
       });
     } else if (binding.type === "kv_namespace") {
       // KV Namespace binding
       kvNamespaces.push({
         binding: bindingName,
-        id: binding.namespaceId,
+        id: "namespaceId" in binding ? binding.namespaceId : binding.id,
       });
     } else if (
       typeof binding === "object" &&
@@ -450,6 +484,33 @@ function processBindings(
       spec.ai = {
         binding: bindingName,
       };
+    } else if (binding.type === "analytics_engine") {
+      analyticsEngineDatasets.push({
+        binding: bindingName,
+        dataset: binding.dataset,
+      });
+    } else if (binding.type === "ai_gateway") {
+      // no-op
+    } else if (binding.type === "hyperdrive") {
+      const password =
+        "password" in binding.origin
+          ? binding.origin.password.unencrypted
+          : binding.origin.access_client_secret.unencrypted;
+      hyperdrive.push({
+        binding: bindingName,
+        id: binding.hyperdriveId,
+        localConnectionString: `${binding.origin.scheme || "postgres"}://${binding.origin.user}:${password}@${binding.origin.host}:${binding.origin.port || 5432}/${binding.origin.database}`,
+      });
+    } else if (binding.type === "pipeline") {
+      pipelines.push({
+        binding: bindingName,
+        pipeline: binding.name,
+      });
+    } else if (binding.type === "json") {
+      // TODO(sam): anything to do here? not sure wrangler.json supports this
+    } else {
+      // biome-ignore lint/correctness/noVoidTypeReturn: it returns never
+      return assertNever(binding);
     }
   }
 
@@ -481,7 +542,7 @@ function processBindings(
   }
 
   if (vectorizeIndexes.length > 0) {
-    spec.vectorize_indexes = vectorizeIndexes;
+    spec.vectorize = vectorizeIndexes;
   }
 
   if (new_sqlite_classes.length > 0 || new_classes.length > 0) {
@@ -496,5 +557,17 @@ function processBindings(
 
   if (workflows.length > 0) {
     spec.workflows = workflows;
+  }
+
+  if (analyticsEngineDatasets.length > 0) {
+    spec.analytics_engine_datasets = analyticsEngineDatasets;
+  }
+
+  if (hyperdrive.length > 0) {
+    spec.hyperdrive = hyperdrive;
+  }
+
+  if (pipelines.length > 0) {
+    spec.pipelines = pipelines;
   }
 }

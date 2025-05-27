@@ -13,13 +13,14 @@ import { nodeJsCompatPlugin } from "./nodejs-compat.js";
 
 export async function bundleWorkerScript<B extends Bindings>(
   props: WorkerProps<B> & {
+    entrypoint: string;
     compatibilityDate: string;
     compatibilityFlags: string[];
   },
 ) {
   const projectRoot = props.projectRoot ?? process.cwd();
 
-  const nodeJsCompatMode = getNodeJSCompatMode(
+  const nodeJsCompatMode = await getNodeJSCompatMode(
     props.compatibilityDate,
     props.compatibilityFlags,
   );
@@ -29,10 +30,11 @@ export async function bundleWorkerScript<B extends Bindings>(
       "You must set your compatibilty date >= 2024-09-23 when using 'nodejs_compat' compatibility flag",
     );
   }
+  const main = props.entrypoint;
 
   try {
     const bundle = await Bundle("bundle", {
-      entryPoint: props.entrypoint!,
+      entryPoint: main,
       format: props.format === "cjs" ? "cjs" : "esm", // Use the specified format or default to ESM
       target: "esnext",
       platform: "node",
@@ -48,6 +50,7 @@ export async function bundleWorkerScript<B extends Bindings>(
           ".json": "json",
         },
         plugins: [
+          ...(props.bundle?.plugins ?? []),
           ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
           ...(props.bundle?.alias
             ? [

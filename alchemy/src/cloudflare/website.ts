@@ -66,6 +66,7 @@ export async function Website<B extends Bindings>(
   if (props.bindings?.ASSETS) {
     throw new Error("ASSETS binding is reserved for internal use");
   }
+  const wrangler = props.wrangler ?? true;
 
   return alchemy.run(id, async () => {
     // building the site requires a wrangler.jsonc file to start
@@ -73,19 +74,17 @@ export async function Website<B extends Bindings>(
 
     const cwd = path.resolve(props.cwd || process.cwd());
     const fileName =
-      typeof props.wrangler === "boolean"
+      typeof wrangler === "boolean"
         ? "wrangler.jsonc"
-        : typeof props.wrangler === "string"
-          ? props.wrangler
-          : (props.wrangler?.path ?? "wrangler.jsonc");
+        : typeof wrangler === "string"
+          ? wrangler
+          : (wrangler?.path ?? "wrangler.jsonc");
     const wranglerPath =
       fileName && path.relative(cwd, path.join(cwd, fileName));
     const wranglerMain =
-      typeof props.wrangler === "object"
-        ? (props.wrangler.main ?? props.main)
-        : props.main;
+      typeof wrangler === "object" ? (wrangler.main ?? props.main) : props.main;
 
-    if (props.wrangler) {
+    if (wrangler) {
       try {
         await fs.access(wranglerPath!);
       } catch {
@@ -96,6 +95,7 @@ export async function Website<B extends Bindings>(
               name: id,
               main: wranglerMain,
               compatibility_date: new Date().toISOString().split("T")[0],
+              compatibility_flags: props.compatibilityFlags ?? [],
             },
             null,
             2,
@@ -105,9 +105,11 @@ export async function Website<B extends Bindings>(
     }
 
     await Exec("build", {
+      cwd,
       command: props.command,
     });
 
+    // @ts-expect-error - the WorkerProps union type not happy
     const worker = await Worker("worker", {
       ...props,
       name: props.name ?? id,
@@ -139,7 +141,7 @@ export default {
       },
     });
 
-    if (props.wrangler) {
+    if (wrangler) {
       await WranglerJson("wrangler.jsonc", {
         path: wranglerPath,
         worker,
