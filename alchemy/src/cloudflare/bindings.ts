@@ -41,7 +41,7 @@ export type Binding =
   | Assets
   | D1DatabaseResource
   | AnalyticsEngineDataset
-  | DurableObjectNamespace
+  | DurableObjectNamespace<any>
   | HyperdriveResource
   | KVNamespaceResource
   | PipelineResource

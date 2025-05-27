@@ -15,8 +15,10 @@ import type { QueueResource as _Queue } from "./queue.js";
 import type { VectorizeIndexResource as _VectorizeIndex } from "./vectorize-index.js";
 import type { Workflow as _Workflow } from "./workflow.js";
 
-export type Bound<T extends Binding> = T extends _DurableObjectNamespace
-  ? DurableObjectNamespace
+export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
+  infer O
+>
+  ? DurableObjectNamespace<O>
   : T extends { type: "kv_namespace" }
     ? KVNamespace
     : T extends { type: "service" }

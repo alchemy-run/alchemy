@@ -8,6 +8,7 @@ import {
   WranglerJson,
 } from "../../alchemy/src/cloudflare/index.js";
 import alchemy from "../../alchemy/src/index.js";
+import type { HelloWorldDO } from "./src/do.js";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 const app = await alchemy("cloudflare-worker", {
@@ -39,7 +40,7 @@ export const worker = await Worker(`cloudflare-worker-worker${BRANCH_PREFIX}`, {
       className: "OFACWorkflow",
       workflowName: "ofac-workflow",
     }),
-    DO: new DurableObjectNamespace("HelloWorldDO", {
+    DO: new DurableObjectNamespace<HelloWorldDO>("HelloWorldDO", {
       className: "HelloWorldDO",
       sqlite: true,
     }),

@@ -1,8 +1,19 @@
+import { DurableObject } from "cloudflare:workers";
+
 /**
  * A simple Hello World Durable Object
  */
-export class HelloWorldDO implements DurableObject {
-  constructor(private readonly state: DurableObjectState) {}
+export class HelloWorldDO extends DurableObject {
+  constructor(
+    private readonly state: DurableObjectState,
+    env: CloudflareEnv,
+  ) {
+    super(state, env);
+  }
+
+  async hello() {
+    return "Hello World";
+  }
 
   /**
    * Handle HTTP requests to the Durable Object

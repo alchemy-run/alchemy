@@ -8,6 +8,10 @@ export default {
       name: "John Doe",
       email: "john.doe@example.com",
     });
+
+    const obj = env.DO.get(env.DO.idFromName("foo"));
+    await obj.hello();
+
     return new Response("Ok");
   },
   async queue(batch: typeof queue.Batch, _env: typeof worker.Env) {
