@@ -384,11 +384,11 @@ export async function prepareWorkerMetadata<B extends Bindings>(
   }
 
   function configureClassMigration(
-    binding: DurableObjectNamespace | Workflow,
+    binding: DurableObjectNamespace<any> | Workflow,
     stableId: string,
     className: string,
   ) {
-    const oldBinding: DurableObjectNamespace | Workflow | undefined =
+    const oldBinding: DurableObjectNamespace<any> | Workflow | undefined =
       Object.values(oldBindings ?? {})
         ?.filter(
           (b) =>

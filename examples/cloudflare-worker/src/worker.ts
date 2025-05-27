@@ -11,6 +11,12 @@ export default {
 
     const obj = env.DO.get(env.DO.idFromName("foo"));
     await obj.hello();
+    await obj.hello();
+    async function _foo() {
+      // @ts-expect-error - foo doesn't exist on the HelloWorldDO class
+      await obj.foo();
+    }
+    await obj.fetch(new Request("https://example.com"));
 
     return new Response("Ok");
   },

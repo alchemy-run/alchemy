@@ -1,7 +1,4 @@
-/// <reference types="./env.d.ts" />
-
 import type { worker } from "../alchemy.run.js";
-
 
 declare global {
   export type CloudflareEnv = typeof worker.Env;
