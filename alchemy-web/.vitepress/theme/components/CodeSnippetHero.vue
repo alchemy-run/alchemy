@@ -194,7 +194,7 @@ function copyCode() {
   line-height: 1.1;
   margin-top: 0.625rem;
   margin-bottom: 0.75rem;
-  color: rgba(235, 235, 235, 0.9);
+  color: var(--vp-c-text-1);
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
@@ -254,30 +254,26 @@ function copyCode() {
 
 .action-link.alt {
   border-color: var(--vp-c-gray-3);
-  color: var(--vp-c-text-1);
+  color: var(--vp-c-text-2);
   text-decoration: none;
-  background-color: #333336;
+  background-color: var(--vp-c-bg-soft);
 }
 
 .action-link.alt:hover {
   border-color: var(--vp-c-brand-1);
   color: var(--vp-c-brand-1);
   text-decoration: none;
-  background-color: #3a3a3e;
+  background-color: var(--vp-c-bg-mute);
 }
 
 /* Enhanced code snippet styling */
 .code-snippet {
-  background: linear-gradient(
-    145deg,
-    rgba(30, 30, 35, 0.95),
-    rgba(15, 15, 20, 0.95)
-  );
+  background: var(--vp-c-bg-alt);
   border-radius: 1rem;
   box-shadow:
-    0 0.625rem 1.875rem rgba(0, 0, 0, 0.2),
-    0 0.3125rem 0.9375rem rgba(0, 0, 0, 0.1),
-    0 0 0 0.0625rem rgba(255, 255, 255, 0.05) inset;
+    0 0.625rem 1.875rem var(--vp-shadow-3),
+    0 0.3125rem 0.9375rem var(--vp-shadow-2),
+    0 0 0 0.0625rem var(--vp-c-border) inset;
   overflow: hidden;
   position: relative;
   transform: perspective(75rem) rotateY(-5deg) rotateX(2deg);
@@ -292,22 +288,22 @@ function copyCode() {
   transform: perspective(75rem) rotateY(0deg) rotateX(0deg)
     translateY(-0.3125rem);
   box-shadow:
-    0 0.9375rem 2.5rem rgba(0, 0, 0, 0.25),
-    0 0.5rem 1.25rem rgba(0, 0, 0, 0.15),
-    0 0 0 0.0625rem rgba(255, 255, 255, 0.07) inset;
+    0 0.9375rem 2.5rem var(--vp-shadow-5),
+    0 0.5rem 1.25rem var(--vp-shadow-3),
+    0 0 0 0.0625rem var(--vp-c-border) inset;
 }
 
 .code-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: rgba(30, 30, 35, 0.8);
+  background-color: var(--vp-c-bg-soft);
   backdrop-filter: blur(0.625rem);
   padding: 0.75rem 1rem;
-  border-bottom: 0.0625rem solid rgba(255, 255, 255, 0.05);
+  border-bottom: 0.0625rem solid var(--vp-c-border);
   font-family: var(--vp-font-family-mono);
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--vp-c-text-2);
   position: relative;
 }
 
@@ -349,7 +345,7 @@ function copyCode() {
   border: none;
   cursor: pointer;
   padding: 0.375rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--vp-c-text-3);
   border-radius: 0.375rem;
   transition:
     color 0.25s,
@@ -358,14 +354,14 @@ function copyCode() {
 }
 
 .copy-button:hover {
-  color: rgba(255, 255, 255, 0.9);
-  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--vp-c-text-1);
+  background-color: var(--vp-c-bg-mute);
 }
 
 .code-content {
   position: relative;
   overflow: hidden;
-  background-color: rgba(20, 20, 25, 0.95);
+  background-color: var(--vp-code-bg);
 }
 
 .code-content :deep(div[class*="language-"]) {
@@ -389,7 +385,6 @@ function copyCode() {
   line-height: 1.6;
   font-weight: 400;
   letter-spacing: 0.3px;
-  text-shadow: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.3);
 }
 
 .code-content :deep(.line-numbers),
