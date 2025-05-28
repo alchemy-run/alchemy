@@ -200,7 +200,9 @@ export async function prepareWorkerMetadata<B extends Bindings>(
       if (
         binding &&
         typeof binding === "object" &&
-        binding.type === "durable_object_namespace"
+        binding.type === "durable_object_namespace" &&
+        (binding.scriptName === undefined ||
+          binding.scriptName === props.workerName)
       ) {
         return [binding.className];
       }
@@ -295,7 +297,14 @@ export async function prepareWorkerMetadata<B extends Bindings>(
         environment: binding.environment,
         namespace_id: binding.namespaceId,
       });
-      configureClassMigration(binding, binding.id, binding.className);
+      if (
+        binding.scriptName === undefined ||
+        // TODO(sam): not sure if Cloudflare Api would like us using `this` worker name here
+        binding.scriptName === props.workerName
+      ) {
+        // we do not need configure class migrations for cross-script bindings
+        configureClassMigration(binding, binding.id, binding.className);
+      }
     } else if (binding.type === "r2_bucket") {
       meta.bindings.push({
         type: "r2_bucket",

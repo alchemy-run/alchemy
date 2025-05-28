@@ -1826,7 +1826,7 @@ describe("Worker Resource", () => {
     const targetWorkerName = `${BRANCH_PREFIX}-target-worker`;
     const callerWorkerName = `${BRANCH_PREFIX}-caller-worker`;
 
-    // Sample script for the target worker
+    // Script for the target worker
     const targetWorkerScript = `
       export default {
         async fetch(request, env, ctx) {
@@ -1857,7 +1857,7 @@ describe("Worker Resource", () => {
       };
     `;
 
-    // Sample script for the caller worker that will use the worker binding
+    // Script for the caller worker that will use the worker binding
     const callerWorkerScript = `
       export default {
         async fetch(request, env, ctx) {
@@ -2113,4 +2113,234 @@ describe("Worker Resource", () => {
       await assertWorkerDoesNotExist(workerName);
     }
   }, 60000); // Increase timeout for Worker operations
+
+  test("create and test worker with cross-script durable object binding", async (scope) => {
+    // Create names for both workers
+    const doWorkerName = `${BRANCH_PREFIX}-do-provider-worker`;
+    const clientWorkerName = `${BRANCH_PREFIX}-do-client-worker`;
+
+    // Script for the worker that defines the durable object
+    const doProviderWorkerScript = `
+      export class SharedCounter {
+        constructor(state, env) {
+          this.state = state;
+          this.env = env;
+          this.counter = 0;
+        }
+
+        async fetch(request) {
+          const url = new URL(request.url);
+          
+          if (url.pathname === '/increment') {
+            this.counter++;
+            return new Response(JSON.stringify({
+              action: 'increment',
+              counter: this.counter,
+              worker: '${doWorkerName}'
+            }), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+
+          if (url.pathname === '/get') {
+            return new Response(JSON.stringify({
+              action: 'get',
+              counter: this.counter,
+              worker: '${doWorkerName}'
+            }), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+
+          return new Response('SharedCounter DO is running!', { status: 200 });
+        }
+      }
+
+      export default {
+        async fetch(request, env, ctx) {
+          return new Response('DO Provider Worker is running!', {
+            status: 200,
+            headers: { 'Content-Type': 'text/plain' }
+          });
+        }
+      };
+    `;
+
+    // Script for the worker that uses the cross-script durable object
+    const clientWorkerScript = `
+      export default {
+        async fetch(request, env, ctx) {
+          const url = new URL(request.url);
+          
+          if (url.pathname === '/increment') {
+            try {
+              // Get the durable object instance and increment
+              const id = env.SHARED_COUNTER.idFromName('test-counter');
+              const stub = env.SHARED_COUNTER.get(id);
+              const response = await stub.fetch(new Request('https://example.com/increment'));
+              const data = await response.json();
+              
+              return Response.json({
+                success: true,
+                clientWorker: '${clientWorkerName}',
+                result: data,
+                crossScriptWorking: true
+              });
+            } catch (error) {
+              return Response.json({
+                success: false,
+                error: error.message,
+                crossScriptWorking: false
+              }, { status: 500 });
+            }
+          }
+
+          if (url.pathname === '/get') {
+            try {
+              // Get the current counter value
+              const id = env.SHARED_COUNTER.idFromName('test-counter');
+              const stub = env.SHARED_COUNTER.get(id);
+              const response = await stub.fetch(new Request('https://example.com/get'));
+              const data = await response.json();
+              
+              return Response.json({
+                success: true,
+                clientWorker: '${clientWorkerName}',
+                result: data
+              });
+            } catch (error) {
+              return Response.json({
+                success: false,
+                error: error.message
+              }, { status: 500 });
+            }
+          }
+
+          return new Response('DO Client Worker is running!', {
+            status: 200,
+            headers: { 'Content-Type': 'text/plain' }
+          });
+        }
+      };
+    `;
+
+    let doProviderWorker: Worker | undefined;
+    let clientWorker: Worker | undefined;
+
+    try {
+      // First create the worker that defines the durable object with its own binding
+      doProviderWorker = await Worker(doWorkerName, {
+        name: doWorkerName,
+        script: doProviderWorkerScript,
+        format: "esm",
+        url: true, // Enable workers.dev URL
+        bindings: {
+          // Create a durable object namespace for the provider worker
+          SHARED_COUNTER: new DurableObjectNamespace(
+            "provider-counter-namespace",
+            {
+              className: "SharedCounter",
+              // No scriptName means it binds to its own script
+            },
+          ), // Bind to its own durable object
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      expect(doProviderWorker.id).toBeTruthy();
+      expect(doProviderWorker.name).toEqual(doWorkerName);
+      expect(doProviderWorker.url).toBeTruthy();
+
+      // Create the client worker with the cross-script durable object binding
+      clientWorker = await Worker(clientWorkerName, {
+        name: clientWorkerName,
+        script: clientWorkerScript,
+        format: "esm",
+        url: true, // Enable workers.dev URL
+        bindings: {
+          // Create a cross-script durable object namespace that references the first worker
+
+          SHARED_COUNTER: new DurableObjectNamespace(
+            "cross-script-counter-namespace",
+            {
+              className: "SharedCounter",
+              scriptName: doWorkerName, // This makes it cross-script
+            },
+          ), // Cross-script binding
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      expect(clientWorker.id).toBeTruthy();
+      expect(clientWorker.name).toEqual(clientWorkerName);
+      expect(clientWorker.url).toBeTruthy();
+      expect(clientWorker.bindings?.SHARED_COUNTER).toBeDefined();
+
+      // Verify the binding configuration
+      const binding = clientWorker.bindings!.SHARED_COUNTER as any;
+      expect(binding.className).toEqual("SharedCounter");
+      expect(binding.scriptName).toEqual(doWorkerName);
+
+      // Test that both workers respond to basic requests
+      const doProviderResponse = await fetch(doProviderWorker.url!);
+      expect(doProviderResponse.status).toEqual(200);
+      const doProviderText = await doProviderResponse.text();
+      expect(doProviderText).toEqual("DO Provider Worker is running!");
+
+      const clientResponse = await fetch(clientWorker.url!);
+      expect(clientResponse.status).toEqual(200);
+      const clientText = await clientResponse.text();
+      expect(clientText).toEqual("DO Client Worker is running!");
+
+      // Test cross-script durable object functionality by calling increment
+      const incrementResponse = await fetch(`${clientWorker.url}/increment`);
+      expect(incrementResponse.status).toEqual(200);
+      const incrementData: any = await incrementResponse.json();
+
+      expect(incrementData).toMatchObject({
+        success: true,
+        clientWorker: clientWorkerName,
+        crossScriptWorking: true,
+        result: {
+          action: "increment",
+          worker: doWorkerName,
+        },
+      });
+
+      // Test getting the counter value
+      const getResponse = await fetch(`${clientWorker.url}/get`);
+      expect(getResponse.status).toEqual(200);
+      const getData: any = await getResponse.json();
+
+      expect(getData).toMatchObject({
+        success: true,
+        clientWorker: clientWorkerName,
+        result: {
+          action: "get",
+          worker: doWorkerName,
+        },
+      });
+
+      // Test state persistence by making multiple increment calls
+      const firstIncrement = await fetch(`${clientWorker.url}/increment`);
+      const firstData: any = await firstIncrement.json();
+
+      const secondIncrement = await fetch(`${clientWorker.url}/increment`);
+      const secondData: any = await secondIncrement.json();
+
+      const thirdIncrement = await fetch(`${clientWorker.url}/increment`);
+      const thirdData: any = await thirdIncrement.json();
+
+      // Verify that the counter is incrementing properly across calls
+      expect(firstData.result.counter).toBeLessThan(secondData.result.counter);
+      expect(secondData.result.counter).toBeLessThan(thirdData.result.counter);
+    } finally {
+      await destroy(scope);
+      // Verify both workers were deleted
+      await assertWorkerDoesNotExist(doWorkerName);
+      await assertWorkerDoesNotExist(clientWorkerName);
+    }
+  }, 120000); // Increased timeout for cross-script DO operations
 });

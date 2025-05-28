@@ -95,6 +95,39 @@ const frontend = await Worker("frontend", {
 });
 ```
 
+## Cross-Script Durable Object Binding
+
+Share durable objects between workers by defining them in one worker and accessing them from another:
+
+```ts
+import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";
+
+// Worker that defines and owns the durable object
+const dataWorker = await Worker("data-worker", {
+  name: "data-worker",
+  entrypoint: "./src/data.ts",
+  bindings: {
+    // Bind to its own durable object
+    STORAGE: new DurableObjectNamespace("storage", {
+      className: "DataStorage"
+    })
+  }
+});
+
+// Worker that accesses the durable object from another worker
+const apiWorker = await Worker("api-worker", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts", 
+  bindings: {
+    // Cross-script binding to the data worker's durable object
+    SHARED_STORAGE: new DurableObjectNamespace("shared-storage", {
+      className: "DataStorage",
+      scriptName: dataWorker.name  // References the other worker
+    })
+  }
+});
+```
+
 ## With Custom Domain Routing
 
 ```ts

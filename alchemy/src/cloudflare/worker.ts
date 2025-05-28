@@ -412,6 +412,32 @@ export type Worker<B extends Bindings = Bindings> =
  *   crons: ['* 15 * * *', '0 0 * * *', '0 12 * * MON']
  * })
  *
+ * @example
+ * // Create cross-script durable object binding where one worker
+ * // defines the durable object and another worker accesses it:
+ * const dataWorker = await Worker("data-worker", {
+ *   name: "data-worker",
+ *   entrypoint: "./src/data.ts",
+ *   bindings: {
+ *     // Bind to its own durable object
+ *     STORAGE: new DurableObjectNamespace("storage", {
+ *       className: "DataStorage"
+ *     })
+ *   }
+ * });
+ *
+ * const apiWorker = await Worker("api-worker", {
+ *   name: "api-worker",
+ *   entrypoint: "./src/api.ts",
+ *   bindings: {
+ *     // Cross-script binding to the data worker's durable object
+ *     SHARED_STORAGE: new DurableObjectNamespace("shared-storage", {
+ *       className: "DataStorage",
+ *       scriptName: "data-worker"  // References the other worker
+ *     })
+ *   }
+ * });
+ *
  * @see
  * https://developers.cloudflare.com/workers/
  */
