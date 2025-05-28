@@ -1,3 +1,5 @@
+import type { Binding } from "./bindings.js";
+
 /**
  * Properties for creating a Durable Object Namespace
  */
@@ -7,6 +9,14 @@ export interface DurableObjectNamespaceInput {
   environment?: string | undefined;
   sqlite?: boolean | undefined;
   namespaceId?: string | undefined;
+}
+
+export function isDurableObjectNamespace(
+  binding: Binding,
+): binding is DurableObjectNamespace {
+  return (
+    typeof binding === "object" && binding.type === "durable_object_namespace"
+  );
 }
 
 /**

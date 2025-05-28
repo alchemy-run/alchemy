@@ -120,10 +120,7 @@ const apiWorker = await Worker("api-worker", {
   entrypoint: "./src/api.ts", 
   bindings: {
     // Cross-script binding to the data worker's durable object
-    SHARED_STORAGE: new DurableObjectNamespace("shared-storage", {
-      className: "DataStorage",
-      scriptName: dataWorker.name  // References the other worker
-    })
+    SHARED_STORAGE: dataWorker.bindings.STORAGE
   }
 });
 ```

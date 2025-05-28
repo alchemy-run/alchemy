@@ -23,6 +23,10 @@ import { isBucket } from "./bucket.js";
 import { bundleWorkerScript } from "./bundle/bundle-worker.js";
 import { isD1Database } from "./d1-database.js";
 import {
+  DurableObjectNamespace,
+  isDurableObjectNamespace,
+} from "./durable-object-namespace.js";
+import {
   type EventSource,
   type QueueEventSource,
   isQueueEventSource,
@@ -90,7 +94,7 @@ export interface AssetsConfig {
   serve_directly?: boolean;
 }
 
-export interface BaseWorkerProps<B extends Bindings = Bindings>
+export interface BaseWorkerProps<B extends Bindings | undefined = undefined>
   extends CloudflareApiOptions {
   /**
    * Bundle options when using entryPoint
@@ -200,14 +204,15 @@ export interface BaseWorkerProps<B extends Bindings = Bindings>
   eventSources?: EventSource[];
 }
 
-export interface InlineWorkerProps<B extends Bindings = Bindings>
+export interface InlineWorkerProps<B extends Bindings | undefined = Bindings>
   extends BaseWorkerProps<B> {
   script: string;
   entrypoint?: undefined;
 }
 
-export interface EntrypointWorkerProps<B extends Bindings = Bindings>
-  extends BaseWorkerProps<B> {
+export interface EntrypointWorkerProps<
+  B extends Bindings | undefined = Bindings,
+> extends BaseWorkerProps<B> {
   entrypoint: string;
   script?: undefined;
 }
@@ -215,7 +220,7 @@ export interface EntrypointWorkerProps<B extends Bindings = Bindings>
 /**
  * Properties for creating or updating a Worker
  */
-export type WorkerProps<B extends Bindings = Bindings> =
+export type WorkerProps<B extends Bindings | undefined = Bindings> =
   | InlineWorkerProps<B>
   | EntrypointWorkerProps<B>;
 
@@ -265,7 +270,7 @@ export function isWorker(resource: Resource): resource is Worker<any> {
 /**
  * Output returned after Worker creation/update
  */
-export type Worker<B extends Bindings = Bindings> =
+export type Worker<B extends Bindings | undefined = Bindings | undefined> =
   Resource<"cloudflare::Worker"> &
     Omit<WorkerProps<B>, "url" | "script"> &
     globalThis.Service & {
@@ -300,7 +305,7 @@ export type Worker<B extends Bindings = Bindings> =
       /**
        * The bindings that were created
        */
-      bindings: B | undefined;
+      bindings: B;
 
       /**
        * Configuration for static assets
@@ -308,9 +313,11 @@ export type Worker<B extends Bindings = Bindings> =
       assets?: AssetsConfig;
 
       // phantom property (for typeof myWorker.Env)
-      Env: {
-        [bindingName in keyof B]: Bound<B[bindingName]>;
-      };
+      Env: B extends Bindings
+        ? {
+            [bindingName in keyof B]: Bound<B[bindingName]>;
+          }
+        : undefined;
 
       /**
        * The compatibility date for the worker
@@ -431,10 +438,7 @@ export type Worker<B extends Bindings = Bindings> =
  *   entrypoint: "./src/api.ts",
  *   bindings: {
  *     // Cross-script binding to the data worker's durable object
- *     SHARED_STORAGE: new DurableObjectNamespace("shared-storage", {
- *       className: "DataStorage",
- *       scriptName: "data-worker"  // References the other worker
- *     })
+ *     SHARED_STORAGE: dataWorker.bindings.STORAGE
  *   }
  * });
  *
@@ -842,6 +846,24 @@ export const _Worker = Resource(
 
     const { scriptMetadata, workerUrl, now } = await uploadWorkerScript(props);
 
+    function exportBindings() {
+      return Object.fromEntries(
+        Object.entries(props.bindings ?? ({} as B)).map(
+          ([bindingName, binding]) => [
+            bindingName,
+            isDurableObjectNamespace(binding) &&
+            binding.scriptName === undefined
+              ? new DurableObjectNamespace(binding.id, {
+                  ...binding,
+                  // re-export this binding mapping to the host worker (this worker)
+                  scriptName: workerName,
+                })
+              : binding,
+          ],
+        ),
+      );
+    }
+
     // Construct the output
     return this({
       ...props,
@@ -852,7 +874,7 @@ export const _Worker = Resource(
       compatibilityDate,
       compatibilityFlags,
       format: props.format || "esm", // Include format in the output
-      bindings: props.bindings ?? ({} as B),
+      bindings: exportBindings(),
       env: props.env,
       observability: scriptMetadata.observability,
       createdAt: now,
