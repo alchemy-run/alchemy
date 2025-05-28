@@ -1,5 +1,5 @@
-import { handleApiError } from "../neon/api-error.js";
 import type { Secret } from "../secret.js";
+import { CloudflareApiError } from "./api-error.js";
 import {
   getCloudflareAuthHeaders,
   type CloudflareAuthOptions,
@@ -79,7 +79,10 @@ export async function getCloudflareAccounts(
   if (accounts.ok) {
     return (accountCache[cacheKey] ??= ((await accounts.json()) as any).result);
   } else {
-    return await handleApiError(accounts, "get", "accounts");
+    throw new CloudflareApiError(
+      `Failed to get accounts for authorized user, please make sure you're authenticated (see: https://alchemy.run/docs/guides/cloudflare-auth.html) or explicitly set the Cloudflare Account ID (see: https://alchemy.run/docs/guides/cloudflare-auth.html#account-id)`,
+      accounts,
+    );
   }
 }
 
