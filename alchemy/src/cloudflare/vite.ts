@@ -1,4 +1,3 @@
-import path from "node:path";
 import type { Assets } from "./assets.js";
 import type { Bindings } from "./bindings.js";
 import { Website, type WebsiteProps } from "./website.js";
@@ -13,9 +12,10 @@ export type Vite<B extends Bindings> = B extends { ASSETS: any }
 
 export async function Vite<B extends Bindings>(
   id: string,
-  props: ViteProps<B>,
+  props: ViteProps<B>
 ): Promise<Vite<B>> {
-  const defaultAssets = path.join("dist", "client");
+  const defaultAssets = "dist";
+
   return Website(id, {
     ...props,
     assets:
