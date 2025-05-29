@@ -200,7 +200,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
     compatibilityFlags: string[];
     workerName: string;
   },
-  assetUploadResult?: AssetUploadResult
+  assetUploadResult?: AssetUploadResult,
 ): Promise<WorkerMetadata> {
   // we use Cloudflare Worker tags to store a mapping between Alchemy's stable identifier and the binding name
   // e.g.
@@ -217,7 +217,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
         return [[bindingName, stableId]];
       }
       return [];
-    }) ?? []
+    }) ?? [],
   );
 
   const deletedClasses = oldBindings?.flatMap((oldBinding) => {
@@ -239,7 +239,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
         // try and find the DO binding by stable id
         const object = Object.values(props.bindings).find(
           (binding): binding is DurableObjectNamespace<any> =>
-            isDurableObjectNamespace(binding) && binding.id === stableId
+            isDurableObjectNamespace(binding) && binding.id === stableId,
         );
         if (object) {
           // we found the corresponding object, it should not be deleted
@@ -290,7 +290,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
           isDurableObjectNamespace(binding)
             ? // TODO(sam): base64 encode if contains `:`?
               [`alchemy:do:${binding.id}:${bindingName}`]
-            : []
+            : [],
       ),
     ],
     migrations: {
@@ -468,7 +468,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
 
   function configureClassMigration(
     bindingName: string,
-    newBinding: DurableObjectNamespace<any>
+    newBinding: DurableObjectNamespace<any>,
   ) {
     let prevBinding: WorkerBindingDurableObjectNamespace | undefined;
     if (oldBindings) {
