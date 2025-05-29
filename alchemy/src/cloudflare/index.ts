@@ -26,6 +26,7 @@ export * from "./pipeline.ts";
 export * from "./queue-consumer.ts";
 export * from "./queue.ts";
 export * from "./r2-rest-state-store.ts";
+export * from "./react-router.ts";
 export * from "./redwood.ts";
 export * from "./route.ts";
 export * from "./tanstack-start.ts";

@@ -21,11 +21,12 @@
     "alchemy",
     "alchemy-web",
     "examples/aws-app",
-    "examples/cloudflare-vite",
     "examples/cloudflare-nuxt-pipeline",
+    "examples/cloudflare-react-router",
     "examples/cloudflare-redwood",
-    "examples/cloudflare-worker",
-    "examples/cloudflare-worker-bootstrap"
+    "examples/cloudflare-vite",
+    "examples/cloudflare-worker-bootstrap",
+    "examples/cloudflare-worker"
   ],
   "devDependencies": {
     "@biomejs/biome": "beta",

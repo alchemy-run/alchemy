@@ -23,6 +23,7 @@ const app = await alchemy("cloudflare-vite", {
 export const [authStore, storage] = await Promise.all([
   KVNamespace("AUTH_STORE", {
     title: `cloudflare-vite-auth-store${BRANCH_PREFIX}`,
+    adopt: true,
   }),
   R2Bucket(`cloudflare-vite-storage${BRANCH_PREFIX}`, {
     allowPublicAccess: false,

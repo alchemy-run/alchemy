@@ -1,10 +1,14 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { alchemy } from "../alchemy.ts";
 import { Exec } from "../os/exec.ts";
 import { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
-import { Worker, type AssetsConfig, type WorkerProps } from "./worker.ts";
+import {
+  DEFAULT_COMPATIBILITY_DATE,
+  Worker,
+  type AssetsConfig,
+  type WorkerProps,
+} from "./worker.ts";
 import { WranglerJson } from "./wrangler.json.ts";
 
 export interface WebsiteProps<B extends Bindings>
@@ -86,42 +90,9 @@ export async function Website<B extends Bindings>(
 
     const workerName = props.name ?? id;
 
-    if (wrangler) {
-      await WranglerJson("wrangler.jsonc", {
-        path: wranglerPath,
-        worker: {
-          ...props,
-          name: workerName,
-        } as WorkerProps<any> & { name: string },
-        main: wranglerMain,
-      });
-      try {
-        await fs.access(wranglerPath!);
-      } catch {
-        await fs.writeFile(
-          wranglerPath!,
-          JSON.stringify(
-            {
-              name: id,
-              main: wranglerMain,
-              compatibility_date: new Date().toISOString().split("T")[0],
-              compatibility_flags: props.compatibilityFlags ?? [],
-            },
-            null,
-            2,
-          ),
-        );
-      }
-    }
-
-    await Exec("build", {
-      cwd,
-      command: props.command,
-    });
-
-    // @ts-expect-error - the WorkerProps union type not happy
-    const worker = await Worker("worker", {
+    const workerProps = {
       ...props,
+      compatibilityDate: props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
       name: workerName,
       entrypoint: props.main,
       assets: {
@@ -149,8 +120,21 @@ export default {
               : (props.assets?.dist ?? "dist"),
         }),
       },
+    } as WorkerProps<any> & { name: string };
+
+    if (wrangler) {
+      await WranglerJson("wrangler.jsonc", {
+        path: wranglerPath,
+        worker: workerProps,
+        main: wranglerMain,
+      });
+    }
+
+    await Exec("build", {
+      cwd,
+      command: props.command,
     });
 
-    return worker as Website<B>;
+    return (await Worker("worker", workerProps)) as Website<B>;
   });
 }

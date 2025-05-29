@@ -1,0 +1,6 @@
+{
+  "name": "cloudflare-react-router-website",
+  "main": "./workers/app.ts",
+  "compatibility_date": "2025-04-20",
+  "assets": { "directory": "build/client", "binding": "ASSETS" }
+}

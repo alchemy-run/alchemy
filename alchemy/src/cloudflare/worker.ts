@@ -683,6 +683,8 @@ export function Worker<const B extends Bindings>(
   });
 }
 
+export const DEFAULT_COMPATIBILITY_DATE = "2025-04-20";
+
 export const _Worker = Resource(
   "cloudflare::Worker",
   {
@@ -699,7 +701,8 @@ export const _Worker = Resource(
     // Use the provided name
     const workerName = props.name ?? id;
 
-    const compatibilityDate = props.compatibilityDate ?? "2025-04-20";
+    const compatibilityDate =
+      props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
     const uploadWorkerScript = async (props: WorkerProps<B>) => {
