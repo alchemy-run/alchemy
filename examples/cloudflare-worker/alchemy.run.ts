@@ -9,6 +9,7 @@ import {
 } from "../../alchemy/src/cloudflare/index.js";
 import alchemy from "../../alchemy/src/index.js";
 import type { HelloWorldDO } from "./src/do.js";
+import { MyRPC } from "./src/rpc.js";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 const app = await alchemy("cloudflare-worker", {
@@ -28,6 +29,11 @@ export const queue = await Queue<{
   adopt: true,
 });
 
+export const rpc = await Worker(`cloudflare-worker-rpc${BRANCH_PREFIX}`, {
+  entrypoint: "./src/rpc.ts",
+  rpc: MyRPC,
+});
+
 export const worker = await Worker(`cloudflare-worker-worker${BRANCH_PREFIX}`, {
   entrypoint: "./src/worker.ts",
   bindings: {
@@ -44,6 +50,7 @@ export const worker = await Worker(`cloudflare-worker-worker${BRANCH_PREFIX}`, {
       className: "HelloWorldDO",
       sqlite: true,
     }),
+    RPC: rpc,
   },
   url: true,
   eventSources: [queue],

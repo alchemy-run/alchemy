@@ -18,6 +18,8 @@ export default {
     }
     await obj.fetch(new Request("https://example.com"));
 
+    await env.RPC.hello("John Doe");
+
     return new Response("Ok");
   },
   async queue(batch: typeof queue.Batch, _env: typeof worker.Env) {

@@ -8,6 +8,7 @@ import { bootstrapPlugin } from "../runtime/plugin.js";
 import { Scope } from "../scope.js";
 import { Secret, secret } from "../secret.js";
 import { serializeScope } from "../serde.js";
+import type { type } from "../type.js";
 import { withExponentialBackoff } from "../util/retry.js";
 import { slugify } from "../util/slugify.js";
 import { CloudflareApiError, handleApiError } from "./api-error.js";
@@ -94,8 +95,10 @@ export interface AssetsConfig {
   serve_directly?: boolean;
 }
 
-export interface BaseWorkerProps<B extends Bindings | undefined = undefined>
-  extends CloudflareApiOptions {
+export interface BaseWorkerProps<
+  B extends Bindings | undefined = undefined,
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> extends CloudflareApiOptions {
   /**
    * Bundle options when using entryPoint
    *
@@ -202,17 +205,27 @@ export interface BaseWorkerProps<B extends Bindings | undefined = undefined>
    * Can include queues, streams, or other event sources.
    */
   eventSources?: EventSource[];
+
+  /**
+   * The RPC class to use for the worker.
+   *
+   * This is only used when using the rpc property.
+   */
+  rpc?: (new (...args: any[]) => RPC) | type<RPC>;
 }
 
-export interface InlineWorkerProps<B extends Bindings | undefined = Bindings>
-  extends BaseWorkerProps<B> {
+export interface InlineWorkerProps<
+  B extends Bindings | undefined = Bindings,
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> extends BaseWorkerProps<B, RPC> {
   script: string;
   entrypoint?: undefined;
 }
 
 export interface EntrypointWorkerProps<
   B extends Bindings | undefined = Bindings,
-> extends BaseWorkerProps<B> {
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> extends BaseWorkerProps<B, RPC> {
   entrypoint: string;
   script?: undefined;
 }
@@ -220,9 +233,10 @@ export interface EntrypointWorkerProps<
 /**
  * Properties for creating or updating a Worker
  */
-export type WorkerProps<B extends Bindings | undefined = Bindings> =
-  | InlineWorkerProps<B>
-  | EntrypointWorkerProps<B>;
+export type WorkerProps<
+  B extends Bindings | undefined = Bindings,
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> = InlineWorkerProps<B, RPC> | EntrypointWorkerProps<B, RPC>;
 
 export type FetchWorkerProps<
   B extends Bindings = Bindings,
@@ -270,65 +284,70 @@ export function isWorker(resource: Resource): resource is Worker<any> {
 /**
  * Output returned after Worker creation/update
  */
-export type Worker<B extends Bindings | undefined = Bindings | undefined> =
-  Resource<"cloudflare::Worker"> &
-    Omit<WorkerProps<B>, "url" | "script"> &
-    globalThis.Service & {
-      type: "service";
+export type Worker<
+  B extends Bindings | undefined = Bindings | undefined,
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> = Resource<"cloudflare::Worker"> &
+  Omit<WorkerProps<B>, "url" | "script"> &
+  globalThis.Service & {
+    /** @internal phantom property */
+    __rpc__?: RPC;
 
-      /**
-       * The ID of the worker
-       */
-      id: string;
+    type: "service";
 
-      /**
-       * The name of the worker
-       */
-      name: string;
+    /**
+     * The ID of the worker
+     */
+    id: string;
 
-      /**
-       * Time at which the worker was created
-       */
-      createdAt: number;
+    /**
+     * The name of the worker
+     */
+    name: string;
 
-      /**
-       * Time at which the worker was last updated
-       */
-      updatedAt: number;
+    /**
+     * Time at which the worker was created
+     */
+    createdAt: number;
 
-      /**
-       * The worker's URL if enabled
-       * Format: {name}.{subdomain}.workers.dev
-       */
-      url?: string;
+    /**
+     * Time at which the worker was last updated
+     */
+    updatedAt: number;
 
-      /**
-       * The bindings that were created
-       */
-      bindings: B;
+    /**
+     * The worker's URL if enabled
+     * Format: {name}.{subdomain}.workers.dev
+     */
+    url?: string;
 
-      /**
-       * Configuration for static assets
-       */
-      assets?: AssetsConfig;
+    /**
+     * The bindings that were created
+     */
+    bindings: B;
 
-      // phantom property (for typeof myWorker.Env)
-      Env: B extends Bindings
-        ? {
-            [bindingName in keyof B]: Bound<B[bindingName]>;
-          }
-        : undefined;
+    /**
+     * Configuration for static assets
+     */
+    assets?: AssetsConfig;
 
-      /**
-       * The compatibility date for the worker
-       */
-      compatibilityDate: string;
+    // phantom property (for typeof myWorker.Env)
+    Env: B extends Bindings
+      ? {
+          [bindingName in keyof B]: Bound<B[bindingName]>;
+        }
+      : undefined;
 
-      /**
-       * The compatibility flags for the worker
-       */
-      compatibilityFlags: string[];
-    };
+    /**
+     * The compatibility date for the worker
+     */
+    compatibilityDate: string;
+
+    /**
+     * The compatibility flags for the worker
+     */
+    compatibilityFlags: string[];
+  };
 
 /**
  * A Cloudflare Worker is a serverless function that can be deployed to the Cloudflare network.
@@ -445,10 +464,10 @@ export type Worker<B extends Bindings | undefined = Bindings | undefined> =
  * @see
  * https://developers.cloudflare.com/workers/
  */
-export function Worker<const B extends Bindings>(
-  id: string,
-  props: WorkerProps<B>,
-): Promise<Worker<B>>;
+export function Worker<
+  const B extends Bindings,
+  RPC extends Rpc.WorkerEntrypointBranded,
+>(id: string, props: WorkerProps<B, RPC>): Promise<Worker<B, RPC>>;
 export function Worker<const B extends Bindings, const E extends EventSource[]>(
   id: string,
   meta: ImportMeta,

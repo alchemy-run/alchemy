@@ -17,7 +17,7 @@ export interface WranglerJsonProps {
   /**
    * The worker to generate the wrangler.json file for
    */
-  worker: Worker;
+  worker: Worker<any>;
   /**
    * Path to write the wrangler.json file to
    *
@@ -393,6 +393,10 @@ function processBindings(
   }
   // Process each binding
   for (const [bindingName, binding] of Object.entries(bindings)) {
+    if (typeof binding === "function") {
+      // this is only reachable in the
+      throw new Error(`Invalid binding ${bindingName} is a function`);
+    }
     if (typeof binding === "string") {
       // Plain text binding - add to vars
       if (!spec.vars) {
