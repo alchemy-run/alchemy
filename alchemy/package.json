@@ -4,7 +4,8 @@
   "type": "module",
   "module": "./lib/index.js",
   "scripts": {
-    "publish:npm": "cp ../README.md . && rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && npm publish && rm README.md",
+    "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b",
+    "publish:npm": "cp ../README.md . && bun run build && npm publish && rm README.md",
     "docs:gen": "rm -rf ./docs && typedoc"
   },
   "files": [
