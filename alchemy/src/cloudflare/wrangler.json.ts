@@ -35,6 +35,16 @@ export interface WranglerJsonProps {
    * @default worker.entrypoint
    */
   main?: string;
+
+  /**
+   * Path to the assets directory
+   *
+   * @default inferred from the worker's Asset bindings
+   */
+  assets?: {
+    binding: string;
+    directory: string;
+  };
 }
 
 /**
@@ -96,6 +106,7 @@ export const WranglerJson = Resource(
       // see: https://developers.cloudflare.com/workers/configuration/compatibility-dates/
       compatibility_date: worker.compatibilityDate,
       compatibility_flags: props.worker.compatibilityFlags,
+      assets: props.assets,
     };
 
     // Process bindings if they exist

@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
 import { Website, type WebsiteProps } from "./website.ts";
@@ -57,7 +58,7 @@ export async function Nuxt<B extends Bindings>(
     // Default entry point for cloudflare-module preset
     main: props?.main ?? "./index.ts",
     // Default static assets directory for cloudflare-module preset
-    assets: props?.assets ?? "./.output/public",
+    assets: props?.assets ?? path.join(".output", "public"),
     // Ensure nodejs_compat flag is included for Nuxt compatibility
     compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
     // Enable wrangler by default, common for Nuxt/Cloudflare deployments

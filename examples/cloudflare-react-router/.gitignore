@@ -11,3 +11,4 @@
 .wrangler
 .dev.vars*
 
+wrangler.json*

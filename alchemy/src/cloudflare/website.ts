@@ -73,9 +73,6 @@ export async function Website<B extends Bindings>(
   const wrangler = props.wrangler ?? true;
 
   return alchemy.run(id, async () => {
-    // building the site requires a wrangler.jsonc file to start
-    // - so initialize an empty one if it doesn't exist
-
     const cwd = path.resolve(props.cwd || process.cwd());
     const fileName =
       typeof wrangler === "boolean"
@@ -89,6 +86,11 @@ export async function Website<B extends Bindings>(
       typeof wrangler === "object" ? (wrangler.main ?? props.main) : props.main;
 
     const workerName = props.name ?? id;
+
+    const assetDir =
+      typeof props.assets === "string"
+        ? props.assets
+        : (props.assets?.dist ?? "dist");
 
     const workerProps = {
       ...props,
@@ -111,15 +113,6 @@ export default {
 };`,
       url: true,
       adopt: true,
-      bindings: {
-        ...props.bindings,
-        ASSETS: await Assets("assets", {
-          path:
-            typeof props.assets === "string"
-              ? props.assets
-              : (props.assets?.dist ?? "dist"),
-        }),
-      },
     } as WorkerProps<any> & { name: string };
 
     if (wrangler) {
@@ -127,6 +120,11 @@ export default {
         path: wranglerPath,
         worker: workerProps,
         main: wranglerMain,
+        // hard-code the assets directory because we haven't yet included the assets binding
+        assets: {
+          binding: "ASSETS",
+          directory: assetDir,
+        },
       });
     }
 
@@ -135,6 +133,16 @@ export default {
       command: props.command,
     });
 
-    return (await Worker("worker", workerProps)) as Website<B>;
+    return (await Worker("worker", {
+      ...workerProps,
+      bindings: {
+        ...workerProps.bindings,
+        // we don't include the Assets binding until after build to make sure the asset manifest is correct
+        // we generate the wrangler.json using all the bind
+        ASSETS: await Assets("assets", {
+          path: assetDir,
+        }),
+      },
+    } as WorkerProps<any> & { name: string })) as Website<B>;
   });
 }
