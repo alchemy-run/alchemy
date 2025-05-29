@@ -298,7 +298,7 @@ export const YAMLFile = Resource("ai::YAMLFile", async function <
  * @returns The extracted YAML or error message
  */
 async function extractYAMLContent(
-  text: string
+  text: string,
 ): Promise<{ content: string; error?: string }> {
   // Check for yaml or yml fence blocks
   const yamlCodeRegex = /```(yaml|yml)\s*([\s\S]*?)```/g;
