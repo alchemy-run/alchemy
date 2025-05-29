@@ -1,9 +1,4 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
-  "python.terminal.activateEnvironment": true,
-  "python.terminal.activateEnvInCurrentTerminal": true,
-  "python.envFile": "${workspaceFolder}/.env",
-  "python.venvPath": "${workspaceFolder}/.venv",
   "editor.codeLens": false,
   "editor.formatOnSave": true,
   "editor.formatOnSaveMode": "file",
@@ -14,19 +9,12 @@
     "source.organizeImports.biome": "explicit"
   },
   "rewrap.autoWrap.enabled": true,
-  "python.testing.unittestEnabled": false,
-  "python.testing.pytestEnabled": true,
   "[rust]": {
     "editor.insertSpaces": true,
     "editor.tabSize": 4
   },
   "[toml]": {
     "editor.defaultFormatter": "tamasfe.even-better-toml"
-  },
-  "[python]": {
-    "editor.defaultFormatter": "charliermarsh.ruff",
-    "editor.insertSpaces": true,
-    "editor.tabSize": 4
   },
   "[json]": {
     "editor.indentSize": 2,
@@ -40,27 +28,9 @@
   "[markdown]": {
     "editor.formatOnSave": true
   },
-  "ruff.lint.args": ["--config=pyproject.toml"],
-  "ruff.importStrategy": "fromEnvironment",
-  "rust-analyzer.checkOnSave.command": "clippy",
   "editor.inlayHints.enabled": "offUnlessPressed",
-  // tailscale is noisy and keeps prompting to share ports on the internet with Funnel
-  "tailscale.portDiscovery.enabled": false,
-  // rust's noisy inlay hints are so distracting
-  // "editor.inlayHints.enabled": "offUnlessPressed",
-  // rust overlays "2 implemenations" on every fucking struct, this disables that at the cost of other lens features (who cares)
-
   "files.exclude": {
     "**/__pycache__": true,
     "**/*.pyc": true
-  },
-  "cSpell.words": [
-    "Agentic",
-    "bunx",
-    "cursorrules",
-    "deinit",
-    "Pulumi",
-    "qwik",
-    "Shadcn"
-  ]
+  }
 }

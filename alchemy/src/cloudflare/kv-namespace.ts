@@ -73,7 +73,7 @@ export interface KVPair {
 }
 
 export function isKVNamespace(
-  resource: Resource
+  resource: Resource,
 ): resource is KVNamespaceResource {
   return resource[ResourceKind] === "cloudflare::KVNamespace";
 }
@@ -160,7 +160,7 @@ export type KVNamespace = KVNamespaceResource & Bound<KVNamespaceResource>;
 
 export async function KVNamespace(
   name: string,
-  props: KVNamespaceProps = {}
+  props: KVNamespaceProps = {},
 ): Promise<KVNamespace> {
   const kv = await _KVNamespace(name, props);
   const binding = await bind(kv);
@@ -179,7 +179,7 @@ const _KVNamespace = Resource(
   async function (
     this: Context<KVNamespaceResource>,
     id: string,
-    props: KVNamespaceProps
+    props: KVNamespaceProps,
   ): Promise<KVNamespaceResource> {
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
@@ -229,7 +229,7 @@ const _KVNamespace = Resource(
 
           if (!existingNamespace) {
             throw new Error(
-              `Failed to find existing namespace '${title}' for adoption`
+              `Failed to find existing namespace '${title}' for adoption`,
             );
           }
 
@@ -253,20 +253,20 @@ const _KVNamespace = Resource(
       createdAt: createdAt,
       modifiedAt: Date.now(),
     });
-  }
+  },
 );
 
 export async function createKVNamespace(
   api: CloudflareApi,
   props: KVNamespaceProps & {
     title: string;
-  }
+  },
 ): Promise<{ id: string }> {
   const createResponse = await api.post(
     `/accounts/${api.accountId}/storage/kv/namespaces`,
     {
       title: props.title,
-    }
+    },
   );
 
   if (!createResponse.ok) {
@@ -278,11 +278,11 @@ export async function createKVNamespace(
 
 export async function deleteKVNamespace(
   api: CloudflareApi,
-  namespaceId: string
+  namespaceId: string,
 ) {
   // Delete KV namespace
   const deleteResponse = await api.delete(
-    `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}`
+    `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}`,
   );
 
   if (!deleteResponse.ok && deleteResponse.status !== 404) {
@@ -293,7 +293,7 @@ export async function deleteKVNamespace(
 export async function insertKVRecords(
   api: CloudflareApi,
   namespaceId: string,
-  props: KVNamespaceProps
+  props: KVNamespaceProps,
 ) {
   if (props.values && props.values.length > 0) {
     // Process KV pairs in batches of 10000 (API limit)
@@ -330,7 +330,7 @@ export async function insertKVRecords(
         async () => {
           const bulkResponse = await api.put(
             `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}/bulk`,
-            bulkPayload
+            bulkPayload,
           );
 
           if (!bulkResponse.ok) {
@@ -351,7 +351,7 @@ export async function insertKVRecords(
           return error.message?.includes("not found");
         },
         5, // 5 retry attempts
-        1000 // Start with 1 second delay
+        1000, // Start with 1 second delay
       );
     }
   }
@@ -372,7 +372,7 @@ interface CloudflareKVNamespace {
  */
 export async function findKVNamespaceByTitle(
   api: CloudflareApi,
-  title: string
+  title: string,
 ): Promise<{ id: string; createdAt?: number } | null> {
   let page = 1;
   const perPage = 100; // Maximum allowed by API
@@ -380,7 +380,7 @@ export async function findKVNamespaceByTitle(
 
   while (hasMorePages) {
     const response = await api.get(
-      `/accounts/${api.accountId}/storage/kv/namespaces?page=${page}&per_page=${perPage}`
+      `/accounts/${api.accountId}/storage/kv/namespaces?page=${page}&per_page=${perPage}`,
     );
 
     if (!response.ok) {
