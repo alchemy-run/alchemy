@@ -1,11 +1,18 @@
 import type { Context } from "../context.js";
 import { slugify } from "../util/slugify.js";
-import { Self, type Bindings, type WorkerBindingSpec } from "./bindings.js";
-import type { DurableObjectNamespace } from "./durable-object-namespace.js";
+import {
+  Self,
+  type Bindings,
+  type WorkerBindingDurableObjectNamespace,
+  type WorkerBindingSpec,
+} from "./bindings.js";
+import {
+  isDurableObjectNamespace,
+  type DurableObjectNamespace,
+} from "./durable-object-namespace.js";
 import { createAssetConfig, type AssetUploadResult } from "./worker-assets.js";
 import type { SingleStepMigration } from "./worker-migration.js";
 import type { AssetsConfig, Worker, WorkerProps } from "./worker.js";
-import type { Workflow } from "./workflow.js";
 
 /**
  * Metadata returned by Cloudflare API for a worker script
@@ -186,7 +193,8 @@ export interface WorkerMetadata {
 
 export async function prepareWorkerMetadata<B extends Bindings>(
   ctx: Context<Worker<B>>,
-  oldBindings: Bindings | undefined,
+  oldBindings: WorkerBindingSpec[] | undefined,
+  oldTags: string[] | undefined,
   props: WorkerProps & {
     compatibilityDate: string;
     compatibilityFlags: string[];
@@ -194,20 +202,75 @@ export async function prepareWorkerMetadata<B extends Bindings>(
   },
   assetUploadResult?: AssetUploadResult,
 ): Promise<WorkerMetadata> {
-  const deletedClasses = Object.entries(oldBindings ?? {})
-    .filter(([key]) => !props.bindings?.[key])
-    .flatMap(([_, binding]) => {
-      if (
-        binding &&
-        typeof binding === "object" &&
-        binding.type === "durable_object_namespace" &&
-        (binding.scriptName === undefined ||
-          binding.scriptName === props.workerName)
-      ) {
-        return [binding.className];
+  // we use Cloudflare Worker tags to store a mapping between Alchemy's stable identifier and the binding name
+  // e.g.
+  // {
+  //   BINDING_NAME: new DurableObjectNamespace("stable-id")
+  // }
+  // will be stored as alchemy:do:stable-id:BINDING_NAME
+  // TODO(sam): should we base64 encode to ensure no `:` collision risk?
+  const bindingNameToStableId = Object.fromEntries(
+    oldTags?.flatMap((tag) => {
+      // alchemy:do:{stableId}:{bindingName}
+      if (tag.startsWith("alchemy:do:")) {
+        const [, , stableId, bindingName] = tag.split(":");
+        return [[bindingName, stableId]];
       }
       return [];
-    });
+    }) ?? [],
+  );
+
+  const deletedClasses = oldBindings?.flatMap((oldBinding) => {
+    if (
+      oldBinding.type === "durable_object_namespace" &&
+      (oldBinding.script_name === undefined ||
+        // if this a cross-script binding, we don't need to do migrations in the remote worker
+        oldBinding.script_name === props.workerName)
+    ) {
+      // reverse the stableId from our tag-encoded metadata
+      const stableId = bindingNameToStableId[oldBinding.name];
+      if (stableId) {
+        if (props.bindings === undefined) {
+          // all classes are deleted
+          return [oldBinding.class_name];
+        }
+        // we created this worker on latest version, we can now intelligently determine migrations
+
+        // try and find the DO binding by stable id
+        const object = Object.values(props.bindings).find(
+          (binding): binding is DurableObjectNamespace<any> =>
+            isDurableObjectNamespace(binding) && binding.id === stableId,
+        );
+        if (object) {
+          // we found the corresponding object, it should not be deleted
+          return [];
+        } else {
+          // it was not found, we will now delete it
+          return [oldBinding.class_name];
+        }
+      } else {
+        // ok, we were unable to find the stableId, this worker must have been created by an old alchemy or outside of alchemy
+        // let's now apply a herusitic based on binding name (assume binding name is consistent)
+        // TODO(sam): this has a chance of being wrong, is that OK? Users should be encouraged to upgrade alchemy version and re-deploy
+        const object = props.bindings?.[oldBinding.name];
+        if (object && isDurableObjectNamespace(object)) {
+          if (object.className === oldBinding.class_name) {
+            // this is relatively safe to assume is the right match, do not delete
+            return [];
+          } else {
+            // the class name has changed, this could indicate one of:
+            // 1. the user has changed the class name and we should migrate it
+            // 2. the user deleted the DO a long time ago and this is unrelated (we should just create a new one)
+            return [oldBinding.class_name];
+          }
+        } else {
+          // we didn't find it, so delete it
+          return [oldBinding.class_name];
+        }
+      }
+    }
+    return [];
+  });
 
   // Prepare metadata with bindings
   const meta: WorkerMetadata = {
@@ -218,11 +281,22 @@ export async function prepareWorkerMetadata<B extends Bindings>(
       enabled: props.observability?.enabled !== false,
     },
     // TODO(sam): base64 encode instead? 0 collision risk vs readability.
-    tags: [`alchemy:id:${slugify(ctx.fqn)}`],
+    tags: [
+      `alchemy:id:${slugify(ctx.fqn)}`,
+      // encode a mapping table of Durable Object stable ID -> binding name
+      // we use this to reliably compute class migrations based on server-side state
+      ...Object.entries(props.bindings ?? {}).flatMap(
+        ([bindingName, binding]) =>
+          isDurableObjectNamespace(binding)
+            ? // TODO(sam): base64 encode if contains `:`?
+              [`alchemy:do:${binding.id}:${bindingName}`]
+            : [],
+      ),
+    ],
     migrations: {
       new_classes: props.migrations?.new_classes ?? [],
       deleted_classes: [
-        ...deletedClasses,
+        ...(deletedClasses ?? []),
         ...(props.migrations?.deleted_classes ?? []),
       ],
       renamed_classes: props.migrations?.renamed_classes ?? [],
@@ -303,7 +377,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
         binding.scriptName === props.workerName
       ) {
         // we do not need configure class migrations for cross-script bindings
-        configureClassMigration(binding, binding.id, binding.className);
+        configureClassMigration(bindingName, binding);
       }
     } else if (binding.type === "r2_bucket") {
       meta.bindings.push({
@@ -393,29 +467,46 @@ export async function prepareWorkerMetadata<B extends Bindings>(
   }
 
   function configureClassMigration(
-    binding: DurableObjectNamespace<any> | Workflow,
-    stableId: string,
-    className: string,
+    bindingName: string,
+    newBinding: DurableObjectNamespace<any>,
   ) {
-    const oldBinding: DurableObjectNamespace<any> | Workflow | undefined =
-      Object.values(oldBindings ?? {})
-        ?.filter(
-          (b) =>
-            typeof b === "object" &&
-            (b.type === "durable_object_namespace" || b.type === "workflow"),
-        )
-        ?.find((b) => b.id === stableId);
-
-    if (!oldBinding) {
-      if (binding.type === "durable_object_namespace" && binding.sqlite) {
-        meta.migrations!.new_sqlite_classes!.push(className);
-      } else {
-        meta.migrations!.new_classes!.push(className);
+    let prevBinding: WorkerBindingDurableObjectNamespace | undefined;
+    if (oldBindings) {
+      // try and find the prev binding for this
+      for (const oldBinding of oldBindings) {
+        if (oldBinding.type === "durable_object_namespace") {
+          const stableId = bindingNameToStableId[oldBinding.name];
+          if (stableId) {
+            // (happy case)
+            // great, this Worker was created with Alchemy and we can map stable ids
+            if (stableId === newBinding.id) {
+              prevBinding = oldBinding;
+              break;
+            }
+          } else {
+            // (heuristic case)
+            // we were unable to find the stableId, this Worker must not have been created with Alchemy
+            // now, try and resolve by assuming 1:1 binding name correspondence
+            // WARNING: this is an imperfect assumption. Users are advised to upgrade alchemy and re-deploy
+            if (oldBinding.name === bindingName) {
+              prevBinding = oldBinding;
+              break;
+            }
+          }
+        }
       }
-    } else if (oldBinding.className !== className) {
+    }
+
+    if (!prevBinding) {
+      if (newBinding.sqlite) {
+        meta.migrations!.new_sqlite_classes!.push(newBinding.className);
+      } else {
+        meta.migrations!.new_classes!.push(newBinding.className);
+      }
+    } else if (prevBinding.class_name !== newBinding.className) {
       meta.migrations!.renamed_classes!.push({
-        from: oldBinding.className,
-        to: className,
+        from: prevBinding.class_name,
+        to: newBinding.className,
       });
     }
   }

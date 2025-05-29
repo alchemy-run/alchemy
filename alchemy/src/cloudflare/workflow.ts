@@ -1,5 +1,6 @@
 import { handleApiError } from "./api-error.js";
 import type { CloudflareApi } from "./api.js";
+import type { Binding } from "./bindings.js";
 
 export interface WorkflowProps {
   /**
@@ -18,6 +19,10 @@ export interface WorkflowProps {
    * @default - workflowName if provided, otherwise id
    */
   className?: string;
+}
+
+export function isWorkflow(binding: Binding): binding is Workflow {
+  return typeof binding === "object" && binding.type === "workflow";
 }
 
 export class Workflow<PARAMS = unknown> {
