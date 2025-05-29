@@ -546,7 +546,7 @@ describe("Worker Resource", () => {
         name: workerName,
         script: envVarsWorkerScript,
         format: "esm",
-        env: {
+        bindings: {
           TEST_API_KEY: "test-api-key-123",
           NODE_ENV: "testing",
           APP_DEBUG: "true",
@@ -554,12 +554,11 @@ describe("Worker Resource", () => {
         url: true, // Enable workers.dev URL to test the worker
       });
 
-      expect(worker.id).toBeTruthy();
-      expect(worker.name).toEqual(workerName);
-      expect(worker.env).toBeDefined();
-      expect(worker.env?.TEST_API_KEY).toEqual("test-api-key-123");
-      expect(worker.env?.NODE_ENV).toEqual("testing");
-      expect(worker.url).toBeTruthy();
+      expect(worker.bindings).toEqual({
+        TEST_API_KEY: "test-api-key-123",
+        NODE_ENV: "testing",
+        APP_DEBUG: "true",
+      });
 
       if (worker.url) {
         // Test that the environment variables are accessible in the worker
@@ -580,7 +579,7 @@ describe("Worker Resource", () => {
         name: workerName,
         script: envVarsWorkerScript,
         format: "esm",
-        env: {
+        bindings: {
           TEST_API_KEY: "updated-key-456",
           NODE_ENV: "production",
           NEW_VAR: "new-value",
@@ -590,12 +589,13 @@ describe("Worker Resource", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      expect(worker.id).toEqual(worker.id);
-      expect(worker.env?.TEST_API_KEY).toEqual("updated-key-456");
-      expect(worker.env?.NODE_ENV).toEqual("production");
-      expect(worker.env?.NEW_VAR).toEqual("new-value");
+      expect(worker.bindings).toEqual({
+        TEST_API_KEY: "updated-key-456",
+        NODE_ENV: "production",
+        NEW_VAR: "new-value",
+      });
       // APP_DEBUG should no longer be present
-      expect(worker.env?.APP_DEBUG).toBeUndefined();
+      expect(worker.bindings?.APP_DEBUG).toBeUndefined();
 
       // Test that the updated environment variables are accessible
       const response = await fetch(`${worker.url}/env/TEST_API_KEY`);
@@ -720,7 +720,6 @@ describe("Worker Resource", () => {
 
       // Apply the worker with binding
       expect(worker.bindings).toBeDefined();
-      expect(worker.env).toBeUndefined();
 
       // Now update the worker by adding environment variables
       worker = await Worker(workerName, {
@@ -729,17 +728,16 @@ describe("Worker Resource", () => {
         format: "esm",
         bindings: {
           COUNTER: counterNamespace,
-        },
-        env: {
           API_SECRET: "test-secret-123",
           DEBUG_MODE: "true",
         },
       });
 
-      expect(worker.bindings).toBeDefined();
-      expect(worker.env).toBeDefined();
-      expect(worker.env?.API_SECRET).toEqual("test-secret-123");
-      expect(worker.env?.DEBUG_MODE).toEqual("true");
+      expect(worker.bindings).toEqual({
+        COUNTER: counterNamespace,
+        API_SECRET: "test-secret-123",
+        DEBUG_MODE: "true",
+      });
     } finally {
       await destroy(scope);
       await assertWorkerDoesNotExist(workerName);

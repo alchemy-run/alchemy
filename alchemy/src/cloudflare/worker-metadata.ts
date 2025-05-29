@@ -420,18 +420,6 @@ export async function prepareWorkerMetadata<B extends Bindings>(
     }
   }
 
-  // Convert env variables to plain_text bindings
-  // TODO(sam): remove Worker.env in favor of always bindings
-  if (props.env) {
-    for (const [key, value] of Object.entries(props.env)) {
-      meta.bindings.push({
-        name: key,
-        type: "plain_text",
-        text: value,
-      });
-    }
-  }
-
   // Determine if we're using ESM or service worker format
   const isEsModule = props.format !== "cjs"; // Default to ESM unless CJS is specified
   const scriptName = isEsModule ? "worker.js" : "script";

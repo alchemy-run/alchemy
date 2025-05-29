@@ -129,15 +129,6 @@ export interface BaseWorkerProps<B extends Bindings | undefined = undefined>
   bindings?: B;
 
   /**
-   * Environment variables to attach to the worker
-   *
-   * These will be converted to plain_text bindings
-   */
-  env?: {
-    [key: string]: string;
-  };
-
-  /**
    * Whether to enable a workers.dev URL for this worker
    *
    * If true, the worker will be available at {name}.{subdomain}.workers.dev
@@ -875,7 +866,6 @@ export const _Worker = Resource(
       compatibilityFlags,
       format: props.format || "esm", // Include format in the output
       bindings: exportBindings(),
-      env: props.env,
       observability: scriptMetadata.observability,
       createdAt: now,
       updatedAt: now,

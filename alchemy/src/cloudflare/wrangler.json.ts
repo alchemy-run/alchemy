@@ -99,11 +99,6 @@ export const WranglerJson = Resource(
       processBindings(spec, worker.bindings, worker.eventSources, worker.name);
     }
 
-    // Add environment variables as vars
-    if (worker.env) {
-      spec.vars = { ...worker.env };
-    }
-
     if (worker.crons && worker.crons.length > 0) {
       spec.triggers = { crons: worker.crons };
     }
