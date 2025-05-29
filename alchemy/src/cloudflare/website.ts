@@ -84,7 +84,17 @@ export async function Website<B extends Bindings>(
     const wranglerMain =
       typeof wrangler === "object" ? (wrangler.main ?? props.main) : props.main;
 
+    const workerName = props.name ?? id;
+
     if (wrangler) {
+      await WranglerJson("wrangler.jsonc", {
+        path: wranglerPath,
+        worker: {
+          ...props,
+          name: workerName,
+        } as WorkerProps<any> & { name: string },
+        main: wranglerMain,
+      });
       try {
         await fs.access(wranglerPath!);
       } catch {
@@ -112,7 +122,7 @@ export async function Website<B extends Bindings>(
     // @ts-expect-error - the WorkerProps union type not happy
     const worker = await Worker("worker", {
       ...props,
-      name: props.name ?? id,
+      name: workerName,
       entrypoint: props.main,
       assets: {
         html_handling: "auto-trailing-slash",
@@ -140,14 +150,6 @@ export default {
         }),
       },
     });
-
-    if (wrangler) {
-      await WranglerJson("wrangler.jsonc", {
-        path: wranglerPath,
-        worker,
-        main: wranglerMain,
-      });
-    }
 
     return worker as Website<B>;
   });
