@@ -270,16 +270,6 @@ export async function prepareWorkerMetadata<B extends Bindings>(
       }
     }
     return [];
-    // if (
-    //   binding &&
-    //   typeof binding === "object" &&
-    //   binding.type === "durable_object_namespace" &&
-    //   (binding.scriptName === undefined ||
-    //     binding.scriptName === props.workerName)
-    // ) {
-    //   return [binding.className];
-    // }
-    // return [];
   });
 
   // Prepare metadata with bindings
