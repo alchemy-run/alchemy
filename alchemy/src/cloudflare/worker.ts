@@ -17,7 +17,12 @@ import {
   createCloudflareApi,
 } from "./api.js";
 import type { Assets } from "./assets.js";
-import { type Binding, type Bindings, Json } from "./bindings.js";
+import {
+  type Binding,
+  type Bindings,
+  Json,
+  type WorkerBindingSpec,
+} from "./bindings.js";
 import type { Bound } from "./bound.js";
 import { isBucket } from "./bucket.js";
 import { bundleWorkerScript } from "./bundle/bundle-worker.js";
@@ -678,7 +683,11 @@ export const _Worker = Resource(
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
     const uploadWorkerScript = async (props: WorkerProps<B>) => {
-      const oldBindings = await this.get<Bindings>("bindings");
+      const [oldBindings, oldMetadata] = await Promise.all([
+        getWorkerBindings(api, workerName),
+        getWorkerScriptMetadata(api, workerName),
+      ]);
+      const oldTags = oldMetadata?.default_environment?.script?.tags;
 
       // Get the script content - either from props.script, or by bundling
       const scriptContent =
@@ -725,6 +734,7 @@ export const _Worker = Resource(
       const scriptMetadata = await prepareWorkerMetadata(
         this,
         oldBindings,
+        oldTags,
         {
           ...props,
           compatibilityDate,
@@ -735,9 +745,6 @@ export const _Worker = Resource(
       );
 
       await putWorker(api, workerName, scriptContent, scriptMetadata);
-
-      // TODO: it is less than ideal that this can fail, resulting in state problem
-      await this.set("bindings", props.bindings);
 
       for (const workflow of workflowsBindings) {
         await upsertWorkflow(api, {
@@ -1106,34 +1113,49 @@ export async function getWorkerScriptMetadata(
   return ((await response.json()) as any).result as WorkerScriptMetadata;
 }
 
-export async function _getWorkerBindings(
-  api: CloudflareApi,
-  workerName: string,
-  environment = "production",
-) {
+async function getWorkerBindings(api: CloudflareApi, workerName: string) {
+  // Fetch the bindings for a worker by calling the Cloudflare API endpoint:
+  // GET /accounts/:account_id/workers/scripts/:script_name/bindings
+  // See: https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/script_and_version_settings/methods/get/
   const response = await api.get(
-    `/accounts/${api.accountId}/workers/services/${workerName}/environments/${environment}/bindings`,
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-    },
+    `/accounts/${api.accountId}/workers/scripts/${workerName}/settings`,
   );
-
   if (response.status === 404) {
     return undefined;
   }
-
   if (!response.ok) {
     throw new Error(
-      `Failed to fetch bindings: ${response.status} ${response.statusText}`,
+      `Error getting worker bindings: ${response.status} ${response.statusText}`,
     );
   }
-
-  const data: any = await response.json();
-
-  return data.result;
+  // The result is an object with a "result" property containing the bindings array
+  const { result, success, errors } = (await response.json()) as {
+    result: {
+      bindings: WorkerBindingSpec[];
+      compatibility_date: string;
+      compatibility_flags: string[];
+      [key: string]: any;
+    };
+    success: boolean;
+    errors: Array<{
+      code: number;
+      message: string;
+      documentation_url: string;
+      [key: string]: any;
+    }>;
+    messages: Array<{
+      code: number;
+      message: string;
+      documentation_url: string;
+      [key: string]: any;
+    }>;
+  };
+  if (!success) {
+    throw new Error(
+      `Error getting worker bindings: ${response.status} ${response.statusText}\nErrors:\n${errors.map((e) => `- [${e.code}] ${e.message} (${e.documentation_url})`).join("\n")}`,
+    );
+  }
+  return result.bindings;
 }
 
 /**

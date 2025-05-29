@@ -2569,4 +2569,41 @@ describe("Worker Resource", () => {
       await assertWorkerDoesNotExist(clientWorkerName);
     }
   }, 120000); // Increased timeout for cross-script DO operations
+
+  test("adopting a Worker should use server-side state to migrate classes", async (scope) => {
+    try {
+      const workerName = `${BRANCH_PREFIX}-test-worker-adoption-migrate`;
+      await Worker("worker-1", {
+        name: workerName,
+        script: `
+          export class Counter {}
+          export default { fetch() {} }
+        `,
+        bindings: {
+          DO: new DurableObjectNamespace("DO", {
+            className: "Counter",
+          }),
+        },
+      });
+
+      await Worker("worker-2", {
+        name: workerName,
+        // adopt the worker since it already exists
+        adopt: true,
+        script: `
+          export class Counter2 {}
+          export default { fetch() {} }
+        `,
+        bindings: {
+          // mapped by stable ID "DO"
+          DO_1: new DurableObjectNamespace("DO", {
+            // should migrate to Counter 2
+            className: "Counter2",
+          }),
+        },
+      });
+    } finally {
+      await destroy(scope);
+    }
+  });
 });
