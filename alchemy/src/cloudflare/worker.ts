@@ -485,6 +485,7 @@ export function Worker<const B extends Bindings>(
 ): Promise<Worker<B>> {
   const [id, meta, props] =
     args.length === 2 ? [args[0], undefined, args[1]] : args;
+
   if (("fetch" in props && props.fetch) || ("queue" in props && props.queue)) {
     const scope = Scope.current;
 

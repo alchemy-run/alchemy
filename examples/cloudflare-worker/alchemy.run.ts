@@ -7,9 +7,9 @@ import {
   Workflow,
   WranglerJson,
 } from "../../alchemy/src/cloudflare/index.js";
-import alchemy from "../../alchemy/src/index.js";
+import alchemy, { type } from "../../alchemy/src/index.js";
 import type { HelloWorldDO } from "./src/do.js";
-import { MyRPC } from "./src/rpc.js";
+import type MyRPC from "./src/rpc.js";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 const app = await alchemy("cloudflare-worker", {
@@ -31,7 +31,7 @@ export const queue = await Queue<{
 
 export const rpc = await Worker(`cloudflare-worker-rpc${BRANCH_PREFIX}`, {
   entrypoint: "./src/rpc.ts",
-  rpc: MyRPC,
+  rpc: type<MyRPC>,
 });
 
 export const worker = await Worker(`cloudflare-worker-worker${BRANCH_PREFIX}`, {
