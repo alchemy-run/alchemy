@@ -1,5 +1,5 @@
-import type { QueueConsumerSettings } from "./queue-consumer.js";
-import type { QueueResource } from "./queue.js";
+import type { QueueConsumerSettings } from "./queue-consumer.ts";
+import type { QueueResource } from "./queue.ts";
 
 /**
  * Base interface for event sources that can be bound to a Worker

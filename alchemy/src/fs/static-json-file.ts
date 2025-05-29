@@ -1,4 +1,4 @@
-import { File } from "./file.js";
+import { File } from "./file.ts";
 
 /**
  * Creates a JSON file with formatted content

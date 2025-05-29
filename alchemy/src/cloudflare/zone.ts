@@ -1,7 +1,7 @@
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { handleApiError } from "./api-error.js";
-import { createCloudflareApi, type CloudflareApiOptions } from "./api.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { handleApiError } from "./api-error.ts";
+import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
 import type {
   AlwaysUseHTTPSValue,
   AutomaticHTTPSRewritesValue,
@@ -20,7 +20,7 @@ import type {
   UpdateZoneSettingParams,
   WebSocketsValue,
   ZeroRTTValue,
-} from "./zone-settings.js";
+} from "./zone-settings.ts";
 
 /**
  * Properties for creating or updating a Zone

@@ -1,4 +1,4 @@
-import type { Binding } from "./bindings.js";
+import type { Binding } from "./bindings.ts";
 
 /**
  * Properties for creating a Durable Object Namespace

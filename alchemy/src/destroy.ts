@@ -1,5 +1,5 @@
-import { alchemy } from "./alchemy.js";
-import { context } from "./context.js";
+import { alchemy } from "./alchemy.ts";
+import { context } from "./context.ts";
 import {
   resolveDeletionHandler,
   type Resource,
@@ -8,8 +8,8 @@ import {
   ResourceKind,
   ResourceScope,
   ResourceSeq,
-} from "./resource.js";
-import { Scope } from "./scope.js";
+} from "./resource.ts";
+import { Scope } from "./scope.ts";
 
 export class DestroyedSignal extends Error {}
 

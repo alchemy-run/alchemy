@@ -1,14 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { ignore } from "../util/ignore.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { ignore } from "../util/ignore.ts";
 
-import { alchemy } from "../alchemy.js";
-import type { FileCollection } from "./file-collection.js";
-import type { FileRef } from "./file-ref.js";
+import { alchemy } from "../alchemy.ts";
+import type { FileCollection } from "./file-collection.ts";
+import type { FileRef } from "./file-ref.ts";
 
-declare module "../alchemy.js" {
+declare module "../alchemy.ts" {
   interface Alchemy {
     /**
      * Creates a reference to a file in the filesystem.

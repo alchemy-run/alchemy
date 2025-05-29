@@ -1,16 +1,16 @@
-import type { Context } from "../context.js";
+import type { Context } from "../context.ts";
 import type {
   DnsRecord as BaseDnsRecord,
   DnsRecordType,
   DnsRecordWithMetadata,
-} from "../dns/record.js";
-import { Resource } from "../resource.js";
+} from "../dns/record.ts";
+import { Resource } from "../resource.ts";
 import {
   type CloudflareApi,
   type CloudflareApiOptions,
   createCloudflareApi,
-} from "./api.js";
-import type { CloudflareResponse } from "./response.js";
+} from "./api.ts";
+import type { CloudflareResponse } from "./response.ts";
 
 /**
  * Cloudflare DNS Record response format

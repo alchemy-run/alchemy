@@ -1,9 +1,9 @@
-import type { Secret } from "../secret.js";
-import { CloudflareApiError } from "./api-error.js";
+import type { Secret } from "../secret.ts";
+import { CloudflareApiError } from "./api-error.ts";
 import {
   getCloudflareAuthHeaders,
   type CloudflareAuthOptions,
-} from "./auth.js";
+} from "./auth.ts";
 
 export interface CloudflareAccount {
   name: string;

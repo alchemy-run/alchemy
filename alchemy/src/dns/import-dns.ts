@@ -1,6 +1,6 @@
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { DEFAULT_RECORD_TYPES, type DnsRecordType } from "./record.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { DEFAULT_RECORD_TYPES, type DnsRecordType } from "./record.ts";
 
 /**
  * DNS record response structure from Cloudflare DNS API

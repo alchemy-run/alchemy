@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getContentType } from "../util/content-type.js";
-import type { CloudflareApi } from "./api.js";
-import type { Assets } from "./assets.js";
-import type { AssetsConfig, WorkerProps } from "./worker.js";
+import { getContentType } from "../util/content-type.ts";
+import type { CloudflareApi } from "./api.ts";
+import type { Assets } from "./assets.ts";
+import type { AssetsConfig, WorkerProps } from "./worker.ts";
 
 export interface AssetUploadResult {
   completionToken: string;

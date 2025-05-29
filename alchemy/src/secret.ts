@@ -1,4 +1,4 @@
-import { alchemy } from "./alchemy.js";
+import { alchemy } from "./alchemy.ts";
 
 // a global registry of all secrets that we will use when serializing an application
 const globalSecrets: {

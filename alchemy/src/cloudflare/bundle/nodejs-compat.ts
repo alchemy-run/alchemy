@@ -6,7 +6,7 @@ import type { Plugin, PluginBuild } from "esbuild";
 import assert from "node:assert";
 import module, { createRequire } from "node:module";
 import nodePath from "node:path";
-import { dedent } from "../../util/dedent.js";
+import { dedent } from "../../util/dedent.ts";
 
 const _require =
   typeof require === "undefined" ? createRequire(import.meta.url) : require;

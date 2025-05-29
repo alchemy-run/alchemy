@@ -1,11 +1,11 @@
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { handleApiError } from "./api-error.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { handleApiError } from "./api-error.ts";
 import {
-  type CloudflareApi,
   createCloudflareApi,
+  type CloudflareApi,
   type CloudflareApiOptions,
-} from "./api.js";
+} from "./api.ts";
 
 /**
  * Properties for creating or updating a CustomDomain

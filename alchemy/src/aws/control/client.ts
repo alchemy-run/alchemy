@@ -13,7 +13,7 @@ import {
   ThrottlingException,
   UpdateFailedError,
   ValidationException,
-} from "./error.js";
+} from "./error.ts";
 
 /**
  * Status of a Cloud Control API operation

@@ -15,10 +15,10 @@ import {
   UpdateFunctionConfigurationCommand,
   UpdateFunctionUrlConfigCommand,
 } from "@aws-sdk/client-lambda";
-import type { Context } from "../context.js";
-import type { Bundle } from "../esbuild/bundle.js";
-import { Resource } from "../resource.js";
-import { ignore } from "../util/ignore.js";
+import type { Context } from "../context.ts";
+import type { Bundle } from "../esbuild/bundle.ts";
+import { Resource } from "../resource.ts";
+import { ignore } from "../util/ignore.ts";
 
 /**
  * Properties for creating or updating a Lambda function

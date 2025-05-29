@@ -1,17 +1,17 @@
 import { compare } from "fast-json-patch";
-import type { Context } from "../../context.js";
+import type { Context } from "../../context.ts";
 import {
   registerDynamicResource,
   Resource,
   type Provider,
-} from "../../resource.js";
-import { createCloudControlClient, type ProgressEvent } from "./client.js";
+} from "../../resource.ts";
+import { createCloudControlClient, type ProgressEvent } from "./client.ts";
 import {
   AlreadyExistsError,
   ConcurrentOperationError,
   UpdateFailedError,
-} from "./error.js";
-import readOnlyPropertiesMap from "./properties.js";
+} from "./error.ts";
+import readOnlyPropertiesMap from "./properties.ts";
 
 /**
  * Properties for creating or updating a Cloud Control resource

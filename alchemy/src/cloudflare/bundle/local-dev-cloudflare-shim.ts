@@ -1,4 +1,4 @@
-import { dedent } from "../../util/dedent.js";
+import { dedent } from "../../util/dedent.ts";
 
 /**
  * TanStackStart server functions and middleware run in Node.js intead of Miniflare when using `vite dev`.

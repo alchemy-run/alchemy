@@ -1,11 +1,11 @@
-import type { Context } from "../context.js";
-import { Resource, ResourceKind } from "../resource.js";
-import { handleApiError } from "./api-error.js";
+import type { Context } from "../context.ts";
+import { Resource, ResourceKind } from "../resource.ts";
+import { handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
-} from "./api.js";
+} from "./api.ts";
 
 /**
  * Properties for creating a Worker stub
@@ -52,7 +52,7 @@ export const WorkerStub = Resource(
   async function (
     this: Context<WorkerStub>,
     _id: string,
-    props: WorkerStubProps,
+    props: WorkerStubProps
   ): Promise<WorkerStub> {
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
@@ -72,15 +72,15 @@ export const WorkerStub = Resource(
       type: "service",
       ...props,
     });
-  },
+  }
 );
 
 async function exists(
   api: CloudflareApi,
-  workerName: string,
+  workerName: string
 ): Promise<boolean> {
   const response = await api.get(
-    `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+    `/accounts/${api.accountId}/workers/scripts/${workerName}`
   );
 
   if (response.ok) {
@@ -94,7 +94,7 @@ async function exists(
 
 async function createEmptyWorker(
   api: CloudflareApi,
-  workerName: string,
+  workerName: string
 ): Promise<void> {
   // Minimal empty worker script
   const emptyScript = `export default { 
@@ -112,7 +112,7 @@ async function createEmptyWorker(
     new Blob([emptyScript], {
       type: "application/javascript+module",
     }),
-    "worker.js",
+    "worker.js"
   );
 
   // Add metadata as JSON
@@ -129,8 +129,8 @@ async function createEmptyWorker(
       ],
       {
         type: "application/json",
-      },
-    ),
+      }
+    )
   );
 
   // Upload worker script
@@ -141,13 +141,13 @@ async function createEmptyWorker(
       headers: {
         "Content-Type": "multipart/form-data",
       },
-    },
+    }
   );
 
   // Check if the upload was successful
   if (!uploadResponse.ok) {
     throw new Error(
-      `Failed to create empty worker: ${uploadResponse.status} ${uploadResponse.statusText}`,
+      `Failed to create empty worker: ${uploadResponse.status} ${uploadResponse.statusText}`
     );
   }
 }

@@ -1,9 +1,9 @@
-import { alchemy } from "../alchemy.js";
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import type { Secret } from "../secret.js";
-import { UpstashApi } from "./api.js";
-import { UpstashError } from "./error.js";
+import { alchemy } from "../alchemy.ts";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { UpstashApi } from "./api.ts";
+import { UpstashError } from "./error.ts";
 
 /**
  * Available regions for Upstash Redis databases

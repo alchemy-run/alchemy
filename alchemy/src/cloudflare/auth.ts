@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { Secret } from "../secret.js";
+import type { Secret } from "../secret.ts";
 /**
  * Authentication options for Cloudflare API
  */

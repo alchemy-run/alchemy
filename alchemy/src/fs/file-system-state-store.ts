@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { ResourceScope } from "../resource.js";
-import type { Scope } from "../scope.js";
-import { serialize } from "../serde.js";
-import { deserializeState, type State, type StateStore } from "../state.js";
-import { ignore } from "../util/ignore.js";
+import { ResourceScope } from "../resource.ts";
+import type { Scope } from "../scope.ts";
+import { serialize } from "../serde.ts";
+import { deserializeState, type State, type StateStore } from "../state.ts";
+import { ignore } from "../util/ignore.ts";
 
 const stateRootDir = path.join(process.cwd(), ".alchemy");
 

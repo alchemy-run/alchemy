@@ -1,11 +1,11 @@
-import { alchemy } from "../alchemy.js";
-import type { Secret } from "../secret.js";
-import { withExponentialBackoff } from "../util/retry.js";
+import { alchemy } from "../alchemy.ts";
+import type { Secret } from "../secret.ts";
+import { withExponentialBackoff } from "../util/retry.ts";
 import {
   getCloudflareAuthHeaders,
   type CloudflareAuthOptions,
-} from "./auth.js";
-import { getCloudflareAccounts, getUserEmailFromApiKey } from "./user.js";
+} from "./auth.ts";
+import { getCloudflareAccounts, getUserEmailFromApiKey } from "./user.ts";
 
 /**
  * Options for Cloudflare API requests

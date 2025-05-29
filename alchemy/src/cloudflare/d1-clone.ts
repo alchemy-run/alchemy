@@ -1,14 +1,14 @@
-import type { CloudflareApi } from "./api.js";
+import type { CloudflareApi } from "./api.ts";
 import {
   exportD1Database,
   type ExportD1DatabaseOptions,
   type ExportD1DatabaseResult,
-} from "./d1-export.js";
+} from "./d1-export.ts";
 import {
   importD1Database,
   type ImportD1DatabaseOptions,
   type ImportD1DatabaseResult,
-} from "./d1-import.js";
+} from "./d1-import.ts";
 
 /**
  * Options for cloning a D1 database

@@ -1,12 +1,12 @@
-export type { AlchemyOptions } from "./alchemy.js";
-export type * from "./context.js";
-export * from "./resource.js";
-export type * from "./scope.js";
-export * from "./secret.js";
-export * from "./serde.js";
-export * from "./state.js";
-export * from "./type.js";
-export * from "./util/ignore.js";
+export type { AlchemyOptions } from "./alchemy.ts";
+export type * from "./context.ts";
+export * from "./resource.ts";
+export type * from "./scope.ts";
+export * from "./secret.ts";
+export * from "./serde.ts";
+export * from "./state.ts";
+export * from "./type.ts";
+export * from "./util/ignore.ts";
 
-import { alchemy } from "./alchemy.js";
+import { alchemy } from "./alchemy.ts";
 export default alchemy;

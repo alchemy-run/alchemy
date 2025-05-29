@@ -1,2 +1,2 @@
-export * from "./import-dns.js";
-export * from "./record.js";
+export * from "./import-dns.ts";
+export * from "./record.ts";

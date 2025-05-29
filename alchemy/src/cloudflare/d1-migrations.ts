@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { handleApiError } from "./api-error.js";
-import type { CloudflareApi } from "./api.js";
+import { handleApiError } from "./api-error.ts";
+import type { CloudflareApi } from "./api.ts";
 
 export interface D1MigrationOptions {
   migrationsFiles: Array<{ id: string; sql: string }>;

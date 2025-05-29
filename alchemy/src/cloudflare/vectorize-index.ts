@@ -1,13 +1,13 @@
-import type { Context } from "../context.js";
-import { Resource, ResourceKind } from "../resource.js";
-import { bind } from "../runtime/bind.js";
-import { CloudflareApiError, handleApiError } from "./api-error.js";
+import type { Context } from "../context.ts";
+import { Resource, ResourceKind } from "../resource.ts";
+import { bind } from "../runtime/bind.ts";
+import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
-} from "./api.js";
-import type { Bound } from "./bound.js";
+} from "./api.ts";
+import type { Bound } from "./bound.ts";
 
 /**
  * Properties for creating or updating a Vectorize Index

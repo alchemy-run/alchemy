@@ -1,4 +1,5 @@
 {
+  "$schema": "https://biomejs.dev/schemas/2.0.0-beta.5/schema.json",
   "files": {
     "includes": [
       "./**/package.json",
@@ -33,7 +34,7 @@
         "useImportExtensions": {
           "level": "error",
           "options": {
-            "forceJsExtensions": true
+            "forceJsExtensions": false
           }
         },
         "noUnsafeFinally": "off",

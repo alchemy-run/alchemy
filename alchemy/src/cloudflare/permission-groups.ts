@@ -1,6 +1,6 @@
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { createCloudflareApi, type CloudflareApiOptions } from "./api.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
 
 /**
  * Cloudflare permission group as returned by the API

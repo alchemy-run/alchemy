@@ -1,13 +1,13 @@
-import type { Context } from "../context.js";
-import { StaticJsonFile } from "../fs/static-json-file.js";
-import { Resource } from "../resource.js";
-import { assertNever } from "../util/assert-never.js";
-import { Self, type Bindings } from "./bindings.js";
-import type { DurableObjectNamespace } from "./durable-object-namespace.js";
-import type { EventSource } from "./event-source.js";
-import { isQueueEventSource } from "./event-source.js";
-import { isQueue } from "./queue.js";
-import type { Worker } from "./worker.js";
+import type { Context } from "../context.ts";
+import { StaticJsonFile } from "../fs/static-json-file.ts";
+import { Resource } from "../resource.ts";
+import { assertNever } from "../util/assert-never.ts";
+import { Self, type Bindings } from "./bindings.ts";
+import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
+import type { EventSource } from "./event-source.ts";
+import { isQueueEventSource } from "./event-source.ts";
+import { isQueue } from "./queue.ts";
+import type { Worker } from "./worker.ts";
 
 /**
  * Properties for wrangler.json configuration file

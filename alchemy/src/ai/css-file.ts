@@ -1,9 +1,9 @@
 import { generateText } from "ai";
-import type { Context } from "../context.js";
-import { StaticCSSFile } from "../fs/static-css-file.js";
-import { Resource } from "../resource.js";
-import type { Secret } from "../secret.js";
-import { type ModelConfig, createModel } from "./client.js";
+import type { Context } from "../context.ts";
+import { StaticCSSFile } from "../fs/static-css-file.ts";
+import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { type ModelConfig, createModel } from "./client.ts";
 
 /**
  * Properties for creating or updating a CSSFile

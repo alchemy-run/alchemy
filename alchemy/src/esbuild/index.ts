@@ -1,1 +1,1 @@
-export * from "./bundle.js";
+export * from "./bundle.ts";

@@ -1,6 +1,6 @@
-import { handleApiError } from "./api-error.js";
-import type { CloudflareApi } from "./api.js";
-import type { Binding } from "./bindings.js";
+import { handleApiError } from "./api-error.ts";
+import type { CloudflareApi } from "./api.ts";
+import type { Binding } from "./bindings.ts";
 
 export interface WorkflowProps {
   /**

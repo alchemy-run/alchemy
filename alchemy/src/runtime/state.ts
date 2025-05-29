@@ -1,4 +1,4 @@
-import type { Resource } from "../resource.js";
+import type { Resource } from "../resource.ts";
 
 export interface RuntimeState {
   get(id: string): Resource;

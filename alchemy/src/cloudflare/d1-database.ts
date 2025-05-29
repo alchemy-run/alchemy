@@ -1,14 +1,14 @@
-import type { Context } from "../context.js";
-import { Resource, ResourceKind } from "../resource.js";
-import { bind, type Bound } from "../runtime/bind.js";
-import { CloudflareApiError, handleApiError } from "./api-error.js";
+import type { Context } from "../context.ts";
+import { Resource, ResourceKind } from "../resource.ts";
+import { bind, type Bound } from "../runtime/bind.ts";
+import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
-} from "./api.js";
-import { cloneD1Database } from "./d1-clone.js";
-import { applyMigrations, listMigrationsFiles } from "./d1-migrations.js";
+} from "./api.ts";
+import { cloneD1Database } from "./d1-clone.ts";
+import { applyMigrations, listMigrationsFiles } from "./d1-migrations.ts";
 
 /**
  * Properties for creating or updating a D1 Database

@@ -1,18 +1,18 @@
-import type { Context } from "../context.js";
-import { slugify } from "../util/slugify.js";
+import type { Context } from "../context.ts";
+import { slugify } from "../util/slugify.ts";
 import {
   Self,
   type Bindings,
   type WorkerBindingDurableObjectNamespace,
   type WorkerBindingSpec,
-} from "./bindings.js";
+} from "./bindings.ts";
 import {
   isDurableObjectNamespace,
   type DurableObjectNamespace,
-} from "./durable-object-namespace.js";
-import { createAssetConfig, type AssetUploadResult } from "./worker-assets.js";
-import type { SingleStepMigration } from "./worker-migration.js";
-import type { AssetsConfig, Worker, WorkerProps } from "./worker.js";
+} from "./durable-object-namespace.ts";
+import { createAssetConfig, type AssetUploadResult } from "./worker-assets.ts";
+import type { SingleStepMigration } from "./worker-migration.ts";
+import type { AssetsConfig, Worker, WorkerProps } from "./worker.ts";
 
 /**
  * Metadata returned by Cloudflare API for a worker script
@@ -200,7 +200,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
     compatibilityFlags: string[];
     workerName: string;
   },
-  assetUploadResult?: AssetUploadResult,
+  assetUploadResult?: AssetUploadResult
 ): Promise<WorkerMetadata> {
   // we use Cloudflare Worker tags to store a mapping between Alchemy's stable identifier and the binding name
   // e.g.
@@ -217,7 +217,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
         return [[bindingName, stableId]];
       }
       return [];
-    }) ?? [],
+    }) ?? []
   );
 
   const deletedClasses = oldBindings?.flatMap((oldBinding) => {
@@ -239,7 +239,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
         // try and find the DO binding by stable id
         const object = Object.values(props.bindings).find(
           (binding): binding is DurableObjectNamespace<any> =>
-            isDurableObjectNamespace(binding) && binding.id === stableId,
+            isDurableObjectNamespace(binding) && binding.id === stableId
         );
         if (object) {
           // we found the corresponding object, it should not be deleted
@@ -290,7 +290,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
           isDurableObjectNamespace(binding)
             ? // TODO(sam): base64 encode if contains `:`?
               [`alchemy:do:${binding.id}:${bindingName}`]
-            : [],
+            : []
       ),
     ],
     migrations: {
@@ -468,7 +468,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
 
   function configureClassMigration(
     bindingName: string,
-    newBinding: DurableObjectNamespace<any>,
+    newBinding: DurableObjectNamespace<any>
   ) {
     let prevBinding: WorkerBindingDurableObjectNamespace | undefined;
     if (oldBindings) {

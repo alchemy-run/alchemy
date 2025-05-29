@@ -1,8 +1,8 @@
 import path from "node:path";
-import type { Assets } from "./assets.js";
-import type { Bindings } from "./bindings.js";
-import { Website, type WebsiteProps } from "./website.js";
-import type { Worker } from "./worker.js";
+import type { Assets } from "./assets.ts";
+import type { Bindings } from "./bindings.ts";
+import { Website, type WebsiteProps } from "./website.ts";
+import type { Worker } from "./worker.ts";
 
 export interface RedwoodProps<B extends Bindings> extends WebsiteProps<B> {}
 
@@ -39,7 +39,7 @@ export type Redwood<B extends Bindings> = B extends { ASSETS: any }
  */
 export async function Redwood<B extends Bindings>(
   id: string,
-  props?: Partial<RedwoodProps<B>>,
+  props?: Partial<RedwoodProps<B>>
 ): Promise<Redwood<B>> {
   return Website(id, {
     ...props,

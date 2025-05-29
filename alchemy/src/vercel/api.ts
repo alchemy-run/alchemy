@@ -1,5 +1,5 @@
-import { alchemy } from "../alchemy.js";
-import type { Secret } from "../secret.js";
+import { alchemy } from "../alchemy.ts";
+import type { Secret } from "../secret.ts";
 
 /**
  * Options for Vercel API requests

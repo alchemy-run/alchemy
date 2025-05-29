@@ -7,9 +7,9 @@ import {
   type Tag,
   UpdateAssumeRolePolicyCommand,
 } from "@aws-sdk/client-iam";
-import type { Context } from "../../context.js";
-import { Resource } from "../../resource.js";
-import { AccountId } from "../account-id.js";
+import type { Context } from "../../context.ts";
+import { Resource } from "../../resource.ts";
+import { AccountId } from "../account-id.ts";
 
 /**
  * Properties for configuring an AWS OIDC provider for GitHub Actions

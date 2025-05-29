@@ -1,11 +1,11 @@
 import { isPromise } from "node:util/types";
-import type { Binding as CloudflareBinding } from "../cloudflare/bindings.js";
-import type { Bound as CloudflareBound } from "../cloudflare/bound.js";
-import { isWorkerStub } from "../cloudflare/worker-stub.js";
-import { isWorker } from "../cloudflare/worker.js";
-import { env } from "../env.js";
-import { ResourceFQN, ResourceScope, type Resource } from "../resource.js";
-import { isRuntime } from "./global.js";
+import type { Binding as CloudflareBinding } from "../cloudflare/bindings.ts";
+import type { Bound as CloudflareBound } from "../cloudflare/bound.ts";
+import { isWorkerStub } from "../cloudflare/worker-stub.ts";
+import { isWorker } from "../cloudflare/worker.ts";
+import { env } from "../env.ts";
+import { ResourceFQN, ResourceScope, type Resource } from "../resource.ts";
+import { isRuntime } from "./global.ts";
 
 /**
  * Get a Resource's Binding from the Environment.

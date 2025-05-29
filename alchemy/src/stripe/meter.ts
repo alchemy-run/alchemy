@@ -1,6 +1,6 @@
 import Stripe from "stripe";
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
 
 /**
  * Properties for creating or updating a Stripe Meter.

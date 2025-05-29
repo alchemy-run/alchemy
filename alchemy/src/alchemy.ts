@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { DestroyedSignal, destroy } from "./destroy.js";
-import { env } from "./env.js";
+import { DestroyedSignal, destroy } from "./destroy.ts";
+import { env } from "./env.ts";
 import {
   type PendingResource,
   ResourceFQN,
@@ -10,11 +10,11 @@ import {
   ResourceKind,
   ResourceScope,
   ResourceSeq,
-} from "./resource.js";
-import { isRuntime } from "./runtime/global.js";
-import { Scope } from "./scope.js";
-import { secret } from "./secret.js";
-import type { StateStoreType } from "./state.js";
+} from "./resource.ts";
+import { isRuntime } from "./runtime/global.ts";
+import { Scope } from "./scope.ts";
+import { secret } from "./secret.ts";
+import type { StateStoreType } from "./state.ts";
 
 /**
  * Type alias for semantic highlighting of `alchemy` as a type keyword
@@ -141,8 +141,8 @@ async function _alchemy(
   const indent = " ".repeat(leadingSpaces);
 
   const [{ isFileRef }, { isFileCollection }] = await Promise.all([
-    import("./fs/file-ref.js"),
-    import("./fs/file-collection.js"),
+    import("./fs/file-ref.ts"),
+    import("./fs/file-collection.ts"),
   ]);
 
   const appendices: Record<string, string> = {};

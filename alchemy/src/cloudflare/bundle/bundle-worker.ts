@@ -1,15 +1,15 @@
 import fs from "node:fs/promises";
-import { Bundle } from "../../esbuild/bundle.js";
-import type { Bindings } from "../bindings.js";
-import type { WorkerProps } from "../worker.js";
-import { createAliasPlugin } from "./alias-plugin.js";
+import { Bundle } from "../../esbuild/bundle.ts";
+import type { Bindings } from "../bindings.ts";
+import type { WorkerProps } from "../worker.ts";
+import { createAliasPlugin } from "./alias-plugin.ts";
 import {
   isBuildFailure,
   rewriteNodeCompatBuildFailure,
-} from "./build-failures.js";
-import { external, external_als } from "./external.js";
-import { getNodeJSCompatMode } from "./nodejs-compat-mode.js";
-import { nodeJsCompatPlugin } from "./nodejs-compat.js";
+} from "./build-failures.ts";
+import { external, external_als } from "./external.ts";
+import { getNodeJSCompatMode } from "./nodejs-compat-mode.ts";
+import { nodeJsCompatPlugin } from "./nodejs-compat.ts";
 
 export async function bundleWorkerScript<B extends Bindings>(
   props: WorkerProps<B> & {

@@ -1,12 +1,12 @@
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { CloudflareApiError, handleApiError } from "./api-error.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
-} from "./api.js";
-import type { QueueResource } from "./queue.js";
+} from "./api.ts";
+import type { QueueResource } from "./queue.ts";
 
 /**
  * Settings for configuring a Queue Consumer

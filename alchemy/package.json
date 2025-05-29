@@ -26,14 +26,13 @@
     "./neon": "./lib/neon/index.js",
     "./os": "./lib/os/index.js",
     "./sentry": "./lib/sentry/index.js",
-    "./shadcn": "./lib/shadcn/index.js",
     "./stripe": "./lib/stripe/index.js",
-    "./test/bun": "./lib/test/bun.js",
     "./upstash": "./lib/upstash/index.js",
     "./vercel": "./lib/vercel/index.js",
-    "./web/astro": "./lib/web/astro/index.js",
-    "./web/tailwind": "./lib/web/tailwind/index.js",
-    "./web/vite": "./lib/web/vite/index.js",
+    "./shadcn": "./lib/web/shadcn.js",
+    "./web/astro": "./lib/web/astro.js",
+    "./web/tailwind": "./lib/web/tailwind.js",
+    "./web/vite": "./lib/web/vite.js",
     "./web/vitepress": "./lib/web/vitepress/index.js"
   },
   "dependencies": {

@@ -19,9 +19,9 @@ import {
   type SuppressionOptions,
   type TrackingOptions,
 } from "@aws-sdk/client-sesv2";
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { ignore } from "../util/ignore.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { ignore } from "../util/ignore.ts";
 
 /**
  * Properties for configuring AWS SES resources

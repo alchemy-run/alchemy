@@ -1,4 +1,4 @@
-import type { SerializedScope } from "../serde.js";
+import type { SerializedScope } from "../serde.ts";
 
 declare global {
   const __ALCHEMY_WORKER_NAME__: string;

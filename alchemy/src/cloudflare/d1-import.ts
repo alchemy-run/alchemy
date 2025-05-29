@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { CloudflareApi } from "./api.js";
+import type { CloudflareApi } from "./api.ts";
 
 /**
  * Options for importing SQL into a D1 database

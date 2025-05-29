@@ -1,9 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { Phase } from "./alchemy.js";
-import { destroyAll } from "./destroy.js";
-import { FileSystemStateStore } from "./fs/file-system-state-store.js";
-import { ResourceID, type PendingResource } from "./resource.js";
-import type { StateStore, StateStoreType } from "./state.js";
+import type { Phase } from "./alchemy.ts";
+import { destroyAll } from "./destroy.ts";
+import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
+import { ResourceID, type PendingResource } from "./resource.ts";
+import type { StateStore, StateStoreType } from "./state.ts";
 
 export type ScopeOptions = {
   appName?: string;

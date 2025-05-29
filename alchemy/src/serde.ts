@@ -1,12 +1,12 @@
-import { decryptWithKey, encrypt } from "./encrypt.js";
+import { decryptWithKey, encrypt } from "./encrypt.ts";
 import {
   InnerResourceScope,
   ResourceFQN,
   ResourceKind,
   type Resource,
-} from "./resource.js";
-import { Scope } from "./scope.js";
-import { Secret } from "./secret.js";
+} from "./resource.ts";
+import { Scope } from "./scope.ts";
+import { Secret } from "./secret.ts";
 
 import type { Type } from "arktype";
 

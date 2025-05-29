@@ -1,4 +1,4 @@
-import type { CloudflareApi } from "./api.js"; // Ensure CloudflareApi is exported if not already
+import type { CloudflareApi } from "./api.ts"; // Ensure CloudflareApi is exported if not already
 
 /**
  * Options for exporting a D1 database

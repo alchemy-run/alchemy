@@ -2,13 +2,13 @@ import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { Context } from "../../context.js";
-import { Folder } from "../../fs/folder.js";
-import { StaticJsonFile } from "../../fs/static-json-file.js";
-import { StaticTextFile } from "../../fs/static-text-file.js";
-import { StaticTypeScriptFile } from "../../fs/static-typescript-file.js";
-import { Resource } from "../../resource.js";
-import { InstallDependencies, fixedDependencies } from "./dependencies.js";
+import type { Context } from "../../context.ts";
+import { Folder } from "../../fs/folder.ts";
+import { StaticJsonFile } from "../../fs/static-json-file.ts";
+import { StaticTextFile } from "../../fs/static-text-file.ts";
+import { StaticTypeScriptFile } from "../../fs/static-typescript-file.ts";
+import { Resource } from "../../resource.ts";
+import { InstallDependencies, fixedDependencies } from "./dependencies.ts";
 
 const _execAsync = promisify(exec);
 

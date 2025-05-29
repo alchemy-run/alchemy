@@ -1,7 +1,7 @@
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import type { Secret } from "../secret.js";
-import { SentryApi } from "./api.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { SentryApi } from "./api.ts";
 
 /**
  * Properties for creating or updating a ClientKey

@@ -1,8 +1,8 @@
 import sodium from "libsodium-wrappers";
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import type { Secret } from "../secret.js";
-import { createGitHubClient, verifyGitHubAuth } from "./client.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { createGitHubClient, verifyGitHubAuth } from "./client.ts";
 /**
  * Properties for creating or updating a GitHub Secret
  */

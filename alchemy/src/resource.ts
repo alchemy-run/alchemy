@@ -1,6 +1,6 @@
-import { apply } from "./apply.js";
-import type { Context } from "./context.js";
-import { Scope as _Scope, type Scope } from "./scope.js";
+import { apply } from "./apply.ts";
+import type { Context } from "./context.ts";
+import { Scope as _Scope, type Scope } from "./scope.ts";
 
 export const PROVIDERS: Map<ResourceKind, Provider<string, any>> = new Map<
   ResourceKind,

@@ -1,12 +1,12 @@
 import { exec } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { Context } from "../context.js";
-import { Folder } from "../fs/folder.js";
-import { StaticJsonFile } from "../fs/static-json-file.js";
-import { StaticTypeScriptFile } from "../fs/static-typescript-file.js";
-import { Resource } from "../resource.js";
-import { ShadcnComponent } from "./shadcn-component.js";
+import type { Context } from "../context.ts";
+import { Folder } from "../fs/folder.ts";
+import { StaticJsonFile } from "../fs/static-json-file.ts";
+import { StaticTypeScriptFile } from "../fs/static-typescript-file.ts";
+import { Resource } from "../resource.ts";
+import { ShadcnComponent } from "./shadcn-component.ts";
 
 const execAsync = promisify(exec);
 
@@ -121,14 +121,14 @@ export const ShadcnUI = Resource(
   async function (
     this: Context<ShadcnUI>,
     _id: string,
-    props: ShadcnUIProps,
+    props: ShadcnUIProps
   ): Promise<ShadcnUI> {
     if (this.phase === "delete") {
       // For a delete phase, we don't perform any action
       // as removing Shadcn UI would require removing many files
       // which could be destructive to the project
       console.log(
-        "Note: ShadcnUI delete phase does not remove installed components",
+        "Note: ShadcnUI delete phase does not remove installed components"
       );
 
       return this.destroy();
@@ -172,15 +172,15 @@ export const ShadcnUI = Resource(
         props.cwd,
         props.srcDir !== false ? "src" : "",
         "components",
-        "ui",
-      ),
+        "ui"
+      )
     );
 
     // Create lib directory
     const libPath = path.join(
       props.cwd,
       props.srcDir !== false ? "src" : "",
-      "lib",
+      "lib"
     );
     const lib = await Folder(libPath);
 
@@ -216,5 +216,5 @@ export const ShadcnUI = Resource(
       ui,
       lib,
     });
-  },
+  }
 );

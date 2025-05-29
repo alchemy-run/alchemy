@@ -3,24 +3,24 @@
  * Based on Cloudflare API documentation:
  * https://developers.cloudflare.com/api/resources/workers/subresources/scripts/methods/update/
  */
-import type { Secret } from "../secret.js";
-import type { AiGatewayResource } from "./ai-gateway.js";
-import type { Ai } from "./ai.js";
-import type { AnalyticsEngineDataset } from "./analytics-engine.js";
-import type { Assets } from "./assets.js";
-import type { Bound } from "./bound.js";
-import type { BrowserRendering } from "./browser-rendering.js";
-import type { R2BucketResource } from "./bucket.js";
-import type { D1DatabaseResource } from "./d1-database.js";
-import type { DurableObjectNamespace } from "./durable-object-namespace.js";
-import type { HyperdriveResource } from "./hyperdrive.js";
-import type { KVNamespaceResource } from "./kv-namespace.js";
-import type { PipelineResource } from "./pipeline.js";
-import type { QueueResource } from "./queue.js";
-import type { VectorizeIndexResource } from "./vectorize-index.js";
-import type { WorkerStub } from "./worker-stub.js";
-import type { Worker } from "./worker.js";
-import type { Workflow } from "./workflow.js";
+import type { Secret } from "../secret.ts";
+import type { AiGatewayResource } from "./ai-gateway.ts";
+import type { Ai } from "./ai.ts";
+import type { AnalyticsEngineDataset } from "./analytics-engine.ts";
+import type { Assets } from "./assets.ts";
+import type { Bound } from "./bound.ts";
+import type { BrowserRendering } from "./browser-rendering.ts";
+import type { R2BucketResource } from "./bucket.ts";
+import type { D1DatabaseResource } from "./d1-database.ts";
+import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
+import type { HyperdriveResource } from "./hyperdrive.ts";
+import type { KVNamespaceResource } from "./kv-namespace.ts";
+import type { PipelineResource } from "./pipeline.ts";
+import type { QueueResource } from "./queue.ts";
+import type { VectorizeIndexResource } from "./vectorize-index.ts";
+import type { WorkerStub } from "./worker-stub.ts";
+import type { Worker } from "./worker.ts";
+import type { Workflow } from "./workflow.ts";
 
 export type Bindings = {
   [bindingName: string]: Binding;

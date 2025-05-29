@@ -1,5 +1,5 @@
-import type { Secret } from "../secret.js";
-import { withExponentialBackoff } from "../util/retry.js";
+import type { Secret } from "../secret.ts";
+import { withExponentialBackoff } from "../util/retry.ts";
 
 /**
  * Options for Neon API requests

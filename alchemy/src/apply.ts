@@ -1,5 +1,5 @@
-import { alchemy } from "./alchemy.js";
-import { context } from "./context.js";
+import { alchemy } from "./alchemy.ts";
+import { context } from "./context.ts";
 import {
   PROVIDERS,
   ResourceFQN,
@@ -11,10 +11,10 @@ import {
   type Provider,
   type Resource,
   type ResourceProps,
-} from "./resource.js";
-import { Scope } from "./scope.js";
-import { serialize } from "./serde.js";
-import type { State } from "./state.js";
+} from "./resource.ts";
+import { Scope } from "./scope.ts";
+import { serialize } from "./serde.ts";
+import type { State } from "./state.ts";
 
 export interface ApplyOptions {
   quiet?: boolean;

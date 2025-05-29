@@ -1,10 +1,10 @@
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { tryGetBinding } from "../runtime/bind.js";
-import type { Secret } from "../secret.js";
-import { handleApiError } from "./api-error.js";
-import { createCloudflareApi, type CloudflareApiOptions } from "./api.js";
-import type { Bound } from "./bound.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { tryGetBinding } from "../runtime/bind.ts";
+import type { Secret } from "../secret.ts";
+import { handleApiError } from "./api-error.ts";
+import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
+import type { Bound } from "./bound.ts";
 
 /**
  * Origin configuration for a PostgreSQL database connection

@@ -1,7 +1,7 @@
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { isSecret, type Secret } from "../secret.js";
-import { createVercelApi, type VercelApi } from "./api.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { isSecret, type Secret } from "../secret.ts";
+import { createVercelApi, type VercelApi } from "./api.ts";
 
 type TargetEnvironment = "production" | "preview" | "development";
 

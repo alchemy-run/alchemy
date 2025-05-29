@@ -1,9 +1,9 @@
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { bind } from "../runtime/bind.js";
-import { handleApiError } from "./api-error.js";
-import { createCloudflareApi, type CloudflareApiOptions } from "./api.js";
-import type { Bound } from "./bound.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { bind } from "../runtime/bind.ts";
+import { handleApiError } from "./api-error.ts";
+import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
+import type { Bound } from "./bound.ts";
 
 /**
  * Properties for creating or updating a Cloudflare AI Gateway.
