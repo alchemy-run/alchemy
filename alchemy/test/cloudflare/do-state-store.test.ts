@@ -126,6 +126,56 @@ describe("DOFS State Store", () => {
     await destroy(scope);
   });
 
+  test("authentication with api key", async (scope) => {
+    const stateStore = new DOFSStateStore(scope, {
+      autoDeploy: true,
+      workerName: `${BRANCH_PREFIX}-auth-test-worker`,
+      apiKey: "test-secret-key-123"
+    });
+
+    // This should work with valid authentication
+    await stateStore.init();
+    const keys = await stateStore.list();
+    expect(Array.isArray(keys)).toBe(true);
+
+    await destroy(scope);
+  });
+
+  test("authentication fails with wrong api key", async (scope) => {
+    // Create worker with one API key  
+    const stateStore1 = new DOFSStateStore(scope, {
+      autoDeploy: true,
+      workerName: `${BRANCH_PREFIX}-auth-fail-unique`,
+      apiKey: "correct-secret-key-123"
+    });
+    
+    await stateStore1.init();
+    
+    // Get the deployed worker URL directly from the private property
+    const workerUrl = (stateStore1 as any).deployedWorkerUrl;
+    
+    if (!workerUrl) {
+      throw new Error("Worker URL not found after deployment");
+    }
+
+    // Try to access the same worker URL but with wrong API key
+    // This should fail at the worker level with 401 Unauthorized 
+    const response = await fetch(`${workerUrl}/listDir`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer wrong-secret-key-456"
+      },
+      body: JSON.stringify({ path: "/test" })
+    });
+    
+    // Should get 401 Unauthorized
+    expect(response.status).toBe(401);
+    expect(await response.text()).toBe("Unauthorized");
+
+    await destroy(scope);
+  });
+
   test("scope hierarchy and state isolation", async (scope) => {
     const parentStore = new DOFSStateStore(scope, {
       autoDeploy: true,

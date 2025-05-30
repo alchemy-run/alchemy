@@ -293,6 +293,16 @@ export default {
     console.log(`Worker received request: ${request.method} ${request.url}`);
     
     try {
+      // Validate bearer token if API key is configured
+      if (env.DOFS_API_KEY) {
+        const authHeader = request.headers.get("Authorization");
+        const expectedToken = `Bearer ${env.DOFS_API_KEY}`;
+        
+        if (!authHeader || authHeader !== expectedToken) {
+          return new Response("Unauthorized", { status: 401 });
+        }
+      }
+      
       const durableObjectId = env.ALCHEMY_DOFS_STATE_STORE.idFromName("default");
       const durableObject = env.ALCHEMY_DOFS_STATE_STORE.get(durableObjectId);
       

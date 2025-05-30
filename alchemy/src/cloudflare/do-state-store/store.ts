@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { alchemy } from "../../alchemy.js";
 import { ResourceScope } from "../../resource.js";
 import type { Scope } from "../../scope.js";
 import { serialize } from "../../serde.js";
@@ -24,7 +25,7 @@ export interface DOFSStateStoreOptions {
 
   /**
    * Authentication token for requests to the worker
-   * This will be set as DOFS_API_KEY environment variable in the worker
+   * This will be set as DOFS_API_KEY secret binding in the worker
    */
   apiKey?: string;
 
@@ -224,10 +225,13 @@ export class DOFSStateStore implements StateStore {
         sqlite: true, // Required for DOFS filesystem storage
       });
 
-      // Create environment variables with API key if provided
-      const env: Record<string, string> = {};
+      // Create secret binding for API key if provided
+      const bindings: Record<string, any> = {
+        ALCHEMY_DOFS_STATE_STORE: dofsNamespace, // This binding matches the worker code
+      };
+      
       if (this.apiKey) {
-        env.DOFS_API_KEY = this.apiKey;
+        bindings.DOFS_API_KEY = alchemy.secret(this.apiKey);
       }
 
       // Use this.scope.run() to explicitly run the Worker creation within this state store's scope.
@@ -237,10 +241,7 @@ export class DOFSStateStore implements StateStore {
         return Worker(this.workerName, {
           name: this.workerName,
           entrypoint: path.join(__dirname, "dofs-worker.ts"), // Point to the actual TypeScript file
-          bindings: {
-            ALCHEMY_DOFS_STATE_STORE: dofsNamespace, // This binding matches the worker code
-          },
-          env,
+          bindings,
           url: this.workerUrl,
           compatibilityDate: "2024-09-23", // Required for nodejs_compat
           compatibilityFlags: ["nodejs_compat"], // Required for dofs

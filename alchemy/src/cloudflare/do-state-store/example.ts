@@ -30,6 +30,7 @@ try {
       workerName: "alchemy-dofs-example-v3", // Changed to v3 for URL routing
       workerUrl: true, // Enable workers.dev URL (default: true)
       basePath: "/alchemy-example", // Custom base path
+      apiKey: process.env.DOFS_API_KEY, // Optional: API key for authentication
     })
   });
 
@@ -46,6 +47,7 @@ try {
     autoDeploy: true,
     workerName: "alchemy-dofs-example-v3",
     basePath: "/alchemy-example",
+    apiKey: process.env.DOFS_API_KEY, // Optional: API key for authentication
   });
 
   // Initialize the state store (this will trigger auto-deployment)
