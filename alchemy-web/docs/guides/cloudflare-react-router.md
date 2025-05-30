@@ -174,9 +174,25 @@ yarn wrangler login
 
 Now we can run and deploy our Alchemy stack:
 
-```sh
-bun ./alchemy.run.ts
+::: code-group
+
+```sh [bun]
+bun ./alchemy.run
 ```
+
+```sh [npm]
+npx tsx ./alchemy.run
+```
+
+```sh [pnpm]
+pnpm tsx ./alchemy.run
+```
+
+```sh [yarn]
+yarn tsx ./alchemy.run
+```
+
+:::
 
 It will log out the URL of your new React Router website hosted on Cloudflare:
 ```
