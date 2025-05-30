@@ -25,13 +25,13 @@ export class AlchemyDOFSStateStore extends DurableObject {
   async fetch(request: Request): Promise<Response> {
     try {
       const url = new URL(request.url);
-      const operation = request.headers.get("X-Operation");
+      const operation = url.pathname.substring(1); // Remove leading /
       
-      console.log(`Received request: ${request.method} ${url.pathname} with operation: ${operation}`);
+      console.log(`Received request: ${request.method} ${url.pathname}`);
       
       if (!operation) {
-        console.log("Missing X-Operation header");
-        return new Response("Missing X-Operation header", { status: 400 });
+        console.log("Missing operation in URL path");
+        return new Response("Missing operation in URL path", { status: 400 });
       }
 
       let body: any = null;
@@ -50,13 +50,13 @@ export class AlchemyDOFSStateStore extends DurableObject {
 
       switch (operation) {
         case "readFile":
-          return await this.handleReadFile(request.headers.get("X-Path"));
+          return await this.handleReadFile(body?.path);
           
         case "writeFile":
           return await this.handleWriteFile(body?.path, body?.data);
           
         case "listDir":
-          return await this.handleListDir(request.headers.get("X-Path"));
+          return await this.handleListDir(body?.path);
           
         case "mkdir":
           return await this.handleMkdir(body?.path, body?.recursive);
@@ -134,15 +134,17 @@ export class AlchemyDOFSStateStore extends DurableObject {
     try {
       // Ensure directory exists
       const dir = path.substring(0, path.lastIndexOf('/'));
+      console.log(`Creating directory: ${dir}`);
       if (dir) {
         await this.fs.mkdir(dir, { recursive: true });
       }
       
+      console.log(`Writing file to: ${path}`);
       await this.fs.writeFile(path, data, { encoding: 'utf8' });
       console.log(`Successfully wrote file: ${path}`);
       return new Response("OK");
     } catch (error: any) {
-      console.log(`Write file error: ${error}`);
+      console.log(`Write file error: ${error.message}, code: ${error.code}, stack: ${error.stack}`);
       return new Response(`Failed to write file: ${error.message}`, { status: 500 });
     }
   }

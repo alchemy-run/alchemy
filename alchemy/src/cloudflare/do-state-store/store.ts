@@ -6,8 +6,8 @@ import { deserializeState, type State, type StateStore } from "../../state.js";
 import { withExponentialBackoff } from "../../util/retry.js";
 import { CloudflareApiError } from "../api-error.js";
 import {
-    type CloudflareApi,
-    createCloudflareApi
+  type CloudflareApi,
+  createCloudflareApi
 } from "../api.js";
 import { DurableObjectNamespace } from "../durable-object-namespace.js";
 import { Worker } from "../worker.js";
@@ -151,9 +151,6 @@ export class DOFSStateStore implements StateStore {
       // Create the directory structure if it doesn't exist (now that we're marked as initialized)
       const directoryResponse = await this.fetchWithoutInit("/mkdir", {
         method: "POST",
-        headers: {
-          "X-Operation": "mkdir",
-        },
         body: JSON.stringify({ path: this.fullPath, recursive: true }),
       });
       
@@ -265,9 +262,6 @@ export class DOFSStateStore implements StateStore {
     try {
       await this.fetch("/rmdir", {
         method: "POST",
-        headers: {
-          "X-Operation": "rmdir",
-        },
         body: JSON.stringify({ path: this.fullPath, recursive: true }),
       });
     } catch (error) {
@@ -278,11 +272,8 @@ export class DOFSStateStore implements StateStore {
   async list(): Promise<string[]> {
     try {
       const response = await this.fetch(`/listDir`, {
-        method: "GET",
-        headers: {
-          "X-Operation": "listDir",
-          "X-Path": this.fullPath,
-        },
+        method: "POST",
+        body: JSON.stringify({ path: this.fullPath }),
       });
       
       if (!response.ok) {
@@ -315,11 +306,8 @@ export class DOFSStateStore implements StateStore {
     try {
       const filePath = this.getFilePath(key);
       const response = await this.fetch(`/readFile`, {
-        method: "GET",
-        headers: {
-          "X-Operation": "readFile",
-          "X-Path": filePath,
-        },
+        method: "POST",
+        body: JSON.stringify({ path: filePath }),
       });
 
       if (!response.ok) {
@@ -356,9 +344,6 @@ export class DOFSStateStore implements StateStore {
     
     const response = await this.fetch("/writeFile", {
       method: "POST",
-      headers: {
-        "X-Operation": "writeFile",
-      },
       body: JSON.stringify({ 
         path: filePath,
         data: serializedData 
@@ -375,9 +360,6 @@ export class DOFSStateStore implements StateStore {
       const filePath = this.getFilePath(key);
       const response = await this.fetch("/unlink", {
         method: "POST",
-        headers: {
-          "X-Operation": "unlink",
-        },
         body: JSON.stringify({ path: filePath }),
       });
 
