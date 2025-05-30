@@ -6,14 +6,15 @@ description: Step-by-step guide to deploying a React Router (formerly Remix) app
 
 # React Router
 
-This guide demonstrates how to deploy a React Router application to Cloudflare with Alchemy.
+This guide demonstrates how to deploy a [React Router](https://reactrouter.com/) (formerly Remix.js) application to Cloudflare with Alchemy.
 
 ## Create a new React Router Project
 
-Start by creating new React Router project using the Cloudflare template. This will assume `wrangler.json`, but we will adapt it to Alchemy (and learn some Alchemy concepts along the way).
+Start by creating new React Router project using the [Cloudflare template](https://developers.cloudflare.com/workers/frameworks/framework-guides/react-router/). 
 
-See: 
-https://developers.cloudflare.com/workers/frameworks/framework-guides/react-router/
+> [!NOTE]
+> This template assumes you're using wrangler. We will adapt it to Alchemy (and learn some Alchemy concepts along the way).
+
 
 ::: code-group
 
@@ -73,7 +74,9 @@ yarn add -D @cloudflare/workers-types
 
 ## Create `alchemy.run.ts`
 
-`alchemy.run.ts` can be thought of as kinda like the `wrangler.jsonc` except in pure TypeScript code. Let's create it and use the `ReactRouter` from `alchemy/cloudflare` to build and deploy our React Router project.
+`alchemy.run.ts` can be thought of as kinda like the `wrangler.jsonc` except in pure TypeScript code.
+
+Let's create it and use the `ReactRouter` from `alchemy/cloudflare` to build and deploy our React Router project.
 
 ```ts
 /// <reference types="node" />
@@ -163,8 +166,6 @@ pnpm wrangler login
 yarn wrangler login
 ```
 :::
-
-
 
 > [!TIP]
 > Alchemy will by default try and use your wrangler OAuth token and Refresh Token to connect but see the [Cloudflare Auth](../guides/cloudflare-auth.md) for other methods.
