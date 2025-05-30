@@ -14,88 +14,88 @@
   ],
   "exports": {
     ".": {
-      "import": "./lib/index.js",
-      "bun": "./src/index.ts"
+      "bun": "./src/index.ts",
+      "import": "./lib/index.js"
     },
     "./ai": {
-      "import": "./lib/ai/index.js",
-      "bun": "./src/ai/index.ts"
+      "bun": "./src/ai/index.ts",
+      "import": "./lib/ai/index.js"
     },
     "./aws": {
-      "import": "./lib/aws/index.js",
-      "bun": "./src/aws/index.ts"
+      "bun": "./src/aws/index.ts",
+      "import": "./lib/aws/index.js"
     },
     "./aws/control": {
-      "import": "./lib/aws/control/index.js",
-      "bun": "./src/aws/control/index.ts"
+      "bun": "./src/aws/control/index.ts",
+      "import": "./lib/aws/control/index.js"
     },
     "./aws/oidc": {
-      "import": "./lib/aws/oidc/index.js",
-      "bun": "./src/aws/oidc/index.ts"
+      "bun": "./src/aws/oidc/index.ts",
+      "import": "./lib/aws/oidc/index.js"
     },
     "./cloudflare": {
-      "import": "./lib/cloudflare/index.js",
-      "bun": "./src/cloudflare/index.ts"
+      "bun": "./src/cloudflare/index.ts",
+      "import": "./lib/cloudflare/index.js"
     },
     "./dns": {
-      "import": "./lib/dns/index.js",
-      "bun": "./src/dns/index.ts"
+      "bun": "./src/dns/index.ts",
+      "import": "./lib/dns/index.js"
     },
     "./esbuild": {
-      "import": "./lib/esbuild/index.js",
-      "bun": "./src/esbuild/index.ts"
+      "bun": "./src/esbuild/index.ts",
+      "import": "./lib/esbuild/index.js"
     },
     "./fs": {
-      "import": "./lib/fs/index.js",
-      "bun": "./src/fs/index.ts"
+      "bun": "./src/fs/index.ts",
+      "import": "./lib/fs/index.js"
     },
     "./github": {
-      "import": "./lib/github/index.js",
-      "bun": "./src/github/index.ts"
+      "bun": "./src/github/index.ts",
+      "import": "./lib/github/index.js"
     },
     "./neon": {
-      "import": "./lib/neon/index.js",
-      "bun": "./src/neon/index.ts"
+      "bun": "./src/neon/index.ts",
+      "import": "./lib/neon/index.js"
     },
     "./os": {
-      "import": "./lib/os/index.js",
-      "bun": "./src/os/index.ts"
+      "bun": "./src/os/index.ts",
+      "import": "./lib/os/index.js"
     },
     "./sentry": {
-      "import": "./lib/sentry/index.js",
-      "bun": "./src/sentry/index.ts"
+      "bun": "./src/sentry/index.ts",
+      "import": "./lib/sentry/index.js"
     },
     "./stripe": {
-      "import": "./lib/stripe/index.js",
-      "bun": "./src/stripe/index.ts"
+      "bun": "./src/stripe/index.ts",
+      "import": "./lib/stripe/index.js"
     },
     "./upstash": {
-      "import": "./lib/upstash/index.js",
-      "bun": "./src/upstash/index.ts"
+      "bun": "./src/upstash/index.ts",
+      "import": "./lib/upstash/index.js"
     },
     "./vercel": {
-      "import": "./lib/vercel/index.js",
-      "bun": "./src/vercel/index.ts"
+      "bun": "./src/vercel/index.ts",
+      "import": "./lib/vercel/index.js"
     },
     "./shadcn": {
-      "import": "./lib/web/shadcn.js",
-      "bun": "./src/web/shadcn.ts"
+      "bun": "./src/web/shadcn.ts",
+      "import": "./lib/web/shadcn.js"
     },
     "./web/astro": {
-      "import": "./lib/web/astro.js",
-      "bun": "./src/web/astro.ts"
+      "bun": "./src/web/astro.ts",
+      "import": "./lib/web/astro.js"
     },
     "./web/tailwind": {
-      "import": "./lib/web/tailwind.js",
-      "bun": "./src/web/tailwind.ts"
+      "bun": "./src/web/tailwind.ts",
+      "import": "./lib/web/tailwind.js"
     },
     "./web/vite": {
-      "import": "./lib/web/vite.js",
-      "bun": "./src/web/vite.ts"
+      "bun": "./src/web/vite.ts",
+      "import": "./lib/web/vite.js"
     },
     "./web/vitepress": {
-      "import": "./lib/web/vitepress/index.js",
-      "bun": "./src/web/vitepress/index.ts"
+      "bun": "./src/web/vitepress/index.ts",
+      "import": "./lib/web/vitepress/index.js"
     }
   },
   "dependencies": {
