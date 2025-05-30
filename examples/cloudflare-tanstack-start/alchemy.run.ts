@@ -1,10 +1,5 @@
-import "../../alchemy/src/cloudflare/index.js";
-
-import alchemy from "../../alchemy/src/index.js";
-import {
-  R2RestStateStore,
-  TanStackStart,
-} from "../../alchemy/src/cloudflare/index.js";
+import alchemy from "alchemy";
+import { R2RestStateStore, TanStackStart } from "alchemy/cloudflare";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 

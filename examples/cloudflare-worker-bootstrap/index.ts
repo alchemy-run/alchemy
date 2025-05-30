@@ -1,11 +1,6 @@
+import alchemy from "alchemy";
+import { Queue, R2Bucket, R2RestStateStore, Worker } from "alchemy/cloudflare";
 import { type } from "arktype";
-import {
-  Queue,
-  R2Bucket,
-  R2RestStateStore,
-  Worker,
-} from "../../alchemy/src/cloudflare/index.js";
-import alchemy from "../../alchemy/src/index.js";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? process.env.USER;
 
