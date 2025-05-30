@@ -10,6 +10,6 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
-    "types": ["./types/env.ts", "@cloudflare/workers-types"]
+    "types": ["./workers/env.ts", "@cloudflare/workers-types"]
   }
 }
