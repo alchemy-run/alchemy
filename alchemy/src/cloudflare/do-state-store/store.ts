@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import { ResourceScope } from "../../resource.js";
 import type { Scope } from "../../scope.js";
 import { serialize } from "../../serde.js";
@@ -5,11 +6,11 @@ import { deserializeState, type State, type StateStore } from "../../state.js";
 import { withExponentialBackoff } from "../../util/retry.js";
 import { CloudflareApiError } from "../api-error.js";
 import {
-  type CloudflareApi,
-  createCloudflareApi
+    type CloudflareApi,
+    createCloudflareApi
 } from "../api.js";
-import { putWorker } from "../worker.js";
-import { DOFS_WORKER_SCRIPT } from "./dofs-worker.js";
+import { DurableObjectNamespace } from "../durable-object-namespace.js";
+import { Worker } from "../worker.js";
 
 /**
  * Options for DOFSStateStore
@@ -22,9 +23,10 @@ export interface DOFSStateStoreOptions {
   url?: string;
 
   /**
-   * Optional authentication token for requests
+   * Authentication token for requests to the worker
+   * This will be set as DOFS_API_KEY environment variable in the worker
    */
-  token?: string;
+  apiKey?: string;
 
   /**
    * Base path in the DOFS filesystem for storing state files
@@ -61,8 +63,10 @@ export class DOFSStateStore implements StateStore {
   private readonly autoDeploy: boolean;
   private readonly workerName: string;
   private readonly workerUrl: boolean;
+  private readonly apiKey?: string;
   private deployedWorkerUrl?: string;
   private isInitializing = false; // Add flag to prevent recursive initialization
+  private worker?: any; // Will store the deployed Worker resource
 
   constructor(
     public readonly scope: Scope,
@@ -77,6 +81,7 @@ export class DOFSStateStore implements StateStore {
     this.autoDeploy = options.autoDeploy !== false; // Default to true
     this.workerName = options.workerName || "alchemy-dofs-state-store";
     this.workerUrl = options.workerUrl !== false; // Default to true
+    this.apiKey = options.apiKey;
   }
 
   async init(): Promise<void> {
@@ -144,9 +149,11 @@ export class DOFSStateStore implements StateStore {
       console.log("📁 Creating directory structure...");
       
       // Create the directory structure if it doesn't exist (now that we're marked as initialized)
-      const directoryResponse = await this.fetchWithoutInit("", {
+      const directoryResponse = await this.fetchWithoutInit("/mkdir", {
         method: "POST",
-        headers: { "X-Operation": "mkdir" },
+        headers: {
+          "X-Operation": "mkdir",
+        },
         body: JSON.stringify({ path: this.fullPath, recursive: true }),
       });
       
@@ -206,85 +213,49 @@ export class DOFSStateStore implements StateStore {
   }
 
   /**
-   * Deploy the DOFS state store worker
+   * Deploy the worker using Alchemy's Worker resource with bundling.
+   * This method uses `this.scope.run()` to ensure the Worker resource is
+   * created within the context of the `Scope` instance held by `DOFSStateStore`.
    */
   private async deployWorker(): Promise<string> {
-    if (!this.api) {
-      throw new Error("API client not initialized");
-    }
-
     try {
-      // Create worker metadata with DOFS durable object binding
-      const metadata = {
-        compatibility_date: "2023-12-01",
-        compatibility_flags: [],
-        bindings: [
-          {
-            type: "durable_object_namespace" as const,
-            name: "ALCHEMY_DOFS_STATE_STORE",
-            class_name: "AlchemyDOFSStateStore",
-            script_name: this.workerName,
-          },
-        ],
-        observability: {
-          enabled: true,
-        },
-        main_module: "index.js",
-        migrations: {
-          new_classes: ["AlchemyDOFSStateStore"],
-          deleted_classes: [],
-          renamed_classes: [],
-          transferred_classes: [],
-          new_sqlite_classes: [],
-        },
-      };
+      console.log("🏗️  Deploying DOFS worker with bundling...");
 
-      // Deploy the worker
-      await withExponentialBackoff(
-        () => putWorker(this.api!, this.workerName, DOFS_WORKER_SCRIPT, metadata),
-        (error) => isRetryableError(error),
-        5,
-        1000,
-      );
+      // Create the Durable Object Namespace
+      const dofsNamespace = new DurableObjectNamespace("ALCHEMY_DOFS_STATE_STORE", {
+        className: "AlchemyDOFSStateStore",
+        sqlite: true, // Required for DOFS filesystem storage
+      });
 
-      // Enable workers.dev URL if requested
-      let workerUrl: string;
-      if (this.workerUrl) {
-        await this.api.post(
-          `/accounts/${this.api.accountId}/workers/scripts/${this.workerName}/subdomain`,
-          { enabled: true, previews_enabled: true },
-          {
-            headers: { "Content-Type": "application/json" },
-          },
-        );
-
-        const subdomainResponse = await this.api.get(
-          `/accounts/${this.api.accountId}/workers/subdomain`,
-        );
-
-        if (subdomainResponse.ok) {
-          const subdomainData: any = await subdomainResponse.json();
-          const subdomain = subdomainData.result?.subdomain;
-          
-          if (subdomain) {
-            workerUrl = `https://${this.workerName}.${subdomain}.workers.dev`;
-            
-            // Add delay to prevent negative cache hits
-            await new Promise((resolve) => setTimeout(resolve, 3000));
-          } else {
-            workerUrl = `https://${this.workerName}.${this.api.accountId}.workers.dev`;
-          }
-        } else {
-          workerUrl = `https://${this.workerName}.${this.api.accountId}.workers.dev`;
-        }
-      } else {
-        workerUrl = `https://${this.workerName}.${this.api.accountId}.workers.dev`;
+      // Create environment variables with API key if provided
+      const env: Record<string, string> = {};
+      if (this.apiKey) {
+        env.DOFS_API_KEY = this.apiKey;
       }
 
-      console.log(`✅ Auto-deployed DOFS state store worker: ${workerUrl}`);
+      // Use this.scope.run() to explicitly run the Worker creation within this state store's scope.
+      // This is the correct pattern to ensure the Worker resource is properly registered
+      // and tracked by the parent Alchemy application's state.
+      this.worker = await this.scope.run(async () => {
+        return Worker(this.workerName, {
+          name: this.workerName,
+          entrypoint: path.join(__dirname, "dofs-worker.ts"), // Point to the actual TypeScript file
+          bindings: {
+            ALCHEMY_DOFS_STATE_STORE: dofsNamespace, // This binding matches the worker code
+          },
+          env,
+          url: this.workerUrl,
+          compatibilityDate: "2024-09-23", // Required for nodejs_compat
+          compatibilityFlags: ["nodejs_compat"], // Required for dofs
+        });
+      });
+
+      const workerUrl = this.worker.url || `https://${this.workerName}.workers.dev`;
+      console.log(`✅ Successfully deployed DOFS worker with bundling: ${workerUrl}`);
+      
       return workerUrl;
     } catch (error) {
-      console.error("Failed to deploy worker:", error);
+      console.error("Failed to deploy worker with bundling:", error);
       throw error;
     }
   }
@@ -292,9 +263,11 @@ export class DOFSStateStore implements StateStore {
   async deinit(): Promise<void> {
     // Optionally clean up the directory
     try {
-      await this.fetch("", {
-        method: "DELETE",
-        headers: { "X-Operation": "rmdir" },
+      await this.fetch("/rmdir", {
+        method: "POST",
+        headers: {
+          "X-Operation": "rmdir",
+        },
         body: JSON.stringify({ path: this.fullPath, recursive: true }),
       });
     } catch (error) {
@@ -304,11 +277,11 @@ export class DOFSStateStore implements StateStore {
 
   async list(): Promise<string[]> {
     try {
-      const response = await this.fetch("", {
+      const response = await this.fetch(`/listDir`, {
         method: "GET",
-        headers: { 
+        headers: {
           "X-Operation": "listDir",
-          "X-Path": this.fullPath
+          "X-Path": this.fullPath,
         },
       });
       
@@ -341,11 +314,11 @@ export class DOFSStateStore implements StateStore {
   async get(key: string): Promise<State | undefined> {
     try {
       const filePath = this.getFilePath(key);
-      const response = await this.fetch("", {
+      const response = await this.fetch(`/readFile`, {
         method: "GET",
-        headers: { 
+        headers: {
           "X-Operation": "readFile",
-          "X-Path": filePath
+          "X-Path": filePath,
         },
       });
 
@@ -381,9 +354,11 @@ export class DOFSStateStore implements StateStore {
     const filePath = this.getFilePath(key);
     const serializedData = JSON.stringify(await serialize(this.scope, value), null, 2);
     
-    const response = await this.fetch("", {
-      method: "PUT",
-      headers: { "X-Operation": "writeFile" },
+    const response = await this.fetch("/writeFile", {
+      method: "POST",
+      headers: {
+        "X-Operation": "writeFile",
+      },
       body: JSON.stringify({ 
         path: filePath,
         data: serializedData 
@@ -398,9 +373,11 @@ export class DOFSStateStore implements StateStore {
   async delete(key: string): Promise<void> {
     try {
       const filePath = this.getFilePath(key);
-      const response = await this.fetch("", {
-        method: "DELETE",
-        headers: { "X-Operation": "unlink" },
+      const response = await this.fetch("/unlink", {
+        method: "POST",
+        headers: {
+          "X-Operation": "unlink",
+        },
         body: JSON.stringify({ path: filePath }),
       });
 
@@ -409,122 +386,103 @@ export class DOFSStateStore implements StateStore {
         throw new Error(`Failed to delete state: ${response.statusText}`);
       }
     } catch (error: any) {
-      if (error.message?.includes("ENOENT")) {
-        return; // File already doesn't exist
+      // Ignore ENOENT errors - file doesn't exist
+      if (!error.message?.includes("ENOENT") && !error.message?.includes("404")) {
+        throw error;
       }
-      throw error;
     }
   }
 
   async all(): Promise<Record<string, State>> {
-    return this.getBatch(await this.list());
+    const keys = await this.list();
+    const result: Record<string, State> = {};
+    
+    // Get all states in parallel
+    const states = await Promise.all(
+      keys.map(async (key) => {
+        const state = await this.get(key);
+        return { key, state };
+      })
+    );
+    
+    // Build result object
+    for (const { key, state } of states) {
+      if (state) {
+        result[key] = state;
+      }
+    }
+    
+    return result;
   }
 
   async getBatch(ids: string[]): Promise<Record<string, State>> {
-    const results = await Promise.all(
+    const result: Record<string, State> = {};
+    
+    // Get all states in parallel
+    const states = await Promise.all(
       ids.map(async (id) => {
         const state = await this.get(id);
-        return state ? [id, state] as const : undefined;
+        return { id, state };
       })
     );
-
-    return Object.fromEntries(
-      results.filter((result): result is [string, State] => result !== undefined)
-    );
+    
+    // Build result object
+    for (const { id, state } of states) {
+      if (state) {
+        result[id] = state;
+      }
+    }
+    
+    return result;
   }
 
   private async fetch(url: string, init?: RequestInit): Promise<Response> {
-    // Ensure initialized before making requests
     await this.ensureInitialized();
-    
     return this.fetchWithoutInit(url, init);
   }
 
-  /**
-   * Make a fetch request without ensuring initialization (used during init to prevent infinite loop)
-   */
   private async fetchWithoutInit(url: string, init?: RequestInit): Promise<Response> {
-    const baseUrl = this.deployedWorkerUrl || this.options.url;
-    if (!baseUrl) {
-      throw new Error("No worker URL available - initialization may have failed");
+    if (!this.deployedWorkerUrl) {
+      throw new Error("Worker URL not available");
     }
 
-    const fullUrl = `${baseUrl}${url}`;
-    const operation = (init?.headers as Record<string, string>)?.["X-Operation"] || "unknown";
-    
-    console.log(`🔗 Making request to worker: ${operation} -> ${fullUrl}`);
-    
-    const maxRetries = 10;
-    let retries = 0;
-    let delay = 30;
-    let response: Response;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(init?.headers as Record<string, string> || {}),
+    };
 
-    while (retries < maxRetries) {
-      const startTime = Date.now();
-      
-      try {
-        console.log(`   📡 Attempt ${retries + 1}/${maxRetries}: ${operation}`);
-        
-        response = await fetch(fullUrl, {
+    // Add authentication header if API key is configured
+    if (this.apiKey) {
+      headers.Authorization = `Bearer ${this.apiKey}`;
+    }
+
+    return await withExponentialBackoff(
+      async () => {
+        const response = await fetch(`${this.deployedWorkerUrl}${url}`, {
           ...init,
-          headers: {
-            "Content-Type": "application/json",
-            ...(this.options.token && { Authorization: `Bearer ${this.options.token}` }),
-            ...init?.headers,
-          },
+          headers,
         });
 
-        const duration = Date.now() - startTime;
-        console.log(`   ⚡ Response received in ${duration}ms: ${response.status} ${response.statusText}`);
-
-        if (response.ok) {
-          console.log(`   ✅ Success: ${operation}`);
-          return response;
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`DOFS State Store request failed: ${response.status} ${response.statusText}: ${errorText}`);
+          
+          // Convert some common errors to CloudflareApiError for consistency
+          if (response.status >= 500) {
+            throw new CloudflareApiError(
+              `DOFS State Store server error: ${response.statusText}`, 
+              response,
+              { error: errorText }
+            );
+          }
         }
 
-        console.log(`   ❌ Error response: ${response.status} ${response.statusText}`);
-        
-        // Log response body for debugging
-        try {
-          const responseText = await response.clone().text();
-          console.log(`   📄 Response body: ${responseText.substring(0, 200)}${responseText.length > 200 ? '...' : ''}`);
-        } catch (e) {
-          console.log(`   📄 Could not read response body: ${e}`);
-        }
-
-        // Retry on rate limits and server errors
-        if (
-          response.status === 429 ||
-          response.status === 500 ||
-          response.status === 503
-        ) {
-          console.log(`   🔄 Retryable error, waiting ${delay}ms before retry...`);
-          delay *= 2;
-          retries += 1;
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          continue;
-        }
-
-        // Don't retry other errors
-        console.log(`   🚫 Non-retryable error, returning response`);
         return response;
-        
-      } catch (fetchError) {
-        const duration = Date.now() - startTime;
-        console.log(`   💥 Fetch error after ${duration}ms:`, fetchError);
-        
-        retries += 1;
-        if (retries >= maxRetries) {
-          throw new Error(`Network error after ${maxRetries} retries: ${fetchError}`);
-        }
-        
-        console.log(`   🔄 Network error, waiting ${delay}ms before retry...`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        delay *= 2;
-      }
-    }
-
-    throw new Error(`Failed to fetch after ${maxRetries} retries: ${response!.statusText}`);
+      },
+      (error: any) => isRetryableError(error),
+      3,
+      1000,
+    );
   }
 
   private getFilePath(key: string): string {
