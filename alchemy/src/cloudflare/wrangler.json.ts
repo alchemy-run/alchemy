@@ -79,6 +79,9 @@ export interface WranglerJson
  */
 export const WranglerJson = Resource(
   "cloudflare::WranglerJson",
+  {
+    alwaysUpdate: true,
+  },
   async function (
     this: Context<WranglerJson>,
     _id: string,
