@@ -450,6 +450,7 @@ export class DOFSStateStore implements StateStore {
           console.error(`DOFS State Store request failed: ${response.status} ${response.statusText}: ${errorText}`);
           
           // Convert some common errors to CloudflareApiError for consistency
+          // NOTE: 404 is NOT an error condition - it's handled by get() method
           if (response.status >= 500) {
             throw new CloudflareApiError(
               `DOFS State Store server error: ${response.statusText}`, 

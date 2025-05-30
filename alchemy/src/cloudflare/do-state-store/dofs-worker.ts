@@ -117,7 +117,7 @@ export class AlchemyDOFSStateStore extends DurableObject {
       });
     } catch (error: any) {
       console.log(`Read file error: ${error}`);
-      if (error.code === "ENOENT") {
+      if (error.message === "ENOENT") {
         return new Response("File not found", { status: 404 });
       }
       throw error;

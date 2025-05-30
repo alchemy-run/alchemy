@@ -28,7 +28,7 @@ describe("DOFS State Store", () => {
   test("auto-deploy worker with bundling", async (scope) => {
     const stateStore = new DOFSStateStore(scope, {
       autoDeploy: true,
-      workerName: `${BRANCH_PREFIX}-dofs-test-worker-v3`,
+      workerName: `${BRANCH_PREFIX}-dofs-test-worker`,
       basePath: "/test-alchemy",
     });
 
@@ -41,7 +41,7 @@ describe("DOFS State Store", () => {
   test("state operations", async (scope) => {
     const stateStore = new DOFSStateStore(scope, {
       autoDeploy: true,
-      workerName: `${BRANCH_PREFIX}-ops-test-worker-v4`,
+      workerName: `${BRANCH_PREFIX}-ops-test-worker`,
     });
 
     // Test basic operations with actual deployment
@@ -60,7 +60,7 @@ describe("DOFS State Store", () => {
   test("resource lifecycle with state persistence", async (scope) => {
     const stateStore = new DOFSStateStore(scope, {
       autoDeploy: true,
-      workerName: `${BRANCH_PREFIX}-lifecycle-test-v5`,
+      workerName: `${BRANCH_PREFIX}-lifecycle-final`,
     });
 
     // Simulate resource creation state
@@ -129,7 +129,7 @@ describe("DOFS State Store", () => {
   test("scope hierarchy and state isolation", async (scope) => {
     const parentStore = new DOFSStateStore(scope, {
       autoDeploy: true,
-      workerName: `${BRANCH_PREFIX}-hierarchy-test-v2`,
+      workerName: `${BRANCH_PREFIX}-hierarchy-test`,
     });
 
     // Create nested scope using alchemy.run instead of scope.run
@@ -138,7 +138,7 @@ describe("DOFS State Store", () => {
       childScope = childScopeParam;
       const childStore = new DOFSStateStore(childScope, {
         autoDeploy: true,
-        workerName: `${BRANCH_PREFIX}-hierarchy-test-v2`,
+        workerName: `${BRANCH_PREFIX}-hierarchy-test`,
       });
 
       // Parent and child should have different paths due to scope hierarchy
@@ -191,7 +191,7 @@ describe("DOFS State Store", () => {
     // Child store should not see parent resource
     const childStore = new DOFSStateStore(childScope, {
       autoDeploy: true,
-      workerName: `${BRANCH_PREFIX}-hierarchy-test-v2`,
+      workerName: `${BRANCH_PREFIX}-hierarchy-test`,
     });
     const parentStateFromChild = await childStore.get("parent-resource");
     expect(parentStateFromChild).toBeUndefined();
