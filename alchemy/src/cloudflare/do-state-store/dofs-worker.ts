@@ -196,54 +196,8 @@ export class AlchemyDOFSStateStore extends DurableObject {
     }
     
     try {
-      if (recursive) {
-        console.log(`Starting recursive directory creation for: ${path}`);
-        // Implement proper recursive directory creation
-        // Split path into parts and create each level
-        const parts = path.split('/').filter(Boolean);
-        console.log(`Path parts: ${JSON.stringify(parts)}`);
-        let currentPath = '';
-        
-        for (let i = 0; i < parts.length; i++) {
-          const part = parts[i];
-          currentPath += '/' + part;
-          console.log(`Processing part ${i + 1}/${parts.length}: "${part}" -> currentPath: "${currentPath}"`);
-          
-          // Check if directory already exists
-          try {
-            console.log(`Checking if directory exists: ${currentPath}`);
-            const stat = await this.fs.stat(currentPath);
-            console.log(`Directory exists, isDirectory: ${stat.isDirectory}`);
-            if (stat.isDirectory) {
-              // Directory exists, continue
-              console.log(`Directory "${currentPath}" already exists, continuing...`);
-              continue;
-            } else {
-              // Path exists but is not a directory
-              console.log(`Path "${currentPath}" exists but is not a directory`);
-              return new Response(`Path exists but is not a directory: ${currentPath}`, { status: 400 });
-            }
-          } catch (error: any) {
-            console.log(`Directory "${currentPath}" doesn't exist (${error.message}), creating it...`);
-            if (error.message === "ENOENT") {
-              // Directory doesn't exist, create it
-              console.log(`Creating directory: ${currentPath}`);
-              await this.fs.mkdir(currentPath, { recursive: false });
-              console.log(`Successfully created directory: ${currentPath}`);
-            } else {
-              console.log(`Unexpected error checking directory: ${error.message}`);
-              throw error;
-            }
-          }
-        }
-        console.log(`Recursive directory creation completed for: ${path}`);
-      } else {
-        console.log(`Creating single directory (non-recursive): ${path}`);
-        // Non-recursive, just call mkdir directly
-        await this.fs.mkdir(path, { recursive: false });
-        console.log(`Successfully created single directory: ${path}`);
-      }
-      
+      // Use DOFS native recursive support
+      await this.fs.mkdir(path, { recursive });
       console.log(`Directory creation successful: ${path}`);
       return new Response("OK");
     } catch (error: any) {
@@ -283,12 +237,7 @@ export class AlchemyDOFSStateStore extends DurableObject {
     }
     
     try {
-      if (recursive) {
-        // For recursive deletion, use the rmdir with recursive option
-        await this.fs.rmdir(path, { recursive: true });
-      } else {
-        await this.fs.rmdir(path);
-      }
+      await this.fs.rmdir(path, { recursive });
       console.log(`Successfully removed directory: ${path}`);
       return new Response("OK");
     } catch (error: any) {
