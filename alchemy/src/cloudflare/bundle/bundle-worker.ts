@@ -10,6 +10,7 @@ import {
 import { external, external_als } from "./external.ts";
 import { getNodeJSCompatMode } from "./nodejs-compat-mode.ts";
 import { nodeJsCompatPlugin } from "./nodejs-compat.ts";
+import { wasmPlugin } from "./wasm-plugin.ts";
 
 export async function bundleWorkerScript<B extends Bindings>(
   props: WorkerProps<B> & {
@@ -52,6 +53,7 @@ export async function bundleWorkerScript<B extends Bindings>(
           ...props.bundle?.options?.loader,
         },
         plugins: [
+          wasmPlugin,
           ...(props.bundle?.plugins ?? []),
           ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
           ...(props.bundle?.alias
