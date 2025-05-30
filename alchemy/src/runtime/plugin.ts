@@ -46,7 +46,7 @@ export const bootstrapPlugin: Plugin = {
   name: "alchemy-bootstrap",
   async setup(build) {
     const { parse, print } = await import("@swc/core");
-    const { Visitor } = await import("@swc/core/Visitor.ts");
+    const { Visitor } = await import("@swc/core/Visitor.js");
 
     async function expr(expr: string) {
       return (
