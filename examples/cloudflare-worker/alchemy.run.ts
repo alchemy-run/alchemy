@@ -1,3 +1,4 @@
+import alchemy, { type } from "alchemy";
 import {
   DurableObjectNamespace,
   Queue,
@@ -6,10 +7,9 @@ import {
   Worker,
   Workflow,
   WranglerJson,
-} from "../../alchemy/src/cloudflare/index.js";
-import alchemy, { type } from "../../alchemy/src/index.js";
-import type { HelloWorldDO } from "./src/do.js";
-import type MyRPC from "./src/rpc.js";
+} from "alchemy/cloudflare";
+import type { HelloWorldDO } from "./src/do.ts";
+import type MyRPC from "./src/rpc.ts";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 const app = await alchemy("cloudflare-worker", {

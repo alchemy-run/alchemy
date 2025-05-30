@@ -7,6 +7,7 @@
     "destroy": "bun run --env-file ../../.env ./alchemy.run.ts --destroy"
   },
   "dependencies": {
+    "alchemy": "workspace:*",
     "braintrust": "^0.0.201",
     "chalk": "^5.4.1",
     "pluralize": "^8.0.0",
