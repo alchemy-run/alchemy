@@ -336,6 +336,13 @@ export interface WranglerJsonSpec {
    * Pipelines
    */
   pipelines?: { binding: string; pipeline: string }[];
+
+  /**
+   * Version metadata bindings
+   */
+  version_metadata?: {
+    binding: string;
+  };
 }
 
 /**
@@ -514,7 +521,14 @@ function processBindings(
     } else if (binding.type === "ai_gateway") {
       // no-op
     } else if (binding.type === "version_metadata") {
-      // no-op
+      if (spec.version_metadata) {
+        throw new Error(
+          `Version metadata already bound to ${spec.version_metadata.binding}`,
+        );
+      }
+      spec.version_metadata = {
+        binding: bindingName,
+      };
     } else if (binding.type === "hyperdrive") {
       const password =
         "password" in binding.origin
