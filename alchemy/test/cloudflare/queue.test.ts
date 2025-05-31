@@ -209,7 +209,9 @@ describe("Cloudflare Queue Resource", async () => {
       const queues = await listQueues(api);
       const foundDlq = queues.find((q) => q.name === dlqName);
       const foundMainQueue = queues.find((q) => q.name === mainQueueName);
-      const foundStringQueue = queues.find((q) => q.name === `${mainQueueName}-string`);
+      const foundStringQueue = queues.find(
+        (q) => q.name === `${mainQueueName}-string`,
+      );
 
       expect(foundDlq).toBeTruthy();
       expect(foundMainQueue).toBeTruthy();
