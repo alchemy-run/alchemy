@@ -72,6 +72,14 @@ export interface ShadcnUIProps {
    * @default false
    */
   react?: boolean;
+
+  /**
+   * Whether to adopt an existing Shadcn UI installation if it already exists
+   * If true and a Shadcn UI installation exists, it will be adopted rather than creating a new one
+   *
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 /**

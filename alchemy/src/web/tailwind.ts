@@ -38,6 +38,14 @@ export interface TailwindConfigProps {
    * Custom additional packages to install with Tailwind
    */
   additionalPackages?: string[];
+
+  /**
+   * Whether to adopt an existing Tailwind configuration if it already exists
+   * If true and a Tailwind config exists, it will be adopted rather than creating a new one
+   *
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 /**

@@ -81,6 +81,14 @@ export interface SESProps {
    * Key-value pairs for resource organization
    */
   tags?: Record<string, string>;
+
+  /**
+   * Whether to adopt an existing SES configuration if it already exists
+   * If true and a SES configuration exists, it will be adopted rather than creating a new one
+   *
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 /**
