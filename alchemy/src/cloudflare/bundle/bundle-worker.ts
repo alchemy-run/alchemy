@@ -1,4 +1,4 @@
-import fs, { glob } from "node:fs/promises";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { Bundle } from "../../esbuild/bundle.ts";
 import type { Bindings } from "../bindings.ts";
@@ -53,7 +53,7 @@ export async function bundleWorkerScript<B extends Bindings>(
           await Promise.all(
             rules.map((rule) =>
               Array.fromAsync(
-                glob(rule, {
+                fs.glob(rule, {
                   cwd: rootDir,
                 }),
               ),
