@@ -218,32 +218,16 @@ export const Card = Resource(
 
       if (this.phase === "update" && this.output?.id) {
         const updateParams = {
-          ...(props.name !== undefined && { name: props.name }),
-          ...(props.addressCity !== undefined && {
-            address_city: props.addressCity,
-          }),
-          ...(props.addressCountry !== undefined && {
-            address_country: props.addressCountry,
-          }),
-          ...(props.addressLine1 !== undefined && {
-            address_line1: props.addressLine1,
-          }),
-          ...(props.addressLine2 !== undefined && {
-            address_line2: props.addressLine2,
-          }),
-          ...(props.addressState !== undefined && {
-            address_state: props.addressState,
-          }),
-          ...(props.addressZip !== undefined && {
-            address_zip: props.addressZip,
-          }),
-          ...(props.expMonth !== undefined && {
-            exp_month: props.expMonth.toString(),
-          }),
-          ...(props.expYear !== undefined && {
-            exp_year: props.expYear.toString(),
-          }),
-          ...(props.metadata !== undefined && { metadata: props.metadata }),
+          name: props.name,
+          address_city: props.addressCity,
+          address_country: props.addressCountry,
+          address_line1: props.addressLine1,
+          address_line2: props.addressLine2,
+          address_state: props.addressState,
+          address_zip: props.addressZip,
+          exp_month: props.expMonth?.toString(),
+          exp_year: props.expYear?.toString(),
+          metadata: props.metadata,
         };
 
         card = (await stripe.customers.updateSource(
