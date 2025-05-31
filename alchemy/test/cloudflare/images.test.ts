@@ -21,7 +21,7 @@ describe("Images Binding", () => {
     try {
       worker = await Worker(workerName, {
         name: workerName,
-        entrypoint: path.join(import.meta.dirname, "simple-handler.ts"),
+        entrypoint: path.join(import.meta.dirname, "images-handler.ts"),
         format: "esm",
         url: true,
         bindings: {
