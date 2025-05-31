@@ -57,14 +57,6 @@ export interface UpstashRedisProps {
    * Email to use (overrides environment variable)
    */
   email?: string;
-
-  /**
-   * Whether to adopt an existing Redis database if it already exists
-   * If true and a database with the same name exists, it will be adopted rather than creating a new one
-   *
-   * @default false
-   */
-  adopt?: boolean;
 }
 
 /**

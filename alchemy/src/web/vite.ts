@@ -121,14 +121,6 @@ export interface ViteProjectProps {
    * @default true
    */
   delete?: boolean;
-
-  /**
-   * Whether to adopt an existing Vite project if it already exists
-   * If true and a project with the same name exists, it will be adopted rather than creating a new one
-   *
-   * @default false
-   */
-  adopt?: boolean;
 }
 
 export interface ViteProject extends ViteProjectProps, Resource {

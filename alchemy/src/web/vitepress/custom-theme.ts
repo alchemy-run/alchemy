@@ -77,14 +77,6 @@ export interface CustomThemeProps {
   prompt: string;
 
   /**
-   * Whether to adopt an existing custom theme if it already exists
-   * If true and a theme with the same configuration exists, it will be adopted rather than creating a new one
-   *
-   * @default false
-   */
-  adopt?: boolean;
-
-  /**
    * Optional extension to the built-in system prompt
    */
   systemPromptExtension?: string;

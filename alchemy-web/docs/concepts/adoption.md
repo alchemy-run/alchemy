@@ -54,12 +54,11 @@ if (this.phase === "create") {
 
 ## Supported Resources
 
-Most Alchemy resources support adoption, including:
+Alchemy resources that support adoption include:
 
-- **Cloudflare**: R2 Buckets, D1 Databases, Workers
-- **AWS**: S3 Buckets, SES configurations  
+- **Cloudflare**: R2 Buckets, D1 Databases, KV Namespaces, Vectorize Indexes, Workers, Queues
 - **Sentry**: Teams, Projects, Client Keys
-- **Web**: Vite projects, Astro projects, Shadcn components
+- **AWS**: Resources managed through AWS Cloud Control API
 
 ## Related Concepts
 

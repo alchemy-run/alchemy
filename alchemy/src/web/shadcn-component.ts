@@ -30,14 +30,6 @@ export interface ShadcnComponentProps {
    * @default false
    */
   silent?: boolean;
-
-  /**
-   * Whether to adopt an existing Shadcn component if it already exists
-   * If true and a component with the same name exists, it will be adopted rather than creating a new one
-   *
-   * @default false
-   */
-  adopt?: boolean;
 }
 
 export interface ShadcnComponent extends ShadcnComponentProps, Resource {

@@ -148,14 +148,6 @@ export interface AstroProjectProps {
    * Additional scripts to add to package.json
    */
   scripts?: Record<string, string>;
-
-  /**
-   * Whether to adopt an existing Astro project if it already exists
-   * If true and a project with the same name exists, it will be adopted rather than creating a new one
-   *
-   * @default false
-   */
-  adopt?: boolean;
 }
 
 /**

@@ -86,14 +86,6 @@ export interface VitePressProjectProps {
    * @default {@link name}
    */
   dir?: string;
-
-  /**
-   * Whether to adopt an existing VitePress project if it already exists
-   * If true and a project with the same name exists, it will be adopted rather than creating a new one
-   *
-   * @default false
-   */
-  adopt?: boolean;
 }
 
 export interface VitePressProject extends VitePressProjectProps, Resource {

@@ -56,14 +56,6 @@ export interface ImportDnsRecordsProps {
    * Bump the resource to force a new import
    */
   bump?: number;
-
-  /**
-   * Whether to adopt existing DNS records if they already exist
-   * If true and DNS records for the domain exist, they will be adopted rather than creating new ones
-   *
-   * @default false
-   */
-  adopt?: boolean;
 }
 
 /**

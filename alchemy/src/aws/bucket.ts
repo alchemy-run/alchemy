@@ -29,14 +29,6 @@ export interface BucketProps {
    * Each tag is a key-value pair.
    */
   tags?: Record<string, string>;
-
-  /**
-   * Whether to adopt an existing S3 bucket if it already exists
-   * If true and a bucket with the same name exists, it will be adopted rather than creating a new one
-   *
-   * @default false
-   */
-  adopt?: boolean;
 }
 
 /**
