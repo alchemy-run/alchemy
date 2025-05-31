@@ -21,7 +21,10 @@ describe("VersionMetadata Binding", () => {
     try {
       worker = await Worker(workerName, {
         name: workerName,
-        entrypoint: path.join(import.meta.dirname, "version-metadata-handler.ts"),
+        entrypoint: path.join(
+          import.meta.dirname,
+          "version-metadata-handler.ts",
+        ),
         format: "esm",
         url: true,
         bindings: {

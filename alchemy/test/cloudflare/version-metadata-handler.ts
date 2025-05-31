@@ -3,10 +3,7 @@ export default {
     if (env.IMAGES && env.IMAGES.type === "images") {
       return new Response("Images binding available", { status: 200 });
     }
-    if (
-      env.VERSION_METADATA &&
-      env.VERSION_METADATA.type === "version_metadata"
-    ) {
+    if (env.VERSION_METADATA) {
       return new Response("VersionMetadata binding available", { status: 200 });
     }
     return new Response("Binding not found", { status: 500 });
