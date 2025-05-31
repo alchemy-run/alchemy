@@ -36,5 +36,6 @@ export * from "./vite.ts";
 export * from "./website.ts";
 export * from "./worker.ts";
 export { Workflow } from "./workflow.ts";
+export * from "./version-metadata.ts";
 export * from "./wrangler.json.ts";
 export * from "./zone.ts";

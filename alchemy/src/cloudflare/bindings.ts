@@ -21,6 +21,7 @@ import type { VectorizeIndexResource } from "./vectorize-index.ts";
 import type { WorkerStub } from "./worker-stub.ts";
 import type { Worker } from "./worker.ts";
 import type { Workflow } from "./workflow.ts";
+import type { VersionMetadata } from "./version-metadata.ts";
 
 export type Bindings = {
   [bindingName: string]: Binding;
@@ -58,6 +59,7 @@ export type Binding =
   | WorkerStub
   | Workflow
   | BrowserRendering
+  | VersionMetadata
   | Self
   | Json;
 

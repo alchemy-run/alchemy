@@ -513,6 +513,8 @@ function processBindings(
       });
     } else if (binding.type === "ai_gateway") {
       // no-op
+    } else if (binding.type === "version_metadata") {
+      // no-op
     } else if (binding.type === "hyperdrive") {
       const password =
         "password" in binding.origin
