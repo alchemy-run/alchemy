@@ -21,7 +21,7 @@ import type { VectorizeIndexResource } from "./vectorize-index.ts";
 import type { WorkerStub } from "./worker-stub.ts";
 import type { Worker } from "./worker.ts";
 import type { Workflow } from "./workflow.ts";
-import type { ImagesResource } from "./images.ts";
+import type { Images } from "./images.ts";
 
 export type Bindings = {
   [bindingName: string]: Binding;
@@ -44,7 +44,7 @@ export type Binding =
   | AnalyticsEngineDataset
   | DurableObjectNamespace<Rpc.DurableObjectBranded | undefined>
   | HyperdriveResource
-  | ImagesResource
+  | Images
   | KVNamespaceResource
   | PipelineResource
   | QueueResource

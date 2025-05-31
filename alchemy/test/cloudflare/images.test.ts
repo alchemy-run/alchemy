@@ -1,30 +1,43 @@
 import { describe, expect } from "bun:test";
 import { alchemy } from "../../src/alchemy.js";
-import { destroy } from "../../src/destroy.js";
 import { Images } from "../../src/cloudflare/images.js";
+import { Worker } from "../../src/cloudflare/worker.js";
+import { destroy } from "../../src/destroy.js";
 import { BRANCH_PREFIX } from "../util.js";
+
+import path from "node:path";
 import "../../src/test/bun.js";
 
 const test = alchemy.test(import.meta, {
-  prefix: BRANCH_PREFIX
+  prefix: BRANCH_PREFIX,
 });
 
-describe("Images Resource", () => {
-  const testId = `${BRANCH_PREFIX}-test-images`;
+describe("Images Binding", () => {
+  test("create worker with images binding", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-images-worker`;
 
-  test("create and delete images binding", async (scope) => {
-    let images: Awaited<ReturnType<typeof Images>> | undefined;
+    let worker: Worker | undefined;
+
     try {
-      images = await Images(testId, {});
+      worker = await Worker(workerName, {
+        name: workerName,
+        entrypoint: path.join(import.meta.dirname, "simple-handler.ts"),
+        format: "esm",
+        url: true,
+        bindings: {
+          IMAGES: new Images(),
+        },
+      });
 
-      expect(images.id).toEqual(testId);
-      expect(images.type).toEqual("images");
-      expect(images.createdAt).toBeTruthy();
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+      expect(worker.url).toBeTruthy();
 
-      expect(images).toBeTruthy();
-    } catch(err) {
-      console.log(err);
-      throw err;
+      const response = await fetch(worker.url!);
+      expect(response.status).toEqual(200);
+      const text = await response.text();
+      expect(text).toContain("Images binding available");
     } finally {
       await destroy(scope);
     }
