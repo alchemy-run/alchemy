@@ -44,7 +44,7 @@ export async function bundleWorkerScript<B extends Bindings>(
       props.rules ?? [
         {
           type: "ESModule",
-          globs: ["**/*.js", "**/*.mjs"],
+          globs: ["**/*.js", "**/*.mjs", "**/*.wasm"],
         },
       ]
     ).flatMap((rule) => rule.globs);

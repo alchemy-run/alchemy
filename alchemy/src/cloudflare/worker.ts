@@ -1005,24 +1005,30 @@ export async function putWorker(
       // Create FormData for the upload
       const formData = new FormData();
 
-      function addFile(fileName: string, content: string) {
+      function addFile(fileName: string, content: string, contentType: string) {
         formData.append(
           fileName,
           new Blob([content], {
-            type: scriptMetadata.main_module
-              ? "application/javascript+module"
-              : "application/javascript",
+            type: contentType,
           }),
           fileName,
         );
       }
 
+      const jsContentType = scriptMetadata.main_module
+        ? "application/javascript+module"
+        : "application/javascript";
+
       if (typeof scriptBundle === "string") {
-        addFile(scriptName, scriptBundle);
+        addFile(scriptName, scriptBundle, jsContentType);
       } else {
         for (const [fileName, content] of Object.entries(scriptBundle)) {
           // Add the actual script content as a named file part
-          addFile(fileName, content);
+          addFile(
+            fileName,
+            content,
+            fileName.endsWith(".wasm") ? "application/wasm" : jsContentType,
+          );
         }
       }
 
