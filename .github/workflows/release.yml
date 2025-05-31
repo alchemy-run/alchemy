@@ -1,0 +1,66 @@
+name: Release Workflow
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.head_commit.message, 'chore(release):')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from commit message
+        id: version
+        run: |
+          VERSION=$(echo "${{ github.event.head_commit.message }}" | sed -E 's/^chore\(release\): //')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create and push tag
+        if: steps.version.outputs.version != ''
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
+          git push --tags
+
+      - name: Set node
+        uses: actions/setup-node@v4
+        if: steps.version.outputs.version != ''
+        with:
+          registry-url: https://registry.npmjs.org/
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        if: steps.version.outputs.version != ''
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        if: steps.version.outputs.version != ''
+        run: bun install
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.version != ''
+        run: bunx changelogithub
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create NPM Release
+        if: steps.version.outputs.version != ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+        run: |
+          npm config set '//registry.npmjs.org/:_authToken' "${NODE_AUTH_TOKEN}"
+          bun run publish:npm
