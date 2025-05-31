@@ -16,7 +16,6 @@ import type { VectorizeIndexResource as _VectorizeIndex } from "./vectorize-inde
 import type { Worker as _Worker } from "./worker.ts";
 import type { Workflow as _Workflow } from "./workflow.ts";
 import type { Images as _Images } from "./images.ts";
-import type { ImagesBinding } from "@cloudflare/workers-types";
 
 export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
   infer O
