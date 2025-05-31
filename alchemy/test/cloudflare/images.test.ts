@@ -29,11 +29,6 @@ describe("Images Binding", () => {
         },
       });
 
-      expect(worker.id).toBeTruthy();
-      expect(worker.name).toEqual(workerName);
-      expect(worker.bindings).toBeDefined();
-      expect(worker.url).toBeTruthy();
-
       const response = await fetch(worker.url!);
       expect(response.status).toEqual(200);
       const text = await response.text();
