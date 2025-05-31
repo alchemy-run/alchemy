@@ -1,6 +1,8 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 /**
  * Restrictions for promotion code usage
@@ -56,6 +58,11 @@ export interface PromotionCodeProps {
    * Settings that restrict the redemption of the promotion code
    */
   restrictions?: PromotionCodeRestrictions;
+
+  /**
+   * API key to use (overrides environment variable)
+   */
+  apiKey?: Secret;
 }
 
 /**
@@ -139,12 +146,7 @@ export const PromotionCode = Resource(
     _id: string,
     props: PromotionCodeProps,
   ): Promise<PromotionCode> {
-    const apiKey = process.env.STRIPE_API_KEY;
-    if (!apiKey) {
-      throw new Error("STRIPE_API_KEY environment variable is required");
-    }
-
-    const stripe = new Stripe(apiKey);
+    const stripe = createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -152,7 +154,7 @@ export const PromotionCode = Resource(
           await stripe.promotionCodes.update(this.output.id, { active: false });
         }
       } catch (error) {
-        console.error("Error deactivating promotion code:", error);
+        handleStripeDeleteError(error, "PromotionCode", this.output?.id);
       }
       return this.destroy();
     }

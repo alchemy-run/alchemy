@@ -1,6 +1,8 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 /**
  * Properties for creating a Stripe product feature
@@ -15,6 +17,11 @@ export interface ProductFeatureProps {
    * The ID of the entitlements feature to attach to the product
    */
   entitlementFeature: string;
+
+  /**
+   * API key to use (overrides environment variable)
+   */
+  apiKey?: Secret;
 }
 
 /**
@@ -80,12 +87,7 @@ export const ProductFeature = Resource(
     _id: string,
     props: ProductFeatureProps,
   ): Promise<ProductFeature> {
-    const apiKey = process.env.STRIPE_API_KEY;
-    if (!apiKey) {
-      throw new Error("STRIPE_API_KEY environment variable is required");
-    }
-
-    const stripe = new Stripe(apiKey);
+    const stripe = createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -96,7 +98,7 @@ export const ProductFeature = Resource(
           );
         }
       } catch (error) {
-        console.error("Error deleting product feature:", error);
+        handleStripeDeleteError(error, "ProductFeature", this.output?.id);
       }
       return this.destroy();
     }
@@ -117,16 +119,8 @@ export const ProductFeature = Resource(
         object: productFeature.object,
         product: props.product,
         entitlementFeature: props.entitlementFeature,
-        entitlementFeatureObject: productFeature.entitlement_feature
-          ? {
-              id: productFeature.entitlement_feature.id,
-              name: productFeature.entitlement_feature.name,
-              lookupKey:
-                productFeature.entitlement_feature.lookup_key || undefined,
-              metadata:
-                productFeature.entitlement_feature.metadata || undefined,
-            }
-          : undefined,
+        entitlementFeatureObject:
+          productFeature.entitlement_feature || undefined,
         livemode: productFeature.livemode,
       });
     } catch (error) {

@@ -1,6 +1,8 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 /**
  * Customer address information
@@ -153,6 +155,11 @@ export interface CustomerProps {
    * ID of the test clock to attach to the customer
    */
   testClock?: string;
+
+  /**
+   * API key to use (overrides environment variable)
+   */
+  apiKey?: Secret;
 }
 
 /**
@@ -269,12 +276,7 @@ export const Customer = Resource(
     _id: string,
     props: CustomerProps,
   ): Promise<Customer> {
-    const apiKey = process.env.STRIPE_API_KEY;
-    if (!apiKey) {
-      throw new Error("STRIPE_API_KEY environment variable is required");
-    }
-
-    const stripe = new Stripe(apiKey);
+    const stripe = createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -282,7 +284,7 @@ export const Customer = Resource(
           await stripe.customers.del(this.output.id);
         }
       } catch (error) {
-        console.error("Error deleting customer:", error);
+        handleStripeDeleteError(error, "Customer", this.output?.id);
       }
       return this.destroy();
     }

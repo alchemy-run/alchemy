@@ -1,4 +1,5 @@
 export * from "./card.ts";
+export * from "./client.ts";
 export * from "./coupon.ts";
 export * from "./customer.ts";
 export * from "./entitlements-feature.ts";

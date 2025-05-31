@@ -1,6 +1,8 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { createStripeClient } from "./client.ts";
 
 /**
  * Properties for creating a Stripe file
@@ -31,6 +33,11 @@ export interface FileProps {
      */
     metadata?: Record<string, string>;
   };
+
+  /**
+   * API key to use (overrides environment variable)
+   */
+  apiKey?: Secret;
 }
 
 /**
@@ -140,12 +147,7 @@ export const File = Resource(
     _id: string,
     props: FileProps,
   ): Promise<File> {
-    const apiKey = process.env.STRIPE_API_KEY;
-    if (!apiKey) {
-      throw new Error("STRIPE_API_KEY environment variable is required");
-    }
-
-    const stripe = new Stripe(apiKey);
+    const stripe = createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       return this.destroy();

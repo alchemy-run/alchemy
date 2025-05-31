@@ -1,6 +1,8 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 /**
  * Properties for creating a Stripe tax rate
@@ -46,6 +48,10 @@ export interface TaxRateProps {
    * The high-level tax type, such as vat or sales_tax
    */
   taxType?: Stripe.TaxRateCreateParams.TaxType;
+  /**
+   * API key to use (overrides environment variable)
+   */
+  apiKey?: Secret;
 }
 
 /**
@@ -127,12 +133,7 @@ export const TaxRate = Resource(
     _id: string,
     props: TaxRateProps,
   ): Promise<TaxRate> {
-    const apiKey = process.env.STRIPE_API_KEY;
-    if (!apiKey) {
-      throw new Error("STRIPE_API_KEY environment variable is required");
-    }
-
-    const stripe = new Stripe(apiKey);
+    const stripe = createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -140,7 +141,7 @@ export const TaxRate = Resource(
           await stripe.taxRates.update(this.output.id, { active: false });
         }
       } catch (error) {
-        console.error("Error deactivating tax rate:", error);
+        handleStripeDeleteError(error, "TaxRate", this.output?.id);
       }
       return this.destroy();
     }

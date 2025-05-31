@@ -1,6 +1,8 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 type CouponDuration = Stripe.CouponCreateParams.Duration;
 
@@ -67,6 +69,11 @@ export interface CouponProps {
    * Set of key-value pairs that you can attach to an object
    */
   metadata?: Record<string, string>;
+
+  /**
+   * API key to use (overrides environment variable)
+   */
+  apiKey?: Secret;
 }
 
 /**
@@ -146,12 +153,7 @@ export const Coupon = Resource(
     _id: string,
     props: CouponProps,
   ): Promise<Coupon> {
-    const apiKey = process.env.STRIPE_API_KEY;
-    if (!apiKey) {
-      throw new Error("STRIPE_API_KEY environment variable is required");
-    }
-
-    const stripe = new Stripe(apiKey);
+    const stripe = createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -159,7 +161,7 @@ export const Coupon = Resource(
           await stripe.coupons.del(this.output.id);
         }
       } catch (error) {
-        console.error("Error deleting coupon:", error);
+        handleStripeDeleteError(error, "Coupon", this.output?.id);
       }
       return this.destroy();
     }

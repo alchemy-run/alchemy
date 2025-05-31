@@ -1,6 +1,8 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 /**
  * Business profile information for the portal
@@ -21,103 +23,143 @@ export interface PortalConfigurationBusinessProfile {
 }
 
 /**
+ * Customer update feature configuration
+ */
+export interface PortalCustomerUpdateFeature {
+  /**
+   * The types of customer update that are supported
+   */
+  allowedUpdates?: Array<Stripe.BillingPortal.ConfigurationCreateParams.Features.CustomerUpdate.AllowedUpdate>;
+  /**
+   * Whether the feature is enabled
+   */
+  enabled?: boolean;
+}
+
+/**
+ * Invoice history feature configuration
+ */
+export interface PortalInvoiceHistoryFeature {
+  /**
+   * Whether the feature is enabled
+   */
+  enabled?: boolean;
+}
+
+/**
+ * Payment method update feature configuration
+ */
+export interface PortalPaymentMethodUpdateFeature {
+  /**
+   * Whether the feature is enabled
+   */
+  enabled?: boolean;
+}
+
+/**
+ * Subscription cancellation reason configuration
+ */
+export interface PortalSubscriptionCancellationReason {
+  /**
+   * Whether the feature is enabled
+   */
+  enabled?: boolean;
+  /**
+   * Which cancellation reasons will be given as options to the customer
+   */
+  options?: Array<Stripe.BillingPortal.ConfigurationCreateParams.Features.SubscriptionCancel.CancellationReason.Option>;
+}
+
+/**
+ * Subscription cancel feature configuration
+ */
+export interface PortalSubscriptionCancelFeature {
+  /**
+   * Cancellation reason configuration
+   */
+  cancellationReason?: PortalSubscriptionCancellationReason;
+  /**
+   * Whether the feature is enabled
+   */
+  enabled?: boolean;
+  /**
+   * Whether to cancel subscriptions immediately or at the end of the billing period
+   */
+  mode?: Stripe.BillingPortal.ConfigurationCreateParams.Features.SubscriptionCancel.Mode;
+  /**
+   * Whether to create prorations when canceling subscriptions
+   */
+  prorationBehavior?: Stripe.BillingPortal.ConfigurationCreateParams.Features.SubscriptionCancel.ProrationBehavior;
+}
+
+/**
+ * Subscription pause feature configuration
+ */
+export interface PortalSubscriptionPauseFeature {
+  /**
+   * Whether the feature is enabled
+   */
+  enabled?: boolean;
+}
+
+/**
+ * Subscription update product configuration
+ */
+export interface PortalSubscriptionUpdateProduct {
+  product: string;
+  prices?: string[];
+}
+
+/**
+ * Subscription update feature configuration
+ */
+export interface PortalSubscriptionUpdateFeature {
+  /**
+   * The types of subscription updates that are supported for items
+   */
+  defaultAllowedUpdates?: Array<Stripe.BillingPortal.ConfigurationCreateParams.Features.SubscriptionUpdate.DefaultAllowedUpdate>;
+  /**
+   * Whether the feature is enabled
+   */
+  enabled?: boolean;
+  /**
+   * The list of products that support subscription updates
+   */
+  products?: Array<PortalSubscriptionUpdateProduct>;
+  /**
+   * Determines how to handle prorations resulting from subscription updates
+   */
+  prorationBehavior?: Stripe.BillingPortal.ConfigurationCreateParams.Features.SubscriptionUpdate.ProrationBehavior;
+}
+
+/**
  * Features available in the customer portal
  */
 export interface PortalConfigurationFeatures {
   /**
    * Information about updating the customer details in the portal
    */
-  customerUpdate?: {
-    /**
-     * The types of customer update that are supported
-     */
-    allowedUpdates?: Array<Stripe.BillingPortal.ConfigurationCreateParams.Features.CustomerUpdate.AllowedUpdate>;
-    /**
-     * Whether the feature is enabled
-     */
-    enabled?: boolean;
-  };
+  customerUpdate?: PortalCustomerUpdateFeature;
   /**
    * Information about showing the billing history in the portal
    */
-  invoiceHistory?: {
-    /**
-     * Whether the feature is enabled
-     */
-    enabled?: boolean;
-  };
+  invoiceHistory?: PortalInvoiceHistoryFeature;
   /**
    * Information about updating payment methods in the portal
    */
-  paymentMethodUpdate?: {
-    /**
-     * Whether the feature is enabled
-     */
-    enabled?: boolean;
-  };
+  paymentMethodUpdate?: PortalPaymentMethodUpdateFeature;
   /**
    * Information about canceling subscriptions in the portal
    */
-  subscriptionCancel?: {
-    /**
-     * Whether to cancel subscriptions immediately or at the end of the billing period
-     */
-    cancellationReason?: {
-      /**
-       * Whether the feature is enabled
-       */
-      enabled?: boolean;
-      /**
-       * Which cancellation reasons will be given as options to the customer
-       */
-      options?: Array<Stripe.BillingPortal.ConfigurationCreateParams.Features.SubscriptionCancel.CancellationReason.Option>;
-    };
-    /**
-     * Whether the feature is enabled
-     */
-    enabled?: boolean;
-    /**
-     * Whether to cancel subscriptions immediately or at the end of the billing period
-     */
-    mode?: Stripe.BillingPortal.ConfigurationCreateParams.Features.SubscriptionCancel.Mode;
-    /**
-     * Whether to create prorations when canceling subscriptions
-     */
-    prorationBehavior?: Stripe.BillingPortal.ConfigurationCreateParams.Features.SubscriptionCancel.ProrationBehavior;
-  };
+  subscriptionCancel?: PortalSubscriptionCancelFeature;
   /**
    * Information about pausing subscriptions in the portal
    */
-  subscriptionPause?: {
-    /**
-     * Whether the feature is enabled
-     */
-    enabled?: boolean;
-  };
+  subscriptionPause?: PortalSubscriptionPauseFeature;
   /**
    * Information about updating subscriptions in the portal
    */
-  subscriptionUpdate?: {
-    /**
-     * The types of subscription updates that are supported for items
-     */
-    defaultAllowedUpdates?: Array<Stripe.BillingPortal.ConfigurationCreateParams.Features.SubscriptionUpdate.DefaultAllowedUpdate>;
-    /**
-     * Whether the feature is enabled
-     */
-    enabled?: boolean;
-    /**
-     * The list of products that support subscription updates
-     */
-    products?: Array<{
-      product: string;
-      prices?: string[];
-    }>;
-    /**
-     * Determines how to handle prorations resulting from subscription updates
-     */
-    prorationBehavior?: Stripe.BillingPortal.ConfigurationCreateParams.Features.SubscriptionUpdate.ProrationBehavior;
-  };
+  subscriptionUpdate?: PortalSubscriptionUpdateFeature;
 }
 
 /**
@@ -140,6 +182,11 @@ export interface PortalConfigurationProps {
    * Set of key-value pairs that you can attach to an object
    */
   metadata?: Record<string, string>;
+
+  /**
+   * API key to use (overrides environment variable)
+   */
+  apiKey?: Secret;
 }
 
 /**
@@ -255,12 +302,7 @@ export const PortalConfiguration = Resource(
     _id: string,
     props: PortalConfigurationProps,
   ): Promise<PortalConfiguration> {
-    const apiKey = process.env.STRIPE_API_KEY;
-    if (!apiKey) {
-      throw new Error("STRIPE_API_KEY environment variable is required");
-    }
-
-    const stripe = new Stripe(apiKey);
+    const stripe = createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -270,7 +312,7 @@ export const PortalConfiguration = Resource(
           });
         }
       } catch (error) {
-        console.error("Error deactivating portal configuration:", error);
+        handleStripeDeleteError(error, "PortalConfiguration", this.output?.id);
       }
       return this.destroy();
     }

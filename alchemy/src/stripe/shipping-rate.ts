@@ -1,6 +1,8 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 /**
  * Delivery estimate for shipping rate
@@ -100,6 +102,11 @@ export interface ShippingRateProps {
    * The type of calculation to use on the shipping rate
    */
   type?: "fixed_amount";
+
+  /**
+   * API key to use (overrides environment variable)
+   */
+  apiKey?: Secret;
 }
 
 /**
@@ -192,12 +199,7 @@ export const ShippingRate = Resource(
     _id: string,
     props: ShippingRateProps,
   ): Promise<ShippingRate> {
-    const apiKey = process.env.STRIPE_API_KEY;
-    if (!apiKey) {
-      throw new Error("STRIPE_API_KEY environment variable is required");
-    }
-
-    const stripe = new Stripe(apiKey);
+    const stripe = createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -205,7 +207,7 @@ export const ShippingRate = Resource(
           await stripe.shippingRates.update(this.output.id, { active: false });
         }
       } catch (error) {
-        console.error("Error deactivating shipping rate:", error);
+        handleStripeDeleteError(error, "ShippingRate", this.output?.id);
       }
       return this.destroy();
     }
