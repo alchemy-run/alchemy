@@ -3,10 +3,8 @@ import * as path from "node:path";
 import { alchemy } from "../../src/alchemy.js";
 import { Worker } from "../../src/cloudflare/worker.js";
 import { destroy } from "../../src/destroy.js";
-import { BRANCH_PREFIX } from "../util.js";
-
-// Import bun test utilities
 import "../../src/test/bun.js";
+import { BRANCH_PREFIX } from "../util.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -85,4 +83,30 @@ describe("Bundle Worker Test", () => {
       await destroy(scope);
     }
   }, 120000); // Increased timeout for bundling and deployment
+
+  test("should return a list of imported files when noBundle is true", async (scope) => {
+    try {
+      const worker = await Worker(`${BRANCH_PREFIX}-test-no-bundle`, {
+        url: true,
+        entrypoint: path.resolve(__dirname, "nobundle", "index.js"),
+        format: "esm",
+        noBundle: true,
+        compatibilityDate: "2025-05-30",
+        compatibilityFlags: [],
+        adopt: true,
+      });
+
+      const response = await fetch(worker.url!);
+      expect(response.status).toEqual(200);
+      const text = await response.text();
+      expect(text).toEqual(
+        JSON.stringify({
+          foo: "foo",
+          bar: "bar",
+        }),
+      );
+    } finally {
+      await destroy(scope);
+    }
+  });
 });

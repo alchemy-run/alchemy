@@ -67,12 +67,6 @@ export interface BundleProps extends Partial<esbuild.BuildOptions> {
    * neutral: Platform-agnostic
    */
   platform?: "browser" | "node" | "neutral";
-
-  /**
-   * Additional esbuild options
-   * Any other valid esbuild BuildOptions
-   */
-  options?: Partial<esbuild.BuildOptions>;
 }
 
 /**
@@ -185,10 +179,9 @@ export const Bundle = Resource(
 );
 
 export async function bundle(props: BundleProps) {
-  const { entryPoint, options: _, ...rest } = props;
+  const { entryPoint, ...rest } = props;
   const options = {
     ...rest,
-    ...props.options,
     write: !(props.outdir === undefined && props.outfile === undefined),
     // write:
     //   props.outdir === undefined && props.outfile === undefined ? false : true,
@@ -201,7 +194,7 @@ export async function bundle(props: BundleProps) {
     target: props.target,
     minify: props.minify,
     sourcemap: props.sourcemap,
-    external: [...(props.external ?? []), ...(props.options?.external ?? [])],
+    external: props.external,
     platform: props.platform,
     metafile: true,
   };

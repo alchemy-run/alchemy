@@ -1,4 +1,5 @@
-import fs from "node:fs/promises";
+import fs, { glob } from "node:fs/promises";
+import path from "node:path";
 import { Bundle } from "../../esbuild/bundle.ts";
 import type { Bindings } from "../bindings.ts";
 import type { WorkerProps } from "../worker.ts";
@@ -12,13 +13,17 @@ import { getNodeJSCompatMode } from "./nodejs-compat-mode.ts";
 import { nodeJsCompatPlugin } from "./nodejs-compat.ts";
 import { wasmPlugin } from "./wasm-plugin.ts";
 
+export type NoBundleResult = {
+  [fileName: string]: string;
+};
+
 export async function bundleWorkerScript<B extends Bindings>(
   props: WorkerProps<B> & {
     entrypoint: string;
     compatibilityDate: string;
     compatibilityFlags: string[];
   },
-) {
+): Promise<string | NoBundleResult> {
   const projectRoot = props.projectRoot ?? process.cwd();
 
   const nodeJsCompatMode = await getNodeJSCompatMode(
@@ -33,6 +38,41 @@ export async function bundleWorkerScript<B extends Bindings>(
   }
   const main = props.entrypoint;
 
+  if (props.noBundle) {
+    const rootDir = path.dirname(path.resolve(main));
+    const rules = (
+      props.rules ?? [
+        {
+          type: "ESModule",
+          globs: ["**/*.js", "**/*.mjs"],
+        },
+      ]
+    ).flatMap((rule) => rule.globs);
+    const files = Array.from(
+      new Set(
+        (
+          await Promise.all(
+            rules.map((rule) =>
+              Array.fromAsync(
+                glob(rule, {
+                  cwd: rootDir,
+                }),
+              ),
+            ),
+          )
+        ).flat(),
+      ),
+    );
+    return Object.fromEntries(
+      await Promise.all(
+        files.map(async (file) => [
+          file,
+          await fs.readFile(path.resolve(rootDir, file), "utf-8"),
+        ]),
+      ),
+    );
+  }
+
   try {
     const bundle = await Bundle("bundle", {
       entryPoint: main,
@@ -42,34 +82,29 @@ export async function bundleWorkerScript<B extends Bindings>(
       minify: false,
       ...(props.bundle || {}),
       conditions: ["workerd", "worker", "browser"],
-      options: {
-        absWorkingDir: projectRoot,
-        ...(props.bundle?.options || {}),
-        keepNames: true, // Important for Durable Object classes
-        loader: {
-          ".sql": "text",
-          ".json": "json",
-          ...props.bundle?.loader,
-          ...props.bundle?.options?.loader,
-        },
-        plugins: [
-          wasmPlugin,
-          ...(props.bundle?.plugins ?? []),
-          ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
-          ...(props.bundle?.alias
-            ? [
-                createAliasPlugin({
-                  alias: props.bundle?.alias,
-                  projectRoot,
-                }),
-              ]
-            : []),
-        ],
+      absWorkingDir: projectRoot,
+      keepNames: true, // Important for Durable Object classes
+      loader: {
+        ".sql": "text",
+        ".json": "json",
+        ...props.bundle?.loader,
       },
+      plugins: [
+        wasmPlugin,
+        ...(props.bundle?.plugins ?? []),
+        ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
+        ...(props.bundle?.alias
+          ? [
+              createAliasPlugin({
+                alias: props.bundle?.alias,
+                projectRoot,
+              }),
+            ]
+          : []),
+      ],
       external: [
         ...(nodeJsCompatMode === "als" ? external_als : external),
         ...(props.bundle?.external ?? []),
-        ...(props.bundle?.options?.external ?? []),
       ],
     });
     if (bundle.content) {

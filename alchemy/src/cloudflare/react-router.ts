@@ -18,7 +18,7 @@ export async function ReactRouter<B extends Bindings>(
   const defaultAssets = path.join("build", "client");
   return Website(id, {
     ...props,
-    // Alchemy should bundle the result of `vite built`, not the user's main
+    // Alchemy should bundle the result of `vite build`, not the user's main
     // TODO: we probably need bundling to properly handle WASM/rules
     main: path.join(props.cwd ?? process.cwd(), "build", "server", "index.js"),
     wrangler: {

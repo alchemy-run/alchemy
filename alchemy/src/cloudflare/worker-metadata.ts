@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { Context } from "../context.ts";
 import { slugify } from "../util/slugify.ts";
 import {
@@ -525,7 +526,11 @@ export async function prepareWorkerMetadata<B extends Bindings>(
 
   // Determine if we're using ESM or service worker format
   const isEsModule = props.format !== "cjs"; // Default to ESM unless CJS is specified
-  const scriptName = isEsModule ? "worker.js" : "script";
+  const scriptName = props.noBundle
+    ? path.basename(props.entrypoint!)
+    : isEsModule
+      ? "worker.js"
+      : "script";
 
   if (isEsModule) {
     // For ES modules format
