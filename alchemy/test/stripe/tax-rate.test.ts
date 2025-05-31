@@ -39,10 +39,12 @@ describe("Stripe TaxRate Resource", () => {
       },
     });
 
-    expect(taxRate.displayName).toBe("Test Tax Rate");
-    expect(taxRate.percentage).toBe(8.5);
-    expect(taxRate.inclusive).toBe(false);
-    expect(taxRate.active).toBe(true);
+    expect(taxRate).toMatchObject({
+      displayName: "Test Tax Rate",
+      percentage: 8.5,
+      inclusive: false,
+      active: true,
+    });
 
     const stripeTaxRate = await stripeClient.taxRates.retrieve(taxRate.id);
     expect(stripeTaxRate.id).toBe(taxRate.id);
@@ -63,8 +65,10 @@ describe("Stripe TaxRate Resource", () => {
       },
     });
 
-    expect(updatedTaxRate.displayName).toBe("Updated Test Tax Rate");
-    expect(updatedTaxRate.active).toBe(false);
+    expect(updatedTaxRate).toMatchObject({
+      displayName: "Updated Test Tax Rate",
+      active: false,
+    });
 
     await destroy(scope);
 

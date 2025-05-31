@@ -36,10 +36,12 @@ describe("Stripe Coupon Resource", () => {
       },
     });
 
-    expect(coupon.id).toBe(couponId);
-    expect(coupon.duration).toBe("once");
-    expect(coupon.percentOff).toBe(25);
-    expect(coupon.name).toBe("Test Coupon");
+    expect(coupon).toMatchObject({
+      id: couponId,
+      duration: "once",
+      percentOff: 25,
+      name: "Test Coupon",
+    });
 
     const stripeCoupon = await stripeClient.coupons.retrieve(coupon.id);
     expect(stripeCoupon.id).toBe(coupon.id);
@@ -57,8 +59,12 @@ describe("Stripe Coupon Resource", () => {
       },
     });
 
-    expect(updatedCoupon.name).toBe("Updated Test Coupon");
-    expect(updatedCoupon.metadata?.updated).toBe("true");
+    expect(updatedCoupon).toMatchObject({
+      name: "Updated Test Coupon",
+      metadata: expect.objectContaining({
+        updated: "true",
+      }),
+    });
 
     await destroy(scope);
 

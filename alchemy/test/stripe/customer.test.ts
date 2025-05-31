@@ -42,10 +42,14 @@ describe("Stripe Customer Resource", () => {
       },
     });
 
-    expect(customer.email).toBe("test@example.com");
-    expect(customer.name).toBe("Test Customer");
-    expect(customer.description).toBe("A test customer");
-    expect(customer.address?.line1).toBe("123 Test St");
+    expect(customer).toMatchObject({
+      email: "test@example.com",
+      name: "Test Customer",
+      description: "A test customer",
+      address: expect.objectContaining({
+        line1: "123 Test St",
+      }),
+    });
 
     const stripeCustomer = (await stripeClient.customers.retrieve(
       customer.id,
@@ -64,8 +68,10 @@ describe("Stripe Customer Resource", () => {
       },
     });
 
-    expect(updatedCustomer.email).toBe("updated@example.com");
-    expect(updatedCustomer.name).toBe("Updated Test Customer");
+    expect(updatedCustomer).toMatchObject({
+      email: "updated@example.com",
+      name: "Updated Test Customer",
+    });
 
     await destroy(scope);
 

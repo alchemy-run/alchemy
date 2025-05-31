@@ -2,22 +2,64 @@ import Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 
+/**
+ * Properties for creating a Stripe file
+ */
 export interface FileProps {
+  /**
+   * A file to upload. The file should follow the specifications of RFC 2388
+   */
   file: any;
+  /**
+   * The purpose of the uploaded file
+   */
   purpose: Stripe.FileCreateParams.Purpose;
+  /**
+   * Optional parameters for the file link data
+   */
   fileLink?: {
+    /**
+     * Whether to create a file link for the uploaded file
+     */
     create: boolean;
+    /**
+     * The time at which the file link expires
+     */
     expiresAt?: number;
+    /**
+     * Set of key-value pairs that you can attach to the file link
+     */
     metadata?: Record<string, string>;
   };
 }
 
+/**
+ * Output from the Stripe file
+ */
 export interface File extends Resource<"stripe::File"> {
+  /**
+   * The ID of the file
+   */
   id: string;
+  /**
+   * String representing the object's type
+   */
   object: "file";
+  /**
+   * Time at which the object was created
+   */
   created: number;
+  /**
+   * The time at which the file expires and is no longer available
+   */
   expiresAt?: number;
+  /**
+   * A filename for the file, suitable for saving to a filesystem
+   */
   filename?: string;
+  /**
+   * Any links that have been created for the file
+   */
   links?: {
     object: "list";
     data: Array<{
@@ -34,14 +76,63 @@ export interface File extends Resource<"stripe::File"> {
     hasMore: boolean;
     url: string;
   };
+  /**
+   * The purpose of the uploaded file
+   */
   purpose: Stripe.File.Purpose;
+  /**
+   * The size in bytes of the file object
+   */
   size: number;
+  /**
+   * A user friendly title for the document
+   */
   title?: string;
+  /**
+   * The type of the file returned
+   */
   type?: string;
+  /**
+   * The URL from which the file can be downloaded
+   */
   url?: string;
+  /**
+   * Has the value true if the object exists in live mode or the value false if the object exists in test mode
+   */
   livemode: boolean;
 }
 
+/**
+ * Create and manage Stripe files for uploads
+ *
+ * @example
+ * // Upload a dispute evidence file
+ * const disputeEvidence = await File("dispute-evidence", {
+ *   file: fs.readFileSync("./evidence.pdf"),
+ *   purpose: "dispute_evidence"
+ * });
+ *
+ * @example
+ * // Upload an identity document
+ * const identityDocument = await File("identity-doc", {
+ *   file: fs.readFileSync("./passport.jpg"),
+ *   purpose: "identity_document"
+ * });
+ *
+ * @example
+ * // Upload a business logo with file link
+ * const businessLogo = await File("business-logo", {
+ *   file: fs.readFileSync("./logo.png"),
+ *   purpose: "business_logo",
+ *   fileLink: {
+ *     create: true,
+ *     expiresAt: Math.floor(Date.now() / 1000) + 86400,
+ *     metadata: {
+ *       brand: "company_logo"
+ *     }
+ *   }
+ * });
+ */
 export const File = Resource(
   "stripe::File",
   async function (

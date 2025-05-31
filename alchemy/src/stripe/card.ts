@@ -2,37 +2,189 @@ import Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 
+/**
+ * Properties for creating a Stripe card
+ */
 export interface CardProps {
+  /**
+   * The ID of the customer to attach the card to
+   */
   customer: string;
+
+  /**
+   * A token or source to attach to the customer
+   */
   source?: string;
+
+  /**
+   * The card number, as a string without any separators
+   */
   number?: string;
+
+  /**
+   * Two-digit number representing the card's expiration month
+   */
   expMonth?: number;
+
+  /**
+   * Four-digit number representing the card's expiration year
+   */
   expYear?: number;
+
+  /**
+   * Card security code
+   */
   cvc?: string;
+
+  /**
+   * Cardholder's full name
+   */
   name?: string;
+
+  /**
+   * City/District/Suburb/Town/Village
+   */
   addressCity?: string;
+
+  /**
+   * Billing address country, if provided when creating card
+   */
   addressCountry?: string;
+
+  /**
+   * Address line 1 (Street address/PO Box/Company name)
+   */
   addressLine1?: string;
+
+  /**
+   * Address line 2 (Apartment/Suite/Unit/Building)
+   */
   addressLine2?: string;
+
+  /**
+   * State/County/Province/Region
+   */
   addressState?: string;
+
+  /**
+   * ZIP or postal code
+   */
   addressZip?: string;
+
+  /**
+   * Required when adding a card to an account (not applicable to customers or recipients)
+   */
   currency?: string;
+
+  /**
+   * Only applicable on accounts (not customers or recipients)
+   */
   defaultForCurrency?: boolean;
+
+  /**
+   * Set of key-value pairs that you can attach to an object
+   */
   metadata?: Record<string, string>;
 }
 
+/**
+ * Output from the Stripe card
+ */
 export interface Card extends Resource<"stripe::Card">, CardProps {
+  /**
+   * The ID of the card
+   */
   id: string;
+
+  /**
+   * String representing the object's type
+   */
   object: "card";
+
+  /**
+   * Card brand (Visa, American Express, MasterCard, Discover, JCB, Diners Club, or Unknown)
+   */
   brand: string;
+
+  /**
+   * Two-letter ISO code representing the country of the card
+   */
   country?: string;
+
+  /**
+   * The last four digits of the device account number
+   */
   dynamicLast4?: string;
+
+  /**
+   * Uniquely identifies this particular card number
+   */
   fingerprint?: string;
+
+  /**
+   * Card funding type (credit, debit, prepaid, or unknown)
+   */
   funding: string;
+
+  /**
+   * The last four digits of the card
+   */
   last4: string;
+
+  /**
+   * If the card number is tokenized, this is the method that was used
+   */
   tokenizationMethod?: string;
 }
 
+/**
+ * Create and manage Stripe cards attached to customers
+ *
+ * @example
+ * // Create a card using raw card details
+ * const customerCard = await Card("customer-card", {
+ *   customer: "cus_xyz123",
+ *   number: "4242424242424242",
+ *   expMonth: 12,
+ *   expYear: 2025,
+ *   cvc: "123",
+ *   name: "John Doe",
+ *   addressLine1: "123 Main St",
+ *   addressCity: "San Francisco",
+ *   addressState: "CA",
+ *   addressZip: "94105",
+ *   addressCountry: "US"
+ * });
+ *
+ * @example
+ * // Create a card using a token
+ * const tokenCard = await Card("token-card", {
+ *   customer: "cus_xyz123",
+ *   source: "tok_visa",
+ *   metadata: {
+ *     type: "primary",
+ *     source: "mobile_app"
+ *   }
+ * });
+ *
+ * @example
+ * // Create a card for international customer
+ * const internationalCard = await Card("international-card", {
+ *   customer: "cus_international456",
+ *   number: "4000000000000002",
+ *   expMonth: 6,
+ *   expYear: 2026,
+ *   name: "Maria Garcia",
+ *   addressLine1: "Calle Principal 123",
+ *   addressCity: "Madrid",
+ *   addressCountry: "ES",
+ *   addressZip: "28001",
+ *   metadata: {
+ *     region: "europe",
+ *     currency_preference: "eur"
+ *   }
+ * });
+ */
 export const Card = Resource(
   "stripe::Card",
   async function (
@@ -65,25 +217,34 @@ export const Card = Resource(
       let card: Stripe.Card;
 
       if (this.phase === "update" && this.output?.id) {
-        const updateParams: any = {};
-        if (props.name !== undefined) updateParams.name = props.name;
-        if (props.addressCity !== undefined)
-          updateParams.address_city = props.addressCity;
-        if (props.addressCountry !== undefined)
-          updateParams.address_country = props.addressCountry;
-        if (props.addressLine1 !== undefined)
-          updateParams.address_line1 = props.addressLine1;
-        if (props.addressLine2 !== undefined)
-          updateParams.address_line2 = props.addressLine2;
-        if (props.addressState !== undefined)
-          updateParams.address_state = props.addressState;
-        if (props.addressZip !== undefined)
-          updateParams.address_zip = props.addressZip;
-        if (props.expMonth !== undefined)
-          updateParams.exp_month = props.expMonth;
-        if (props.expYear !== undefined) updateParams.exp_year = props.expYear;
-        if (props.metadata !== undefined)
-          updateParams.metadata = props.metadata;
+        const updateParams = {
+          ...(props.name !== undefined && { name: props.name }),
+          ...(props.addressCity !== undefined && {
+            address_city: props.addressCity,
+          }),
+          ...(props.addressCountry !== undefined && {
+            address_country: props.addressCountry,
+          }),
+          ...(props.addressLine1 !== undefined && {
+            address_line1: props.addressLine1,
+          }),
+          ...(props.addressLine2 !== undefined && {
+            address_line2: props.addressLine2,
+          }),
+          ...(props.addressState !== undefined && {
+            address_state: props.addressState,
+          }),
+          ...(props.addressZip !== undefined && {
+            address_zip: props.addressZip,
+          }),
+          ...(props.expMonth !== undefined && {
+            exp_month: props.expMonth.toString(),
+          }),
+          ...(props.expYear !== undefined && {
+            exp_year: props.expYear.toString(),
+          }),
+          ...(props.metadata !== undefined && { metadata: props.metadata }),
+        };
 
         card = (await stripe.customers.updateSource(
           props.customer,
