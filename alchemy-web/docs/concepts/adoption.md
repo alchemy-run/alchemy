@@ -46,18 +46,6 @@ if (this.phase === "create") {
 }
 ```
 
-## When to Use
-
-- **Migrating existing infrastructure** to Alchemy management
-- **Re-running failed deployments** where some resources were already created
-- **Environment consistency** where resources might already exist
-
-## Supported Resources
-
-Alchemy resources that support adoption include:
-
-- **Cloudflare**: R2 Buckets, D1 Databases, KV Namespaces, Vectorize Indexes, Workers, Queues
-
 ## Related Concepts
 
 - **[Resource](./resource.md)** - Understanding Alchemy's resource model
