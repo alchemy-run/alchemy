@@ -28,9 +28,6 @@ describe("R2Bucket Name Change Validation", () => {
       }).toThrow(
         "Cannot update R2Bucket name after creation. Bucket name is immutable.",
       );
-    } catch (err) {
-      console.log(err);
-      throw err;
     } finally {
       await destroy(scope);
     }
