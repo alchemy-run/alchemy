@@ -17,19 +17,6 @@ import type { Worker as _Worker } from "./worker.ts";
 import type { Workflow as _Workflow } from "./workflow.ts";
 import type { VersionMetadata as _VersionMetadata } from "./version-metadata.ts";
 
-/**
- * Runtime interface for Version Metadata binding
- * @see https://developers.cloudflare.com/workers/runtime-apis/bindings/version-metadata/
- */
-export interface VersionMetadataRuntime {
-  /** Version ID */
-  id: string;
-  /** Version tag */
-  tag: string;
-  /** Timestamp when the version was created */
-  timestamp: string;
-}
-
 export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
   infer O
 >
@@ -76,7 +63,7 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
                                   : T extends _Ai<infer M>
                                     ? Ai<M>
                                     : T extends _VersionMetadata
-                                      ? VersionMetadataRuntime
+                                      ? WorkerVersionMetadata
                                       : T extends Self
                                         ? Service
                                         : T extends Json<infer T>
