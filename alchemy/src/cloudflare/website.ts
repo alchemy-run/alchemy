@@ -131,6 +131,7 @@ export default {
     await Exec("build", {
       cwd,
       command: props.command,
+      env: props.env,
     });
 
     return (await Worker("worker", {

@@ -9,6 +9,7 @@ import { Scope } from "../scope.ts";
 import { Secret, secret } from "../secret.ts";
 import { serializeScope } from "../serde.ts";
 import type { type } from "../type.ts";
+import { getContentType } from "../util/content-type.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { slugify } from "../util/slugify.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
@@ -255,10 +256,9 @@ export interface EntrypointWorkerProps<
    *
    * If {@link noBundle} is false | undefined, this will be ignored.
    *
-   * @default - all .js and .mjs files under the entrypoint directory
+   * @default - all .js, .mjs, and .wasm files under the entrypoint directory
    */
   rules?: {
-    type: "ESModule";
     globs: string[];
   }[];
 }
@@ -1005,30 +1005,27 @@ export async function putWorker(
       // Create FormData for the upload
       const formData = new FormData();
 
-      function addFile(fileName: string, content: string, contentType: string) {
+      function addFile(fileName: string, content: Buffer | string) {
+        const contentType = getContentType(fileName) ?? "application/null";
         formData.append(
           fileName,
           new Blob([content], {
-            type: contentType,
+            type:
+              contentType === "application/javascript" &&
+              scriptMetadata.main_module
+                ? "application/javascript+module"
+                : contentType,
           }),
           fileName,
         );
       }
 
-      const jsContentType = scriptMetadata.main_module
-        ? "application/javascript+module"
-        : "application/javascript";
-
       if (typeof scriptBundle === "string") {
-        addFile(scriptName, scriptBundle, jsContentType);
+        addFile(scriptName, scriptBundle);
       } else {
         for (const [fileName, content] of Object.entries(scriptBundle)) {
           // Add the actual script content as a named file part
-          addFile(
-            fileName,
-            content,
-            fileName.endsWith(".wasm") ? "application/wasm" : jsContentType,
-          );
+          addFile(fileName, content);
         }
       }
 

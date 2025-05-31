@@ -14,7 +14,7 @@ import { nodeJsCompatPlugin } from "./nodejs-compat.ts";
 import { wasmPlugin } from "./wasm-plugin.ts";
 
 export type NoBundleResult = {
-  [fileName: string]: string;
+  [fileName: string]: Buffer;
 };
 
 export async function bundleWorkerScript<B extends Bindings>(
@@ -43,7 +43,6 @@ export async function bundleWorkerScript<B extends Bindings>(
     const rules = (
       props.rules ?? [
         {
-          type: "ESModule",
           globs: ["**/*.js", "**/*.mjs", "**/*.wasm"],
         },
       ]
@@ -67,7 +66,7 @@ export async function bundleWorkerScript<B extends Bindings>(
       await Promise.all(
         files.map(async (file) => [
           file,
-          await fs.readFile(path.resolve(rootDir, file), "utf-8"),
+          await fs.readFile(path.resolve(rootDir, file)),
         ]),
       ),
     );
