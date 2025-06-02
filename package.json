@@ -19,7 +19,8 @@
     "generate:aws-control": "bun ./scripts/generate-aws-control.ts",
     "publish:npm": "bun run --filter alchemy publish:npm",
     "test": "bun ./alchemy/test/run.ts",
-    "test:smoke": "./scripts/smoke.sh"
+    "test:smoke": "./scripts/smoke.sh",
+    "bump": "bun ./scripts/bump.ts"
   },
   "workspaces": [
     "alchemy",
@@ -33,6 +34,7 @@
     "@types/node": "latest",
     "aws4fetch": "^1.0.20",
     "braintrust": "*",
+    "changelogithub": "^13.15.0",
     "openai": "^4.103.0",
     "typescript": "latest",
     "yaml": "^2.7.1"
