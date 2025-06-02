@@ -1,7 +1,7 @@
 import { $ } from "bun";
 import { generate } from "changelogithub";
-import { readFile, writeFile } from "fs/promises";
-import { join } from "path";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 export async function generateReleaseNotes(tag: string) {
   console.log(`Generating release notes for version ${tag}`);
@@ -13,7 +13,7 @@ export async function generateReleaseNotes(tag: string) {
   });
   const fileContents = await readFile(
     join(process.cwd(), "CHANGELOG.md"),
-    "utf-8"
+    "utf-8",
   );
   if (fileContents.includes(tag)) {
     console.log(`Version ${tag} already exists in changelog, skipping`);
@@ -21,20 +21,20 @@ export async function generateReleaseNotes(tag: string) {
   }
   await writeFile(
     join(process.cwd(), "CHANGELOG.md"),
-    `## ${tag}\n\n${changelog.md}\n\n---\n\n${fileContents}`
+    `## ${tag}\n\n${changelog.md}\n\n---\n\n${fileContents}`,
   );
 }
 
 async function checkNpmVersion(
   packageName: string,
-  version: string
+  version: string,
 ): Promise<boolean> {
   try {
     const response = await fetch(
-      `https://registry.npmjs.org/${packageName}/${version}`
+      `https://registry.npmjs.org/${packageName}/${version}`,
     );
     return response.ok;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -42,10 +42,10 @@ async function checkNpmVersion(
 async function checkGithubTag(version: string): Promise<boolean> {
   try {
     const response = await fetch(
-      `https://api.github.com/repos/sam-goodwin/alchemy/git/refs/tags/v${version}`
+      `https://api.github.com/repos/sam-goodwin/alchemy/git/refs/tags/v${version}`,
     );
     return response.ok;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -53,10 +53,10 @@ async function checkGithubTag(version: string): Promise<boolean> {
 async function checkGithubRelease(version: string): Promise<boolean> {
   try {
     const response = await fetch(
-      `https://api.github.com/repos/sam-goodwin/alchemy/releases/tags/v${version}`
+      `https://api.github.com/repos/sam-goodwin/alchemy/releases/tags/v${version}`,
     );
     return response.ok;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -78,7 +78,7 @@ $.cwd(process.cwd());
 
 const alchemyPackageJsonPath = join(process.cwd(), "alchemy", "package.json");
 const alchemyPackageJson = JSON.parse(
-  await readFile(alchemyPackageJsonPath, "utf-8")
+  await readFile(alchemyPackageJsonPath, "utf-8"),
 );
 
 // Check if version already exists
@@ -103,7 +103,7 @@ if (githubReleaseExists) {
 alchemyPackageJson.version = newVersion;
 await writeFile(
   alchemyPackageJsonPath,
-  JSON.stringify(alchemyPackageJson, null, 2) + "\n"
+  `${JSON.stringify(alchemyPackageJson, null, 2)}\n`,
 );
 
 await $`bun install`;
