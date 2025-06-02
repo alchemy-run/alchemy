@@ -61,9 +61,14 @@ paths-ignore:
 
 # Query pack configuration
 packs:
-  # Use comprehensive security and quality query packs
-  - codeql/javascript-queries:security-extended
-  - codeql/javascript-queries:security-and-quality
+  # Include the JavaScript queries pack
+  - codeql/javascript-queries
+
+# Query suite configuration
+queries:
+  # Use comprehensive security and quality query suites
+  - uses: security-extended
+  - uses: security-and-quality
 
 # Custom query suites for more specific analysis
 query-filters:
