@@ -7016,7 +7016,7 @@ const properties = {
     TransactionSearchConfig: ["AccountId"],
   },
   Alexa: {
-    ASK: ["VendorId"],
+    ASKSkill: ["VendorId"],
   },
 };
 
