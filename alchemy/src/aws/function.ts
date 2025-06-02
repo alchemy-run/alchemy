@@ -625,6 +625,13 @@ export const Function = Resource(
           }
         }
 
+        // Additional stabilization check - ensure role can be used
+        // by waiting a bit more after function becomes Active
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // Verify function is fully stable and role is usable
+        await waitForFunctionStabilization(client, props.functionName);
+
         // Create URL configuration if needed
         if (props.url) {
           try {
@@ -788,9 +795,14 @@ async function zipCode(props: FunctionProps): Promise<Buffer> {
     parseFile(props.handler) +
     (props.bundle.format === "cjs" ? ".cjs" : ".mjs");
 
+  if (!fileContent || fileContent.length === 0) {
+    throw new Error("Bundle content is empty");
+  }
+
   // Create a zip buffer in memory
   const zip = new (await import("jszip")).default();
   zip.file(fileName, fileContent);
+
   return zip.generateAsync({
     type: "nodebuffer",
     compression: "DEFLATE",

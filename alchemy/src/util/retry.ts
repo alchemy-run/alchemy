@@ -25,7 +25,6 @@ export async function withExponentialBackoff<T>(
       console.log(error.message);
       attempt++;
       if (attempt >= maxAttempts || !isRetryable(error)) {
-        console.warn("Failed after ", attempt, " attempts");
         throw error;
       }
 
