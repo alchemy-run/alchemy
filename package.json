@@ -5,6 +5,10 @@
   "type": "module",
   "module": "./lib/index.js",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sam-goodwin/alchemy"
+  },
   "scripts": {
     "build": "tsc -b",
     "check": "bun run --filter cloudflare-react-router types && tsc -b ./tsconfig.json && biome check",
