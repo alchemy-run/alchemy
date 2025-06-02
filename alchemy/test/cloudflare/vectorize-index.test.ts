@@ -133,7 +133,7 @@ describe("Vectorize Index Resource", async () => {
       expect(index.name).toEqual(deleteIndex);
       expect(index.delete).toBeUndefined(); // Default is true
 
-      // Update only the delete property
+      // Update only the delete property to false
       const updatedIndex = await VectorizeIndex(deleteIndex, {
         name: deleteIndex,
         dimensions: 768,
@@ -148,6 +148,15 @@ describe("Vectorize Index Resource", async () => {
       expect(updatedIndex.metric).toEqual("cosine");
       expect(updatedIndex.id).toEqual(index.id);
       expect(updatedIndex.delete).toEqual(false);
+
+      // Set delete back to true before cleanup to ensure proper deletion
+      await VectorizeIndex(deleteIndex, {
+        name: deleteIndex,
+        dimensions: 768,
+        metric: "cosine",
+        adopt: true,
+        delete: true,
+      });
     } finally {
       await alchemy.destroy(scope);
     }

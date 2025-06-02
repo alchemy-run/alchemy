@@ -9,6 +9,7 @@ import { Worker } from "../../src/cloudflare/worker.js";
 import { destroy } from "../../src/destroy.js";
 import { NeonProject } from "../../src/neon/project.js";
 import { BRANCH_PREFIX } from "../util.js";
+import { fetchAndExpectOK } from "./fetch-utils.js";
 // must import this or else alchemy.test won't exist
 import "../../src/test/vitest.js";
 
@@ -96,8 +97,7 @@ describe("Hyperdrive Resource", () => {
       expect(worker.url).toBeTruthy();
 
       // Test the connection works
-      const response = await fetch(worker.url!);
-      expect(response.status).toEqual(200);
+      await fetchAndExpectOK(worker.url!);
 
       // Update the hyperdrive
       hyperdrive = await Hyperdrive(testId, {

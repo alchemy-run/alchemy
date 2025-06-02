@@ -5,6 +5,7 @@ import { Worker } from "../../src/cloudflare/worker.js";
 import { destroy } from "../../src/destroy.js";
 import "../../src/test/vitest.js";
 import { BRANCH_PREFIX } from "../util.js";
+import { fetchAndExpectOK } from "./fetch-utils.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -27,8 +28,7 @@ describe("Bundle Worker Test", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      const response = await fetch(worker.url!);
-      expect(response.status).toEqual(200);
+      const response = await fetchAndExpectOK(worker.url!);
       const text = await response.text();
       // Check against the expected response from bundle-handler.ts
       expect(text).toEqual("Hello World!");
@@ -52,8 +52,7 @@ describe("Bundle Worker Test", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      const response = await fetch(worker.url!);
-      expect(response.status).toEqual(200);
+      const response = await fetchAndExpectOK(worker.url!);
       const text = await response.text();
       // Check against the expected response from bundle-handler.ts
       expect(text).toEqual("function");
@@ -96,8 +95,7 @@ describe("Bundle Worker Test", () => {
         adopt: true,
       });
 
-      const response = await fetch(worker.url!);
-      expect(response.status).toEqual(200);
+      const response = await fetchAndExpectOK(worker.url!);
       const text = await response.text();
       expect(text).toEqual(
         JSON.stringify({

@@ -7,6 +7,7 @@ import { BRANCH_PREFIX } from "../util.js";
 
 import path from "node:path";
 import "../../src/test/vitest.js";
+import { fetchAndExpectOK } from "./fetch-utils.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -37,8 +38,7 @@ describe("VersionMetadata Binding", () => {
       expect(worker.bindings).toBeDefined();
       expect(worker.url).toBeTruthy();
 
-      const response = await fetch(worker.url!);
-      expect(response.status).toEqual(200);
+      const response = await fetchAndExpectOK(worker.url!);
       const text = await response.text();
       expect(text).toContain("VersionMetadata binding available");
     } finally {

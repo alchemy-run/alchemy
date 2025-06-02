@@ -11,6 +11,7 @@ import { destroy } from "../../src/destroy.js";
 import { BRANCH_PREFIX } from "../util.js";
 
 import "../../src/test/vitest.js";
+import { fetchAndExpectOK } from "./fetch-utils.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -418,13 +419,16 @@ describe("Pipeline Resource", () => {
         ];
 
         // Send records to the pipeline through the worker
-        const sendResponse = await fetch(`${worker.url}/send-record`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+        const sendResponse = await fetchAndExpectOK(
+          `${worker.url}/send-record`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(testRecords),
           },
-          body: JSON.stringify(testRecords),
-        });
+        );
 
         const responseData: any = await sendResponse.json();
         console.log(responseData);
