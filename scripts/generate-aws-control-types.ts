@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { $ } from "bun";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import prettier from "prettier";
@@ -550,6 +551,18 @@ export default properties;
   console.log("Successfully wrote properties file");
 }
 
+async function runBiomeFix(): Promise<void> {
+  console.log("Running biome fix on generated files...");
+  
+  try {
+    await $`bunx @biomejs/biome check --write ${OUTPUT_FILE} ${PROPERTIES_FILE}`;
+    console.log("Successfully applied biome fixes to generated files");
+  } catch (error) {
+    console.warn("Warning: biome fix failed:", error);
+    console.warn("Generated files may not be properly formatted according to biome rules");
+  }
+}
+
 export async function generateAwsControlTypes(): Promise<{
   resourceTypesByService: Record<string, Record<string, ResourceType>>;
 }> {
@@ -584,6 +597,9 @@ export async function generateAwsControlTypes(): Promise<{
 
   const properties = generateReadOnlyPropertiesObject(resourceTypesByService);
   await writeProperties(properties);
+
+  // Run biome fix on the generated files
+  await runBiomeFix();
 
   // Emit metrics
   const totalServices = Object.keys(resourceTypesByService).length;
