@@ -24,10 +24,13 @@ function isRetryableError(error: any): boolean {
 /**
  * Retry function with standardized parameters for AWS throttling
  */
-export function retry<T>(operation: () => Promise<T>): Promise<T> {
+export function retry<T>(
+  operation: () => Promise<T>,
+  extraIsRetryableError?: (error: any) => boolean,
+): Promise<T> {
   return withExponentialBackoff(
     operation,
-    isRetryableError,
+    (err) => isRetryableError(err) || extraIsRetryableError?.(err) || false,
     10, // max attempts
     1000, // initial delay ms
   );

@@ -3,14 +3,14 @@ import {
   ParameterNotFound,
   SSMClient,
 } from "@aws-sdk/client-ssm";
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { SSMParameter } from "../../src/aws/ssm-parameter.ts";
 import { destroy } from "../../src/destroy.ts";
 import { isSecret } from "../../src/secret.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
-import "../../src/test/bun.ts";
+import "../../src/test/vitest.ts";
 
 const client = new SSMClient({});
 

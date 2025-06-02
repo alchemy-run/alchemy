@@ -30,6 +30,7 @@ describe("CloudControlResource", () => {
             Status: "Enabled",
           },
         },
+        adopt: true,
       });
 
       expect(resource.id).toBeTruthy();
@@ -40,7 +41,6 @@ describe("CloudControlResource", () => {
         "AWS::S3::Bucket",
         resource.id,
       ))!;
-      console.log({ getResponse });
       expect(getResponse.BucketName).toEqual(testId);
       expect(getResponse.VersioningConfiguration.Status).toEqual("Enabled");
 
@@ -53,11 +53,6 @@ describe("CloudControlResource", () => {
             Status: "Suspended",
           },
         },
-      });
-
-      console.log({
-        testId,
-        resource,
       });
 
       expect(resource.id).toBeTruthy();
@@ -174,10 +169,6 @@ describe("CloudControlResource", () => {
           "AWS::S3::Bucket",
           resource.id,
         );
-        console.log({
-          id: resource.id,
-          getResponse,
-        });
         expect(getResponse?.BucketName).toBeTruthy();
       }
 

@@ -120,7 +120,7 @@
     "@aws-sdk/client-ses": "^3.0.0",
     "@aws-sdk/client-sesv2": "^3.0.0",
     "@aws-sdk/client-sqs": "^3.0.0",
-    "@aws-sdk/client-ssm": "^3.821.0",
+    "@aws-sdk/client-ssm": "^3.0.0",
     "@aws-sdk/client-sts": "^3.0.0",
     "@aws-sdk/credential-providers": "^3.0.0",
     "@aws-sdk/node-config-provider": "^3.374.0",

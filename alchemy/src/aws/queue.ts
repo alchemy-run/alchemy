@@ -175,13 +175,13 @@ export const Queue = Resource(
         let queueDeleted = false;
         while (!queueDeleted) {
           try {
-            await retry(() =>
-              client.send(
+            await retry(() => {
+              return client.send(
                 new GetQueueUrlCommand({
                   QueueName: queueName,
                 }),
-              ),
-            );
+              );
+            });
             // If we get here, queue still exists
             await new Promise((resolve) => setTimeout(resolve, 1000));
           } catch (error: any) {
@@ -193,11 +193,11 @@ export const Queue = Resource(
           }
         }
       } catch (error: any) {
+        console.log(error.message);
         if (!isQueueDoesNotExist(error)) {
           throw error;
         }
       }
-
       return this.destroy();
     }
     // Create queue with attributes
@@ -245,14 +245,16 @@ export const Queue = Resource(
 
     try {
       // Create the queue
-      const createResponse = await retry(() =>
-        client.send(
-          new CreateQueueCommand({
-            QueueName: queueName,
-            Attributes: attributes,
-            tags,
-          }),
-        ),
+      const createResponse = await retry(
+        () =>
+          client.send(
+            new CreateQueueCommand({
+              QueueName: queueName,
+              Attributes: attributes,
+              tags,
+            }),
+          ),
+        (err) => isQueueDeletedRecently(err),
       );
 
       // Get queue attributes
