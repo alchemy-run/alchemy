@@ -4,6 +4,7 @@ import { createCloudControlClient } from "../../../src/aws/control/client.js";
 import { CloudControlResource } from "../../../src/aws/control/resource.js";
 import { destroy } from "../../../src/destroy.js";
 import { BRANCH_PREFIX } from "../../util.js";
+import { waitForStableDeletion } from "./test-utils.js";
 // must import this or else alchemy.test won't exist
 import "../../../src/test/vitest.js";
 
@@ -11,10 +12,11 @@ const client = await createCloudControlClient();
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
+  quiet: true,
 });
 
 describe("CloudControlResource", () => {
-  const testId = `${BRANCH_PREFIX}-test-bucket`;
+  const testId = `${BRANCH_PREFIX}-test-bucket-resource`;
 
   test("create, update, and delete S3 bucket", async (scope) => {
     let resource: CloudControlResource | undefined;
@@ -38,6 +40,7 @@ describe("CloudControlResource", () => {
         "AWS::S3::Bucket",
         resource.id,
       ))!;
+      console.log({ getResponse });
       expect(getResponse.BucketName).toEqual(testId);
       expect(getResponse.VersioningConfiguration.Status).toEqual("Enabled");
 
@@ -50,6 +53,11 @@ describe("CloudControlResource", () => {
             Status: "Suspended",
           },
         },
+      });
+
+      console.log({
+        testId,
+        resource,
       });
 
       expect(resource.id).toBeTruthy();
@@ -66,17 +74,17 @@ describe("CloudControlResource", () => {
       // Always clean up, even if test assertions fail
       await destroy(scope);
 
-      // Verify bucket was deleted
-      expect(
-        await client.getResource("AWS::S3::Bucket", resource?.id!),
-      ).toBeUndefined();
+      // Verify bucket was deleted with stable check
+      if (resource?.id) {
+        await waitForStableDeletion("AWS::S3::Bucket", resource.id);
+      }
     }
   });
 
   test("adopt existing resource with different ID", async (scope) => {
     const bucketName = `${testId}-adopt-test`;
-    const firstId = `${testId}-first`;
-    const secondId = `${testId}-second`;
+    const firstId = `${testId}-adopt-first`;
+    const secondId = `${testId}-adopt-second`;
 
     let firstResource: CloudControlResource | undefined;
     let secondResource: CloudControlResource | undefined;
@@ -132,22 +140,19 @@ describe("CloudControlResource", () => {
       expect(getSecondResponse.VersioningConfiguration.Status).toEqual(
         "Suspended",
       );
-    } catch (err) {
-      console.log(err);
-      throw err;
     } finally {
       // Clean up
       await destroy(scope);
 
-      // Verify bucket was deleted
-      expect(
-        await client.getResource("AWS::S3::Bucket", firstResource?.id!),
-      ).toBeUndefined();
+      // Verify bucket was deleted with stable check
+      if (firstResource?.id) {
+        await waitForStableDeletion("AWS::S3::Bucket", firstResource.id);
+      }
     }
   });
 
   test("wildcard deletion handler", async (scope) => {
-    const bucketIds = [`${testId}-1`, `${testId}-2`];
+    const bucketIds = [`${testId}-wildcard-1`, `${testId}-wildcard-2`];
     const resources: CloudControlResource[] = [];
 
     try {
@@ -158,31 +163,31 @@ describe("CloudControlResource", () => {
           desiredState: {
             BucketName: bucketId,
           },
+          adopt: true,
         });
         resources.push(resource);
       }
 
       // Verify buckets were created
       for (const resource of resources) {
-        const getResponse = (await client.getResource(
+        const getResponse = await client.getResource(
           "AWS::S3::Bucket",
           resource.id,
-        ))!;
-        expect(getResponse.BucketName).toBeTruthy();
+        );
+        console.log({
+          id: resource.id,
+          getResponse,
+        });
+        expect(getResponse?.BucketName).toBeTruthy();
       }
 
       // Trigger wildcard deletion
       await destroy(scope);
 
-      // Verify all buckets were deleted
+      // Verify all buckets were deleted with stable checks
       for (const resource of resources) {
-        expect(
-          await client.getResource("AWS::S3::Bucket", resource.id),
-        ).toBeUndefined();
+        await waitForStableDeletion("AWS::S3::Bucket", resource.id);
       }
-    } catch (err) {
-      console.log(err);
-      throw err;
     } finally {
       // Clean up in case any test assertions failed
       await destroy(scope);

@@ -15,11 +15,11 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("ClientKey Resource", () => {
+describe("ClientKey Resource", { concurrent: false }, () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
   const testId = `${BRANCH_PREFIX}-test-key`;
-  const projectId = `${BRANCH_PREFIX}-test-project`;
-  const teamId = `${BRANCH_PREFIX}-test-team`;
+  const projectId = `${BRANCH_PREFIX}-test-project-client-key`;
+  const teamId = `${BRANCH_PREFIX}-test-team-client-key`;
   const organization = process.env.SENTRY_ORG;
   if (!organization) {
     throw new Error("SENTRY_ORG environment variable is required");

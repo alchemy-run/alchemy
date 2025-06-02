@@ -23,7 +23,7 @@ export default defineConfig({
       NODE_ENV: 'test',
     },
     globals: true,
-    reporter: ['verbose'],
+    // reporter: ['verbose'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -36,5 +36,6 @@ export default defineConfig({
         '**/*.config.*',
       ],
     },
+    setupFiles: ['./vitest.setup.ts'],
   },
 });

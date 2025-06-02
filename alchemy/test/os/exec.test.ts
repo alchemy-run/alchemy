@@ -1,7 +1,7 @@
-import { describe, expect } from "vitest";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { destroy } from "../../src/destroy.js";
 import { Exec } from "../../src/os/exec.js";
@@ -13,7 +13,7 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("Exec Resource", () => {
+describe("Exec Resource", { concurrent: false }, () => {
   test("execute a simple command", async (scope) => {
     try {
       // Run a simple command

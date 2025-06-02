@@ -1,6 +1,6 @@
-import { describe, expect } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { AnalyticsEngineDataset } from "../../src/cloudflare/analytics-engine.js";
 import { createCloudflareApi } from "../../src/cloudflare/api.js";
@@ -414,7 +414,7 @@ describe("Worker Resource", () => {
 
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
-      expect(worker.bindings).toHaveLength(0);
+      expect(worker.bindings).toEqual({});
 
       // Create a Durable Object namespace
       const counterNamespace = new DurableObjectNamespace(
@@ -1028,8 +1028,6 @@ describe("Worker Resource", () => {
           run_worker_first: false,
         },
       });
-
-      console.log(worker.url);
 
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);

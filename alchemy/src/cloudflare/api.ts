@@ -175,11 +175,15 @@ export class CloudflareApi {
         if (response.status.toString().startsWith("5")) {
           throw new InternalError("5xx error");
         }
+        if (response.status === 429) {
+          throw new TooManyRequestsError();
+        }
         return response;
       },
       // transient errors should be retried aggressively
-      (error) => error instanceof InternalError,
-      5, // Maximum 5 attempts (1 initial + 4 retries)
+      (error) =>
+        error instanceof InternalError || error instanceof TooManyRequestsError,
+      10, // Maximum 10 attempts (1 initial + 9 retries)
       1000, // Start with 1s delay, will exponentially increase
     );
   }
@@ -250,3 +254,5 @@ export class CloudflareApi {
 }
 
 class InternalError extends Error {}
+
+class TooManyRequestsError extends Error {}

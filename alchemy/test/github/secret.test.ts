@@ -19,7 +19,7 @@ const repository = process.env.GITHUB_REPO || "test-alchemy-resources";
 // Use a fixed environment name for testing
 const environmentName = `${BRANCH_PREFIX}-test-env`;
 
-describe("GitHubSecret Resource", () => {
+describe("GitHubSecret Resource", { concurrent: false }, () => {
   // Use a fixed resource ID
   const testId = `${BRANCH_PREFIX}-github-secret-test`;
 

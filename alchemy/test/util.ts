@@ -1,4 +1,18 @@
+import fs from "node:fs/promises";
 import os from "node:os";
+
+/**
+ * Check if a file or directory exists
+ * Uses fs.access which is available in all Node.js versions
+ */
+export async function exists(path: string): Promise<boolean> {
+  try {
+    await fs.access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Sanitize a string to be safe for AWS resource names

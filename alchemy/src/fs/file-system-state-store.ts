@@ -67,8 +67,10 @@ export class FileSystemStateStore implements StateStore {
 
   async set(key: string, value: State): Promise<void> {
     await this.init();
+    const file = this.getPath(key);
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
     await fs.promises.writeFile(
-      this.getPath(key),
+      file,
       JSON.stringify(await serialize(this.scope, value), null, 2),
     );
   }

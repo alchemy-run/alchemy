@@ -202,18 +202,17 @@ export class CloudControlClient {
     identifier: string,
   ): Promise<Record<string, any> | undefined> {
     try {
-      return JSON.parse(
-        (
-          await this.fetch<{
-            ResourceDescription: {
-              Properties: string;
-            };
-          }>("GetResource", {
-            TypeName: typeName,
-            Identifier: identifier,
-          })
-        ).ResourceDescription.Properties,
-      );
+      const resource = await this.fetch<{
+        Identifier: string;
+        TypeName: string;
+        ResourceDescription: {
+          Properties: string;
+        };
+      }>("GetResource", {
+        TypeName: typeName,
+        Identifier: identifier,
+      });
+      return JSON.parse(resource.ResourceDescription.Properties);
     } catch (error: any) {
       if (error instanceof ResourceNotFoundException) {
         return undefined;

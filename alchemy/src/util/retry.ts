@@ -33,6 +33,7 @@ export async function withExponentialBackoff<T>(
       const jitter = Math.random() * 0.1 * delay;
       await new Promise((resolve) => setTimeout(resolve, delay + jitter));
       delay *= 2; // Double the delay for next attempt
+      delay = Math.min(delay, 10000); // Cap at 10 seconds
     }
   }
 }
