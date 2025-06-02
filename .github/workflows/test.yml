@@ -77,7 +77,7 @@ jobs:
           fi
 
           echo "Running tests changed since commit: $BASE_COMMIT"
-          bun run test --since "$BASE_COMMIT"
+          bun run test --since "$BASE_COMMIT" --vitest
 
           bun run test:smoke
         env:

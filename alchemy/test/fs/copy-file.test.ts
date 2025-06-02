@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect } from "bun:test";
+import { afterAll, beforeAll, describe, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { alchemy } from "../../src/alchemy.js";
@@ -6,7 +6,7 @@ import { destroy } from "../../src/destroy.js";
 import { CopyFile } from "../../src/fs/copy-file.js";
 import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

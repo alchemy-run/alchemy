@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import Stripe from "stripe";
 import { alchemy } from "../src/alchemy.js";
 import { destroy } from "../src/destroy.js";
@@ -7,7 +7,7 @@ import { Product } from "../src/stripe/product.js";
 import { WebhookEndpoint } from "../src/stripe/webhook.js";
 import { BRANCH_PREFIX } from "./util.js";
 
-import "../src/test/bun.js";
+import "../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

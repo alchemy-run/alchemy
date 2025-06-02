@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { BrowserRendering } from "../../src/cloudflare/browser-rendering.js";
 import { KVNamespace } from "../../src/cloudflare/kv-namespace.js";
@@ -7,7 +7,7 @@ import { destroy } from "../../src/destroy.js";
 import { BRANCH_PREFIX } from "../util.js";
 
 import path from "node:path";
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

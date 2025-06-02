@@ -1,0 +1,9 @@
+{
+  "name": "samgoodwin-test-worker-wf",
+  "main": ".out/alchemy-wf-test/worker.ts",
+  "compatibility_date": "2025-04-20",
+  "compatibility_flags": [],
+  "workflows": [
+    { "name": "test-workflow", "binding": "WF", "class_name": "TestWorkflow" }
+  ]
+}

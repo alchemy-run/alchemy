@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect } from "bun:test";
+import { beforeAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { AccountApiToken } from "../../src/cloudflare/account-api-token.js";
 import {
@@ -8,7 +8,7 @@ import {
 import { destroy } from "../../src/destroy.js";
 import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 // Create API client for verification
 let api: CloudflareApi;

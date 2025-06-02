@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { createCloudflareApi } from "../../src/cloudflare/api.js";
 import { R2Bucket } from "../../src/cloudflare/bucket.js";
@@ -10,7 +10,7 @@ import { Worker } from "../../src/cloudflare/worker.js";
 import { destroy } from "../../src/destroy.js";
 import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -93,7 +93,7 @@ describe("Pipeline Resource", () => {
       expect(pipeline.id).toBeTruthy();
       expect(pipeline.name).toEqual(pipelineName);
       expect(pipeline.endpoint).toBeTruthy();
-      expect(pipeline.version).toBeNumber();
+      expect(pipeline.version).toBeTypeOf("number");
       expect(pipeline.type).toEqual("pipeline");
       expect(pipeline.destination).toBeDefined();
       expect(pipeline.destination.type).toEqual("r2");

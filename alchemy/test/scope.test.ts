@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import fs from "node:fs/promises";
 import { alchemy } from "../src/alchemy.js";
 import { destroy } from "../src/destroy.js";
@@ -9,7 +9,7 @@ import { BRANCH_PREFIX } from "./util.js";
 
 import { Resource } from "../src/resource.js";
 import { serializeScope } from "../src/serde.js";
-import "../src/test/bun.js";
+import "../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

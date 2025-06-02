@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { alchemy } from "../../src/alchemy.js";
@@ -16,7 +16,7 @@ import { Workflow } from "../../src/cloudflare/workflow.js";
 import { destroy } from "../../src/destroy.js";
 import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -414,7 +414,7 @@ describe("Worker Resource", () => {
 
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
-      expect(worker.bindings).toBeEmpty();
+      expect(worker.bindings).toHaveLength(0);
 
       // Create a Durable Object namespace
       const counterNamespace = new DurableObjectNamespace(
@@ -1426,7 +1426,7 @@ describe("Worker Resource", () => {
       expect(queryResponse.status).toEqual(200);
       const queryData: any = await queryResponse.json();
       expect(queryData.success).toEqual(true);
-      expect(queryData.data).toBeArray();
+      expect(queryData.data).toBeInstanceOf(Array);
       expect(queryData.data.length).toBeGreaterThan(0);
       expect(queryData.data[0].name).toEqual("Test User");
       expect(queryData.data[0].email).toEqual("test@example.com");

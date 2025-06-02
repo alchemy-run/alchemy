@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { dedent } from "../../src/util/dedent.js";
 
 describe("dedent", () => {

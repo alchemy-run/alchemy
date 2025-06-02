@@ -10,10 +10,12 @@ const execAsync = promisify(exec);
  * Runs only tests that have changed dependencies
  * @param directory Directory to scan for test files
  * @param baseCommit Optional base commit to compare against
+ * @param useVitest Whether to use vitest instead of bun test
  */
 export async function runChangedTests(
   directory: string,
   baseCommit?: string,
+  useVitest?: boolean,
 ): Promise<void> {
   const changedTests = await findChangedTestFiles(directory, baseCommit);
 
@@ -22,11 +24,15 @@ export async function runChangedTests(
     return;
   }
 
-  // Run the tests with bun using spawn for stdio inheritance
+  // Run the tests using spawn for stdio inheritance
   return new Promise<void>((resolve, reject) => {
-    console.log(`bun test ${changedTests.join(" ")}`);
+    const command = useVitest ? "vitest" : "bun";
+    const args = useVitest
+      ? ["run", ...changedTests]
+      : ["test", ...changedTests];
+    console.log(`${command} ${args.join(" ")}`);
     // resolve();
-    const child = spawn("bun", ["test", ...changedTests], { stdio: "inherit" });
+    const child = spawn(command, args, { stdio: "inherit" });
 
     child.on("close", (code) => {
       if (code === 0) resolve();
@@ -129,7 +135,7 @@ async function getDependencies(testFile: string): Promise<Set<string>> {
       format: "esm",
       bundle: true,
       metafile: true,
-      external: ["@cloudflare/workers-types", "bun:test", "@swc/*"],
+      external: ["@cloudflare/workers-types", "bun:test", "vitest", "@swc/*"],
       logLevel: "error",
     });
 

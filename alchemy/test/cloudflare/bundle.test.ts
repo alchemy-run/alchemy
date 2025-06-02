@@ -1,9 +1,9 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import * as path from "node:path";
 import { alchemy } from "../../src/alchemy.js";
 import { Worker } from "../../src/cloudflare/worker.js";
 import { destroy } from "../../src/destroy.js";
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 import { BRANCH_PREFIX } from "../util.js";
 
 const test = alchemy.test(import.meta, {

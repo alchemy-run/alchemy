@@ -1,4 +1,4 @@
-import { afterAll, describe, expect } from "bun:test";
+import { afterAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { createCloudflareApi } from "../../src/cloudflare/api.js";
 import { DnsRecords } from "../../src/cloudflare/dns-records.js";
@@ -7,7 +7,7 @@ import { destroy } from "../../src/destroy.js";
 import { BRANCH_PREFIX } from "../util.js";
 
 import type { Scope } from "../../src/scope.js";
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

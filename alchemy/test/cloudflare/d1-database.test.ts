@@ -1,10 +1,10 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { createCloudflareApi } from "../../src/cloudflare/api.js";
 import { D1Database, listDatabases } from "../../src/cloudflare/d1-database.js";
 import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -30,8 +30,8 @@ describe("D1 Database Resource", async () => {
 
       expect(database.name).toEqual(testId);
       expect(database.id).toBeTruthy();
-      expect(database.fileSize).toBeNumber();
-      expect(database.numTables).toBeNumber();
+      expect(database.fileSize).toBeTypeOf("number");
+      expect(database.numTables).toBeTypeOf("number");
       expect(database.version).toBeTruthy();
 
       // Check if database exists by listing databases
