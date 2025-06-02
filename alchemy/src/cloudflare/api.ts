@@ -255,4 +255,8 @@ export class CloudflareApi {
 
 class InternalError extends Error {}
 
-class TooManyRequestsError extends Error {}
+class TooManyRequestsError extends Error {
+  constructor() {
+    super(`Cloudflare Rate Limit Exceeded at ${new Date().toISOString()}`);
+  }
+}

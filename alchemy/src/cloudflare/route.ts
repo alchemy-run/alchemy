@@ -28,6 +28,14 @@ export interface RouteProps extends CloudflareApiOptions {
    * Zone ID for the route
    */
   zoneId: string;
+
+  /**
+   * Whether to adopt an existing route with the same pattern if it exists
+   * If true and a route with the same pattern exists, it will be adopted rather than creating a new one
+   *
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -133,8 +141,44 @@ export const Route = Resource(
     } else {
       console.log("Creating Route:", props.pattern);
 
-      // Create new route
-      routeData = await createRoute(api, zoneId, props.pattern, scriptName);
+      try {
+        // Create new route
+        routeData = await createRoute(api, zoneId, props.pattern, scriptName);
+      } catch (error) {
+        // Check if this is a "route already exists" error and adopt is enabled
+        if (
+          props.adopt &&
+          error instanceof CloudflareApiError &&
+          error.status === 409
+        ) {
+          console.log(
+            `Route with pattern '${props.pattern}' already exists, adopting it`,
+          );
+          // Find the existing route by pattern
+          const existingRoute = await findRouteByPattern(
+            api,
+            zoneId,
+            props.pattern,
+          );
+
+          if (!existingRoute) {
+            throw new Error(
+              `Failed to find existing route with pattern '${props.pattern}' for adoption`,
+            );
+          }
+
+          // Use the existing route data
+          routeData = {
+            result: existingRoute,
+            success: true,
+            errors: [],
+            messages: [],
+          };
+        } else {
+          // Re-throw the error if adopt is false or it's not a 409 error
+          throw error;
+        }
+      }
     }
 
     // Return the route resource
@@ -265,4 +309,44 @@ export async function listRoutes(
   }
 
   return (await response.json()) as CloudflareRouteResponse;
+}
+
+/**
+ * Find a route by pattern
+ */
+async function findRouteByPattern(
+  api: CloudflareApi,
+  zoneId: string,
+  pattern: string,
+): Promise<{ id: string; pattern: string; script: string } | null> {
+  const response = await api.get(`/zones/${zoneId}/workers/routes`);
+
+  if (!response.ok) {
+    throw new CloudflareApiError(
+      `Failed to list routes: ${response.statusText}`,
+      response,
+    );
+  }
+
+  const data = (await response.json()) as {
+    result: Array<{
+      id: string;
+      pattern: string;
+      script: string;
+    }>;
+    success: boolean;
+    errors: Array<{ code: number; message: string }>;
+    messages: string[];
+  };
+
+  if (!data.success) {
+    throw new CloudflareApiError(
+      `Failed to list routes: ${data.errors?.[0]?.message || "Unknown error"}`,
+      response,
+    );
+  }
+
+  // Look for a route with matching pattern
+  const match = data.result.find((route) => route.pattern === pattern);
+  return match || null;
 }

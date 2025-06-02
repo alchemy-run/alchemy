@@ -17,6 +17,7 @@ describe("KV Namespace Resource", () => {
     let kvNamespace: KVNamespace | undefined;
     try {
       kvNamespace = await KVNamespace(testId, {
+        adopt: true,
         title: `${BRANCH_PREFIX}-Test Namespace ${testId}`,
         values: [
           {
@@ -86,6 +87,7 @@ describe("KV Namespace Resource", () => {
     try {
       kvNamespace = await KVNamespace("kv", {
         title: `${testId}-adopt`,
+        adopt: true,
       });
 
       await alchemy.run("nested", async () => {
@@ -106,12 +108,13 @@ describe("KV Namespace Resource", () => {
     let kvNamespace: KVNamespace | undefined;
     try {
       kvNamespace = await KVNamespace("kv", {
-        title: `${testId}-adopt`,
+        title: `${testId}-adopt-no-delete`,
+        adopt: true,
       });
 
       await alchemy.run("nested", async (scope) => {
         const adoptedNamespace = await KVNamespace("kv", {
-          title: `${testId}-adopt`,
+          title: `${testId}-adopt-no-delete`,
           adopt: true,
           delete: false,
         });

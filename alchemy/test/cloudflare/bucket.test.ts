@@ -73,6 +73,7 @@ describe("R2 Bucket Resource", async () => {
     const euBucket = await R2Bucket(euBucketName, {
       name: euBucketName,
       jurisdiction: "eu",
+      adopt: true,
     });
 
     try {

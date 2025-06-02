@@ -1,5 +1,5 @@
-import { describe, expect } from "vitest";
 import * as path from "node:path";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { Worker } from "../../src/cloudflare/worker.js";
 import { destroy } from "../../src/destroy.js";
@@ -66,7 +66,7 @@ describe("Bundle Worker Test", () => {
   test("error when using 'nodejs_compat' compatibility flag with a compatibility date before Sept 23rd 2024", async (scope) => {
     try {
       // Create a worker using the entrypoint file
-      expect(
+      await expect(
         Worker(`${BRANCH_PREFIX}-test-bundle-worker-legacy`, {
           entrypoint,
           format: "esm",
