@@ -553,13 +553,15 @@ export default properties;
 
 async function runBiomeFix(): Promise<void> {
   console.log("Running biome fix on generated files...");
-  
+
   try {
     await $`bunx @biomejs/biome check --write ${OUTPUT_FILE} ${PROPERTIES_FILE}`;
     console.log("Successfully applied biome fixes to generated files");
   } catch (error) {
     console.warn("Warning: biome fix failed:", error);
-    console.warn("Generated files may not be properly formatted according to biome rules");
+    console.warn(
+      "Generated files may not be properly formatted according to biome rules",
+    );
   }
 }
 

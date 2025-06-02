@@ -53,7 +53,6 @@ interface ResourceType {
 function generatePropsInterface(
   resourceType: ResourceType,
   resourceName: string,
-  serviceName: string,
 ): string {
   const lines: string[] = [];
 
@@ -107,19 +106,6 @@ function generateResourceType(
   lines.push("};");
 
   return lines.join("\n");
-}
-
-function sanitizeTypeName(typeName: string | undefined): string {
-  // Handle undefined or non-string inputs
-  if (!typeName || typeof typeName !== "string") {
-    return "any";
-  }
-
-  // Replace dots with underscores and other invalid characters
-  return typeName
-    .replace(/\./g, "_")
-    .replace(/[^a-zA-Z0-9_]/g, "_")
-    .replace(/^(\d)/, "_$1"); // Ensure it doesn't start with a number
 }
 
 function toKebabCase(str: string): string {
@@ -946,7 +932,6 @@ async function generateDocumentation(
             const propsInterface = generatePropsInterface(
               resourceType,
               resource,
-              service,
             );
             documentation = await generateDocumentationWithAI(
               service,
@@ -986,7 +971,6 @@ async function generateDocumentation(
 
   console.log("Successfully generated all documentation");
 }
-
 
 try {
   // Check for OpenAI API key
