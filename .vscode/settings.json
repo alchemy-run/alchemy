@@ -33,5 +33,8 @@
     "**/__pycache__": true,
     "**/*.pyc": true
   },
-  "vitest.disableWorkspaceWarning": true
+  "vitest.disableWorkspaceWarning": true,
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  }
 }
