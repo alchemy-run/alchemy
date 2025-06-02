@@ -351,6 +351,8 @@ export type Worker<
     /**
      * The worker's URL if enabled
      * Format: {name}.{subdomain}.workers.dev
+     *
+     * @default true
      */
     url?: string;
 
@@ -837,7 +839,7 @@ export const _Worker = Resource(
         this,
         api,
         workerName,
-        props.url ?? false,
+        props.url ?? true,
       );
 
       // Get current timestamp
