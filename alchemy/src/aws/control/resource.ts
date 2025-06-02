@@ -206,7 +206,19 @@ export const CloudControlResource = Resource(
 // register a catch-all for AWS::* resources (Resources created with the Control API)
 registerDynamicResource((typeName) => {
   if (typeName.startsWith("AWS::")) {
-    return Resource(typeName, CloudControlLifecycle) as unknown as Provider;
+    return Resource(
+      typeName,
+      function (
+        this: Context<CloudControlResource, CloudControlResourceProps>,
+        id: string,
+        props: Omit<CloudControlResourceProps, "typeName">,
+      ) {
+        return CloudControlLifecycle.bind(this)(id, {
+          typeName,
+          ...props,
+        });
+      },
+    ) as unknown as Provider;
   }
   return undefined;
 });
