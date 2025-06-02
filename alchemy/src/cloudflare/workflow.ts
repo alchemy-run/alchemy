@@ -19,7 +19,6 @@ export interface WorkflowProps {
    * @default - workflowName if provided, otherwise id
    */
   className?: string;
-
   /**
    * Name of the script containing the workflow implementation
    *

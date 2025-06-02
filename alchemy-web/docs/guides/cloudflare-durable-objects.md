@@ -124,4 +124,181 @@ declare module "cloudflare:workers" {
 ```
 
 > [!TIP]
-> See the [Bindings](../concepts/bindings.md) for more information. 
+> See the [Bindings](../concepts/bindings.md) for more information.
+
+## Cross-Script Durable Object Binding
+
+You can share Durable Objects across multiple Workers, allowing one Worker to access Durable Object instances defined in another Worker. This enables powerful patterns for building distributed systems where different Workers can coordinate through shared state.
+
+### Method 1: Using re-exported syntax
+
+You can directly reference the Durable Object binding from the provider Worker:
+
+```ts
+import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";
+
+// Create the provider Worker with the Durable Object
+const host = await Worker("Host", {
+  entrypoint: "./do-provider.ts", 
+  bindings: {
+    SHARED_COUNTER: new DurableObjectNamespace("shared-counter", {
+      className: "SharedCounter",
+      sqlite: true,
+    }),
+  },
+});
+
+// Create the client Worker using the provider's Durable Object binding directly
+const client = await Worker("client", {
+  entrypoint: "./client-worker.ts",
+  bindings: {
+    // Re-use the exact same Durable Object binding from the provider worker
+    SHARED_COUNTER: host.bindings.SHARED_COUNTER,
+  },
+});
+```
+
+### Method 2: Using `scriptName` directly
+
+Alternatively, when creating a Durable Object binding in a client Worker, you can reference a Durable Object defined in another Worker by specifying the `scriptName`:
+
+```ts
+import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";
+
+const hostWorkerName = "host"
+
+const durableObject = new DurableObjectNamespace("shared-counter", {
+  className: "SharedCounter",
+  scriptName: hostWorkerName,
+  sqlite: true,
+});
+
+// First, create the Worker that defines the Durable Object
+const host = await Worker("host", {
+  entrypoint: "./do-provider.ts",
+  name: hostWorkerName,
+  bindings: {
+    // Define the Durable Object in this worker
+    SHARED_COUNTER: durableObject,
+  },
+});
+
+// Then, create a client Worker that uses the cross-script Durable Object
+const client = await Worker("client", {
+  entrypoint: "./client-worker.ts",
+  bindings: {
+    // Reference the same Durable Object but specify which script it comes from
+    SHARED_COUNTER: durableObject,
+  },
+});
+```
+
+### Durable Object Provider Implementation
+
+The provider Worker implements the Durable Object class and optionally provides endpoints:
+
+```ts
+// do-provider.ts
+export class SharedCounter {
+  private state: DurableObjectState;
+  private counter: number;
+
+  constructor(state: DurableObjectState, env: any) {
+    this.state = state;
+    this.counter = 0;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    
+    // Retrieve current count from durable storage
+    this.counter = await this.state.storage.get("count") || 0;
+
+    if (url.pathname === "/increment") {
+      this.counter++;
+      await this.state.storage.put("count", this.counter);
+      
+      return Response.json({
+        action: "increment",
+        counter: this.counter,
+        worker: "do-provider"
+      });
+    }
+
+    if (url.pathname === "/get") {
+      return Response.json({
+        action: "get", 
+        counter: this.counter,
+        worker: "do-provider"
+      });
+    }
+
+    return new Response("SharedCounter DO is running!", { status: 200 });
+  }
+}
+
+export default {
+  async fetch(request: Request): Promise<Response> {
+    return new Response('DO Provider Worker is running!');
+  }
+};
+```
+
+### Client Worker Implementation
+
+The client Worker can access the shared Durable Object without implementing the Durable Object class:
+
+```ts
+// client-worker.ts
+import { env } from "cloudflare:workers";
+
+export default {
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    
+    if (url.pathname === '/increment') {
+      try {
+        // Access the Durable Object defined in another worker
+        const id = env.SHARED_COUNTER.idFromName('global-counter');
+        const stub = env.SHARED_COUNTER.get(id);
+        const response = await stub.fetch(new Request('https://example.com/increment'));
+        const data = await response.json();
+        
+        return Response.json({
+          success: true,
+          clientWorker: 'client-worker',
+          result: data,
+          crossScriptWorking: true
+        });
+      } catch (error) {
+        return Response.json({
+          error: error.message,
+          crossScriptWorking: false
+        }, { status: 500 });
+      }
+    }
+
+    if (url.pathname === '/get') {
+      try {
+        // Get the current counter value
+        const id = env.SHARED_COUNTER.idFromName('global-counter');
+        const stub = env.SHARED_COUNTER.get(id);
+        const response = await stub.fetch(new Request('https://example.com/get'));
+        const data = await response.json();
+        
+        return Response.json({
+          success: true,
+          clientWorker: 'client-worker',
+          result: data
+        });
+      } catch (error) {
+        return Response.json({
+          error: error.message
+        }, { status: 500 });
+      }
+    }
+
+    return new Response('Client Worker is running!');
+  }
+};
+```

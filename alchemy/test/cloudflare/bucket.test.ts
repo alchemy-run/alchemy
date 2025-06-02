@@ -9,6 +9,8 @@ import {
   R2Bucket,
   withJurisdiction,
 } from "../../src/cloudflare/bucket.js";
+import { Worker } from "../../src/cloudflare/worker.js";
+import { destroy } from "../../src/destroy.js";
 import { BRANCH_PREFIX } from "../util.js";
 
 import "../../src/test/bun.js";
@@ -167,6 +169,68 @@ describe("R2 Bucket Resource", async () => {
         bucket?.name,
       );
       console.log("Visit the Cloudflare dashboard to verify bucket deletion");
+    }
+  });
+
+  test("create and delete worker with R2 bucket binding", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-r2-binding-r2-1`;
+    // Create a test R2 bucket
+    let testBucket: R2Bucket | undefined;
+
+    let worker: Worker<{ STORAGE: R2Bucket }> | undefined;
+
+    try {
+      testBucket = await R2Bucket("test-bucket", {
+        name: `${BRANCH_PREFIX.toLowerCase()}-test-r2-bucket`,
+        allowPublicAccess: false,
+      });
+
+      // Create a worker with the R2 bucket binding
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              // Use the R2 binding
+              if (request.url.includes('/r2-info')) {
+                // Just confirm we have access to the binding
+                return new Response(JSON.stringify({
+                  hasR2: !!env.STORAGE,
+                  bucketName: env.STORAGE.name || 'unknown'
+                }), {
+                  status: 200,
+                  headers: { 'Content-Type': 'application/json' }
+                });
+              }
+
+              return new Response('Hello with R2 Bucket!', { status: 200 });
+            }
+          };
+        `,
+        format: "esm",
+        url: true, // Enable workers.dev URL to test the worker
+        bindings: {
+          STORAGE: testBucket,
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+      expect(worker.bindings!.STORAGE).toBeDefined();
+
+      // Test that the R2 binding is accessible in the worker
+      const response = await fetch(`${worker.url}/r2-info`);
+      expect(response.status).toEqual(200);
+      const data = (await response.json()) as {
+        hasR2: boolean;
+        bucketName: string;
+      };
+      expect(data.hasR2).toEqual(true);
+    } finally {
+      await destroy(scope);
     }
   });
 });
