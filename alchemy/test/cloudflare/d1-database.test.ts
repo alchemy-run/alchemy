@@ -1,12 +1,13 @@
-import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { D1Database, listDatabases } from "../../src/cloudflare/d1-database.js";
-import { Worker } from "../../src/cloudflare/worker.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import { D1Database, listDatabases } from "../../src/cloudflare/d1-database.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import { destroy } from "../../src/destroy.js";
-import "../../src/test/bun.js";
+import { destroy } from "../../src/destroy.ts";
+import "../../src/test/vitest.ts";
+import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -32,8 +33,8 @@ describe("D1 Database Resource", async () => {
 
       expect(database.name).toEqual(testId);
       expect(database.id).toBeTruthy();
-      expect(database.fileSize).toBeNumber();
-      expect(database.numTables).toBeNumber();
+      expect(database.fileSize).toBeTypeOf("number");
+      expect(database.numTables).toBeTypeOf("number");
       expect(database.version).toBeTruthy();
 
       // Check if database exists by listing databases
@@ -92,7 +93,7 @@ describe("D1 Database Resource", async () => {
       expect(database.id).toBeTruthy();
       expect(database.readReplication?.mode).toEqual("auto");
 
-      // Verify the read replication setting by fetching the database directly from API
+      // Verify the read replication setting by fetchAndExpectOKing the database directly from API
       const getResponse = await api.get(
         `/accounts/${api.accountId}/d1/database/${database.id}`,
       );
@@ -454,17 +455,16 @@ describe("D1 Database Resource", async () => {
       expect(worker.url).toBeTruthy();
 
       // Initialize the database with a table and data
-      const initResponse = await fetch(`${worker.url}/init-db`);
+      const initResponse = await fetchAndExpectOK(`${worker.url}/init-db`);
       expect(initResponse.status).toEqual(200);
       const initText = await initResponse.text();
       expect(initText).toEqual("Database initialized successfully!");
 
       // Query data from the database
-      const queryResponse = await fetch(`${worker.url}/query-db`);
+      const queryResponse = await fetchAndExpectOK(`${worker.url}/query-db`);
       expect(queryResponse.status).toEqual(200);
       const queryData: any = await queryResponse.json();
       expect(queryData.success).toEqual(true);
-      expect(queryData.data).toBeArray();
       expect(queryData.data.length).toBeGreaterThan(0);
       expect(queryData.data[0].name).toEqual("Test User");
       expect(queryData.data[0].email).toEqual("test@example.com");

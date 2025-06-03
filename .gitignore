@@ -12,3 +12,4 @@ lib/
 
 .repomix-output.txt
 alchemy-web/public/og-images/
+wrangler.jsonc

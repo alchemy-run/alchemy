@@ -1,6 +1,7 @@
 import { alchemy } from "../alchemy.ts";
 import type { Secret } from "../secret.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
+import { safeFetch } from "../util/safe-fetch.ts";
 import {
   getCloudflareAuthHeaders,
   type CloudflareAuthOptions,
@@ -165,21 +166,35 @@ export class CloudflareApi {
       delete headers["Content-Type"];
     }
 
+    let forbidden = false;
+
     // Use withExponentialBackoff for automatic retry on network errors
     return withExponentialBackoff(
       async () => {
-        const response = await fetch(`${this.baseUrl}${path}`, {
+        const response = await safeFetch(`${this.baseUrl}${path}`, {
           ...init,
           headers,
         });
         if (response.status.toString().startsWith("5")) {
           throw new InternalError("5xx error");
         }
+        if (response.status === 403 && !forbidden) {
+          // we occasionally get 403s from Cloudflare tha tare actually transient
+          // so, we will retry this at MOST once
+          forbidden = true;
+          throw new ForbiddenError();
+        }
+        if (response.status === 429) {
+          throw new TooManyRequestsError();
+        }
         return response;
       },
       // transient errors should be retried aggressively
-      (error) => error instanceof InternalError,
-      5, // Maximum 5 attempts (1 initial + 4 retries)
+      (error) =>
+        error instanceof InternalError ||
+        error instanceof TooManyRequestsError ||
+        error instanceof ForbiddenError,
+      10, // Maximum 10 attempts (1 initial + 9 retries)
       1000, // Start with 1s delay, will exponentially increase
     );
   }
@@ -250,3 +265,11 @@ export class CloudflareApi {
 }
 
 class InternalError extends Error {}
+
+class TooManyRequestsError extends Error {
+  constructor() {
+    super(`Cloudflare Rate Limit Exceeded at ${new Date().toISOString()}`);
+  }
+}
+
+class ForbiddenError extends Error {}

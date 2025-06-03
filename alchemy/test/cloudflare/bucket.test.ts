@@ -1,6 +1,6 @@
-import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import {
   createR2Client,
   getBucket,
@@ -8,12 +8,12 @@ import {
   listObjects,
   R2Bucket,
   withJurisdiction,
-} from "../../src/cloudflare/bucket.js";
-import { Worker } from "../../src/cloudflare/worker.js";
-import { destroy } from "../../src/destroy.js";
-import { BRANCH_PREFIX } from "../util.js";
+} from "../../src/cloudflare/bucket.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { destroy } from "../../src/destroy.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -36,6 +36,7 @@ describe("R2 Bucket Resource", async () => {
       bucket = await R2Bucket(testId, {
         name: testId,
         locationHint: "wnam", // West North America
+        adopt: true,
       });
       expect(bucket.name).toEqual(testId);
 
@@ -75,6 +76,7 @@ describe("R2 Bucket Resource", async () => {
     const euBucket = await R2Bucket(euBucketName, {
       name: euBucketName,
       jurisdiction: "eu",
+      adopt: true,
     });
 
     try {
@@ -105,6 +107,7 @@ describe("R2 Bucket Resource", async () => {
       bucket = await R2Bucket(bucketName, {
         name: bucketName,
         empty: true,
+        adopt: true,
       });
       expect(bucket.name).toEqual(bucketName);
 
@@ -183,6 +186,7 @@ describe("R2 Bucket Resource", async () => {
       testBucket = await R2Bucket("test-bucket", {
         name: `${BRANCH_PREFIX.toLowerCase()}-test-r2-bucket`,
         allowPublicAccess: false,
+        adopt: true,
       });
 
       // Create a worker with the R2 bucket binding

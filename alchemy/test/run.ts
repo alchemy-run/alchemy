@@ -8,4 +8,7 @@ const sinceIdx = process.argv.findIndex((arg) => arg === "--since");
 const since =
   (sinceIdx !== -1 ? process.argv[sinceIdx + 1] : undefined) ?? "HEAD~1";
 
-await runChangedTests(import.meta.dirname, since);
+const vitestIdx = process.argv.findIndex((arg) => arg === "--vitest");
+const useVitest = vitestIdx !== -1;
+
+await runChangedTests(import.meta.dirname, since, useVitest);

@@ -1,18 +1,19 @@
-import { describe, expect } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { alchemy } from "../../src/alchemy.js";
-import { AnalyticsEngineDataset } from "../../src/cloudflare/analytics-engine.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { Assets } from "../../src/cloudflare/assets.js";
-import { Self } from "../../src/cloudflare/bindings.js";
-import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.js";
-import { KVNamespace } from "../../src/cloudflare/kv-namespace.js";
-import { Worker } from "../../src/cloudflare/worker.js";
-import { destroy } from "../../src/destroy.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { AnalyticsEngineDataset } from "../../src/cloudflare/analytics-engine.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import { Assets } from "../../src/cloudflare/assets.ts";
+import { Self } from "../../src/cloudflare/bindings.ts";
+import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.ts";
+import { KVNamespace } from "../../src/cloudflare/kv-namespace.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { destroy } from "../../src/destroy.ts";
+import { BRANCH_PREFIX } from "../util.ts";
+import { fetchAndExpectOK, fetchAndExpectStatus } from "./fetch-utils.ts";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -363,14 +364,16 @@ describe("Worker Resource", () => {
 
       if (worker.url) {
         // Test that the environment variables are accessible in the worker
-        const response = await fetch(`${worker.url}/env/TEST_API_KEY`);
-        expect(response.status).toEqual(200);
+        const response = await fetchAndExpectOK(
+          `${worker.url}/env/TEST_API_KEY`,
+        );
         const text = await response.text();
         expect(text).toEqual("test-api-key-123");
 
         // Test another environment variable
-        const nodeEnvResponse = await fetch(`${worker.url}/env/NODE_ENV`);
-        expect(nodeEnvResponse.status).toEqual(200);
+        const nodeEnvResponse = await fetchAndExpectOK(
+          `${worker.url}/env/NODE_ENV`,
+        );
         const nodeEnvText = await nodeEnvResponse.text();
         expect(nodeEnvText).toEqual("testing");
       }
@@ -398,20 +401,21 @@ describe("Worker Resource", () => {
       expect(worker.env?.APP_DEBUG).toBeUndefined();
 
       // Test that the updated environment variables are accessible
-      const response = await fetch(`${worker.url}/env/TEST_API_KEY`);
-      expect(response.status).toEqual(200);
+      const response = await fetchAndExpectOK(`${worker.url}/env/TEST_API_KEY`);
       const text = await response.text();
       expect(text).toEqual("updated-key-456");
 
       // Test new environment variable
-      const newVarResponse = await fetch(`${worker.url}/env/NEW_VAR`);
-      expect(newVarResponse.status).toEqual(200);
+      const newVarResponse = await fetchAndExpectOK(
+        `${worker.url}/env/NEW_VAR`,
+      );
       const newVarText = await newVarResponse.text();
       expect(newVarText).toEqual("new-value");
 
       // Test that the removed environment variable is no longer accessible
-      const removedVarResponse = await fetch(`${worker.url}/env/APP_DEBUG`);
-      expect(removedVarResponse.status).toEqual(200);
+      const removedVarResponse = await fetchAndExpectOK(
+        `${worker.url}/env/APP_DEBUG`,
+      );
       const removedVarText = await removedVarResponse.text();
       expect(removedVarText).toEqual("undefined");
     } finally {
@@ -493,15 +497,7 @@ describe("Worker Resource", () => {
       expect(worker.bindings?.ASSETS).toBeTruthy();
 
       async function get(url: string) {
-        const response = await fetch(url);
-        if (response.status !== 200) {
-          console.log(
-            response.status,
-            response.statusText,
-            await response.text(),
-          );
-        }
-        expect(response.status).toEqual(200);
+        const response = await fetchAndExpectOK(url);
         const text = await response.text();
         return text;
       }
@@ -658,8 +654,6 @@ describe("Worker Resource", () => {
         },
       });
 
-      console.log(worker.url);
-
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
       expect(worker.url).toBeTruthy();
@@ -676,8 +670,7 @@ describe("Worker Resource", () => {
       expect(worker.assets?.run_worker_first).toEqual(false);
 
       // Test that the static assets are accessible
-      const indexResponse = await fetch(`${worker.url}/index.html`);
-      expect(indexResponse.status).toEqual(200);
+      const indexResponse = await fetchAndExpectOK(`${worker.url}/index.html`);
       expect(await indexResponse.text()).toContain("Assets Config Test");
 
       // Test HTML headers
@@ -688,8 +681,7 @@ describe("Worker Resource", () => {
       );
 
       // Test that custom headers are applied
-      const cssResponse = await fetch(`${worker.url}/styles.css`);
-      expect(cssResponse.status).toEqual(200);
+      const cssResponse = await fetchAndExpectOK(`${worker.url}/styles.css`);
       expect(cssResponse.headers.get("Cache-Control")).toEqual(
         "public, max-age=86400",
       );
@@ -697,26 +689,34 @@ describe("Worker Resource", () => {
 
       // Test auto-trailing-slash behavior
       // With auto-trailing-slash, /index should redirect to /index.html
-      const indexWithoutExtension = await fetch(`${worker.url}/index`, {
-        redirect: "manual",
-      });
-      expect(indexWithoutExtension.status).toEqual(307);
+      await fetchAndExpectStatus(
+        `${worker.url}/index`,
+        {
+          redirect: "manual",
+        },
+        307,
+      );
 
       // Test redirects
-      const oldPathResponse = await fetch(`${worker.url}/old-path`, {
-        redirect: "manual",
-      });
-      expect(oldPathResponse.status).toEqual(301);
+      await fetchAndExpectStatus(
+        `${worker.url}/old-path`,
+        {
+          redirect: "manual",
+        },
+        301,
+      );
 
       // Test wildcard redirects
-      const legacyResponse = await fetch(`${worker.url}/legacy/something`, {
-        redirect: "manual",
-      });
-      expect(legacyResponse.status).toEqual(302);
+      await fetchAndExpectStatus(
+        `${worker.url}/legacy/something`,
+        {
+          redirect: "manual",
+        },
+        302,
+      );
 
       // Test the worker's API endpoint
-      const apiResponse = await fetch(`${worker.url}/api/status`);
-      expect(apiResponse.status).toEqual(200);
+      const apiResponse = await fetchAndExpectOK(`${worker.url}/api/status`);
       const apiData: any = await apiResponse.json();
       expect(apiData.status).toEqual("ok");
       expect(apiData.worker).toEqual(workerName);
@@ -805,14 +805,16 @@ describe("Worker Resource", () => {
       expect(worker.url).toBeTruthy();
 
       // Test the echo endpoint
-      const echoResponse = await fetch(`${worker.url}/echo/hello-world`);
-      expect(echoResponse.status).toEqual(200);
+      const echoResponse = await fetchAndExpectOK(
+        `${worker.url}/echo/hello-world`,
+      );
       const echoText = await echoResponse.text();
       expect(echoText).toEqual("Echo: hello-world");
 
       // Test the recursive endpoint with a count of 3
-      const recursiveResponse = await fetch(`${worker.url}/recursive/start/3`);
-      expect(recursiveResponse.status).toEqual(200);
+      const recursiveResponse = await fetchAndExpectOK(
+        `${worker.url}/recursive/start/3`,
+      );
       const recursiveText = await recursiveResponse.text();
       expect(recursiveText).toEqual("Final result: start-3-2-1");
     } finally {
@@ -874,14 +876,12 @@ describe("Worker Resource", () => {
       expect(worker.url).toBeTruthy();
 
       // Test that the worker is running correctly
-      const response = await fetch(worker.url!);
-      expect(response.status).toEqual(200);
+      const response = await fetchAndExpectOK(worker.url!);
       const text = await response.text();
       expect(text).toEqual("Hello from entrypoint file!");
 
       // Test the JSON endpoint
-      const jsonResponse = await fetch(`${worker.url}/data`);
-      expect(jsonResponse.status).toEqual(200);
+      const jsonResponse = await fetchAndExpectOK(`${worker.url}/data`);
       const data: any = await jsonResponse.json();
       expect(data.message).toEqual("Hello from bundled worker!");
       expect(data.version).toEqual("1.0.0");
@@ -923,14 +923,12 @@ describe("Worker Resource", () => {
 
       if (worker.url) {
         // Test that the worker was updated correctly
-        const response = await fetch(worker.url);
-        expect(response.status).toEqual(200);
+        const response = await fetchAndExpectOK(worker.url);
         const text = await response.text();
         expect(text).toEqual("Hello from updated entrypoint file!");
 
         // Test the updated JSON endpoint
-        const jsonResponse = await fetch(`${worker.url}/data`);
-        expect(jsonResponse.status).toEqual(200);
+        const jsonResponse = await fetchAndExpectOK(`${worker.url}/data`);
         const data: any = await jsonResponse.json();
         expect(data.message).toEqual("Hello from updated bundled worker!");
         expect(data.version).toEqual("2.0.0");
@@ -1164,14 +1162,14 @@ describe("Worker Resource", () => {
       expect(callerWorker.bindings?.TARGET_WORKER).toBeDefined();
 
       // Test direct access to target worker works
-      const targetResponse = await fetch(targetWorker.url!);
-      expect(targetResponse.status).toEqual(200);
+      const targetResponse = await fetchAndExpectOK(targetWorker.url!);
       const targetText = await targetResponse.text();
       expect(targetText).toEqual("Target Worker is running!");
 
       // Test caller worker can access the target worker through binding
-      const callerResponse = await fetch(`${callerWorker.url}/call-target`);
-      expect(callerResponse.status).toEqual(200);
+      const callerResponse = await fetchAndExpectOK(
+        `${callerWorker.url}/call-target`,
+      );
       const callerData: any = await callerResponse.json();
 
       expect(callerData.success).toEqual(true);
@@ -1183,8 +1181,9 @@ describe("Worker Resource", () => {
       );
 
       // Test echo functionality to verify data passing works
-      const echoResponse = await fetch(`${callerWorker.url}/echo-test`);
-      expect(echoResponse.status).toEqual(200);
+      const echoResponse = await fetchAndExpectOK(
+        `${callerWorker.url}/echo-test`,
+      );
       const echoData: any = await echoResponse.json();
 
       expect(echoData.success).toEqual(true);
@@ -1283,14 +1282,13 @@ describe("Worker Resource", () => {
       expect(worker.url).toBeTruthy();
 
       // Test that the binding exists in the worker
-      const response = await fetch(`${worker.url}/check-binding`);
-      expect(response.status).toEqual(200);
+      const response = await fetchAndExpectOK(`${worker.url}/check-binding`);
       const data: any = await response.json();
       expect(data.success).toEqual(true);
       expect(data.hasBinding).toEqual(true);
 
       // Test logging an event
-      const logResponse = await fetch(`${worker.url}/log-event`, {
+      const logResponse = await fetchAndExpectOK(`${worker.url}/log-event`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1304,7 +1302,6 @@ describe("Worker Resource", () => {
         }),
       });
 
-      expect(logResponse.status).toEqual(200);
       const logData: any = await logResponse.json();
       expect(logData.success).toEqual(true);
       expect(logData.message).toEqual("Event logged successfully");
