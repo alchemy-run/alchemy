@@ -1,9 +1,9 @@
-import { beforeAll, describe, expect } from "bun:test";
+import { beforeAll, describe, expect } from "vitest";
 import Stripe from "stripe";
-import { alchemy } from "../../src/alchemy.js";
-import { destroy } from "../../src/destroy.js";
+import { alchemy } from "../../src/alchemy.ts";
+import { destroy } from "../../src/destroy.ts";
 import { File } from "../../src/stripe/file.ts";
-import "../../src/test/bun.js";
+import "../../src/test/vitest.ts";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX || "test";
 
