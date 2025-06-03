@@ -20,27 +20,20 @@ const app = await alchemy("cloudflare-sveltekit", {
       : undefined,
 });
 
-export const [authStore, storage] = await Promise.all([
-  KVNamespace("AUTH_STORE", {
-    title: `cloudflare-sveltekit-auth-store${BRANCH_PREFIX}`,
-    adopt: true,
-  }),
-  R2Bucket(`cloudflare-sveltekit-storage${BRANCH_PREFIX}`, {
-    allowPublicAccess: false,
-    // so that CI is idempotent
-    adopt: true,
-  }),
-]);
-
 export const website = await SvelteKit(`cloudflare-sveltekit-website${BRANCH_PREFIX}`, {
   bindings: {
-    STORAGE: storage,
-    AUTH_STORE: authStore,
+    AUTH_STORE: await KVNamespace("AUTH_STORE", {
+      title: `cloudflare-sveltekit-auth-store${BRANCH_PREFIX}`,
+      adopt: true,
+    }),
+    STORAGE: await R2Bucket(`cloudflare-sveltekit-storage${BRANCH_PREFIX}`, {
+      allowPublicAccess: false,
+      adopt: true,
+    }),
   },
+  url: true,
 });
 
-console.log({
-  url: website.url,
-});
+console.log(website.url);
 
 await app.finalize(); 

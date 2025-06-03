@@ -1,154 +1,85 @@
 # Cloudflare SvelteKit Example
 
-This example demonstrates how to deploy a SvelteKit application to Cloudflare Workers using Alchemy's infrastructure-as-code approach.
+This example demonstrates deploying a SvelteKit application to Cloudflare Workers using Alchemy.
 
-## Features
+It includes:
 
-- 🚀 SvelteKit app deployed to Cloudflare Workers
-- 📦 KV Namespace for key-value storage
-- 🗄️ R2 Bucket for object storage
-- 🔧 Alchemy-managed infrastructure
-- 💻 TypeScript support with Cloudflare Workers types
+- A SvelteKit frontend with server-side rendering
+- KV Namespace for key-value storage (`AUTH_STORE`)
+- R2 Bucket for object storage (`STORAGE`) 
+- Cloudflare Workers with Static Assets deployment
+- Configuration using `alchemy.run.ts`
 
-## Prerequisites
+## Setup
 
-1. [Bun](https://bun.sh/) installed
-2. Cloudflare account with API token
-3. Environment variables configured (see below)
-
-## Environment Setup
-
-Create a `.env` file in the project root (`../../.env` relative to this directory) with:
-
-```bash
-# Cloudflare API credentials
-CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
-CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
-
-# Optional: Alchemy configuration
-ALCHEMY_PASSWORD=your_encryption_password
-BRANCH_PREFIX=your_branch_prefix
-USER=your_username
-```
-
-## Getting Started
-
-1. **Install dependencies:**
+1. **Install Dependencies:** Navigate to the root of the Alchemy repository and run:
    ```bash
    bun install
    ```
+   This will install dependencies for the core library and all examples, including this one.
 
-2. **Run the development server:**
+2. **Cloudflare Credentials:** Ensure you have your Cloudflare API token and Account ID configured as environment variables:
    ```bash
-   bun run dev
+   export CLOUDFLARE_API_TOKEN="your_api_token"
+   export CLOUDFLARE_ACCOUNT_ID="your_account_id"
+   ```
+   You can also place these in a `.env` file in the repository root.
+
+## Running the Deployment
+
+1. **Navigate to Example Directory:**
+   ```bash
+   cd examples/cloudflare-sveltekit
    ```
 
-3. **Deploy to Cloudflare:**
+2. **Run Alchemy Deployment:**
    ```bash
    bun run deploy
    ```
 
-4. **Destroy resources:**
+This command will:
+
+- Execute the `bun run build` script to build the SvelteKit application
+- Provision the KV Namespace (`cloudflare-sveltekit-auth-store`)
+- Provision the R2 Bucket (`cloudflare-sveltekit-storage`) 
+- Upload the static assets from `./.svelte-kit/cloudflare` to Cloudflare Workers Assets
+- Deploy the Cloudflare Worker using the entrypoint `./.svelte-kit/cloudflare/_worker.js`
+- Bind the KV and R2 resources to the worker environment
+- Output the URL of the deployed worker
+
+## Development
+
+To run the SvelteKit development server locally:
+
+1. Navigate to the example directory:
    ```bash
-   bun run destroy
+   cd examples/cloudflare-sveltekit
+   ```
+2. Run the development server:
+   ```bash
+   bun run dev
    ```
 
-## Project Structure
+Note: The Cloudflare bindings will not function correctly in the local development environment as they rely on Cloudflare environment bindings injected by Alchemy during deployment.
 
-```
-├── src/
-│   ├── routes/
-│   │   ├── +page.svelte          # Main demo page
-│   │   └── +page.server.ts       # Server-side logic with Cloudflare bindings
-│   ├── app.d.ts                  # Type definitions for Cloudflare Platform
-│   └── app.html                  # HTML template
-├── alchemy.run.ts                # Alchemy infrastructure definition
-├── svelte.config.js              # SvelteKit config with Cloudflare adapter
-└── package.json
-```
+## Accessing Cloudflare Resources
 
-## Infrastructure Resources
-
-The Alchemy configuration creates:
-
-- **KV Namespace**: `cloudflare-sveltekit-auth-store{BRANCH_PREFIX}`
-- **R2 Bucket**: `cloudflare-sveltekit-storage{BRANCH_PREFIX}`
-- **Cloudflare Worker**: Hosts the SvelteKit application
-
-## How It Works
-
-1. **SvelteKit Configuration**: Uses `@sveltejs/adapter-cloudflare` to build for Cloudflare Workers
-2. **Alchemy Infrastructure**: Defines KV and R2 resources in `alchemy.run.ts`
-3. **Bindings**: Resources are automatically bound to the worker environment
-4. **Server-side Logic**: `+page.server.ts` demonstrates using the Cloudflare bindings
-5. **Type Safety**: Full TypeScript support with Cloudflare Workers types
-
-## Development vs Production
-
-- **Development**: Run `bun run dev` for local development with Vite
-- **Production**: Deploy with `bun run deploy` to create real Cloudflare resources
-
-## Customization
-
-### Adding More Resources
-
-Edit `alchemy.run.ts` to add additional Cloudflare resources:
+In your SvelteKit application, access the Cloudflare resources via `platform.env`:
 
 ```typescript
-// Add a D1 Database
-const database = await D1Database("my-database", {
-  name: `my-app-db${BRANCH_PREFIX}`
-});
-
-// Add to bindings
-export const website = await SvelteKit(`cloudflare-sveltekit-website${BRANCH_PREFIX}`, {
-  bindings: {
-    STORAGE: storage,
-    AUTH_STORE: authStore,
-    DATABASE: database, // Add the new resource
-  },
-});
-```
-
-### Updating Types
-
-Update `src/app.d.ts` to include new bindings:
-
-```typescript
-interface Platform {
-  env: {
-    STORAGE: R2Bucket;
-    AUTH_STORE: KVNamespace;
-    DATABASE: D1Database; // Add new binding type
-  };
-  context: ExecutionContext;
-  caches: CacheStorage & { default: Cache };
+// In a +page.server.ts file
+export async function load({ platform }) {
+  const kvData = await platform?.env?.AUTH_STORE?.get('some-key');
+  const r2Object = await platform?.env?.STORAGE?.get('some-file');
+  return { kvData };
 }
 ```
 
-## Learn More
+## Cleanup
 
-- [SvelteKit Documentation](https://svelte.dev/docs/kit)
-- [Cloudflare Workers Documentation](https://developers.cloudflare.com/workers/)
-- [Alchemy Documentation](https://alchemy.run)
-- [@sveltejs/adapter-cloudflare](https://www.npmjs.com/package/@sveltejs/adapter-cloudflare)
+To destroy the Cloudflare resources created by this example, run:
 
-## Troubleshooting
-
-### Build Issues
-
-If you encounter build issues, try:
-1. `bun install` to ensure all dependencies are installed
-2. `bun run check` to verify TypeScript types
-3. Check that the Cloudflare adapter is properly configured
-
-### Deployment Issues
-
-If deployment fails:
-1. Verify your Cloudflare API token has the necessary permissions
-2. Check that your account ID is correct
-3. Ensure you're not hitting Cloudflare's free tier limits
-
-### Type Errors
-
-Some TypeScript errors are expected during development until SvelteKit generates the types. Run `svelte-kit sync` to generate missing types.
+```bash
+cd examples/cloudflare-sveltekit
+bun run destroy
+```

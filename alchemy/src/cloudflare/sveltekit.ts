@@ -11,7 +11,7 @@ export type SvelteKit<B extends Bindings> = B extends { ASSETS: any }
   : Worker<B & { ASSETS: Assets }>;
 
 /**
- * Deploy a SvelteKit application to Cloudflare Pages with automatically configured defaults.
+ * Deploy a SvelteKit application to Cloudflare Workers with automatically configured defaults.
  *
  * This resource handles the deployment of SvelteKit applications with optimized settings for
  * Cloudflare Workers, including proper build commands and compatibility flags. It expects
@@ -54,15 +54,13 @@ export async function SvelteKit<B extends Bindings>(
     ...props,
     // Default build command for SvelteKit
     command: props?.command ?? "bun run build",
-    // Default entry point for @sveltejs/adapter-cloudflare
-    main: props?.main ?? "./.svelte-kit/output/server/index.js",
-    // Default static assets directory for SvelteKit
-    assets: props?.assets ?? "./.svelte-kit/output/client",
+    // FIXED: Use the correct entry point that SvelteKit adapter generates
+    main: props?.main ?? "./.svelte-kit/cloudflare/_worker.js",
+    // FIXED: Use the cloudflare directory which contains all static assets
+    assets: props?.assets ?? "./.svelte-kit/cloudflare",
     // SvelteKit with Cloudflare adapter needs nodejs_compat
     compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
-    // Enable wrangler by default for SvelteKit deployments
-    wrangler: props?.wrangler ?? true,
-    // Set compatibility date for modern features
-    compatibilityDate: props?.compatibilityDate ?? "2024-04-01",
+    // Set compatibility date for nodejs_compat (must be >= 2024-09-23)
+    compatibilityDate: props?.compatibilityDate ?? "2024-09-23",
   });
 } 
