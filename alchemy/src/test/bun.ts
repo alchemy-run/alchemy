@@ -131,13 +131,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
   }
 
   // Add skipIf functionality
-  test.skipIf = (condition: boolean) => {
-    if (condition) {
-      // TODO: proxy through to bun:test.skipIf
-      return (..._args: any[]) => {};
-    }
-    return test;
-  };
+  test.skipIf = it.skipIf.bind(it);
 
   // Create local test scope based on filename
   const scope = new Scope({
