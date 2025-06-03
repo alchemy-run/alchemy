@@ -36,7 +36,10 @@ async function discoverExamples(): Promise<ExampleProject[]> {
       const examplePath = join(examplesDir, entry);
       const stats = await stat(examplePath);
 
-      if (stats.isDirectory() && !skippedExamples.includes(entry)) {
+      if (
+        stats.isDirectory() &&
+        !skippedExamples.find((e) => entry.includes(e))
+      ) {
         // Check for various files
         const envFilePath = join(rootDir, ".env");
         const alchemyRunPath = join(examplePath, "alchemy.run.ts");
