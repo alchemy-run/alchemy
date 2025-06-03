@@ -6,8 +6,6 @@ import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
 
-const isGithubCI = process.env.GITHUB_ACTIONS === "true";
-
 /**
  * Runs only tests that have changed dependencies
  * @param directory Directory to scan for test files
@@ -27,7 +25,7 @@ export async function runChangedTests(
     changedTests.unshift(smokeTestPath); // Add at the beginning
   }
 
-  if (isGithubCI) {
+  if (process.env.CI) {
     // these tests are being really weird in GitHub CI.
     // not the priority to test in CI
     const testsToRemove = [

@@ -21,9 +21,7 @@ interface ExampleProject {
   hasIndexFile: boolean;
 }
 
-const isGithubCI = process.env.GITHUB_ACTIONS === "true";
-
-const skippedExamples = isGithubCI
+const skippedExamples = process.env.CI
   ? ["aws-app"]
   : // acting up in github CI, will come back to it once it's priority again
     ["aws-app", "cloudflare-worker-bootstrap"];
