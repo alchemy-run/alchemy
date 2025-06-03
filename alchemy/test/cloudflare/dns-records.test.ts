@@ -1,13 +1,13 @@
 import { afterAll, describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { DnsRecords } from "../../src/cloudflare/dns-records.js";
-import { Zone } from "../../src/cloudflare/zone.js";
-import { destroy } from "../../src/destroy.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { alchemy } from "../../src/alchemy.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import { DnsRecords } from "../../src/cloudflare/dns-records.ts";
+import { Zone } from "../../src/cloudflare/zone.ts";
+import { destroy } from "../../src/destroy.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import type { Scope } from "../../src/scope.js";
-import "../../src/test/vitest.js";
+import type { Scope } from "../../src/scope.ts";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

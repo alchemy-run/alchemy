@@ -1,11 +1,11 @@
 import { describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { getBucket } from "../../src/cloudflare/bucket.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { alchemy } from "../../src/alchemy.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import { getBucket } from "../../src/cloudflare/bucket.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import { R2RestStateStore } from "../../src/cloudflare/r2-rest-state-store.js";
-import "../../src/test/vitest.js";
+import { R2RestStateStore } from "../../src/cloudflare/r2-rest-state-store.ts";
+import "../../src/test/vitest.ts";
 
 describe("R2RestStateStore", async () => {
   const test = alchemy.test(import.meta, {

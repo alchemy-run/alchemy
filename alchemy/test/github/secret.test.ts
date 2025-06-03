@@ -1,13 +1,13 @@
 import { describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy.js";
-import { destroy } from "../../src/destroy.js";
-import { createGitHubClient } from "../../src/github/client.js";
-import { RepositoryEnvironment } from "../../src/github/repository-environment.js";
-import { GitHubSecret } from "../../src/github/secret.js";
-import { secret } from "../../src/secret.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { alchemy } from "../../src/alchemy.ts";
+import { destroy } from "../../src/destroy.ts";
+import { createGitHubClient } from "../../src/github/client.ts";
+import { RepositoryEnvironment } from "../../src/github/repository-environment.ts";
+import { GitHubSecret } from "../../src/github/secret.ts";
+import { secret } from "../../src/secret.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import "../../src/test/vitest.js";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

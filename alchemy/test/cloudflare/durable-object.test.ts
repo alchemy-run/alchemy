@@ -1,12 +1,12 @@
-import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.js";
-import { Worker } from "../../src/cloudflare/worker.js";
-import { destroy } from "../../src/destroy.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { destroy } from "../../src/destroy.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -73,7 +73,7 @@ describe("Durable Object Namespace", () => {
 
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
-      expect(worker.bindings).toBeEmpty();
+      expect(worker.bindings).toEqual({});
 
       // Create a Durable Object namespace
       const counterNamespace = new DurableObjectNamespace(

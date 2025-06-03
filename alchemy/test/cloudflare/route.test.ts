@@ -1,15 +1,15 @@
 import { afterAll, describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy.js";
-import { CloudflareApiError } from "../../src/cloudflare/api-error.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { Route } from "../../src/cloudflare/route.js";
-import { Worker } from "../../src/cloudflare/worker.js";
-import { Zone } from "../../src/cloudflare/zone.js";
-import { destroy } from "../../src/destroy.js";
-import type { Scope } from "../../src/scope.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { alchemy } from "../../src/alchemy.ts";
+import { CloudflareApiError } from "../../src/cloudflare/api-error.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import { Route } from "../../src/cloudflare/route.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { Zone } from "../../src/cloudflare/zone.ts";
+import { destroy } from "../../src/destroy.ts";
+import type { Scope } from "../../src/scope.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
-import "../../src/test/vitest.js";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

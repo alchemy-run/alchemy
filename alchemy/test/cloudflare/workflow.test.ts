@@ -1,11 +1,12 @@
-import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { Worker } from "../../src/cloudflare/worker.js";
-import { Workflow } from "../../src/cloudflare/workflow.js";
-import { destroy } from "../../src/destroy.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { Workflow } from "../../src/cloudflare/workflow.ts";
+import { destroy } from "../../src/destroy.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.ts";
+import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -222,7 +223,9 @@ describe("Workflow", () => {
       expect(worker.url).toBeTruthy();
 
       // Test triggering the first workflow
-      const response = await fetch(`${worker.url!}/trigger-email-workflow`);
+      const response = await fetchAndExpectOK(
+        `${worker.url!}/trigger-email-workflow`,
+      );
       const result: any = await response.json();
       console.log("Email workflow response:", result);
 
@@ -262,7 +265,7 @@ describe("Workflow", () => {
       expect(Object.keys(worker.bindings || {})).toHaveLength(2);
 
       // Test triggering the second workflow
-      const orderResponse = await fetch(
+      const orderResponse = await fetchAndExpectOK(
         `${worker.url!}/trigger-order-workflow`,
       );
       const orderResult: any = await orderResponse.json();
@@ -362,23 +365,22 @@ describe("Workflow", () => {
       expect(binding.scriptName).toEqual(workflowWorkerName);
 
       // Test that both workers respond to basic requests
-      const workflowProviderResponse = await fetch(workflowProviderWorker.url!);
-      expect(workflowProviderResponse.status).toEqual(200);
+      const workflowProviderResponse = await fetchAndExpectOK(
+        workflowProviderWorker.url!,
+      );
       const workflowProviderText = await workflowProviderResponse.text();
       expect(workflowProviderText).toEqual(
         "Workflow Provider Worker is running!",
       );
 
-      const clientResponse = await fetch(clientWorker.url!);
-      expect(clientResponse.status).toEqual(200);
+      const clientResponse = await fetchAndExpectOK(clientWorker.url!);
       const clientText = await clientResponse.text();
       expect(clientText).toEqual("Workflow Client Worker is running!");
 
       // Test cross-script workflow functionality
-      const triggerResponse = await fetch(
+      const triggerResponse = await fetchAndExpectOK(
         `${clientWorker.url}/trigger-shared-workflow`,
       );
-      expect(triggerResponse.status).toEqual(200);
       const triggerData: any = await triggerResponse.json();
 
       expect(triggerData).toMatchObject({
@@ -484,23 +486,22 @@ describe("Workflow", () => {
       expect(binding.scriptName).toEqual(workflowWorkerName);
 
       // Test that both workers respond to basic requests
-      const workflowProviderResponse = await fetch(workflowProviderWorker.url!);
-      expect(workflowProviderResponse.status).toEqual(200);
+      const workflowProviderResponse = await fetchAndExpectOK(
+        workflowProviderWorker.url!,
+      );
       const workflowProviderText = await workflowProviderResponse.text();
       expect(workflowProviderText).toEqual(
         "Workflow Provider Worker is running!",
       );
 
-      const clientResponse = await fetch(clientWorker.url!);
-      expect(clientResponse.status).toEqual(200);
+      const clientResponse = await fetchAndExpectOK(clientWorker.url!);
       const clientText = await clientResponse.text();
       expect(clientText).toEqual("Workflow Client Worker is running!");
 
       // Test cross-script workflow functionality
-      const triggerResponse = await fetch(
+      const triggerResponse = await fetchAndExpectOK(
         `${clientWorker.url}/trigger-shared-notification`,
       );
-      expect(triggerResponse.status).toEqual(200);
       const triggerData: any = await triggerResponse.json();
 
       expect(triggerData).toMatchObject({

@@ -1,17 +1,17 @@
 import { describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { alchemy } from "../../src/alchemy.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import {
   Hyperdrive,
   type HyperdriveResource,
-} from "../../src/cloudflare/hyperdrive.js";
-import { Worker } from "../../src/cloudflare/worker.js";
-import { destroy } from "../../src/destroy.js";
-import { NeonProject } from "../../src/neon/project.js";
-import { BRANCH_PREFIX } from "../util.js";
-import { fetchAndExpectOK } from "./fetch-utils.js";
+} from "../../src/cloudflare/hyperdrive.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { destroy } from "../../src/destroy.ts";
+import { NeonProject } from "../../src/neon/project.ts";
+import { BRANCH_PREFIX } from "../util.ts";
+import { fetchAndExpectOK } from "./fetch-utils.ts";
 // must import this or else alchemy.test won't exist
-import "../../src/test/vitest.js";
+import "../../src/test/vitest.ts";
 
 // Create API client for verification
 const api = await createCloudflareApi();

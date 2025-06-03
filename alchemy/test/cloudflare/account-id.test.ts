@@ -1,11 +1,11 @@
 import { beforeAll, describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy.js";
-import { AccountId } from "../../src/cloudflare/account-id.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { alchemy } from "../../src/alchemy.ts";
+import { AccountId } from "../../src/cloudflare/account-id.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import { destroy } from "../../src/destroy.js";
-import "../../src/test/vitest.js";
+import { destroy } from "../../src/destroy.ts";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

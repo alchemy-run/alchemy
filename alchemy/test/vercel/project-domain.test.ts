@@ -1,13 +1,13 @@
 import { describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy.js";
-import { destroy } from "../../src/destroy.js";
-import { ProjectDomain } from "../../src/vercel/project-domain.js";
-import { Project } from "../../src/vercel/project.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { alchemy } from "../../src/alchemy.ts";
+import { destroy } from "../../src/destroy.ts";
+import { ProjectDomain } from "../../src/vercel/project-domain.ts";
+import { Project } from "../../src/vercel/project.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
 // must import this or else alchemy.test won't exist
-import "../../src/test/vitest.js";
-import { createVercelApi } from "../../src/vercel/api.js";
+import "../../src/test/vitest.ts";
+import { createVercelApi } from "../../src/vercel/api.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

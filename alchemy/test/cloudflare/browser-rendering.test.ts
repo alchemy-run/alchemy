@@ -1,14 +1,14 @@
 import { describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy.js";
-import { BrowserRendering } from "../../src/cloudflare/browser-rendering.js";
-import { KVNamespace } from "../../src/cloudflare/kv-namespace.js";
-import { Worker } from "../../src/cloudflare/worker.js";
-import { destroy } from "../../src/destroy.js";
-import { BRANCH_PREFIX } from "../util.js";
-import { fetchAndExpectOK } from "./fetch-utils.js";
+import { alchemy } from "../../src/alchemy.ts";
+import { BrowserRendering } from "../../src/cloudflare/browser-rendering.ts";
+import { KVNamespace } from "../../src/cloudflare/kv-namespace.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { destroy } from "../../src/destroy.ts";
+import { BRANCH_PREFIX } from "../util.ts";
+import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 import path from "node:path";
-import "../../src/test/vitest.js";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

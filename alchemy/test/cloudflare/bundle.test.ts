@@ -1,11 +1,11 @@
 import * as path from "node:path";
 import { describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy.js";
-import { Worker } from "../../src/cloudflare/worker.js";
-import { destroy } from "../../src/destroy.js";
-import "../../src/test/vitest.js";
-import { BRANCH_PREFIX } from "../util.js";
-import { fetchAndExpectOK } from "./fetch-utils.js";
+import { alchemy } from "../../src/alchemy.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { destroy } from "../../src/destroy.ts";
+import "../../src/test/vitest.ts";
+import { BRANCH_PREFIX } from "../util.ts";
+import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -40,7 +40,6 @@ describe("Bundle Worker Test", () => {
 
   test("create, test and delete a worker with 'nodejs_als' compatibility flag", async (scope) => {
     try {
-      console.log(entrypoint_als);
       // Create a worker using the entrypoint file
       const worker = await Worker(`${BRANCH_PREFIX}-test-bundle-worker-als`, {
         entrypoint: entrypoint_als,
