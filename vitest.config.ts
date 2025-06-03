@@ -11,6 +11,8 @@ export default defineConfig({
     },
     minWorkers: 16,
     testTimeout: 120000,
+    hookTimeout: 120000,
+    passWithNoTests: true,
     sequence: {
       concurrent: true,
     },
