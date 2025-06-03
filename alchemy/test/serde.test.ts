@@ -180,12 +180,12 @@ describe("serde", async () => {
 
   test("unique symbol property should error", async (scope) => {
     try {
-      expect(
+      await expect(
         serialize(scope, {
           [Symbol()]: "bar",
         }),
       ).rejects.toThrow();
-      expect(
+      await expect(
         serialize(scope, {
           [Symbol("foo")]: "bar",
         }),
@@ -197,12 +197,12 @@ describe("serde", async () => {
 
   test("unique symbol value should error", async (scope) => {
     try {
-      expect(
+      await expect(
         serialize(scope, {
           foo: Symbol(),
         }),
       ).rejects.toThrow();
-      expect(
+      await expect(
         serialize(scope, {
           foo: Symbol("bar"),
         }),
