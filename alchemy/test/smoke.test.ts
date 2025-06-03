@@ -119,7 +119,6 @@ const examples = (await discoverExamples()).filter(
 console.log(
   `Discovered ${examples.length} example projects:`,
   examples.map((e) => e.name),
-  skippedExamples,
 );
 
 describe("Smoke Tests", () => {

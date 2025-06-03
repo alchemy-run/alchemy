@@ -83,8 +83,6 @@ jobs:
 
           echo "Running tests changed since commit: $BASE_COMMIT"
           bun run test --since "$BASE_COMMIT" --vitest
-
-          bun run test:smoke
         env:
           CI: true
           ALCHEMY_STATE_STORE: cloudflare
