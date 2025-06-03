@@ -307,9 +307,13 @@ export const PortalConfiguration = Resource(
     if (this.phase === "delete") {
       try {
         if (this.output?.id) {
-          await stripe.billingPortal.configurations.update(this.output.id, {
-            active: false,
-          });
+          const existingConfig =
+            await stripe.billingPortal.configurations.retrieve(this.output.id);
+          if (!existingConfig.is_default) {
+            await stripe.billingPortal.configurations.update(this.output.id, {
+              active: false,
+            });
+          }
         }
       } catch (error) {
         handleStripeDeleteError(error, "PortalConfiguration", this.output?.id);
