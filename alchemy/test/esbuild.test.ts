@@ -1,12 +1,12 @@
-import { afterAll, expect } from "bun:test";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { alchemy } from "../src/alchemy.js";
-import { Bundle } from "../src/esbuild/bundle.js";
-import { BRANCH_PREFIX } from "./util.js";
+import { afterAll, expect } from "vitest";
+import { alchemy } from "../src/alchemy.ts";
+import { Bundle } from "../src/esbuild/bundle.ts";
+import { BRANCH_PREFIX, exists } from "./util.ts";
 
-import { destroy } from "../src/destroy.js";
-import "../src/test/bun.js";
+import { destroy } from "../src/destroy.ts";
+import "../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -34,11 +34,11 @@ test("bundle and cleanup", async (scope) => {
     expect(bundle.hash).toBeTruthy();
 
     // Verify the file exists and contains our code
-    expect(await fs.exists(outputFile)).toBe(true);
+    expect(await exists(outputFile)).toBe(true);
     const contents = await fs.readFile(outputFile, "utf-8");
     expect(contents).toContain("Hello from bundled handler");
   } finally {
     await destroy(scope);
-    expect(await fs.exists(outputFile)).toBe(false);
+    expect(await exists(outputFile)).toBe(false);
   }
 });

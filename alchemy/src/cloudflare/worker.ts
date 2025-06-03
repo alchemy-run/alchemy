@@ -58,7 +58,7 @@ import {
 } from "./worker-metadata.ts";
 import type { SingleStepMigration } from "./worker-migration.ts";
 import { WorkerStub, isWorkerStub } from "./worker-stub.ts";
-import { type Workflow, upsertWorkflow } from "./workflow.ts";
+import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 
 /**
  * Configuration options for static assets
@@ -351,6 +351,8 @@ export type Worker<
     /**
      * The worker's URL if enabled
      * Format: {name}.{subdomain}.workers.dev
+     *
+     * @default true
      */
     url?: string;
 
@@ -391,7 +393,6 @@ export type Worker<
  * const api = await Worker("api", {
  *   name: "api-worker",
  *   entrypoint: "./src/api.ts",
- *   routes: ["api.example.com/*"],
  *   url: true
  * });
  *
@@ -802,11 +803,16 @@ export const _Worker = Resource(
       await putWorker(api, workerName, scriptBundle, scriptMetadata);
 
       for (const workflow of workflowsBindings) {
-        await upsertWorkflow(api, {
-          workflowName: workflow.workflowName,
-          className: workflow.className,
-          scriptName: workerName,
-        });
+        if (
+          workflow.scriptName === undefined ||
+          workflow.scriptName === workerName
+        ) {
+          await upsertWorkflow(api, {
+            workflowName: workflow.workflowName,
+            className: workflow.className,
+            scriptName: workflow.scriptName ?? workerName,
+          });
+        }
       }
 
       await Promise.all(
@@ -821,7 +827,9 @@ export const _Worker = Resource(
               accountId: api.accountId,
               settings: isQueueEventSource(eventSource)
                 ? eventSource.settings
-                : undefined,
+                : queue.dlq
+                  ? { deadLetterQueue: queue.dlq }
+                  : undefined,
             });
           }
           throw new Error(`Unsupported event source type: ${eventSource}`);
@@ -833,7 +841,7 @@ export const _Worker = Resource(
         this,
         api,
         workerName,
-        props.url ?? false,
+        props.url ?? true,
       );
 
       // Get current timestamp
@@ -922,7 +930,13 @@ export const _Worker = Resource(
                   // re-export this binding mapping to the host worker (this worker)
                   scriptName: workerName,
                 })
-              : binding,
+              : isWorkflow(binding) && binding.scriptName === undefined
+                ? new Workflow(binding.id, {
+                    ...binding,
+                    // re-export this binding mapping to the host worker (this worker)
+                    scriptName: workerName,
+                  })
+                : binding,
           ],
         ),
       );

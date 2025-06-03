@@ -4,9 +4,10 @@ import footnotePlugin from "markdown-it-footnote";
 import path from "path";
 import { defineConfig } from "vitepress";
 import {
-	groupIconMdPlugin,
-	groupIconVitePlugin,
+    groupIconMdPlugin,
+    groupIconVitePlugin,
 } from "vitepress-plugin-group-icons";
+import { parse as parseYaml } from "yaml";
 import { processFrontmatterFiles } from "../../alchemy/src/web/vitepress";
 
 // Imports for OG Image Generation
@@ -280,22 +281,8 @@ export default defineConfig({
 				return result;
 			}
 
-			const frontmatterText = match[1];
-
-			// Parse frontmatter lines
-			frontmatterText.split("\n").forEach((line) => {
-				// Look for "key: value" patterns
-				const colonIndex = line.indexOf(":");
-				if (colonIndex > 0) {
-					const key = line.slice(0, colonIndex).trim();
-					const value = line.slice(colonIndex + 1).trim();
-
-					// Remove quotes if present
-					result[key] = value.replace(/^['"](.*)['"]$/, "$1");
-				}
-			});
-
-			return result;
+			// Parse the YAML frontmatter properly
+			return parseYaml(match[1]) || {};
 		}
 	},
 });

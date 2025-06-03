@@ -4,7 +4,7 @@ import "../alchemy/src/aws/oidc/index.js";
 import "../alchemy/src/cloudflare/index.js";
 import "../alchemy/src/os/index.js";
 
-import { AccountId, Role } from "../alchemy/src/aws/index.js";
+import { AccountId, Role, SSMParameter } from "../alchemy/src/aws/index.js";
 import { GitHubOIDCProvider } from "../alchemy/src/aws/oidc/index.js";
 import { AccountApiToken, R2Bucket } from "../alchemy/src/cloudflare/index.js";
 import {
@@ -80,31 +80,49 @@ const accountAccessToken = await AccountApiToken("account-access-token", {
   ],
 });
 
+const secrets = {
+  AWS_ROLE_ARN: githubRole.arn,
+  CLOUDFLARE_ACCOUNT_ID,
+  CLOUDFLARE_API_KEY,
+  CLOUDFLARE_EMAIL,
+  STRIPE_API_KEY,
+  OPENAI_API_KEY,
+  NEON_API_KEY,
+  CLOUDFLARE_BUCKET_NAME: stateStore.name,
+  R2_ACCESS_KEY_ID: accountAccessToken.accessKeyId,
+  R2_SECRET_ACCESS_KEY: accountAccessToken.secretAccessKey,
+  SECRET_PASSPHRASE: alchemy.secret(process.env.SECRET_PASSPHRASE!),
+  UPSTASH_API_KEY,
+  UPSTASH_EMAIL: "sam@alchemy.run",
+  SENTRY_AUTH_TOKEN: await alchemy.secret.env.SENTRY_AUTH_TOKEN,
+  SENTRY_ORG: await alchemy.secret.env.SENTRY_ORG,
+  VERCEL_ACCESS_TOKEN: await alchemy.secret.env.VERCEL_ACCESS_TOKEN,
+  ALCHEMY_PASSWORD: await alchemy.secret.env.ALCHEMY_PASSWORD,
+  NPM_TOKEN: await alchemy.secret.env.NPM_TOKEN,
+  ALCHEMY_STATE_TOKEN: await alchemy.secret.env.ALCHEMY_STATE_TOKEN,
+};
+
 await Promise.all([
   GitHubOIDCProvider("github-oidc", {
     owner: "sam-goodwin",
     repository: "alchemy",
     roleArn: githubRole.arn,
   }),
-  ...Object.entries({
-    AWS_ROLE_ARN: githubRole.arn,
-    CLOUDFLARE_ACCOUNT_ID,
-    CLOUDFLARE_API_KEY,
-    CLOUDFLARE_EMAIL,
-    STRIPE_API_KEY,
-    OPENAI_API_KEY,
-    NEON_API_KEY,
-    CLOUDFLARE_BUCKET_NAME: stateStore.name,
-    R2_ACCESS_KEY_ID: accountAccessToken.accessKeyId,
-    R2_SECRET_ACCESS_KEY: accountAccessToken.secretAccessKey,
-    SECRET_PASSPHRASE: alchemy.secret(process.env.SECRET_PASSPHRASE!),
-    UPSTASH_API_KEY,
-    UPSTASH_EMAIL: "sam@alchemy.run",
-    SENTRY_AUTH_TOKEN: await alchemy.secret.env.SENTRY_AUTH_TOKEN,
-    SENTRY_ORG: await alchemy.secret.env.SENTRY_ORG,
-    VERCEL_ACCESS_TOKEN: await alchemy.secret.env.VERCEL_ACCESS_TOKEN,
-    ALCHEMY_PASSWORD: await alchemy.secret.env.ALCHEMY_PASSWORD,
-  }).flatMap(async ([name, value]) => {
+  SSMParameter("github-ci-secrets", {
+    name: "/alchemy/github-ci-secrets",
+    type: "SecureString",
+    value: alchemy.secret(
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries(secrets).map(([name, value]) => [
+            name,
+            typeof value === "string" ? value : value.unencrypted,
+          ]),
+        ),
+      ),
+    ),
+  }),
+  ...Object.entries(secrets).flatMap(async ([name, value]) => {
     const props = {
       owner: "sam-goodwin",
       repository: "alchemy",

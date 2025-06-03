@@ -1,5 +1,5 @@
-import { describe, expect, it } from "bun:test";
-import { dedent } from "../../src/util/dedent.js";
+import { describe, expect, it } from "vitest";
+import { dedent } from "../../src/util/dedent.ts";
 
 describe("dedent", () => {
   it("removes common indentation", () => {

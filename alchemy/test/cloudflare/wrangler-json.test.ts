@@ -1,16 +1,16 @@
-import { describe, expect } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { alchemy } from "../../src/alchemy.js";
-import { Ai } from "../../src/cloudflare/ai.js";
-import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.js";
-import { Worker } from "../../src/cloudflare/worker.js";
-import { WranglerJson } from "../../src/cloudflare/wrangler.json.js";
-import { destroy } from "../../src/destroy.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { Ai } from "../../src/cloudflare/ai.ts";
+import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { WranglerJson } from "../../src/cloudflare/wrangler.json.ts";
+import { destroy } from "../../src/destroy.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import { Workflow } from "../../src/cloudflare/workflow.js";
-import "../../src/test/bun.js";
+import { Workflow } from "../../src/cloudflare/workflow.ts";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -123,6 +123,7 @@ describe("WranglerJson Resource", () => {
           format: "esm",
           entrypoint,
           compatibilityFlags: ["nodejs_compat"],
+          adopt: true,
         });
 
         const { spec } = await WranglerJson(
@@ -147,11 +148,14 @@ describe("WranglerJson Resource", () => {
         const worker = await Worker(name, {
           format: "esm",
           script: esmWorkerScript,
+          adopt: true,
         });
 
         const id = `${BRANCH_PREFIX}-test-wrangler-json-2`;
 
-        await expect(async () => await WranglerJson(id, { worker })).toThrow(
+        await expect(
+          async () => await WranglerJson(id, { worker }),
+        ).rejects.toThrow(
           "Worker must have an entrypoint to generate a wrangler.json",
         );
       } finally {
@@ -176,6 +180,7 @@ describe("WranglerJson Resource", () => {
           bindings: {
             browser: { type: "browser" },
           },
+          adopt: true,
         });
 
         const { spec } = await WranglerJson(
@@ -209,6 +214,7 @@ describe("WranglerJson Resource", () => {
           bindings: {
             AI: new Ai(),
           },
+          adopt: true,
         });
 
         const { spec } = await WranglerJson(
@@ -259,6 +265,7 @@ describe("WranglerJson Resource", () => {
             COUNTER: counterNamespace,
             SQLITE_COUNTER: sqliteCounterNamespace,
           },
+          adopt: true,
         });
 
         const { spec } = await WranglerJson(
@@ -325,6 +332,7 @@ describe("WranglerJson Resource", () => {
         const workflow = new Workflow("test-workflow", {
           className: "TestWorkflow",
           workflowName: "test-workflow",
+          scriptName: "other-script",
         });
 
         const worker = await Worker(name, {
@@ -333,6 +341,7 @@ describe("WranglerJson Resource", () => {
           bindings: {
             WF: workflow,
           },
+          adopt: true,
         });
 
         const { spec } = await WranglerJson(
@@ -345,6 +354,7 @@ describe("WranglerJson Resource", () => {
         expect(spec.workflows?.[0].name).toEqual("test-workflow");
         expect(spec.workflows?.[0].binding).toEqual("WF");
         expect(spec.workflows?.[0].class_name).toEqual("TestWorkflow");
+        expect(spec.workflows?.[0].script_name).toEqual("other-script");
       } finally {
         await fs.rm(tempDir, { recursive: true, force: true });
         await destroy(scope);
@@ -365,6 +375,7 @@ describe("WranglerJson Resource", () => {
           format: "esm",
           entrypoint,
           crons: ["*/3 * * * *", "0 15 1 * *", "59 23 LW * *"],
+          adopt: true,
         });
 
         const { spec } = await WranglerJson(

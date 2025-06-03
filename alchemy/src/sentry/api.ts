@@ -1,5 +1,6 @@
 import { alchemy } from "../alchemy.ts";
 import type { Secret } from "../secret.ts";
+import { safeFetch } from "../util/safe-fetch.ts";
 
 /**
  * Options for Sentry API requests
@@ -60,7 +61,7 @@ export class SentryApi {
       delete headers["Content-Type"];
     }
 
-    return fetch(`${this.baseUrl}${path}`, {
+    return safeFetch(`${this.baseUrl}${path}`, {
       ...init,
       headers,
     });

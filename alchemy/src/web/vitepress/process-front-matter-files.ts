@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { parse as parseYaml } from "yaml";
 
 /**
  * Process markdown files with frontmatter to generate navigation items
@@ -56,14 +57,21 @@ export async function processFrontmatterFiles(
         let title;
 
         if (frontmatterMatch) {
-          const frontmatter = frontmatterMatch[1];
-          const orderMatch = frontmatter.match(/order:\s*(\d+)/);
-          if (orderMatch) {
-            order = Number.parseFloat(orderMatch[1]);
+          const frontmatter = parseYaml(frontmatterMatch[1]);
+
+          // Parse order as a number (supports both integers and floats)
+          if (frontmatter.order !== undefined) {
+            if (typeof frontmatter.order !== "number") {
+              throw new Error(
+                `Invalid order field in ${fullPath}: expected number, got ${typeof frontmatter.order}`,
+              );
+            }
+            order = frontmatter.order;
           }
-          const titleMatch = frontmatter.match(/title:\s*(.+)/);
-          if (titleMatch) {
-            title = titleMatch[1].trim();
+
+          // Get title from frontmatter
+          if (frontmatter.title) {
+            title = String(frontmatter.title).trim();
           }
         }
 

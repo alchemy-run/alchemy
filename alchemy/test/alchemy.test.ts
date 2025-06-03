@@ -1,8 +1,8 @@
-import { describe, expect } from "bun:test";
-import { alchemy } from "../src/alchemy.js";
-import { BRANCH_PREFIX } from "./util.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../src/alchemy.ts";
+import { BRANCH_PREFIX } from "./util.ts";
 
-import "../src/test/bun.js";
+import "../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

@@ -177,7 +177,7 @@ Let's now comment out the `File` and run it again.
 > import "alchemy/fs"
 > ```
 > If you forget this, you would get an error
-> `Cannot destroy resource "my-first-app/dev/hello" type fs::File - no provider found. You may need to import the provider in your alchemy.config.ts.`
+> `Cannot destroy resource "my-first-app/dev/hello" type fs::File - no provider found. You may need to import the provider in your alchemy.run.ts.`
 > 
 > This is because IDEs usually remove unused imports. If you don't import the resource, the delete handler won't be registered which Alchemy needs to delete the resource.
 
