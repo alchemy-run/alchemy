@@ -179,6 +179,56 @@ describe("Cloudflare Queue Resource", async () => {
     }
   }, 120000);
 
+  test("create queue with dead letter queue", async (scope) => {
+    const dlqName = `${BRANCH_PREFIX}-test-queue-dlq`;
+    const mainQueueName = `${BRANCH_PREFIX}-test-queue-with-dlq`;
+
+    try {
+      // Create dead letter queue first
+      const dlq = await Queue(dlqName, {
+        name: dlqName,
+        adopt: true,
+      });
+
+      expect(dlq.name).toEqual(dlqName);
+      expect(dlq.id).toBeTruthy();
+
+      // Create main queue with DLQ reference using Queue object
+      const mainQueue = await Queue(mainQueueName, {
+        name: mainQueueName,
+        dlq: dlq,
+        adopt: true,
+      });
+
+      expect(mainQueue.name).toEqual(mainQueueName);
+      expect(mainQueue.id).toBeTruthy();
+      expect(mainQueue.dlq).toEqual(dlq);
+
+      const mainQueueWithStringDlq = await Queue(`${mainQueueName}-string`, {
+        name: `${mainQueueName}-string`,
+        dlq: dlqName,
+        adopt: true,
+      });
+
+      expect(mainQueueWithStringDlq.name).toEqual(`${mainQueueName}-string`);
+      expect(mainQueueWithStringDlq.dlq).toEqual(dlqName);
+
+      // Verify both queues exist
+      const queues = await listQueues(api);
+      const foundDlq = queues.find((q) => q.name === dlqName);
+      const foundMainQueue = queues.find((q) => q.name === mainQueueName);
+      const foundStringQueue = queues.find(
+        (q) => q.name === `${mainQueueName}-string`,
+      );
+
+      expect(foundDlq).toBeTruthy();
+      expect(foundMainQueue).toBeTruthy();
+      expect(foundStringQueue).toBeTruthy();
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  }, 120000);
+
   test("create and test worker with Queue binding", async (scope) => {
     // Sample ESM worker script with Queue functionality
 

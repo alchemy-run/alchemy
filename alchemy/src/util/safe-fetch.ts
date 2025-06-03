@@ -18,6 +18,7 @@ export async function safeFetch(
       const shouldRetry =
         err?.code === "UND_ERR_SOCKET" ||
         err?.code === "ECONNRESET" ||
+        err?.code === "UND_ERR_CONNECT_TIMEOUT" ||
         err?.name === "FetchError";
 
       if (!shouldRetry || attempt === retries) {

@@ -52,6 +52,12 @@ export interface QueueProps extends CloudflareApiOptions {
   settings?: QueueSettings;
 
   /**
+   * Dead letter queue for failed messages
+   * Can be either a queue name (string) or a Queue object
+   */
+  dlq?: string | Queue;
+
+  /**
    * Whether to delete the queue.
    * If set to false, the queue will remain but the resource will be removed from state
    *
@@ -146,6 +152,28 @@ export type Queue<Body = unknown> = QueueResource<Body> &
  *   settings: {
  *     deliveryPaused: true
  *   }
+ * });
+ *
+ * @example
+ * // Create a queue with a dead letter queue using string reference
+ * const dlqQueue = await Queue("dlq-queue", {
+ *   name: "dlq-queue"
+ * });
+ *
+ * const mainQueue = await Queue("main-queue", {
+ *   name: "main-queue",
+ *   dlq: "dlq-queue"
+ * });
+ *
+ * @example
+ * // Create a queue with a dead letter queue using Queue object
+ * const dlqQueue = await Queue("dlq-queue", {
+ *   name: "dlq-queue"
+ * });
+ *
+ * const mainQueue = await Queue("main-queue", {
+ *   name: "main-queue",
+ *   dlq: dlqQueue
  * });
  *
  * @see https://developers.cloudflare.com/queues/
@@ -244,6 +272,7 @@ const QueueResource = Resource("cloudflare::Queue", async function <
             queueData.result.settings.message_retention_period,
         }
       : undefined,
+    dlq: props.dlq,
     createdOn: queueData.result.created_on || new Date().toISOString(),
     modifiedOn: queueData.result.modified_on || new Date().toISOString(),
     accountId: api.accountId,
@@ -468,8 +497,6 @@ export async function findQueueByName(
       };
     }>;
   };
-
-  console.log(data);
 
   if (!data.success) {
     const errorMessage = data.errors?.[0]?.message || "Unknown error";
