@@ -272,6 +272,7 @@ const QueueResource = Resource("cloudflare::Queue", async function <
             queueData.result.settings.message_retention_period,
         }
       : undefined,
+    dlq: props.dlq,
     createdOn: queueData.result.created_on || new Date().toISOString(),
     modifiedOn: queueData.result.modified_on || new Date().toISOString(),
     accountId: api.accountId,
@@ -496,8 +497,6 @@ export async function findQueueByName(
       };
     }>;
   };
-
-  console.log(data);
 
   if (!data.success) {
     const errorMessage = data.errors?.[0]?.message || "Unknown error";
