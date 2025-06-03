@@ -27,7 +27,7 @@ describe("Stripe EntitlementsFeature Resource", () => {
 
     const feature = await EntitlementsFeature(featureId, {
       name: "Test Feature",
-      lookupKey: `test_feature_${BRANCH_PREFIX}_entitlements`,
+      lookupKey: `test_feature_${BRANCH_PREFIX}_entitlements_${Date.now()}`,
       metadata: {
         test: "true",
         branch: BRANCH_PREFIX,
