@@ -469,6 +469,8 @@ export async function findQueueByName(
     }>;
   };
 
+  console.log(data);
+
   if (!data.success) {
     const errorMessage = data.errors?.[0]?.message || "Unknown error";
     throw new Error(`Failed to list queues: ${errorMessage}`);

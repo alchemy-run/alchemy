@@ -19,6 +19,7 @@ import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 import type { PolicyDocument } from "./policy.ts";
+import { retry } from "./retry.ts";
 
 /**
  * Properties for creating or updating an IAM role
@@ -229,11 +230,13 @@ export const Role = Resource(
         if (props.policies) {
           for (const policy of props.policies) {
             await ignore(NoSuchEntityException.name, () =>
-              client.send(
-                new DeleteRolePolicyCommand({
-                  RoleName: props.roleName,
-                  PolicyName: policy.policyName,
-                }),
+              retry(() =>
+                client.send(
+                  new DeleteRolePolicyCommand({
+                    RoleName: props.roleName,
+                    PolicyName: policy.policyName,
+                  }),
+                ),
               ),
             );
           }
@@ -242,10 +245,12 @@ export const Role = Resource(
         // We need to detach managed policies before deleting the role
         // First, get all attached policies
         try {
-          const attachedPoliciesResponse = await client.send(
-            new ListAttachedRolePoliciesCommand({
-              RoleName: props.roleName,
-            }),
+          const attachedPoliciesResponse = await retry(() =>
+            client.send(
+              new ListAttachedRolePoliciesCommand({
+                RoleName: props.roleName,
+              }),
+            ),
           );
 
           // Detach all managed policies
@@ -253,11 +258,13 @@ export const Role = Resource(
             attachedPoliciesResponse.AttachedPolicies || [];
           for (const policy of attachedPolicies) {
             await ignore(NoSuchEntityException.name, () =>
-              client.send(
-                new DetachRolePolicyCommand({
-                  RoleName: props.roleName,
-                  PolicyArn: policy.PolicyArn!,
-                }),
+              retry(() =>
+                client.send(
+                  new DetachRolePolicyCommand({
+                    RoleName: props.roleName,
+                    PolicyArn: policy.PolicyArn!,
+                  }),
+                ),
               ),
             );
           }
@@ -270,10 +277,12 @@ export const Role = Resource(
 
         // Try to delete the role, ignoring if it doesn't exist
         await ignore(NoSuchEntityException.name, () =>
-          client.send(
-            new DeleteRoleCommand({
-              RoleName: props.roleName,
-            }),
+          retry(() =>
+            client.send(
+              new DeleteRoleCommand({
+                RoleName: props.roleName,
+              }),
+            ),
           ),
         );
       } catch (error: any) {
@@ -294,29 +303,31 @@ export const Role = Resource(
     try {
       if (this.phase === "create") {
         // Try to create the role
-        await client.send(
-          new CreateRoleCommand({
-            RoleName: props.roleName,
-            AssumeRolePolicyDocument: assumeRolePolicyDocument,
-            Description: props.description,
-            Path: props.path,
-            MaxSessionDuration: props.maxSessionDuration,
-            PermissionsBoundary: props.permissionsBoundary,
-            Tags: [
-              ...Object.entries(props.tags || {}).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-              {
-                Key: "alchemy_stage",
-                Value: this.stage,
-              },
-              {
-                Key: "alchemy_resource",
-                Value: this.id,
-              },
-            ],
-          }),
+        await retry(() =>
+          client.send(
+            new CreateRoleCommand({
+              RoleName: props.roleName,
+              AssumeRolePolicyDocument: assumeRolePolicyDocument,
+              Description: props.description,
+              Path: props.path,
+              MaxSessionDuration: props.maxSessionDuration,
+              PermissionsBoundary: props.permissionsBoundary,
+              Tags: [
+                ...Object.entries(props.tags || {}).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+                {
+                  Key: "alchemy_stage",
+                  Value: this.stage,
+                },
+                {
+                  Key: "alchemy_resource",
+                  Value: this.id,
+                },
+              ],
+            }),
+          ),
         );
       }
     } catch (error: any) {
@@ -325,10 +336,12 @@ export const Role = Resource(
         this.phase === "create"
       ) {
         // Check if we were the ones who created it
-        const existingRole = await client.send(
-          new GetRoleCommand({
-            RoleName: props.roleName,
-          }),
+        const existingRole = await retry(() =>
+          client.send(
+            new GetRoleCommand({
+              RoleName: props.roleName,
+            }),
+          ),
         );
         const roleTags =
           existingRole.Role?.Tags?.reduce(
@@ -351,19 +364,23 @@ export const Role = Resource(
     }
 
     // Get or update the role
-    role = await client.send(
-      new GetRoleCommand({
-        RoleName: props.roleName,
-      }),
+    role = await retry(() =>
+      client.send(
+        new GetRoleCommand({
+          RoleName: props.roleName,
+        }),
+      ),
     );
 
     // Update assume role policy if it changed
     if (role.Role?.AssumeRolePolicyDocument !== assumeRolePolicyDocument) {
-      await client.send(
-        new UpdateAssumeRolePolicyCommand({
-          RoleName: props.roleName,
-          PolicyDocument: assumeRolePolicyDocument,
-        }),
+      await retry(() =>
+        client.send(
+          new UpdateAssumeRolePolicyCommand({
+            RoleName: props.roleName,
+            PolicyDocument: assumeRolePolicyDocument,
+          }),
+        ),
       );
     }
 
@@ -372,12 +389,14 @@ export const Role = Resource(
       role.Role?.Description !== props.description ||
       role.Role?.MaxSessionDuration !== props.maxSessionDuration
     ) {
-      await client.send(
-        new UpdateRoleCommand({
-          RoleName: props.roleName,
-          Description: props.description,
-          MaxSessionDuration: props.maxSessionDuration,
-        }),
+      await retry(() =>
+        client.send(
+          new UpdateRoleCommand({
+            RoleName: props.roleName,
+            Description: props.description,
+            MaxSessionDuration: props.maxSessionDuration,
+          }),
+        ),
       );
     }
 
@@ -391,11 +410,13 @@ export const Role = Resource(
       Key,
       Value,
     }));
-    await client.send(
-      new TagRoleCommand({
-        RoleName: props.roleName,
-        Tags: tags,
-      }),
+    await retry(() =>
+      client.send(
+        new TagRoleCommand({
+          RoleName: props.roleName,
+          Tags: tags,
+        }),
+      ),
     );
 
     // Handle policy changes
@@ -411,11 +432,13 @@ export const Role = Resource(
         )
       ) {
         await ignore(NoSuchEntityException.name, () =>
-          client.send(
-            new DeleteRolePolicyCommand({
-              RoleName: props.roleName,
-              PolicyName: oldPolicy.policyName,
-            }),
+          retry(() =>
+            client.send(
+              new DeleteRolePolicyCommand({
+                RoleName: props.roleName,
+                PolicyName: oldPolicy.policyName,
+              }),
+            ),
           ),
         );
       }
@@ -431,22 +454,26 @@ export const Role = Resource(
         JSON.stringify(oldPolicy.policyDocument) !==
           JSON.stringify(policy.policyDocument)
       ) {
-        await client.send(
-          new PutRolePolicyCommand({
-            RoleName: props.roleName,
-            PolicyName: policy.policyName,
-            PolicyDocument: JSON.stringify(policy.policyDocument),
-          }),
+        await retry(() =>
+          client.send(
+            new PutRolePolicyCommand({
+              RoleName: props.roleName,
+              PolicyName: policy.policyName,
+              PolicyDocument: JSON.stringify(policy.policyDocument),
+            }),
+          ),
         );
       }
     }
 
     // Handle managed policy attachments
     // Get currently attached policies
-    const attachedPoliciesResponse = await client.send(
-      new ListAttachedRolePoliciesCommand({
-        RoleName: props.roleName,
-      }),
+    const attachedPoliciesResponse = await retry(() =>
+      client.send(
+        new ListAttachedRolePoliciesCommand({
+          RoleName: props.roleName,
+        }),
+      ),
     );
 
     const currentAttachedPolicies =
@@ -460,11 +487,13 @@ export const Role = Resource(
     // Detach policies that are no longer needed
     for (const policyArn of currentPolicyArns) {
       if (!desiredPolicyArns.includes(policyArn)) {
-        await client.send(
-          new DetachRolePolicyCommand({
-            RoleName: props.roleName,
-            PolicyArn: policyArn,
-          }),
+        await retry(() =>
+          client.send(
+            new DetachRolePolicyCommand({
+              RoleName: props.roleName,
+              PolicyArn: policyArn,
+            }),
+          ),
         );
       }
     }
@@ -472,11 +501,13 @@ export const Role = Resource(
     // Attach new policies that weren't attached before
     for (const policyArn of desiredPolicyArns) {
       if (!currentPolicyArns.includes(policyArn)) {
-        await client.send(
-          new AttachRolePolicyCommand({
-            RoleName: props.roleName,
-            PolicyArn: policyArn,
-          }),
+        await retry(() =>
+          client.send(
+            new AttachRolePolicyCommand({
+              RoleName: props.roleName,
+              PolicyArn: policyArn,
+            }),
+          ),
         );
       }
     }

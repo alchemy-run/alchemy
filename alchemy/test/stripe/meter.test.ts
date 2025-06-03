@@ -1,13 +1,13 @@
-import { beforeAll, describe, expect } from "bun:test";
 import Stripe from "stripe";
-import { alchemy } from "../../src/alchemy.js";
-import { destroy } from "../../src/destroy.js";
+import { beforeAll, describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { destroy } from "../../src/destroy.ts";
 import {
   Meter,
   type Meter as MeterOutput,
   type MeterProps,
-} from "../../src/stripe/meter.js";
-import "../../src/test/bun.js";
+} from "../../src/stripe/meter.ts";
+import "../../src/test/vitest.ts";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX || "local";
 

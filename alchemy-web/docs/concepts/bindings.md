@@ -60,11 +60,9 @@ export default {
 
 ## Type-Safe Bindings
 
-To make bindings type-safe, create an `env.d.ts` file:
+To make bindings type-safe, create an `env.ts` file:
 
 ```typescript
-/// <reference types="./env.d.ts" />
-
 import type { myWorker } from "./alchemy.run";
 
 export type WorkerEnv = typeof myWorker.Env;
@@ -72,6 +70,15 @@ export type WorkerEnv = typeof myWorker.Env;
 declare module "cloudflare:workers" {
   namespace Cloudflare {
     export interface Env extends WorkerEnv {}
+  }
+}
+```
+
+Register `env.ts` in your `tsconfig.json`'s `types`.
+```json
+{
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types", "./src/env.ts"]
   }
 }
 ```
@@ -89,6 +96,13 @@ export default {
     return new Response(`Value: ${value}`);
   }
 };
+```
+
+Or use the global import:
+```ts
+import { env } from "cloudflare:workers";
+
+await env.MY_KV.get("key")
 ```
 
 ## Binding Types

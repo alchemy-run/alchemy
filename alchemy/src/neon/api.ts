@@ -1,5 +1,6 @@
 import type { Secret } from "../secret.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
+import { safeFetch } from "../util/safe-fetch.ts";
 
 /**
  * Options for Neon API requests
@@ -98,7 +99,7 @@ export class NeonApi {
     // Use withExponentialBackoff for automatic retry on network errors
     return withExponentialBackoff(
       () =>
-        fetch(`${this.baseUrl}${path}`, {
+        safeFetch(`${this.baseUrl}${path}`, {
           ...init,
           headers,
         }),

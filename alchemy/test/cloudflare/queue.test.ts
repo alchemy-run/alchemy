@@ -1,39 +1,40 @@
-import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { Queue, listQueues } from "../../src/cloudflare/queue.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import { Queue, listQueues } from "../../src/cloudflare/queue.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { destroy } from "../../src/destroy.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
 describe("Cloudflare Queue Resource", async () => {
-  // Use BRANCH_PREFIX for deterministic, non-colliding resource names
-  const testId = `${BRANCH_PREFIX}-test-queue`;
-
   // Create Cloudflare API client for direct verification
   const api = await createCloudflareApi();
 
   test("create and delete queue", async (scope) => {
-    // Create a test queue
+    // Use unique queue name for this test
+    const queueName = `${BRANCH_PREFIX}-test-queue-basic`;
     let queue: Queue | undefined;
 
     try {
-      queue = await Queue(testId, {
-        name: testId,
+      queue = await Queue(queueName, {
+        name: queueName,
+        adopt: true,
       });
 
-      expect(queue.name).toEqual(testId);
+      expect(queue.name).toEqual(queueName);
       expect(queue.id).toBeTruthy();
       expect(queue.createdOn).toBeTruthy();
       expect(queue.modifiedOn).toBeTruthy();
 
       // Check if queue exists by listing queues
       const queues = await listQueues(api);
-      const foundQueue = queues.find((q) => q.name === testId);
+      const foundQueue = queues.find((q) => q.name === queueName);
       expect(foundQueue).toBeTruthy();
       expect(foundQueue?.id).toEqual(queue.id);
     } finally {
@@ -47,7 +48,7 @@ describe("Cloudflare Queue Resource", async () => {
   }, 120000);
 
   test("create queue with settings", async (scope) => {
-    const settingsQueueName = `${testId}-settings`;
+    const settingsQueueName = `${BRANCH_PREFIX}-test-queue-settings`;
 
     try {
       // Create a queue with custom settings
@@ -58,6 +59,7 @@ describe("Cloudflare Queue Resource", async () => {
           deliveryPaused: true,
           messageRetentionPeriod: 3600, // 1 hour
         },
+        adopt: true,
       });
 
       expect(queue.name).toEqual(settingsQueueName);
@@ -72,7 +74,7 @@ describe("Cloudflare Queue Resource", async () => {
   }, 120000);
 
   test("update queue settings", async (scope) => {
-    const updateQueueName = `${testId}-update`;
+    const updateQueueName = `${BRANCH_PREFIX}-test-queue-update`;
 
     try {
       // Create a queue with initial settings
@@ -82,6 +84,7 @@ describe("Cloudflare Queue Resource", async () => {
           deliveryDelay: 5,
           deliveryPaused: false,
         },
+        adopt: true,
       });
 
       expect(queue.name).toEqual(updateQueueName);
@@ -106,13 +109,14 @@ describe("Cloudflare Queue Resource", async () => {
   }, 120000);
 
   test("throws error on name change", async (scope) => {
-    const immutableQueueName = `${testId}-immutable`;
-    const newQueueName = `${testId}-new-name`;
+    const immutableQueueName = `${BRANCH_PREFIX}-test-queue-immutable`;
+    const newQueueName = `${BRANCH_PREFIX}-test-queue-new-name`;
 
     try {
       // Create a queue
       const queue = await Queue(immutableQueueName, {
         name: immutableQueueName,
+        adopt: true,
       });
 
       expect(queue.name).toEqual(immutableQueueName);
@@ -129,9 +133,9 @@ describe("Cloudflare Queue Resource", async () => {
   }, 120000);
 
   test("adopts existing queue with same name", async (scope) => {
-    const adoptQueueName = `${testId}-adopt`;
-    const firstId = `${testId}-first`;
-    const secondId = `${testId}-second`;
+    const adoptQueueName = `${BRANCH_PREFIX}-test-queue-adopt`;
+    const firstId = `${BRANCH_PREFIX}-test-first`;
+    const secondId = `${BRANCH_PREFIX}-test-second`;
 
     try {
       // Create first queue
@@ -141,6 +145,7 @@ describe("Cloudflare Queue Resource", async () => {
           deliveryDelay: 5,
           deliveryPaused: false,
         },
+        adopt: true,
       });
 
       expect(firstQueue.name).toEqual(adoptQueueName);
@@ -173,6 +178,112 @@ describe("Cloudflare Queue Resource", async () => {
       await alchemy.destroy(scope);
     }
   }, 120000);
+
+  test("create and test worker with Queue binding", async (scope) => {
+    // Sample ESM worker script with Queue functionality
+
+    const workerName = `${BRANCH_PREFIX}-test-worker-queue`;
+    const queueName = `${BRANCH_PREFIX}-test-queue-worker`;
+
+    let worker: Worker<{ MESSAGE_QUEUE: Queue }> | undefined;
+    let queue: Queue | undefined;
+
+    try {
+      // Create a Queue
+      queue = await Queue(queueName, {
+        name: queueName,
+        settings: {
+          deliveryDelay: 0, // No delay for testing
+          deliveryPaused: false,
+        },
+        adopt: true,
+      });
+
+      expect(queue.id).toBeTruthy();
+      expect(queue.name).toEqual(queueName);
+      expect(queue.type).toEqual("queue");
+
+      // Create a worker with the Queue binding
+      worker = await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              const url = new URL(request.url);
+
+              // Send a message to the queue
+              if (url.pathname === '/send-message') {
+                try {
+                  const body = await request.json();
+                  const messageId = await env.MESSAGE_QUEUE.send(body);
+
+                  return new Response(JSON.stringify({
+                    success: true,
+                    messageId,
+                    message: 'Message sent successfully'
+                  }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' }
+                  });
+                } catch (error) {
+                  return new Response(JSON.stringify({
+                    success: false,
+                    error: error.message
+                  }), {
+                    status: 500,
+                    headers: { 'Content-Type': 'application/json' }
+                  });
+                }
+              }
+
+              return new Response('Queue Worker is running!', {
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            }
+          };
+        `,
+        format: "esm",
+        url: true, // Enable workers.dev URL to test the worker
+        bindings: {
+          MESSAGE_QUEUE: queue,
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+      expect(worker.bindings!.MESSAGE_QUEUE).toBeDefined();
+      expect(worker.url).toBeTruthy();
+
+      if (worker.url) {
+        // Send a message to the queue
+        const testMessage = {
+          id: "msg-123",
+          content: "Test message content",
+          timestamp: Date.now(),
+        };
+
+        const sendResponse = await fetch(`${worker.url}/send-message`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(testMessage),
+        });
+
+        expect(sendResponse.status).toEqual(200);
+        const responseData: any = await sendResponse.json();
+        expect(responseData.success).toEqual(true);
+        expect(responseData.message).toEqual("Message sent successfully");
+      }
+    } finally {
+      await destroy(scope);
+    }
+  }, 120000); // Increased timeout for Queue operations
 });
 
 async function assertQueueDeleted(queue: Queue) {

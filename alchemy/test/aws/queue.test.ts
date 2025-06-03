@@ -4,13 +4,13 @@ import {
   SQSClient,
   SendMessageCommand,
 } from "@aws-sdk/client-sqs";
-import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { Queue } from "../../src/aws/queue.js";
-import { destroy } from "../../src/destroy.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { Queue } from "../../src/aws/queue.ts";
+import { destroy } from "../../src/destroy.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -65,13 +65,8 @@ describe("AWS Resources", () => {
         // Always clean up, even if test assertions fail
         await destroy(scope);
         // Verify queue is gone (this will throw if queue doesn't exist)
-        await expect(
-          sqs.send(
-            new GetQueueUrlCommand({
-              QueueName: queueName,
-            }),
-          ),
-        ).rejects.toThrow("The specified queue does not exist");
+        const queueExists = await waitUntilQueueDoesNotExist(sqs, queueName);
+        expect(queueExists).toBe(false);
       }
     });
 
@@ -152,14 +147,9 @@ describe("AWS Resources", () => {
         // Delete the queue
         await destroy(queue);
 
-        // Verify queue is fully deleted by checking if GetQueueUrl throws
-        await expect(
-          sqs.send(
-            new GetQueueUrlCommand({
-              QueueName: queueName,
-            }),
-          ),
-        ).rejects.toThrow("The specified queue does not exist");
+        // Wait for the queue to be fully deleted due to eventual consistency
+        const queueExists = await waitUntilQueueDoesNotExist(sqs, queueName);
+        expect(queueExists).toBe(false);
 
         // Immediately try to recreate the queue - this should handle the QueueDeletedRecently error
         const recreatedQueue = await Queue(queueName, {
@@ -186,3 +176,46 @@ describe("AWS Resources", () => {
     });
   });
 });
+
+/**
+ * Wait until an SQS queue no longer exists, handling eventual consistency
+ *
+ * AWS SQS control plane operations are eventually consistent, so after deleting
+ * a queue it may still appear to exist for some time. This utility polls until
+ * the queue is truly gone or times out.
+ *
+ * @param sqs SQS client instance
+ * @param queueName Name of the queue to check
+ * @param timeoutMs Maximum time to wait in milliseconds (default: 60000ms)
+ * @param intervalMs Time between checks in milliseconds (default: 2000ms)
+ * @returns Promise<boolean> true if queue still exists after timeout, false if queue is gone
+ */
+export async function waitUntilQueueDoesNotExist(
+  sqs: SQSClient,
+  queueName: string,
+  timeoutMs = 60000,
+  intervalMs = 2000,
+): Promise<boolean> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      await sqs.send(new GetQueueUrlCommand({ QueueName: queueName }));
+      // If we get here, the queue still exists, wait and try again
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    } catch (error) {
+      // If GetQueueUrl throws, the queue doesn't exist anymore
+      if (
+        error instanceof Error &&
+        error.message.includes("The specified queue does not exist")
+      ) {
+        return false; // Queue is gone
+      }
+      // For other errors, continue waiting
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+
+  // Timeout reached, queue still exists
+  return true;
+}
