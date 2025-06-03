@@ -1,6 +1,6 @@
-import { describe, expect } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { Ai } from "../../src/cloudflare/ai.js";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.js";
@@ -10,7 +10,7 @@ import { destroy } from "../../src/destroy.js";
 import { BRANCH_PREFIX } from "../util.js";
 
 import { Workflow } from "../../src/cloudflare/workflow.js";
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -151,7 +151,9 @@ describe("WranglerJson Resource", () => {
 
         const id = `${BRANCH_PREFIX}-test-wrangler-json-2`;
 
-        await expect(async () => await WranglerJson(id, { worker })).toThrow(
+        await expect(
+          async () => await WranglerJson(id, { worker }),
+        ).rejects.toThrow(
           "Worker must have an entrypoint to generate a wrangler.json",
         );
       } finally {

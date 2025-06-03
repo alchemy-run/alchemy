@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect } from "bun:test";
+import { beforeAll, describe, expect } from "vitest";
 import Stripe from "stripe";
 import { alchemy } from "../../src/alchemy.js";
 import { destroy } from "../../src/destroy.js";
@@ -7,7 +7,7 @@ import {
   type Meter as MeterOutput,
   type MeterProps,
 } from "../../src/stripe/meter.js";
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX || "local";
 

@@ -2,6 +2,7 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { loadConfig } from "@aws-sdk/node-config-provider";
 import { AwsClient } from "aws4fetch";
 
+import { safeFetch } from "../../util/safe-fetch.ts";
 import {
   AlreadyExistsError,
   CloudControlError,
@@ -202,18 +203,17 @@ export class CloudControlClient {
     identifier: string,
   ): Promise<Record<string, any> | undefined> {
     try {
-      return JSON.parse(
-        (
-          await this.fetch<{
-            ResourceDescription: {
-              Properties: string;
-            };
-          }>("GetResource", {
-            TypeName: typeName,
-            Identifier: identifier,
-          })
-        ).ResourceDescription.Properties,
-      );
+      const resource = await this.fetch<{
+        Identifier: string;
+        TypeName: string;
+        ResourceDescription: {
+          Properties: string;
+        };
+      }>("GetResource", {
+        TypeName: typeName,
+        Identifier: identifier,
+      });
+      return JSON.parse(resource.ResourceDescription.Properties);
     } catch (error: any) {
       if (error instanceof ResourceNotFoundException) {
         return undefined;
@@ -366,7 +366,7 @@ export class CloudControlClient {
           },
         ] as const;
         const signedRequest = await this.client.sign(...args);
-        const response = await fetch(signedRequest);
+        const response = await safeFetch(signedRequest);
 
         if (!response.ok) {
           const data: any = await response.json();

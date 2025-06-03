@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { destroy } from "../../src/destroy.js";
 import { SentryApi } from "../../src/sentry/api.js";
@@ -7,7 +7,7 @@ import { Project } from "../../src/sentry/project.js";
 import { Team } from "../../src/sentry/team.js";
 import { BRANCH_PREFIX } from "../util.js";
 // must import this or else alchemy.test won't exist
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const api = new SentryApi();
 
@@ -15,11 +15,11 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("ClientKey Resource", () => {
+describe("ClientKey Resource", { concurrent: false }, () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
   const testId = `${BRANCH_PREFIX}-test-key`;
-  const projectId = `${BRANCH_PREFIX}-test-project`;
-  const teamId = `${BRANCH_PREFIX}-test-team`;
+  const projectId = `${BRANCH_PREFIX}-test-project-client-key`;
+  const teamId = `${BRANCH_PREFIX}-test-team-client-key`;
   const organization = process.env.SENTRY_ORG;
   if (!organization) {
     throw new Error("SENTRY_ORG environment variable is required");

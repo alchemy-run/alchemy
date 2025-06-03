@@ -1,11 +1,12 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { Ai } from "../../src/cloudflare/ai.js";
 import { Worker } from "../../src/cloudflare/worker.js";
 import { destroy } from "../../src/destroy.js";
 import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
+import { fetchAndExpectOK } from "./fetch-utils.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -50,7 +51,7 @@ describe("AI Resource Binding", () => {
       expect(worker.url).toBeTruthy();
 
       // Test the AI prompt by calling the worker endpoint
-      const response = await fetch(worker.url!);
+      const response = await fetchAndExpectOK(worker.url!);
       expect(response.status).toEqual(200);
       expect(response.headers.get("content-type")).toContain(
         "application/json",

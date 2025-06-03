@@ -1,5 +1,6 @@
 import { alchemy } from "../alchemy.ts";
 import type { Secret } from "../secret.ts";
+import { safeFetch } from "../util/safe-fetch.ts";
 
 /**
  * Options for Vercel API requests
@@ -85,7 +86,7 @@ export class VercelApi {
       delete headers["Content-Type"];
     }
 
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const response = await safeFetch(`${this.baseUrl}${path}`, {
       ...init,
       headers,
     });

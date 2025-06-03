@@ -30,8 +30,13 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
-          git push --tags
+          # Check if tag exists before creating
+          if ! git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
+            git push --tags
+          else
+            echo "Tag v${{ steps.version.outputs.version }} already exists, skipping creation"
+          fi
 
       - name: Set node
         uses: actions/setup-node@v4
@@ -52,7 +57,13 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.version.outputs.version != ''
-        run: bunx changelogithub
+        run: |
+          # Check if release exists before creating
+          if ! gh release view "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            bunx changelogithub
+          else
+            echo "Release v${{ steps.version.outputs.version }} already exists, skipping creation"
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -63,4 +74,8 @@ jobs:
           NPM_CONFIG_PROVENANCE: true
         run: |
           npm config set '//registry.npmjs.org/:_authToken' "${NODE_AUTH_TOKEN}"
-          bun run publish:npm
+          if ! npm view "alchemy@${{ steps.version.outputs.version }}" version >/dev/null 2>&1; then
+            bun run publish:npm
+          else
+            echo "Version ${{ steps.version.outputs.version }} already published to npm, skipping publish"
+          fi

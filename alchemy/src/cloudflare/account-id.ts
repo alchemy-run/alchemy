@@ -5,6 +5,8 @@ import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
  */
 export interface GetCloudflareAccountIdOptions extends CloudflareApiOptions {}
 
+export type AccountId = string;
+
 /**
  * Retrieves a Cloudflare Account ID for use with other Cloudflare resources.
  *

@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { createCloudflareApi } from "../../src/cloudflare/api.js";
 import {
@@ -7,7 +7,7 @@ import {
 } from "../../src/cloudflare/vectorize-index.js";
 import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -133,7 +133,7 @@ describe("Vectorize Index Resource", async () => {
       expect(index.name).toEqual(deleteIndex);
       expect(index.delete).toBeUndefined(); // Default is true
 
-      // Update only the delete property
+      // Update only the delete property to false
       const updatedIndex = await VectorizeIndex(deleteIndex, {
         name: deleteIndex,
         dimensions: 768,
@@ -148,6 +148,15 @@ describe("Vectorize Index Resource", async () => {
       expect(updatedIndex.metric).toEqual("cosine");
       expect(updatedIndex.id).toEqual(index.id);
       expect(updatedIndex.delete).toEqual(false);
+
+      // Set delete back to true before cleanup to ensure proper deletion
+      await VectorizeIndex(deleteIndex, {
+        name: deleteIndex,
+        dimensions: 768,
+        metric: "cosine",
+        adopt: true,
+        delete: true,
+      });
     } finally {
       await alchemy.destroy(scope);
     }

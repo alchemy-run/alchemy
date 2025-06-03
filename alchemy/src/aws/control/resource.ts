@@ -9,6 +9,7 @@ import { createCloudControlClient, type ProgressEvent } from "./client.ts";
 import {
   AlreadyExistsError,
   ConcurrentOperationError,
+  NotFoundError,
   UpdateFailedError,
 } from "./error.ts";
 import readOnlyPropertiesMap from "./properties.ts";
@@ -228,8 +229,11 @@ async function CloudControlLifecycle(
       try {
         await client.deleteResource(props.typeName, this.output.id);
       } catch (error) {
-        // Log but don't throw on cleanup errors
-        console.error(`Error deleting resource ${id}:`, error);
+        if (error instanceof NotFoundError) {
+          // great, this is the desired outcome
+        } else {
+          throw error;
+        }
       }
     }
     return this.destroy();

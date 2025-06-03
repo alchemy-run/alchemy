@@ -1,19 +1,19 @@
-import { describe, expect } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { destroy } from "../../src/destroy.js";
 import { Exec } from "../../src/os/exec.js";
 import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("Exec Resource", () => {
+describe("Exec Resource", { concurrent: false }, () => {
   test("execute a simple command", async (scope) => {
     try {
       // Run a simple command

@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { createCloudflareApi } from "../../src/cloudflare/api.js";
 import { listQueueConsumers } from "../../src/cloudflare/queue-consumer.js";
@@ -8,7 +8,7 @@ import { destroy } from "../../src/destroy.js";
 import { BRANCH_PREFIX } from "../util.js";
 // must import this or else alchemy.test won't exist
 import { CloudflareApiError } from "../../src/cloudflare/api-error.js";
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

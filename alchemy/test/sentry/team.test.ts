@@ -1,11 +1,11 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { destroy } from "../../src/destroy.js";
 import { SentryApi } from "../../src/sentry/api.js";
 import { Team } from "../../src/sentry/team.js";
 import { BRANCH_PREFIX } from "../util.js";
 // must import this or else alchemy.test won't exist
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const api = new SentryApi();
 
@@ -13,7 +13,7 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("Team Resource", () => {
+describe("Team Resource", { concurrent: false }, () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
   const testId = `${BRANCH_PREFIX}-test-team`;
   const organization = process.env.SENTRY_ORG;

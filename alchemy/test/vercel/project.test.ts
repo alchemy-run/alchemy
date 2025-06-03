@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { destroy } from "../../src/destroy.js";
 import { createVercelApi } from "../../src/vercel/api.js";
@@ -6,7 +6,7 @@ import { Project } from "../../src/vercel/project.js";
 import { BRANCH_PREFIX } from "../util.js";
 
 // must import this or else alchemy.test won't exist
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const api = await createVercelApi({
   baseUrl: "https://api.vercel.com/v11",
@@ -16,7 +16,7 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("Project Resource", () => {
+describe("Vercel Project Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
   const testId = `${BRANCH_PREFIX}-test-project`;
 

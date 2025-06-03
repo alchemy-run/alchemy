@@ -1,10 +1,11 @@
-import { describe, expect } from "bun:test";
 import * as path from "node:path";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { Worker } from "../../src/cloudflare/worker.js";
 import { destroy } from "../../src/destroy.js";
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 import { BRANCH_PREFIX } from "../util.js";
+import { fetchAndExpectOK } from "./fetch-utils.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -27,8 +28,7 @@ describe("Bundle Worker Test", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      const response = await fetch(worker.url!);
-      expect(response.status).toEqual(200);
+      const response = await fetchAndExpectOK(worker.url!);
       const text = await response.text();
       // Check against the expected response from bundle-handler.ts
       expect(text).toEqual("Hello World!");
@@ -52,8 +52,7 @@ describe("Bundle Worker Test", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      const response = await fetch(worker.url!);
-      expect(response.status).toEqual(200);
+      const response = await fetchAndExpectOK(worker.url!);
       const text = await response.text();
       // Check against the expected response from bundle-handler.ts
       expect(text).toEqual("function");
@@ -66,7 +65,7 @@ describe("Bundle Worker Test", () => {
   test("error when using 'nodejs_compat' compatibility flag with a compatibility date before Sept 23rd 2024", async (scope) => {
     try {
       // Create a worker using the entrypoint file
-      expect(
+      await expect(
         Worker(`${BRANCH_PREFIX}-test-bundle-worker-legacy`, {
           entrypoint,
           format: "esm",
@@ -96,8 +95,7 @@ describe("Bundle Worker Test", () => {
         adopt: true,
       });
 
-      const response = await fetch(worker.url!);
-      expect(response.status).toEqual(200);
+      const response = await fetchAndExpectOK(worker.url!);
       const text = await response.text();
       expect(text).toEqual(
         JSON.stringify({

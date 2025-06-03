@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import { destroy } from "../../src/destroy.js";
 import { createGitHubClient } from "../../src/github/client.js";
@@ -7,7 +7,7 @@ import { GitHubSecret } from "../../src/github/secret.js";
 import { secret } from "../../src/secret.js";
 import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -19,7 +19,7 @@ const repository = process.env.GITHUB_REPO || "test-alchemy-resources";
 // Use a fixed environment name for testing
 const environmentName = `${BRANCH_PREFIX}-test-env`;
 
-describe("GitHubSecret Resource", () => {
+describe("GitHubSecret Resource", { concurrent: false }, () => {
   // Use a fixed resource ID
   const testId = `${BRANCH_PREFIX}-github-secret-test`;
 
