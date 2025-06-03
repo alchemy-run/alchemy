@@ -84,7 +84,7 @@ jobs:
           CI: true
           ALCHEMY_STATE_STORE: cloudflare
           AWS_REGION: us-west-2
-          BRANCH_PREFIX: pr-${{ github.event_name == 'pull_request_target' && github.event.pull_request.number || github.ref_name }}
+          BRANCH_PREFIX: pr-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref_name }}
           # All secrets are now loaded from SSM parameter via the previous step
           # Fallback to GitHub secrets if SSM parameter is not available
           ALCHEMY_PASSWORD: ${{ env.ALCHEMY_PASSWORD || secrets.ALCHEMY_PASSWORD }}

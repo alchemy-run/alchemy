@@ -19,6 +19,12 @@ export async function runChangedTests(
 ): Promise<void> {
   const changedTests = await findChangedTestFiles(directory, baseCommit);
 
+  // Always include smoke test
+  const smokeTestPath = "alchemy/test/smoke.test.ts";
+  if (!changedTests.includes(smokeTestPath)) {
+    changedTests.unshift(smokeTestPath); // Add at the beginning
+  }
+
   if (changedTests.length === 0) {
     console.log("No tests affected by recent changes.");
     return;
