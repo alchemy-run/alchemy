@@ -11,6 +11,7 @@
   },
   "scripts": {
     "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b",
+    "postbuild": "cpx 'src/**/*/types.d.ts' lib",
     "publish:npm": "cp ../README.md . && bun run build && npm publish && rm README.md",
     "docs:gen": "rm -rf ./docs && typedoc"
   },
@@ -167,6 +168,7 @@
     "braintrust": "^0.0.201",
     "change-case": "^5.4.4",
     "cloudflare": "^4.2.0",
+    "cpx": "^1.5.0",
     "libsodium-wrappers": "^0.7.15",
     "openpgp": "^6.1.0",
     "prettier": "^3.5.3",
