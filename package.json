@@ -20,7 +20,6 @@
     "publish:npm": "bun run --filter alchemy publish:npm",
     "test": "bun ./alchemy/test/run.ts",
     "test:force": "vitest run",
-    "test:smoke": "./scripts/smoke.sh",
     "bump": "bun ./scripts/bump.ts"
   },
   "workspaces": [
