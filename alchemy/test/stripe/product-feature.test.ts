@@ -39,7 +39,7 @@ describe("Stripe ProductFeature Resource", () => {
 
     const feature = await EntitlementsFeature(featureId, {
       name: "Test Feature",
-      lookupKey: "test_feature_v1",
+      lookupKey: `test_feature_${BRANCH_PREFIX}_${Date.now()}`,
       metadata: {
         test: "true",
         branch: BRANCH_PREFIX,

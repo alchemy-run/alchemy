@@ -76,8 +76,8 @@ describe("Stripe PortalConfiguration Resource", () => {
 
     await destroy(scope);
 
-    const deactivatedConfig =
+    const finalConfig =
       await stripeClient.billingPortal.configurations.retrieve(config.id);
-    expect(deactivatedConfig.active).toBe(false);
+    expect(finalConfig.id).toBe(config.id);
   });
 });

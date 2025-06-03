@@ -27,7 +27,7 @@ describe("Stripe EntitlementsFeature Resource", () => {
 
     const feature = await EntitlementsFeature(featureId, {
       name: "Test Feature",
-      lookupKey: "test_feature_v1",
+      lookupKey: `test_feature_${BRANCH_PREFIX}_${Date.now()}`,
       metadata: {
         test: "true",
         branch: BRANCH_PREFIX,
@@ -36,7 +36,7 @@ describe("Stripe EntitlementsFeature Resource", () => {
 
     expect(feature).toMatchObject({
       name: "Test Feature",
-      lookupKey: "test_feature_v1",
+      lookupKey: expect.stringMatching(/^test_feature_/),
     });
 
     const stripeFeature = await stripeClient.entitlements.features.retrieve(
@@ -47,7 +47,7 @@ describe("Stripe EntitlementsFeature Resource", () => {
 
     const updatedFeature = await EntitlementsFeature(featureId, {
       name: "Updated Test Feature",
-      lookupKey: "test_feature_v1",
+      lookupKey: feature.lookupKey,
       metadata: {
         test: "true",
         branch: BRANCH_PREFIX,

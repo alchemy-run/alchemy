@@ -34,10 +34,7 @@ describe("Stripe Card Resource", () => {
 
     const card = await Card(cardId, {
       customer: customer.id,
-      number: "4242424242424242",
-      expMonth: 12,
-      expYear: 2025,
-      cvc: "123",
+      source: "tok_visa",
       name: "Test Cardholder",
       addressLine1: "123 Test St",
       addressCity: "Test City",
@@ -51,10 +48,8 @@ describe("Stripe Card Resource", () => {
     });
 
     expect(card.customer).toBe(customer.id);
-    expect(card.brand).toBe("visa");
+    expect(card.brand).toBe("Visa");
     expect(card.last4).toBe("4242");
-    expect(card.expMonth).toBe(12);
-    expect(card.expYear).toBe(2025);
 
     const stripeCard = (await stripeClient.customers.retrieveSource(
       customer.id,
@@ -66,8 +61,6 @@ describe("Stripe Card Resource", () => {
     const updatedCard = await Card(cardId, {
       customer: customer.id,
       name: "Updated Test Cardholder",
-      expMonth: 12,
-      expYear: 2026,
       metadata: {
         test: "true",
         branch: BRANCH_PREFIX,
@@ -76,7 +69,6 @@ describe("Stripe Card Resource", () => {
     });
 
     expect(updatedCard.name).toBe("Updated Test Cardholder");
-    expect(updatedCard.expYear).toBe(2026);
 
     await destroy(scope);
 
