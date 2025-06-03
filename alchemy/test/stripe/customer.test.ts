@@ -76,10 +76,16 @@ describe("Stripe Customer Resource", () => {
     await destroy(scope);
 
     try {
-      await stripeClient.customers.retrieve(customer.id);
-      throw new Error("Expected customer to be deleted");
+      const deletedCustomer = await stripeClient.customers.retrieve(
+        customer.id,
+      );
+      expect(deletedCustomer.deleted).toBe(true);
     } catch (error: any) {
-      expect(error.code).toBe("resource_missing");
+      if (error.code === "resource_missing") {
+        expect(error.code).toBe("resource_missing");
+      } else {
+        throw error;
+      }
     }
   });
 });

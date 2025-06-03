@@ -188,7 +188,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
       (ctx) => {
         // Get the current describe block name from the test context
         let describeBlockName = "";
-        if (ctx.task.suite?.name) {
+        if (ctx?.task?.suite?.name) {
           describeBlockName = `${ctx.task.suite.name}/`;
         }
 
