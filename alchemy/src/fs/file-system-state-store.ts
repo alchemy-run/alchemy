@@ -24,7 +24,19 @@ export class FileSystemStateStore implements StateStore {
   }
 
   async deinit(): Promise<void> {
-    await ignore("ENOENT", () => fs.promises.rmdir(this.dir));
+    await ignore("ENOENT", async () => {
+      const entries = await fs.promises.readdir(this.dir, {
+        withFileTypes: true,
+      });
+      const files = entries.filter((entry) => entry.isFile());
+      if (files.length > 0) {
+        throw new Error(
+          `Cannot deinit: directory "${this.dir}" contains files and cannot be deleted.`,
+        );
+      }
+      // Only folders (or empty), delete recursively
+      await fs.promises.rm(this.dir, { recursive: true, force: true });
+    });
   }
 
   async count(): Promise<number> {

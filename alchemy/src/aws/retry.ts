@@ -17,7 +17,8 @@ function isRetryableError(error: any): boolean {
     errorCode === "RequestLimitExceeded" ||
     errorMessage.includes("Rate exceeded") ||
     errorMessage.includes("throttling") ||
-    errorMessage.includes("Throttling")
+    errorMessage.includes("Throttling") ||
+    errorMessage.includes("Internal server error")
   );
 }
 

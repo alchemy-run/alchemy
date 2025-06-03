@@ -165,6 +165,8 @@ export class CloudflareApi {
       delete headers["Content-Type"];
     }
 
+    let forbidden = false;
+
     // Use withExponentialBackoff for automatic retry on network errors
     return withExponentialBackoff(
       async () => {
@@ -175,6 +177,12 @@ export class CloudflareApi {
         if (response.status.toString().startsWith("5")) {
           throw new InternalError("5xx error");
         }
+        if (response.status === 403 && !forbidden) {
+          // we occasionally get 403s from Cloudflare tha tare actually transient
+          // so, we will retry this at MOST once
+          forbidden = true;
+          throw new ForbiddenError();
+        }
         if (response.status === 429) {
           throw new TooManyRequestsError();
         }
@@ -182,7 +190,9 @@ export class CloudflareApi {
       },
       // transient errors should be retried aggressively
       (error) =>
-        error instanceof InternalError || error instanceof TooManyRequestsError,
+        error instanceof InternalError ||
+        error instanceof TooManyRequestsError ||
+        error instanceof ForbiddenError,
       10, // Maximum 10 attempts (1 initial + 9 retries)
       1000, // Start with 1s delay, will exponentially increase
     );
@@ -260,3 +270,5 @@ class TooManyRequestsError extends Error {
     super(`Cloudflare Rate Limit Exceeded at ${new Date().toISOString()}`);
   }
 }
+
+class ForbiddenError extends Error {}

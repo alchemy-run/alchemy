@@ -273,10 +273,13 @@ export const Table = Resource(
 
     while (!tableActive && retryCount < maxRetries) {
       try {
-        const response = await client.send(
-          new DescribeTableCommand({
-            TableName: props.tableName,
-          }),
+        const response = await retry(
+          async () =>
+            await client.send(
+              new DescribeTableCommand({
+                TableName: props.tableName,
+              }),
+            ),
         );
 
         tableActive = response.Table?.TableStatus === "ACTIVE";
