@@ -16,6 +16,7 @@ import { Bundle } from "../../src/esbuild/index.js";
 import { BRANCH_PREFIX } from "../util.js";
 
 import "../../src/test/vitest.js";
+import { fetchAndExpectOK } from "../cloudflare/fetch-utils.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -250,7 +251,7 @@ describe("AWS Resources", () => {
 
         // Test function URL by making an HTTP request
         const testEvent = { test: "event" };
-        const response = await fetch(func.functionUrl!, {
+        const response = await fetchAndExpectOK(func.functionUrl!, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

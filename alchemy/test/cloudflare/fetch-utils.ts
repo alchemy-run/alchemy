@@ -19,7 +19,7 @@ export async function fetchAndExpectStatus(
   input: string | URL | Request,
   init?: RequestInit,
   expectedStatus = 200,
-  maxAttempts = 10,
+  maxAttempts = 20,
   maxWaitTime = 30000,
 ): Promise<Response> {
   let attempt = 0;

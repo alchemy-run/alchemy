@@ -1512,58 +1512,6 @@ async function serializeScope(scope) {
     await Promise.all(Array.from(scope2.children.values()).map((scope3) => serializeScope2(scope3)));
     return map;
   }
-  __name(serializeScope2, "serializeScope");
-}
-async function serialize(scope, value, options) {
-  if (options?.transform) {
-    value = options.transform(value);
-  }
-  if (Array.isArray(value)) {
-    return Promise.all(value.map((value2) => serialize(scope, value2, options)));
-  } else if (value instanceof Secret) {
-    if (!scope.password) {
-      throw new Error("Cannot serialize secret without password");
-    }
-    return {
-      "@secret": options?.encrypt !== false ? await encrypt(value.unencrypted, scope.password) : value.unencrypted
-    };
-  } else if (isType(value)) {
-    return {
-      "@schema": value.toJSON()
-    };
-  } else if (value instanceof Date) {
-    return {
-      "@date": value.toISOString()
-    };
-  } else if (typeof value === "symbol") {
-    assertNotUniqueSymbol(value);
-    return {
-      "@symbol": value.toString()
-    };
-  } else if (value instanceof Scope) {
-    return {
-      "@scope": null
-    };
-  } else if (isImportMeta(value)) {
-    return Object.fromEntries(Object.keys(Object.getPrototypeOf(value)).filter((prop) => prop === "env").map((prop) => [
-      prop,
-      value[prop]
-    ]));
-  } else if (value && typeof value === "object") {
-    for (const symbol of Object.getOwnPropertySymbols(value)) {
-      assertNotUniqueSymbol(symbol);
-    }
-    return Object.fromEntries(await Promise.all([
-      ...Object.getOwnPropertySymbols(value),
-      ...Object.keys(value)
-    ].map(async (key) => [
-      key.toString(),
-      await serialize(scope, value[key], options)
-    ])));
-  } else if (typeof value === "function") {
-    return void 0;
-  }
-  return value;
 }
 function isImportMeta(value) {
   return value && typeof value === "object" && typeof value.dirname === "string" && typeof value.filename === "string" && typeof value.url === "string";
@@ -1928,7 +1876,7 @@ async function destroy(...args) {
   }
   const Provider = PROVIDERS.get(instance[ResourceKind]);
   if (!Provider) {
-    throw new Error(`Cannot destroy resource "${instance[ResourceFQN]}" type ${instance[ResourceKind]} - no provider found. You may need to import the provider in your alchemy.config.ts.`);
+    throw new Error(`Cannot destroy resource "${instance[ResourceFQN]}" type ${instance[ResourceKind]} - no provider found. You may need to import the provider in your alchemy.run.ts.`);
   }
   const scope = instance[ResourceScope];
   if (!scope) {
@@ -2638,6 +2586,9 @@ var init_scope = __esm({
 
 // alchemy/src/runtime/shims.js
 import { env as env3 } from "cloudflare:workers";
+import "node:path";
+import path7 from "node:path";
+import { isPromise } from "node:util/types";
 var __ALCHEMY_RUNTIME__, __ALCHEMY_SERIALIZED_SCOPE__, STATE;
 var init_shims = __esm({
   "alchemy/src/runtime/shims.js"() {
@@ -2967,7 +2918,6 @@ init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 init_env();
 init_resource();
-import { isPromise } from "node:util/types";
 function getBinding(resource) {
   return env2[getBindKey(resource)];
 }
@@ -3041,7 +2991,6 @@ init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 init_promises2();
 init_os();
-import path3 from "node:path";
 
 // alchemy/src/cloudflare/user.ts
 init_shims();
@@ -3083,7 +3032,6 @@ init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 init_resource();
-import path7 from "node:path";
 init_global();
 
 // alchemy/src/runtime/plugin.ts
@@ -3211,7 +3159,6 @@ init_performance2();
 init_crypto2();
 init_promises2();
 init_resource();
-import "node:path";
 
 // alchemy/src/cloudflare/bundle/alias-plugin.ts
 init_shims();
@@ -3276,8 +3223,6 @@ init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 init_module2();
-import assert3 from "node:assert";
-import nodePath from "node:path";
 
 // alchemy/src/util/dedent.ts
 init_shims();
@@ -3354,14 +3299,12 @@ init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 init_crypto2();
 init_promises2();
-import path6 from "node:path";
 
 // alchemy/src/util/content-type.ts
 init_shims();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
-import path5 from "node:path";
 
 // alchemy/src/cloudflare/worker-metadata.ts
 init_shims();
