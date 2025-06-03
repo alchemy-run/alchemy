@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, it } from "vitest";
 import path from "node:path";
+import { afterAll, beforeAll, it } from "vitest";
 import { alchemy } from "../alchemy.ts";
 import { R2RestStateStore } from "../cloudflare/r2-rest-state-store.ts";
 import { Scope } from "../scope.ts";
@@ -185,9 +185,15 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
 
     return it(
       testName,
-      () =>
-        alchemy.run(
-          testName,
+      (ctx) => {
+        // Get the current describe block name from the test context
+        let describeBlockName = "";
+        if (ctx.task.suite?.name) {
+          describeBlockName = `${ctx.task.suite.name}/`;
+        }
+
+        return alchemy.run(
+          `${describeBlockName}${testName}`,
           {
             ...options,
             parent: scope,
@@ -195,7 +201,8 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
           async (scope) => {
             await scope.run(() => fn(scope));
           },
-        ),
+        );
+      },
       timeout,
     );
   }

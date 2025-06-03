@@ -14,7 +14,7 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("Project Resource", { concurrent: false }, () => {
+describe("Sentry Project Resource", { concurrent: false }, () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
   const testId = `${BRANCH_PREFIX}-test-project-project`;
   const teamId = `${BRANCH_PREFIX}-test-team-project`;
