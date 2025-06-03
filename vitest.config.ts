@@ -6,10 +6,10 @@ export default defineConfig({
     poolOptions: {
       threads: {
         singleThread: false,
-        maxThreads: 32
+        maxThreads: 24
       },
     },
-    minWorkers: 16,
+    minWorkers: 12,
     testTimeout: 120000,
     hookTimeout: 120000,
     passWithNoTests: true,

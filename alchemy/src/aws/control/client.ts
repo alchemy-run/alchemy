@@ -2,6 +2,7 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { loadConfig } from "@aws-sdk/node-config-provider";
 import { AwsClient } from "aws4fetch";
 
+import { safeFetch } from "../../util/safe-fetch.ts";
 import {
   AlreadyExistsError,
   CloudControlError,
@@ -365,7 +366,7 @@ export class CloudControlClient {
           },
         ] as const;
         const signedRequest = await this.client.sign(...args);
-        const response = await fetch(signedRequest);
+        const response = await safeFetch(signedRequest);
 
         if (!response.ok) {
           const data: any = await response.json();

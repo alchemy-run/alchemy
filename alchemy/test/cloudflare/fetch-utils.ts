@@ -3,6 +3,27 @@
  * eventually consistent control plane.
  */
 
+import { safeFetch } from "../../src/util/safe-fetch.ts";
+
+/**
+ * Fetch with exponential backoff retry logic for 404 responses, expecting 200 OK.
+ * This is a convenience wrapper around fetchAndExpectStatus with expectedStatus=200.
+ *
+ * @param input URL or Request object
+ * @param init RequestInit options
+ * @param maxAttempts Maximum number of retry attempts (default: 10)
+ * @param maxWaitTime Maximum total wait time in milliseconds (default: 30000)
+ * @returns The successful Response
+ */
+export async function fetchAndExpectOK(
+  input: string | URL | Request,
+  init?: RequestInit,
+  maxAttempts = 10,
+  maxWaitTime = 30000,
+): Promise<Response> {
+  return fetchAndExpectStatus(input, init, 200, maxAttempts, maxWaitTime);
+}
+
 /**
  * Fetch and expect a specific status code with retry logic.
  * Cloudflare's control plane is eventually consistent, so resources may
@@ -27,7 +48,7 @@ export async function fetchAndExpectStatus(
 
   while (attempt < maxAttempts) {
     try {
-      const response = await fetch(input, init);
+      const response = await safeFetch(input, init);
 
       // If we get the expected status, return it
       if (response.status === expectedStatus) {
@@ -93,23 +114,4 @@ export async function fetchAndExpectStatus(
   }
 
   throw lastError || new Error(`Failed after ${maxAttempts} attempts`);
-}
-
-/**
- * Fetch with exponential backoff retry logic for 404 responses, expecting 200 OK.
- * This is a convenience wrapper around fetchAndExpectStatus with expectedStatus=200.
- *
- * @param input URL or Request object
- * @param init RequestInit options
- * @param maxAttempts Maximum number of retry attempts (default: 10)
- * @param maxWaitTime Maximum total wait time in milliseconds (default: 30000)
- * @returns The successful Response
- */
-export async function fetchAndExpectOK(
-  input: string | URL | Request,
-  init?: RequestInit,
-  maxAttempts = 10,
-  maxWaitTime = 30000,
-): Promise<Response> {
-  return fetchAndExpectStatus(input, init, 200, maxAttempts, maxWaitTime);
 }

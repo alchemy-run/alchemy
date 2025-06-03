@@ -1,6 +1,7 @@
 import { alchemy } from "../alchemy.ts";
 import type { Secret } from "../secret.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
+import { safeFetch } from "../util/safe-fetch.ts";
 import {
   getCloudflareAuthHeaders,
   type CloudflareAuthOptions,
@@ -170,7 +171,7 @@ export class CloudflareApi {
     // Use withExponentialBackoff for automatic retry on network errors
     return withExponentialBackoff(
       async () => {
-        const response = await fetch(`${this.baseUrl}${path}`, {
+        const response = await safeFetch(`${this.baseUrl}${path}`, {
           ...init,
           headers,
         });
