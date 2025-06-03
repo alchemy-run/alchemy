@@ -36,6 +36,7 @@ describe("R2 Bucket Resource", async () => {
       bucket = await R2Bucket(testId, {
         name: testId,
         locationHint: "wnam", // West North America
+        adopt: true,
       });
       expect(bucket.name).toEqual(testId);
 
@@ -106,6 +107,7 @@ describe("R2 Bucket Resource", async () => {
       bucket = await R2Bucket(bucketName, {
         name: bucketName,
         empty: true,
+        adopt: true,
       });
       expect(bucket.name).toEqual(bucketName);
 
@@ -184,6 +186,7 @@ describe("R2 Bucket Resource", async () => {
       testBucket = await R2Bucket("test-bucket", {
         name: `${BRANCH_PREFIX.toLowerCase()}-test-r2-bucket`,
         allowPublicAccess: false,
+        adopt: true,
       });
 
       // Create a worker with the R2 bucket binding
