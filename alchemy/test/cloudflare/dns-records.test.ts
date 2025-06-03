@@ -71,10 +71,22 @@ describe("DnsRecords Resource", async () => {
 
       // Verify records were created by querying the API directly
       for (const record of dnsRecords.records) {
-        const response = await api.get(
-          `/zones/${dnsRecords.zoneId}/dns_records/${record.id}`,
-        );
-        expect(response.ok).toBe(true);
+        let response;
+        const start = Date.now();
+        const timeout = 10000; // 10 seconds
+        const interval = 500; // 0.5 seconds
+        while (true) {
+          response = await api.get(
+            `/zones/${dnsRecords.zoneId}/dns_records/${record.id}`,
+          );
+          if (response.ok) break;
+          if (Date.now() - start > timeout) {
+            throw new Error(
+              `DNS record ${record.id} did not become available within 10s`,
+            );
+          }
+          await new Promise((resolve) => setTimeout(resolve, interval));
+        }
 
         const data: any = await response.json();
         expect(data.result.name).toBe(record.name);

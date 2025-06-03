@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest-8-core
+    runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read

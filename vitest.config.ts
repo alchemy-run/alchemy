@@ -6,8 +6,10 @@ export default defineConfig({
     poolOptions: {
       threads: {
         singleThread: false,
+        maxThreads: 32
       },
     },
+    minWorkers: 16,
     testTimeout: 120000,
     sequence: {
       concurrent: true,
