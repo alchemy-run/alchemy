@@ -108,9 +108,9 @@ async function verifyNoLocalStateInCI(examplePath: string): Promise<void> {
 }
 
 const skippedExamples = process.env.CI
-  ? ["aws-app"]
-  : // acting up in github CI, will come back to it once it's priority again
-    ["aws-app", "cloudflare-worker-bootstrap"];
+  ? // acting up in github CI, will come back to it once it's priority again
+    ["aws-app", "cloudflare-worker-bootstrap"]
+  : ["aws-app"];
 
 // Discover examples and generate tests
 const examples = (await discoverExamples()).filter(
