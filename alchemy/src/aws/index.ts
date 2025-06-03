@@ -6,4 +6,5 @@ export * from "./policy.ts";
 export * from "./queue.ts";
 export * from "./role.ts";
 export * from "./ses.ts";
+export * from "./ssm-parameter.ts";
 export * from "./table.ts";

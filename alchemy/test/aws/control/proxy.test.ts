@@ -1,11 +1,12 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../../src/alchemy.js";
 import AWS from "../../../src/aws/control/index.js";
 import { destroy } from "../../../src/destroy.js";
 import { BRANCH_PREFIX } from "../../util.js";
+import { waitForStableDeletion } from "./test-utils.js";
 // must import this or else alchemy.test won't exist
 import { ValidationException } from "../../../src/aws/control/error.js";
-import "../../../src/test/bun.js";
+import "../../../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -14,7 +15,7 @@ const test = alchemy.test(import.meta, {
 const FIVE_MINUTES = 5 * 60 * 1000;
 
 describe("AWS Cloud Control Proxy", () => {
-  const testId = `${BRANCH_PREFIX}-test-bucket`;
+  const testId = `${BRANCH_PREFIX}-test-bucket-proxy`;
 
   test(
     "create, update, and delete S3 bucket using proxy interface",
@@ -46,6 +47,11 @@ describe("AWS Cloud Control Proxy", () => {
       } finally {
         // Clean up
         await destroy(scope);
+
+        // Verify bucket was deleted with stable check
+        if (bucket?.BucketName) {
+          await waitForStableDeletion("AWS::S3::Bucket", bucket.BucketName);
+        }
       }
     },
     FIVE_MINUTES,
@@ -95,6 +101,14 @@ describe("AWS Cloud Control Proxy", () => {
       } finally {
         // Clean up
         await destroy(scope);
+
+        // Verify bucket was deleted with stable check
+        if (firstBucket?.BucketName) {
+          await waitForStableDeletion(
+            "AWS::S3::Bucket",
+            firstBucket.BucketName,
+          );
+        }
       }
     },
     FIVE_MINUTES,

@@ -224,6 +224,8 @@ export const GitHubSecret = Resource(
         }
       }
 
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
       let publicKey;
 
       // Get the appropriate public key for encrypting secrets

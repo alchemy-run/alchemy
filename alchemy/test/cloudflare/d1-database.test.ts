@@ -1,10 +1,13 @@
-import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { D1Database, listDatabases } from "../../src/cloudflare/d1-database.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import { D1Database, listDatabases } from "../../src/cloudflare/d1-database.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import "../../src/test/bun.js";
+import { destroy } from "../../src/destroy.ts";
+import "../../src/test/vitest.ts";
+import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -30,8 +33,8 @@ describe("D1 Database Resource", async () => {
 
       expect(database.name).toEqual(testId);
       expect(database.id).toBeTruthy();
-      expect(database.fileSize).toBeNumber();
-      expect(database.numTables).toBeNumber();
+      expect(database.fileSize).toBeTypeOf("number");
+      expect(database.numTables).toBeTypeOf("number");
       expect(database.version).toBeTruthy();
 
       // Check if database exists by listing databases
@@ -90,7 +93,7 @@ describe("D1 Database Resource", async () => {
       expect(database.id).toBeTruthy();
       expect(database.readReplication?.mode).toEqual("auto");
 
-      // Verify the read replication setting by fetching the database directly from API
+      // Verify the read replication setting by fetchAndExpectOKing the database directly from API
       const getResponse = await api.get(
         `/accounts/${api.accountId}/d1/database/${database.id}`,
       );
@@ -357,6 +360,118 @@ describe("D1 Database Resource", async () => {
       await alchemy.destroy(scope);
     }
   });
+
+  test("create and test worker with D1 database binding", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-d1`;
+
+    let worker: Worker<{ DATABASE: D1Database }> | undefined;
+    let db: D1Database | undefined;
+
+    try {
+      // Create a D1 database
+      db = await D1Database(`${BRANCH_PREFIX}-test-db`, {
+        name: `${BRANCH_PREFIX}-test-db`,
+        primaryLocationHint: "wnam", // West North America
+      });
+
+      expect(db.id).toBeTruthy();
+      expect(db.name).toEqual(`${BRANCH_PREFIX}-test-db`);
+
+      // Create a worker with the D1 database binding
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              const url = new URL(request.url);
+
+              // Initialize the database with a table and data
+              if (url.pathname === '/init-db') {
+                try {
+                  const db = env.DATABASE;
+
+                  // Create a test table
+                  await db.exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)");
+
+                  // Insert some test data
+                  await db.exec("INSERT INTO users (name, email) VALUES ('Test User', 'test@example.com')");
+
+                  return new Response('Database initialized successfully!', {
+                    status: 200,
+                    headers: { 'Content-Type': 'text/plain' }
+                  });
+                } catch (error) {
+                  return new Response('Error initializing database: ' + error.message, {
+                    status: 500,
+                    headers: { 'Content-Type': 'text/plain' }
+                  });
+                }
+              }
+
+              // Query data from the database
+              if (url.pathname === '/query-db') {
+                try {
+                  const db = env.DATABASE;
+
+                  // Query the database
+                  const { results } = await db.prepare("SELECT * FROM users").all();
+
+                  return new Response(JSON.stringify({ success: true, data: results }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' }
+                  });
+                } catch (error) {
+                  return new Response(JSON.stringify({
+                    success: false,
+                    error: error.message
+                  }), {
+                    status: 500,
+                    headers: { 'Content-Type': 'application/json' }
+                  });
+                }
+              }
+
+              return new Response('D1 Database Worker is running!', {
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            }
+          };
+        `,
+        format: "esm",
+        url: true, // Enable workers.dev URL to test the worker
+        bindings: {
+          DATABASE: db,
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+      expect(worker.bindings!.DATABASE).toBeDefined();
+      expect(worker.bindings!.DATABASE.id).toEqual(db.id);
+      expect(worker.url).toBeTruthy();
+
+      // Initialize the database with a table and data
+      const initResponse = await fetchAndExpectOK(`${worker.url}/init-db`);
+      expect(initResponse.status).toEqual(200);
+      const initText = await initResponse.text();
+      expect(initText).toEqual("Database initialized successfully!");
+
+      // Query data from the database
+      const queryResponse = await fetchAndExpectOK(`${worker.url}/query-db`);
+      expect(queryResponse.status).toEqual(200);
+      const queryData: any = await queryResponse.json();
+      expect(queryData.success).toEqual(true);
+      expect(queryData.data.length).toBeGreaterThan(0);
+      expect(queryData.data[0].name).toEqual("Test User");
+      expect(queryData.data[0].email).toEqual("test@example.com");
+    } finally {
+      await destroy(scope);
+    }
+  }, 120000); // Increased timeout for D1 database operations
 });
 
 async function assertDatabaseDeleted(database: D1Database) {

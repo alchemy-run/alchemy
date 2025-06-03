@@ -1,4 +1,5 @@
 import type { Secret } from "../secret.ts";
+import { safeFetch } from "../util/safe-fetch.ts";
 
 /**
  * Options for Upstash API requests
@@ -68,7 +69,7 @@ export class UpstashApi {
       });
     }
 
-    return fetch(`${this.baseUrl}${path}`, {
+    return safeFetch(`${this.baseUrl}${path}`, {
       ...init,
       headers,
     });

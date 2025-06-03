@@ -4,14 +4,14 @@ import {
   ListAttachedRolePoliciesCommand,
   NoSuchEntityException,
 } from "@aws-sdk/client-iam";
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
 import type { PolicyDocument } from "../../src/aws/policy.js";
 import { Role, type RoleProps } from "../../src/aws/role.js";
 import { destroy } from "../../src/destroy.js";
 import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

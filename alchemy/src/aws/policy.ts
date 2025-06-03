@@ -11,6 +11,7 @@ import {
 } from "@aws-sdk/client-iam";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { retry } from "./retry.ts";
 
 /**
  * Type of effect for a policy statement
@@ -238,28 +239,34 @@ export const Policy = Resource(
     if (this.phase === "delete") {
       try {
         // List and delete all non-default versions first
-        const versions = await client.send(
-          new ListPolicyVersionsCommand({
-            PolicyArn: policyArn,
-          }),
+        const versions = await retry(() =>
+          client.send(
+            new ListPolicyVersionsCommand({
+              PolicyArn: policyArn,
+            }),
+          ),
         );
 
         for (const version of versions.Versions || []) {
           if (!version.IsDefaultVersion) {
-            await client.send(
-              new DeletePolicyVersionCommand({
-                PolicyArn: policyArn,
-                VersionId: version.VersionId,
-              }),
+            await retry(() =>
+              client.send(
+                new DeletePolicyVersionCommand({
+                  PolicyArn: policyArn,
+                  VersionId: version.VersionId,
+                }),
+              ),
             );
           }
         }
 
         // Delete the policy
-        await client.send(
-          new DeletePolicyCommand({
-            PolicyArn: policyArn,
-          }),
+        await retry(() =>
+          client.send(
+            new DeletePolicyCommand({
+              PolicyArn: policyArn,
+            }),
+          ),
         );
       } catch (error: any) {
         if (error.name !== NoSuchEntityException.name) {
@@ -270,18 +277,22 @@ export const Policy = Resource(
     }
     try {
       // Check if policy exists
-      const existingPolicy = await client.send(
-        new GetPolicyCommand({
-          PolicyArn: policyArn,
-        }),
+      const existingPolicy = await retry(() =>
+        client.send(
+          new GetPolicyCommand({
+            PolicyArn: policyArn,
+          }),
+        ),
       );
 
       // Get current policy version
-      const currentVersion = await client.send(
-        new GetPolicyVersionCommand({
-          PolicyArn: policyArn,
-          VersionId: existingPolicy.Policy!.DefaultVersionId!,
-        }),
+      const currentVersion = await retry(() =>
+        client.send(
+          new GetPolicyVersionCommand({
+            PolicyArn: policyArn,
+            VersionId: existingPolicy.Policy!.DefaultVersionId!,
+          }),
+        ),
       );
 
       const currentDocument = JSON.parse(
@@ -291,10 +302,12 @@ export const Policy = Resource(
       // If policy document changed, create new version
       if (JSON.stringify(currentDocument) !== JSON.stringify(props.document)) {
         // List versions to check if we need to delete old ones
-        const versions = await client.send(
-          new ListPolicyVersionsCommand({
-            PolicyArn: policyArn,
-          }),
+        const versions = await retry(() =>
+          client.send(
+            new ListPolicyVersionsCommand({
+              PolicyArn: policyArn,
+            }),
+          ),
         );
 
         // Delete oldest version if we have 5 versions (maximum allowed)
@@ -304,29 +317,35 @@ export const Policy = Resource(
           )[0];
 
           if (!oldestVersion.IsDefaultVersion) {
-            await client.send(
-              new DeletePolicyVersionCommand({
-                PolicyArn: policyArn,
-                VersionId: oldestVersion.VersionId!,
-              }),
+            await retry(() =>
+              client.send(
+                new DeletePolicyVersionCommand({
+                  PolicyArn: policyArn,
+                  VersionId: oldestVersion.VersionId!,
+                }),
+              ),
             );
           }
         }
 
         // Create new version
-        await client.send(
-          new CreatePolicyVersionCommand({
-            PolicyArn: policyArn,
-            PolicyDocument: JSON.stringify(props.document),
-            SetAsDefault: true,
-          }),
+        await retry(() =>
+          client.send(
+            new CreatePolicyVersionCommand({
+              PolicyArn: policyArn,
+              PolicyDocument: JSON.stringify(props.document),
+              SetAsDefault: true,
+            }),
+          ),
         );
       }
 
-      const policy = await client.send(
-        new GetPolicyCommand({
-          PolicyArn: policyArn,
-        }),
+      const policy = await retry(() =>
+        client.send(
+          new GetPolicyCommand({
+            PolicyArn: policyArn,
+          }),
+        ),
       );
 
       return this({
@@ -341,19 +360,21 @@ export const Policy = Resource(
     } catch (error: any) {
       if (error.name === "NoSuchEntity") {
         // Create new policy
-        const newPolicy = await client.send(
-          new CreatePolicyCommand({
-            PolicyName: props.policyName,
-            PolicyDocument: JSON.stringify(props.document),
-            Description: props.description,
-            Path: props.path,
-            Tags: props.tags
-              ? Object.entries(props.tags).map(([Key, Value]) => ({
-                  Key,
-                  Value,
-                }))
-              : undefined,
-          }),
+        const newPolicy = await retry(() =>
+          client.send(
+            new CreatePolicyCommand({
+              PolicyName: props.policyName,
+              PolicyDocument: JSON.stringify(props.document),
+              Description: props.description,
+              Path: props.path,
+              Tags: props.tags
+                ? Object.entries(props.tags).map(([Key, Value]) => ({
+                    Key,
+                    Value,
+                  }))
+                : undefined,
+            }),
+          ),
         );
 
         return this({

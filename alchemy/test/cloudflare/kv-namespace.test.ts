@@ -1,10 +1,12 @@
-import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { KVNamespace } from "../../src/cloudflare/kv-namespace.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import { KVNamespace } from "../../src/cloudflare/kv-namespace.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import "../../src/test/bun.js";
+import { destroy } from "../../src/destroy.ts";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -17,6 +19,7 @@ describe("KV Namespace Resource", () => {
     let kvNamespace: KVNamespace | undefined;
     try {
       kvNamespace = await KVNamespace(testId, {
+        adopt: true,
         title: `${BRANCH_PREFIX}-Test Namespace ${testId}`,
         values: [
           {
@@ -86,6 +89,7 @@ describe("KV Namespace Resource", () => {
     try {
       kvNamespace = await KVNamespace("kv", {
         title: `${testId}-adopt`,
+        adopt: true,
       });
 
       await alchemy.run("nested", async () => {
@@ -106,12 +110,13 @@ describe("KV Namespace Resource", () => {
     let kvNamespace: KVNamespace | undefined;
     try {
       kvNamespace = await KVNamespace("kv", {
-        title: `${testId}-adopt`,
+        title: `${testId}-adopt-no-delete`,
+        adopt: true,
       });
 
       await alchemy.run("nested", async (scope) => {
         const adoptedNamespace = await KVNamespace("kv", {
-          title: `${testId}-adopt`,
+          title: `${testId}-adopt-no-delete`,
           adopt: true,
           delete: false,
         });
@@ -123,6 +128,51 @@ describe("KV Namespace Resource", () => {
     } finally {
       await alchemy.destroy(scope);
       await assertKvNamespaceNotExists(kvNamespace!.namespaceId);
+    }
+  });
+
+  test("create and delete worker with KV Namespace binding", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-kv-binding-kv-1`;
+
+    let worker: Worker | undefined;
+    let testKv: KVNamespace | undefined;
+    try {
+      // Create a KV namespace with initial values
+      testKv = await KVNamespace("test-kv-namespace", {
+        title: `${BRANCH_PREFIX} Test KV Namespace 2`,
+        values: [
+          {
+            key: "testKey",
+            value: "initial-value",
+          },
+        ],
+      });
+      // Create a worker with the KV Namespace binding
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              // Use the KV binding
+              if (request.url.includes('/kv')) {
+                const value = await env.TEST_KV.get('testKey');
+                return new Response('KV Value: ' + (value || 'not found'), { status: 200 });
+              }
+
+              return new Response('Hello with KV Namespace!', { status: 200 });
+            }
+          };
+        `,
+        format: "esm",
+        bindings: {
+          TEST_KV: testKv,
+        },
+      });
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+    } finally {
+      await destroy(scope);
     }
   });
 
