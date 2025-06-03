@@ -315,7 +315,14 @@ export const Zone = Resource(
       if (this.output?.id && props.delete !== false) {
         const deleteResponse = await api.delete(`/zones/${this.output.id}`);
 
-        if (!deleteResponse.ok && deleteResponse.status !== 404) {
+        if (
+          !deleteResponse.ok &&
+          !(
+            deleteResponse.status === 404 ||
+            (deleteResponse.status === 400 &&
+              deleteResponse.statusText.includes("Invalid zone identifier"))
+          )
+        ) {
           await handleApiError(
             deleteResponse,
             "delete",
