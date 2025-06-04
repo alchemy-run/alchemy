@@ -176,9 +176,9 @@ describe("R2 Bucket Resource", async () => {
     }
   });
 
-  test("should throw error when trying to change bucket name during update", async (scope) => {
+  test("should throw error when trying to change bucket name during update", async (_scope) => {
     const nameChangeTestId = `${testId}-name-change`;
-    
+
     const bucket = await R2Bucket(nameChangeTestId, {
       name: `${nameChangeTestId}-original`,
       adopt: true,
