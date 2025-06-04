@@ -25,6 +25,8 @@ It includes:
    ```
    You can also place these in a `.env` file in the repository root.
 
+   More information on how to get your Cloudflare API token and Account ID can be found in the [Cloudflare Auth Guide](https://alchemy.run/docs/guides/cloudflare-auth.html).
+
 ## Running the Deployment
 
 1. **Navigate to Example Directory:**
@@ -74,6 +76,8 @@ export async function load({ platform }) {
   return { kvData };
 }
 ```
+
+The type definitions for the platform interface are defined in [`src/app.d.ts`](./src/app.d.ts), which provides type safety for the [Cloudflare bindings](https://svelte.dev/docs/kit/adapter-cloudflare#Runtime-APIs). You can learn more about the Cloudflare bindings [here](https://developers.cloudflare.com/pages/framework-guides/deploy-a-svelte-kit-site/).
 
 ## Cleanup
 
