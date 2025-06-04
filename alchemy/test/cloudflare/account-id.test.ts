@@ -1,10 +1,11 @@
-import { beforeAll, describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { AccountId } from "../../src/cloudflare/account-id.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { beforeAll, describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { AccountId } from "../../src/cloudflare/account-id.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import "../../src/test/bun.js";
+import { destroy } from "../../src/destroy.ts";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -19,19 +20,23 @@ describe("Cloudflare Account ID", () => {
     expectedAccountId = api.accountId;
   });
 
-  test("AccountId function", async () => {
-    // Get account ID with default options
-    const accountId = await AccountId();
+  test("AccountId function", async (scope) => {
+    try {
+      // Get account ID with default options
+      const accountId = await AccountId();
 
-    // Verify account ID was retrieved correctly
-    expect(accountId).toBeTruthy();
-    expect(accountId).toEqual(expectedAccountId);
+      // Verify account ID was retrieved correctly
+      expect(accountId).toBeTruthy();
+      expect(accountId).toEqual(expectedAccountId);
 
-    // Verify account ID can be retrieved with explicit options
-    const accountIdWithOptions = await AccountId({
-      accountId: expectedAccountId,
-    });
+      // Verify account ID can be retrieved with explicit options
+      const accountIdWithOptions = await AccountId({
+        accountId: expectedAccountId,
+      });
 
-    expect(accountIdWithOptions).toEqual(expectedAccountId);
+      expect(accountIdWithOptions).toEqual(expectedAccountId);
+    } finally {
+      await destroy(scope);
+    }
   });
 });

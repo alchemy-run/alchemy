@@ -21,10 +21,6 @@
     "editor.insertSpaces": true,
     "editor.defaultFormatter": "biomejs.biome"
   },
-  "[typescript][javascript][tsx][jsx]": {
-    "editor.indentSize": 2,
-    "editor.defaultFormatter": "biomejs.biome"
-  },
   "[markdown]": {
     "editor.formatOnSave": true
   },
@@ -32,5 +28,22 @@
   "files.exclude": {
     "**/__pycache__": true,
     "**/*.pyc": true
+  },
+  "vitest.disableWorkspaceWarning": true,
+  "[typescript]": {
+    "editor.indentSize": 2,
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[javascript]": {
+    "editor.indentSize": 2,
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[tsx]": {
+    "editor.indentSize": 2,
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[jsx]": {
+    "editor.indentSize": 2,
+    "editor.defaultFormatter": "biomejs.biome"
   }
 }

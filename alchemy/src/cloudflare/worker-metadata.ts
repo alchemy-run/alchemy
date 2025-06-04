@@ -403,8 +403,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
         name: bindingName,
         workflow_name: binding.workflowName,
         class_name: binding.className,
-        // this should be set if the Workflow is in another script ...
-        // script_name: ??,
+        script_name: binding.scriptName,
       });
       // it's unclear whether this is needed, but it works both ways
       // configureClassMigration(binding, binding.id, binding.className);
@@ -460,6 +459,11 @@ export async function prepareWorkerMetadata<B extends Bindings>(
         type: "analytics_engine",
         name: bindingName,
         dataset: binding.dataset,
+      });
+    } else if (binding.type === "version_metadata") {
+      meta.bindings.push({
+        type: "version_metadata",
+        name: bindingName,
       });
     } else {
       // @ts-expect-error - we should never reach here

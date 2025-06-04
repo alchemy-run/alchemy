@@ -72,7 +72,7 @@ export async function destroy<Type extends string>(
   const Provider = resolveDeletionHandler(instance[ResourceKind]);
   if (!Provider) {
     throw new Error(
-      `Cannot destroy resource "${instance[ResourceFQN]}" type ${instance[ResourceKind]} - no provider found. You may need to import the provider in your alchemy.config.ts.`,
+      `Cannot destroy resource "${instance[ResourceFQN]}" type ${instance[ResourceKind]} - no provider found. You may need to import the provider in your alchemy.run.ts.`,
     );
   }
 

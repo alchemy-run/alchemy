@@ -3,15 +3,13 @@ import {
   DeleteTableCommand,
   DescribeTableCommand,
   DynamoDBClient,
-  InternalServerError,
   type KeySchemaElement,
-  ResourceInUseException,
   ResourceNotFoundException,
 } from "@aws-sdk/client-dynamodb";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
-import { withExponentialBackoff } from "../util/retry.ts";
+import { retry } from "./retry.ts";
 
 /**
  * Properties for creating or updating a DynamoDB table
@@ -148,20 +146,15 @@ export const Table = Resource(
     const client = new DynamoDBClient({});
 
     if (this.phase === "delete") {
-      await withExponentialBackoff(
-        async () => {
-          await ignore(ResourceNotFoundException.name, () =>
-            client.send(
-              new DeleteTableCommand({
-                TableName: props.tableName,
-              }),
-            ),
-          );
-        },
-        isRetryableError,
-        10, // Max attempts
-        200, // Initial delay in ms
-      );
+      await retry(async () => {
+        await ignore(ResourceNotFoundException.name, () =>
+          client.send(
+            new DeleteTableCommand({
+              TableName: props.tableName,
+            }),
+          ),
+        );
+      });
 
       // Wait for table to be deleted
       let tableDeleted = false;
@@ -223,59 +216,54 @@ export const Table = Resource(
       });
     }
 
-    // Attempt to create the table with exponential backoff for ResourceInUseException
-    await withExponentialBackoff(
-      async () => {
-        try {
-          // First check if table already exists
-          const describeResponse = await client.send(
-            new DescribeTableCommand({
+    // Attempt to create the table with retry for retryable errors
+    await retry(async () => {
+      try {
+        // First check if table already exists
+        const describeResponse = await client.send(
+          new DescribeTableCommand({
+            TableName: props.tableName,
+          }),
+        );
+
+        // If table exists and is ACTIVE, no need to create it
+        if (describeResponse.Table?.TableStatus === "ACTIVE") {
+          return;
+        }
+
+        // If table exists but not ACTIVE, wait for it in the polling loop below
+        if (describeResponse.Table) {
+          return;
+        }
+      } catch (error) {
+        if (error instanceof ResourceNotFoundException) {
+          // Table doesn't exist, try to create it
+          await client.send(
+            new CreateTableCommand({
               TableName: props.tableName,
+              AttributeDefinitions: attributeDefinitions,
+              KeySchema: keySchema,
+              BillingMode: props.billingMode || "PAY_PER_REQUEST",
+              ProvisionedThroughput:
+                props.billingMode === "PROVISIONED"
+                  ? {
+                      ReadCapacityUnits: props.readCapacity || 5,
+                      WriteCapacityUnits: props.writeCapacity || 5,
+                    }
+                  : undefined,
+              Tags: props.tags
+                ? Object.entries(props.tags).map(([Key, Value]) => ({
+                    Key,
+                    Value,
+                  }))
+                : undefined,
             }),
           );
-
-          // If table exists and is ACTIVE, no need to create it
-          if (describeResponse.Table?.TableStatus === "ACTIVE") {
-            return;
-          }
-
-          // If table exists but not ACTIVE, wait for it in the polling loop below
-          if (describeResponse.Table) {
-            return;
-          }
-        } catch (error) {
-          if (error instanceof ResourceNotFoundException) {
-            // Table doesn't exist, try to create it
-            await client.send(
-              new CreateTableCommand({
-                TableName: props.tableName,
-                AttributeDefinitions: attributeDefinitions,
-                KeySchema: keySchema,
-                BillingMode: props.billingMode || "PAY_PER_REQUEST",
-                ProvisionedThroughput:
-                  props.billingMode === "PROVISIONED"
-                    ? {
-                        ReadCapacityUnits: props.readCapacity || 5,
-                        WriteCapacityUnits: props.writeCapacity || 5,
-                      }
-                    : undefined,
-                Tags: props.tags
-                  ? Object.entries(props.tags).map(([Key, Value]) => ({
-                      Key,
-                      Value,
-                    }))
-                  : undefined,
-              }),
-            );
-          } else {
-            throw error;
-          }
+        } else {
+          throw error;
         }
-      },
-      isRetryableError,
-      10, // Max attempts
-      200, // Initial delay in ms
-    );
+      }
+    });
 
     // Wait for table to be active with timeout
     let tableActive = false;
@@ -285,10 +273,13 @@ export const Table = Resource(
 
     while (!tableActive && retryCount < maxRetries) {
       try {
-        const response = await client.send(
-          new DescribeTableCommand({
-            TableName: props.tableName,
-          }),
+        const response = await retry(
+          async () =>
+            await client.send(
+              new DescribeTableCommand({
+                TableName: props.tableName,
+              }),
+            ),
         );
 
         tableActive = response.Table?.TableStatus === "ACTIVE";
@@ -323,23 +314,3 @@ export const Table = Resource(
     });
   },
 );
-
-const retryableErrors = [
-  "ResourceInUseException",
-  "ResourceNotFoundException",
-  "InternalServerError",
-  "ThrottlingException",
-  "ProvisionedThroughputExceededException",
-  "LimitExceededException",
-  "RequestLimitExceeded",
-];
-
-function isRetryableError(error: any) {
-  return (
-    error instanceof ResourceInUseException ||
-    error instanceof InternalServerError ||
-    retryableErrors.includes(error?.name) ||
-    retryableErrors.includes(error?.code) ||
-    error?.$metadata?.httpStatusCode === 500
-  );
-}

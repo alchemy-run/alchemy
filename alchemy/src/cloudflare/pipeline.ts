@@ -364,7 +364,7 @@ const PipelineResource = Resource("cloudflare::Pipeline", async function <
     // Update operation
     if (this.output?.id) {
       // Check if name is being changed, which is not allowed
-      if (props.name !== this.output.name) {
+      if (pipelineName !== this.output.name) {
         throw new Error(
           "Cannot update Pipeline name after creation. Pipeline name is immutable.",
         );

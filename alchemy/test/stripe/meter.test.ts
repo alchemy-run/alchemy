@@ -1,13 +1,14 @@
-import { beforeAll, describe, expect } from "bun:test";
-import Stripe from "stripe";
-import { alchemy } from "../../src/alchemy.js";
-import { destroy } from "../../src/destroy.js";
+import type Stripe from "stripe";
+import { beforeAll, describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { destroy } from "../../src/destroy.ts";
+import { createStripeClient } from "../../src/stripe/client.ts";
 import {
   Meter,
   type Meter as MeterOutput,
   type MeterProps,
-} from "../../src/stripe/meter.js";
-import "../../src/test/bun.js";
+} from "../../src/stripe/meter.ts";
+import "../../src/test/vitest.ts";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX || "local";
 
@@ -18,7 +19,7 @@ const test = alchemy.test(import.meta, {
 });
 
 describe("Stripe Meter Resource", () => {
-  const testRunSuffix = Date.now();
+  const testRunSuffix = "test1";
   const baseLogicalId = `${BRANCH_PREFIX}-test-stripe-meter`;
 
   const generateMeterDisplayName = (suffix: string | number) =>
@@ -31,7 +32,7 @@ describe("Stripe Meter Resource", () => {
         "STRIPE_API_KEY environment variable is required for Stripe integration tests.",
       );
     }
-    stripeClient = new Stripe(apiKey);
+    stripeClient = createStripeClient({ apiKey });
   });
 
   test("create, update status, and delete meter", async (scope) => {
