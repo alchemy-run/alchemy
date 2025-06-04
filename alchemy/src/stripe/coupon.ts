@@ -2,7 +2,11 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError } from "./client.ts";
+import {
+  createStripeClient,
+  handleStripeDeleteError,
+  isStripeConflictError,
+} from "./client.ts";
 
 type CouponDuration = Stripe.CouponCreateParams.Duration;
 
@@ -74,6 +78,11 @@ export interface CouponProps {
    * API key to use (overrides environment variable)
    */
   apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -203,7 +212,47 @@ export const Coupon = Resource(
           createParams.redeem_by = props.redeemBy;
         }
 
-        coupon = await stripe.coupons.create(createParams);
+        try {
+          try {
+            coupon = await stripe.coupons.create(createParams);
+          } catch (error) {
+            if (isStripeConflictError(error) && props.adopt) {
+              if (props.id) {
+                const existingCoupon = await stripe.coupons.retrieve(props.id);
+                const updateParams: Stripe.CouponUpdateParams = {
+                  metadata: props.metadata,
+                  name: props.name,
+                };
+                coupon = await stripe.coupons.update(
+                  existingCoupon.id,
+                  updateParams,
+                );
+              } else {
+                throw error;
+              }
+            } else {
+              throw error;
+            }
+          }
+        } catch (error) {
+          if (isStripeConflictError(error) && props.adopt) {
+            if (props.id) {
+              const existingCoupon = await stripe.coupons.retrieve(props.id);
+              const updateParams: Stripe.CouponUpdateParams = {
+                metadata: props.metadata,
+                name: props.name,
+              };
+              coupon = await stripe.coupons.update(
+                existingCoupon.id,
+                updateParams,
+              );
+            } else {
+              throw error;
+            }
+          } else {
+            throw error;
+          }
+        }
       }
 
       return this({

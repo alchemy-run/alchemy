@@ -47,6 +47,10 @@ export function handleStripeDeleteError(
   throw error;
 }
 
+export function isStripeConflictError(error: any): boolean {
+  return error?.status === 409 || error?.statusCode === 409;
+}
+
 /**
  * Creates a proxy that wraps Stripe API calls with retry logic
  */

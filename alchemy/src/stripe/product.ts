@@ -2,7 +2,11 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError } from "./client.ts";
+import {
+  createStripeClient,
+  handleStripeDeleteError,
+  isStripeConflictError,
+} from "./client.ts";
 
 type ProductType = Stripe.Product.Type;
 
@@ -69,6 +73,11 @@ export interface ProductProps {
    * API key to use (overrides environment variable)
    */
   apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -196,7 +205,38 @@ export const Product = Resource(
           metadata: props.metadata,
           tax_code: props.taxCode,
         };
-        product = await stripe.products.create(createParams);
+        try {
+          product = await stripe.products.create(createParams);
+        } catch (error) {
+          if (isStripeConflictError(error) && props.adopt) {
+            const existingProducts = await stripe.products.list({
+              limit: 100,
+            });
+            const existingProduct = existingProducts.data.find(
+              (p) => p.name === props.name,
+            );
+            if (existingProduct) {
+              const updateParams = {
+                name: props.name,
+                description: props.description,
+                active: props.active,
+                images: props.images,
+                url: props.url,
+                statement_descriptor: props.statementDescriptor,
+                metadata: props.metadata,
+                tax_code: props.taxCode,
+              };
+              product = await stripe.products.update(
+                existingProduct.id,
+                updateParams,
+              );
+            } else {
+              throw error;
+            }
+          } else {
+            throw error;
+          }
+        }
       }
 
       return this({

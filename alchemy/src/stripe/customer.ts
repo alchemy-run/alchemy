@@ -2,7 +2,11 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError } from "./client.ts";
+import {
+  createStripeClient,
+  handleStripeDeleteError,
+  isStripeConflictError,
+} from "./client.ts";
 
 /**
  * Customer address information
@@ -160,6 +164,11 @@ export interface CustomerProps {
    * API key to use (overrides environment variable)
    */
   apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -379,7 +388,74 @@ export const Customer = Resource(
           };
         }
 
-        customer = await stripe.customers.create(createParams);
+        try {
+          customer = await stripe.customers.create(createParams);
+        } catch (error) {
+          if (isStripeConflictError(error) && props.adopt) {
+            if (props.email) {
+              const existingCustomers = await stripe.customers.list({
+                email: props.email,
+                limit: 1,
+              });
+              if (existingCustomers.data.length > 0) {
+                const existingCustomer = existingCustomers.data[0];
+                const adoptUpdateParams: Stripe.CustomerUpdateParams = {
+                  address: props.address
+                    ? {
+                        city: props.address.city,
+                        country: props.address.country,
+                        line1: props.address.line1,
+                        line2: props.address.line2,
+                        postal_code: props.address.postalCode,
+                        state: props.address.state,
+                      }
+                    : undefined,
+                  balance: props.balance,
+                  coupon: props.coupon,
+                  description: props.description,
+                  email: props.email,
+                  invoice_prefix: props.invoicePrefix,
+                  metadata: props.metadata,
+                  name: props.name,
+                  next_invoice_sequence: props.nextInvoiceSequence,
+                  phone: props.phone,
+                  preferred_locales: props.preferredLocales,
+                  promotion_code: props.promotionCode,
+                  shipping: props.shipping as any,
+                  source: props.source,
+                  tax_exempt: props.taxExempt,
+                };
+
+                if (props.invoiceSettings) {
+                  adoptUpdateParams.invoice_settings = {
+                    custom_fields: props.invoiceSettings.customFields,
+                    default_payment_method:
+                      props.invoiceSettings.defaultPaymentMethod,
+                    footer: props.invoiceSettings.footer,
+                    rendering_options: props.invoiceSettings.renderingOptions
+                      ? {
+                          amount_tax_display:
+                            props.invoiceSettings.renderingOptions
+                              .amountTaxDisplay,
+                        }
+                      : null,
+                  };
+                }
+
+                customer = await stripe.customers.update(
+                  existingCustomer.id,
+                  adoptUpdateParams,
+                );
+              } else {
+                throw error;
+              }
+            } else {
+              throw error;
+            }
+          } else {
+            throw error;
+          }
+        }
       }
 
       return this({

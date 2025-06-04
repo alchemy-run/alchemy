@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient } from "./client.ts";
+import { createStripeClient, isStripeConflictError } from "./client.ts";
 
 /**
  * Properties for creating a Stripe file
@@ -38,6 +38,11 @@ export interface FileProps {
    * API key to use (overrides environment variable)
    */
   apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -159,10 +164,20 @@ export const File = Resource(
       if (this.phase === "update" && this.output?.id) {
         file = await stripe.files.retrieve(this.output.id);
       } else {
-        file = await stripe.files.create({
-          file: props.file,
-          purpose: props.purpose,
-        });
+        try {
+          file = await stripe.files.create({
+            file: props.file,
+            purpose: props.purpose,
+          });
+        } catch (error) {
+          if (isStripeConflictError(error) && props.adopt) {
+            throw new Error(
+              "File adoption is not supported - files are immutable and cannot be adopted",
+            );
+          } else {
+            throw error;
+          }
+        }
       }
 
       return this({

@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient } from "./client.ts";
+import { createStripeClient, isStripeConflictError } from "./client.ts";
 
 /**
  * Properties for creating a Stripe entitlements feature
@@ -27,6 +27,11 @@ export interface EntitlementsFeatureProps {
    * API key to use (overrides environment variable)
    */
   apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -121,7 +126,31 @@ export const EntitlementsFeature = Resource(
         if (props.lookupKey) {
           createParams.lookup_key = props.lookupKey;
         }
-        feature = await stripe.entitlements.features.create(createParams);
+        try {
+          feature = await stripe.entitlements.features.create(createParams);
+        } catch (error) {
+          if (isStripeConflictError(error) && props.adopt) {
+            const existingFeatures = await stripe.entitlements.features.list({
+              lookup_key: props.lookupKey,
+              limit: 1,
+            });
+            if (existingFeatures.data.length > 0) {
+              const existingFeature = existingFeatures.data[0];
+              const updateParams: Stripe.Entitlements.FeatureUpdateParams = {
+                name: props.name,
+                metadata: props.metadata,
+              };
+              feature = await stripe.entitlements.features.update(
+                existingFeature.id,
+                updateParams,
+              );
+            } else {
+              throw error;
+            }
+          } else {
+            throw error;
+          }
+        }
       }
 
       return this({
