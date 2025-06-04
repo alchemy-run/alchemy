@@ -2,11 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import {
-  createStripeClient,
-  handleStripeDeleteError,
-  isStripeConflictError,
-} from "./client.ts";
+import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 /**
  * Properties for price recurring configuration
@@ -270,37 +266,33 @@ export const Price = Resource(
           };
         }
 
-        try {
-          price = await stripe.prices.create(createParams);
-        } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
-            if (props.lookupKey) {
-              const existingPrices = await stripe.prices.list({
-                lookup_keys: [props.lookupKey],
-                limit: 1,
-              });
-              if (existingPrices.data.length > 0) {
-                const existingPrice = existingPrices.data[0];
-                const updateParams: Stripe.PriceUpdateParams = {
-                  active: props.active,
-                  metadata: props.metadata,
-                  nickname: props.nickname,
-                  lookup_key: props.lookupKey,
-                  transfer_lookup_key: props.transferLookupKey,
-                };
-                price = await stripe.prices.update(
-                  existingPrice.id,
-                  updateParams,
-                );
-              } else {
-                throw error;
-              }
+        if (props.lookupKey) {
+          const existingPrices = await stripe.prices.list({
+            lookup_keys: [props.lookupKey],
+            limit: 1,
+          });
+          if (existingPrices.data.length > 0) {
+            if (props.adopt) {
+              const existingPrice = existingPrices.data[0];
+              const updateParams: Stripe.PriceUpdateParams = {
+                active: props.active,
+                metadata: props.metadata,
+                nickname: props.nickname,
+                lookup_key: props.lookupKey,
+                transfer_lookup_key: props.transferLookupKey,
+              };
+              price = await stripe.prices.update(
+                existingPrice.id,
+                updateParams,
+              );
             } else {
-              throw error;
+              price = existingPrices.data[0];
             }
           } else {
-            throw error;
+            price = await stripe.prices.create(createParams);
           }
+        } else {
+          price = await stripe.prices.create(createParams);
         }
       }
 
