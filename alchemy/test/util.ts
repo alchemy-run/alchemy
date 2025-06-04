@@ -24,20 +24,6 @@ function sanitizeForAwsResourceName(str: string): string {
 }
 
 /**
- * Generate a session-unique suffix for CI environments to avoid resource conflicts
- * Uses process.hrtime() which is deterministic within a session but unique across sessions
- */
-function getSessionSuffix(): string {
-  if (process.env.CI === "true") {
-    const [seconds, nanoseconds] = process.hrtime();
-    return `-${seconds}-${nanoseconds.toString().slice(0, 6)}`;
-  }
-  return "";
-}
-
-export const SESSION_SUFFIX = getSessionSuffix();
-
-/**
  * Branch prefix for resource names to avoid naming conflicts in CI/CD
  *
  * Uses BRANCH_PREFIX environment variable in CI/CD environments
