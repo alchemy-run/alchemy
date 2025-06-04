@@ -2,11 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import {
-  createStripeClient,
-  handleStripeDeleteError,
-  withStripeRetry,
-} from "./client.ts";
+import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 /**
  * Restrictions for promotion code usage
@@ -155,9 +151,7 @@ export const PromotionCode = Resource(
     if (this.phase === "delete") {
       try {
         if (this.output?.id) {
-          await withStripeRetry(() =>
-            stripe.promotionCodes.update(this.output.id, { active: false }),
-          );
+          await stripe.promotionCodes.update(this.output.id, { active: false });
         }
       } catch (error) {
         handleStripeDeleteError(error, "PromotionCode", this.output?.id);
@@ -169,11 +163,13 @@ export const PromotionCode = Resource(
       let promotionCode: Stripe.PromotionCode;
 
       if (this.phase === "update" && this.output?.id) {
-        promotionCode = await withStripeRetry(() =>
-          stripe.promotionCodes.update(this.output.id, {
-            active: props.active,
-            metadata: props.metadata,
-          }),
+        const updateParams: Stripe.PromotionCodeUpdateParams = {
+          active: props.active,
+          metadata: props.metadata,
+        };
+        promotionCode = await stripe.promotionCodes.update(
+          this.output.id,
+          updateParams,
         );
       } else {
         const createParams: Stripe.PromotionCodeCreateParams = {
@@ -194,9 +190,7 @@ export const PromotionCode = Resource(
           };
         }
 
-        promotionCode = await withStripeRetry(() =>
-          stripe.promotionCodes.create(createParams),
-        );
+        promotionCode = await stripe.promotionCodes.create(createParams);
       }
 
       return this({

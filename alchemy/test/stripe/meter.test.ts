@@ -1,7 +1,8 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import { beforeAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
+import { createStripeClient } from "../../src/stripe/client.ts";
 import {
   Meter,
   type Meter as MeterOutput,
@@ -31,7 +32,7 @@ describe("Stripe Meter Resource", () => {
         "STRIPE_API_KEY environment variable is required for Stripe integration tests.",
       );
     }
-    stripeClient = new Stripe(apiKey);
+    stripeClient = createStripeClient({ apiKey });
   });
 
   test("create, update status, and delete meter", async (scope) => {

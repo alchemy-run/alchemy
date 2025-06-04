@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, withStripeRetry } from "./client.ts";
+import { createStripeClient } from "./client.ts";
 
 /**
  * Properties for creating a Stripe entitlements feature
@@ -105,11 +105,13 @@ export const EntitlementsFeature = Resource(
       let feature: Stripe.Entitlements.Feature;
 
       if (this.phase === "update" && this.output?.id) {
-        feature = await withStripeRetry(() =>
-          stripe.entitlements.features.update(this.output.id, {
-            name: props.name,
-            metadata: props.metadata,
-          }),
+        const updateParams: any = {
+          name: props.name,
+          metadata: props.metadata,
+        };
+        feature = await stripe.entitlements.features.update(
+          this.output.id,
+          updateParams,
         );
       } else {
         const createParams: any = {
@@ -119,9 +121,7 @@ export const EntitlementsFeature = Resource(
         if (props.lookupKey) {
           createParams.lookup_key = props.lookupKey;
         }
-        feature = await withStripeRetry(() =>
-          stripe.entitlements.features.create(createParams),
-        );
+        feature = await stripe.entitlements.features.create(createParams);
       }
 
       return this({

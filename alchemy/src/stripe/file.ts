@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, withStripeRetry } from "./client.ts";
+import { createStripeClient } from "./client.ts";
 
 /**
  * Properties for creating a Stripe file
@@ -157,16 +157,12 @@ export const File = Resource(
       let file: Stripe.File;
 
       if (this.phase === "update" && this.output?.id) {
-        file = await withStripeRetry(() =>
-          stripe.files.retrieve(this.output.id),
-        );
+        file = await stripe.files.retrieve(this.output.id);
       } else {
-        file = await withStripeRetry(() =>
-          stripe.files.create({
-            file: props.file,
-            purpose: props.purpose,
-          }),
-        );
+        file = await stripe.files.create({
+          file: props.file,
+          purpose: props.purpose,
+        });
       }
 
       return this({

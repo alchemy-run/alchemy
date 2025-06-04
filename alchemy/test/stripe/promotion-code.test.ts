@@ -1,7 +1,8 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import { beforeAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
+import { createStripeClient } from "../../src/stripe/client.ts";
 import { Coupon } from "../../src/stripe/coupon.ts";
 import { PromotionCode } from "../../src/stripe/promotion-code.ts";
 import "../../src/test/vitest.ts";
@@ -20,7 +21,7 @@ describe("Stripe PromotionCode Resource", () => {
     if (!apiKey) {
       throw new Error("STRIPE_API_KEY environment variable is required");
     }
-    stripeClient = new Stripe(apiKey);
+    stripeClient = createStripeClient({ apiKey });
   });
 
   test("create, update, and deactivate promotion code", async (scope) => {

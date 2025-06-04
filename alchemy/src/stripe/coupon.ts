@@ -2,11 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import {
-  createStripeClient,
-  handleStripeDeleteError,
-  withStripeRetry,
-} from "./client.ts";
+import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 type CouponDuration = Stripe.CouponCreateParams.Duration;
 
@@ -162,7 +158,7 @@ export const Coupon = Resource(
     if (this.phase === "delete") {
       try {
         if (this.output?.id) {
-          await withStripeRetry(() => stripe.coupons.del(this.output.id));
+          await stripe.coupons.del(this.output.id);
         }
       } catch (error) {
         handleStripeDeleteError(error, "Coupon", this.output?.id);
@@ -174,12 +170,10 @@ export const Coupon = Resource(
       let coupon: Stripe.Coupon;
 
       if (this.phase === "update" && this.output?.id) {
-        coupon = await withStripeRetry(() =>
-          stripe.coupons.update(this.output.id, {
-            name: props.name,
-            metadata: props.metadata,
-          }),
-        );
+        coupon = await stripe.coupons.update(this.output.id, {
+          name: props.name,
+          metadata: props.metadata,
+        });
       } else {
         const createParams: Stripe.CouponCreateParams = {
           duration: props.duration,
@@ -209,9 +203,7 @@ export const Coupon = Resource(
           createParams.redeem_by = props.redeemBy;
         }
 
-        coupon = await withStripeRetry(() =>
-          stripe.coupons.create(createParams),
-        );
+        coupon = await stripe.coupons.create(createParams);
       }
 
       return this({

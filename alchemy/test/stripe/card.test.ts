@@ -1,8 +1,9 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import { beforeAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
 import { Card } from "../../src/stripe/card.ts";
+import { createStripeClient } from "../../src/stripe/client.ts";
 import { Customer } from "../../src/stripe/customer.ts";
 import "../../src/test/vitest.ts";
 
@@ -20,7 +21,7 @@ describe("Stripe Card Resource", () => {
     if (!apiKey) {
       throw new Error("STRIPE_API_KEY environment variable is required");
     }
-    stripeClient = new Stripe(apiKey);
+    stripeClient = createStripeClient({ apiKey });
   });
 
   test("create, update, and delete card", async (scope) => {

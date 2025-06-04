@@ -2,11 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import {
-  createStripeClient,
-  handleStripeDeleteError,
-  withStripeRetry,
-} from "./client.ts";
+import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 /**
  * Business profile information for the portal
@@ -400,11 +396,9 @@ export const PortalConfiguration = Resource(
           };
         }
 
-        configuration = await withStripeRetry(() =>
-          stripe.billingPortal.configurations.update(
-            this.output.id,
-            updateParams,
-          ),
+        configuration = await stripe.billingPortal.configurations.update(
+          this.output.id,
+          updateParams,
         );
       } else {
         const createParams: Stripe.BillingPortal.ConfigurationCreateParams = {
@@ -491,9 +485,8 @@ export const PortalConfiguration = Resource(
           };
         }
 
-        configuration = await withStripeRetry(() =>
-          stripe.billingPortal.configurations.create(createParams),
-        );
+        configuration =
+          await stripe.billingPortal.configurations.create(createParams);
       }
 
       return this({

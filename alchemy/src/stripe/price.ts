@@ -2,11 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import {
-  createStripeClient,
-  handleStripeDeleteError,
-  withStripeRetry,
-} from "./client.ts";
+import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 /**
  * Properties for price recurring configuration
@@ -212,9 +208,7 @@ export const Price = Resource(
       try {
         if (this.phase === "delete" && this.output?.id) {
           // Prices can't be deleted, only deactivated
-          await withStripeRetry(() =>
-            stripe.prices.update(this.output.id, { active: false }),
-          );
+          await stripe.prices.update(this.output.id, { active: false });
         }
       } catch (error) {
         handleStripeDeleteError(error, "Price", this.output?.id);
@@ -227,15 +221,15 @@ export const Price = Resource(
 
       if (this.phase === "update" && this.output?.id) {
         // Update existing price (limited properties can be updated)
-        price = await withStripeRetry(() =>
-          stripe.prices.update(this.output.id, {
-            active: props.active,
-            metadata: props.metadata,
-            nickname: props.nickname,
-            lookup_key: props.lookupKey,
-            transfer_lookup_key: props.transferLookupKey,
-          }),
-        );
+        const updateParams: Stripe.PriceUpdateParams = {
+          active: props.active,
+          metadata: props.metadata,
+          nickname: props.nickname,
+          lookup_key: props.lookupKey,
+          transfer_lookup_key: props.transferLookupKey,
+        };
+
+        price = await stripe.prices.update(this.output.id, updateParams);
       } else {
         // Create new price
         const createParams: Stripe.PriceCreateParams = {
@@ -267,7 +261,7 @@ export const Price = Resource(
           };
         }
 
-        price = await withStripeRetry(() => stripe.prices.create(createParams));
+        price = await stripe.prices.create(createParams);
       }
 
       // Transform Stripe recurring object to our format
