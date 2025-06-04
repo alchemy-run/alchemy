@@ -4,7 +4,8 @@ import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
-import { BRANCH_PREFIX, SESSION_SUFFIX } from "../util.ts";
+import { withExponentialBackoff } from "../../src/util/retry.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
 import "../../src/test/vitest.ts";
 
@@ -167,8 +168,8 @@ describe("Durable Object Namespace", () => {
 
   test("create and test worker with cross-script durable object binding", async (scope) => {
     // Create names for both workers
-    const doWorkerName = `${BRANCH_PREFIX}-do-provider-worker${SESSION_SUFFIX}`;
-    const clientWorkerName = `${BRANCH_PREFIX}-do-client-worker${SESSION_SUFFIX}`;
+    const doWorkerName = `${BRANCH_PREFIX}-do-provider-worker`;
+    const clientWorkerName = `${BRANCH_PREFIX}-do-client-worker`;
 
     // Script for the worker that defines the durable object
     const doProviderWorkerScript = `
@@ -679,7 +680,19 @@ export default {
       expect(binding.scriptName).toEqual(doWorkerName);
 
       // Test that both workers respond to basic requests
-      const doProviderResponse = await fetch(doProviderWorker.url!);
+      const url = doProviderWorker.url!;
+      const doProviderResponse = await withExponentialBackoff(
+        () =>
+          fetch(url).then((res) => {
+            if (!res.ok) {
+              throw new Error(
+                `Failed to fetch ${url}: ${res.status} ${res.statusText}`,
+              );
+            }
+            return res;
+          }),
+        () => true,
+      );
       expect(doProviderResponse.status).toEqual(200);
       const doProviderText = await doProviderResponse.text();
       expect(doProviderText).toEqual("DO Provider Worker is running!");

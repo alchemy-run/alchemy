@@ -5,6 +5,7 @@ import { getBucket } from "../../src/cloudflare/bucket.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
 import { R2RestStateStore } from "../../src/cloudflare/r2-rest-state-store.ts";
+import { destroy } from "../../src/destroy.ts";
 import "../../src/test/vitest.ts";
 
 describe("R2RestStateStore", async () => {
@@ -18,10 +19,14 @@ describe("R2RestStateStore", async () => {
   // This is one feature not available through the S3 API
   const api = await createCloudflareApi();
 
-  test("optimistically creates alchemy-state bucket", async () => {
-    const defaultBucketName = "alchemy-state";
-    const bucket = await getBucket(api, defaultBucketName);
+  test("optimistically creates alchemy-state bucket", async (scope) => {
+    try {
+      const defaultBucketName = "alchemy-state";
+      const bucket = await getBucket(api, defaultBucketName);
 
-    expect(bucket.result.name).toEqual(defaultBucketName);
+      expect(bucket.result.name).toEqual(defaultBucketName);
+    } finally {
+      await destroy(scope);
+    }
   });
 });

@@ -6,7 +6,7 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
-import type { QueueResource, Queue } from "./queue.ts";
+import type { Queue, QueueResource } from "./queue.ts";
 
 /**
  * Settings for configuring a Queue Consumer
@@ -448,5 +448,63 @@ export async function listQueueConsumers(
           deadLetterQueue: consumer.settings.dead_letter_queue,
         }
       : undefined,
+  }));
+}
+
+export async function listQueueConsumersForWorker(
+  api: CloudflareApi,
+  workerName: string,
+) {
+  const response = await api.get(
+    `/accounts/${api.accountId}/workers/scripts/${workerName}/queue-consumers?perPage=100`,
+  );
+
+  if (response.status === 404) {
+    return [];
+  }
+
+  if (!response.ok) {
+    return await handleApiError(
+      response,
+      "list",
+      "QueueConsumer",
+      `for worker ${workerName}`,
+    );
+  }
+
+  const data = (await response.json()) as {
+    result: Array<{
+      script: string;
+      settings?: {
+        batch_size?: number;
+        max_retries?: number;
+        max_wait_time_ms?: number;
+        retry_delay?: number;
+        dead_letter_queue?: string;
+      };
+      type: string;
+      queue_name: string;
+      queue_id: string;
+      consumer_id: string;
+      created_on: string;
+    }>;
+    success: boolean;
+    errors: any[] | null;
+    messages: any[] | null;
+    result_info: {
+      page: number;
+      per_page: number;
+      count: number;
+      total_count: number;
+      total_pages: number;
+    };
+  };
+
+  return data.result.map((consumer) => ({
+    queueName: consumer.queue_name,
+    queueId: consumer.queue_id,
+    consumerId: consumer.consumer_id,
+    createdOn: consumer.created_on,
+    settings: consumer.settings,
   }));
 }

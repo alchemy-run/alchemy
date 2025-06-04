@@ -47,6 +47,7 @@ describe("QueueConsumer Resource", () => {
           }
         `,
         eventSources: [queue],
+        adopt: true, // make test idempotent
       });
 
       expect(worker.id).toBeTruthy();

@@ -12,7 +12,7 @@ import type { type } from "../type.ts";
 import { getContentType } from "../util/content-type.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { slugify } from "../util/slugify.ts";
-import { CloudflareApiError, handleApiError } from "./api-error.ts";
+import { handleApiError } from "./api-error.ts";
 import {
   type CloudflareApi,
   type CloudflareApiOptions,
@@ -46,7 +46,7 @@ import { isPipeline } from "./pipeline.ts";
 import {
   QueueConsumer,
   deleteQueueConsumer,
-  listQueueConsumers,
+  listQueueConsumersForWorker,
 } from "./queue-consumer.ts";
 import { type QueueResource, isQueue } from "./queue.ts";
 import { isVectorizeIndex } from "./vectorize-index.ts";
@@ -869,7 +869,7 @@ export const _Worker = Resource(
 
     if (this.phase === "delete") {
       // Delete any queue consumers attached to this worker first
-      await deleteQueueConsumers(this, api, workerName);
+      await deleteQueueConsumers(api, workerName);
 
       // @ts-ignore
       await uploadWorkerScript({
@@ -879,7 +879,7 @@ export const _Worker = Resource(
         script:
           props.format === "cjs"
             ? "addEventListener('fetch', event => { event.respondWith(new Response('hello world')); });"
-            : "export default { fetch(request) { return new Response('hello world'); } }",
+            : "export default { fetch(request) { return new Response('hello world'); }, queue: () => {} }",
         bindings: {} as B,
         // we are writing a stub worker (to remove binding/event source dependencies)
         // queue consumers will no longer exist by this point
@@ -1248,53 +1248,15 @@ async function getWorkerBindings(api: CloudflareApi, workerName: string) {
  * @param api CloudflareApi instance
  * @param workerName Name of the worker script
  */
-async function deleteQueueConsumers<B extends Bindings>(
-  ctx: Context<Worker<B>>,
+async function deleteQueueConsumers(
   api: CloudflareApi,
   workerName: string,
 ): Promise<void> {
-  const eventSources = ctx.output?.eventSources || [];
+  const consumers = await listQueueConsumersForWorker(api, workerName);
 
-  // Extract queue IDs from event sources
-  const queueIds = eventSources.flatMap((eventSource) => {
-    if (isQueue(eventSource)) {
-      return [eventSource.id];
-    }
-    if (isQueueEventSource(eventSource)) {
-      return [eventSource.queue.id];
-    }
-    return [];
-  });
-
-  // Process each queue associated with this worker
   await Promise.all(
-    queueIds.map(async (queueId) => {
-      try {
-        // List all consumers for this queue
-        const consumers = await listQueueConsumers(api, queueId);
-
-        // Filter consumers by worker name
-        const workerConsumers = consumers.filter(
-          (consumer) => consumer.scriptName === workerName,
-        );
-
-        // Delete all consumers for this worker in parallel
-        await Promise.all(
-          workerConsumers.map(async (consumer) => {
-            console.log(
-              `Deleting queue consumer ${consumer.id} for worker ${workerName}`,
-            );
-            // Use the deleteQueueConsumer function from queue-consumer.ts
-            await deleteQueueConsumer(api, consumer.queueId, consumer.id);
-          }),
-        );
-      } catch (err) {
-        if (err instanceof CloudflareApiError && err.status === 404) {
-          // this is OK
-        } else {
-          throw err;
-        }
-      }
+    consumers.map(async (consumer) => {
+      await deleteQueueConsumer(api, consumer.queueId, consumer.consumerId);
     }),
   );
 }
