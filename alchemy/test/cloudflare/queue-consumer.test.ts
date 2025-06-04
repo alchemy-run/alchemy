@@ -29,6 +29,7 @@ describe("QueueConsumer Resource", () => {
     try {
       queue = await Queue(`${testId}-queue`, {
         name: queueName,
+        adopt: true,
       });
 
       expect(queue.id).toBeTruthy();

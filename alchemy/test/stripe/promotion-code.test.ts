@@ -25,8 +25,8 @@ describe("Stripe PromotionCode Resource", () => {
   });
 
   test("create, update, and deactivate promotion code", async (scope) => {
-    const couponId = `${BRANCH_PREFIX}-coupon-1`;
-    const promotionCodeId = `${BRANCH_PREFIX}-promo-1`;
+    const couponId = `${BRANCH_PREFIX}-coupon-test-1`;
+    const promotionCodeId = `${BRANCH_PREFIX}-promo-test-1`;
     let coupon: Coupon | undefined;
     let promotionCode: PromotionCode | undefined;
     try {
