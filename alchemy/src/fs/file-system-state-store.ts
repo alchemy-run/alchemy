@@ -11,8 +11,13 @@ const stateRootDir = path.join(process.cwd(), ".alchemy");
 export class FileSystemStateStore implements StateStore {
   public readonly dir: string;
   private initialized = false;
-  constructor(public readonly scope: Scope) {
-    this.dir = path.join(stateRootDir, ...scope.chain);
+  constructor(
+    public readonly scope: Scope,
+    options?: {
+      rootDir?: string;
+    },
+  ) {
+    this.dir = path.join(options?.rootDir ?? stateRootDir, ...scope.chain);
   }
 
   async init(): Promise<void> {

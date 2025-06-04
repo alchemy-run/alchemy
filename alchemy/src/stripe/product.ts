@@ -1,6 +1,8 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 type ProductType = Stripe.Product.Type;
 
@@ -62,6 +64,11 @@ export interface ProductProps {
    * Default tax code for the product
    */
   taxCode?: string;
+
+  /**
+   * API key to use (overrides environment variable)
+   */
+  apiKey?: Secret;
 }
 
 /**
@@ -144,14 +151,7 @@ export const Product = Resource(
     _id: string,
     props: ProductProps,
   ): Promise<Product> {
-    // Get Stripe API key from context or environment
-    const apiKey = process.env.STRIPE_API_KEY;
-    if (!apiKey) {
-      throw new Error("STRIPE_API_KEY environment variable is required");
-    }
-
-    // Initialize Stripe client
-    const stripe = new Stripe(apiKey);
+    const stripe = createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -159,8 +159,7 @@ export const Product = Resource(
           await stripe.products.update(this.output.id, { active: false });
         }
       } catch (error) {
-        // Ignore if the product doesn't exist
-        console.error("Error deactivating product:", error);
+        handleStripeDeleteError(error, "Product", this.output?.id);
       }
 
       // Return a minimal output for deleted state
@@ -171,7 +170,7 @@ export const Product = Resource(
 
       if (this.phase === "update" && this.output?.id) {
         // Update existing product
-        product = await stripe.products.update(this.output.id, {
+        const updateParams = {
           name: props.name,
           description: props.description,
           active: props.active,
@@ -180,10 +179,11 @@ export const Product = Resource(
           statement_descriptor: props.statementDescriptor,
           metadata: props.metadata,
           tax_code: props.taxCode,
-        });
+        };
+        product = await stripe.products.update(this.output.id, updateParams);
       } else {
         // Create new product
-        product = await stripe.products.create({
+        const createParams = {
           name: props.name,
           description: props.description,
           active: props.active,
@@ -195,7 +195,8 @@ export const Product = Resource(
           statement_descriptor: props.statementDescriptor,
           metadata: props.metadata,
           tax_code: props.taxCode,
-        });
+        };
+        product = await stripe.products.create(createParams);
       }
 
       return this({

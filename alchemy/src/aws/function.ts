@@ -312,8 +312,6 @@ export const Function = Resource(
     const client = new LambdaClient({});
     const region = await resolveRegion(client);
 
-    const code = await zipCode(props);
-
     if (this.phase === "delete") {
       // Delete function URL if it exists
       if (this.output?.url) {
@@ -344,6 +342,9 @@ export const Function = Resource(
 
       return this.destroy();
     }
+
+    const code = await zipCode(props);
+
     let functionUrl: string | undefined;
     try {
       // Check if function exists
@@ -794,10 +795,6 @@ async function zipCode(props: FunctionProps): Promise<Buffer> {
   const fileName =
     parseFile(props.handler) +
     (props.bundle.format === "cjs" ? ".cjs" : ".mjs");
-
-  if (!fileContent || fileContent.length === 0) {
-    throw new Error("Bundle content is empty");
-  }
 
   // Create a zip buffer in memory
   const zip = new (await import("jszip")).default();

@@ -70,7 +70,7 @@ jobs:
       - name: Run affected tests
         run: |
           # Determine the base commit depending on event type
-          if [ "${{ github.event_name }}" == "pull_request_target" ]; then
+          if [ "${{ github.event_name }}" == "pull_request_target" ] || [ "${{ github.event_name }}" == "pull_request" ]; then
             # For pull requests, use PR base commit
             BASE_COMMIT="${{ github.event.pull_request.base.sha }}"
           elif [ "${{ github.event_name }}" == "push" ]; then
@@ -95,7 +95,6 @@ jobs:
           CLOUDFLARE_API_KEY: ${{ env.CLOUDFLARE_API_KEY || secrets.CLOUDFLARE_API_KEY }}
           CLOUDFLARE_BUCKET_NAME: ${{ env.CLOUDFLARE_BUCKET_NAME || secrets.CLOUDFLARE_BUCKET_NAME }}
           CLOUDFLARE_EMAIL: ${{ env.CLOUDFLARE_EMAIL || secrets.CLOUDFLARE_EMAIL }}
-          GITHUB_ACCESS_TOKEN: ${{ env.GITHUB_ACCESS_TOKEN || secrets.ADMIN_GITHUB_ACCESS_TOKEN }}
           OPENAI_API_KEY: ${{ env.OPENAI_API_KEY || secrets.OPENAI_API_KEY }}
           R2_ACCESS_KEY_ID: ${{ env.R2_ACCESS_KEY_ID || secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ env.R2_SECRET_ACCESS_KEY || secrets.R2_SECRET_ACCESS_KEY }}

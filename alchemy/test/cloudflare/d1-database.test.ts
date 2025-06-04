@@ -293,6 +293,8 @@ describe("D1 Database Resource", async () => {
       expect(cloned.name).toEqual(targetDb);
       expect(cloned.id).toBeTruthy();
 
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
       // Verify the cloned data exists in the target database
       const resp = await api.post(
         `/accounts/${api.accountId}/d1/database/${cloned.id}/query`,
@@ -342,6 +344,8 @@ describe("D1 Database Resource", async () => {
 
       expect(clonedDb.name).toEqual(targetDbId);
       expect(clonedDb.id).toBeTruthy();
+
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       // Verify the cloned data exists in the target database
       const resp = await api.post(

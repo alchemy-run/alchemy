@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, it } from "bun:test";
 import path from "node:path";
 import { alchemy } from "../alchemy.ts";
-import { R2RestStateStore } from "../cloudflare/r2-rest-state-store.ts";
+import { DOStateStore } from "../cloudflare/index.ts";
 import { Scope } from "../scope.ts";
 import type { StateStoreType } from "../state.ts";
 
@@ -122,12 +122,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     // process.env.CI &&
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
   ) {
-    defaultOptions.stateStore = (scope) =>
-      new R2RestStateStore(scope, {
-        apiKey: alchemy.secret(process.env.CLOUDFLARE_API_KEY),
-        email: process.env.CLOUDFLARE_EMAIL,
-        bucketName: process.env.CLOUDFLARE_BUCKET_NAME!,
-      });
+    defaultOptions.stateStore = (scope) => new DOStateStore(scope);
   }
 
   // Add skipIf functionality

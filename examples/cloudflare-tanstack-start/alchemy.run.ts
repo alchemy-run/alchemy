@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { R2RestStateStore, TanStackStart } from "alchemy/cloudflare";
+import { DOStateStore, TanStackStart } from "alchemy/cloudflare";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 
@@ -7,7 +7,7 @@ const app = await alchemy("cloudflare-tanstack", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   stateStore:
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new R2RestStateStore(scope)
+      ? (scope) => new DOStateStore(scope)
       : undefined,
 });
 

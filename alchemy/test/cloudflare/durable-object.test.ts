@@ -4,9 +4,11 @@ import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
+import { withExponentialBackoff } from "../../src/util/retry.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
 import "../../src/test/vitest.ts";
+import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -334,19 +336,18 @@ describe("Durable Object Namespace", () => {
       expect(binding.scriptName).toEqual(doWorkerName);
 
       // Test that both workers respond to basic requests
-      const doProviderResponse = await fetch(doProviderWorker.url!);
-      expect(doProviderResponse.status).toEqual(200);
+      const doProviderResponse = await fetchAndExpectOK(doProviderWorker.url!);
       const doProviderText = await doProviderResponse.text();
       expect(doProviderText).toEqual("DO Provider Worker is running!");
 
-      const clientResponse = await fetch(clientWorker.url!);
-      expect(clientResponse.status).toEqual(200);
+      const clientResponse = await fetchAndExpectOK(clientWorker.url!);
       const clientText = await clientResponse.text();
       expect(clientText).toEqual("DO Client Worker is running!");
 
       // Test cross-script durable object functionality by calling increment
-      const incrementResponse = await fetch(`${clientWorker.url}/increment`);
-      expect(incrementResponse.status).toEqual(200);
+      const incrementResponse = await fetchAndExpectOK(
+        `${clientWorker.url}/increment`,
+      );
       const incrementData: any = await incrementResponse.json();
 
       expect(incrementData).toMatchObject({
@@ -360,8 +361,7 @@ describe("Durable Object Namespace", () => {
       });
 
       // Test getting the counter value
-      const getResponse = await fetch(`${clientWorker.url}/get`);
-      expect(getResponse.status).toEqual(200);
+      const getResponse = await fetchAndExpectOK(`${clientWorker.url}/get`);
       const getData: any = await getResponse.json();
 
       expect(getData).toMatchObject({
@@ -374,13 +374,19 @@ describe("Durable Object Namespace", () => {
       });
 
       // Test state persistence by making multiple increment calls
-      const firstIncrement = await fetch(`${clientWorker.url}/increment`);
+      const firstIncrement = await fetchAndExpectOK(
+        `${clientWorker.url}/increment`,
+      );
       const firstData: any = await firstIncrement.json();
 
-      const secondIncrement = await fetch(`${clientWorker.url}/increment`);
+      const secondIncrement = await fetchAndExpectOK(
+        `${clientWorker.url}/increment`,
+      );
       const secondData: any = await secondIncrement.json();
 
-      const thirdIncrement = await fetch(`${clientWorker.url}/increment`);
+      const thirdIncrement = await fetchAndExpectOK(
+        `${clientWorker.url}/increment`,
+      );
       const thirdData: any = await thirdIncrement.json();
 
       // Verify that the counter is incrementing properly across calls
@@ -679,19 +685,31 @@ export default {
       expect(binding.scriptName).toEqual(doWorkerName);
 
       // Test that both workers respond to basic requests
-      const doProviderResponse = await fetch(doProviderWorker.url!);
+      const url = doProviderWorker.url!;
+      const doProviderResponse = await withExponentialBackoff(
+        () =>
+          fetch(url).then((res) => {
+            if (!res.ok) {
+              throw new Error(
+                `Failed to fetch ${url}: ${res.status} ${res.statusText}`,
+              );
+            }
+            return res;
+          }),
+        () => true,
+      );
       expect(doProviderResponse.status).toEqual(200);
       const doProviderText = await doProviderResponse.text();
       expect(doProviderText).toEqual("DO Provider Worker is running!");
 
-      const clientResponse = await fetch(clientWorker.url!);
-      expect(clientResponse.status).toEqual(200);
+      const clientResponse = await fetchAndExpectOK(clientWorker.url!);
       const clientText = await clientResponse.text();
       expect(clientText).toEqual("DO Client Worker is running!");
 
       // Test cross-script durable object functionality by calling increment
-      const incrementResponse = await fetch(`${clientWorker.url}/increment`);
-      expect(incrementResponse.status).toEqual(200);
+      const incrementResponse = await fetchAndExpectOK(
+        `${clientWorker.url}/increment`,
+      );
       const incrementData: any = await incrementResponse.json();
 
       expect(incrementData).toMatchObject({
@@ -705,8 +723,7 @@ export default {
       });
 
       // Test getting the counter value
-      const getResponse = await fetch(`${clientWorker.url}/get`);
-      expect(getResponse.status).toEqual(200);
+      const getResponse = await fetchAndExpectOK(`${clientWorker.url}/get`);
       const getData: any = await getResponse.json();
 
       expect(getData).toMatchObject({
@@ -719,13 +736,19 @@ export default {
       });
 
       // Test state persistence by making multiple increment calls
-      const firstIncrement = await fetch(`${clientWorker.url}/increment`);
+      const firstIncrement = await fetchAndExpectOK(
+        `${clientWorker.url}/increment`,
+      );
       const firstData: any = await firstIncrement.json();
 
-      const secondIncrement = await fetch(`${clientWorker.url}/increment`);
+      const secondIncrement = await fetchAndExpectOK(
+        `${clientWorker.url}/increment`,
+      );
       const secondData: any = await secondIncrement.json();
 
-      const thirdIncrement = await fetch(`${clientWorker.url}/increment`);
+      const thirdIncrement = await fetchAndExpectOK(
+        `${clientWorker.url}/increment`,
+      );
       const thirdData: any = await thirdIncrement.json();
 
       // Verify that the counter is incrementing properly across calls

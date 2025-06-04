@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
+import { createStripeClient } from "../../src/stripe/client.ts";
 import { Product } from "../../src/stripe/product.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
@@ -17,7 +18,7 @@ if (!stripeApiKey) {
 }
 
 // Initialize a Stripe client for verification
-const stripe = new Stripe(stripeApiKey);
+const stripe = createStripeClient({ apiKey: stripeApiKey });
 
 describe("Product Resource", () => {
   const testProductId = `${BRANCH_PREFIX}-product`;

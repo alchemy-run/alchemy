@@ -18,6 +18,7 @@ export * from "./d1-database.ts";
 export * from "./d1-export.ts";
 export * from "./d1-import.ts";
 export * from "./dns-records.ts";
+export * from "./do-state-store/index.ts";
 export * from "./durable-object-namespace.ts";
 export * from "./hyperdrive.ts";
 export * from "./kv-namespace.ts";

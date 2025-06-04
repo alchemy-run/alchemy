@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Nuxt, Pipeline, R2Bucket, R2RestStateStore } from "alchemy/cloudflare";
+import { DOStateStore, Nuxt, Pipeline, R2Bucket } from "alchemy/cloudflare";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 
@@ -10,7 +10,7 @@ const app = await alchemy("cloudflare-nuxt-pipeline", {
   password: process.env.SECRET_PASSPHRASE,
   stateStore:
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new R2RestStateStore(scope)
+      ? (scope) => new DOStateStore(scope)
       : undefined,
 });
 

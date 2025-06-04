@@ -5,6 +5,7 @@ import { Queue, listQueues } from "../../src/cloudflare/queue.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
+import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 import "../../src/test/vitest.ts";
 
@@ -317,13 +318,16 @@ describe("Cloudflare Queue Resource", async () => {
           timestamp: Date.now(),
         };
 
-        const sendResponse = await fetch(`${worker.url}/send-message`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+        const sendResponse = await fetchAndExpectOK(
+          `${worker.url}/send-message`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(testMessage),
           },
-          body: JSON.stringify(testMessage),
-        });
+        );
 
         expect(sendResponse.status).toEqual(200);
         const responseData: any = await sendResponse.json();
