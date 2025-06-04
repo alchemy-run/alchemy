@@ -26,6 +26,7 @@ describe("Browser Rendering Resource", () => {
       // Create a KV namespace for caching screenshots
       kvNamespace = await KVNamespace(kvNamespaceName, {
         title: `${BRANCH_PREFIX} Browser KV Demo`,
+        adopt: true,
       });
 
       expect(kvNamespace.title).toEqual(`${BRANCH_PREFIX} Browser KV Demo`);
