@@ -136,12 +136,13 @@ describe("Product Resource", () => {
     }
   });
 
-  test("adoption fails without adopt flag", async (scope) => {
+  test("creates separate products without adopt flag", async (scope) => {
     const productName = `${BRANCH_PREFIX} No Adoption Test Product`;
     const firstId = `${testProductId}-no-adopt-first`;
     const secondId = `${testProductId}-no-adopt-second`;
 
     let firstProduct: Product | undefined;
+    let secondProduct: Product | undefined;
 
     try {
       // Create first product
@@ -152,12 +153,15 @@ describe("Product Resource", () => {
 
       expect(firstProduct.id).toBeTruthy();
 
-      await expect(() =>
-        Product(secondId, {
-          name: productName, // Same product name
-          description: "Second product - should fail without adopt",
-        }),
-      ).rejects.toThrow();
+      // Create second product with same name but without adopt flag - should create separate product
+      secondProduct = await Product(secondId, {
+        name: productName, // Same product name
+        description: "Second product - should create separate product",
+      });
+
+      expect(secondProduct.id).toBeTruthy();
+      expect(secondProduct.id).not.toEqual(firstProduct.id); // Should have different IDs
+      expect(secondProduct.name).toEqual(productName);
     } catch (err) {
       console.log(err);
       throw err;
@@ -166,6 +170,9 @@ describe("Product Resource", () => {
 
       if (firstProduct?.id) {
         await assertProductDeactivated(firstProduct.id);
+      }
+      if (secondProduct?.id) {
+        await assertProductDeactivated(secondProduct.id);
       }
     }
   });

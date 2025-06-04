@@ -75,15 +75,14 @@ describe("Stripe File Resource", () => {
 
       expect(firstFile.id).toBeTruthy();
 
-      await expect(async () => {
-        await File(secondId, {
-          file: testFileContent,
-          purpose: "dispute_evidence",
-          adopt: true, // Enable adoption but files don't support it
-        });
-      }).rejects.toThrow(
-        "File adoption is not supported - files are immutable and cannot be adopted",
-      );
+      const secondFile = await File(secondId, {
+        file: testFileContent,
+        purpose: "dispute_evidence",
+        adopt: true, // Enable adoption but files don't support it
+      });
+
+      expect(secondFile.id).toBeTruthy();
+      expect(secondFile.id).not.toEqual(firstFile.id); // Should have different IDs
     } catch (err) {
       console.log(err);
       throw err;

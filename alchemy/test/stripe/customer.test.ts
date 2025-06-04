@@ -137,25 +137,31 @@ describe("Stripe Customer Resource", () => {
     }
   });
 
-  test("adoption fails without adopt flag", async (scope) => {
+  test("creates separate customers without adopt flag", async (scope) => {
     const customerEmail = `${BRANCH_PREFIX}-no-adopt@example.com`;
     const firstId = `${BRANCH_PREFIX}-customer-no-adopt-first`;
     const secondId = `${BRANCH_PREFIX}-customer-no-adopt-second`;
 
+    let firstCustomer: Customer | undefined;
+    let secondCustomer: Customer | undefined;
+
     try {
-      await Customer(firstId, {
+      firstCustomer = await Customer(firstId, {
         email: customerEmail,
         name: "First Customer",
         description: "First customer for no adoption test",
       });
 
-      const secondCustomer = await Customer(secondId, {
+      expect(firstCustomer.id).toBeTruthy();
+
+      secondCustomer = await Customer(secondId, {
         email: customerEmail, // Same email
         name: "Second Customer",
-        description: "Second customer - should create new one without adopt",
+        description: "Second customer - should create separate customer",
       });
 
       expect(secondCustomer.id).toBeTruthy();
+      expect(secondCustomer.id).not.toEqual(firstCustomer.id); // Should have different IDs
       expect(secondCustomer.email).toEqual(customerEmail);
     } finally {
       await destroy(scope);

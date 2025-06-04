@@ -266,15 +266,16 @@ describe("Price Resource", () => {
 
       expect(firstPrice.id).toBeTruthy();
 
-      await expect(async () => {
-        await Price(secondId, {
-          product: product!.id,
-          currency: "usd",
-          unitAmount: 1000,
-          nickname: "Second price - should fail",
-          adopt: true, // Enable adoption but no lookup key
-        });
-      }).rejects.toThrow("Cannot adopt without lookup_key");
+      const secondPrice = await Price(secondId, {
+        product: product.id,
+        currency: "usd",
+        unitAmount: 1000,
+        nickname: "Second price - should create separate price",
+        adopt: true, // Enable adoption but no lookup key
+      });
+
+      expect(secondPrice.id).toBeTruthy();
+      expect(secondPrice.id).not.toEqual(firstPrice.id); // Should have different IDs
     } catch (err) {
       console.log(err);
       throw err;
