@@ -14,6 +14,7 @@ import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
 import "../../src/test/vitest.ts";
+import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -226,8 +227,7 @@ describe("R2 Bucket Resource", async () => {
       expect(worker.bindings!.STORAGE).toBeDefined();
 
       // Test that the R2 binding is accessible in the worker
-      const response = await fetch(`${worker.url}/r2-info`);
-      expect(response.status).toEqual(200);
+      const response = await fetchAndExpectOK(`${worker.url}/r2-info`);
       const data = (await response.json()) as {
         hasR2: boolean;
         bucketName: string;
