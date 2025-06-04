@@ -80,6 +80,20 @@ This transparency helps with debugging and understanding what Alchemy is doing.
 
 ## Customizing State Storage
 
+### Change `.alchemy` directory location
+
+Perhaps you want to change the location of the `.alchemy` directory in a monorepo.
+
+```typescript
+const app = await alchemy("my-app", {
+  stateStore: (scope) => new FileSystemStateStore(scope, {
+    rootDir: path.resolve(import.meta.dir, "..", ".alchemy")
+  })
+});
+```
+
+### R2 Rest State Store
+
 Alchemy supports multiple state storage backends. You can use the default file system store or integrate with cloud services like Cloudflare R2:
 
 ```typescript

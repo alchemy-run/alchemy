@@ -357,15 +357,13 @@ describe("AWS Resources", () => {
 
         // Test function URL invocation
         const testEvent = { test: "url-event" };
-        const urlResponse = await fetch(func.functionUrl!, {
+        const urlResponse = await fetchAndExpectOK(func.functionUrl!, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(testEvent),
         });
-
-        expect(urlResponse.status).toBe(200);
 
         const urlResponseBody: any = await urlResponse.json();
         expect(urlResponseBody.message).toBe("Hello from bundled handler!");
@@ -509,15 +507,13 @@ describe("AWS Resources", () => {
 
         // Test function URL invocation
         const testEvent = { test: "added-url-event" };
-        const urlResponse = await fetch(func.functionUrl!, {
+        const urlResponse = await fetchAndExpectOK(func.functionUrl!, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(testEvent),
         });
-
-        expect(urlResponse.status).toBe(200);
 
         const urlResponseBody: any = await urlResponse.json();
         expect(urlResponseBody.message).toBe("Hello from bundled handler!");
@@ -661,7 +657,7 @@ describe("AWS Resources", () => {
 
         // Test function URL invocation (now in RESPONSE_STREAM mode)
         const streamTestEvent = { test: "response-stream-mode" };
-        const streamResponse = await fetch(func.functionUrl!, {
+        const streamResponse = await fetchAndExpectOK(func.functionUrl!, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -670,7 +666,6 @@ describe("AWS Resources", () => {
         });
 
         // Check the status code
-        expect(streamResponse.status).toBe(200);
 
         // Test the URL configuration to verify the invokeMode setting was properly applied
         const urlConfig = await lambda.send(
@@ -825,13 +820,12 @@ describe("AWS Resources", () => {
         );
 
         // Test function invocation via URL
-        const response = await fetch(func.functionUrl!, {
+        const response = await fetchAndExpectOK(func.functionUrl!, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ test: "special-handler" }),
         });
 
-        expect(response.status).toBe(200);
         const body: any = await response.json();
         expect(body.message).toBe("Hello from bundled handler!");
       } finally {

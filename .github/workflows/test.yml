@@ -70,7 +70,7 @@ jobs:
       - name: Run affected tests
         run: |
           # Determine the base commit depending on event type
-          if [ "${{ github.event_name }}" == "pull_request_target" ]; then
+          if [ "${{ github.event_name }}" == "pull_request_target" ] || [ "${{ github.event_name }}" == "pull_request" ]; then
             # For pull requests, use PR base commit
             BASE_COMMIT="${{ github.event.pull_request.base.sha }}"
           elif [ "${{ github.event_name }}" == "push" ]; then
