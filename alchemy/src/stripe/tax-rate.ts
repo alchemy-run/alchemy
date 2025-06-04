@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError } from "./client.ts";
+import { createStripeClient, handleStripeDeleteError, withStripeRetry } from "./client.ts";
 
 /**
  * Properties for creating a Stripe tax rate
@@ -138,7 +138,7 @@ export const TaxRate = Resource(
     if (this.phase === "delete") {
       try {
         if (this.output?.id) {
-          await stripe.taxRates.update(this.output.id, { active: false });
+          await withStripeRetry(() => stripe.taxRates.update(this.output.id, { active: false }));
         }
       } catch (error) {
         handleStripeDeleteError(error, "TaxRate", this.output?.id);
@@ -150,7 +150,7 @@ export const TaxRate = Resource(
       let taxRate: Stripe.TaxRate;
 
       if (this.phase === "update" && this.output?.id) {
-        taxRate = await stripe.taxRates.update(this.output.id, {
+        taxRate = await withStripeRetry(() => stripe.taxRates.update(this.output.id, {
           active: props.active,
           country: props.country,
           description: props.description,
@@ -159,9 +159,9 @@ export const TaxRate = Resource(
           metadata: props.metadata,
           state: props.state,
           tax_type: props.taxType,
-        });
+        }));
       } else {
-        taxRate = await stripe.taxRates.create({
+        taxRate = await withStripeRetry(() => stripe.taxRates.create({
           display_name: props.displayName,
           percentage: props.percentage,
           inclusive: props.inclusive,
@@ -172,7 +172,7 @@ export const TaxRate = Resource(
           metadata: props.metadata,
           state: props.state,
           tax_type: props.taxType,
-        });
+        }));
       }
 
       return this({

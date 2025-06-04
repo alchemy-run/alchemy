@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError } from "./client.ts";
+import { createStripeClient, handleStripeDeleteError, withStripeRetry } from "./client.ts";
 
 /**
  * Properties for creating a Stripe product feature
@@ -92,10 +92,10 @@ export const ProductFeature = Resource(
     if (this.phase === "delete") {
       try {
         if (this.output?.id && this.output?.product) {
-          await stripe.products.deleteFeature(
+          await withStripeRetry(() => stripe.products.deleteFeature(
             this.output.product,
             this.output.id,
-          );
+          ));
         }
       } catch (error) {
         handleStripeDeleteError(error, "ProductFeature", this.output?.id);
@@ -109,9 +109,9 @@ export const ProductFeature = Resource(
       if (this.phase === "update" && this.output?.id) {
         throw new Error("Product features cannot be updated after creation");
       } else {
-        productFeature = await stripe.products.createFeature(props.product, {
+        productFeature = await withStripeRetry(() => stripe.products.createFeature(props.product, {
           entitlement_feature: props.entitlementFeature,
-        });
+        }));
       }
 
       return this({

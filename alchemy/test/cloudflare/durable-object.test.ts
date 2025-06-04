@@ -754,7 +754,7 @@ export default {
 
   test("adopting a Worker should use server-side state to migrate classes", async (scope) => {
     try {
-      const workerName = `${BRANCH_PREFIX}-test-worker-adoption-migrate${SESSION_SUFFIX}`;
+      const workerName = `${BRANCH_PREFIX}-test-worker-adoption-migrate`;
       await Worker("worker-1", {
         name: workerName,
         script: `

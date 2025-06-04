@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient } from "./client.ts";
+import { createStripeClient, withStripeRetry } from "./client.ts";
 
 /**
  * Properties for creating or updating a Stripe Meter.
@@ -204,9 +204,9 @@ export const Meter = Resource(
     if (this.phase === "delete") {
       if (currentOutputId) {
         try {
-          const meter = await stripe.billing.meters.retrieve(currentOutputId);
+          const meter = await withStripeRetry(() => stripe.billing.meters.retrieve(currentOutputId));
           if (meter.status === "active") {
-            await stripe.billing.meters.deactivate(currentOutputId);
+            await withStripeRetry(() => stripe.billing.meters.deactivate(currentOutputId));
           }
         } catch (error: any) {
           if (error?.code !== "resource_missing") {
@@ -222,7 +222,7 @@ export const Meter = Resource(
 
     if (this.phase === "update" && currentOutputId) {
       const existingStripeMeter =
-        await stripe.billing.meters.retrieve(currentOutputId);
+        await withStripeRetry(() => stripe.billing.meters.retrieve(currentOutputId));
 
       // Normalize existingMeter's relevant fields for immutable comparison
       const existingPropsForCompare = {
@@ -265,14 +265,14 @@ export const Meter = Resource(
           existingStripeMeter.status === "active"
         ) {
           stripeAPIResponse =
-            await stripe.billing.meters.deactivate(currentOutputId);
+            await withStripeRetry(() => stripe.billing.meters.deactivate(currentOutputId));
         } else if (
           props.status === "active" &&
           existingStripeMeter.status === "inactive"
         ) {
           console.log(`Reactivating Stripe Meter ${currentOutputId}.`);
           stripeAPIResponse =
-            await stripe.billing.meters.reactivate(currentOutputId);
+            await withStripeRetry(() => stripe.billing.meters.reactivate(currentOutputId));
         } else {
           stripeAPIResponse = existingStripeMeter; // No change in status
         }
@@ -294,16 +294,16 @@ export const Meter = Resource(
       }
 
       const createParams = mapPropsToStripeParams(props);
-      stripeAPIResponse = await stripe.billing.meters.create(createParams);
+      stripeAPIResponse = await withStripeRetry(() => stripe.billing.meters.create(createParams));
 
       // If status 'inactive' is requested during creation, and Stripe created it as 'active'
       if (
         props.status === "inactive" &&
         stripeAPIResponse.status === "active"
       ) {
-        stripeAPIResponse = await stripe.billing.meters.deactivate(
+        stripeAPIResponse = await withStripeRetry(() => stripe.billing.meters.deactivate(
           stripeAPIResponse.id,
-        );
+        ));
       } else if (props.status && props.status !== stripeAPIResponse.status) {
         console.warn(
           `Meter ${stripeAPIResponse.id} created with status ${stripeAPIResponse.status} but requested ${props.status}. Ensure this is intended.`,

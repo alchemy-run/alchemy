@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError } from "./client.ts";
+import { createStripeClient, handleStripeDeleteError, withStripeRetry } from "./client.ts";
 
 type ProductType = Stripe.Product.Type;
 
@@ -156,7 +156,7 @@ export const Product = Resource(
     if (this.phase === "delete") {
       try {
         if (this.phase === "delete" && this.output?.id) {
-          await stripe.products.update(this.output.id, { active: false });
+          await withStripeRetry(() => stripe.products.update(this.output.id, { active: false }));
         }
       } catch (error) {
         handleStripeDeleteError(error, "Product", this.output?.id);
@@ -170,7 +170,7 @@ export const Product = Resource(
 
       if (this.phase === "update" && this.output?.id) {
         // Update existing product
-        product = await stripe.products.update(this.output.id, {
+        product = await withStripeRetry(() => stripe.products.update(this.output.id, {
           name: props.name,
           description: props.description,
           active: props.active,
@@ -179,10 +179,10 @@ export const Product = Resource(
           statement_descriptor: props.statementDescriptor,
           metadata: props.metadata,
           tax_code: props.taxCode,
-        });
+        }));
       } else {
         // Create new product
-        product = await stripe.products.create({
+        product = await withStripeRetry(() => stripe.products.create({
           name: props.name,
           description: props.description,
           active: props.active,
@@ -194,7 +194,7 @@ export const Product = Resource(
           statement_descriptor: props.statementDescriptor,
           metadata: props.metadata,
           tax_code: props.taxCode,
-        });
+        }));
       }
 
       return this({

@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError } from "./client.ts";
+import { createStripeClient, handleStripeDeleteError, withStripeRetry } from "./client.ts";
 
 /**
  * Customer address information
@@ -281,7 +281,7 @@ export const Customer = Resource(
     if (this.phase === "delete") {
       try {
         if (this.output?.id) {
-          await stripe.customers.del(this.output.id);
+          await withStripeRetry(() => stripe.customers.del(this.output.id));
         }
       } catch (error) {
         handleStripeDeleteError(error, "Customer", this.output?.id);
@@ -334,7 +334,7 @@ export const Customer = Resource(
           };
         }
 
-        customer = await stripe.customers.update(this.output.id, updateParams);
+        customer = await withStripeRetry(() => stripe.customers.update(this.output.id, updateParams));
       } else {
         const createParams: Stripe.CustomerCreateParams = {
           address: props.address
@@ -379,7 +379,7 @@ export const Customer = Resource(
           };
         }
 
-        customer = await stripe.customers.create(createParams);
+        customer = await withStripeRetry(() => stripe.customers.create(createParams));
       }
 
       return this({

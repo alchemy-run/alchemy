@@ -1,6 +1,8 @@
 import Stripe from "stripe";
 import type { Secret } from "../secret.ts";
 
+export { withStripeRetry } from "./retry.ts";
+
 export interface StripeClientOptions {
   apiKey?: Secret;
 }
