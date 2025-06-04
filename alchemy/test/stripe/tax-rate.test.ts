@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect } from "vitest";
 import Stripe from "stripe";
+import { beforeAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
 import { TaxRate } from "../../src/stripe/tax-rate.ts";
@@ -24,55 +24,61 @@ describe("Stripe TaxRate Resource", () => {
 
   test("create, update, and deactivate tax rate", async (scope) => {
     const taxRateId = `${BRANCH_PREFIX}-tax-rate-1`;
+    let taxRate: TaxRate | undefined;
+    try {
+      taxRate = await TaxRate(taxRateId, {
+        displayName: "Test Tax Rate",
+        percentage: 8.5,
+        inclusive: false,
+        active: true,
+        country: "US",
+        state: "CA",
+        description: "California sales tax",
+        metadata: {
+          test: "true",
+          branch: BRANCH_PREFIX,
+        },
+      });
 
-    const taxRate = await TaxRate(taxRateId, {
-      displayName: "Test Tax Rate",
-      percentage: 8.5,
-      inclusive: false,
-      active: true,
-      country: "US",
-      state: "CA",
-      description: "California sales tax",
-      metadata: {
-        test: "true",
-        branch: BRANCH_PREFIX,
-      },
-    });
+      expect(taxRate).toMatchObject({
+        displayName: "Test Tax Rate",
+        percentage: 8.5,
+        inclusive: false,
+        active: true,
+      });
 
-    expect(taxRate).toMatchObject({
-      displayName: "Test Tax Rate",
-      percentage: 8.5,
-      inclusive: false,
-      active: true,
-    });
+      const stripeTaxRate = await stripeClient.taxRates.retrieve(taxRate.id);
+      expect(stripeTaxRate.id).toBe(taxRate.id);
+      expect(stripeTaxRate.percentage).toBe(8.5);
 
-    const stripeTaxRate = await stripeClient.taxRates.retrieve(taxRate.id);
-    expect(stripeTaxRate.id).toBe(taxRate.id);
-    expect(stripeTaxRate.percentage).toBe(8.5);
+      taxRate = await TaxRate(taxRateId, {
+        displayName: "Updated Test Tax Rate",
+        percentage: 8.5,
+        inclusive: false,
+        active: false,
+        country: "US",
+        state: "CA",
+        description: "Updated California sales tax",
+        metadata: {
+          test: "true",
+          branch: BRANCH_PREFIX,
+          updated: "true",
+        },
+      });
 
-    const updatedTaxRate = await TaxRate(taxRateId, {
-      displayName: "Updated Test Tax Rate",
-      percentage: 8.5,
-      inclusive: false,
-      active: false,
-      country: "US",
-      state: "CA",
-      description: "Updated California sales tax",
-      metadata: {
-        test: "true",
-        branch: BRANCH_PREFIX,
-        updated: "true",
-      },
-    });
+      expect(taxRate).toMatchObject({
+        displayName: "Updated Test Tax Rate",
+        active: false,
+      });
+    } finally {
+      await destroy(scope);
 
-    expect(updatedTaxRate).toMatchObject({
-      displayName: "Updated Test Tax Rate",
-      active: false,
-    });
-
-    await destroy(scope);
-
-    const deactivatedTaxRate = await stripeClient.taxRates.retrieve(taxRate.id);
-    expect(deactivatedTaxRate.active).toBe(false);
+      if (taxRate) {
+        const deactivatedTaxRate = await stripeClient.taxRates.retrieve(
+          taxRate.id,
+        );
+        expect(deactivatedTaxRate.active).toBe(false);
+      }
+    }
   });
 });

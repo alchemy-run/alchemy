@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect } from "vitest";
 import Stripe from "stripe";
+import { beforeAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
 import { Coupon } from "../../src/stripe/coupon.ts";
@@ -25,54 +25,59 @@ describe("Stripe Coupon Resource", () => {
   test("create, update, and delete coupon", async (scope) => {
     const couponId = `${BRANCH_PREFIX}-coupon-test`;
 
-    const coupon = await Coupon(couponId, {
-      id: couponId,
-      duration: "once",
-      percentOff: 25,
-      name: "Test Coupon",
-      metadata: {
-        test: "true",
-        branch: BRANCH_PREFIX,
-      },
-    });
-
-    expect(coupon).toMatchObject({
-      id: couponId,
-      duration: "once",
-      percentOff: 25,
-      name: "Test Coupon",
-    });
-
-    const stripeCoupon = await stripeClient.coupons.retrieve(coupon.id);
-    expect(stripeCoupon.id).toBe(coupon.id);
-    expect(stripeCoupon.percent_off).toBe(25);
-
-    const updatedCoupon = await Coupon(couponId, {
-      id: couponId,
-      duration: "once",
-      percentOff: 25,
-      name: "Updated Test Coupon",
-      metadata: {
-        test: "true",
-        branch: BRANCH_PREFIX,
-        updated: "true",
-      },
-    });
-
-    expect(updatedCoupon).toMatchObject({
-      name: "Updated Test Coupon",
-      metadata: expect.objectContaining({
-        updated: "true",
-      }),
-    });
-
-    await destroy(scope);
-
+    let coupon: Coupon | undefined;
     try {
-      await stripeClient.coupons.retrieve(coupon.id);
-      expect(false).toBe(true);
-    } catch (error: any) {
-      expect(error.code).toBe("resource_missing");
+      const coupon = await Coupon(couponId, {
+        id: couponId,
+        duration: "once",
+        percentOff: 25,
+        name: "Test Coupon",
+        metadata: {
+          test: "true",
+          branch: BRANCH_PREFIX,
+        },
+      });
+
+      expect(coupon).toMatchObject({
+        id: couponId,
+        duration: "once",
+        percentOff: 25,
+        name: "Test Coupon",
+      });
+
+      const stripeCoupon = await stripeClient.coupons.retrieve(coupon.id);
+      expect(stripeCoupon.id).toBe(coupon.id);
+      expect(stripeCoupon.percent_off).toBe(25);
+
+      const updatedCoupon = await Coupon(couponId, {
+        id: couponId,
+        duration: "once",
+        percentOff: 25,
+        name: "Updated Test Coupon",
+        metadata: {
+          test: "true",
+          branch: BRANCH_PREFIX,
+          updated: "true",
+        },
+      });
+
+      expect(updatedCoupon).toMatchObject({
+        name: "Updated Test Coupon",
+        metadata: expect.objectContaining({
+          updated: "true",
+        }),
+      });
+    } finally {
+      await destroy(scope);
+
+      if (coupon) {
+        try {
+          await stripeClient.coupons.retrieve(coupon.id);
+          expect(false).toBe(true);
+        } catch (error: any) {
+          expect(error.code).toBe("resource_missing");
+        }
+      }
     }
   });
 });

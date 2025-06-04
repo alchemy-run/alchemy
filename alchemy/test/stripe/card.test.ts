@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect } from "vitest";
 import Stripe from "stripe";
+import { beforeAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
 import { Card } from "../../src/stripe/card.ts";
@@ -27,56 +27,62 @@ describe("Stripe Card Resource", () => {
     const customerId = `${BRANCH_PREFIX}-customer-1`;
     const cardId = `${BRANCH_PREFIX}-card-1`;
 
-    const customer = await Customer(customerId, {
-      email: "test@example.com",
-      name: "Test Customer for Card",
-    });
-
-    const card = await Card(cardId, {
-      customer: customer.id,
-      source: "tok_visa",
-      name: "Test Cardholder",
-      addressLine1: "123 Test St",
-      addressCity: "Test City",
-      addressState: "CA",
-      addressZip: "12345",
-      addressCountry: "US",
-      metadata: {
-        test: "true",
-        branch: BRANCH_PREFIX,
-      },
-    });
-
-    expect(card.customer).toBe(customer.id);
-    expect(card.brand).toBe("Visa");
-    expect(card.last4).toBe("4242");
-
-    const stripeCard = (await stripeClient.customers.retrieveSource(
-      customer.id,
-      card.id,
-    )) as Stripe.Card;
-    expect(stripeCard.id).toBe(card.id);
-    expect(stripeCard.last4).toBe("4242");
-
-    const updatedCard = await Card(cardId, {
-      customer: customer.id,
-      name: "Updated Test Cardholder",
-      metadata: {
-        test: "true",
-        branch: BRANCH_PREFIX,
-        updated: "true",
-      },
-    });
-
-    expect(updatedCard.name).toBe("Updated Test Cardholder");
-
-    await destroy(scope);
-
+    let customer: Customer | undefined;
+    let card: Card | undefined;
     try {
-      await stripeClient.customers.retrieveSource(customer.id, card.id);
-      expect(false).toBe(true);
-    } catch (error: any) {
-      expect(error.code).toBe("resource_missing");
+      const customer = await Customer(customerId, {
+        email: "test@example.com",
+        name: "Test Customer for Card",
+      });
+
+      const card = await Card(cardId, {
+        customer: customer.id,
+        source: "tok_visa",
+        name: "Test Cardholder",
+        addressLine1: "123 Test St",
+        addressCity: "Test City",
+        addressState: "CA",
+        addressZip: "12345",
+        addressCountry: "US",
+        metadata: {
+          test: "true",
+          branch: BRANCH_PREFIX,
+        },
+      });
+
+      expect(card.customer).toBe(customer.id);
+      expect(card.brand).toBe("Visa");
+      expect(card.last4).toBe("4242");
+
+      const stripeCard = (await stripeClient.customers.retrieveSource(
+        customer.id,
+        card.id,
+      )) as Stripe.Card;
+      expect(stripeCard.id).toBe(card.id);
+      expect(stripeCard.last4).toBe("4242");
+
+      const updatedCard = await Card(cardId, {
+        customer: customer.id,
+        name: "Updated Test Cardholder",
+        metadata: {
+          test: "true",
+          branch: BRANCH_PREFIX,
+          updated: "true",
+        },
+      });
+
+      expect(updatedCard.name).toBe("Updated Test Cardholder");
+    } finally {
+      await destroy(scope);
+
+      if (customer && card) {
+        try {
+          await stripeClient.customers.retrieveSource(customer.id, card.id);
+          expect(false).toBe(true);
+        } catch (error: any) {
+          expect(error.code).toBe("resource_missing");
+        }
+      }
     }
   });
 });

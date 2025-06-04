@@ -1,9 +1,9 @@
-import { beforeAll, describe, expect } from "vitest";
 import Stripe from "stripe";
+import { beforeAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
-import { PromotionCode } from "../../src/stripe/promotion-code.ts";
 import { Coupon } from "../../src/stripe/coupon.ts";
+import { PromotionCode } from "../../src/stripe/promotion-code.ts";
 import "../../src/test/vitest.ts";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX || "test";
@@ -26,54 +26,58 @@ describe("Stripe PromotionCode Resource", () => {
   test("create, update, and deactivate promotion code", async (scope) => {
     const couponId = `${BRANCH_PREFIX}-coupon-1`;
     const promotionCodeId = `${BRANCH_PREFIX}-promo-1`;
+    let coupon: Coupon | undefined;
+    let promotionCode: PromotionCode | undefined;
+    try {
+      coupon = await Coupon(couponId, {
+        id: couponId,
+        duration: "once",
+        percentOff: 20,
+        name: "Test Coupon for Promo",
+      });
 
-    const coupon = await Coupon(couponId, {
-      id: couponId,
-      duration: "once",
-      percentOff: 20,
-      name: "Test Coupon for Promo",
-    });
+      const promotionCode = await PromotionCode(promotionCodeId, {
+        coupon: coupon.id,
+        code: "TESTCODE123",
+        active: true,
+        maxRedemptions: 100,
+        metadata: {
+          test: "true",
+          branch: BRANCH_PREFIX,
+        },
+      });
 
-    const promotionCode = await PromotionCode(promotionCodeId, {
-      coupon: coupon.id,
-      code: "TESTCODE123",
-      active: true,
-      maxRedemptions: 100,
-      metadata: {
-        test: "true",
-        branch: BRANCH_PREFIX,
-      },
-    });
+      expect(promotionCode.coupon).toBe(coupon.id);
+      expect(promotionCode.active).toBe(true);
+      expect(promotionCode.maxRedemptions).toBe(100);
 
-    expect(promotionCode.coupon).toBe(coupon.id);
-    expect(promotionCode.active).toBe(true);
-    expect(promotionCode.maxRedemptions).toBe(100);
+      const stripePromotionCode = await stripeClient.promotionCodes.retrieve(
+        promotionCode.id,
+      );
+      expect(stripePromotionCode.id).toBe(promotionCode.id);
+      expect(stripePromotionCode.active).toBe(true);
 
-    const stripePromotionCode = await stripeClient.promotionCodes.retrieve(
-      promotionCode.id,
-    );
-    expect(stripePromotionCode.id).toBe(promotionCode.id);
-    expect(stripePromotionCode.active).toBe(true);
+      const updatedPromotionCode = await PromotionCode(promotionCodeId, {
+        coupon: coupon.id,
+        code: promotionCode.code,
+        active: false,
+        maxRedemptions: 100,
+        metadata: {
+          test: "true",
+          branch: BRANCH_PREFIX,
+          updated: "true",
+        },
+      });
 
-    const updatedPromotionCode = await PromotionCode(promotionCodeId, {
-      coupon: coupon.id,
-      code: promotionCode.code,
-      active: false,
-      maxRedemptions: 100,
-      metadata: {
-        test: "true",
-        branch: BRANCH_PREFIX,
-        updated: "true",
-      },
-    });
+      expect(updatedPromotionCode.active).toBe(false);
+    } finally {
+      await destroy(scope);
 
-    expect(updatedPromotionCode.active).toBe(false);
-
-    await destroy(scope);
-
-    const deactivatedPromotionCode = await stripeClient.promotionCodes.retrieve(
-      promotionCode.id,
-    );
-    expect(deactivatedPromotionCode.active).toBe(false);
+      if (promotionCode) {
+        const deactivatedPromotionCode =
+          await stripeClient.promotionCodes.retrieve(promotionCode.id);
+        expect(deactivatedPromotionCode.active).toBe(false);
+      }
+    }
   });
 });

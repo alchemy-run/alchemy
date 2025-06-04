@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect } from "vitest";
 import Stripe from "stripe";
+import { beforeAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
 import { ShippingRate } from "../../src/stripe/shipping-rate.ts";
@@ -24,62 +24,65 @@ describe("Stripe ShippingRate Resource", () => {
 
   test("create, update, and deactivate shipping rate", async (scope) => {
     const shippingRateId = `${BRANCH_PREFIX}-shipping-rate-1`;
-
-    const shippingRate = await ShippingRate(shippingRateId, {
-      displayName: "Test Shipping Rate",
-      type: "fixed_amount",
-      fixedAmount: {
-        amount: 500,
-        currency: "usd",
-      },
-      deliveryEstimate: {
-        minimum: {
-          unit: "business_day",
-          value: 1,
+    let shippingRate: ShippingRate | undefined;
+    try {
+      shippingRate = await ShippingRate(shippingRateId, {
+        displayName: "Test Shipping Rate",
+        type: "fixed_amount",
+        fixedAmount: {
+          amount: 500,
+          currency: "usd",
         },
-        maximum: {
-          unit: "business_day",
-          value: 3,
+        deliveryEstimate: {
+          minimum: {
+            unit: "business_day",
+            value: 1,
+          },
+          maximum: {
+            unit: "business_day",
+            value: 3,
+          },
         },
-      },
-      metadata: {
-        test: "true",
-        branch: BRANCH_PREFIX,
-      },
-    });
+        metadata: {
+          test: "true",
+          branch: BRANCH_PREFIX,
+        },
+      });
 
-    expect(shippingRate.displayName).toBe("Test Shipping Rate");
-    expect(shippingRate.fixedAmount?.amount).toBe(500);
-    expect(shippingRate.fixedAmount?.currency).toBe("usd");
+      expect(shippingRate.displayName).toBe("Test Shipping Rate");
+      expect(shippingRate.fixedAmount?.amount).toBe(500);
+      expect(shippingRate.fixedAmount?.currency).toBe("usd");
 
-    const stripeShippingRate = await stripeClient.shippingRates.retrieve(
-      shippingRate.id,
-    );
-    expect(stripeShippingRate.id).toBe(shippingRate.id);
-    expect(stripeShippingRate.fixed_amount?.amount).toBe(500);
+      const stripeShippingRate = await stripeClient.shippingRates.retrieve(
+        shippingRate.id,
+      );
+      expect(stripeShippingRate.id).toBe(shippingRate.id);
+      expect(stripeShippingRate.fixed_amount?.amount).toBe(500);
 
-    const updatedShippingRate = await ShippingRate(shippingRateId, {
-      displayName: "Test Shipping Rate",
-      type: "fixed_amount",
-      fixedAmount: {
-        amount: 500,
-        currency: "usd",
-      },
-      active: false,
-      metadata: {
-        test: "true",
-        branch: BRANCH_PREFIX,
-        updated: "true",
-      },
-    });
+      shippingRate = await ShippingRate(shippingRateId, {
+        displayName: "Test Shipping Rate",
+        type: "fixed_amount",
+        fixedAmount: {
+          amount: 500,
+          currency: "usd",
+        },
+        active: false,
+        metadata: {
+          test: "true",
+          branch: BRANCH_PREFIX,
+          updated: "true",
+        },
+      });
 
-    expect(updatedShippingRate.active).toBe(false);
+      expect(shippingRate.active).toBe(false);
+    } finally {
+      await destroy(scope);
 
-    await destroy(scope);
-
-    const deactivatedShippingRate = await stripeClient.shippingRates.retrieve(
-      shippingRate.id,
-    );
-    expect(deactivatedShippingRate.active).toBe(false);
+      if (shippingRate) {
+        const deactivatedShippingRate =
+          await stripeClient.shippingRates.retrieve(shippingRate.id);
+        expect(deactivatedShippingRate.active).toBe(false);
+      }
+    }
   });
 });

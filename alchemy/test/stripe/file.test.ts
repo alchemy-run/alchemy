@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect } from "vitest";
 import Stripe from "stripe";
+import { beforeAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
 import { File } from "../../src/stripe/file.ts";
@@ -33,20 +33,21 @@ describe("Stripe File Resource", () => {
       name: "test-file.png",
       type: "image/png",
     };
+    try {
+      const file = await File(fileId, {
+        file: testFileContent,
+        purpose: "dispute_evidence",
+      });
 
-    const file = await File(fileId, {
-      file: testFileContent,
-      purpose: "dispute_evidence",
-    });
+      expect(file.purpose).toBe("dispute_evidence");
+      expect(file.size).toBeGreaterThan(0);
+      expect(file.object).toBe("file");
 
-    expect(file.purpose).toBe("dispute_evidence");
-    expect(file.size).toBeGreaterThan(0);
-    expect(file.object).toBe("file");
-
-    const stripeFile = await stripeClient.files.retrieve(file.id);
-    expect(stripeFile.id).toBe(file.id);
-    expect(stripeFile.purpose).toBe("dispute_evidence");
-
-    await destroy(scope);
+      const stripeFile = await stripeClient.files.retrieve(file.id);
+      expect(stripeFile.id).toBe(file.id);
+      expect(stripeFile.purpose).toBe("dispute_evidence");
+    } finally {
+      await destroy(scope);
+    }
   });
 });
