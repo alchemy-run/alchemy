@@ -4,7 +4,7 @@ import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
-import { BRANCH_PREFIX } from "../util.ts";
+import { BRANCH_PREFIX, SESSION_SUFFIX } from "../util.ts";
 
 import "../../src/test/vitest.ts";
 
@@ -167,8 +167,8 @@ describe("Durable Object Namespace", () => {
 
   test("create and test worker with cross-script durable object binding", async (scope) => {
     // Create names for both workers
-    const doWorkerName = `${BRANCH_PREFIX}-do-provider-worker`;
-    const clientWorkerName = `${BRANCH_PREFIX}-do-client-worker`;
+    const doWorkerName = `${BRANCH_PREFIX}-do-provider-worker${SESSION_SUFFIX}`;
+    const clientWorkerName = `${BRANCH_PREFIX}-do-client-worker${SESSION_SUFFIX}`;
 
     // Script for the worker that defines the durable object
     const doProviderWorkerScript = `
@@ -741,7 +741,7 @@ export default {
 
   test("adopting a Worker should use server-side state to migrate classes", async (scope) => {
     try {
-      const workerName = `${BRANCH_PREFIX}-test-worker-adoption-migrate`;
+      const workerName = `${BRANCH_PREFIX}-test-worker-adoption-migrate${SESSION_SUFFIX}`;
       await Worker("worker-1", {
         name: workerName,
         script: `

@@ -5,7 +5,7 @@ import { listQueueConsumers } from "../../src/cloudflare/queue-consumer.ts";
 import { Queue } from "../../src/cloudflare/queue.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
-import { BRANCH_PREFIX } from "../util.ts";
+import { BRANCH_PREFIX, SESSION_SUFFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
 import { CloudflareApiError } from "../../src/cloudflare/api-error.ts";
 import "../../src/test/vitest.ts";
@@ -18,7 +18,7 @@ const api = await createCloudflareApi({});
 
 describe("QueueConsumer Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
-  const testId = `${BRANCH_PREFIX}-test-queue-consumer`;
+  const testId = `${BRANCH_PREFIX}-test-queue-consumer${SESSION_SUFFIX}`;
   const queueName = `${testId}-queue`;
   const workerName = `${testId}-worker`;
 
@@ -63,7 +63,9 @@ describe("QueueConsumer Resource", () => {
 
       // Verify consumers were deleted
       try {
-        await listQueueConsumers(api, queue!.id);
+        if (queue?.id) {
+          await listQueueConsumers(api, queue.id);
+        }
       } catch (err) {
         if (err instanceof CloudflareApiError && err.status === 404) {
           // expected

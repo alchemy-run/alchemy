@@ -4,7 +4,7 @@ import { BrowserRendering } from "../../src/cloudflare/browser-rendering.ts";
 import { KVNamespace } from "../../src/cloudflare/kv-namespace.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
-import { BRANCH_PREFIX } from "../util.ts";
+import { BRANCH_PREFIX, SESSION_SUFFIX } from "../util.ts";
 import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 import path from "node:path";
@@ -25,10 +25,12 @@ describe("Browser Rendering Resource", () => {
     try {
       // Create a KV namespace for caching screenshots
       kvNamespace = await KVNamespace(kvNamespaceName, {
-        title: `${BRANCH_PREFIX} Browser KV Demo`,
+        title: `${BRANCH_PREFIX} Browser KV Demo${SESSION_SUFFIX}`,
       });
 
-      expect(kvNamespace.title).toEqual(`${BRANCH_PREFIX} Browser KV Demo`);
+      expect(kvNamespace.title).toEqual(
+        `${BRANCH_PREFIX} Browser KV Demo${SESSION_SUFFIX}`,
+      );
 
       // Create a worker with browser rendering binding
       worker = await Worker(workerName, {
