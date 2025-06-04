@@ -1,3 +1,18 @@
+## v0.24.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Add dead letter queue support to Cloudflare Queue &nbsp;-&nbsp; in https://github.com/sam-goodwin/alchemy/issues/243 [<samp>(bdd12)</samp>](https://github.com/sam-goodwin/alchemy/commit/bdd12e1)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **aws**: AWS Control API type generation &nbsp;-&nbsp; by **Tyler van Hensbergen** in https://github.com/sam-goodwin/alchemy/issues/265 [<samp>(12835)</samp>](https://github.com/sam-goodwin/alchemy/commit/12835a2)
+- **cloudflare**: Version Metadata Type Mapping &nbsp;-&nbsp; in https://github.com/sam-goodwin/alchemy/issues/252 [<samp>(32035)</samp>](https://github.com/sam-goodwin/alchemy/commit/32035e3)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.23.0...v0.24.0)
+
+---
+
 ## v0.23.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
