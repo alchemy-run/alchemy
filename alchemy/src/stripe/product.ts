@@ -2,7 +2,11 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError, withStripeRetry } from "./client.ts";
+import {
+  createStripeClient,
+  handleStripeDeleteError,
+  withStripeRetry,
+} from "./client.ts";
 
 type ProductType = Stripe.Product.Type;
 
@@ -156,7 +160,9 @@ export const Product = Resource(
     if (this.phase === "delete") {
       try {
         if (this.phase === "delete" && this.output?.id) {
-          await withStripeRetry(() => stripe.products.update(this.output.id, { active: false }));
+          await withStripeRetry(() =>
+            stripe.products.update(this.output.id, { active: false }),
+          );
         }
       } catch (error) {
         handleStripeDeleteError(error, "Product", this.output?.id);
@@ -170,31 +176,35 @@ export const Product = Resource(
 
       if (this.phase === "update" && this.output?.id) {
         // Update existing product
-        product = await withStripeRetry(() => stripe.products.update(this.output.id, {
-          name: props.name,
-          description: props.description,
-          active: props.active,
-          images: props.images,
-          url: props.url,
-          statement_descriptor: props.statementDescriptor,
-          metadata: props.metadata,
-          tax_code: props.taxCode,
-        }));
+        product = await withStripeRetry(() =>
+          stripe.products.update(this.output.id, {
+            name: props.name,
+            description: props.description,
+            active: props.active,
+            images: props.images,
+            url: props.url,
+            statement_descriptor: props.statementDescriptor,
+            metadata: props.metadata,
+            tax_code: props.taxCode,
+          }),
+        );
       } else {
         // Create new product
-        product = await withStripeRetry(() => stripe.products.create({
-          name: props.name,
-          description: props.description,
-          active: props.active,
-          images: props.images,
-          url: props.url,
-          shippable: props.shippable,
-          type: props.type as Stripe.ProductCreateParams.Type,
-          unit_label: props.unitLabel,
-          statement_descriptor: props.statementDescriptor,
-          metadata: props.metadata,
-          tax_code: props.taxCode,
-        }));
+        product = await withStripeRetry(() =>
+          stripe.products.create({
+            name: props.name,
+            description: props.description,
+            active: props.active,
+            images: props.images,
+            url: props.url,
+            shippable: props.shippable,
+            type: props.type as Stripe.ProductCreateParams.Type,
+            unit_label: props.unitLabel,
+            statement_descriptor: props.statementDescriptor,
+            metadata: props.metadata,
+            tax_code: props.taxCode,
+          }),
+        );
       }
 
       return this({

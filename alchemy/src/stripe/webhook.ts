@@ -2,7 +2,11 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError, withStripeRetry } from "./client.ts";
+import {
+  createStripeClient,
+  handleStripeDeleteError,
+  withStripeRetry,
+} from "./client.ts";
 
 export type EnabledEvent = Stripe.WebhookEndpointUpdateParams.EnabledEvent;
 
@@ -151,7 +155,9 @@ export const WebhookEndpoint = Resource(
       try {
         // Get the webhook ID from the stored output
         if (this.phase === "delete" && this.output?.id) {
-          await withStripeRetry(() => stripe.webhookEndpoints.del(this.output.id));
+          await withStripeRetry(() =>
+            stripe.webhookEndpoints.del(this.output.id),
+          );
         }
       } catch (error) {
         handleStripeDeleteError(error, "WebhookEndpoint", this.output?.id);
@@ -164,21 +170,25 @@ export const WebhookEndpoint = Resource(
 
       if (this.phase === "update" && this.output?.id) {
         // Update existing webhook
-        webhook = await withStripeRetry(() => stripe.webhookEndpoints.update(this.output.id, {
-          url: props.url,
-          enabled_events: props.enabledEvents,
-          description: props.description,
-          disabled: props.active === false,
-          metadata: props.metadata,
-        }));
+        webhook = await withStripeRetry(() =>
+          stripe.webhookEndpoints.update(this.output.id, {
+            url: props.url,
+            enabled_events: props.enabledEvents,
+            description: props.description,
+            disabled: props.active === false,
+            metadata: props.metadata,
+          }),
+        );
       } else {
         // Create new webhook
-        webhook = await withStripeRetry(() => stripe.webhookEndpoints.create({
-          url: props.url,
-          enabled_events: props.enabledEvents,
-          description: props.description,
-          metadata: props.metadata,
-        }));
+        webhook = await withStripeRetry(() =>
+          stripe.webhookEndpoints.create({
+            url: props.url,
+            enabled_events: props.enabledEvents,
+            description: props.description,
+            metadata: props.metadata,
+          }),
+        );
 
         // For connect parameter, need to handle it separately if it exists
         if (props.connect !== undefined) {

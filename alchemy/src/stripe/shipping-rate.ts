@@ -2,7 +2,11 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError, withStripeRetry } from "./client.ts";
+import {
+  createStripeClient,
+  handleStripeDeleteError,
+  withStripeRetry,
+} from "./client.ts";
 
 /**
  * Delivery estimate for shipping rate
@@ -204,7 +208,9 @@ export const ShippingRate = Resource(
     if (this.phase === "delete") {
       try {
         if (this.output?.id) {
-          await withStripeRetry(() => stripe.shippingRates.update(this.output.id, { active: false }));
+          await withStripeRetry(() =>
+            stripe.shippingRates.update(this.output.id, { active: false }),
+          );
         }
       } catch (error) {
         handleStripeDeleteError(error, "ShippingRate", this.output?.id);
@@ -221,10 +227,9 @@ export const ShippingRate = Resource(
           tax_behavior: props.taxBehavior,
         };
         if (props.active !== undefined) updateParams.active = props.active;
-        shippingRate = await withStripeRetry(() => stripe.shippingRates.update(
-          this.output.id,
-          updateParams,
-        ));
+        shippingRate = await withStripeRetry(() =>
+          stripe.shippingRates.update(this.output.id, updateParams),
+        );
       } else {
         const createParams: Stripe.ShippingRateCreateParams = {
           display_name: props.displayName,
@@ -272,7 +277,9 @@ export const ShippingRate = Resource(
           };
         }
 
-        shippingRate = await withStripeRetry(() => stripe.shippingRates.create(createParams));
+        shippingRate = await withStripeRetry(() =>
+          stripe.shippingRates.create(createParams),
+        );
       }
 
       return this({

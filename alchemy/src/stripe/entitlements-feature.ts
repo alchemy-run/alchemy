@@ -105,10 +105,12 @@ export const EntitlementsFeature = Resource(
       let feature: Stripe.Entitlements.Feature;
 
       if (this.phase === "update" && this.output?.id) {
-        feature = await withStripeRetry(() => stripe.entitlements.features.update(this.output.id, {
-          name: props.name,
-          metadata: props.metadata,
-        }));
+        feature = await withStripeRetry(() =>
+          stripe.entitlements.features.update(this.output.id, {
+            name: props.name,
+            metadata: props.metadata,
+          }),
+        );
       } else {
         const createParams: any = {
           name: props.name,
@@ -117,7 +119,9 @@ export const EntitlementsFeature = Resource(
         if (props.lookupKey) {
           createParams.lookup_key = props.lookupKey;
         }
-        feature = await withStripeRetry(() => stripe.entitlements.features.create(createParams));
+        feature = await withStripeRetry(() =>
+          stripe.entitlements.features.create(createParams),
+        );
       }
 
       return this({

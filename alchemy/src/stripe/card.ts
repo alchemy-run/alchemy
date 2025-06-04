@@ -2,7 +2,11 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError, withStripeRetry } from "./client.ts";
+import {
+  createStripeClient,
+  handleStripeDeleteError,
+  withStripeRetry,
+} from "./client.ts";
 
 /**
  * Properties for creating a Stripe card
@@ -204,10 +208,9 @@ export const Card = Resource(
     if (this.phase === "delete") {
       try {
         if (this.output?.id && this.output?.customer) {
-          await withStripeRetry(() => stripe.customers.deleteSource(
-            this.output.customer,
-            this.output.id,
-          ));
+          await withStripeRetry(() =>
+            stripe.customers.deleteSource(this.output.customer, this.output.id),
+          );
         }
       } catch (error) {
         handleStripeDeleteError(error, "Card", this.output?.id);
@@ -232,11 +235,13 @@ export const Card = Resource(
           metadata: props.metadata,
         };
 
-        card = (await withStripeRetry(() => stripe.customers.updateSource(
-          props.customer,
-          this.output.id,
-          updateParams,
-        ))) as Stripe.Card;
+        card = (await withStripeRetry(() =>
+          stripe.customers.updateSource(
+            props.customer,
+            this.output.id,
+            updateParams,
+          ),
+        )) as Stripe.Card;
       } else {
         const createParams: any = {
           metadata: props.metadata,
@@ -263,10 +268,9 @@ export const Card = Resource(
           };
         }
 
-        card = (await withStripeRetry(() => stripe.customers.createSource(
-          props.customer,
-          createParams,
-        ))) as Stripe.Card;
+        card = (await withStripeRetry(() =>
+          stripe.customers.createSource(props.customer, createParams),
+        )) as Stripe.Card;
       }
 
       return this({

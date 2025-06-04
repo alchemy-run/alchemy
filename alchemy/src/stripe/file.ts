@@ -157,12 +157,16 @@ export const File = Resource(
       let file: Stripe.File;
 
       if (this.phase === "update" && this.output?.id) {
-        file = await withStripeRetry(() => stripe.files.retrieve(this.output.id));
+        file = await withStripeRetry(() =>
+          stripe.files.retrieve(this.output.id),
+        );
       } else {
-        file = await withStripeRetry(() => stripe.files.create({
-          file: props.file,
-          purpose: props.purpose,
-        }));
+        file = await withStripeRetry(() =>
+          stripe.files.create({
+            file: props.file,
+            purpose: props.purpose,
+          }),
+        );
       }
 
       return this({
