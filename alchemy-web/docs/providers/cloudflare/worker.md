@@ -95,6 +95,64 @@ const frontend = await Worker("frontend", {
 });
 ```
 
+## RPC Workers
+
+Create a Worker with RPC capabilities using WorkerEntrypoint and typed RPC interfaces:
+
+```ts
+import { Worker, type } from "alchemy/cloudflare";
+import type MyRPC from "./src/rpc.ts";
+
+// Create an RPC worker with typed interface
+const rpcWorker = await Worker("rpc-service", {
+  name: "rpc-service-worker",
+  entrypoint: "./src/rpc.ts",
+  rpc: type<MyRPC>
+});
+
+// Use the RPC worker as a binding in another worker
+const mainWorker = await Worker("main", {
+  name: "main-worker",
+  entrypoint: "./src/worker.ts",
+  bindings: {
+    RPC: rpcWorker
+  }
+});
+```
+
+The RPC worker's entrypoint should export a class extending `WorkerEntrypoint`:
+
+```ts
+// src/rpc.ts
+import { WorkerEntrypoint } from "cloudflare:workers";
+
+export default class MyRPC extends WorkerEntrypoint {
+  async getData(id: string): Promise<{ data: string }> {
+    return { data: `Data for ${id}` };
+  }
+
+  async processItem(item: { name: string; value: number }): Promise<boolean> {
+    // Process the item
+    return true;
+  }
+}
+```
+
+Then the main worker can call RPC methods with full type safety:
+
+```ts
+// src/worker.ts
+export default {
+  async fetch(request: Request, env: { RPC: MyRPC }): Promise<Response> {
+    // Type-safe RPC calls
+    const result = await env.RPC.getData("123");
+    const success = await env.RPC.processItem({ name: "test", value: 42 });
+    
+    return new Response(JSON.stringify({ result, success }));
+  }
+};
+```
+
 ## Cross-Script Durable Object Binding
 
 Share durable objects between workers by defining them in one worker and accessing them from another:
@@ -142,5 +200,42 @@ const route = await Route("route", {
   zoneId: zone.id,
   worker: api,
   pattern: "api.example.com/*"
+});
+```
+
+## Reference Workers by Name
+
+Use `WorkerRef` to reference an existing worker by its service name rather than by resource instance. This is useful for worker-to-worker bindings when you need to reference a worker that already exists.
+
+```ts
+import { Worker, WorkerRef } from "alchemy/cloudflare";
+
+const callerWorker = await Worker("caller", {
+  bindings: {
+    TARGET_WORKER: WorkerRef({
+      // reference the worker by name (not created with Alchemy)
+      service: "target-worker"
+    })
+  },
+});
+```
+
+### RPC Type
+
+If you're using a WorkerEntrypoint RPC, you can provide its type:
+
+```ts
+import { Worker, WorkerRef } from "alchemy/cloudflare";
+import type { MyWorkerEntrypoint } from "./src/worker.ts";
+
+const callerWorker = await Worker("caller", {
+  name: "caller-worker",
+  bindings: {
+    TARGET_WORKER: WorkerRef<MyWorkerEntrypoint>({
+      service: "target-worker",
+      environment: "production", // Optional
+      namespace: "main"           // Optional
+    })
+  },
 });
 ```

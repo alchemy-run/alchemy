@@ -69,6 +69,11 @@ export interface ProductProps {
    * API key to use (overrides environment variable)
    */
   apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -196,7 +201,34 @@ export const Product = Resource(
           metadata: props.metadata,
           tax_code: props.taxCode,
         };
-        product = await stripe.products.create(createParams);
+        if (props.adopt) {
+          const existingProducts = await stripe.products.list({
+            limit: 100,
+          });
+          const existingProduct = existingProducts.data.find(
+            (p) => p.name === props.name,
+          );
+          if (existingProduct) {
+            const updateParams = {
+              name: props.name,
+              description: props.description,
+              active: props.active,
+              images: props.images,
+              url: props.url,
+              statement_descriptor: props.statementDescriptor,
+              metadata: props.metadata,
+              tax_code: props.taxCode,
+            };
+            product = await stripe.products.update(
+              existingProduct.id,
+              updateParams,
+            );
+          } else {
+            product = await stripe.products.create(createParams);
+          }
+        } else {
+          product = await stripe.products.create(createParams);
+        }
       }
 
       return this({

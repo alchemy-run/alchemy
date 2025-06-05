@@ -45,11 +45,6 @@ describe("R2 Bucket Resource", async () => {
       const gotBucket = await getBucket(api, testId);
       expect(gotBucket.result.name).toEqual(testId);
 
-      // Check if bucket exists by listing buckets
-      const buckets = await listBuckets(api);
-      const foundBucket = buckets.find((b) => b.Name === testId);
-      expect(foundBucket).toBeTruthy();
-
       // Update the bucket to enable public access
       bucket = await R2Bucket(testId, {
         name: testId,
@@ -74,28 +69,29 @@ describe("R2 Bucket Resource", async () => {
   test("bucket with jurisdiction", async (scope) => {
     const api = await createCloudflareApi();
     const euBucketName = `${testId}-eu`;
-    const euBucket = await R2Bucket(euBucketName, {
-      name: euBucketName,
-      jurisdiction: "eu",
-      adopt: true,
-    });
-
+    let euBucket: R2Bucket | undefined;
     try {
+      euBucket = await R2Bucket(euBucketName, {
+        name: euBucketName,
+        jurisdiction: "eu",
+        adopt: true,
+      });
       // Create a bucket with EU jurisdiction
       expect(euBucket.name).toEqual(euBucketName);
       expect(euBucket.jurisdiction).toEqual("eu");
 
-      // Check if bucket exists by listing buckets
-      const buckets = await listBuckets(api, {
+      // Check if bucket exists by getting it explicitly
+      const gotBucket = await getBucket(api, euBucketName, {
         jurisdiction: "eu",
       });
-      const foundBucket = buckets.find((b) => b.Name === euBucketName);
-      expect(foundBucket).toBeTruthy();
+      expect(gotBucket.result.name).toEqual(euBucketName);
 
       // Note: S3 API doesn't expose jurisdiction info, so we can't verify that aspect
     } finally {
       await alchemy.destroy(scope);
-      await assertBucketDeleted(euBucket);
+      if (euBucket) {
+        await assertBucketDeleted(euBucket);
+      }
     }
   });
 
@@ -167,12 +163,6 @@ describe("R2 Bucket Resource", async () => {
     } finally {
       // Destroy the bucket which should empty it first
       await alchemy.destroy(scope);
-
-      console.log(
-        "Note: Manual cleanup may be needed for bucket:",
-        bucket?.name,
-      );
-      console.log("Visit the Cloudflare dashboard to verify bucket deletion");
     }
   });
 
@@ -239,7 +229,7 @@ describe("R2 Bucket Resource", async () => {
   });
 });
 
-async function assertBucketDeleted(bucket: R2Bucket) {
+async function assertBucketDeleted(bucket: R2Bucket, attempt = 0) {
   const api = await createCloudflareApi();
   try {
     if (!bucket.name) {
@@ -253,7 +243,12 @@ async function assertBucketDeleted(bucket: R2Bucket) {
     const foundBucket = buckets.find((b) => b.Name === bucket.name);
 
     if (foundBucket) {
-      throw new Error(`Bucket ${bucket.name} was not deleted as expected`);
+      if (attempt > 30) {
+        throw new Error(`Bucket ${bucket.name} was not deleted as expected`);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await assertBucketDeleted(bucket, attempt + 1);
+      }
     }
   } catch (error: any) {
     // If we get a 404 or NoSuchBucket error, the bucket was deleted

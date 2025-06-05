@@ -113,6 +113,11 @@ export interface PriceProps {
    * API key to use (overrides environment variable)
    */
   apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -261,7 +266,34 @@ export const Price = Resource(
           };
         }
 
-        price = await stripe.prices.create(createParams);
+        if (props.lookupKey) {
+          const existingPrices = await stripe.prices.list({
+            lookup_keys: [props.lookupKey],
+            limit: 1,
+          });
+          if (existingPrices.data.length > 0) {
+            if (props.adopt) {
+              const existingPrice = existingPrices.data[0];
+              const updateParams: Stripe.PriceUpdateParams = {
+                active: props.active,
+                metadata: props.metadata,
+                nickname: props.nickname,
+                lookup_key: props.lookupKey,
+                transfer_lookup_key: props.transferLookupKey,
+              };
+              price = await stripe.prices.update(
+                existingPrice.id,
+                updateParams,
+              );
+            } else {
+              price = existingPrices.data[0];
+            }
+          } else {
+            price = await stripe.prices.create(createParams);
+          }
+        } else {
+          price = await stripe.prices.create(createParams);
+        }
       }
 
       // Transform Stripe recurring object to our format

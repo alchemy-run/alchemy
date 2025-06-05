@@ -2,7 +2,11 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError } from "./client.ts";
+import {
+  createStripeClient,
+  handleStripeDeleteError,
+  isStripeConflictError,
+} from "./client.ts";
 
 /**
  * Delivery estimate for shipping rate
@@ -107,6 +111,11 @@ export interface ShippingRateProps {
    * API key to use (overrides environment variable)
    */
   apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -272,7 +281,27 @@ export const ShippingRate = Resource(
           };
         }
 
-        shippingRate = await stripe.shippingRates.create(createParams);
+        try {
+          try {
+            shippingRate = await stripe.shippingRates.create(createParams);
+          } catch (error) {
+            if (isStripeConflictError(error) && props.adopt) {
+              throw new Error(
+                "ShippingRate adoption is not supported - shipping rates cannot be uniquely identified for adoption",
+              );
+            } else {
+              throw error;
+            }
+          }
+        } catch (error) {
+          if (isStripeConflictError(error) && props.adopt) {
+            throw new Error(
+              "ShippingRate adoption is not supported - shipping rates cannot be uniquely identified for adoption",
+            );
+          } else {
+            throw error;
+          }
+        }
       }
 
       return this({

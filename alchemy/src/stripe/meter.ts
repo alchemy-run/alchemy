@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient } from "./client.ts";
+import { createStripeClient, isStripeConflictError } from "./client.ts";
 
 /**
  * Properties for creating or updating a Stripe Meter.
@@ -28,6 +28,10 @@ export interface MeterProps {
    * API key to use (overrides environment variable)
    */
   apiKey?: Secret;
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -294,7 +298,17 @@ export const Meter = Resource(
       }
 
       const createParams = mapPropsToStripeParams(props);
-      stripeAPIResponse = await stripe.billing.meters.create(createParams);
+      try {
+        stripeAPIResponse = await stripe.billing.meters.create(createParams);
+      } catch (error) {
+        if (isStripeConflictError(error) && props.adopt) {
+          throw new Error(
+            "Meter adoption is not supported - meters cannot be uniquely identified for adoption",
+          );
+        } else {
+          throw error;
+        }
+      }
 
       // If status 'inactive' is requested during creation, and Stripe created it as 'active'
       if (

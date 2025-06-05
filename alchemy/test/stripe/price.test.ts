@@ -175,6 +175,121 @@ describe("Price Resource", () => {
       }
     }
   });
+
+  test("adopt existing price with different ID", async (scope) => {
+    const lookupKey = `${BRANCH_PREFIX}-adopt-price-key`;
+    const firstId = `${testPriceId}-adopt-first`;
+    const secondId = `${testPriceId}-adopt-second`;
+    const productId = `${testProductId}-adopt`;
+
+    let product: Product | undefined;
+    let firstPrice: Price | undefined;
+    let secondPrice: Price | undefined;
+
+    try {
+      // Create a test product first
+      product = await Product(productId, {
+        name: `${BRANCH_PREFIX} Adoption Price Test Product`,
+        description: "A product for price adoption testing",
+      });
+
+      // Create first price with lookup key
+      firstPrice = await Price(firstId, {
+        product: product.id,
+        currency: "usd",
+        unitAmount: 1000,
+        lookupKey: lookupKey,
+        nickname: "First price",
+      });
+
+      expect(firstPrice.id).toBeTruthy();
+      expect(firstPrice.lookupKey).toEqual(lookupKey);
+
+      // Verify first price was created
+      const stripeFirstPrice = await stripe.prices.retrieve(firstPrice.id);
+      expect(stripeFirstPrice.lookup_key).toEqual(lookupKey);
+
+      secondPrice = await Price(secondId, {
+        product: product.id,
+        currency: "usd",
+        unitAmount: 1000, // Same amount (immutable)
+        lookupKey: lookupKey, // Same lookup key
+        nickname: "Second price - adopted",
+        adopt: true, // Enable adoption
+      });
+
+      expect(secondPrice.id).toBeTruthy();
+      expect(secondPrice.id).toEqual(firstPrice.id); // Should have same underlying resource ID
+      expect(secondPrice.lookupKey).toEqual(lookupKey);
+
+      // Verify the price was updated with new configuration
+      const stripeSecondPrice = await stripe.prices.retrieve(secondPrice.id);
+      expect(stripeSecondPrice.lookup_key).toEqual(lookupKey);
+      expect(stripeSecondPrice.nickname).toEqual("Second price - adopted");
+    } catch (err) {
+      console.log(err);
+      throw err;
+    } finally {
+      await destroy(scope);
+
+      if (firstPrice?.id) {
+        await assertPriceDeactivated(firstPrice.id);
+      }
+      if (product?.id) {
+        await assertProductDeactivated(product.id);
+      }
+    }
+  });
+
+  test("price adoption fails without lookup key", async (scope) => {
+    const firstId = `${testPriceId}-no-key-first`;
+    const secondId = `${testPriceId}-no-key-second`;
+    const productId = `${testProductId}-no-key`;
+
+    let product: Product | undefined;
+    let firstPrice: Price | undefined;
+
+    try {
+      // Create a test product first
+      product = await Product(productId, {
+        name: `${BRANCH_PREFIX} No Key Price Test Product`,
+        description: "A product for price no-key testing",
+      });
+
+      // Create first price without lookup key
+      firstPrice = await Price(firstId, {
+        product: product.id,
+        currency: "usd",
+        unitAmount: 1000,
+        nickname: "First price without key",
+      });
+
+      expect(firstPrice.id).toBeTruthy();
+
+      const secondPrice = await Price(secondId, {
+        product: product.id,
+        currency: "usd",
+        unitAmount: 1000,
+        nickname: "Second price - should create separate price",
+        adopt: true, // Enable adoption but no lookup key
+      });
+
+      expect(secondPrice.id).toBeTruthy();
+      expect(secondPrice.id).not.toEqual(firstPrice.id); // Should have different IDs
+    } catch (err) {
+      console.log(err);
+      throw err;
+    } finally {
+      await destroy(scope);
+
+      if (firstPrice?.id) {
+        await assertPriceDeactivated(firstPrice.id);
+      }
+      if (product?.id) {
+        await assertProductDeactivated(product.id);
+      }
+    }
+  });
 });
 
 // Helper functions for verification

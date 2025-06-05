@@ -2,7 +2,11 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError } from "./client.ts";
+import {
+  createStripeClient,
+  handleStripeDeleteError,
+  isStripeConflictError,
+} from "./client.ts";
 
 /**
  * Properties for creating a Stripe card
@@ -92,6 +96,11 @@ export interface CardProps {
    * API key to use (overrides environment variable)
    */
   apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -263,10 +272,20 @@ export const Card = Resource(
           };
         }
 
-        card = (await stripe.customers.createSource(
-          props.customer,
-          createParams,
-        )) as Stripe.Card;
+        try {
+          card = (await stripe.customers.createSource(
+            props.customer,
+            createParams,
+          )) as Stripe.Card;
+        } catch (error) {
+          if (isStripeConflictError(error) && props.adopt) {
+            throw new Error(
+              "Card adoption is not supported - cards cannot be uniquely identified for adoption",
+            );
+          } else {
+            throw error;
+          }
+        }
       }
 
       return this({

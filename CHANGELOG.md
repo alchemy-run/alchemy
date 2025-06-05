@@ -1,3 +1,21 @@
+## v0.24.1
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - DOFS state store &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/266 [<samp>(19dea)</samp>](https://github.com/sam-goodwin/alchemy/commit/19deabd)
+  - Support binding to an external worker by name &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/280 [<samp>(383e4)</samp>](https://github.com/sam-goodwin/alchemy/commit/383e420)
+  - Allow skipping or memoizing build in Website &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/281 [<samp>(087b2)</samp>](https://github.com/sam-goodwin/alchemy/commit/087b2f0)
+- **fs**:
+  - Allow overriding .alchemy dir &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/274 [<samp>(24896)</samp>](https://github.com/sam-goodwin/alchemy/commit/2489642)
+- **stripe**:
+  - Implement 10 missing Stripe resources for terraform parity &nbsp;-&nbsp; in https://github.com/sam-goodwin/alchemy/issues/251 [<samp>(c938b)</samp>](https://github.com/sam-goodwin/alchemy/commit/c938be6)
+  - Add adoption pattern to all Stripe resources &nbsp;-&nbsp; in https://github.com/sam-goodwin/alchemy/issues/275 [<samp>(18ae6)</samp>](https://github.com/sam-goodwin/alchemy/commit/18ae67a)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.24.0...v0.24.1)
+
+---
+
 ## v0.24.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

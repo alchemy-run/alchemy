@@ -2,7 +2,11 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError } from "./client.ts";
+import {
+  createStripeClient,
+  handleStripeDeleteError,
+  isStripeConflictError,
+} from "./client.ts";
 
 /**
  * Properties for creating a Stripe product feature
@@ -22,6 +26,11 @@ export interface ProductFeatureProps {
    * API key to use (overrides environment variable)
    */
   apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -109,9 +118,19 @@ export const ProductFeature = Resource(
       if (this.phase === "update" && this.output?.id) {
         throw new Error("Product features cannot be updated after creation");
       } else {
-        productFeature = await stripe.products.createFeature(props.product, {
-          entitlement_feature: props.entitlementFeature,
-        });
+        try {
+          productFeature = await stripe.products.createFeature(props.product, {
+            entitlement_feature: props.entitlementFeature,
+          });
+        } catch (error) {
+          if (isStripeConflictError(error) && props.adopt) {
+            throw new Error(
+              "ProductFeature adoption is not supported - product features cannot be uniquely identified for adoption",
+            );
+          } else {
+            throw error;
+          }
+        }
       }
 
       return this({

@@ -1,5 +1,5 @@
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
-import { loadConfig } from "@aws-sdk/node-config-provider";
+import { loadConfig } from "@smithy/node-config-provider";
 import { AwsClient } from "aws4fetch";
 
 import { safeFetch } from "../../util/safe-fetch.ts";

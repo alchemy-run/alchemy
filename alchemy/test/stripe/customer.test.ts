@@ -94,4 +94,77 @@ describe("Stripe Customer Resource", () => {
       }
     }
   });
+
+  test("adopt existing customer with different ID", async (scope) => {
+    const customerEmail = `${BRANCH_PREFIX}-adopt@example.com`;
+    const firstId = `${BRANCH_PREFIX}-customer-adopt-first`;
+    const secondId = `${BRANCH_PREFIX}-customer-adopt-second`;
+
+    let firstCustomer: Customer | undefined;
+    let secondCustomer: Customer | undefined;
+
+    try {
+      firstCustomer = await Customer(firstId, {
+        email: customerEmail,
+        name: "First Customer",
+        description: "First customer for adoption test",
+      });
+
+      expect(firstCustomer.id).toBeTruthy();
+      expect(firstCustomer.email).toEqual(customerEmail);
+
+      secondCustomer = await Customer(secondId, {
+        email: customerEmail, // Same email
+        name: "Second Customer",
+        description: "Second customer for adoption test - should adopt first",
+        adopt: true, // Enable adoption
+      });
+
+      expect(secondCustomer.id).toBeTruthy();
+      expect(secondCustomer.id).toEqual(firstCustomer.id); // Should have same underlying resource ID
+      expect(secondCustomer.email).toEqual(customerEmail);
+
+      const stripeSecondCustomer = (await stripeClient.customers.retrieve(
+        secondCustomer.id,
+      )) as Stripe.Customer;
+      expect(stripeSecondCustomer.email).toEqual(customerEmail);
+      expect(stripeSecondCustomer.name).toEqual("Second Customer");
+      expect(stripeSecondCustomer.description).toEqual(
+        "Second customer for adoption test - should adopt first",
+      );
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("creates separate customers without adopt flag", async (scope) => {
+    const customerEmail = `${BRANCH_PREFIX}-no-adopt@example.com`;
+    const firstId = `${BRANCH_PREFIX}-customer-no-adopt-first`;
+    const secondId = `${BRANCH_PREFIX}-customer-no-adopt-second`;
+
+    let firstCustomer: Customer | undefined;
+    let secondCustomer: Customer | undefined;
+
+    try {
+      firstCustomer = await Customer(firstId, {
+        email: customerEmail,
+        name: "First Customer",
+        description: "First customer for no adoption test",
+      });
+
+      expect(firstCustomer.id).toBeTruthy();
+
+      secondCustomer = await Customer(secondId, {
+        email: customerEmail, // Same email
+        name: "Second Customer",
+        description: "Second customer - should create separate customer",
+      });
+
+      expect(secondCustomer.id).toBeTruthy();
+      expect(secondCustomer.id).not.toEqual(firstCustomer.id); // Should have different IDs
+      expect(secondCustomer.email).toEqual(customerEmail);
+    } finally {
+      await destroy(scope);
+    }
+  });
 });

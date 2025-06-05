@@ -2,7 +2,11 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError } from "./client.ts";
+import {
+  createStripeClient,
+  handleStripeDeleteError,
+  isStripeConflictError,
+} from "./client.ts";
 
 /**
  * Restrictions for promotion code usage
@@ -63,6 +67,11 @@ export interface PromotionCodeProps {
    * API key to use (overrides environment variable)
    */
   apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -190,7 +199,35 @@ export const PromotionCode = Resource(
           };
         }
 
-        promotionCode = await stripe.promotionCodes.create(createParams);
+        try {
+          promotionCode = await stripe.promotionCodes.create(createParams);
+        } catch (error) {
+          if (isStripeConflictError(error) && props.adopt) {
+            if (props.code) {
+              const existingPromotionCodes = await stripe.promotionCodes.list({
+                code: props.code,
+                limit: 1,
+              });
+              if (existingPromotionCodes.data.length > 0) {
+                const existingPromotionCode = existingPromotionCodes.data[0];
+                const updateParams: Stripe.PromotionCodeUpdateParams = {
+                  active: props.active,
+                  metadata: props.metadata,
+                };
+                promotionCode = await stripe.promotionCodes.update(
+                  existingPromotionCode.id,
+                  updateParams,
+                );
+              } else {
+                throw error;
+              }
+            } else {
+              throw error;
+            }
+          } else {
+            throw error;
+          }
+        }
       }
 
       return this({

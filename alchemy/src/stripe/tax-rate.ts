@@ -2,7 +2,11 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError } from "./client.ts";
+import {
+  createStripeClient,
+  handleStripeDeleteError,
+  isStripeConflictError,
+} from "./client.ts";
 
 /**
  * Properties for creating a Stripe tax rate
@@ -52,6 +56,11 @@ export interface TaxRateProps {
    * API key to use (overrides environment variable)
    */
   apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -161,18 +170,28 @@ export const TaxRate = Resource(
           tax_type: props.taxType,
         });
       } else {
-        taxRate = await stripe.taxRates.create({
-          display_name: props.displayName,
-          percentage: props.percentage,
-          inclusive: props.inclusive,
-          active: props.active,
-          country: props.country,
-          description: props.description,
-          jurisdiction: props.jurisdiction,
-          metadata: props.metadata,
-          state: props.state,
-          tax_type: props.taxType,
-        });
+        try {
+          taxRate = await stripe.taxRates.create({
+            display_name: props.displayName,
+            percentage: props.percentage,
+            inclusive: props.inclusive,
+            active: props.active,
+            country: props.country,
+            description: props.description,
+            jurisdiction: props.jurisdiction,
+            metadata: props.metadata,
+            state: props.state,
+            tax_type: props.taxType,
+          });
+        } catch (error) {
+          if (isStripeConflictError(error) && props.adopt) {
+            throw new Error(
+              "TaxRate adoption is not supported - tax rates cannot be uniquely identified for adoption",
+            );
+          } else {
+            throw error;
+          }
+        }
       }
 
       return this({

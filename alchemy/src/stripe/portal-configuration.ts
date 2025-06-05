@@ -2,7 +2,11 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createStripeClient, handleStripeDeleteError } from "./client.ts";
+import {
+  createStripeClient,
+  handleStripeDeleteError,
+  isStripeConflictError,
+} from "./client.ts";
 
 /**
  * Business profile information for the portal
@@ -187,6 +191,11 @@ export interface PortalConfigurationProps {
    * API key to use (overrides environment variable)
    */
   apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -485,8 +494,18 @@ export const PortalConfiguration = Resource(
           };
         }
 
-        configuration =
-          await stripe.billingPortal.configurations.create(createParams);
+        try {
+          configuration =
+            await stripe.billingPortal.configurations.create(createParams);
+        } catch (error) {
+          if (isStripeConflictError(error) && props.adopt) {
+            throw new Error(
+              "PortalConfiguration adoption is not supported - portal configurations cannot be uniquely identified for adoption",
+            );
+          } else {
+            throw error;
+          }
+        }
       }
 
       return this({
