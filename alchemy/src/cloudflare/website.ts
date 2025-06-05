@@ -15,8 +15,10 @@ export interface WebsiteProps<B extends Bindings>
   extends Omit<WorkerProps<B>, "name" | "assets" | "entrypoint"> {
   /**
    * The command to run to build the site
+   *
+   * If one is not provided, the build is assumed to have already happened.
    */
-  command: string;
+  command?: string;
   /**
    * The name of the worker
    *
@@ -128,11 +130,13 @@ export default {
       });
     }
 
-    await Exec("build", {
-      cwd,
-      command: props.command,
-      env: props.env,
-    });
+    if (props.command) {
+      await Exec("build", {
+        cwd,
+        command: props.command,
+        env: props.env,
+      });
+    }
 
     return (await Worker("worker", {
       ...workerProps,
