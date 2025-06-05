@@ -35,7 +35,7 @@ export interface WebsiteProps<B extends Bindings>
    *
    * @example
    * // Disable memoization in CI to ensure build outputs are always produced
-   * await Exec("build", {
+   * await Website("my-website", {
    *   command: "vite build",
    *   memoize: process.env.CI ? false : {
    *     patterns: ["./src/**"]
