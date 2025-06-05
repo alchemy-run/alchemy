@@ -19,6 +19,33 @@ export interface WebsiteProps<B extends Bindings>
    * If one is not provided, the build is assumed to have already happened.
    */
   command?: string;
+
+  /**
+   * Whether to memoize the command (only re-run if the command changes)
+   *
+   * When set to `true`, the command will only be re-executed if the command string changes.
+   *
+   * When set to an object with `patterns`, the command will be re-executed if either:
+   * 1. The command string changes, or
+   * 2. The contents of any files matching the glob patterns change
+   *
+   * ⚠️ **Important Note**: When using memoization with build commands, the build outputs
+   * will not be produced if the command is memoized. This is because the command is not
+   * actually executed when memoized. Consider disabling memoization in CI environments:
+   *
+   * @example
+   * // Disable memoization in CI to ensure build outputs are always produced
+   * await Exec("build", {
+   *   command: "vite build",
+   *   memoize: process.env.CI ? false : {
+   *     patterns: ["./src/**"]
+   *   }
+   * });
+   *
+   * @default false
+   */
+  memoize?: boolean | { patterns: string[] };
+
   /**
    * The name of the worker
    *
@@ -135,6 +162,7 @@ export default {
         cwd,
         command: props.command,
         env: props.env,
+        memoize: props.memoize,
       });
     }
 
