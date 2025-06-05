@@ -358,7 +358,6 @@ export async function prepareWorkerMetadata<B extends Bindings>(
           "namespaceId" in binding ? binding.namespaceId : binding.id,
       });
     } else if (binding.type === "service") {
-      console.log(binding);
       meta.bindings.push({
         type: "service",
         name: bindingName,
