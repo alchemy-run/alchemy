@@ -12,7 +12,7 @@ import type { type } from "../type.ts";
 import { getContentType } from "../util/content-type.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { slugify } from "../util/slugify.ts";
-import { handleApiError } from "./api-error.ts";
+import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   type CloudflareApi,
   type CloudflareApiOptions,
@@ -1125,7 +1125,14 @@ export async function putWorker(
 
       return formData;
     },
-    (err) => err.status === 404 || err.status === 500 || err.status === 503,
+    (err) =>
+      err.status === 404 ||
+      err.status === 500 ||
+      err.status === 503 ||
+      // this is a tranient error that cloudflare throws randomly
+      (err instanceof CloudflareApiError &&
+        err.status === 400 &&
+        err.message.match(/binding.*failed to generate/)),
     10,
     100,
   );

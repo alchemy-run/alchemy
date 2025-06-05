@@ -11,7 +11,7 @@
  */
 export async function withExponentialBackoff<T>(
   operation: () => Promise<T>,
-  isRetryable: (error: any) => boolean,
+  isRetryable: (error: any) => any,
   maxAttempts = 5,
   initialDelayMs = 100,
 ): Promise<T> {
