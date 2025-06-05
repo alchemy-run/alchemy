@@ -8,7 +8,7 @@ import { Assets } from "../../src/cloudflare/assets.ts";
 import { Self } from "../../src/cloudflare/bindings.ts";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.ts";
 import { KVNamespace } from "../../src/cloudflare/kv-namespace.ts";
-import { Worker } from "../../src/cloudflare/worker.ts";
+import { Worker, WorkerRef } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 import { fetchAndExpectOK, fetchAndExpectStatus } from "./fetch-utils.ts";
@@ -1310,4 +1310,50 @@ describe("Worker Resource", () => {
       await assertWorkerDoesNotExist(workerName);
     }
   }, 60000); // Increase timeout for Worker operations
+
+  test("can bind to a worker referenced by name", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-bind-by-name`;
+    const workerName2 = `${BRANCH_PREFIX}-test-worker-bind-by-name-2`;
+    try {
+      await Worker("worker1", {
+        name: workerName,
+        script: `export default { async fetch(request, env, ctx) { return new Response('Hello, world!'); } };`,
+      });
+
+      const worker2 = await Worker("worker1", {
+        name: workerName2,
+        bindings: {
+          TARGET_WORKER: WorkerRef<{
+            foo(): Promise<string>;
+            __WORKER_ENTRYPOINT_BRAND: never;
+          }>({
+            service: workerName,
+          }),
+        },
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              // Call the target worker via the binding
+              const response = await env.TARGET_WORKER.fetch(request);
+              // Return the response from the target worker
+              return response;
+            }
+          };
+        `,
+      });
+
+      function _foo() {
+        // should type check
+        worker2.Env.TARGET_WORKER.foo();
+        // @ts-expect-error
+        worker2.Env.TARGET_WORKER.bar();
+      }
+
+      const response = await fetchAndExpectOK(worker2.url!);
+      const text = await response.text();
+      expect(text).toEqual("Hello, world!");
+    } finally {
+      await destroy(scope);
+    }
+  });
 });

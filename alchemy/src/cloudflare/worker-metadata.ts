@@ -358,10 +358,11 @@ export async function prepareWorkerMetadata<B extends Bindings>(
           "namespaceId" in binding ? binding.namespaceId : binding.id,
       });
     } else if (binding.type === "service") {
+      console.log(binding);
       meta.bindings.push({
         type: "service",
         name: bindingName,
-        service: binding.name,
+        service: "service" in binding ? binding.service : binding.name,
       });
     } else if (binding.type === "durable_object_namespace") {
       meta.bindings.push({

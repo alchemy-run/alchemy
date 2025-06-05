@@ -13,9 +13,9 @@ import type { HyperdriveResource as _Hyperdrive } from "./hyperdrive.ts";
 import type { PipelineResource as _Pipeline } from "./pipeline.ts";
 import type { QueueResource as _Queue } from "./queue.ts";
 import type { VectorizeIndexResource as _VectorizeIndex } from "./vectorize-index.ts";
-import type { Worker as _Worker } from "./worker.ts";
-import type { Workflow as _Workflow } from "./workflow.ts";
 import type { VersionMetadata as _VersionMetadata } from "./version-metadata.ts";
+import type { Worker as _Worker, WorkerRef } from "./worker.ts";
+import type { Workflow as _Workflow } from "./workflow.ts";
 
 export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
   infer O
@@ -23,7 +23,7 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
   ? DurableObjectNamespace<O>
   : T extends { type: "kv_namespace" }
     ? KVNamespace
-    : T extends _Worker<any, infer RPC>
+    : T extends _Worker<any, infer RPC> | WorkerRef<infer RPC>
       ? Service<RPC> & {
           // cloudflare's Rpc.Provider type loses mapping between properties (jump to definition)
           // we fix that using Pick to re-connect mappings
