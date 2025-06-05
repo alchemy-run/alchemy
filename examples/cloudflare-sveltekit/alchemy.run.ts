@@ -1,8 +1,8 @@
 import alchemy from "alchemy";
 import {
+  DOStateStore,
   KVNamespace,
   R2Bucket,
-  R2RestStateStore,
   SvelteKit,
 } from "alchemy/cloudflare";
 
@@ -14,7 +14,7 @@ const app = await alchemy("cloudflare-sveltekit", {
   password: process.env.ALCHEMY_PASSWORD,
   stateStore:
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new R2RestStateStore(scope)
+      ? (scope) => new DOStateStore(scope)
       : undefined,
 });
 

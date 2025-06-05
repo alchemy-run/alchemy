@@ -1,3 +1,5 @@
+import type { CloudflarePlatform } from './env';
+
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 declare global {
@@ -6,16 +8,9 @@ declare global {
 		// interface Locals {}
 		// interface PageData {}
 		// interface PageState {}
-		interface Platform {
-			env: {
-				STORAGE: R2Bucket;
-				AUTH_STORE: KVNamespace;
-			};
-			context: ExecutionContext;
-			caches: CacheStorage & { default: Cache };
-		}
+		interface Platform extends CloudflarePlatform {}
 	}
 }
 
-export { };
+// export { };
 
