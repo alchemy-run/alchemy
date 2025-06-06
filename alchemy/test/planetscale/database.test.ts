@@ -1,18 +1,18 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
-import {
-  Database,
-  PlanetScaleApi,
-  waitForDatabaseReady,
-} from "../../src/planetscale/database.ts";
+import { Database } from "../../src/planetscale/database.ts";
+import { PlanetScaleApi } from "../../src/planetscale/api.ts";
+import { waitForDatabaseReady } from "../../src/planetscale/utils.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
 import "../../src/test/vitest.ts";
 
 const api = new PlanetScaleApi();
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("Database Resource", () => {
   const organizationId = process.env.PLANETSCALE_ORG_ID || "";
@@ -34,14 +34,16 @@ describe("Database Resource", () => {
         defaultBranch: "main",
       });
 
-      expect(database.id).toBeTruthy();
-      expect(database.name).toEqual(testId);
-      expect(database.organizationId).toEqual(organizationId);
-      expect(database.state).toBeTruthy();
-      expect(database.plan).toBeTruthy();
-      expect(database.createdAt).toBeTruthy();
-      expect(database.updatedAt).toBeTruthy();
-      expect(database.htmlUrl).toBeTruthy();
+      expect(database).toMatchObject({
+        id: expect.any(String),
+        name: testId,
+        organizationId,
+        state: expect.any(String),
+        plan: expect.any(String),
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+        htmlUrl: expect.any(String),
+      });
 
       // Branch won't exist until database is ready
       await waitForDatabaseReady(api, organizationId, testId);
@@ -87,23 +89,25 @@ describe("Database Resource", () => {
         migrationTableName: "schema_migrations",
       });
 
-      expect(database.id).toBeTruthy();
-      expect(database.name).toEqual(testId);
-      expect(database.organizationId).toEqual(organizationId);
-      expect(database.allowDataBranching).toEqual(true);
-      expect(database.automaticMigrations).toEqual(true);
-      expect(database.requireApprovalForDeploy).toEqual(false);
-      expect(database.restrictBranchRegion).toEqual(true);
-      expect(database.insightsRawQueries).toEqual(true);
-      expect(database.productionBranchWebConsole).toEqual(true);
-      expect(database.defaultBranch).toEqual("main");
-      expect(database.migrationFramework).toEqual("rails");
-      expect(database.migrationTableName).toEqual("schema_migrations");
-      expect(database.state).toBeTruthy();
-      expect(database.plan).toBeTruthy();
-      expect(database.createdAt).toBeTruthy();
-      expect(database.updatedAt).toBeTruthy();
-      expect(database.htmlUrl).toBeTruthy();
+      expect(database).toMatchObject({
+        id: expect.any(String),
+        name: testId,
+        organizationId,
+        allowDataBranching: true,
+        automaticMigrations: true,
+        requireApprovalForDeploy: false,
+        restrictBranchRegion: true,
+        insightsRawQueries: true,
+        productionBranchWebConsole: true,
+        defaultBranch: "main",
+        migrationFramework: "rails",
+        migrationTableName: "schema_migrations",
+        state: expect.any(String),
+        plan: expect.any(String),
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+        htmlUrl: expect.any(String),
+      });
 
       // Update database settings
       database = await Database(testId, {
@@ -121,15 +125,17 @@ describe("Database Resource", () => {
         migrationTableName: "django_migrations",
       });
 
-      expect(database.allowDataBranching).toEqual(false);
-      expect(database.automaticMigrations).toEqual(false);
-      expect(database.requireApprovalForDeploy).toEqual(true);
-      expect(database.restrictBranchRegion).toEqual(false);
-      expect(database.insightsRawQueries).toEqual(false);
-      expect(database.productionBranchWebConsole).toEqual(false);
-      expect(database.defaultBranch).toEqual("main");
-      expect(database.migrationFramework).toEqual("django");
-      expect(database.migrationTableName).toEqual("django_migrations");
+      expect(database).toMatchObject({
+        allowDataBranching: false,
+        automaticMigrations: false,
+        requireApprovalForDeploy: true,
+        restrictBranchRegion: false,
+        insightsRawQueries: false,
+        productionBranchWebConsole: false,
+        defaultBranch: "main",
+        migrationFramework: "django",
+        migrationTableName: "django_migrations",
+      });
 
       // Verify main branch cluster size was updated
       const mainBranchResponse = await api.get(
@@ -165,7 +171,9 @@ describe("Database Resource", () => {
         defaultBranch: customBranch,
       });
 
-      expect(database.defaultBranch).toEqual(customBranch);
+      expect(database).toMatchObject({
+        defaultBranch: customBranch,
+      });
       await waitForDatabaseReady(
         api,
         organizationId,

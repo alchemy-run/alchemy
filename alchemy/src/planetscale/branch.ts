@@ -1,11 +1,12 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { PlanetScaleApi } from "./api.ts";
 import {
   fixClusterSize,
-  PlanetScaleApi,
   waitForDatabaseReady,
   type PlanetScaleClusterSize,
-} from "./database.ts";
+} from "./utils.ts";
 
 /**
  * Properties for creating or updating a PlanetScale Branch
@@ -27,6 +28,11 @@ export interface BranchProps {
   databaseName: string;
 
   /**
+   * PlanetScale API token (overrides environment variable)
+   */
+  apiKey?: Secret;
+
+  /**
    * Whether or not the branch should be set to a production branch or not.
    */
 
@@ -40,9 +46,9 @@ export interface BranchProps {
   adopt?: boolean;
 
   /**
-   * The parent branch name
+   * The parent branch name or Branch object
    */
-  parentBranch?: string;
+  parentBranch?: string | Branch;
 
   /**
    * If provided, restores the backup's schema and data to the new branch.
@@ -78,6 +84,11 @@ export interface BranchProps {
  */
 export interface Branch extends Resource<"planetscale::Branch">, BranchProps {
   /**
+   * The name of the branch
+   */
+  name: string;
+
+  /**
    * The name of the parent branch
    */
   parentBranch: string;
@@ -111,6 +122,22 @@ export interface Branch extends Resource<"planetscale::Branch">, BranchProps {
  * });
  *
  * @example
+ * // Create a branch from another branch object
+ * const parentBranch = await Branch("staging", {
+ *   name: "staging",
+ *   organizationId: "my-org",
+ *   databaseName: "my-database",
+ *   parentBranch: "main"
+ * });
+ *
+ * const featureBranch = await Branch("feature-456", {
+ *   name: "feature-456",
+ *   organizationId: "my-org",
+ *   databaseName: "my-database",
+ *   parentBranch: parentBranch // Using Branch object instead of string
+ * });
+ *
+ * @example
  * // Create a branch from a backup
  * const branch = await Branch("restored-branch", {
  *   name: "restored-branch",
@@ -128,7 +155,13 @@ export const Branch = Resource(
     _id: string,
     props: BranchProps,
   ): Promise<Branch> {
-    const api = new PlanetScaleApi();
+    const apiKey =
+      props.apiKey?.unencrypted || process.env.PLANETSCALE_API_TOKEN;
+    if (!apiKey) {
+      throw new Error("PLANETSCALE_API_TOKEN environment variable is required");
+    }
+
+    const api = new PlanetScaleApi({ apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -151,6 +184,21 @@ export const Branch = Resource(
     }
 
     try {
+      const parentBranchName = !props.parentBranch
+        ? "main"
+        : typeof props.parentBranch === "string"
+          ? props.parentBranch
+          : props.parentBranch.name;
+
+      if (typeof props.parentBranch !== "string" && props.parentBranch) {
+        await waitForDatabaseReady(
+          api,
+          props.organizationId,
+          props.databaseName,
+          props.parentBranch.name,
+        );
+      }
+
       // Check if branch exists
       const getResponse = await api.get(
         `/organizations/${props.organizationId}/databases/${props.databaseName}/branches/${props.name}`,
@@ -175,9 +223,9 @@ export const Branch = Resource(
         const currentParentBranch = data.parent_branch || "main";
 
         // Check immutable properties
-        if (props.parentBranch && props.parentBranch !== currentParentBranch) {
+        if (props.parentBranch && parentBranchName !== currentParentBranch) {
           throw new Error(
-            `Cannot change parent branch from ${currentParentBranch} to ${props.parentBranch}`,
+            `Cannot change parent branch from ${currentParentBranch} to ${parentBranchName}`,
           );
         }
         if (this.output?.backupId) {
@@ -224,6 +272,7 @@ export const Branch = Resource(
 
         return this({
           ...props,
+          name: props.name,
           parentBranch: currentParentBranch,
           createdAt: data.created_at,
           updatedAt: data.updated_at,
@@ -237,7 +286,7 @@ export const Branch = Resource(
         `/organizations/${props.organizationId}/databases/${props.databaseName}/branches`,
         {
           name: props.name,
-          parent_branch: props.parentBranch || "main",
+          parent_branch: parentBranchName,
           backup_id: props.backupId,
           seed_data: props.seedData,
           cluster_size: props.clusterSize,
@@ -289,6 +338,7 @@ export const Branch = Resource(
 
       return this({
         ...props,
+        name: props.name,
         parentBranch: data.parent_branch,
         createdAt: data.created_at,
         updatedAt: data.updated_at,

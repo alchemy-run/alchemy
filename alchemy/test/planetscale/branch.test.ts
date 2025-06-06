@@ -2,11 +2,9 @@ import { afterAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
 import { Branch } from "../../src/planetscale/branch.ts";
-import {
-  Database,
-  PlanetScaleApi,
-  waitForDatabaseReady,
-} from "../../src/planetscale/database.ts";
+import { Database } from "../../src/planetscale/database.ts";
+import { PlanetScaleApi } from "../../src/planetscale/api.ts";
+import { waitForDatabaseReady } from "../../src/planetscale/utils.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
 import "../../src/test/vitest.ts";
@@ -14,7 +12,9 @@ import type { Scope } from "../../src/scope.ts";
 
 const api = new PlanetScaleApi();
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("Branch Resource", () => {
   const testDbId = `${BRANCH_PREFIX}-test-database`;
@@ -66,8 +66,10 @@ describe("Branch Resource", () => {
         isProduction: false,
       });
 
-      expect(branch.name).toEqual(testId);
-      expect(branch.parentBranch).toEqual("main");
+      expect(branch).toMatchObject({
+        name: testId,
+        parentBranch: "main",
+      });
 
       // Verify branch exists via API
       const getResponse = await api.get(
@@ -184,8 +186,10 @@ describe("Branch Resource", () => {
         isProduction: true,
       });
 
-      expect(branch.name).toEqual(testId);
-      expect(branch.parentBranch).toEqual("main");
+      expect(branch).toMatchObject({
+        name: testId,
+        parentBranch: "main",
+      });
       expect(branch.isProduction).toEqual(true);
 
       // Verify branch exists
@@ -221,7 +225,9 @@ describe("Branch Resource", () => {
         isProduction: true,
       });
 
-      expect(branch.name).toEqual(testId);
+      expect(branch).toMatchObject({
+        name: testId,
+      });
 
       // Verify safe migrations were enabled
       let response = await api.get(
@@ -268,7 +274,9 @@ describe("Branch Resource", () => {
         clusterSize: "PS_10",
       });
 
-      expect(branch.name).toEqual(testId);
+      expect(branch).toMatchObject({
+        name: testId,
+      });
 
       // Update branch with new cluster size
       branch = await Branch(testId, {
@@ -295,4 +303,69 @@ describe("Branch Resource", () => {
       await destroy(scope);
     }
   }, 300_000);
+
+  test("can create branch with Branch object as parent", async (scope) => {
+    const parentBranchId = `${BRANCH_PREFIX}-parent-branch`;
+    const childBranchId = `${BRANCH_PREFIX}-child-branch`;
+
+    try {
+      // Create a parent branch first
+      const parentBranch = await Branch(parentBranchId, {
+        name: parentBranchId,
+        organizationId,
+        databaseName: testDB.name,
+        parentBranch: "main",
+        isProduction: false,
+      });
+
+      expect(parentBranch).toMatchObject({
+        name: parentBranchId,
+        parentBranch: "main",
+      });
+
+      // Create a child branch using the parent Branch object
+      const childBranch = await Branch(childBranchId, {
+        name: childBranchId,
+        organizationId,
+        databaseName: testDB.name,
+        parentBranch: parentBranch, // Using Branch object instead of string
+        isProduction: false,
+      });
+
+      expect(childBranch).toMatchObject({
+        name: childBranchId,
+        parentBranch: parentBranchId, // Should use the parent's name
+      });
+
+      // Verify both branches exist via API
+      const getParentResponse = await api.get(
+        `/organizations/${organizationId}/databases/${testDB.name}/branches/${parentBranchId}`,
+      );
+      expect(getParentResponse.status).toEqual(200);
+
+      const getChildResponse = await api.get(
+        `/organizations/${organizationId}/databases/${testDB.name}/branches/${childBranchId}`,
+      );
+      expect(getChildResponse.status).toEqual(200);
+
+      const childData = await getChildResponse.json<any>();
+      expect(childData.parent_branch).toEqual(parentBranchId);
+    } catch (err) {
+      console.log(err);
+      throw err;
+    } finally {
+      await destroy(scope);
+
+      // Verify both branches were deleted
+      const getParentDeletedResponse = await api.get(
+        `/organizations/${organizationId}/databases/${testDB.name}/branches/${parentBranchId}`,
+      );
+      expect(getParentDeletedResponse.status).toEqual(404);
+
+      const getChildDeletedResponse = await api.get(
+        `/organizations/${organizationId}/databases/${testDB.name}/branches/${childBranchId}`,
+      );
+      expect(getChildDeletedResponse.status).toEqual(404);
+    }
+  });
 });

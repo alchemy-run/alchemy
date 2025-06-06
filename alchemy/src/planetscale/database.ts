@@ -1,186 +1,12 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-
-export type PlanetScaleClusterSize =
-  | "PS_DEV"
-  | "PS_10"
-  | "PS_20"
-  | "PS_40"
-  | "PS_80"
-  | "PS_160"
-  | "PS_320"
-  | "PS_400"
-  | "PS_640"
-  | "PS_700"
-  | "PS_900"
-  | "PS_1280"
-  | "PS_1400"
-  | "PS_1800"
-  | "PS_2100"
-  | "PS_2560"
-  | "PS_2700"
-  | "PS_2800"
-  | (string & {});
-/**
- * Wait for a database to be ready with exponential backoff
- */
-export async function waitForDatabaseReady(
-  api: PlanetScaleApi,
-  organizationId: string,
-  databaseName: string,
-  branchName?: string,
-): Promise<void> {
-  const startTime = Date.now();
-  let waitMs = 100;
-  const branchSuffix = branchName ? `/branches/${branchName}` : "";
-  while (true) {
-    const response = await api.get(
-      `/organizations/${organizationId}/databases/${databaseName}${branchSuffix}`,
-    );
-
-    if (!response.ok) {
-      throw new Error(`Failed to check database state: ${response.statusText}`);
-    }
-
-    const data = await response.json<any>();
-    if (data.ready === true) {
-      return;
-    }
-
-    if (Date.now() - startTime >= 60000) {
-      throw new Error(
-        `Timeout waiting for database ${databaseName} to be ready`,
-      );
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
-    waitMs = Math.min(waitMs * 2, 1000); // Cap at 1s intervals
-  }
-}
-
-const waitForKeyspaceReady = async (
-  api: PlanetScaleApi,
-  org: string,
-  db: string,
-  branch: string,
-  keyspace: string,
-): Promise<void> => {
-  const start = Date.now();
-  let delay = 100;
-
-  while (true) {
-    const res = await api.get(
-      `/organizations/${org}/databases/${db}/branches/${branch}/keyspaces/${keyspace}/resizes`,
-    );
-    if (!res.ok) {
-      throw new Error(
-        `Error fetching keyspace "${keyspace}": ${res.statusText}`,
-      );
-    }
-
-    const ks = await res.json<{
-      data: [
-        {
-          state: string;
-        },
-      ];
-    }>();
-    // once it's fully ready, we can proceed
-    if (ks.data.every((item) => item.state !== "resizing")) {
-      return;
-    }
-
-    if (Date.now() - start > 600_000) {
-      throw new Error(`Timeout waiting for keyspace "${keyspace}" to be ready`);
-    }
-
-    await new Promise((r) => setTimeout(r, delay));
-    delay = Math.min(delay * 2, 1_000);
-  }
-};
-
-export const fixClusterSize = async (
-  api: PlanetScaleApi,
-  organizationId: string,
-  databaseName: string,
-  branchName: string,
-  expectedClusterSize: PlanetScaleClusterSize,
-  isDBReady: boolean,
-) => {
-  if (!isDBReady) {
-    await waitForDatabaseReady(api, organizationId, databaseName);
-  }
-
-  // 1. Ensure branch is production
-  let branchRes = await api.get(
-    `/organizations/${organizationId}/databases/${databaseName}/branches/${branchName}`,
-  );
-  if (!branchRes.ok) {
-    throw new Error(`Unable to get branch data: ${branchRes.statusText}`);
-  }
-  let branchData = await branchRes.json<any>();
-  if (!branchData.production) {
-    if (!branchData.ready) {
-      await waitForDatabaseReady(api, organizationId, databaseName, branchName);
-    }
-    const promoteRes = await api.post(
-      `/organizations/${organizationId}/databases/${databaseName}/branches/${branchName}/promote`,
-    );
-    if (!promoteRes.ok) {
-      throw new Error(`Unable to promote branch: ${promoteRes.statusText}`);
-    }
-  }
-  // 2. Load default keyspace
-  const ksListRes = await api.get(
-    `/organizations/${organizationId}/databases/${databaseName}/branches/${branchName}/keyspaces`,
-  );
-  if (!ksListRes.ok) {
-    throw new Error(`Failed to list keyspaces: ${ksListRes.statusText}`);
-  }
-  const ksList = (await ksListRes.json<any>()).data as Array<{
-    name: string;
-    cluster_name: string;
-  }>;
-  const defaultKsData = ksList.find((x) => x.name === databaseName); // Default keypsace is always the same name as the database
-  if (ksList.length === 0 || !defaultKsData) {
-    throw new Error(`No default keyspace found for branch ${branchName}`);
-  }
-  const defaultKs = defaultKsData.name;
-  let currentSize = defaultKsData.cluster_name as PlanetScaleClusterSize;
-
-  // 3. Wait until any in-flight resize is done
-  await waitForKeyspaceReady(
-    api,
-    organizationId,
-    databaseName,
-    branchName,
-    defaultKs,
-  );
-
-  // 4. If size mismatch, trigger resize and wait again
-  // Ideally this would use the undocumented Keyspaces API, but there seems to be a missing oauth scope that we cannot add via the console yet
-  if (currentSize !== expectedClusterSize) {
-    const resizeRes = await api.patch(
-      `/organizations/${organizationId}/databases/${databaseName}/branches/${branchName}/cluster`,
-      { cluster_size: expectedClusterSize },
-    );
-    if (!resizeRes.ok) {
-      const text = await resizeRes.text();
-      throw new Error(
-        `Failed to start resize: ${resizeRes.statusText} ${text}`,
-      );
-    }
-
-    // Poll until the resize completes
-    await waitForKeyspaceReady(
-      api,
-      organizationId,
-      databaseName,
-      branchName,
-      defaultKs,
-    );
-  }
-};
+import type { Secret } from "../secret.ts";
+import { PlanetScaleApi } from "./api.ts";
+import {
+  type PlanetScaleClusterSize,
+  waitForDatabaseReady,
+  fixClusterSize,
+} from "./utils.ts";
 
 /**
  * Properties for creating or updating a PlanetScale Database
@@ -195,6 +21,11 @@ export interface DatabaseProps {
    * The organization ID where the database will be created
    */
   organizationId: string;
+
+  /**
+   * PlanetScale API token (overrides environment variable)
+   */
+  apiKey?: Secret;
 
   /**
    * Whether to adopt the database if it already exists in Planetscale
@@ -305,74 +136,6 @@ export interface Database
 }
 
 /**
- * PlanetScale API client configuration
- */
-export interface PlanetScaleApiOptions {
-  /**
-   * API token for authentication
-   */
-  apiToken?: string;
-}
-
-/**
- * Minimal PlanetScale API client
- */
-export class PlanetScaleApi {
-  private readonly baseUrl = "https://api.planetscale.com/v1";
-  private readonly apiToken: string;
-
-  constructor(options: PlanetScaleApiOptions = {}) {
-    this.apiToken = options.apiToken || process.env.PLANETSCALE_API_TOKEN || "";
-    if (!this.apiToken) {
-      throw new Error("PLANETSCALE_API_TOKEN environment variable is required");
-    }
-  }
-
-  private async fetch(path: string, init: RequestInit = {}): Promise<Response> {
-    const headers = {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Authorization: `${this.apiToken}`,
-      ...init.headers,
-    };
-
-    return fetch(`${this.baseUrl}${path}`, {
-      ...init,
-      headers,
-    });
-  }
-
-  async get(path: string): Promise<Response> {
-    return this.fetch(path, { method: "GET" });
-  }
-
-  async post(path: string, body?: any): Promise<Response> {
-    return this.fetch(path, {
-      method: "POST",
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  }
-
-  async put(path: string, body?: any): Promise<Response> {
-    return this.fetch(path, {
-      method: "PUT",
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  }
-
-  async patch(path: string, body: any): Promise<Response> {
-    return this.fetch(path, {
-      method: "PATCH",
-      body: JSON.stringify(body),
-    });
-  }
-
-  async delete(path: string): Promise<Response> {
-    return this.fetch(path, { method: "DELETE" });
-  }
-}
-
-/**
  * Create, manage and delete PlanetScale databases
  *
  * @example
@@ -398,14 +161,12 @@ export class PlanetScaleApi {
  * });
  *
  * @example
- * // Update database settings
+ * // Create a database with custom API key
  * const db = await Database("my-app-db", {
  *   name: "my-app-db",
  *   organizationId: "my-org",
- *   defaultBranch: "main",
- *   requireApprovalForDeploy: true,
- *   migrationFramework: "rails",
- *   migrationTableName: "schema_migrations"
+ *   apiKey: alchemy.secret(process.env.CUSTOM_PLANETSCALE_TOKEN),
+ *   clusterSize: "PS_10"
  * });
  */
 export const Database = Resource(
@@ -415,7 +176,13 @@ export const Database = Resource(
     _id: string,
     props: DatabaseProps,
   ): Promise<Database> {
-    const api = new PlanetScaleApi();
+    const apiKey =
+      props.apiKey?.unencrypted || process.env.PLANETSCALE_API_TOKEN;
+    if (!apiKey) {
+      throw new Error("PLANETSCALE_API_TOKEN environment variable is required");
+    }
+
+    const api = new PlanetScaleApi({ apiKey });
 
     if (this.phase === "delete") {
       try {
