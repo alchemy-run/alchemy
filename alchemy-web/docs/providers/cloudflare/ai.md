@@ -27,7 +27,7 @@ await Worker("ai-worker", {
 
 ## Text Generation
 
-Use AI models for text generation tasks:
+Use AI models for text generation tasks. See the [text generation models](https://developers.cloudflare.com/workers-ai/models/#text-generation) documentation for available options.
 
 ```ts
 import { Worker, Ai } from "alchemy/cloudflare";
@@ -60,7 +60,7 @@ export default {
 
 ## Text Embeddings
 
-Generate embeddings for semantic search and similarity:
+Generate embeddings for semantic search and similarity. See the [text embeddings models](https://developers.cloudflare.com/workers-ai/models/#text-embeddings) documentation for available options.
 
 ```ts
 import { Worker, Ai } from "alchemy/cloudflare";
@@ -93,7 +93,7 @@ export default {
 
 ## Image Classification
 
-Classify images using computer vision models:
+Classify images using computer vision models. See the [image classification models](https://developers.cloudflare.com/workers-ai/models/#image-classification) documentation for available options.
 
 ```ts
 import { Worker, Ai } from "alchemy/cloudflare";
@@ -128,7 +128,7 @@ export default {
 
 ## With AI Gateway
 
-Combine AI binding with AI Gateway for observability and control:
+Combine AI binding with AI Gateway for observability and control. Learn more about [AI Gateway integration](https://developers.cloudflare.com/workers-ai/get-started/workers-ai-gateway/).
 
 ```ts
 import { Worker, Ai, AiGateway } from "alchemy/cloudflare";
@@ -172,18 +172,11 @@ export default {
 
 ## Available Models
 
-Workers AI supports 50+ models across different categories:
-
-- **Text Generation**: Llama, Mistral, Qwen, and more
-- **Text Embeddings**: BGE models for semantic search
-- **Image Classification**: ResNet, object detection models
-- **Text-to-Image**: Stable Diffusion variants
-- **Speech Recognition**: Whisper models
-- **Translation**: M2M100 for multilingual translation
+Workers AI supports [50+ open-source models](https://developers.cloudflare.com/workers-ai/models/) across different categories including text generation, embeddings, image classification, and more.
 
 ## Runtime Usage
 
-The AI binding provides several methods in your Worker runtime:
+The AI binding provides several methods in your Worker runtime. See the [Workers AI API reference](https://developers.cloudflare.com/workers-ai/configuration/bindings/) for complete details.
 
 ### `run(model, inputs, options?)`
 
@@ -245,10 +238,3 @@ await Worker("my-worker", {
   }
 });
 ```
-
-## Links
-
-- [Cloudflare Workers AI Documentation](https://developers.cloudflare.com/workers-ai/)
-- [Available Models](https://developers.cloudflare.com/workers-ai/models/)
-- [AI Gateway Integration](https://developers.cloudflare.com/workers-ai/get-started/workers-ai-gateway/)
-- [Pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)

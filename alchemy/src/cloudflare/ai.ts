@@ -7,14 +7,22 @@
  *
  * @example
  * ```ts
- * import { Ai } from "alchemy/cloudflare";
+ * import { Worker, Ai } from "alchemy/cloudflare";
  *
  * const ai = new Ai();
+ *
+ * await Worker("my-worker", {
+ *   name: "my-worker",
+ *   entrypoint: "./src/worker.ts",
+ *   bindings: {
+ *     AI: ai
+ *   }
+ * });
  * ```
  *
  * @see https://developers.cloudflare.com/workers-ai/
  */
-export class Ai<Models extends Record<string, any> = Record<string, any>> {
+export class Ai<Models extends AiModelListType = AiModelListType> {
   public readonly type = "ai";
 
   /**
