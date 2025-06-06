@@ -11,5 +11,4 @@ lib/
 # examples/*/.alchemy
 
 .repomix-output.txt
-alchemy-web/public/og-images/
 wrangler.jsonc

@@ -25,7 +25,7 @@ describe("NeonProject Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-neon-project`;
 
   // Helper function to generate a unique project name
-  const generateProjectName = () => `Test Project ${testId}-${Date.now()}`;
+  const generateProjectName = () => `Test Project ${testId}}`;
 
   test("create, update, and delete neon project", async (scope) => {
     let project: NeonProject | undefined;

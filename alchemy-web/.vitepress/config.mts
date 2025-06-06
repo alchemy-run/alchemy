@@ -4,8 +4,8 @@ import footnotePlugin from "markdown-it-footnote";
 import path from "path";
 import { defineConfig } from "vitepress";
 import {
-    groupIconMdPlugin,
-    groupIconVitePlugin,
+	groupIconMdPlugin,
+	groupIconVitePlugin,
 } from "vitepress-plugin-group-icons";
 import { parse as parseYaml } from "yaml";
 import { processFrontmatterFiles } from "../../alchemy/src/web/vitepress";
@@ -108,13 +108,17 @@ export default defineConfig({
 		imageSlug = imageSlug.replace(/\//g, "-").replace(/^-|-$/, "");
 		const finalImageSlug = imageSlug === "" ? "home" : imageSlug;
 
-		// Ensure URL is properly formatted with double slashes after protocol
-		// Use a proper URL construction to avoid incorrect replacements
-		const imageSlugForUrl = finalImageSlug || "placeholder";
-		const ogImageUrl = new URL(
-			`/og-images/${imageSlugForUrl}.png`,
-			SITE_URL,
-		).toString();
+		// Use custom OG image for home page, otherwise use generated images
+		let ogImageUrl: string;
+		if (pagePath === "/" || finalImageSlug === "home") {
+			ogImageUrl = new URL("/alchemy-og.png", SITE_URL).toString();
+		} else {
+			const imageSlugForUrl = finalImageSlug || "placeholder";
+			ogImageUrl = new URL(
+				`/og-images/${imageSlugForUrl}.png`,
+				SITE_URL,
+			).toString();
+		}
 		// --- End OG Image Path Calculation ---
 
 		// Add dynamic meta tags
