@@ -51,13 +51,12 @@ export async function SvelteKit<B extends Bindings>(
   id: string,
   props?: Partial<SvelteKitProps<B>>,
 ): Promise<SvelteKit<B>> {
-
   if (props?.compatibilityDate) {
     const providedDate = new Date(props.compatibilityDate);
     const minDate = new Date("2024-09-23");
     if (providedDate < minDate) {
       throw new Error(
-        `SvelteKit compatibility date must be >= 2024-09-23 for nodejs_compat support, got ${props.compatibilityDate}`
+        `SvelteKit compatibility date must be >= 2024-09-23 for nodejs_compat support, got ${props.compatibilityDate}`,
       );
     }
   }
@@ -70,4 +69,4 @@ export async function SvelteKit<B extends Bindings>(
     compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
     compatibilityDate: props?.compatibilityDate,
   });
-} 
+}

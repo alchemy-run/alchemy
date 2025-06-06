@@ -1,4 +1,4 @@
-import type { CloudflarePlatform } from './env';
+import type { CloudflarePlatform } from "./env.ts";
 
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
