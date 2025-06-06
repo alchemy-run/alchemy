@@ -14,47 +14,44 @@ import { withExponentialBackoff } from "../util/retry.ts";
 import { slugify } from "../util/slugify.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
-  type CloudflareApi,
-  type CloudflareApiOptions,
-  createCloudflareApi,
+    type CloudflareApi,
+    type CloudflareApiOptions,
+    createCloudflareApi,
 } from "./api.ts";
 import type { Assets } from "./assets.ts";
 import {
-  type Binding,
-  type Bindings,
-  Json,
-  type WorkerBindingSpec,
+    type Binding,
+    type Bindings,
+    Json,
+    type WorkerBindingSpec,
 } from "./bindings.ts";
 import type { Bound } from "./bound.ts";
 import { isBucket } from "./bucket.ts";
-import {
-  type NoBundleResult,
-  bundleWorkerScript,
-} from "./bundle/bundle-worker.ts";
+import { bundleWorkerScript } from "./bundle/bundle-worker.ts";
 import { isD1Database } from "./d1-database.ts";
 import {
-  DurableObjectNamespace,
-  isDurableObjectNamespace,
+    DurableObjectNamespace,
+    isDurableObjectNamespace,
 } from "./durable-object-namespace.ts";
 import {
-  type EventSource,
-  type QueueEventSource,
-  isQueueEventSource,
+    type EventSource,
+    type QueueEventSource,
+    isQueueEventSource,
 } from "./event-source.ts";
 import { isKVNamespace } from "./kv-namespace.ts";
 import { isPipeline } from "./pipeline.ts";
 import {
-  QueueConsumer,
-  deleteQueueConsumer,
-  listQueueConsumers,
+    QueueConsumer,
+    deleteQueueConsumer,
+    listQueueConsumers,
 } from "./queue-consumer.ts";
 import { type QueueResource, isQueue } from "./queue.ts";
 import { isVectorizeIndex } from "./vectorize-index.ts";
 import { type AssetUploadResult, uploadAssets } from "./worker-assets.ts";
 import {
-  type WorkerMetadata,
-  type WorkerScriptMetadata,
-  prepareWorkerMetadata,
+    type WorkerMetadata,
+    type WorkerScriptMetadata,
+    prepareWorkerMetadata,
 } from "./worker-metadata.ts";
 import type { SingleStepMigration } from "./worker-migration.ts";
 import { WorkerStub, isWorkerStub } from "./worker-stub.ts";
@@ -669,7 +666,6 @@ export function Worker<const B extends Bindings>(
           const incoming = request.url.startsWith("/")
             ? new URL(`${worker.url}${request.url}`)
             : new URL(request.url);
-          console.log(incoming);
           const proxyURL = new URL(
             `${incoming.pathname}${incoming.search}${incoming.hash}`,
             origin,
@@ -746,13 +742,24 @@ export const _Worker = Resource(
       const oldTags = oldMetadata?.default_environment?.script?.tags;
 
       // Get the script content - either from props.script, or by bundling
-      const scriptBundle =
-        props.script ??
-        (await bundleWorkerScript({
-          ...props,
-          compatibilityDate,
-          compatibilityFlags,
-        }));
+      const scriptBundle: WorkerScriptOutput = props.script
+        ? {
+            files: {
+              "_worker.js": {
+                content: props.script,
+                contentType: "application/javascript",
+              },
+            },
+            mainFile: "_worker.js",
+          }
+        : // Bundle the script using the unified WorkerFiles interface
+          await bundleWorkerScript({
+            ...props, // props.sourceMaps is now passed through
+            compatibilityDate,
+            compatibilityFlags,
+            // entrypoint must be asserted for bundleWorkerScript if props.script is not given
+            entrypoint: props.entrypoint!,
+          });
 
       // Find any assets bindings
       const assetsBindings: { name: string; assets: Assets }[] = [];
@@ -871,20 +878,41 @@ export const _Worker = Resource(
       // Delete any queue consumers attached to this worker first
       await deleteQueueConsumers(this, api, workerName);
 
-      // @ts-ignore
-      await uploadWorkerScript({
-        ...props,
-        entrypoint: undefined,
-        noBundle: false,
-        script:
-          props.format === "cjs"
-            ? "addEventListener('fetch', event => { event.respondWith(new Response('hello world')); });"
-            : "export default { fetch(request) { return new Response('hello world'); } }",
-        bindings: {} as B,
-        // we are writing a stub worker (to remove binding/event source dependencies)
-        // queue consumers will no longer exist by this point
-        eventSources: undefined,
-      });
+      // Create a stub worker with fixed script name for deletion
+      const deletionStub: WorkerScriptOutput = {
+        files: {
+          "_worker.js": {
+            content: props.format === "cjs"
+              ? "addEventListener('fetch', event => { event.respondWith(new Response('hello world')); });"
+              : "export default { fetch(request) { return new Response('hello world'); } }",
+            contentType: "application/javascript",
+          },
+        },
+        mainFile: "_worker.js",
+      };
+
+      // Prepare metadata for deletion stub
+      const [oldBindings, oldMetadata] = await Promise.all([
+        getWorkerBindings(api, workerName),
+        getWorkerScriptMetadata(api, workerName),
+      ]);
+      const oldTags = oldMetadata?.default_environment?.script?.tags;
+
+      const deletionMetadata = await prepareWorkerMetadata(
+        this,
+        oldBindings,
+        oldTags,
+        {
+          ...props,
+          compatibilityDate,
+          compatibilityFlags,
+          workerName,
+          bindings: {} as B,
+        },
+        undefined, // No assets for deletion stub
+      );
+
+      await putWorker(api, workerName, deletionStub, deletionMetadata);
 
       await withExponentialBackoff(
         () =>
@@ -1008,50 +1036,42 @@ export async function deleteWorker<B extends Bindings>(
 export async function putWorker(
   api: CloudflareApi,
   workerName: string,
-  scriptBundle: string | NoBundleResult,
+  scriptBundleInput: WorkerScriptOutput,
   scriptMetadata: WorkerMetadata,
 ) {
   return withExponentialBackoff(
     async () => {
-      const scriptName =
-        scriptMetadata.main_module ?? scriptMetadata.body_part!;
+      // Use unified WorkerFiles interface - single code path for all scenarios
+      const { files, mainFile } = scriptBundleInput;
+
+      // Streamlined metadata alignment
+      scriptMetadata.main_module = mainFile;
+      
+      // Clear body_part for module scripts (body_part is for legacy service_worker format)
+      if (scriptMetadata.body_part) {
+        delete scriptMetadata.body_part;
+      }
 
       // Create FormData for the upload
       const formData = new FormData();
 
-      function addFile(fileName: string, content: Buffer | string) {
-        const contentType = getContentType(fileName) ?? "application/null";
+      // Unified file addition logic
+      for (const [fileName, fileData] of Object.entries(files)) {
+        const contentType = resolveContentType(fileName, fileData.contentType, scriptMetadata.main_module);
         formData.append(
           fileName,
-          new Blob([content], {
-            type:
-              contentType === "application/javascript" &&
-              scriptMetadata.main_module
-                ? "application/javascript+module"
-                : contentType,
-          }),
+          new Blob([fileData.content], { type: contentType }),
           fileName,
         );
-      }
-
-      if (typeof scriptBundle === "string") {
-        addFile(scriptName, scriptBundle);
-      } else {
-        for (const [fileName, content] of Object.entries(scriptBundle)) {
-          // Add the actual script content as a named file part
-          addFile(fileName, content);
-        }
       }
 
       // Add metadata as JSON
       formData.append(
         "metadata",
-        new Blob([JSON.stringify(scriptMetadata)], {
-          type: "application/json",
-        }),
+        new Blob([JSON.stringify(scriptMetadata)], { type: "application/json" }),
       );
 
-      // Upload worker script with bindings
+      // Upload worker script
       const uploadResponse = await api.put(
         `/accounts/${api.accountId}/workers/scripts/${workerName}`,
         formData,
@@ -1062,7 +1082,7 @@ export async function putWorker(
         },
       );
 
-      // Check if the upload was successful
+      // Check upload success
       if (!uploadResponse.ok) {
         await handleApiError(
           uploadResponse,
@@ -1078,6 +1098,26 @@ export async function putWorker(
     10,
     100,
   );
+}
+
+/**
+ * Resolve the appropriate content type for a file in the worker upload
+ * Handles the special case of main modules needing "application/javascript+module"
+ */
+function resolveContentType(
+  fileName: string, 
+  providedContentType: string | undefined, 
+  mainModule: string | undefined
+): string {
+  const baseContentType = providedContentType || getContentType(fileName) || "application/null";
+  
+  // Main module JavaScript files need special content type for Cloudflare
+  if (fileName === mainModule && 
+      (baseContentType === "application/javascript" || baseContentType === "text/javascript")) {
+    return "application/javascript+module";
+  }
+  
+  return baseContentType;
 }
 
 export async function assertWorkerDoesNotExist<B extends Bindings>(

@@ -70,16 +70,14 @@ export interface BundleProps extends Partial<esbuild.BuildOptions> {
 }
 
 /**
- * Output returned after bundle creation/update
+ * Describes the output of the bundling process, including optional source map.
  */
-export interface Bundle<P extends BundleProps = BundleProps>
-  extends Resource<"esbuild::Bundle">,
-    BundleProps {
+export interface BundleOutput {
   /**
-   * Path to the bundled file
+   * Path to the main bundled file (if written to disk)
    * Absolute or relative path to the generated bundle
    */
-  path: P extends { outdir: string } | { outfile: string } ? string : undefined;
+  path?: string;
 
   /**
    * SHA-256 hash of the bundle contents
@@ -91,7 +89,33 @@ export interface Bundle<P extends BundleProps = BundleProps>
    * The content of the bundle (the .js or .mjs file)
    */
   content: string;
+
+  /**
+   * Details of the generated source map, if any.
+   */
+  sourceMap?: {
+    /**
+     * Path to the .map file (if written to disk and `props.write` was true)
+     */
+    path?: string;
+    /**
+     * Filename of the .map file (e.g., "index.js.map")
+     */
+    name: string;
+    /**
+     * Content of the .map file
+     */
+    content: string;
+  };
 }
+
+/**
+ * Output returned after bundle creation/update
+ */
+export interface Bundle<P extends BundleProps = BundleProps>
+  extends Resource<"esbuild::Bundle">,
+    P,
+    BundleOutput {}
 
 /**
  * esbuild Bundle Resource
@@ -120,15 +144,11 @@ export const Bundle = Resource(
     props: Props,
   ): Promise<Bundle<Props>> {
     if (this.phase === "delete") {
-      if (this.output.path) {
+      if (this.output?.path) {
         try {
           await fs.rm(this.output.path, { force: true });
-        } catch (error) {
-          if (error instanceof Error && error.message.includes("ENOENT")) {
-            // File doesn't exist, so we can ignore the error
-          } else {
-            throw error;
-          }
+        } catch {
+          // File doesn't exist or can't be deleted - that's okay for deletion
         }
       }
       return this.destroy();
@@ -136,71 +156,117 @@ export const Bundle = Resource(
 
     const result = await bundle(props);
 
-    const bundlePath = Object.entries(result.metafile!.outputs).find(
-      ([_, output]) => {
-        if (output.entryPoint === undefined) {
-          return false;
-        }
-        // resolve to absolute and then relative to ensure consistent result (e.g. ./src/handler.ts instead of src/handler.ts)
-        const relativeOutput = path.relative(
-          process.cwd(),
-          path.resolve(output.entryPoint),
-        );
-        return (
-          relativeOutput ===
-          path.relative(
-            process.cwd(),
-            path.resolve(process.cwd(), props.entryPoint),
-          )
-        );
-      },
-    )?.[0];
+    // Extract bundle content and source map from esbuild result
+    const { content, sourceMap, outputPath } = await extractBundleOutput(result, props);
 
-    const outputFile = result.outputFiles?.[0];
-    if (outputFile === undefined && bundlePath === undefined) {
-      throw new Error("Failed to create bundle");
-    }
-    if (outputFile) {
-      return this({
-        ...props,
-        path: bundlePath,
-        hash: outputFile.hash,
-        content: outputFile.text,
-      });
-    }
-    const content = await fs.readFile(bundlePath!, "utf-8");
+    // Generate hash for content verification
+    const hash = crypto.createHash("sha256").update(content).digest("hex");
+
     return this({
       ...props,
-      path: bundlePath,
-      hash: crypto.createHash("sha256").update(content).digest("hex"),
+      path: outputPath as Props extends
+        | { outdir: string }
+        | { outfile: string }
+        ? string
+        : undefined,
+      hash,
       content,
+      sourceMap,
     });
   },
 );
 
+/**
+ * Extract bundle content and source map from esbuild result
+ * Simplified logic that handles both in-memory and disk outputs
+ */
+async function extractBundleOutput(
+  result: esbuild.BuildResult,
+  props: BundleProps,
+): Promise<{
+  content: string;
+  sourceMap?: BundleOutput["sourceMap"];
+  outputPath?: string;
+}> {
+  // Handle in-memory output (preferred approach)
+  if (result.outputFiles && result.outputFiles.length > 0) {
+    let content = "";
+    let sourceMap: BundleOutput["sourceMap"] | undefined;
+    let outputPath: string | undefined;
+
+    for (const outputFile of result.outputFiles) {
+      if (outputFile.path.endsWith(".map")) {
+        sourceMap = {
+          name: path.basename(outputFile.path),
+          content: outputFile.text,
+          path: outputFile.path,
+        };
+      } else {
+        content = outputFile.text;
+        outputPath = props.outfile || outputFile.path;
+      }
+    }
+
+    if (!content) {
+      throw new Error("No bundle content found in esbuild output");
+    }
+
+    return { content, sourceMap, outputPath };
+  }
+
+  // Handle disk output (fallback for when write: true)
+  if (props.outfile) {
+    try {
+      const content = await fs.readFile(props.outfile, "utf-8");
+      const mapPath = `${props.outfile}.map`;
+      let sourceMap: BundleOutput["sourceMap"] | undefined;
+
+      try {
+        const mapContent = await fs.readFile(mapPath, "utf-8");
+        sourceMap = {
+          name: path.basename(mapPath),
+          content: mapContent,
+          path: mapPath,
+        };
+      } catch {
+        // No source map file - that's okay
+      }
+
+      return { content, sourceMap, outputPath: props.outfile };
+    } catch (error) {
+      throw new Error(`Failed to read bundle from ${props.outfile}: ${error}`);
+    }
+  }
+
+  throw new Error("No bundle output found - esbuild may have failed");
+}
+
 export async function bundle(props: BundleProps) {
   const { entryPoint, ...rest } = props;
-  const options = {
+  
+  // Prefer in-memory processing for consistency with source maps approach
+  const shouldWriteToDisk = props.outdir !== undefined || props.outfile !== undefined;
+
+  const options: esbuild.BuildOptions = {
     ...rest,
-    write: !(props.outdir === undefined && props.outfile === undefined),
-    // write:
-    //   props.outdir === undefined && props.outfile === undefined ? false : true,
-    // write: false,
+    write: shouldWriteToDisk,
     entryPoints: [entryPoint],
-    outdir: props.outdir ? props.outdir : props.outfile ? undefined : ".out",
+    outdir: props.outdir,
     outfile: props.outfile,
     bundle: true,
-    format: props.format,
-    target: props.target,
-    minify: props.minify,
-    sourcemap: props.sourcemap,
-    external: props.external,
-    platform: props.platform,
-    metafile: true,
+    sourcemap: props.sourcemap === true ? "external" : props.sourcemap,
+    metafile: true, // Keep metafile for debugging
   };
-  if (process.env.DEBUG) {
-    console.log(options);
+
+  // Clean up conflicting options
+  if (props.outfile) {
+    options.outdir = undefined; // outfile takes precedence
   }
+
+  if (process.env.DEBUG) {
+    console.log("esbuild options:", options);
+  }
+
   const esbuild = await import("esbuild");
   return await esbuild.build(options);
 }

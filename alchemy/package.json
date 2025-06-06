@@ -17,10 +17,7 @@
   },
   "author": "Sam Goodwin <sam@alchemy.run>",
   "homepage": "https://alchemy.run",
-  "files": [
-    "lib",
-    "src"
-  ],
+  "files": ["lib", "src"],
   "exports": {
     ".": {
       "bun": "./src/index.ts",
