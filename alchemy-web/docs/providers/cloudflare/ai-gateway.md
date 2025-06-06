@@ -84,7 +84,15 @@ const aiGateway = await AiGateway("chat-gateway", {
 });
 
 await Worker("chat-worker", {
-  script: `
+  entrypoint: "./src/worker.ts",
+  bindings: {
+    AI: aiGateway
+  }
+});
+```
+
+```ts
+// src/worker.ts
 export default {
   async fetch(request, env) {
     const { message } = await request.json();
@@ -95,9 +103,5 @@ export default {
 
     return Response.json({ response: response.response });
   }
-};`,
-  bindings: {
-    AI: aiGateway
-  }
-});
+};
 ```
