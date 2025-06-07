@@ -14,15 +14,13 @@ export interface TelemetryClientOptions {
 }
 
 export interface ITelemetryClient {
-  init(): Promise<void>;
+  ready: Promise<void>;
   record(event: Telemetry.EventInput): void;
   finalize(): Promise<void>;
 }
 
 export class NoopTelemetryClient implements ITelemetryClient {
-  init() {
-    return Promise.resolve();
-  }
+  ready = Promise.resolve();
   record(_: Telemetry.EventInput) {}
   finalize() {
     return Promise.resolve();
@@ -30,6 +28,8 @@ export class NoopTelemetryClient implements ITelemetryClient {
 }
 
 export class TelemetryClient implements ITelemetryClient {
+  ready: Promise<void>;
+
   private path: string;
   private promises: Promise<unknown>[] = [];
   private _writeStream?: WriteStream;
@@ -37,12 +37,10 @@ export class TelemetryClient implements ITelemetryClient {
 
   constructor(readonly options: TelemetryClientOptions) {
     this.path = join(STATE_DIR, `session-${this.options.sessionId}.jsonl`);
+    this.ready = this.init();
   }
 
-  async init() {
-    if (this._context) {
-      return;
-    }
+  private async init() {
     const now = Date.now();
     const [ctx] = await Promise.all([
       context({
@@ -139,8 +137,10 @@ export class TelemetryClient implements ITelemetryClient {
     const events = await readFile(path, "utf-8").then((file) => {
       const events: Telemetry.Event[] = [];
       for (const line of file.split("\n")) {
-        if (line) {
+        try {
           events.push(JSON.parse(line));
+        } catch {
+          // ignore
         }
       }
       return events;

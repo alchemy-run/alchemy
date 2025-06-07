@@ -133,7 +133,7 @@ export class Scope {
   }
 
   public async init() {
-    await Promise.all([this.state.init?.(), this.rootTelemetryClient?.init()]);
+    await Promise.all([this.state.init?.(), this.telemetryClient.ready]);
   }
 
   public async deinit() {
