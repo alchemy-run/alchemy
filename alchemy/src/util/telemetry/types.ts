@@ -44,8 +44,8 @@ export namespace Telemetry {
 
   export type ErrorInput = Error | SerializedError;
 
-  export interface ScopeEvent extends BaseEvent {
-    event: "scope.start" | "scope.success" | "scope.error";
+  export interface AppEvent extends BaseEvent {
+    event: "app.start" | "app.success" | "app.error";
     elapsed?: number;
     error?: SerializedError;
   }
@@ -70,9 +70,9 @@ export namespace Telemetry {
     replaced?: boolean;
   }
 
-  export type Event = ScopeEvent | ResourceEvent;
+  export type Event = AppEvent | ResourceEvent;
   export type EventInput = (
-    | Omit<ScopeEvent, "context" | "timestamp" | "error">
+    | Omit<AppEvent, "context" | "timestamp" | "error">
     | Omit<ResourceEvent, "context" | "timestamp" | "error">
   ) & {
     error?: ErrorInput;
