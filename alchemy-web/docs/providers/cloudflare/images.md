@@ -65,6 +65,12 @@ export default {
 };
 ```
 
+## Requirements
+
+The Images binding requires Cloudflare Images to be enabled for your account. 
+
+**Important**: For deployed Workers, image transformations require enabling image transforms for the zone where the Worker is deployed. Without this setting, the original image will be returned instead of the transformed version. You can enable this in your Cloudflare dashboard under **Speed** > **Optimization** > **Image Optimization** or follow the [zone transformation setup guide](https://developers.cloudflare.com/images/get-started/#enable-transformations-on-your-zone).
+
 ## Advanced Transformations
 
 The Images binding supports various transformation options:
