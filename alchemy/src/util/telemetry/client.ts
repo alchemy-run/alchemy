@@ -1,5 +1,6 @@
 import { type WriteStream, createWriteStream, renameSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, unlink } from "node:fs/promises";
+import os from "node:os";
 import { basename, join } from "node:path";
 import type { Phase } from "../../alchemy.ts";
 import { INGEST_URL, STATE_DIR, TELEMETRY_DISABLED } from "./constants.ts";
@@ -115,9 +116,11 @@ export class TelemetryClient implements ITelemetryClient {
     }
     if (error instanceof Error) {
       return {
+        ...error, // include additional properties from error object
         name: error.name,
         message: error.message,
-        stack: error.stack,
+        // TODO: maybe redact more of the stack trace?
+        stack: error.stack?.replaceAll(os.homedir(), "~"), // redact home directory
       };
     }
     return error;
