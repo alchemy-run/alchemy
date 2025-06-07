@@ -9,13 +9,17 @@ A [Cloudflare Secrets Store](https://developers.cloudflare.com/secrets-store/) i
 
 ## Minimal Example
 
-Create a basic secrets store:
+Create a basic secrets store with an inline secret:
 
 ```ts
 import { SecretsStore } from "alchemy/cloudflare";
+import alchemy from "alchemy";
 
 const store = await SecretsStore("my-secrets", {
-  name: "production-secrets"
+  name: "production-secrets",
+  secrets: {
+    API_KEY: alchemy.secret("my-secret-api-key")
+  }
 });
 ```
 
@@ -85,16 +89,20 @@ const worker = await Worker("my-worker", {
   bindings: {
     SECRETS: store
   },
-  code: `
-    export default {
-      async fetch(request, env) {
-        const apiKey = await env.SECRETS.get("API_KEY");
-        const dbUrl = await env.SECRETS.get("DATABASE_URL");
-        return new Response(apiKey ? "Secrets found" : "No secrets");
-      }
-    }
-  `
+  entrypoint: "./src/worker.ts"
 });
+```
+
+Worker code (`./src/worker.ts`):
+
+```ts
+export default {
+  async fetch(request: Request, env: { SECRETS: any }): Promise<Response> {
+    const apiKey = await env.SECRETS.get("API_KEY");
+    const dbUrl = await env.SECRETS.get("DATABASE_URL");
+    return new Response(apiKey ? "Secrets found" : "No secrets");
+  }
+};
 ```
 
 ## Adding Individual Secrets
