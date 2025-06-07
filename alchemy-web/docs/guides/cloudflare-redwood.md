@@ -12,16 +12,55 @@ This guide demonstrates how to deploy a Redwood application with Drizzle to Clou
 
 Start by creating a new Redwood project using the Drizzle template:
 
-```bash
+::: code-group
+
+```sh [bun]
 bunx degit redwoodjs/example-drizzle my-cloudflare-app
 cd my-cloudflare-app
 bun install
 ```
 
+```sh [npm]
+npx degit redwoodjs/example-drizzle my-cloudflare-app
+cd my-cloudflare-app
+npm install
+```
+
+```sh [pnpm]
+pnpm dlx degit redwoodjs/example-drizzle my-cloudflare-app
+cd my-cloudflare-app
+pnpm install
+```
+
+```sh [yarn]
+yarn dlx degit redwoodjs/example-drizzle my-cloudflare-app
+cd my-cloudflare-app
+yarn install
+```
+
+:::
+
 Install `cloudflare` and `alchemy`:
-```sh
+
+::: code-group
+
+```sh [bun]
 bun add alchemy cloudflare
 ```
+
+```sh [npm]
+npm install alchemy cloudflare
+```
+
+```sh [pnpm]
+pnpm add alchemy cloudflare
+```
+
+```sh [yarn]
+yarn add alchemy cloudflare
+```
+
+:::
 
 ## Create `alchemy.run.ts`
 
@@ -73,15 +112,47 @@ console.log({
 
 Login to Cloudflare:
 
-```sh
-wrangler login
+::: code-group
+
+```sh [bun]
+bun wrangler login
 ```
+
+```sh [npm]
+npx wrangler login
+```
+
+```sh [pnpm]
+pnpm wrangler login
+```
+
+```sh [yarn]
+yarn wrangler login
+```
+
+:::
 
 Run `alchemy.run.ts` script to deploy:
 
-```sh
+::: code-group
+
+```sh [bun]
 bun ./alchemy.run
 ```
+
+```sh [npm]
+npx tsx ./alchemy.run
+```
+
+```sh [pnpm]
+pnpm tsx ./alchemy.run
+```
+
+```sh [yarn]
+yarn tsx ./alchemy.run
+```
+
+:::
 
 It should log out the URL of your deployed site:
 ```sh
@@ -142,9 +213,25 @@ export const posts = sqliteTable("posts", {
 
 After modifying the schema, generate a migration:
 
-```sh
+::: code-group
+
+```sh [bun]
 bun migrate:new
 ```
+
+```sh [npm]
+npm run migrate:new
+```
+
+```sh [pnpm]
+pnpm migrate:new
+```
+
+```sh [yarn]
+yarn migrate:new
+```
+
+:::
 
 This will create a new migration file in the `drizzle` directory.
 
@@ -152,9 +239,25 @@ This will create a new migration file in the `drizzle` directory.
 
 Now that we've modified the schema and generated migrations, let's redeploy our application with the updated database schema:
 
-```sh
+::: code-group
+
+```sh [bun]
 bun ./alchemy.run
 ```
+
+```sh [npm]
+npx tsx ./alchemy.run
+```
+
+```sh [pnpm]
+pnpm tsx ./alchemy.run
+```
+
+```sh [yarn]
+yarn tsx ./alchemy.run
+```
+
+:::
 
 The D1Database resource will automatically apply migrations from the directory we specified earlier (`migrationsDir: "drizzle"`).
 
@@ -163,9 +266,25 @@ The D1Database resource will automatically apply migrations from the directory w
 
 Redwood has integrated development tooling. Run the development server:
 
-```sh
+::: code-group
+
+```sh [bun]
 bun run dev
 ```
+
+```sh [npm]
+npm run dev
+```
+
+```sh [pnpm]
+pnpm run dev
+```
+
+```sh [yarn]
+yarn run dev
+```
+
+:::
 
 This will start both the web and API sides of your Redwood application:
 
@@ -183,6 +302,22 @@ This will start both the web and API sides of your Redwood application:
 
 That's it! You can now tear down the app (if you want to):
 
-```bash
+::: code-group
+
+```sh [bun]
 bun ./alchemy.run --destroy
 ```
+
+```sh [npm]
+npx tsx ./alchemy.run --destroy
+```
+
+```sh [pnpm]
+pnpm tsx ./alchemy.run --destroy
+```
+
+```sh [yarn]
+yarn tsx ./alchemy.run --destroy
+```
+
+:::
