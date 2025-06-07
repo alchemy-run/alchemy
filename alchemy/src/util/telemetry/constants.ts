@@ -11,4 +11,4 @@ export const TELEMETRY_DISABLED =
 // TODO(sam): replace with permanent URL
 export const INGEST_URL =
   process.env.ALCHEMY_TELEMETRY_URL ??
-  "https://bc6398b3703c4615972fda998c8d09f1.pipelines.cloudflare.com";
+  "https://b75a323ba8074abd80abe83abd01d092.pipelines.cloudflare.com";
