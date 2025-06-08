@@ -1,7 +1,7 @@
-import { type WriteStream, createWriteStream, renameSync } from "node:fs";
-import { mkdir, readdir, readFile, rmdir, unlink } from "node:fs/promises";
+import { type WriteStream, createWriteStream } from "node:fs";
+import { mkdir, readdir, readFile, unlink } from "node:fs/promises";
 import os from "node:os";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import type { Phase } from "../../alchemy.ts";
 import { INGEST_URL, STATE_DIR, TELEMETRY_DISABLED } from "./constants.ts";
 import { context } from "./context.ts";
@@ -33,13 +33,11 @@ export class TelemetryClient implements ITelemetryClient {
 
   private path: string;
   private promises: Promise<unknown>[] = [];
-  private tempDir: string;
   private _writeStream?: WriteStream;
   private _context?: Telemetry.Context;
 
   constructor(readonly options: TelemetryClientOptions) {
     this.path = join(STATE_DIR, `session-${this.options.sessionId}.jsonl`);
-    this.tempDir = join(STATE_DIR, `temp-${this.options.sessionId}`);
     this.ready = this.init();
   }
 
@@ -64,7 +62,6 @@ export class TelemetryClient implements ITelemetryClient {
   private async initFs() {
     try {
       await mkdir(STATE_DIR, { recursive: true });
-      await mkdir(this.tempDir, { recursive: true });
     } catch (error) {
       if (
         error instanceof Error &&
@@ -139,42 +136,29 @@ export class TelemetryClient implements ITelemetryClient {
         }
       }
     });
-    await rmdir(this.tempDir);
   }
 
   async flush(path: string) {
-    const tempPath = join(this.tempDir, basename(path));
-    try {
-      renameSync(path, tempPath);
-    } catch (error) {
+    const events = await readFile(path, "utf-8").then((file) => {
+      const events: Telemetry.Event[] = [];
+      for (const line of file.split("\n")) {
+        try {
+          events.push(JSON.parse(line));
+        } catch {
+          // ignore
+        }
+      }
+      return events;
+    });
+    // TODO: deduplicate events on send
+    await this.send(events);
+    await unlink(path).catch((error) => {
       if (error instanceof Error && error.message.includes("ENOENT")) {
         // ignore
       } else {
         throw error;
       }
-    }
-    try {
-      const events = await readFile(tempPath, "utf-8").then((file) => {
-        const events: Telemetry.Event[] = [];
-        for (const line of file.split("\n")) {
-          try {
-            events.push(JSON.parse(line));
-          } catch {
-            // ignore
-          }
-        }
-        return events;
-      });
-      await this.send(events);
-      await unlink(tempPath);
-    } catch (error) {
-      try {
-        renameSync(tempPath, path); // restore the file if the send fails
-      } catch (error) {
-        console.warn("Failed to restore file", error);
-      }
-      throw error;
-    }
+    });
   }
 
   private async send(events: Telemetry.Event[]) {
