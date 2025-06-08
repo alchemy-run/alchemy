@@ -279,14 +279,21 @@ export const poll = (
       RequestToken: requestToken,
     }).pipe(
       Effect.retry(retrySchedule),
-      Effect.catchTag("NotFoundError", (error) => 
+      Effect.catchTag("ResourceNotFoundException", (error) => 
         action === "DeleteResource" 
-          ? Effect.succeed({ ProgressEvent: error.progressEvent })
+          ? Effect.succeed({ ProgressEvent: { 
+              OperationStatus: "SUCCESS" as const,
+              RequestToken: requestToken,
+              Identifier: "",
+              TypeName: "",
+            } })
           : Effect.fail(error)
       )
     );
 
-    const checkProgress = (progressEvent: ProgressEvent): Effect.Effect<ProgressEvent, UpdateFailedError | AlreadyExistsError | NotFoundError, never> => {
+    class ContinuePolling extends Data.TaggedError("ContinuePolling")<{}> {}
+
+    const checkProgress = (progressEvent: ProgressEvent): Effect.Effect<ProgressEvent, UpdateFailedError | AlreadyExistsError | NotFoundError | ContinuePolling, never> => {
       if (progressEvent.OperationStatus === "SUCCESS") {
         return Effect.succeed(progressEvent);
       }
@@ -302,7 +309,7 @@ export const poll = (
       }
 
       // Continue polling
-      return Effect.fail("continue");
+      return Effect.fail(new ContinuePolling({}));
     };
 
     let logged = false;
@@ -310,7 +317,7 @@ export const poll = (
       const { ProgressEvent } = yield* pollOnce;
       
       const result = yield* checkProgress(ProgressEvent).pipe(
-        Effect.catchAll(() => Effect.succeed("continue" as const))
+        Effect.catchTag("ContinuePolling", () => Effect.succeed("continue" as const))
       );
 
       if (result !== "continue") {
@@ -341,14 +348,15 @@ export const poll = (
       Schedule.whileOutput((result: ProgressEvent | "continue") => result === "continue")
     );
 
-    return yield* pollWithBackoff.pipe(
-      Effect.repeat(pollSchedule),
-      Effect.map((result) => result === "continue" ? 
-        Effect.fail(new TimeoutError({ message: "Polling timeout exceeded" })) :
-        Effect.succeed(result)
-      ),
-      Effect.flatten
+    const finalResult = yield* pollWithBackoff.pipe(
+      Effect.repeat(pollSchedule)
     );
+
+    if (finalResult === "continue") {
+      return yield* Effect.fail(new TimeoutError({ message: "Polling timeout exceeded" }));
+    }
+
+    return finalResult;
   });
 
 /**

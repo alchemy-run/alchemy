@@ -276,12 +276,14 @@ async function CloudControlLifecycle(
             if (!resource) {
               return Effect.fail(error);
             }
-            return updateResourceWithPatchEffect(
-              typeName, 
-              error.progressEvent.Identifier!,
-              resource,
-              desiredState,
-              cloudControlOptions,
+            return Effect.tryPromise(() => 
+              updateResourceWithPatchEffect(
+                typeName, 
+                error.progressEvent.Identifier!,
+                resource,
+                desiredState,
+                cloudControlOptions,
+              )
             ).pipe(Effect.map(() => error.progressEvent));
           })
         );
@@ -306,12 +308,14 @@ async function CloudControlLifecycle(
                   return Effect.fail(error);
                 }
                 // Apply our desired state as a patch to the existing resource
-                return updateResourceWithPatchEffect(
-                  typeName,
-                  concurrentResult.Identifier!,
-                  resource,
-                  desiredState,
-                  cloudControlOptions,
+                return Effect.tryPromise(() => 
+                  updateResourceWithPatchEffect(
+                    typeName,
+                    concurrentResult.Identifier!,
+                    resource,
+                    desiredState,
+                    cloudControlOptions,
+                  )
                 ).pipe(Effect.map(() => concurrentResult));
               })
             );
