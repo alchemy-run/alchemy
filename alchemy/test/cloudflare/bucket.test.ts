@@ -186,11 +186,11 @@ describe("R2 Bucket Resource", async () => {
 
     expect(bucket.name).toEqual(`${nameChangeTestId}-original`);
 
-    await expect(async () => {
-      await R2Bucket(nameChangeTestId, {
+    await expect(
+      R2Bucket(nameChangeTestId, {
         name: `${nameChangeTestId}-changed`,
-      });
-    }).toThrow(
+      }),
+    ).rejects.toThrow(
       "Cannot update R2Bucket name after creation. Bucket name is immutable.",
     );
   });
