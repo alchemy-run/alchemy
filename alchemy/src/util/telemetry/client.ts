@@ -1,5 +1,5 @@
 import { type WriteStream, createWriteStream, renameSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, unlink } from "node:fs/promises";
+import { mkdir, readdir, readFile, rmdir, unlink } from "node:fs/promises";
 import os from "node:os";
 import { basename, join } from "node:path";
 import type { Phase } from "../../alchemy.ts";
@@ -33,13 +33,13 @@ export class TelemetryClient implements ITelemetryClient {
 
   private path: string;
   private promises: Promise<unknown>[] = [];
-  private tempDirPromise: Promise<string>;
+  private tempDir: string;
   private _writeStream?: WriteStream;
   private _context?: Telemetry.Context;
 
   constructor(readonly options: TelemetryClientOptions) {
     this.path = join(STATE_DIR, `session-${this.options.sessionId}.jsonl`);
-    this.tempDirPromise = mkdtemp(`alchemy-${this.options.sessionId}-`);
+    this.tempDir = join(STATE_DIR, `temp-${this.options.sessionId}`);
     this.ready = this.init();
   }
 
@@ -64,6 +64,7 @@ export class TelemetryClient implements ITelemetryClient {
   private async initFs() {
     try {
       await mkdir(STATE_DIR, { recursive: true });
+      await mkdir(this.tempDir, { recursive: true });
     } catch (error) {
       if (
         error instanceof Error &&
@@ -78,7 +79,9 @@ export class TelemetryClient implements ITelemetryClient {
 
     const files = await readdir(STATE_DIR);
     this.promises.push(
-      ...files.map((file) => this.flush(join(STATE_DIR, file))),
+      ...files
+        .filter((file) => file.endsWith(".jsonl"))
+        .map((file) => this.flush(join(STATE_DIR, file))),
     );
 
     this._writeStream = createWriteStream(this.path, { flags: "a" });
@@ -136,12 +139,11 @@ export class TelemetryClient implements ITelemetryClient {
         }
       }
     });
+    await rmdir(this.tempDir);
   }
 
   async flush(path: string) {
-    // Synchronously move the file to a temp directory to avoid race conditions
-    const tempDir = await this.tempDirPromise;
-    const tempPath = join(tempDir, basename(path));
+    const tempPath = join(this.tempDir, basename(path));
     try {
       renameSync(path, tempPath);
     } catch (error) {
@@ -166,7 +168,11 @@ export class TelemetryClient implements ITelemetryClient {
       await this.send(events);
       await unlink(tempPath);
     } catch (error) {
-      renameSync(tempPath, path); // restore the file if the send fails
+      try {
+        renameSync(tempPath, path); // restore the file if the send fails
+      } catch (error) {
+        console.warn("Failed to restore file", error);
+      }
       throw error;
     }
   }
