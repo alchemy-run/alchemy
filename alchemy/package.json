@@ -145,7 +145,6 @@
     "prettier": "^3.0.0",
     "stripe": "^17.0.0",
     "turndown": "^7.0.0",
-    "xdg-app-paths": "^8.0.0",
     "yaml": "^2.0.0",
     "zod": "^3.0.0"
   },
@@ -180,7 +179,6 @@
     "vite": "^6.0.7",
     "vitepress": "^1.6.3",
     "wrangler": "^3.114.0",
-    "xdg-app-paths": "^8.3.0",
     "yaml": "^2.7.1"
   }
 }
