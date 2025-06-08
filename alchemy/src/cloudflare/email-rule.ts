@@ -1,5 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { handleApiError } from "./api-error.ts";
 import {
   type CloudflareApi,
   type CloudflareApiOptions,
@@ -246,9 +247,7 @@ export const EmailRule = Resource(
           `/zones/${zoneId}/email/routing/rules/${this.output.ruleId}`,
         );
         if (!response.ok && response.status !== 404) {
-          throw new Error(
-            `Failed to delete email rule: ${response.statusText}`,
-          );
+          await handleApiError(response, "delete", "email rule");
         }
       }
       return this.destroy();
@@ -273,10 +272,7 @@ export const EmailRule = Resource(
         if (response.status === 404) {
           // Rule was deleted externally, create a new one
         } else {
-          const errorBody = await response.text();
-          throw new Error(
-            `Failed to update email rule: ${response.statusText}\nResponse: ${errorBody}`,
-          );
+          await handleApiError(response, "update", "email rule");
         }
       } else {
         const result =
@@ -310,10 +306,7 @@ export const EmailRule = Resource(
     );
 
     if (!createResponse.ok) {
-      const errorBody = await createResponse.text();
-      throw new Error(
-        `Failed to create email rule: ${createResponse.statusText}\nResponse: ${errorBody}`,
-      );
+      await handleApiError(createResponse, "create", "email rule");
     }
 
     const result =

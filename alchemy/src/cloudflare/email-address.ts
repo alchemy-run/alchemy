@@ -1,5 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { handleApiError } from "./api-error.ts";
 import {
   type CloudflareApi,
   type CloudflareApiOptions,
@@ -114,9 +115,7 @@ export const EmailAddress = Resource(
           `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(this.output.email)}`,
         );
         if (!response.ok && response.status !== 404) {
-          throw new Error(
-            `Failed to delete email address: ${response.statusText}`,
-          );
+          await handleApiError(response, "delete", "email address");
         }
       }
       return this.destroy();
@@ -131,9 +130,7 @@ export const EmailAddress = Resource(
           `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(this.output.email)}`,
         );
         if (!deleteResponse.ok && deleteResponse.status !== 404) {
-          throw new Error(
-            `Failed to delete old email address: ${deleteResponse.statusText}`,
-          );
+          await handleApiError(deleteResponse, "delete", "old email address");
         }
 
         // Create the new email address (fall through to create logic)
@@ -146,9 +143,7 @@ export const EmailAddress = Resource(
           if (getResponse.status === 404) {
             // Email address was deleted externally, recreate it
           } else {
-            throw new Error(
-              `Failed to get email address: ${getResponse.statusText}`,
-            );
+            await handleApiError(getResponse, "get", "email address");
           }
         } else {
           const result =
@@ -195,10 +190,7 @@ export const EmailAddress = Resource(
     );
 
     if (!createResponse.ok) {
-      const errorBody = await createResponse.text();
-      throw new Error(
-        `Failed to create email address: ${createResponse.statusText}\nResponse: ${errorBody}`,
-      );
+      await handleApiError(createResponse, "create", "email address");
     }
 
     const result =

@@ -1,5 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { handleApiError } from "./api-error.ts";
 import {
   type CloudflareApi,
   type CloudflareApiOptions,
@@ -125,9 +126,7 @@ export const EmailRouting = Resource(
       // Disable email routing
       const response = await api.delete(`/zones/${zoneId}/email/routing`);
       if (!response.ok && response.status !== 404) {
-        throw new Error(
-          `Failed to disable email routing: ${response.statusText}`,
-        );
+        await handleApiError(response, "disabling", "email routing");
       }
       return this.destroy();
     }
@@ -149,17 +148,13 @@ export const EmailRouting = Resource(
             enablePayload,
           );
           if (!response.ok) {
-            throw new Error(
-              `Failed to enable email routing: ${response.statusText}`,
-            );
+            await handleApiError(response, "enabling", "email routing");
           }
         } else {
           // Disable email routing
           const response = await api.delete(`/zones/${zoneId}/email/routing`);
           if (!response.ok) {
-            throw new Error(
-              `Failed to disable email routing: ${response.statusText}`,
-            );
+            await handleApiError(response, "disabling", "email routing");
           }
         }
       }
@@ -170,9 +165,7 @@ export const EmailRouting = Resource(
         if (getResponse.status === 404) {
           throw new Error("Email routing is not enabled for this zone");
         }
-        throw new Error(
-          `Failed to get email routing settings: ${getResponse.statusText}`,
-        );
+        await handleApiError(getResponse, "getting", "email routing settings");
       }
 
       const result =
@@ -201,10 +194,7 @@ export const EmailRouting = Resource(
         enablePayload,
       );
       if (!response.ok) {
-        const errorBody = await response.text();
-        throw new Error(
-          `Failed to enable email routing: ${response.statusText}\nResponse: ${errorBody}`,
-        );
+        await handleApiError(response, "enabling", "email routing");
       }
     }
 
@@ -216,9 +206,7 @@ export const EmailRouting = Resource(
           "Email routing is not enabled. Set enabled: true to enable it.",
         );
       }
-      throw new Error(
-        `Failed to get email routing settings: ${getResponse.statusText}`,
-      );
+      await handleApiError(getResponse, "getting", "email routing settings");
     }
 
     const result =
