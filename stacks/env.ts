@@ -1,5 +1,5 @@
 import type { AlchemyOptions, Phase } from "../alchemy/src/alchemy.js";
-import { R2RestStateStore } from "../alchemy/src/cloudflare/index.js";
+import { DOStateStore } from "../alchemy/src/cloudflare/index.js";
 import alchemy from "../alchemy/src/index.js";
 
 export const CLOUDFLARE_EMAIL = await alchemy.env.CLOUDFLARE_EMAIL;
@@ -30,6 +30,6 @@ export default {
   quiet: process.argv.includes("--quiet"),
   stateStore:
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new R2RestStateStore(scope)
+      ? (scope) => new DOStateStore(scope)
       : undefined,
 } satisfies AlchemyOptions;
