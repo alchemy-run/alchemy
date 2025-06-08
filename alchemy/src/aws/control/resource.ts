@@ -1,23 +1,32 @@
 import { compare } from "fast-json-patch";
+import * as Effect from "effect/Effect";
 import type { Context } from "../../context.ts";
 import {
   registerDynamicResource,
   Resource,
   type Provider,
 } from "../../resource.ts";
-import { createCloudControlClient, type ProgressEvent } from "./client.ts";
+import type { ProgressEvent } from "./client.ts";
 import {
   AlreadyExistsError,
   ConcurrentOperationError,
   NotFoundError,
   UpdateFailedError,
-} from "./error.ts";
+  createResource,
+  deleteResource,
+  getResource,
+  updateResource,
+  poll,
+  makeCloudControlConfig,
+  runWithCloudControl,
+  type CloudControlOptions,
+} from "./effect-client.ts";
 import readOnlyPropertiesMap from "./properties.ts";
 
 /**
  * Properties for creating or updating a Cloud Control resource
  */
-export interface CloudControlResourceProps {
+export interface CloudControlResourceProps extends CloudControlOptions {
   /**
    * The type name of the resource (e.g. AWS::S3::Bucket)
    */
@@ -32,27 +41,6 @@ export interface CloudControlResourceProps {
    * If true, adopt existing resource instead of failing when resource already exists
    */
   adopt?: boolean;
-
-  /**
-   * Optional AWS region
-   * @default AWS_REGION environment variable
-   */
-  region?: string;
-
-  /**
-   * AWS access key ID (overrides environment variable)
-   */
-  accessKeyId?: string;
-
-  /**
-   * AWS secret access key (overrides environment variable)
-   */
-  secretAccessKey?: string;
-
-  /**
-   * AWS session token for temporary credentials
-   */
-  sessionToken?: string;
 }
 
 /**
@@ -118,21 +106,18 @@ export function createResourceType(typeName: string) {
     function (
       this: Context<CloudControlResource, CloudControlResourceProps>,
       id: string,
-      props: Record<string, any> & {
-        adopt?: boolean;
-        region?: string;
-        accessKeyId?: string;
-        secretAccessKey?: string;
-        sessionToken?: string;
-      },
+      props: Record<string, any> & CloudControlResourceProps,
     ) {
-      // Extract Alchemy-specific properties
+      // Extract Alchemy-specific properties and CloudControl options
       const {
         adopt,
         region,
         accessKeyId,
         secretAccessKey,
         sessionToken,
+        initialPollingDelay,
+        maxPollingDelay,
+        maxRetries,
         ...desiredState
       } = props;
 
@@ -144,6 +129,9 @@ export function createResourceType(typeName: string) {
         accessKeyId,
         secretAccessKey,
         sessionToken,
+        initialPollingDelay,
+        maxPollingDelay,
+        maxRetries,
       });
     },
   ));
@@ -229,24 +217,37 @@ async function CloudControlLifecycle(
   id: string,
   props: CloudControlResourceProps,
 ) {
-  const client = await createCloudControlClient({
-    region: props.region,
-    accessKeyId: props.accessKeyId,
-    secretAccessKey: props.secretAccessKey,
-    sessionToken: props.sessionToken,
-  });
+  // Extract CloudControl options from props
+  const {
+    typeName,
+    desiredState,
+    adopt,
+    region,
+    accessKeyId,
+    secretAccessKey,
+    sessionToken,
+    initialPollingDelay,
+    maxPollingDelay,
+    maxRetries,
+  } = props;
+
+  const cloudControlOptions: CloudControlOptions = {
+    region,
+    accessKeyId,
+    secretAccessKey,
+    sessionToken,
+    initialPollingDelay,
+    maxPollingDelay,
+    maxRetries,
+  };
 
   if (this.phase === "delete") {
     if (this.output?.id) {
-      try {
-        await client.deleteResource(props.typeName, this.output.id);
-      } catch (error) {
-        if (error instanceof NotFoundError) {
-          // great, this is the desired outcome
-        } else {
-          throw error;
-        }
-      }
+      const deleteEffect = deleteResource(typeName, this.output.id).pipe(
+        Effect.catchTag("NotFoundError", () => Effect.succeed({} as ProgressEvent))
+      );
+
+      await Effect.runPromise(runWithCloudControl(deleteEffect, cloudControlOptions));
     }
     return this.destroy();
   }
@@ -254,79 +255,76 @@ async function CloudControlLifecycle(
   let response: ProgressEvent | undefined;
   if (this.phase === "update" && this.output?.id) {
     // Update existing resource
-    response = await updateResourceWithPatch(
-      client,
-      props.typeName,
+    response = await updateResourceWithPatchEffect(
+      typeName,
       this.output.id,
       this.output.desiredState,
-      props.desiredState,
+      desiredState,
+      cloudControlOptions,
     );
   } else {
     // Create new resource
-    try {
-      response = await client.createResource(
-        props.typeName,
-        props.desiredState,
-      );
-    } catch (error) {
-      if (error instanceof AlreadyExistsError && props.adopt) {
-        const resource = (await client.getResource(
-          props.typeName,
-          error.progressEvent.Identifier!,
-        ))!;
-
-        response = await updateResourceWithPatch(
-          client,
-          props.typeName,
-          error.progressEvent.Identifier!,
-          resource,
-          props.desiredState,
-        );
-      } else if (error instanceof ConcurrentOperationError) {
-        // Handle concurrent operation exception
-        console.log(error.message);
-        if (!props.adopt) {
-          // If adopt is not true, concurrent operations are an error
-          throw error;
+    const createEffect = createResource(typeName, desiredState).pipe(
+      Effect.catchTag("AlreadyExistsError", (error) => {
+        if (!adopt) {
+          return Effect.fail(error);
         }
+        
+        // Adopt existing resource by getting it and applying patches
+        return getResource(typeName, error.progressEvent.Identifier!).pipe(
+          Effect.flatMap((resource) => {
+            if (!resource) {
+              return Effect.fail(error);
+            }
+            return updateResourceWithPatchEffect(
+              typeName, 
+              error.progressEvent.Identifier!,
+              resource,
+              desiredState,
+              cloudControlOptions,
+            ).pipe(Effect.map(() => error.progressEvent));
+          })
+        );
+      }),
+      Effect.catchTag("ConcurrentOperationError", (error) => {
+        console.log(error.message);
+        if (!adopt) {
+          return Effect.fail(error);
+        }
+        
         console.log(
           `Waiting for concurrent operation with request token '${error.requestToken}' to complete`,
         );
 
         // Wait for the concurrent operation to complete by polling it
-        try {
-          // Poll the concurrent operation until it completes
-          const concurrentResult = await client.poll(error.requestToken);
-
-          // The concurrent operation succeeded, now adopt the resource
-          const resource = (await client.getResource(
-            props.typeName,
-            concurrentResult.Identifier!,
-          ))!;
-
-          // Apply our desired state as a patch to the existing resource
-          response = await updateResourceWithPatch(
-            client,
-            props.typeName,
-            concurrentResult.Identifier!,
-            resource,
-            props.desiredState,
-          );
-        } catch (pollError) {
-          // If the concurrent operation failed, we can try to create the resource ourselves
-          if (pollError instanceof UpdateFailedError) {
-            response = await client.createResource(
-              props.typeName,
-              props.desiredState,
+        return poll(error.requestToken).pipe(
+          Effect.flatMap((concurrentResult) => {
+            // Get the resource created by the concurrent operation
+            return getResource(typeName, concurrentResult.Identifier!).pipe(
+              Effect.flatMap((resource) => {
+                if (!resource) {
+                  return Effect.fail(error);
+                }
+                // Apply our desired state as a patch to the existing resource
+                return updateResourceWithPatchEffect(
+                  typeName,
+                  concurrentResult.Identifier!,
+                  resource,
+                  desiredState,
+                  cloudControlOptions,
+                ).pipe(Effect.map(() => concurrentResult));
+              })
             );
-          } else {
-            throw pollError;
-          }
-        }
-      } else {
-        throw error;
-      }
-    }
+          }),
+          Effect.catchTag("UpdateFailedError", () => {
+            // If the concurrent operation failed, try to create the resource ourselves
+            return createResource(typeName, desiredState);
+          })
+        );
+      })
+    );
+
+    response = await Effect.runPromise(runWithCloudControl(createEffect, cloudControlOptions));
   }
 
   if (response.OperationStatus === "FAILED") {
@@ -335,28 +333,33 @@ async function CloudControlLifecycle(
     );
   }
 
+  // Get the final resource state
+  const finalState = await Effect.runPromise(
+    runWithCloudControl(getResource(typeName, response.Identifier!), cloudControlOptions)
+  );
+
   return this({
     ...props,
     id: response.Identifier!,
     createdAt: Date.now(),
-    ...(await client.getResource(props.typeName, response.Identifier!)),
+    ...(finalState || {}),
   });
 }
 
-async function updateResourceWithPatch(
-  client: any,
+async function updateResourceWithPatchEffect(
   typeName: string,
   resourceId: string,
   currentState: Record<string, any>,
   desiredState: Record<string, any>,
+  cloudControlOptions: CloudControlOptions,
 ): Promise<ProgressEvent> {
   // Filter out read-only properties to avoid patch conflicts
   const filteredCurrentState = filterReadOnlyProperties(typeName, currentState);
 
   // Create and apply patch
-  return await client.updateResource(
-    typeName,
-    resourceId,
-    compare(filteredCurrentState, desiredState),
-  );
+  const patchDocument = compare(filteredCurrentState, desiredState);
+  
+  const updateEffect = updateResource(typeName, resourceId, patchDocument);
+  
+  return await Effect.runPromise(runWithCloudControl(updateEffect, cloudControlOptions));
 }

@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import { describe, expect, test } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
 import {
   createResource,
   getResource,
@@ -10,6 +11,8 @@ import {
   makeCloudControlConfig,
   type CloudControlOptions,
 } from "../../src/aws/control/effect-client.ts";
+// must import this or else alchemy.test won't exist
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: "effect-test",
