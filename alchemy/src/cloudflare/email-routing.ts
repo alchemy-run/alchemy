@@ -123,10 +123,10 @@ export const EmailRouting = Resource(
     const zoneId = typeof props.zone === "string" ? props.zone : props.zone.id;
 
     if (this.phase === "delete") {
-      // Disable email routing
-      const response = await api.delete(`/zones/${zoneId}/email/routing`);
+      // Disable email routing DNS
+      const response = await api.delete(`/zones/${zoneId}/email/routing/dns`);
       if (!response.ok && response.status !== 404) {
-        await handleApiError(response, "disabling", "email routing");
+        await handleApiError(response, "disabling", "email routing DNS");
       }
       return this.destroy();
     }
@@ -138,34 +138,34 @@ export const EmailRouting = Resource(
 
       if (currentEnabled !== desiredEnabled) {
         if (desiredEnabled) {
-          // Enable email routing
+          // Enable email routing DNS
           const enablePayload = {
             enabled: true,
             ...(props.skipWizard && { skip_wizard: props.skipWizard }),
           };
           const response = await api.post(
-            `/zones/${zoneId}/email/routing`,
+            `/zones/${zoneId}/email/routing/dns`,
             enablePayload,
           );
           if (!response.ok) {
-            await handleApiError(response, "enabling", "email routing");
+            await handleApiError(response, "enabling", "email routing DNS");
           }
         } else {
-          // Disable email routing
-          const response = await api.delete(`/zones/${zoneId}/email/routing`);
+          // Disable email routing DNS
+          const response = await api.delete(`/zones/${zoneId}/email/routing/dns`);
           if (!response.ok) {
-            await handleApiError(response, "disabling", "email routing");
+            await handleApiError(response, "disabling", "email routing DNS");
           }
         }
       }
 
       // Get current state
-      const getResponse = await api.get(`/zones/${zoneId}/email/routing`);
+      const getResponse = await api.get(`/zones/${zoneId}/email/routing/dns`);
       if (!getResponse.ok) {
         if (getResponse.status === 404) {
-          throw new Error("Email routing is not enabled for this zone");
+          throw new Error("Email routing DNS is not configured for this zone");
         }
-        await handleApiError(getResponse, "getting", "email routing settings");
+        await handleApiError(getResponse, "getting", "email routing DNS settings");
       }
 
       const result =
@@ -190,23 +190,23 @@ export const EmailRouting = Resource(
         ...(props.skipWizard && { skip_wizard: props.skipWizard }),
       };
       const response = await api.post(
-        `/zones/${zoneId}/email/routing`,
+        `/zones/${zoneId}/email/routing/dns`,
         enablePayload,
       );
       if (!response.ok) {
-        await handleApiError(response, "enabling", "email routing");
+        await handleApiError(response, "enabling", "email routing DNS");
       }
     }
 
     // Get the current state
-    const getResponse = await api.get(`/zones/${zoneId}/email/routing`);
+    const getResponse = await api.get(`/zones/${zoneId}/email/routing/dns`);
     if (!getResponse.ok) {
       if (getResponse.status === 404) {
         throw new Error(
-          "Email routing is not enabled. Set enabled: true to enable it.",
+          "Email routing DNS is not configured. Set enabled: true to configure it.",
         );
       }
-      await handleApiError(getResponse, "getting", "email routing settings");
+      await handleApiError(getResponse, "getting", "email routing DNS settings");
     }
 
     const result =
