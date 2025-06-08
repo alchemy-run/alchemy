@@ -234,15 +234,16 @@ export default defineConfig({
 		// Process files in parallel
 		const promises = filesToProcess.map(async ({ entryFullPath, ogImagePath }) => {
 			try {
+				// TEMPORARY: Force regeneration to fix description sub-text issue
 				// Check if image already exists
-				try {
-					await fs.promises.access(ogImagePath);
-					processedCount++;
-					console.log(`Skipped (exists) ${processedCount}/${fileCount}: ${entryFullPath}`);
-					return;
-				} catch {
-					// File doesn't exist, continue with generation
-				}
+				// try {
+				// 	await fs.promises.access(ogImagePath);
+				// 	processedCount++;
+				// 	console.log(`Skipped (exists) ${processedCount}/${fileCount}: ${entryFullPath}`);
+				// 	return;
+				// } catch {
+				// 	// File doesn't exist, continue with generation
+				// }
 
 				// Read the file content
 				const fileContent = await fs.promises.readFile(entryFullPath, "utf-8");
