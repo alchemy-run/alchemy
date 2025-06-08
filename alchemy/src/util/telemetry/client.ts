@@ -145,11 +145,7 @@ export class TelemetryClient implements ITelemetryClient {
     try {
       renameSync(path, tempPath);
     } catch (error) {
-      if (
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "ENOENT"
-      ) {
+      if (error instanceof Error && error.message.includes("ENOENT")) {
         // ignore
       } else {
         throw error;
