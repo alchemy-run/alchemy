@@ -1,12 +1,7 @@
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { loadConfig } from "@smithy/node-config-provider";
 import { AwsClient } from "aws4fetch";
-import * as Effect from "effect/Effect";
-import * as Data from "effect/Data";
-import * as Schedule from "effect/Schedule";
-import * as Duration from "effect/Duration";
-import * as Layer from "effect/Layer";
-import * as Context from "effect/Context";
+import { Effect, Data, Schedule, Duration, Layer, Context } from "effect";
 
 // Re-export types from the original client for compatibility
 export type { OperationStatus, ProgressEvent, CloudControlOptions } from "./client.ts";
@@ -103,9 +98,9 @@ const effectFetch = <T>(
       },
     ] as const;
 
-    const signedRequest = yield* Effect.promise(() => config.client.sign(...args));
+    const signedRequest = yield* Effect.tryPromise(() => config.client.sign(...args));
     
-    const response = yield* Effect.promise(() => fetch(signedRequest)).pipe(
+    const response = yield* Effect.tryPromise(() => fetch(signedRequest)).pipe(
       Effect.catchAll((error) =>
         Effect.fail(new NetworkError({
           message: `Network error during fetch: ${String(error)}`,
@@ -115,7 +110,7 @@ const effectFetch = <T>(
     );
 
     if (!response.ok) {
-      const data = yield* Effect.promise(() => response.json()).pipe(
+      const data = yield* Effect.tryPromise(() => response.json()).pipe(
         Effect.catchAll(() => Effect.succeed({}))
       );
 
@@ -153,7 +148,7 @@ const effectFetch = <T>(
       return yield* Effect.fail(new RequestError({ response, data }));
     }
 
-    return yield* Effect.promise(() => response.json() as Promise<T>);
+    return yield* Effect.tryPromise(() => response.json() as Promise<T>);
   });
 
 /**
@@ -315,7 +310,7 @@ export const poll = (
       const { ProgressEvent } = yield* pollOnce;
       
       const result = yield* checkProgress(ProgressEvent).pipe(
-        Effect.catchTag("continue" as any, () => Effect.succeed("continue" as const))
+        Effect.catchAll(() => Effect.succeed("continue" as const))
       );
 
       if (result !== "continue") {
@@ -363,7 +358,7 @@ export const makeCloudControlConfig = (
   options: CloudControlOptions = {},
 ): Effect.Effect<Layer.Layer<CloudControlConfig, never, never>, Error, never> =>
   Effect.gen(function* () {
-    const credentials = yield* Effect.promise(() => fromNodeProviderChain()());
+    const credentials = yield* Effect.tryPromise(() => fromNodeProviderChain()());
     
     const getRegion = loadConfig({
       environmentVariableSelector: (env) => env.AWS_REGION || env.AWS_DEFAULT_REGION,
@@ -373,7 +368,7 @@ export const makeCloudControlConfig = (
 
     const region =
       options.region ??
-      (yield* Effect.promise(() => getRegion()).pipe(Effect.orElse(() => Effect.succeed(undefined)))) ??
+      (yield* Effect.tryPromise(() => getRegion()).pipe(Effect.orElse(() => Effect.succeed(undefined)))) ??
       process.env.AWS_REGION ??
       process.env.AWS_DEFAULT_REGION;
 

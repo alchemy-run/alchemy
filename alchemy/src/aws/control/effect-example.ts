@@ -4,9 +4,7 @@
  * This demonstrates how to migrate from async/await patterns to Effect
  */
 
-import * as Effect from "effect/Effect";
-import * as Console from "effect/Console";
-import * as Exit from "effect/Exit";
+import { Effect, Console, Exit } from "effect";
 import {
   createResource,
   getResource,

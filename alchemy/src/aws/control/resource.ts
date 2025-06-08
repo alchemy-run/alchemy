@@ -1,5 +1,5 @@
 import { compare } from "fast-json-patch";
-import * as Effect from "effect/Effect";
+import { Effect } from "effect";
 import type { Context } from "../../context.ts";
 import {
   registerDynamicResource,
