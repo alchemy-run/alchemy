@@ -24,12 +24,17 @@ export default defineConfig({
 		["meta", { property: "og:type", content: "website" }],
 		// Base meta tags are now added by transformPageData
 	],
+	metaChunk: true,
 	markdown: {
 		theme: { light: "light-plus", dark: "dark-plus" },
 		config: (md) => md.use(footnotePlugin).use(groupIconMdPlugin),
 	},
 	vite: {
 		plugins: [groupIconVitePlugin() as any],
+		// Disable sourcemap generation to shave ~20-30 % off large builds
+		build: {
+			sourcemap: false,
+		},
 	},
 	// https://vitepress.dev/reference/default-theme-config
 	themeConfig: {
