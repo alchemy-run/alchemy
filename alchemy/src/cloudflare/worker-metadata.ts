@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { Context } from "../context.ts";
+import { logger } from "../util/logger.ts";
 import { slugify } from "../util/slugify.ts";
 import {
   Self,
@@ -544,7 +545,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
     meta.body_part = scriptName;
   }
   if (process.env.DEBUG) {
-    console.log(meta);
+    logger.log(meta);
   }
   return meta;
 }

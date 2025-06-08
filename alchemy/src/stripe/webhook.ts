@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import {
   createStripeClient,
   handleStripeDeleteError,
@@ -251,7 +252,7 @@ export const WebhookEndpoint = Resource(
         // For connect parameter, need to handle it separately if it exists
         if (props.connect !== undefined) {
           // Note: connect is specified at creation time and cannot be updated
-          console.log(
+          logger.log(
             "Note: 'connect' parameter will be applied at creation time only",
           );
         }
@@ -282,7 +283,7 @@ export const WebhookEndpoint = Resource(
         status: webhook.status,
       });
     } catch (error) {
-      console.error("Error creating/updating webhook:", error);
+      logger.error("Error creating/updating webhook:", error);
       throw error;
     }
   },

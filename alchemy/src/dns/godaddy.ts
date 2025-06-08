@@ -1,3 +1,4 @@
+import { logger } from "../util/logger.ts";
 import { safeFetch } from "../util/safe-fetch.ts";
 
 export type UpdateNameserversOptions = {
@@ -23,9 +24,9 @@ export async function updateNameservers(options: UpdateNameserversOptions) {
   });
 
   if (response.ok) {
-    console.log(`✅ Nameservers updated for ${options.domain}`);
+    logger.log(`✅ Nameservers updated for ${options.domain}`);
   } else {
     const error = await response.json();
-    console.error("❌ Failed to update nameservers:", error);
+    logger.error("❌ Failed to update nameservers:", error);
   }
 }

@@ -2,6 +2,7 @@ import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
@@ -374,7 +375,7 @@ const PipelineResource = Resource("cloudflare::Pipeline", async function <
       pipelineData = await updatePipeline(api, pipelineName, props);
     } else {
       // If no ID exists, fall back to creating a new pipeline
-      console.log(
+      logger.log(
         "No existing Pipeline ID found, creating new Cloudflare Pipeline:",
         pipelineName,
       );

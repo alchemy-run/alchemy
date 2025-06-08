@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import {
   createStripeClient,
   handleStripeDeleteError,
@@ -143,7 +144,7 @@ export const ProductFeature = Resource(
         livemode: productFeature.livemode,
       });
     } catch (error) {
-      console.error("Error creating product feature:", error);
+      logger.error("Error creating product feature:", error);
       throw error;
     }
   },

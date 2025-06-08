@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import type { Secret } from "../secret.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
+import { logger } from "../util/logger.ts";
 
 export interface StripeClientOptions {
   apiKey?: Secret | string;
@@ -34,13 +35,13 @@ export function handleStripeDeleteError(
   resourceId?: string,
 ): void {
   if (error?.code === "resource_missing" || error?.status === 404) {
-    console.log(
+    logger.log(
       `${resourceType} ${resourceId || "unknown"} not found during deletion (already deleted)`,
     );
     return;
   }
 
-  console.error(
+  logger.error(
     `Error deleting ${resourceType} ${resourceId || "unknown"}:`,
     error,
   );

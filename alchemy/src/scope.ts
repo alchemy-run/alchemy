@@ -4,6 +4,11 @@ import { destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
 import { ResourceID, type PendingResource } from "./resource.ts";
 import type { StateStore, StateStoreType } from "./state.ts";
+import {
+  createDummyLogger,
+  createLoggerInstance,
+  type LoggerApi,
+} from "./util/cli.tsx";
 
 export type ScopeOptions = {
   appName?: string;
@@ -55,6 +60,7 @@ export class Scope {
   public readonly stateStore: StateStoreType;
   public readonly quiet: boolean;
   public readonly phase: Phase;
+  public readonly logger: LoggerApi;
 
   private isErrored = false;
   private finalized = false;
@@ -82,6 +88,14 @@ export class Scope {
       throw new Error("Phase is required");
     }
     this.phase = phase;
+
+    this.logger = this.quiet
+      ? createDummyLogger()
+      : createLoggerInstance({
+          phase: this.phase,
+          stage: this.stage,
+          appName: this.appName ?? "",
+        });
 
     this.stateStore =
       options.stateStore ??
@@ -119,7 +133,7 @@ export class Scope {
   }
 
   public fail() {
-    console.error("Scope failed", this.chain.join("/"));
+    this.logger.error("Scope failed", this.chain.join("/"));
     this.isErrored = true;
   }
 
@@ -177,7 +191,7 @@ export class Scope {
         strategy: "sequential",
       });
     } else {
-      console.warn("Scope is in error, skipping finalize");
+      this.logger.warn("Scope is in error, skipping finalize");
     }
   }
 

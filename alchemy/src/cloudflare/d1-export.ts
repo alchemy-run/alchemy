@@ -1,3 +1,4 @@
+import { logger } from "../util/logger.ts";
 import type { CloudflareApi } from "./api.ts"; // Ensure CloudflareApi is exported if not already
 
 /**
@@ -153,7 +154,7 @@ export async function exportD1Database(
   // Log messages for visibility
   if (data.messages && data.messages.length > 0) {
     for (const message of data.messages) {
-      console.log(`D1 Export: ${message}`);
+      logger.log(`D1 Export: ${message}`);
     }
   }
 

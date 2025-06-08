@@ -2,6 +2,7 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { Context } from "../../context.ts";
 import { Resource } from "../../resource.ts";
+import { logger } from "../../util/logger.ts";
 
 const execAsync = promisify(exec);
 
@@ -63,6 +64,6 @@ export async function installDependencies(
     .join(" ");
 
   const cmd = `bun add ${args.join(" ")} ${deps}`;
-  console.log(cmd);
+  logger.log(cmd);
   await execAsync(cmd, { cwd });
 }

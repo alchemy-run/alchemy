@@ -5,8 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { version } from "../../package.json";
 import type { Phase } from "../alchemy.ts";
 
-type Color = Parameters<typeof Text>[0]["color"];
-type Task = {
+export type Color = Parameters<typeof Text>[0]["color"];
+export type Task = {
   prefix?: string;
   prefixColor?: Color;
   resource?: string;
@@ -14,17 +14,15 @@ type Task = {
   status?: "pending" | "success" | "failure";
 };
 
-type LogMessage = {
+export type LogMessage = {
   id: number;
   text: string;
 };
 
-type LoggerApi = {
+export type LoggerApi = {
   log: (...args: unknown[]) => void;
-  error: (...args: unknown[]) => void;
   warn: (...args: unknown[]) => void;
-  info: (...args: unknown[]) => void;
-  debug: (...args: unknown[]) => void;
+  error: (...args: unknown[]) => void;
   task: (id: string, data: Task) => void;
   exit: () => void;
 };
@@ -52,7 +50,7 @@ export function LoggerCLI({ alchemyInfo, setLogger }: LoggerCLIProps) {
         ...prev,
         { id: nextId.current++, text: format(...args) },
       ]),
-    [],
+    []
   );
 
   const task = useCallback((id: string, data: Task) => {
@@ -65,10 +63,8 @@ export function LoggerCLI({ alchemyInfo, setLogger }: LoggerCLIProps) {
   useEffect(() => {
     setLogger({
       log: log,
-      error: log,
       warn: log,
-      info: log,
-      debug: log,
+      error: log,
       task: task,
       exit: () => exit(),
     });
@@ -117,7 +113,7 @@ export function LoggerCLI({ alchemyInfo, setLogger }: LoggerCLIProps) {
           }
 
           return (
-            <Text color="gray" key={log.id}>
+            <Text color="gray" key={log.id} wrap="wrap">
               {log.text}
             </Text>
           );
@@ -160,9 +156,11 @@ export function LoggerCLI({ alchemyInfo, setLogger }: LoggerCLIProps) {
   );
 }
 
-const createLoggerInstance = (alchemyInfo: AlchemyInfo) => {
-  let loggerApi: LoggerApi;
-  const app = render(
+let loggerApi: LoggerApi | null = null;
+export const createLoggerInstance = (alchemyInfo: AlchemyInfo) => {
+  if (loggerApi) return loggerApi;
+
+  render(
     <LoggerCLI
       alchemyInfo={alchemyInfo}
       setLogger={(logger) => {
@@ -171,30 +169,25 @@ const createLoggerInstance = (alchemyInfo: AlchemyInfo) => {
     />,
     {
       exitOnCtrlC: true,
-    },
+    }
   );
 
   process.on("SIGINT", () => {
     loggerApi?.exit();
-    app.waitUntilExit();
     process.exit(0);
   });
 
   return loggerApi!;
 };
 
-export const patchConsole = (alchemyInfo: AlchemyInfo) => {
-  const oldConsole = globalThis.console;
-  const newConsole = createLoggerInstance(alchemyInfo);
-
-  globalThis.console = {
-    ...oldConsole,
-    ...newConsole,
+export const createDummyLogger = (): LoggerApi => {
+  return {
+    log: () => {},
+    error: () => {},
+    warn: () => {},
+    task: () => {},
+    exit: () => {},
   };
 };
-
-declare global {
-  interface Console extends LoggerApi {}
-}
 
 export const formatFQN = (fqn: string) => fqn.split("/").slice(2).join(" > ");

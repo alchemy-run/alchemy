@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 /**
@@ -329,7 +330,7 @@ export const Price = Resource(
         lookupKey: price.lookup_key || undefined,
       });
     } catch (error) {
-      console.error("Error creating/updating price:", error);
+      logger.error("Error creating/updating price:", error);
       throw error;
     }
   },

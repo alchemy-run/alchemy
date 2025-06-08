@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import {
   createStripeClient,
   handleStripeDeleteError,
@@ -355,7 +356,7 @@ export const ShippingRate = Resource(
         livemode: shippingRate.livemode,
       });
     } catch (error) {
-      console.error("Error creating/updating shipping rate:", error);
+      logger.error("Error creating/updating shipping rate:", error);
       throw error;
     }
   },

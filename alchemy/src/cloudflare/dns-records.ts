@@ -5,6 +5,7 @@ import type {
   DnsRecordWithMetadata,
 } from "../dns/record.ts";
 import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
 import {
   type CloudflareApi,
   type CloudflareApiOptions,
@@ -146,12 +147,12 @@ export const DnsRecords = Resource(
                 `/zones/${zoneId}/dns_records/${record.id}`,
               );
               if (!response.ok && response.status !== 404) {
-                console.error(
+                logger.error(
                   `Failed to delete DNS record ${record.name}: ${response.statusText}`,
                 );
               }
             } catch (error) {
-              console.error(`Error deleting DNS record ${record.name}:`, error);
+              logger.error(`Error deleting DNS record ${record.name}:`, error);
             }
           }),
         );
@@ -181,12 +182,12 @@ export const DnsRecords = Resource(
               `/zones/${zoneId}/dns_records/${record.id}`,
             );
             if (!response.ok && response.status !== 404) {
-              console.error(
+              logger.error(
                 `Failed to delete DNS record ${record.name}: ${response.statusText}`,
               );
             }
           } catch (error) {
-            console.error(`Error deleting DNS record ${record.name}:`, error);
+            logger.error(`Error deleting DNS record ${record.name}:`, error);
           }
         }),
       );

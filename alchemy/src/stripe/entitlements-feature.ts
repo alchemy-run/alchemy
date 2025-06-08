@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { createStripeClient, isStripeConflictError } from "./client.ts";
 
 /**
@@ -162,7 +163,7 @@ export const EntitlementsFeature = Resource(
         livemode: feature.livemode,
       });
     } catch (error) {
-      console.error("Error creating/updating entitlements feature:", error);
+      logger.error("Error creating/updating entitlements feature:", error);
       throw error;
     }
   },

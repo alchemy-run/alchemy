@@ -1,5 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
 import { createGitHubClient, verifyGitHubAuth } from "./client.ts";
 
 /**
@@ -198,7 +199,7 @@ export const RepositoryEnvironment = Resource(
         } catch (error: any) {
           // Ignore 404 errors (environment already deleted)
           if (error.status === 404) {
-            console.log("Environment doesn't exist, ignoring");
+            logger.log("Environment doesn't exist, ignoring");
           } else {
             throw error;
           }
@@ -447,14 +448,14 @@ export const RepositoryEnvironment = Resource(
         error.status === 403 &&
         error.message?.includes("Must have admin rights")
       ) {
-        console.error(
+        logger.error(
           "\n⚠️ Error creating/updating GitHub environment: You must have admin rights to the repository.",
         );
-        console.error(
+        logger.error(
           "Make sure your GitHub token has the required permissions (repo scope for private repos).\n",
         );
       } else {
-        console.error(
+        logger.error(
           "Error creating/updating GitHub environment:",
           error.message,
         );

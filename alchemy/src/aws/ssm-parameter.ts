@@ -12,6 +12,7 @@ import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { type Secret, isSecret } from "../secret.ts";
 import { ignore } from "../util/ignore.ts";
+import { logger } from "../util/logger.ts";
 
 /**
  * Base properties shared by all SSM Parameter types
@@ -308,7 +309,7 @@ export const SSMParameter = Resource(
         type: (parameter.Parameter.Type as any) ?? parameterType,
       } as SSMParameter);
     } catch (error: any) {
-      console.error(`Error creating/updating parameter ${props.name}:`, error);
+      logger.error(`Error creating/updating parameter ${props.name}:`, error);
       throw error;
     }
   },
