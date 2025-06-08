@@ -15,6 +15,7 @@ import {
 import { Scope } from "./scope.ts";
 import { serialize } from "./serde.ts";
 import type { State } from "./state.ts";
+import { formatFQN } from "./util/cli.tsx";
 
 export interface ApplyOptions {
   quiet?: boolean;
@@ -37,6 +38,12 @@ async function _apply<Out extends Resource>(
 ): Promise<Awaited<Out>> {
   const scope = resource[ResourceScope];
   try {
+    console.task(resource[ResourceFQN], {
+      prefix: "SETUP",
+      prefixColor: "cyanBright",
+      resource: formatFQN(resource[ResourceFQN]),
+      message: "Setting up Resource...",
+    });
     const quiet = props?.quiet ?? scope.quiet;
     await scope.init();
     let state: State | undefined = (await scope.state.get(
@@ -97,7 +104,14 @@ async function _apply<Out extends Resource>(
         alwaysUpdate !== true
       ) {
         if (!quiet) {
-          // console.log(`Skip:    "${resource.FQN}" (no changes)`);
+          console.task(resource[ResourceFQN], {
+            prefix: "SKIPPED",
+            prefixColor: "yellowBright",
+            resource: formatFQN(resource[ResourceFQN]),
+            message: "Skipped Resource (no changes)",
+            status: "success",
+          });
+          console.log(`Skipping ${resource[ResourceFQN]} (no changes)`);
         }
         options?.resolveInnerScope?.(
           new Scope({
@@ -115,6 +129,12 @@ async function _apply<Out extends Resource>(
     state.props = props;
 
     if (!quiet) {
+      console.task(resource[ResourceFQN], {
+        prefix: phase === "create" ? "CREATING" : "UPDATING",
+        prefixColor: "magenta",
+        resource: formatFQN(resource[ResourceFQN]),
+        message: `${phase === "create" ? "Creating" : "Updating"} Resource...`,
+      });
       console.log(
         `${phase === "create" ? "Create" : "Update"}:  "${resource[ResourceFQN]}"`,
       );
@@ -155,6 +175,13 @@ async function _apply<Out extends Resource>(
       },
     );
     if (!quiet) {
+      console.task(resource[ResourceFQN], {
+        prefix: phase === "create" ? "CREATED" : "UPDATED",
+        prefixColor: "greenBright",
+        resource: formatFQN(resource[ResourceFQN]),
+        message: `${phase === "create" ? "Created" : "Updated"} Resource`,
+        status: "success",
+      });
       console.log(
         `${phase === "create" ? "Created" : "Updated"}: "${resource[ResourceFQN]}"`,
       );

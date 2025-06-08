@@ -15,7 +15,7 @@ import { isRuntime } from "./runtime/global.ts";
 import { Scope } from "./scope.ts";
 import { secret } from "./secret.ts";
 import type { StateStoreType } from "./state.ts";
-
+import { patchConsole } from "./util/cli.tsx";
 /**
  * Type alias for semantic highlighting of `alchemy` as a type keyword
  */
@@ -113,6 +113,12 @@ async function _alchemy(
   if (typeof args[0] === "string") {
     const [appName, options] = args as [string, AlchemyOptions?];
     const phase = options?.phase ?? "up";
+    patchConsole({
+      phase,
+      stage: options?.stage ?? process.env.USER ?? "",
+      appName,
+    });
+
     const root = new Scope({
       ...options,
       appName,
