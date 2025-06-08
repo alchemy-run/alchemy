@@ -19,11 +19,6 @@ import options from "./env.js";
 const branchPrefix = process.env.BRANCH_PREFIX;
 const isPreview = !!branchPrefix;
 
-// Helper function to add prefix to resource names
-function getResourceName(baseName: string): string {
-  return branchPrefix ? `${branchPrefix}-${baseName}` : baseName;
-}
-
 const app = await alchemy("alchemy:website", options);
 
 // Only create zone for production deployments, not for previews
@@ -39,12 +34,12 @@ await Exec("build-site", {
   command: "bun run --filter alchemy-web docs:build",
 });
 
-const staticAssets = await Assets(getResourceName("static-assets"), {
+const staticAssets = await Assets("static-assets", {
   path: path.join("alchemy-web", ".vitepress", "dist"),
 });
 
-export const website = await Worker(getResourceName("website"), {
-  name: getResourceName("alchemy-website"),
+export const website = await Worker("website", {
+  name: branchPrefix ? `${branchPrefix}-alchemy-website` : "alchemy-website",
   url: true,
   bindings: {
     ASSETS: staticAssets,

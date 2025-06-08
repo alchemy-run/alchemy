@@ -1,4 +1,4 @@
-name: PR Website Preview
+name: Publish Preview Website
 
 on:
   pull_request:
