@@ -1,4 +1,3 @@
-import { transformerTwoslash } from "@shikijs/vitepress-twoslash";
 import fs from "fs";
 import footnotePlugin from "markdown-it-footnote";
 import path from "path";
@@ -26,8 +25,6 @@ export default defineConfig({
 		// Base meta tags are now added by transformPageData
 	],
 	markdown: {
-		// @ts-ignore
-		codeTransformers: [transformerTwoslash()],
 		theme: { light: "light-plus", dark: "dark-plus" },
 		config: (md) => md.use(footnotePlugin).use(groupIconMdPlugin),
 	},

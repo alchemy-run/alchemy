@@ -33,7 +33,7 @@ jobs:
           bun ./stacks/website.run.ts 2>&1 | tee deploy.log
 
           # Extract the website URL from the logs
-          WEBSITE_URL=$(grep -o 'https://[^.]*\.workers\.dev' deploy.log | head -1)
+          WEBSITE_URL=$(grep -o 'https://[^[:space:]]*\.workers\.dev' deploy.log | head -1)
           echo "website_url=$WEBSITE_URL" >> $GITHUB_OUTPUT
         env:
           BRANCH_PREFIX: pr-${{ github.event.pull_request.number }}
