@@ -2,8 +2,11 @@ import type { Phase } from "../../alchemy.ts";
 
 export namespace Telemetry {
   export interface Context {
+    /** Random UUID generated once per machine and stored in XDG config directory (e.g. `~/Library/Preferences/alchemy` on Mac). Null for CI environments. */
     userId: string | null;
+    /** Root commit hash for the git repository. Anonymous, stable identifier for anyone using git. */
     projectId: string | null;
+    /** UUID generated once per application run. */
     sessionId: string;
 
     system: {
