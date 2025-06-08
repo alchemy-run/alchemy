@@ -263,7 +263,7 @@ export default defineConfig({
 					return;
 				}
 
-				await generateOgImage(pageTitle, pageDescription, ogImagePath);
+				await generateOgImage(pageTitle, undefined, ogImagePath);
 				processedCount++;
 				console.log(`Generated ${processedCount}/${fileCount}: ${entryFullPath}`);
 			} catch (error) {
