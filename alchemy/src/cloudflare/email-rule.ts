@@ -1,11 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { handleApiError } from "./api-error.ts";
-import {
-  type CloudflareApi,
-  type CloudflareApiOptions,
-  createCloudflareApi,
-} from "./api.ts";
+import { type CloudflareApiOptions, createCloudflareApi } from "./api.ts";
 import type { CloudflareResponse } from "./response.ts";
 import type { Zone } from "./zone.ts";
 
@@ -81,7 +77,7 @@ export interface EmailRuleProps extends CloudflareApiOptions {
 
   /**
    * Whether the rule is enabled
-   * 
+   *
    * @default true
    */
   enabled?: boolean;
@@ -89,7 +85,7 @@ export interface EmailRuleProps extends CloudflareApiOptions {
   /**
    * Rule priority - lower numbers have higher priority
    * Rules are evaluated in priority order
-   * 
+   *
    * @default 0
    */
   priority?: number;

@@ -26,7 +26,7 @@ describe("EmailAddress Resource", async () => {
   test("create, update, and delete email address", async (scope) => {
     let emailAddress;
     const testEmail = `test-${BRANCH_PREFIX}@example.com`;
-    
+
     try {
       // Create email address
       emailAddress = await EmailAddress(`${BRANCH_PREFIX}-email-addr`, {
@@ -43,7 +43,7 @@ describe("EmailAddress Resource", async () => {
 
       // Verify email address exists by querying the API directly
       const response = await api.get(
-        `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(testEmail)}`
+        `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(testEmail)}`,
       );
       expect(response.ok).toBe(true);
 
@@ -68,13 +68,13 @@ describe("EmailAddress Resource", async () => {
 
       // Verify old email was deleted
       const oldResponse = await api.get(
-        `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(testEmail)}`
+        `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(testEmail)}`,
       );
       expect(oldResponse.status).toBe(404);
 
       // Verify new email exists
       const newResponse = await api.get(
-        `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(newTestEmail)}`
+        `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(newTestEmail)}`,
       );
       expect(newResponse.ok).toBe(true);
     } finally {
@@ -87,19 +87,22 @@ describe("EmailAddress Resource", async () => {
 
   test("handle existing email address", async (scope) => {
     const testEmail = `existing-${BRANCH_PREFIX}@example.com`;
-    
+
     try {
       // Create email address first via API
       const createResponse = await api.post(
         `/accounts/${api.accountId}/email/routing/addresses`,
-        { email: testEmail }
+        { email: testEmail },
       );
       expect(createResponse.ok).toBe(true);
 
       // Now create through Alchemy - should return existing
-      const emailAddress = await EmailAddress(`${BRANCH_PREFIX}-existing-email`, {
-        email: testEmail,
-      });
+      const emailAddress = await EmailAddress(
+        `${BRANCH_PREFIX}-existing-email`,
+        {
+          email: testEmail,
+        },
+      );
 
       expect(emailAddress.email).toBe(testEmail);
       expect(emailAddress.verified).toBe(false);
@@ -112,7 +115,7 @@ describe("EmailAddress Resource", async () => {
   test("multiple email addresses", async (scope) => {
     const testEmail1 = `multi1-${BRANCH_PREFIX}@example.com`;
     const testEmail2 = `multi2-${BRANCH_PREFIX}@example.com`;
-    
+
     try {
       // Create multiple email addresses
       const emailAddress1 = await EmailAddress(`${BRANCH_PREFIX}-email-1`, {
@@ -128,10 +131,10 @@ describe("EmailAddress Resource", async () => {
 
       // Verify both exist
       const response1 = await api.get(
-        `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(testEmail1)}`
+        `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(testEmail1)}`,
       );
       const response2 = await api.get(
-        `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(testEmail2)}`
+        `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(testEmail2)}`,
       );
 
       expect(response1.ok).toBe(true);
@@ -145,17 +148,20 @@ describe("EmailAddress Resource", async () => {
 
   test("handle special characters in email", async (scope) => {
     const testEmail = `test+special.${BRANCH_PREFIX}@example-domain.com`;
-    
+
     try {
-      const emailAddress = await EmailAddress(`${BRANCH_PREFIX}-special-email`, {
-        email: testEmail,
-      });
+      const emailAddress = await EmailAddress(
+        `${BRANCH_PREFIX}-special-email`,
+        {
+          email: testEmail,
+        },
+      );
 
       expect(emailAddress.email).toBe(testEmail);
 
       // Verify via API with proper encoding
       const response = await api.get(
-        `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(testEmail)}`
+        `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(testEmail)}`,
       );
       expect(response.ok).toBe(true);
     } finally {
@@ -167,7 +173,7 @@ describe("EmailAddress Resource", async () => {
 
 async function assertEmailAddressDoesNotExist(api: any, email: string) {
   const response = await api.get(
-    `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(email)}`
+    `/accounts/${api.accountId}/email/routing/addresses/${encodeURIComponent(email)}`,
   );
   expect(response.status).toBe(404);
 }

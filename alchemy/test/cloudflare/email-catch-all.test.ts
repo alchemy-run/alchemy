@@ -18,7 +18,7 @@ const test = alchemy.test(import.meta, {
 const testDomain = `${BRANCH_PREFIX}-catchall-test.com`;
 
 let zone: Zone;
-let emailRouting: EmailRouting;
+let _emailRouting: EmailRouting;
 let destinationEmail: EmailAddress;
 let scope: Scope | undefined;
 
@@ -28,7 +28,7 @@ test.beforeAll(async (_scope) => {
   });
 
   // Enable email routing for the zone
-  emailRouting = await EmailRouting(`${BRANCH_PREFIX}-catchall-routing`, {
+  _emailRouting = await EmailRouting(`${BRANCH_PREFIX}-catchall-routing`, {
     zone: zone.id,
     enabled: true,
     skipWizard: true,
@@ -53,7 +53,7 @@ describe("EmailCatchAll Resource", async () => {
 
   test("create, update, and delete catch-all rule", async (scope) => {
     let emailCatchAll;
-    
+
     try {
       // Create catch-all rule with forward action
       emailCatchAll = await EmailCatchAll(`${BRANCH_PREFIX}-catch-all`, {
@@ -84,7 +84,7 @@ describe("EmailCatchAll Resource", async () => {
 
       // Verify catch-all rule exists by querying the API directly
       const response = await api.get(
-        `/zones/${zone.id}/email/routing/rules/catch_all`
+        `/zones/${zone.id}/email/routing/rules/catch_all`,
       );
       expect(response.ok).toBe(true);
 
@@ -110,7 +110,7 @@ describe("EmailCatchAll Resource", async () => {
 
       // Verify update via API
       const updatedResponse = await api.get(
-        `/zones/${zone.id}/email/routing/rules/catch_all`
+        `/zones/${zone.id}/email/routing/rules/catch_all`,
       );
       expect(updatedResponse.ok).toBe(true);
 
@@ -138,16 +138,19 @@ describe("EmailCatchAll Resource", async () => {
 
   test("create catch-all with Zone resource reference", async (scope) => {
     try {
-      const emailCatchAll = await EmailCatchAll(`${BRANCH_PREFIX}-catchall-zone-ref`, {
-        zone: zone, // Use Zone resource instead of string ID
-        enabled: true,
-        actions: [
-          {
-            type: "forward",
-            value: [destinationEmail.email],
-          },
-        ],
-      });
+      const emailCatchAll = await EmailCatchAll(
+        `${BRANCH_PREFIX}-catchall-zone-ref`,
+        {
+          zone: zone, // Use Zone resource instead of string ID
+          enabled: true,
+          actions: [
+            {
+              type: "forward",
+              value: [destinationEmail.email],
+            },
+          ],
+        },
+      );
 
       expect(emailCatchAll.zoneId).toBe(zone.id);
     } finally {
@@ -158,17 +161,20 @@ describe("EmailCatchAll Resource", async () => {
 
   test("create catch-all with worker action", async (scope) => {
     try {
-      const emailCatchAll = await EmailCatchAll(`${BRANCH_PREFIX}-worker-catchall`, {
-        zone: zone.id,
-        enabled: true,
-        name: "Worker processing",
-        actions: [
-          {
-            type: "worker",
-            value: ["email-processor"],
-          },
-        ],
-      });
+      const emailCatchAll = await EmailCatchAll(
+        `${BRANCH_PREFIX}-worker-catchall`,
+        {
+          zone: zone.id,
+          enabled: true,
+          name: "Worker processing",
+          actions: [
+            {
+              type: "worker",
+              value: ["email-processor"],
+            },
+          ],
+        },
+      );
 
       expect(emailCatchAll.actions[0].type).toBe("worker");
       expect(emailCatchAll.actions[0].value).toEqual(["email-processor"]);
@@ -180,28 +186,31 @@ describe("EmailCatchAll Resource", async () => {
 
   test("create catch-all with custom matchers", async (scope) => {
     try {
-      const emailCatchAll = await EmailCatchAll(`${BRANCH_PREFIX}-custom-catchall`, {
-        zone: zone.id,
-        enabled: true,
-        name: "Custom catch-all",
-        matchers: [
-          {
-            type: "literal",
-            field: "to",
-            value: "*@" + testDomain,
-          },
-        ],
-        actions: [
-          {
-            type: "forward",
-            value: [destinationEmail.email],
-          },
-        ],
-      });
+      const emailCatchAll = await EmailCatchAll(
+        `${BRANCH_PREFIX}-custom-catchall`,
+        {
+          zone: zone.id,
+          enabled: true,
+          name: "Custom catch-all",
+          matchers: [
+            {
+              type: "literal",
+              field: "to",
+              value: `*@${testDomain}`,
+            },
+          ],
+          actions: [
+            {
+              type: "forward",
+              value: [destinationEmail.email],
+            },
+          ],
+        },
+      );
 
       expect(emailCatchAll.matchers[0].type).toBe("literal");
       expect(emailCatchAll.matchers[0].field).toBe("to");
-      expect(emailCatchAll.matchers[0].value).toBe("*@" + testDomain);
+      expect(emailCatchAll.matchers[0].value).toBe(`*@${testDomain}`);
     } finally {
       await destroy(scope);
       await assertEmailCatchAllIsDisabled(api, zone.id);
@@ -210,18 +219,21 @@ describe("EmailCatchAll Resource", async () => {
 
   test("default values", async (scope) => {
     try {
-      const emailCatchAll = await EmailCatchAll(`${BRANCH_PREFIX}-default-catchall`, {
-        zone: zone.id,
-        // enabled not specified, should default to true
-        // name not specified, should default to "Catch All"
-        // matchers not specified, should default to [{ type: "all" }]
-        actions: [
-          {
-            type: "forward",
-            value: [destinationEmail.email],
-          },
-        ],
-      });
+      const emailCatchAll = await EmailCatchAll(
+        `${BRANCH_PREFIX}-default-catchall`,
+        {
+          zone: zone.id,
+          // enabled not specified, should default to true
+          // name not specified, should default to "Catch All"
+          // matchers not specified, should default to [{ type: "all" }]
+          actions: [
+            {
+              type: "forward",
+              value: [destinationEmail.email],
+            },
+          ],
+        },
+      );
 
       expect(emailCatchAll.enabled).toBe(true);
       expect(emailCatchAll.name).toBe("Catch All");
@@ -234,21 +246,27 @@ describe("EmailCatchAll Resource", async () => {
 
   test("multiple actions", async (scope) => {
     try {
-      const emailCatchAll = await EmailCatchAll(`${BRANCH_PREFIX}-multi-action-catchall`, {
-        zone: zone.id,
-        enabled: true,
-        name: "Multi-action catch-all",
-        actions: [
-          {
-            type: "forward",
-            value: [destinationEmail.email, `backup-${BRANCH_PREFIX}@example.com`],
-          },
-          {
-            type: "worker",
-            value: ["log-all-emails"],
-          },
-        ],
-      });
+      const emailCatchAll = await EmailCatchAll(
+        `${BRANCH_PREFIX}-multi-action-catchall`,
+        {
+          zone: zone.id,
+          enabled: true,
+          name: "Multi-action catch-all",
+          actions: [
+            {
+              type: "forward",
+              value: [
+                destinationEmail.email,
+                `backup-${BRANCH_PREFIX}@example.com`,
+              ],
+            },
+            {
+              type: "worker",
+              value: ["log-all-emails"],
+            },
+          ],
+        },
+      );
 
       expect(emailCatchAll.actions).toHaveLength(2);
       expect(emailCatchAll.actions[0].type).toBe("forward");
@@ -275,21 +293,24 @@ describe("EmailCatchAll Resource", async () => {
       });
 
       // Now disable it
-      const emailCatchAll = await EmailCatchAll(`${BRANCH_PREFIX}-disable-test`, {
-        zone: zone.id,
-        enabled: false,
-        actions: [
-          {
-            type: "drop",
-          },
-        ],
-      });
+      const emailCatchAll = await EmailCatchAll(
+        `${BRANCH_PREFIX}-disable-test`,
+        {
+          zone: zone.id,
+          enabled: false,
+          actions: [
+            {
+              type: "drop",
+            },
+          ],
+        },
+      );
 
       expect(emailCatchAll.enabled).toBe(false);
 
       // Verify via API
       const response = await api.get(
-        `/zones/${zone.id}/email/routing/rules/catch_all`
+        `/zones/${zone.id}/email/routing/rules/catch_all`,
       );
       expect(response.ok).toBe(true);
 
@@ -303,7 +324,9 @@ describe("EmailCatchAll Resource", async () => {
 });
 
 async function assertEmailCatchAllIsDisabled(api: any, zoneId: string) {
-  const response = await api.get(`/zones/${zoneId}/email/routing/rules/catch_all`);
+  const response = await api.get(
+    `/zones/${zoneId}/email/routing/rules/catch_all`,
+  );
   if (response.ok) {
     const data: any = await response.json();
     expect(data.result.enabled).toBe(false);

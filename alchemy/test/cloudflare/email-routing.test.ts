@@ -95,11 +95,14 @@ describe("EmailRouting Resource", async () => {
 
   test("enable email routing with Zone resource reference", async (scope) => {
     try {
-      const emailRouting = await EmailRouting(`${BRANCH_PREFIX}-email-routing-zone-ref`, {
-        zone: zone, // Use Zone resource instead of string ID
-        enabled: true,
-        skipWizard: true,
-      });
+      const emailRouting = await EmailRouting(
+        `${BRANCH_PREFIX}-email-routing-zone-ref`,
+        {
+          zone: zone, // Use Zone resource instead of string ID
+          enabled: true,
+          skipWizard: true,
+        },
+      );
 
       expect(emailRouting).toMatchObject({
         zoneId: zone.id,
@@ -122,11 +125,14 @@ describe("EmailRouting Resource", async () => {
       });
 
       // Try to enable again - should return existing configuration
-      const emailRouting = await EmailRouting(`${BRANCH_PREFIX}-email-routing-existing-2`, {
-        zone: zone.id,
-        enabled: true,
-        skipWizard: true,
-      });
+      const emailRouting = await EmailRouting(
+        `${BRANCH_PREFIX}-email-routing-existing-2`,
+        {
+          zone: zone.id,
+          enabled: true,
+          skipWizard: true,
+        },
+      );
 
       expect(emailRouting.enabled).toBe(true);
       expect(emailRouting.zoneId).toBe(zone.id);
@@ -138,11 +144,14 @@ describe("EmailRouting Resource", async () => {
 
   test("default enabled to true", async (scope) => {
     try {
-      const emailRouting = await EmailRouting(`${BRANCH_PREFIX}-email-routing-default`, {
-        zone: zone.id,
-        // enabled not specified, should default to true
-        skipWizard: true,
-      });
+      const emailRouting = await EmailRouting(
+        `${BRANCH_PREFIX}-email-routing-default`,
+        {
+          zone: zone.id,
+          // enabled not specified, should default to true
+          skipWizard: true,
+        },
+      );
 
       expect(emailRouting.enabled).toBe(true);
     } finally {

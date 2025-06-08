@@ -53,14 +53,15 @@ export class CloudflareApiError extends Error {
  */
 function isOAuthError(
   json: any,
-  action: string,
-  resourceType: string,
+  _action: string,
+  _resourceType: string,
 ): boolean {
   const errors: { message: string; code?: number }[] = json?.errors || [];
-  return errors.some(error => 
-    error.message?.includes("oauth_token authentication scheme") ||
-    error.message?.includes("POST method not allowed") ||
-    error.code === 10000
+  return errors.some(
+    (error) =>
+      error.message?.includes("oauth_token authentication scheme") ||
+      error.message?.includes("POST method not allowed") ||
+      error.code === 10000,
   );
 }
 
@@ -78,17 +79,17 @@ export async function handleApiError(
   } catch {
     json = { errors: [{ message: text }] };
   }
-  
+
   // Check for OAuth-specific errors first
   if (isOAuthError(json, action, resourceType)) {
     throw new Error(
       `${resourceType} ${action} requires API token authentication. ` +
-      `OAuth tokens from 'wrangler login' don't support this operation. ` +
-      `Please set CLOUDFLARE_API_TOKEN environment variable or pass apiToken option. ` +
-      `You can create an API token at https://dash.cloudflare.com/profile/api-tokens`
+        `OAuth tokens from 'wrangler login' don't support this operation. ` +
+        "Please set CLOUDFLARE_API_TOKEN environment variable or pass apiToken option. " +
+        "You can create an API token at https://dash.cloudflare.com/profile/api-tokens",
     );
   }
-  
+
   // Handle general API errors
   const errors: { message: string }[] = json?.errors || [
     { message: response.statusText },

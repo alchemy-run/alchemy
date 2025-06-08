@@ -1,11 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { handleApiError } from "./api-error.ts";
-import {
-  type CloudflareApi,
-  type CloudflareApiOptions,
-  createCloudflareApi,
-} from "./api.ts";
+import { type CloudflareApiOptions, createCloudflareApi } from "./api.ts";
 import type { CloudflareResponse } from "./response.ts";
 import type { Zone } from "./zone.ts";
 
@@ -31,14 +27,14 @@ export interface EmailRoutingProps extends CloudflareApiOptions {
 
   /**
    * Whether email routing should be enabled
-   * 
+   *
    * @default true
    */
   enabled?: boolean;
 
   /**
    * Skip the DNS setup wizard when enabling email routing
-   * 
+   *
    * @default false
    */
   skipWizard?: boolean;
@@ -152,7 +148,9 @@ export const EmailRouting = Resource(
           }
         } else {
           // Disable email routing DNS
-          const response = await api.delete(`/zones/${zoneId}/email/routing/dns`);
+          const response = await api.delete(
+            `/zones/${zoneId}/email/routing/dns`,
+          );
           if (!response.ok) {
             await handleApiError(response, "disabling", "email routing DNS");
           }
@@ -165,7 +163,11 @@ export const EmailRouting = Resource(
         if (getResponse.status === 404) {
           throw new Error("Email routing DNS is not configured for this zone");
         }
-        await handleApiError(getResponse, "getting", "email routing DNS settings");
+        await handleApiError(
+          getResponse,
+          "getting",
+          "email routing DNS settings",
+        );
       }
 
       const result =
@@ -206,7 +208,11 @@ export const EmailRouting = Resource(
           "Email routing DNS is not configured. Set enabled: true to configure it.",
         );
       }
-      await handleApiError(getResponse, "getting", "email routing DNS settings");
+      await handleApiError(
+        getResponse,
+        "getting",
+        "email routing DNS settings",
+      );
     }
 
     const result =

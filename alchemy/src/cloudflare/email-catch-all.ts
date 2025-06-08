@@ -1,10 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import {
-  type CloudflareApi,
-  type CloudflareApiOptions,
-  createCloudflareApi,
-} from "./api.ts";
+import { type CloudflareApiOptions, createCloudflareApi } from "./api.ts";
 import type { CloudflareResponse } from "./response.ts";
 import type { EmailAction, EmailMatcher } from "./email-rule.ts";
 import type { Zone } from "./zone.ts";
@@ -31,14 +27,14 @@ export interface EmailCatchAllProps extends CloudflareApiOptions {
 
   /**
    * Whether the catch-all rule is enabled
-   * 
+   *
    * @default true
    */
   enabled?: boolean;
 
   /**
    * Name for the catch-all rule
-   * 
+   *
    * @default "Catch All"
    */
   name?: string;
@@ -179,7 +175,7 @@ export const EmailCatchAll = Resource(
     }
 
     // Get current catch-all rule state
-    const getResponse = await api.get(
+    const _getResponse = await api.get(
       `/zones/${zoneId}/email/routing/rules/catch_all`,
     );
 

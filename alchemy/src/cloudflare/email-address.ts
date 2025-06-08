@@ -1,11 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { handleApiError } from "./api-error.ts";
-import {
-  type CloudflareApi,
-  type CloudflareApiOptions,
-  createCloudflareApi,
-} from "./api.ts";
+import { type CloudflareApiOptions, createCloudflareApi } from "./api.ts";
 import type { CloudflareResponse } from "./response.ts";
 
 /**
@@ -31,7 +27,7 @@ export interface EmailAddressProps extends CloudflareApiOptions {
   /**
    * Whether to automatically verify the email address if possible
    * Note: Verification typically requires email confirmation by the recipient
-   * 
+   *
    * @default false
    */
   verified?: boolean;
@@ -80,7 +76,7 @@ export interface EmailAddress extends Resource<"cloudflare::EmailAddress"> {
  * const emailAddress = await EmailAddress("admin-email", {
  *   email: "admin@company.com"
  * });
- * 
+ *
  * // Note: The email address will need to be verified before it can receive emails
  * console.log(`Verified: ${emailAddress.verified}`);
  * ```

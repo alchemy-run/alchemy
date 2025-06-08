@@ -18,7 +18,7 @@ const test = alchemy.test(import.meta, {
 const testDomain = `${BRANCH_PREFIX}-rule-test.com`;
 
 let zone: Zone;
-let emailRouting: EmailRouting;
+let _emailRouting: EmailRouting;
 let destinationEmail: EmailAddress;
 let scope: Scope | undefined;
 
@@ -28,7 +28,7 @@ test.beforeAll(async (_scope) => {
   });
 
   // Enable email routing for the zone
-  emailRouting = await EmailRouting(`${BRANCH_PREFIX}-rule-routing`, {
+  _emailRouting = await EmailRouting(`${BRANCH_PREFIX}-rule-routing`, {
     zone: zone.id,
     enabled: true,
     skipWizard: true,
@@ -53,7 +53,7 @@ describe("EmailRule Resource", async () => {
 
   test("create, update, and delete email rule", async (scope) => {
     let emailRule;
-    
+
     try {
       // Create email rule with forward action
       emailRule = await EmailRule(`${BRANCH_PREFIX}-email-rule`, {
@@ -100,7 +100,7 @@ describe("EmailRule Resource", async () => {
 
       // Verify rule exists by querying the API directly
       const response = await api.get(
-        `/zones/${zone.id}/email/routing/rules/${emailRule.ruleId}`
+        `/zones/${zone.id}/email/routing/rules/${emailRule.ruleId}`,
       );
       expect(response.ok).toBe(true);
 
@@ -125,7 +125,10 @@ describe("EmailRule Resource", async () => {
         actions: [
           {
             type: "forward",
-            value: [destinationEmail.email, `backup-${BRANCH_PREFIX}@example.com`],
+            value: [
+              destinationEmail.email,
+              `backup-${BRANCH_PREFIX}@example.com`,
+            ],
           },
         ],
       });
@@ -137,7 +140,7 @@ describe("EmailRule Resource", async () => {
 
       // Verify update via API
       const updatedResponse = await api.get(
-        `/zones/${zone.id}/email/routing/rules/${emailRule.ruleId}`
+        `/zones/${zone.id}/email/routing/rules/${emailRule.ruleId}`,
       );
       expect(updatedResponse.ok).toBe(true);
 
@@ -331,7 +334,13 @@ describe("EmailRule Resource", async () => {
   });
 });
 
-async function assertEmailRuleDoesNotExist(api: any, zoneId: string, ruleId: string) {
-  const response = await api.get(`/zones/${zoneId}/email/routing/rules/${ruleId}`);
+async function assertEmailRuleDoesNotExist(
+  api: any,
+  zoneId: string,
+  ruleId: string,
+) {
+  const response = await api.get(
+    `/zones/${zoneId}/email/routing/rules/${ruleId}`,
+  );
   expect(response.status).toBe(404);
 }
