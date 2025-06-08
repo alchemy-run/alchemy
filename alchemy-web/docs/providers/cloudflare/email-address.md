@@ -7,6 +7,9 @@ description: Learn how to manage destination email addresses for Cloudflare emai
 
 Manage destination email addresses that can receive emails forwarded by Cloudflare email routing rules.
 
+> [!CAUTION]
+> Email Routing resources do not work with `wrangler login` (OAuth tokens) due to permission limitations. You must use an API token instead. See the [Cloudflare Auth guide](../../guides/cloudflare-auth.md) for details on setting up API token authentication.
+
 ## Minimal Example
 
 Add a destination email address:

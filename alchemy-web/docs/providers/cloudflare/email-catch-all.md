@@ -7,6 +7,9 @@ description: Learn how to configure catch-all email routing rules that handle em
 
 Configure a catch-all email routing rule that handles emails not matched by other routing rules. This rule is processed last and typically matches all unhandled emails.
 
+> [!CAUTION]
+> Email Routing resources do not work with `wrangler login` (OAuth tokens) due to permission limitations. You must use an API token instead. See the [Cloudflare Auth guide](../../guides/cloudflare-auth.md) for details on setting up API token authentication.
+
 ## Minimal Example
 
 Forward all unmatched emails to an admin address:
