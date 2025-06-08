@@ -285,3 +285,17 @@ yarn tsx ./alchemy.run --destroy
 
 > [!TIP]
 > If the Resource is mostly headless infrastructure like a database or some other service, you should use Cloudflare Workers as the runtime to "round off" the example package. E.g. for a Neon Provider, we would connect it into a Cloudlare Worker via Hyperdrive and provide a URL (via Worker) to hit that page. Ideally you'd also put ViteJS in front and hit that endpoint.
+
+# Test Workflow
+
+Before committing changes to Git and pushing Pull Requests, make sure to run the following commands to ensure the code is working:
+
+```sh
+bun biome check --fix
+```
+
+If that fails, consider running (but be careful):
+
+```sh
+bun biome check --fix --unsafe
+```

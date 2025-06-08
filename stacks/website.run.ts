@@ -77,7 +77,7 @@ if (!isPreview && zone) {
 if (isPreview) {
   console.log(`Website preview deployed: ${website.url}`);
 } else {
-  console.log(`Website deployed: https://alchemy.run`);
+  console.log("Website deployed: https://alchemy.run");
 }
 
 await app.finalize();
