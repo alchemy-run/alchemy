@@ -38,18 +38,21 @@ export async function destroy<Type extends string>(
       ...(args[1] ?? {}),
     } satisfies DestroyOptions;
 
-    // destroy all active resources
-    await destroyAll(Array.from(scope.resources.values()), options);
+    await scope.run(async () => {
+      // destroy all active resources
+      await destroyAll(Array.from(scope.resources.values()), options);
 
-    // then detect orphans and destroy them
-    const orphans = await scope.state.all();
-    await destroyAll(
-      Object.values(orphans).map((orphan) => ({
-        ...orphan.output,
-        Scope: scope,
-      })),
-      options,
-    );
+      // then detect orphans and destroy them
+      const orphans = await scope.state.all();
+      await destroyAll(
+        Object.values(orphans).map((orphan) => ({
+          ...orphan.output,
+          Scope: scope,
+        })),
+        options,
+      );
+    });
+
     // finally, destroy the scope container
     await scope.deinit();
     return;
