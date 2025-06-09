@@ -130,14 +130,9 @@ describe("Smoke Tests", () => {
       let deployCommand: string;
       let destroyCommand: string;
 
-      if (example.hasEnvFile) {
-        // Use npm scripts if .env file exists in root
+      if (example.hasAlchemyRunFile) {
         deployCommand = "bun run deploy";
         destroyCommand = "bun run destroy";
-      } else if (example.hasAlchemyRunFile) {
-        // Use alchemy.run.ts if it exists
-        deployCommand = "bun ./alchemy.run.ts";
-        destroyCommand = "bun ./alchemy.run.ts --destroy";
       } else {
         // Fallback to index.ts
         deployCommand = "bun ./index.ts";
