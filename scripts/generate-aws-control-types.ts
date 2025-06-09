@@ -219,8 +219,9 @@ function generateResourceType(
   if (resourceType.Attributes) {
     for (const [propName, prop] of Object.entries(resourceType.Attributes)) {
       const propType = convertPropertyToTypeScript(prop);
+      const required = prop.Required ? "" : "?";
       // Since some attribute names contain a dot, make the attribute name a string literal.
-      lines.push(`  "${propName}"?: ${propType};`);
+      lines.push(`  "${propName}"${required}: ${propType};`);
     }
   }
 
