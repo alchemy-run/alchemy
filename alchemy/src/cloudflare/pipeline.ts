@@ -368,27 +368,33 @@ const PipelineResource = Resource("cloudflare::Pipeline", async function <
   let pipelineData: CloudflarePipelineResponse;
 
   if (this.phase === "create") {
+    console.log(props);
     // Check if we should adopt an existing pipeline
-    if (props.adopt) {
-      try {
-        // Try to create pipeline first
-        console.log("Creating new Cloudflare Pipeline:", pipelineName);
-        pipelineData = await createPipeline(api, pipelineName, props);
-      } catch (error) {
-        // If creation fails with 409 (conflict), adopt existing pipeline
-        if (error instanceof CloudflareApiError && error.status === 409) {
+    try {
+      // Try to create pipeline first
+      console.log("Creating new Cloudflare Pipeline:", pipelineName);
+      pipelineData = await createPipeline(api, pipelineName, props);
+    } catch (error) {
+      // If creation fails with 409 (conflict), adopt existing pipeline
+      if (
+        error instanceof CloudflareApiError &&
+        (error.status === 409 ||
+          (error.status === 400 &&
+            error.message.includes("Pipeline with this name already exists")))
+      ) {
+        if (props.adopt) {
           console.log(
             "Pipeline already exists, adopting existing Cloudflare Pipeline:",
             pipelineName,
           );
           pipelineData = await getPipeline(api, pipelineName);
         } else {
-          // For any other error, rethrow
           throw error;
         }
+      } else {
+        // For any other error, rethrow
+        throw error;
       }
-    } else {
-      pipelineData = await createPipeline(api, pipelineName, props);
     }
   } else {
     // Update operation
