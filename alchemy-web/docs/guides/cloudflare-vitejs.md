@@ -54,7 +54,6 @@ yarn add -D alchemy cloudflare @cloudflare/workers-types
 
 :::
 
-
 ## Remove Unnecessary files
 
 Cloudflare's Vite.js template uses `wrangler.jsonc` and `wrangler types` to generate types which are not used by Alchemy.
@@ -91,7 +90,6 @@ console.log({
 });
 
 await app.finalize();
-
 ```
 
 ## Configure Alchemy Types
@@ -106,7 +104,7 @@ import type { website } from "../alchemy.run.ts";
 export type CloudflareEnv = typeof website.Env;
 
 declare global {
-  type Env = CloudflareEnv
+  type Env = CloudflareEnv;
 }
 
 declare module "cloudflare:workers" {
@@ -123,11 +121,10 @@ Then, replace `tsconfig.worker.json` with the following content:
   "extends": "./tsconfig.node.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.worker.tsbuildinfo",
-    "types": ["@cloudflare/workers-types"],
+    "types": ["@cloudflare/workers-types"]
   },
   "include": ["./worker"]
 }
-
 ```
 
 ## Login to Cloudflare
@@ -151,13 +148,13 @@ pnpm wrangler login
 ```sh [yarn]
 yarn wrangler login
 ```
+
 :::
 
 > [!TIP]
 > Alchemy will by default try and use your wrangler OAuth token and Refresh Token to connect but see the [Cloudflare Auth](../guides/cloudflare-auth.md) for other methods.
 
 ## Deploy Static Site
-
 
 Run `alchemy.run.ts` script to deploy:
 
@@ -182,6 +179,7 @@ yarn tsx ./alchemy.run
 :::
 
 It should log out the URL of your deployed site:
+
 ```sh
 {
   url: "https://your-site.your-sub-domain.workers.dev",
@@ -227,8 +225,9 @@ VITE v6.2.2  ready in 1114 ms
 
 > [!TIP]
 > Cloudflare's Vite.js plugin needs a `wrangler.jsonc` which Alchemy's `Vite` resource generates automatically.
-> 
+>
 > You may wish to add it to `.gitignore`:
+>
 > ```
 > # .gitignore
 > wrangler.jsonc
@@ -257,4 +256,3 @@ yarn tsx ./alchemy.run --destroy
 ```
 
 :::
-

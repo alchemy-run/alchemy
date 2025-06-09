@@ -10,6 +10,7 @@ import {
   ResourceSeq,
 } from "./resource.ts";
 import { Scope } from "./scope.ts";
+import { logger } from "./util/logger.ts";
 
 export class DestroyedSignal extends Error {}
 
@@ -37,18 +38,21 @@ export async function destroy<Type extends string>(
       ...(args[1] ?? {}),
     } satisfies DestroyOptions;
 
-    // destroy all active resources
-    await destroyAll(Array.from(scope.resources.values()), options);
+    await scope.run(async () => {
+      // destroy all active resources
+      await destroyAll(Array.from(scope.resources.values()), options);
 
-    // then detect orphans and destroy them
-    const orphans = await scope.state.all();
-    await destroyAll(
-      Object.values(orphans).map((orphan) => ({
-        ...orphan.output,
-        Scope: scope,
-      })),
-      options,
-    );
+      // then detect orphans and destroy them
+      const orphans = await scope.state.all();
+      await destroyAll(
+        Object.values(orphans).map((orphan) => ({
+          ...orphan.output,
+          Scope: scope,
+        })),
+        options,
+      );
+    });
+
     // finally, destroy the scope container
     await scope.deinit();
     return;
@@ -65,7 +69,7 @@ export async function destroy<Type extends string>(
       parent: instance[ResourceScope],
       scopeName: instance[ResourceID],
     });
-    console.log("Destroying scope", scope.chain.join("/"));
+    logger.log("Destroying scope", scope.chain.join("/"));
     return await destroy(scope, options);
   }
 
@@ -78,13 +82,13 @@ export async function destroy<Type extends string>(
 
   const scope = instance[ResourceScope];
   if (!scope) {
-    console.warn(`Resource "${instance[ResourceFQN]}" has no scope`);
+    logger.warn(`Resource "${instance[ResourceFQN]}" has no scope`);
   }
   const quiet = options?.quiet ?? scope.quiet;
 
   try {
     if (!quiet) {
-      console.log(`Delete:  "${instance[ResourceFQN]}"`);
+      logger.log(`Delete:  "${instance[ResourceFQN]}"`);
     }
 
     const state = await scope.state.get(instance[ResourceID]);
@@ -140,10 +144,10 @@ export async function destroy<Type extends string>(
     await scope.delete(instance[ResourceID]);
 
     if (!quiet) {
-      console.log(`Deleted: "${instance[ResourceFQN]}"`);
+      logger.log(`Deleted: "${instance[ResourceFQN]}"`);
     }
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     throw error;
   }
 }

@@ -15,6 +15,8 @@ import { isRuntime } from "./runtime/global.ts";
 import { Scope } from "./scope.ts";
 import { secret } from "./secret.ts";
 import type { StateStoreType } from "./state.ts";
+import { logger } from "./util/logger.ts";
+import { TelemetryClient } from "./util/telemetry/client.ts";
 
 /**
  * Type alias for semantic highlighting of `alchemy` as a type keyword
@@ -112,13 +114,21 @@ async function _alchemy(
 ): Promise<Scope | string | never> {
   if (typeof args[0] === "string") {
     const [appName, options] = args as [string, AlchemyOptions?];
-    const phase = options?.phase ?? "up";
+    const phase = isRuntime ? "read" : (options?.phase ?? "up");
+    const telemetryClient =
+      options?.parent?.telemetryClient ??
+      TelemetryClient.create({
+        phase,
+        enabled: options?.telemetry ?? true,
+        quiet: options?.quiet ?? false,
+      });
     const root = new Scope({
       ...options,
       appName,
       stage: options?.stage ?? process.env.ALCHEMY_STAGE,
-      phase: isRuntime ? "read" : phase,
+      phase,
       password: options?.password ?? process.env.ALCHEMY_PASSWORD,
+      telemetryClient,
     });
     try {
       Scope.storage.enterWith(root);
@@ -207,7 +217,7 @@ async function _alchemy(
         ).join("\n");
       }
       // TODO: support other types
-      console.log(value);
+      logger.log(value);
       throw new Error(`Unsupported value type: ${value}`);
     }),
   );
@@ -291,6 +301,13 @@ export interface AlchemyOptions {
    * Required if using alchemy.secret() in this scope.
    */
   password?: string;
+  /**
+   * Whether to send anonymous telemetry data to the Alchemy team.
+   * You can also opt out by setting the `DO_NOT_TRACK` or `ALCHEMY_TELEMETRY_DISABLED` environment variables to a truthy value.
+   *
+   * @default true
+   */
+  telemetry?: boolean;
 }
 
 export interface ScopeOptions extends AlchemyOptions {
@@ -337,9 +354,17 @@ async function run<T>(
           RunOptions,
           (this: Scope, scope: Scope) => Promise<T>,
         ]);
+  const telemetryClient =
+    options?.parent?.telemetryClient ??
+    TelemetryClient.create({
+      phase: isRuntime ? "read" : (options?.phase ?? "up"),
+      enabled: options?.telemetry ?? true,
+      quiet: options?.quiet ?? false,
+    });
   const _scope = new Scope({
     ...options,
     scopeName: id,
+    telemetryClient,
   });
   try {
     if (options?.isResource !== true && _scope.parent) {

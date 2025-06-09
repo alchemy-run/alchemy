@@ -1,6 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { isSecret, type Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { createVercelApi, type VercelApi } from "./api.ts";
 
 type TargetEnvironment = "production" | "preview" | "development";
@@ -380,7 +381,7 @@ export const Project = Resource(
             await api.delete(`/projects/${this.output.id}`);
           }
         } catch (error) {
-          console.error("Error deleting project:", error);
+          logger.error("Error deleting project:", error);
         }
 
         return this.destroy();

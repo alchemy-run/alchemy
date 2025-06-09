@@ -1,4 +1,3 @@
-import { transformerTwoslash } from "@shikijs/vitepress-twoslash";
 import fs from "fs";
 import footnotePlugin from "markdown-it-footnote";
 import path from "path";
@@ -25,14 +24,17 @@ export default defineConfig({
 		["meta", { property: "og:type", content: "website" }],
 		// Base meta tags are now added by transformPageData
 	],
+	metaChunk: true,
 	markdown: {
-		// @ts-ignore
-		codeTransformers: [transformerTwoslash()],
 		theme: { light: "light-plus", dark: "dark-plus" },
 		config: (md) => md.use(footnotePlugin).use(groupIconMdPlugin),
 	},
 	vite: {
 		plugins: [groupIconVitePlugin() as any],
+		// Disable sourcemap generation to shave ~20-30 % off large builds
+		build: {
+			sourcemap: false,
+		},
 	},
 	// https://vitepress.dev/reference/default-theme-config
 	themeConfig: {
@@ -51,6 +53,7 @@ export default defineConfig({
 			await generateSidebar("Guides"),
 			await generateSidebar("Concepts"),
 			await generateProvidersSidebar(),
+			await generateSidebar("Telemetry"),
 		],
 		search: { provider: "local" },
 	},

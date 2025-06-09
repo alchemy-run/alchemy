@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import {
   createStripeClient,
   handleStripeDeleteError,
@@ -313,7 +314,7 @@ export const Card = Resource(
         tokenizationMethod: card.tokenization_method || undefined,
       });
     } catch (error) {
-      console.error("Error creating/updating card:", error);
+      logger.error("Error creating/updating card:", error);
       throw error;
     }
   },

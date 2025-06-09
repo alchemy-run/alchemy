@@ -1,6 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
 import { bind, type Bound } from "../runtime/bind.ts";
+import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
@@ -240,10 +241,10 @@ const D1DatabaseResource = Resource(
     const databaseName = props.name ?? id;
 
     if (this.phase === "delete") {
-      console.log("Deleting D1 database:", databaseName);
+      logger.log("Deleting D1 database:", databaseName);
       if (props.delete !== false) {
         // Delete D1 database
-        console.log("Deleting D1 database:", databaseName);
+        logger.log("Deleting D1 database:", databaseName);
         await deleteDatabase(api, this.output?.id);
       }
 
@@ -253,7 +254,7 @@ const D1DatabaseResource = Resource(
     let dbData: CloudflareD1Response;
 
     if (this.phase === "create") {
-      console.log("Creating D1 database:", databaseName);
+      logger.log("Creating D1 database:", databaseName);
       try {
         dbData = await createDatabase(api, databaseName, props);
 
@@ -273,7 +274,7 @@ const D1DatabaseResource = Resource(
           error instanceof CloudflareApiError &&
           error.message.includes("already exists")
         ) {
-          console.log(`Database ${databaseName} already exists, adopting it`);
+          logger.log(`Database ${databaseName} already exists, adopting it`);
           // Find the existing database by name
           const databases = await listDatabases(api, databaseName);
           const existingDb = databases.find((db) => db.name === databaseName);
@@ -289,7 +290,7 @@ const D1DatabaseResource = Resource(
 
           // Update the database with the provided properties
           if (props.readReplication) {
-            console.log(
+            logger.log(
               `Updating adopted database ${databaseName} with new properties`,
             );
             dbData = await updateDatabase(api, existingDb.id, props);
@@ -311,12 +312,12 @@ const D1DatabaseResource = Resource(
             `Cannot update primaryLocationHint from '${this.output.primaryLocationHint}' to '${props.primaryLocationHint}' after database creation.`,
           );
         }
-        console.log("Updating D1 database:", databaseName);
+        logger.log("Updating D1 database:", databaseName);
         // Update the database with new properties
         dbData = await updateDatabase(api, this.output.id, props);
       } else {
         // If no ID exists, fall back to creating a new database
-        console.log(
+        logger.log(
           "No existing database ID found, creating new D1 database:",
           databaseName,
         );
@@ -342,7 +343,7 @@ const D1DatabaseResource = Resource(
           api,
         });
       } catch (migrationErr) {
-        console.error("Failed to apply D1 migrations:", migrationErr);
+        logger.error("Failed to apply D1 migrations:", migrationErr);
         throw migrationErr;
       }
     }
@@ -443,7 +444,7 @@ export async function deleteDatabase(
   databaseId?: string,
 ): Promise<void> {
   if (!databaseId) {
-    console.log("No database ID provided, skipping delete");
+    logger.log("No database ID provided, skipping delete");
     return;
   }
 
@@ -580,7 +581,7 @@ async function cloneDb(
   }
 
   // Perform the cloning
-  console.log(`Cloning data from database ${sourceId} to ${targetDbId}`);
+  logger.log(`Cloning data from database ${sourceId} to ${targetDbId}`);
   await cloneD1Database(api, {
     sourceDatabaseId: sourceId,
     targetDatabaseId: targetDbId,

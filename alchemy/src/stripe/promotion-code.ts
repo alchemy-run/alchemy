@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import {
   createStripeClient,
   handleStripeDeleteError,
@@ -261,7 +262,7 @@ export const PromotionCode = Resource(
         timesRedeemed: promotionCode.times_redeemed,
       });
     } catch (error) {
-      console.error("Error creating/updating promotion code:", error);
+      logger.error("Error creating/updating promotion code:", error);
       throw error;
     }
   },

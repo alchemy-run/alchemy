@@ -1,6 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { SentryApi } from "./api.ts";
 
 /**
@@ -138,11 +139,11 @@ export const Team = Resource(
             `/teams/${props.organization}/${this.output.slug || this.output.id}/`,
           );
           if (!response.ok && response.status !== 404) {
-            console.error("Error deleting team:", response.statusText);
+            logger.error("Error deleting team:", response.statusText);
           }
         }
       } catch (error) {
-        console.error("Error deleting team:", error);
+        logger.error("Error deleting team:", error);
       }
       return this.destroy();
     } else {
@@ -167,7 +168,7 @@ export const Team = Resource(
               error instanceof Error &&
               error.message.includes("already exists")
             ) {
-              console.log(
+              logger.log(
                 `Team '${props.slug || props.name}' already exists, adopting it`,
               );
               // Find the existing team by slug
@@ -209,7 +210,7 @@ export const Team = Resource(
           avatar: data.avatar,
         });
       } catch (error) {
-        console.error("Error creating/updating team:", error);
+        logger.error("Error creating/updating team:", error);
         throw error;
       }
     }

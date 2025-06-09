@@ -1,5 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
 import type {
@@ -165,9 +166,9 @@ export interface ZoneProps extends CloudflareApiOptions {
 }
 
 /**
- * Output returned after Zone creation/update
+ * Zone data structure (used for lookup functions)
  */
-export interface Zone extends Resource<"cloudflare::Zone"> {
+export interface ZoneData {
   /**
    * The ID of the zone
    */
@@ -247,6 +248,11 @@ export interface Zone extends Resource<"cloudflare::Zone"> {
 }
 
 /**
+ * Output returned after Zone creation/update
+ */
+export interface Zone extends Resource<"cloudflare::Zone">, ZoneData {}
+
+/**
  * A Cloudflare Zone represents a domain and its configuration settings on Cloudflare.
  * Zones allow you to manage DNS, SSL/TLS, caching, security and other settings for a domain.
  *
@@ -324,7 +330,7 @@ export const Zone = Resource(
           );
         }
       } else {
-        console.warn(`Zone '${props.name}' not found, skipping delete`);
+        logger.warn(`Zone '${props.name}' not found, skipping delete`);
       }
       return this.destroy();
     }
@@ -382,7 +388,7 @@ export const Zone = Resource(
     if (!response.ok) {
       if (response.status === 400 && body.includes("already exists")) {
         // Zone already exists, fetch it instead
-        console.warn(
+        logger.warn(
           `Zone '${props.name}' already exists during Zone create, adopting it...`,
         );
         const getResponse = await api.get(`/zones?name=${props.name}`);
@@ -483,7 +489,7 @@ async function updateZoneSettings(
         if (!response.ok) {
           const data = await response.text();
           if (response.status === 400 && data.includes("already enabled")) {
-            console.warn(`Warning: Setting '${key}' already enabled`);
+            logger.warn(`Warning: Setting '${key}' already enabled`);
             return;
           }
           throw new Error(
@@ -536,6 +542,74 @@ async function getZoneSettings(
     brotli: getSetting("brotli", "on"),
     hotlinkProtection: getSetting("hotlink_protection", "off"),
     minTlsVersion: getSetting("min_tls_version", "1.0"),
+  };
+}
+
+/**
+ * Look up a Cloudflare zone by domain name
+ *
+ * @param domainName The domain name to look up (e.g., "example.com")
+ * @param options Optional API configuration
+ * @returns Promise resolving to zone details or null if not found
+ *
+ * @example
+ * // Look up a zone by domain name
+ * const zone = await getZoneByDomain("example.com");
+ * if (zone) {
+ *   console.log(`Zone ID: ${zone.id}`);
+ *   console.log(`Nameservers: ${zone.nameservers.join(", ")}`);
+ * }
+ *
+ * @example
+ * // Look up a zone with custom API options
+ * const zone = await getZoneByDomain("example.com", {
+ *   apiToken: myApiToken,
+ *   accountId: "my-account-id"
+ * });
+ */
+export async function getZoneByDomain(
+  domainName: string,
+  options: Partial<CloudflareApiOptions> = {},
+): Promise<ZoneData | null> {
+  const api = await createCloudflareApi(options);
+
+  const response = await api.get(
+    `/zones?name=${encodeURIComponent(domainName)}`,
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Error fetching zone for '${domainName}': ${response.statusText}`,
+    );
+  }
+
+  const zones = ((await response.json()) as { result: CloudflareZone[] })
+    .result;
+
+  if (zones.length === 0) {
+    return null;
+  }
+
+  const zoneData = zones[0];
+
+  // Get zone settings
+  const settings = await getZoneSettings(api, zoneData.id);
+
+  return {
+    id: zoneData.id,
+    name: zoneData.name,
+    type: zoneData.type,
+    status: zoneData.status,
+    paused: zoneData.paused,
+    accountId: zoneData.account.id,
+    nameservers: zoneData.name_servers,
+    originalNameservers: zoneData.original_name_servers,
+    createdAt: new Date(zoneData.created_on).getTime(),
+    modifiedAt: new Date(zoneData.modified_on).getTime(),
+    activatedAt: zoneData.activated_on
+      ? new Date(zoneData.activated_on).getTime()
+      : null,
+    settings,
   };
 }
 

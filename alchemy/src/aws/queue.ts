@@ -9,6 +9,7 @@ import {
 } from "@aws-sdk/client-sqs";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
 import { retry } from "./retry.ts";
 
 /**
@@ -193,7 +194,7 @@ export const Queue = Resource(
           }
         }
       } catch (error: any) {
-        console.log(error.message);
+        logger.log(error.message);
         if (!isQueueDoesNotExist(error)) {
           throw error;
         }
@@ -274,7 +275,7 @@ export const Queue = Resource(
       });
     } catch (error: any) {
       if (isQueueDeletedRecently(error)) {
-        console.log(
+        logger.log(
           `Queue "${queueName}" was recently deleted and can't be re-created. Waiting and retrying...`,
         );
         // Queue was recently deleted, wait and retry

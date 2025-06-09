@@ -8,6 +8,7 @@ import type {
 } from "@swc/core";
 import type { Plugin } from "esbuild";
 import fs from "node:fs/promises";
+import { logger } from "../util/logger.ts";
 
 /**
  * Bundles a single Worker function entrypoint by:
@@ -146,7 +147,7 @@ export const bootstrapPlugin: Plugin = {
 
           return transformed(code);
         } catch (error: unknown) {
-          console.error(`Error transforming ${args.path}:`, error);
+          logger.error(`Error transforming ${args.path}:`, error);
           return {
             errors: [
               {

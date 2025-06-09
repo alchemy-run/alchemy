@@ -1,5 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
@@ -157,7 +158,7 @@ export const QueueConsumer = Resource(
     }
 
     if (this.phase === "delete") {
-      console.log(`Deleting Queue Consumer for queue ${queueId}`);
+      logger.log(`Deleting Queue Consumer for queue ${queueId}`);
       if (props.delete !== false && this.output?.id) {
         // Delete the consumer
         await deleteQueueConsumer(api, queueId, this.output.id);

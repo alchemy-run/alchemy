@@ -100,6 +100,7 @@ const secrets = {
   ALCHEMY_PASSWORD: await alchemy.secret.env.ALCHEMY_PASSWORD,
   NPM_TOKEN: await alchemy.secret.env.NPM_TOKEN,
   ALCHEMY_STATE_TOKEN: await alchemy.secret.env.ALCHEMY_STATE_TOKEN,
+  ANTHROPIC_API_KEY: await alchemy.secret.env.ANTHROPIC_API_KEY,
 };
 
 await Promise.all([
