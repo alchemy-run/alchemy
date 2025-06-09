@@ -1,12 +1,12 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../src/alchemy.ts";
-import { serialize, deserialize } from "../src/serde.ts";
-import { encrypt, decryptWithKey } from "../src/encrypt.ts";
 import { destroy } from "../src/destroy.ts";
+import { decryptWithKey, encrypt } from "../src/encrypt.ts";
+import { deserialize, serialize } from "../src/serde.ts";
 import { BRANCH_PREFIX } from "./util.ts";
 // must import this or else alchemy.test won't exist
-import "../src/test/vitest.ts";
 import { SALT_KEY } from "../src/secret.ts";
+import "../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -55,7 +55,7 @@ describe.sequential("Secret serialization", () => {
           if (scope?.root?.state) {
             await scope.root.state.delete(SALT_KEY);
           }
-        } catch (_e) {
+        } catch {
           // Ignore cleanup errors
         }
         await destroy(scope);
@@ -102,7 +102,7 @@ describe.sequential("Secret serialization", () => {
           if (scope?.root?.state) {
             await scope.root.state.delete(SALT_KEY);
           }
-        } catch (_e) {
+        } catch {
           // Ignore cleanup errors
         }
         await destroy(scope);
@@ -156,7 +156,7 @@ describe.sequential("Secret serialization", () => {
           if (scope?.root?.state) {
             await scope.root.state.delete(SALT_KEY);
           }
-        } catch (_e) {
+        } catch {
           // Ignore cleanup errors
         }
         await destroy(scope);
@@ -205,7 +205,7 @@ describe.sequential("Secret serialization", () => {
           if (scope?.root?.state) {
             await scope.root.state.delete(SALT_KEY);
           }
-        } catch (_e) {
+        } catch {
           // Ignore cleanup errors
         }
         await destroy(scope);
@@ -249,7 +249,7 @@ describe.sequential("Secret serialization", () => {
           if (scope?.root?.state) {
             await scope.root.state.delete(SALT_KEY);
           }
-        } catch (_e) {
+        } catch {
           // Ignore cleanup errors
         }
         await destroy(scope);
@@ -318,7 +318,7 @@ describe.sequential("Secret serialization", () => {
           if (scope?.root?.state) {
             await scope.root.state.delete(SALT_KEY);
           }
-        } catch (_e) {
+        } catch {
           // Ignore cleanup errors
         }
         await destroy(scope);
