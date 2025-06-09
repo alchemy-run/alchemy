@@ -176,7 +176,7 @@ export class CloudflareApi {
           headers,
         });
         if (response.status.toString().startsWith("5")) {
-          throw new InternalError("5xx error");
+          throw new InternalError(response.statusText);
         }
         if (response.status === 403 && !forbidden) {
           // we occasionally get 403s from Cloudflare tha tare actually transient
@@ -185,7 +185,10 @@ export class CloudflareApi {
           throw new ForbiddenError();
         }
         if (response.status === 429) {
-          throw new TooManyRequestsError();
+          const data: any = await response.json();
+          throw new TooManyRequestsError(
+            data.errors[0].message ?? response.statusText,
+          );
         }
         return response;
       },
@@ -267,8 +270,10 @@ export class CloudflareApi {
 class InternalError extends Error {}
 
 class TooManyRequestsError extends Error {
-  constructor() {
-    super(`Cloudflare Rate Limit Exceeded at ${new Date().toISOString()}`);
+  constructor(message: string) {
+    super(
+      `Cloudflare Rate Limit Exceeded at ${new Date().toISOString()}: ${message}`,
+    );
   }
 }
 

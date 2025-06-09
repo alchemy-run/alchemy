@@ -1,5 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
 import type {
@@ -329,7 +330,7 @@ export const Zone = Resource(
           );
         }
       } else {
-        console.warn(`Zone '${props.name}' not found, skipping delete`);
+        logger.warn(`Zone '${props.name}' not found, skipping delete`);
       }
       return this.destroy();
     }
@@ -387,7 +388,7 @@ export const Zone = Resource(
     if (!response.ok) {
       if (response.status === 400 && body.includes("already exists")) {
         // Zone already exists, fetch it instead
-        console.warn(
+        logger.warn(
           `Zone '${props.name}' already exists during Zone create, adopting it...`,
         );
         const getResponse = await api.get(`/zones?name=${props.name}`);
@@ -488,7 +489,7 @@ async function updateZoneSettings(
         if (!response.ok) {
           const data = await response.text();
           if (response.status === 400 && data.includes("already enabled")) {
-            console.warn(`Warning: Setting '${key}' already enabled`);
+            logger.warn(`Warning: Setting '${key}' already enabled`);
             return;
           }
           throw new Error(

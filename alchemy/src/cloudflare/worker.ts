@@ -10,6 +10,7 @@ import { Secret, secret } from "../secret.ts";
 import { serializeScope } from "../serde.ts";
 import type { type } from "../type.ts";
 import { getContentType } from "../util/content-type.ts";
+import { logger } from "../util/logger.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { slugify } from "../util/slugify.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
@@ -719,7 +720,7 @@ export function Worker<const B extends Bindings>(
           const incoming = request.url.startsWith("/")
             ? new URL(`${worker.url}${request.url}`)
             : new URL(request.url);
-          console.log(incoming);
+          logger.log(incoming);
           const proxyURL = new URL(
             `${incoming.pathname}${incoming.search}${incoming.hash}`,
             origin,
@@ -1047,7 +1048,7 @@ export async function deleteWorker<B extends Bindings>(
         },
       );
     } catch (error) {
-      console.warn("Failed to disable worker URL during deletion:", error);
+      logger.warn("Failed to disable worker URL during deletion:", error);
     }
   }
 

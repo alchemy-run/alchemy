@@ -1,6 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
+import { logger } from "../util/logger.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { handleApiError } from "./api-error.ts";
 import {
@@ -223,7 +224,7 @@ const _KVNamespace = Resource(
           error instanceof Error &&
           error.message.includes("already exists")
         ) {
-          console.log(`Namespace '${title}' already exists, adopting it`);
+          logger.log(`Namespace '${title}' already exists, adopting it`);
           // Find the existing namespace by title
           const existingNamespace = await findKVNamespaceByTitle(api, title);
 

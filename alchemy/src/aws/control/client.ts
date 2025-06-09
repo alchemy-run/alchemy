@@ -1,7 +1,7 @@
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { loadConfig } from "@smithy/node-config-provider";
 import { AwsClient } from "aws4fetch";
-
+import { logger } from "../../util/logger.ts";
 import { safeFetch } from "../../util/safe-fetch.ts";
 import {
   AlreadyExistsError,
@@ -306,7 +306,7 @@ export class CloudControlClient {
 
         if (!logged) {
           logged = true;
-          console.log(
+          logger.log(
             `Polling for ${response.ProgressEvent.Identifier} (${response.ProgressEvent.TypeName}) to stabilize`,
           );
         }
@@ -425,7 +425,7 @@ export class CloudControlClient {
             error instanceof ThrottlingException
               ? "Throttling"
               : "Network error";
-          console.log(
+          logger.log(
             `${errorType} detected, retrying in ${Math.round(retryDelay)}ms (attempt ${attempt + 1}/${maxRetries + 1})`,
           );
           await new Promise((resolve) => setTimeout(resolve, retryDelay));
@@ -435,7 +435,7 @@ export class CloudControlClient {
 
         // Max retries exceeded
         if (error instanceof ThrottlingException) {
-          console.error(
+          logger.error(
             `Max retries (${maxRetries}) exceeded for throttling exception`,
           );
           throw error;

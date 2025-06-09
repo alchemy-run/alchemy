@@ -8,6 +8,7 @@ import { StaticJsonFile } from "../../fs/static-json-file.ts";
 import { StaticTextFile } from "../../fs/static-text-file.ts";
 import { StaticTypeScriptFile } from "../../fs/static-typescript-file.ts";
 import { Resource } from "../../resource.ts";
+import { logger } from "../../util/logger.ts";
 import { InstallDependencies, fixedDependencies } from "./dependencies.ts";
 
 const _execAsync = promisify(exec);
@@ -121,7 +122,7 @@ export const VitepressProject = Resource(
           }
         }
       } catch (error) {
-        console.error(`Error deleting VitePress project ${id}:`, error);
+        logger.error(`Error deleting VitePress project ${id}:`, error);
       }
       return this.destroy();
     }

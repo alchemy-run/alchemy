@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
 
 /**
  * Properties for creating or updating an esbuild bundle
@@ -199,7 +200,7 @@ export async function bundle(props: BundleProps) {
     metafile: true,
   };
   if (process.env.DEBUG) {
-    console.log(options);
+    logger.log(options);
   }
   const esbuild = await import("esbuild");
   return await esbuild.build(options);

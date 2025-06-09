@@ -1,5 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
@@ -114,7 +115,7 @@ export const Route = Resource(
     const { zoneId } = props;
 
     if (this.phase === "delete") {
-      console.log("Deleting Route:", props.pattern);
+      logger.log("Deleting Route:", props.pattern);
 
       // Only delete if we have an ID
       if (this.output?.id) {
@@ -128,7 +129,7 @@ export const Route = Resource(
     let routeData: CloudflareRouteResponse;
 
     if (this.phase === "update" && this.output?.id) {
-      console.log("Updating Route:", props.pattern);
+      logger.log("Updating Route:", props.pattern);
 
       // Update existing route
       routeData = await updateRoute(
@@ -139,7 +140,7 @@ export const Route = Resource(
         scriptName,
       );
     } else {
-      console.log("Creating Route:", props.pattern);
+      logger.log("Creating Route:", props.pattern);
 
       try {
         // Create new route
@@ -151,7 +152,7 @@ export const Route = Resource(
           error instanceof CloudflareApiError &&
           error.status === 409
         ) {
-          console.log(
+          logger.log(
             `Route with pattern '${props.pattern}' already exists, adopting it`,
           );
           // Find the existing route by pattern

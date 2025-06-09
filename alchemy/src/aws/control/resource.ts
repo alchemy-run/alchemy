@@ -6,6 +6,7 @@ import {
   Resource,
   type Provider,
 } from "../../resource.ts";
+import { logger } from "../../util/logger.ts";
 import { createCloudControlClient, type ProgressEvent } from "./client.ts";
 import {
   AlreadyExistsError,
@@ -285,12 +286,12 @@ async function CloudControlLifecycle(
         );
       } else if (error instanceof ConcurrentOperationError) {
         // Handle concurrent operation exception
-        console.log(error.message);
+        logger.log(error.message);
         if (!props.adopt) {
           // If adopt is not true, concurrent operations are an error
           throw error;
         }
-        console.log(
+        logger.log(
           `Waiting for concurrent operation with request token '${error.requestToken}' to complete`,
         );
 

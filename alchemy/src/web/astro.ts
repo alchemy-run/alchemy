@@ -8,6 +8,7 @@ import { StaticJsonFile } from "../fs/static-json-file.ts";
 import { StaticTextFile } from "../fs/static-text-file.ts";
 import { StaticTypeScriptFile } from "../fs/static-typescript-file.ts";
 import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
 import { ShadcnUI } from "./shadcn.ts";
 
 const execAsync = promisify(exec);
@@ -208,7 +209,7 @@ export const AstroProject = Resource(
           }
         }
       } catch (error) {
-        console.error(`Error deleting project ${id}:`, error);
+        logger.error(`Error deleting project ${id}:`, error);
       }
       return this.destroy();
     }

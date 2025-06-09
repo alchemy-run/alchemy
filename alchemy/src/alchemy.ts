@@ -15,6 +15,7 @@ import { isRuntime } from "./runtime/global.ts";
 import { Scope } from "./scope.ts";
 import { secret } from "./secret.ts";
 import type { StateStoreType } from "./state.ts";
+import { logger } from "./util/logger.ts";
 import { TelemetryClient } from "./util/telemetry/client.ts";
 
 /**
@@ -216,7 +217,7 @@ async function _alchemy(
         ).join("\n");
       }
       // TODO: support other types
-      console.log(value);
+      logger.log(value);
       throw new Error(`Unsupported value type: ${value}`);
     }),
   );

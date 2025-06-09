@@ -2,6 +2,7 @@ import fs from "node:fs";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
+import { logger } from "../util/logger.ts";
 
 /**
  * Properties for creating a CopyFile resource
@@ -107,7 +108,7 @@ export const CopyFile = Resource(
         createdAt: Date.now(),
       });
     } catch (error) {
-      console.error(`Error copying file from ${src} to ${dest}:`, error);
+      logger.error("Error copying file:", error);
       throw error;
     }
   },

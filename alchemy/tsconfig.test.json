@@ -1,9 +1,10 @@
 {
   "extends": "./tsconfig.json",
   "include": [
-    "package.json",
     "src/**/*.ts",
+    "src/**/*.tsx",
     "test/**/*.ts",
+    "./package.json",
     "src/runtime/shims.js"
   ],
   "compilerOptions": {

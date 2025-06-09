@@ -15,6 +15,8 @@ import {
 import { Scope } from "./scope.ts";
 import { serialize } from "./serde.ts";
 import type { State } from "./state.ts";
+import { formatFQN } from "./util/cli.tsx";
+import { logger } from "./util/logger.ts";
 import type { Telemetry } from "./util/telemetry/index.ts";
 
 export interface ApplyOptions {
@@ -39,6 +41,12 @@ async function _apply<Out extends Resource>(
   const scope = resource[ResourceScope];
   const start = performance.now();
   try {
+    logger.task(resource[ResourceFQN], {
+      prefix: "SETUP",
+      prefixColor: "cyanBright",
+      resource: formatFQN(resource[ResourceFQN]),
+      message: "Setting up Resource...",
+    });
     const quiet = props?.quiet ?? scope.quiet;
     await scope.init();
     let state: State | undefined = (await scope.state.get(
@@ -103,7 +111,14 @@ async function _apply<Out extends Resource>(
         alwaysUpdate !== true
       ) {
         if (!quiet) {
-          // console.log(`Skip:    "${resource.FQN}" (no changes)`);
+          logger.task(resource[ResourceFQN], {
+            prefix: "SKIPPED",
+            prefixColor: "yellowBright",
+            resource: formatFQN(resource[ResourceFQN]),
+            message: "Skipped Resource (no changes)",
+            status: "success",
+          });
+          logger.log(`Skipping ${resource[ResourceFQN]} (no changes)`);
         }
         options?.resolveInnerScope?.(
           new Scope({
@@ -126,7 +141,13 @@ async function _apply<Out extends Resource>(
     state.props = props;
 
     if (!quiet) {
-      console.log(
+      logger.task(resource[ResourceFQN], {
+        prefix: phase === "create" ? "CREATING" : "UPDATING",
+        prefixColor: "magenta",
+        resource: formatFQN(resource[ResourceFQN]),
+        message: `${phase === "create" ? "Creating" : "Updating"} Resource...`,
+      });
+      logger.log(
         `${phase === "create" ? "Create" : "Update"}:  "${resource[ResourceFQN]}"`,
       );
     }
@@ -152,7 +173,7 @@ async function _apply<Out extends Resource>(
       state,
       replace: () => {
         if (isReplaced) {
-          console.warn(
+          logger.warn(
             `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} is already marked as REPLACE`,
           );
           return;
@@ -173,7 +194,14 @@ async function _apply<Out extends Resource>(
       },
     );
     if (!quiet) {
-      console.log(
+      logger.task(resource[ResourceFQN], {
+        prefix: phase === "create" ? "CREATED" : "UPDATED",
+        prefixColor: "greenBright",
+        resource: formatFQN(resource[ResourceFQN]),
+        message: `${phase === "create" ? "Created" : "Updated"} Resource`,
+        status: "success",
+      });
+      logger.log(
         `${phase === "create" ? "Created" : "Updated"}: "${resource[ResourceFQN]}"`,
       );
     }
