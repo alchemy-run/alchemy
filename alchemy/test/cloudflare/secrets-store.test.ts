@@ -1,9 +1,9 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
-import { secret } from "../../src/secret.ts";
 import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { Secret } from "../../src/cloudflare/secret.ts";
 import { SecretsStore } from "../../src/cloudflare/secrets-store.ts";
+import { secret } from "../../src/secret.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
 import "../../src/test/vitest.ts";
@@ -12,7 +12,7 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("SecretsStore Resource", () => {
+describe("SecretsStore Resource", { concurrent: false }, () => {
   const testId = `${BRANCH_PREFIX}-test-secrets-store`;
 
   test("create, update, and delete secrets store", async (scope) => {
@@ -222,8 +222,6 @@ describe("SecretsStore Resource", () => {
       },
     });
 
-    let dynamicSecret: Secret | undefined;
-
     try {
       // Verify all initial secrets exist
       await assertSecretExists(secretsStore.id, "INITIAL_SECRET_1");
@@ -231,7 +229,7 @@ describe("SecretsStore Resource", () => {
       await assertSecretExists(secretsStore.id, "INITIAL_SECRET_3");
 
       // Add a dynamic secret
-      dynamicSecret = await Secret("dynamic-secret", {
+      await Secret("dynamic-secret", {
         store: secretsStore,
         value: secret("dynamic-value"),
       });
@@ -270,7 +268,7 @@ describe("SecretsStore Resource", () => {
       await assertSecretNotExists(secretsStore.id, "temp-secret-2");
 
       // Add a persistent secret to main scope
-      const tempSecret1 = await Secret("temp-secret-1", {
+      await Secret("temp-secret-1", {
         store: secretsStore,
         value: secret("temp-value-1"),
       });
@@ -279,7 +277,7 @@ describe("SecretsStore Resource", () => {
 
       // Add a temporary secret in nested scope that will be removed
       await alchemy.run("temp-scope", async (tempScope) => {
-        const tempSecret2 = await Secret("temp-secret-2", {
+        await Secret("temp-secret-2", {
           store: secretsStore,
           value: secret("temp-value-2"),
         });
@@ -303,7 +301,9 @@ describe("SecretsStore Resource", () => {
         value: secret("updated-temp-value-1"),
       });
 
-      expect(updatedTempSecret1.value.unencrypted).toEqual("updated-temp-value-1");
+      expect(updatedTempSecret1.value.unencrypted).toEqual(
+        "updated-temp-value-1",
+      );
       await assertSecretExists(secretsStore.id, "temp-secret-1");
     } finally {
       await alchemy.destroy(scope);
@@ -311,7 +311,10 @@ describe("SecretsStore Resource", () => {
     }
   });
 
-  async function assertSecretExists(storeId: string, secretName: string): Promise<void> {
+  async function assertSecretExists(
+    storeId: string,
+    secretName: string,
+  ): Promise<void> {
     const api = await createCloudflareApi();
     const response = await api.get(
       `/accounts/${api.accountId}/secrets_store/stores/${storeId}/secrets`,
@@ -323,7 +326,10 @@ describe("SecretsStore Resource", () => {
     expect(secret).toBeTruthy();
   }
 
-  async function assertSecretNotExists(storeId: string, secretName: string): Promise<void> {
+  async function assertSecretNotExists(
+    storeId: string,
+    secretName: string,
+  ): Promise<void> {
     const api = await createCloudflareApi();
     const response = await api.get(
       `/accounts/${api.accountId}/secrets_store/stores/${storeId}/secrets`,
