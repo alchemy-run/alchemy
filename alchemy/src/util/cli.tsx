@@ -51,7 +51,7 @@ export function LoggerCLI({ alchemyInfo, setLogger }: LoggerCLIProps) {
         ...prev,
         { id: nextId.current++, text: format(...args) },
       ]),
-    []
+    [],
   );
 
   const task = useCallback((id: string, data: Task) => {
@@ -179,7 +179,7 @@ export const createLoggerInstance = (alchemyInfo: AlchemyInfo) => {
     />,
     {
       exitOnCtrlC: true,
-    }
+    },
   );
 
   process.on("SIGINT", () => {
