@@ -1,4 +1,5 @@
-import { compare } from "fast-json-patch";
+import jsonpatch from "fast-json-patch";
+const compare = jsonpatch.compare;
 import type { Context } from "../../context.ts";
 import {
   registerDynamicResource,

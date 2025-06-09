@@ -1,3 +1,17 @@
+## v0.25.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Add getZoneByDomain function &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/313 [<samp>(17f55)</samp>](https://github.com/sam-goodwin/alchemy/commit/17f558b8)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **aws**: Update fast-json-patch import for Node.js compatibility &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/316 [<samp>(d0ea5)</samp>](https://github.com/sam-goodwin/alchemy/commit/d0ea5a6c)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.24.1...v0.25.0)
+
+---
+
 ## v0.24.1
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

@@ -53,6 +53,7 @@ export default defineConfig({
 			await generateSidebar("Guides"),
 			await generateSidebar("Concepts"),
 			await generateProvidersSidebar(),
+			await generateSidebar("Telemetry"),
 		],
 		search: { provider: "local" },
 	},

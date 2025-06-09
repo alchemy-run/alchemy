@@ -17,6 +17,7 @@ import { serialize } from "./serde.ts";
 import type { State } from "./state.ts";
 import { formatFQN } from "./util/cli.tsx";
 import { logger } from "./util/logger.ts";
+import type { Telemetry } from "./util/telemetry/index.ts";
 
 export interface ApplyOptions {
   quiet?: boolean;
@@ -38,6 +39,7 @@ async function _apply<Out extends Resource>(
   options?: ApplyOptions,
 ): Promise<Awaited<Out>> {
   const scope = resource[ResourceScope];
+  const start = performance.now();
   try {
     logger.task(resource[ResourceFQN], {
       prefix: "SETUP",
@@ -66,6 +68,10 @@ async function _apply<Out extends Resource>(
           scopeName: resource[ResourceID],
         }),
       );
+      scope.telemetryClient.record({
+        event: "resource.read",
+        resource: resource[ResourceKind],
+      });
       return state.output as Awaited<Out>;
     }
     if (state === undefined) {
@@ -120,6 +126,11 @@ async function _apply<Out extends Resource>(
             scopeName: resource[ResourceID],
           }),
         );
+        scope.telemetryClient.record({
+          event: "resource.skip",
+          resource: resource[ResourceKind],
+          status: state.status,
+        });
         return state.output as Awaited<Out>;
       }
     }
@@ -140,6 +151,12 @@ async function _apply<Out extends Resource>(
         `${phase === "create" ? "Create" : "Update"}:  "${resource[ResourceFQN]}"`,
       );
     }
+
+    scope.telemetryClient.record({
+      event: "resource.start",
+      resource: resource[ResourceKind],
+      status: state.status,
+    });
 
     await scope.state.set(resource[ResourceID], state);
 
@@ -169,6 +186,7 @@ async function _apply<Out extends Resource>(
       resource[ResourceID],
       {
         isResource: true,
+        parent: scope,
       },
       async (scope) => {
         options?.resolveInnerScope?.(scope);
@@ -188,13 +206,22 @@ async function _apply<Out extends Resource>(
       );
     }
 
+    const status = phase === "create" ? "created" : "updated";
+    scope.telemetryClient.record({
+      event: "resource.success",
+      resource: resource[ResourceKind],
+      status,
+      elapsed: performance.now() - start,
+      replaced: isReplaced,
+    });
+
     await scope.state.set(resource[ResourceID], {
       kind: resource[ResourceKind],
       id: resource[ResourceID],
       fqn: resource[ResourceFQN],
       seq: resource[ResourceSeq],
       data: state.data,
-      status: phase === "create" ? "created" : "updated",
+      status,
       output,
       props,
       // deps: [...deps],
@@ -204,6 +231,12 @@ async function _apply<Out extends Resource>(
     // }
     return output as any;
   } catch (error) {
+    scope.telemetryClient.record({
+      event: "resource.error",
+      resource: resource[ResourceKind],
+      error: error as Telemetry.ErrorInput,
+      elapsed: performance.now() - start,
+    });
     scope.fail();
     throw error;
   }

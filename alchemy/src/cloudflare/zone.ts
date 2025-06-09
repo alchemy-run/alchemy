@@ -166,9 +166,9 @@ export interface ZoneProps extends CloudflareApiOptions {
 }
 
 /**
- * Output returned after Zone creation/update
+ * Zone data structure (used for lookup functions)
  */
-export interface Zone extends Resource<"cloudflare::Zone"> {
+export interface ZoneData {
   /**
    * The ID of the zone
    */
@@ -246,6 +246,11 @@ export interface Zone extends Resource<"cloudflare::Zone"> {
     minTlsVersion: MinTLSVersionValue;
   };
 }
+
+/**
+ * Output returned after Zone creation/update
+ */
+export interface Zone extends Resource<"cloudflare::Zone">, ZoneData {}
 
 /**
  * A Cloudflare Zone represents a domain and its configuration settings on Cloudflare.
@@ -537,6 +542,74 @@ async function getZoneSettings(
     brotli: getSetting("brotli", "on"),
     hotlinkProtection: getSetting("hotlink_protection", "off"),
     minTlsVersion: getSetting("min_tls_version", "1.0"),
+  };
+}
+
+/**
+ * Look up a Cloudflare zone by domain name
+ *
+ * @param domainName The domain name to look up (e.g., "example.com")
+ * @param options Optional API configuration
+ * @returns Promise resolving to zone details or null if not found
+ *
+ * @example
+ * // Look up a zone by domain name
+ * const zone = await getZoneByDomain("example.com");
+ * if (zone) {
+ *   console.log(`Zone ID: ${zone.id}`);
+ *   console.log(`Nameservers: ${zone.nameservers.join(", ")}`);
+ * }
+ *
+ * @example
+ * // Look up a zone with custom API options
+ * const zone = await getZoneByDomain("example.com", {
+ *   apiToken: myApiToken,
+ *   accountId: "my-account-id"
+ * });
+ */
+export async function getZoneByDomain(
+  domainName: string,
+  options: Partial<CloudflareApiOptions> = {},
+): Promise<ZoneData | null> {
+  const api = await createCloudflareApi(options);
+
+  const response = await api.get(
+    `/zones?name=${encodeURIComponent(domainName)}`,
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Error fetching zone for '${domainName}': ${response.statusText}`,
+    );
+  }
+
+  const zones = ((await response.json()) as { result: CloudflareZone[] })
+    .result;
+
+  if (zones.length === 0) {
+    return null;
+  }
+
+  const zoneData = zones[0];
+
+  // Get zone settings
+  const settings = await getZoneSettings(api, zoneData.id);
+
+  return {
+    id: zoneData.id,
+    name: zoneData.name,
+    type: zoneData.type,
+    status: zoneData.status,
+    paused: zoneData.paused,
+    accountId: zoneData.account.id,
+    nameservers: zoneData.name_servers,
+    originalNameservers: zoneData.original_name_servers,
+    createdAt: new Date(zoneData.created_on).getTime(),
+    modifiedAt: new Date(zoneData.modified_on).getTime(),
+    activatedAt: zoneData.activated_on
+      ? new Date(zoneData.activated_on).getTime()
+      : null,
+    settings,
   };
 }
 

@@ -634,10 +634,9 @@ export function Worker<const B extends Bindings>(
       return _Worker(id, {
         ...(props as any),
         url: true,
-        compatibilityFlags: [
-          "nodejs_compat",
-          ...(props.compatibilityFlags ?? []),
-        ],
+        compatibilityFlags: Array.from(
+          new Set(["nodejs_compat", ...(props.compatibilityFlags ?? [])]),
+        ),
         entrypoint: meta!.filename,
         name: workerName,
         // adopt because the stub guarnatees that the worker exists

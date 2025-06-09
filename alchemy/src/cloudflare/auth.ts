@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Secret } from "../secret.ts";
+import { createXdgAppPaths } from "../util/xdg-paths.ts";
 /**
  * Authentication options for Cloudflare API
  */
@@ -195,9 +196,9 @@ async function findWranglerConfig(): Promise<string> {
     `${environment === "production" ? "default.toml" : `${environment}.toml`}`,
   );
 
-  const xdgAppPaths = (await import("xdg-app-paths")).default;
+  const xdgAppPaths = createXdgAppPaths(".wrangler");
   //TODO: We should implement a custom path --global-config and/or the WRANGLER_HOME type environment variable
-  const configDir = xdgAppPaths(".wrangler").config(); // New XDG compliant config path
+  const configDir = xdgAppPaths.config(); // New XDG compliant config path
   const legacyConfigDir = path.join(os.homedir(), ".wrangler"); // Legacy config in user's home directory
 
   // Check for the .wrangler directory in root if it is not there then use the XDG compliant path.

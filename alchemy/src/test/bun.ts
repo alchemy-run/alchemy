@@ -6,6 +6,7 @@ import { alchemy } from "../alchemy.ts";
 import { DOStateStore } from "../cloudflare/index.ts";
 import { Scope } from "../scope.ts";
 import type { StateStoreType } from "../state.ts";
+import { NoopTelemetryClient } from "../util/telemetry/index.ts";
 
 /**
  * Extend the Alchemy interface to include test functionality
@@ -134,6 +135,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     // parent: globalTestScope,
     stateStore: defaultOptions?.stateStore,
     phase: "up",
+    telemetryClient: new NoopTelemetryClient(),
   });
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {
