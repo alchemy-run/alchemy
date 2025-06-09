@@ -3,9 +3,9 @@ import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { PlanetScaleApi } from "./api.ts";
 import {
+  fixClusterSize,
   type PlanetScaleClusterSize,
   waitForDatabaseReady,
-  fixClusterSize,
 } from "./utils.ts";
 
 /**

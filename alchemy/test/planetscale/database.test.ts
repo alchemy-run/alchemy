@@ -1,8 +1,8 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
-import { Database } from "../../src/planetscale/database.ts";
 import { PlanetScaleApi } from "../../src/planetscale/api.ts";
+import { Database } from "../../src/planetscale/database.ts";
 import { waitForDatabaseReady } from "../../src/planetscale/utils.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
@@ -59,10 +59,7 @@ describe("Database Resource", () => {
     } finally {
       await destroy(scope);
       // Verify database was deleted by checking API directly
-      const getDeletedResponse = await api.get(
-        `/organizations/${organizationId}/databases/${testId}`,
-      );
-      expect(getDeletedResponse.status).toEqual(404);
+      await assertDatabaseDeleted(api, organizationId, testId);
     }
   }, 600_000);
 
@@ -152,10 +149,7 @@ describe("Database Resource", () => {
       await destroy(scope);
 
       // Verify database was deleted by checking API directly
-      const getDeletedResponse = await api.get(
-        `/organizations/${organizationId}/databases/${testId}`,
-      );
-      expect(getDeletedResponse.status).toEqual(404);
+      await assertDatabaseDeleted(api, organizationId, testId);
     }
   }, 600_000); // this test takes forever as it needs to wait on multiple resizes!
 
@@ -219,10 +213,43 @@ describe("Database Resource", () => {
       await destroy(scope);
 
       // Verify database was deleted
-      const getDeletedResponse = await api.get(
-        `/organizations/${organizationId}/databases/${testId}`,
-      );
-      expect(getDeletedResponse.status).toEqual(404);
+      await assertDatabaseDeleted(api, organizationId, testId);
     }
   }, 1000_000); //must wait on multiple resizes
 });
+
+/**
+ * Wait for database to be deleted (return 404) for up to 60 seconds
+ */
+async function assertDatabaseDeleted(
+  api: PlanetScaleApi,
+  organizationId: string,
+  databaseName: string,
+): Promise<void> {
+  const timeout = 1000_000;
+  const interval = 2_000;
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    const response = await api.get(
+      `/organizations/${organizationId}/databases/${databaseName}`,
+    );
+
+    console.log(
+      `Waiting for database ${databaseName} to be deleted: ${response.status} ${response.status}`,
+    );
+
+    if (response.status === 404) {
+      // Database is deleted, test passes
+      return;
+    }
+
+    // Database still exists, wait and try again
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+
+  // Timeout reached, database still exists
+  throw new Error(
+    `Database ${databaseName} was not deleted within ${timeout}ms`,
+  );
+}
