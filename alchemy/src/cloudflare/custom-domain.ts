@@ -1,5 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
@@ -127,20 +128,20 @@ async function deleteCustomDomain(
   const domainIdToDelete = context.output?.id;
 
   if (!domainIdToDelete) {
-    console.warn(
+    logger.warn(
       `Cannot delete CustomDomain ${logicalId} (${domainHostname}): Missing domain ID in state. Assuming already deleted.`,
     );
     return; // Exit early if no ID
   }
 
-  console.log(
+  logger.log(
     `Deleting CustomDomain binding ${domainIdToDelete} for ${domainHostname}`,
   );
   const response = await api.delete(
     `/accounts/${api.accountId}/workers/domains/${domainIdToDelete}`,
   );
 
-  console.log(
+  logger.log(
     `Delete result for ${domainIdToDelete} (${domainHostname}):`,
     response.status,
     response.statusText,
@@ -172,7 +173,7 @@ async function ensureCustomDomain(
   const domainHostname = props.name;
 
   // Check if domain binding already exists for this account
-  console.log(`Checking existing domain bindings for account ${api.accountId}`);
+  logger.log(`Checking existing domain bindings for account ${api.accountId}`);
   const listResponse = await api.get(
     `/accounts/${api.accountId}/workers/domains`,
   );
@@ -210,7 +211,7 @@ async function ensureCustomDomain(
   let currentDomainId = existingBinding?.id;
   const bindingExists = !!existingBinding;
 
-  console.log(
+  logger.log(
     `Domain binding status for ${domainHostname} (Zone: ${props.zoneId}):`,
     bindingExists
       ? `Found (ID: ${currentDomainId}, Worker: ${existingBinding.service}, Env: ${existingBinding.environment})`
@@ -230,7 +231,7 @@ async function ensureCustomDomain(
   // Cloudflare's PUT /accounts/{account_id}/workers/domains acts as an upsert
   if (!bindingExists || needsUpdate) {
     operationPerformed = bindingExists ? "update" : "create";
-    console.log(
+    logger.log(
       `${operationPerformed === "update" ? "Updating" : "Creating"} domain binding: ${domainHostname} (Zone: ${props.zoneId}) → ${props.workerName}:${environment}`,
     );
 
@@ -272,11 +273,11 @@ async function ensureCustomDomain(
 
     resultantBinding = putResult.result;
     currentDomainId = resultantBinding.id; // Update ID from the PUT response
-    console.log(
+    logger.log(
       `Successfully ${operationPerformed}d binding, new ID: ${currentDomainId}`,
     );
   } else {
-    console.log(
+    logger.log(
       `Domain binding already exists and is up to date: ${domainHostname} (ID: ${currentDomainId}) → ${props.workerName}:${environment}`,
     );
   }
@@ -284,7 +285,7 @@ async function ensureCustomDomain(
   // Ensure we have the final binding details
   if (!resultantBinding || !currentDomainId) {
     // This case should ideally not happen if API calls succeed
-    console.error("Error: Could not determine final domain binding state.", {
+    logger.error("Error: Could not determine final domain binding state.", {
       existingBinding,
       resultantBinding,
       currentDomainId,

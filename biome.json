@@ -5,6 +5,7 @@
       "./**/package.json",
       "./**/biome.json",
       "./alchemy/src/**/*.ts",
+      "./alchemy/src/**/*.tsx",
       "./alchemy/src/**/*.js",
       "./alchemy/test/**/*.ts",
       "./alchemy-web/.vitepress/**/*.ts",

@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 /**
@@ -521,7 +522,7 @@ export const Customer = Resource(
         taxIds: customer.tax_ids || undefined,
       });
     } catch (error) {
-      console.error("Error creating/updating customer:", error);
+      logger.error("Error creating/updating customer:", error);
       throw error;
     }
   },

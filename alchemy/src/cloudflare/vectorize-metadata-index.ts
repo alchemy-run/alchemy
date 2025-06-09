@@ -1,5 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
+import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
@@ -121,7 +122,7 @@ export const VectorizeMetadataIndex = Resource(
       ) {
         // Update operation is not supported
         if (!this.scope.quiet) {
-          console.warn(
+          logger.warn(
             `Attempted to update Vectorize metadata index ${this.props.propertyName} but it was a no-op.`,
           );
         }

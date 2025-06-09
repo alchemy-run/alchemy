@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 type ProductType = Stripe.Product.Type;
@@ -251,7 +252,7 @@ export const Product = Resource(
         packageDimensions: product.package_dimensions || undefined,
       });
     } catch (error) {
-      console.error("Error creating/updating product:", error);
+      logger.error("Error creating/updating product:", error);
       throw error;
     }
   },

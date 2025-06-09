@@ -6,6 +6,7 @@ import { Folder } from "../fs/folder.ts";
 import { StaticJsonFile } from "../fs/static-json-file.ts";
 import { StaticTypeScriptFile } from "../fs/static-typescript-file.ts";
 import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
 import { rm } from "../util/rm.ts";
 import { ShadcnComponent } from "./shadcn-component.ts";
 import { TailwindConfig } from "./tailwind.ts";
@@ -147,7 +148,7 @@ export const ViteProject = Resource(
           await execAsync(`rm -rf ${props.name}`);
         }
       } catch (error) {
-        console.error(`Error deleting project ${id}:`, error);
+        logger.error(`Error deleting project ${id}:`, error);
       }
       return this.destroy();
     }
@@ -156,7 +157,7 @@ export const ViteProject = Resource(
       if (props.overwrite) {
         await modifyConfig(props);
       } else {
-        console.warn(
+        logger.warn(
           "ViteProject does not support updates - the project must be recreated to change the template",
         );
       }

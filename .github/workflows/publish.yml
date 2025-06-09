@@ -19,11 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-
       - name: Cache VitePress cache and OG images
         uses: actions/cache@v4
         with:
@@ -32,42 +27,17 @@ jobs:
             alchemy-web/public/og-images
           key: ${{ runner.os }}-vitepress-cache
 
-      - name: Install dependencies
-        run: |
-          bun install
-          # tanstack start doesn't deploy when packages are hoisted ...
-          cd examples/cloudflare-tanstack-start
-          bun install
-          cd ../..
+      - name: Setup Alchemy Environment
+        uses: ./.github/actions/setup-alchemy
+        with:
+          aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-west-2
+          install-extra-deps: "true"
 
       - name: Check Types
         run: bun run check
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Publish docs
+        uses: ./.github/actions/run-with-alchemy-env
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: us-west-2
-
-      - name: Publsh docs
-        run: bun run deploy:website
-        env:
-          CI: true
-          ALCHEMY_STATE_STORE: cloudflare
-          ALCHEMY_PASSWORD: ${{ secrets.ALCHEMY_PASSWORD }}
-          AWS_REGION: us-west-2
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
-          CLOUDFLARE_BUCKET_NAME: ${{ secrets.CLOUDFLARE_BUCKET_NAME }}
-          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-          SECRET_PASSPHRASE: ${{ secrets.SECRET_PASSPHRASE }}
-          UPSTASH_API_KEY: ${{ secrets.UPSTASH_API_KEY }}
-          UPSTASH_EMAIL: sam@alchemy.run
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-          VERCEL_ACCESS_TOKEN: ${{ secrets.VERCEL_ACCESS_TOKEN }}
+          command: bun run deploy:website

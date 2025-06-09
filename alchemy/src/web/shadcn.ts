@@ -6,6 +6,7 @@ import { Folder } from "../fs/folder.ts";
 import { StaticJsonFile } from "../fs/static-json-file.ts";
 import { StaticTypeScriptFile } from "../fs/static-typescript-file.ts";
 import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
 import { ShadcnComponent } from "./shadcn-component.ts";
 
 const execAsync = promisify(exec);
@@ -127,7 +128,7 @@ export const ShadcnUI = Resource(
       // For a delete phase, we don't perform any action
       // as removing Shadcn UI would require removing many files
       // which could be destructive to the project
-      console.log(
+      logger.log(
         "Note: ShadcnUI delete phase does not remove installed components",
       );
 

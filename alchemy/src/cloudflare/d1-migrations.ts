@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import type { CloudflareApi } from "./api.ts";
 
@@ -132,6 +133,6 @@ export async function applyMigrations(
     const insertSQL = `INSERT INTO ${options.migrationsTable} (id, applied_at) VALUES ('${migrationId.replace("'", "''")}', datetime('now'));`;
     await executeD1SQL(options, insertSQL);
 
-    console.log(`Applied migration: ${migrationId}`);
+    logger.log(`Applied migration: ${migrationId}`);
   }
 }

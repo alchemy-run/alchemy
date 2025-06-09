@@ -2,6 +2,7 @@ import { alchemy } from "../alchemy.ts";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { UpstashApi } from "./api.ts";
 import { UpstashError } from "./error.ts";
 
@@ -366,7 +367,7 @@ export async function setRedisEviction(
   );
 
   if (!response.ok) {
-    console.warn(
+    logger.warn(
       `API error updating eviction (status: ${response.status}): ${response.statusText}. (Eviction may already be set)`,
     );
   }

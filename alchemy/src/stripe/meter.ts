@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { createStripeClient, isStripeConflictError } from "./client.ts";
 
 /**
@@ -274,7 +275,7 @@ export const Meter = Resource(
           props.status === "active" &&
           existingStripeMeter.status === "inactive"
         ) {
-          console.log(`Reactivating Stripe Meter ${currentOutputId}.`);
+          logger.log(`Reactivating Stripe Meter ${currentOutputId}.`);
           stripeAPIResponse =
             await stripe.billing.meters.reactivate(currentOutputId);
         } else {
@@ -301,6 +302,7 @@ export const Meter = Resource(
       try {
         stripeAPIResponse = await stripe.billing.meters.create(createParams);
       } catch (error) {
+        logger.warn("Error creating/updating meter:", error);
         if (isStripeConflictError(error) && props.adopt) {
           throw new Error(
             "Meter adoption is not supported - meters cannot be uniquely identified for adoption",
@@ -319,7 +321,7 @@ export const Meter = Resource(
           stripeAPIResponse.id,
         );
       } else if (props.status && props.status !== stripeAPIResponse.status) {
-        console.warn(
+        logger.warn(
           `Meter ${stripeAPIResponse.id} created with status ${stripeAPIResponse.status} but requested ${props.status}. Ensure this is intended.`,
         );
       }

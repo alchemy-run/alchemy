@@ -18,6 +18,7 @@ import {
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
+import { logger } from "../util/logger.ts";
 import type { PolicyDocument } from "./policy.ts";
 import { retry } from "./retry.ts";
 
@@ -289,7 +290,7 @@ export const Role = Resource(
         // If we get any other error besides NoSuchEntityException, log it but don't fail
         // This ensures the resource is still marked as destroyed
         if (error.name !== NoSuchEntityException.name) {
-          console.error(`Error deleting role ${props.roleName}:`, error);
+          logger.error(`Error deleting role ${props.roleName}:`, error);
         }
       }
 
@@ -359,6 +360,7 @@ export const Role = Resource(
           throw error;
         }
       } else if (error.name !== NoSuchEntityException.name) {
+        logger.error("Error creating/updating role:", error);
         throw error;
       }
     }

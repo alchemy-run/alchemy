@@ -19,6 +19,7 @@ import type { Context } from "../context.ts";
 import type { Bundle } from "../esbuild/bundle.ts";
 import { Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
+import { logger } from "../util/logger.ts";
 import { retry } from "./retry.ts";
 
 /**
@@ -325,7 +326,7 @@ export const Function = Resource(
           );
         } catch (error: any) {
           if (error.name !== "ResourceNotFoundException") {
-            console.warn("Failed to delete function URL:", error);
+            logger.warn("Failed to delete function URL:", error);
           }
         }
       }
@@ -446,7 +447,7 @@ export const Function = Resource(
                   );
                 } catch (permError: any) {
                   if (!permError.message?.includes("already exists")) {
-                    console.warn("Error adding URL permission:", permError);
+                    logger.warn("Error adding URL permission:", permError);
                   }
                 }
               }
@@ -489,7 +490,7 @@ export const Function = Resource(
                   );
                 } catch (permError: any) {
                   if (!permError.message?.includes("already exists")) {
-                    console.warn("Error adding URL permission:", permError);
+                    logger.warn("Error adding URL permission:", permError);
                   }
                 }
               }
@@ -534,7 +535,7 @@ export const Function = Resource(
                   );
                 } catch (permError: any) {
                   if (!permError.message?.includes("already exists")) {
-                    console.warn("Error adding URL permission:", permError);
+                    logger.warn("Error adding URL permission:", permError);
                   }
                 }
               }
@@ -555,7 +556,7 @@ export const Function = Resource(
             functionUrl = undefined;
           } catch (error: any) {
             if (error.name !== "ResourceNotFoundException") {
-              console.warn("Failed to delete function URL:", error);
+              logger.warn("Failed to delete function URL:", error);
             }
           }
         }
@@ -673,12 +674,12 @@ export const Function = Resource(
                 );
               } catch (permError: any) {
                 if (!permError.message?.includes("already exists")) {
-                  console.warn("Error adding URL permission:", permError);
+                  logger.warn("Error adding URL permission:", permError);
                 }
               }
             }
           } catch (error) {
-            console.warn("Failed to create function URL:", error);
+            logger.warn("Failed to create function URL:", error);
           }
         }
       } else {
@@ -717,7 +718,7 @@ export const Function = Resource(
         functionUrl = urlConfig.FunctionUrl;
       } catch (error: any) {
         if (error.name !== "ResourceNotFoundException") {
-          console.warn("Failed to get function URL:", error);
+          logger.warn("Failed to get function URL:", error);
         }
       }
     }

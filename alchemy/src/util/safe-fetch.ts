@@ -1,4 +1,5 @@
 import type { Agent } from "undici";
+import { logger } from "./logger.ts";
 
 export async function safeFetch(
   url: string | URL | Request,
@@ -25,7 +26,7 @@ export async function safeFetch(
         throw err;
       }
 
-      console.warn(`Retry ${attempt}/${retries} for ${url}: ${err.code}`);
+      logger.warn(`Retry ${attempt}/${retries} for ${url}: ${err.code}`);
       await new Promise((r) => setTimeout(r, 250 * attempt)); // exponential backoff
     }
   }

@@ -1,7 +1,7 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { createCloudflareApi } from "../../src/cloudflare/api.ts";
-import { Zone } from "../../src/cloudflare/zone.ts";
+import { Zone, getZoneByDomain } from "../../src/cloudflare/zone.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
@@ -147,6 +147,56 @@ describe("Zone Resource", () => {
         const text = await getDeletedResponse.text();
         expect(text).toContain("Invalid zone identifier");
         // seriously, wtf, why 400?
+        expect(getDeletedResponse.status).toEqual(400);
+      }
+    }
+  });
+
+  test("getZoneByDomain lookup function", async (scope) => {
+    const lookupTestDomain = `${BRANCH_PREFIX}-lookup-test.dev`;
+    let zone: Zone | undefined;
+
+    try {
+      // Create a test zone
+      zone = await Zone(lookupTestDomain, {
+        name: lookupTestDomain,
+        type: "full",
+        jumpStart: false,
+        settings: {
+          ssl: "flexible",
+          alwaysUseHttps: "on",
+        },
+      });
+
+      expect(zone.id).toBeTruthy();
+      expect(zone.name).toEqual(lookupTestDomain);
+
+      // Use getZoneByDomain to look up the zone we just created
+      const foundZone = await getZoneByDomain(lookupTestDomain);
+
+      // Verify the lookup returned the correct zone
+      expect(foundZone).toBeTruthy();
+      expect(foundZone!.id).toEqual(zone.id);
+      expect(foundZone!.name).toEqual(lookupTestDomain);
+      expect(foundZone!.type).toEqual("full");
+      expect(foundZone!.accountId).toEqual(zone.accountId);
+      expect(foundZone!.nameservers).toEqual(zone.nameservers);
+      expect(foundZone!.settings.ssl).toEqual("flexible");
+      expect(foundZone!.settings.alwaysUseHttps).toEqual("on");
+
+      // Test lookup of non-existent domain
+      const nonExistentZone = await getZoneByDomain(
+        `${BRANCH_PREFIX}-non-existent.dev`,
+      );
+      expect(nonExistentZone).toBeNull();
+    } finally {
+      // Always clean up
+      await destroy(scope);
+
+      if (zone) {
+        const getDeletedResponse = await api.get(`/zones/${zone.id}`);
+        const text = await getDeletedResponse.text();
+        expect(text).toContain("Invalid zone identifier");
         expect(getDeletedResponse.status).toEqual(400);
       }
     }

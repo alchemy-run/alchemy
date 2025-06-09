@@ -1,6 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { SentryApi } from "./api.ts";
 
 /**
@@ -293,11 +294,11 @@ export const Project = Resource(
             `/projects/${props.organization}/${this.output.slug || this.output.id}/`,
           );
           if (!response.ok && response.status !== 404) {
-            console.error("Error deleting project:", response.statusText);
+            logger.error("Error deleting project:", response.statusText);
           }
         }
       } catch (error) {
-        console.error("Error deleting project:", error);
+        logger.error("Error deleting project:", error);
       }
       return this.destroy();
     } else {
@@ -322,7 +323,7 @@ export const Project = Resource(
               error instanceof Error &&
               error.message.includes("already exists")
             ) {
-              console.log(
+              logger.log(
                 `Project '${props.slug || props.name}' already exists, adopting it`,
               );
               // Find the existing project by slug
@@ -391,7 +392,7 @@ export const Project = Resource(
           latestDeploys: data.latestDeploys,
         });
       } catch (error) {
-        console.error("Error creating/updating project:", error);
+        logger.error("Error creating/updating project:", error);
         throw error;
       }
     }

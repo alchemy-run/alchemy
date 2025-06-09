@@ -1,6 +1,7 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { openai } from "@ai-sdk/openai";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 
 /**
  * Model configuration for AI operations
@@ -88,7 +89,7 @@ export async function withRateLimitRetry<T>(fn: () => Promise<T>): Promise<T> {
     } catch (error: any) {
       _lastError = error;
 
-      console.log("retry error", error);
+      logger.log("retry error", error);
 
       // Check if we should retry
       const isRateLimit = error.statusCode === 429;
@@ -106,7 +107,7 @@ export async function withRateLimitRetry<T>(fn: () => Promise<T>): Promise<T> {
         MAX_RETRY_TIME - timeElapsed,
       );
 
-      console.log(`Retrying in ${delay}ms`);
+      logger.log(`Retrying in ${delay}ms`);
 
       // Wait before retrying
       await new Promise((resolve) => setTimeout(resolve, delay));
