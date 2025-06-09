@@ -55,7 +55,7 @@ describe.sequential("Secret serialization", () => {
           if (scope?.root?.state) {
             await scope.root.state.delete(SALT_KEY);
           }
-        } catch (e) {
+        } catch (_e) {
           // Ignore cleanup errors
         }
         await destroy(scope);
@@ -102,7 +102,7 @@ describe.sequential("Secret serialization", () => {
           if (scope?.root?.state) {
             await scope.root.state.delete(SALT_KEY);
           }
-        } catch (e) {
+        } catch (_e) {
           // Ignore cleanup errors
         }
         await destroy(scope);
@@ -156,7 +156,7 @@ describe.sequential("Secret serialization", () => {
           if (scope?.root?.state) {
             await scope.root.state.delete(SALT_KEY);
           }
-        } catch (e) {
+        } catch (_e) {
           // Ignore cleanup errors
         }
         await destroy(scope);
@@ -182,7 +182,7 @@ describe.sequential("Secret serialization", () => {
         const testValues = [
           "simple-string",
           "complex-string-with-symbols!@#$%^&*()",
-          "very-long-string-" + "x".repeat(1000),
+          `very-long-string-${"x".repeat(1000)}`,
           "unicode-string-🔐🔑🛡️",
           "",
           " ",
@@ -205,7 +205,7 @@ describe.sequential("Secret serialization", () => {
           if (scope?.root?.state) {
             await scope.root.state.delete(SALT_KEY);
           }
-        } catch (e) {
+        } catch (_e) {
           // Ignore cleanup errors
         }
         await destroy(scope);
@@ -249,7 +249,7 @@ describe.sequential("Secret serialization", () => {
           if (scope?.root?.state) {
             await scope.root.state.delete(SALT_KEY);
           }
-        } catch (e) {
+        } catch (_e) {
           // Ignore cleanup errors
         }
         await destroy(scope);
@@ -318,7 +318,7 @@ describe.sequential("Secret serialization", () => {
           if (scope?.root?.state) {
             await scope.root.state.delete(SALT_KEY);
           }
-        } catch (e) {
+        } catch (_e) {
           // Ignore cleanup errors
         }
         await destroy(scope);

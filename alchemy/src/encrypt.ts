@@ -1,18 +1,5 @@
 import type { Scope } from "./scope.ts";
 
-const SALT_KEY = "_passkey-salt";
-
-/**
- * Get salt from the root scope for encryption
- */
-async function getSalt(scope: Scope): Promise<string | undefined> {
-  const state = await scope.root.state.get(SALT_KEY);
-  if (!state?.data?.value) {
-    return undefined;
-  }
-  return state.data.value;
-}
-
 /**
  * Encrypt a value with a symmetric key using libsodium.
  * If a salt is available in the scope, uses pwhash for key derivation.
@@ -27,6 +14,7 @@ export async function encrypt(
   value: string,
   key: string,
   scope?: Scope,
+  salt?: string,
 ): Promise<string> {
   const sodium = (await import("libsodium-wrappers-sumo" as any)).default;
   await sodium.ready;
@@ -35,7 +23,6 @@ export async function encrypt(
 
   // If scope is provided, try to get salt for pwhash
   if (scope) {
-    const salt = await getSalt(scope);
     if (salt) {
       // Derive key using pwhash
       const saltBytes = sodium.from_base64(
@@ -98,6 +85,7 @@ export async function decryptWithKey(
   encryptedValue: string,
   key: string,
   scope?: Scope,
+  salt?: string,
 ): Promise<string> {
   const sodium = (await import("libsodium-wrappers-sumo" as any)).default;
   await sodium.ready;
@@ -106,7 +94,6 @@ export async function decryptWithKey(
 
   // If scope is provided, try to get salt for pwhash
   if (scope) {
-    const salt = await getSalt(scope);
     if (salt) {
       // Derive key using pwhash
       const saltBytes = sodium.from_base64(

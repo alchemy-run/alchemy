@@ -1,13 +1,5 @@
 import { alchemy } from "./alchemy.ts";
 import { decryptWithKey, encrypt } from "./encrypt.ts";
-import {
-  type Resource,
-  ResourceFQN,
-  ResourceID,
-  ResourceKind,
-  ResourceScope,
-  ResourceSeq,
-} from "./resource.ts";
 import type { Scope } from "./scope.ts";
 
 export const SALT_KEY = "_passkey-salt";
@@ -26,7 +18,7 @@ function nextName() {
  * Generate a new salt for secret encryption.
  * This should only be called during serialization if no salt exists.
  */
-async function generateSalt(): Promise<string> {
+export async function generateSalt(): Promise<string> {
   const sodium = (await import("libsodium-wrappers-sumo" as any)).default;
   await sodium.ready;
   // Generate a random salt using proper pwhash salt size
@@ -155,6 +147,7 @@ export function secret<S extends string | undefined>(
 export async function serializeSecret(
   secret: Secret,
   scope: Scope,
+  salt?: string,
 ): Promise<{ "@secret": string }> {
   if (!scope.password) {
     throw new Error(
@@ -163,34 +156,13 @@ export async function serializeSecret(
     );
   }
 
-  // Initialize salt in root scope if not present
-  const salt = await scope.root.state.get(SALT_KEY);
-  if (!salt?.data?.value) {
-    const newSalt = await generateSalt();
-    const saltResource = {
-      [ResourceID]: "alchemy::SecretSalt",
-      [ResourceFQN]: "alchemy::SecretSalt",
-      [ResourceKind]: "alchemy::SecretSalt",
-      [ResourceScope]: scope,
-      [ResourceSeq]: 0,
-    } satisfies Resource;
-
-    await scope.root.state.set(SALT_KEY, {
-      output: saltResource,
-      status: "created",
-      kind: "alchemy::SecretSalt",
-      id: SALT_KEY,
-      fqn: SALT_KEY,
-      seq: 0,
-      data: {
-        value: newSalt,
-      },
-      props: {},
-    });
-  }
-
   // Encrypt using the password and root scope's salt
-  const encrypted = await encrypt(secret.unencrypted, scope.password, scope);
+  const encrypted = await encrypt(
+    secret.unencrypted,
+    scope.password,
+    scope,
+    salt,
+  );
 
   return {
     "@secret": encrypted,

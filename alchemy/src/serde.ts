@@ -4,8 +4,8 @@ import {
   ResourceKind,
   type Resource,
 } from "./resource.ts";
-import { deserializeSecret, Secret, serializeSecret } from "./secret.ts";
 import { Scope } from "./scope.ts";
+import { deserializeSecret, Secret, serializeSecret } from "./secret.ts";
 
 import type { Type } from "arktype";
 
@@ -101,6 +101,7 @@ export async function serialize(
   value: any,
   options?: {
     encrypt?: boolean;
+    salt?: string;
     transform?: (value: any) => any;
   },
 ): Promise<any> {
@@ -111,7 +112,7 @@ export async function serialize(
   if (Array.isArray(value)) {
     return Promise.all(value.map((value) => serialize(scope, value, options)));
   } else if (value instanceof Secret) {
-    return serializeSecret(value, scope);
+    return serializeSecret(value, scope, options?.salt);
   } else if (isType(value)) {
     return {
       "@schema": value.toJSON(),
