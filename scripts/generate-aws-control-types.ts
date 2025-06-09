@@ -229,17 +229,6 @@ function generateResourceType(
     }
   }
 
-  // Add additional properties from Cloud Control API only if not already present
-  lines.push("  // Additional properties from Cloud Control API");
-  if (!addedProperties.has("Arn")) {
-    lines.push("  Arn: string;");
-  }
-  if (!addedProperties.has("CreationTime")) {
-    lines.push("  CreationTime: string;");
-  }
-  if (!addedProperties.has("LastUpdateTime")) {
-    lines.push("  LastUpdateTime: string;");
-  }
   lines.push("};");
 
   return lines.join("\n");
