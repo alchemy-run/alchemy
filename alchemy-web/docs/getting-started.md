@@ -16,17 +16,17 @@ You'll need:
 
 ::: code-group
 
-```sh [Node.js]
+```sh [node]
 # Install from https://nodejs.org/
 node --version
 ```
 
-```sh [Bun]
+```sh [bun]
 # Install from https://bun.sh/
 bun --version
 ```
 
-```sh [Deno]
+```sh [deno]
 # Install from https://deno.com/
 deno --version
 ```
@@ -115,8 +115,7 @@ This will open your browser to authenticate with your Cloudflare account.
 
 Create a file named `alchemy.run.ts` in your project directory:
 
-> [!TIP]
-> `alchemy.run.ts` is just a convention - you can run Alchemy in any script or JavaScript environment.
+> [!TIP] > `alchemy.run.ts` is just a convention - you can run Alchemy in any script or JavaScript environment.
 
 ### Step 1: Initialize the Alchemy Application Scope
 
@@ -169,9 +168,9 @@ Create a `src/worker.ts` file with your worker code:
 ```typescript
 export default {
   async fetch(request: Request): Promise<Response> {
-    return Response.json({ 
+    return Response.json({
       message: "Hello from Alchemy!",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   },
 };
@@ -221,12 +220,12 @@ Now let's add some infrastructure to our worker. We'll add a KV namespace for st
 First, update your `alchemy.run.ts` to add bindings:
 
 ```typescript
-import { Worker, KvNamespace } from "alchemy/cloudflare";
+import { Worker, KVNamespace } from "alchemy/cloudflare";
 
 // ... existing app initialization ...
 
 // Create a KV namespace for storage
-const kv = await KvNamespace("my-app-storage", {});
+const kv = await KVNamespace("my-app-storage");
 
 // Update the worker with bindings
 const worker = await Worker("hello-worker", {
@@ -238,8 +237,7 @@ const worker = await Worker("hello-worker", {
   },
 });
 
-console.log(`Worker deployed at: ${worker.url}`);
-await app.finalize();
+// ... existing app.finalize() ...
 ```
 
 Now update your worker to use these bindings with type safety:
@@ -253,12 +251,12 @@ export default {
     // Store and retrieve data with type safety
     await env.KV.put("last-visit", new Date().toISOString());
     const lastVisit = await env.KV.get("last-visit");
-    
-    return Response.json({ 
+
+    return Response.json({
       message: "Hello from Alchemy!",
       timestamp: new Date().toISOString(),
       lastVisit: lastVisit,
-      apiKey: env.API_KEY // TypeScript knows this is a string
+      apiKey: env.API_KEY, // TypeScript knows this is a string
     });
   },
 };
@@ -311,12 +309,12 @@ export default {
     // Store and retrieve data with type safety
     await env.KV.put("last-visit", new Date().toISOString());
     const lastVisit = await env.KV.get("last-visit");
-    
-    return Response.json({ 
+
+    return Response.json({
       message: "Hello from Alchemy!",
       timestamp: new Date().toISOString(),
       lastVisit: lastVisit,
-      apiKey: env.API_KEY // TypeScript knows this is a string
+      apiKey: env.API_KEY, // TypeScript knows this is a string
     });
   },
 };
@@ -414,6 +412,7 @@ yarn tsx ./alchemy.run.ts --destroy
 :::
 
 Output:
+
 ```
 Delete:  "my-first-app/dev/hello-worker"
 Deleted: "my-first-app/dev/hello-worker"
