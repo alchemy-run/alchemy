@@ -1,7 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
-import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
@@ -201,8 +200,6 @@ const QueueResource = Resource("cloudflare::Queue", async function <
   const queueName = props.name ?? id;
 
   if (this.phase === "delete") {
-    logger.log("Deleting Cloudflare Queue:", queueName);
-    logger.log(this.output);
     if (props.delete !== false) {
       // Delete Queue
       await deleteQueue(api, this.output?.id);
@@ -214,7 +211,6 @@ const QueueResource = Resource("cloudflare::Queue", async function <
   let queueData: CloudflareQueueResponse;
 
   if (this.phase === "create") {
-    logger.log("Creating Cloudflare Queue:", queueName);
     try {
       queueData = await createQueue(api, queueName, props);
     } catch (error) {
@@ -238,8 +234,6 @@ const QueueResource = Resource("cloudflare::Queue", async function <
   } else {
     // Update operation
     if (this.output?.id) {
-      logger.log("Updating Cloudflare Queue:", queueName);
-
       // Check if name is being changed, which is not allowed
       if (queueName !== this.output.name) {
         throw new Error(
@@ -251,10 +245,6 @@ const QueueResource = Resource("cloudflare::Queue", async function <
       queueData = await updateQueue(api, this.output.id, props);
     } else {
       // If no ID exists, fall back to creating a new queue
-      logger.log(
-        "No existing Queue ID found, creating new Cloudflare Queue:",
-        queueName,
-      );
       queueData = await createQueue(api, queueName, props);
     }
   }
@@ -367,7 +357,6 @@ export async function deleteQueue(
   queueId?: string,
 ): Promise<void> {
   if (!queueId) {
-    logger.log("No Queue ID provided, skipping delete");
     return;
   }
 
