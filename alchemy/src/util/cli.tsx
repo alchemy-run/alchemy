@@ -2,8 +2,9 @@ import { Box, render, Static, Text, useApp } from "ink";
 import Spinner from "ink-spinner";
 import { format } from "node:util";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { version } from "../../package.json";
+import { version } from "../../package.json" with { type: "json" };
 import type { Phase } from "../alchemy.ts";
+import { dedent } from "./dedent.ts";
 
 export type Color = Parameters<typeof Text>[0]["color"];
 export type Task = {
@@ -160,6 +161,15 @@ let loggerApi: LoggerApi | null = null;
 export const createLoggerInstance = (alchemyInfo: AlchemyInfo) => {
   if (loggerApi) return loggerApi;
 
+  if (
+    process.env.CI ||
+    process.env.USE_FALLBACK_LOGGER ||
+    !process.stdin.isTTY
+  ) {
+    loggerApi = createFallbackLogger(alchemyInfo);
+    return loggerApi;
+  }
+
   render(
     <LoggerCLI
       alchemyInfo={alchemyInfo}
@@ -185,6 +195,24 @@ export const createDummyLogger = (): LoggerApi => {
     log: () => {},
     error: () => {},
     warn: () => {},
+    task: () => {},
+    exit: () => {},
+  };
+};
+
+export const createFallbackLogger = (alchemyInfo: AlchemyInfo): LoggerApi => {
+  console.log(dedent`
+    Alchemy (v${version})
+    App: ${alchemyInfo.appName}
+    Phase: ${alchemyInfo.phase}
+    Stage: ${alchemyInfo.stage}
+    
+  `);
+
+  return {
+    log: console.log,
+    error: console.error,
+    warn: console.warn,
     task: () => {},
     exit: () => {},
   };
