@@ -1,7 +1,7 @@
 ---
 layout: home
 title: Alchemy
-description: TypeScript-native Infrastructure-as-Code without the dead weight. Create, Update, Delete resources with pure async TypeScript.
+description: Like Terraform but in plain JavaScript. Supports AWS, Cloudflare, Azure, etc.
 
 # Custom hero component instead of the default hero
 ---
@@ -9,7 +9,7 @@ description: TypeScript-native Infrastructure-as-Code without the dead weight. C
 <CodeSnippetHero 
   name="Alchemy" 
   text="Create, Update, Delete" 
-  tagline="Infrastructure-as-Code without the dead weight. Written in pure TypeScript, optimized for Gen-AI."
+  tagline="Like Terraform but in plain JavaScript. Supports AWS, Cloudflare, Azure, etc."
   :actions="[
     { theme: 'brand', text: 'Get Started', link: '/docs/getting-started' },
     { theme: 'alt', text: 'Star on GitHub ⭐️', link: 'https://github.com/sam-goodwin/alchemy' }
