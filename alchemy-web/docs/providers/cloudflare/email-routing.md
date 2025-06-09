@@ -8,7 +8,11 @@ description: Learn how to enable and configure email routing for your Cloudflare
 Enable and configure email routing for your Cloudflare zone to start receiving and routing emails sent to your domain.
 
 > [!CAUTION]
-> Email Routing resources do not work with `wrangler login` (OAuth tokens) due to permission limitations. You must use an API token instead. See the [Cloudflare Auth guide](../../guides/cloudflare-auth.md) for details on setting up API token authentication.
+> Email Routing resources do not work with `wrangler login` (OAuth tokens) due to permission limitations. You must use an API token instead with the following scopes:
+> - **Zone:Read** - to read zone information
+> - **Zone:Edit** - to manage email routing settings
+>
+> See the [Cloudflare Auth guide](../../guides/cloudflare-auth.md) for details on setting up API token authentication.
 
 ## Minimal Example
 
