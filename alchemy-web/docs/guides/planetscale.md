@@ -37,7 +37,7 @@ yarn add --dev alchemy
 To use PlanetScale with Alchemy, you'll need:
 
 1. **PlanetScale API Token**: Create a service token in your [PlanetScale organization settings](https://app.planetscale.com/organization/settings/service-tokens)
-2. **Organization ID**: Found in your PlanetScale organization URL
+2. **Organization Name**: Your PlanetScale organization name (not UUID), found in your organization URL
 
 Add these to your `.env` file:
 
@@ -45,6 +45,10 @@ Add these to your `.env` file:
 PLANETSCALE_API_TOKEN=your_service_token_here
 PLANETSCALE_ORG_ID=your_organization_id
 ```
+
+::: warning [!CAUTION]
+When creating your service token in PlanetScale, make sure to copy the token in the format `id:secret` (both parts separated by a colon). This is the complete token value that should be used for `PLANETSCALE_API_TOKEN`.
+:::
 
 ## Create a new project
 
