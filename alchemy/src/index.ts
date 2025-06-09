@@ -7,6 +7,7 @@ export * from "./serde.ts";
 export * from "./state.ts";
 export * from "./type.ts";
 export * from "./util/ignore.ts";
+export * from "./util/logger.ts";
 
 import { alchemy } from "./alchemy.ts";
 export default alchemy;
