@@ -5,41 +5,86 @@ description: Learn how to create, update, and manage AWS MediaTailor LiveSources
 
 # LiveSource
 
-The LiveSource resource lets you create and manage [AWS MediaTailor LiveSources](https://docs.aws.amazon.com/mediatailor/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-mediatailor-livesource.html
+The LiveSource resource lets you manage [AWS MediaTailor LiveSources](https://docs.aws.amazon.com/mediatailor/latest/userguide/) for live video streaming. This resource allows you to define a source of live content for your MediaTailor configurations.
 
 ## Minimal Example
+
+Create a basic LiveSource with required properties and a tag.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const livesource = await AWS.MediaTailor.LiveSource("livesource-example", {
-  LiveSourceName: "livesource-livesource",
-  SourceLocationName: "livesource-sourcelocation",
-  HttpPackageConfigurations: [],
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const liveSource = await AWS.MediaTailor.LiveSource("myLiveSource", {
+  LiveSourceName: "MyLiveSource",
+  SourceLocationName: "MySourceLocation",
+  HttpPackageConfigurations: [
+    {
+      Name: "MyHttpPackageConfig",
+      SourceGroup: "MySourceGroup",
+      PackageType: "HLS",
+      Url: "https://my-live-source-url.com/playlist.m3u8"
+    }
+  ],
+  Tags: [
+    {
+      Key: "Environment",
+      Value: "Production"
+    }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a livesource with additional configuration:
+Configure a LiveSource with multiple HTTP package configurations and additional tags.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedLiveSource = await AWS.MediaTailor.LiveSource("advanced-livesource", {
-  LiveSourceName: "livesource-livesource",
-  SourceLocationName: "livesource-sourcelocation",
-  HttpPackageConfigurations: [],
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedLiveSource = await AWS.MediaTailor.LiveSource("advancedLiveSource", {
+  LiveSourceName: "AdvancedLiveSource",
+  SourceLocationName: "AdvancedSourceLocation",
+  HttpPackageConfigurations: [
+    {
+      Name: "MainHttpPackageConfig",
+      SourceGroup: "MainSourceGroup",
+      PackageType: "HLS",
+      Url: "https://advanced-live-source-url.com/playlist.m3u8"
+    },
+    {
+      Name: "BackupHttpPackageConfig",
+      SourceGroup: "BackupSourceGroup",
+      PackageType: "HLS",
+      Url: "https://backup-live-source-url.com/playlist.m3u8"
+    }
+  ],
+  Tags: [
+    {
+      Key: "Environment",
+      Value: "Staging"
+    },
+    {
+      Key: "Owner",
+      Value: "TeamA"
+    }
+  ]
 });
 ```
 
+## Adoption of Existing Resource
+
+Create a LiveSource while adopting an existing resource if it already exists.
+
+```ts
+const adoptLiveSource = await AWS.MediaTailor.LiveSource("adoptLiveSource", {
+  LiveSourceName: "ExistingLiveSource",
+  SourceLocationName: "ExistingSourceLocation",
+  HttpPackageConfigurations: [
+    {
+      Name: "AdoptedHttpPackageConfig",
+      SourceGroup: "AdoptedSourceGroup",
+      PackageType: "HLS",
+      Url: "https://existing-live-source-url.com/playlist.m3u8"
+    }
+  ],
+  adopt: true // Adopt existing resource if it already exists
+});
+```

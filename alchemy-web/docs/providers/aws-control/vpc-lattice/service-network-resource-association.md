@@ -5,40 +5,60 @@ description: Learn how to create, update, and manage AWS VpcLattice ServiceNetwo
 
 # ServiceNetworkResourceAssociation
 
-The ServiceNetworkResourceAssociation resource lets you create and manage [AWS VpcLattice ServiceNetworkResourceAssociations](https://docs.aws.amazon.com/vpclattice/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-vpclattice-servicenetworkresourceassociation.html
+The ServiceNetworkResourceAssociation resource allows you to manage associations between service networks and resources in AWS VpcLattice. This facilitates the integration of your services in a networked environment. For more information, visit the [AWS VpcLattice ServiceNetworkResourceAssociations documentation](https://docs.aws.amazon.com/vpclattice/latest/userguide/).
 
 ## Minimal Example
+
+Create a basic ServiceNetworkResourceAssociation with required properties and a common optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const servicenetworkresourceassociation = await AWS.VpcLattice.ServiceNetworkResourceAssociation(
-  "servicenetworkresourceassociation-example",
-  { Tags: { Environment: "production", ManagedBy: "Alchemy" } }
-);
+const serviceNetworkAssociation = await AWS.VpcLattice.ServiceNetworkResourceAssociation("myServiceNetworkAssociation", {
+  ResourceConfigurationId: "myResourceConfigId",
+  ServiceNetworkId: "myServiceNetworkId"
+});
 ```
 
 ## Advanced Configuration
 
-Create a servicenetworkresourceassociation with additional configuration:
+Configure a ServiceNetworkResourceAssociation with tags for better identification and management.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedServiceNetworkResourceAssociation =
-  await AWS.VpcLattice.ServiceNetworkResourceAssociation(
-    "advanced-servicenetworkresourceassociation",
-    {
-      Tags: {
-        Environment: "production",
-        Team: "DevOps",
-        Project: "MyApp",
-        CostCenter: "Engineering",
-        ManagedBy: "Alchemy",
-      },
-    }
-  );
+const advancedServiceNetworkAssociation = await AWS.VpcLattice.ServiceNetworkResourceAssociation("advancedServiceNetworkAssociation", {
+  ResourceConfigurationId: "myAdvancedResourceConfigId",
+  ServiceNetworkId: "myAdvancedServiceNetworkId",
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Project", Value: "VpcLatticeIntegration" }
+  ]
+});
 ```
 
+## Adopting Existing Resources
+
+Demonstrate how to adopt an existing resource if it already exists, which prevents errors during deployment.
+
+```ts
+const adoptedServiceNetworkAssociation = await AWS.VpcLattice.ServiceNetworkResourceAssociation("adoptedServiceNetworkAssociation", {
+  ResourceConfigurationId: "existingResourceConfigId",
+  ServiceNetworkId: "existingServiceNetworkId",
+  adopt: true
+});
+```
+
+## Complete Resource Configuration
+
+Create a ServiceNetworkResourceAssociation with a full configuration, including optional properties.
+
+```ts
+const completeServiceNetworkAssociation = await AWS.VpcLattice.ServiceNetworkResourceAssociation("completeServiceNetworkAssociation", {
+  ResourceConfigurationId: "fullResourceConfigId",
+  ServiceNetworkId: "fullServiceNetworkId",
+  Tags: [
+    { Key: "Environment", Value: "Development" },
+    { Key: "Owner", Value: "DevTeam" }
+  ],
+  adopt: false // Default value, explicitly set to false
+});
+```

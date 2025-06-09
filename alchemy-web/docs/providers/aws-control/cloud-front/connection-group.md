@@ -5,37 +5,62 @@ description: Learn how to create, update, and manage AWS CloudFront ConnectionGr
 
 # ConnectionGroup
 
-The ConnectionGroup resource lets you create and manage [AWS CloudFront ConnectionGroups](https://docs.aws.amazon.com/cloudfront/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-cloudfront-connectiongroup.html
+The ConnectionGroup resource allows you to manage [AWS CloudFront ConnectionGroups](https://docs.aws.amazon.com/cloudfront/latest/userguide/) for enhanced routing control across multiple origins and improved network performance.
 
 ## Minimal Example
+
+Create a basic ConnectionGroup with essential properties:
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const connectiongroup = await AWS.CloudFront.ConnectionGroup("connectiongroup-example", {
-  Name: "connectiongroup-",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const basicConnectionGroup = await AWS.CloudFront.ConnectionGroup("basic-connection-group", {
+  name: "BasicConnectionGroup",
+  enabled: true,
+  ipv6Enabled: true
 });
 ```
 
 ## Advanced Configuration
 
-Create a connectiongroup with additional configuration:
+Configure a ConnectionGroup with additional settings, including tags and an Anycast IP List ID:
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedConnectionGroup = await AWS.CloudFront.ConnectionGroup("advanced-connectiongroup", {
-  Name: "connectiongroup-",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedConnectionGroup = await AWS.CloudFront.ConnectionGroup("advanced-connection-group", {
+  name: "AdvancedConnectionGroup",
+  enabled: true,
+  ipv6Enabled: true,
+  anycastIpListId: "example-ip-list-id",
+  tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Team", Value: "CloudOps" }
+  ]
 });
 ```
 
+## Adoption of Existing Resource
+
+Create a ConnectionGroup that adopts an existing resource instead of failing:
+
+```ts
+const existingConnectionGroup = await AWS.CloudFront.ConnectionGroup("existing-connection-group", {
+  name: "ExistingConnectionGroup",
+  adopt: true,
+  enabled: true
+});
+```
+
+## Enable ConnectionGroup with Specific Tags
+
+Set up a ConnectionGroup with specific tags for better resource management:
+
+```ts
+const taggedConnectionGroup = await AWS.CloudFront.ConnectionGroup("tagged-connection-group", {
+  name: "TaggedConnectionGroup",
+  enabled: true,
+  tags: [
+    { Key: "Project", Value: "Migration" },
+    { Key: "Owner", Value: "DevTeam" }
+  ]
+});
+```

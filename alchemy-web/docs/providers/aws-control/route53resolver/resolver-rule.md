@@ -5,37 +5,69 @@ description: Learn how to create, update, and manage AWS Route53Resolver Resolve
 
 # ResolverRule
 
-The ResolverRule resource lets you create and manage [AWS Route53Resolver ResolverRules](https://docs.aws.amazon.com/route53resolver/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-route53resolver-resolverrule.html
+The ResolverRule resource allows you to manage [AWS Route53Resolver ResolverRules](https://docs.aws.amazon.com/route53resolver/latest/userguide/) for DNS resolution configurations, enabling you to specify how DNS queries are resolved.
 
 ## Minimal Example
+
+Create a basic ResolverRule with required properties and a common optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const resolverrule = await AWS.Route53Resolver.ResolverRule("resolverrule-example", {
-  RuleType: "example-ruletype",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const basicResolverRule = await AWS.Route53Resolver.ResolverRule("basicResolverRule", {
+  RuleType: "FORWARD",
+  DomainName: "example.com",
+  ResolverEndpointId: "re-1234567890abcdef",
+  Name: "Example Rule"
 });
 ```
 
 ## Advanced Configuration
 
-Create a resolverrule with additional configuration:
+Configure a ResolverRule with additional settings including target IP addresses and tags.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedResolverRule = await AWS.Route53Resolver.ResolverRule("advanced-resolverrule", {
-  RuleType: "example-ruletype",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedResolverRule = await AWS.Route53Resolver.ResolverRule("advancedResolverRule", {
+  RuleType: "FORWARD",
+  DomainName: "service.example.com",
+  ResolverEndpointId: "re-0987654321fedcba",
+  TargetIps: [
+    { Ip: "192.0.2.1", Port: 53 },
+    { Ip: "192.0.2.2", Port: 53 }
+  ],
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Team", Value: "DevOps" }
+  ],
+  Name: "Service Rule"
 });
 ```
 
+## Custom Rule for Specific Use Case
+
+Create a ResolverRule specifically for a private hosted zone with a unique configuration.
+
+```ts
+const privateHostedZoneRule = await AWS.Route53Resolver.ResolverRule("privateHostedZoneRule", {
+  RuleType: "SYSTEM",
+  DomainName: "internal.example.com",
+  Tags: [
+    { Key: "UseCase", Value: "Internal Resolution" }
+  ],
+  Name: "Internal Rule"
+});
+```
+
+## Conditional Rule Adoption
+
+Demonstrate adopting an existing ResolverRule if it already exists, preventing failure.
+
+```ts
+const conditionalAdoptResolverRule = await AWS.Route53Resolver.ResolverRule("conditionalAdoptResolverRule", {
+  RuleType: "FORWARD",
+  DomainName: "adopted.example.com",
+  ResolverEndpointId: "re-abcdef1234567890",
+  adopt: true, // Allows adopting existing resource
+  Name: "Adopted Rule"
+});
+```

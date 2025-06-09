@@ -5,37 +5,69 @@ description: Learn how to create, update, and manage AWS ElasticBeanstalk Config
 
 # ConfigurationTemplate
 
-The ConfigurationTemplate resource lets you create and manage [AWS ElasticBeanstalk ConfigurationTemplates](https://docs.aws.amazon.com/elasticbeanstalk/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticbeanstalk-configurationtemplate.html
+The ConfigurationTemplate resource lets you manage [AWS ElasticBeanstalk ConfigurationTemplates](https://docs.aws.amazon.com/elasticbeanstalk/latest/userguide/) which define the settings for your Elastic Beanstalk environments.
 
 ## Minimal Example
+
+Create a basic configuration template with required properties and one optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const configurationtemplate = await AWS.ElasticBeanstalk.ConfigurationTemplate(
-  "configurationtemplate-example",
-  {
-    ApplicationName: "configurationtemplate-application",
-    Description: "A configurationtemplate resource managed by Alchemy",
-  }
-);
+const basicConfigTemplate = await AWS.ElasticBeanstalk.ConfigurationTemplate("basicConfigTemplate", {
+  ApplicationName: "MyApplication",
+  EnvironmentId: "my-environment-id",
+  Description: "Basic configuration template for my application"
+});
 ```
 
 ## Advanced Configuration
 
-Create a configurationtemplate with additional configuration:
+Define an advanced configuration template with custom option settings.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedConfigurationTemplate = await AWS.ElasticBeanstalk.ConfigurationTemplate(
-  "advanced-configurationtemplate",
-  {
-    ApplicationName: "configurationtemplate-application",
-    Description: "A configurationtemplate resource managed by Alchemy",
-  }
-);
+const advancedConfigTemplate = await AWS.ElasticBeanstalk.ConfigurationTemplate("advancedConfigTemplate", {
+  ApplicationName: "MyApplication",
+  EnvironmentId: "my-environment-id",
+  OptionSettings: [
+    {
+      Namespace: "aws:autoscaling:launchconfiguration",
+      OptionName: "InstanceType",
+      Value: "t2.micro"
+    },
+    {
+      Namespace: "aws:elasticbeanstalk:environment",
+      OptionName: "EnvironmentType",
+      Value: "LoadBalanced"
+    }
+  ],
+  Description: "Advanced configuration template with custom options"
+});
 ```
 
+## Source Configuration
+
+Create a configuration template based on an existing template for reuse.
+
+```ts
+const sourceConfigTemplate = await AWS.ElasticBeanstalk.ConfigurationTemplate("sourceConfigTemplate", {
+  ApplicationName: "MyApplication",
+  SourceConfiguration: {
+    ApplicationName: "MyApplication",
+    TemplateName: "baseConfigTemplate"
+  },
+  Description: "Configuration template derived from baseConfigTemplate"
+});
+```
+
+## Solution Stack
+
+Configure a template using a specific solution stack name.
+
+```ts
+const solutionStackConfigTemplate = await AWS.ElasticBeanstalk.ConfigurationTemplate("solutionStackConfigTemplate", {
+  ApplicationName: "MyApplication",
+  SolutionStackName: "64bit Amazon Linux 2 v3.3.5 running Python 3.8",
+  Description: "Configuration template using a specific solution stack"
+});
+```

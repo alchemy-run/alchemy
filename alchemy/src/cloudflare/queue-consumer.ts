@@ -1,12 +1,13 @@
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { CloudflareApiError, handleApiError } from "./api-error.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
+import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
-} from "./api.js";
-import type { QueueResource } from "./queue.js";
+} from "./api.ts";
+import type { Queue, QueueResource } from "./queue.ts";
 
 /**
  * Settings for configuring a Queue Consumer
@@ -41,6 +42,12 @@ export interface QueueConsumerSettings {
    * @default 30
    */
   retryDelay?: number;
+
+  /**
+   * Dead letter queue for messages that exceed max retries
+   * Can be either a queue name (string) or a Queue object
+   */
+  deadLetterQueue?: string | Queue;
 }
 
 /**
@@ -151,7 +158,7 @@ export const QueueConsumer = Resource(
     }
 
     if (this.phase === "delete") {
-      console.log(`Deleting Queue Consumer for queue ${queueId}`);
+      logger.log(`Deleting Queue Consumer for queue ${queueId}`);
       if (props.delete !== false && this.output?.id) {
         // Delete the consumer
         await deleteQueueConsumer(api, queueId, this.output.id);
@@ -188,6 +195,7 @@ export const QueueConsumer = Resource(
             maxRetries: consumerData.result.settings.max_retries,
             maxWaitTimeMs: consumerData.result.settings.max_wait_time_ms,
             retryDelay: consumerData.result.settings.retry_delay,
+            deadLetterQueue: consumerData.result.settings.dead_letter_queue,
           }
         : undefined,
       createdOn: consumerData.result.created_on,
@@ -209,6 +217,7 @@ interface CloudflareQueueConsumerResponse {
       max_retries?: number;
       max_wait_time_ms?: number;
       retry_delay?: number;
+      dead_letter_queue?: string;
     };
     type: "worker";
     queue_id?: string;
@@ -255,6 +264,14 @@ export async function createQueueConsumer(
 
     if (props.settings.retryDelay !== undefined) {
       createPayload.settings.retry_delay = props.settings.retryDelay;
+    }
+
+    if (props.settings.deadLetterQueue !== undefined) {
+      const dlqName =
+        typeof props.settings.deadLetterQueue === "string"
+          ? props.settings.deadLetterQueue
+          : props.settings.deadLetterQueue.name;
+      createPayload.settings.dead_letter_queue = dlqName;
     }
   }
 
@@ -336,6 +353,14 @@ async function updateQueueConsumer(
     if (props.settings.retryDelay !== undefined) {
       updatePayload.settings.retry_delay = props.settings.retryDelay;
     }
+
+    if (props.settings.deadLetterQueue !== undefined) {
+      const dlqName =
+        typeof props.settings.deadLetterQueue === "string"
+          ? props.settings.deadLetterQueue
+          : props.settings.deadLetterQueue.name;
+      updatePayload.settings.dead_letter_queue = dlqName;
+    }
   }
 
   // Use PUT to update the consumer
@@ -397,6 +422,7 @@ export async function listQueueConsumers(
         max_retries?: number;
         max_wait_time_ms?: number;
         retry_delay?: number;
+        dead_letter_queue?: string;
       };
     }>;
   };
@@ -420,7 +446,66 @@ export async function listQueueConsumers(
           maxRetries: consumer.settings.max_retries,
           maxWaitTimeMs: consumer.settings.max_wait_time_ms,
           retryDelay: consumer.settings.retry_delay,
+          deadLetterQueue: consumer.settings.dead_letter_queue,
         }
       : undefined,
+  }));
+}
+
+export async function listQueueConsumersForWorker(
+  api: CloudflareApi,
+  workerName: string,
+) {
+  const response = await api.get(
+    `/accounts/${api.accountId}/workers/scripts/${workerName}/queue-consumers?perPage=100`,
+  );
+
+  if (response.status === 404) {
+    return [];
+  }
+
+  if (!response.ok) {
+    return await handleApiError(
+      response,
+      "list",
+      "QueueConsumer",
+      `for worker ${workerName}`,
+    );
+  }
+
+  const data = (await response.json()) as {
+    result: Array<{
+      script: string;
+      settings?: {
+        batch_size?: number;
+        max_retries?: number;
+        max_wait_time_ms?: number;
+        retry_delay?: number;
+        dead_letter_queue?: string;
+      };
+      type: string;
+      queue_name: string;
+      queue_id: string;
+      consumer_id: string;
+      created_on: string;
+    }>;
+    success: boolean;
+    errors: any[] | null;
+    messages: any[] | null;
+    result_info: {
+      page: number;
+      per_page: number;
+      count: number;
+      total_count: number;
+      total_pages: number;
+    };
+  };
+
+  return data.result.map((consumer) => ({
+    queueName: consumer.queue_name,
+    queueId: consumer.queue_id,
+    consumerId: consumer.consumer_id,
+    createdOn: consumer.created_on,
+    settings: consumer.settings,
   }));
 }

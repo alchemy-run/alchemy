@@ -5,41 +5,65 @@ description: Learn how to create, update, and manage AWS Location Maps using Alc
 
 # Map
 
-The Map resource lets you create and manage [AWS Location Maps](https://docs.aws.amazon.com/location/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-location-map.html
+The Map resource lets you manage [AWS Location Maps](https://docs.aws.amazon.com/location/latest/userguide/) for geospatial applications and services.
 
 ## Minimal Example
+
+Create a basic map with essential properties including a name and configuration:
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const map = await AWS.Location.Map("map-example", {
-  MapName: "map-map",
-  Configuration: "example-configuration",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A map resource managed by Alchemy",
+const basicMap = await AWS.Location.Map("basicMap", {
+  MapName: "BasicMap",
+  Configuration: {
+    Style: "VectorEsriStreet"
+  }
 });
 ```
 
 ## Advanced Configuration
 
-Create a map with additional configuration:
+Configure a map with a description and a pricing plan for enhanced features:
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedMap = await AWS.Location.Map("advanced-map", {
-  MapName: "map-map",
-  Configuration: "example-configuration",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedMap = await AWS.Location.Map("advancedMap", {
+  MapName: "AdvancedMap",
+  Description: "An advanced map for geospatial services.",
+  Configuration: {
+    Style: "VectorEsriImagery"
   },
-  Description: "A map resource managed by Alchemy",
+  PricingPlan: "RequestBased"
 });
 ```
 
+## Using Tags
+
+Create a map with tags to help organize and manage resources:
+
+```ts
+const taggedMap = await AWS.Location.Map("taggedMap", {
+  MapName: "TaggedMap",
+  Configuration: {
+    Style: "VectorEsriTopographic"
+  },
+  Tags: [
+    { Key: "Project", Value: "GeospatialAnalysis" },
+    { Key: "Environment", Value: "Production" }
+  ]
+});
+```
+
+## Adopting Existing Resources
+
+If you need to adopt an existing map without creating a new one, you can set the `adopt` property to true:
+
+```ts
+const adoptedMap = await AWS.Location.Map("adoptedMap", {
+  MapName: "ExistingMap",
+  Configuration: {
+    Style: "VectorEsriNavigation"
+  },
+  adopt: true
+});
+```

@@ -1,10 +1,11 @@
 import { generateText } from "ai";
 import prettier from "prettier";
-import type { Context } from "../context.js";
-import { StaticAstroFile } from "../fs/static-astro-file.js";
-import { Resource } from "../resource.js";
-import type { Secret } from "../secret.js";
-import { type ModelConfig, createModel } from "./client.js";
+import type { Context } from "../context.ts";
+import { StaticAstroFile } from "../fs/static-astro-file.ts";
+import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
+import { type ModelConfig, createModel } from "./client.ts";
 
 /**
  * Properties for creating or updating an AstroFile
@@ -220,7 +221,7 @@ export const AstroFile = Resource(
       code = await prettier.format(code, prettierOptions);
     } catch (error) {
       // If Prettier formatting fails, just use the unformatted code
-      console.warn("Failed to format Astro code with Prettier:", error);
+      logger.warn("Failed to format Astro code with Prettier:", error);
     }
 
     // Use StaticAstroFile to create/update the file

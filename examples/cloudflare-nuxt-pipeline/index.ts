@@ -1,5 +1,5 @@
 /// <reference types="@cloudflare/workers-types" />
-import type { WorkerEnv } from "./env";
+import type { WorkerEnv } from "./env.ts";
 // @ts-ignore - Suppress type errors if the module isn't found during editing/linting
 import nitroApp from "./.output/server/index.mjs";
 

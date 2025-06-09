@@ -1,4 +1,4 @@
-import { OIDCProvider, type OIDCProviderProps } from "./oidc-provider.js";
+import { OIDCProvider, type OIDCProviderProps } from "./oidc-provider.ts";
 
 /**
  * Default thumbprint for GitHub's OIDC provider

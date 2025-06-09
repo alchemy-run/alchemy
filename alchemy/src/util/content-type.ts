@@ -6,6 +6,7 @@ const mimeTypes: Record<string, string> = {
   ".htm": "text/html",
   ".css": "text/css",
   ".js": "application/javascript",
+  ".mjs": "application/javascript+module",
   ".json": "application/json",
   ".xml": "application/xml",
   ".txt": "text/plain",
@@ -28,6 +29,7 @@ const mimeTypes: Record<string, string> = {
   ".webm": "video/webm",
   ".mp3": "audio/mpeg",
   ".wav": "audio/wav",
+  ".wasm": "application/wasm",
 };
 
 /**

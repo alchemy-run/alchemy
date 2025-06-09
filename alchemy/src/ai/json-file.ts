@@ -1,11 +1,11 @@
 import { generateObject, generateText } from "ai";
 import type { JsonSchema, Type, type } from "arktype";
-import type { Context } from "../context.js";
-import { StaticJsonFile } from "../fs/static-json-file.js";
-import { Resource } from "../resource.js";
-import type { Secret } from "../secret.js";
-import { ark } from "./ark.js";
-import { type ModelConfig, createModel } from "./client.js";
+import type { Context } from "../context.ts";
+import { StaticJsonFile } from "../fs/static-json-file.ts";
+import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { ark } from "./ark.ts";
+import { type ModelConfig, createModel } from "./client.ts";
 
 /**
  * Properties for creating or updating a JSONFile

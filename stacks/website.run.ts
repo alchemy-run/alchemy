@@ -15,12 +15,20 @@ import alchemy from "../alchemy/src/index.js";
 import { Exec } from "../alchemy/src/os/index.js";
 import options from "./env.js";
 
+// Support BRANCH_PREFIX for resource isolation
+const branchPrefix = process.env.BRANCH_PREFIX;
+const isPreview = !!branchPrefix;
+
 const app = await alchemy("alchemy:website", options);
 
-const zone = await Zone("alchemy.run", {
-  name: "alchemy.run",
-  type: "full",
-});
+// Only create zone for production deployments, not for previews
+let zone;
+if (!isPreview) {
+  zone = await Zone("alchemy.run", {
+    name: "alchemy.run",
+    type: "full",
+  });
+}
 
 await Exec("build-site", {
   command: "bun run --filter alchemy-web docs:build",
@@ -31,7 +39,7 @@ const staticAssets = await Assets("static-assets", {
 });
 
 export const website = await Worker("website", {
-  name: "alchemy-website",
+  name: branchPrefix ? `${branchPrefix}-alchemy-website` : "alchemy-website",
   url: true,
   bindings: {
     ASSETS: staticAssets,
@@ -51,10 +59,20 @@ export default {
 `,
 });
 
-await CustomDomain("alchemy-web-domain", {
-  name: "alchemy.run",
-  zoneId: zone.id,
-  workerName: website.name,
-});
+// Only set up custom domain for production deployments
+if (!isPreview && zone) {
+  await CustomDomain("alchemy-web-domain", {
+    name: "alchemy.run",
+    zoneId: zone.id,
+    workerName: website.name,
+  });
+}
+
+// Log the website URL for CI to extract
+if (isPreview) {
+  console.log(`Website preview deployed: ${website.url}`);
+} else {
+  console.log("Website deployed: https://alchemy.run");
+}
 
 await app.finalize();

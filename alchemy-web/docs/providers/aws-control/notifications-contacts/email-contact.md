@@ -5,39 +5,66 @@ description: Learn how to create, update, and manage AWS NotificationsContacts E
 
 # EmailContact
 
-The EmailContact resource lets you create and manage [AWS NotificationsContacts EmailContacts](https://docs.aws.amazon.com/notificationscontacts/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-notificationscontacts-emailcontact.html
+The EmailContact resource allows you to manage email contacts for AWS Notifications. This resource can be utilized to create, update, and manage email contacts for notification purposes. For more information, refer to the [AWS NotificationsContacts EmailContacts documentation](https://docs.aws.amazon.com/notificationscontacts/latest/userguide/).
 
 ## Minimal Example
+
+Create a basic email contact with the required properties.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const emailcontact = await AWS.NotificationsContacts.EmailContact("emailcontact-example", {
-  EmailAddress: "example-emailaddress",
-  Name: "emailcontact-",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const emailContact = await AWS.NotificationsContacts.EmailContact("primaryEmailContact", {
+  Name: "Primary Contact",
+  EmailAddress: "primary.contact@example.com",
+  Tags: [
+    { Key: "Department", Value: "Engineering" },
+    { Key: "Role", Value: "Developer" }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a emailcontact with additional configuration:
+Create an email contact with additional properties, including tags.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedEmailContact = await AWS.NotificationsContacts.EmailContact("advanced-emailcontact", {
-  EmailAddress: "example-emailaddress",
-  Name: "emailcontact-",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedEmailContact = await AWS.NotificationsContacts.EmailContact("advancedEmailContact", {
+  Name: "Advanced Contact",
+  EmailAddress: "advanced.contact@example.com",
+  Tags: [
+    { Key: "Department", Value: "Marketing" },
+    { Key: "Role", Value: "Manager" }
+  ],
+  adopt: true // Allow adoption of existing resources
 });
 ```
 
+## Updating an Existing Contact
+
+Update an existing email contact to change its name and tags.
+
+```ts
+const updatedEmailContact = await AWS.NotificationsContacts.EmailContact("existingEmailContact", {
+  Name: "Updated Contact Name",
+  EmailAddress: "updated.contact@example.com",
+  Tags: [
+    { Key: "Department", Value: "Sales" },
+    { Key: "Role", Value: "Sales Associate" }
+  ]
+});
+```
+
+## Deleting an Email Contact
+
+Delete an existing email contact by using the resource ID.
+
+```ts
+const deleteEmailContact = await AWS.NotificationsContacts.EmailContact("deleteEmailContact", {
+  Name: "Delete This Contact",
+  EmailAddress: "delete.contact@example.com"
+});
+
+// Perform delete operation
+await deleteEmailContact.delete();
+```

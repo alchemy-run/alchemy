@@ -1,3 +1,3 @@
-export * from "./api.js";
-export * from "./project-domain.js";
-export * from "./project.js";
+export * from "./api.ts";
+export * from "./project-domain.ts";
+export * from "./project.ts";

@@ -1,14 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { ignore } from "../util/ignore.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { ignore } from "../util/ignore.ts";
+import { logger } from "../util/logger.ts";
 
-import { alchemy } from "../alchemy.js";
-import type { FileCollection } from "./file-collection.js";
-import type { FileRef } from "./file-ref.js";
+import { alchemy } from "../alchemy.ts";
+import type { FileCollection } from "./file-collection.ts";
+import type { FileRef } from "./file-ref.ts";
 
-declare module "../alchemy.js" {
+declare module "../alchemy.ts" {
   interface Alchemy {
     /**
      * Creates a reference to a file in the filesystem.
@@ -176,7 +177,7 @@ export const File = Resource(
       this.output.path !== filePath
     ) {
       // If path has changed, delete the old file
-      console.log(
+      logger.log(
         `File: Path changed from ${this.output.path} to ${filePath}, removing old file`,
       );
       await ignore("ENOENT", async () => fs.promises.unlink(this.output.path));
@@ -186,6 +187,7 @@ export const File = Resource(
     await fs.promises.mkdir(path.dirname(filePath), {
       recursive: true,
     });
+
     await fs.promises.writeFile(filePath, props.content);
 
     return this({

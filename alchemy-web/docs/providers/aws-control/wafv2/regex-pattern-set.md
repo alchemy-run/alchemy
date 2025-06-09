@@ -5,41 +5,53 @@ description: Learn how to create, update, and manage AWS WAFv2 RegexPatternSets 
 
 # RegexPatternSet
 
-The RegexPatternSet resource lets you create and manage [AWS WAFv2 RegexPatternSets](https://docs.aws.amazon.com/wafv2/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-wafv2-regexpatternset.html
+The RegexPatternSet resource allows you to manage [AWS WAFv2 RegexPatternSets](https://docs.aws.amazon.com/wafv2/latest/userguide/) that contain regular expressions for filtering web requests.
 
 ## Minimal Example
+
+Create a basic RegexPatternSet with required properties and a description.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const regexpatternset = await AWS.WAFv2.RegexPatternSet("regexpatternset-example", {
-  RegularExpressionList: ["example-regularexpressionlist-1"],
-  Scope: "example-scope",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A regexpatternset resource managed by Alchemy",
+const regexPatternSet = await AWS.WAFv2.RegexPatternSet("myRegexPatternSet", {
+  Scope: "REGIONAL",
+  RegularExpressionList: [
+    "^(example\\.)?mywebsite\\.com$"
+  ],
+  Description: "A set of regex patterns for my website"
 });
 ```
 
 ## Advanced Configuration
 
-Create a regexpatternset with additional configuration:
+Configure a RegexPatternSet with tags and an optional name.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedRegexPatternSet = await AWS.WAFv2.RegexPatternSet("advanced-regexpatternset", {
-  RegularExpressionList: ["example-regularexpressionlist-1"],
-  Scope: "example-scope",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
-  Description: "A regexpatternset resource managed by Alchemy",
+const advancedRegexPatternSet = await AWS.WAFv2.RegexPatternSet("advancedRegexPatternSet", {
+  Scope: "CLOUDFRONT",
+  RegularExpressionList: [
+    "^.*\\.example\\.com$",
+    "^.*mywebsite\\.com$"
+  ],
+  Name: "MyAdvancedRegexPatternSet",
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Project", Value: "WebSecurity" }
+  ]
 });
 ```
 
+## Adoption of Existing Resource
+
+Adopt an existing RegexPatternSet instead of failing if it already exists.
+
+```ts
+const adoptedRegexPatternSet = await AWS.WAFv2.RegexPatternSet("adoptedRegexPatternSet", {
+  Scope: "REGIONAL",
+  RegularExpressionList: [
+    "^secure\\.mywebsite\\.com$"
+  ],
+  adopt: true // Adopts the existing resource if it already exists
+});
+```

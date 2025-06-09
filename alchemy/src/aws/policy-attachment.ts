@@ -4,9 +4,10 @@ import {
   IAMClient,
   NoSuchEntityException,
 } from "@aws-sdk/client-iam";
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { ignore } from "../util/ignore.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { ignore } from "../util/ignore.ts";
+import { retry } from "./retry.ts";
 
 /**
  * Properties for creating or updating a policy attachment
@@ -72,20 +73,24 @@ export const PolicyAttachment = Resource(
 
     if (this.phase === "delete") {
       await ignore(NoSuchEntityException.name, () =>
-        client.send(
-          new DetachRolePolicyCommand({
-            PolicyArn: props.policyArn,
-            RoleName: props.roleName,
-          }),
+        retry(() =>
+          client.send(
+            new DetachRolePolicyCommand({
+              PolicyArn: props.policyArn,
+              RoleName: props.roleName,
+            }),
+          ),
         ),
       );
       return this.destroy();
     }
-    await client.send(
-      new AttachRolePolicyCommand({
-        PolicyArn: props.policyArn,
-        RoleName: props.roleName,
-      }),
+    await retry(() =>
+      client.send(
+        new AttachRolePolicyCommand({
+          PolicyArn: props.policyArn,
+          RoleName: props.roleName,
+        }),
+      ),
     );
 
     return this(props);

@@ -1,16 +1,18 @@
-import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { listQueueConsumers } from "../../src/cloudflare/queue-consumer.js";
-import { Queue } from "../../src/cloudflare/queue.js";
-import { Worker } from "../../src/cloudflare/worker.js";
-import { destroy } from "../../src/destroy.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import { listQueueConsumers } from "../../src/cloudflare/queue-consumer.ts";
+import { Queue } from "../../src/cloudflare/queue.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { destroy } from "../../src/destroy.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
-import { CloudflareApiError } from "../../src/cloudflare/api-error.js";
-import "../../src/test/bun.js";
+import { CloudflareApiError } from "../../src/cloudflare/api-error.ts";
+import "../../src/test/vitest.ts";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 const api = await createCloudflareApi({});
 
@@ -27,6 +29,7 @@ describe("QueueConsumer Resource", () => {
     try {
       queue = await Queue(`${testId}-queue`, {
         name: queueName,
+        adopt: true,
       });
 
       expect(queue.id).toBeTruthy();
@@ -45,6 +48,7 @@ describe("QueueConsumer Resource", () => {
           }
         `,
         eventSources: [queue],
+        adopt: true, // make test idempotent
       });
 
       expect(worker.id).toBeTruthy();
@@ -61,7 +65,9 @@ describe("QueueConsumer Resource", () => {
 
       // Verify consumers were deleted
       try {
-        await listQueueConsumers(api, queue!.id);
+        if (queue?.id) {
+          await listQueueConsumers(api, queue.id);
+        }
       } catch (err) {
         if (err instanceof CloudflareApiError && err.status === 404) {
           // expected

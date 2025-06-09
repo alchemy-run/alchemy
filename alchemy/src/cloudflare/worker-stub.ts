@@ -1,11 +1,11 @@
-import type { Context } from "../context.js";
-import { Resource, ResourceKind } from "../resource.js";
-import { handleApiError } from "./api-error.js";
+import type { Context } from "../context.ts";
+import { Resource, ResourceKind } from "../resource.ts";
+import { handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
-} from "./api.js";
+} from "./api.ts";
 
 /**
  * Properties for creating a Worker stub

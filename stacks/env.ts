@@ -1,5 +1,5 @@
 import type { AlchemyOptions, Phase } from "../alchemy/src/alchemy.js";
-import { R2RestStateStore } from "../alchemy/src/cloudflare/index.js";
+import { DOStateStore } from "../alchemy/src/cloudflare/index.js";
 import alchemy from "../alchemy/src/index.js";
 
 export const CLOUDFLARE_EMAIL = await alchemy.env.CLOUDFLARE_EMAIL;
@@ -17,7 +17,7 @@ export const NEON_API_KEY = await alchemy.secret.env.NEON_API_KEY;
 export const UPSTASH_API_KEY = await alchemy.secret.env.UPSTASH_API_KEY;
 
 export default {
-  stage: "prod",
+  stage: process.env.BRANCH_PREFIX ?? "prod",
   phase:
     (process.env.ALCHEMY_PHASE as Phase) ??
     (process.argv.includes("--destroy")
@@ -30,6 +30,6 @@ export default {
   quiet: process.argv.includes("--quiet"),
   stateStore:
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new R2RestStateStore(scope)
+      ? (scope) => new DOStateStore(scope)
       : undefined,
 } satisfies AlchemyOptions;

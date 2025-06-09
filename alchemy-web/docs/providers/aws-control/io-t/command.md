@@ -5,39 +5,69 @@ description: Learn how to create, update, and manage AWS IoT Commands using Alch
 
 # Command
 
-The Command resource lets you create and manage [AWS IoT Commands](https://docs.aws.amazon.com/iot/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iot-command.html
+The Command resource lets you create and manage [AWS IoT Commands](https://docs.aws.amazon.com/iot/latest/userguide/) that can be used to perform actions on IoT devices.
 
 ## Minimal Example
+
+Create a basic IoT command with required properties and a few common optional settings.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const command = await AWS.IoT.Command("command-example", {
-  CommandId: "example-commandid",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A command resource managed by Alchemy",
+const basicCommand = await AWS.IoT.Command("basicCommand", {
+  CommandId: "restartDevice",
+  Description: "Restarts the IoT device",
+  DisplayName: "Restart Device Command",
+  RoleArn: "arn:aws:iam::123456789012:role/service-role/iot-command-role",
+  Payload: {
+    key: "restart",
+    value: "true"
+  },
+  Tags: [
+    { Key: "Environment", Value: "Production" }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a command with additional configuration:
+Configure a command with additional parameters and settings for more advanced use cases.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedCommand = await AWS.IoT.Command("advanced-command", {
-  CommandId: "example-commandid",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedCommand = await AWS.IoT.Command("advancedCommand", {
+  CommandId: "updateDeviceConfig",
+  Description: "Updates the configuration of the IoT device",
+  DisplayName: "Update Device Config Command",
+  RoleArn: "arn:aws:iam::123456789012:role/service-role/iot-command-role",
+  Payload: {
+    key: "updateConfig",
+    value: JSON.stringify({ settingA: true, settingB: "high" })
   },
-  Description: "A command resource managed by Alchemy",
+  MandatoryParameters: [
+    { Name: "deviceId", Type: "String" },
+    { Name: "newConfig", Type: "String" }
+  ],
+  Tags: [
+    { Key: "Project", Value: "IoT Management" },
+    { Key: "Version", Value: "v1.0" }
+  ]
 });
 ```
 
+## Command with Deprecation Handling
+
+Create a command that is marked for deprecation and pending deletion.
+
+```ts
+const deprecatedCommand = await AWS.IoT.Command("deprecatedCommand", {
+  CommandId: "oldRestartDevice",
+  Description: "Deprecated command for restarting IoT device",
+  DisplayName: "Old Restart Device Command",
+  RoleArn: "arn:aws:iam::123456789012:role/service-role/iot-command-role",
+  Deprecated: true,
+  PendingDeletion: true,
+  Tags: [
+    { Key: "Status", Value: "Deprecated" }
+  ]
+});
+```

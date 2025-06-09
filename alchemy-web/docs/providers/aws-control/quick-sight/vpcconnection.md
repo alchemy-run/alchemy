@@ -5,35 +5,68 @@ description: Learn how to create, update, and manage AWS QuickSight VPCConnectio
 
 # VPCConnection
 
-The VPCConnection resource lets you create and manage [AWS QuickSight VPCConnections](https://docs.aws.amazon.com/quicksight/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-quicksight-vpcconnection.html
+The VPCConnection resource allows you to manage [AWS QuickSight VPCConnections](https://docs.aws.amazon.com/quicksight/latest/userguide/) for securely connecting QuickSight to your VPC resources.
 
 ## Minimal Example
+
+Create a basic VPCConnection with required properties and a common optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const vpcconnection = await AWS.QuickSight.VPCConnection("vpcconnection-example", {
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const vpcConnection = await AWS.QuickSight.VPCConnection("myVpcConnection", {
+  AwsAccountId: "123456789012",
+  Name: "MyVPCConnection",
+  SubnetIds: ["subnet-0abcd1234efgh5678"],
+  SecurityGroupIds: ["sg-0abcd1234efgh5678"],
+  DnsResolvers: ["10.0.0.2"]
 });
 ```
 
 ## Advanced Configuration
 
-Create a vpcconnection with additional configuration:
+Configure a VPCConnection with additional properties for role ARN and tags.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedVPCConnection = await AWS.QuickSight.VPCConnection("advanced-vpcconnection", {
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedVpcConnection = await AWS.QuickSight.VPCConnection("advancedVpcConnection", {
+  AwsAccountId: "123456789012",
+  Name: "AdvancedVPCConnection",
+  SubnetIds: ["subnet-0abcd1234efgh5678"],
+  SecurityGroupIds: ["sg-0abcd1234efgh5678"],
+  DnsResolvers: ["10.0.0.2"],
+  RoleArn: "arn:aws:iam::123456789012:role/MyQuickSightRole",
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Department", Value: "Analytics" }
+  ]
 });
 ```
 
+## Managing Availability Status
+
+Create or update a VPCConnection while managing its availability status.
+
+```ts
+const vpcConnectionWithStatus = await AWS.QuickSight.VPCConnection("vpcConnectionWithStatus", {
+  AwsAccountId: "123456789012",
+  Name: "StatusManagedVPCConnection",
+  SubnetIds: ["subnet-0abcd1234efgh5678"],
+  SecurityGroupIds: ["sg-0abcd1234efgh5678"],
+  AvailabilityStatus: "AVAILABLE"
+});
+```
+
+## Adopting Existing VPCConnection
+
+Adopt an existing VPCConnection by setting the adopt property to true.
+
+```ts
+const adoptedVpcConnection = await AWS.QuickSight.VPCConnection("adoptedVpcConnection", {
+  AwsAccountId: "123456789012",
+  Name: "AdoptedVPCConnection",
+  SubnetIds: ["subnet-0abcd1234efgh5678"],
+  SecurityGroupIds: ["sg-0abcd1234efgh5678"],
+  DnsResolvers: ["10.0.0.2"],
+  adopt: true
+});
+```

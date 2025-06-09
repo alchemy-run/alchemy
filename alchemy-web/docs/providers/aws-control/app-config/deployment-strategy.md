@@ -5,48 +5,54 @@ description: Learn how to create, update, and manage AWS AppConfig DeploymentStr
 
 # DeploymentStrategy
 
-The DeploymentStrategy resource lets you create and manage [AWS AppConfig DeploymentStrategys](https://docs.aws.amazon.com/appconfig/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-appconfig-deploymentstrategy.html
+The DeploymentStrategy resource lets you manage [AWS AppConfig DeploymentStrategies](https://docs.aws.amazon.com/appconfig/latest/userguide/) for deploying application configurations in a controlled manner. 
 
 ## Minimal Example
+
+Create a basic deployment strategy with required properties and some common optional configurations.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const deploymentstrategy = await AWS.AppConfig.DeploymentStrategy("deploymentstrategy-example", {
-  ReplicateTo: "example-replicateto",
-  DeploymentDurationInMinutes: 1,
-  GrowthFactor: 1,
-  Name: "deploymentstrategy-",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A deploymentstrategy resource managed by Alchemy",
+const basicDeploymentStrategy = await AWS.AppConfig.DeploymentStrategy("basicDeploymentStrategy", {
+  Name: "BasicDeployment",
+  ReplicateTo: "NONE", // This indicates that the deployment will not be replicated
+  DeploymentDurationInMinutes: 30,
+  GrowthFactor: 10,
+  Description: "A basic deployment strategy for testing purposes."
 });
 ```
 
 ## Advanced Configuration
 
-Create a deploymentstrategy with additional configuration:
+Configure a deployment strategy with advanced settings including growth type and final bake time.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedDeploymentStrategy = await AWS.AppConfig.DeploymentStrategy(
-  "advanced-deploymentstrategy",
-  {
-    ReplicateTo: "example-replicateto",
-    DeploymentDurationInMinutes: 1,
-    GrowthFactor: 1,
-    Name: "deploymentstrategy-",
-    Tags: {
-      Environment: "production",
-      Team: "DevOps",
-      Project: "MyApp",
-      CostCenter: "Engineering",
-      ManagedBy: "Alchemy",
-    },
-    Description: "A deploymentstrategy resource managed by Alchemy",
-  }
-);
+const advancedDeploymentStrategy = await AWS.AppConfig.DeploymentStrategy("advancedDeploymentStrategy", {
+  Name: "AdvancedDeployment",
+  ReplicateTo: "SSM_DOCUMENT", // This indicates that deployment will be replicated to SSM Document
+  DeploymentDurationInMinutes: 60,
+  GrowthFactor: 20,
+  GrowthType: "LINEAR", // Use linear growth for deployment
+  FinalBakeTimeInMinutes: 15,
+  Description: "An advanced deployment strategy for gradual rollout."
+});
 ```
 
+## Custom Tags
+
+Create a deployment strategy with custom tags for better resource management.
+
+```ts
+const taggedDeploymentStrategy = await AWS.AppConfig.DeploymentStrategy("taggedDeploymentStrategy", {
+  Name: "TaggedDeployment",
+  ReplicateTo: "APPLICATION", // Indicates deployment will be replicated to the application
+  DeploymentDurationInMinutes: 45,
+  GrowthFactor: 15,
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Team", Value: "DevOps" }
+  ],
+  Description: "A deployment strategy with tags for better tracking."
+});
+```

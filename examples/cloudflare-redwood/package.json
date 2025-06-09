@@ -27,9 +27,10 @@
     "destroy": "bun run --env-file ../../.env ./alchemy.run.ts --destroy"
   },
   "dependencies": {
-    "rwsdk": "^0.0.83",
+    "alchemy": "workspace:*",
     "dotenv": "^16.5.0",
-    "drizzle-orm": "beta"
+    "drizzle-orm": "beta",
+    "rwsdk": "^0.0.83"
   },
   "devDependencies": {
     "@types/node": "^22.14.1",

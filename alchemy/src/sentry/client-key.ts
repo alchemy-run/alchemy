@@ -1,7 +1,8 @@
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import type { Secret } from "../secret.js";
-import { SentryApi } from "./api.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
+import { SentryApi } from "./api.ts";
 
 /**
  * Properties for creating or updating a ClientKey
@@ -191,11 +192,11 @@ export const ClientKey = Resource(
             `/projects/${props.organization}/${props.project}/keys/${this.output.id}/`,
           );
           if (!response.ok && response.status !== 404) {
-            console.error("Error deleting client key:", response.statusText);
+            logger.error("Error deleting client key:", response.statusText);
           }
         }
       } catch (error) {
-        console.error("Error deleting client key:", error);
+        logger.error("Error deleting client key:", error);
       }
       return this.destroy();
     } else {
@@ -221,7 +222,7 @@ export const ClientKey = Resource(
               error.message.includes("already exists") &&
               props.name
             ) {
-              console.log(
+              logger.log(
                 `Client key '${props.name}' already exists, adopting it`,
               );
               // Find the existing key by name
@@ -268,7 +269,7 @@ export const ClientKey = Resource(
           dynamicSdkLoaderOptions: data.dynamicSdkLoaderOptions,
         });
       } catch (error) {
-        console.error("Error creating/updating client key:", error);
+        logger.error("Error creating/updating client key:", error);
         throw error;
       }
     }

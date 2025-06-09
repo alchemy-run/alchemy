@@ -1,13 +1,15 @@
+import alchemy, { type } from "alchemy";
 import {
+  DOStateStore,
   DurableObjectNamespace,
   Queue,
   R2Bucket,
-  R2RestStateStore,
   Worker,
   Workflow,
   WranglerJson,
-} from "../../alchemy/src/cloudflare/index.js";
-import alchemy from "../../alchemy/src/index.js";
+} from "alchemy/cloudflare";
+import type { HelloWorldDO } from "./src/do.ts";
+import type MyRPC from "./src/rpc.ts";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 const app = await alchemy("cloudflare-worker", {
@@ -15,7 +17,7 @@ const app = await alchemy("cloudflare-worker", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   stateStore:
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new R2RestStateStore(scope)
+      ? (scope) => new DOStateStore(scope)
       : undefined,
 });
 
@@ -25,6 +27,11 @@ export const queue = await Queue<{
 }>(`cloudflare-worker-queue${BRANCH_PREFIX}`, {
   name: `cloudflare-worker-queue${BRANCH_PREFIX}`,
   adopt: true,
+});
+
+export const rpc = await Worker(`cloudflare-worker-rpc${BRANCH_PREFIX}`, {
+  entrypoint: "./src/rpc.ts",
+  rpc: type<MyRPC>,
 });
 
 export const worker = await Worker(`cloudflare-worker-worker${BRANCH_PREFIX}`, {
@@ -39,10 +46,11 @@ export const worker = await Worker(`cloudflare-worker-worker${BRANCH_PREFIX}`, {
       className: "OFACWorkflow",
       workflowName: "ofac-workflow",
     }),
-    DO: new DurableObjectNamespace("HelloWorldDO", {
+    DO: new DurableObjectNamespace<HelloWorldDO>("HelloWorldDO", {
       className: "HelloWorldDO",
       sqlite: true,
     }),
+    RPC: rpc,
   },
   url: true,
   eventSources: [queue],

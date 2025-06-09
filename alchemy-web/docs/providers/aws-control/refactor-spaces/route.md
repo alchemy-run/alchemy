@@ -5,43 +5,85 @@ description: Learn how to create, update, and manage AWS RefactorSpaces Routes u
 
 # Route
 
-The Route resource lets you create and manage [AWS RefactorSpaces Routes](https://docs.aws.amazon.com/refactorspaces/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-refactorspaces-route.html
+The Route resource lets you manage [AWS RefactorSpaces Routes](https://docs.aws.amazon.com/refactorspaces/latest/userguide/) for directing traffic to various services in your application. This resource allows you to define the environment and application context for your routes.
 
 ## Minimal Example
+
+Create a basic route with required properties and a default route configuration.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const route = await AWS.RefactorSpaces.Route("route-example", {
-  EnvironmentIdentifier: "example-environmentidentifier",
-  RouteType: "example-routetype",
-  ServiceIdentifier: "example-serviceidentifier",
-  ApplicationIdentifier: "example-applicationidentifier",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const basicRoute = await AWS.RefactorSpaces.Route("basicRoute", {
+  EnvironmentIdentifier: "env-123456",
+  ApplicationIdentifier: "app-abcde",
+  ServiceIdentifier: "service-xyz",
+  RouteType: "URI_PATH",
+  DefaultRoute: {
+    Status: "ACTIVE",
+    Priority: 1
+  }
 });
 ```
 
 ## Advanced Configuration
 
-Create a route with additional configuration:
+Configure a route with a URI path route specification and additional tags.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedRoute = await AWS.RefactorSpaces.Route("advanced-route", {
-  EnvironmentIdentifier: "example-environmentidentifier",
-  RouteType: "example-routetype",
-  ServiceIdentifier: "example-serviceidentifier",
-  ApplicationIdentifier: "example-applicationidentifier",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedRoute = await AWS.RefactorSpaces.Route("advancedRoute", {
+  EnvironmentIdentifier: "env-123456",
+  ApplicationIdentifier: "app-abcde",
+  ServiceIdentifier: "service-xyz",
+  RouteType: "URI_PATH",
+  UriPathRoute: {
+    Path: "/api/v1/resource",
+    Methods: ["GET", "POST"]
   },
+  Tags: [
+    { Key: "Project", Value: "RefactorSpaces" },
+    { Key: "Environment", Value: "Production" }
+  ]
 });
 ```
 
+## Route with Detailed URI Path
+
+Create a route that specifies a detailed URI path and supports multiple HTTP methods.
+
+```ts
+const detailedUriRoute = await AWS.RefactorSpaces.Route("detailedUriRoute", {
+  EnvironmentIdentifier: "env-123456",
+  ApplicationIdentifier: "app-abcde",
+  ServiceIdentifier: "service-xyz",
+  RouteType: "URI_PATH",
+  UriPathRoute: {
+    Path: "/api/v1/users",
+    Methods: ["GET", "POST", "DELETE"]
+  },
+  DefaultRoute: {
+    Status: "ACTIVE",
+    Priority: 2
+  }
+});
+```
+
+## Route for Specific Service
+
+Define a route that targets a specific service within an application.
+
+```ts
+const serviceRoute = await AWS.RefactorSpaces.Route("serviceRoute", {
+  EnvironmentIdentifier: "env-123456",
+  ApplicationIdentifier: "app-abcde",
+  ServiceIdentifier: "service-xyz",
+  RouteType: "DEFAULT",
+  DefaultRoute: {
+    Status: "ACTIVE",
+    Priority: 3
+  },
+  Tags: [
+    { Key: "Service", Value: "UserManagement" }
+  ]
+});
+```

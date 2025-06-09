@@ -5,39 +5,85 @@ description: Learn how to create, update, and manage AWS Amplify Apps using Alch
 
 # App
 
-The App resource lets you create and manage [AWS Amplify Apps](https://docs.aws.amazon.com/amplify/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-amplify-app.html
+The App resource lets you manage [AWS Amplify Apps](https://docs.aws.amazon.com/amplify/latest/userguide/) for building, deploying, and hosting web applications.
 
 ## Minimal Example
+
+Create a basic Amplify App with essential properties:
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const app = await AWS.Amplify.App("app-example", {
-  Name: "app-",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A app resource managed by Alchemy",
+const basicAmplifyApp = await AWS.Amplify.App("basicAmplifyApp", {
+  name: "MyFirstAmplifyApp",
+  repository: "https://github.com/username/my-first-amplify-app",
+  platform: "WEB",
+  description: "A simple web application hosted on AWS Amplify",
 });
 ```
 
 ## Advanced Configuration
 
-Create a app with additional configuration:
+Configure an Amplify App with advanced settings such as auto branch creation and environment variables:
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedApp = await AWS.Amplify.App("advanced-app", {
-  Name: "app-",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedAmplifyApp = await AWS.Amplify.App("advancedAmplifyApp", {
+  name: "AdvancedAmplifyApp",
+  repository: "https://github.com/username/advanced-amplify-app",
+  platform: "WEB",
+  autoBranchCreationConfig: {
+    autoBranchCreationPatterns: ["feature/*", "release/*"],
+    basicAuthConfig: {
+      username: "admin",
+      password: "securepassword",
+    },
   },
-  Description: "A app resource managed by Alchemy",
+  environmentVariables: [
+    { name: "API_URL", value: "https://api.example.com" },
+    { name: "NODE_ENV", value: "production" },
+  ],
 });
 ```
 
+## Custom Build Specifications
+
+Set a custom build specification to define the build process for your app:
+
+```ts
+const customBuildSpecApp = await AWS.Amplify.App("customBuildSpecApp", {
+  name: "CustomBuildSpecAmplifyApp",
+  repository: "https://github.com/username/custom-buildspec-app",
+  platform: "WEB",
+  buildSpec: `
+version: 0.1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm install
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: build
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+  `,
+});
+```
+
+## Branch Auto Deletion
+
+Enable auto deletion of branches when they are no longer needed:
+
+```ts
+const branchAutoDeletionApp = await AWS.Amplify.App("branchAutoDeletionApp", {
+  name: "BranchAutoDeletionAmplifyApp",
+  repository: "https://github.com/username/branch-auto-deletion-app",
+  platform: "WEB",
+  enableBranchAutoDeletion: true,
+});
+```

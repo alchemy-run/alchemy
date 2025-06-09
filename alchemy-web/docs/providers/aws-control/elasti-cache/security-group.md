@@ -5,37 +5,56 @@ description: Learn how to create, update, and manage AWS ElastiCache SecurityGro
 
 # SecurityGroup
 
-The SecurityGroup resource lets you create and manage [AWS ElastiCache SecurityGroups](https://docs.aws.amazon.com/elasticache/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-elasticache-security-group.html
+The SecurityGroup resource lets you manage [AWS ElastiCache SecurityGroups](https://docs.aws.amazon.com/elasticache/latest/userguide/) for controlling access to your ElastiCache clusters.
 
 ## Minimal Example
+
+Create a basic ElastiCache SecurityGroup with a description and tags.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const securitygroup = await AWS.ElastiCache.SecurityGroup("securitygroup-example", {
-  Description: "A securitygroup resource managed by Alchemy",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const basicSecurityGroup = await AWS.ElastiCache.SecurityGroup("basicSecurityGroup", {
+  Description: "Basic Security Group for ElastiCache",
+  Tags: [
+    { Key: "Environment", Value: "Development" },
+    { Key: "Project", Value: "SampleProject" }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a securitygroup with additional configuration:
+Configure a SecurityGroup with existing resource adoption.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedSecurityGroup = await AWS.ElastiCache.SecurityGroup("advanced-securitygroup", {
-  Description: "A securitygroup resource managed by Alchemy",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedSecurityGroup = await AWS.ElastiCache.SecurityGroup("advancedSecurityGroup", {
+  Description: "Advanced Security Group for ElastiCache with adoption",
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Project", Value: "CriticalProject" }
+  ],
+  adopt: true
 });
 ```
 
+## Security Group with Custom Properties
+
+Create a SecurityGroup with a specific description and without tags.
+
+```ts
+const customSecurityGroup = await AWS.ElastiCache.SecurityGroup("customSecurityGroup", {
+  Description: "Custom Security Group for specific use cases"
+});
+```
+
+## Security Group Adoption
+
+Demonstrate how to adopt an existing SecurityGroup.
+
+```ts
+const existingSecurityGroup = await AWS.ElastiCache.SecurityGroup("existingSecurityGroup", {
+  Description: "Adopting an existing Security Group",
+  adopt: true
+});
+```

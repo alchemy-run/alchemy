@@ -5,45 +5,58 @@ description: Learn how to create, update, and manage AWS Kendra Faqs using Alche
 
 # Faq
 
-The Faq resource lets you create and manage [AWS Kendra Faqs](https://docs.aws.amazon.com/kendra/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-kendra-faq.html
+The Faq resource lets you manage [AWS Kendra Faqs](https://docs.aws.amazon.com/kendra/latest/userguide/) to improve search capabilities by providing frequently asked questions and their answers.
 
 ## Minimal Example
+
+Create a basic FAQ entry in AWS Kendra with required properties and one optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const faq = await AWS.Kendra.Faq("faq-example", {
-  IndexId: "example-indexid",
-  S3Path: "example-s3path",
-  RoleArn: "example-rolearn",
-  Name: "faq-",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A faq resource managed by Alchemy",
+const faqEntry = await AWS.Kendra.Faq("faqEntry", {
+  indexId: "my-kendra-index",
+  s3Path: {
+    bucket: "my-kendra-faq-bucket",
+    key: "faqs.csv"
+  },
+  roleArn: "arn:aws:iam::123456789012:role/KendraFAQRole",
+  languageCode: "en"
 });
 ```
 
 ## Advanced Configuration
 
-Create a faq with additional configuration:
+Configure a more detailed FAQ entry with additional optional properties such as description and tags.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedFaq = await AWS.Kendra.Faq("advanced-faq", {
-  IndexId: "example-indexid",
-  S3Path: "example-s3path",
-  RoleArn: "example-rolearn",
-  Name: "faq-",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedFaqEntry = await AWS.Kendra.Faq("advancedFaqEntry", {
+  indexId: "my-kendra-index",
+  s3Path: {
+    bucket: "my-kendra-faq-bucket",
+    key: "advanced_faqs.csv"
   },
-  Description: "A faq resource managed by Alchemy",
+  roleArn: "arn:aws:iam::123456789012:role/KendraFAQRole",
+  description: "This FAQ entry provides advanced troubleshooting information.",
+  tags: [
+    { key: "category", value: "troubleshooting" },
+    { key: "status", value: "active" }
+  ]
 });
 ```
 
+## Adopting Existing Resources
+
+Create a FAQ entry while adopting an existing resource instead of failing if it already exists.
+
+```ts
+const adoptedFaqEntry = await AWS.Kendra.Faq("adoptedFaqEntry", {
+  indexId: "my-kendra-index",
+  s3Path: {
+    bucket: "my-kendra-faq-bucket",
+    key: "existing_faqs.csv"
+  },
+  roleArn: "arn:aws:iam::123456789012:role/KendraFAQRole",
+  adopt: true // Adopt existing resource if it already exists
+});
+```

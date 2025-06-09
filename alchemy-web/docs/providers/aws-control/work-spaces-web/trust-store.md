@@ -5,37 +5,57 @@ description: Learn how to create, update, and manage AWS WorkSpacesWeb TrustStor
 
 # TrustStore
 
-The TrustStore resource lets you create and manage [AWS WorkSpacesWeb TrustStores](https://docs.aws.amazon.com/workspacesweb/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-workspacesweb-truststore.html
+The TrustStore resource allows you to manage [AWS WorkSpacesWeb TrustStores](https://docs.aws.amazon.com/workspacesweb/latest/userguide/), which are used to store SSL/TLS certificates for secure communication.
 
 ## Minimal Example
+
+Create a basic TrustStore with a list of certificates:
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const truststore = await AWS.WorkSpacesWeb.TrustStore("truststore-example", {
-  CertificateList: ["example-certificatelist-1"],
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const basicTrustStore = await AWS.WorkSpacesWeb.TrustStore("basicTrustStore", {
+  CertificateList: [
+    "-----BEGIN CERTIFICATE-----\nMIIDdzCCAl+gAwIBAgIEU5G6NjANBgkqhkiG9w0BAQUFADB...",
+    "-----BEGIN CERTIFICATE-----\nMIIDdzCCAl+gAwIBAgIEU5F6NjANBgkqhkiG9w0BAQUFADB..."
+  ],
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Project", Value: "WebAccess" }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a truststore with additional configuration:
+Configure a TrustStore with additional properties such as adopting existing resources:
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedTrustStore = await AWS.WorkSpacesWeb.TrustStore("advanced-truststore", {
-  CertificateList: ["example-certificatelist-1"],
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedTrustStore = await AWS.WorkSpacesWeb.TrustStore("advancedTrustStore", {
+  CertificateList: [
+    "-----BEGIN CERTIFICATE-----\nMIIDdzCCAl+gAwIBAgIEU5G6NjANBgkqhkiG9w0BAQUFADB...",
+    "-----BEGIN CERTIFICATE-----\nMIIDdzCCAl+gAwIBAgIEU5F6NjANBgkqhkiG9w0BAQUFADB..."
+  ],
+  Tags: [
+    { Key: "Environment", Value: "Staging" }
+  ],
+  adopt: true // Adopt existing resource if it already exists
 });
 ```
 
+## Certificate Management
+
+Update an existing TrustStore with a new set of certificates:
+
+```ts
+const updatedTrustStore = await AWS.WorkSpacesWeb.TrustStore("updatedTrustStore", {
+  CertificateList: [
+    "-----BEGIN CERTIFICATE-----\nMIIDdzCCAl+gAwIBAgIEU5G6NjANBgkqhkiG9w0BAQUFADB...",
+    "-----BEGIN CERTIFICATE-----\nMIIDdzCCAl+gAwIBAgIEU5F6NjANBgkqhkiG9w0BAQUFADB...",
+    "-----BEGIN CERTIFICATE-----\nMIIDdzCCAl+gAwIBAgIEU5G7NjANBgkqhkiG9w0BAQUFADB..."
+  ],
+  Tags: [
+    { Key: "Environment", Value: "Development" }
+  ]
+});
+```

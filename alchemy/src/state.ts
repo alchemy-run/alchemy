@@ -6,9 +6,9 @@ import {
   ResourceSeq,
   type Resource,
   type ResourceProps,
-} from "./resource.js";
-import { Scope } from "./scope.js";
-import { deserialize } from "./serde.js";
+} from "./resource.ts";
+import { Scope } from "./scope.ts";
+import { deserialize } from "./serde.ts";
 
 export type State<
   Kind extends string = string,

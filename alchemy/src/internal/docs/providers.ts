@@ -1,10 +1,10 @@
 import { type } from "arktype";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Data } from "../../ai/data.js";
-import { Document } from "../../ai/document.js";
-import { alchemy } from "../../alchemy.js";
-import { Folder } from "../../fs/folder.js";
+import { Data } from "../../ai/data.ts";
+import { Document } from "../../ai/document.ts";
+import { alchemy } from "../../alchemy.ts";
+import { Folder } from "../../fs/folder.ts";
 
 function getArg(arg: string) {
   const idx = process.argv.findIndex((a) => a === arg);

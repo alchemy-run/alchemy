@@ -1,39 +1,71 @@
 ---
-title: Managing AWS EC2 DHCPOptionss with Alchemy
-description: Learn how to create, update, and manage AWS EC2 DHCPOptionss using Alchemy Cloud Control.
+title: Managing AWS EC2 DHCPOptions with Alchemy
+description: Learn how to create, update, and manage AWS EC2 DHCPOptions using Alchemy Cloud Control.
 ---
 
 # DHCPOptions
 
-The DHCPOptions resource lets you create and manage [AWS EC2 DHCPOptionss](https://docs.aws.amazon.com/ec2/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-dhcpoptions.html
+The DHCPOptions resource allows you to manage [AWS EC2 DHCPOptions](https://docs.aws.amazon.com/ec2/latest/userguide/) for configuring DHCP settings in your VPC.
 
 ## Minimal Example
+
+Create a basic DHCPOptions resource with essential properties such as domain name and DNS servers.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const dhcpoptions = await AWS.EC2.DHCPOptions("dhcpoptions-example", {
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const dhcpOptions = await AWS.EC2.DHCPOptions("basicDhcpOptions", {
+  DomainName: "example.local",
+  DomainNameServers: ["192.168.1.1", "192.168.1.2"],
+  Tags: [
+    { Key: "Environment", Value: "Development" }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a dhcpoptions with additional configuration:
+Configure a DHCPOptions resource with additional settings, including NTP servers and NetBIOS options.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedDHCPOptions = await AWS.EC2.DHCPOptions("advanced-dhcpoptions", {
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedDhcpOptions = await AWS.EC2.DHCPOptions("advancedDhcpOptions", {
+  DomainName: "example.local",
+  DomainNameServers: ["192.168.1.1", "192.168.1.2"],
+  NtpServers: ["ntp.example.local"],
+  NetbiosNameServers: ["192.168.1.3"],
+  NetbiosNodeType: 8,
+  Ipv6AddressPreferredLeaseTime: 300,
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Department", Value: "IT" }
+  ]
 });
 ```
 
+## Custom DHCP Options
+
+Demonstrate how to create a DHCPOptions resource with custom NetBIOS settings.
+
+```ts
+const customNetbiosDhcpOptions = await AWS.EC2.DHCPOptions("customNetbiosDhcpOptions", {
+  DomainName: "custom.local",
+  DomainNameServers: ["10.0.0.1"],
+  NetbiosNameServers: ["10.0.0.2"],
+  NetbiosNodeType: 4,
+  Tags: [
+    { Key: "Project", Value: "Migration" }
+  ]
+});
+```
+
+## Adoption of Existing DHCP Options
+
+Show how to adopt existing DHCPOptions instead of creating a new one.
+
+```ts
+const adoptExistingDhcpOptions = await AWS.EC2.DHCPOptions("existingDhcpOptions", {
+  DomainName: "existing.local",
+  DomainNameServers: ["10.0.1.1"],
+  adopt: true
+});
+```

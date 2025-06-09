@@ -1,4 +1,4 @@
-import { createResourceType } from "./resource.js";
+import { createResourceType } from "./resource.ts";
 
 /**
  * Proxy-based interface for dynamically accessing AWS resource handlers.

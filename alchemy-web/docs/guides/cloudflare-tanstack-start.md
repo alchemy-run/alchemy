@@ -12,11 +12,33 @@ This guide walks through how to deploy a TanStack Start application to Cloudflar
 
 Start by creating a TanStack Start project:
 
-```sh
+::: code-group
+
+```sh [bun]
 bunx gitpick TanStack/router/tree/main/examples/react/start-basic start-basic
 cd start-basic
 bun install
 ```
+
+```sh [npm]
+npx gitpick TanStack/router/tree/main/examples/react/start-basic start-basic
+cd start-basic
+npm install
+```
+
+```sh [pnpm]
+pnpm dlx gitpick TanStack/router/tree/main/examples/react/start-basic start-basic
+cd start-basic
+pnpm install
+```
+
+```sh [yarn]
+yarn dlx gitpick TanStack/router/tree/main/examples/react/start-basic start-basic
+cd start-basic
+yarn install
+```
+
+:::
 
 > [!NOTE]
 > See TanStack's [Quick Start](https://tanstack.com/start/latest/docs/framework/react/quick-start) guide for more details on TanStack Start applications.
@@ -25,9 +47,25 @@ bun install
 
 Install the required dependencies:
 
-```sh
+::: code-group
+
+```sh [bun]
 bun add alchemy cloudflare
 ```
+
+```sh [npm]
+npm install alchemy cloudflare
+```
+
+```sh [pnpm]
+pnpm add alchemy cloudflare
+```
+
+```sh [yarn]
+yarn add alchemy cloudflare
+```
+
+:::
 
 ## Create `alchemy.run.ts`
 
@@ -127,15 +165,47 @@ export const DEPLOY_URL = typeof window !== "undefined" ? window.location.origin
 
 Login to Cloudflare:
 
-```sh
-wrangler login
+::: code-group
+
+```sh [bun]
+bun wrangler login
 ```
+
+```sh [npm]
+npx wrangler login
+```
+
+```sh [pnpm]
+pnpm wrangler login
+```
+
+```sh [yarn]
+yarn wrangler login
+```
+
+:::
 
 Run your Alchemy script to deploy the application:
 
-```sh
+::: code-group
+
+```sh [bun]
 bun ./alchemy.run
 ```
+
+```sh [npm]
+npx tsx ./alchemy.run
+```
+
+```sh [pnpm]
+pnpm tsx ./alchemy.run
+```
+
+```sh [yarn]
+yarn tsx ./alchemy.run
+```
+
+:::
 
 It should output the URL of your deployed site:
 
@@ -151,9 +221,25 @@ Click the URL to see your TanStack Start application live!
 
 To run your application locally, use the TanStack Start development server:
 
-```sh
+::: code-group
+
+```sh [bun]
 bun run dev
 ```
+
+```sh [npm]
+npm run dev
+```
+
+```sh [pnpm]
+pnpm run dev
+```
+
+```sh [yarn]
+yarn run dev
+```
+
+:::
 
 This will start a local development server with hot module reloading:
 
@@ -169,8 +255,24 @@ This will start a local development server with hot module reloading:
 
 When you're finished experimenting, you can tear down the application:
 
-```bash
+::: code-group
+
+```sh [bun]
 bun ./alchemy.run --destroy
 ```
+
+```sh [npm]
+npx tsx ./alchemy.run --destroy
+```
+
+```sh [pnpm]
+pnpm tsx ./alchemy.run --destroy
+```
+
+```sh [yarn]
+yarn tsx ./alchemy.run --destroy
+```
+
+:::
 
 This will remove all Cloudflare resources created by this deployment.

@@ -1,9 +1,5 @@
-import {
-  D1Database,
-  R2RestStateStore,
-  Redwood,
-} from "../../alchemy/src/cloudflare/index.js";
-import alchemy from "../../alchemy/src/index.js";
+import alchemy from "alchemy";
+import { D1Database, DOStateStore, Redwood } from "alchemy/cloudflare";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 
@@ -11,7 +7,7 @@ const app = await alchemy("cloudflare-redwood", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   stateStore:
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new R2RestStateStore(scope)
+      ? (scope) => new DOStateStore(scope)
       : undefined,
 });
 

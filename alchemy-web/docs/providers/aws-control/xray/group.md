@@ -5,37 +5,61 @@ description: Learn how to create, update, and manage AWS XRay Groups using Alche
 
 # Group
 
-The Group resource lets you create and manage [AWS XRay Groups](https://docs.aws.amazon.com/xray/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-xray-group.html
+The Group resource lets you manage [AWS XRay Groups](https://docs.aws.amazon.com/xray/latest/userguide/) for organizing and analyzing traces from your applications.
 
 ## Minimal Example
+
+Create a basic XRay Group with a specified name and a filter expression.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const group = await AWS.XRay.Group("group-example", {
-  GroupName: "group-group",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const xrayGroup = await AWS.XRay.Group("myXRayGroup", {
+  GroupName: "MyApplicationGroup",
+  FilterExpression: "service('MyService')"
 });
 ```
 
 ## Advanced Configuration
 
-Create a group with additional configuration:
+Configure a group with insights enabled and additional tags.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedGroup = await AWS.XRay.Group("advanced-group", {
-  GroupName: "group-group",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const insightsGroup = await AWS.XRay.Group("insightsXRayGroup", {
+  GroupName: "InsightsEnabledGroup",
+  FilterExpression: "service('MyService')",
+  InsightsConfiguration: {
+    InsightsEnabled: true,
+    NotificationsEnabled: false
   },
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Project", Value: "MyProject" }
+  ]
 });
 ```
 
+## Adoption of Existing Resources
+
+Adopt an existing XRay Group instead of failing when the resource already exists.
+
+```ts
+const existingGroup = await AWS.XRay.Group("existingXRayGroup", {
+  GroupName: "ExistingGroup",
+  adopt: true
+});
+```
+
+## Group with Custom Insights Configuration
+
+Define a group with customized insights configuration.
+
+```ts
+const customInsightsGroup = await AWS.XRay.Group("customInsightsXRayGroup", {
+  GroupName: "CustomInsightsGroup",
+  InsightsConfiguration: {
+    InsightsEnabled: true,
+    NotificationsEnabled: true
+  }
+});
+```

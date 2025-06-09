@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getContentType } from "../util/content-type.js";
-import type { CloudflareApi } from "./api.js";
-import type { Assets } from "./assets.js";
-import type { AssetsConfig, WorkerProps } from "./worker.js";
+import { getContentType } from "../util/content-type.ts";
+import type { CloudflareApi } from "./api.ts";
+import type { Assets } from "./assets.ts";
+import type { AssetsConfig, WorkerProps } from "./worker.ts";
 
 export interface AssetUploadResult {
   completionToken: string;
@@ -109,8 +109,8 @@ export async function uploadAssets(
   for (const bucket of buckets) {
     const formData = new FormData();
 
-    // Add each file in the bucket to the form
-    for (const fileHash of bucket) {
+    // Prepare file reading operations for parallel execution
+    const fileReadPromises = bucket.map(async (fileHash) => {
       // Find the file with this hash
       const file = assets.files.find((f) => {
         const filePath = f.path.startsWith("/") ? f.path : `/${f.path}`;
@@ -127,10 +127,22 @@ export async function uploadAssets(
       // Convert to base64 as required by the API when using base64=true
       const base64Content = fileContent.toString("base64");
 
+      return {
+        fileHash,
+        base64Content,
+        filePath: file.filePath,
+      };
+    });
+
+    // Read all files in parallel
+    const fileResults = await Promise.all(fileReadPromises);
+
+    // Add each file to the form
+    for (const { fileHash, base64Content, filePath } of fileResults) {
       // Add the file to the form with the hash as the key and set the correct content type
       const blob = new Blob([base64Content], {
         // if you set application/octet-stream, you get weird `-1` errors with a message to contact support
-        type: getContentType(file.filePath) ?? "application/null",
+        type: getContentType(filePath) ?? "application/null",
       });
       formData.append(fileHash, blob, fileHash);
     }

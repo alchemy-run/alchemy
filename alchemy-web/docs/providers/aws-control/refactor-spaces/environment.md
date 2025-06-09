@@ -5,37 +5,64 @@ description: Learn how to create, update, and manage AWS RefactorSpaces Environm
 
 # Environment
 
-The Environment resource lets you create and manage [AWS RefactorSpaces Environments](https://docs.aws.amazon.com/refactorspaces/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-refactorspaces-environment.html
+The Environment resource lets you manage [AWS RefactorSpaces Environments](https://docs.aws.amazon.com/refactorspaces/latest/userguide/) that facilitate the migration of applications to the cloud by providing a secure and isolated environment for your services.
 
 ## Minimal Example
+
+Create a basic RefactorSpaces Environment with a name and description:
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const environment = await AWS.RefactorSpaces.Environment("environment-example", {
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A environment resource managed by Alchemy",
+const refactorEnvironment = await AWS.RefactorSpaces.Environment("myRefactorEnvironment", {
+  name: "MyRefactorEnvironment",
+  description: "An environment for migrating my application",
+  tags: [
+    { key: "Project", value: "Migration" },
+    { key: "Owner", value: "DevTeam" }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a environment with additional configuration:
+Configure an environment with a specific network fabric type and additional tags:
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedEnvironment = await AWS.RefactorSpaces.Environment("advanced-environment", {
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
-  Description: "A environment resource managed by Alchemy",
+const advancedEnvironment = await AWS.RefactorSpaces.Environment("advancedRefactorEnvironment", {
+  name: "AdvancedRefactorEnvironment",
+  description: "An advanced environment with specific networking",
+  networkFabricType: "VPC", // Options include 'VPC', 'TransitGateway', etc.
+  tags: [
+    { key: "Environment", value: "Production" },
+    { key: "Owner", value: "OpsTeam" }
+  ]
 });
 ```
 
+## Adopting Existing Resources
+
+If you want to adopt an existing environment instead of failing when it already exists, you can set the `adopt` property to `true`:
+
+```ts
+const adoptedEnvironment = await AWS.RefactorSpaces.Environment("adoptedRefactorEnvironment", {
+  name: "AdoptedRefactorEnvironment",
+  description: "Adopting an existing RefactorSpaces environment",
+  adopt: true
+});
+```
+
+## Custom Network Configuration
+
+Create an environment with specific network configurations using a custom CIDR block:
+
+```ts
+const customNetworkEnvironment = await AWS.RefactorSpaces.Environment("customNetworkRefactorEnvironment", {
+  name: "CustomNetworkRefactorEnvironment",
+  description: "Environment with custom network settings",
+  networkFabricType: "VPC",
+  tags: [
+    { key: "NetworkType", value: "Custom" }
+  ]
+});
+```

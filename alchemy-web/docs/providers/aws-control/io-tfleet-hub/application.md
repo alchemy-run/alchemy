@@ -5,39 +5,61 @@ description: Learn how to create, update, and manage AWS IoTFleetHub Application
 
 # Application
 
-The Application resource lets you create and manage [AWS IoTFleetHub Applications](https://docs.aws.amazon.com/iotfleethub/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iotfleethub-application.html
+The Application resource lets you manage [AWS IoTFleetHub Applications](https://docs.aws.amazon.com/iotfleethub/latest/userguide/) for monitoring and managing fleets of IoT devices.
 
 ## Minimal Example
+
+Create a basic IoTFleetHub application with essential properties.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const application = await AWS.IoTFleetHub.Application("application-example", {
-  ApplicationName: "application-application",
-  RoleArn: "example-rolearn",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const basicApplication = await AWS.IoTFleetHub.Application("basicFleetHubApp", {
+  ApplicationName: "BasicFleetHubApplication",
+  RoleArn: "arn:aws:iam::123456789012:role/MyIoTFleetHubRole",
+  ApplicationDescription: "A simple IoTFleetHub application for managing IoT devices"
 });
 ```
 
 ## Advanced Configuration
 
-Create a application with additional configuration:
+Configure a more advanced application with tags for better resource management.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedApplication = await AWS.IoTFleetHub.Application("advanced-application", {
-  ApplicationName: "application-application",
-  RoleArn: "example-rolearn",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedApplication = await AWS.IoTFleetHub.Application("advancedFleetHubApp", {
+  ApplicationName: "AdvancedFleetHubApplication",
+  RoleArn: "arn:aws:iam::123456789012:role/MyIoTFleetHubRole",
+  ApplicationDescription: "An advanced application with additional configurations.",
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Department", Value: "IoT" }
+  ]
 });
 ```
 
+## Adoption of Existing Resource
+
+Create a new application that adopts an existing resource to avoid conflicts.
+
+```ts
+const adoptExistingApplication = await AWS.IoTFleetHub.Application("adoptFleetHubApp", {
+  ApplicationName: "AdoptedFleetHubApplication",
+  RoleArn: "arn:aws:iam::123456789012:role/MyIoTFleetHubRole",
+  adopt: true // Adopts the existing resource if it already exists
+});
+```
+
+## Custom Role Configuration
+
+Create an application with a custom IAM role that grants specific permissions.
+
+```ts
+const customRoleApplication = await AWS.IoTFleetHub.Application("customRoleFleetHubApp", {
+  ApplicationName: "CustomRoleFleetHubApplication",
+  RoleArn: "arn:aws:iam::123456789012:role/CustomIoTFleetHubRole",
+  ApplicationDescription: "Application with a custom IAM role for specific access.",
+  Tags: [
+    { Key: "AccessLevel", Value: "Admin" }
+  ]
+});
+```

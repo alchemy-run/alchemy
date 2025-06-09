@@ -5,41 +5,64 @@ description: Learn how to create, update, and manage AWS MemoryDB ParameterGroup
 
 # ParameterGroup
 
-The ParameterGroup resource lets you create and manage [AWS MemoryDB ParameterGroups](https://docs.aws.amazon.com/memorydb/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-memorydb-parametergroup.html
+The ParameterGroup resource lets you manage [AWS MemoryDB ParameterGroups](https://docs.aws.amazon.com/memorydb/latest/userguide/) and their configuration settings.
 
 ## Minimal Example
+
+Create a basic MemoryDB ParameterGroup with required properties and a description.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const parametergroup = await AWS.MemoryDB.ParameterGroup("parametergroup-example", {
-  ParameterGroupName: "parametergroup-parametergroup",
-  Family: "example-family",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A parametergroup resource managed by Alchemy",
+const basicParameterGroup = await AWS.MemoryDB.ParameterGroup("basic-parameter-group", {
+  ParameterGroupName: "default",
+  Family: "redis",
+  Description: "Basic parameter group for Redis"
 });
 ```
 
 ## Advanced Configuration
 
-Create a parametergroup with additional configuration:
+Configure a ParameterGroup with specific parameters to customize MemoryDB settings.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedParameterGroup = await AWS.MemoryDB.ParameterGroup("advanced-parametergroup", {
-  ParameterGroupName: "parametergroup-parametergroup",
-  Family: "example-family",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
-  Description: "A parametergroup resource managed by Alchemy",
+const advancedParameterGroup = await AWS.MemoryDB.ParameterGroup("advanced-parameter-group", {
+  ParameterGroupName: "custom-redis",
+  Family: "redis",
+  Description: "Advanced parameter group with custom settings",
+  Parameters: {
+    maxmemory: "512mb",
+    timeout: "300",
+    save: "60 1"
+  }
 });
 ```
 
+## Tagging for Resource Management
+
+Create a ParameterGroup with tags for better resource management and identification.
+
+```ts
+const taggedParameterGroup = await AWS.MemoryDB.ParameterGroup("tagged-parameter-group", {
+  ParameterGroupName: "tagged-redis",
+  Family: "redis",
+  Description: "Parameter group with tags",
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Project", Value: "MyApp" }
+  ]
+});
+```
+
+## Adopting Existing Resources
+
+Create a ParameterGroup while adopting an existing resource, avoiding failure if it already exists.
+
+```ts
+const adoptedParameterGroup = await AWS.MemoryDB.ParameterGroup("adopted-parameter-group", {
+  ParameterGroupName: "existing-redis",
+  Family: "redis",
+  Description: "Adopting an existing parameter group",
+  adopt: true
+});
+```

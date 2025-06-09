@@ -1,12 +1,13 @@
-import type { Context } from "../context.js";
-import { Resource, ResourceKind } from "../resource.js";
-import { CloudflareApiError, handleApiError } from "./api-error.js";
+import type { Context } from "../context.ts";
+import { Resource, ResourceKind } from "../resource.ts";
+import { logger } from "../util/logger.ts";
+import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
-} from "./api.js";
-import type { VectorizeIndexResource } from "./vectorize-index.js";
+} from "./api.ts";
+import type { VectorizeIndexResource } from "./vectorize-index.ts";
 
 /**
  * Properties for creating or deleting a Vectorize Metadata Index
@@ -121,7 +122,7 @@ export const VectorizeMetadataIndex = Resource(
       ) {
         // Update operation is not supported
         if (!this.scope.quiet) {
-          console.warn(
+          logger.warn(
             `Attempted to update Vectorize metadata index ${this.props.propertyName} but it was a no-op.`,
           );
         }

@@ -1,13 +1,14 @@
-import { alchemy } from "../alchemy.js";
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import type { Secret } from "../secret.js";
-import { sha256 } from "../util/sha256.js";
-import { createCloudflareApi, type CloudflareApiOptions } from "./api.js";
+import { alchemy } from "../alchemy.ts";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
+import { sha256 } from "../util/sha256.ts";
+import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
 import {
   PermissionGroups,
   type PermissionGroupName,
-} from "./permission-groups.js";
+} from "./permission-groups.ts";
 
 /**
  * Permission group for a token policy
@@ -269,10 +270,10 @@ export const AccountApiToken = Resource(
             const errorData: any = await deleteResponse.json().catch(() => ({
               errors: [{ message: deleteResponse.statusText }],
             }));
-            console.error(`Error deleting token '${props.name}':`, errorData);
+            logger.error(`Error deleting token '${props.name}':`, errorData);
           }
         } catch (error) {
-          console.error(`Error deleting token '${props.name}':`, error);
+          logger.error(`Error deleting token '${props.name}':`, error);
         }
       }
 

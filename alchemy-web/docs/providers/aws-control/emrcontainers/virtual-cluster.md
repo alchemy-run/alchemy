@@ -5,39 +5,61 @@ description: Learn how to create, update, and manage AWS EMRContainers VirtualCl
 
 # VirtualCluster
 
-The VirtualCluster resource lets you create and manage [AWS EMRContainers VirtualClusters](https://docs.aws.amazon.com/emrcontainers/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-emrcontainers-virtualcluster.html
+The VirtualCluster resource allows you to create and manage [AWS EMRContainers VirtualClusters](https://docs.aws.amazon.com/emrcontainers/latest/userguide/) for running serverless Apache Spark applications. This resource facilitates the management of your containerized EMR workloads.
 
 ## Minimal Example
+
+Create a basic VirtualCluster with required properties and one optional security configuration.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const virtualcluster = await AWS.EMRContainers.VirtualCluster("virtualcluster-example", {
-  ContainerProvider: "example-containerprovider",
-  Name: "virtualcluster-",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const virtualCluster = await AWS.EMRContainers.VirtualCluster("myVirtualCluster", {
+  name: "MyVirtualCluster",
+  containerProvider: {
+    type: "EKS",
+    id: "myEKSCluster"
+  },
+  securityConfigurationId: "mySecurityConfigId" // Optional
 });
 ```
 
 ## Advanced Configuration
 
-Create a virtualcluster with additional configuration:
+Configure a VirtualCluster with tags for better resource management and identification.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedVirtualCluster = await AWS.EMRContainers.VirtualCluster("advanced-virtualcluster", {
-  ContainerProvider: "example-containerprovider",
-  Name: "virtualcluster-",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedVirtualCluster = await AWS.EMRContainers.VirtualCluster("advancedVirtualCluster", {
+  name: "AdvancedVirtualCluster",
+  containerProvider: {
+    type: "EKS",
+    id: "myAdvancedEKSCluster"
   },
+  securityConfigurationId: "myAdvancedSecurityConfigId", // Optional
+  tags: [
+    {
+      key: "Environment",
+      value: "Production"
+    },
+    {
+      key: "Department",
+      value: "DataScience"
+    }
+  ]
 });
 ```
 
+## Using Existing Resource
+
+This example demonstrates how to adopt an existing VirtualCluster instead of failing if it already exists.
+
+```ts
+const existingVirtualCluster = await AWS.EMRContainers.VirtualCluster("existingVirtualCluster", {
+  name: "ExistingVirtualCluster",
+  containerProvider: {
+    type: "EKS",
+    id: "myExistingEKSCluster"
+  },
+  adopt: true // Enables adopting existing resources
+});
+```

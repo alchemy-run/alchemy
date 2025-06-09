@@ -13,6 +13,7 @@ export default {
     console.log(crypto.randomBytes(10));
     console.log(crypto2.randomBytes(10));
     console.log(logger);
+    require("ws");
     return new Response("Hello World!");
   },
 };

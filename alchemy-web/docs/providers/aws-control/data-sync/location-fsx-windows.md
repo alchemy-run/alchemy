@@ -1,46 +1,63 @@
 ---
-title: Managing AWS DataSync LocationFSxWindowss with Alchemy
-description: Learn how to create, update, and manage AWS DataSync LocationFSxWindowss using Alchemy Cloud Control.
+title: Managing AWS DataSync LocationFSxWindows with Alchemy
+description: Learn how to create, update, and manage AWS DataSync LocationFSxWindows using Alchemy Cloud Control.
 ---
 
 # LocationFSxWindows
 
-The LocationFSxWindows resource lets you create and manage [AWS DataSync LocationFSxWindowss](https://docs.aws.amazon.com/datasync/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-datasync-locationfsxwindows.html
+The LocationFSxWindows resource allows you to create and manage an AWS DataSync location that uses FSx for Windows File Server as a source or destination for data transfer. For more information, see the [AWS DataSync LocationFSxWindows documentation](https://docs.aws.amazon.com/datasync/latest/userguide/).
 
 ## Minimal Example
+
+Create a basic DataSync LocationFSxWindows resource with the required properties and one optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const locationfsxwindows = await AWS.DataSync.LocationFSxWindows("locationfsxwindows-example", {
-  User: "example-user",
-  SecurityGroupArns: ["example-securitygrouparns-1"],
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const fsxLocation = await AWS.DataSync.LocationFSxWindows("myFsxLocation", {
+  User: "Administrator",
+  Password: alchemy.secret(process.env.FSX_PASSWORD!),
+  FsxFilesystemArn: "arn:aws:fsx:us-west-2:123456789012:file-system/fs-0123456789abcdef0",
+  SecurityGroupArns: [
+    "arn:aws:ec2:us-west-2:123456789012:security-group/sg-0123456789abcdef0"
+  ],
+  Subdirectory: "/data"
 });
 ```
 
 ## Advanced Configuration
 
-Create a locationfsxwindows with additional configuration:
+Configure a DataSync LocationFSxWindows with additional settings, including domain and tags.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedLocationFSxWindows = await AWS.DataSync.LocationFSxWindows(
-  "advanced-locationfsxwindows",
-  {
-    User: "example-user",
-    SecurityGroupArns: ["example-securitygrouparns-1"],
-    Tags: {
-      Environment: "production",
-      Team: "DevOps",
-      Project: "MyApp",
-      CostCenter: "Engineering",
-      ManagedBy: "Alchemy",
-    },
-  }
-);
+const advancedFsxLocation = await AWS.DataSync.LocationFSxWindows("advancedFsxLocation", {
+  User: "Administrator",
+  Password: alchemy.secret(process.env.FSX_PASSWORD!),
+  FsxFilesystemArn: "arn:aws:fsx:us-west-2:123456789012:file-system/fs-0123456789abcdef0",
+  Domain: "example.com",
+  SecurityGroupArns: [
+    "arn:aws:ec2:us-west-2:123456789012:security-group/sg-0123456789abcdef0"
+  ],
+  Subdirectory: "/data",
+  Tags: [
+    { Key: "Project", Value: "DataSync" },
+    { Key: "Environment", Value: "Production" }
+  ]
+});
 ```
 
+## Adopting Existing Resources
+
+If you want to adopt an existing DataSync LocationFSxWindows resource instead of creating a new one, set the `adopt` property to true.
+
+```ts
+const adoptedFsyncLocation = await AWS.DataSync.LocationFSxWindows("adoptedFsxLocation", {
+  User: "Administrator",
+  Password: alchemy.secret(process.env.FSX_PASSWORD!),
+  FsxFilesystemArn: "arn:aws:fsx:us-west-2:123456789012:file-system/fs-0123456789abcdef0",
+  SecurityGroupArns: [
+    "arn:aws:ec2:us-west-2:123456789012:security-group/sg-0123456789abcdef0"
+  ],
+  adopt: true
+});
+```

@@ -5,35 +5,65 @@ description: Learn how to create, update, and manage AWS CloudTrail EventDataSto
 
 # EventDataStore
 
-The EventDataStore resource lets you create and manage [AWS CloudTrail EventDataStores](https://docs.aws.amazon.com/cloudtrail/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-cloudtrail-eventdatastore.html
+The EventDataStore resource lets you manage [AWS CloudTrail EventDataStores](https://docs.aws.amazon.com/cloudtrail/latest/userguide/) for storing and querying CloudTrail events.
 
 ## Minimal Example
+
+Create a basic EventDataStore with essential properties.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const eventdatastore = await AWS.CloudTrail.EventDataStore("eventdatastore-example", {
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const eventDataStore = await AWS.CloudTrail.EventDataStore("basicEventDataStore", {
+  name: "MyEventDataStore",
+  multiRegionEnabled: true,
+  retentionPeriod: 365 // Retain events for 365 days
 });
 ```
 
 ## Advanced Configuration
 
-Create a eventdatastore with additional configuration:
+Configure an EventDataStore with advanced options such as KMS key for encryption and insight selectors.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedEventDataStore = await AWS.CloudTrail.EventDataStore("advanced-eventdatastore", {
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedEventDataStore = await AWS.CloudTrail.EventDataStore("advancedEventDataStore", {
+  name: "AdvancedEventDataStore",
+  kmsKeyId: "arn:aws:kms:us-east-1:123456789012:key/abcd1234-56ef-78gh-90ij-klmnopqrst",
+  advancedEventSelectors: [{
+    name: "MyAdvancedSelector",
+    fieldSelectors: [{
+      field: "eventSource",
+      equals: ["s3.amazonaws.com"]
+    }]
+  }],
+  insightSelectors: [{
+    insightType: "ApiCallRateInsight"
+  }],
+  federationEnabled: true,
+  organizationEnabled: false
 });
 ```
 
+## Event Ingestion Enabled
+
+Create an EventDataStore with ingestion enabled for capturing real-time events.
+
+```ts
+const ingestionEnabledEventDataStore = await AWS.CloudTrail.EventDataStore("ingestionEnabledEventDataStore", {
+  name: "IngestionEnabledDataStore",
+  ingestionEnabled: true,
+  retentionPeriod: 180 // Retain events for 180 days
+});
+```
+
+## Termination Protection
+
+Set up an EventDataStore with termination protection enabled to prevent accidental deletion.
+
+```ts
+const protectedEventDataStore = await AWS.CloudTrail.EventDataStore("protectedEventDataStore", {
+  name: "ProtectedEventDataStore",
+  terminationProtectionEnabled: true,
+  multiRegionEnabled: true
+});
+```

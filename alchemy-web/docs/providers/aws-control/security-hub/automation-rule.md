@@ -5,45 +5,92 @@ description: Learn how to create, update, and manage AWS SecurityHub AutomationR
 
 # AutomationRule
 
-The AutomationRule resource lets you create and manage [AWS SecurityHub AutomationRules](https://docs.aws.amazon.com/securityhub/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-securityhub-automationrule.html
+The AutomationRule resource lets you manage [AWS SecurityHub AutomationRules](https://docs.aws.amazon.com/securityhub/latest/userguide/) for automating responses to security findings in your AWS environment.
 
 ## Minimal Example
+
+Create a basic automation rule with required properties and one optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const automationrule = await AWS.SecurityHub.AutomationRule("automationrule-example", {
-  Description: "A automationrule resource managed by Alchemy",
-  Actions: [],
-  Criteria: "example-criteria",
+const basicAutomationRule = await AWS.SecurityHub.AutomationRule("basicAutomationRule", {
+  Description: "A basic automation rule for managing security findings.",
+  Actions: [
+    {
+      ActionType: "SNS",
+      TargetArn: "arn:aws:sns:us-west-2:123456789012:security-notifications"
+    }
+  ],
+  Criteria: {
+    Criterion: {
+      "aws/securityhub/SeverityLabel": {
+        Eq: ["HIGH"]
+      }
+    }
+  },
   RuleOrder: 1,
-  RuleName: "automationrule-rule",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+  RuleName: "HighSeverityFindings"
 });
 ```
 
 ## Advanced Configuration
 
-Create a automationrule with additional configuration:
+Configure an automation rule with additional settings such as terminal state and tags.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedAutomationRule = await AWS.SecurityHub.AutomationRule("advanced-automationrule", {
-  Description: "A automationrule resource managed by Alchemy",
-  Actions: [],
-  Criteria: "example-criteria",
-  RuleOrder: 1,
-  RuleName: "automationrule-rule",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedAutomationRule = await AWS.SecurityHub.AutomationRule("advancedAutomationRule", {
+  Description: "An advanced automation rule with additional configuration.",
+  Actions: [
+    {
+      ActionType: "Lambda",
+      TargetArn: "arn:aws:lambda:us-west-2:123456789012:function:processFindings"
+    }
+  ],
+  IsTerminal: true,
+  RuleStatus: "ENABLED",
+  Criteria: {
+    Criterion: {
+      "aws/securityhub/ResourceType": {
+        Eq: ["AWS::EC2::Instance"]
+      }
+    }
   },
+  RuleOrder: 2,
+  RuleName: "EC2InstanceFindings",
+  Tags: {
+    Environment: "Production",
+    Team: "Security"
+  }
 });
 ```
 
+## Terminal State Example
+
+Create an automation rule that defines terminal states for specific findings.
+
+```ts
+const terminalAutomationRule = await AWS.SecurityHub.AutomationRule("terminalAutomationRule", {
+  Description: "A terminal automation rule for specific findings.",
+  Actions: [
+    {
+      ActionType: "SQS",
+      TargetArn: "arn:aws:sqs:us-west-2:123456789012:security-alerts"
+    }
+  ],
+  IsTerminal: true,
+  RuleStatus: "ENABLED",
+  Criteria: {
+    Criterion: {
+      "aws/securityhub/SeverityLabel": {
+        Eq: ["CRITICAL"]
+      }
+    }
+  },
+  RuleOrder: 3,
+  RuleName: "CriticalFindings",
+  Tags: {
+    Project: "Compliance"
+  }
+});
+```

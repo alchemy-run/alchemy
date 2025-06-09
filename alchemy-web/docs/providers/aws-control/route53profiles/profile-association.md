@@ -5,47 +5,64 @@ description: Learn how to create, update, and manage AWS Route53Profiles Profile
 
 # ProfileAssociation
 
-The ProfileAssociation resource lets you create and manage [AWS Route53Profiles ProfileAssociations](https://docs.aws.amazon.com/route53profiles/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-route53profiles-profileassociation.html
+The ProfileAssociation resource allows you to associate a resource with a profile in AWS Route53Profiles. This is essential for managing resources in a controlled manner, ensuring that they adhere to the policies and settings defined in the associated profile. For more information, refer to the [AWS Route53Profiles ProfileAssociations documentation](https://docs.aws.amazon.com/route53profiles/latest/userguide/).
 
 ## Minimal Example
+
+Create a basic ProfileAssociation linking a resource to a profile:
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const profileassociation = await AWS.Route53Profiles.ProfileAssociation(
-  "profileassociation-example",
-  {
-    ProfileId: "example-profileid",
-    ResourceId: "example-resourceid",
-    Name: "profileassociation-",
-    Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  }
-);
+const profileAssociation = await AWS.Route53Profiles.ProfileAssociation("basicProfileAssociation", {
+  ProfileId: "profile-12345",
+  ResourceId: "resource-67890",
+  Name: "MyProfileAssociation"
+});
 ```
 
 ## Advanced Configuration
 
-Create a profileassociation with additional configuration:
+Configure a ProfileAssociation with tags and the option to adopt an existing resource:
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedProfileAssociation = await AWS.Route53Profiles.ProfileAssociation(
-  "advanced-profileassociation",
-  {
-    ProfileId: "example-profileid",
-    ResourceId: "example-resourceid",
-    Name: "profileassociation-",
-    Tags: {
-      Environment: "production",
-      Team: "DevOps",
-      Project: "MyApp",
-      CostCenter: "Engineering",
-      ManagedBy: "Alchemy",
-    },
-  }
-);
+const advancedProfileAssociation = await AWS.Route53Profiles.ProfileAssociation("advancedProfileAssociation", {
+  ProfileId: "profile-12345",
+  ResourceId: "resource-67890",
+  Name: "AdvancedProfileAssociation",
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Owner", Value: "DevTeam" }
+  ],
+  adopt: true
+});
 ```
 
+## Handling Resource Updates
+
+Update an existing ProfileAssociation by changing its name and tags:
+
+```ts
+const updatedProfileAssociation = await AWS.Route53Profiles.ProfileAssociation("updatedProfileAssociation", {
+  ProfileId: "profile-12345",
+  ResourceId: "resource-67890",
+  Name: "UpdatedProfileAssociation",
+  Tags: [
+    { Key: "Environment", Value: "Staging" },
+    { Key: "Owner", Value: "QA Team" }
+  ]
+});
+```
+
+## Deleting a ProfileAssociation
+
+Remove a ProfileAssociation when it's no longer needed:
+
+```ts
+const deleteProfileAssociation = await AWS.Route53Profiles.ProfileAssociation("deleteProfileAssociation", {
+  ProfileId: "profile-12345",
+  ResourceId: "resource-67890",
+  Name: "DeleteProfileAssociation",
+  adopt: false // Ensure this does not fail if resource is absent
+});
+```

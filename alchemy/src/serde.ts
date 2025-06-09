@@ -1,12 +1,12 @@
-import { decryptWithKey, encrypt } from "./encrypt.js";
+import { decryptWithKey, encrypt } from "./encrypt.ts";
 import {
   InnerResourceScope,
   ResourceFQN,
   ResourceKind,
   type Resource,
-} from "./resource.js";
-import { Scope } from "./scope.js";
-import { Secret } from "./secret.js";
+} from "./resource.ts";
+import { Scope } from "./scope.ts";
+import { Secret } from "./secret.ts";
 
 import type { Type } from "arktype";
 
@@ -113,7 +113,10 @@ export async function serialize(
     return Promise.all(value.map((value) => serialize(scope, value, options)));
   } else if (value instanceof Secret) {
     if (!scope.password) {
-      throw new Error("Cannot serialize secret without password");
+      throw new Error(
+        "Cannot serialize secret without password, did you forget to set password when initializing your alchemy app?\n" +
+          "See: https://alchemy.run/docs/concepts/secret.html#encryption-password",
+      );
     }
     return {
       "@secret":
@@ -202,7 +205,10 @@ export async function deserialize(
   if (value && typeof value === "object") {
     if (typeof value["@secret"] === "string") {
       if (!scope.password) {
-        throw new Error("Cannot deserialize secret without password");
+        throw new Error(
+          "Cannot deserialize secret without password, did you forget to set password when initializing your alchemy app?\n" +
+            "See: https://alchemy.run/docs/concepts/secret.html#encryption-password",
+        );
       }
       return new Secret(await decryptWithKey(value["@secret"], scope.password));
     } else if ("@schema" in value) {

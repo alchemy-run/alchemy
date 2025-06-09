@@ -5,41 +5,78 @@ description: Learn how to create, update, and manage AWS CodeArtifact Repository
 
 # Repository
 
-The Repository resource lets you create and manage [AWS CodeArtifact Repositorys](https://docs.aws.amazon.com/codeartifact/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-codeartifact-repository.html
+The Repository resource lets you manage [AWS CodeArtifact Repositorys](https://docs.aws.amazon.com/codeartifact/latest/userguide/) for storing and retrieving packages.
 
 ## Minimal Example
+
+Create a basic CodeArtifact repository with required properties.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const repository = await AWS.CodeArtifact.Repository("repository-example", {
-  DomainName: "repository-domain",
-  RepositoryName: "repository-repository",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A repository resource managed by Alchemy",
+const basicRepository = await AWS.CodeArtifact.Repository("basic-repo", {
+  DomainName: "my-domain",
+  RepositoryName: "my-repo",
+  Description: "A basic repository for storing npm packages.",
+  Tags: [
+    { Key: "Environment", Value: "Development" }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a repository with additional configuration:
+Configure a repository with external connections and permissions policy.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedRepository = await AWS.CodeArtifact.Repository("advanced-repository", {
-  DomainName: "repository-domain",
-  RepositoryName: "repository-repository",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedRepository = await AWS.CodeArtifact.Repository("advanced-repo", {
+  DomainName: "my-domain",
+  RepositoryName: "advanced-repo",
+  Description: "An advanced repository with external connections.",
+  ExternalConnections: ["public:npm"],
+  PermissionsPolicyDocument: {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: { AWS: "*" },
+        Action: "codeartifact:GetPackageVersion",
+        Resource: "*"
+      }
+    ]
   },
-  Description: "A repository resource managed by Alchemy",
+  Upstreams: ["public:npm"]
 });
 ```
 
+## Repository with Multiple Upstreams
+
+Create a repository that includes multiple upstream repositories for package resolution.
+
+```ts
+const multiUpstreamRepo = await AWS.CodeArtifact.Repository("multi-upstream-repo", {
+  DomainName: "my-domain",
+  RepositoryName: "multi-upstream-repo",
+  Description: "Repository with multiple upstreams for package resolution.",
+  Upstreams: ["public:pypi", "public:npm"],
+  Tags: [
+    { Key: "Project", Value: "MultiRepoIntegration" }
+  ]
+});
+```
+
+## Repository with Domain Owner
+
+Set up a repository specifying a domain owner for better control and management.
+
+```ts
+const ownerRepo = await AWS.CodeArtifact.Repository("owner-repo", {
+  DomainName: "my-domain",
+  RepositoryName: "owner-repo",
+  DomainOwner: "123456789012", // Example AWS Account ID
+  Description: "A repository owned by a specific AWS account.",
+  Tags: [
+    { Key: "Owner", Value: "MyAccount" }
+  ]
+});
+```

@@ -5,35 +5,49 @@ description: Learn how to create, update, and manage AWS Detective Graphs using 
 
 # Graph
 
-The Graph resource lets you create and manage [AWS Detective Graphs](https://docs.aws.amazon.com/detective/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-detective-graph.html
+The Graph resource allows you to create and manage [AWS Detective Graphs](https://docs.aws.amazon.com/detective/latest/userguide/) that help you visualize and analyze security-related data across your AWS environment.
 
 ## Minimal Example
+
+Create a basic Detective Graph with auto member enabling:
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const graph = await AWS.Detective.Graph("graph-example", {
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const detectiveGraph = await AWS.Detective.Graph("myDetectiveGraph", {
+  AutoEnableMembers: true,
+  Tags: [
+    { Key: "Project", Value: "Security" },
+    { Key: "Environment", Value: "Production" }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a graph with additional configuration:
+Configure a Detective Graph with custom tags and without auto member enabling:
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedGraph = await AWS.Detective.Graph("advanced-graph", {
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedDetectiveGraph = await AWS.Detective.Graph("advancedGraph", {
+  AutoEnableMembers: false,
+  Tags: [
+    { Key: "Compliance", Value: "PCI-DSS" },
+    { Key: "Owner", Value: "SecurityTeam" }
+  ],
+  adopt: true // Allows adoption of existing resource
 });
 ```
 
+## Adoption of Existing Graph
+
+Create a Detective Graph while ensuring it adopts an existing resource if it already exists:
+
+```ts
+const existingGraph = await AWS.Detective.Graph("existingGraph", {
+  AutoEnableMembers: true,
+  Tags: [
+    { Key: "Status", Value: "Active" }
+  ],
+  adopt: true // Ensures the function adopts the existing graph
+});
+```

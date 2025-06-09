@@ -1,6 +1,6 @@
-import { apply } from "./apply.js";
-import type { Context } from "./context.js";
-import { Scope as _Scope, type Scope } from "./scope.js";
+import { apply } from "./apply.ts";
+import type { Context } from "./context.ts";
+import { Scope as _Scope, type Scope } from "./scope.ts";
 
 export const PROVIDERS: Map<ResourceKind, Provider<string, any>> = new Map<
   ResourceKind,
@@ -137,9 +137,15 @@ export function Resource<
       const otherResource = scope.resources.get(resourceID);
       if (otherResource?.[ResourceKind] !== type) {
         scope.fail();
-        throw new Error(
+        const error = new Error(
           `Resource ${resourceID} already exists in the stack and is of a different type: '${otherResource?.[ResourceKind]}' !== '${type}'`,
         );
+        scope.telemetryClient.record({
+          event: "resource.error",
+          resource: type,
+          error,
+        });
+        throw error;
       }
     }
 

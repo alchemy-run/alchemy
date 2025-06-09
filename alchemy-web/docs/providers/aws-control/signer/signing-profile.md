@@ -5,37 +5,49 @@ description: Learn how to create, update, and manage AWS Signer SigningProfiles 
 
 # SigningProfile
 
-The SigningProfile resource lets you create and manage [AWS Signer SigningProfiles](https://docs.aws.amazon.com/signer/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-signer-signingprofile.html
+The SigningProfile resource allows you to create and manage signing profiles in AWS Signer, which are used to specify the signing configurations for your code and binaries. For more details, refer to the [AWS Signer SigningProfiles documentation](https://docs.aws.amazon.com/signer/latest/userguide/).
 
 ## Minimal Example
+
+Create a basic signing profile with required properties and a common optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const signingprofile = await AWS.Signer.SigningProfile("signingprofile-example", {
-  PlatformId: "example-platformid",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const signingProfile = await AWS.Signer.SigningProfile("mySigningProfile", {
+  PlatformId: "aws-eu-west-1-x86_64", // Specify the platform ID for your signing profile
+  SignatureValidityPeriod: {
+    Type: "DAYS",
+    Value: 7 // Validity period of 7 days
+  }
 });
 ```
 
 ## Advanced Configuration
 
-Create a signingprofile with additional configuration:
+Configure a signing profile with tags for better resource management.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedSigningProfile = await AWS.Signer.SigningProfile("advanced-signingprofile", {
-  PlatformId: "example-platformid",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedSigningProfile = await AWS.Signer.SigningProfile("advancedSigningProfile", {
+  PlatformId: "aws-us-east-1-arm64", // Specify the platform ID for ARM64 architecture
+  SignatureValidityPeriod: {
+    Type: "DAYS",
+    Value: 30 // Validity period of 30 days
   },
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Owner", Value: "DevTeam" }
+  ]
 });
 ```
 
+## Using Existing Resources
+
+Create a signing profile that adopts an existing resource if it already exists.
+
+```ts
+const existingProfile = await AWS.Signer.SigningProfile("existingProfile", {
+  PlatformId: "aws-us-west-2-x86_64", // Specify the platform ID for existing signing profile
+  adopt: true // Attempt to adopt the existing signing profile
+});
+```

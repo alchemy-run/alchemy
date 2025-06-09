@@ -5,35 +5,53 @@ description: Learn how to create, update, and manage AWS DataZone Connections us
 
 # Connection
 
-The Connection resource lets you create and manage [AWS DataZone Connections](https://docs.aws.amazon.com/datazone/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-datazone-connection.html
+The Connection resource allows you to create and manage connections within AWS DataZone, enabling connectivity and integration with various data sources and services. For more information, visit the [AWS DataZone Connections](https://docs.aws.amazon.com/datazone/latest/userguide/).
 
 ## Minimal Example
+
+Create a basic DataZone connection with required properties and a common optional description.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const connection = await AWS.DataZone.Connection("connection-example", {
-  EnvironmentIdentifier: "example-environmentidentifier",
-  Name: "connection-",
-  DomainIdentifier: "example-domainidentifier",
-  Description: "A connection resource managed by Alchemy",
+const dataZoneConnection = await AWS.DataZone.Connection("myDataZoneConnection", {
+  name: "MyDataZoneConnection",
+  environmentIdentifier: "env-123456",
+  domainIdentifier: "domain-987654",
+  description: "This connection integrates with my data source."
 });
 ```
 
 ## Advanced Configuration
 
-Create a connection with additional configuration:
+Configure a DataZone connection with additional properties such as AWS location and custom connection properties.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedConnection = await AWS.DataZone.Connection("advanced-connection", {
-  EnvironmentIdentifier: "example-environmentidentifier",
-  Name: "connection-",
-  DomainIdentifier: "example-domainidentifier",
-  Description: "A connection resource managed by Alchemy",
+const advancedDataZoneConnection = await AWS.DataZone.Connection("advancedConnection", {
+  name: "AdvancedDataZoneConnection",
+  environmentIdentifier: "env-123456",
+  domainIdentifier: "domain-987654",
+  description: "This connection includes advanced settings.",
+  awsLocation: {
+    region: "us-west-2",
+    accountId: "123456789012"
+  },
+  props: {
+    type: "S3",
+    connectionString: "s3://my-data-source-bucket"
+  }
 });
 ```
 
+## Connection Adoption
+
+Create a connection that adopts an existing resource instead of failing if it already exists.
+
+```ts
+const adoptedDataZoneConnection = await AWS.DataZone.Connection("adoptedConnection", {
+  name: "AdoptedDataZoneConnection",
+  environmentIdentifier: "env-123456",
+  domainIdentifier: "domain-987654",
+  adopt: true // Adopt an existing resource if it exists
+});
+```

@@ -5,35 +5,43 @@ description: Learn how to create, update, and manage AWS HealthImaging Datastore
 
 # Datastore
 
-The Datastore resource lets you create and manage [AWS HealthImaging Datastores](https://docs.aws.amazon.com/healthimaging/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-healthimaging-datastore.html
+The Datastore resource lets you manage [AWS HealthImaging Datastores](https://docs.aws.amazon.com/healthimaging/latest/userguide/) for storing and retrieving medical imaging data.
 
 ## Minimal Example
+
+Create a basic HealthImaging Datastore with a specified name and an optional KMS key for encryption.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const datastore = await AWS.HealthImaging.Datastore("datastore-example", {
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const basicDatastore = await AWS.HealthImaging.Datastore("basic-datastore", {
+  DatastoreName: "patient-imaging-data",
+  KmsKeyArn: "arn:aws:kms:us-west-2:123456789012:key/abcd1234-ab12-cd34-ef56-1234567890ab"
 });
 ```
 
 ## Advanced Configuration
 
-Create a datastore with additional configuration:
+Configure a datastore with tags for better resource management and organization.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedDatastore = await AWS.HealthImaging.Datastore("advanced-datastore", {
+const taggedDatastore = await AWS.HealthImaging.Datastore("tagged-datastore", {
+  DatastoreName: "research-study-images",
+  KmsKeyArn: "arn:aws:kms:us-west-2:123456789012:key/abcd1234-ab12-cd34-ef56-1234567890ab",
   Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+    Project: "Medical Research",
+    Environment: "Production"
+  }
 });
 ```
 
+## Adoption of Existing Resources
+
+Adopt an existing HealthImaging Datastore instead of failing if the resource already exists.
+
+```ts
+const adoptExistingDatastore = await AWS.HealthImaging.Datastore("adopt-datastore", {
+  DatastoreName: "legacy-datastore",
+  adopt: true
+});
+```

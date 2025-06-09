@@ -5,39 +5,50 @@ description: Learn how to create, update, and manage AWS Redshift Integrations u
 
 # Integration
 
-The Integration resource lets you create and manage [AWS Redshift Integrations](https://docs.aws.amazon.com/redshift/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-redshift-integration.html
+The Integration resource allows you to manage [AWS Redshift Integrations](https://docs.aws.amazon.com/redshift/latest/userguide/) for secure data sharing between AWS services and your Redshift cluster.
 
 ## Minimal Example
+
+Create a basic Redshift integration with required properties and a common optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const integration = await AWS.Redshift.Integration("integration-example", {
-  SourceArn: "example-sourcearn",
-  TargetArn: "example-targetarn",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const redshiftIntegration = await AWS.Redshift.Integration("basicIntegration", {
+  SourceArn: "arn:aws:s3:::my-data-bucket",
+  TargetArn: "arn:aws:redshift:us-west-2:123456789012:cluster:my-cluster",
+  KMSKeyId: "arn:aws:kms:us-west-2:123456789012:key/my-key-id" // Optional
 });
 ```
 
 ## Advanced Configuration
 
-Create a integration with additional configuration:
+Configure a Redshift integration with additional encryption context and tags for better management.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedIntegration = await AWS.Redshift.Integration("advanced-integration", {
-  SourceArn: "example-sourcearn",
-  TargetArn: "example-targetarn",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedIntegration = await AWS.Redshift.Integration("advancedIntegration", {
+  SourceArn: "arn:aws:s3:::my-secure-data-bucket",
+  TargetArn: "arn:aws:redshift:us-west-2:123456789012:cluster:my-cluster",
+  KMSKeyId: "arn:aws:kms:us-west-2:123456789012:key/my-key-id",
+  AdditionalEncryptionContext: {
+    "Project": "DataPipeline",
+    "Environment": "Production"
   },
+  Tags: [
+    { Key: "Owner", Value: "DataTeam" },
+    { Key: "Environment", Value: "Production" }
+  ]
 });
 ```
 
+## Adoption of Existing Resources
+
+If you want to adopt an existing Redshift integration rather than creating a new one, you can set the `adopt` flag to true.
+
+```ts
+const adoptIntegration = await AWS.Redshift.Integration("adoptedIntegration", {
+  SourceArn: "arn:aws:s3:::existing-bucket",
+  TargetArn: "arn:aws:redshift:us-west-2:123456789012:cluster:my-cluster",
+  adopt: true // This will adopt the existing resource if it exists
+});
+```

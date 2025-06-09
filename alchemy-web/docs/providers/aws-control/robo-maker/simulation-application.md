@@ -5,45 +5,74 @@ description: Learn how to create, update, and manage AWS RoboMaker SimulationApp
 
 # SimulationApplication
 
-The SimulationApplication resource lets you create and manage [AWS RoboMaker SimulationApplications](https://docs.aws.amazon.com/robomaker/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-robomaker-simulationapplication.html
+The SimulationApplication resource lets you create and manage [AWS RoboMaker SimulationApplications](https://docs.aws.amazon.com/robomaker/latest/userguide/) for running simulations of robotic applications.
 
 ## Minimal Example
+
+Create a basic simulation application with required properties and some common optional settings.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const simulationapplication = await AWS.RoboMaker.SimulationApplication(
-  "simulationapplication-example",
-  {
-    SimulationSoftwareSuite: "example-simulationsoftwaresuite",
-    RobotSoftwareSuite: "example-robotsoftwaresuite",
-    Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  }
-);
+const simulationApp = await AWS.RoboMaker.SimulationApplication("basicSimulationApp", {
+  simulationSoftwareSuite: {
+    name: "Gazebo",
+    version: "9"
+  },
+  robotSoftwareSuite: {
+    name: "ROS",
+    version: "Melodic"
+  },
+  renderingEngine: {
+    name: "OGRE",
+    version: "1.12"
+  },
+  name: "BasicSimulationApp"
+});
 ```
 
 ## Advanced Configuration
 
-Create a simulationapplication with additional configuration:
+Configure a simulation application with additional properties like environment variables and source configuration.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedSimulationApplication = await AWS.RoboMaker.SimulationApplication(
-  "advanced-simulationapplication",
-  {
-    SimulationSoftwareSuite: "example-simulationsoftwaresuite",
-    RobotSoftwareSuite: "example-robotsoftwaresuite",
-    Tags: {
-      Environment: "production",
-      Team: "DevOps",
-      Project: "MyApp",
-      CostCenter: "Engineering",
-      ManagedBy: "Alchemy",
-    },
-  }
-);
+const advancedSimulationApp = await AWS.RoboMaker.SimulationApplication("advancedSimulationApp", {
+  simulationSoftwareSuite: {
+    name: "Gazebo",
+    version: "9"
+  },
+  robotSoftwareSuite: {
+    name: "ROS",
+    version: "Melodic"
+  },
+  environment: "MY_ENV_VAR=myValue",
+  sources: [{
+    s3Bucket: "my-robot-app-bucket",
+    s3Key: "my-robot-app.zip"
+  }],
+  tags: {
+    Project: "RoboticsSimulation",
+    Environment: "Development"
+  },
+  name: "AdvancedSimulationApp"
+});
 ```
 
+## Using an Existing Resource
+
+If you want to adopt an existing simulation application instead of creating a new one, you can specify the `adopt` property.
+
+```ts
+const existingSimulationApp = await AWS.RoboMaker.SimulationApplication("existingSimulationApp", {
+  simulationSoftwareSuite: {
+    name: "Gazebo",
+    version: "9"
+  },
+  robotSoftwareSuite: {
+    name: "ROS",
+    version: "Melodic"
+  },
+  adopt: true, // Adopting existing resource
+  name: "ExistingSimulationApp"
+});
+```

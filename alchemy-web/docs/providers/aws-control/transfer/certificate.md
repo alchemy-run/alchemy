@@ -5,41 +5,61 @@ description: Learn how to create, update, and manage AWS Transfer Certificates u
 
 # Certificate
 
-The Certificate resource lets you create and manage [AWS Transfer Certificates](https://docs.aws.amazon.com/transfer/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-transfer-certificate.html
+The Certificate resource allows you to manage [AWS Transfer Certificates](https://docs.aws.amazon.com/transfer/latest/userguide/) for secure data transfer. This resource supports the creation and management of SSL/TLS certificates for AWS Transfer Family.
 
 ## Minimal Example
+
+Create a basic AWS Transfer Certificate with required properties and one optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const certificate = await AWS.Transfer.Certificate("certificate-example", {
-  Usage: "example-usage",
-  Certificate: "example-certificate",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A certificate resource managed by Alchemy",
+const transferCertificate = await AWS.Transfer.Certificate("myTransferCertificate", {
+  Certificate: "-----BEGIN CERTIFICATE-----\nMIID...AB\n-----END CERTIFICATE-----",
+  PrivateKey: "-----BEGIN PRIVATE KEY-----\nMIIEvA...IDAQAB\n-----END PRIVATE KEY-----",
+  Usage: "ENCRYPTION", // Common usage type
 });
 ```
 
 ## Advanced Configuration
 
-Create a certificate with additional configuration:
+Configure an AWS Transfer Certificate with additional properties such as description and tags.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedCertificate = await AWS.Transfer.Certificate("advanced-certificate", {
-  Usage: "example-usage",
-  Certificate: "example-certificate",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
-  Description: "A certificate resource managed by Alchemy",
+const advancedTransferCertificate = await AWS.Transfer.Certificate("advancedTransferCertificate", {
+  Certificate: "-----BEGIN CERTIFICATE-----\nMIID...AB\n-----END CERTIFICATE-----",
+  PrivateKey: "-----BEGIN PRIVATE KEY-----\nMIIEvA...IDAQAB\n-----END PRIVATE KEY-----",
+  Usage: "ENCRYPTION",
+  Description: "This is a certificate for secure data transfer.",
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Project", Value: "Data Transfer" }
+  ],
 });
 ```
 
+## Inactive Certificate
+
+Create an AWS Transfer Certificate that specifies an inactive date.
+
+```ts
+const inactiveTransferCertificate = await AWS.Transfer.Certificate("inactiveTransferCertificate", {
+  Certificate: "-----BEGIN CERTIFICATE-----\nMIID...AB\n-----END CERTIFICATE-----",
+  PrivateKey: "-----BEGIN PRIVATE KEY-----\nMIIEvA...IDAQAB\n-----END PRIVATE KEY-----",
+  Usage: "ENCRYPTION",
+  InactiveDate: "2023-12-31T23:59:59Z", // Example inactive date
+});
+```
+
+## Certificate Chain
+
+Create an AWS Transfer Certificate with a certificate chain for enhanced security.
+
+```ts
+const certificateChainTransferCertificate = await AWS.Transfer.Certificate("certificateChainTransferCertificate", {
+  Certificate: "-----BEGIN CERTIFICATE-----\nMIID...AB\n-----END CERTIFICATE-----",
+  PrivateKey: "-----BEGIN PRIVATE KEY-----\nMIIEvA...IDAQAB\n-----END PRIVATE KEY-----",
+  Usage: "ENCRYPTION",
+  CertificateChain: "-----BEGIN CERTIFICATE-----\nMIID...AB\n-----END CERTIFICATE-----", // Example certificate chain
+});
+```

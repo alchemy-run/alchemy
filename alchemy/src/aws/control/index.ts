@@ -1,6 +1,6 @@
-export * from "./client.js";
-export * from "./proxy.js";
-export * from "./resource.js";
-import { AWS } from "./proxy.js";
+export * from "./client.ts";
+export * from "./proxy.ts";
+export * from "./resource.ts";
+import { AWS } from "./proxy.ts";
 
 export default AWS;

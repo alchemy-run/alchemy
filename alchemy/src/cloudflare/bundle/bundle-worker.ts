@@ -1,15 +1,22 @@
 import fs from "node:fs/promises";
-import { Bundle } from "../../esbuild/bundle.js";
-import type { Bindings } from "../bindings.js";
-import type { WorkerProps } from "../worker.js";
-import { createAliasPlugin } from "./alias-plugin.js";
+import path from "node:path";
+import { Bundle } from "../../esbuild/bundle.ts";
+import { logger } from "../../util/logger.ts";
+import type { Bindings } from "../bindings.ts";
+import type { WorkerProps } from "../worker.ts";
+import { createAliasPlugin } from "./alias-plugin.ts";
 import {
   isBuildFailure,
   rewriteNodeCompatBuildFailure,
-} from "./build-failures.js";
-import { external, external_als } from "./external.js";
-import { getNodeJSCompatMode } from "./nodejs-compat-mode.js";
-import { nodeJsCompatPlugin } from "./nodejs-compat.js";
+} from "./build-failures.ts";
+import { external, external_als } from "./external.ts";
+import { getNodeJSCompatMode } from "./nodejs-compat-mode.ts";
+import { nodeJsCompatPlugin } from "./nodejs-compat.ts";
+import { wasmPlugin } from "./wasm-plugin.ts";
+
+export type NoBundleResult = {
+  [fileName: string]: Buffer;
+};
 
 export async function bundleWorkerScript<B extends Bindings>(
   props: WorkerProps<B> & {
@@ -17,7 +24,7 @@ export async function bundleWorkerScript<B extends Bindings>(
     compatibilityDate: string;
     compatibilityFlags: string[];
   },
-) {
+): Promise<string | NoBundleResult> {
   const projectRoot = props.projectRoot ?? process.cwd();
 
   const nodeJsCompatMode = await getNodeJSCompatMode(
@@ -32,6 +39,40 @@ export async function bundleWorkerScript<B extends Bindings>(
   }
   const main = props.entrypoint;
 
+  if (props.noBundle) {
+    const rootDir = path.dirname(path.resolve(main));
+    const rules = (
+      props.rules ?? [
+        {
+          globs: ["**/*.js", "**/*.mjs", "**/*.wasm"],
+        },
+      ]
+    ).flatMap((rule) => rule.globs);
+    const files = Array.from(
+      new Set(
+        (
+          await Promise.all(
+            rules.map((rule) =>
+              Array.fromAsync(
+                fs.glob(rule, {
+                  cwd: rootDir,
+                }),
+              ),
+            ),
+          )
+        ).flat(),
+      ),
+    );
+    return Object.fromEntries(
+      await Promise.all(
+        files.map(async (file) => [
+          file,
+          await fs.readFile(path.resolve(rootDir, file)),
+        ]),
+      ),
+    );
+  }
+
   try {
     const bundle = await Bundle("bundle", {
       entryPoint: main,
@@ -41,31 +82,29 @@ export async function bundleWorkerScript<B extends Bindings>(
       minify: false,
       ...(props.bundle || {}),
       conditions: ["workerd", "worker", "browser"],
-      options: {
-        absWorkingDir: projectRoot,
-        ...(props.bundle?.options || {}),
-        keepNames: true, // Important for Durable Object classes
-        loader: {
-          ".sql": "text",
-          ".json": "json",
-        },
-        plugins: [
-          ...(props.bundle?.plugins ?? []),
-          ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
-          ...(props.bundle?.alias
-            ? [
-                createAliasPlugin({
-                  alias: props.bundle?.alias,
-                  projectRoot,
-                }),
-              ]
-            : []),
-        ],
+      absWorkingDir: projectRoot,
+      keepNames: true, // Important for Durable Object classes
+      loader: {
+        ".sql": "text",
+        ".json": "json",
+        ...props.bundle?.loader,
       },
+      plugins: [
+        wasmPlugin,
+        ...(props.bundle?.plugins ?? []),
+        ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
+        ...(props.bundle?.alias
+          ? [
+              createAliasPlugin({
+                alias: props.bundle?.alias,
+                projectRoot,
+              }),
+            ]
+          : []),
+      ],
       external: [
         ...(nodeJsCompatMode === "als" ? external_als : external),
         ...(props.bundle?.external ?? []),
-        ...(props.bundle?.options?.external ?? []),
       ],
     });
     if (bundle.content) {
@@ -86,7 +125,7 @@ export async function bundleWorkerScript<B extends Bindings>(
       rewriteNodeCompatBuildFailure(e.errors, nodeJsCompatMode);
       throw e;
     }
-    console.error("Error reading bundle:", e);
+    logger.error("Error reading bundle:", e);
     throw new Error("Error reading bundle");
   }
 }

@@ -1,45 +1,74 @@
 ---
-title: Managing AWS GameLift Aliass with Alchemy
-description: Learn how to create, update, and manage AWS GameLift Aliass using Alchemy Cloud Control.
+title: Managing AWS GameLift Aliases with Alchemy
+description: Learn how to create, update, and manage AWS GameLift Aliases using Alchemy Cloud Control.
 ---
 
 # Alias
 
-The Alias resource lets you create and manage [AWS GameLift Aliass](https://docs.aws.amazon.com/gamelift/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-gamelift-alias.html
+The Alias resource lets you manage [AWS GameLift Aliases](https://docs.aws.amazon.com/gamelift/latest/userguide/) to route player traffic to game server fleets.
 
 ## Minimal Example
 
+Create a basic GameLift alias with a routing strategy.
+
 ```ts
 import AWS from "alchemy/aws/control";
 
-const alias = await AWS.GameLift.Alias("alias-example", {
-  RoutingStrategy: "example-routingstrategy",
-  Name: "alias-",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A alias resource managed by Alchemy",
+const gameLiftAlias = await AWS.GameLift.Alias("basicAlias", {
+  Name: "BasicGameAlias",
+  RoutingStrategy: {
+    Type: "SIMPLE",
+    FleetId: "fleet-12345678"
+  }
 });
 ```
 
-## Advanced Configuration
+## Enhanced Description and Tags
 
-Create a alias with additional configuration:
+Configure an alias with a description and tags for better management.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedAlias = await AWS.GameLift.Alias("advanced-alias", {
-  RoutingStrategy: "example-routingstrategy",
-  Name: "alias-",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const taggedAlias = await AWS.GameLift.Alias("taggedAlias", {
+  Name: "TaggedGameAlias",
+  Description: "This alias routes traffic to the main game server fleet.",
+  RoutingStrategy: {
+    Type: "SIMPLE",
+    FleetId: "fleet-87654321"
   },
-  Description: "A alias resource managed by Alchemy",
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Game", Value: "MyAwesomeGame" }
+  ]
 });
 ```
 
+## Advanced Routing Strategy
+
+Create an alias with a complex routing strategy that includes multiple fleet options.
+
+```ts
+const advancedAlias = await AWS.GameLift.Alias("advancedAlias", {
+  Name: "AdvancedGameAlias",
+  Description: "Routes players based on player count.",
+  RoutingStrategy: {
+    Type: "TARGET_BASED",
+    FleetId: "fleet-11223344",
+    Message: "Directing traffic to the best available server based on load."
+  }
+});
+```
+
+## Adoption of Existing Resources
+
+Create an alias while adopting an existing resource if it already exists.
+
+```ts
+const existingAlias = await AWS.GameLift.Alias("existingAlias", {
+  Name: "ExistingGameAlias",
+  RoutingStrategy: {
+    Type: "SIMPLE",
+    FleetId: "fleet-55667788"
+  },
+  adopt: true
+});
+```

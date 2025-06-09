@@ -5,43 +5,56 @@ description: Learn how to create, update, and manage AWS IoTWireless Destination
 
 # Destination
 
-The Destination resource lets you create and manage [AWS IoTWireless Destinations](https://docs.aws.amazon.com/iotwireless/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iotwireless-destination.html
+The Destination resource allows you to manage [AWS IoTWireless Destinations](https://docs.aws.amazon.com/iotwireless/latest/userguide/) for routing messages from your IoT devices to AWS services. 
 
 ## Minimal Example
+
+Create a basic IoTWireless Destination with required properties and one optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const destination = await AWS.IoTWireless.Destination("destination-example", {
-  Expression: "example-expression",
-  ExpressionType: "example-expressiontype",
-  Name: "destination-",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A destination resource managed by Alchemy",
+const simpleDestination = await AWS.IoTWireless.Destination("simpleDestination", {
+  Name: "SimpleDestination",
+  Expression: "SELECT * FROM 'iot/topic'",
+  ExpressionType: "RuleQueryString",
+  Description: "A simple destination for routing IoT messages",
+  RoleArn: "arn:aws:iam::123456789012:role/MyIoTRole"
 });
 ```
 
 ## Advanced Configuration
 
-Create a destination with additional configuration:
+Configure a more complex IoTWireless Destination with multiple tags and necessary IAM role.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedDestination = await AWS.IoTWireless.Destination("advanced-destination", {
-  Expression: "example-expression",
-  ExpressionType: "example-expressiontype",
-  Name: "destination-",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
-  Description: "A destination resource managed by Alchemy",
+const advancedDestination = await AWS.IoTWireless.Destination("advancedDestination", {
+  Name: "AdvancedDestination",
+  Expression: "SELECT * FROM 'iot/topic'",
+  ExpressionType: "RuleQueryString",
+  RoleArn: "arn:aws:iam::123456789012:role/MyIoTRole",
+  Tags: [
+    {
+      Key: "Environment",
+      Value: "Production"
+    },
+    {
+      Key: "Project",
+      Value: "IoTMonitoring"
+    }
+  ]
 });
 ```
 
+## Using Existing Resources
+
+If you want to adopt an existing resource instead of failing when it already exists, set the `adopt` property to `true`.
+
+```ts
+const adoptDestination = await AWS.IoTWireless.Destination("adoptDestination", {
+  Name: "ExistingDestination",
+  Expression: "SELECT * FROM 'iot/topic'",
+  ExpressionType: "RuleQueryString",
+  adopt: true
+});
+```

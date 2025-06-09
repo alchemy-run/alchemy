@@ -5,39 +5,71 @@ description: Learn how to create, update, and manage AWS Config ConfigurationAgg
 
 # ConfigurationAggregator
 
-The ConfigurationAggregator resource lets you create and manage [AWS Config ConfigurationAggregators](https://docs.aws.amazon.com/config/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-config-configurationaggregator.html
+The ConfigurationAggregator resource allows you to manage [AWS Config ConfigurationAggregators](https://docs.aws.amazon.com/config/latest/userguide/) which aggregate configuration data across multiple accounts and regions.
 
 ## Minimal Example
+
+Create a basic ConfigurationAggregator with a name and an organization aggregation source.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const configurationaggregator = await AWS.Config.ConfigurationAggregator(
-  "configurationaggregator-example",
-  { Tags: { Environment: "production", ManagedBy: "Alchemy" } }
-);
+const basicAggregator = await AWS.Config.ConfigurationAggregator("basicAggregator", {
+  ConfigurationAggregatorName: "MyBasicAggregator",
+  OrganizationAggregationSource: {
+    RoleArn: "arn:aws:iam::123456789012:role/MyConfigRole",
+    SourceRegions: ["us-east-1", "us-west-2"]
+  }
+});
 ```
 
 ## Advanced Configuration
 
-Create a configurationaggregator with additional configuration:
+Configure a ConfigurationAggregator with multiple account aggregation sources and tags.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedConfigurationAggregator = await AWS.Config.ConfigurationAggregator(
-  "advanced-configurationaggregator",
-  {
-    Tags: {
-      Environment: "production",
-      Team: "DevOps",
-      Project: "MyApp",
-      CostCenter: "Engineering",
-      ManagedBy: "Alchemy",
-    },
-  }
-);
+const advancedAggregator = await AWS.Config.ConfigurationAggregator("advancedAggregator", {
+  ConfigurationAggregatorName: "MyAdvancedAggregator",
+  AccountAggregationSources: [
+    {
+      AccountIds: ["123456789012", "987654321098"],
+      AllRegions: true
+    }
+  ],
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Project", Value: "ConfigAggregator" }
+  ]
+});
 ```
 
+## Using Multiple Sources
+
+Create a ConfigurationAggregator that combines both organization and account aggregation sources.
+
+```ts
+const combinedAggregator = await AWS.Config.ConfigurationAggregator("combinedAggregator", {
+  ConfigurationAggregatorName: "MyCombinedAggregator",
+  AccountAggregationSources: [
+    {
+      AccountIds: ["123456789012"],
+      AllRegions: true
+    }
+  ],
+  OrganizationAggregationSource: {
+    RoleArn: "arn:aws:iam::123456789012:role/MyConfigRole",
+    SourceRegions: ["us-east-1"]
+  }
+});
+```
+
+## Adopting Existing Resource
+
+If you want to adopt an existing ConfigurationAggregator without failure, use the `adopt` property.
+
+```ts
+const adoptAggregator = await AWS.Config.ConfigurationAggregator("adoptAggregator", {
+  ConfigurationAggregatorName: "MyAdoptedAggregator",
+  adopt: true
+});
+```

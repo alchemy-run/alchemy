@@ -1,6 +1,7 @@
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { DEFAULT_RECORD_TYPES, type DnsRecordType } from "./record.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
+import { DEFAULT_RECORD_TYPES, type DnsRecordType } from "./record.ts";
 
 /**
  * DNS record response structure from Cloudflare DNS API
@@ -195,7 +196,7 @@ export const ImportDnsRecords = Resource(
           allRecords.push(...compatRecords);
         }
       } catch (error) {
-        console.warn(
+        logger.warn(
           `Failed to fetch ${type} records for ${props.domain}:`,
           error,
         );

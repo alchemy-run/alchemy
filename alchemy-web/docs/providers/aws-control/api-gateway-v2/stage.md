@@ -5,41 +5,71 @@ description: Learn how to create, update, and manage AWS ApiGatewayV2 Stages usi
 
 # Stage
 
-The Stage resource lets you create and manage [AWS ApiGatewayV2 Stages](https://docs.aws.amazon.com/apigatewayv2/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-apigatewayv2-stage.html
+The Stage resource lets you manage [AWS ApiGatewayV2 Stages](https://docs.aws.amazon.com/apigatewayv2/latest/userguide/) and their configurations for API deployments.
 
 ## Minimal Example
+
+Create a basic stage with required properties and a common optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const stage = await AWS.ApiGatewayV2.Stage("stage-example", {
-  StageName: "stage-stage",
-  ApiId: "example-apiid",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A stage resource managed by Alchemy",
+const apiGatewayStage = await AWS.ApiGatewayV2.Stage("myApiStage", {
+  ApiId: "abc1234xyz",
+  StageName: "production",
+  Description: "Production stage for the API",
+  AutoDeploy: true
 });
 ```
 
 ## Advanced Configuration
 
-Create a stage with additional configuration:
+Configure a stage with logging settings and stage variables.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedStage = await AWS.ApiGatewayV2.Stage("advanced-stage", {
-  StageName: "stage-stage",
-  ApiId: "example-apiid",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedStage = await AWS.ApiGatewayV2.Stage("advancedApiStage", {
+  ApiId: "abc1234xyz",
+  StageName: "development",
+  Description: "Development stage with detailed logging",
+  AccessLogSettings: {
+    DestinationArn: "arn:aws:logs:us-west-2:123456789012:log-group:/aws/apigateway/myApiLogGroup",
+    Format: "$context.identity.sourceIp - $context.requestId"
   },
-  Description: "A stage resource managed by Alchemy",
+  StageVariables: {
+    "version": "1.0",
+    "featureFlag": "true"
+  }
 });
 ```
 
+## Custom Route Settings
+
+Create a stage with custom route settings to fine-tune API behavior.
+
+```ts
+const customRouteStage = await AWS.ApiGatewayV2.Stage("customRouteStage", {
+  ApiId: "abc1234xyz",
+  StageName: "custom",
+  RouteSettings: [{
+    RouteId: "route123",
+    DataTraceEnabled: true,
+    DetailedMetricsEnabled: true
+  }]
+});
+```
+
+## Access Control Policy
+
+Define an access policy that restricts access to specific IP addresses.
+
+```ts
+const accessPolicyStage = await AWS.ApiGatewayV2.Stage("policyStage", {
+  ApiId: "abc1234xyz",
+  StageName: "secured",
+  AccessPolicyId: "policyId123",
+  Tags: {
+    "Environment": "production",
+    "Department": "engineering"
+  }
+});
+```

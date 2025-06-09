@@ -5,47 +5,70 @@ description: Learn how to create, update, and manage AWS MediaLive EventBridgeRu
 
 # EventBridgeRuleTemplate
 
-The EventBridgeRuleTemplate resource lets you create and manage [AWS MediaLive EventBridgeRuleTemplates](https://docs.aws.amazon.com/medialive/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-medialive-eventbridgeruletemplate.html
+The EventBridgeRuleTemplate resource allows you to create and manage EventBridge rule templates for AWS MediaLive, enabling you to define how MediaLive events interact with EventBridge. For more information, see the [AWS MediaLive EventBridgeRuleTemplates documentation](https://docs.aws.amazon.com/medialive/latest/userguide/).
 
 ## Minimal Example
+
+Create a basic EventBridge rule template with the required properties and a description.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const eventbridgeruletemplate = await AWS.MediaLive.EventBridgeRuleTemplate(
-  "eventbridgeruletemplate-example",
-  {
-    EventType: "example-eventtype",
-    Name: "eventbridgeruletemplate-",
-    Tags: { Environment: "production", ManagedBy: "Alchemy" },
-    Description: "A eventbridgeruletemplate resource managed by Alchemy",
-  }
-);
+const minimalEventBridgeRuleTemplate = await AWS.MediaLive.EventBridgeRuleTemplate("basicRuleTemplate", {
+  name: "BasicRuleTemplate",
+  eventType: "MediaLiveEvent",
+  description: "This is a simple EventBridge rule template for MediaLive events."
+});
 ```
 
 ## Advanced Configuration
 
-Create a eventbridgeruletemplate with additional configuration:
+Configure an EventBridge rule template with multiple event targets and tags for better organization.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedEventBridgeRuleTemplate = await AWS.MediaLive.EventBridgeRuleTemplate(
-  "advanced-eventbridgeruletemplate",
-  {
-    EventType: "example-eventtype",
-    Name: "eventbridgeruletemplate-",
-    Tags: {
-      Environment: "production",
-      Team: "DevOps",
-      Project: "MyApp",
-      CostCenter: "Engineering",
-      ManagedBy: "Alchemy",
+const advancedEventBridgeRuleTemplate = await AWS.MediaLive.EventBridgeRuleTemplate("advancedRuleTemplate", {
+  name: "AdvancedRuleTemplate",
+  eventType: "MediaLiveEvent",
+  description: "This template has multiple targets and tags.",
+  eventTargets: [
+    {
+      targetArn: "arn:aws:sqs:us-east-1:123456789012:MyQueue",
+      id: "SQSQueueTarget",
+      inputTransformer: {
+        inputPathsMap: {
+          detail: "$.detail",
+          source: "$.source"
+        },
+        inputTemplate: "<template>${detail}</template>"
+      }
     },
-    Description: "A eventbridgeruletemplate resource managed by Alchemy",
+    {
+      targetArn: "arn:aws:lambda:us-east-1:123456789012:function:MyFunction",
+      id: "LambdaFunctionTarget"
+    }
+  ],
+  tags: {
+    Project: "MediaLiveIntegration",
+    Environment: "Production"
   }
-);
+});
 ```
 
+## Using Group Identifier
+
+Demonstrate how to create an EventBridge rule template with a group identifier to manage related rules.
+
+```ts
+const groupedEventBridgeRuleTemplate = await AWS.MediaLive.EventBridgeRuleTemplate("groupedRuleTemplate", {
+  name: "GroupedRuleTemplate",
+  eventType: "MediaLiveEvent",
+  description: "This template is part of a group of related templates.",
+  groupIdentifier: "media-live-group",
+  eventTargets: [
+    {
+      targetArn: "arn:aws:events:us-east-1:123456789012:rule/MyRule",
+      id: "EventRuleTarget"
+    }
+  ]
+});
+```

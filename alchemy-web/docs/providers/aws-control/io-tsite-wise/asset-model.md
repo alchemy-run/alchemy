@@ -5,37 +5,86 @@ description: Learn how to create, update, and manage AWS IoTSiteWise AssetModels
 
 # AssetModel
 
-The AssetModel resource lets you create and manage [AWS IoTSiteWise AssetModels](https://docs.aws.amazon.com/iotsitewise/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iotsitewise-assetmodel.html
+The AssetModel resource lets you manage [AWS IoTSiteWise AssetModels](https://docs.aws.amazon.com/iotsitewise/latest/userguide/) for modeling and organizing industrial assets in your IoT applications.
 
 ## Minimal Example
+
+Create a basic AssetModel with required properties and a common optional description.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const assetmodel = await AWS.IoTSiteWise.AssetModel("assetmodel-example", {
-  AssetModelName: "assetmodel-assetmodel",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const basicAssetModel = await AWS.IoTSiteWise.AssetModel("basicAssetModel", {
+  AssetModelName: "PumpModel",
+  AssetModelDescription: "Model for monitoring industrial pumps",
+  AssetModelType: "STANDARD"
 });
 ```
 
 ## Advanced Configuration
 
-Create a assetmodel with additional configuration:
+Configure an AssetModel with composite models, properties, and hierarchies for a more complex structure.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedAssetModel = await AWS.IoTSiteWise.AssetModel("advanced-assetmodel", {
-  AssetModelName: "assetmodel-assetmodel",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedAssetModel = await AWS.IoTSiteWise.AssetModel("advancedAssetModel", {
+  AssetModelName: "ComplexAssetModel",
+  AssetModelDescription: "Model representing a complex industrial asset",
+  AssetModelType: "STANDARD",
+  AssetModelCompositeModels: [
+    {
+      name: "CompositeModel1",
+      properties: [
+        {
+          name: "Temperature",
+          type: "DOUBLE",
+          unit: "Celsius"
+        }
+      ]
+    }
+  ],
+  AssetModelProperties: [
+    {
+      name: "Pressure",
+      type: "DOUBLE",
+      unit: "Pascal"
+    }
+  ],
+  AssetModelHierarchies: [
+    {
+      name: "Hierarchy1",
+      childAssetModelId: "ChildAssetModelId"
+    }
+  ]
 });
 ```
 
+## Create with Tags
+
+Create an AssetModel while also tagging it for resource organization and management.
+
+```ts
+const taggedAssetModel = await AWS.IoTSiteWise.AssetModel("taggedAssetModel", {
+  AssetModelName: "TaggedPumpModel",
+  Tags: [
+    {
+      Key: "Environment",
+      Value: "Production"
+    },
+    {
+      Key: "Location",
+      Value: "Plant1"
+    }
+  ]
+});
+```
+
+## Adopt Existing Resource
+
+Use the adopt feature to manage an existing AssetModel without failing if it already exists.
+
+```ts
+const adoptAssetModel = await AWS.IoTSiteWise.AssetModel("adoptedAssetModel", {
+  AssetModelName: "ExistingAssetModel",
+  adopt: true
+});
+```

@@ -1,9 +1,9 @@
 import { generateText, type CoreMessage } from "ai";
-import type { Context } from "../context.js";
-import { StaticTextFile } from "../fs/static-text-file.js";
-import { Resource } from "../resource.js";
-import type { Secret } from "../secret.js";
-import { createModel, withRateLimitRetry, type ModelConfig } from "./client.js";
+import type { Context } from "../context.ts";
+import { StaticTextFile } from "../fs/static-text-file.ts";
+import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { createModel, withRateLimitRetry, type ModelConfig } from "./client.ts";
 
 /**
  * Properties for creating or updating a Document
@@ -329,7 +329,7 @@ export const Document = Resource(
  * @param text The text to extract markdown content from
  * @returns The extracted markdown content or error message
  */
-function extractMarkdownContent(text: string): {
+export function extractMarkdownContent(text: string): {
   content: string;
   error?: string;
 } {

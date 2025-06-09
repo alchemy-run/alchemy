@@ -1,3 +1,5 @@
+import type { Binding } from "./bindings.ts";
+
 /**
  * Properties for creating a Durable Object Namespace
  */
@@ -7,6 +9,14 @@ export interface DurableObjectNamespaceInput {
   environment?: string | undefined;
   sqlite?: boolean | undefined;
   namespaceId?: string | undefined;
+}
+
+export function isDurableObjectNamespace(
+  binding: Binding,
+): binding is DurableObjectNamespace {
+  return (
+    typeof binding === "object" && binding.type === "durable_object_namespace"
+  );
 }
 
 /**
@@ -31,7 +41,10 @@ export interface DurableObjectNamespaceInput {
  *   environment: "production"
  * });
  */
-export class DurableObjectNamespace implements DurableObjectNamespaceInput {
+export class DurableObjectNamespace<
+  T extends Rpc.DurableObjectBranded | undefined = undefined,
+> implements DurableObjectNamespaceInput
+{
   public readonly type = "durable_object_namespace" as const;
   // alias for bindingName to be consistent with other bindings
   public readonly className: string;
@@ -39,6 +52,9 @@ export class DurableObjectNamespace implements DurableObjectNamespaceInput {
   public readonly environment?: string | undefined;
   public readonly sqlite?: boolean | undefined;
   public readonly namespaceId?: string | undefined;
+
+  // @ts-ignore - phantom type
+  protected readonly __service__: T;
 
   constructor(
     public readonly id: string,

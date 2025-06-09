@@ -1,13 +1,14 @@
-import type { Context } from "../context.js";
-import { Resource, ResourceKind } from "../resource.js";
-import { bind } from "../runtime/bind.js";
-import { CloudflareApiError, handleApiError } from "./api-error.js";
+import type { Context } from "../context.ts";
+import { Resource, ResourceKind } from "../resource.ts";
+import { bind } from "../runtime/bind.ts";
+import { logger } from "../util/logger.ts";
+import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
-} from "./api.js";
-import type { Bound } from "./bound.js";
+} from "./api.ts";
+import type { Bound } from "./bound.ts";
 
 /**
  * Properties for creating or updating a Vectorize Index
@@ -145,7 +146,7 @@ const _VectorizeIndex = Resource(
     const indexName = props.name || id;
 
     if (this.phase === "delete") {
-      console.log("Deleting Vectorize index:", indexName);
+      logger.log("Deleting Vectorize index:", indexName);
       if (props.delete !== false) {
         // Delete Vectorize index
         await deleteIndex(api, indexName);
@@ -157,7 +158,7 @@ const _VectorizeIndex = Resource(
     let indexData: CloudflareVectorizeResponse;
 
     if (this.phase === "create") {
-      console.log("Creating Vectorize index:", indexName);
+      logger.log("Creating Vectorize index:", indexName);
       try {
         indexData = await createIndex(api, indexName, {
           ...props,
@@ -170,7 +171,7 @@ const _VectorizeIndex = Resource(
           error instanceof CloudflareApiError &&
           error.message.includes("already exists")
         ) {
-          console.log(`Index ${indexName} already exists, adopting it`);
+          logger.log(`Index ${indexName} already exists, adopting it`);
           // Find the existing index
           indexData = await getIndex(api, indexName);
         } else {
@@ -182,7 +183,7 @@ const _VectorizeIndex = Resource(
       if (props.delete !== this.props.delete) {
         // Only allow changing the delete property
         if (!this.quiet) {
-          console.warn(
+          logger.warn(
             `Attempted to update Vectorize index ${indexName} but only the delete property can be changed.`,
           );
         }
@@ -200,7 +201,7 @@ const _VectorizeIndex = Resource(
         props.metric === this.props.metric
       ) {
         if (!this.quiet) {
-          console.warn(
+          logger.warn(
             `Attempted to update Vectorize index ${indexName} but it was a no-op.`,
           );
         }

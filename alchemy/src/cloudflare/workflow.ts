@@ -1,5 +1,6 @@
-import { handleApiError } from "./api-error.js";
-import type { CloudflareApi } from "./api.js";
+import { handleApiError } from "./api-error.ts";
+import type { CloudflareApi } from "./api.ts";
+import type { Binding } from "./bindings.ts";
 
 export interface WorkflowProps {
   /**
@@ -18,6 +19,16 @@ export interface WorkflowProps {
    * @default - workflowName if provided, otherwise id
    */
   className?: string;
+  /**
+   * Name of the script containing the workflow implementation
+   *
+   * @default - bound worker script
+   */
+  scriptName?: string;
+}
+
+export function isWorkflow(binding: Binding): binding is Workflow {
+  return typeof binding === "object" && binding.type === "workflow";
 }
 
 export class Workflow<PARAMS = unknown> {
@@ -31,6 +42,7 @@ export class Workflow<PARAMS = unknown> {
 
   public readonly workflowName: string;
   public readonly className: string;
+  public readonly scriptName?: string;
 
   constructor(
     public readonly id: string,
@@ -38,6 +50,7 @@ export class Workflow<PARAMS = unknown> {
   ) {
     this.workflowName = props.workflowName ?? props.className ?? id;
     this.className = props.className ?? this.workflowName;
+    this.scriptName = props.scriptName;
   }
 }
 

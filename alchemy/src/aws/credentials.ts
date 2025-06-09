@@ -1,4 +1,4 @@
-import type { Secret } from "../secret.js";
+import type { Secret } from "../secret.ts";
 
 export interface AwsCredentials {
   accessKeyId: Secret;

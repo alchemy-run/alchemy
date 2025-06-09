@@ -5,39 +5,52 @@ description: Learn how to create, update, and manage AWS EventSchemas Discoverer
 
 # Discoverer
 
-The Discoverer resource lets you create and manage [AWS EventSchemas Discoverers](https://docs.aws.amazon.com/eventschemas/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-eventschemas-discoverer.html
+The Discoverer resource lets you manage [AWS EventSchemas Discoverers](https://docs.aws.amazon.com/eventschemas/latest/userguide/) to facilitate the discovery of event schemas in your AWS environment.
 
 ## Minimal Example
+
+Create a basic EventSchemas Discoverer with essential properties:
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const discoverer = await AWS.EventSchemas.Discoverer("discoverer-example", {
-  SourceArn: "example-sourcearn",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A discoverer resource managed by Alchemy",
+const basicDiscoverer = await AWS.EventSchemas.Discoverer("basic-discoverer", {
+  SourceArn: "arn:aws:events:us-west-2:123456789012:event-bus/default",
+  Description: "This discoverer is for the default event bus.",
+  CrossAccount: false
 });
 ```
 
 ## Advanced Configuration
 
-Create a discoverer with additional configuration:
+Configure a Discoverer with additional tags and cross-account access:
 
 ```ts
-import AWS from "alchemy/aws/control";
-
 const advancedDiscoverer = await AWS.EventSchemas.Discoverer("advanced-discoverer", {
-  SourceArn: "example-sourcearn",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
-  Description: "A discoverer resource managed by Alchemy",
+  SourceArn: "arn:aws:events:us-west-2:123456789012:event-bus/custom-bus",
+  Description: "This discoverer supports cross-account access.",
+  CrossAccount: true,
+  Tags: [
+    {
+      Key: "Environment",
+      Value: "Production"
+    },
+    {
+      Key: "Department",
+      Value: "Finance"
+    }
+  ]
 });
 ```
 
+## Adoption of Existing Resource
+
+Create a Discoverer that adopts an existing resource if it already exists:
+
+```ts
+const adoptDiscoverer = await AWS.EventSchemas.Discoverer("adopt-discoverer", {
+  SourceArn: "arn:aws:events:us-west-2:123456789012:event-bus/adopt-bus",
+  Description: "This discoverer will adopt the existing resource.",
+  adopt: true
+});
+```

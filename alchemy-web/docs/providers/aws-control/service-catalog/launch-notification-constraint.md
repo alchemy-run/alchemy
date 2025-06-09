@@ -5,41 +5,53 @@ description: Learn how to create, update, and manage AWS ServiceCatalog LaunchNo
 
 # LaunchNotificationConstraint
 
-The LaunchNotificationConstraint resource lets you create and manage [AWS ServiceCatalog LaunchNotificationConstraints](https://docs.aws.amazon.com/servicecatalog/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-servicecatalog-launchnotificationconstraint.html
+The LaunchNotificationConstraint resource lets you manage [AWS ServiceCatalog Launch Notification Constraints](https://docs.aws.amazon.com/servicecatalog/latest/userguide/). This resource is used to specify notification settings for when a product is launched from a portfolio.
 
 ## Minimal Example
+
+Create a basic Launch Notification Constraint with required properties and one optional description.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const launchnotificationconstraint = await AWS.ServiceCatalog.LaunchNotificationConstraint(
-  "launchnotificationconstraint-example",
-  {
-    NotificationArns: ["example-notificationarns-1"],
-    PortfolioId: "example-portfolioid",
-    ProductId: "example-productid",
-    Description: "A launchnotificationconstraint resource managed by Alchemy",
-  }
-);
+const launchNotificationConstraint = await AWS.ServiceCatalog.LaunchNotificationConstraint("launchNotificationConstraint1", {
+  PortfolioId: "portfolio-12345678",
+  ProductId: "product-12345678",
+  NotificationArns: [
+    "arn:aws:sns:us-east-1:123456789012:my-sns-topic"
+  ],
+  Description: "This constraint sends notifications to specified SNS topics."
+});
 ```
 
 ## Advanced Configuration
 
-Create a launchnotificationconstraint with additional configuration:
+Configure a Launch Notification Constraint with additional optional properties like Accept Language.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedLaunchNotificationConstraint = await AWS.ServiceCatalog.LaunchNotificationConstraint(
-  "advanced-launchnotificationconstraint",
-  {
-    NotificationArns: ["example-notificationarns-1"],
-    PortfolioId: "example-portfolioid",
-    ProductId: "example-productid",
-    Description: "A launchnotificationconstraint resource managed by Alchemy",
-  }
-);
+const advancedLaunchNotificationConstraint = await AWS.ServiceCatalog.LaunchNotificationConstraint("advancedLaunchNotificationConstraint", {
+  PortfolioId: "portfolio-12345678",
+  ProductId: "product-12345678",
+  NotificationArns: [
+    "arn:aws:sns:us-east-1:123456789012:my-sns-topic",
+    "arn:aws:sns:us-east-1:123456789012:another-topic"
+  ],
+  Description: "This constraint sends notifications in English.",
+  AcceptLanguage: "en"
+});
 ```
 
+## Adoption of Existing Resources
+
+Adopt an existing Launch Notification Constraint instead of failing if it already exists.
+
+```ts
+const adoptLaunchNotificationConstraint = await AWS.ServiceCatalog.LaunchNotificationConstraint("adoptLaunchNotificationConstraint", {
+  PortfolioId: "portfolio-12345678",
+  ProductId: "product-12345678",
+  NotificationArns: [
+    "arn:aws:sns:us-east-1:123456789012:my-sns-topic"
+  ],
+  adopt: true
+});
+```

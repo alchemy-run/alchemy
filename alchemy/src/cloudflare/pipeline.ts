@@ -1,14 +1,15 @@
-import type { Context } from "../context.js";
-import { Resource, ResourceKind } from "../resource.js";
-import { bind } from "../runtime/bind.js";
-import type { Secret } from "../secret.js";
-import { CloudflareApiError, handleApiError } from "./api-error.js";
+import type { Context } from "../context.ts";
+import { Resource, ResourceKind } from "../resource.ts";
+import { bind } from "../runtime/bind.ts";
+import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
+import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
-} from "./api.js";
-import type { Bound } from "./bound.js";
+} from "./api.ts";
+import type { Bound } from "./bound.ts";
 
 /**
  * Settings for compression of pipeline output
@@ -211,6 +212,14 @@ export interface PipelineProps extends CloudflareApiOptions {
    * @default true
    */
   delete?: boolean;
+
+  /**
+   * Whether to adopt an existing pipeline instead of creating a new one.
+   * If set to true, the resource will attempt to adopt an existing pipeline with the same name
+   *
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -359,12 +368,39 @@ const PipelineResource = Resource("cloudflare::Pipeline", async function <
   let pipelineData: CloudflarePipelineResponse;
 
   if (this.phase === "create") {
-    pipelineData = await createPipeline(api, pipelineName, props);
+    console.log(props);
+    // Check if we should adopt an existing pipeline
+    try {
+      // Try to create pipeline first
+      console.log("Creating new Cloudflare Pipeline:", pipelineName);
+      pipelineData = await createPipeline(api, pipelineName, props);
+    } catch (error) {
+      // If creation fails with 409 (conflict), adopt existing pipeline
+      if (
+        error instanceof CloudflareApiError &&
+        (error.status === 409 ||
+          (error.status === 400 &&
+            error.message.includes("Pipeline with this name already exists")))
+      ) {
+        if (props.adopt) {
+          console.log(
+            "Pipeline already exists, adopting existing Cloudflare Pipeline:",
+            pipelineName,
+          );
+          pipelineData = await getPipeline(api, pipelineName);
+        } else {
+          throw error;
+        }
+      } else {
+        // For any other error, rethrow
+        throw error;
+      }
+    }
   } else {
     // Update operation
     if (this.output?.id) {
       // Check if name is being changed, which is not allowed
-      if (props.name !== this.output.name) {
+      if (pipelineName !== this.output.name) {
         throw new Error(
           "Cannot update Pipeline name after creation. Pipeline name is immutable.",
         );
@@ -374,7 +410,7 @@ const PipelineResource = Resource("cloudflare::Pipeline", async function <
       pipelineData = await updatePipeline(api, pipelineName, props);
     } else {
       // If no ID exists, fall back to creating a new pipeline
-      console.log(
+      logger.log(
         "No existing Pipeline ID found, creating new Cloudflare Pipeline:",
         pipelineName,
       );

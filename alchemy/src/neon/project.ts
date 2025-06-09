@@ -1,9 +1,10 @@
-import { alchemy } from "../alchemy.js";
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import type { Secret } from "../secret.js";
-import { handleApiError } from "./api-error.js";
-import { createNeonApi, type NeonApiOptions } from "./api.js";
+import { alchemy } from "../alchemy.ts";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
+import { handleApiError } from "./api-error.ts";
+import { createNeonApi, type NeonApiOptions } from "./api.ts";
 
 /**
  * A Neon region where projects can be provisioned
@@ -525,7 +526,7 @@ export const NeonProject = Resource(
           }
         }
       } catch (error) {
-        console.error(`Error deleting Neon project ${id}:`, error);
+        logger.error(`Error deleting Neon project ${id}:`, error);
         throw error;
       }
       return this.destroy();
@@ -628,7 +629,7 @@ export const NeonProject = Resource(
         endpoints: response.endpoints,
       });
     } catch (error) {
-      console.error(`Error ${this.phase} Neon project '${id}':`, error);
+      logger.error(`Error ${this.phase} Neon project '${id}':`, error);
       throw error;
     }
   },

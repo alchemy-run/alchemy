@@ -1,6 +1,6 @@
 {
   "extends": "../tsconfig.base.json",
-  "include": ["src/**/*"],
+  "include": ["package.json", "src/**/*.ts", "src/**/*.js", "src/**/*.tsx"],
   "compilerOptions": {
     "composite": true,
     "noEmit": false,
@@ -11,6 +11,8 @@
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "target": "ESNext",
-    "allowJs": true
+    "allowJs": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true
   }
 }

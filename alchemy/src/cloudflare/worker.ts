@@ -1,50 +1,66 @@
 import path from "node:path";
-import type { Context } from "../context.js";
-import type { BundleProps } from "../esbuild/bundle.js";
-import { InnerResourceScope, Resource, ResourceKind } from "../resource.js";
-import { getBindKey, tryGetBinding } from "../runtime/bind.js";
-import { isRuntime } from "../runtime/global.js";
-import { bootstrapPlugin } from "../runtime/plugin.js";
-import { Scope } from "../scope.js";
-import { Secret, secret } from "../secret.js";
-import { serializeScope } from "../serde.js";
-import { withExponentialBackoff } from "../util/retry.js";
-import { slugify } from "../util/slugify.js";
-import { CloudflareApiError, handleApiError } from "./api-error.js";
+import type { Context } from "../context.ts";
+import type { BundleProps } from "../esbuild/bundle.ts";
+import { InnerResourceScope, Resource, ResourceKind } from "../resource.ts";
+import { getBindKey, tryGetBinding } from "../runtime/bind.ts";
+import { isRuntime } from "../runtime/global.ts";
+import { bootstrapPlugin } from "../runtime/plugin.ts";
+import { Scope } from "../scope.ts";
+import { Secret, secret } from "../secret.ts";
+import { serializeScope } from "../serde.ts";
+import type { type } from "../type.ts";
+import { getContentType } from "../util/content-type.ts";
+import { logger } from "../util/logger.ts";
+import { withExponentialBackoff } from "../util/retry.ts";
+import { slugify } from "../util/slugify.ts";
+import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   type CloudflareApi,
   type CloudflareApiOptions,
   createCloudflareApi,
-} from "./api.js";
-import type { Assets } from "./assets.js";
-import { type Binding, type Bindings, Json } from "./bindings.js";
-import type { Bound } from "./bound.js";
-import { isBucket } from "./bucket.js";
-import { bundleWorkerScript } from "./bundle/bundle-worker.js";
-import { isD1Database } from "./d1-database.js";
+} from "./api.ts";
+import type { Assets } from "./assets.ts";
+import {
+  type Binding,
+  type Bindings,
+  Json,
+  type WorkerBindingService,
+  type WorkerBindingSpec,
+} from "./bindings.ts";
+import type { Bound } from "./bound.ts";
+import { isBucket } from "./bucket.ts";
+import {
+  type NoBundleResult,
+  bundleWorkerScript,
+} from "./bundle/bundle-worker.ts";
+import { isD1Database } from "./d1-database.ts";
+import {
+  DurableObjectNamespace,
+  isDurableObjectNamespace,
+} from "./durable-object-namespace.ts";
 import {
   type EventSource,
   type QueueEventSource,
   isQueueEventSource,
-} from "./event-source.js";
-import { isKVNamespace } from "./kv-namespace.js";
-import { isPipeline } from "./pipeline.js";
+} from "./event-source.ts";
+import { isKVNamespace } from "./kv-namespace.ts";
+import { isPipeline } from "./pipeline.ts";
 import {
   QueueConsumer,
   deleteQueueConsumer,
-  listQueueConsumers,
-} from "./queue-consumer.js";
-import { type QueueResource, isQueue } from "./queue.js";
-import { isVectorizeIndex } from "./vectorize-index.js";
-import { type AssetUploadResult, uploadAssets } from "./worker-assets.js";
+  listQueueConsumersForWorker,
+} from "./queue-consumer.ts";
+import { type QueueResource, isQueue } from "./queue.ts";
+import { isVectorizeIndex } from "./vectorize-index.ts";
+import { type AssetUploadResult, uploadAssets } from "./worker-assets.ts";
 import {
   type WorkerMetadata,
   type WorkerScriptMetadata,
   prepareWorkerMetadata,
-} from "./worker-metadata.js";
-import type { SingleStepMigration } from "./worker-migration.js";
-import { WorkerStub, isWorkerStub } from "./worker-stub.js";
-import { type Workflow, upsertWorkflow } from "./workflow.js";
+} from "./worker-metadata.ts";
+import type { SingleStepMigration } from "./worker-migration.ts";
+import { WorkerStub, isWorkerStub } from "./worker-stub.ts";
+import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 
 /**
  * Configuration options for static assets
@@ -90,8 +106,10 @@ export interface AssetsConfig {
   serve_directly?: boolean;
 }
 
-export interface BaseWorkerProps<B extends Bindings = Bindings>
-  extends CloudflareApiOptions {
+export interface BaseWorkerProps<
+  B extends Bindings | undefined = undefined,
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> extends CloudflareApiOptions {
   /**
    * Bundle options when using entryPoint
    *
@@ -200,6 +218,13 @@ export interface BaseWorkerProps<B extends Bindings = Bindings>
   eventSources?: EventSource[];
 
   /**
+   * The RPC class to use for the worker.
+   *
+   * This is only used when using the rpc property.
+   */
+  rpc?: (new (...args: any[]) => RPC) | type<RPC>;
+
+  /**
    * Dispatch namespace for the worker
    *
    * @see https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/get-started/user-workers/
@@ -207,24 +232,53 @@ export interface BaseWorkerProps<B extends Bindings = Bindings>
   dispatchNamespace?: string;
 }
 
-export interface InlineWorkerProps<B extends Bindings = Bindings>
-  extends BaseWorkerProps<B> {
+export interface InlineWorkerProps<
+  B extends Bindings | undefined = Bindings,
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> extends BaseWorkerProps<B, RPC> {
   script: string;
   entrypoint?: undefined;
+  noBundle?: false;
 }
 
-export interface EntrypointWorkerProps<B extends Bindings = Bindings>
-  extends BaseWorkerProps<B> {
-  entrypoint: string;
+export interface EntrypointWorkerProps<
+  B extends Bindings | undefined = Bindings,
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> extends BaseWorkerProps<B, RPC> {
   script?: undefined;
+  /**
+   * The entrypoint for the worker script.
+   */
+  entrypoint: string;
+
+  /**
+   * Whether to disable bundling of the worker script.
+   *
+   * If true, the worker script and any files it imports will be deployed in the Worker.
+   *
+   * @default false
+   */
+  noBundle?: boolean;
+
+  /**
+   * Rules for adding additional files to the bundle.
+   *
+   * If {@link noBundle} is false | undefined, this will be ignored.
+   *
+   * @default - all .js, .mjs, and .wasm files under the entrypoint directory
+   */
+  rules?: {
+    globs: string[];
+  }[];
 }
 
 /**
  * Properties for creating or updating a Worker
  */
-export type WorkerProps<B extends Bindings = Bindings> =
-  | InlineWorkerProps<B>
-  | EntrypointWorkerProps<B>;
+export type WorkerProps<
+  B extends Bindings | undefined = Bindings,
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> = InlineWorkerProps<B, RPC> | EntrypointWorkerProps<B, RPC>;
 
 export type FetchWorkerProps<
   B extends Bindings = Bindings,
@@ -272,63 +326,122 @@ export function isWorker(resource: Resource): resource is Worker<any> {
 /**
  * Output returned after Worker creation/update
  */
-export type Worker<B extends Bindings = Bindings> =
-  Resource<"cloudflare::Worker"> &
-    Omit<WorkerProps<B>, "url" | "script"> &
-    globalThis.Service & {
-      type: "service";
+export type Worker<
+  B extends Bindings | undefined = Bindings | undefined,
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> = Resource<"cloudflare::Worker"> &
+  Omit<WorkerProps<B>, "url" | "script"> &
+  globalThis.Service & {
+    /** @internal phantom property */
+    __rpc__?: RPC;
 
-      /**
-       * The ID of the worker
-       */
-      id: string;
+    type: "service";
 
-      /**
-       * The name of the worker
-       */
-      name: string;
+    /**
+     * The ID of the worker
+     */
+    id: string;
 
-      /**
-       * Time at which the worker was created
-       */
-      createdAt: number;
+    /**
+     * The name of the worker
+     */
+    name: string;
 
-      /**
-       * Time at which the worker was last updated
-       */
-      updatedAt: number;
+    /**
+     * Time at which the worker was created
+     */
+    createdAt: number;
 
-      /**
-       * The worker's URL if enabled
-       * Format: {name}.{subdomain}.workers.dev
-       */
-      url?: string;
+    /**
+     * Time at which the worker was last updated
+     */
+    updatedAt: number;
 
-      /**
-       * The bindings that were created
-       */
-      bindings: B | undefined;
+    /**
+     * The worker's URL if enabled
+     * Format: {name}.{subdomain}.workers.dev
+     *
+     * @default true
+     */
+    url?: string;
 
-      /**
-       * Configuration for static assets
-       */
-      assets?: AssetsConfig;
+    /**
+     * The bindings that were created
+     */
+    bindings: B;
 
-      // phantom property (for typeof myWorker.Env)
-      Env: {
-        [bindingName in keyof B]: Bound<B[bindingName]>;
-      };
+    /**
+     * Configuration for static assets
+     */
+    assets?: AssetsConfig;
 
-      /**
-       * The compatibility date for the worker
-       */
-      compatibilityDate: string;
+    // phantom property (for typeof myWorker.Env)
+    Env: B extends Bindings
+      ? {
+          [bindingName in keyof B]: Bound<B[bindingName]>;
+        }
+      : undefined;
 
-      /**
-       * The compatibility flags for the worker
-       */
-      compatibilityFlags: string[];
-    };
+    /**
+     * The compatibility date for the worker
+     */
+    compatibilityDate: string;
+
+    /**
+     * The compatibility flags for the worker
+     */
+    compatibilityFlags: string[];
+  };
+
+/**
+ * Represents a reference to a Cloudflare Worker service.
+ *
+ * @template RPC - The type of the worker's RPC entrypoint, defaults to Rpc.WorkerEntrypointBranded.
+ *
+ * This interface extends all properties of WorkerBindingService except for "name".
+ * It also includes an optional __rpc__ property for type branding.
+ */
+export type WorkerRef<
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> = Omit<WorkerBindingService, "name"> & {
+  /**
+   * Optional type branding for the worker's RPC entrypoint.
+   */
+  __rpc__?: RPC;
+};
+
+/**
+ * Creates a reference to a Cloudflare Worker service.
+ *
+ * @example
+ * // Create a reference to a Cloudflare Worker service:
+ * const ref = WorkerRef({
+ *   service: "my-worker",
+ *   environment: "production",
+ *   namespace: "main"
+ * });
+ *
+ * // Optionally, you can specify only the service:
+ * const ref2 = WorkerRef({ service: "my-worker" });
+ *
+ * // You can also specify the RPC type for stronger typing:
+ * interface MyWorkerRPC extends Rpc.WorkerEntrypointBranded {
+ *   myMethod(arg: string): Promise<number>;
+ * }
+ * const typedRef = WorkerRef<MyWorkerRPC>({ service: "my-worker" });
+ */
+export function WorkerRef<
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+>(options?: {
+  service: string;
+  environment?: string;
+  namespace?: string;
+}): WorkerRef<RPC> {
+  return {
+    ...options,
+    type: "service",
+  } as WorkerRef<RPC>;
+}
 
 /**
  * A Cloudflare Worker is a serverless function that can be deployed to the Cloudflare network.
@@ -339,7 +452,6 @@ export type Worker<B extends Bindings = Bindings> =
  * const api = await Worker("api", {
  *   name: "api-worker",
  *   entrypoint: "./src/api.ts",
- *   routes: ["api.example.com/*"],
  *   url: true
  * });
  *
@@ -419,13 +531,36 @@ export type Worker<B extends Bindings = Bindings> =
  *   crons: ['* 15 * * *', '0 0 * * *', '0 12 * * MON']
  * })
  *
+ * @example
+ * // Create cross-script durable object binding where one worker
+ * // defines the durable object and another worker accesses it:
+ * const dataWorker = await Worker("data-worker", {
+ *   name: "data-worker",
+ *   entrypoint: "./src/data.ts",
+ *   bindings: {
+ *     // Bind to its own durable object
+ *     STORAGE: new DurableObjectNamespace("storage", {
+ *       className: "DataStorage"
+ *     })
+ *   }
+ * });
+ *
+ * const apiWorker = await Worker("api-worker", {
+ *   name: "api-worker",
+ *   entrypoint: "./src/api.ts",
+ *   bindings: {
+ *     // Cross-script binding to the data worker's durable object
+ *     SHARED_STORAGE: dataWorker.bindings.STORAGE
+ *   }
+ * });
+ *
  * @see
  * https://developers.cloudflare.com/workers/
  */
-export function Worker<const B extends Bindings>(
-  id: string,
-  props: WorkerProps<B>,
-): Promise<Worker<B>>;
+export function Worker<
+  const B extends Bindings,
+  RPC extends Rpc.WorkerEntrypointBranded,
+>(id: string, props: WorkerProps<B, RPC>): Promise<Worker<B, RPC>>;
 export function Worker<const B extends Bindings, const E extends EventSource[]>(
   id: string,
   meta: ImportMeta,
@@ -438,6 +573,7 @@ export function Worker<const B extends Bindings>(
 ): Promise<Worker<B>> {
   const [id, meta, props] =
     args.length === 2 ? [args[0], undefined, args[1]] : args;
+
   if (("fetch" in props && props.fetch) || ("queue" in props && props.queue)) {
     const scope = Scope.current;
 
@@ -505,10 +641,9 @@ export function Worker<const B extends Bindings>(
       return _Worker(id, {
         ...(props as any),
         url: true,
-        compatibilityFlags: [
-          "nodejs_compat",
-          ...(props.compatibilityFlags ?? []),
-        ],
+        compatibilityFlags: Array.from(
+          new Set(["nodejs_compat", ...(props.compatibilityFlags ?? [])]),
+        ),
         entrypoint: meta!.filename,
         name: workerName,
         // adopt because the stub guarnatees that the worker exists
@@ -592,7 +727,7 @@ export function Worker<const B extends Bindings>(
           const incoming = request.url.startsWith("/")
             ? new URL(`${worker.url}${request.url}`)
             : new URL(request.url);
-          console.log(incoming);
+          logger.log(incoming);
           const proxyURL = new URL(
             `${incoming.pathname}${incoming.search}${incoming.hash}`,
             origin,
@@ -635,6 +770,8 @@ export function Worker<const B extends Bindings>(
   });
 }
 
+export const DEFAULT_COMPATIBILITY_DATE = "2025-04-20";
+
 export const _Worker = Resource(
   "cloudflare::Worker",
   {
@@ -645,20 +782,29 @@ export const _Worker = Resource(
     id: string,
     props: WorkerProps<B>,
   ): Promise<Worker<B>> {
+    if (props.noBundle && !props.entrypoint) {
+      throw new Error("entrypoint must be provided when noBundle is true");
+    }
+
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
 
     // Use the provided name
     const workerName = props.name ?? id;
 
-    const compatibilityDate = props.compatibilityDate ?? "2025-04-20";
+    const compatibilityDate =
+      props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
     const uploadWorkerScript = async (props: WorkerProps<B>) => {
-      const oldBindings = await this.get<Bindings>("bindings");
+      const [oldBindings, oldMetadata] = await Promise.all([
+        getWorkerBindings(api, workerName),
+        getWorkerScriptMetadata(api, workerName),
+      ]);
+      const oldTags = oldMetadata?.default_environment?.script?.tags;
 
       // Get the script content - either from props.script, or by bundling
-      const scriptContent =
+      const scriptBundle =
         props.script ??
         (await bundleWorkerScript({
           ...props,
@@ -702,6 +848,7 @@ export const _Worker = Resource(
       const scriptMetadata = await prepareWorkerMetadata(
         this,
         oldBindings,
+        oldTags,
         {
           ...props,
           compatibilityDate,
@@ -711,17 +858,19 @@ export const _Worker = Resource(
         assetUploadResult,
       );
 
-      await putWorker(api, workerName, scriptContent, scriptMetadata);
-
-      // TODO: it is less than ideal that this can fail, resulting in state problem
-      await this.set("bindings", props.bindings);
+      await putWorker(api, workerName, scriptBundle, scriptMetadata);
 
       for (const workflow of workflowsBindings) {
-        await upsertWorkflow(api, {
-          workflowName: workflow.workflowName,
-          className: workflow.className,
-          scriptName: workerName,
-        });
+        if (
+          workflow.scriptName === undefined ||
+          workflow.scriptName === workerName
+        ) {
+          await upsertWorkflow(api, {
+            workflowName: workflow.workflowName,
+            className: workflow.className,
+            scriptName: workflow.scriptName ?? workerName,
+          });
+        }
       }
 
       await Promise.all(
@@ -736,7 +885,9 @@ export const _Worker = Resource(
               accountId: api.accountId,
               settings: isQueueEventSource(eventSource)
                 ? eventSource.settings
-                : undefined,
+                : queue.dlq
+                  ? { deadLetterQueue: queue.dlq }
+                  : undefined,
             });
           }
           throw new Error(`Unsupported event source type: ${eventSource}`);
@@ -748,7 +899,7 @@ export const _Worker = Resource(
         this,
         api,
         workerName,
-        props.url ?? false,
+        props.url ?? true,
       );
 
       // Get current timestamp
@@ -771,21 +922,26 @@ export const _Worker = Resource(
         }
       }
 
-      return { scriptContent, scriptMetadata, workerUrl, now };
+      return { scriptBundle, scriptMetadata, workerUrl, now };
     };
 
     if (this.phase === "delete") {
       // Delete any queue consumers attached to this worker first
-      await deleteQueueConsumers(this, api, workerName);
+      await deleteQueueConsumers(api, workerName);
 
+      // @ts-ignore
       await uploadWorkerScript({
         ...props,
         entrypoint: undefined,
+        noBundle: false,
         script:
           props.format === "cjs"
             ? "addEventListener('fetch', event => { event.respondWith(new Response('hello world')); });"
-            : "export default { fetch(request) { return new Response('hello world'); } }",
+            : "export default { fetch(request) { return new Response('hello world'); }, queue: () => {} }",
         bindings: {} as B,
+        // we are writing a stub worker (to remove binding/event source dependencies)
+        // queue consumers will no longer exist by this point
+        eventSources: undefined,
       });
 
       await withExponentialBackoff(
@@ -820,6 +976,30 @@ export const _Worker = Resource(
 
     const { scriptMetadata, workerUrl, now } = await uploadWorkerScript(props);
 
+    function exportBindings() {
+      return Object.fromEntries(
+        Object.entries(props.bindings ?? ({} as B)).map(
+          ([bindingName, binding]) => [
+            bindingName,
+            isDurableObjectNamespace(binding) &&
+            binding.scriptName === undefined
+              ? new DurableObjectNamespace(binding.id, {
+                  ...binding,
+                  // re-export this binding mapping to the host worker (this worker)
+                  scriptName: workerName,
+                })
+              : isWorkflow(binding) && binding.scriptName === undefined
+                ? new Workflow(binding.id, {
+                    ...binding,
+                    // re-export this binding mapping to the host worker (this worker)
+                    scriptName: workerName,
+                  })
+                : binding,
+          ],
+        ),
+      );
+    }
+
     // Construct the output
     return this({
       ...props,
@@ -830,7 +1010,7 @@ export const _Worker = Resource(
       compatibilityDate,
       compatibilityFlags,
       format: props.format || "esm", // Include format in the output
-      bindings: props.bindings ?? ({} as B),
+      bindings: exportBindings(),
       env: props.env,
       observability: scriptMetadata.observability,
       createdAt: now,
@@ -857,7 +1037,7 @@ export async function deleteWorker<B extends Bindings>(
   const targetUrl = props.dispatchNamespace
     ? `/accounts/${api.accountId}/workers/dispatch/namespaces/${props.dispatchNamespace}/scripts/${workerName}`
     : `/accounts/${api.accountId}/workers/scripts/${workerName}`;
-    
+
   // Delete worker
   const deleteResponse = await api.delete(
     targetUrl,
@@ -879,7 +1059,7 @@ export async function deleteWorker<B extends Bindings>(
         },
       );
     } catch (error) {
-      console.warn("Failed to disable worker URL during deletion:", error);
+      logger.warn("Failed to disable worker URL during deletion:", error);
     }
   }
 
@@ -890,7 +1070,7 @@ export async function deleteWorker<B extends Bindings>(
 export async function putWorker(
   api: CloudflareApi,
   workerName: string,
-  scriptContent: string,
+  scriptBundle: string | NoBundleResult,
   scriptMetadata: WorkerMetadata,
 ) {
   return withExponentialBackoff(
@@ -901,16 +1081,29 @@ export async function putWorker(
       // Create FormData for the upload
       const formData = new FormData();
 
-      // Add the actual script content as a named file part
-      formData.append(
-        scriptName,
-        new Blob([scriptContent], {
-          type: scriptMetadata.main_module
-            ? "application/javascript+module"
-            : "application/javascript",
-        }),
-        scriptName,
-      );
+      function addFile(fileName: string, content: Buffer | string) {
+        const contentType = getContentType(fileName) ?? "application/null";
+        formData.append(
+          fileName,
+          new Blob([content], {
+            type:
+              contentType === "application/javascript" &&
+              scriptMetadata.main_module
+                ? "application/javascript+module"
+                : contentType,
+          }),
+          fileName,
+        );
+      }
+
+      if (typeof scriptBundle === "string") {
+        addFile(scriptName, scriptBundle);
+      } else {
+        for (const [fileName, content] of Object.entries(scriptBundle)) {
+          // Add the actual script content as a named file part
+          addFile(fileName, content);
+        }
+      }
 
       // Add metadata as JSON
       formData.append(
@@ -947,7 +1140,14 @@ export async function putWorker(
 
       return formData;
     },
-    (err) => err.status === 404 || err.status === 500 || err.status === 503,
+    (err) =>
+      err.status === 404 ||
+      err.status === 500 ||
+      err.status === 503 ||
+      // this is a tranient error that cloudflare throws randomly
+      (err instanceof CloudflareApiError &&
+        err.status === 400 &&
+        err.message.match(/binding.*failed to generate/)),
     10,
     100,
   );
@@ -1070,34 +1270,49 @@ export async function getWorkerScriptMetadata(
   return ((await response.json()) as any).result as WorkerScriptMetadata;
 }
 
-export async function _getWorkerBindings(
-  api: CloudflareApi,
-  workerName: string,
-  environment = "production",
-) {
+async function getWorkerBindings(api: CloudflareApi, workerName: string) {
+  // Fetch the bindings for a worker by calling the Cloudflare API endpoint:
+  // GET /accounts/:account_id/workers/scripts/:script_name/bindings
+  // See: https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/script_and_version_settings/methods/get/
   const response = await api.get(
-    `/accounts/${api.accountId}/workers/services/${workerName}/environments/${environment}/bindings`,
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-    },
+    `/accounts/${api.accountId}/workers/scripts/${workerName}/settings`,
   );
-
   if (response.status === 404) {
     return undefined;
   }
-
   if (!response.ok) {
     throw new Error(
-      `Failed to fetch bindings: ${response.status} ${response.statusText}`,
+      `Error getting worker bindings: ${response.status} ${response.statusText}`,
     );
   }
-
-  const data: any = await response.json();
-
-  return data.result;
+  // The result is an object with a "result" property containing the bindings array
+  const { result, success, errors } = (await response.json()) as {
+    result: {
+      bindings: WorkerBindingSpec[];
+      compatibility_date: string;
+      compatibility_flags: string[];
+      [key: string]: any;
+    };
+    success: boolean;
+    errors: Array<{
+      code: number;
+      message: string;
+      documentation_url: string;
+      [key: string]: any;
+    }>;
+    messages: Array<{
+      code: number;
+      message: string;
+      documentation_url: string;
+      [key: string]: any;
+    }>;
+  };
+  if (!success) {
+    throw new Error(
+      `Error getting worker bindings: ${response.status} ${response.statusText}\nErrors:\n${errors.map((e) => `- [${e.code}] ${e.message} (${e.documentation_url})`).join("\n")}`,
+    );
+  }
+  return result.bindings;
 }
 
 /**
@@ -1106,53 +1321,15 @@ export async function _getWorkerBindings(
  * @param api CloudflareApi instance
  * @param workerName Name of the worker script
  */
-async function deleteQueueConsumers<B extends Bindings>(
-  ctx: Context<Worker<B>>,
+async function deleteQueueConsumers(
   api: CloudflareApi,
   workerName: string,
 ): Promise<void> {
-  const eventSources = ctx.output?.eventSources || [];
+  const consumers = await listQueueConsumersForWorker(api, workerName);
 
-  // Extract queue IDs from event sources
-  const queueIds = eventSources.flatMap((eventSource) => {
-    if (isQueue(eventSource)) {
-      return [eventSource.id];
-    }
-    if (isQueueEventSource(eventSource)) {
-      return [eventSource.queue.id];
-    }
-    return [];
-  });
-
-  // Process each queue associated with this worker
   await Promise.all(
-    queueIds.map(async (queueId) => {
-      try {
-        // List all consumers for this queue
-        const consumers = await listQueueConsumers(api, queueId);
-
-        // Filter consumers by worker name
-        const workerConsumers = consumers.filter(
-          (consumer) => consumer.scriptName === workerName,
-        );
-
-        // Delete all consumers for this worker in parallel
-        await Promise.all(
-          workerConsumers.map(async (consumer) => {
-            console.log(
-              `Deleting queue consumer ${consumer.id} for worker ${workerName}`,
-            );
-            // Use the deleteQueueConsumer function from queue-consumer.ts
-            await deleteQueueConsumer(api, consumer.queueId, consumer.id);
-          }),
-        );
-      } catch (err) {
-        if (err instanceof CloudflareApiError && err.status === 404) {
-          // this is OK
-        } else {
-          throw err;
-        }
-      }
+    consumers.map(async (consumer) => {
+      await deleteQueueConsumer(api, consumer.queueId, consumer.consumerId);
     }),
   );
 }

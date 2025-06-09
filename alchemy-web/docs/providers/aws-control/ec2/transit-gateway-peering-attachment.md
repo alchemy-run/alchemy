@@ -5,49 +5,64 @@ description: Learn how to create, update, and manage AWS EC2 TransitGatewayPeeri
 
 # TransitGatewayPeeringAttachment
 
-The TransitGatewayPeeringAttachment resource lets you create and manage [AWS EC2 TransitGatewayPeeringAttachments](https://docs.aws.amazon.com/ec2/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-transitgatewaypeeringattachment.html
+The TransitGatewayPeeringAttachment resource lets you manage [AWS EC2 Transit Gateway Peering Attachments](https://docs.aws.amazon.com/ec2/latest/userguide/). This resource facilitates the connection between two transit gateways, allowing for the exchange of traffic between their respective networks.
 
 ## Minimal Example
+
+Create a basic Transit Gateway Peering Attachment with required properties and some optional tags.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const transitgatewaypeeringattachment = await AWS.EC2.TransitGatewayPeeringAttachment(
-  "transitgatewaypeeringattachment-example",
-  {
-    TransitGatewayId: "example-transitgatewayid",
-    PeerTransitGatewayId: "example-peertransitgatewayid",
-    PeerAccountId: "example-peeraccountid",
-    PeerRegion: "example-peerregion",
-    Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  }
-);
+const peeringAttachment = await AWS.EC2.TransitGatewayPeeringAttachment("myPeeringAttachment", {
+  TransitGatewayId: "tgw-0123456789abcdef0",
+  PeerTransitGatewayId: "tgw-0123456789abcdef1",
+  PeerAccountId: "123456789012",
+  PeerRegion: "us-west-2",
+  Tags: [
+    {
+      Key: "Name",
+      Value: "MyTransitGatewayPeering"
+    }
+  ]
+});
 ```
 
 ## Advanced Configuration
 
-Create a transitgatewaypeeringattachment with additional configuration:
+Configure the peering attachment with the option to adopt an existing resource.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedTransitGatewayPeeringAttachment = await AWS.EC2.TransitGatewayPeeringAttachment(
-  "advanced-transitgatewaypeeringattachment",
-  {
-    TransitGatewayId: "example-transitgatewayid",
-    PeerTransitGatewayId: "example-peertransitgatewayid",
-    PeerAccountId: "example-peeraccountid",
-    PeerRegion: "example-peerregion",
-    Tags: {
-      Environment: "production",
-      Team: "DevOps",
-      Project: "MyApp",
-      CostCenter: "Engineering",
-      ManagedBy: "Alchemy",
-    },
-  }
-);
+const advancedPeeringAttachment = await AWS.EC2.TransitGatewayPeeringAttachment("advancedPeeringAttachment", {
+  TransitGatewayId: "tgw-0123456789abcdef0",
+  PeerTransitGatewayId: "tgw-0123456789abcdef1",
+  PeerAccountId: "123456789012",
+  PeerRegion: "us-west-2",
+  Tags: [
+    {
+      Key: "Environment",
+      Value: "Production"
+    }
+  ],
+  adopt: true // Adopt existing resource instead of failing if it exists
+});
 ```
 
+## Distinct Use Case: Cross-Region Connectivity
+
+Establish a peering attachment between transit gateways in different AWS regions.
+
+```ts
+const crossRegionPeeringAttachment = await AWS.EC2.TransitGatewayPeeringAttachment("crossRegionPeering", {
+  TransitGatewayId: "tgw-0123456789abcdef0",
+  PeerTransitGatewayId: "tgw-0123456789abcdef1",
+  PeerAccountId: "123456789012",
+  PeerRegion: "eu-central-1",
+  Tags: [
+    {
+      Key: "Name",
+      Value: "CrossRegionPeering"
+    }
+  ]
+});
+```

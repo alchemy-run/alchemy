@@ -5,39 +5,54 @@ description: Learn how to create, update, and manage AWS Neptune DBSubnetGroups 
 
 # DBSubnetGroup
 
-The DBSubnetGroup resource lets you create and manage [AWS Neptune DBSubnetGroups](https://docs.aws.amazon.com/neptune/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-neptune-dbsubnetgroup.html
+The DBSubnetGroup resource allows you to create and manage [AWS Neptune DBSubnetGroups](https://docs.aws.amazon.com/neptune/latest/userguide/) for your database instances. A DBSubnetGroup is a collection of subnets that you can use to designate where your Neptune database can be deployed within your Amazon VPC.
 
 ## Minimal Example
+
+Create a basic DBSubnetGroup with required properties and an optional description.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const dbsubnetgroup = await AWS.Neptune.DBSubnetGroup("dbsubnetgroup-example", {
-  DBSubnetGroupDescription: "A dbsubnetgroup resource managed by Alchemy",
-  SubnetIds: ["example-subnetids-1"],
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const dbSubnetGroup = await AWS.Neptune.DBSubnetGroup("myDbSubnetGroup", {
+  DBSubnetGroupDescription: "My DB Subnet Group for Neptune",
+  SubnetIds: [
+    "subnet-0abcd1234efgh5678",
+    "subnet-1abcd1234efgh5678"
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a dbsubnetgroup with additional configuration:
+Configure a DBSubnetGroup with an optional name and tags for better organization.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedDBSubnetGroup = await AWS.Neptune.DBSubnetGroup("advanced-dbsubnetgroup", {
-  DBSubnetGroupDescription: "A dbsubnetgroup resource managed by Alchemy",
-  SubnetIds: ["example-subnetids-1"],
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedDbSubnetGroup = await AWS.Neptune.DBSubnetGroup("advancedDbSubnetGroup", {
+  DBSubnetGroupName: "MyAdvancedDBSubnetGroup",
+  DBSubnetGroupDescription: "Advanced DB Subnet Group for Neptune",
+  SubnetIds: [
+    "subnet-0abcd1234efgh5678",
+    "subnet-1abcd1234efgh5678"
+  ],
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Department", Value: "DataScience" }
+  ]
 });
 ```
 
+## Using Existing Resources
+
+If you want to adopt an existing DBSubnetGroup instead of failing when the resource already exists, you can set the `adopt` property.
+
+```ts
+const existingDbSubnetGroup = await AWS.Neptune.DBSubnetGroup("existingDbSubnetGroup", {
+  DBSubnetGroupDescription: "Existing DB Subnet Group",
+  SubnetIds: [
+    "subnet-0abcd1234efgh5678",
+    "subnet-1abcd1234efgh5678"
+  ],
+  adopt: true
+});
+```

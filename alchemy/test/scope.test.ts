@@ -1,5 +1,5 @@
-import { describe, expect } from "bun:test";
 import fs from "node:fs/promises";
+import { describe, expect } from "vitest";
 import { alchemy } from "../src/alchemy.js";
 import { destroy } from "../src/destroy.js";
 import { FileSystemStateStore } from "../src/fs/file-system-state-store.js";
@@ -9,7 +9,7 @@ import { BRANCH_PREFIX } from "./util.js";
 
 import { Resource } from "../src/resource.js";
 import { serializeScope } from "../src/serde.js";
-import "../src/test/bun.js";
+import "../src/test/vitest.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -34,17 +34,21 @@ describe("Scope", () => {
     }
   });
 
-  test("should have phase available in stateStore callback", async () => {
-    let observedPhase: string | undefined;
-    new Scope({
-      scopeName: "phase-test",
-      phase: "read",
-      stateStore: (scope) => {
-        observedPhase = scope.phase;
-        return new FileSystemStateStore(scope);
-      },
-    });
-    expect(observedPhase).toBe("read");
+  test("should have phase available in stateStore callback", async (scope) => {
+    try {
+      let observedPhase: string | undefined;
+      new Scope({
+        scopeName: "phase-test",
+        phase: "read",
+        stateStore: (scope) => {
+          observedPhase = scope.phase;
+          return new FileSystemStateStore(scope);
+        },
+      });
+      expect(observedPhase).toBe("read");
+    } finally {
+      await destroy(scope);
+    }
   });
 
   test("serialized scope should be equal to the original scope", async (scope) => {

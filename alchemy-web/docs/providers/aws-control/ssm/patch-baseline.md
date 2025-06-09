@@ -5,39 +5,81 @@ description: Learn how to create, update, and manage AWS SSM PatchBaselines usin
 
 # PatchBaseline
 
-The PatchBaseline resource lets you create and manage [AWS SSM PatchBaselines](https://docs.aws.amazon.com/ssm/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ssm-patchbaseline.html
+The PatchBaseline resource allows you to manage [AWS SSM PatchBaselines](https://docs.aws.amazon.com/ssm/latest/userguide/) for automating the patching of your managed instances. Patch baselines define which patches should be approved for installation on your instances, helping ensure that they remain secure and up-to-date.
 
 ## Minimal Example
+
+Create a basic PatchBaseline with the required properties and a few common optional settings.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const patchbaseline = await AWS.SSM.PatchBaseline("patchbaseline-example", {
-  Name: "patchbaseline-",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A patchbaseline resource managed by Alchemy",
+const basicPatchBaseline = await AWS.SSM.PatchBaseline("basicPatchBaseline", {
+  Name: "MyPatchBaseline",
+  OperatingSystem: "WINDOWS",
+  Description: "A baseline for Windows patches",
+  ApprovedPatches: ["KB4484070", "KB4474419"],
+  RejectedPatches: ["KB4487018"]
 });
 ```
 
 ## Advanced Configuration
 
-Create a patchbaseline with additional configuration:
+Configure a PatchBaseline with advanced settings, including approval rules and global filters.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedPatchBaseline = await AWS.SSM.PatchBaseline("advanced-patchbaseline", {
-  Name: "patchbaseline-",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedPatchBaseline = await AWS.SSM.PatchBaseline("advancedPatchBaseline", {
+  Name: "AdvancedPatchBaseline",
+  OperatingSystem: "LINUX",
+  Description: "An advanced baseline for Linux patches",
+  ApprovalRules: {
+    PatchRules: [{
+      PatchFilterGroup: {
+        PatchFilters: [{
+          Key: "PRODUCT",
+          Values: ["Amazon Linux 2"]
+        }]
+      },
+      ApproveAfterDays: 7
+    }]
   },
-  Description: "A patchbaseline resource managed by Alchemy",
+  ApprovedPatches: ["kernel-4.14.209-160.646.amzn2.x86_64"],
+  RejectedPatchesAction: "ALLOW_AS_DEPENDENCY",
+  GlobalFilters: {
+    PatchFilters: [{
+      Key: "CLASSIFICATION",
+      Values: ["Security"]
+    }]
+  }
 });
 ```
 
+## Using Patch Groups
+
+Create a PatchBaseline specifically for a set of instances grouped together.
+
+```ts
+const patchGroupBaseline = await AWS.SSM.PatchBaseline("patchGroupBaseline", {
+  Name: "PatchGroupBaseline",
+  OperatingSystem: "WINDOWS",
+  Description: "A baseline for a specific patch group",
+  PatchGroups: ["MyPatchGroup"],
+  ApprovedPatches: ["KB5003637"],
+  RejectedPatches: ["KB5003645"]
+});
+```
+
+## Default Baseline Configuration
+
+Set a PatchBaseline as the default baseline for your environment.
+
+```ts
+const defaultPatchBaseline = await AWS.SSM.PatchBaseline("defaultPatchBaseline", {
+  Name: "DefaultPatchBaseline",
+  OperatingSystem: "WINDOWS",
+  Description: "Default baseline for Windows instances",
+  DefaultBaseline: true,
+  ApprovedPatches: ["KB5003637", "KB5003640"],
+  RejectedPatches: ["KB5003638"]
+});
+```

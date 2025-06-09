@@ -45,6 +45,29 @@ const route = await Route("api-route", {
 });
 ```
 
+## Adopt Existing Routes
+
+Use the `adopt` option to take control of existing routes instead of failing with a conflict:
+
+```ts
+import { Route } from "alchemy/cloudflare";
+
+// This will adopt an existing route if one with the same pattern exists
+const route = await Route("existing-route", {
+  pattern: "api.example.com/*",
+  script: "my-worker", 
+  zoneId: "your-zone-id",
+  adopt: true  // Adopts existing route instead of throwing 409 error
+});
+```
+
+When `adopt: true` is set and a route with the same pattern already exists, the resource will:
+- Find the existing route by pattern
+- Adopt it into your Alchemy state
+- Update it with the specified script if different
+
+This is useful when migrating existing Cloudflare configurations to Alchemy or working with routes created outside of Alchemy.
+
 ## Bind to a Worker
 
 Routes are automatically bound to the specified Worker:

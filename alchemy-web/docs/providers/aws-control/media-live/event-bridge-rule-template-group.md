@@ -5,45 +5,52 @@ description: Learn how to create, update, and manage AWS MediaLive EventBridgeRu
 
 # EventBridgeRuleTemplateGroup
 
-The EventBridgeRuleTemplateGroup resource lets you create and manage [AWS MediaLive EventBridgeRuleTemplateGroups](https://docs.aws.amazon.com/medialive/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-medialive-eventbridgeruletemplategroup.html
+The EventBridgeRuleTemplateGroup resource allows you to manage groups of AWS MediaLive EventBridge rule templates. This resource is essential for organizing and automating media workflows. For more information, refer to the [AWS MediaLive EventBridgeRuleTemplateGroups](https://docs.aws.amazon.com/medialive/latest/userguide/).
 
 ## Minimal Example
+
+Create a basic EventBridgeRuleTemplateGroup with a name and description.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const eventbridgeruletemplategroup = await AWS.MediaLive.EventBridgeRuleTemplateGroup(
-  "eventbridgeruletemplategroup-example",
-  {
-    Name: "eventbridgeruletemplategroup-",
-    Tags: { Environment: "production", ManagedBy: "Alchemy" },
-    Description: "A eventbridgeruletemplategroup resource managed by Alchemy",
+const templateGroup = await AWS.MediaLive.EventBridgeRuleTemplateGroup("basic-template-group", {
+  name: "MyMediaLiveTemplateGroup",
+  description: "This is a template group for media live events.",
+  tags: {
+    environment: "production",
+    project: "media-live"
   }
-);
+});
 ```
 
 ## Advanced Configuration
 
-Create a eventbridgeruletemplategroup with additional configuration:
+Configure an EventBridgeRuleTemplateGroup with additional properties such as tags and adoption of existing resources.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedEventBridgeRuleTemplateGroup = await AWS.MediaLive.EventBridgeRuleTemplateGroup(
-  "advanced-eventbridgeruletemplategroup",
-  {
-    Name: "eventbridgeruletemplategroup-",
-    Tags: {
-      Environment: "production",
-      Team: "DevOps",
-      Project: "MyApp",
-      CostCenter: "Engineering",
-      ManagedBy: "Alchemy",
-    },
-    Description: "A eventbridgeruletemplategroup resource managed by Alchemy",
-  }
-);
+const advancedTemplateGroup = await AWS.MediaLive.EventBridgeRuleTemplateGroup("advanced-template-group", {
+  name: "AdvancedMediaLiveTemplateGroup",
+  description: "This group adopts existing resources for better management.",
+  tags: {
+    department: "media",
+    owner: "team-a"
+  },
+  adopt: true
+});
 ```
 
+## Use Case: Automated Event Management
+
+Set up a template group specifically for managing automated events in a media workflow.
+
+```ts
+const automatedEventTemplateGroup = await AWS.MediaLive.EventBridgeRuleTemplateGroup("automated-event-group", {
+  name: "AutomatedEventTemplateGroup",
+  description: "Template group for managing automated media events.",
+  tags: {
+    useCase: "automation",
+    status: "active"
+  }
+});
+```

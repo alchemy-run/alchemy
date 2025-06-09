@@ -4,9 +4,9 @@
 
 import type { Plugin, PluginBuild } from "esbuild";
 import assert from "node:assert";
-import { builtinModules, createRequire } from "node:module";
+import module, { createRequire } from "node:module";
 import nodePath from "node:path";
-import { dedent } from "../../util/dedent.js";
+import { dedent } from "../../util/dedent.ts";
 
 const _require =
   typeof require === "undefined" ? createRequire(import.meta.url) : require;
@@ -39,7 +39,18 @@ export async function nodeJsCompatPlugin(): Promise<Plugin> {
   };
 }
 
-const NODEJS_MODULES_RE = new RegExp(`^(node:)?(${builtinModules.join("|")})$`);
+const NODEJS_MODULES_RE = new RegExp(
+  `^(node:)?(${module.builtinModules
+    .filter(
+      (m) =>
+        ![
+          // in some runtimes (like bun), `ws` is a built-in module but is not in `node`
+          // bundling for `nodejs_compat` should not polyfill these modules
+          "ws",
+        ].includes(m),
+    )
+    .join("|")})$`,
+);
 
 /**
  * If we are bundling a "Service Worker" formatted Worker, imports of external modules,

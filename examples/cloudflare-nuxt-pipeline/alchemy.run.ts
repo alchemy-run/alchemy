@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Nuxt, Pipeline, R2Bucket, R2RestStateStore } from "alchemy/cloudflare";
+import { DOStateStore, Nuxt, Pipeline, R2Bucket } from "alchemy/cloudflare";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 
@@ -10,17 +10,21 @@ const app = await alchemy("cloudflare-nuxt-pipeline", {
   password: process.env.SECRET_PASSPHRASE,
   stateStore:
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new R2RestStateStore(scope)
+      ? (scope) => new DOStateStore(scope)
       : undefined,
 });
 
 const bucket = await R2Bucket(
   `cloudflare-nuxt-pipeline-bucket${BRANCH_PREFIX}`,
+  {
+    adopt: true,
+  },
 );
 
 const pipeline = await Pipeline(
   `cloudflare-nuxt-pipeline-pipeline${BRANCH_PREFIX}`,
   {
+    adopt: true,
     source: [{ type: "binding", format: "json" }],
     destination: {
       type: "r2",
@@ -45,6 +49,7 @@ const pipeline = await Pipeline(
 export const website = await Nuxt(
   `cloudflare-nuxt-pipeline-website${BRANCH_PREFIX}`,
   {
+    adopt: true,
     bindings: {
       R2_BUCKET: bucket,
       PIPELINE: pipeline,

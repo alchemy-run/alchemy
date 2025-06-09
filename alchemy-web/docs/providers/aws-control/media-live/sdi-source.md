@@ -5,39 +5,64 @@ description: Learn how to create, update, and manage AWS MediaLive SdiSources us
 
 # SdiSource
 
-The SdiSource resource lets you create and manage [AWS MediaLive SdiSources](https://docs.aws.amazon.com/medialive/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-medialive-sdisource.html
+The SdiSource resource allows you to manage [AWS MediaLive SdiSources](https://docs.aws.amazon.com/medialive/latest/userguide/) for your media workflows. SDI (Serial Digital Interface) sources are used to ingest high-quality video feeds into AWS MediaLive.
 
 ## Minimal Example
+
+Create a basic SdiSource with required properties and one optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const sdisource = await AWS.MediaLive.SdiSource("sdisource-example", {
-  Type: "example-type",
-  Name: "sdisource-",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const sdiSource = await AWS.MediaLive.SdiSource("mySdiSource", {
+  Name: "primary-sdi-source",
+  Type: "SDI",
+  Mode: "AUTO" // Optional: Mode can be AUTO or MANUAL
 });
 ```
 
 ## Advanced Configuration
 
-Create a sdisource with additional configuration:
+Configure an SdiSource with additional settings such as tags and adoption options.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedSdiSource = await AWS.MediaLive.SdiSource("advanced-sdisource", {
-  Type: "example-type",
-  Name: "sdisource-",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedSdiSource = await AWS.MediaLive.SdiSource("advancedSdiSource", {
+  Name: "advanced-sdi-source",
+  Type: "SDI",
+  Mode: "MANUAL", // Optional: Set to MANUAL for specific configurations
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Project", Value: "LiveStreaming" }
+  ],
+  adopt: true // Optional: If true, adopts existing resource instead of failing
 });
 ```
 
+## Connecting Multiple Sources
+
+Demonstrate how to create multiple SdiSources for redundancy.
+
+```ts
+const secondarySdiSource = await AWS.MediaLive.SdiSource("secondarySdiSource", {
+  Name: "secondary-sdi-source",
+  Type: "SDI",
+  Mode: "AUTO"
+});
+```
+
+## Ingesting Multiple Feeds
+
+Configure an SdiSource to handle multiple video feeds by creating a list of sources.
+
+```ts
+const multiFeedSdiSource = await AWS.MediaLive.SdiSource("multiFeedSdiSource", {
+  Name: "multi-feed-sdi-source",
+  Type: "SDI",
+  Mode: "AUTO",
+  Tags: [
+    { Key: "Environment", Value: "Staging" },
+    { Key: "UseCase", Value: "Testing" }
+  ],
+  adopt: false // Default is false: will fail if the resource already exists
+});
+```

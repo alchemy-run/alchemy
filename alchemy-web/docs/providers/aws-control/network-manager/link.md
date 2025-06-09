@@ -5,43 +5,85 @@ description: Learn how to create, update, and manage AWS NetworkManager Links us
 
 # Link
 
-The Link resource lets you create and manage [AWS NetworkManager Links](https://docs.aws.amazon.com/networkmanager/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-networkmanager-link.html
+The Link resource allows you to manage [AWS NetworkManager Links](https://docs.aws.amazon.com/networkmanager/latest/userguide/) which connect sites and enable communication between them.
 
 ## Minimal Example
+
+Create a basic NetworkManager Link with required properties and a common optional description.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const link = await AWS.NetworkManager.Link("link-example", {
-  SiteId: "example-siteid",
-  GlobalNetworkId: "example-globalnetworkid",
-  Bandwidth: "example-bandwidth",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A link resource managed by Alchemy",
+const networkLink = await AWS.NetworkManager.Link("primary-link", {
+  SiteId: "site-123456",
+  GlobalNetworkId: "global-network-abcdef",
+  Bandwidth: {
+    UploadSpeed: 100,
+    DownloadSpeed: 100
+  },
+  Description: "Primary connection between sites."
 });
 ```
 
 ## Advanced Configuration
 
-Create a link with additional configuration:
+Configure a link with additional optional properties such as type and provider.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
 const advancedLink = await AWS.NetworkManager.Link("advanced-link", {
-  SiteId: "example-siteid",
-  GlobalNetworkId: "example-globalnetworkid",
-  Bandwidth: "example-bandwidth",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+  SiteId: "site-123456",
+  GlobalNetworkId: "global-network-abcdef",
+  Bandwidth: {
+    UploadSpeed: 500,
+    DownloadSpeed: 500
   },
-  Description: "A link resource managed by Alchemy",
+  Type: "MPLS",
+  Provider: "MyServiceProvider",
+  Description: "High-speed MPLS connection."
 });
 ```
 
+## Using Tags
+
+Create a NetworkManager Link with tags for better organization and management.
+
+```ts
+const taggedLink = await AWS.NetworkManager.Link("tagged-link", {
+  SiteId: "site-123456",
+  GlobalNetworkId: "global-network-abcdef",
+  Bandwidth: {
+    UploadSpeed: 200,
+    DownloadSpeed: 200
+  },
+  Tags: [
+    {
+      Key: "Environment",
+      Value: "Production"
+    },
+    {
+      Key: "Team",
+      Value: "Networking"
+    }
+  ],
+  Description: "Link tagged for production networking team."
+});
+```
+
+## Adopting Existing Resources
+
+Create a NetworkManager Link that adopts an existing resource if it already exists.
+
+```ts
+const adoptLink = await AWS.NetworkManager.Link("adopt-link", {
+  SiteId: "site-123456",
+  GlobalNetworkId: "global-network-abcdef",
+  Bandwidth: {
+    UploadSpeed: 300,
+    DownloadSpeed: 300
+  },
+  adopt: true,
+  Description: "Adopting existing link."
+});
+``` 
+
+These examples demonstrate how to effectively create and manage AWS NetworkManager Links using Alchemy, catering to various use cases and configurations.

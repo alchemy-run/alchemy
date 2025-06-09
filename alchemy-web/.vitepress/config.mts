@@ -1,4 +1,3 @@
-import { transformerTwoslash } from "@shikijs/vitepress-twoslash";
 import fs from "fs";
 import footnotePlugin from "markdown-it-footnote";
 import path from "path";
@@ -7,6 +6,7 @@ import {
 	groupIconMdPlugin,
 	groupIconVitePlugin,
 } from "vitepress-plugin-group-icons";
+import { parse as parseYaml } from "yaml";
 import { processFrontmatterFiles } from "../../alchemy/src/web/vitepress";
 
 // Imports for OG Image Generation
@@ -24,14 +24,17 @@ export default defineConfig({
 		["meta", { property: "og:type", content: "website" }],
 		// Base meta tags are now added by transformPageData
 	],
+	metaChunk: true,
 	markdown: {
-		// @ts-ignore
-		codeTransformers: [transformerTwoslash()],
 		theme: { light: "light-plus", dark: "dark-plus" },
 		config: (md) => md.use(footnotePlugin).use(groupIconMdPlugin),
 	},
 	vite: {
 		plugins: [groupIconVitePlugin() as any],
+		// Disable sourcemap generation to shave ~20-30 % off large builds
+		build: {
+			sourcemap: false,
+		},
 	},
 	// https://vitepress.dev/reference/default-theme-config
 	themeConfig: {
@@ -50,6 +53,7 @@ export default defineConfig({
 			await generateSidebar("Guides"),
 			await generateSidebar("Concepts"),
 			await generateProvidersSidebar(),
+			await generateSidebar("Telemetry"),
 		],
 		search: { provider: "local" },
 	},
@@ -107,13 +111,17 @@ export default defineConfig({
 		imageSlug = imageSlug.replace(/\//g, "-").replace(/^-|-$/, "");
 		const finalImageSlug = imageSlug === "" ? "home" : imageSlug;
 
-		// Ensure URL is properly formatted with double slashes after protocol
-		// Use a proper URL construction to avoid incorrect replacements
-		const imageSlugForUrl = finalImageSlug || "placeholder";
-		const ogImageUrl = new URL(
-			`/og-images/${imageSlugForUrl}.png`,
-			SITE_URL,
-		).toString();
+		// Use custom OG image for home page, otherwise use generated images
+		let ogImageUrl: string;
+		if (pagePath === "/" || finalImageSlug === "home") {
+			ogImageUrl = new URL("/alchemy-og.png", SITE_URL).toString();
+		} else {
+			const imageSlugForUrl = finalImageSlug || "placeholder";
+			ogImageUrl = new URL(
+				`/og-images/${imageSlugForUrl}.png`,
+				SITE_URL,
+			).toString();
+		}
 		// --- End OG Image Path Calculation ---
 
 		// Add dynamic meta tags
@@ -156,16 +164,18 @@ export default defineConfig({
 		// Process both docs and blogs directories
 		const baseDirs = ["docs", "blogs"];
 		let fileCount = 0;
+		let processedCount = 0;
 
-		for (const dir of baseDirs) {
-			// Process files for this directory
-			await processDirectory(dir, "", publicOgDir);
-		}
+		// Collect all files that need OG images
+		const filesToProcess: Array<{
+			entryFullPath: string;
+			entryRelativePath: string;
+			baseDir: string;
+			ogImagePath: string;
+		}> = [];
 
-		console.log(`OG image generation complete. Processed ${fileCount} files.`);
-
-		// Function to recursively process directories
-		async function processDirectory(
+		// Function to recursively collect files
+		async function collectFiles(
 			baseDir: string,
 			relativePath: string,
 			outputDir: string,
@@ -185,36 +195,11 @@ export default defineConfig({
 
 				if (entry.isDirectory()) {
 					// Recursively process subdirectories
-					await processDirectory(baseDir, entryRelativePath, outputDir);
+					await collectFiles(baseDir, entryRelativePath, outputDir);
 				} else if (entry.name.endsWith(".md")) {
-					// Process markdown files
 					fileCount++;
 
-					// Read the file content
-					const fileContent = await fs.promises.readFile(
-						entryFullPath,
-						"utf-8",
-					);
-
-					// Simple frontmatter extraction (replaces gray-matter)
-					const frontmatter = extractFrontmatter(fileContent);
-
-					const pageTitleRaw =
-						frontmatter.title || path.basename(entry.name, ".md");
-					// A simple title case, adjust if more complex logic is needed
-					const pageTitle = pageTitleRaw
-						.replace(/-/g, " ")
-						.replace(/\b\w/g, (l) => l.toUpperCase());
-					const pageDescription = frontmatter.description;
-
-					if (!pageTitle) {
-						console.warn(
-							`Skipping OG image for ${entryFullPath}: title missing or could not be derived.`,
-						);
-						continue;
-					}
-
-					// Consistent slug generation including directory prefix
+					// Generate image slug
 					const filePath = entryRelativePath;
 					let imageSlug = `${baseDir}-${filePath}`.replace(/\.md$/, "");
 
@@ -230,19 +215,67 @@ export default defineConfig({
 					const ogImageFileName = `${finalImageSlug}.png`;
 					const ogImagePath = path.join(outputDir, ogImageFileName);
 
-					console.log(`Processing ${entryFullPath} -> ${ogImageFileName}`);
-
-					try {
-						await generateOgImage(pageTitle, pageDescription, ogImagePath);
-					} catch (error) {
-						console.error(
-							`Failed to generate OG image for ${entryFullPath}:`,
-							error,
-						);
-					}
+					filesToProcess.push({
+						entryFullPath,
+						entryRelativePath,
+						baseDir,
+						ogImagePath,
+					});
 				}
 			}
 		}
+
+		// Collect all files first
+		for (const dir of baseDirs) {
+			await collectFiles(dir, "", publicOgDir);
+		}
+
+		console.log(`Found ${fileCount} files to process`);
+
+		// Process files in parallel
+		const promises = filesToProcess.map(async ({ entryFullPath, ogImagePath }) => {
+			try {
+				// Check if image already exists
+				try {
+					await fs.promises.access(ogImagePath);
+					processedCount++;
+					console.log(`Skipped (exists) ${processedCount}/${fileCount}: ${entryFullPath}`);
+					return;
+				} catch {
+					// File doesn't exist, continue with generation
+				}
+
+				// Read the file content
+				const fileContent = await fs.promises.readFile(entryFullPath, "utf-8");
+
+				// Extract frontmatter
+				const frontmatter = extractFrontmatter(fileContent);
+
+				const pageTitleRaw = frontmatter.title || path.basename(entryFullPath, ".md");
+				const pageTitle = pageTitleRaw
+					.replace(/-/g, " ")
+					.replace(/\b\w/g, (l) => l.toUpperCase());
+				const pageDescription = frontmatter.description;
+
+				if (!pageTitle) {
+					console.warn(
+						`Skipping OG image for ${entryFullPath}: title missing or could not be derived.`,
+					);
+					return;
+				}
+
+				await generateOgImage(pageTitle, pageDescription, ogImagePath);
+				processedCount++;
+				console.log(`Generated ${processedCount}/${fileCount}: ${entryFullPath}`);
+			} catch (error) {
+				console.error(`Failed to generate OG image for ${entryFullPath}:`, error);
+			}
+		});
+
+		// Wait for all promises to complete
+		await Promise.all(promises);
+
+		console.log(`OG image generation complete. Processed ${processedCount}/${fileCount} files.`);
 
 		// Simple function to extract frontmatter from markdown
 		function extractFrontmatter(content: string) {
@@ -255,22 +288,8 @@ export default defineConfig({
 				return result;
 			}
 
-			const frontmatterText = match[1];
-
-			// Parse frontmatter lines
-			frontmatterText.split("\n").forEach((line) => {
-				// Look for "key: value" patterns
-				const colonIndex = line.indexOf(":");
-				if (colonIndex > 0) {
-					const key = line.slice(0, colonIndex).trim();
-					const value = line.slice(colonIndex + 1).trim();
-
-					// Remove quotes if present
-					result[key] = value.replace(/^['"](.*)['"]$/, "$1");
-				}
-			});
-
-			return result;
+			// Parse the YAML frontmatter properly
+			return parseYaml(match[1]) || {};
 		}
 	},
 });

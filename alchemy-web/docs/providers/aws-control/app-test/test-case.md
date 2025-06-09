@@ -5,41 +5,110 @@ description: Learn how to create, update, and manage AWS AppTest TestCases using
 
 # TestCase
 
-The TestCase resource lets you create and manage [AWS AppTest TestCases](https://docs.aws.amazon.com/apptest/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-apptest-testcase.html
+The TestCase resource lets you manage [AWS AppTest TestCases](https://docs.aws.amazon.com/apptest/latest/userguide/) for automating application testing.
 
 ## Minimal Example
+
+Create a basic AppTest TestCase with essential properties.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const testcase = await AWS.AppTest.TestCase("testcase-example", {
-  Steps: [],
-  Name: "testcase-",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A testcase resource managed by Alchemy",
+const basicTestCase = await AWS.AppTest.TestCase("basicTestCase", {
+  Name: "BasicTestCase",
+  Steps: [
+    {
+      Action: "Click",
+      Target: "button#submit"
+    },
+    {
+      Action: "Type",
+      Target: "input#username",
+      Value: "testUser"
+    }
+  ],
+  Description: "A basic test case for user login"
 });
 ```
 
 ## Advanced Configuration
 
-Create a testcase with additional configuration:
+Configure an AppTest TestCase with additional steps and tags for better organization.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedTestCase = await AWS.AppTest.TestCase("advanced-testcase", {
-  Steps: [],
-  Name: "testcase-",
+const advancedTestCase = await AWS.AppTest.TestCase("advancedTestCase", {
+  Name: "AdvancedTestCase",
+  Steps: [
+    {
+      Action: "Click",
+      Target: "button#submit"
+    },
+    {
+      Action: "Type",
+      Target: "input#username",
+      Value: "testUser"
+    },
+    {
+      Action: "Type",
+      Target: "input#password",
+      Value: "securePassword123"
+    },
+    {
+      Action: "Click",
+      Target: "button#login"
+    },
+    {
+      Action: "AssertVisible",
+      Target: "div#dashboard"
+    }
+  ],
+  Description: "An advanced test case for user login with validation",
   Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
-  Description: "A testcase resource managed by Alchemy",
+    environment: "staging",
+    priority: "high"
+  }
 });
 ```
 
+## Debugging and Logging
+
+Create a TestCase that includes logging steps for better debugging during test execution.
+
+```ts
+const loggingTestCase = await AWS.AppTest.TestCase("loggingTestCase", {
+  Name: "LoggingTestCase",
+  Steps: [
+    {
+      Action: "Log",
+      Message: "Starting the login process"
+    },
+    {
+      Action: "Type",
+      Target: "input#username",
+      Value: "testUser"
+    },
+    {
+      Action: "Log",
+      Message: "Username entered, now typing password"
+    },
+    {
+      Action: "Type",
+      Target: "input#password",
+      Value: "securePassword123"
+    },
+    {
+      Action: "Click",
+      Target: "button#login"
+    },
+    {
+      Action: "AssertVisible",
+      Target: "div#dashboard"
+    },
+    {
+      Action: "Log",
+      Message: "Login process completed"
+    }
+  ],
+  Description: "Test case with logging for each step"
+});
+```

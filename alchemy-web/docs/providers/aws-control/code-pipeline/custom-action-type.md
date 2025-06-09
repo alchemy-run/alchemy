@@ -5,49 +5,127 @@ description: Learn how to create, update, and manage AWS CodePipeline CustomActi
 
 # CustomActionType
 
-The CustomActionType resource lets you create and manage [AWS CodePipeline CustomActionTypes](https://docs.aws.amazon.com/codepipeline/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-codepipeline-customactiontype.html
+The CustomActionType resource lets you define custom actions for your AWS CodePipeline, enabling integration with third-party services or custom processing logic. For more detailed information, refer to the [AWS CodePipeline CustomActionTypes documentation](https://docs.aws.amazon.com/codepipeline/latest/userguide/).
 
 ## Minimal Example
+
+Create a basic CustomActionType with required properties and a common optional configuration.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const customactiontype = await AWS.CodePipeline.CustomActionType("customactiontype-example", {
-  Category: "example-category",
-  InputArtifactDetails: "example-inputartifactdetails",
-  Version: "example-version",
-  OutputArtifactDetails: "example-outputartifactdetails",
-  Provider: "example-provider",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const simpleCustomActionType = await AWS.CodePipeline.CustomActionType("simpleCustomAction", {
+  category: "Build",
+  inputArtifactDetails: {
+    minimumCount: 1,
+    maximumCount: 5,
+    type: {
+      name: "MyInputArtifact",
+      type: "S3"
+    }
+  },
+  outputArtifactDetails: {
+    minimumCount: 1,
+    maximumCount: 5,
+    type: {
+      name: "MyOutputArtifact",
+      type: "S3"
+    }
+  },
+  provider: "MyCustomProvider",
+  version: "1.0",
+  settings: {
+    entityUrlTemplate: "https://example.com/{JobId}",
+    executionUrlTemplate: "https://example.com/{JobId}/execute"
+  }
 });
 ```
 
 ## Advanced Configuration
 
-Create a customactiontype with additional configuration:
+Configure a CustomActionType with detailed configuration properties including multiple configuration options and tags.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedCustomActionType = await AWS.CodePipeline.CustomActionType(
-  "advanced-customactiontype",
-  {
-    Category: "example-category",
-    InputArtifactDetails: "example-inputartifactdetails",
-    Version: "example-version",
-    OutputArtifactDetails: "example-outputartifactdetails",
-    Provider: "example-provider",
-    Tags: {
-      Environment: "production",
-      Team: "DevOps",
-      Project: "MyApp",
-      CostCenter: "Engineering",
-      ManagedBy: "Alchemy",
+const advancedCustomActionType = await AWS.CodePipeline.CustomActionType("advancedCustomAction", {
+  category: "Test",
+  inputArtifactDetails: {
+    minimumCount: 1,
+    maximumCount: 3,
+    type: {
+      name: "TestInputArtifact",
+      type: "S3"
+    }
+  },
+  outputArtifactDetails: {
+    minimumCount: 1,
+    maximumCount: 2,
+    type: {
+      name: "TestOutputArtifact",
+      type: "S3"
+    }
+  },
+  provider: "AdvancedProvider",
+  version: "1.0",
+  configurationProperties: [
+    {
+      key: "TestParameter1",
+      required: true,
+      secret: false,
+      type: "String"
     },
-    Settings: "example-settings",
-  }
-);
+    {
+      key: "TestParameter2",
+      required: false,
+      secret: true,
+      type: "String"
+    }
+  ],
+  tags: [
+    { key: "Project", value: "MyProject" },
+    { key: "Environment", value: "Production" }
+  ]
+});
 ```
 
+## Custom Action with IAM Permissions
+
+Define a CustomActionType that requires specific IAM permissions for execution.
+
+```ts
+const customActionWithPermissions = await AWS.CodePipeline.CustomActionType("permissionedCustomAction", {
+  category: "Deploy",
+  inputArtifactDetails: {
+    minimumCount: 1,
+    maximumCount: 1,
+    type: {
+      name: "DeployInputArtifact",
+      type: "S3"
+    }
+  },
+  outputArtifactDetails: {
+    minimumCount: 1,
+    maximumCount: 1,
+    type: {
+      name: "DeployOutputArtifact",
+      type: "S3"
+    }
+  },
+  provider: "PermissionedProvider",
+  version: "1.0",
+  configurationProperties: [
+    {
+      key: "Environment",
+      required: true,
+      secret: false,
+      type: "String"
+    }
+  ],
+  settings: {
+    entityUrlTemplate: "https://example.com/{JobId}",
+    executionUrlTemplate: "https://example.com/{JobId}/execute"
+  },
+  tags: [
+    { key: "Service", value: "DeploymentService" }
+  ]
+});
+```

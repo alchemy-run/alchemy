@@ -5,35 +5,61 @@ description: Learn how to create, update, and manage AWS SSO Instances using Alc
 
 # Instance
 
-The Instance resource lets you create and manage [AWS SSO Instances](https://docs.aws.amazon.com/sso/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-sso-instance.html
+The Instance resource lets you manage [AWS SSO Instances](https://docs.aws.amazon.com/sso/latest/userguide/) and their configurations.
 
 ## Minimal Example
+
+Create a basic AWS SSO Instance with a name and some tags.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const instance = await AWS.SSO.Instance("instance-example", {
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const ssoInstance = await AWS.SSO.Instance("mySsoInstance", {
+  Name: "MySSOInstance",
+  Tags: [
+    { Key: "Environment", Value: "Development" },
+    { Key: "Project", Value: "Alchemy" }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a instance with additional configuration:
+Configure an SSO Instance with the option to adopt an existing resource.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedInstance = await AWS.SSO.Instance("advanced-instance", {
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const existingSsoInstance = await AWS.SSO.Instance("existingSsoInstance", {
+  Name: "ExistingSSOInstance",
+  Tags: [
+    { Key: "Environment", Value: "Production" }
+  ],
+  adopt: true // Adopt an existing resource instead of failing
 });
 ```
 
+## Updating Instance Tags
+
+Update the tags for an existing SSO Instance to reflect a change in project status.
+
+```ts
+const updatedSsoInstance = await AWS.SSO.Instance("updateSsoInstance", {
+  Name: "MySSOInstance",
+  Tags: [
+    { Key: "Environment", Value: "Staging" },
+    { Key: "Project", Value: "Alchemy-Updated" }
+  ]
+});
+```
+
+## Retrieving Instance Information
+
+Fetch and log the ARN and creation time of an AWS SSO Instance.
+
+```ts
+const ssoInstanceInfo = await AWS.SSO.Instance("mySsoInstance", {
+  Name: "MySSOInstance"
+});
+
+console.log(`SSO Instance ARN: ${ssoInstanceInfo.Arn}`);
+console.log(`Creation Time: ${ssoInstanceInfo.CreationTime}`);
+```

@@ -5,40 +5,77 @@ description: Learn how to create, update, and manage AWS EC2 TrafficMirrorFilter
 
 # TrafficMirrorFilter
 
-The TrafficMirrorFilter resource lets you create and manage [AWS EC2 TrafficMirrorFilters](https://docs.aws.amazon.com/ec2/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-trafficmirrorfilter.html
+The TrafficMirrorFilter resource lets you manage [AWS EC2 TrafficMirrorFilters](https://docs.aws.amazon.com/ec2/latest/userguide/) to define how network traffic is mirrored for analysis and monitoring.
 
 ## Minimal Example
+
+Create a basic TrafficMirrorFilter with a description and a tag.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const trafficmirrorfilter = await AWS.EC2.TrafficMirrorFilter("trafficmirrorfilter-example", {
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A trafficmirrorfilter resource managed by Alchemy",
+const basicFilter = await AWS.EC2.TrafficMirrorFilter("basicTrafficMirrorFilter", {
+  Description: "Basic Traffic Mirror Filter for monitoring",
+  Tags: [
+    {
+      Key: "Environment",
+      Value: "Development"
+    }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a trafficmirrorfilter with additional configuration:
+Configure a TrafficMirrorFilter with network services and additional tags for more specific traffic mirroring behavior.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedTrafficMirrorFilter = await AWS.EC2.TrafficMirrorFilter(
-  "advanced-trafficmirrorfilter",
-  {
-    Tags: {
-      Environment: "production",
-      Team: "DevOps",
-      Project: "MyApp",
-      CostCenter: "Engineering",
-      ManagedBy: "Alchemy",
+const advancedFilter = await AWS.EC2.TrafficMirrorFilter("advancedTrafficMirrorFilter", {
+  Description: "Advanced Traffic Mirror Filter for complex routing",
+  NetworkServices: ["AMAZON_DNS"],
+  Tags: [
+    {
+      Key: "Project",
+      Value: "TrafficMonitoring"
     },
-    Description: "A trafficmirrorfilter resource managed by Alchemy",
-  }
-);
+    {
+      Key: "Owner",
+      Value: "TeamA"
+    }
+  ]
+});
 ```
 
+## Multiple Network Services
+
+Create a TrafficMirrorFilter that uses multiple network services for comprehensive traffic analysis.
+
+```ts
+const multiServiceFilter = await AWS.EC2.TrafficMirrorFilter("multiServiceTrafficMirrorFilter", {
+  Description: "Traffic Mirror Filter for multiple services",
+  NetworkServices: ["AMAZON_DNS", "S3"],
+  Tags: [
+    {
+      Key: "Purpose",
+      Value: "Traffic Analysis"
+    }
+  ]
+});
+```
+
+## Adoption of Existing Resources
+
+Create a TrafficMirrorFilter while adopting an existing resource if it already exists, preventing failure.
+
+```ts
+const adoptedFilter = await AWS.EC2.TrafficMirrorFilter("adoptedTrafficMirrorFilter", {
+  Description: "Adopt existing Traffic Mirror Filter",
+  adopt: true,
+  Tags: [
+    {
+      Key: "Status",
+      Value: "Adopted"
+    }
+  ]
+});
+```

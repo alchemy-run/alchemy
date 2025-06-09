@@ -1,13 +1,15 @@
-import type { Context } from "../context.js";
-import { StaticJsonFile } from "../fs/static-json-file.js";
-import { Resource } from "../resource.js";
-import { assertNever } from "../util/assert-never.js";
-import { Self, type Bindings } from "./bindings.js";
-import type { DurableObjectNamespace } from "./durable-object-namespace.js";
-import type { EventSource } from "./event-source.js";
-import { isQueueEventSource } from "./event-source.js";
-import { isQueue } from "./queue.js";
-import type { Worker } from "./worker.js";
+import fs from "node:fs/promises";
+import path from "node:path";
+import type { Context } from "../context.ts";
+import { formatJson } from "../fs/static-json-file.ts";
+import { Resource } from "../resource.ts";
+import { assertNever } from "../util/assert-never.ts";
+import { Self, type Bindings } from "./bindings.ts";
+import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
+import type { EventSource } from "./event-source.ts";
+import { isQueueEventSource } from "./event-source.ts";
+import { isQueue } from "./queue.ts";
+import type { Worker, WorkerProps } from "./worker.ts";
 
 /**
  * Properties for wrangler.json configuration file
@@ -17,7 +19,11 @@ export interface WranglerJsonProps {
   /**
    * The worker to generate the wrangler.json file for
    */
-  worker: Worker;
+  worker:
+    | Worker
+    | (WorkerProps<any> & {
+        name: string;
+      });
   /**
    * Path to write the wrangler.json file to
    *
@@ -31,6 +37,16 @@ export interface WranglerJsonProps {
    * @default worker.entrypoint
    */
   main?: string;
+
+  /**
+   * Path to the assets directory
+   *
+   * @default inferred from the worker's Asset bindings
+   */
+  assets?: {
+    binding: string;
+    directory: string;
+  };
 }
 
 /**
@@ -65,6 +81,9 @@ export interface WranglerJson
  */
 export const WranglerJson = Resource(
   "cloudflare::WranglerJson",
+  {
+    alwaysUpdate: true,
+  },
   async function (
     this: Context<WranglerJson>,
     _id: string,
@@ -92,6 +111,7 @@ export const WranglerJson = Resource(
       // see: https://developers.cloudflare.com/workers/configuration/compatibility-dates/
       compatibility_date: worker.compatibilityDate,
       compatibility_flags: props.worker.compatibilityFlags,
+      assets: props.assets,
     };
 
     // Process bindings if they exist
@@ -108,7 +128,8 @@ export const WranglerJson = Resource(
       spec.triggers = { crons: worker.crons };
     }
 
-    await StaticJsonFile(filePath, spec);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, await formatJson(spec));
 
     // Return the resource
     return this({
@@ -243,6 +264,7 @@ export interface WranglerJsonSpec {
     name: string;
     binding: string;
     class_name: string;
+    script_name?: string;
   }[];
 
   /**
@@ -318,6 +340,13 @@ export interface WranglerJsonSpec {
    * Pipelines
    */
   pipelines?: { binding: string; pipeline: string }[];
+
+  /**
+   * Version metadata bindings
+   */
+  version_metadata?: {
+    binding: string;
+  };
 }
 
 /**
@@ -341,7 +370,12 @@ function processBindings(
   const services: { binding: string; service: string; environment?: string }[] =
     [];
   const secrets: string[] = [];
-  const workflows: { name: string; binding: string; class_name: string }[] = [];
+  const workflows: {
+    name: string;
+    binding: string;
+    class_name: string;
+    script_name?: string;
+  }[] = [];
   const d1Databases: {
     binding: string;
     database_id: string;
@@ -393,6 +427,10 @@ function processBindings(
   }
   // Process each binding
   for (const [bindingName, binding] of Object.entries(bindings)) {
+    if (typeof binding === "function") {
+      // this is only reachable in the
+      throw new Error(`Invalid binding ${bindingName} is a function`);
+    }
     if (typeof binding === "string") {
       // Plain text binding - add to vars
       if (!spec.vars) {
@@ -409,7 +447,7 @@ function processBindings(
       // Service binding
       services.push({
         binding: bindingName,
-        service: binding.name,
+        service: "name" in binding ? binding.name : binding.service,
       });
     } else if (binding.type === "kv_namespace") {
       // KV Namespace binding
@@ -452,6 +490,7 @@ function processBindings(
         name: binding.workflowName,
         binding: bindingName,
         class_name: binding.className,
+        script_name: binding.scriptName,
       });
     } else if (binding.type === "d1") {
       d1Databases.push({
@@ -491,6 +530,15 @@ function processBindings(
       });
     } else if (binding.type === "ai_gateway") {
       // no-op
+    } else if (binding.type === "version_metadata") {
+      if (spec.version_metadata) {
+        throw new Error(
+          `Version metadata already bound to ${spec.version_metadata.binding}`,
+        );
+      }
+      spec.version_metadata = {
+        binding: bindingName,
+      };
     } else if (binding.type === "hyperdrive") {
       const password =
         "password" in binding.origin

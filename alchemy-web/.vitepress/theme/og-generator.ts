@@ -20,7 +20,7 @@ function calculateDynamicFontSizeAndLineHeight(
   maxSize: number,
   linesForBase: number,
   linesForMax: number,
-  lineHeightFactor: number
+  lineHeightFactor: number,
 ): { fontSize: number; lineHeight: number } {
   const numLines = textLines.length;
   let fontSize = baseSize;
@@ -55,7 +55,7 @@ function calculateDynamicFontSizeAndLineHeight(
 export async function generateOgImage(
   title: string,
   description: string | undefined,
-  outputPath: string
+  outputPath: string,
 ): Promise<void> {
   try {
     if (path.basename(outputPath) === "docs-home.png") {
@@ -66,16 +66,16 @@ export async function generateOgImage(
         await fs.writeFile(outputPath, imageBuffer);
         console.log(`Used existing image for docs-home: ${outputPath}`);
         return;
-      } catch (error) {
+      } catch (_error) {
         console.warn(
-          `alchemy-og.png not found, generating image for docs-home instead`
+          "alchemy-og.png not found, generating image for docs-home instead",
         );
       }
     }
 
     const backgroundColor = "#0A0A0A"; // Even darker background
     const flattenBackgroundColor = { r: 10, g: 10, b: 10 };
-    const logoFileName = "potion.png";
+    const _logoFileName = "potion.png";
     const logoSize = 100;
     const descriptionFillColor = "#B0B0B0"; // Silver-ish color for description
 
@@ -92,7 +92,7 @@ export async function generateOgImage(
     const verticalLine2X = Math.round(totalWidth * 0.4);
 
     const logoCenterY = firstHorizontalLineY / 2;
-    const logoY = logoCenterY - logoSize / 2;
+    const _logoY = logoCenterY - logoSize / 2;
 
     const titleLines = wrapText(title, 23); // Adjusted for more aggressive dynamic font
     let descriptionLines: string[] = [];
@@ -108,7 +108,7 @@ export async function generateOgImage(
       60, // maxSize (for 1 line)
       2, // linesForBase
       1, // linesForMax
-      1.2 // lineHeightFactor
+      1.2, // lineHeightFactor
     );
     const titleFontSize = titleFontConfig.fontSize;
     const titleLineHeight = titleFontConfig.lineHeight;
@@ -126,7 +126,7 @@ export async function generateOgImage(
         24, // Adjusted maxSize for description (was 26)
         5, // Increased linesForBase (was 4) to be even more forgiving
         2, // linesForMax (unchanged)
-        1.1 // Further reduced lineHeightFactor (was 1.2) to pack more content
+        1.1, // Further reduced lineHeightFactor (was 1.2) to pack more content
       );
       descriptionFontSize = descFontConfig.fontSize;
       descriptionLineHeight = descFontConfig.lineHeight;
@@ -136,7 +136,7 @@ export async function generateOgImage(
     const maxDescriptionHeight = totalHeight * 0.65; // Increased from 0.55 to 0.65 - allow up to 65% of total height for description
     const descriptionHeight = Math.min(
       maxDescriptionHeight,
-      descriptionLines.length * descriptionLineHeight
+      descriptionLines.length * descriptionLineHeight,
     );
     const totalTextHeight =
       titleHeight + spaceBetweenTitleAndDesc + descriptionHeight;
@@ -149,24 +149,8 @@ export async function generateOgImage(
 
     const textBlockTop = Math.max(
       adjustedTopMargin, // Use adjusted margin when description is long
-      (totalHeight - totalTextHeight) / 2
+      (totalHeight - totalTextHeight) / 2,
     );
-
-    const logoPath = path.resolve(__dirname, `../../public/${logoFileName}`);
-    const logoBuffer = await fs.readFile(logoPath);
-    const logoResized = await sharp(logoBuffer)
-      .resize(logoSize, logoSize, {
-        fit: "contain",
-        background: { r: 0, g: 0, b: 0, alpha: 0 },
-      })
-      .png()
-      .toBuffer();
-    const logoBase64 = logoResized.toString("base64");
-
-    // New position: Inside main area (below first horizontal line), aligned with text
-    const newLogoX = leftMargin - 20; // Adjusted to move logo further left
-    const newLogoY = firstHorizontalLineY + 20; // 20px padding below the first horizontal line
-    const logoSvg = `<image x="${newLogoX}" y="${newLogoY}" width="${logoSize}" height="${logoSize}" href="data:image/png;base64,${logoBase64}" />`;
 
     const lineStrokeColor = "#222222"; // Darker grid lines for the darkest bg
 
@@ -201,7 +185,6 @@ export async function generateOgImage(
     <svg width="${totalWidth}" height="${totalHeight}" viewBox="0 0 ${totalWidth} ${totalHeight}" overflow="visible" xmlns="http://www.w3.org/2000/svg">
       <rect width="${totalWidth}" height="${totalHeight}" fill="${backgroundColor}" />
       ${gridLines}
-      ${logoSvg}
       <g>
         ${titleSvg}
         ${descriptionSvg}
@@ -213,7 +196,7 @@ export async function generateOgImage(
 
     const alchemistImagePath = path.resolve(
       __dirname,
-      "../../public/alchemist.webp"
+      "../../public/alchemist.webp",
     );
     const alchemistPng = await sharp(alchemistImagePath)
       .toFormat("png")
@@ -302,7 +285,7 @@ function wrapText(text: string, charsPerLine: number): string[] {
   let currentLine = "";
 
   words.forEach((word) => {
-    if ((currentLine + " " + word).length <= charsPerLine) {
+    if (`${currentLine} ${word}`.length <= charsPerLine) {
       currentLine += (currentLine ? " " : "") + word;
     } else {
       if (currentLine.length > 0) lines.push(currentLine);

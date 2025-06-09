@@ -5,40 +5,63 @@ description: Learn how to create, update, and manage AWS PCAConnectorAD Director
 
 # DirectoryRegistration
 
-The DirectoryRegistration resource lets you create and manage [AWS PCAConnectorAD DirectoryRegistrations](https://docs.aws.amazon.com/pcaconnectorad/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-pcaconnectorad-directoryregistration.html
+The DirectoryRegistration resource allows you to manage [AWS PCAConnectorAD DirectoryRegistrations](https://docs.aws.amazon.com/pcaconnectorad/latest/userguide/) which enable the integration of AWS Private Certificate Authority with Active Directory.
 
 ## Minimal Example
+
+Create a basic DirectoryRegistration with required properties and a tag.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const directoryregistration = await AWS.PCAConnectorAD.DirectoryRegistration(
-  "directoryregistration-example",
-  { DirectoryId: "example-directoryid", Tags: { Environment: "production", ManagedBy: "Alchemy" } }
-);
+const directoryRegistration = await AWS.PCAConnectorAD.DirectoryRegistration("myDirectoryRegistration", {
+  DirectoryId: "d-1234567890", // Your Active Directory ID
+  Tags: {
+    Environment: "Development"
+  }
+});
 ```
 
 ## Advanced Configuration
 
-Create a directoryregistration with additional configuration:
+Configure a DirectoryRegistration with additional properties, including the adopt option to handle existing resources.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedDirectoryRegistration = await AWS.PCAConnectorAD.DirectoryRegistration(
-  "advanced-directoryregistration",
-  {
-    DirectoryId: "example-directoryid",
-    Tags: {
-      Environment: "production",
-      Team: "DevOps",
-      Project: "MyApp",
-      CostCenter: "Engineering",
-      ManagedBy: "Alchemy",
-    },
-  }
-);
+const advancedDirectoryRegistration = await AWS.PCAConnectorAD.DirectoryRegistration("myAdvancedDirectoryRegistration", {
+  DirectoryId: "d-0987654321", // Your Active Directory ID
+  Tags: {
+    Project: "MyProject",
+    Owner: "admin@example.com"
+  },
+  adopt: true // Adopt existing resource if it already exists
+});
 ```
 
+## Using Tags for Resource Management
+
+Create a DirectoryRegistration that uses multiple tags for better resource management and identification.
+
+```ts
+const taggedDirectoryRegistration = await AWS.PCAConnectorAD.DirectoryRegistration("myTaggedDirectoryRegistration", {
+  DirectoryId: "d-1122334455", // Your Active Directory ID
+  Tags: {
+    Environment: "Production",
+    Department: "IT",
+    Owner: "it-admin@example.com"
+  }
+});
+```
+
+## Handling Updates
+
+Demonstrate updating an existing DirectoryRegistration by modifying its tags.
+
+```ts
+const updateDirectoryRegistration = await AWS.PCAConnectorAD.DirectoryRegistration("myUpdateDirectoryRegistration", {
+  DirectoryId: "d-5566778899", // Your Active Directory ID
+  Tags: {
+    Environment: "Staging", // Updated tag
+    Owner: "admin@example.com"
+  }
+});
+```

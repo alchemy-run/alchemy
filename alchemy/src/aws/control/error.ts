@@ -1,4 +1,4 @@
-import type { ProgressEvent } from "./client.js";
+import type { ProgressEvent } from "./client.ts";
 
 /**
  * Error thrown by Cloud Control API operations

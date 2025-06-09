@@ -1,7 +1,8 @@
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
-import { loadConfig } from "@aws-sdk/node-config-provider";
+import { loadConfig } from "@smithy/node-config-provider";
 import { AwsClient } from "aws4fetch";
-
+import { logger } from "../../util/logger.ts";
+import { safeFetch } from "../../util/safe-fetch.ts";
 import {
   AlreadyExistsError,
   CloudControlError,
@@ -13,7 +14,7 @@ import {
   ThrottlingException,
   UpdateFailedError,
   ValidationException,
-} from "./error.js";
+} from "./error.ts";
 
 /**
  * Status of a Cloud Control API operation
@@ -202,18 +203,17 @@ export class CloudControlClient {
     identifier: string,
   ): Promise<Record<string, any> | undefined> {
     try {
-      return JSON.parse(
-        (
-          await this.fetch<{
-            ResourceDescription: {
-              Properties: string;
-            };
-          }>("GetResource", {
-            TypeName: typeName,
-            Identifier: identifier,
-          })
-        ).ResourceDescription.Properties,
-      );
+      const resource = await this.fetch<{
+        Identifier: string;
+        TypeName: string;
+        ResourceDescription: {
+          Properties: string;
+        };
+      }>("GetResource", {
+        TypeName: typeName,
+        Identifier: identifier,
+      });
+      return JSON.parse(resource.ResourceDescription.Properties);
     } catch (error: any) {
       if (error instanceof ResourceNotFoundException) {
         return undefined;
@@ -306,7 +306,7 @@ export class CloudControlClient {
 
         if (!logged) {
           logged = true;
-          console.log(
+          logger.log(
             `Polling for ${response.ProgressEvent.Identifier} (${response.ProgressEvent.TypeName}) to stabilize`,
           );
         }
@@ -366,7 +366,7 @@ export class CloudControlClient {
           },
         ] as const;
         const signedRequest = await this.client.sign(...args);
-        const response = await fetch(signedRequest);
+        const response = await safeFetch(signedRequest);
 
         if (!response.ok) {
           const data: any = await response.json();
@@ -425,7 +425,7 @@ export class CloudControlClient {
             error instanceof ThrottlingException
               ? "Throttling"
               : "Network error";
-          console.log(
+          logger.log(
             `${errorType} detected, retrying in ${Math.round(retryDelay)}ms (attempt ${attempt + 1}/${maxRetries + 1})`,
           );
           await new Promise((resolve) => setTimeout(resolve, retryDelay));
@@ -435,7 +435,7 @@ export class CloudControlClient {
 
         // Max retries exceeded
         if (error instanceof ThrottlingException) {
-          console.error(
+          logger.error(
             `Max retries (${maxRetries}) exceeded for throttling exception`,
           );
           throw error;

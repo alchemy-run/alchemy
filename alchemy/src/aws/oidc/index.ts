@@ -1,2 +1,2 @@
-export * from "./github-oidc-provider.js";
-export * from "./oidc-provider.js";
+export * from "./github-oidc-provider.ts";
+export * from "./oidc-provider.ts";

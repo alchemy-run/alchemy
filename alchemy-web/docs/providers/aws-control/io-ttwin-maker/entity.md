@@ -5,41 +5,92 @@ description: Learn how to create, update, and manage AWS IoTTwinMaker Entitys us
 
 # Entity
 
-The Entity resource lets you create and manage [AWS IoTTwinMaker Entitys](https://docs.aws.amazon.com/iottwinmaker/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iottwinmaker-entity.html
+The Entity resource lets you manage [AWS IoTTwinMaker Entities](https://docs.aws.amazon.com/iottwinmaker/latest/userguide/) which represent real-world objects in your digital twin environments.
 
 ## Minimal Example
+
+Create a basic entity with required properties and some optional ones.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const entity = await AWS.IoTTwinMaker.Entity("entity-example", {
-  EntityName: "entity-entity",
-  WorkspaceId: "example-workspaceid",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A entity resource managed by Alchemy",
+const basicEntity = await AWS.IoTTwinMaker.Entity("basicEntity", {
+  EntityId: "entity-12345",
+  EntityName: "CoolingSystem",
+  WorkspaceId: "workspace-xyz",
+  Description: "A cooling system for the factory"
 });
 ```
 
 ## Advanced Configuration
 
-Create a entity with additional configuration:
+Configure an entity with components and tags for better identification and functionality.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedEntity = await AWS.IoTTwinMaker.Entity("advanced-entity", {
-  EntityName: "entity-entity",
-  WorkspaceId: "example-workspaceid",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedEntity = await AWS.IoTTwinMaker.Entity("advancedEntity", {
+  EntityId: "entity-67890",
+  EntityName: "ConveyorBelt",
+  WorkspaceId: "workspace-xyz",
+  Components: {
+    Speed: {
+      type: "number",
+      value: 5.0
+    },
+    Temperature: {
+      type: "number",
+      value: 70.0
+    }
   },
-  Description: "A entity resource managed by Alchemy",
+  Tags: {
+    environment: "production",
+    status: "active"
+  }
 });
 ```
 
+## Composite Components
+
+This example demonstrates how to create an entity with composite components.
+
+```ts
+const compositeEntity = await AWS.IoTTwinMaker.Entity("compositeEntity", {
+  EntityId: "entity-13579",
+  EntityName: "SensorArray",
+  WorkspaceId: "workspace-xyz",
+  CompositeComponents: {
+    TemperatureSensor: {
+      type: "Sensor",
+      properties: {
+        unit: "Celsius",
+        value: 22.5
+      }
+    },
+    PressureSensor: {
+      type: "Sensor",
+      properties: {
+        unit: "Pascal",
+        value: 101325
+      }
+    }
+  }
+});
+```
+
+## Parent Entity Relationship
+
+Link an entity as a child to a parent entity.
+
+```ts
+const childEntity = await AWS.IoTTwinMaker.Entity("childEntity", {
+  EntityId: "entity-24680",
+  EntityName: "SubCoolingUnit",
+  WorkspaceId: "workspace-xyz",
+  ParentEntityId: "entity-12345", // Link to the CoolingSystem entity
+  Components: {
+    Status: {
+      type: "string",
+      value: "operational"
+    }
+  }
+});
+```

@@ -5,39 +5,57 @@ description: Learn how to create, update, and manage AWS Forecast DatasetGroups 
 
 # DatasetGroup
 
-The DatasetGroup resource lets you create and manage [AWS Forecast DatasetGroups](https://docs.aws.amazon.com/forecast/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-forecast-datasetgroup.html
+The DatasetGroup resource lets you manage [AWS Forecast DatasetGroups](https://docs.aws.amazon.com/forecast/latest/userguide/) for organizing and managing datasets used in forecasting models.
 
 ## Minimal Example
+
+Create a basic DatasetGroup with the required properties and an optional tag.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const datasetgroup = await AWS.Forecast.DatasetGroup("datasetgroup-example", {
-  DatasetGroupName: "datasetgroup-datasetgroup",
-  Domain: "example-domain",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const datasetGroup = await AWS.Forecast.DatasetGroup("myDatasetGroup", {
+  DatasetGroupName: "SalesForecastGroup",
+  Domain: "RETAIL",
+  DatasetArns: [
+    "arn:aws:forecast:us-east-1:123456789012:dataset/myDataset"
+  ],
+  Tags: [
+    { Key: "Environment", Value: "Production" }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a datasetgroup with additional configuration:
+Configure a DatasetGroup with multiple datasets to enhance your forecasting capabilities.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedDatasetGroup = await AWS.Forecast.DatasetGroup("advanced-datasetgroup", {
-  DatasetGroupName: "datasetgroup-datasetgroup",
-  Domain: "example-domain",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedDatasetGroup = await AWS.Forecast.DatasetGroup("advancedDatasetGroup", {
+  DatasetGroupName: "AdvancedSalesForecastGroup",
+  Domain: "RETAIL",
+  DatasetArns: [
+    "arn:aws:forecast:us-east-1:123456789012:dataset/salesData",
+    "arn:aws:forecast:us-east-1:123456789012:dataset/seasonalityData"
+  ],
+  Tags: [
+    { Key: "Project", Value: "SalesForecasting" },
+    { Key: "Team", Value: "DataScience" }
+  ]
 });
 ```
 
+## Adoption of Existing Resources
+
+Create a DatasetGroup that adopts an existing resource if it already exists.
+
+```ts
+const adoptDatasetGroup = await AWS.Forecast.DatasetGroup("adoptDatasetGroup", {
+  DatasetGroupName: "SalesForecastGroup",
+  Domain: "RETAIL",
+  DatasetArns: [
+    "arn:aws:forecast:us-east-1:123456789012:dataset/myExistingDataset"
+  ],
+  adopt: true // This will adopt the existing DatasetGroup instead of failing
+});
+```

@@ -5,39 +5,72 @@ description: Learn how to create, update, and manage AWS AppConfig ExtensionAsso
 
 # ExtensionAssociation
 
-The ExtensionAssociation resource lets you create and manage [AWS AppConfig ExtensionAssociations](https://docs.aws.amazon.com/appconfig/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-appconfig-extensionassociation.html
+The ExtensionAssociation resource allows you to manage [AWS AppConfig ExtensionAssociations](https://docs.aws.amazon.com/appconfig/latest/userguide/), which are used to associate extensions with AppConfig resources.
 
 ## Minimal Example
+
+Create a basic ExtensionAssociation with the required properties and one optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const extensionassociation = await AWS.AppConfig.ExtensionAssociation(
-  "extensionassociation-example",
-  { Tags: { Environment: "production", ManagedBy: "Alchemy" } }
-);
+const basicExtensionAssociation = await AWS.AppConfig.ExtensionAssociation("basicAssociation", {
+  ResourceIdentifier: "myApplication",
+  ExtensionIdentifier: "myExtension",
+  Parameters: {
+    key1: "value1",
+    key2: "value2"
+  }
+});
 ```
 
 ## Advanced Configuration
 
-Create a extensionassociation with additional configuration:
+Configure an ExtensionAssociation with additional properties, including tags and an extension version number.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedExtensionAssociation = await AWS.AppConfig.ExtensionAssociation(
-  "advanced-extensionassociation",
-  {
-    Tags: {
-      Environment: "production",
-      Team: "DevOps",
-      Project: "MyApp",
-      CostCenter: "Engineering",
-      ManagedBy: "Alchemy",
-    },
-  }
-);
+const advancedExtensionAssociation = await AWS.AppConfig.ExtensionAssociation("advancedAssociation", {
+  ResourceIdentifier: "myApplication",
+  ExtensionIdentifier: "myExtension",
+  ExtensionVersionNumber: 1,
+  Parameters: {
+    key1: "value1",
+    key2: "value2"
+  },
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Project", Value: "MyProject" }
+  ]
+});
 ```
 
+## Adoption of Existing Resource
+
+Create an ExtensionAssociation that adopts an existing resource if it already exists, preventing failure.
+
+```ts
+const adoptExistingAssociation = await AWS.AppConfig.ExtensionAssociation("adoptAssociation", {
+  ResourceIdentifier: "myExistingApplication",
+  ExtensionIdentifier: "myExtension",
+  adopt: true
+});
+```
+
+## Detailed Parameter Configuration
+
+Demonstrate the use of detailed parameters for an ExtensionAssociation.
+
+```ts
+const detailedParameterAssociation = await AWS.AppConfig.ExtensionAssociation("detailedParamAssociation", {
+  ResourceIdentifier: "myApplication",
+  ExtensionIdentifier: "myDetailedExtension",
+  Parameters: {
+    configOption1: "enabled",
+    configOption2: 42,
+    configOption3: ["optionA", "optionB"]
+  },
+  Tags: [
+    { Key: "Team", Value: "DevOps" }
+  ]
+});
+```

@@ -1,11 +1,14 @@
 {
+  "$schema": "https://biomejs.dev/schemas/2.0.0-beta.5/schema.json",
   "files": {
     "includes": [
       "./**/package.json",
       "./**/biome.json",
       "./alchemy/src/**/*.ts",
+      "./alchemy/src/**/*.tsx",
       "./alchemy/src/**/*.js",
       "./alchemy/test/**/*.ts",
+      "./alchemy-web/.vitepress/**/*.ts",
       "./scripts/**/*.ts",
       "./stacks/**/*.ts",
       "./examples/*/src/**/*.ts",
@@ -13,7 +16,9 @@
       "!**/node_modules",
       "!examples/cloudflare-tanstack-start/src/routeTree.gen.ts",
       "!examples/cloudflare-redwood/worker-configuration.d.ts",
-      "!./alchemy/src/aws/control/types.d.ts"
+      "!./alchemy/src/aws/control/types.d.ts",
+      "!examples/cloudflare-tanstack-start/.output/**",
+      "!examples/cloudflare-nuxt-pipeline/.output/**"
     ],
     "maxSize": 10000000
   },
@@ -32,7 +37,7 @@
         "useImportExtensions": {
           "level": "error",
           "options": {
-            "forceJsExtensions": true
+            "forceJsExtensions": false
           }
         },
         "noUnsafeFinally": "off",
@@ -58,7 +63,6 @@
       },
       "style": {
         "useLiteralEnumMembers": "error",
-        "noCommaOperator": "error",
         "useNodejsImportProtocol": "error",
         "useAsConstAssertion": "error",
         "useEnumInitializers": "error",
@@ -73,7 +77,6 @@
         "noParameterAssign": "off",
         "noNonNullAssertion": "off",
         "useDefaultParameterLast": "error",
-        "noArguments": "error",
         "useImportType": "error",
         "useExportType": "error",
         "noUselessElse": "off",

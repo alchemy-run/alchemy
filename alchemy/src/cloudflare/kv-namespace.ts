@@ -1,14 +1,15 @@
-import type { Context } from "../context.js";
-import { Resource, ResourceKind } from "../resource.js";
-import { bind } from "../runtime/bind.js";
-import { withExponentialBackoff } from "../util/retry.js";
-import { handleApiError } from "./api-error.js";
+import type { Context } from "../context.ts";
+import { Resource, ResourceKind } from "../resource.ts";
+import { bind } from "../runtime/bind.ts";
+import { logger } from "../util/logger.ts";
+import { withExponentialBackoff } from "../util/retry.ts";
+import { handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
-} from "./api.js";
-import type { Bound } from "./bound.js";
+} from "./api.ts";
+import type { Bound } from "./bound.ts";
 
 /**
  * Properties for creating or updating a KV Namespace
@@ -223,7 +224,7 @@ const _KVNamespace = Resource(
           error instanceof Error &&
           error.message.includes("already exists")
         ) {
-          console.log(`Namespace '${title}' already exists, adopting it`);
+          logger.log(`Namespace '${title}' already exists, adopting it`);
           // Find the existing namespace by title
           const existingNamespace = await findKVNamespaceByTitle(api, title);
 

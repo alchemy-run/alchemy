@@ -5,37 +5,67 @@ description: Learn how to create, update, and manage AWS ManagedBlockchain Acces
 
 # Accessor
 
-The Accessor resource lets you create and manage [AWS ManagedBlockchain Accessors](https://docs.aws.amazon.com/managedblockchain/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-managedblockchain-accessor.html
+The Accessor resource lets you manage AWS ManagedBlockchain Accessors, which are used to interact with blockchain networks. For more details, refer to the [AWS ManagedBlockchain Accessors](https://docs.aws.amazon.com/managedblockchain/latest/userguide/) documentation.
 
 ## Minimal Example
+
+Create a basic Accessor with required properties and a common optional property:
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const accessor = await AWS.ManagedBlockchain.Accessor("accessor-example", {
-  AccessorType: "example-accessortype",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const basicAccessor = await AWS.ManagedBlockchain.Accessor("basicAccessor", {
+  AccessorType: "AMAZON_MANAGED",
+  NetworkType: "HYPERLEDGER_FABRIC",
+  Tags: [
+    { Key: "Project", Value: "BlockchainDemo" }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a accessor with additional configuration:
+Configure an Accessor with additional properties such as adopting existing resources:
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedAccessor = await AWS.ManagedBlockchain.Accessor("advanced-accessor", {
-  AccessorType: "example-accessortype",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedAccessor = await AWS.ManagedBlockchain.Accessor("advancedAccessor", {
+  AccessorType: "AMAZON_MANAGED",
+  NetworkType: "ETHEREUM",
+  Tags: [
+    { Key: "Environment", Value: "Production" }
+  ],
+  adopt: true
 });
 ```
 
+## Accessor with Custom Tags
+
+Create an Accessor with multiple custom tags for better organization:
+
+```ts
+const taggedAccessor = await AWS.ManagedBlockchain.Accessor("taggedAccessor", {
+  AccessorType: "CUSTOM",
+  NetworkType: "HYPERLEDGER_FABRIC",
+  Tags: [
+    { Key: "Department", Value: "Finance" },
+    { Key: "Owner", Value: "Alice" },
+    { Key: "Status", Value: "Active" }
+  ]
+});
+```
+
+## Accessor for Multi-Environment Setup
+
+Set up an Accessor for a multi-environment configuration with distinct properties:
+
+```ts
+const multiEnvAccessor = await AWS.ManagedBlockchain.Accessor("multiEnvAccessor", {
+  AccessorType: "CUSTOM",
+  NetworkType: "ETHEREUM",
+  Tags: [
+    { Key: "Environment", Value: "Staging" },
+    { Key: "Project", Value: "BlockchainExperiment" }
+  ],
+  adopt: false
+});
+```

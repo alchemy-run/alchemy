@@ -2,15 +2,16 @@
 
 import { afterAll, beforeAll, it } from "bun:test";
 import path from "node:path";
-import { alchemy } from "../alchemy.js";
-import { R2RestStateStore } from "../cloudflare/r2-rest-state-store.js";
-import { Scope } from "../scope.js";
-import type { StateStoreType } from "../state.js";
+import { alchemy } from "../alchemy.ts";
+import { DOStateStore } from "../cloudflare/index.ts";
+import { Scope } from "../scope.ts";
+import type { StateStoreType } from "../state.ts";
+import { NoopTelemetryClient } from "../util/telemetry/index.ts";
 
 /**
  * Extend the Alchemy interface to include test functionality
  */
-declare module "../alchemy.js" {
+declare module "../alchemy.ts" {
   interface Alchemy {
     test: typeof test;
   }
@@ -99,7 +100,9 @@ type test = {
  *
  * @example
  * ```typescript
- * const test = alchemy.test(import.meta);
+ * const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX
+});
  *
  * describe("My Resource", () => {
  *   test("create and delete", async (scope) => {
@@ -120,22 +123,11 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     // process.env.CI &&
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
   ) {
-    defaultOptions.stateStore = (scope) =>
-      new R2RestStateStore(scope, {
-        apiKey: alchemy.secret(process.env.CLOUDFLARE_API_KEY),
-        email: process.env.CLOUDFLARE_EMAIL,
-        bucketName: process.env.CLOUDFLARE_BUCKET_NAME!,
-      });
+    defaultOptions.stateStore = (scope) => new DOStateStore(scope);
   }
 
   // Add skipIf functionality
-  test.skipIf = (condition: boolean) => {
-    if (condition) {
-      // TODO: proxy through to bun:test.skipIf
-      return (..._args: any[]) => {};
-    }
-    return test;
-  };
+  test.skipIf = it.skipIf.bind(it);
 
   // Create local test scope based on filename
   const scope = new Scope({
@@ -143,6 +135,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     // parent: globalTestScope,
     stateStore: defaultOptions?.stateStore,
     phase: "up",
+    telemetryClient: new NoopTelemetryClient(),
   });
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {

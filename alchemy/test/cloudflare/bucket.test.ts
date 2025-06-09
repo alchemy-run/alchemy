@@ -1,6 +1,6 @@
-import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import {
   createR2Client,
   getBucket,
@@ -8,10 +8,13 @@ import {
   listObjects,
   R2Bucket,
   withJurisdiction,
-} from "../../src/cloudflare/bucket.js";
-import { BRANCH_PREFIX } from "../util.js";
+} from "../../src/cloudflare/bucket.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { destroy } from "../../src/destroy.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.ts";
+import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -34,17 +37,13 @@ describe("R2 Bucket Resource", async () => {
       bucket = await R2Bucket(testId, {
         name: testId,
         locationHint: "wnam", // West North America
+        adopt: true,
       });
       expect(bucket.name).toEqual(testId);
 
       // Check if bucket exists by getting it explicitly
       const gotBucket = await getBucket(api, testId);
       expect(gotBucket.result.name).toEqual(testId);
-
-      // Check if bucket exists by listing buckets
-      const buckets = await listBuckets(api);
-      const foundBucket = buckets.find((b) => b.Name === testId);
-      expect(foundBucket).toBeTruthy();
 
       // Update the bucket to enable public access
       bucket = await R2Bucket(testId, {
@@ -70,27 +69,29 @@ describe("R2 Bucket Resource", async () => {
   test("bucket with jurisdiction", async (scope) => {
     const api = await createCloudflareApi();
     const euBucketName = `${testId}-eu`;
-    const euBucket = await R2Bucket(euBucketName, {
-      name: euBucketName,
-      jurisdiction: "eu",
-    });
-
+    let euBucket: R2Bucket | undefined;
     try {
+      euBucket = await R2Bucket(euBucketName, {
+        name: euBucketName,
+        jurisdiction: "eu",
+        adopt: true,
+      });
       // Create a bucket with EU jurisdiction
       expect(euBucket.name).toEqual(euBucketName);
       expect(euBucket.jurisdiction).toEqual("eu");
 
-      // Check if bucket exists by listing buckets
-      const buckets = await listBuckets(api, {
+      // Check if bucket exists by getting it explicitly
+      const gotBucket = await getBucket(api, euBucketName, {
         jurisdiction: "eu",
       });
-      const foundBucket = buckets.find((b) => b.Name === euBucketName);
-      expect(foundBucket).toBeTruthy();
+      expect(gotBucket.result.name).toEqual(euBucketName);
 
       // Note: S3 API doesn't expose jurisdiction info, so we can't verify that aspect
     } finally {
       await alchemy.destroy(scope);
-      await assertBucketDeleted(euBucket);
+      if (euBucket) {
+        await assertBucketDeleted(euBucket);
+      }
     }
   });
 
@@ -103,6 +104,7 @@ describe("R2 Bucket Resource", async () => {
       bucket = await R2Bucket(bucketName, {
         name: bucketName,
         empty: true,
+        adopt: true,
       });
       expect(bucket.name).toEqual(bucketName);
 
@@ -161,17 +163,73 @@ describe("R2 Bucket Resource", async () => {
     } finally {
       // Destroy the bucket which should empty it first
       await alchemy.destroy(scope);
+    }
+  });
 
-      console.log(
-        "Note: Manual cleanup may be needed for bucket:",
-        bucket?.name,
-      );
-      console.log("Visit the Cloudflare dashboard to verify bucket deletion");
+  test("create and delete worker with R2 bucket binding", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-r2-binding-r2-1`;
+    // Create a test R2 bucket
+    let testBucket: R2Bucket | undefined;
+
+    let worker: Worker<{ STORAGE: R2Bucket }> | undefined;
+
+    try {
+      testBucket = await R2Bucket("test-bucket", {
+        name: `${BRANCH_PREFIX.toLowerCase()}-test-r2-bucket`,
+        allowPublicAccess: false,
+        adopt: true,
+      });
+
+      // Create a worker with the R2 bucket binding
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              // Use the R2 binding
+              if (request.url.includes('/r2-info')) {
+                // Just confirm we have access to the binding
+                return new Response(JSON.stringify({
+                  hasR2: !!env.STORAGE,
+                  bucketName: env.STORAGE.name || 'unknown'
+                }), {
+                  status: 200,
+                  headers: { 'Content-Type': 'application/json' }
+                });
+              }
+
+              return new Response('Hello with R2 Bucket!', { status: 200 });
+            }
+          };
+        `,
+        format: "esm",
+        url: true, // Enable workers.dev URL to test the worker
+        bindings: {
+          STORAGE: testBucket,
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.bindings).toBeDefined();
+      expect(worker.bindings!.STORAGE).toBeDefined();
+
+      // Test that the R2 binding is accessible in the worker
+      const response = await fetchAndExpectOK(`${worker.url}/r2-info`);
+      const data = (await response.json()) as {
+        hasR2: boolean;
+        bucketName: string;
+      };
+      expect(data.hasR2).toEqual(true);
+    } finally {
+      await destroy(scope);
     }
   });
 });
 
-async function assertBucketDeleted(bucket: R2Bucket) {
+async function assertBucketDeleted(bucket: R2Bucket, attempt = 0) {
   const api = await createCloudflareApi();
   try {
     if (!bucket.name) {
@@ -185,7 +243,12 @@ async function assertBucketDeleted(bucket: R2Bucket) {
     const foundBucket = buckets.find((b) => b.Name === bucket.name);
 
     if (foundBucket) {
-      throw new Error(`Bucket ${bucket.name} was not deleted as expected`);
+      if (attempt > 30) {
+        throw new Error(`Bucket ${bucket.name} was not deleted as expected`);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await assertBucketDeleted(bucket, attempt + 1);
+      }
     }
   } catch (error: any) {
     // If we get a 404 or NoSuchBucket error, the bucket was deleted

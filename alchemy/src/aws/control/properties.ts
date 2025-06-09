@@ -120,6 +120,7 @@ const properties = {
       "DistributionDomainName",
       "DistributionHostedZoneId",
       "DomainName",
+      "DomainNameArn",
       "RegionalDomainName",
       "RegionalHostedZoneId",
     ],
@@ -533,7 +534,11 @@ const properties = {
     ],
   },
   AutoScaling: {
-    AutoScalingGroup: ["AutoScalingGroupName", "InstanceId"],
+    AutoScalingGroup: [
+      "AutoScalingGroupARN",
+      "AutoScalingGroupName",
+      "InstanceId",
+    ],
     LaunchConfiguration: [
       "AssociatePublicIpAddress",
       "BlockDeviceMappings",
@@ -756,6 +761,18 @@ const properties = {
       "GuardrailId",
       "GuardrailIdentifier",
       "Version",
+    ],
+    IntelligentPromptRouter: [
+      "CreatedAt",
+      "Description",
+      "FallbackModel",
+      "Models",
+      "PromptRouterArn",
+      "PromptRouterName",
+      "RoutingCriteria",
+      "Status",
+      "Type",
+      "UpdatedAt",
     ],
     KnowledgeBase: [
       "CreatedAt",
@@ -1092,7 +1109,6 @@ const properties = {
       "ETag",
       "Id",
       "LastModifiedTime",
-      "ManagedCertificateRequest",
       "Name",
       "Status",
     ],
@@ -1537,7 +1553,14 @@ const properties = {
       "SubnetArns",
       "VpcEndpointId",
     ],
-    LocationAzureBlob: ["AzureBlobContainerUrl", "LocationArn", "LocationUri"],
+    LocationAzureBlob: [
+      "AzureBlobContainerUrl",
+      "CmkSecretConfig.SecretArn",
+      "LocationArn",
+      "LocationUri",
+      "ManagedSecretConfig",
+      "ManagedSecretConfig.SecretArn",
+    ],
     LocationEFS: [
       "Ec2Config",
       "EfsFilesystemArn",
@@ -1571,14 +1594,16 @@ const properties = {
     ],
     LocationHDFS: ["LocationArn", "LocationUri"],
     LocationNFS: ["LocationArn", "LocationUri"],
-    LocationObjectStorage: ["BucketName", "LocationArn", "LocationUri"],
+    LocationObjectStorage: [
+      "BucketName",
+      "CmkSecretConfig.SecretArn",
+      "LocationArn",
+      "LocationUri",
+      "ManagedSecretConfig",
+      "ManagedSecretConfig.SecretArn",
+    ],
     LocationS3: ["LocationArn", "LocationUri", "S3BucketArn"],
     LocationSMB: ["LocationArn", "LocationUri"],
-    StorageSystem: [
-      "ConnectivityStatus",
-      "SecretsManagerArn",
-      "StorageSystemArn",
-    ],
     Task: [
       "DestinationLocationArn",
       "DestinationNetworkInterfaceArns",
@@ -1631,6 +1656,16 @@ const properties = {
       "PortalUrl",
       "RootDomainUnitId",
       "Status",
+    ],
+    DomainUnit: [
+      "CreatedAt",
+      "DomainId",
+      "DomainIdentifier",
+      "Id",
+      "Identifier",
+      "LastUpdatedAt",
+      "ParentDomainUnitId",
+      "ParentDomainUnitIdentifier",
     ],
     Environment: [
       "AwsAccountId",
@@ -1686,15 +1721,29 @@ const properties = {
       "GroupName",
       "Id",
     ],
+    Owner: ["DomainIdentifier", "EntityIdentifier", "EntityType", "Owner"],
     Project: [
       "CreatedAt",
       "CreatedBy",
       "DomainId",
       "DomainIdentifier",
+      "DomainUnitId",
       "Id",
       "LastUpdatedAt",
+      "ProjectProfileId",
+      "ProjectStatus",
     ],
     ProjectMembership: ["DomainIdentifier", "Member", "ProjectIdentifier"],
+    ProjectProfile: [
+      "CreatedAt",
+      "CreatedBy",
+      "DomainId",
+      "DomainIdentifier",
+      "DomainUnitId",
+      "Id",
+      "Identifier",
+      "LastUpdatedAt",
+    ],
     SubscriptionTarget: [
       "CreatedAt",
       "CreatedBy",
@@ -1949,7 +1998,6 @@ const properties = {
     EIP: [
       "Address",
       "AllocationId",
-      "Domain",
       "IpamPoolId",
       "NetworkBorderGroup",
       "PublicIp",
@@ -2180,6 +2228,7 @@ const properties = {
       "AlternatePathHints",
       "Explanations",
       "FilterInArns",
+      "FilterOutArns",
       "ForwardPathComponents",
       "NetworkInsightsAnalysisArn",
       "NetworkInsightsAnalysisId",
@@ -2591,7 +2640,6 @@ const properties = {
     PrimaryTaskSet: ["Cluster", "Service"],
     Service: [
       "Cluster",
-      "DeploymentController",
       "LaunchType",
       "Name",
       "Role",
@@ -3064,7 +3112,6 @@ const properties = {
       "FleetId",
       "GameServerContainerGroupDefinitionArn",
       "InstanceType",
-      "Locations",
       "MaximumGameServerContainerGroupsPerInstance",
       "PerInstanceContainerGroupDefinitionArn",
       "Status",
@@ -3084,6 +3131,7 @@ const properties = {
       "CertificateConfiguration",
       "ComputeType",
       "EC2InstanceType",
+      "FleetArn",
       "FleetId",
       "FleetType",
       "InstanceRoleARN",
@@ -3822,7 +3870,7 @@ const properties = {
     ],
   },
   Kendra: {
-    DataSource: ["Arn", "Id", "Type"],
+    DataSource: ["Arn", "Id", "IndexId", "Type"],
     Faq: [
       "Arn",
       "Description",
@@ -4328,7 +4376,7 @@ const properties = {
     Queue: ["Arn", "Name", "Name"],
   },
   MediaLive: {
-    Channel: ["AnywhereSettings", "Arn", "Inputs", "Vpc"],
+    Channel: ["Arn", "Inputs", "Vpc"],
     ChannelPlacementGroup: ["Arn", "Channels", "ClusterId", "Id", "State"],
     CloudWatchAlarmTemplate: [
       "Arn",
@@ -4848,6 +4896,22 @@ const properties = {
       "Status",
       "StorageCapacity",
       "Type",
+      "Uuid",
+    ],
+    WorkflowVersion: [
+      "Accelerators",
+      "Arn",
+      "CreationTime",
+      "DefinitionUri",
+      "Engine",
+      "Main",
+      "ParameterTemplate",
+      "Status",
+      "Type",
+      "Uuid",
+      "VersionName",
+      "WorkflowBucketOwnerId",
+      "WorkflowId",
     ],
   },
   OpenSearchServerless: {
@@ -5808,11 +5872,8 @@ const properties = {
       "IpAddressCount",
       "Name",
       "OutpostArn",
-      "OutpostArn",
-      "PreferredInstanceType",
       "PreferredInstanceType",
       "ResolverEndpointId",
-      "ResolverEndpointType",
       "SecurityGroupIds",
     ],
     ResolverQueryLoggingConfig: [
@@ -5911,6 +5972,14 @@ const properties = {
     StorageLensGroup: ["Name", "StorageLensGroupArn"],
   },
   S3Express: {
+    AccessPoint: [
+      "Arn",
+      "Bucket",
+      "BucketAccountId",
+      "Name",
+      "NetworkOrigin",
+      "VpcConfiguration",
+    ],
     BucketPolicy: ["Bucket"],
     DirectoryBucket: [
       "Arn",
@@ -5983,6 +6052,11 @@ const properties = {
       "AddonSubscriptionArn",
       "AddonSubscriptionId",
     ],
+    MailManagerAddressList: [
+      "AddressListArn",
+      "AddressListId",
+      "AddressListName",
+    ],
     MailManagerArchive: [
       "ArchiveArn",
       "ArchiveId",
@@ -6042,6 +6116,9 @@ const properties = {
     Plan: ["Arn", "ContactId"],
     Rotation: ["Arn"],
   },
+  SSMGuiConnect: {
+    Preferences: ["AccountId"],
+  },
   SSMIncidents: {
     ReplicationSet: ["Arn"],
     ResponsePlan: ["Arn", "Name"],
@@ -6074,6 +6151,7 @@ const properties = {
       "AppArn",
       "AppName",
       "AppType",
+      "BuiltInLifecycleConfigArn",
       "DomainId",
       "ResourceSpec",
       "Tags",
@@ -6578,7 +6656,6 @@ const properties = {
     ],
     ScheduledQuery: [
       "Arn",
-      "ClientToken",
       "ErrorReportConfiguration",
       "KmsKeyId",
       "NotificationConfiguration",
@@ -6939,7 +7016,7 @@ const properties = {
     TransactionSearchConfig: ["AccountId"],
   },
   Alexa: {
-    ASK: ["VendorId"],
+    ASKSkill: ["VendorId"],
   },
 };
 

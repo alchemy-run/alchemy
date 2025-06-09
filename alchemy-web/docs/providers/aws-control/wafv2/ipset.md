@@ -5,43 +5,54 @@ description: Learn how to create, update, and manage AWS WAFv2 IPSets using Alch
 
 # IPSet
 
-The IPSet resource lets you create and manage [AWS WAFv2 IPSets](https://docs.aws.amazon.com/wafv2/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-wafv2-ipset.html
+The IPSet resource lets you manage [AWS WAFv2 IPSets](https://docs.aws.amazon.com/wafv2/latest/userguide/) for controlling access to your applications based on IP addresses.
 
 ## Minimal Example
+
+Create a basic IPSet with required properties and a description.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const ipset = await AWS.WAFv2.IPSet("ipset-example", {
-  Addresses: ["example-addresses-1"],
-  Scope: "example-scope",
-  IPAddressVersion: "example-ipaddressversion",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A ipset resource managed by Alchemy",
+const basicIpSet = await AWS.WAFv2.IPSet("basicIpSet", {
+  Addresses: ["192.0.2.0/24", "203.0.113.0/24"],
+  Description: "Basic IP Set for allowing specific IP ranges.",
+  Scope: "REGIONAL", // or "CLOUDFRONT"
+  IPAddressVersion: "IPV4",
+  Tags: [
+    { Key: "Environment", Value: "Development" }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a ipset with additional configuration:
+Configure an IPSet with tags for better organization and a custom name.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedIPSet = await AWS.WAFv2.IPSet("advanced-ipset", {
-  Addresses: ["example-addresses-1"],
-  Scope: "example-scope",
-  IPAddressVersion: "example-ipaddressversion",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
-  Description: "A ipset resource managed by Alchemy",
+const advancedIpSet = await AWS.WAFv2.IPSet("advancedIpSet", {
+  Addresses: ["198.51.100.0/24"],
+  Description: "Advanced IP Set for production access control.",
+  Scope: "REGIONAL",
+  IPAddressVersion: "IPV4",
+  Tags: [
+    { Key: "Project", Value: "MyApp" },
+    { Key: "Owner", Value: "DevTeam" }
+  ],
+  Name: "MyProductionIPSet"
 });
 ```
 
+## Adoption of Existing Resource
+
+If you wish to adopt an existing IPSet without failing on conflict, you can set the `adopt` property to true.
+
+```ts
+const adoptedIpSet = await AWS.WAFv2.IPSet("adoptedIpSet", {
+  Addresses: ["192.0.2.0/24"],
+  Description: "Adopting an existing IP Set.",
+  Scope: "REGIONAL",
+  IPAddressVersion: "IPV4",
+  adopt: true
+});
+```

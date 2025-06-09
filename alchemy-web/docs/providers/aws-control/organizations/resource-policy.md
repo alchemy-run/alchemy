@@ -5,37 +5,100 @@ description: Learn how to create, update, and manage AWS Organizations ResourceP
 
 # ResourcePolicy
 
-The ResourcePolicy resource lets you create and manage [AWS Organizations ResourcePolicys](https://docs.aws.amazon.com/organizations/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-organizations-resourcepolicy.html
+The ResourcePolicy resource lets you manage [AWS Organizations ResourcePolicys](https://docs.aws.amazon.com/organizations/latest/userguide/) to define permissions for your AWS accounts and organizational units.
 
 ## Minimal Example
+
+Create a basic resource policy with necessary content and tags.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const resourcepolicy = await AWS.Organizations.ResourcePolicy("resourcepolicy-example", {
-  Content: {},
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const resourcePolicy = await AWS.Organizations.ResourcePolicy("basicResourcePolicy", {
+  Content: {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: "*",
+        Action: "organizations:DescribeAccounts",
+        Resource: "*"
+      }
+    ]
+  },
+  Tags: [
+    {
+      Key: "Environment",
+      Value: "Development"
+    }
+  ]
 });
 ```
 
 ## Advanced Configuration
 
-Create a resourcepolicy with additional configuration:
+Define a more complex resource policy with multiple statements and additional properties.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedResourcePolicy = await AWS.Organizations.ResourcePolicy("advanced-resourcepolicy", {
-  Content: {},
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedResourcePolicy = await AWS.Organizations.ResourcePolicy("advancedResourcePolicy", {
+  Content: {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: {
+          Service: "cloudformation.amazonaws.com"
+        },
+        Action: "organizations:ListAccounts",
+        Resource: "*"
+      },
+      {
+        Effect: "Deny",
+        Principal: {
+          AWS: "arn:aws:iam::123456789012:root"
+        },
+        Action: "organizations:DeleteOrganization",
+        Resource: "*"
+      }
+    ]
   },
+  Tags: [
+    {
+      Key: "Project",
+      Value: "ResourceManagement"
+    }
+  ],
+  adopt: true
 });
 ```
 
+## Use Case: Restricting Access
+
+Implement a resource policy to restrict access to a specific account.
+
+```ts
+const restrictedAccessPolicy = await AWS.Organizations.ResourcePolicy("restrictedAccessPolicy", {
+  Content: {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: {
+          AWS: "arn:aws:iam::098765432109:user/SpecificUser"
+        },
+        Action: [
+          "organizations:DescribeOrganizationalUnits",
+          "organizations:ListAccounts"
+        ],
+        Resource: "*"
+      },
+      {
+        Effect: "Deny",
+        Principal: "*",
+        Action: "organizations:DescribeOrganizationalUnits",
+        Resource: "arn:aws:organizations::123456789012:ou/o-exampleorgid/ou-exampleouid"
+      }
+    ]
+  }
+});
+```

@@ -5,37 +5,48 @@ description: Learn how to create, update, and manage AWS RDS EventSubscriptions 
 
 # EventSubscription
 
-The EventSubscription resource lets you create and manage [AWS RDS EventSubscriptions](https://docs.aws.amazon.com/rds/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-rds-eventsubscription.html
+The EventSubscription resource allows you to manage [AWS RDS EventSubscriptions](https://docs.aws.amazon.com/rds/latest/userguide/) for monitoring events related to your RDS resources.
 
 ## Minimal Example
+
+Create a basic RDS EventSubscription with required properties and one optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const eventsubscription = await AWS.RDS.EventSubscription("eventsubscription-example", {
-  SnsTopicArn: "example-snstopicarn",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const eventSubscription = await AWS.RDS.EventSubscription("myEventSubscription", {
+  SnsTopicArn: "arn:aws:sns:us-west-2:123456789012:mySNSTopic",
+  SourceType: "db-instance",
+  Enabled: true
 });
 ```
 
 ## Advanced Configuration
 
-Create a eventsubscription with additional configuration:
+Configure an EventSubscription to receive specific event categories for multiple RDS instances.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedEventSubscription = await AWS.RDS.EventSubscription("advanced-eventsubscription", {
-  SnsTopicArn: "example-snstopicarn",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
-  },
+const advancedEventSubscription = await AWS.RDS.EventSubscription("advancedEventSubscription", {
+  SnsTopicArn: "arn:aws:sns:us-west-2:123456789012:mySNSTopic",
+  SourceType: "db-instance",
+  EventCategories: ["availability", "deletion", "failover"],
+  SourceIds: ["mydbinstance1", "mydbinstance2"],
+  Enabled: true
 });
 ```
 
+## Using Tags for Resource Management
+
+Create an EventSubscription with tags for better resource management and cost allocation.
+
+```ts
+const taggedEventSubscription = await AWS.RDS.EventSubscription("taggedEventSubscription", {
+  SnsTopicArn: "arn:aws:sns:us-west-2:123456789012:mySNSTopic",
+  SourceType: "db-instance",
+  Enabled: true,
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Project", Value: "MyProject" }
+  ]
+});
+```

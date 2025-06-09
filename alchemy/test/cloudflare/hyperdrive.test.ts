@@ -1,21 +1,24 @@
-import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import {
   Hyperdrive,
   type HyperdriveResource,
-} from "../../src/cloudflare/hyperdrive.js";
-import { Worker } from "../../src/cloudflare/worker.js";
-import { destroy } from "../../src/destroy.js";
-import { NeonProject } from "../../src/neon/project.js";
-import { BRANCH_PREFIX } from "../util.js";
+} from "../../src/cloudflare/hyperdrive.ts";
+import { Worker } from "../../src/cloudflare/worker.ts";
+import { destroy } from "../../src/destroy.ts";
+import { NeonProject } from "../../src/neon/project.ts";
+import { BRANCH_PREFIX } from "../util.ts";
+import { fetchAndExpectOK } from "./fetch-utils.ts";
 // must import this or else alchemy.test won't exist
-import "../../src/test/bun.js";
+import "../../src/test/vitest.ts";
 
 // Create API client for verification
 const api = await createCloudflareApi();
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("Hyperdrive Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
@@ -94,8 +97,7 @@ describe("Hyperdrive Resource", () => {
       expect(worker.url).toBeTruthy();
 
       // Test the connection works
-      const response = await fetch(worker.url!);
-      expect(response.status).toEqual(200);
+      await fetchAndExpectOK(worker.url!);
 
       // Update the hyperdrive
       hyperdrive = await Hyperdrive(testId, {

@@ -5,49 +5,75 @@ description: Learn how to create, update, and manage AWS AppStream Applications 
 
 # Application
 
-The Application resource lets you create and manage [AWS AppStream Applications](https://docs.aws.amazon.com/appstream/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-appstream-application.html
+The Application resource lets you manage [AWS AppStream Applications](https://docs.aws.amazon.com/appstream/latest/userguide/) for delivering desktop applications to users over the internet.
 
 ## Minimal Example
+
+Create a basic AWS AppStream application with required properties and a common optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const application = await AWS.AppStream.Application("application-example", {
-  Platforms: ["example-platforms-1"],
-  AppBlockArn: "example-appblockarn",
-  InstanceFamilies: ["example-instancefamilies-1"],
-  LaunchPath: "example-launchpath",
-  Name: "application-",
-  IconS3Location: "example-icons3location",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A application resource managed by Alchemy",
+const appStreamApplication = await AWS.AppStream.Application("basicApp", {
+  name: "BasicApp",
+  appBlockArn: "arn:aws:appstream:us-east-1:123456789012:app-block/basic-app-block",
+  launchPath: "C:\\Program Files\\BasicApp\\basic.exe",
+  platforms: ["WINDOWS"],
+  instanceFamilies: ["stream.standard"],
+  iconS3Location: {
+    bucket: "my-app-icons",
+    key: "basic-app-icon.png"
+  }
 });
 ```
 
 ## Advanced Configuration
 
-Create a application with additional configuration:
+Configure an AWS AppStream application with additional optional properties for enhanced functionality.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedApplication = await AWS.AppStream.Application("advanced-application", {
-  Platforms: ["example-platforms-1"],
-  AppBlockArn: "example-appblockarn",
-  InstanceFamilies: ["example-instancefamilies-1"],
-  LaunchPath: "example-launchpath",
-  Name: "application-",
-  IconS3Location: "example-icons3location",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedAppStreamApplication = await AWS.AppStream.Application("advancedApp", {
+  name: "AdvancedApp",
+  appBlockArn: "arn:aws:appstream:us-east-1:123456789012:app-block/advanced-app-block",
+  launchPath: "C:\\Program Files\\AdvancedApp\\advanced.exe",
+  platforms: ["WINDOWS"],
+  instanceFamilies: ["stream.standard"],
+  description: "An advanced application for demonstration purposes.",
+  displayName: "Advanced Application",
+  launchParameters: "--mode=development",
+  workingDirectory: "C:\\Program Files\\AdvancedApp\\",
+  iconS3Location: {
+    bucket: "my-app-icons",
+    key: "advanced-app-icon.png"
   },
-  Description: "A application resource managed by Alchemy",
+  tags: [
+    { key: "Environment", value: "Development" },
+    { key: "Project", value: "Demo" }
+  ]
 });
 ```
 
+## Updating Application Properties
+
+Demonstrate how to update the properties of an existing application by modifying its description and tags.
+
+```ts
+const updatedAppStreamApplication = await AWS.AppStream.Application("advancedApp", {
+  description: "Updated advanced application description.",
+  attributesToDelete: ["tags"],
+  tags: [
+    { key: "Environment", value: "Production" },
+    { key: "Project", value: "Demo" }
+  ]
+});
+```
+
+## Deleting an Application
+
+Show how to delete an existing application from AWS AppStream.
+
+```ts
+const deleteAppStreamApplication = await AWS.AppStream.Application("advancedApp", {
+  adopt: true // Allows the deletion of an existing resource
+});
+```

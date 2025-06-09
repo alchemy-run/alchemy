@@ -7,8 +7,10 @@ import {
   QueueDoesNotExist,
   SQSClient,
 } from "@aws-sdk/client-sqs";
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
+import { retry } from "./retry.ts";
 
 /**
  * Properties for creating or updating an SQS queue
@@ -153,28 +155,34 @@ export const Queue = Resource(
     if (this.phase === "delete") {
       try {
         // Get queue URL first
-        const urlResponse = await client.send(
-          new GetQueueUrlCommand({
-            QueueName: queueName,
-          }),
+        const urlResponse = await retry(() =>
+          client.send(
+            new GetQueueUrlCommand({
+              QueueName: queueName,
+            }),
+          ),
         );
 
         // Delete the queue
-        await client.send(
-          new DeleteQueueCommand({
-            QueueUrl: urlResponse.QueueUrl,
-          }),
+        await retry(() =>
+          client.send(
+            new DeleteQueueCommand({
+              QueueUrl: urlResponse.QueueUrl,
+            }),
+          ),
         );
 
         // Wait for queue to be deleted
         let queueDeleted = false;
         while (!queueDeleted) {
           try {
-            await client.send(
-              new GetQueueUrlCommand({
-                QueueName: queueName,
-              }),
-            );
+            await retry(() => {
+              return client.send(
+                new GetQueueUrlCommand({
+                  QueueName: queueName,
+                }),
+              );
+            });
             // If we get here, queue still exists
             await new Promise((resolve) => setTimeout(resolve, 1000));
           } catch (error: any) {
@@ -186,11 +194,11 @@ export const Queue = Resource(
           }
         }
       } catch (error: any) {
+        logger.log(error.message);
         if (!isQueueDoesNotExist(error)) {
           throw error;
         }
       }
-
       return this.destroy();
     }
     // Create queue with attributes
@@ -238,20 +246,26 @@ export const Queue = Resource(
 
     try {
       // Create the queue
-      const createResponse = await client.send(
-        new CreateQueueCommand({
-          QueueName: queueName,
-          Attributes: attributes,
-          tags,
-        }),
+      const createResponse = await retry(
+        () =>
+          client.send(
+            new CreateQueueCommand({
+              QueueName: queueName,
+              Attributes: attributes,
+              tags,
+            }),
+          ),
+        (err) => isQueueDeletedRecently(err),
       );
 
       // Get queue attributes
-      const attributesResponse = await client.send(
-        new GetQueueAttributesCommand({
-          QueueUrl: createResponse.QueueUrl,
-          AttributeNames: ["QueueArn"],
-        }),
+      const attributesResponse = await retry(() =>
+        client.send(
+          new GetQueueAttributesCommand({
+            QueueUrl: createResponse.QueueUrl,
+            AttributeNames: ["QueueArn"],
+          }),
+        ),
       );
 
       return this({
@@ -261,7 +275,7 @@ export const Queue = Resource(
       });
     } catch (error: any) {
       if (isQueueDeletedRecently(error)) {
-        console.log(
+        logger.log(
           `Queue "${queueName}" was recently deleted and can't be re-created. Waiting and retrying...`,
         );
         // Queue was recently deleted, wait and retry
@@ -274,20 +288,24 @@ export const Queue = Resource(
             await new Promise((resolve) => setTimeout(resolve, 1000));
 
             // Retry creating the queue
-            const createResponse = await client.send(
-              new CreateQueueCommand({
-                QueueName: queueName,
-                Attributes: attributes,
-                tags,
-              }),
+            const createResponse = await retry(() =>
+              client.send(
+                new CreateQueueCommand({
+                  QueueName: queueName,
+                  Attributes: attributes,
+                  tags,
+                }),
+              ),
             );
 
             // Get queue attributes
-            const attributesResponse = await client.send(
-              new GetQueueAttributesCommand({
-                QueueUrl: createResponse.QueueUrl,
-                AttributeNames: ["QueueArn"],
-              }),
+            const attributesResponse = await retry(() =>
+              client.send(
+                new GetQueueAttributesCommand({
+                  QueueUrl: createResponse.QueueUrl,
+                  AttributeNames: ["QueueArn"],
+                }),
+              ),
             );
 
             return this({

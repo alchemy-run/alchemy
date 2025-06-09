@@ -5,43 +5,59 @@ description: Learn how to create, update, and manage AWS VpcLattice AccessLogSub
 
 # AccessLogSubscription
 
-The AccessLogSubscription resource lets you create and manage [AWS VpcLattice AccessLogSubscriptions](https://docs.aws.amazon.com/vpclattice/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-vpclattice-accesslogsubscription.html
+The AccessLogSubscription resource lets you manage [AWS VpcLattice AccessLogSubscriptions](https://docs.aws.amazon.com/vpclattice/latest/userguide/) for logging access to service network traffic in VPC Lattice.
 
 ## Minimal Example
+
+Create a basic AccessLogSubscription with required properties and a common optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const accesslogsubscription = await AWS.VpcLattice.AccessLogSubscription(
-  "accesslogsubscription-example",
-  {
-    DestinationArn: "example-destinationarn",
-    Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  }
-);
+const accessLogSubscription = await AWS.VpcLattice.AccessLogSubscription("myAccessLogSubscription", {
+  DestinationArn: "arn:aws:s3:::my-log-bucket/access-logs/",
+  ServiceNetworkLogType: "HTTP",
+  ResourceIdentifier: "my-service-network"
+});
 ```
 
 ## Advanced Configuration
 
-Create a accesslogsubscription with additional configuration:
+Configure an AccessLogSubscription with tags for better resource management.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedAccessLogSubscription = await AWS.VpcLattice.AccessLogSubscription(
-  "advanced-accesslogsubscription",
-  {
-    DestinationArn: "example-destinationarn",
-    Tags: {
-      Environment: "production",
-      Team: "DevOps",
-      Project: "MyApp",
-      CostCenter: "Engineering",
-      ManagedBy: "Alchemy",
-    },
-  }
-);
+const taggedAccessLogSubscription = await AWS.VpcLattice.AccessLogSubscription("taggedAccessLogSubscription", {
+  DestinationArn: "arn:aws:s3:::my-log-bucket/access-logs/",
+  ServiceNetworkLogType: "HTTP",
+  ResourceIdentifier: "my-service-network",
+  Tags: [
+    { Key: "Environment", Value: "Production" },
+    { Key: "Project", Value: "VpcLatticeDemo" }
+  ]
+});
 ```
 
+## Adopting an Existing Resource
+
+Adopt an existing AccessLogSubscription instead of failing if it already exists.
+
+```ts
+const existingAccessLogSubscription = await AWS.VpcLattice.AccessLogSubscription("existingAccessLogSubscription", {
+  DestinationArn: "arn:aws:s3:::my-log-bucket/access-logs/",
+  ServiceNetworkLogType: "HTTP",
+  ResourceIdentifier: "my-service-network",
+  adopt: true
+});
+```
+
+## Logging to CloudWatch
+
+Set up an AccessLogSubscription that logs to a CloudWatch destination.
+
+```ts
+const cloudWatchLogSubscription = await AWS.VpcLattice.AccessLogSubscription("cloudWatchLogSubscription", {
+  DestinationArn: "arn:aws:logs:us-west-2:123456789012:log-group:my-log-group",
+  ServiceNetworkLogType: "HTTP",
+  ResourceIdentifier: "my-service-network"
+});
+```

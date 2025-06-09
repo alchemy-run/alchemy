@@ -1,4 +1,4 @@
-import { DestroyedSignal } from "./destroy.js";
+import { DestroyedSignal } from "./destroy.ts";
 import {
   ResourceFQN,
   ResourceID,
@@ -7,9 +7,9 @@ import {
   ResourceSeq,
   type Resource,
   type ResourceProps,
-} from "./resource.js";
-import type { Scope } from "./scope.js";
-import type { State } from "./state.js";
+} from "./resource.ts";
+import type { Scope } from "./scope.ts";
+import type { State } from "./state.ts";
 
 export type Context<
   Out extends Resource,

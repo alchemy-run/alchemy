@@ -1,16 +1,11 @@
+import alchemy from "alchemy";
+import { Queue, R2Bucket, R2RestStateStore, Worker } from "alchemy/cloudflare";
 import { type } from "arktype";
-import {
-  Queue,
-  R2Bucket,
-  R2RestStateStore,
-  Worker,
-} from "../../alchemy/src/cloudflare/index.js";
-import alchemy from "../../alchemy/src/index.js";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? process.env.USER;
 
 const app = await alchemy("cloudflare-worker", {
-  stage: BRANCH_PREFIX || undefined,
+  stage: BRANCH_PREFIX,
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   stateStore:
     process.env.ALCHEMY_STATE_STORE === "cloudflare"

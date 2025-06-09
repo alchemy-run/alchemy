@@ -5,41 +5,103 @@ description: Learn how to create, update, and manage AWS AppMesh VirtualServices
 
 # VirtualService
 
-The VirtualService resource lets you create and manage [AWS AppMesh VirtualServices](https://docs.aws.amazon.com/appmesh/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-appmesh-virtualservice.html
+The VirtualService resource allows you to manage [AWS AppMesh VirtualServices](https://docs.aws.amazon.com/appmesh/latest/userguide/) which provide a way to route traffic to your services. 
 
 ## Minimal Example
+
+Create a basic VirtualService with required properties:
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const virtualservice = await AWS.AppMesh.VirtualService("virtualservice-example", {
-  MeshName: "virtualservice-mesh",
-  VirtualServiceName: "virtualservice-virtualservice",
-  Spec: "example-spec",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const basicVirtualService = await AWS.AppMesh.VirtualService("basicVirtualService", {
+  MeshName: "myAppMesh",
+  VirtualServiceName: "myService.local",
+  Spec: {
+    Provider: {
+      VirtualRouter: {
+        VirtualRouterName: "myRouter"
+      }
+    }
+  }
 });
 ```
 
 ## Advanced Configuration
 
-Create a virtualservice with additional configuration:
+Configure a VirtualService with additional tags and mesh owner properties:
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedVirtualService = await AWS.AppMesh.VirtualService("advanced-virtualservice", {
-  MeshName: "virtualservice-mesh",
-  VirtualServiceName: "virtualservice-virtualservice",
-  Spec: "example-spec",
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedVirtualService = await AWS.AppMesh.VirtualService("advancedVirtualService", {
+  MeshName: "myAppMesh",
+  MeshOwner: "123456789012", // AWS Account ID
+  VirtualServiceName: "myAdvancedService.local",
+  Spec: {
+    Provider: {
+      VirtualRouter: {
+        VirtualRouterName: "myAdvancedRouter"
+      }
+    }
   },
+  Tags: [
+    {
+      Key: "Environment",
+      Value: "Production"
+    },
+    {
+      Key: "Project",
+      Value: "MyApp"
+    }
+  ]
 });
 ```
 
+## Traffic Routing with Multiple Providers
+
+Demonstrate traffic routing by configuring a VirtualService with multiple providers:
+
+```ts
+const multiProviderVirtualService = await AWS.AppMesh.VirtualService("multiProviderVirtualService", {
+  MeshName: "myAppMesh",
+  VirtualServiceName: "myMultiProviderService.local",
+  Spec: {
+    Provider: {
+      VirtualRouter: {
+        VirtualRouterName: "myMultiRouter"
+      },
+      VirtualNode: {
+        VirtualNodeName: "myServiceNode"
+      }
+    }
+  }
+});
+```
+
+## Custom Health Checks
+
+Set up a VirtualService with health check configurations to ensure service reliability:
+
+```ts
+const healthCheckVirtualService = await AWS.AppMesh.VirtualService("healthCheckVirtualService", {
+  MeshName: "myAppMesh",
+  VirtualServiceName: "myHealthCheckService.local",
+  Spec: {
+    Provider: {
+      VirtualRouter: {
+        VirtualRouterName: "myHealthCheckRouter"
+      }
+    },
+    HealthCheck: {
+      HealthyThreshold: 2,
+      IntervalMillis: 5000,
+      TimeoutMillis: 2000,
+      UnhealthyThreshold: 2,
+      Path: "/health",
+      Port: 8080,
+      Protocol: "http"
+    }
+  }
+});
+``` 
+
+These code examples illustrate how to create and manage AWS AppMesh VirtualServices using Alchemy, providing practical use cases for routing and service management.

@@ -5,37 +5,50 @@ description: Learn how to create, update, and manage AWS ResourceExplorer2 Index
 
 # Index
 
-The Index resource lets you create and manage [AWS ResourceExplorer2 Indexs](https://docs.aws.amazon.com/resourceexplorer2/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-resourceexplorer2-index.html
+The Index resource lets you manage [AWS ResourceExplorer2 Indexs](https://docs.aws.amazon.com/resourceexplorer2/latest/userguide/) for indexing your AWS resources for easier discovery and management.
 
 ## Minimal Example
+
+Create a basic ResourceExplorer2 Index with required properties and a few optional tags.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const index = await AWS.ResourceExplorer2.Index("index-example", {
-  Type: "example-type",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
+const resourceExplorerIndex = await AWS.ResourceExplorer2.Index("myResourceExplorerIndex", {
+  Type: "AWS::ResourceExplorer2::Index",
+  Tags: {
+    Environment: "Production",
+    Project: "ResourceManagement"
+  }
 });
 ```
 
 ## Advanced Configuration
 
-Create a index with additional configuration:
+Configure the Index with the adoption feature to allow resource adoption if it already exists.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedIndex = await AWS.ResourceExplorer2.Index("advanced-index", {
-  Type: "example-type",
+const adoptResourceExplorerIndex = await AWS.ResourceExplorer2.Index("myAdoptedResourceExplorerIndex", {
+  Type: "AWS::ResourceExplorer2::Index",
   Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+    Environment: "Development",
+    Project: "Experimentation"
   },
+  adopt: true
 });
 ```
 
+## Custom Index Settings
+
+Create an Index with specific settings to enhance resource indexing capabilities.
+
+```ts
+const customResourceExplorerIndex = await AWS.ResourceExplorer2.Index("myCustomResourceExplorerIndex", {
+  Type: "AWS::ResourceExplorer2::Index",
+  Tags: {
+    Environment: "Testing",
+    Project: "CustomIndexing"
+  },
+  adopt: false
+});
+```

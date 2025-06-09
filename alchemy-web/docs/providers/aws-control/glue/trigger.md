@@ -5,41 +5,108 @@ description: Learn how to create, update, and manage AWS Glue Triggers using Alc
 
 # Trigger
 
-The Trigger resource lets you create and manage [AWS Glue Triggers](https://docs.aws.amazon.com/glue/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-glue-trigger.html
+The Trigger resource lets you manage [AWS Glue Triggers](https://docs.aws.amazon.com/glue/latest/userguide/) which are used to start jobs based on specific events or schedules.
 
 ## Minimal Example
+
+Create a basic Glue Trigger that starts on job creation:
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const trigger = await AWS.Glue.Trigger("trigger-example", {
-  Type: "example-type",
-  Actions: [],
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A trigger resource managed by Alchemy",
+const glueTrigger = await AWS.Glue.Trigger("myGlueTrigger", {
+  Type: "SCHEDULED",
+  StartOnCreation: true,
+  Actions: [
+    {
+      JobName: "myGlueJob",
+      Arguments: {
+        "--input": "s3://my-bucket/input",
+        "--output": "s3://my-bucket/output"
+      }
+    }
+  ],
+  Schedule: "cron(0 12 * * ? *)" // Every day at noon UTC
 });
 ```
 
 ## Advanced Configuration
 
-Create a trigger with additional configuration:
+Configure a Glue Trigger with event batching conditions and a predicate:
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedTrigger = await AWS.Glue.Trigger("advanced-trigger", {
-  Type: "example-type",
-  Actions: [],
-  Tags: {
-    Environment: "production",
-    Team: "DevOps",
-    Project: "MyApp",
-    CostCenter: "Engineering",
-    ManagedBy: "Alchemy",
+const advancedGlueTrigger = await AWS.Glue.Trigger("advancedGlueTrigger", {
+  Type: "EVENT",
+  StartOnCreation: false,
+  Actions: [
+    {
+      JobName: "myAdvancedGlueJob",
+      Arguments: {
+        "--input": "s3://my-bucket/advanced-input",
+        "--output": "s3://my-bucket/advanced-output"
+      }
+    }
+  ],
+  EventBatchingCondition: {
+    BatchSize: 10,
+    BatchWindow: 60 // seconds
   },
-  Description: "A trigger resource managed by Alchemy",
+  Predicate: {
+    Conditions: [
+      {
+        JobName: "myGlueJob",
+        State: "SUCCEEDED"
+      }
+    ]
+  }
 });
 ```
 
+## Scheduled Trigger Example
+
+Create a Glue Trigger that runs a job daily at a specific time:
+
+```ts
+const dailyGlueTrigger = await AWS.Glue.Trigger("dailyGlueTrigger", {
+  Type: "SCHEDULED",
+  StartOnCreation: true,
+  Actions: [
+    {
+      JobName: "myDailyJob",
+      Arguments: {
+        "--input": "s3://my-bucket/daily-input",
+        "--output": "s3://my-bucket/daily-output"
+      }
+    }
+  ],
+  Schedule: "cron(0 15 * * ? *)" // Every day at 3 PM UTC
+});
+```
+
+## Event-Based Trigger Example
+
+Set up a Glue Trigger that responds to an event from another service:
+
+```ts
+const eventBasedGlueTrigger = await AWS.Glue.Trigger("eventBasedGlueTrigger", {
+  Type: "EVENT",
+  StartOnCreation: true,
+  Actions: [
+    {
+      JobName: "myEventJob",
+      Arguments: {
+        "--input": "s3://my-bucket/event-input",
+        "--output": "s3://my-bucket/event-output"
+      }
+    }
+  ],
+  Predicate: {
+    Conditions: [
+      {
+        JobName: "myEventJob",
+        State: "FAILED"
+      }
+    ]
+  }
+});
+```

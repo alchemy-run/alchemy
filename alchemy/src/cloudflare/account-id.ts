@@ -1,9 +1,11 @@
-import { createCloudflareApi, type CloudflareApiOptions } from "./api.js";
+import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
 
 /**
  * Options for getting a Cloudflare account ID
  */
 export interface GetCloudflareAccountIdOptions extends CloudflareApiOptions {}
+
+export type AccountId = string;
 
 /**
  * Retrieves a Cloudflare Account ID for use with other Cloudflare resources.

@@ -1,9 +1,10 @@
-import { handleApiError } from "../neon/api-error.js";
-import type { Secret } from "../secret.js";
+import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
+import { CloudflareApiError } from "./api-error.ts";
 import {
   getCloudflareAuthHeaders,
   type CloudflareAuthOptions,
-} from "./auth.js";
+} from "./auth.ts";
 
 export interface CloudflareAccount {
   name: string;
@@ -79,7 +80,10 @@ export async function getCloudflareAccounts(
   if (accounts.ok) {
     return (accountCache[cacheKey] ??= ((await accounts.json()) as any).result);
   } else {
-    return await handleApiError(accounts, "get", "accounts");
+    throw new CloudflareApiError(
+      `Failed to get accounts for authorized user, please make sure you're authenticated (see: https://alchemy.run/docs/guides/cloudflare-auth.html) or explicitly set the Cloudflare Account ID (see: https://alchemy.run/docs/guides/cloudflare-auth.html#account-id)`,
+      accounts,
+    );
   }
 }
 
@@ -124,7 +128,7 @@ export async function getUserEmailFromApiKey(apiKey: string): Promise<string> {
     emailCache[apiKey] = data.result.email;
     return data.result.email;
   } catch (error) {
-    console.error("Error retrieving email from Cloudflare API:", error);
+    logger.error("Error retrieving email from Cloudflare API:", error);
     throw new Error(
       "Failed to automatically discover email for API Key authentication",
     );

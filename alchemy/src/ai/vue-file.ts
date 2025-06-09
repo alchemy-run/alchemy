@@ -1,9 +1,9 @@
 import { generateText } from "ai";
-import type { Context } from "../context.js";
-import { StaticVueFile } from "../fs/static-vue-file.js";
-import { Resource } from "../resource.js";
-import type { Secret } from "../secret.js";
-import { type ModelConfig, createModel } from "./client.js";
+import type { Context } from "../context.ts";
+import { StaticVueFile } from "../fs/static-vue-file.ts";
+import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { type ModelConfig, createModel } from "./client.ts";
 
 /**
  * Properties for creating or updating a VueFile

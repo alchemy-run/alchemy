@@ -1,10 +1,10 @@
 import { generateObject, type CoreMessage } from "ai";
 import type { JsonSchema, Type, type } from "arktype";
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import type { Secret } from "../secret.js";
-import { ark } from "./ark.js";
-import { createModel, type ModelConfig } from "./client.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { ark } from "./ark.ts";
+import { createModel, type ModelConfig } from "./client.ts";
 
 /**
  * Properties for creating or updating an AI Object

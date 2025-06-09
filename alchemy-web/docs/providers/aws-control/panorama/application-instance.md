@@ -5,44 +5,69 @@ description: Learn how to create, update, and manage AWS Panorama ApplicationIns
 
 # ApplicationInstance
 
-The ApplicationInstance resource lets you create and manage [AWS Panorama ApplicationInstances](https://docs.aws.amazon.com/panorama/latest/userguide/) using AWS Cloud Control API.
-
-http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-panorama-applicationinstance.html
+The ApplicationInstance resource allows you to manage [AWS Panorama ApplicationInstances](https://docs.aws.amazon.com/panorama/latest/userguide/) which are used for deploying machine learning models to edge devices.
 
 ## Minimal Example
+
+Create a basic ApplicationInstance with required properties and one optional property.
 
 ```ts
 import AWS from "alchemy/aws/control";
 
-const applicationinstance = await AWS.Panorama.ApplicationInstance("applicationinstance-example", {
-  DefaultRuntimeContextDevice: "example-defaultruntimecontextdevice",
-  ManifestPayload: "example-manifestpayload",
-  Tags: { Environment: "production", ManagedBy: "Alchemy" },
-  Description: "A applicationinstance resource managed by Alchemy",
+const basicApplicationInstance = await AWS.Panorama.ApplicationInstance("basicInstance", {
+  DefaultRuntimeContextDevice: "device-arn-123",
+  ManifestPayload: {
+    "PayloadData": "manifest data here"
+  },
+  Description: "A basic application instance for testing"
 });
 ```
 
 ## Advanced Configuration
 
-Create a applicationinstance with additional configuration:
+Configure an ApplicationInstance with a runtime role and tags for better management and tracking.
 
 ```ts
-import AWS from "alchemy/aws/control";
-
-const advancedApplicationInstance = await AWS.Panorama.ApplicationInstance(
-  "advanced-applicationinstance",
-  {
-    DefaultRuntimeContextDevice: "example-defaultruntimecontextdevice",
-    ManifestPayload: "example-manifestpayload",
-    Tags: {
-      Environment: "production",
-      Team: "DevOps",
-      Project: "MyApp",
-      CostCenter: "Engineering",
-      ManagedBy: "Alchemy",
-    },
-    Description: "A applicationinstance resource managed by Alchemy",
-  }
-);
+const advancedApplicationInstance = await AWS.Panorama.ApplicationInstance("advancedInstance", {
+  DefaultRuntimeContextDevice: "device-arn-456",
+  ManifestPayload: {
+    "PayloadData": "advanced manifest data here"
+  },
+  RuntimeRoleArn: "arn:aws:iam::123456789012:role/MyPanoramaRole",
+  Tags: [
+    { Key: "Environment", Value: "Development" },
+    { Key: "Project", Value: "PanoramaML" }
+  ]
+});
 ```
 
+## Instance Replacement
+
+Create an ApplicationInstance that replaces an existing one.
+
+```ts
+const replaceApplicationInstance = await AWS.Panorama.ApplicationInstance("replaceInstance", {
+  DefaultRuntimeContextDevice: "device-arn-789",
+  ManifestPayload: {
+    "PayloadData": "replacement manifest data here"
+  },
+  ApplicationInstanceIdToReplace: "existing-instance-id-001"
+});
+```
+
+## With Manifest Overrides
+
+Deploy an ApplicationInstance with manifest overrides for specific runtime configurations.
+
+```ts
+const overrideApplicationInstance = await AWS.Panorama.ApplicationInstance("overrideInstance", {
+  DefaultRuntimeContextDevice: "device-arn-101",
+  ManifestPayload: {
+    "PayloadData": "override manifest data here"
+  },
+  ManifestOverridesPayload: {
+    "PayloadData": "overriden data for runtime"
+  },
+  Description: "Application instance with manifest overrides"
+});
+```

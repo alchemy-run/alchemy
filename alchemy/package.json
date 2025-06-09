@@ -1,39 +1,111 @@
 {
   "name": "alchemy",
-  "version": "0.17.2",
+  "version": "0.25.0",
   "type": "module",
   "module": "./lib/index.js",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sam-goodwin/alchemy",
+    "directory": "alchemy"
+  },
   "scripts": {
-    "publish:npm": "cp ../README.md . && rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && npm publish && rm README.md",
+    "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b",
+    "postbuild": "cpx 'src/**/*/types.d.ts' lib",
+    "publish:npm": "cp ../README.md . && bun run build && npm publish && rm README.md",
     "docs:gen": "rm -rf ./docs && typedoc"
   },
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "homepage": "https://alchemy.run",
   "files": [
     "lib",
     "src"
   ],
   "exports": {
-    ".": "./lib/index.js",
-    "./ai": "./lib/ai/index.js",
-    "./aws": "./lib/aws/index.js",
-    "./aws/control": "./lib/aws/control/index.js",
-    "./aws/oidc": "./lib/aws/oidc/index.js",
-    "./cloudflare": "./lib/cloudflare/index.js",
-    "./dns": "./lib/dns/index.js",
-    "./esbuild": "./lib/esbuild/index.js",
-    "./fs": "./lib/fs/index.js",
-    "./github": "./lib/github/index.js",
-    "./neon": "./lib/neon/index.js",
-    "./os": "./lib/os/index.js",
-    "./sentry": "./lib/sentry/index.js",
-    "./shadcn": "./lib/shadcn/index.js",
-    "./stripe": "./lib/stripe/index.js",
-    "./test/bun": "./lib/test/bun.js",
-    "./upstash": "./lib/upstash/index.js",
-    "./vercel": "./lib/vercel/index.js",
-    "./web/astro": "./lib/web/astro/index.js",
-    "./web/tailwind": "./lib/web/tailwind/index.js",
-    "./web/vite": "./lib/web/vite/index.js",
-    "./web/vitepress": "./lib/web/vitepress/index.js"
+    ".": {
+      "bun": "./src/index.ts",
+      "import": "./lib/index.js"
+    },
+    "./ai": {
+      "bun": "./src/ai/index.ts",
+      "import": "./lib/ai/index.js"
+    },
+    "./aws": {
+      "bun": "./src/aws/index.ts",
+      "import": "./lib/aws/index.js"
+    },
+    "./aws/control": {
+      "bun": "./src/aws/control/index.ts",
+      "import": "./lib/aws/control/index.js"
+    },
+    "./aws/oidc": {
+      "bun": "./src/aws/oidc/index.ts",
+      "import": "./lib/aws/oidc/index.js"
+    },
+    "./cloudflare": {
+      "bun": "./src/cloudflare/index.ts",
+      "import": "./lib/cloudflare/index.js"
+    },
+    "./dns": {
+      "bun": "./src/dns/index.ts",
+      "import": "./lib/dns/index.js"
+    },
+    "./esbuild": {
+      "bun": "./src/esbuild/index.ts",
+      "import": "./lib/esbuild/index.js"
+    },
+    "./fs": {
+      "bun": "./src/fs/index.ts",
+      "import": "./lib/fs/index.js"
+    },
+    "./github": {
+      "bun": "./src/github/index.ts",
+      "import": "./lib/github/index.js"
+    },
+    "./neon": {
+      "bun": "./src/neon/index.ts",
+      "import": "./lib/neon/index.js"
+    },
+    "./os": {
+      "bun": "./src/os/index.ts",
+      "import": "./lib/os/index.js"
+    },
+    "./sentry": {
+      "bun": "./src/sentry/index.ts",
+      "import": "./lib/sentry/index.js"
+    },
+    "./stripe": {
+      "bun": "./src/stripe/index.ts",
+      "import": "./lib/stripe/index.js"
+    },
+    "./upstash": {
+      "bun": "./src/upstash/index.ts",
+      "import": "./lib/upstash/index.js"
+    },
+    "./vercel": {
+      "bun": "./src/vercel/index.ts",
+      "import": "./lib/vercel/index.js"
+    },
+    "./shadcn": {
+      "bun": "./src/web/shadcn.ts",
+      "import": "./lib/web/shadcn.js"
+    },
+    "./web/astro": {
+      "bun": "./src/web/astro.ts",
+      "import": "./lib/web/astro.js"
+    },
+    "./web/tailwind": {
+      "bun": "./src/web/tailwind.ts",
+      "import": "./lib/web/tailwind.js"
+    },
+    "./web/vite": {
+      "bun": "./src/web/vite.ts",
+      "import": "./lib/web/vite.js"
+    },
+    "./web/vitepress": {
+      "bun": "./src/web/vitepress/index.ts",
+      "import": "./lib/web/vitepress/index.js"
+    }
   },
   "dependencies": {
     "unenv": "2.0.0-rc.15"
@@ -49,9 +121,10 @@
     "@aws-sdk/client-ses": "^3.0.0",
     "@aws-sdk/client-sesv2": "^3.0.0",
     "@aws-sdk/client-sqs": "^3.0.0",
+    "@aws-sdk/client-ssm": "^3.0.0",
     "@aws-sdk/client-sts": "^3.0.0",
     "@aws-sdk/credential-providers": "^3.0.0",
-    "@aws-sdk/node-config-provider": "^3.374.0",
+    "@smithy/node-config-provider": "^4.0.0",
     "@cloudflare/unenv-preset": "^2.3.1",
     "@cloudflare/workers-shared": "^0.17.5",
     "@iarna/toml": "^2.2.5",
@@ -62,6 +135,7 @@
     "aws4fetch": "^1.0.20",
     "cloudflare": "^4.0.0",
     "diff": "^7.0.0",
+    "dofs": "^0.0.1",
     "esbuild": "^0.25.1",
     "fast-json-patch": "^3.1.1",
     "glob": "^10.0.0",
@@ -71,7 +145,6 @@
     "prettier": "^3.0.0",
     "stripe": "^17.0.0",
     "turndown": "^7.0.0",
-    "xdg-app-paths": "^8.0.0",
     "yaml": "^2.0.0",
     "zod": "^3.0.0"
   },
@@ -89,15 +162,20 @@
     "@types/diff": "^5.0.0",
     "@types/libsodium-wrappers": "^0.7.14",
     "@types/node": "latest",
+    "@types/react": "^19.1.6",
     "@types/turndown": "^5.0.5",
     "ai": "^4.1.16",
     "arktype": "^2.1.16",
     "braintrust": "^0.0.201",
     "change-case": "^5.4.4",
     "cloudflare": "^4.2.0",
+    "cpx": "^1.5.0",
+    "ink": "^6.0.0",
+    "ink-spinner": "^5.0.0",
     "libsodium-wrappers": "^0.7.15",
     "openpgp": "^6.1.0",
     "prettier": "^3.5.3",
+    "react": "^19.1.0",
     "turndown": "^7.2.0",
     "typedoc": "^0.28.1",
     "typedoc-plugin-markdown": "^4.6.0",
@@ -105,7 +183,6 @@
     "vite": "^6.0.7",
     "vitepress": "^1.6.3",
     "wrangler": "^3.114.0",
-    "xdg-app-paths": "^8.3.0",
     "yaml": "^2.7.1"
   }
 }
