@@ -376,7 +376,10 @@ const PipelineResource = Resource("cloudflare::Pipeline", async function <
       } catch (error) {
         // If creation fails with 409 (conflict), adopt existing pipeline
         if (error instanceof CloudflareApiError && error.status === 409) {
-          console.log("Pipeline already exists, adopting existing Cloudflare Pipeline:", pipelineName);
+          console.log(
+            "Pipeline already exists, adopting existing Cloudflare Pipeline:",
+            pipelineName,
+          );
           pipelineData = await getPipeline(api, pipelineName);
         } else {
           // For any other error, rethrow
