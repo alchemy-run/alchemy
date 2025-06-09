@@ -17,7 +17,7 @@ export const NEON_API_KEY = await alchemy.secret.env.NEON_API_KEY;
 export const UPSTASH_API_KEY = await alchemy.secret.env.UPSTASH_API_KEY;
 
 export default {
-  stage: process.env.BRANCH_PREFIX ?? "prod",
+  stage: process.env.BRANCH_PREFIX || "prod",
   phase:
     (process.env.ALCHEMY_PHASE as Phase) ??
     (process.argv.includes("--destroy")
