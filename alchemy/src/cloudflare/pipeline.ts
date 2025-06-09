@@ -370,15 +370,18 @@ const PipelineResource = Resource("cloudflare::Pipeline", async function <
     // Check if we should adopt an existing pipeline
     if (props.adopt) {
       try {
-        pipelineData = await getPipeline(api, pipelineName);
-        console.log("Adopting existing Cloudflare Pipeline:", pipelineName);
-      } catch (_error) {
-        // If pipeline doesn't exist, create a new one
-        console.log(
-          "Pipeline not found for adoption, creating new Cloudflare Pipeline:",
-          pipelineName,
-        );
+        // Try to create pipeline first
+        console.log("Creating new Cloudflare Pipeline:", pipelineName);
         pipelineData = await createPipeline(api, pipelineName, props);
+      } catch (error) {
+        // If creation fails with 409 (conflict), adopt existing pipeline
+        if (error instanceof CloudflareApiError && error.status === 409) {
+          console.log("Pipeline already exists, adopting existing Cloudflare Pipeline:", pipelineName);
+          pipelineData = await getPipeline(api, pipelineName);
+        } else {
+          // For any other error, rethrow
+          throw error;
+        }
       }
     } else {
       pipelineData = await createPipeline(api, pipelineName, props);
