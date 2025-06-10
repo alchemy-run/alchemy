@@ -12,3 +12,7 @@ lib/
 
 .repomix-output.txt
 wrangler.jsonc
+
+# Husky - ignore generated files but keep hooks
+.husky/_
+!.husky/pre-commit

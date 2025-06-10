@@ -21,7 +21,8 @@
     "publish:npm": "bun run --filter alchemy publish:npm",
     "test": "bun ./alchemy/test/run.ts",
     "test:force": "vitest run",
-    "bump": "bun ./scripts/bump.ts"
+    "bump": "bun ./scripts/bump.ts",
+    "prepare": "husky"
   },
   "workspaces": [
     "alchemy",
@@ -37,6 +38,8 @@
     "aws4fetch": "^1.0.20",
     "braintrust": "*",
     "changelogithub": "^13.15.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.3.0",
     "openai": "^4.103.0",
     "typescript": "latest",
     "vitest": "^3.1.4",
@@ -44,5 +47,11 @@
   },
   "dependencies": {
     "alchemy-mono": "."
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs}": [
+      "biome check --write --no-errors-on-unmatched",
+      "biome check --no-errors-on-unmatched"
+    ]
   }
 }
