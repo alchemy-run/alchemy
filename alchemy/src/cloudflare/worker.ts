@@ -971,28 +971,20 @@ export const _Worker = Resource(
           : props.namespace.namespace
         : undefined;
 
-      // Determine if we should publish a version or update the live worker
-      let versionResult: { versionId: string; previewUrl: string } | undefined;
-      if (props.version) {
-        // When version is specified, publish as a version instead of updating live worker
-        versionResult = await putWorkerVersion(
-          api,
-          workerName,
-          scriptBundle,
-          scriptMetadata,
-          props.version,
-          `Version ${props.version}`,
-        );
-      } else {
-        // Standard deployment to live worker
-        await putWorker(
-          api,
-          workerName,
-          scriptBundle,
-          scriptMetadata,
-          dispatchNamespace,
-        );
-      }
+      // Deploy worker (either as version or live worker)
+      const versionResult = await putWorker(
+        api,
+        workerName,
+        scriptBundle,
+        scriptMetadata,
+        dispatchNamespace,
+        props.version
+          ? {
+              versionLabel: props.version,
+              message: `Version ${props.version}`,
+            }
+          : undefined,
+      );
 
       for (const workflow of workflowsBindings) {
         if (
@@ -1376,40 +1368,25 @@ async function putWorkerInternal(
   );
 }
 
-export async function putWorkerVersion(
-  api: CloudflareApi,
-  workerName: string,
-  scriptBundle: string | NoBundleResult,
-  scriptMetadata: WorkerMetadata,
-  versionLabel: string,
-  message?: string,
-): Promise<{ versionId: string; previewUrl: string }> {
-  const result = await putWorkerInternal(
-    api,
-    workerName,
-    scriptBundle,
-    scriptMetadata,
-    {
-      versionLabel,
-      message,
-    },
-  );
-  return {
-    versionId: result.versionId!,
-    previewUrl: result.previewUrl!,
-  };
-}
-
 export async function putWorker(
   api: CloudflareApi,
   workerName: string,
   scriptBundle: string | NoBundleResult,
   scriptMetadata: WorkerMetadata,
   dispatchNamespace?: string,
-) {
-  await putWorkerInternal(api, workerName, scriptBundle, scriptMetadata, {
-    dispatchNamespace,
-  });
+  version?: { versionLabel: string; message?: string },
+): Promise<{ versionId?: string; previewUrl?: string }> {
+  return await putWorkerInternal(
+    api,
+    workerName,
+    scriptBundle,
+    scriptMetadata,
+    {
+      dispatchNamespace,
+      versionLabel: version?.versionLabel,
+      message: version?.message,
+    },
+  );
 }
 
 export async function checkWorkerExists(

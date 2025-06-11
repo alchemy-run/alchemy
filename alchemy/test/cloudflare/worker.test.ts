@@ -1410,9 +1410,11 @@ describe("Worker Resource", () => {
       });
 
       // Verify the version worker properties
+      expect(versionWorker).toMatchObject({
+        name: workerName,
+        version: versionLabel,
+      });
       expect(versionWorker.id).toBeTruthy();
-      expect(versionWorker.name).toEqual(workerName);
-      expect(versionWorker.version).toEqual(versionLabel);
       expect(versionWorker.previewUrl).toBeTruthy();
       expect(versionWorker.previewUrl).toContain(versionLabel);
       expect(versionWorker.previewUrl).toContain(workerName);
