@@ -1,6 +1,9 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
+import { createStripeClient, isStripeConflictError } from "./client.ts";
 
 /**
  * Properties for creating or updating a Stripe Meter.
@@ -22,6 +25,14 @@ export interface MeterProps {
   valueSettings: {
     eventPayloadKey: string;
   };
+  /**
+   * API key to use (overrides environment variable)
+   */
+  apiKey?: Secret;
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -144,11 +155,7 @@ export const Meter = Resource(
     _logicalId: string,
     props: MeterProps,
   ): Promise<Meter> {
-    const apiKey = process.env.STRIPE_API_KEY;
-    if (!apiKey) {
-      throw new Error("STRIPE_API_KEY environment variable is required");
-    }
-    const stripe = new Stripe(apiKey);
+    const stripe = createStripeClient({ apiKey: props.apiKey });
 
     const currentOutputId = this.output?.id;
 
@@ -268,7 +275,7 @@ export const Meter = Resource(
           props.status === "active" &&
           existingStripeMeter.status === "inactive"
         ) {
-          console.log(`Reactivating Stripe Meter ${currentOutputId}.`);
+          logger.log(`Reactivating Stripe Meter ${currentOutputId}.`);
           stripeAPIResponse =
             await stripe.billing.meters.reactivate(currentOutputId);
         } else {
@@ -292,7 +299,18 @@ export const Meter = Resource(
       }
 
       const createParams = mapPropsToStripeParams(props);
-      stripeAPIResponse = await stripe.billing.meters.create(createParams);
+      try {
+        stripeAPIResponse = await stripe.billing.meters.create(createParams);
+      } catch (error) {
+        logger.warn("Error creating/updating meter:", error);
+        if (isStripeConflictError(error) && props.adopt) {
+          throw new Error(
+            "Meter adoption is not supported - meters cannot be uniquely identified for adoption",
+          );
+        } else {
+          throw error;
+        }
+      }
 
       // If status 'inactive' is requested during creation, and Stripe created it as 'active'
       if (
@@ -303,7 +321,7 @@ export const Meter = Resource(
           stripeAPIResponse.id,
         );
       } else if (props.status && props.status !== stripeAPIResponse.status) {
-        console.warn(
+        logger.warn(
           `Meter ${stripeAPIResponse.id} created with status ${stripeAPIResponse.status} but requested ${props.status}. Ensure this is intended.`,
         );
       }

@@ -4,8 +4,14 @@ import { destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
 import { ResourceID, type PendingResource } from "./resource.ts";
 import type { StateStore, StateStoreType } from "./state.ts";
+import {
+  createDummyLogger,
+  createLoggerInstance,
+  type LoggerApi,
+} from "./util/cli.tsx";
+import type { ITelemetryClient } from "./util/telemetry/client.ts";
 
-export type ScopeOptions = {
+export interface ScopeOptions {
   appName?: string;
   stage?: string;
   parent?: Scope;
@@ -14,7 +20,8 @@ export type ScopeOptions = {
   stateStore?: StateStoreType;
   quiet?: boolean;
   phase?: Phase;
-};
+  telemetryClient?: ITelemetryClient;
+}
 
 // TODO: support browser
 const DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
@@ -26,7 +33,14 @@ export class Scope {
   public static globals: Scope[] = [];
 
   public static get(): Scope | undefined {
-    return Scope.storage.getStore();
+    const scope = Scope.storage.getStore();
+    if (!scope) {
+      if (Scope.globals.length > 0) {
+        return Scope.globals[Scope.globals.length - 1];
+      }
+      return undefined;
+    }
+    return scope;
   }
 
   public static get root(): Scope {
@@ -35,12 +49,7 @@ export class Scope {
 
   public static get current(): Scope {
     const scope = Scope.get();
-    if (!scope) {
-      if (Scope.globals.length > 0) {
-        return Scope.globals[Scope.globals.length - 1];
-      }
-      throw new Error("Not running within an Alchemy Scope");
-    }
+    if (!scope) throw new Error("Not running within an Alchemy Scope");
     return scope;
   }
 
@@ -55,9 +64,12 @@ export class Scope {
   public readonly stateStore: StateStoreType;
   public readonly quiet: boolean;
   public readonly phase: Phase;
+  public readonly logger: LoggerApi;
+  public readonly telemetryClient: ITelemetryClient;
 
   private isErrored = false;
   private finalized = false;
+  private startedAt = performance.now();
 
   private deferred: (() => Promise<any>)[] = [];
 
@@ -83,11 +95,24 @@ export class Scope {
     }
     this.phase = phase;
 
+    this.logger = this.quiet
+      ? createDummyLogger()
+      : createLoggerInstance({
+          phase: this.phase,
+          stage: this.stage,
+          appName: this.appName ?? "",
+        });
+
     this.stateStore =
       options.stateStore ??
       this.parent?.stateStore ??
       ((scope) => new FileSystemStateStore(scope));
     this.state = this.stateStore(this);
+    if (!options.telemetryClient && !this.parent?.telemetryClient) {
+      throw new Error("Telemetry client is required");
+    }
+    this.telemetryClient =
+      options.telemetryClient ?? this.parent?.telemetryClient!;
   }
 
   public get root(): Scope {
@@ -119,12 +144,12 @@ export class Scope {
   }
 
   public fail() {
-    console.error("Scope failed", this.chain.join("/"));
+    this.logger.error("Scope failed", this.chain.join("/"));
     this.isErrored = true;
   }
 
   public async init() {
-    await this.state.init?.();
+    await Promise.all([this.state.init?.(), this.telemetryClient.ready]);
   }
 
   public async deinit() {
@@ -144,8 +169,23 @@ export class Scope {
     return this.finalize();
   }
 
+  /**
+   * The telemetry client for the root scope.
+   * This is used so that app-level hooks are only called once.
+   */
+  private get rootTelemetryClient(): ITelemetryClient | null {
+    if (!this.parent) {
+      return this.telemetryClient;
+    }
+    return null;
+  }
+
   public async finalize() {
     if (this.phase === "read") {
+      this.rootTelemetryClient?.record({
+        event: "app.success",
+        elapsed: performance.now() - this.startedAt,
+      });
       return;
     }
     if (this.finalized) {
@@ -155,7 +195,7 @@ export class Scope {
       const last = Scope.globals.pop();
       if (last !== this) {
         throw new Error(
-          "Running in AsyncLocaStorage.enterWith emultation mode and attempted to finalize a global Scope that wasn't top of the stack",
+          "Running in AsyncLocaStorage.enterWith emulation mode and attempted to finalize a global Scope that wasn't top of the stack",
         );
       }
     }
@@ -176,9 +216,20 @@ export class Scope {
         quiet: this.quiet,
         strategy: "sequential",
       });
+      this.rootTelemetryClient?.record({
+        event: "app.success",
+        elapsed: performance.now() - this.startedAt,
+      });
     } else {
-      console.warn("Scope is in error, skipping finalize");
+      this.logger.warn("Scope is in error, skipping finalize");
+      this.rootTelemetryClient?.record({
+        event: "app.error",
+        error: new Error("Scope failed"),
+        elapsed: performance.now() - this.startedAt,
+      });
     }
+
+    await this.rootTelemetryClient?.finalize();
   }
 
   /**

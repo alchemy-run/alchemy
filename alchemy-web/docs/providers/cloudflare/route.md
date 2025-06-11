@@ -5,64 +5,91 @@ description: Learn how to configure Cloudflare Routes for your Workers using Alc
 
 # Route
 
-The Route resource lets you map URL patterns to [Cloudflare Workers](https://developers.cloudflare.com/workers/configuration/routing/routes/).
+Routes map URL patterns to [Cloudflare Workers](https://developers.cloudflare.com/workers/configuration/routing/routes/), controlling which requests are handled by your Workers.
 
-## Minimal Example
+## Worker Routes
 
-Map a domain pattern to a Worker:
+The most convenient way to create routes is by defining them directly on your Worker.
 
 ```ts
-import { Route } from "alchemy/cloudflare";
+import { Worker, Zone } from "alchemy/cloudflare";
 
-const route = await Route("api-route", {
-  pattern: "api.example.com/*", 
-  script: "my-worker",
-  zoneId: "your-zone-id"
+// Create zone first so it exists for inference
+const zone = await Zone("example-zone", {
+  name: "example.com",
 });
-```
-
-## Route with Worker Resource
-
-Use a Worker resource directly:
-
-```ts
-import { Worker, Route } from "alchemy/cloudflare";
 
 const worker = await Worker("api", {
-  script: `
-    export default {
-      fetch(request) {
-        return new Response("Hello from API!");
-      }
-    }
-  `
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
+  routes: [
+    {
+      pattern: "api.example.com/*", // Zone ID inferred from example.com
+    },
+    {
+      pattern: "admin.example.com/*", // Also inferred from example.com
+    },
+  ],
+});
+
+// Routes are accessible on the worker
+console.log(worker.routes); // Array of created Route resources
+```
+
+> [!NOTE]
+> Zone IDs are inferred from the domain from the pattern and finding the matching zone in your Cloudflare account.
+
+## Explicit Zone ID
+
+For more control, you can explicitly specify zone IDs:
+
+```ts
+import { Worker, Zone } from "alchemy/cloudflare";
+
+const zone = await Zone("example-zone", {
+  name: "example.com",
+});
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
+  routes: [
+    {
+      pattern: "api.example.com/*",
+      zoneId: zone.id, // Explicit zone ID
+    },
+  ],
+});
+```
+
+## `Route` Resource
+
+You can create and manage Routes independently with the `Route` resource:
+
+```ts
+import { Route, Zone, Worker } from "alchemy/cloudflare";
+
+const zone = await Zone("example-zone", {
+  name: "example.com",
+});
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
 });
 
 const route = await Route("api-route", {
   pattern: "api.example.com/*",
-  script: worker,
-  zoneId: "your-zone-id"
+  script: worker, // Can use Worker resource directly
+  zoneId: zone.id,
 });
 ```
 
-## Bind to a Worker
-
-Routes are automatically bound to the specified Worker:
+Standalone routes also support automatic zone ID inference:
 
 ```ts
-import { Worker, Route } from "alchemy/cloudflare";
-
-const route = await Route("my-route", {
-  pattern: "api.example.com/*",
+const route = await Route("auto-route", {
+  pattern: "api.example.com/*", // Zone ID inferred
   script: "my-worker",
-  zoneId: "your-zone-id"
-});
-
-await Worker("my-worker", {
-  name: "my-worker",
-  script: "console.log('Hello, world!')",
-  bindings: {
-    myRoute: route
-  }
 });
 ```

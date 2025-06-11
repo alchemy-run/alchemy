@@ -1,6 +1,13 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
+import {
+  createStripeClient,
+  handleStripeDeleteError,
+  isStripeConflictError,
+} from "./client.ts";
 
 export type EnabledEvent = Stripe.WebhookEndpointUpdateParams.EnabledEvent;
 
@@ -42,6 +49,16 @@ export interface WebhookEndpointProps {
    * Webhook endpoint metadata
    */
   metadata?: Record<string, string>;
+
+  /**
+   * API key to use (overrides environment variable)
+   */
+  apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -138,14 +155,7 @@ export const WebhookEndpoint = Resource(
     _id: string,
     props: WebhookEndpointProps,
   ) {
-    // Get Stripe API key from context or environment
-    const apiKey = process.env.STRIPE_API_KEY;
-    if (!apiKey) {
-      throw new Error("STRIPE_API_KEY environment variable is required");
-    }
-
-    // Initialize Stripe client
-    const stripe = new Stripe(apiKey);
+    const stripe = createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -154,8 +164,7 @@ export const WebhookEndpoint = Resource(
           await stripe.webhookEndpoints.del(this.output.id);
         }
       } catch (error) {
-        // Ignore if the webhook doesn't exist
-        console.error("Error deleting webhook:", error);
+        handleStripeDeleteError(error, "WebhookEndpoint", this.output?.id);
       }
 
       return this.destroy();
@@ -165,26 +174,85 @@ export const WebhookEndpoint = Resource(
 
       if (this.phase === "update" && this.output?.id) {
         // Update existing webhook
-        webhook = await stripe.webhookEndpoints.update(this.output.id, {
+        const updateParams = {
           url: props.url,
           enabled_events: props.enabledEvents,
           description: props.description,
           disabled: props.active === false,
           metadata: props.metadata,
-        });
+        };
+        webhook = await stripe.webhookEndpoints.update(
+          this.output.id,
+          updateParams,
+        );
       } else {
         // Create new webhook
-        webhook = await stripe.webhookEndpoints.create({
+        const createParams = {
           url: props.url,
           enabled_events: props.enabledEvents,
           description: props.description,
           metadata: props.metadata,
-        });
+        };
+        try {
+          try {
+            webhook = await stripe.webhookEndpoints.create(createParams);
+          } catch (error) {
+            if (isStripeConflictError(error) && props.adopt) {
+              const existingWebhooks = await stripe.webhookEndpoints.list({
+                limit: 100,
+              });
+              const existingWebhook = existingWebhooks.data.find(
+                (w) => w.url === props.url,
+              );
+              if (existingWebhook) {
+                const updateParams: Stripe.WebhookEndpointUpdateParams = {
+                  url: props.url,
+                  enabled_events: props.enabledEvents as any,
+                  description: props.description,
+                  metadata: props.metadata,
+                };
+                webhook = await stripe.webhookEndpoints.update(
+                  existingWebhook.id,
+                  updateParams,
+                );
+              } else {
+                throw error;
+              }
+            } else {
+              throw error;
+            }
+          }
+        } catch (error) {
+          if (isStripeConflictError(error) && props.adopt) {
+            const existingWebhooks = await stripe.webhookEndpoints.list({
+              limit: 100,
+            });
+            const existingWebhook = existingWebhooks.data.find(
+              (w) => w.url === props.url,
+            );
+            if (existingWebhook) {
+              const updateParams: Stripe.WebhookEndpointUpdateParams = {
+                url: props.url,
+                enabled_events: props.enabledEvents as any,
+                description: props.description,
+                metadata: props.metadata,
+              };
+              webhook = await stripe.webhookEndpoints.update(
+                existingWebhook.id,
+                updateParams,
+              );
+            } else {
+              throw error;
+            }
+          } else {
+            throw error;
+          }
+        }
 
         // For connect parameter, need to handle it separately if it exists
         if (props.connect !== undefined) {
           // Note: connect is specified at creation time and cannot be updated
-          console.log(
+          logger.log(
             "Note: 'connect' parameter will be applied at creation time only",
           );
         }
@@ -215,7 +283,7 @@ export const WebhookEndpoint = Resource(
         status: webhook.status,
       });
     } catch (error) {
-      console.error("Error creating/updating webhook:", error);
+      logger.error("Error creating/updating webhook:", error);
       throw error;
     }
   },

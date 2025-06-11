@@ -1,6 +1,6 @@
 {
   "extends": "../tsconfig.base.json",
-  "include": ["src/**/*.ts"],
+  "include": ["package.json", "src/**/*.ts", "src/**/*.js", "src/**/*.tsx"],
   "compilerOptions": {
     "composite": true,
     "noEmit": false,
@@ -8,6 +8,7 @@
     "rootDir": "./src",
     "sourceMap": true,
     "declarationMap": true,
+    "declaration": true,
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "target": "ESNext",

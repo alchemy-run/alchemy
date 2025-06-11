@@ -11,4 +11,8 @@ lib/
 # examples/*/.alchemy
 
 .repomix-output.txt
-alchemy-web/public/og-images/
+wrangler.jsonc
+
+# Husky - ignore generated files but keep hooks
+.husky/_
+!.husky/pre-commit

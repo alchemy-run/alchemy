@@ -1,14 +1,17 @@
-import { compare } from "fast-json-patch";
+import jsonpatch from "fast-json-patch";
+const compare = jsonpatch.compare;
 import type { Context } from "../../context.ts";
 import {
   registerDynamicResource,
   Resource,
   type Provider,
 } from "../../resource.ts";
+import { logger } from "../../util/logger.ts";
 import { createCloudControlClient, type ProgressEvent } from "./client.ts";
 import {
   AlreadyExistsError,
   ConcurrentOperationError,
+  NotFoundError,
   UpdateFailedError,
 } from "./error.ts";
 import readOnlyPropertiesMap from "./properties.ts";
@@ -206,7 +209,19 @@ export const CloudControlResource = Resource(
 // register a catch-all for AWS::* resources (Resources created with the Control API)
 registerDynamicResource((typeName) => {
   if (typeName.startsWith("AWS::")) {
-    return Resource(typeName, CloudControlLifecycle) as unknown as Provider;
+    return Resource(
+      typeName,
+      function (
+        this: Context<CloudControlResource, CloudControlResourceProps>,
+        id: string,
+        props: Omit<CloudControlResourceProps, "typeName">,
+      ) {
+        return CloudControlLifecycle.bind(this)(id, {
+          typeName,
+          ...props,
+        });
+      },
+    ) as unknown as Provider;
   }
   return undefined;
 });
@@ -228,8 +243,11 @@ async function CloudControlLifecycle(
       try {
         await client.deleteResource(props.typeName, this.output.id);
       } catch (error) {
-        // Log but don't throw on cleanup errors
-        console.error(`Error deleting resource ${id}:`, error);
+        if (error instanceof NotFoundError) {
+          // great, this is the desired outcome
+        } else {
+          throw error;
+        }
       }
     }
     return this.destroy();
@@ -268,12 +286,12 @@ async function CloudControlLifecycle(
         );
       } else if (error instanceof ConcurrentOperationError) {
         // Handle concurrent operation exception
-        console.log(error.message);
+        logger.log(error.message);
         if (!props.adopt) {
           // If adopt is not true, concurrent operations are an error
           throw error;
         }
-        console.log(
+        logger.log(
           `Waiting for concurrent operation with request token '${error.requestToken}' to complete`,
         );
 

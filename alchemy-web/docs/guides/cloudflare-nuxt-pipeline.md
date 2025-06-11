@@ -12,17 +12,55 @@ This guide walks through deploying a full-stack Nuxt 3 application with a backen
 
 Start by creating a new Nuxt 3 project:
 
-```sh
+::: code-group
+
+```sh [bun]
 bun create nuxt-app 
 cd my-nuxt-app
 bun install
 ```
 
+```sh [npm]
+npm create nuxt-app 
+cd my-nuxt-app
+npm install
+```
+
+```sh [pnpm]
+pnpm create nuxt-app 
+cd my-nuxt-app
+pnpm install
+```
+
+```sh [yarn]
+yarn create nuxt-app 
+cd my-nuxt-app
+yarn install
+```
+
+:::
+
 Install alchemy and Cloudflare:
 
-```sh
+::: code-group
+
+```sh [bun]
 bun add alchemy cloudflare
 ```
+
+```sh [npm]
+npm install alchemy cloudflare
+```
+
+```sh [pnpm]
+pnpm add alchemy cloudflare
+```
+
+```sh [yarn]
+yarn add alchemy cloudflare
+```
+
+:::
 
 ## Configure Nuxt for Cloudflare
 
@@ -252,15 +290,47 @@ button {
 
 Login to Cloudflare:
 
-```sh
-wrangler login
+::: code-group
+
+```sh [bun]
+bun wrangler login
 ```
+
+```sh [npm]
+npx wrangler login
+```
+
+```sh [pnpm]
+pnpm wrangler login
+```
+
+```sh [yarn]
+yarn wrangler login
+```
+
+:::
 
 Run your Alchemy script to deploy the application:
 
-```sh
+::: code-group
+
+```sh [bun]
 bun ./alchemy.run
 ```
+
+```sh [npm]
+npx tsx ./alchemy.run
+```
+
+```sh [pnpm]
+pnpm tsx ./alchemy.run
+```
+
+```sh [yarn]
+yarn tsx ./alchemy.run
+```
+
+:::
 
 It should output the URL of your deployed site:
 
@@ -276,9 +346,25 @@ Click the URL to see your site. Test sending data via the form; it should appear
 
 To run your application locally, use the Nuxt development server:
 
-```sh
+::: code-group
+
+```sh [bun]
 bun run dev
 ```
+
+```sh [npm]
+npm run dev
+```
+
+```sh [pnpm]
+pnpm run dev
+```
+
+```sh [yarn]
+yarn run dev
+```
+
+:::
 
 This will start a local development server:
 
@@ -293,6 +379,22 @@ Nuxt 3.9.0 with Nitro 2.8.1
 
 When you're finished experimenting, you can tear down the application:
 
-```sh
+::: code-group
+
+```sh [bun]
 bun ./alchemy.run --destroy
-``` 
+```
+
+```sh [npm]
+npx tsx ./alchemy.run --destroy
+```
+
+```sh [pnpm]
+pnpm tsx ./alchemy.run --destroy
+```
+
+```sh [yarn]
+yarn tsx ./alchemy.run --destroy
+```
+
+:::

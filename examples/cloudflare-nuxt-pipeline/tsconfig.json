@@ -3,7 +3,8 @@
   "extends": "./.nuxt/tsconfig.json",
   "compilerOptions": {
     "types": ["@cloudflare/workers-types", "@types/node"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "noEmit": true
   },
   "references": [{ "path": "../../alchemy/tsconfig.json" }]
 }

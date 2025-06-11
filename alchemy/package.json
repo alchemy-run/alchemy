@@ -1,13 +1,22 @@
 {
   "name": "alchemy",
-  "version": "0.22.3",
+  "version": "0.25.0",
   "type": "module",
   "module": "./lib/index.js",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sam-goodwin/alchemy",
+    "directory": "alchemy"
+  },
   "scripts": {
     "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b",
+    "postbuild": "cpx 'src/**/*/types.d.ts' lib",
     "publish:npm": "cp ../README.md . && bun run build && npm publish && rm README.md",
     "docs:gen": "rm -rf ./docs && typedoc"
   },
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "homepage": "https://alchemy.run",
   "files": [
     "lib",
     "src"
@@ -112,9 +121,10 @@
     "@aws-sdk/client-ses": "^3.0.0",
     "@aws-sdk/client-sesv2": "^3.0.0",
     "@aws-sdk/client-sqs": "^3.0.0",
+    "@aws-sdk/client-ssm": "^3.0.0",
     "@aws-sdk/client-sts": "^3.0.0",
     "@aws-sdk/credential-providers": "^3.0.0",
-    "@aws-sdk/node-config-provider": "^3.374.0",
+    "@smithy/node-config-provider": "^4.0.0",
     "@cloudflare/unenv-preset": "^2.3.1",
     "@cloudflare/workers-shared": "^0.17.5",
     "@iarna/toml": "^2.2.5",
@@ -124,7 +134,8 @@
     "arktype": "^2.0.0",
     "aws4fetch": "^1.0.20",
     "cloudflare": "^4.0.0",
-    "diff": "^7.0.0",
+    "diff": "^8.0.2",
+    "dofs": "^0.0.1",
     "esbuild": "^0.25.1",
     "fast-json-patch": "^3.1.1",
     "glob": "^10.0.0",
@@ -134,7 +145,6 @@
     "prettier": "^3.0.0",
     "stripe": "^17.0.0",
     "turndown": "^7.0.0",
-    "xdg-app-paths": "^8.0.0",
     "yaml": "^2.0.0",
     "zod": "^3.0.0"
   },
@@ -152,15 +162,20 @@
     "@types/diff": "^5.0.0",
     "@types/libsodium-wrappers": "^0.7.14",
     "@types/node": "latest",
+    "@types/react": "^19.1.6",
     "@types/turndown": "^5.0.5",
     "ai": "^4.1.16",
     "arktype": "^2.1.16",
     "braintrust": "^0.0.201",
     "change-case": "^5.4.4",
     "cloudflare": "^4.2.0",
+    "cpx": "^1.5.0",
+    "ink": "^6.0.0",
+    "ink-spinner": "^5.0.0",
     "libsodium-wrappers": "^0.7.15",
     "openpgp": "^6.1.0",
     "prettier": "^3.5.3",
+    "react": "^19.1.0",
     "turndown": "^7.2.0",
     "typedoc": "^0.28.1",
     "typedoc-plugin-markdown": "^4.6.0",
@@ -168,7 +183,6 @@
     "vite": "^6.0.7",
     "vitepress": "^1.6.3",
     "wrangler": "^3.114.0",
-    "xdg-app-paths": "^8.3.0",
     "yaml": "^2.7.1"
   }
 }

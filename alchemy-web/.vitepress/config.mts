@@ -1,4 +1,3 @@
-import { transformerTwoslash } from "@shikijs/vitepress-twoslash";
 import fs from "fs";
 import footnotePlugin from "markdown-it-footnote";
 import path from "path";
@@ -7,6 +6,7 @@ import {
 	groupIconMdPlugin,
 	groupIconVitePlugin,
 } from "vitepress-plugin-group-icons";
+import { parse as parseYaml } from "yaml";
 import { processFrontmatterFiles } from "../../alchemy/src/web/vitepress";
 
 // Imports for OG Image Generation
@@ -24,14 +24,17 @@ export default defineConfig({
 		["meta", { property: "og:type", content: "website" }],
 		// Base meta tags are now added by transformPageData
 	],
+	metaChunk: true,
 	markdown: {
-		// @ts-ignore
-		codeTransformers: [transformerTwoslash()],
 		theme: { light: "light-plus", dark: "dark-plus" },
 		config: (md) => md.use(footnotePlugin).use(groupIconMdPlugin),
 	},
 	vite: {
 		plugins: [groupIconVitePlugin() as any],
+		// Disable sourcemap generation to shave ~20-30 % off large builds
+		build: {
+			sourcemap: false,
+		},
 	},
 	// https://vitepress.dev/reference/default-theme-config
 	themeConfig: {
@@ -50,6 +53,7 @@ export default defineConfig({
 			await generateSidebar("Guides"),
 			await generateSidebar("Concepts"),
 			await generateProvidersSidebar(),
+			await generateSidebar("Telemetry"),
 		],
 		search: { provider: "local" },
 	},
@@ -107,13 +111,17 @@ export default defineConfig({
 		imageSlug = imageSlug.replace(/\//g, "-").replace(/^-|-$/, "");
 		const finalImageSlug = imageSlug === "" ? "home" : imageSlug;
 
-		// Ensure URL is properly formatted with double slashes after protocol
-		// Use a proper URL construction to avoid incorrect replacements
-		const imageSlugForUrl = finalImageSlug || "placeholder";
-		const ogImageUrl = new URL(
-			`/og-images/${imageSlugForUrl}.png`,
-			SITE_URL,
-		).toString();
+		// Use custom OG image for home page, otherwise use generated images
+		let ogImageUrl: string;
+		if (pagePath === "/" || finalImageSlug === "home") {
+			ogImageUrl = new URL("/alchemy-og.png", SITE_URL).toString();
+		} else {
+			const imageSlugForUrl = finalImageSlug || "placeholder";
+			ogImageUrl = new URL(
+				`/og-images/${imageSlugForUrl}.png`,
+				SITE_URL,
+			).toString();
+		}
 		// --- End OG Image Path Calculation ---
 
 		// Add dynamic meta tags
@@ -280,22 +288,8 @@ export default defineConfig({
 				return result;
 			}
 
-			const frontmatterText = match[1];
-
-			// Parse frontmatter lines
-			frontmatterText.split("\n").forEach((line) => {
-				// Look for "key: value" patterns
-				const colonIndex = line.indexOf(":");
-				if (colonIndex > 0) {
-					const key = line.slice(0, colonIndex).trim();
-					const value = line.slice(colonIndex + 1).trim();
-
-					// Remove quotes if present
-					result[key] = value.replace(/^['"](.*)['"]$/, "$1");
-				}
-			});
-
-			return result;
+			// Parse the YAML frontmatter properly
+			return parseYaml(match[1]) || {};
 		}
 	},
 });

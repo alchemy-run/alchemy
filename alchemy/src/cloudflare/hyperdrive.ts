@@ -2,6 +2,7 @@ import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { tryGetBinding } from "../runtime/bind.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
 import type { Bound } from "./bound.ts";
@@ -276,7 +277,7 @@ const HyperdriveResource = Resource(
 
     if (this.phase === "delete") {
       if (!hyperdriveId) {
-        console.warn(`No hyperdriveId found for ${id}, skipping delete`);
+        logger.warn(`No hyperdriveId found for ${id}, skipping delete`);
         return this.destroy();
       }
 
@@ -287,7 +288,7 @@ const HyperdriveResource = Resource(
           await handleApiError(deleteResponse, "delete", "hyperdrive", id);
         }
       } catch (error) {
-        console.error(`Error deleting Hyperdrive ${id}:`, error);
+        logger.error(`Error deleting Hyperdrive ${id}:`, error);
         throw error;
       }
       return this.destroy();
@@ -311,7 +312,7 @@ const HyperdriveResource = Resource(
           const getResponse = await api.get(configPath);
           if (getResponse.status === 200) {
             // Hyperdrive exists, update it
-            console.log(
+            logger.log(
               `Hyperdrive '${id}' already exists. Updating existing resource.`,
             );
             response = await api.put(configPath, requestBody);
@@ -344,7 +345,7 @@ const HyperdriveResource = Resource(
       const data: { result: Record<string, any> } = await response!.json();
       apiResource = data.result;
     } catch (error) {
-      console.error(`Error ${this.phase} Hyperdrive '${id}':`, error);
+      logger.error(`Error ${this.phase} Hyperdrive '${id}':`, error);
       throw error;
     }
 

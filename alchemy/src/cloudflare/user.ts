@@ -1,4 +1,5 @@
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { CloudflareApiError } from "./api-error.ts";
 import {
   getCloudflareAuthHeaders,
@@ -127,7 +128,7 @@ export async function getUserEmailFromApiKey(apiKey: string): Promise<string> {
     emailCache[apiKey] = data.result.email;
     return data.result.email;
   } catch (error) {
-    console.error("Error retrieving email from Cloudflare API:", error);
+    logger.error("Error retrieving email from Cloudflare API:", error);
     throw new Error(
       "Failed to automatically discover email for API Key authentication",
     );

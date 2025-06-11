@@ -1,5 +1,7 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import type { Context } from "../context.ts";
-import { StaticJsonFile } from "../fs/static-json-file.ts";
+import { formatJson } from "../fs/static-json-file.ts";
 import { Resource } from "../resource.ts";
 import { assertNever } from "../util/assert-never.ts";
 import { Self, type Bindings } from "./bindings.ts";
@@ -126,7 +128,8 @@ export const WranglerJson = Resource(
       spec.triggers = { crons: worker.crons };
     }
 
-    await StaticJsonFile(filePath, spec);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, await formatJson(spec));
 
     // Return the resource
     return this({
@@ -268,6 +271,7 @@ export interface WranglerJsonSpec {
     name: string;
     binding: string;
     class_name: string;
+    script_name?: string;
   }[];
 
   /**
@@ -343,6 +347,13 @@ export interface WranglerJsonSpec {
    * Pipelines
    */
   pipelines?: { binding: string; pipeline: string }[];
+
+  /**
+   * Version metadata bindings
+   */
+  version_metadata?: {
+    binding: string;
+  };
 }
 
 /**
@@ -366,7 +377,12 @@ function processBindings(
   const services: { binding: string; service: string; environment?: string }[] =
     [];
   const secrets: string[] = [];
-  const workflows: { name: string; binding: string; class_name: string }[] = [];
+  const workflows: {
+    name: string;
+    binding: string;
+    class_name: string;
+    script_name?: string;
+  }[] = [];
   const d1Databases: {
     binding: string;
     database_id: string;
@@ -438,7 +454,7 @@ function processBindings(
       // Service binding
       services.push({
         binding: bindingName,
-        service: binding.name,
+        service: "name" in binding ? binding.name : binding.service,
       });
     } else if (binding.type === "kv_namespace") {
       // KV Namespace binding
@@ -481,6 +497,7 @@ function processBindings(
         name: binding.workflowName,
         binding: bindingName,
         class_name: binding.className,
+        script_name: binding.scriptName,
       });
     } else if (binding.type === "d1") {
       d1Databases.push({
@@ -527,6 +544,15 @@ function processBindings(
       });
     } else if (binding.type === "ai_gateway") {
       // no-op
+    } else if (binding.type === "version_metadata") {
+      if (spec.version_metadata) {
+        throw new Error(
+          `Version metadata already bound to ${spec.version_metadata.binding}`,
+        );
+      }
+      spec.version_metadata = {
+        binding: bindingName,
+      };
     } else if (binding.type === "hyperdrive") {
       const password =
         "password" in binding.origin

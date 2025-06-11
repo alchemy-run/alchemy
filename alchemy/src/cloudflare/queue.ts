@@ -52,6 +52,12 @@ export interface QueueProps extends CloudflareApiOptions {
   settings?: QueueSettings;
 
   /**
+   * Dead letter queue for failed messages
+   * Can be either a queue name (string) or a Queue object
+   */
+  dlq?: string | Queue;
+
+  /**
    * Whether to delete the queue.
    * If set to false, the queue will remain but the resource will be removed from state
    *
@@ -148,6 +154,28 @@ export type Queue<Body = unknown> = QueueResource<Body> &
  *   }
  * });
  *
+ * @example
+ * // Create a queue with a dead letter queue using string reference
+ * const dlqQueue = await Queue("dlq-queue", {
+ *   name: "dlq-queue"
+ * });
+ *
+ * const mainQueue = await Queue("main-queue", {
+ *   name: "main-queue",
+ *   dlq: "dlq-queue"
+ * });
+ *
+ * @example
+ * // Create a queue with a dead letter queue using Queue object
+ * const dlqQueue = await Queue("dlq-queue", {
+ *   name: "dlq-queue"
+ * });
+ *
+ * const mainQueue = await Queue("main-queue", {
+ *   name: "main-queue",
+ *   dlq: dlqQueue
+ * });
+ *
  * @see https://developers.cloudflare.com/queues/
  */
 export async function Queue<Body = unknown>(
@@ -172,12 +200,8 @@ const QueueResource = Resource("cloudflare::Queue", async function <
   const queueName = props.name ?? id;
 
   if (this.phase === "delete") {
-    console.log("Deleting Cloudflare Queue:", queueName);
     if (props.delete !== false) {
       // Delete Queue
-      if (!this.output?.id) {
-        console.log(this.output);
-      }
       await deleteQueue(api, this.output?.id);
     }
 
@@ -187,7 +211,6 @@ const QueueResource = Resource("cloudflare::Queue", async function <
   let queueData: CloudflareQueueResponse;
 
   if (this.phase === "create") {
-    console.log("Creating Cloudflare Queue:", queueName);
     try {
       queueData = await createQueue(api, queueName, props);
     } catch (error) {
@@ -211,8 +234,6 @@ const QueueResource = Resource("cloudflare::Queue", async function <
   } else {
     // Update operation
     if (this.output?.id) {
-      console.log("Updating Cloudflare Queue:", queueName);
-
       // Check if name is being changed, which is not allowed
       if (queueName !== this.output.name) {
         throw new Error(
@@ -224,10 +245,6 @@ const QueueResource = Resource("cloudflare::Queue", async function <
       queueData = await updateQueue(api, this.output.id, props);
     } else {
       // If no ID exists, fall back to creating a new queue
-      console.log(
-        "No existing Queue ID found, creating new Cloudflare Queue:",
-        queueName,
-      );
       queueData = await createQueue(api, queueName, props);
     }
   }
@@ -244,6 +261,7 @@ const QueueResource = Resource("cloudflare::Queue", async function <
             queueData.result.settings.message_retention_period,
         }
       : undefined,
+    dlq: props.dlq,
     createdOn: queueData.result.created_on || new Date().toISOString(),
     modifiedOn: queueData.result.modified_on || new Date().toISOString(),
     accountId: api.accountId,
@@ -339,7 +357,6 @@ export async function deleteQueue(
   queueId?: string,
 ): Promise<void> {
   if (!queueId) {
-    console.log("No Queue ID provided, skipping delete");
     return;
   }
 

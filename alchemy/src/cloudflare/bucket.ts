@@ -3,6 +3,7 @@ import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import { type CloudflareApi, createCloudflareApi } from "./api.ts";
 import type { Bound } from "./bound.ts";
@@ -195,7 +196,7 @@ const R2BucketResource = Resource(
     if (this.phase === "delete") {
       if (props.delete !== false) {
         if (props.empty) {
-          console.log("Emptying R2 bucket:", bucketName);
+          logger.log("Emptying R2 bucket:", bucketName);
           const r2Client = await createR2Client({
             ...props,
             accountId: api.accountId,
@@ -225,6 +226,12 @@ const R2BucketResource = Resource(
           throw err;
         }
       }
+    }
+
+    if (this.phase === "update" && bucketName !== this.output.name) {
+      throw new Error(
+        `Cannot update R2Bucket name after creation. Bucket name is immutable. Before: ${this.output.name}, After: ${bucketName}`,
+      );
     }
 
     await updatePublicAccess(
@@ -497,7 +504,7 @@ export async function emptyBucket(
 
   try {
     do {
-      console.log(`Listing objects in bucket ${bucketName}`);
+      logger.log(`Listing objects in bucket ${bucketName}`);
       // List objects in the bucket
       const { objects, continuationToken: nextToken } = await listObjects(
         r2,
@@ -508,7 +515,7 @@ export async function emptyBucket(
 
       continuationToken = nextToken;
 
-      console.log(`Found ${objects.length} objects in bucket ${bucketName}`);
+      logger.log(`Found ${objects.length} objects in bucket ${bucketName}`);
 
       // Delete objects in batches
       if (objects.length > 0) {
@@ -527,7 +534,7 @@ export async function emptyBucket(
             `https://${r2.accountId}.r2.cloudflarestorage.com/${bucketName}?delete`,
           );
 
-          console.log(
+          logger.log(
             `Deleting ${batch.length} objects from bucket ${bucketName}`,
           );
 
@@ -554,7 +561,7 @@ export async function emptyBucket(
       }
     } while (continuationToken);
 
-    console.log(
+    logger.log(
       `Successfully emptied bucket ${bucketName}, deleted ${totalDeleted} objects total`,
     );
   } catch (error) {
@@ -562,7 +569,7 @@ export async function emptyBucket(
       // the bucket was not found
       return;
     }
-    console.error(`Failed to empty bucket ${bucketName}:`, error);
+    logger.error(`Failed to empty bucket ${bucketName}:`, error);
     throw error;
   }
 }
@@ -647,9 +654,9 @@ export async function setCorsConfiguration(
       );
     }
 
-    console.log(`Successfully set CORS configuration for bucket ${bucketName}`);
+    logger.log(`Successfully set CORS configuration for bucket ${bucketName}`);
   } catch (error) {
-    console.error(
+    logger.error(
       `Failed to set CORS configuration for bucket ${bucketName}:`,
       error,
     );

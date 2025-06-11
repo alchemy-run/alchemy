@@ -4,19 +4,19 @@ All dependencies must be peer dependencies.
 
 Always use alchemy.secret() instead of new Secret() to create secrets.
 
-# Running Tests with Bun
+# Running Tests with Vitest
 
-We use Bun for testing. Here's how to run tests:
+We use Vitest for testing. Here's how to run tests:
 
 ```bash
 # Run all tests
-bun test
+bunx vitest
 
 # Run tests in a specific file
-bun test alchemy/test/stripe/price.test.ts
+bunx vitest alchemy/test/stripe/price.test.ts
 
 # Run a specific test in a specific file
-bun test --test-name-pattern="create and update price" alchemy/test/stripe/price.test.ts
+bunx vitest --test-name-pattern="create and update price" alchemy/test/stripe/price.test.ts
 ```
 
 For resource tests, create a dedicated test file for each resource type following the pattern `alchemy/test/service-name/resource-name.test.ts`.
@@ -66,7 +66,7 @@ export interface {{ResourceName}}Props {
  * IMPORTANT: The interface name MUST match the exported resource name
  * For example, if your resource is exported as "Product", this interface
  * should be named "Product" (not "ProductOutput")
- * 
+ *
  */
 export interface {{ResourceName}} extends Resource<"{{service-name}}::{{ResourceName}}"> {{ResourceName}}Props {
   /**
@@ -207,11 +207,11 @@ Create the resource with the pseudo-class pattern using `this` with Context type
 ```typescript
 /**
  * (Resource description)
- * 
+ *
  * (followed by examples for distinct use-cases of the Resource)
- * 
+ *
  * @example
- * // Create a basic table with just a hash key for simple 
+ * // Create a basic table with just a hash key for simple
  * // key-value lookups:
  * const basicTable = await DynamoTable("users", {
  *   hashKey: {
@@ -219,9 +219,9 @@ Create the resource with the pseudo-class pattern using `this` with Context type
  *     type: "string"
  *   }
  * });
- * 
+ *
  * @example
- * // Create a time-series table with hash and sort key 
+ * // Create a time-series table with hash and sort key
  * // for efficient range queries:
  * const timeSeriesTable = await DynamoTable("events", {
  *   hashKey: {
@@ -233,9 +233,9 @@ Create the resource with the pseudo-class pattern using `this` with Context type
  *     type: "number"
  *   }
  * });
- * 
+ *
  * @example
- * // Create a table with a global secondary index 
+ * // Create a table with a global secondary index
  * // for alternate access patterns:
  * const ordersTable = await DynamoTable("orders", {
  *   hashKey: {
@@ -254,7 +254,7 @@ Create the resource with the pseudo-class pattern using `this` with Context type
  *     }
  *   }]
  * });
- * 
+ *
  * @example
  * // Create a one-time fixed price for a product:
  * const oneTimePrice = await Price("basic-license", {
@@ -262,9 +262,9 @@ Create the resource with the pseudo-class pattern using `this` with Context type
  *   unitAmount: 2999,
  *   product: "prod_xyz"
  * });
- * 
+ *
  * @example
- * // Create a recurring subscription price with fixed 
+ * // Create a recurring subscription price with fixed
  * // monthly billing:
  * const subscriptionPrice = await Price("pro-monthly", {
  *   currency: "usd",
@@ -275,7 +275,7 @@ Create the resource with the pseudo-class pattern using `this` with Context type
  *     usageType: "licensed"
  *   }
  * });
- * 
+ *
  * @example
  * // Create a metered price for usage-based billing:
  * const meteredPrice = await Price("storage", {
@@ -434,14 +434,14 @@ Create a test file that uses direct API interaction for verification:
 
 ```typescript
 // alchemy/test/{{service-name}}/{{resource-name}}.test.ts
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy";
 import { destroy } from "../../src/destroy";
 import { {{ResourceName}} } from "../../src/{{service-name}}/{{resource-name}}";
 import { {{ServiceName}}Api } from "../../src/{{service-name}}/api";
 import { BRANCH_PREFIX } from "../util";
 // must import this or else alchemy.test won't exist
-import "../../src/test/bun";
+import "../../src/test/vitest";
 
 const api = new {{ServiceName}}Api();
 

@@ -69,3 +69,39 @@ await Worker("my-worker", {
   }
 });
 ```
+
+## Worker Example with AI Model Usage
+
+Here's a simple example showing how to use AI Gateway in a Cloudflare Worker:
+
+```ts
+import { Worker, AiGateway } from "alchemy/cloudflare";
+
+const aiGateway = await AiGateway("chat-gateway", {
+  rateLimitingInterval: 60,
+  rateLimitingLimit: 100,
+  collectLogs: true
+});
+
+await Worker("chat-worker", {
+  entrypoint: "./src/worker.ts",
+  bindings: {
+    AI: aiGateway
+  }
+});
+```
+
+```ts
+// src/worker.ts
+export default {
+  async fetch(request, env) {
+    const { message } = await request.json();
+    
+    const response = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      messages: [{ role: "user", content: message }]
+    });
+
+    return Response.json({ response: response.response });
+  }
+};
+```

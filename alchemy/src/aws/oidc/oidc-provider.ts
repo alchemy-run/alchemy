@@ -9,6 +9,7 @@ import {
 } from "@aws-sdk/client-iam";
 import type { Context } from "../../context.ts";
 import { Resource } from "../../resource.ts";
+import { logger } from "../../util/logger.ts";
 import { AccountId } from "../account-id.ts";
 
 /**
@@ -173,7 +174,7 @@ export const OIDCProvider = Resource(
           }
         } catch (error) {
           // Log but don't throw on cleanup errors
-          console.error("Error during cleanup:", error);
+          logger.error("Error during cleanup:", error);
         }
       }
       return this.destroy();
@@ -285,7 +286,7 @@ export const OIDCProvider = Resource(
         createdAt: Date.now(),
       });
     } catch (error) {
-      console.error("Error configuring OIDC provider:", error);
+      logger.error("Error configuring OIDC provider:", error);
       throw error;
     }
   },

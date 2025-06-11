@@ -1,9 +1,15 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src/**/*.ts", "test/**/*.ts", "src/runtime/shims.js"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "test/**/*.ts",
+    "./package.json",
+    "src/runtime/shims.js"
+  ],
   "compilerOptions": {
     "rootDir": ".",
     "noEmit": true,
-    "types": ["bun-types", "@cloudflare/workers-types"]
+    "types": ["@types/bun", "@cloudflare/workers-types"]
   }
 }

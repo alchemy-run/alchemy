@@ -5,8 +5,10 @@
       "./**/package.json",
       "./**/biome.json",
       "./alchemy/src/**/*.ts",
+      "./alchemy/src/**/*.tsx",
       "./alchemy/src/**/*.js",
       "./alchemy/test/**/*.ts",
+      "./alchemy-web/.vitepress/**/*.ts",
       "./scripts/**/*.ts",
       "./stacks/**/*.ts",
       "./examples/*/src/**/*.ts",
@@ -15,8 +17,8 @@
       "!examples/cloudflare-tanstack-start/src/routeTree.gen.ts",
       "!examples/cloudflare-redwood/worker-configuration.d.ts",
       "!./alchemy/src/aws/control/types.d.ts",
-      "!examples/cloudflare-tanstack-start/.output",
-      "alchemy-web/.vitepress/**/*.ts"
+      "!examples/cloudflare-tanstack-start/.output/**",
+      "!examples/cloudflare-nuxt-pipeline/.output/**"
     ],
     "maxSize": 10000000
   },
@@ -61,7 +63,6 @@
       },
       "style": {
         "useLiteralEnumMembers": "error",
-        "noCommaOperator": "error",
         "useNodejsImportProtocol": "error",
         "useAsConstAssertion": "error",
         "useEnumInitializers": "error",
@@ -76,7 +77,6 @@
         "noParameterAssign": "off",
         "noNonNullAssertion": "off",
         "useDefaultParameterLast": "error",
-        "noArguments": "error",
         "useImportType": "error",
         "useExportType": "error",
         "noUselessElse": "off",

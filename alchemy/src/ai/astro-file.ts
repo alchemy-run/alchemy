@@ -4,6 +4,7 @@ import type { Context } from "../context.ts";
 import { StaticAstroFile } from "../fs/static-astro-file.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
 import { type ModelConfig, createModel } from "./client.ts";
 
 /**
@@ -220,7 +221,7 @@ export const AstroFile = Resource(
       code = await prettier.format(code, prettierOptions);
     } catch (error) {
       // If Prettier formatting fails, just use the unformatted code
-      console.warn("Failed to format Astro code with Prettier:", error);
+      logger.warn("Failed to format Astro code with Prettier:", error);
     }
 
     // Use StaticAstroFile to create/update the file

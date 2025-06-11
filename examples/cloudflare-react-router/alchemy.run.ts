@@ -1,7 +1,7 @@
 /// <reference types="node" />
 
 import alchemy from "alchemy";
-import { R2RestStateStore, ReactRouter } from "alchemy/cloudflare";
+import { DOStateStore, ReactRouter } from "alchemy/cloudflare";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
 const app = await alchemy("cloudflare-react-router", {
@@ -11,7 +11,7 @@ const app = await alchemy("cloudflare-react-router", {
   password: process.env.ALCHEMY_PASSWORD,
   stateStore:
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new R2RestStateStore(scope)
+      ? (scope) => new DOStateStore(scope)
       : undefined,
 });
 

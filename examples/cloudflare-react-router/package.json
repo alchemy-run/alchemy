@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "react-router build",
-    "deploy": "bun --env-file ../../.env ./alchemy.run.ts",
-    "destroy": "bun --env-file ../../.env ./alchemy.run.ts --destroy",
+    "deploy": "bun tsx --env-file ../../.env ./alchemy.run.ts",
+    "destroy": "bun tsx --env-file ../../.env ./alchemy.run.ts --destroy",
     "dev": "react-router dev",
     "preview": "bun run build && vite preview",
     "types": "react-router typegen"
@@ -25,6 +25,7 @@
     "@types/node": "^20",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
+    "alchemy": "workspace:*",
     "tailwindcss": "^4.1.4",
     "typescript": "^5.8.3",
     "vite": "^6.3.3",

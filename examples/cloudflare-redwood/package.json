@@ -23,8 +23,8 @@
     "seed": "bun run worker:run ./src/db/seed.ts",
     "check": "bun run types",
     "types": "bun run tsc",
-    "deploy": "bun run --env-file ../../.env ./alchemy.run.ts",
-    "destroy": "bun run --env-file ../../.env ./alchemy.run.ts --destroy"
+    "deploy": "bun tsx --env-file ../../.env ./alchemy.run.ts",
+    "destroy": "bun tsx --env-file ../../.env ./alchemy.run.ts --destroy"
   },
   "dependencies": {
     "alchemy": "workspace:*",

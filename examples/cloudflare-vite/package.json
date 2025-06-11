@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "deploy": "bun run --env-file ../../.env ./alchemy.run.ts",
-    "destroy": "bun run --env-file ../../.env ./alchemy.run.ts --destroy",
+    "deploy": "bun tsx --env-file ../../.env ./alchemy.run.ts",
+    "destroy": "bun tsx --env-file ../../.env ./alchemy.run.ts --destroy",
     "lint": "eslint .",
     "preview": "vite preview"
   },

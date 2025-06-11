@@ -5,7 +5,7 @@ import { type } from "arktype";
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? process.env.USER;
 
 const app = await alchemy("cloudflare-worker", {
-  stage: BRANCH_PREFIX || undefined,
+  stage: BRANCH_PREFIX,
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   stateStore:
     process.env.ALCHEMY_STATE_STORE === "cloudflare"

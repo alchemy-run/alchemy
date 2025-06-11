@@ -1,6 +1,4 @@
 // @ts-nocheck
-import TwoslashFloatingVue from "@shikijs/vitepress-twoslash/client";
-import "@shikijs/vitepress-twoslash/style.css";
 import "virtual:group-icons.css";
 import type { Theme as ThemeConfig } from "vitepress";
 import { inBrowser, useRoute } from "vitepress";
@@ -12,7 +10,6 @@ import "./style.css";
 export default {
   extends: Theme,
   enhanceApp(ctx) {
-    ctx.app.use(TwoslashFloatingVue);
     ctx.app.component("CodeSnippetHero", CodeSnippetHero);
   },
   // synchronizes code-group tabs

@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { Bundle } from "../../esbuild/bundle.ts";
+import { logger } from "../../util/logger.ts";
 import type { Bindings } from "../bindings.ts";
 import type { WorkerProps } from "../worker.ts";
 import { createAliasPlugin } from "./alias-plugin.ts";
@@ -124,7 +125,7 @@ export async function bundleWorkerScript<B extends Bindings>(
       rewriteNodeCompatBuildFailure(e.errors, nodeJsCompatMode);
       throw e;
     }
-    console.error("Error reading bundle:", e);
+    logger.error("Error reading bundle:", e);
     throw new Error("Error reading bundle");
   }
 }

@@ -3,9 +3,10 @@
 import { afterAll, beforeAll, it } from "bun:test";
 import path from "node:path";
 import { alchemy } from "../alchemy.ts";
-import { R2RestStateStore } from "../cloudflare/r2-rest-state-store.ts";
+import { DOStateStore } from "../cloudflare/index.ts";
 import { Scope } from "../scope.ts";
 import type { StateStoreType } from "../state.ts";
+import { NoopTelemetryClient } from "../util/telemetry/index.ts";
 
 /**
  * Extend the Alchemy interface to include test functionality
@@ -116,28 +117,19 @@ type test = {
  * ```
  */
 export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
-  defaultOptions = defaultOptions ?? {};
+  defaultOptions = defaultOptions ?? {
+    quiet: true,
+  };
   if (
     defaultOptions.stateStore === undefined &&
     // process.env.CI &&
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
   ) {
-    defaultOptions.stateStore = (scope) =>
-      new R2RestStateStore(scope, {
-        apiKey: alchemy.secret(process.env.CLOUDFLARE_API_KEY),
-        email: process.env.CLOUDFLARE_EMAIL,
-        bucketName: process.env.CLOUDFLARE_BUCKET_NAME!,
-      });
+    defaultOptions.stateStore = (scope) => new DOStateStore(scope);
   }
 
   // Add skipIf functionality
-  test.skipIf = (condition: boolean) => {
-    if (condition) {
-      // TODO: proxy through to bun:test.skipIf
-      return (..._args: any[]) => {};
-    }
-    return test;
-  };
+  test.skipIf = it.skipIf.bind(it);
 
   // Create local test scope based on filename
   const scope = new Scope({
@@ -145,6 +137,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     // parent: globalTestScope,
     stateStore: defaultOptions?.stateStore,
     phase: "up",
+    telemetryClient: new NoopTelemetryClient(),
   });
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {
@@ -188,6 +181,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
       ...spread(defaultOptions),
       ...spread(_options),
     };
+    console.log("options", options);
 
     const fn = typeof args[1] === "function" ? args[1] : args[2]!;
 

@@ -1,9 +1,9 @@
 import alchemy, { type } from "alchemy";
 import {
+  DOStateStore,
   DurableObjectNamespace,
   Queue,
   R2Bucket,
-  R2RestStateStore,
   Worker,
   Workflow,
   WranglerJson,
@@ -17,7 +17,7 @@ const app = await alchemy("cloudflare-worker", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   stateStore:
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new R2RestStateStore(scope)
+      ? (scope) => new DOStateStore(scope)
       : undefined,
 });
 

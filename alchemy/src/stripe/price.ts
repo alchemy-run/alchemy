@@ -1,6 +1,9 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
+import { createStripeClient, handleStripeDeleteError } from "./client.ts";
 
 /**
  * Properties for price recurring configuration
@@ -106,6 +109,16 @@ export interface PriceProps {
    * If set to true, will atomically transfer the lookup key from an existing price to this price.
    */
   transferLookupKey?: boolean;
+
+  /**
+   * API key to use (overrides environment variable)
+   */
+  apiKey?: Secret;
+
+  /**
+   * If true, adopt existing resource if creation fails due to conflict
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -195,14 +208,7 @@ export const Price = Resource(
     _id: string,
     props: PriceProps,
   ): Promise<Price> {
-    // Get Stripe API key from context or environment
-    const apiKey = process.env.STRIPE_API_KEY;
-    if (!apiKey) {
-      throw new Error("STRIPE_API_KEY environment variable is required");
-    }
-
-    // Initialize Stripe client
-    const stripe = new Stripe(apiKey);
+    const stripe = createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
       try {
@@ -211,8 +217,7 @@ export const Price = Resource(
           await stripe.prices.update(this.output.id, { active: false });
         }
       } catch (error) {
-        // Ignore if the price doesn't exist
-        console.error("Error deactivating price:", error);
+        handleStripeDeleteError(error, "Price", this.output?.id);
       }
 
       return this.destroy();
@@ -222,13 +227,15 @@ export const Price = Resource(
 
       if (this.phase === "update" && this.output?.id) {
         // Update existing price (limited properties can be updated)
-        price = await stripe.prices.update(this.output.id, {
+        const updateParams: Stripe.PriceUpdateParams = {
           active: props.active,
           metadata: props.metadata,
           nickname: props.nickname,
           lookup_key: props.lookupKey,
           transfer_lookup_key: props.transferLookupKey,
-        });
+        };
+
+        price = await stripe.prices.update(this.output.id, updateParams);
       } else {
         // Create new price
         const createParams: Stripe.PriceCreateParams = {
@@ -260,7 +267,34 @@ export const Price = Resource(
           };
         }
 
-        price = await stripe.prices.create(createParams);
+        if (props.lookupKey) {
+          const existingPrices = await stripe.prices.list({
+            lookup_keys: [props.lookupKey],
+            limit: 1,
+          });
+          if (existingPrices.data.length > 0) {
+            if (props.adopt) {
+              const existingPrice = existingPrices.data[0];
+              const updateParams: Stripe.PriceUpdateParams = {
+                active: props.active,
+                metadata: props.metadata,
+                nickname: props.nickname,
+                lookup_key: props.lookupKey,
+                transfer_lookup_key: props.transferLookupKey,
+              };
+              price = await stripe.prices.update(
+                existingPrice.id,
+                updateParams,
+              );
+            } else {
+              price = existingPrices.data[0];
+            }
+          } else {
+            price = await stripe.prices.create(createParams);
+          }
+        } else {
+          price = await stripe.prices.create(createParams);
+        }
       }
 
       // Transform Stripe recurring object to our format
@@ -296,7 +330,7 @@ export const Price = Resource(
         lookupKey: price.lookup_key || undefined,
       });
     } catch (error) {
-      console.error("Error creating/updating price:", error);
+      logger.error("Error creating/updating price:", error);
       throw error;
     }
   },

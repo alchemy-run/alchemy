@@ -1,4 +1,5 @@
 import type { NodeJSCompatMode } from "miniflare";
+import { logger } from "../../util/logger.ts";
 
 /**
  * Computes and validates the Node.js compatibility mode we are running.
@@ -40,7 +41,7 @@ export async function getNodeJSCompatMode(
   }
 
   if (props?.noBundle && hasNodejsCompatV2Flag) {
-    console.warn(
+    logger.warn(
       "`nodejs_compat_v2` compatibility flag and `--no-bundle` can't be used together. If you want to polyfill Node.js built-ins and disable Wrangler's bundling, please polyfill as part of your own bundling process.",
     );
   }

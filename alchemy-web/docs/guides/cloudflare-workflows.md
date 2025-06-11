@@ -112,3 +112,142 @@ declare module "cloudflare:workers" {
 
 > [!TIP]
 > See the [Bindings](../concepts/bindings.md) for more information.
+
+## Cross-Script Workflow Binding
+
+You can share workflows across multiple Workers, allowing one Worker to trigger workflows defined in another Worker. This is useful for creating modular architectures where different Workers handle different concerns.
+
+### Method 1: Using re-exported syntax
+
+You can directly reference the workflow binding from the provider Worker:
+
+```ts
+import { Worker, Workflow } from "alchemy/cloudflare";
+
+// Create the provider Worker with the workflow
+const host = await Worker("Host", {
+  entrypoint: "./workflow-provider.ts", 
+  bindings: {
+    SHARED_PROCESSOR: new Workflow("shared-processor", {
+      className: "SharedProcessor",
+      workflowName: "shared-processing-workflow",
+    }),
+  },
+});
+
+// Create the client Worker using the provider's workflow binding directly
+const client = await Worker("client", {
+  entrypoint: "./client-worker.ts",
+  bindings: {
+    // Re-use the exact same workflow binding from the provider worker
+    SHARED_PROCESSOR: host.bindings.SHARED_PROCESSOR,
+  },
+});
+```
+
+### Method 2: Using `scriptName` directly
+
+Alternatively, when creating a workflow binding in a client Worker, you can reference a workflow defined in another Worker by specifying the `scriptName`:
+
+```ts
+import { Worker, Workflow } from "alchemy/cloudflare";
+
+const hostWorkerName = "host"
+
+const workflow = new Workflow("shared-processor", {
+  className: "SharedProcessor",
+  workflowName: "shared-processing-workflow",
+  scriptName: hostWorkerName
+});
+
+// First, create the Worker that defines the workflow
+const host = await Worker("host", {
+  entrypoint: "./workflow-provider.ts",
+  name: hostWorkerName,
+  bindings: {
+    // Define the workflow in this worker
+    SHARED_PROCESSOR: workflow,
+  },
+});
+
+// Then, create a client Worker that uses the cross-script workflow
+const client = await Worker("client", {
+  entrypoint: "./client-worker.ts",
+  bindings: {
+    // Reference the same workflow but specify which script it comes from
+    SHARED_PROCESSOR: workflow,
+  },
+});
+```
+
+### Workflow Provider Implementation
+
+The provider Worker implements the workflow class and optionally provides endpoints:
+
+```ts
+// workflow-provider.ts
+export class SharedProcessor {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async run(event, step) {
+    const result = await step.do('process-shared-data', async () => {
+      console.log("Processing shared data", event.payload);
+      return {
+        success: true,
+        processedId: event.payload.id,
+        message: "Data processed successfully"
+      };
+    });
+
+    return result;
+  }
+}
+
+export default {
+  async fetch(request: Request) {
+    return new Response('Workflow Provider Worker is running!');
+  }
+};
+```
+
+### Client Worker Implementation
+
+The client Worker can trigger the shared workflow without implementing the workflow class:
+
+```ts
+// client-worker.ts
+import { env } from "cloudflare:workers";
+
+export default {
+  async fetch(request: Request) {
+    const url = new URL(request.url);
+    
+    if (url.pathname === '/trigger-shared-workflow') {
+      try {
+        // Trigger the workflow defined in another worker
+        const workflow = env.SHARED_PROCESSOR;
+        const params = { id: "client-123", data: "example" };
+        const instance = await workflow.create(params);
+
+        return Response.json({
+          id: instance.id,
+          details: await instance.status(),
+          success: true,
+          crossScriptWorking: true,
+          params: params
+        });
+      } catch (error) {
+        return Response.json({
+          error: error.message,
+          crossScriptWorking: false
+        }, { status: 500 });
+      }
+    }
+
+    return new Response('Client Worker is running!');
+  }
+};
+```

@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { Context } from "../context.ts";
+import { logger } from "../util/logger.ts";
 import { slugify } from "../util/slugify.ts";
 import {
   Self,
@@ -361,7 +362,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
       meta.bindings.push({
         type: "service",
         name: bindingName,
-        service: binding.name,
+        service: "service" in binding ? binding.service : binding.name,
       });
     } else if (binding.type === "durable_object_namespace") {
       meta.bindings.push({
@@ -403,8 +404,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
         name: bindingName,
         workflow_name: binding.workflowName,
         class_name: binding.className,
-        // this should be set if the Workflow is in another script ...
-        // script_name: ??,
+        script_name: binding.scriptName,
       });
       // it's unclear whether this is needed, but it works both ways
       // configureClassMigration(binding, binding.id, binding.className);
@@ -464,6 +464,11 @@ export async function prepareWorkerMetadata<B extends Bindings>(
     } else if (binding.type === "images") {
       meta.bindings.push({
         type: "images",
+        name: bindingName,
+      });
+    } else if (binding.type === "version_metadata") {
+      meta.bindings.push({
+        type: "version_metadata",
         name: bindingName,
       });
     } else {
@@ -545,7 +550,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
     meta.body_part = scriptName;
   }
   if (process.env.DEBUG) {
-    console.log(meta);
+    logger.log(meta);
   }
   return meta;
 }

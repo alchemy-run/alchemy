@@ -1,6 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
+import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
 import type { Bound } from "./bound.ts";
@@ -187,7 +188,7 @@ const AiGatewayResource = Resource(
           await handleApiError(deleteResponse, "delete", "ai gateway", id);
         }
       } catch (error) {
-        console.error(`Error deleting AI Gateway ${id}:`, error);
+        logger.error(`Error deleting AI Gateway ${id}:`, error);
         throw error;
       }
       return this.destroy();
@@ -217,7 +218,7 @@ const AiGatewayResource = Resource(
         const getResponse = await api.get(gatewayPath);
         if (getResponse.status === 200) {
           // Gateway exists, treat as update (PUT)
-          console.log(
+          logger.log(
             `AI Gateway '${id}' already exists. Updating existing resource.`,
           );
           const requestBody = mapPropsToApi(id, mergedProps, false);
@@ -240,7 +241,7 @@ const AiGatewayResource = Resource(
       const data: { result: Record<string, any> } = await response!.json();
       apiResource = data.result;
     } catch (error) {
-      console.error(`Error ${this.phase} AI Gateway '${id}':`, error);
+      logger.error(`Error ${this.phase} AI Gateway '${id}':`, error);
       throw error; // Re-throw the error to fail the deployment
     }
 

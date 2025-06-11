@@ -1,12 +1,12 @@
-import { afterAll, beforeAll, describe, expect } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { alchemy } from "../../src/alchemy.js";
-import { destroy } from "../../src/destroy.js";
-import { CopyFile } from "../../src/fs/copy-file.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { destroy } from "../../src/destroy.ts";
+import { CopyFile } from "../../src/fs/copy-file.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -15,28 +15,23 @@ const test = alchemy.test(import.meta, {
 describe("CopyFile Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
   const testId = `${BRANCH_PREFIX}-test-copy-file`;
-  const sourceFilePath = path.join(process.cwd(), "test-source.txt");
-  const destinationFilePath = path.join(process.cwd(), "test-destination.txt");
 
-  // Create a test source file before tests
-  beforeAll(async () => {
+  test("create, update, and delete copy file resource", async (scope) => {
+    const sourceFilePath = path.join(
+      process.cwd(),
+      `test-source-${testId}-1.txt`,
+    );
+    const destinationFilePath = path.join(
+      process.cwd(),
+      `test-destination-${testId}-1.txt`,
+    );
+
+    // Create a test source file
     await fs.promises.writeFile(
       sourceFilePath,
       "This is a test file for copying",
     );
-  });
 
-  // Clean up test files after tests
-  afterAll(async () => {
-    try {
-      await fs.promises.unlink(sourceFilePath);
-      await fs.promises.unlink(destinationFilePath);
-    } catch (_error) {
-      // Ignore errors if files don't exist
-    }
-  });
-
-  test("create, update, and delete copy file resource", async (scope) => {
     let resource;
     try {
       // Create a test copy file resource
@@ -66,7 +61,7 @@ describe("CopyFile Resource", () => {
       // Update the resource with a different destination
       const newDestinationPath = path.join(
         process.cwd(),
-        "test-destination-updated.txt",
+        `test-destination-updated-${testId}-1.txt`,
       );
       resource = await CopyFile(testId, {
         src: sourceFilePath,
@@ -90,6 +85,14 @@ describe("CopyFile Resource", () => {
       // Always clean up, even if test assertions fail
       await destroy(scope);
 
+      // Clean up test files
+      try {
+        await fs.promises.unlink(sourceFilePath);
+        await fs.promises.unlink(destinationFilePath);
+      } catch (_error) {
+        // Ignore errors if files don't exist
+      }
+
       // Verify destination file was deleted
       const fileExists = await fs.promises
         .access(destinationFilePath, fs.constants.F_OK)
@@ -100,6 +103,21 @@ describe("CopyFile Resource", () => {
   });
 
   test("copy file with overwrite false", async (scope) => {
+    const sourceFilePath = path.join(
+      process.cwd(),
+      `test-source-${testId}-2.txt`,
+    );
+    const destinationFilePath = path.join(
+      process.cwd(),
+      `test-destination-${testId}-2.txt`,
+    );
+
+    // Create a test source file
+    await fs.promises.writeFile(
+      sourceFilePath,
+      "This is a test file for copying",
+    );
+
     try {
       // Create a file at the destination first
       await fs.promises.writeFile(
@@ -123,6 +141,14 @@ describe("CopyFile Resource", () => {
       expect(content).toBe("This is the original file");
     } finally {
       await destroy(scope);
+
+      // Clean up test files
+      try {
+        await fs.promises.unlink(sourceFilePath);
+        await fs.promises.unlink(destinationFilePath);
+      } catch (_error) {
+        // Ignore errors if files don't exist
+      }
     }
   });
 });

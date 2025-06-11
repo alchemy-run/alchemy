@@ -1,17 +1,17 @@
-import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { destroy } from "../../src/destroy.js";
-import { createNeonApi } from "../../src/neon/api.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { destroy } from "../../src/destroy.ts";
+import { createNeonApi } from "../../src/neon/api.ts";
 import {
   type NeonBranch,
   type NeonDatabase,
   type NeonEndpoint,
   NeonProject,
   type NeonRole,
-} from "../../src/neon/project.js";
-import { BRANCH_PREFIX } from "../util.js";
+} from "../../src/neon/project.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
-import "../../src/test/bun.js";
+import "../../src/test/vitest.ts";
 
 // Create API client for verification
 const api = createNeonApi();
@@ -25,7 +25,7 @@ describe("NeonProject Resource", () => {
   const testId = `${BRANCH_PREFIX}-test-neon-project`;
 
   // Helper function to generate a unique project name
-  const generateProjectName = () => `Test Project ${testId}-${Date.now()}`;
+  const generateProjectName = () => `Test Project ${testId}}`;
 
   test("create, update, and delete neon project", async (scope) => {
     let project: NeonProject | undefined;

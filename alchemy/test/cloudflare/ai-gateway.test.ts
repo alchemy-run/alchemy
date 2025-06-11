@@ -1,11 +1,11 @@
-import { describe, expect } from "bun:test";
-import { alchemy } from "../../src/alchemy.js";
-import { AiGateway } from "../../src/cloudflare/ai-gateway.js";
-import { createCloudflareApi } from "../../src/cloudflare/api.js";
-import { destroy } from "../../src/destroy.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { describe, expect } from "vitest";
+import { alchemy } from "../../src/alchemy.ts";
+import { AiGateway } from "../../src/cloudflare/ai-gateway.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import { destroy } from "../../src/destroy.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
-import "../../src/test/bun.js";
+import "../../src/test/vitest.ts";
 
 // Create API client for verification
 const api = await createCloudflareApi();

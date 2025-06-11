@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "deploy": "bun --env-file ../../.env ./index.ts",
-    "destroy": "bun --env-file ../../.env ./index.ts --destroy"
+    "deploy": "bun tsx --env-file ../../.env ./index.ts",
+    "destroy": "bun tsx --env-file ../../.env ./index.ts --destroy"
   },
   "dependencies": {
     "alchemy": "workspace:*"
