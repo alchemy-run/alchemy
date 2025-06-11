@@ -697,9 +697,10 @@ export function Worker<const B extends Bindings>(
             "esbuild",
             // TODO(sam): this is for fetch, why is it a package?
             "undici",
-            // TODO(sam): no idea where this came from, feels dangerous to externalize it
-            "ws",
             "miniflare",
+            "@iarna/toml",
+            "cli-*",
+            "react*",
           ],
           banner: {
             js: "var __ALCHEMY_RUNTIME__ = true;",

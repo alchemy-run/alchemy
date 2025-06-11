@@ -55,8 +55,11 @@ export async function fetchAndExpectStatus(
         return response;
       }
 
-      // If we get a 404 when expecting something else, retry with backoff
-      if (response.status === 404 && expectedStatus !== 404) {
+      // If we get a 500, 404 when expecting something else, retry with backoff
+      if (
+        response.status >= 500 ||
+        (response.status === 404 && expectedStatus !== 404)
+      ) {
         attempt++;
 
         if (attempt >= maxAttempts) {

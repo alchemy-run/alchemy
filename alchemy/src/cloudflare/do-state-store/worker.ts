@@ -11,6 +11,10 @@ interface Env {
 
 export default class extends WorkerEntrypoint<Env> {
   override async fetch(request: Request) {
+    const url = new URL(request.url);
+    if (url.pathname === "/health-check") {
+      return new Response("OK", { status: 200 });
+    }
     try {
       const result = await this.handle(request);
       const body: DOStateStoreAPI.Response = {

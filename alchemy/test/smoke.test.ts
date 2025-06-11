@@ -107,10 +107,11 @@ async function verifyNoLocalStateInCI(examplePath: string): Promise<void> {
   }
 }
 
-const skippedExamples = process.env.CI
-  ? // acting up in github CI, will come back to it once it's priority again
-    ["aws-app", "cloudflare-worker-bootstrap"]
-  : ["aws-app"];
+const skippedExamples = [
+  "aws-app",
+  "cloudflare-worker-bootstrap",
+  "cloudflare-tanstack-start",
+];
 
 // Discover examples and generate tests
 const examples = (await discoverExamples()).filter(
@@ -145,6 +146,11 @@ describe("Smoke Tests", () => {
       }
 
       try {
+        // pre-emptively try and destroy the example if it exists
+        console.log(`Running destroy for ${example.name}...`);
+        let destroyResult = await runCommand(destroyCommand, example.path);
+        expect(destroyResult).toBeDefined();
+
         // Run deploy command
         console.log(`Running deploy for ${example.name}...`);
         const deployResult = await runCommand(deployCommand, example.path);
@@ -155,7 +161,7 @@ describe("Smoke Tests", () => {
 
         // Run destroy command
         console.log(`Running destroy for ${example.name}...`);
-        const destroyResult = await runCommand(destroyCommand, example.path);
+        destroyResult = await runCommand(destroyCommand, example.path);
         expect(destroyResult).toBeDefined();
 
         // Verify cleanup in CI

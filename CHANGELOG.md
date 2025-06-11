@@ -1,3 +1,37 @@
+## v0.26.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Anonymous telemetry with opt-out &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/302 [<samp>(d2c53)</samp>](https://github.com/sam-goodwin/alchemy/commit/d2c53f5c)
+- Add fancy deployment CLI &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/sam-goodwin/alchemy/issues/315 [<samp>(5efac)</samp>](https://github.com/sam-goodwin/alchemy/commit/5efac184)
+- **cloudflare**:
+  - Add Cloudflare Email Routing resources &nbsp;-&nbsp; by **Sam Goodwin** and **sam-goodwin** in https://github.com/sam-goodwin/alchemy/issues/314 [<samp>(5a3df)</samp>](https://github.com/sam-goodwin/alchemy/commit/5a3df036)
+  - Add adopt support to Pipeline resource &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/318 [<samp>(c9f23)</samp>](https://github.com/sam-goodwin/alchemy/commit/c9f2387b)
+  - Add SvelteKit on Cloudflare Workers guide using Alchemy &nbsp;-&nbsp; by **Jordan Coeyman** in https://github.com/sam-goodwin/alchemy/issues/271 [<samp>(c516c)</samp>](https://github.com/sam-goodwin/alchemy/commit/c516c47d)
+  - Add Astro resource for Cloudflare deployment &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/330 [<samp>(dbea5)</samp>](https://github.com/sam-goodwin/alchemy/commit/dbea5738)
+  - Add routes support to Worker and Website resources &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/336 [<samp>(510e2)</samp>](https://github.com/sam-goodwin/alchemy/commit/510e29a4)
+  - Add Cloudflare Images binding support &nbsp;-&nbsp; in https://github.com/sam-goodwin/alchemy/issues/239 [<samp>(a785d)</samp>](https://github.com/sam-goodwin/alchemy/commit/a785d28f)
+  - Secrets Store and Secret &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/296 [<samp>(b1979)</samp>](https://github.com/sam-goodwin/alchemy/commit/b1979873)
+- **planetscale**:
+  - Planetscale databases & branch &nbsp;-&nbsp; by **NickBlow** in https://github.com/sam-goodwin/alchemy/issues/268 [<samp>(3b79a)</samp>](https://github.com/sam-goodwin/alchemy/commit/3b79a49a)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Fallback to console if no scope is available &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/sam-goodwin/alchemy/issues/325 [<samp>(34e0a)</samp>](https://github.com/sam-goodwin/alchemy/commit/34e0aa8b)
+- Log tasks in destroy &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(f2465)</samp>](https://github.com/sam-goodwin/alchemy/commit/f2465b42)
+- Use logical OR operator for BRANCH_PREFIX fallback &nbsp;-&nbsp; by **Sam Goodwin** and **sam-goodwin** in https://github.com/sam-goodwin/alchemy/issues/327 [<samp>(66990)</samp>](https://github.com/sam-goodwin/alchemy/commit/66990e81)
+- **aws**:
+  - Include output attributes in generated resource types &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/322 [<samp>(b87b3)</samp>](https://github.com/sam-goodwin/alchemy/commit/b87b3560)
+- **cloudflare**:
+  - Filter duplicate compat flags &nbsp;-&nbsp; by **NickBlow** in https://github.com/sam-goodwin/alchemy/issues/300 [<samp>(5d53c)</samp>](https://github.com/sam-goodwin/alchemy/commit/5d53c52f)
+  - Error on R2Bucket name change during update &nbsp;-&nbsp; in https://github.com/sam-goodwin/alchemy/issues/246 [<samp>(640d7)</samp>](https://github.com/sam-goodwin/alchemy/commit/640d71ed)
+- **telemetry**:
+  - Remove file buffer to resolve "enoent" error &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/333 [<samp>(eb8e5)</samp>](https://github.com/sam-goodwin/alchemy/commit/eb8e5f59)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.25.0...v0.26.0)
+
+---
+
 ## v0.25.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
