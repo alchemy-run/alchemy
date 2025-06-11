@@ -6,9 +6,9 @@ description: Like Terraform but in plain TypeScript
 ---
 
 <CodeSnippetHero 
-  name="Alchemy" 
-  text="Wrangle the Cloud with pure TypeScript 🪄" 
-  tagline="Built-in support for Cloudflare, AWS, Stripe and more — or generate your own in minutes with our llms.txt"
+  name="Alchemy 🪄" 
+  text="Wrangle the Cloud with simple TypeScript scripts" 
+  tagline="Built-in support for Cloudflare, AWS, Stripe and more — or generate your own in minutes with AI"
   :actions="[
     { theme: 'brand', text: 'Get Started', link: '/docs/getting-started' },
     { theme: 'alt', text: 'Star on GitHub ⭐️', link: 'https://github.com/sam-goodwin/alchemy' }
