@@ -10,6 +10,7 @@ import type { R2BucketResource as _R2Bucket } from "./bucket.ts";
 import type { D1DatabaseResource } from "./d1-database.ts";
 import type { DurableObjectNamespace as _DurableObjectNamespace } from "./durable-object-namespace.ts";
 import type { HyperdriveResource as _Hyperdrive } from "./hyperdrive.ts";
+import type { Images as _Images } from "./images.ts";
 import type { PipelineResource as _Pipeline } from "./pipeline.ts";
 import type { QueueResource as _Queue } from "./queue.ts";
 import type { SecretsStore as _SecretsStore } from "./secrets-store.ts";
@@ -65,13 +66,15 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
                                     ? Fetcher
                                     : T extends _Ai<infer M>
                                       ? Ai<M>
-                                      : T extends _VersionMetadata
-                                        ? WorkerVersionMetadata
-                                        : T extends Self
-                                          ? Service
-                                          : T extends Json<infer T>
-                                            ? T
-                                            : Service;
+                                      : T extends _Images
+                                        ? ImagesBinding
+                                        : T extends _VersionMetadata
+                                          ? WorkerVersionMetadata
+                                          : T extends Self
+                                            ? Service
+                                            : T extends Json<infer T>
+                                              ? T
+                                              : Service;
 
 interface SecretsStoreBinding<
   S extends Record<string, Secret> | undefined = undefined,

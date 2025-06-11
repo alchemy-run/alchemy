@@ -228,6 +228,12 @@ const R2BucketResource = Resource(
       }
     }
 
+    if (this.phase === "update" && bucketName !== this.output.name) {
+      throw new Error(
+        `Cannot update R2Bucket name after creation. Bucket name is immutable. Before: ${this.output.name}, After: ${bucketName}`,
+      );
+    }
+
     await updatePublicAccess(
       api,
       bucketName,

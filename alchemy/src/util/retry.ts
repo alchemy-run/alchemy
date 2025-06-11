@@ -1,5 +1,3 @@
-import { logger } from "./logger.ts";
-
 /**
  * Utility function for exponential backoff retry
  * Retries an operation with exponential backoff when a retryable error occurs
@@ -24,7 +22,6 @@ export async function withExponentialBackoff<T>(
     try {
       return await operation();
     } catch (error: any) {
-      logger.log(error.message);
       attempt++;
       if (attempt >= maxAttempts || !isRetryable(error)) {
         throw error;

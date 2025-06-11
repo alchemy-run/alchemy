@@ -1,6 +1,9 @@
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
-import { secret as alchemySecret, type Secret as AlchemySecret } from "../secret.ts";
+import {
+  secret as alchemySecret,
+  type Secret as AlchemySecret,
+} from "../secret.ts";
 import { handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
@@ -44,7 +47,7 @@ export interface SecretProps extends CloudflareApiOptions {
   /**
    * The secret value to store
    * Can be a string or an existing Secret instance
-   * 
+   *
    * @example
    * ```ts
    * const secret = await Secret("api-key", {
@@ -99,8 +102,8 @@ export interface Secret
 
 /**
  * A Cloudflare Secret represents an individual secret stored in a Secrets Store.
- * 
- * Use this resource to add individual secrets to an existing Secrets Store, 
+ *
+ * Use this resource to add individual secrets to an existing Secrets Store,
  * providing fine-grained control over secret management.
  *
  * @see https://developers.cloudflare.com/api/resources/secrets_store/subresources/stores/subresources/secrets/
@@ -110,13 +113,13 @@ export interface Secret
  * const store = await SecretsStore("my-store", {
  *   name: "production-secrets"
  * });
- * 
+ *
  * // Add individual secrets to the store
  * const apiKey = await Secret("api-key", {
  *   store: store,
  *   value: alchemy.secret(process.env.API_KEY)
  * });
- * 
+ *
  * const dbUrl = await Secret("database-url", {
  *   store: store,
  *   value: process.env.DATABASE_URL
@@ -152,9 +155,8 @@ export async function Secret(
   props: SecretProps,
 ): Promise<Secret> {
   // Convert string value to AlchemySecret if needed to prevent plain text serialization
-  const secretValue = typeof props.value === "string" 
-    ? alchemySecret(props.value) 
-    : props.value;
+  const secretValue =
+    typeof props.value === "string" ? alchemySecret(props.value) : props.value;
 
   // Call the internal resource with secure props
   return _Secret(name, {
@@ -163,34 +165,40 @@ export async function Secret(
   });
 }
 
-const _Secret = Resource("cloudflare::Secret", async function (
-  this: Context<Secret>,
-  name: string,
-  props: _SecretProps,
-): Promise<Secret> {
-  const api = await createCloudflareApi(props);
+const _Secret = Resource(
+  "cloudflare::Secret",
+  async function (
+    this: Context<Secret>,
+    name: string,
+    props: _SecretProps,
+  ): Promise<Secret> {
+    const api = await createCloudflareApi(props);
 
-  if (this.phase === "delete") {
-    if (props.delete !== false) {
-      await deleteSecret(api, props.store.id, name);
+    if (this.phase === "delete") {
+      if (props.delete !== false) {
+        await deleteSecret(api, props.store.id, name);
+      }
+      return this.destroy();
     }
-    return this.destroy();
-  }
 
-  const createdAt = this.phase === "update" ? this.output?.createdAt || Date.now() : Date.now();
+    const createdAt =
+      this.phase === "update"
+        ? this.output?.createdAt || Date.now()
+        : Date.now();
 
-  // Insert or update the secret
-  await insertSecret(api, props.store.id, name, props.value);
+    // Insert or update the secret
+    await insertSecret(api, props.store.id, name, props.value);
 
-  return this({
-    name,
-    storeId: props.store.id,
-    store: props.store,
-    value: props.value,
-    createdAt,
-    modifiedAt: Date.now(),
-  });
-});
+    return this({
+      name,
+      storeId: props.store.id,
+      store: props.store,
+      value: props.value,
+      createdAt,
+      modifiedAt: Date.now(),
+    });
+  },
+);
 
 /**
  * Insert or update a secret in a secrets store

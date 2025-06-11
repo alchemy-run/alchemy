@@ -50,6 +50,80 @@ interface ResourceType {
   Attributes?: Record<string, ResourceTypeProperty>;
 }
 
+function convertPropertyToTypeScript(prop: ResourceTypeProperty): string {
+  // Handle primitive types
+  if (prop.PrimitiveType) {
+    let type = prop.PrimitiveType.toLowerCase();
+    if (type === "integer" || type === "double") {
+      type = "number";
+    } else if (type === "json") {
+      type = "any";
+    } else if (type === "timestamp") {
+      type = "string"; // timestamps are represented as ISO strings in CloudFormation
+    } else if (type === "long") {
+      type = "number"; // long integers are represented as numbers in TypeScript
+    }
+    return type;
+  }
+  // Handle array types
+  else if (prop.Type === "List" || prop.Type === "Array") {
+    if (prop.PrimitiveItemType) {
+      let itemType = prop.PrimitiveItemType.toLowerCase();
+      if (itemType === "integer" || itemType === "double") {
+        itemType = "number";
+      } else if (itemType === "json") {
+        itemType = "any";
+      }
+      return `${itemType}[]`;
+    } else if (prop.ItemType) {
+      return `${sanitizeTypeName(prop.ItemType)}[]`;
+    } else {
+      return "any[]";
+    }
+  }
+  // Handle map types
+  else if (prop.Type === "Map") {
+    return "Record<string, any>";
+  }
+  // Handle references to other types
+  else if (prop.Type) {
+    const sanitizedTypeName = sanitizeTypeName(prop.Type);
+    // If the type name is empty or invalid after sanitization, fall back to any
+    if (!sanitizedTypeName || sanitizedTypeName === "any") {
+      return "any";
+    }
+    return sanitizedTypeName;
+  }
+
+  return "any";
+}
+
+function sanitizeTypeName(typeName: string | undefined): string {
+  // Handle undefined or non-string inputs
+  if (!typeName || typeof typeName !== "string") {
+    return "any";
+  }
+
+  // Fix common naming issues
+  let fixedName = typeName;
+
+  // Note: Don't fix plural forms automatically as they may be intentional type aliases
+  // Individual fixes can be added if needed, but avoid blanket plural-to-singular conversion
+
+  // Fix specific type name issues
+  if (fixedName === "Tags") {
+    fixedName = "Tag";
+  }
+
+  // Note: These types should exist in the spec and be processed appropriately
+
+  // Replace dots with underscores and other invalid characters
+  return fixedName
+    .replace(/\./g, "_")
+    .replace(/[^a-zA-Z0-9_]/g, "_")
+    .replace(/^(\d)/, "_$1"); // Ensure it doesn't start with a number
+}
+
 function generatePropsInterface(
   resourceType: ResourceType,
   resourceName: string,
@@ -99,10 +173,21 @@ function generateResourceType(
   lines.push(
     `type ${resourceName} = Resource<"AWS::${resourceName}"> & ${resourceName}Props & {`,
   );
-  lines.push("  // Additional properties from Cloud Control API");
-  lines.push("  Arn?: string;");
-  lines.push("  CreationTime?: string;");
-  lines.push("  LastUpdateTime?: string;");
+
+  // Track which properties we've already added from attributes
+  const addedProperties = new Set<string>();
+
+  // Add attributes (output properties) from CloudFormation specification
+  if (resourceType.Attributes) {
+    for (const [propName, prop] of Object.entries(resourceType.Attributes)) {
+      const propType = convertPropertyToTypeScript(prop);
+      // Make all attributes required (remove ?) as requested
+      // Since some attribute names contain a dot, make the attribute name a string literal.
+      lines.push(`  "${propName}": ${propType};`);
+      addedProperties.add(propName);
+    }
+  }
+
   lines.push("};");
 
   return lines.join("\n");

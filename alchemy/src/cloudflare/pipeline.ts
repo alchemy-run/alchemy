@@ -212,6 +212,14 @@ export interface PipelineProps extends CloudflareApiOptions {
    * @default true
    */
   delete?: boolean;
+
+  /**
+   * Whether to adopt an existing pipeline instead of creating a new one.
+   * If set to true, the resource will attempt to adopt an existing pipeline with the same name
+   *
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -360,7 +368,34 @@ const PipelineResource = Resource("cloudflare::Pipeline", async function <
   let pipelineData: CloudflarePipelineResponse;
 
   if (this.phase === "create") {
-    pipelineData = await createPipeline(api, pipelineName, props);
+    console.log(props);
+    // Check if we should adopt an existing pipeline
+    try {
+      // Try to create pipeline first
+      console.log("Creating new Cloudflare Pipeline:", pipelineName);
+      pipelineData = await createPipeline(api, pipelineName, props);
+    } catch (error) {
+      // If creation fails with 409 (conflict), adopt existing pipeline
+      if (
+        error instanceof CloudflareApiError &&
+        (error.status === 409 ||
+          (error.status === 400 &&
+            error.message.includes("Pipeline with this name already exists")))
+      ) {
+        if (props.adopt) {
+          console.log(
+            "Pipeline already exists, adopting existing Cloudflare Pipeline:",
+            pipelineName,
+          );
+          pipelineData = await getPipeline(api, pipelineName);
+        } else {
+          throw error;
+        }
+      } else {
+        // For any other error, rethrow
+        throw error;
+      }
+    }
   } else {
     // Update operation
     if (this.output?.id) {

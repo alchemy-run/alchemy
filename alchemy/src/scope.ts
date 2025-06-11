@@ -33,7 +33,14 @@ export class Scope {
   public static globals: Scope[] = [];
 
   public static get(): Scope | undefined {
-    return Scope.storage.getStore();
+    const scope = Scope.storage.getStore();
+    if (!scope) {
+      if (Scope.globals.length > 0) {
+        return Scope.globals[Scope.globals.length - 1];
+      }
+      return undefined;
+    }
+    return scope;
   }
 
   public static get root(): Scope {
@@ -42,12 +49,7 @@ export class Scope {
 
   public static get current(): Scope {
     const scope = Scope.get();
-    if (!scope) {
-      if (Scope.globals.length > 0) {
-        return Scope.globals[Scope.globals.length - 1];
-      }
-      throw new Error("Not running within an Alchemy Scope");
-    }
+    if (!scope) throw new Error("Not running within an Alchemy Scope");
     return scope;
   }
 

@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "react-router build",
-    "deploy": "bun --env-file ../../.env ./alchemy.run.ts",
-    "destroy": "bun --env-file ../../.env ./alchemy.run.ts --destroy",
+    "deploy": "bun tsx --env-file ../../.env ./alchemy.run.ts",
+    "destroy": "bun tsx --env-file ../../.env ./alchemy.run.ts --destroy",
     "dev": "react-router dev",
     "preview": "bun run build && vite preview",
     "types": "react-router typegen"

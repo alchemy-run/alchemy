@@ -69,6 +69,7 @@ describe("Pipeline Resource", () => {
       // Create a basic pipeline with R2 destination
       pipeline = await Pipeline(pipelineName, {
         name: pipelineName,
+        adopt: true,
         source: [
           {
             type: "http",
@@ -131,6 +132,7 @@ describe("Pipeline Resource", () => {
       // Create a pipeline with the R2 bucket as destination and custom settings
       pipeline = await Pipeline(pipelineName, {
         name: pipelineName,
+        adopt: true,
         source: [
           {
             type: "http",
@@ -198,6 +200,7 @@ describe("Pipeline Resource", () => {
       // Create a pipeline with initial settings
       pipeline = await Pipeline(pipelineName, {
         name: pipelineName,
+        adopt: true,
         source: [
           {
             type: "http",
@@ -231,6 +234,7 @@ describe("Pipeline Resource", () => {
       // Update the pipeline with new settings
       pipeline = await Pipeline(pipelineName, {
         name: pipelineName,
+        adopt: true,
         source: [
           {
             type: "http",
@@ -349,6 +353,7 @@ describe("Pipeline Resource", () => {
       // Create a pipeline with the R2 bucket as destination
       pipeline = await Pipeline(pipelineName, {
         name: pipelineName,
+        adopt: true,
         source: [
           {
             type: "binding",

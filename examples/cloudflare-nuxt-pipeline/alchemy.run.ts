@@ -16,11 +16,15 @@ const app = await alchemy("cloudflare-nuxt-pipeline", {
 
 const bucket = await R2Bucket(
   `cloudflare-nuxt-pipeline-bucket${BRANCH_PREFIX}`,
+  {
+    adopt: true,
+  },
 );
 
 const pipeline = await Pipeline(
   `cloudflare-nuxt-pipeline-pipeline${BRANCH_PREFIX}`,
   {
+    adopt: true,
     source: [{ type: "binding", format: "json" }],
     destination: {
       type: "r2",
@@ -45,6 +49,7 @@ const pipeline = await Pipeline(
 export const website = await Nuxt(
   `cloudflare-nuxt-pipeline-website${BRANCH_PREFIX}`,
   {
+    adopt: true,
     bindings: {
       R2_BUCKET: bucket,
       PIPELINE: pipeline,

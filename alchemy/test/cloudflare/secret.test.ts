@@ -157,7 +157,10 @@ describe("Secret Resource", () => {
     }
   });
 
-  async function assertSecretExists(storeId: string, secretName: string): Promise<void> {
+  async function assertSecretExists(
+    storeId: string,
+    secretName: string,
+  ): Promise<void> {
     const api = await createCloudflareApi();
     const response = await api.get(
       `/accounts/${api.accountId}/secrets_store/stores/${storeId}/secrets`,
@@ -169,7 +172,10 @@ describe("Secret Resource", () => {
     expect(secret).toBeTruthy();
   }
 
-  async function assertSecretNotExists(storeId: string, secretName: string): Promise<void> {
+  async function assertSecretNotExists(
+    storeId: string,
+    secretName: string,
+  ): Promise<void> {
     const api = await createCloudflareApi();
     const response = await api.get(
       `/accounts/${api.accountId}/secrets_store/stores/${storeId}/secrets`,

@@ -214,10 +214,21 @@ function generateResourceType(
   lines.push(
     `type ${resourceName} = AlchemyResource<"AWS::${serviceName}::${resourceName}"> & ${resourceName}Props & {`,
   );
-  lines.push("  // Additional properties from Cloud Control API");
-  lines.push("  Arn?: string;");
-  lines.push("  CreationTime?: string;");
-  lines.push("  LastUpdateTime?: string;");
+
+  // Track which properties we've already added from attributes
+  const addedProperties = new Set<string>();
+
+  // Add attributes (output properties) from CloudFormation specification
+  if (resourceType.Attributes) {
+    for (const [propName, prop] of Object.entries(resourceType.Attributes)) {
+      const propType = convertPropertyToTypeScript(prop);
+      // Make all attributes required (remove ?) as requested
+      // Since some attribute names contain a dot, make the attribute name a string literal.
+      lines.push(`  "${propName}": ${propType};`);
+      addedProperties.add(propName);
+    }
+  }
+
   lines.push("};");
 
   return lines.join("\n");

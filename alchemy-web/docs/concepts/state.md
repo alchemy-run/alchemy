@@ -92,9 +92,50 @@ const app = await alchemy("my-app", {
 });
 ```
 
+### Durable Objects State Store (Recommended)
+
+For high-performance cloud state storage, use DOStateStore with Cloudflare Durable Objects.
+
+```typescript
+import { DOStateStore } from "alchemy/cloudflare";
+
+// Set CLOUDFLARE_API_KEY, CLOUDFLARE_EMAIL, and ALCHEMY_STATE_TOKEN env vars
+const app = await alchemy("my-app", {
+  stage: "prod",
+  phase: process.argv.includes("--destroy") ? "destroy" : "up",
+  stateStore: (scope) => new DOStateStore(scope)
+});
+```
+
+> [!TIP]
+> Credentials can be inferred from environment variables or OAuth. See the [Cloudflare Auth Guide](../guides/cloudflare-auth.md) for setup instructions.
+
+You can also provide explicit configuration:
+
+```typescript
+import { DOStateStore } from "alchemy/cloudflare";
+
+const app = await alchemy("my-app", {
+  stage: "prod", 
+  phase: process.argv.includes("--destroy") ? "destroy" : "up",
+  stateStore: (scope) => new DOStateStore(scope, {
+    // Cloudflare API credentials
+    apiKey: alchemy.secret(process.env.CLOUDFLARE_API_KEY),
+    email: process.env.CLOUDFLARE_EMAIL,
+    // Optional: customize worker name (defaults to "alchemy-state")
+    worker: {
+      name: "my-app-state"
+    }
+  })
+});
+```
+
+DOStateStore automatically creates and manages a Cloudflare Worker with Durable Objects for state storage.
+
+
 ### R2 Rest State Store
 
-Alchemy supports multiple state storage backends. You can use the default file system store or integrate with cloud services like Cloudflare R2:
+Alchemy also supports state storage using Cloudflare R2, though DOStateStore is recommended for better performance:
 
 ```typescript
 // Example with Cloudflare R2 state store

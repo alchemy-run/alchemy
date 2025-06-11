@@ -468,6 +468,11 @@ export async function prepareWorkerMetadata<B extends Bindings>(
         name: bindingName,
         dataset: binding.dataset,
       });
+    } else if (binding.type === "images") {
+      meta.bindings.push({
+        type: "images",
+        name: bindingName,
+      });
     } else if (binding.type === "version_metadata") {
       meta.bindings.push({
         type: "version_metadata",

@@ -156,7 +156,13 @@ async function getDependencies(testFile: string): Promise<Set<string>> {
       format: "esm",
       bundle: true,
       metafile: true,
-      external: ["@cloudflare/workers-types", "bun:test", "vitest", "@swc/*"],
+      external: [
+        "@cloudflare/workers-types",
+        "bun:test",
+        "vitest",
+        "@swc/*",
+        "react-devtools-core",
+      ],
       logLevel: "error",
     });
 

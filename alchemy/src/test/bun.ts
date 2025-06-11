@@ -117,7 +117,9 @@ type test = {
  * ```
  */
 export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
-  defaultOptions = defaultOptions ?? {};
+  defaultOptions = defaultOptions ?? {
+    quiet: true,
+  };
   if (
     defaultOptions.stateStore === undefined &&
     // process.env.CI &&
@@ -179,6 +181,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
       ...spread(defaultOptions),
       ...spread(_options),
     };
+    console.log("options", options);
 
     const fn = typeof args[1] === "function" ? args[1] : args[2]!;
 

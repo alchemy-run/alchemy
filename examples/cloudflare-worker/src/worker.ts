@@ -24,7 +24,7 @@ export default {
     const apiKey = await env.SECRETS.get("API_KEY");
     const databaseUrl = await env.SECRETS.get("DATABASE_URL");
     const oauthSecret = await env.SECRETS.get("OAUTH_SECRET");
-    
+
     console.log(`API Key exists: ${apiKey ? "yes" : "no"}`);
     console.log(`Database URL exists: ${databaseUrl ? "yes" : "no"}`);
     console.log(`OAuth Secret exists: ${oauthSecret ? "yes" : "no"}`);

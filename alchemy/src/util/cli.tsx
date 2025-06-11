@@ -2,7 +2,7 @@ import { Box, render, Static, Text, useApp } from "ink";
 import Spinner from "ink-spinner";
 import { format } from "node:util";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { version } from "../../package.json" with { type: "json" };
+import packageJson from "../../package.json" with { type: "json" };
 import type { Phase } from "../alchemy.ts";
 import { dedent } from "./dedent.ts";
 
@@ -51,7 +51,7 @@ export function LoggerCLI({ alchemyInfo, setLogger }: LoggerCLIProps) {
         ...prev,
         { id: nextId.current++, text: format(...args) },
       ]),
-    []
+    [],
   );
 
   const task = useCallback((id: string, data: Task) => {
@@ -85,7 +85,7 @@ export function LoggerCLI({ alchemyInfo, setLogger }: LoggerCLIProps) {
               <Box flexDirection="column" key={log.text}>
                 <Box flexDirection="column" borderStyle="round" padding={1}>
                   <Text color="green" bold>
-                    Alchemy (v{version})
+                    Alchemy (v{packageJson.version})
                   </Text>
                   <Text color="gray" bold>
                     App:{" "}
@@ -179,7 +179,7 @@ export const createLoggerInstance = (alchemyInfo: AlchemyInfo) => {
     />,
     {
       exitOnCtrlC: true,
-    }
+    },
   );
 
   process.on("SIGINT", () => {
@@ -202,7 +202,7 @@ export const createDummyLogger = (): LoggerApi => {
 
 export const createFallbackLogger = (alchemyInfo: AlchemyInfo): LoggerApi => {
   console.log(dedent`
-    Alchemy (v${version})
+    Alchemy (v${packageJson.version})
     App: ${alchemyInfo.appName}
     Phase: ${alchemyInfo.phase}
     Stage: ${alchemyInfo.stage}

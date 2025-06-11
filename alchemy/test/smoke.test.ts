@@ -136,8 +136,8 @@ describe("Smoke Tests", () => {
         destroyCommand = "bun run destroy";
       } else if (example.hasAlchemyRunFile) {
         // Use alchemy.run.ts if it exists
-        deployCommand = "bun ./alchemy.run.ts";
-        destroyCommand = "bun ./alchemy.run.ts --destroy";
+        deployCommand = "bun tsx ./alchemy.run.ts";
+        destroyCommand = "bun tsx ./alchemy.run.ts --destroy";
       } else {
         // Fallback to index.ts
         deployCommand = "bun ./index.ts";

@@ -1,6 +1,6 @@
-import type { AlchemyOptions, Phase } from "../alchemy/src/alchemy.js";
-import { DOStateStore } from "../alchemy/src/cloudflare/index.js";
-import alchemy from "../alchemy/src/index.js";
+import type { AlchemyOptions, Phase } from "alchemy";
+import alchemy from "alchemy";
+import { DOStateStore } from "alchemy/cloudflare";
 
 export const CLOUDFLARE_EMAIL = await alchemy.env.CLOUDFLARE_EMAIL;
 
@@ -17,7 +17,7 @@ export const NEON_API_KEY = await alchemy.secret.env.NEON_API_KEY;
 export const UPSTASH_API_KEY = await alchemy.secret.env.UPSTASH_API_KEY;
 
 export default {
-  stage: process.env.BRANCH_PREFIX ?? "prod",
+  stage: process.env.BRANCH_PREFIX || "prod",
   phase:
     (process.env.ALCHEMY_PHASE as Phase) ??
     (process.argv.includes("--destroy")

@@ -198,6 +198,13 @@ export interface WranglerJsonSpec {
   };
 
   /**
+   * Images bindings
+   */
+  images?: {
+    binding: string;
+  };
+
+  /**
    * KV Namespace bindings
    */
   kv_namespaces?: {
@@ -535,6 +542,13 @@ function processBindings(
         throw new Error(`AI already bound to ${spec.ai.binding}`);
       }
       spec.ai = {
+        binding: bindingName,
+      };
+    } else if (binding.type === "images") {
+      if (spec.images) {
+        throw new Error(`Images already bound to ${spec.images.binding}`);
+      }
+      spec.images = {
         binding: bindingName,
       };
     } else if (binding.type === "analytics_engine") {
