@@ -286,6 +286,129 @@ yarn tsx ./alchemy.run --destroy
 > [!TIP]
 > If the Resource is mostly headless infrastructure like a database or some other service, you should use Cloudflare Workers as the runtime to "round off" the example package. E.g. for a Neon Provider, we would connect it into a Cloudlare Worker via Hyperdrive and provide a URL (via Worker) to hit that page. Ideally you'd also put ViteJS in front and hit that endpoint.
 
+# Coding Best Practices
+
+> [!IMPORTANT]
+> These guidelines have been refined based on code review feedback and production experience. Following them will prevent common issues and improve code quality.
+
+## Resource Implementation
+
+### Runtime Bindings
+When adding a new resource type that can be used as a binding:
+
+1. **Always update `bound.ts`**: Add the mapping from your resource type to its runtime binding interface
+2. **Follow official API specs**: Use the exact interface specified in the provider's documentation
+3. **Don't spread proxy objects**: Proxies can't be spread - explicitly implement each method/property
+
+```ts
+// ❌ DON'T: Spread proxy objects
+return {
+  ...this.runtime,
+  someProperty: value
+};
+
+// ✅ DO: Explicitly implement methods
+return {
+  get: this.runtime.get.bind(this.runtime),
+  someProperty: value
+};
+```
+
+### Resource Output Properties
+Always include relevant metadata in resource outputs:
+
+```ts
+export interface MyResource extends Resource<"provider::my-resource"> {
+  // Include both human-readable names and system IDs
+  resourceName: string;
+  resourceId: string;
+  // Include any other metadata that callers might need
+}
+```
+
+### Update Validation
+Validate immutable properties during resource updates:
+
+```ts
+// Check for changes to immutable properties
+if (currentResource.name !== props.name) {
+  throw new Error(`Cannot change resource name from '${currentResource.name}' to '${props.name}'. Name is immutable after creation.`);
+}
+```
+
+### API Design Principles
+
+1. **Unified over separate**: Prefer single functions that handle multiple cases over separate specialized functions
+2. **Fetch additional metadata**: Call provider APIs to get complete resource information when needed
+3. **Consider deployment implications**: When resources have bindings, consider where they should be deployed
+
+```ts
+// ❌ DON'T: Separate deployment functions
+async function deployWorker(props: WorkerProps) { /* ... */ }
+async function deployWorkerToNamespace(props: WorkerProps, namespace: string) { /* ... */ }
+
+// ✅ DO: Unified deployment with conditional logic
+async function deployWorker(props: WorkerProps) {
+  const endpoint = props.dispatchNamespace 
+    ? `/accounts/${accountId}/workers/dispatch/namespaces/${namespace}/scripts/${scriptName}`
+    : `/accounts/${accountId}/workers/scripts/${scriptName}`;
+  // ...
+}
+```
+
+## Testing Guidelines
+
+### Import Strategy
+- **Use static imports**: Avoid dynamic imports in test files for better IDE support and error detection
+
+```ts
+// ❌ DON'T: Dynamic imports
+const { DispatchNamespace } = await import("../../src/cloudflare/dispatch-namespace.ts");
+
+// ✅ DO: Static imports  
+import { DispatchNamespace } from "../../src/cloudflare/dispatch-namespace.ts";
+```
+
+### Test Structure
+- **Comprehensive end-to-end tests**: Test the full workflow, not just individual components
+- **Use testing utilities**: Prefer `fetchAndExpectOK` for durability testing
+
+```ts
+test("end-to-end workflow", async (scope) => {
+  // 1. Create the infrastructure resource
+  const namespace = await DispatchNamespace("test-namespace", { name: "test" });
+  
+  // 2. Create a worker that uses the resource  
+  const worker = await Worker("test-worker", {
+    dispatchNamespace: namespace,
+    script: "export default { fetch() { return new Response('Hello'); } }"
+  });
+  
+  // 3. Create a dispatcher that binds to the resource
+  const dispatcher = await Worker("dispatcher", {
+    bindings: { NAMESPACE: namespace },
+    script: "export default { async fetch(req, env) { return env.NAMESPACE.get('test-worker').fetch(req); } }"
+  });
+  
+  // 4. Test end-to-end functionality
+  await fetchAndExpectOK(`https://dispatcher.${accountId}.workers.dev`);
+});
+```
+
+### Type Management
+- **Don't export internal types**: Only export types that are part of the public API
+- **Follow provider specifications**: Use exact types from official documentation
+
+## Code Organization
+
+### File Structure
+- **One concern per file**: Each resource should handle its complete lifecycle in one file
+- **Consistent naming**: Use the exact resource name from the provider's API
+
+### Dependencies
+- **Minimize cross-resource dependencies**: Resources should be as independent as possible
+- **Clear separation of concerns**: Keep API calls, validation, and business logic separate
+
 # Test Workflow
 
 Before committing changes to Git and pushing Pull Requests, make sure to run the following commands to ensure the code is working:
