@@ -307,9 +307,11 @@ return {
   someProperty: value
 };
 
-// ✅ DO: Explicitly implement methods
+// ✅ DO: Use bind function and explicitly implement methods
+const binding = await bind(resource);
 return {
-  get: this.runtime.get.bind(this.runtime),
+  ...resource,
+  get: binding.get,
   someProperty: value
 };
 ```
@@ -355,7 +357,6 @@ async function deployWorker(props: WorkerProps) {
   // ...
 }
 ```
-
 ## Testing Guidelines
 
 ### Import Strategy
