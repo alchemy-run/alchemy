@@ -114,8 +114,16 @@ type test = {
  * });
  * ```
  */
-export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
-  defaultOptions = defaultOptions ?? {};
+export function test(
+  meta: ImportMeta,
+  defaultOptions: TestOptions = {
+    quiet: true,
+  },
+): test {
+  if (!("quiet" in defaultOptions)) {
+    defaultOptions.quiet = true;
+  }
+
   if (
     defaultOptions.stateStore === undefined &&
     process.env.ALCHEMY_STATE_STORE === "cloudflare"
@@ -135,6 +143,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
     stateStore: defaultOptions?.stateStore,
     phase: "up",
     telemetryClient: new NoopTelemetryClient(),
+    quiet: defaultOptions.quiet,
   });
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {
@@ -172,7 +181,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
         : {};
 
     const options: TestOptions = {
-      quiet: false,
+      quiet: defaultOptions?.quiet ?? false,
       password: "test-password",
       ...spread(defaultOptions),
       ...spread(_options),

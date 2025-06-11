@@ -854,7 +854,6 @@ export const _Worker = Resource(
       // Find any assets bindings
       const assetsBindings: { name: string; assets: Assets }[] = [];
       const workflowsBindings: Workflow[] = [];
-      let hasDispatchNamespaceBinding = false;
 
       if (props.bindings) {
         for (const [bindingName, binding] of Object.entries(props.bindings)) {
@@ -863,8 +862,6 @@ export const _Worker = Resource(
               assetsBindings.push({ name: bindingName, assets: binding });
             } else if (binding.type === "workflow") {
               workflowsBindings.push(binding);
-            } else if (binding.type === "dispatch_namespace") {
-              hasDispatchNamespaceBinding = true;
             }
           }
         }
@@ -900,14 +897,12 @@ export const _Worker = Resource(
         assetUploadResult,
       );
 
-      // Get dispatch namespace if specified or if worker has dispatch namespace bindings
+      // Get dispatch namespace if specified
       const dispatchNamespace = props.dispatchNamespace
         ? typeof props.dispatchNamespace === "string"
           ? props.dispatchNamespace
           : props.dispatchNamespace.namespace
-        : hasDispatchNamespaceBinding
-          ? "default" // Deploy to default WFP namespace if worker has dispatch namespace bindings
-          : undefined;
+        : undefined;
 
       await putWorker(
         api,
@@ -999,6 +994,8 @@ export const _Worker = Resource(
         // we are writing a stub worker (to remove binding/event source dependencies)
         // queue consumers will no longer exist by this point
         eventSources: undefined,
+        // stub worker doesn't need dispatch namespace
+        dispatchNamespace: undefined,
       });
 
       await withExponentialBackoff(

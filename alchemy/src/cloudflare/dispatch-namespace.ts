@@ -2,7 +2,7 @@ import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
 import { logger } from "../util/logger.ts";
-import { handleApiError } from "./api-error.ts";
+import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
@@ -170,8 +170,10 @@ const _DispatchNamespace = Resource(
         // Check if this is a "namespace already exists" error and adopt is enabled
         if (
           props.adopt &&
-          error instanceof Error &&
-          error.message.includes("already exists")
+          error instanceof CloudflareApiError &&
+          error.status === 400 &&
+          (error.message.includes("already exists") ||
+            error.message.includes("Ensure it does not already exist"))
         ) {
           logger.log(
             `Dispatch namespace '${namespace}' already exists, adopting it`,
@@ -216,7 +218,7 @@ export async function createDispatchNamespace(
   const createResponse = await api.post(
     `/accounts/${api.accountId}/workers/dispatch/namespaces`,
     {
-      namespace: props.namespace,
+      name: props.namespace,
     },
   );
 
