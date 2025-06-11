@@ -1248,16 +1248,22 @@ export async function deleteWorker<B extends Bindings>(
   return;
 }
 
-export async function putWorkerVersion(
+interface PutWorkerOptions {
+  versionLabel?: string;
+  message?: string;
+  dispatchNamespace?: string;
+}
+
+async function putWorkerInternal(
   api: CloudflareApi,
   workerName: string,
   scriptBundle: string | NoBundleResult,
   scriptMetadata: WorkerMetadata,
-  versionLabel: string,
-  message?: string,
-): Promise<{ versionId: string; previewUrl: string }> {
+  options: PutWorkerOptions = {},
+): Promise<{ versionId?: string; previewUrl?: string }> {
   return withExponentialBackoff(
     async () => {
+      const { versionLabel, message, dispatchNamespace } = options;
       const scriptName =
         scriptMetadata.main_module ?? scriptMetadata.body_part!;
 
@@ -1287,37 +1293,59 @@ export async function putWorkerVersion(
         }
       }
 
-      // Add version-specific metadata with annotations
-      const versionMetadata = {
-        ...scriptMetadata,
-        annotations: {
-          "workers/tag": versionLabel,
-          ...(message && { "workers/message": message.substring(0, 100) }),
-        },
-      };
+      // Prepare metadata - add version annotations if this is a version
+      const finalMetadata = versionLabel
+        ? {
+            ...scriptMetadata,
+            annotations: {
+              "workers/tag": versionLabel,
+              ...(message && { "workers/message": message.substring(0, 100) }),
+            },
+          }
+        : scriptMetadata;
 
       // Add metadata as JSON
       formData.append(
         "metadata",
-        new Blob([JSON.stringify(versionMetadata)], {
+        new Blob([JSON.stringify(finalMetadata)], {
           type: "application/json",
         }),
       );
 
-      // Upload worker version using the versions API
-      const endpoint = `/accounts/${api.accountId}/workers/scripts/${workerName}/versions`;
+      // Determine endpoint and HTTP method
+      let endpoint: string;
+      let method: "PUT" | "POST";
 
-      const uploadResponse = await api.post(endpoint, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      if (versionLabel) {
+        // Upload worker version using the versions API
+        endpoint = `/accounts/${api.accountId}/workers/scripts/${workerName}/versions`;
+        method = "POST";
+      } else {
+        // Upload worker script with bindings
+        endpoint = dispatchNamespace
+          ? `/accounts/${api.accountId}/workers/dispatch/namespaces/${dispatchNamespace}/scripts/${workerName}`
+          : `/accounts/${api.accountId}/workers/scripts/${workerName}`;
+        method = "PUT";
+      }
+
+      const uploadResponse =
+        method === "PUT"
+          ? await api.put(endpoint, formData, {
+              headers: {
+                "Content-Type": "multipart/form-data",
+              },
+            })
+          : await api.post(endpoint, formData, {
+              headers: {
+                "Content-Type": "multipart/form-data",
+              },
+            });
 
       // Check if the upload was successful
       if (!uploadResponse.ok) {
         await handleApiError(
           uploadResponse,
-          "uploading worker version",
+          versionLabel ? "uploading worker version" : "uploading worker script",
           "worker",
           workerName,
         );
@@ -1325,11 +1353,15 @@ export async function putWorkerVersion(
 
       const responseData: any = await uploadResponse.json();
       const result = responseData.result;
+      // Handle version response
+      if (versionLabel) {
+        return {
+          versionId: result.id,
+          previewUrl: result.preview_url,
+        };
+      }
 
-      return {
-        versionId: result.id,
-        previewUrl: result.preview_url,
-      };
+      return {};
     },
     (err) =>
       err.status === 404 ||
@@ -1344,6 +1376,30 @@ export async function putWorkerVersion(
   );
 }
 
+export async function putWorkerVersion(
+  api: CloudflareApi,
+  workerName: string,
+  scriptBundle: string | NoBundleResult,
+  scriptMetadata: WorkerMetadata,
+  versionLabel: string,
+  message?: string,
+): Promise<{ versionId: string; previewUrl: string }> {
+  const result = await putWorkerInternal(
+    api,
+    workerName,
+    scriptBundle,
+    scriptMetadata,
+    {
+      versionLabel,
+      message,
+    },
+  );
+  return {
+    versionId: result.versionId!,
+    previewUrl: result.previewUrl!,
+  };
+}
+
 export async function putWorker(
   api: CloudflareApi,
   workerName: string,
@@ -1351,80 +1407,9 @@ export async function putWorker(
   scriptMetadata: WorkerMetadata,
   dispatchNamespace?: string,
 ) {
-  return withExponentialBackoff(
-    async () => {
-      const scriptName =
-        scriptMetadata.main_module ?? scriptMetadata.body_part!;
-
-      // Create FormData for the upload
-      const formData = new FormData();
-
-      function addFile(fileName: string, content: Buffer | string) {
-        const contentType = getContentType(fileName) ?? "application/null";
-        formData.append(
-          fileName,
-          new Blob([content], {
-            type:
-              contentType === "application/javascript" &&
-              scriptMetadata.main_module
-                ? "application/javascript+module"
-                : contentType,
-          }),
-          fileName,
-        );
-      }
-
-      if (typeof scriptBundle === "string") {
-        addFile(scriptName, scriptBundle);
-      } else {
-        for (const [fileName, content] of Object.entries(scriptBundle)) {
-          // Add the actual script content as a named file part
-          addFile(fileName, content);
-        }
-      }
-
-      // Add metadata as JSON
-      formData.append(
-        "metadata",
-        new Blob([JSON.stringify(scriptMetadata)], {
-          type: "application/json",
-        }),
-      );
-
-      // Upload worker script with bindings
-      const endpoint = dispatchNamespace
-        ? `/accounts/${api.accountId}/workers/dispatch/namespaces/${dispatchNamespace}/scripts/${workerName}`
-        : `/accounts/${api.accountId}/workers/scripts/${workerName}`;
-
-      const uploadResponse = await api.put(endpoint, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      // Check if the upload was successful
-      if (!uploadResponse.ok) {
-        await handleApiError(
-          uploadResponse,
-          "uploading worker script",
-          "worker",
-          workerName,
-        );
-      }
-
-      return formData;
-    },
-    (err) =>
-      err.status === 404 ||
-      err.status === 500 ||
-      err.status === 503 ||
-      // this is a tranient error that cloudflare throws randomly
-      (err instanceof CloudflareApiError &&
-        err.status === 400 &&
-        err.message.match(/binding.*failed to generate/)),
-    10,
-    100,
-  );
+  await putWorkerInternal(api, workerName, scriptBundle, scriptMetadata, {
+    dispatchNamespace,
+  });
 }
 
 export async function checkWorkerExists(
