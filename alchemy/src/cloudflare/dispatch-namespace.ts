@@ -8,7 +8,6 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
-import type { Bound } from "./bound.ts";
 
 /**
  * Properties for creating or updating a Dispatch Namespace
@@ -75,8 +74,9 @@ export interface DispatchNamespaceResource
   modifiedAt: number;
 }
 
-export type DispatchNamespace = DispatchNamespaceResource &
-  Bound<DispatchNamespaceResource>;
+export type DispatchNamespace = DispatchNamespaceResource & {
+  get(name: string): Fetcher;
+};
 
 /**
  * A Cloudflare Dispatch Namespace enables routing worker requests to different scripts based on patterns.
@@ -116,9 +116,8 @@ export async function DispatchNamespace(
   const binding = await bind(dispatchNamespace);
   return {
     ...dispatchNamespace,
-    // Add runtime methods that dispatch namespaces have (Service interface)
-    fetch: binding.fetch,
-    connect: binding.connect,
+    // Add runtime methods that dispatch namespaces have
+    get: binding.get,
   };
 }
 

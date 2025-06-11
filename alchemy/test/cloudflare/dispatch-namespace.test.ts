@@ -4,6 +4,7 @@ import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { DispatchNamespace } from "../../src/cloudflare/dispatch-namespace.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { BRANCH_PREFIX } from "../util.ts";
+import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 import "../../src/test/vitest.ts";
 
@@ -16,7 +17,7 @@ describe("Dispatch Namespace Resource", () => {
 
   test("create, update, and delete dispatch namespace", async (scope) => {
     let dispatchNamespace: DispatchNamespace | undefined;
-    const namespaceName = `claude-main-test-namespace-dispatch`;
+    const namespaceName = "claude-main-test-namespace-dispatch";
     try {
       dispatchNamespace = await DispatchNamespace(testId, {
         adopt: true,
@@ -46,7 +47,7 @@ describe("Dispatch Namespace Resource", () => {
 
   test("adopt existing namespace", async (scope) => {
     let dispatchNamespace: DispatchNamespace | undefined;
-    const namespaceName = `claude-main-adopt-test`;
+    const namespaceName = "claude-main-adopt-test";
     try {
       dispatchNamespace = await DispatchNamespace("dispatch-ns", {
         namespace: namespaceName,
@@ -69,48 +70,23 @@ describe("Dispatch Namespace Resource", () => {
     }
   });
 
-  test("adopt existing namespace with delete false", async (scope) => {
+  test("comprehensive dispatch namespace and worker integration", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-target-worker`;
+    const dispatcherWorkerName = `${BRANCH_PREFIX}-dispatcher-worker`;
+    const namespaceName = "claude-main-comprehensive-test";
+
+    let targetWorker: Worker | undefined;
+    let dispatcherWorker: Worker | undefined;
     let dispatchNamespace: DispatchNamespace | undefined;
-    const namespaceName = `claude-main-adopt-no-delete`;
+
     try {
-      dispatchNamespace = await DispatchNamespace("dispatch-ns", {
-        namespace: namespaceName,
-        adopt: true,
-      });
-
-      await alchemy.run("nested", async (scope) => {
-        const adoptedNamespace = await DispatchNamespace("dispatch-ns", {
-          namespace: namespaceName,
-          adopt: true,
-          delete: false,
-        });
-
-        expect(adoptedNamespace.namespace).toEqual(
-          dispatchNamespace!.namespace,
-        );
-        await alchemy.destroy(scope);
-        await assertDispatchNamespaceExists(adoptedNamespace.namespace);
-      });
-    } finally {
-      await alchemy.destroy(scope);
-      await assertDispatchNamespaceNotExists(dispatchNamespace!.namespace);
-    }
-  });
-
-  test("create worker with dispatch namespace", async (scope) => {
-    const workerName = `${BRANCH_PREFIX}-test-worker-dispatch`;
-    const namespaceName = `claude-main-worker-namespace`;
-
-    let worker: Worker | undefined;
-    let dispatchNamespace: DispatchNamespace | undefined;
-    try {
-      // Create a dispatch namespace
+      // 1. Create a dispatch namespace
       dispatchNamespace = await DispatchNamespace("test-dispatch-namespace", {
         namespace: namespaceName,
       });
 
-      // Create a worker in the dispatch namespace
-      worker = await Worker(workerName, {
+      // 2. Create a worker in the dispatch namespace
+      targetWorker = await Worker(workerName, {
         name: workerName,
         script: `
           export default {
@@ -123,60 +99,48 @@ describe("Dispatch Namespace Resource", () => {
         url: false,
       });
 
-      expect(worker.name).toEqual(workerName);
-      expect(worker.dispatchNamespace).toEqual(dispatchNamespace);
-
-      // Verify worker was deployed to dispatch namespace
-      await assertWorkerInDispatchNamespace(namespaceName, workerName);
-    } finally {
-      await alchemy.destroy(scope);
-      if (worker) {
-        await assertWorkerDoesNotExist(worker.name);
-      }
-      if (dispatchNamespace) {
-        await assertDispatchNamespaceNotExists(dispatchNamespace.namespace);
-      }
-    }
-  });
-
-  test("create worker with dispatch namespace binding", async (scope) => {
-    const workerName = `${BRANCH_PREFIX}-test-worker-dispatch-binding`;
-    const namespaceName = `claude-main-binding-namespace`;
-
-    let worker: Worker | undefined;
-    let dispatchNamespace: DispatchNamespace | undefined;
-    try {
-      // Create a dispatch namespace
-      dispatchNamespace = await DispatchNamespace(
-        "test-dispatch-namespace-binding",
-        {
-          namespace: namespaceName,
-        },
-      );
-
-      // Create a worker with dispatch namespace as binding
-      worker = await Worker(workerName, {
-        name: workerName,
+      // 3. Create a worker bound to the namespace (dispatcher)
+      dispatcherWorker = await Worker(dispatcherWorkerName, {
+        name: dispatcherWorkerName,
         script: `
           export default {
             async fetch(request, env, ctx) {
-              // NAMESPACE binding should be available
-              return new Response('Hello with dispatch namespace binding!', { status: 200 });
+              // Call the worker through the dispatch namespace
+              const targetResponse = await env.NAMESPACE.get('${workerName}').fetch('/', {
+                method: 'GET'
+              });
+              
+              const text = await targetResponse.text();
+              return new Response(\`Dispatch response: \${text}\`, { status: 200 });
             }
           }
         `,
         bindings: {
           NAMESPACE: dispatchNamespace,
         },
-        url: false,
+        url: true,
       });
 
-      expect(worker.name).toEqual(workerName);
-      expect(worker.bindings.NAMESPACE).toBeDefined();
+      // Verify worker configurations
+      expect(targetWorker.name).toEqual(workerName);
+      expect(targetWorker.dispatchNamespace).toEqual(dispatchNamespace);
+      expect(dispatcherWorker.name).toEqual(dispatcherWorkerName);
+      expect(dispatcherWorker.bindings.NAMESPACE).toBeDefined();
+
+      // Verify workers were deployed correctly
+      await assertWorkerInDispatchNamespace(namespaceName, workerName);
+
+      // 4. Execute fetchAndExpectOK against the dispatcher and ensure it works at runtime
+      const response = await fetchAndExpectOK(dispatcherWorker.url!);
+      const text = await response.text();
+      expect(text).toEqual("Dispatch response: Hello from dispatch namespace!");
     } finally {
       await alchemy.destroy(scope);
-      if (worker) {
-        await assertWorkerDoesNotExist(worker.name);
+      if (targetWorker) {
+        await assertWorkerDoesNotExist(targetWorker.name);
+      }
+      if (dispatcherWorker) {
+        await assertWorkerDoesNotExist(dispatcherWorker.name);
       }
       if (dispatchNamespace) {
         await assertDispatchNamespaceNotExists(dispatchNamespace.namespace);

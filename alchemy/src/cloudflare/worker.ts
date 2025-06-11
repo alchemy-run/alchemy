@@ -853,6 +853,7 @@ export const _Worker = Resource(
       // Find any assets bindings
       const assetsBindings: { name: string; assets: Assets }[] = [];
       const workflowsBindings: Workflow[] = [];
+      let hasDispatchNamespaceBinding = false;
 
       if (props.bindings) {
         for (const [bindingName, binding] of Object.entries(props.bindings)) {
@@ -861,6 +862,8 @@ export const _Worker = Resource(
               assetsBindings.push({ name: bindingName, assets: binding });
             } else if (binding.type === "workflow") {
               workflowsBindings.push(binding);
+            } else if (binding.type === "dispatch_namespace") {
+              hasDispatchNamespaceBinding = true;
             }
           }
         }
@@ -896,12 +899,14 @@ export const _Worker = Resource(
         assetUploadResult,
       );
 
-      // Get dispatch namespace if specified
+      // Get dispatch namespace if specified or if worker has dispatch namespace bindings
       const dispatchNamespace = props.dispatchNamespace
         ? typeof props.dispatchNamespace === "string"
           ? props.dispatchNamespace
           : props.dispatchNamespace.namespace
-        : undefined;
+        : hasDispatchNamespaceBinding
+          ? "default" // Deploy to default WFP namespace if worker has dispatch namespace bindings
+          : undefined;
 
       await putWorker(
         api,

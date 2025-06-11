@@ -52,7 +52,7 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
                     : T extends D1DatabaseResource
                       ? D1Database
                       : T extends DispatchNamespaceResource
-                        ? Service
+                        ? { get(name: string): Fetcher }
                         : T extends _VectorizeIndex
                           ? VectorizeIndex
                           : T extends _Queue<infer Body>
