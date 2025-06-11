@@ -12,7 +12,8 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("SecretsStore Resource", { concurrent: false }, () => {
+// skip because Cloudflare only allows one Secret Store per account ...
+describe.skip("SecretsStore Resource", { concurrent: false }, () => {
   const testId = `${BRANCH_PREFIX}-test-secrets-store`;
 
   test("create, update, and delete secrets store", async (scope) => {
