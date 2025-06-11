@@ -8,6 +8,7 @@ import type { Binding, Json, Self } from "./bindings.ts";
 import type { BrowserRendering } from "./browser-rendering.ts";
 import type { R2BucketResource as _R2Bucket } from "./bucket.ts";
 import type { D1DatabaseResource } from "./d1-database.ts";
+import type { DispatchNamespaceResource } from "./dispatch-namespace.ts";
 import type { DurableObjectNamespace as _DurableObjectNamespace } from "./durable-object-namespace.ts";
 import type { HyperdriveResource as _Hyperdrive } from "./hyperdrive.ts";
 import type { Images as _Images } from "./images.ts";
@@ -50,31 +51,33 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
                     ? Workflow<P>
                     : T extends D1DatabaseResource
                       ? D1Database
-                      : T extends _VectorizeIndex
-                        ? VectorizeIndex
-                        : T extends _Queue<infer Body>
-                          ? Queue<Body>
-                          : T extends _SecretsStore<infer S>
-                            ? SecretsStoreBinding<S>
-                            : T extends _AnalyticsEngineDataset
-                              ? AnalyticsEngineDataset
-                              : T extends _Pipeline<infer R>
-                                ? Pipeline<R>
-                                : T extends string
-                                  ? string
-                                  : T extends BrowserRendering
-                                    ? Fetcher
-                                    : T extends _Ai<infer M>
-                                      ? Ai<M>
-                                      : T extends _Images
-                                        ? ImagesBinding
-                                        : T extends _VersionMetadata
-                                          ? WorkerVersionMetadata
-                                          : T extends Self
-                                            ? Service
-                                            : T extends Json<infer T>
-                                              ? T
-                                              : Service;
+                      : T extends DispatchNamespaceResource
+                        ? Service
+                        : T extends _VectorizeIndex
+                          ? VectorizeIndex
+                          : T extends _Queue<infer Body>
+                            ? Queue<Body>
+                            : T extends _SecretsStore<infer S>
+                              ? SecretsStoreBinding<S>
+                              : T extends _AnalyticsEngineDataset
+                                ? AnalyticsEngineDataset
+                                : T extends _Pipeline<infer R>
+                                  ? Pipeline<R>
+                                  : T extends string
+                                    ? string
+                                    : T extends BrowserRendering
+                                      ? Fetcher
+                                      : T extends _Ai<infer M>
+                                        ? Ai<M>
+                                        : T extends _Images
+                                          ? ImagesBinding
+                                          : T extends _VersionMetadata
+                                            ? WorkerVersionMetadata
+                                            : T extends Self
+                                              ? Service
+                                              : T extends Json<infer T>
+                                                ? T
+                                                : Service;
 
 interface SecretsStoreBinding<
   S extends Record<string, Secret> | undefined = undefined,

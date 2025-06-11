@@ -55,6 +55,16 @@ export interface DispatchNamespaceResource
   namespace: string;
 
   /**
+   * The namespace name from Cloudflare API
+   */
+  namespaceName: string;
+
+  /**
+   * The namespace ID from Cloudflare API
+   */
+  namespaceId: string;
+
+  /**
    * Time at which the namespace was created
    */
   createdAt: number;
@@ -106,9 +116,9 @@ export async function DispatchNamespace(
   const binding = await bind(dispatchNamespace);
   return {
     ...dispatchNamespace,
-    // Add any runtime methods that dispatch namespaces might have
-    // For now, this is mostly for type compatibility
-    ...binding,
+    // Add runtime methods that dispatch namespaces have (Service interface)
+    fetch: binding.fetch,
+    connect: binding.connect,
   };
 }
 
@@ -142,7 +152,13 @@ const _DispatchNamespace = Resource(
         : Date.now();
 
     if (this.phase === "update") {
-      // For updates, we can't really change the namespace name, so just refresh metadata
+      // Check that the namespace name hasn't changed
+      if (this.output?.namespace && this.output.namespace !== namespace) {
+        throw new Error(
+          `Cannot update dispatch namespace name after creation. Namespace name is immutable. Before: ${this.output.namespace}, After: ${namespace}`,
+        );
+      }
+      // For updates, just refresh metadata
     } else {
       try {
         // Try to create the dispatch namespace
@@ -161,8 +177,13 @@ const _DispatchNamespace = Resource(
           logger.log(
             `Dispatch namespace '${namespace}' already exists, adopting it`,
           );
-          // For dispatch namespaces, if it exists and we're adopting, that's fine
-          // We don't need to find it since the name is what we use for identification
+          // Get the namespace to retrieve ID and validate it exists
+          const existingNamespace = await getDispatchNamespace(api, namespace);
+          if (!existingNamespace) {
+            throw new Error(
+              `Failed to find existing dispatch namespace '${namespace}'`,
+            );
+          }
         } else {
           // Re-throw the error if adopt is false or it's not a "namespace already exists" error
           throw error;
@@ -170,9 +191,17 @@ const _DispatchNamespace = Resource(
       }
     }
 
+    // Get the namespace information after creation/adoption
+    const namespaceInfo = await getDispatchNamespace(api, namespace);
+    if (!namespaceInfo) {
+      throw new Error(`Failed to get namespace information for '${namespace}'`);
+    }
+
     return this({
       type: "dispatch_namespace",
       namespace,
+      namespaceName: namespaceInfo.namespaceName,
+      namespaceId: namespaceInfo.namespaceId,
       createdAt: createdAt,
       modifiedAt: Date.now(),
     });
@@ -200,6 +229,35 @@ export async function createDispatchNamespace(
       props.namespace,
     );
   }
+}
+
+export async function getDispatchNamespace(
+  api: CloudflareApi,
+  namespace: string,
+): Promise<{ namespaceName: string; namespaceId: string } | undefined> {
+  const getResponse = await api.get(
+    `/accounts/${api.accountId}/workers/dispatch/namespaces/${namespace}`,
+  );
+
+  if (getResponse.status === 404) {
+    return undefined;
+  }
+
+  if (!getResponse.ok) {
+    await handleApiError(getResponse, "get", "dispatch_namespace", namespace);
+  }
+
+  const result = (await getResponse.json()) as {
+    result: {
+      namespace_name: string;
+      namespace_id: string;
+    };
+  };
+
+  return {
+    namespaceName: result.result.namespace_name,
+    namespaceId: result.result.namespace_id,
+  };
 }
 
 export async function deleteDispatchNamespace(

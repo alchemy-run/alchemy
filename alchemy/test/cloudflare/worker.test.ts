@@ -6,6 +6,7 @@ import { AnalyticsEngineDataset } from "../../src/cloudflare/analytics-engine.ts
 import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { Assets } from "../../src/cloudflare/assets.ts";
 import { Self } from "../../src/cloudflare/bindings.ts";
+import { DispatchNamespace } from "../../src/cloudflare/dispatch-namespace.ts";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.ts";
 import { KVNamespace } from "../../src/cloudflare/kv-namespace.ts";
 import { Worker, WorkerRef } from "../../src/cloudflare/worker.ts";
@@ -1359,14 +1360,13 @@ describe("Worker Resource", () => {
 
   test("deploy worker to dispatch namespace", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-dispatch-ns`;
-    const namespaceName = `claude-main-test-ns-worker`;
+    const callerWorkerName = `${BRANCH_PREFIX}-test-caller-worker`;
+    const namespaceName = "claude-main-test-ns-worker";
 
     let worker: Worker | undefined;
+    let callerWorker: Worker | undefined;
     try {
       // First, create the dispatch namespace
-      const { DispatchNamespace } = await import(
-        "../../src/cloudflare/dispatch-namespace.ts"
-      );
       const dispatchNamespace = await DispatchNamespace("test-ns", {
         namespace: namespaceName,
       });
@@ -1389,28 +1389,58 @@ describe("Worker Resource", () => {
       expect(worker.dispatchNamespace).toEqual(dispatchNamespace);
 
       // Verify worker was deployed to dispatch namespace
-      const response = await api.get(
+      let response = await api.get(
         `/accounts/${api.accountId}/workers/dispatch/namespaces/${namespaceName}/scripts/${workerName}`,
       );
       expect(response.status).toEqual(200);
+
+      // Create a caller worker that binds to the dispatch namespace and calls the worker
+      callerWorker = await Worker(callerWorkerName, {
+        name: callerWorkerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              // Call the worker through the dispatch namespace
+              const dispatchResponse = await env.DISPATCH_NS.fetch('/', {
+                method: 'GET',
+                headers: {
+                  'cf-worker': '${workerName}'
+                }
+              });
+              
+              const text = await dispatchResponse.text();
+              return new Response(\`Dispatch response: \${text}\`, { status: 200 });
+            }
+          }
+        `,
+        bindings: {
+          DISPATCH_NS: dispatchNamespace,
+        },
+        url: true,
+      });
+
+      // Test the end-to-end functionality using fetchAndExpectOK
+      response = await fetchAndExpectOK(callerWorker.url!);
+      const text = await response.text();
+      expect(text).toEqual("Dispatch response: Hello from dispatch namespace!");
     } finally {
       await destroy(scope);
       if (worker) {
         await assertWorkerDoesNotExist(worker.name);
+      }
+      if (callerWorker) {
+        await assertWorkerDoesNotExist(callerWorker.name);
       }
     }
   });
 
   test("deploy worker to dispatch namespace using string", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-dispatch-str`;
-    const namespaceName = `claude-main-test-ns-str`;
+    const namespaceName = "claude-main-test-ns-str";
 
     let worker: Worker | undefined;
     try {
       // First, create the dispatch namespace
-      const { DispatchNamespace } = await import(
-        "../../src/cloudflare/dispatch-namespace.ts"
-      );
       await DispatchNamespace("test-ns-str", {
         namespace: namespaceName,
       });

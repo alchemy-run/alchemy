@@ -896,17 +896,20 @@ export const _Worker = Resource(
         assetUploadResult,
       );
 
-      await putWorker(api, workerName, scriptBundle, scriptMetadata);
+      // Get dispatch namespace if specified
+      const dispatchNamespace = props.dispatchNamespace
+        ? typeof props.dispatchNamespace === "string"
+          ? props.dispatchNamespace
+          : props.dispatchNamespace.namespace
+        : undefined;
 
-      // Deploy to dispatch namespace if specified
-      if (props.dispatchNamespace) {
-        const namespace =
-          typeof props.dispatchNamespace === "string"
-            ? props.dispatchNamespace
-            : props.dispatchNamespace.namespace;
-
-        await deployWorkerToDispatchNamespace(api, workerName, namespace);
-      }
+      await putWorker(
+        api,
+        workerName,
+        scriptBundle,
+        scriptMetadata,
+        dispatchNamespace,
+      );
 
       for (const workflow of workflowsBindings) {
         if (
@@ -1152,6 +1155,7 @@ export async function putWorker(
   workerName: string,
   scriptBundle: string | NoBundleResult,
   scriptMetadata: WorkerMetadata,
+  dispatchNamespace?: string,
 ) {
   return withExponentialBackoff(
     async () => {
@@ -1194,15 +1198,15 @@ export async function putWorker(
       );
 
       // Upload worker script with bindings
-      const uploadResponse = await api.put(
-        `/accounts/${api.accountId}/workers/scripts/${workerName}`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
+      const endpoint = dispatchNamespace
+        ? `/accounts/${api.accountId}/workers/dispatch/namespaces/${dispatchNamespace}/scripts/${workerName}`
+        : `/accounts/${api.accountId}/workers/scripts/${workerName}`;
+
+      const uploadResponse = await api.put(endpoint, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
         },
-      );
+      });
 
       // Check if the upload was successful
       if (!uploadResponse.ok) {
@@ -1408,30 +1412,4 @@ async function deleteQueueConsumers(
       await deleteQueueConsumer(api, consumer.queueId, consumer.consumerId);
     }),
   );
-}
-
-/**
- * Deploy a worker to a dispatch namespace
- * @param api CloudflareApi instance
- * @param workerName Name of the worker script
- * @param namespace Name of the dispatch namespace
- */
-export async function deployWorkerToDispatchNamespace(
-  api: CloudflareApi,
-  workerName: string,
-  namespace: string,
-): Promise<void> {
-  const deployResponse = await api.put(
-    `/accounts/${api.accountId}/workers/dispatch/namespaces/${namespace}/scripts/${workerName}`,
-    {},
-  );
-
-  if (!deployResponse.ok) {
-    await handleApiError(
-      deployResponse,
-      "deploying to dispatch namespace",
-      "worker",
-      workerName,
-    );
-  }
 }
