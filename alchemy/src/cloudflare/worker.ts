@@ -34,6 +34,7 @@ import {
   bundleWorkerScript,
 } from "./bundle/bundle-worker.ts";
 import { isD1Database } from "./d1-database.ts";
+import type { DispatchNamespaceResource } from "./dispatch-namespace.ts";
 import {
   DurableObjectNamespace,
   isDurableObjectNamespace,
@@ -250,6 +251,13 @@ export interface BaseWorkerProps<
    * This is only used when using the rpc property.
    */
   rpc?: (new (...args: any[]) => RPC) | type<RPC>;
+
+  /**
+   * Deploy this worker to a dispatch namespace
+   *
+   * This allows workers to be routed to via dispatch namespace routing rules
+   */
+  dispatchNamespace?: string | DispatchNamespaceResource;
 }
 
 export interface InlineWorkerProps<
@@ -416,6 +424,11 @@ export type Worker<
      * The compatibility flags for the worker
      */
     compatibilityFlags: string[];
+
+    /**
+     * The dispatch namespace this worker is deployed to
+     */
+    dispatchNamespace?: string | DispatchNamespaceResource;
   };
 
 /**
@@ -885,6 +898,16 @@ export const _Worker = Resource(
 
       await putWorker(api, workerName, scriptBundle, scriptMetadata);
 
+      // Deploy to dispatch namespace if specified
+      if (props.dispatchNamespace) {
+        const namespace =
+          typeof props.dispatchNamespace === "string"
+            ? props.dispatchNamespace
+            : props.dispatchNamespace.namespace;
+
+        await deployWorkerToDispatchNamespace(api, workerName, namespace);
+      }
+
       for (const workflow of workflowsBindings) {
         if (
           workflow.scriptName === undefined ||
@@ -1080,6 +1103,8 @@ export const _Worker = Resource(
       crons: props.crons,
       // Include the created routes in the output
       routes: createdRoutes.length > 0 ? createdRoutes : undefined,
+      // Include the dispatch namespace in the output
+      dispatchNamespace: props.dispatchNamespace,
       // phantom property
       Env: undefined!,
     } as unknown as Worker<B>);
@@ -1383,4 +1408,30 @@ async function deleteQueueConsumers(
       await deleteQueueConsumer(api, consumer.queueId, consumer.consumerId);
     }),
   );
+}
+
+/**
+ * Deploy a worker to a dispatch namespace
+ * @param api CloudflareApi instance
+ * @param workerName Name of the worker script
+ * @param namespace Name of the dispatch namespace
+ */
+export async function deployWorkerToDispatchNamespace(
+  api: CloudflareApi,
+  workerName: string,
+  namespace: string,
+): Promise<void> {
+  const deployResponse = await api.put(
+    `/accounts/${api.accountId}/workers/dispatch/namespaces/${namespace}/scripts/${workerName}`,
+    {},
+  );
+
+  if (!deployResponse.ok) {
+    await handleApiError(
+      deployResponse,
+      "deploying to dispatch namespace",
+      "worker",
+      workerName,
+    );
+  }
 }

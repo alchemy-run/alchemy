@@ -12,6 +12,7 @@ import type { Bound } from "./bound.ts";
 import type { BrowserRendering } from "./browser-rendering.ts";
 import type { R2BucketResource } from "./bucket.ts";
 import type { D1DatabaseResource } from "./d1-database.ts";
+import type { DispatchNamespaceResource } from "./dispatch-namespace.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
 import type { HyperdriveResource } from "./hyperdrive.ts";
 import type { KVNamespaceResource } from "./kv-namespace.ts";
@@ -43,6 +44,7 @@ export type Binding =
   | AiGatewayResource
   | Assets
   | D1DatabaseResource
+  | DispatchNamespaceResource
   | AnalyticsEngineDataset
   | DurableObjectNamespace<Rpc.DurableObjectBranded | undefined>
   | HyperdriveResource

@@ -1356,4 +1356,92 @@ describe("Worker Resource", () => {
       await destroy(scope);
     }
   });
+
+  test("deploy worker to dispatch namespace", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-dispatch-ns`;
+    const namespaceName = `claude-main-test-ns-worker`;
+
+    let worker: Worker | undefined;
+    try {
+      // First, create the dispatch namespace
+      const { DispatchNamespace } = await import(
+        "../../src/cloudflare/dispatch-namespace.ts"
+      );
+      const dispatchNamespace = await DispatchNamespace("test-ns", {
+        namespace: namespaceName,
+      });
+
+      // Create a worker deployed to the dispatch namespace
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from dispatch namespace!', { status: 200 });
+            }
+          }
+        `,
+        dispatchNamespace: dispatchNamespace,
+        url: false,
+      });
+
+      expect(worker.name).toEqual(workerName);
+      expect(worker.dispatchNamespace).toEqual(dispatchNamespace);
+
+      // Verify worker was deployed to dispatch namespace
+      const response = await api.get(
+        `/accounts/${api.accountId}/workers/dispatch/namespaces/${namespaceName}/scripts/${workerName}`,
+      );
+      expect(response.status).toEqual(200);
+    } finally {
+      await destroy(scope);
+      if (worker) {
+        await assertWorkerDoesNotExist(worker.name);
+      }
+    }
+  });
+
+  test("deploy worker to dispatch namespace using string", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-dispatch-str`;
+    const namespaceName = `claude-main-test-ns-str`;
+
+    let worker: Worker | undefined;
+    try {
+      // First, create the dispatch namespace
+      const { DispatchNamespace } = await import(
+        "../../src/cloudflare/dispatch-namespace.ts"
+      );
+      await DispatchNamespace("test-ns-str", {
+        namespace: namespaceName,
+      });
+
+      // Create a worker deployed to the dispatch namespace using string reference
+      worker = await Worker(workerName, {
+        name: workerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from dispatch namespace via string!', { status: 200 });
+            }
+          }
+        `,
+        dispatchNamespace: namespaceName,
+        url: false,
+      });
+
+      expect(worker.name).toEqual(workerName);
+      expect(worker.dispatchNamespace).toEqual(namespaceName);
+
+      // Verify worker was deployed to dispatch namespace
+      const response = await api.get(
+        `/accounts/${api.accountId}/workers/dispatch/namespaces/${namespaceName}/scripts/${workerName}`,
+      );
+      expect(response.status).toEqual(200);
+    } finally {
+      await destroy(scope);
+      if (worker) {
+        await assertWorkerDoesNotExist(worker.name);
+      }
+    }
+  });
 });

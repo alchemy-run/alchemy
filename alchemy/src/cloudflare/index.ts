@@ -18,6 +18,7 @@ export * from "./d1-clone.ts";
 export * from "./d1-database.ts";
 export * from "./d1-export.ts";
 export * from "./d1-import.ts";
+export * from "./dispatch-namespace.ts";
 export * from "./dns-records.ts";
 export * from "./do-state-store/index.ts";
 export * from "./durable-object-namespace.ts";
