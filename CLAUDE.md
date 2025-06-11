@@ -338,25 +338,6 @@ if (currentResource.name !== props.name) {
 }
 ```
 
-### API Design Principles
-
-1. **Unified over separate**: Prefer single functions that handle multiple cases over separate specialized functions
-2. **Fetch additional metadata**: Call provider APIs to get complete resource information when needed
-3. **Consider deployment implications**: When resources have bindings, consider where they should be deployed
-
-```ts
-// ❌ DON'T: Separate deployment functions
-async function deployWorker(props: WorkerProps) { /* ... */ }
-async function deployWorkerToNamespace(props: WorkerProps, namespace: string) { /* ... */ }
-
-// ✅ DO: Unified deployment with conditional logic
-async function deployWorker(props: WorkerProps) {
-  const endpoint = props.dispatchNamespace 
-    ? `/accounts/${accountId}/workers/dispatch/namespaces/${namespace}/scripts/${scriptName}`
-    : `/accounts/${accountId}/workers/scripts/${scriptName}`;
-  // ...
-}
-```
 ## Testing Guidelines
 ### Import Strategy
 - **Use static imports**: Avoid dynamic imports in test files for better IDE support and error detection
