@@ -1,7 +1,7 @@
 ---
 layout: home
 title: Alchemy
-description: Like Terraform but in plain TypeScript
+description: Wrangle the Cloud with simple TypeScript scripts
 # Custom hero component instead of the default hero
 ---
 
