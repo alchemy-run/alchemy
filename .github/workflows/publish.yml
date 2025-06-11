@@ -32,7 +32,6 @@ jobs:
         with:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-west-2
-          install-extra-deps: "true"
 
       - name: Check Types
         run: bun run check
