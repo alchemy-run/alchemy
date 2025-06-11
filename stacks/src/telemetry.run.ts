@@ -1,10 +1,6 @@
-import {
-  DOStateStore,
-  Pipeline,
-  R2Bucket,
-} from "../alchemy/src/cloudflare/index.js";
-import alchemy from "../alchemy/src/index.js";
-import env from "./env.js";
+import alchemy from "alchemy";
+import { DOStateStore, Pipeline, R2Bucket } from "alchemy/cloudflare";
+import env from "./env.ts";
 
 const app = await alchemy("alchemy:telemetry", {
   ...env,

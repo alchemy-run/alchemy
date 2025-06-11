@@ -1,6 +1,6 @@
-import type { AlchemyOptions, Phase } from "../alchemy/src/alchemy.js";
-import { DOStateStore } from "../alchemy/src/cloudflare/index.js";
-import alchemy from "../alchemy/src/index.js";
+import type { AlchemyOptions, Phase } from "alchemy";
+import alchemy from "alchemy";
+import { DOStateStore } from "alchemy/cloudflare";
 
 export const CLOUDFLARE_EMAIL = await alchemy.env.CLOUDFLARE_EMAIL;
 

@@ -1,17 +1,14 @@
 // ensure providers are registered (for deletion purposes)
-import "../alchemy/src/aws/index.js";
-import "../alchemy/src/aws/oidc/index.js";
-import "../alchemy/src/cloudflare/index.js";
-import "../alchemy/src/os/index.js";
+import "../alchemy/src/aws/index.ts";
+import "../alchemy/src/aws/oidc/index.ts";
+import "../alchemy/src/cloudflare/index.ts";
+import "../alchemy/src/os/index.ts";
 
-import { AccountId, Role, SSMParameter } from "../alchemy/src/aws/index.js";
-import { GitHubOIDCProvider } from "../alchemy/src/aws/oidc/index.js";
-import { AccountApiToken, R2Bucket } from "../alchemy/src/cloudflare/index.js";
-import {
-  GitHubSecret,
-  RepositoryEnvironment,
-} from "../alchemy/src/github/index.js";
-import alchemy from "../alchemy/src/index.js";
+import alchemy from "alchemy";
+import { AccountId, Role, SSMParameter } from "alchemy/aws";
+import { GitHubOIDCProvider } from "alchemy/aws/oidc";
+import { AccountApiToken, R2Bucket } from "alchemy/cloudflare";
+import { GitHubSecret, RepositoryEnvironment } from "alchemy/github";
 import env, {
   CLOUDFLARE_ACCOUNT_ID,
   CLOUDFLARE_API_KEY,
@@ -20,7 +17,7 @@ import env, {
   OPENAI_API_KEY,
   STRIPE_API_KEY,
   UPSTASH_API_KEY,
-} from "./env.js";
+} from "./env.ts";
 
 const app = await alchemy("alchemy:repo", env);
 

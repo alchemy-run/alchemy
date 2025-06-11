@@ -1,4 +1,4 @@
-export type { AlchemyOptions } from "./alchemy.ts";
+export type { AlchemyOptions, Phase } from "./alchemy.ts";
 export type * from "./context.ts";
 export * from "./resource.ts";
 export type * from "./scope.ts";

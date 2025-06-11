@@ -30,7 +30,7 @@ jobs:
         id: deploy
         run: |
           echo "Deploying website preview for PR #${{ github.event.pull_request.number }}"
-          bun ./stacks/website.run.ts 2>&1 | tee deploy.log
+          bun ./stacks/src/website.run.ts 2>&1 | tee deploy.log
 
           # Extract the website URL from the logs
           WEBSITE_URL=$(grep -o 'https://[^[:space:]]*\.workers\.dev' deploy.log | head -1)
@@ -91,7 +91,7 @@ jobs:
       - name: Cleanup Website Preview
         run: |
           echo "Cleaning up website preview for PR #${{ github.event.pull_request.number }}"
-          bun ./stacks/website.run.ts --destroy
+          bun ./stacks/src/website.run.ts --destroy
         env:
           BRANCH_PREFIX: pr-${{ github.event.pull_request.number }}
           ALCHEMY_STATE_STORE: cloudflare

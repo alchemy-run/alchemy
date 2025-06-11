@@ -10,13 +10,12 @@
     "url": "https://github.com/sam-goodwin/alchemy"
   },
   "scripts": {
-    "build": "tsc -b",
-    "check": "bun run --filter cloudflare-react-router types && tsc -b ./tsconfig.json && biome check",
+    "build": "bun run --filter cloudflare-react-router types && cd ./alchemy && tsc -b && tsc -b ./tsconfig.json",
+    "check": "bun run build && biome check",
     "fix": "biome check --write",
-    "deploy:repo": "bun ./stacks/repo.run.ts",
-    "deploy:website": "bun ./stacks/website.run.ts",
-    "deploy:telemetry": "bun ./stacks/telemetry.run.ts",
-    "generate:docs": "bun ./stacks/docs.run.ts",
+    "deploy:repo": "bun ./stacks/src/repo.run.ts",
+    "deploy:website": "bun ./stacks/src/website.run.ts",
+    "deploy:telemetry": "bun ./stacks/src/telemetry.run.ts",
     "generate:aws-control": "bun ./scripts/generate-aws-control.ts",
     "publish:npm": "bun run --filter alchemy publish:npm",
     "test": "bun ./alchemy/test/run.ts",
@@ -27,15 +26,8 @@
   "workspaces": [
     "alchemy",
     "alchemy-web",
-    "examples/aws-app",
-    "examples/cloudflare-astro",
-    "examples/cloudflare-nuxt-pipeline",
-    "examples/cloudflare-react-router",
-    "examples/cloudflare-redwood",
-    "examples/cloudflare-sveltekit",
-    "examples/cloudflare-vite",
-    "examples/cloudflare-worker",
-    "examples/cloudflare-worker-bootstrap"
+    "examples/*",
+    "stacks"
   ],
   "devDependencies": {
     "@biomejs/biome": "beta",
@@ -52,9 +44,6 @@
     "typescript": "latest",
     "vitest": "^3.1.4",
     "yaml": "^2.7.1"
-  },
-  "dependencies": {
-    "alchemy-mono": "."
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs}": [

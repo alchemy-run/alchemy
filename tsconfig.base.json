@@ -14,7 +14,7 @@
     // Bundler mode
     "module": "Preserve",
     "moduleResolution": "Bundler",
-    // "allowImportingTsExtensions": true,
+    "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
 
     // Best practices

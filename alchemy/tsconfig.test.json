@@ -10,6 +10,6 @@
   "compilerOptions": {
     "rootDir": ".",
     "noEmit": true,
-    "types": ["bun-types", "@cloudflare/workers-types"]
+    "types": ["@types/bun", "@cloudflare/workers-types"]
   }
 }

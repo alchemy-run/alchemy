@@ -2,17 +2,17 @@
   "files": [],
   "exclude": ["node_modules", "dist"],
   "references": [
-    { "path": "./tsconfig.stacks.json" },
     { "path": "./alchemy/tsconfig.json" },
     { "path": "./alchemy/tsconfig.test.json" },
+    { "path": "./stacks/tsconfig.json" },
     { "path": "./examples/aws-app/tsconfig.json" },
     { "path": "./examples/cloudflare-astro/tsconfig.json" },
     { "path": "./examples/cloudflare-nuxt-pipeline/tsconfig.json" },
     { "path": "./examples/cloudflare-react-router/tsconfig.json" },
     { "path": "./examples/cloudflare-redwood/tsconfig.json" },
-    { "path": "./examples/cloudflare-tanstack-start/tsconfig.json" },
     { "path": "./examples/cloudflare-vite/tsconfig.json" },
     { "path": "./examples/cloudflare-worker-bootstrap/tsconfig.json" },
     { "path": "./examples/cloudflare-worker/tsconfig.json" },
+    { "path": "./examples/cloudflare-tanstack-start/tsconfig.json" }
   ]
 }
