@@ -14,7 +14,7 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("Database Resource", () => {
+describe.skipIf(!process.env.PLANETSCALE_TEST)("Database Resource", () => {
   const organizationId = process.env.PLANETSCALE_ORG_ID || "";
 
   if (!organizationId) {

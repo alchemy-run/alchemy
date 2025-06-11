@@ -51,6 +51,7 @@ import {
   listQueueConsumersForWorker,
 } from "./queue-consumer.ts";
 import { type QueueResource, isQueue } from "./queue.ts";
+import { Route } from "./route.ts";
 import { isVectorizeIndex } from "./vectorize-index.ts";
 import { type AssetUploadResult, uploadAssets } from "./worker-assets.ts";
 import {
@@ -218,6 +219,32 @@ export interface BaseWorkerProps<
   eventSources?: EventSource[];
 
   /**
+   * Routes to create for this worker.
+   *
+   * Each route maps a URL pattern to this worker script.
+   */
+  routes?: Array<{
+    /**
+     * URL pattern for the route
+     * @example "sub.example.com/*"
+     */
+    pattern: string;
+    /**
+     * Zone ID for the route. If not provided, will be automatically inferred from the route pattern.
+     */
+    zoneId?: string;
+    /**
+     * Whether this is a custom domain route
+     */
+    customDomain?: boolean;
+    /**
+     * Whether to adopt an existing route with the same pattern if it exists
+     * @default false
+     */
+    adopt?: boolean;
+  }>;
+
+  /**
    * The RPC class to use for the worker.
    *
    * This is only used when using the rpc property.
@@ -323,7 +350,7 @@ export type Worker<
   B extends Bindings | undefined = Bindings | undefined,
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
 > = Resource<"cloudflare::Worker"> &
-  Omit<WorkerProps<B>, "url" | "script"> &
+  Omit<WorkerProps<B>, "url" | "script" | "routes"> &
   globalThis.Service & {
     /** @internal phantom property */
     __rpc__?: RPC;
@@ -367,6 +394,11 @@ export type Worker<
      * Configuration for static assets
      */
     assets?: AssetsConfig;
+
+    /**
+     * The routes that were created for this worker
+     */
+    routes?: Route[];
 
     // phantom property (for typeof myWorker.Env)
     Env: B extends Bindings
@@ -969,6 +1001,38 @@ export const _Worker = Resource(
 
     const { scriptMetadata, workerUrl, now } = await uploadWorkerScript(props);
 
+    // Create routes if provided and capture their outputs
+    let createdRoutes: Route[] = [];
+    if (props.routes && props.routes.length > 0) {
+      // Validate for duplicate patterns
+      const patterns = props.routes.map((route) => route.pattern);
+      const duplicates = patterns.filter(
+        (pattern, index) => patterns.indexOf(pattern) !== index,
+      );
+      if (duplicates.length > 0) {
+        throw new Error(
+          `Duplicate route patterns found: ${duplicates.join(", ")}`,
+        );
+      }
+
+      // Create Route resources for each route and capture their outputs
+      createdRoutes = await Promise.all(
+        props.routes.map(async (routeConfig) => {
+          return await Route(routeConfig.pattern, {
+            pattern: routeConfig.pattern,
+            script: workerName,
+            zoneId: routeConfig.zoneId, // Route resource will handle inference if not provided
+            adopt: routeConfig.adopt ?? false,
+            accountId: props.accountId,
+            apiKey: props.apiKey,
+            apiToken: props.apiToken,
+            baseUrl: props.baseUrl,
+            email: props.email,
+          });
+        }),
+      );
+    }
+
     function exportBindings() {
       return Object.fromEntries(
         Object.entries(props.bindings ?? ({} as B)).map(
@@ -1014,6 +1078,8 @@ export const _Worker = Resource(
       assets: props.assets,
       // Include cron triggers in the output
       crons: props.crons,
+      // Include the created routes in the output
+      routes: createdRoutes.length > 0 ? createdRoutes : undefined,
       // phantom property
       Env: undefined!,
     } as unknown as Worker<B>);

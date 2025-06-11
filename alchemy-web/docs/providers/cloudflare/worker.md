@@ -15,32 +15,111 @@ Create a basic HTTP handler worker:
 import { Worker } from "alchemy/cloudflare";
 
 const worker = await Worker("api", {
-  name: "api-worker", 
-  entrypoint: "./src/api.ts"
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
 });
 ```
 
-## With Bindings
+In your `./src/api.ts`
+
+```ts
+export default {
+  async fetch(request, env, ctx) {
+    return new Response("OK");
+  },
+};
+```
+
+## Bindings
 
 Attach resources like KV, R2, or Durable Objects:
 
 ```ts
-import { Worker, KVNamespace, DurableObjectNamespace } from "alchemy/cloudflare";
+import {
+  Worker,
+  KVNamespace,
+  DurableObjectNamespace,
+} from "alchemy/cloudflare";
 
 const kv = await KVNamespace("cache", { title: "cache-store" });
 const users = new DurableObjectNamespace("users", { className: "Users" });
 
-const worker = await Worker("api", {
+export const worker = await Worker("api", {
   name: "api-worker",
   entrypoint: "./src/api.ts",
   bindings: {
     CACHE: kv,
-    USERS: users
-  }
+    USERS: users,
+  },
 });
 ```
 
-## With Static Assets
+Access in `./src/api.ts` by importing `cloudflare:workers`:
+
+```ts
+import { env } from "cloudflare:workers";
+
+export default {
+  async fetch() {
+    await env.CACHE.get("key");
+  },
+};
+```
+
+Or via the `env` parameter:
+
+```ts
+export default {
+  async fetch(request, env) {
+    await env.CACHE.get("key");
+  },
+};
+```
+
+### Infer Worker Env Types
+
+Binding types can be inferred from the `worker` in your `alchemy.run.ts` script:
+
+```ts
+import type { worker } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request, env: typeof worker.Env) {
+    await env.CACHE.get("key");
+  },
+};
+```
+
+### Augment types of `cloudflare:workers`
+
+To make the `env` in `cloudflare:workers` type-safe, create an `env.ts` file:
+
+```typescript
+import type { worker } from "./alchemy.run.ts";
+
+export type WorkerEnv = typeof worker.Env;
+
+declare module "cloudflare:workers" {
+  namespace Cloudflare {
+    export interface Env extends WorkerEnv {}
+  }
+}
+```
+
+And register `env.ts` in your `tsconfig.json`'s `types`.
+
+```json
+{
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types", "./src/env.ts"]
+  }
+}
+```
+
+> [!TIP]
+> See [Bindings](../concepts/bindings.md) for more information.
+
+## Static Assets
 
 Serve static files from a directory:
 
@@ -48,19 +127,19 @@ Serve static files from a directory:
 import { Worker, Assets } from "alchemy/cloudflare";
 
 const assets = await Assets("static", {
-  path: "./public"
+  path: "./public",
 });
 
 const worker = await Worker("frontend", {
-  name: "frontend-worker", 
+  name: "frontend-worker",
   entrypoint: "./src/worker.ts",
   bindings: {
-    ASSETS: assets
-  }
+    ASSETS: assets,
+  },
 });
 ```
 
-## With Cron Triggers
+## Cron Triggers
 
 Schedule recurring tasks:
 
@@ -70,7 +149,7 @@ import { Worker } from "alchemy/cloudflare";
 const worker = await Worker("cron", {
   name: "cron-worker",
   entrypoint: "./src/cron.ts",
-  crons: ["0 0 * * *"] // Run daily at midnight
+  crons: ["0 0 * * *"], // Run daily at midnight
 });
 ```
 
@@ -83,19 +162,19 @@ import { Worker } from "alchemy/cloudflare";
 
 const api = await Worker("api", {
   name: "api-worker",
-  entrypoint: "./src/api.ts"
+  entrypoint: "./src/api.ts",
 });
 
 const frontend = await Worker("frontend", {
   name: "frontend-worker",
   entrypoint: "./src/frontend.ts",
   bindings: {
-    API: api
-  }
+    API: api,
+  },
 });
 ```
 
-## RPC Workers
+## RPC
 
 Create a Worker with RPC capabilities using WorkerEntrypoint and typed RPC interfaces:
 
@@ -107,7 +186,7 @@ import type MyRPC from "./src/rpc.ts";
 const rpcWorker = await Worker("rpc-service", {
   name: "rpc-service-worker",
   entrypoint: "./src/rpc.ts",
-  rpc: type<MyRPC>
+  rpc: type<MyRPC>,
 });
 
 // Use the RPC worker as a binding in another worker
@@ -115,8 +194,8 @@ const mainWorker = await Worker("main", {
   name: "main-worker",
   entrypoint: "./src/worker.ts",
   bindings: {
-    RPC: rpcWorker
-  }
+    RPC: rpcWorker,
+  },
 });
 ```
 
@@ -147,13 +226,18 @@ export default {
     // Type-safe RPC calls
     const result = await env.RPC.getData("123");
     const success = await env.RPC.processItem({ name: "test", value: 42 });
-    
+
     return new Response(JSON.stringify({ result, success }));
-  }
+  },
 };
 ```
 
-## Cross-Script Durable Object Binding
+## Durable Object
+
+> [!TIP]
+> See the [Durable Object Guide](./cloudflare-durable-objects.md) for more information.
+
+### Cross-Script Durable Object
 
 Share durable objects between workers by defining them in one worker and accessing them from another:
 
@@ -166,44 +250,54 @@ const dataWorker = await Worker("data-worker", {
   bindings: {
     // Bind to its own durable object
     STORAGE: new DurableObjectNamespace("storage", {
-      className: "DataStorage"
-    })
-  }
+      className: "DataStorage",
+    }),
+  },
 });
 
 // Worker that accesses the durable object from another worker
 const apiWorker = await Worker("api-worker", {
-  entrypoint: "./src/api.ts", 
+  entrypoint: "./src/api.ts",
   bindings: {
     // Cross-script binding to the data worker's durable object
-    SHARED_STORAGE: dataWorker.bindings.STORAGE
-  }
+    SHARED_STORAGE: dataWorker.bindings.STORAGE,
+  },
 });
 ```
 
-## With Custom Domain Routing
+## Routes
+
+Create a worker and its routes in a single declaration:
 
 ```ts
-import { Worker, Route, Zone } from "alchemy/cloudflare";
+import { Worker, Zone } from "alchemy/cloudflare";
 
 const zone = await Zone("example-zone", {
   name: "example.com",
   type: "full",
 });
 
-const api = await Worker("api", {
+const worker = await Worker("api", {
   name: "api-worker",
-  entrypoint: "./src/api.ts"
-});
-
-const route = await Route("route", {
-  zoneId: zone.id,
-  worker: api,
-  pattern: "api.example.com/*"
+  entrypoint: "./src/api.ts",
+  routes: [
+    {
+      pattern: "api.example.com/*",
+      zoneId: zone.id,
+    },
+    {
+      pattern: "admin.example.com/*",
+      // will be inferred from `admin.example.com/*` with an API lookup
+      // zoneId: zone.id,
+    },
+  ],
 });
 ```
 
-## Reference Workers by Name
+> [!TIP]
+> See the [Route](../providers/cloudflare/route.md) for more information.
+
+## Reference Worker by Name
 
 Use `WorkerRef` to reference an existing worker by its service name rather than by resource instance. This is useful for worker-to-worker bindings when you need to reference a worker that already exists.
 
@@ -214,11 +308,14 @@ const callerWorker = await Worker("caller", {
   bindings: {
     TARGET_WORKER: WorkerRef({
       // reference the worker by name (not created with Alchemy)
-      service: "target-worker"
-    })
+      service: "target-worker",
+    }),
   },
 });
 ```
+
+> [!NOTE]
+> Learn more in the [Route Documentation](./route.md)
 
 ### RPC Type
 
@@ -234,8 +331,8 @@ const callerWorker = await Worker("caller", {
     TARGET_WORKER: WorkerRef<MyWorkerEntrypoint>({
       service: "target-worker",
       environment: "production", // Optional
-      namespace: "main"           // Optional
-    })
+      namespace: "main", // Optional
+    }),
   },
 });
 ```

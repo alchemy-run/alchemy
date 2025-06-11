@@ -8,6 +8,7 @@ import {
   type CloudflareApiOptions,
 } from "./api.ts";
 import type { Worker } from "./worker.ts";
+import { getZoneByDomain } from "./zone.ts";
 
 /**
  * Properties for creating or updating a Route
@@ -27,8 +28,18 @@ export interface RouteProps extends CloudflareApiOptions {
 
   /**
    * Zone ID for the route
+   * If not provided, will be automatically inferred from the route pattern using Cloudflare's zones API.
+   * The system will attempt to find a zone that matches the domain in the route pattern.
+   *
+   * @example
+   * // Explicit zone ID:
+   * { pattern: "api.example.com/*", zoneId: "abc123def456" }
+   *
+   * // Automatic inference (recommended):
+   * { pattern: "api.example.com/*" } // Zone ID automatically inferred from "example.com"
+   * { pattern: "*.example.com/api/*" } // Zone ID inferred from "example.com"
    */
-  zoneId: string;
+  zoneId?: string;
 
   /**
    * Whether to adopt an existing route with the same pattern if it exists
@@ -96,6 +107,21 @@ export interface Route extends Resource<"cloudflare::Route">, RouteProps {
  *   zoneId: "your-zone-id"
  * });
  *
+ * @example
+ * // Create a route with automatic zone ID inference
+ * // The zone ID will be automatically determined from the domain in the pattern
+ * const autoRoute = await Route("auto-route", {
+ *   pattern: "api.example.com/*", // Zone ID inferred from example.com
+ *   script: "my-worker"
+ * });
+ *
+ * @example
+ * // Works with wildcard patterns too
+ * const wildcardRoute = await Route("wildcard-route", {
+ *   pattern: "*.example.com/api/*", // Zone ID inferred from example.com
+ *   script: "api-worker"
+ * });
+ *
  * @see https://developers.cloudflare.com/workers/configuration/routes/
  */
 export const Route = Resource(
@@ -111,19 +137,38 @@ export const Route = Resource(
     const scriptName =
       typeof props.script === "string" ? props.script : props.script.name;
 
-    // Get zone ID from props
-    const { zoneId } = props;
-
     if (this.phase === "delete") {
       logger.log("Deleting Route:", props.pattern);
 
-      // Only delete if we have an ID
-      if (this.output?.id) {
-        await deleteRoute(api, zoneId, this.output.id);
+      // Only delete if we have complete output data (both ID and zoneId)
+      // If creation failed, we won't have proper output, so just skip deletion
+      if (this.output?.id && this.output?.zoneId) {
+        await deleteRoute(api, this.output.zoneId, this.output.id);
       }
 
       // Return void (a deleted route has no content)
       return this.destroy();
+    }
+
+    // Get or infer zone ID (only needed for create/update phases)
+    let zoneId = props.zoneId;
+    if (!zoneId) {
+      const inferredZoneId = await inferZoneIdFromPattern(props.pattern, {
+        accountId: props.accountId,
+        apiKey: props.apiKey,
+        apiToken: props.apiToken,
+        baseUrl: props.baseUrl,
+        email: props.email,
+      });
+
+      if (!inferredZoneId) {
+        throw new Error(
+          `Could not infer zone ID for route pattern "${props.pattern}". ` +
+            "Please ensure the domain is managed by Cloudflare or specify an explicit zoneId.",
+        );
+      }
+
+      zoneId = inferredZoneId;
     }
 
     let routeData: CloudflareRouteResponse;
@@ -168,13 +213,14 @@ export const Route = Resource(
             );
           }
 
-          // Use the existing route data
-          routeData = {
-            result: existingRoute,
-            success: true,
-            errors: [],
-            messages: [],
-          };
+          // Update the existing route to point to our script
+          routeData = await updateRoute(
+            api,
+            zoneId,
+            existingRoute.id,
+            props.pattern,
+            scriptName,
+          );
         } else {
           // Re-throw the error if adopt is false or it's not a 409 error
           throw error;
@@ -350,4 +396,57 @@ async function findRouteByPattern(
   // Look for a route with matching pattern
   const match = data.result.find((route) => route.pattern === pattern);
   return match || null;
+}
+
+/**
+ * Extract domain from a route pattern, similar to wrangler's logic
+ * @param pattern The route pattern (e.g., "api.example.com/*", "*.example.com/api/*")
+ * @returns The domain part of the pattern
+ */
+function extractDomainFromPattern(pattern: string): string {
+  // Remove protocol if present
+  let domain = pattern.replace(/^https?:\/\//, "");
+
+  // Remove path part (everything after the first '/')
+  domain = domain.split("/")[0];
+
+  // Remove port if present
+  domain = domain.split(":")[0];
+
+  return domain;
+}
+
+/**
+ * Infer zone ID from a route pattern using Cloudflare API
+ * This implements similar logic to wrangler's zone inference
+ * @param pattern The route pattern
+ * @param apiOptions API options for Cloudflare API calls
+ * @returns Promise resolving to zone ID or null if not found
+ */
+async function inferZoneIdFromPattern(
+  pattern: string,
+  apiOptions: Partial<CloudflareApiOptions>,
+): Promise<string | null> {
+  const domain = extractDomainFromPattern(pattern);
+
+  // Handle wildcard domains by removing the wildcard part
+  const cleanDomain = domain.replace(/^\*\./, "");
+
+  // Try to find zone for the exact domain first
+  let zone = await getZoneByDomain(cleanDomain, apiOptions);
+  if (zone) {
+    return zone.id;
+  }
+
+  // If not found, try parent domains (similar to wrangler's logic)
+  const domainParts = cleanDomain.split(".");
+  for (let i = 1; i < domainParts.length - 1; i++) {
+    const parentDomain = domainParts.slice(i).join(".");
+    zone = await getZoneByDomain(parentDomain, apiOptions);
+    if (zone) {
+      return zone.id;
+    }
+  }
+
+  return null;
 }

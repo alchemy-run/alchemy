@@ -1,14 +1,14 @@
 import { afterAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
+import { PlanetScaleApi } from "../../src/planetscale/api.ts";
 import { Branch } from "../../src/planetscale/branch.ts";
 import { Database } from "../../src/planetscale/database.ts";
-import { PlanetScaleApi } from "../../src/planetscale/api.ts";
 import { waitForDatabaseReady } from "../../src/planetscale/utils.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
-import "../../src/test/vitest.ts";
 import type { Scope } from "../../src/scope.ts";
+import "../../src/test/vitest.ts";
 
 const api = new PlanetScaleApi();
 
@@ -16,7 +16,7 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("Branch Resource", () => {
+describe.skipIf(!process.env.PLANETSCALE_TEST)("Branch Resource", () => {
   const testDbId = `${BRANCH_PREFIX}-test-database`;
   const organizationId = process.env.PLANETSCALE_ORG_ID || "";
   let testDB: Database;

@@ -9,10 +9,6 @@ inputs:
     description: 'AWS region to use'
     required: false
     default: 'us-west-2'
-  install-extra-deps:
-    description: 'Whether to install extra dependencies (e.g., tanstack example)'
-    required: false
-    default: 'false'
 
 runs:
   using: 'composite'
@@ -26,12 +22,9 @@ runs:
       shell: bash
       run: |
         bun install
-        if [ "${{ inputs.install-extra-deps }}" == "true" ]; then
-          # tanstack start doesn't deploy when packages are hoisted ...
-          cd examples/cloudflare-tanstack-start
-          bun install
-          cd ../..
-        fi
+        cd examples/cloudflare-tanstack-start
+        bun install
+        cd ../..
 
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
