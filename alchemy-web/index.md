@@ -1,15 +1,14 @@
 ---
 layout: home
 title: Alchemy
-description: Like Terraform but in plain JavaScript. Supports AWS, Cloudflare, Azure, etc.
-
+description: Like Terraform but in plain TypeScript
 # Custom hero component instead of the default hero
 ---
 
 <CodeSnippetHero 
   name="Alchemy" 
-  text="Create, Update, Delete" 
-  tagline="Like Terraform but in plain JavaScript. Supports AWS, Cloudflare, Azure, etc."
+  text="Wrangle the Cloud with pure TypeScript 🪄" 
+  tagline="Built-in support for Cloudflare, AWS, Stripe and more — or generate your own in minutes with our llms.txt"
   :actions="[
     { theme: 'brand', text: 'Get Started', link: '/docs/getting-started' },
     { theme: 'alt', text: 'Star on GitHub ⭐️', link: 'https://github.com/sam-goodwin/alchemy' }
@@ -18,19 +17,19 @@ description: Like Terraform but in plain JavaScript. Supports AWS, Cloudflare, A
 
 ```typescript
 const database = await D1Database("my-app-db", {
-  name: "my-application-db"
+  name: "my-application-db",
 });
 
 const site = await Worker("website", {
   name: "my-app",
   bindings: {
-    DB: database
-  }
+    DB: database,
+  },
 });
 
 const product = await Product("pro-plan", {
   name: "Pro Plan",
-  description: "Professional subscription tier"
+  description: "Professional subscription tier",
 });
 ```
 

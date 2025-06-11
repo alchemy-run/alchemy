@@ -189,14 +189,14 @@ function copyCode() {
 }
 
 .text {
-  font-size: 3.5rem;
+  font-size: 2.8rem;
   font-weight: 700;
   line-height: 1.1;
   margin-top: 0.625rem;
   margin-bottom: 0.75rem;
   color: var(--vp-c-text-1);
   letter-spacing: -0.01em;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .tagline {
@@ -487,7 +487,7 @@ function copyCode() {
   }
 
   .text {
-    font-size: 3.1rem;
+    font-size: 2.5rem;
   }
 }
 
@@ -514,7 +514,7 @@ function copyCode() {
   }
 
   .text {
-    font-size: 2.7rem;
+    font-size: 2.2rem;
     white-space: normal;
   }
 
@@ -547,7 +547,7 @@ function copyCode() {
   }
 
   .text {
-    font-size: 2.3rem;
+    font-size: 1.8rem;
     white-space: normal;
   }
 
@@ -588,7 +588,7 @@ function copyCode() {
   }
 
   .text {
-    font-size: 1.9rem;
+    font-size: 1.5rem;
     white-space: normal;
   }
 
@@ -644,7 +644,7 @@ function copyCode() {
   }
 
   .text {
-    font-size: 1.5rem;
+    font-size: 1.2rem;
     margin-top: 0.5rem;
     white-space: normal;
   }
