@@ -363,6 +363,14 @@ export interface WranglerJsonSpec {
   version_metadata?: {
     binding: string;
   };
+
+  /**
+   * Dispatch namespace bindings
+   */
+  dispatch_namespaces?: {
+    binding: string;
+    namespace: string;
+  }[];
 }
 
 /**
@@ -428,6 +436,10 @@ function processBindings(
     binding: string;
     store_id: string;
     secret_name: string;
+  }[] = [];
+  const dispatchNamespaces: {
+    binding: string;
+    namespace: string;
   }[] = [];
 
   for (const eventSource of eventSources ?? []) {
@@ -594,6 +606,11 @@ function processBindings(
           });
         }
       }
+    } else if (binding.type === "dispatch_namespace") {
+      dispatchNamespaces.push({
+        binding: bindingName,
+        namespace: binding.namespaceName,
+      });
     } else {
       // biome-ignore lint/correctness/noVoidTypeReturn: it returns never
       return assertNever(binding);
@@ -659,5 +676,9 @@ function processBindings(
 
   if (secretsStoreSecrets.length > 0) {
     spec.secrets_store_secrets = secretsStoreSecrets;
+  }
+
+  if (dispatchNamespaces.length > 0) {
+    spec.dispatch_namespaces = dispatchNamespaces;
   }
 }

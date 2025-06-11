@@ -478,6 +478,12 @@ export async function prepareWorkerMetadata<B extends Bindings>(
         type: "version_metadata",
         name: bindingName,
       });
+    } else if (binding.type === "dispatch_namespace") {
+      meta.bindings.push({
+        type: "dispatch_namespace",
+        name: bindingName,
+        namespace: binding.namespaceName,
+      });
     } else {
       // @ts-expect-error - we should never reach here
       throw new Error(`Unsupported binding type: ${binding.type}`);
