@@ -298,6 +298,59 @@ const worker = await Worker("api", {
 > [!TIP]
 > See the [Route](../providers/cloudflare/route.md) for more information.
 
+## Workers for Platforms
+
+Deploy workers to dispatch namespaces for multi-tenant architectures using Cloudflare's Workers for Platforms:
+
+```ts
+import { Worker, DispatchNamespace } from "alchemy/cloudflare";
+
+// Create a dispatch namespace
+const tenantNamespace = await DispatchNamespace("tenants", {
+  namespace: "customer-workers",
+});
+
+// Deploy a worker to the dispatch namespace
+const tenantWorker = await Worker("tenant-app", {
+  name: "tenant-app-worker",
+  entrypoint: "./src/tenant.ts",
+  dispatchNamespace: tenantNamespace,
+});
+
+// Create a router that binds to the dispatch namespace
+const router = await Worker("platform-router", {
+  name: "main-router",
+  entrypoint: "./src/router.ts",
+  bindings: {
+    TENANT_WORKERS: tenantNamespace,
+  },
+});
+```
+
+In your router, you can dynamically route to tenant workers:
+
+```ts
+// src/router.ts
+export default {
+  async fetch(request: Request, env: { TENANT_WORKERS: DispatchNamespace }) {
+    const url = new URL(request.url);
+    const tenantId = url.hostname.split(".")[0];
+
+    // Get the tenant's worker from the dispatch namespace
+    const tenantWorker = env.TENANT_WORKERS.get(tenantId);
+
+    // Forward the request to the tenant's worker
+    return await tenantWorker.fetch(request);
+  },
+};
+```
+
+> [!NOTE]
+> Workers for Platforms enables multi-tenant architectures where each tenant can have isolated worker scripts with their own bindings and configuration.
+
+> [!TIP]
+> See the [Dispatch Namespace](../providers/cloudflare/dispatch-namespace.md) documentation for more details on Workers for Platforms.
+
 ## Reference Worker by Name
 
 Use `WorkerRef` to reference an existing worker by its service name rather than by resource instance. This is useful for worker-to-worker bindings when you need to reference a worker that already exists.

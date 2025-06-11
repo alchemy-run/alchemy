@@ -162,18 +162,6 @@ describe("Dispatch Namespace Resource", () => {
     expect(response.status).toEqual(404);
   }
 
-  async function assertWorkerInDispatchNamespace(
-    namespace: string,
-    workerName: string,
-  ): Promise<void> {
-    const api = await createCloudflareApi();
-    const response = await api.get(
-      `/accounts/${api.accountId}/workers/dispatch/namespaces/${namespace}/scripts/${workerName}`,
-    );
-
-    expect(response.status).toEqual(200);
-  }
-
   async function assertWorkerDoesNotExist(workerName: string): Promise<void> {
     const api = await createCloudflareApi();
     const response = await api.get(
