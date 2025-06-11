@@ -1357,4 +1357,114 @@ describe("Worker Resource", () => {
       await destroy(scope);
     }
   });
+
+  test("create worker version with preview URL", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-version`;
+    const versionLabel = "test-version-123";
+
+    try {
+      // Create a worker version
+      const worker = await Worker(workerName, {
+        name: workerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from worker version!', {
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            }
+          };
+        `,
+        format: "esm",
+        version: versionLabel,
+      });
+
+      // Verify the worker version was created
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.version).toEqual(versionLabel);
+      expect(worker.previewUrl).toBeTruthy();
+      expect(worker.previewUrl).toContain(versionLabel);
+      expect(worker.previewUrl).toContain(workerName);
+
+      // Test that the preview URL works
+      if (worker.previewUrl) {
+        const response = await fetchAndExpectOK(worker.previewUrl);
+        const text = await response.text();
+        expect(text).toEqual("Hello from worker version!");
+      }
+
+      // Verify that the base worker was created (adopted)
+      const baseWorkerResponse = await api.get(
+        `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+      );
+      expect(baseWorkerResponse.status).toEqual(200);
+
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(workerName);
+    }
+  });
+
+  test("create worker version with existing worker (adoption)", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-version-adopt`;
+    const versionLabel = "pr-456";
+
+    try {
+      // First create a base worker without version
+      const baseWorker = await Worker(`${workerName}-base`, {
+        name: workerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from base worker!', { status: 200 });
+            }
+          };
+        `,
+        format: "esm",
+      });
+
+      expect(baseWorker.version).toBeUndefined();
+      expect(baseWorker.previewUrl).toBeUndefined();
+
+      // Now create a version of the same worker
+      const versionWorker = await Worker(`${workerName}-version`, {
+        name: workerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from worker version!', { status: 200 });
+            }
+          };
+        `,
+        format: "esm",
+        version: versionLabel,
+      });
+
+      // Verify the version worker properties
+      expect(versionWorker.id).toBeTruthy();
+      expect(versionWorker.name).toEqual(workerName);
+      expect(versionWorker.version).toEqual(versionLabel);
+      expect(versionWorker.previewUrl).toBeTruthy();
+      expect(versionWorker.previewUrl).toContain(versionLabel);
+
+      // Test that the preview URL works
+      if (versionWorker.previewUrl) {
+        const response = await fetchAndExpectOK(versionWorker.previewUrl);
+        const text = await response.text();
+        expect(text).toEqual("Hello from worker version!");
+      }
+
+      // Verify the base worker still exists and wasn't modified
+      const baseWorkerCheck = await api.get(
+        `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+      );
+      expect(baseWorkerCheck.status).toEqual(200);
+
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(workerName);
+    }
+  });
 });
