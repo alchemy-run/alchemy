@@ -358,7 +358,6 @@ async function deployWorker(props: WorkerProps) {
 }
 ```
 ## Testing Guidelines
-
 ### Import Strategy
 - **Use static imports**: Avoid dynamic imports in test files for better IDE support and error detection
 
