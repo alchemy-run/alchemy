@@ -41,12 +41,6 @@ async function _apply<Out extends Resource>(
   const scope = resource[ResourceScope];
   const start = performance.now();
   try {
-    logger.task(resource[ResourceFQN], {
-      prefix: "setup",
-      prefixColor: "cyanBright",
-      resource: formatFQN(resource[ResourceFQN]),
-      message: "Setting up Resource...",
-    });
     const quiet = props?.quiet ?? scope.quiet;
     await scope.init();
     let state: State | undefined = (await scope.state.get(

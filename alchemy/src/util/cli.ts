@@ -30,14 +30,6 @@ const colorize = (text: string, color: ColorName): string => {
   return `${colors[color]}${text}${colors.reset}`;
 };
 
-// Format timestamp like Vite (HH:MM:SS)
-const getTimestamp = (): string => {
-  const now = new Date();
-  const hours = now.getHours().toString().padStart(2, '0');
-  const minutes = now.getMinutes().toString().padStart(2, '0');
-  const seconds = now.getSeconds().toString().padStart(2, '0');
-  return `${hours}:${minutes}:${seconds}`;
-};
 
 export type Task = {
   prefix?: string;
@@ -99,7 +91,6 @@ export const createFallbackLogger = (alchemyInfo: AlchemyInfo): LoggerApi => {
     warn: (...args: unknown[]) =>
       console.warn(colorize("WARN", "yellowBright"), ...args),
     task: (_id: string, data: Task) => {
-      const timestamp = colorize(getTimestamp(), "gray");
       const prefix = data.prefix ? `[${data.prefix}]` : "";
 
       // Pad the prefix to ensure consistent alignment (12 characters total including brackets)
@@ -113,11 +104,11 @@ export const createFallbackLogger = (alchemyInfo: AlchemyInfo): LoggerApi => {
       const message = data.message;
 
       if (prefixWithColor && resource) {
-        console.log(`${timestamp} ${prefixWithColor}${resource} ${message}`);
+        console.log(`${prefixWithColor}${resource} ${message}`);
       } else if (prefixWithColor) {
-        console.log(`${timestamp} ${prefixWithColor}${message}`);
+        console.log(`${prefixWithColor}${message}`);
       } else {
-        console.log(`${timestamp} ${message}`);
+        console.log(`${message}`);
       }
     },
     exit: () => {},
