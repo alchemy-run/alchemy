@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { PlanetScaleApi } from "./api.ts";
 import {
@@ -169,7 +169,7 @@ export interface Database
  *   clusterSize: "PS_10"
  * });
  */
-export const Database = Resource(
+export const Database = LiveOnlyResource(
   "planetscale::Database",
   async function (
     this: Context<Database>,

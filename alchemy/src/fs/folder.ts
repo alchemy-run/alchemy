@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 
 export interface FolderProps {
@@ -56,7 +56,7 @@ export interface Folder extends Resource<"fs::Folder"> {
  *   path: "var/log/app"
  * });
  */
-export const Folder = Resource(
+export const Folder = LocalOnlyResource(
   "fs::Folder",
   async function (
     this: Context<Folder>,

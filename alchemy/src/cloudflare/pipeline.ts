@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { LiveOnlyResource, ResourceKind, type Resource } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
@@ -348,93 +348,96 @@ export async function Pipeline<T extends PipelineRecord = PipelineRecord>(
   };
 }
 
-const PipelineResource = Resource("cloudflare::Pipeline", async function <
-  T extends PipelineRecord = PipelineRecord,
->(this: Context<PipelineResource<T>>, id: string, props: PipelineProps): Promise<
-  PipelineResource<T>
-> {
-  const api = await createCloudflareApi(props);
-  const pipelineName = props.name ?? id;
+const PipelineResource = LiveOnlyResource(
+  "cloudflare::Pipeline",
+  async function <T extends PipelineRecord = PipelineRecord>(
+    this: Context<PipelineResource<T>>,
+    id: string,
+    props: PipelineProps,
+  ): Promise<PipelineResource<T>> {
+    const api = await createCloudflareApi(props);
+    const pipelineName = props.name ?? id;
 
-  if (this.phase === "delete") {
-    if (props.delete !== false) {
-      // Delete Pipeline
-      await deletePipeline(api, pipelineName);
+    if (this.phase === "delete") {
+      if (props.delete !== false) {
+        // Delete Pipeline
+        await deletePipeline(api, pipelineName);
+      }
+
+      // Return void (a deleted pipeline has no content)
+      return this.destroy();
     }
+    let pipelineData: CloudflarePipelineResponse;
 
-    // Return void (a deleted pipeline has no content)
-    return this.destroy();
-  }
-  let pipelineData: CloudflarePipelineResponse;
-
-  if (this.phase === "create") {
-    console.log(props);
-    // Check if we should adopt an existing pipeline
-    try {
-      // Try to create pipeline first
-      console.log("Creating new Cloudflare Pipeline:", pipelineName);
-      pipelineData = await createPipeline(api, pipelineName, props);
-    } catch (error) {
-      // If creation fails with 409 (conflict), adopt existing pipeline
-      if (
-        error instanceof CloudflareApiError &&
-        (error.status === 409 ||
-          (error.status === 400 &&
-            error.message.includes("Pipeline with this name already exists")))
-      ) {
-        if (props.adopt) {
-          console.log(
-            "Pipeline already exists, adopting existing Cloudflare Pipeline:",
-            pipelineName,
-          );
-          pipelineData = await getPipeline(api, pipelineName);
+    if (this.phase === "create") {
+      console.log(props);
+      // Check if we should adopt an existing pipeline
+      try {
+        // Try to create pipeline first
+        console.log("Creating new Cloudflare Pipeline:", pipelineName);
+        pipelineData = await createPipeline(api, pipelineName, props);
+      } catch (error) {
+        // If creation fails with 409 (conflict), adopt existing pipeline
+        if (
+          error instanceof CloudflareApiError &&
+          (error.status === 409 ||
+            (error.status === 400 &&
+              error.message.includes("Pipeline with this name already exists")))
+        ) {
+          if (props.adopt) {
+            console.log(
+              "Pipeline already exists, adopting existing Cloudflare Pipeline:",
+              pipelineName,
+            );
+            pipelineData = await getPipeline(api, pipelineName);
+          } else {
+            throw error;
+          }
         } else {
+          // For any other error, rethrow
           throw error;
         }
-      } else {
-        // For any other error, rethrow
-        throw error;
       }
-    }
-  } else {
-    // Update operation
-    if (this.output?.id) {
-      // Check if name is being changed, which is not allowed
-      if (pipelineName !== this.output.name) {
-        throw new Error(
-          "Cannot update Pipeline name after creation. Pipeline name is immutable.",
-        );
-      }
-
-      // Update the pipeline with new settings
-      pipelineData = await updatePipeline(api, pipelineName, props);
     } else {
-      // If no ID exists, fall back to creating a new pipeline
-      logger.log(
-        "No existing Pipeline ID found, creating new Cloudflare Pipeline:",
-        pipelineName,
-      );
-      pipelineData = await createPipeline(api, pipelineName, props);
-    }
-  }
+      // Update operation
+      if (this.output?.id) {
+        // Check if name is being changed, which is not allowed
+        if (pipelineName !== this.output.name) {
+          throw new Error(
+            "Cannot update Pipeline name after creation. Pipeline name is immutable.",
+          );
+        }
 
-  return this({
-    type: "pipeline",
-    id: pipelineData.result.id,
-    name: pipelineName,
-    endpoint: pipelineData.result.endpoint,
-    version: pipelineData.result.version,
-    source: pipelineData.result.source!.map((s) => ({
-      type: s.type as "http" | "binding",
-      format: s.format as "json",
-      authentication: s.authentication,
-      cors: s.cors,
-    })),
-    destination: props.destination, // Use the input destination, not the API response
-    compression: props.compression,
-    accountId: api.accountId,
-  });
-});
+        // Update the pipeline with new settings
+        pipelineData = await updatePipeline(api, pipelineName, props);
+      } else {
+        // If no ID exists, fall back to creating a new pipeline
+        logger.log(
+          "No existing Pipeline ID found, creating new Cloudflare Pipeline:",
+          pipelineName,
+        );
+        pipelineData = await createPipeline(api, pipelineName, props);
+      }
+    }
+
+    return this({
+      type: "pipeline",
+      id: pipelineData.result.id,
+      name: pipelineName,
+      endpoint: pipelineData.result.endpoint,
+      version: pipelineData.result.version,
+      source: pipelineData.result.source!.map((s) => ({
+        type: s.type as "http" | "binding",
+        format: s.format as "json",
+        authentication: s.authentication,
+        cors: s.cors,
+      })),
+      destination: props.destination, // Use the input destination, not the API response
+      compression: props.compression,
+      accountId: api.accountId,
+    });
+  },
+);
 
 interface CloudflarePipelineResponse {
   result: {

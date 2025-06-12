@@ -1,14 +1,14 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { Context } from "../../context.ts";
-import { Resource } from "../../resource.ts";
+import { LocalOnlyResource, type Resource } from "../../resource.ts";
 import { logger } from "../../util/logger.ts";
 
 const execAsync = promisify(exec);
 
 export type InstallDependencies = Resource<"project::InstallDependencies">;
 
-export const InstallDependencies = Resource(
+export const InstallDependencies = LocalOnlyResource(
   "project::InstallDependencies",
   {
     alwaysUpdate: true,

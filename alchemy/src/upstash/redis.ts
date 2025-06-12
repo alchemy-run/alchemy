@@ -1,6 +1,6 @@
 import { alchemy } from "../alchemy.ts";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { UpstashApi } from "./api.ts";
@@ -153,7 +153,7 @@ export interface UpstashRedis
  *   budget: 100
  * });
  */
-export const UpstashRedis = Resource(
+export const UpstashRedis = LiveOnlyResource(
   "upstash::Redis",
   async function (
     this: Context<UpstashRedis>,

@@ -1,6 +1,6 @@
 import sodium from "libsodium-wrappers";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { createGitHubClient, verifyGitHubAuth } from "./client.ts";
@@ -131,7 +131,7 @@ export interface GitHubSecretOutput
  *   });
  * });
  */
-export const GitHubSecret = Resource(
+export const GitHubSecret = LiveOnlyResource(
   "github::Secret",
   async function (
     this: Context<GitHubSecretOutput>,

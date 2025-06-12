@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { LiveOnlyResource, ResourceKind, type Resource } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
@@ -135,7 +135,7 @@ export async function VectorizeIndex(
   };
 }
 
-const _VectorizeIndex = Resource(
+const _VectorizeIndex = LiveOnlyResource(
   "cloudflare::VectorizeIndex",
   async function (
     this: Context<VectorizeIndexResource>,

@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { LiveOnlyResource, ResourceKind, type Resource } from "../resource.ts";
 import { handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
@@ -47,7 +47,7 @@ export function isWorkerStub(resource: Resource): resource is WorkerStub {
  *
  * console.log(`Worker ${workerStub.name} exists: ${!workerStub.created}`);
  */
-export const WorkerStub = Resource(
+export const WorkerStub = LiveOnlyResource(
   "cloudflare::WorkerStub",
   async function (
     this: Context<WorkerStub>,

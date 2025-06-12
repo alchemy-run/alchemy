@@ -1,6 +1,6 @@
 import { alchemy } from "../alchemy.ts";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { sha256 } from "../util/sha256.ts";
@@ -248,7 +248,7 @@ export interface AccountApiToken
  *   ],
  * });
  */
-export const AccountApiToken = Resource(
+export const AccountApiToken = LiveOnlyResource(
   "cloudflare::AccountApiToken",
   async function (
     this: Context<AccountApiToken>,

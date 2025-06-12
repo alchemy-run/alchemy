@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { createGitHubClient, verifyGitHubAuth } from "./client.ts";
 
@@ -170,7 +170,7 @@ export interface RepositoryEnvironment
  *   branchPatterns: ["main", "release/*"]
  * });
  */
-export const RepositoryEnvironment = Resource(
+export const RepositoryEnvironment = LiveOnlyResource(
   "github::RepositoryEnvironment",
   async function (
     this: Context<RepositoryEnvironment>,

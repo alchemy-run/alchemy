@@ -1,7 +1,7 @@
 import { generateText, type CoreMessage } from "ai";
 import type { Context } from "../context.ts";
 import { StaticTextFile } from "../fs/static-text-file.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { createModel, withRateLimitRetry, type ModelConfig } from "./client.ts";
 
@@ -217,7 +217,7 @@ const DEFAULT_MD_SYSTEM_PROMPT =
  *   temperature: 0.1
  * });
  */
-export const Document = Resource(
+export const Document = LocalOnlyResource(
   "docs::Document",
   async function (
     this: Context<Document>,

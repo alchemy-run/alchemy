@@ -5,7 +5,7 @@ import {
   NoSuchEntityException,
 } from "@aws-sdk/client-iam";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 import { retry } from "./retry.ts";
 
@@ -62,7 +62,7 @@ export interface PolicyAttachment
  *   roleName: role.name
  * });
  */
-export const PolicyAttachment = Resource(
+export const PolicyAttachment = LiveOnlyResource(
   "iam::PolicyAttachment",
   async function (
     this: Context<PolicyAttachment>,

@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import type { Context } from "../context.ts";
 import { Folder } from "../fs/folder.ts";
 import { StaticTextFile } from "../fs/static-text-file.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 
 const execAsync = promisify(exec);
 
@@ -77,7 +77,7 @@ export interface TailwindConfig
  *   additionalPackages: ["@tailwindcss/typography", "@tailwindcss/forms"]
  * });
  */
-export const TailwindConfig = Resource(
+export const TailwindConfig = LocalOnlyResource(
   "config::TailwindConfig",
   async function (
     this: Context<TailwindConfig>,

@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { isSecret, type Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { createVercelApi, type VercelApi } from "./api.ts";
@@ -362,7 +362,7 @@ const decryptEnvironmentVariable = (envVar: EnvironmentVariable) => {
  *   devCommand: "npm run dev",
  * });
  */
-export const Project = Resource(
+export const Project = LiveOnlyResource(
   "vercel::Project",
   async function (
     this: Context<Project>,

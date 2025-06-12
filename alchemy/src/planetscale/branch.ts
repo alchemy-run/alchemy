@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { PlanetScaleApi } from "./api.ts";
 import {
@@ -148,7 +148,7 @@ export interface Branch extends Resource<"planetscale::Branch">, BranchProps {
  *   clusterSize: "PS_10"
  * });
  */
-export const Branch = Resource(
+export const Branch = LiveOnlyResource(
   "planetscale::Branch",
   async function (
     this: Context<Branch>,

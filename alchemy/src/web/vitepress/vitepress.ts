@@ -7,7 +7,7 @@ import { Folder } from "../../fs/folder.ts";
 import { StaticJsonFile } from "../../fs/static-json-file.ts";
 import { StaticTextFile } from "../../fs/static-text-file.ts";
 import { StaticTypeScriptFile } from "../../fs/static-typescript-file.ts";
-import { Resource } from "../../resource.ts";
+import { LocalOnlyResource, type Resource } from "../../resource.ts";
 import { logger } from "../../util/logger.ts";
 import { InstallDependencies, fixedDependencies } from "./dependencies.ts";
 
@@ -101,7 +101,7 @@ export interface VitePressProject extends VitePressProjectProps, Resource {
   dir: string;
 }
 
-export const VitepressProject = Resource(
+export const VitepressProject = LocalOnlyResource(
   "project::VitepressProject",
   {
     alwaysUpdate: true,

@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
 
 /**
@@ -106,7 +106,7 @@ export type PermissionGroups = Resource<"cloudflare::PermissionGroups"> & {
  *   ]
  * });
  */
-export const PermissionGroups = Resource(
+export const PermissionGroups = LiveOnlyResource(
   "cloudflare::PermissionGroups",
   async function (
     this: Context<PermissionGroups>,

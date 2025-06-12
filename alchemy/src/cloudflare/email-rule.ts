@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { handleApiError } from "./api-error.ts";
 import { type CloudflareApiOptions, createCloudflareApi } from "./api.ts";
 import type { CloudflareResponse } from "./response.ts";
@@ -227,7 +227,7 @@ export interface EmailRule extends Resource<"cloudflare::EmailRule"> {
  * });
  * ```
  */
-export const EmailRule = Resource(
+export const EmailRule = LiveOnlyResource(
   "cloudflare::EmailRule",
   async function (
     this: Context<EmailRule>,

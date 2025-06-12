@@ -2,12 +2,12 @@ import { alchemy } from "./alchemy.ts";
 import { context } from "./context.ts";
 import {
   resolveDeletionHandler,
-  type Resource,
   ResourceFQN,
   ResourceID,
   ResourceKind,
   ResourceScope,
   ResourceSeq,
+  type Resource,
 } from "./resource.ts";
 import { isScope, Scope } from "./scope.ts";
 import { formatFQN } from "./util/cli.ts";
@@ -128,7 +128,7 @@ export async function destroy<Type extends string>(
         },
         async (scope) => {
           nestedScope = scope;
-          return await Provider.handler.bind(ctx)(
+          return await Provider.getHandler().bind(ctx)(
             instance[ResourceID],
             state.props!,
           );

@@ -5,7 +5,7 @@ import type { Context } from "../context.ts";
 import { Folder } from "../fs/folder.ts";
 import { StaticJsonFile } from "../fs/static-json-file.ts";
 import { StaticTypeScriptFile } from "../fs/static-typescript-file.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { rm } from "../util/rm.ts";
 import { ShadcnComponent } from "./shadcn-component.ts";
@@ -131,7 +131,7 @@ export interface ViteProject extends ViteProjectProps, Resource {
   name: string;
 }
 
-export const ViteProject = Resource(
+export const ViteProject = LocalOnlyResource(
   "project::ViteProject",
   {
     alwaysUpdate: true,

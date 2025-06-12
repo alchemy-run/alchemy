@@ -4,7 +4,7 @@ import type {
   DnsRecordType,
   DnsRecordWithMetadata,
 } from "../dns/record.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import {
   type CloudflareApi,
@@ -124,7 +124,7 @@ export interface DnsRecords extends Resource<"cloudflare::DnsRecords"> {
  *   ]
  * });
  */
-export const DnsRecords = Resource(
+export const DnsRecords = LiveOnlyResource(
   "cloudflare::DnsRecords",
   async function (
     this: Context<DnsRecords>,

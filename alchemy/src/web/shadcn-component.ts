@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 
 const execAsync = promisify(exec);
@@ -39,7 +39,7 @@ export interface ShadcnComponent extends ShadcnComponentProps, Resource {
   name: string;
 }
 
-export const ShadcnComponent = Resource(
+export const ShadcnComponent = LocalOnlyResource(
   "project::ShadcnComponent",
   async function (
     this: Context<ShadcnComponent>,

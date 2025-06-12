@@ -1,7 +1,12 @@
 import path from "node:path";
 import type { Context } from "../context.ts";
 import type { BundleProps } from "../esbuild/bundle.ts";
-import { InnerResourceScope, Resource, ResourceKind } from "../resource.ts";
+import {
+  InnerResourceScope,
+  LiveOnlyResource,
+  type Resource,
+  ResourceKind,
+} from "../resource.ts";
 import { getBindKey, tryGetBinding } from "../runtime/bind.ts";
 import { isRuntime } from "../runtime/global.ts";
 import { bootstrapPlugin } from "../runtime/plugin.ts";
@@ -847,7 +852,7 @@ export function Worker<const B extends Bindings>(
 
 export const DEFAULT_COMPATIBILITY_DATE = "2025-04-20";
 
-export const _Worker = Resource(
+export const _Worker = LiveOnlyResource(
   "cloudflare::Worker",
   {
     alwaysUpdate: true,

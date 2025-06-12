@@ -1,6 +1,7 @@
 import { apply } from "./apply.ts";
 import type { Context } from "./context.ts";
 import { Scope as _Scope, type Scope } from "./scope.ts";
+import { logger } from "./util/logger.ts";
 
 export const PROVIDERS: Map<ResourceKind, Provider<string, any>> = new Map<
   ResourceKind,
@@ -44,6 +45,7 @@ export const ResourceKind = Symbol.for("alchemy::ResourceKind");
 export const ResourceScope = Symbol.for("alchemy::ResourceScope");
 export const InnerResourceScope = Symbol.for("alchemy::InnerResourceScope");
 export const ResourceSeq = Symbol.for("alchemy::ResourceSeq");
+export const InvalidHandlerConfig = Symbol.for("alchemy::InvalidHandlerConfig");
 
 export interface ProviderOptions {
   /**
@@ -59,11 +61,14 @@ export type ResourceProps = {
 export type Provider<
   Type extends string = string,
   F extends ResourceLifecycleHandler = ResourceLifecycleHandler,
-> = F &
+  FL extends LocalResourceLifecycleHandler = LocalResourceLifecycleHandler,
+> = (F | FL) &
   IsClass & {
     type: Type;
     options: Partial<ProviderOptions> | undefined;
-    handler: F;
+    getHandler(): F | FL;
+    liveHandler: F;
+    localHandler: FL;
   };
 
 export interface PendingResource<Out = unknown> extends Promise<Out> {
@@ -94,31 +99,130 @@ type ResourceLifecycleHandler = (
   props: any,
 ) => Promise<Resource<string>>;
 
+// separate type since we may want to use a different handler for local resources
+type LocalResourceLifecycleHandler = ResourceLifecycleHandler;
+
+const localModeHandlerUnavailable: LocalResourceLifecycleHandler & {
+  [InvalidHandlerConfig]: true;
+} = () => {
+  logger.error("Local mode handler unavailable");
+  logger.exit();
+  //todo(michael) provide resource name in error, also just better error message
+  throw new Error("Local mode handler unavailable");
+};
+localModeHandlerUnavailable[InvalidHandlerConfig] = true;
+
+const liveModeHandlerUnavailable: ResourceLifecycleHandler & {
+  [InvalidHandlerConfig]: true;
+} = () => {
+  //todo(michael) provide resource name in error, also just better error message
+  throw new Error("Live mode handler unavailable");
+};
+liveModeHandlerUnavailable[InvalidHandlerConfig] = true;
+
+function isInvalidHandlerConfig(handler: any): handler is {
+  [InvalidHandlerConfig]: true;
+} {
+  return InvalidHandlerConfig in handler;
+}
+
 // see: https://x.com/samgoodwin89/status/1904640134097887653
 type Handler<F extends (...args: any[]) => any> =
   | F
   | (((this: any, id: string, props?: {}) => never) & IsClass);
 
-export function Resource<
+export function LiveOnlyResource<
   const Type extends string,
   F extends ResourceLifecycleHandler,
 >(type: Type, fn: F): Handler<F>;
 
-export function Resource<
+export function LiveOnlyResource<
   const Type extends string,
   F extends ResourceLifecycleHandler,
 >(type: Type, options: Partial<ProviderOptions>, fn: F): Handler<F>;
 
-export function Resource<
+export function LiveOnlyResource<
   const Type extends ResourceKind,
   F extends ResourceLifecycleHandler,
 >(type: Type, ...args: [Partial<ProviderOptions>, F] | [F]): Handler<F> {
+  // this error is actually fine since we know localModeHandlerUnavailable will
+  // always throw. This is probably a good argument for why we might want effect
+  //@ts-expect-error: see above comment
+  return Resource<Type, F, typeof localModeHandlerUnavailable>(
+    type,
+    //todo(michael): need to fight with TS a little here
+    //@ts-expect-error
+    ...args,
+    localModeHandlerUnavailable,
+  );
+}
+
+export function LocalOnlyResource<
+  const Type extends string,
+  FL extends LocalResourceLifecycleHandler,
+>(type: Type, fn: FL): Handler<FL>;
+
+export function LocalOnlyResource<
+  const Type extends string,
+  FL extends LocalResourceLifecycleHandler,
+>(type: Type, options: Partial<ProviderOptions>, fn: FL): Handler<FL>;
+
+export function LocalOnlyResource<
+  const Type extends ResourceKind,
+  FL extends LocalResourceLifecycleHandler,
+>(type: Type, ...args: [Partial<ProviderOptions>, FL] | [FL]): Handler<FL> {
+  const lastArg = args[args.length - 1];
+  const allArgsExceptLast = args.slice(0, -1);
+  // this error is actually fine since we know localModeHandlerUnavailable will
+  // always throw. This is probably a good argument for why we might want effect
+  //@ts-expect-error: see above comment
+  return Resource<Type, typeof liveModeHandlerUnavailable, FL>(
+    type,
+    //todo(michael): need to fight with TS a little here
+    //@ts-expect-error
+    ...allArgsExceptLast,
+    liveModeHandlerUnavailable,
+    lastArg,
+  );
+}
+
+export function Resource<
+  const Type extends string,
+  F extends ResourceLifecycleHandler,
+  FL extends LocalResourceLifecycleHandler,
+>(type: Type, liveHandler: F, localHandler: FL): Handler<F | FL>;
+
+export function Resource<
+  const Type extends string,
+  F extends ResourceLifecycleHandler,
+  FL extends LocalResourceLifecycleHandler,
+>(
+  type: Type,
+  options: Partial<ProviderOptions>,
+  liveHandler: F,
+  localHandler: FL,
+): Handler<F | FL>;
+
+export function Resource<
+  const Type extends ResourceKind,
+  F extends ResourceLifecycleHandler,
+  FL extends LocalResourceLifecycleHandler,
+>(
+  type: Type,
+  ...args:
+    | [Partial<ProviderOptions>, F, FL]
+    | [F, FL]
+    | [Partial<ProviderOptions>, F, FL]
+    | [F, FL]
+): Handler<F | FL> {
   if (PROVIDERS.has(type)) {
     throw new Error(`Resource ${type} already exists`);
   }
-  const [options, handler] = args.length === 2 ? args : [undefined, args[0]];
+  const [options, liveHandler, localHandler] =
+    args.length === 3 ? args : [undefined, args[0], args[1]];
 
-  type Out = Awaited<ReturnType<F>>;
+  // TODO(michael): not a fan of dual return types, maybe tag?
+  type Out = Awaited<ReturnType<F | FL>>;
 
   const provider = (async (
     resourceID: string,
@@ -169,9 +273,27 @@ export function Resource<
     const resource = Object.assign(promise, meta);
     scope.resources.set(resourceID, resource);
     return resource;
-  }) as Provider<Type, F>;
+  }) as Provider<Type, F, FL>;
   provider.type = type;
-  provider.handler = handler;
+  provider.liveHandler = liveHandler;
+  provider.localHandler = localHandler;
+  provider.getHandler = () => {
+    const scope = _Scope.current;
+    switch (scope.mode) {
+      case "dev":
+        return provider.localHandler;
+      case "live":
+        return provider.liveHandler;
+      case "hybrid-prefer-dev":
+        return isInvalidHandlerConfig(provider.localHandler)
+          ? provider.liveHandler
+          : provider.localHandler;
+      case "hybrid-prefer-live":
+        return isInvalidHandlerConfig(provider.liveHandler)
+          ? provider.localHandler
+          : provider.liveHandler;
+    }
+  };
   provider.options = options;
   PROVIDERS.set(type, provider);
   return provider;

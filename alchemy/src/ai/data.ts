@@ -1,7 +1,7 @@
 import { generateObject, type CoreMessage } from "ai";
 import type { JsonSchema, Type, type } from "arktype";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { ark } from "./ark.ts";
 import { createModel, type ModelConfig } from "./client.ts";
@@ -163,7 +163,7 @@ export interface Data<T> extends Resource<"ai::Object"> {
  *   temperature: 0.3
  * });
  */
-export const Data = Resource("ai::Object", async function <
+export const Data = LocalOnlyResource("ai::Object", async function <
   const T extends Type<any, any>,
 >(this: Context<Data<any>>, _id: string, props: DataProps<T>): Promise<
   Data<type.infer<T>>

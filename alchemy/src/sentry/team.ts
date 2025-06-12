@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { SentryApi } from "./api.ts";
@@ -123,7 +123,7 @@ export interface Team extends Resource<"sentry::Team">, TeamProps {
  *   adopt: true
  * });
  */
-export const Team = Resource(
+export const Team = LiveOnlyResource(
   "sentry::Team",
   async function (
     this: Context<Team>,

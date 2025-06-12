@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { DEFAULT_RECORD_TYPES, type DnsRecordType } from "./record.ts";
 
@@ -130,7 +130,7 @@ function mapDnsRecordType(type: number): DnsRecordType {
  *   records: dnsRecords.records,
  * });
  */
-export const ImportDnsRecords = Resource(
+export const ImportDnsRecords = LiveOnlyResource(
   "dns::ImportDnsRecords",
   async function (
     this: Context<ImportDnsRecords>,

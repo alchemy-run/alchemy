@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 import { logger } from "../util/logger.ts";
 
@@ -155,7 +155,7 @@ export interface File extends Resource<"fs::File"> {
  *   content: '{ "version": "1.0.1" }'
  * });
  */
-export const File = Resource(
+export const File = LocalOnlyResource(
   "fs::File",
   async function (
     this: Context<File>,

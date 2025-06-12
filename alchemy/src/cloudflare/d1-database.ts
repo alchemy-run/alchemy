@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { LiveOnlyResource, ResourceKind, type Resource } from "../resource.ts";
 import { bind, type Bound } from "../runtime/bind.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
@@ -230,7 +230,7 @@ export async function D1Database(
  *
  * @see https://developers.cloudflare.com/d1/
  */
-const D1DatabaseResource = Resource(
+const D1DatabaseResource = LiveOnlyResource(
   "cloudflare::D1Database",
   async function (
     this: Context<D1DatabaseResource>,

@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { getContentType } from "../util/content-type.ts";
 import ignore from "../util/ignore-matcher.js";
 
@@ -85,7 +85,7 @@ export interface AssetFile {
  *   }
  * });
  */
-export const Assets = Resource(
+export const Assets = LiveOnlyResource(
   "cloudflare::Asset",
   {
     alwaysUpdate: true,

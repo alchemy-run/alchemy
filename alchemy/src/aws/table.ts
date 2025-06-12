@@ -7,7 +7,7 @@ import {
   ResourceNotFoundException,
 } from "@aws-sdk/client-dynamodb";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 import { retry } from "./retry.ts";
 
@@ -136,7 +136,7 @@ export interface Table extends Resource<"dynamo::Table">, TableProps {
  *   writeCapacity: 50
  * });
  */
-export const Table = Resource(
+export const Table = LiveOnlyResource(
   "dynamo::Table",
   async function (
     this: Context<Table>,

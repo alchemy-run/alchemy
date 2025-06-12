@@ -7,7 +7,7 @@ import { Folder } from "../fs/folder.ts";
 import { StaticJsonFile } from "../fs/static-json-file.ts";
 import { StaticTextFile } from "../fs/static-text-file.ts";
 import { StaticTypeScriptFile } from "../fs/static-typescript-file.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { ShadcnUI } from "./shadcn.ts";
 
@@ -189,7 +189,7 @@ export interface AstroProject extends AstroProjectProps, Resource {
  *   }
  * });
  */
-export const AstroProject = Resource(
+export const AstroProject = LocalOnlyResource(
   "project::AstroProject",
   {
     alwaysUpdate: true,

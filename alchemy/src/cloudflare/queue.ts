@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { LiveOnlyResource, ResourceKind, type Resource } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
@@ -215,7 +215,7 @@ export async function Queue<Body = unknown>(
   } as Queue<Body>;
 }
 
-const QueueResource = Resource("cloudflare::Queue", async function <
+const QueueResource = LiveOnlyResource("cloudflare::Queue", async function <
   T = unknown,
 >(this: Context<QueueResource<T>>, id: string, props: QueueProps = {}): Promise<
   QueueResource<T>

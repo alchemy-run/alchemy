@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { createGitHubClient, verifyGitHubAuth } from "./client.ts";
@@ -167,7 +167,7 @@ export interface GitHubComment
  * });
  * ```
  */
-export const GitHubComment = Resource(
+export const GitHubComment = LiveOnlyResource(
   "github::Comment",
   async function (
     this: Context<GitHubComment>,

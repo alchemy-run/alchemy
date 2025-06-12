@@ -1,11 +1,11 @@
 import { AwsClient } from "aws4fetch";
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { LiveOnlyResource, ResourceKind, type Resource } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
-import { type CloudflareApi, createCloudflareApi } from "./api.ts";
+import { createCloudflareApi, type CloudflareApi } from "./api.ts";
 import type { Bound } from "./bound.ts";
 
 /**
@@ -183,7 +183,7 @@ export async function R2Bucket(
   };
 }
 
-const R2BucketResource = Resource(
+const R2BucketResource = LiveOnlyResource(
   "cloudflare::R2Bucket",
   async function (
     this: Context<R2BucketResource>,

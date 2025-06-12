@@ -1,8 +1,8 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { type CloudflareApiOptions, createCloudflareApi } from "./api.ts";
-import type { CloudflareResponse } from "./response.ts";
 import type { EmailAction, EmailMatcher } from "./email-rule.ts";
+import type { CloudflareResponse } from "./response.ts";
 import type { Zone } from "./zone.ts";
 
 /**
@@ -143,7 +143,7 @@ export interface EmailCatchAll extends Resource<"cloudflare::EmailCatchAll"> {
  * });
  * ```
  */
-export const EmailCatchAll = Resource(
+export const EmailCatchAll = LiveOnlyResource(
   "cloudflare::EmailCatchAll",
   async function (
     this: Context<EmailCatchAll>,

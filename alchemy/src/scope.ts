@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { Phase } from "./alchemy.ts";
 import { destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
+import { DEFAULT_MODE, type ModeType } from "./mode.ts";
 import { ResourceID, type PendingResource } from "./resource.ts";
 import type { StateStore, StateStoreType } from "./state.ts";
 import {
@@ -22,6 +23,7 @@ export interface ScopeOptions {
   phase?: Phase;
   telemetryClient?: ITelemetryClient;
   logger?: LoggerApi;
+  mode?: ModeType;
 }
 
 // TODO: support browser
@@ -81,7 +83,7 @@ export class Scope {
   public readonly phase: Phase;
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
-
+  public readonly mode: ModeType;
   private isErrored = false;
   private finalized = false;
   private startedAt = performance.now();
@@ -98,6 +100,7 @@ export class Scope {
     }
     this.parent = options.parent ?? Scope.get();
     this.stage = options?.stage ?? this.parent?.stage ?? DEFAULT_STAGE;
+    this.mode = options.mode ?? this.parent?.mode ?? DEFAULT_MODE;
     this.parent?.children.set(this.scopeName!, this);
     this.quiet = options.quiet ?? this.parent?.quiet ?? false;
     if (this.parent && !this.scopeName) {

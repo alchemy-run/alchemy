@@ -20,7 +20,7 @@ import {
   type TrackingOptions,
 } from "@aws-sdk/client-sesv2";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 import { retry } from "./retry.ts";
 
@@ -157,7 +157,7 @@ export interface SES extends Resource<"aws::SES">, SESProps {
  *   }
  * });
  */
-export const SES = Resource(
+export const SES = LiveOnlyResource(
   "aws::SES",
   async function (
     this: Context<SES>,

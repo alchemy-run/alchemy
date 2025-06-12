@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { createStripeClient, isStripeConflictError } from "./client.ts";
@@ -94,7 +94,7 @@ export interface EntitlementsFeature
  *   }
  * });
  */
-export const EntitlementsFeature = Resource(
+export const EntitlementsFeature = LiveOnlyResource(
   "stripe::EntitlementsFeature",
   async function (
     this: Context<EntitlementsFeature>,

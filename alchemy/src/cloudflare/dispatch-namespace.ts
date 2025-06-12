@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { LiveOnlyResource, ResourceKind, type Resource } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
@@ -121,7 +121,7 @@ export async function DispatchNamespace(
   };
 }
 
-const _DispatchNamespace = Resource(
+const _DispatchNamespace = LiveOnlyResource(
   "cloudflare::DispatchNamespace",
   async function (
     this: Context<DispatchNamespaceResource>,

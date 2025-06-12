@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { DestroyedSignal, destroy } from "./destroy.ts";
 import { env } from "./env.ts";
+import type { ModeType } from "./mode.ts";
 import {
   type PendingResource,
   ResourceFQN,
@@ -370,6 +371,16 @@ export interface AlchemyOptions {
    * If not provided, the default fallback logger will be used.
    */
   logger?: LoggerApi;
+  /**
+   * Controls how resources are deployed in the current alchemy instance.
+   * - `live`: resources deploy to their target cloud environments.
+   * - `local`: all resources run locally for development and testing.
+   * - `hybrid-prefer-live`: resources run in live mode but can fall back to local mode if a live handler is not found.
+   * - `hybrid-prefer-dev`: resources run in local mode but can fall back to live mode if a local handler is not found.
+   *
+   * @default "hybrid-prefer-live"
+   */
+  mode?: ModeType;
 }
 
 export interface ScopeOptions extends AlchemyOptions {

@@ -17,7 +17,7 @@ import {
 } from "@aws-sdk/client-lambda";
 import type { Context } from "../context.ts";
 import type { Bundle } from "../esbuild/bundle.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 import { logger } from "../util/logger.ts";
 import { retry } from "./retry.ts";
@@ -307,7 +307,7 @@ export interface Function extends Resource<"lambda::Function">, FunctionProps {
  *   }
  * });
  */
-export const Function = Resource(
+export const Function = LiveOnlyResource(
   "lambda::Function",
   async function (this: Context<Function>, _id: string, props: FunctionProps) {
     const client = new LambdaClient({});

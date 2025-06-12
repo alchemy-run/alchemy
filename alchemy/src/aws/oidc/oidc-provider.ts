@@ -8,7 +8,7 @@ import {
   UpdateAssumeRolePolicyCommand,
 } from "@aws-sdk/client-iam";
 import type { Context } from "../../context.ts";
-import { Resource } from "../../resource.ts";
+import { LiveOnlyResource, type Resource } from "../../resource.ts";
 import { logger } from "../../util/logger.ts";
 import { AccountId } from "../account-id.ts";
 
@@ -117,7 +117,7 @@ export interface OIDCProvider
  */
 const TRUST_POLICY_SID = "GitHubOIDCTrust";
 
-export const OIDCProvider = Resource(
+export const OIDCProvider = LiveOnlyResource(
   "aws::OIDCProvider",
   async function (
     this: Context<OIDCProvider>,

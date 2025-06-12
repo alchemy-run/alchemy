@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import {
@@ -149,7 +149,7 @@ export interface PromotionCode
  *   }
  * });
  */
-export const PromotionCode = Resource(
+export const PromotionCode = LiveOnlyResource(
   "stripe::PromotionCode",
   async function (
     this: Context<PromotionCode>,

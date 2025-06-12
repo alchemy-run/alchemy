@@ -10,7 +10,7 @@ import {
   NoSuchEntityException,
 } from "@aws-sdk/client-iam";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { retry } from "./retry.ts";
 
 /**
@@ -226,7 +226,7 @@ export interface Policy extends Resource<"iam::Policy">, PolicyProps {
  *   }
  * });
  */
-export const Policy = Resource(
+export const Policy = LiveOnlyResource(
   "iam::Policy",
   async function (
     this: Context<Policy>,

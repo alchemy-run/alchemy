@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 
 /**
@@ -110,7 +110,7 @@ export interface Bundle<P extends BundleProps = BundleProps>
  *   target: "node18"
  * });
  */
-export const Bundle = Resource(
+export const Bundle = LocalOnlyResource(
   "esbuild::Bundle",
   {
     alwaysUpdate: true,

@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { createStripeClient, handleStripeDeleteError } from "./client.ts";
@@ -150,7 +150,7 @@ export interface Product extends Resource<"stripe::Product">, ProductProps {
  *   }
  * });
  */
-export const Product = Resource(
+export const Product = LiveOnlyResource(
   "stripe::Product",
   async function (
     this: Context<Product>,

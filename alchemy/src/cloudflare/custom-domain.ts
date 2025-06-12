@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import {
@@ -87,7 +87,7 @@ export interface CustomDomain
  *
  * @see https://developers.cloudflare.com/api/resources/workers/subresources/domains/
  */
-export const CustomDomain = Resource(
+export const CustomDomain = LiveOnlyResource(
   "cloudflare::CustomDomain",
   async function (
     this: Context<CustomDomain>,

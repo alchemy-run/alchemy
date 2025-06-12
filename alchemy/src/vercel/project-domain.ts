@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { createVercelApi } from "./api.ts";
 
@@ -118,7 +118,7 @@ export interface ProjectDomain
  *   redirectStatusCode: 301,
  * });
  */
-export const ProjectDomain = Resource(
+export const ProjectDomain = LiveOnlyResource(
   "vercel::ProjectDomain",
   async function (
     this: Context<ProjectDomain>,

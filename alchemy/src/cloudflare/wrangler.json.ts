@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "../context.ts";
 import { formatJson } from "../fs/static-json-file.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { assertNever } from "../util/assert-never.ts";
 import { Self, type Bindings } from "./bindings.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
@@ -79,7 +79,7 @@ export interface WranglerJson
 /**
  * Resource for managing wrangler.json configuration files
  */
-export const WranglerJson = Resource(
+export const WranglerJson = LiveOnlyResource(
   "cloudflare::WranglerJson",
   {
     alwaysUpdate: true,

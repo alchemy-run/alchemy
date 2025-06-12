@@ -180,7 +180,7 @@ async function _apply<Out extends Resource>(
       },
       async (scope) => {
         options?.resolveInnerScope?.(scope);
-        return provider.handler.bind(ctx)(resource[ResourceID], props);
+        return provider.getHandler().bind(ctx)(resource[ResourceID], props);
       },
     );
     if (!quiet) {

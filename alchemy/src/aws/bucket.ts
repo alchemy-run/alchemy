@@ -11,7 +11,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 import { retry } from "./retry.ts";
 
@@ -127,7 +127,7 @@ export interface Bucket extends Resource<"s3::Bucket">, BucketProps {
  *   }
  * });
  */
-export const Bucket = Resource(
+export const Bucket = LiveOnlyResource(
   "s3::Bucket",
   async function (this: Context<Bucket>, _id: string, props: BucketProps) {
     const client = new S3Client({});

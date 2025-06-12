@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { createStripeClient, isStripeConflictError } from "./client.ts";
@@ -146,7 +146,7 @@ export interface File extends Resource<"stripe::File"> {
  *   }
  * });
  */
-export const File = Resource(
+export const File = LiveOnlyResource(
   "stripe::File",
   async function (
     this: Context<File>,

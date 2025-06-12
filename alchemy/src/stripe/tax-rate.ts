@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import {
@@ -136,7 +136,7 @@ export interface TaxRate extends Resource<"stripe::TaxRate">, TaxRateProps {
  *   }
  * });
  */
-export const TaxRate = Resource(
+export const TaxRate = LiveOnlyResource(
   "stripe::TaxRate",
   async function (
     this: Context<TaxRate>,

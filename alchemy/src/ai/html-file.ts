@@ -1,7 +1,7 @@
 import { generateText } from "ai";
 import type { Context } from "../context.ts";
 import { StaticHTMLFile } from "../fs/static-html-file.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { type ModelConfig, createModel } from "./client.ts";
 
@@ -144,7 +144,7 @@ const DEFAULT_HTML_SYSTEM_PROMPT =
  *   }
  * });
  */
-export const HTMLFile = Resource(
+export const HTMLFile = LocalOnlyResource(
   "ai::HTMLFile",
   async function (
     this: Context<HTMLFile>,

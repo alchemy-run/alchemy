@@ -8,7 +8,7 @@ import {
   SQSClient,
 } from "@aws-sdk/client-sqs";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { retry } from "./retry.ts";
 
@@ -136,7 +136,7 @@ export interface Queue extends Resource<"sqs::Queue">, QueueProps {
  *   receiveMessageWaitTimeSeconds: 20
  * });
  */
-export const Queue = Resource(
+export const Queue = LiveOnlyResource(
   "sqs::Queue",
   async function (
     this: Context<Queue>,

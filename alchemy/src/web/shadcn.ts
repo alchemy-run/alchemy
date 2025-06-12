@@ -5,7 +5,7 @@ import type { Context } from "../context.ts";
 import { Folder } from "../fs/folder.ts";
 import { StaticJsonFile } from "../fs/static-json-file.ts";
 import { StaticTypeScriptFile } from "../fs/static-typescript-file.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { ShadcnComponent } from "./shadcn-component.ts";
 
@@ -117,7 +117,7 @@ export interface ShadcnUI extends ShadcnUIProps, Resource<"project::ShadcnUI"> {
  *   react: true     // React must be installed separately
  * });
  */
-export const ShadcnUI = Resource(
+export const ShadcnUI = LocalOnlyResource(
   "project::ShadcnUI",
   async function (
     this: Context<ShadcnUI>,

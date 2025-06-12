@@ -2,7 +2,7 @@ import { generateObject, generateText } from "ai";
 import type { JsonSchema, Type, type } from "arktype";
 import type { Context } from "../context.ts";
 import { StaticJsonFile } from "../fs/static-json-file.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { ark } from "./ark.ts";
 import { type ModelConfig, createModel } from "./client.ts";
@@ -186,7 +186,7 @@ const DEFAULT_JSON_SYSTEM_PROMPT =
  *   indent: 4
  * });
  */
-export const JSONFile = Resource("ai::JSONFile", async function <
+export const JSONFile = LocalOnlyResource("ai::JSONFile", async function <
   const T extends Type<any, any> | undefined = undefined,
 >(this: Context<JSONFile<T extends Type<any, any> ? type.infer<T> : any>>, _id: string, props: JSONFileProps<T>): Promise<
   JSONFile<T extends Type<any, any> ? type.infer<T> : any>

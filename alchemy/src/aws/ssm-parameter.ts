@@ -9,7 +9,7 @@ import {
   type Tag,
 } from "@aws-sdk/client-ssm";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { type Secret, isSecret } from "../secret.ts";
 import { ignore } from "../util/ignore.ts";
 import { logger } from "../util/logger.ts";
@@ -172,7 +172,7 @@ export type SSMParameter = Resource<"ssm::Parameter"> & {
  *   }
  * });
  */
-export const SSMParameter = Resource(
+export const SSMParameter = LiveOnlyResource(
   "ssm::Parameter",
   async function (
     this: Context<SSMParameter>,

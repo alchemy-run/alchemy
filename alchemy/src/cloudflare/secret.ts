@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { LiveOnlyResource, ResourceKind, type Resource } from "../resource.ts";
 import {
   secret as alchemySecret,
   type Secret as AlchemySecret,
@@ -173,7 +173,7 @@ export async function Secret(
   });
 }
 
-const _Secret = Resource(
+const _Secret = LiveOnlyResource(
   "cloudflare::Secret",
   async function (
     this: Context<Secret>,

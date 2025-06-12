@@ -2,7 +2,7 @@ import { generateObject, generateText } from "ai";
 import type { JsonSchema, Type, type } from "arktype";
 import type { Context } from "../context.ts";
 import { StaticYamlFile } from "../fs/static-yaml-file.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { ark } from "./ark.ts";
 import { type ModelConfig, createModel } from "./client.ts";
@@ -193,7 +193,7 @@ const DEFAULT_YAML_SYSTEM_PROMPT =
  *   }
  * });
  */
-export const YAMLFile = Resource("ai::YAMLFile", async function <
+export const YAMLFile = LocalOnlyResource("ai::YAMLFile", async function <
   const T extends Type<any, any> | undefined = undefined,
 >(this: Context<YAMLFile<T extends Type<any, any> ? type.infer<T> : any>>, _id: string, props: YAMLFileProps<T>): Promise<
   YAMLFile<T extends Type<any, any> ? type.infer<T> : any>

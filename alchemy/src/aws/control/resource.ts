@@ -1,10 +1,10 @@
 import jsonpatch from "fast-json-patch";
-const compare = jsonpatch.compare;
 import type { Context } from "../../context.ts";
 import {
+  LiveOnlyResource,
   registerDynamicResource,
-  Resource,
   type Provider,
+  type Resource,
 } from "../../resource.ts";
 import { logger } from "../../util/logger.ts";
 import { createCloudControlClient, type ProgressEvent } from "./client.ts";
@@ -15,6 +15,7 @@ import {
   UpdateFailedError,
 } from "./error.ts";
 import readOnlyPropertiesMap from "./properties.ts";
+const compare = jsonpatch.compare;
 
 /**
  * Properties for creating or updating a Cloud Control resource
@@ -115,7 +116,7 @@ function filterReadOnlyProperties(
  * @returns A memoized Resource handler for the specified type
  */
 export function createResourceType(typeName: string) {
-  return (resourceHandlers[typeName] ??= Resource(
+  return (resourceHandlers[typeName] ??= LiveOnlyResource(
     typeName,
     function (
       this: Context<CloudControlResource, CloudControlResourceProps>,
@@ -201,7 +202,7 @@ export function createResourceType(typeName: string) {
  *   }
  * });
  */
-export const CloudControlResource = Resource(
+export const CloudControlResource = LiveOnlyResource(
   "aws::CloudControlResource",
   CloudControlLifecycle,
 );
@@ -209,7 +210,7 @@ export const CloudControlResource = Resource(
 // register a catch-all for AWS::* resources (Resources created with the Control API)
 registerDynamicResource((typeName) => {
   if (typeName.startsWith("AWS::")) {
-    return Resource(
+    return LiveOnlyResource(
       typeName,
       function (
         this: Context<CloudControlResource, CloudControlResourceProps>,

@@ -16,7 +16,7 @@ import {
   UpdateRoleCommand,
 } from "@aws-sdk/client-iam";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 import { logger } from "../util/logger.ts";
 import type { PolicyDocument } from "./policy.ts";
@@ -216,7 +216,7 @@ export interface Role extends Resource<"iam::Role">, RoleProps {
  *   }
  * });
  */
-export const Role = Resource(
+export const Role = LiveOnlyResource(
   "iam::Role",
   async function (
     this: Context<Role>,

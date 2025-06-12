@@ -2,7 +2,7 @@ import { generateText } from "ai";
 import prettier from "prettier";
 import type { Context } from "../context.ts";
 import { StaticAstroFile } from "../fs/static-astro-file.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { type ModelConfig, createModel } from "./client.ts";
@@ -155,7 +155,7 @@ const DEFAULT_ASTRO_SYSTEM_PROMPT =
  *   }
  * });
  */
-export const AstroFile = Resource(
+export const AstroFile = LocalOnlyResource(
   "ai::AstroFile",
   async function (
     this: Context<AstroFile>,

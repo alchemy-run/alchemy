@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { LiveOnlyResource, ResourceKind, type Resource } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
 import { logger } from "../util/logger.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
@@ -175,7 +175,7 @@ export async function KVNamespace(
   };
 }
 
-const _KVNamespace = Resource(
+const _KVNamespace = LiveOnlyResource(
   "cloudflare::KVNamespace",
   async function (
     this: Context<KVNamespaceResource>,

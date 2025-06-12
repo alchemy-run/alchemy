@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { tryGetBinding } from "../runtime/bind.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
@@ -258,7 +258,7 @@ export async function Hyperdrive(
   } as Hyperdrive;
 }
 
-const HyperdriveResource = Resource(
+const HyperdriveResource = LiveOnlyResource(
   "cloudflare::Hyperdrive",
   async function (
     this: Context<HyperdriveResource>,

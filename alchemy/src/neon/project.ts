@@ -1,6 +1,6 @@
 import { alchemy } from "../alchemy.ts";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
@@ -506,7 +506,7 @@ export interface NeonProject
  *   default_branch_name: "development"
  * });
  */
-export const NeonProject = Resource(
+export const NeonProject = LiveOnlyResource(
   "neon::Project",
   async function (
     this: Context<NeonProject>,

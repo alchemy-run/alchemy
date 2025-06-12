@@ -2,7 +2,7 @@ import { spawn, type SpawnOptions } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 
 /**
  * Properties for executing a shell command
@@ -155,7 +155,7 @@ export interface Exec extends Resource<"os::Exec">, ExecProps {
  *   }
  * });
  */
-export const Exec = Resource(
+export const Exec = LocalOnlyResource(
   "os::Exec",
   {
     alwaysUpdate: true,

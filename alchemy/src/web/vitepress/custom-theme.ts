@@ -8,7 +8,7 @@ import { VueFile } from "../../ai/vue-file.ts";
 import { alchemy } from "../../alchemy.ts";
 import type { Context } from "../../context.ts";
 import { Folder } from "../../fs/folder.ts";
-import { Resource } from "../../resource.ts";
+import { LocalOnlyResource, type Resource } from "../../resource.ts";
 import type { Secret } from "../../secret.ts";
 
 /**
@@ -203,7 +203,7 @@ export interface CustomTheme
  *   prompt: "Create a documentation theme with custom branding and color scheme"
  * });
  */
-export const CustomTheme = Resource(
+export const CustomTheme = LocalOnlyResource(
   "vitepress::CustomTheme",
   async function (
     this: Context<CustomTheme>,

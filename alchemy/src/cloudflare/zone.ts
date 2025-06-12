@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
@@ -307,7 +307,7 @@ export interface Zone extends Resource<"cloudflare::Zone">, ZoneData {}
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/
  */
-export const Zone = Resource(
+export const Zone = LiveOnlyResource(
   "cloudflare::Zone",
   async function (
     this: Context<Zone>,

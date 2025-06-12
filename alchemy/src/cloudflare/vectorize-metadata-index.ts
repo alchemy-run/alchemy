@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { LiveOnlyResource, ResourceKind, type Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
@@ -85,7 +85,7 @@ export interface VectorizeMetadataIndex
  *
  * @see https://developers.cloudflare.com/vectorize/
  */
-export const VectorizeMetadataIndex = Resource(
+export const VectorizeMetadataIndex = LiveOnlyResource(
   "cloudflare::VectorizeMetadataIndex",
   async function (
     this: Context<VectorizeMetadataIndex>,

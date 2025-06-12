@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { SentryApi } from "./api.ts";
@@ -176,7 +176,7 @@ export interface ClientKey
  *   adopt: true
  * });
  */
-export const ClientKey = Resource(
+export const ClientKey = LiveOnlyResource(
   "sentry::ClientKey",
   async function (
     this: Context<ClientKey>,

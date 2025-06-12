@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
@@ -169,7 +169,7 @@ export async function AiGateway(
   } as AiGateway;
 }
 
-const AiGatewayResource = Resource(
+const AiGatewayResource = LiveOnlyResource(
   "cloudflare::AiGateway",
   async function (
     this: Context<AiGatewayResource>,

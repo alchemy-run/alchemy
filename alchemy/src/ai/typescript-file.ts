@@ -1,7 +1,7 @@
 import { generateText } from "ai";
 import type { Context } from "../context.ts";
 import { StaticTypeScriptFile } from "../fs/static-typescript-file.ts";
-import { Resource } from "../resource.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { createModel, type ModelConfig } from "./client.ts";
 
@@ -158,7 +158,7 @@ const DEFAULT_TS_SYSTEM_PROMPT =
  *   }
  * });
  */
-export const TypeScriptFile = Resource(
+export const TypeScriptFile = LocalOnlyResource(
   "ai::TypeScriptFile",
   async function (
     this: Context<TypeScriptFile>,

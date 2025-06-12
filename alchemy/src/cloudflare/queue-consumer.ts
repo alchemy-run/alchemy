@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource } from "../resource.ts";
+import { LiveOnlyResource, type Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
@@ -141,7 +141,7 @@ export interface QueueConsumer
  *
  * @see https://developers.cloudflare.com/queues/platform/consumers/
  */
-export const QueueConsumer = Resource(
+export const QueueConsumer = LiveOnlyResource(
   "cloudflare::QueueConsumer",
   async function (
     this: Context<QueueConsumer>,
