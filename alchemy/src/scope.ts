@@ -98,11 +98,14 @@ export class Scope {
 
     this.logger = this.quiet
       ? createDummyLogger()
-      : createLoggerInstance({
-          phase: this.phase,
-          stage: this.stage,
-          appName: this.appName ?? "",
-        }, options.logger);
+      : createLoggerInstance(
+          {
+            phase: this.phase,
+            stage: this.stage,
+            appName: this.appName ?? "",
+          },
+          options.logger,
+        );
 
     this.stateStore =
       options.stateStore ??

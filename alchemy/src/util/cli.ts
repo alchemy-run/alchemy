@@ -1,4 +1,3 @@
-import { format } from "node:util";
 import packageJson from "../../package.json" with { type: "json" };
 import type { Phase } from "../alchemy.ts";
 import { dedent } from "./dedent.ts";
@@ -7,7 +6,7 @@ import { dedent } from "./dedent.ts";
 const colors = {
   reset: "\x1b[0m",
   cyanBright: "\x1b[96m",
-  yellowBright: "\x1b[93m", 
+  yellowBright: "\x1b[93m",
   magenta: "\x1b[35m",
   greenBright: "\x1b[92m",
   redBright: "\x1b[91m",
@@ -18,7 +17,9 @@ type ColorName = keyof typeof colors;
 
 // Check if colors should be disabled
 const shouldDisableColors = (): boolean => {
-  return Boolean(process.env.CI || process.env.NO_COLOR || !process.stdout.isTTY);
+  return Boolean(
+    process.env.CI || process.env.NO_COLOR || !process.stdout.isTTY,
+  );
 };
 
 // Apply color if colors are enabled
@@ -52,7 +53,10 @@ type AlchemyInfo = {
 };
 
 let loggerApi: LoggerApi | null = null;
-export const createLoggerInstance = (alchemyInfo: AlchemyInfo, customLogger?: LoggerApi) => {
+export const createLoggerInstance = (
+  alchemyInfo: AlchemyInfo,
+  customLogger?: LoggerApi,
+) => {
   if (loggerApi) return loggerApi;
 
   // Use custom logger if provided, otherwise use the basic fallback logger
@@ -81,20 +85,23 @@ export const createFallbackLogger = (alchemyInfo: AlchemyInfo): LoggerApi => {
 
   return {
     log: console.log,
-    error: (...args: unknown[]) => console.error(colorize("ERROR", "redBright"), ...args),
-    warn: (...args: unknown[]) => console.warn(colorize("WARN", "yellowBright"), ...args),
-    task: (id: string, data: Task) => {
-      const prefix = data.prefix ? `[${data.prefix}]` : '';
-      
+    error: (...args: unknown[]) =>
+      console.error(colorize("ERROR", "redBright"), ...args),
+    warn: (...args: unknown[]) =>
+      console.warn(colorize("WARN", "yellowBright"), ...args),
+    task: (_id: string, data: Task) => {
+      const prefix = data.prefix ? `[${data.prefix}]` : "";
+
       // Pad the prefix to ensure consistent alignment (12 characters total)
       const paddedPrefix = prefix.padEnd(12);
-      const prefixWithColor = data.prefixColor && prefix 
-        ? colorize(paddedPrefix, data.prefixColor as ColorName)
-        : paddedPrefix;
-      
-      const resource = data.resource ? colorize(data.resource, "gray") : '';
+      const prefixWithColor =
+        data.prefixColor && prefix
+          ? colorize(paddedPrefix, data.prefixColor as ColorName)
+          : paddedPrefix;
+
+      const resource = data.resource ? colorize(data.resource, "gray") : "";
       const message = data.message;
-      
+
       if (prefixWithColor && resource) {
         console.log(`${prefixWithColor}${resource} ${message}`);
       } else if (prefixWithColor) {
