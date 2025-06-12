@@ -46,6 +46,8 @@ type AlchemyInfo = {
 
 class ClackLogger implements LoggerApi {
   private tasks = new Map<string, { spinner: any; data: Task }>();
+  private activeSpinner: string | null = null;
+  private pendingLogs: Array<{ type: 'log' | 'warn' | 'error'; args: unknown[] }> = [];
 
   constructor(private alchemyInfo: AlchemyInfo) {
     intro(kleur.green(`Alchemy (v${packageJson.version})`));
@@ -56,23 +58,53 @@ class ClackLogger implements LoggerApi {
     log.message("");
   }
 
+  private flushPendingLogs() {
+    for (const pending of this.pendingLogs) {
+      if (pending.type === 'log') {
+        log.message(kleur.gray(format(...pending.args)));
+      } else if (pending.type === 'warn') {
+        log.warn(format(...pending.args));
+      } else if (pending.type === 'error') {
+        log.error(format(...pending.args));
+      }
+    }
+    this.pendingLogs = [];
+  }
+
   log(...args: unknown[]) {
-    log.message(kleur.gray(format(...args)));
+    if (this.activeSpinner) {
+      this.pendingLogs.push({ type: 'log', args });
+    } else {
+      log.message(kleur.gray(format(...args)));
+    }
   }
 
   warn(...args: unknown[]) {
-    log.warn(format(...args));
+    if (this.activeSpinner) {
+      this.pendingLogs.push({ type: 'warn', args });
+    } else {
+      log.warn(format(...args));
+    }
   }
 
   error(...args: unknown[]) {
-    log.error(format(...args));
+    if (this.activeSpinner) {
+      this.pendingLogs.push({ type: 'error', args });
+    } else {
+      log.error(format(...args));
+    }
   }
 
   task(id: string, data: Task) {
     const existing = this.tasks.get(id);
 
+    // Stop existing spinner for this task
     if (existing) {
       existing.spinner.stop();
+      if (this.activeSpinner === id) {
+        this.activeSpinner = null;
+        this.flushPendingLogs();
+      }
     }
 
     const colorMap = {
@@ -102,21 +134,41 @@ class ClackLogger implements LoggerApi {
     message += data.message;
 
     if (!data.status || data.status === "pending") {
+      // If another spinner is active, stop it first
+      if (this.activeSpinner && this.activeSpinner !== id) {
+        const activeTask = this.tasks.get(this.activeSpinner);
+        if (activeTask) {
+          activeTask.spinner.stop();
+        }
+        this.flushPendingLogs();
+      }
+
       const s = spinner();
       s.start(message);
       this.tasks.set(id, { spinner: s, data });
+      this.activeSpinner = id;
     } else if (data.status === "success") {
       if (existing) {
-        existing.spinner.stop(message);
+        existing.spinner.stop();
+      }
+      if (this.activeSpinner === id) {
+        this.activeSpinner = null;
+        this.flushPendingLogs();
       }
       log.success(message);
       this.tasks.delete(id);
+      log.message("");
     } else if (data.status === "failure") {
       if (existing) {
-        existing.spinner.stop(message);
+        existing.spinner.stop();
+      }
+      if (this.activeSpinner === id) {
+        this.activeSpinner = null;
+        this.flushPendingLogs();
       }
       log.error(message);
       this.tasks.delete(id);
+      log.message("");
     }
   }
 
@@ -124,6 +176,7 @@ class ClackLogger implements LoggerApi {
     for (const [, { spinner }] of this.tasks) {
       spinner.stop();
     }
+    this.flushPendingLogs();
     outro("Goodbye!");
     process.exit(0);
   }
