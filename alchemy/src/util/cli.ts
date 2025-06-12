@@ -30,7 +30,6 @@ const colorize = (text: string, color: ColorName): string => {
   return `${colors[color]}${text}${colors.reset}`;
 };
 
-
 export type Task = {
   prefix?: string;
   prefixColor?: string;
