@@ -1,5 +1,5 @@
 import { Scope } from "../scope.ts";
-import type { LoggerApi } from "./cli.tsx";
+import type { LoggerApi } from "./cli.ts";
 
 export const logger = new Proxy({} as LoggerApi, {
   get: (_, prop: keyof LoggerApi) => {

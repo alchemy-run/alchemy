@@ -15,7 +15,7 @@ import {
 import { Scope } from "./scope.ts";
 import { serialize } from "./serde.ts";
 import type { State } from "./state.ts";
-import { formatFQN } from "./util/cli.tsx";
+import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
 import type { Telemetry } from "./util/telemetry/index.ts";
 

@@ -8,7 +8,7 @@ import {
   createDummyLogger,
   createLoggerInstance,
   type LoggerApi,
-} from "./util/cli.tsx";
+} from "./util/cli.ts";
 import type { ITelemetryClient } from "./util/telemetry/client.ts";
 
 export interface ScopeOptions {

@@ -10,7 +10,7 @@ import {
   ResourceSeq,
 } from "./resource.ts";
 import { Scope } from "./scope.ts";
-import { formatFQN } from "./util/cli.tsx";
+import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
 
 export class DestroyedSignal extends Error {}
