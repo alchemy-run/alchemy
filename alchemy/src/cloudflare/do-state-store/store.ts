@@ -88,7 +88,12 @@ export class DOStateStore implements StateStore {
     const api = await createCloudflareApi(this.options);
     const [subdomain, _] = await Promise.all([
       getAccountSubdomain(api),
-      upsertStateStoreWorker(api, workerName, token),
+      upsertStateStoreWorker(
+        api,
+        workerName,
+        token,
+        this.options.worker?.force ?? false,
+      ),
     ]);
     const client = new DOStateStoreClient({
       app: this.scope.appName ?? "alchemy",
