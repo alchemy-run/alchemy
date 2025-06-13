@@ -1,12 +1,49 @@
 #!/usr/bin/env node
 
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
+import * as fs from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { select, input, confirm } from "@inquirer/prompts";
 
 // Package manager detection
 type PackageManager = "bun" | "npm" | "pnpm" | "yarn";
+
+// CLI options interface
+interface CliOptions {
+  name?: string;
+  template?: string;
+  yes?: boolean;
+  overwrite?: boolean;
+  help?: boolean;
+  version?: boolean;
+}
+
+// Parse CLI arguments
+function parseCliArgs(): CliOptions {
+  const args = process.argv.slice(2);
+  const options: CliOptions = {};
+  
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    
+    if (arg === '--help' || arg === '-h') {
+      options.help = true;
+    } else if (arg === '--version' || arg === '-v') {
+      options.version = true;
+    } else if (arg === '--yes' || arg === '-y') {
+      options.yes = true;
+    } else if (arg === '--overwrite') {
+      options.overwrite = true;
+    } else if (arg.startsWith('--name=')) {
+      options.name = arg.split('=')[1];
+    } else if (arg.startsWith('--template=')) {
+      options.template = arg.split('=')[1];
+    }
+  }
+  
+  return options;
+}
 
 function detectPackageManager(): PackageManager {
   // Check npm_execpath for bun
@@ -272,10 +309,10 @@ async function initTypescriptProject(pm: PackageManager, projectName: string, pr
   execCommand(`${commands.addDev} alchemy @cloudflare/workers-types @types/node typescript`, projectPath);
   
   // Create basic project structure
-  mkdirSync(join(projectPath, "src"), { recursive: true });
+  await fs.mkdir(join(projectPath, "src"), { recursive: true });
   
   // Create worker.ts
-  writeFileSync(join(projectPath, "src", "worker.ts"), `export default {
+  await fs.writeFile(join(projectPath, "src", "worker.ts"), `export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     return new Response("Hello World from ${projectName}!");
   },
@@ -283,7 +320,7 @@ async function initTypescriptProject(pm: PackageManager, projectName: string, pr
 `);
 
   // Create tsconfig.json
-  writeFileSync(join(projectPath, "tsconfig.json"), JSON.stringify({
+  await fs.writeFile(join(projectPath, "tsconfig.json"), JSON.stringify({
     compilerOptions: {
       target: "ES2020",
       module: "ESNext",
@@ -309,15 +346,15 @@ async function initViteProject(pm: PackageManager, projectName: string, projectP
   
   // Remove unnecessary files
   if (existsSync(join(projectPath, "worker-configuration.d.ts"))) {
-    execSync(`rm -f worker-configuration.d.ts`, { cwd: projectPath });
+    await fs.unlink(join(projectPath, "worker-configuration.d.ts"));
   }
   if (existsSync(join(projectPath, "wrangler.jsonc"))) {
-    execSync(`rm -f wrangler.jsonc`, { cwd: projectPath });
+    await fs.unlink(join(projectPath, "wrangler.jsonc"));
   }
 
   // Create env.ts for proper typing
-  mkdirSync(join(projectPath, "src"), { recursive: true });
-  writeFileSync(join(projectPath, "src", "env.ts"), `import type { website } from "../alchemy.run.ts";
+  await fs.mkdir(join(projectPath, "src"), { recursive: true });
+  await fs.writeFile(join(projectPath, "src", "env.ts"), `import type { website } from "../alchemy.run.ts";
 
 export type CloudflareEnv = typeof website.Env;
 
@@ -345,7 +382,7 @@ async function initAstroProject(pm: PackageManager, projectName: string, project
   execCommand(`${commands.addDev} alchemy @cloudflare/workers-types`, projectPath);
 
   // Update astro.config.mjs
-  writeFileSync(join(projectPath, "astro.config.mjs"), `import { defineConfig } from 'astro/config';
+  await fs.writeFile(join(projectPath, "astro.config.mjs"), `import { defineConfig } from 'astro/config';
 import cloudflare from '@astrojs/cloudflare';
 
 // https://astro.build/config
@@ -356,8 +393,8 @@ export default defineConfig({
 `);
 
   // Create env.d.ts
-  mkdirSync(join(projectPath, "src"), { recursive: true });
-  writeFileSync(join(projectPath, "src", "env.d.ts"), `/// <reference types="astro/client" />
+  await fs.mkdir(join(projectPath, "src"), { recursive: true });
+  await fs.writeFile(join(projectPath, "src", "env.d.ts"), `/// <reference types="astro/client" />
 
 import type { website } from "../alchemy.run.ts";
 
@@ -369,8 +406,8 @@ declare namespace App {
 `);
 
   // Create API route example
-  mkdirSync(join(projectPath, "src", "pages", "api"), { recursive: true });
-  writeFileSync(join(projectPath, "src", "pages", "api", "hello.ts"), `import type { APIRoute } from 'astro';
+  await fs.mkdir(join(projectPath, "src", "pages", "api"), { recursive: true });
+  await fs.writeFile(join(projectPath, "src", "pages", "api", "hello.ts"), `import type { APIRoute } from 'astro';
 
 export const GET: APIRoute = async ({ request }) => {
   // Access Cloudflare runtime context
@@ -400,10 +437,10 @@ async function initReactRouterProject(pm: PackageManager, projectName: string, p
   
   // Remove unnecessary files
   if (existsSync(join(projectPath, "worker-configuration.d.ts"))) {
-    execSync(`rm -f worker-configuration.d.ts`, { cwd: projectPath });
+    await fs.unlink(join(projectPath, "worker-configuration.d.ts"));
   }
   if (existsSync(join(projectPath, "wrangler.jsonc"))) {
-    execSync(`rm -f wrangler.jsonc`, { cwd: projectPath });
+    await fs.unlink(join(projectPath, "wrangler.jsonc"));
   }
 
   // Install alchemy dependencies
@@ -411,8 +448,8 @@ async function initReactRouterProject(pm: PackageManager, projectName: string, p
   execCommand(`${commands.addDev} @cloudflare/workers-types`, projectPath);
 
   // Create env.ts for proper typing
-  mkdirSync(join(projectPath, "workers"), { recursive: true });
-  writeFileSync(join(projectPath, "workers", "env.ts"), `import type { website } from "../alchemy.run.ts";
+  await fs.mkdir(join(projectPath, "workers"), { recursive: true });
+  await fs.writeFile(join(projectPath, "workers", "env.ts"), `import type { website } from "../alchemy.run.ts";
 
 export type CloudflareEnv = typeof website.Env;
 
@@ -440,7 +477,7 @@ async function initSvelteKitProject(pm: PackageManager, projectName: string, pro
   execCommand(`${commands.addDev} @cloudflare/workers-types`, projectPath);
 
   // Update svelte.config.js
-  writeFileSync(join(projectPath, "svelte.config.js"), `import adapter from '@sveltejs/adapter-cloudflare';
+  await fs.writeFile(join(projectPath, "svelte.config.js"), `import adapter from '@sveltejs/adapter-cloudflare';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
 /** @type {import('@sveltejs/kit').Config} */
@@ -455,7 +492,7 @@ export default config;
 `);
 
   // Create vite.config.ts
-  writeFileSync(join(projectPath, "vite.config.ts"), `import { sveltekit } from '@sveltejs/kit/vite';
+  await fs.writeFile(join(projectPath, "vite.config.ts"), `import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -464,8 +501,8 @@ export default defineConfig({
 `);
 
   // Create env.ts for proper typing
-  mkdirSync(join(projectPath, "src"), { recursive: true });
-  writeFileSync(join(projectPath, "src", "env.ts"), `import type { website } from "../alchemy.run.ts";
+  await fs.mkdir(join(projectPath, "src"), { recursive: true });
+  await fs.writeFile(join(projectPath, "src", "env.ts"), `import type { website } from "../alchemy.run.ts";
 
 export type CloudflareEnv = typeof website.Env;
 
@@ -535,41 +572,100 @@ const templates: Template[] = [
 ];
 
 async function main() {
+  const options = parseCliArgs();
+  
+  // Handle help and version flags
+  if (options.help) {
+    console.log(`
+Usage: alchemy [options]
+
+Options:
+  -h, --help          Show help
+  -v, --version       Show version
+  --name=<name>       Project name (non-interactive)
+  --template=<name>   Template name (non-interactive)
+  -y, --yes           Skip confirmations (non-interactive)
+  --overwrite         Overwrite existing directory
+
+Templates:
+${templates.map((t) => `  ${t.name.padEnd(15)} ${t.description}`).join("\n")}
+`);
+    process.exit(0);
+  }
+  
+  if (options.version) {
+    console.log("0.28.0");
+    process.exit(0);
+  }
+
   console.log("🧪 Welcome to Alchemy!");
   console.log("Creating a new Alchemy project...\n");
 
   const pm = detectPackageManager();
   console.log(`Detected package manager: ${pm}\n`);
 
-  // Get project name
-  const projectName = await input({
-    message: "What is your project name?",
-    default: "my-alchemy-app",
-    validate: (input) => {
-      if (!input.trim()) return "Project name is required";
-      if (!/^[a-z0-9-_]+$/i.test(input)) return "Project name can only contain letters, numbers, hyphens, and underscores";
-      return true;
-    },
-  });
+  // Get project name (interactive or from CLI args)
+  let projectName: string;
+  if (options.name) {
+    projectName = options.name;
+    console.log(`Using project name: ${projectName}`);
+  } else {
+    projectName = await input({
+      message: "What is your project name?",
+      default: "my-alchemy-app",
+      validate: (input) => {
+        if (!input.trim()) return "Project name is required";
+        if (!/^[a-z0-9-_]+$/i.test(input)) return "Project name can only contain letters, numbers, hyphens, and underscores";
+        return true;
+      },
+    });
+  }
 
-  // Get template
-  const template = await select({
-    message: "Which template would you like to use?",
-    choices: templates.map((t) => ({
-      name: t.description,
-      value: t.name,
-    })),
-  });
+  // Validate project name even if provided via CLI
+  if (!projectName.trim()) {
+    console.error("Error: Project name is required");
+    process.exit(1);
+  }
+  if (!/^[a-z0-9-_]+$/i.test(projectName)) {
+    console.error("Error: Project name can only contain letters, numbers, hyphens, and underscores");
+    process.exit(1);
+  }
+
+  // Get template (interactive or from CLI args)
+  let template: string;
+  if (options.template) {
+    template = options.template;
+    console.log(`Using template: ${template}`);
+    // Validate template exists
+    if (!templates.find((t) => t.name === template)) {
+      console.error(`Error: Template '${template}' not found. Available templates: ${templates.map(t => t.name).join(', ')}`);
+      process.exit(1);
+    }
+  } else {
+    template = await select({
+      message: "Which template would you like to use?",
+      choices: templates.map((t) => ({
+        name: t.description,
+        value: t.name,
+      })),
+    });
+  }
 
   const selectedTemplate = templates.find((t) => t.name === template)!;
 
   // Check if directory exists
   const projectPath = resolve(process.cwd(), projectName);
   if (existsSync(projectPath)) {
-    const overwrite = await confirm({
-      message: `Directory ${projectName} already exists. Overwrite?`,
-      default: false,
-    });
+    let overwrite: boolean;
+    if (options.overwrite || options.yes) {
+      overwrite = true;
+      console.log(`Directory ${projectName} already exists. Overwriting due to CLI flag.`);
+    } else {
+      overwrite = await confirm({
+        message: `Directory ${projectName} already exists. Overwrite?`,
+        default: false,
+      });
+    }
 
     if (!overwrite) {
       console.log("Cancelled.");
@@ -578,7 +674,7 @@ async function main() {
   }
 
   // Create project directory
-  mkdirSync(projectPath, { recursive: true });
+  await fs.mkdir(projectPath, { recursive: true });
 
   console.log(`\n🔨 Creating ${template} project in ${projectPath}...`);
 
@@ -587,12 +683,12 @@ async function main() {
 
   // Create alchemy.run.ts
   const alchemyRunContent = createAlchemyRunTs(template, projectName);
-  writeFileSync(join(projectPath, "alchemy.run.ts"), alchemyRunContent);
+  await fs.writeFile(join(projectPath, "alchemy.run.ts"), alchemyRunContent);
 
   // Create .gitignore if it doesn't exist
   const gitignorePath = join(projectPath, ".gitignore");
   if (!existsSync(gitignorePath)) {
-    writeFileSync(gitignorePath, `node_modules/
+    await fs.writeFile(gitignorePath, `node_modules/
 .env
 .env.local
 dist/
@@ -613,25 +709,7 @@ wrangler.jsonc
   console.log(`\n📚 Learn more: https://alchemy.run`);
 }
 
-// Handle CLI arguments
-if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log(`
-Usage: alchemy [options]
-
-Options:
-  -h, --help     Show help
-  -v, --version  Show version
-
-Templates:
-${templates.map((t) => `  ${t.name.padEnd(15)} ${t.description}`).join("\n")}
-`);
-  process.exit(0);
-}
-
-if (process.argv.includes("--version") || process.argv.includes("-v")) {
-  console.log("0.28.0");
-  process.exit(0);
-}
+// CLI arguments are now handled in main() function
 
 // Run the main function
 main().catch((error) => {
