@@ -1,50 +1,124 @@
+import { exec } from "node:child_process";
+import { access, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { describe, expect, test } from "vitest";
-import { execSync } from "node:child_process";
-import * as path from "node:path";
+import { BRANCH_PREFIX } from "./util.ts";
 
 import "../src/test/vitest.ts";
 
-describe("Create CLI", () => {
-  test("CLI shows help message", () => {
-    const helpOutput = execSync("bun ../../src/cli.ts --help", { 
-      encoding: "utf-8",
-      cwd: path.join(process.cwd(), "alchemy", "test")
+const execAsync = promisify(exec);
+
+// Get the root directory of the project
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const rootDir = join(__dirname, "..", "..");
+const cliPath = join(rootDir, "src", "cli.ts");
+
+async function runCommand(
+  command: string,
+  cwd: string,
+): Promise<{ stdout: string; stderr: string }> {
+  console.log(`Running: ${command} in ${cwd}`);
+
+  try {
+    const result = await execAsync(command, {
+      cwd,
+      timeout: 300000, // 5 minutes timeout
+      maxBuffer: 1024 * 1024 * 10, // 10MB buffer
     });
-    
-    expect(helpOutput).toContain("Usage: alchemy");
-    expect(helpOutput).toContain("--name=<name>");
-    expect(helpOutput).toContain("--template=<name>");
-    expect(helpOutput).toContain("typescript");
-    expect(helpOutput).toContain("vite");
-    expect(helpOutput).toContain("astro");
-    expect(helpOutput).toContain("react-router");
-    expect(helpOutput).toContain("sveltekit");
-  });
+    return result;
+  } catch (error: any) {
+    console.error(`Command failed: ${command}`);
+    console.error(`Error: ${error.message}`);
+    if (error.stdout) console.error(`Stdout: ${error.stdout}`);
+    if (error.stderr) console.error(`Stderr: ${error.stderr}`);
+    throw error;
+  }
+}
 
-  test("CLI shows version", () => {
-    const versionOutput = execSync("bun ../../src/cli.ts --version", {
-      encoding: "utf-8", 
-      cwd: path.join(process.cwd(), "alchemy", "test")
-    });
-    
-    expect(versionOutput.trim()).toMatch(/^\d+\.\d+\.\d+$/);
-  });
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-  test("CLI validates project name", () => {
-    expect(() => {
-      execSync("bun ../../src/cli.ts --name='invalid name' --template=typescript --yes", {
-        encoding: "utf-8",
-        cwd: path.join(process.cwd(), "alchemy", "test")
-      });
-    }).toThrow();
-  });
+async function cleanupProject(projectPath: string): Promise<void> {
+  try {
+    if (await fileExists(projectPath)) {
+      await rm(projectPath, { recursive: true, force: true });
+    }
+  } catch (error) {
+    console.warn(`Failed to cleanup ${projectPath}:`, error);
+  }
+}
 
-  test("CLI validates template name", () => {
-    expect(() => {
-      execSync("bun ../../src/cli.ts --name=testproject --template=invalid-template --yes", {
-        encoding: "utf-8",
-        cwd: path.join(process.cwd(), "alchemy", "test")
-      });
-    }).toThrow();
-  });
+const variants = {
+  "typescript": "--template=typescript",
+  "vite": "--template=vite",
+  "astro": "--template=astro",
+  "react-router": "--template=react-router",
+  "sveltekit": "--template=sveltekit",
+};
+
+describe("Create CLI End-to-End Tests", () => {
+  // Generate a test for each template variant
+  for (const [templateName, templateArg] of Object.entries(variants)) {
+    test(`${templateName} - create, deploy, and destroy`, async () => {
+      const projectName = `${BRANCH_PREFIX}-create-test-${templateName}`;
+      const projectPath = join(rootDir, projectName);
+      
+      console.log(`--- Processing: ${templateName} template ---`);
+      
+      try {
+        // Cleanup any existing project directory
+        await cleanupProject(projectPath);
+        
+        // Create the project using CLI
+        console.log(`Creating ${templateName} project...`);
+        const createResult = await runCommand(
+          `bun ${cliPath} --name=${projectName} ${templateArg} --yes`,
+          rootDir
+        );
+        expect(createResult).toBeDefined();
+        
+        // Verify project was created
+        const projectExists = await fileExists(projectPath);
+        expect(projectExists).toBe(true);
+        
+        // Verify alchemy.run.ts was created
+        const alchemyRunPath = join(projectPath, "alchemy.run.ts");
+        const alchemyRunExists = await fileExists(alchemyRunPath);
+        expect(alchemyRunExists).toBe(true);
+        
+        // Try to deploy the project
+        console.log(`Deploying ${templateName} project...`);
+        const deployResult = await runCommand(
+          "bun tsx ./alchemy.run.ts",
+          projectPath
+        );
+        expect(deployResult).toBeDefined();
+        
+        // Try to destroy the project
+        console.log(`Destroying ${templateName} project...`);
+        const destroyResult = await runCommand(
+          "bun tsx ./alchemy.run.ts --destroy",
+          projectPath
+        );
+        expect(destroyResult).toBeDefined();
+        
+        console.log(`--- Completed: ${templateName} template ---`);
+      } catch (error) {
+        console.error(`Failed processing ${templateName}:`, error);
+        throw error;
+      } finally {
+        // Always cleanup the project directory
+        await cleanupProject(projectPath);
+      }
+    }, 600000); // 10 minutes timeout per test
+  }
 });
