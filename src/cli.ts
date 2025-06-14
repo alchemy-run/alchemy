@@ -74,7 +74,9 @@ const templates: Template[] = [
 ];
 
 const args = process.argv.slice(2);
-const options: CliOptions = {};
+const options: CliOptions = {
+  yes: process.env.NODE_ENV === "test",
+};
 
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
@@ -477,11 +479,21 @@ async function initAstroProject(
   projectName: string,
   projectPath: string,
 ): Promise<void> {
-  await initWebsiteProject(pm, projectPath);
+  await execCommand(
+    `${getPackageManagerCommands(pm).create} -y astro@latest ${projectName} -- --no-git --no-deploy --install ${options.yes ? "--yes" : ""}`,
+    process.cwd(),
+  );
+
+  await initWebsiteProject(pm, projectPath, {
+    scripts: {
+      dev: "astro dev",
+      build: "astro check && astro build",
+    },
+  });
 
   // Update astro.config.mjs
   await fs.writeFile(
-    join(projectPath, "astro.config.ts"),
+    join(projectPath, "astro.config.mjs"),
     `import { defineConfig } from 'astro/config';
 import cloudflare from '@astrojs/cloudflare';
 
@@ -590,6 +602,7 @@ async function initWebsiteProject(
   options?: {
     entrypoint?: string;
     tsconfig?: string;
+    scripts?: Record<string, string>;
   },
 ): Promise<void> {
   const commands = getPackageManagerCommands(pm);
@@ -597,7 +610,7 @@ async function initWebsiteProject(
   await createEnvTs(projectPath);
   await cleanupWrangler(projectPath);
   await modifyTsConfig(projectPath, options?.tsconfig);
-  await modifyPackageJson(projectPath, pm);
+  await modifyPackageJson(projectPath, pm, options?.scripts);
 
   // Create alchemy.run.ts
   await initWranglerRunTs(projectPath, options);
