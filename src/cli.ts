@@ -6,6 +6,7 @@ import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { join, resolve } from "node:path";
+import prettier from "prettier";
 
 // Package manager detection
 type PackageManager = "bun" | "npm" | "pnpm" | "yarn";
@@ -560,24 +561,41 @@ async function initSvelteKitProject(
   projectName: string,
   projectPath: string,
 ): Promise<void> {
-  await initWebsiteProject(pm, projectPath);
+  execCommand(
+    `${getPackageManagerCommands(pm).x} -y sv@latest create --install=${pm} --types=ts ${options.yes ? "--template minimal --no-add-ons" : ""} ${projectName}`,
+    process.cwd(),
+  );
+
+  await initWebsiteProject(pm, projectPath, {
+    // entrypoint: "src/routes/index.svelte",
+  });
 
   // Update svelte.config.js
   await fs.writeFile(
     join(projectPath, "svelte.config.js"),
-    `import adapter from '@sveltejs/adapter-cloudflare';
+    await prettier.format(
+      `import adapter from '@sveltejs/adapter-cloudflare';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
-\tpreprocess: vitePreprocess(),
-\tkit: {
-\t\tadapter: adapter()
-\t}
+  preprocess: vitePreprocess(),
+  kit: {
+    adapter: adapter()
+  }
 };
 
 export default config;
 `,
+      {
+        parser: "typescript",
+        tabWidth: 2,
+        useTabs: false,
+        semi: true,
+        singleQuote: false,
+        trailingComma: "none",
+      },
+    ),
   );
 
   // Create vite.config.ts
@@ -593,17 +611,19 @@ export default defineConfig({
   );
 }
 
+interface WebsiteOptions {
+  entrypoint?: string;
+  tsconfig?: string;
+  scripts?: Record<string, string>;
+}
+
 /**
  * Unified initialization function for website projects that use create-cloudflare
  */
 async function initWebsiteProject(
   pm: PackageManager,
   projectPath: string,
-  options?: {
-    entrypoint?: string;
-    tsconfig?: string;
-    scripts?: Record<string, string>;
-  },
+  options?: WebsiteOptions,
 ): Promise<void> {
   const commands = getPackageManagerCommands(pm);
 
