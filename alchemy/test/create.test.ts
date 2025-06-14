@@ -15,11 +15,12 @@ const cliPath = join(rootDir, "src", "cli.ts");
 async function runCommand(
   command: string,
   cwd: string,
+  env?: Record<string, string>,
 ): Promise<{ stdout: string; stderr: string }> {
   console.log(`Running: ${command} in ${cwd}`);
 
   try {
-    await exec(command, { cwd, stdio: "inherit" });
+    await exec(command, { cwd, stdio: "inherit", env });
     return { stdout: "", stderr: "" };
   } catch (error: any) {
     console.error(`Command failed: ${command}`);
@@ -56,7 +57,7 @@ const variants = {
   rwsdk: "--template=rwsdk",
 };
 
-describe("Create CLI End-to-End Tests", () => {
+describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
   // Generate a test for each template variant
   for (const [templateName, templateArg] of Object.entries(variants)) {
     test(`${templateName} - create, deploy, and destroy`, async () => {
@@ -80,6 +81,9 @@ describe("Create CLI End-to-End Tests", () => {
         const createResult = await runCommand(
           `bun ${cliPath} --name=${templateName} ${templateArg} --yes`,
           smokeDir, // Run from .smoke directory so project is created there
+          {
+            NODE_ENV: "test",
+          },
         );
         expect(createResult).toBeDefined();
 
@@ -94,18 +98,12 @@ describe("Create CLI End-to-End Tests", () => {
 
         // Try to deploy the project
         console.log(`Deploying ${templateName} project...`);
-        const deployResult = await runCommand(
-          "bun tsx ./alchemy.run.ts",
-          projectPath,
-        );
+        const deployResult = await runCommand("bun run deploy", projectPath);
         expect(deployResult).toBeDefined();
 
         // Try to destroy the project
         console.log(`Destroying ${templateName} project...`);
-        const destroyResult = await runCommand(
-          "bun tsx ./alchemy.run.ts --destroy",
-          projectPath,
-        );
+        const destroyResult = await runCommand("bun run destroy", projectPath);
         expect(destroyResult).toBeDefined();
 
         console.log(`--- Completed: ${templateName} template ---`);

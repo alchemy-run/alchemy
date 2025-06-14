@@ -338,7 +338,7 @@ async function initViteProject(
   projectPath: string,
 ): Promise<void> {
   execCommand(
-    `${getPackageManagerCommands(pm).x} create-vite@6.5.0 vite --template react-ts`,
+    `${getPackageManagerCommands(pm).x} create-vite@6.5.0 ${projectName} --template react-ts`,
     process.cwd(),
   );
   const root = projectPath;
@@ -618,7 +618,7 @@ async function initWebsiteProject(
   await initWranglerRunTs(projectPath, options);
 
   // Install alchemy dependencies (always include Workers types for Cloudflare Workers projects)
-  const deps = "@cloudflare/workers-types alchemy";
+  const deps = `@cloudflare/workers-types alchemy${process.env.NODE_ENV === "test" ? "@file:../../alchemy" : ""}`;
 
   // Add tsx for non-bun package managers
   const alchemyDeps = pm === "bun" ? deps : `${deps} tsx`;
@@ -645,6 +645,7 @@ function createAlchemyRunTs(
     entrypoint?: string;
   },
 ): string {
+  const adopt = process.env.NODE_ENV === "test" ? "\n  adopt: true," : "";
   if (template === "typescript") {
     return `/// <reference types="@types/node" />
 
@@ -654,7 +655,7 @@ import { Worker } from "alchemy/cloudflare";
 const app = await alchemy("${projectName}");
 
 export const worker = await Worker("worker", {
-  name: "${projectName}",
+  name: "${projectName}",${adopt}
   entrypoint: "${options?.entrypoint || "./src/worker.ts"}",
 });
 
@@ -670,13 +671,13 @@ import { D1Database, DurableObjectNamespace, Redwood } from "alchemy/cloudflare"
 const app = await alchemy("${projectName}");
     
 const database = await D1Database("database", {
-  name: "${projectName}-db",
+  name: "${projectName}-db",${adopt}
   migrationsDir: "migrations",
 });
 
 export const worker = await Redwood("website", {
   name: "${projectName}-website",
-  command: "${detectPackageManager()} run build",
+  command: "${detectPackageManager()} run build",${adopt}
   bindings: {
     AUTH_SECRET_KEY: alchemy.secret(process.env.AUTH_SECRET_KEY),
     DB: database,
@@ -715,10 +716,10 @@ await app.finalize();
     options?.entrypoint !== undefined
       ? `{
   main: "${options?.entrypoint || "./src/index.ts"}",
-  command: "${detectPackageManager()} run build",
+  command: "${detectPackageManager()} run build",${adopt}
 }`
       : `{
-  command: "${detectPackageManager()} run build",
+  command: "${detectPackageManager()} run build",${adopt}
 }`;
 
   return `/// <reference types="@types/node" />
