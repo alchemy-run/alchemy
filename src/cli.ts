@@ -323,6 +323,7 @@ import { Worker } from "alchemy/cloudflare";
 const app = await alchemy("${projectName}");
 
 export const worker = await Worker("worker", {
+  name: "${projectName}",
   entrypoint: "${options?.entrypoint || "./src/worker.ts"}",
 });
 
@@ -332,17 +333,6 @@ await app.finalize();
 `;
   }
 
-  // For all website variants, use unified template
-  return createWebsiteTemplate(template, projectName, options);
-}
-
-function createWebsiteTemplate(
-  template: string,
-  projectName: string,
-  options?: {
-    entrypoint?: string;
-  },
-): string {
   // Map template names to their corresponding resource names
   const resourceMap: Record<string, string> = {
     vite: "Vite",
@@ -408,6 +398,9 @@ async function initTypescriptProject(
   execCommand(commands.init, projectPath);
 
   await createEnvTs(projectPath);
+  await initWranglerRunTs(projectPath, {
+    entrypoint: "src/worker.ts",
+  });
 
   // Create basic project structure
   await fs.mkdir(join(projectPath, "src"), { recursive: true });
@@ -442,6 +435,31 @@ export default {
           types: ["@cloudflare/workers-types", "@types/node"],
         },
         include: ["src/**/*", "types/**/*", "alchemy.run.ts"],
+      },
+      null,
+      2,
+    ),
+  );
+
+  await fs.writeFile(
+    join(projectPath, "package.json"),
+    JSON.stringify(
+      {
+        name: projectName,
+        version: "0.0.0",
+        description: "Alchemy Typescript Project",
+        type: "module",
+        scripts: {
+          build: "tsc -b",
+          deploy: "tsx ./alchemy.run.ts",
+          destroy: "tsx ./alchemy.run.ts --destroy",
+        },
+        devDependencies: {
+          "@cloudflare/workers-types": "latest",
+          "@types/node": "^24.0.1",
+          alchemy: "^0.28.0",
+          typescript: "^5.8.3",
+        },
       },
       null,
       2,
@@ -658,10 +676,7 @@ async function initWebsiteProject(
   await modifyPackageJson(projectPath, pm);
 
   // Create alchemy.run.ts
-  await fs.writeFile(
-    join(projectPath, "alchemy.run.ts"),
-    createAlchemyRunTs(template, projectName, options),
-  );
+  await initWranglerRunTs(projectPath, options);
 
   // Install alchemy dependencies (always include Workers types for Cloudflare Workers projects)
   const deps = "@cloudflare/workers-types alchemy";
@@ -670,6 +685,19 @@ async function initWebsiteProject(
   const alchemyDeps = pm === "bun" ? deps : `${deps} tsx`;
 
   execCommand(`${commands.addDev} ${alchemyDeps}`, projectPath);
+}
+
+async function initWranglerRunTs(
+  projectPath: string,
+  options?: {
+    entrypoint?: string;
+  },
+): Promise<void> {
+  // Create alchemy.run.ts
+  await fs.writeFile(
+    join(projectPath, "alchemy.run.ts"),
+    createAlchemyRunTs(template, projectName, options),
+  );
 }
 
 async function createEnvTs(
@@ -797,6 +825,7 @@ async function modifyTsConfig(projectPath: string): Promise<void> {
 async function modifyPackageJson(
   projectPath: string,
   pm: PackageManager,
+  scripts?: Record<string, string>,
 ): Promise<void> {
   const packageJsonPath = join(projectPath, "package.json");
 
@@ -818,9 +847,10 @@ async function modifyPackageJson(
     packageJson.scripts = {};
   }
 
-  packageJson.scripts.build = "vite build";
-  packageJson.scripts.deploy = deployCommand;
-  packageJson.scripts.destroy = `${deployCommand} --destroy`;
+  packageJson.scripts.build = scripts?.build || "vite build";
+  packageJson.scripts.deploy = scripts?.deploy || deployCommand;
+  packageJson.scripts.destroy =
+    scripts?.destroy || `${deployCommand} --destroy`;
 
   packageJson.scripts = {
     ...Object.fromEntries(
