@@ -307,86 +307,6 @@ interface Template {
   ) => Promise<void>;
 }
 
-function createAlchemyRunTs(
-  template: string,
-  projectName: string,
-  options?: {
-    entrypoint?: string;
-  },
-): string {
-  if (template === "typescript") {
-    return `/// <reference types="@types/node" />
-
-import alchemy from "alchemy";
-import { Worker } from "alchemy/cloudflare";
-
-const app = await alchemy("${projectName}");
-
-export const worker = await Worker("worker", {
-  name: "${projectName}",
-  entrypoint: "${options?.entrypoint || "./src/worker.ts"}",
-});
-
-console.log(worker.url);
-
-await app.finalize();
-`;
-  }
-
-  // Map template names to their corresponding resource names
-  const resourceMap: Record<string, string> = {
-    vite: "Vite",
-    astro: "Astro",
-    "react-router": "ReactRouter",
-    sveltekit: "SvelteKit",
-    "tanstack-start": "TanStackStart",
-    redwood: "Redwood",
-    nuxt: "Nuxt",
-  };
-
-  const resourceName = resourceMap[template];
-  if (!resourceName) {
-    throw new Error(`Unknown template: ${template}`);
-  }
-
-  // Special configuration for Vite template
-  const config =
-    template === "vite"
-      ? `{
-  main: "${options?.entrypoint || "./src/index.ts"}",
-  command: "${detectPackageManager()} run build",
-}`
-      : `{
-  command: "${detectPackageManager()} run build",
-}`;
-
-  return `/// <reference types="@types/node" />
-
-import alchemy from "alchemy";
-import { ${resourceName} } from "alchemy/cloudflare";
-
-const app = await alchemy("${projectName}");
-
-export const worker = await ${resourceName}("website", ${config});
-
-console.log({
-  url: worker.url,
-});
-
-await app.finalize();
-`;
-}
-
-function execCommand(command: string, cwd: string): void {
-  console.log(`Running: ${command}`);
-  try {
-    execSync(command, { stdio: "inherit", cwd });
-  } catch {
-    console.error(`Failed to execute: ${command}`);
-    process.exit(1);
-  }
-}
-
 async function initTypescriptProject(
   pm: PackageManager,
   projectName: string,
@@ -471,12 +391,6 @@ export default {
     `${commands.addDev} alchemy @cloudflare/workers-types @types/node typescript`,
     projectPath,
   );
-}
-
-async function rm(path: string): Promise<void> {
-  if (existsSync(path)) {
-    await fs.rm(path, { recursive: true });
-  }
 }
 
 async function initViteProject(
@@ -611,7 +525,22 @@ async function initReactRouterProject(
   projectName: string,
   projectPath: string,
 ): Promise<void> {
-  await initWebsiteProject(pm, projectPath);
+  execCommand(
+    `${getPackageManagerCommands(pm).create} -y cloudflare@latest ${projectName} -- --framework=react-router --no-git --no-deploy`,
+    process.cwd(),
+  );
+
+  await initWebsiteProject(pm, projectPath, {
+    entrypoint: "workers/app.ts",
+    // tsconfig: "tsconfig.node.json",
+  });
+
+  await modifyTsConfig(projectPath, "tsconfig.node.json");
+
+  await modifyJsoncFile(join(projectPath, "tsconfig.json"), {
+    "compilerOptions.types": undefined,
+    "compilerOptions.noEmit": undefined,
+  });
 }
 
 async function initSvelteKitProject(
@@ -660,19 +589,14 @@ async function initWebsiteProject(
   projectPath: string,
   options?: {
     entrypoint?: string;
+    tsconfig?: string;
   },
 ): Promise<void> {
   const commands = getPackageManagerCommands(pm);
 
-  // // Create project using create-cloudflare
-  // execCommand(
-  //   `${commands.create} cloudflare@latest ${projectName} -- --framework=${framework} --platform=workers --no-deploy --lang=ts ${process.argv.slice(2).join(" ")}`,
-  //   process.cwd(),
-  // );
-
   await createEnvTs(projectPath);
   await cleanupWrangler(projectPath);
-  await modifyTsConfig(projectPath);
+  await modifyTsConfig(projectPath, options?.tsconfig);
   await modifyPackageJson(projectPath, pm);
 
   // Create alchemy.run.ts
@@ -698,6 +622,76 @@ async function initWranglerRunTs(
     join(projectPath, "alchemy.run.ts"),
     createAlchemyRunTs(template, projectName, options),
   );
+}
+
+function createAlchemyRunTs(
+  template: string,
+  projectName: string,
+  options?: {
+    entrypoint?: string;
+  },
+): string {
+  if (template === "typescript") {
+    return `/// <reference types="@types/node" />
+
+import alchemy from "alchemy";
+import { Worker } from "alchemy/cloudflare";
+
+const app = await alchemy("${projectName}");
+
+export const worker = await Worker("worker", {
+  name: "${projectName}",
+  entrypoint: "${options?.entrypoint || "./src/worker.ts"}",
+});
+
+console.log(worker.url);
+
+await app.finalize();
+`;
+  }
+
+  // Map template names to their corresponding resource names
+  const resourceMap: Record<string, string> = {
+    vite: "Vite",
+    astro: "Astro",
+    "react-router": "ReactRouter",
+    sveltekit: "SvelteKit",
+    "tanstack-start": "TanStackStart",
+    redwood: "Redwood",
+    nuxt: "Nuxt",
+  };
+
+  const resourceName = resourceMap[template];
+  if (!resourceName) {
+    throw new Error(`Unknown template: ${template}`);
+  }
+
+  // Special configuration for Vite template
+  const config =
+    options?.entrypoint !== undefined
+      ? `{
+  main: "${options?.entrypoint || "./src/index.ts"}",
+  command: "${detectPackageManager()} run build",
+}`
+      : `{
+  command: "${detectPackageManager()} run build",
+}`;
+
+  return `/// <reference types="@types/node" />
+
+import alchemy from "alchemy";
+import { ${resourceName} } from "alchemy/cloudflare";
+
+const app = await alchemy("${projectName}");
+
+export const worker = await ${resourceName}("website", ${config});
+
+console.log({
+  url: worker.url,
+});
+
+await app.finalize();
+`;
 }
 
 async function createEnvTs(
@@ -738,10 +732,43 @@ async function cleanupWrangler(projectPath: string): Promise<void> {
 }
 
 /**
+ * Modifies a JSON/JSONC file with the given modifications
+ */
+async function modifyJsoncFile(
+  file: string,
+  modifications: Record<string, unknown>,
+): Promise<void> {
+  if (!existsSync(file)) {
+    return; // No file to modify
+  }
+
+  const content = await fs.readFile(file, "utf-8");
+  let modifiedContent = content;
+
+  for (const [path, value] of Object.entries(modifications)) {
+    const pathArray = path.split(".");
+    const edits = modify(modifiedContent, pathArray, value, {
+      formattingOptions: {
+        tabSize: 2,
+        insertSpaces: true,
+        eol: "\n",
+      },
+    });
+    modifiedContent = applyEdits(modifiedContent, edits);
+  }
+
+  await fs.writeFile(file, modifiedContent);
+  console.log(`Modified ${file}`, modifiedContent);
+}
+
+/**
  * Modifies tsconfig.json to set proper Cloudflare Workers types and remove worker-configuration.d.ts
  */
-async function modifyTsConfig(projectPath: string): Promise<void> {
-  const tsconfigPath = join(projectPath, "tsconfig.json");
+async function modifyTsConfig(
+  projectPath: string,
+  tsconfig?: string,
+): Promise<void> {
+  const tsconfigPath = join(projectPath, tsconfig ?? "tsconfig.json");
 
   if (!existsSync(tsconfigPath)) {
     return; // No tsconfig.json to modify
@@ -862,4 +889,20 @@ async function modifyPackageJson(
 
   // Write back to file with proper formatting
   await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+}
+
+async function rm(path: string): Promise<void> {
+  if (existsSync(path)) {
+    await fs.rm(path, { recursive: true });
+  }
+}
+
+function execCommand(command: string, cwd: string): void {
+  console.log(command);
+  try {
+    execSync(command, { stdio: "inherit", cwd });
+  } catch {
+    console.error(`Failed to execute: ${command}`);
+    process.exit(1);
+  }
 }
