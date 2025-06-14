@@ -1,5 +1,6 @@
 import { alchemy } from "./alchemy.ts";
 import { context } from "./context.ts";
+import { DEFAULT_MODE } from "./mode.ts";
 import {
   resolveDeletionHandler,
   ResourceFQN,
@@ -66,9 +67,13 @@ export async function destroy<Type extends string>(
   }
 
   if (instance[ResourceKind] === Scope.KIND) {
+    const state = await instance[ResourceScope]?.state.get(
+      instance[ResourceID],
+    );
     const scope = new Scope({
       parent: instance[ResourceScope],
       scopeName: instance[ResourceID],
+      mode: state?.props?.mode ?? DEFAULT_MODE,
     });
     return await destroy(scope, options);
   }

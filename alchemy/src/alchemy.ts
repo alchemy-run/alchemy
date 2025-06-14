@@ -456,7 +456,9 @@ async function run<T>(
         seq,
         data: {},
         fqn: "",
-        props: {},
+        props: {
+          mode: _scope.mode,
+        },
         status: "created",
         output,
       } as const;

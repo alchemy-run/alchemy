@@ -45,7 +45,7 @@ export const ResourceKind = Symbol.for("alchemy::ResourceKind");
 export const ResourceScope = Symbol.for("alchemy::ResourceScope");
 export const InnerResourceScope = Symbol.for("alchemy::InnerResourceScope");
 export const ResourceSeq = Symbol.for("alchemy::ResourceSeq");
-export const InvalidHandlerConfig = Symbol.for("alchemy::InvalidHandlerConfig");
+export const IsInvalidHandler = Symbol.for("alchemy::IsInvalidHandler");
 
 export interface ProviderOptions {
   /**
@@ -103,27 +103,27 @@ type ResourceLifecycleHandler = (
 type LocalResourceLifecycleHandler = ResourceLifecycleHandler;
 
 const localModeHandlerUnavailable: LocalResourceLifecycleHandler & {
-  [InvalidHandlerConfig]: true;
+  [IsInvalidHandler]: true;
 } = () => {
   logger.error("Local mode handler unavailable");
   logger.exit();
   //todo(michael) provide resource name in error, also just better error message
   throw new Error("Local mode handler unavailable");
 };
-localModeHandlerUnavailable[InvalidHandlerConfig] = true;
+localModeHandlerUnavailable[IsInvalidHandler] = true;
 
 const liveModeHandlerUnavailable: ResourceLifecycleHandler & {
-  [InvalidHandlerConfig]: true;
+  [IsInvalidHandler]: true;
 } = () => {
   //todo(michael) provide resource name in error, also just better error message
   throw new Error("Live mode handler unavailable");
 };
-liveModeHandlerUnavailable[InvalidHandlerConfig] = true;
+liveModeHandlerUnavailable[IsInvalidHandler] = true;
 
 function isInvalidHandlerConfig(handler: any): handler is {
-  [InvalidHandlerConfig]: true;
+  [IsInvalidHandler]: true;
 } {
-  return InvalidHandlerConfig in handler;
+  return IsInvalidHandler in handler;
 }
 
 // see: https://x.com/samgoodwin89/status/1904640134097887653
