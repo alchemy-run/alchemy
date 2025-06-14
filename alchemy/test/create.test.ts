@@ -53,6 +53,7 @@ const variants = {
   astro: "--template=astro",
   "react-router": "--template=react-router",
   sveltekit: "--template=sveltekit",
+  rwsdk: "--template=rwsdk",
 };
 
 describe("Create CLI End-to-End Tests", () => {

@@ -57,12 +57,9 @@ const templates: Template[] = [
     },
   },
   {
-    name: "redwood",
-    description: "RedwoodJS application (coming soon)",
-    init: async () => {
-      console.log("❌ Redwood template not yet implemented");
-      process.exit(1);
-    },
+    name: "rwsdk",
+    description: "Redwood SDK application",
+    init: initRedwoodProject,
   },
   {
     name: "nuxt",
@@ -204,7 +201,6 @@ if (existsSync(projectPath)) {
 }
 
 // Create project directory
-await fs.mkdir(projectPath, { recursive: true });
 
 console.log(`\n🔨 Creating ${template} project in ${projectPath}...`);
 
@@ -237,68 +233,6 @@ console.log("\n🧹 Destroy your project:");
 console.log(`   ${pm} run destroy`);
 console.log("\n📚 Learn more: https://alchemy.run");
 
-function detectPackageManager(): PackageManager {
-  // Check npm_execpath for bun
-  if (process.env.npm_execpath?.includes("bun")) {
-    return "bun";
-  }
-
-  // Check npm_config_user_agent
-  const userAgent = process.env.npm_config_user_agent;
-  if (userAgent) {
-    if (userAgent.startsWith("bun")) return "bun";
-    if (userAgent.startsWith("pnpm")) return "pnpm";
-    if (userAgent.startsWith("yarn")) return "yarn";
-    if (userAgent.startsWith("npm")) return "npm";
-  }
-
-  // Default fallback
-  return "npm";
-}
-
-function getPackageManagerCommands(pm: PackageManager) {
-  const commands = {
-    bun: {
-      init: "bun init -y",
-      install: "bun install",
-      add: "bun add",
-      addDev: "bun add -D",
-      run: "bun",
-      create: "bun create",
-      x: "bunx",
-    },
-    npm: {
-      init: "npm init -y",
-      install: "npm install",
-      add: "npm install",
-      addDev: "npm install --save-dev",
-      run: "npx",
-      create: "npm create",
-      x: "npx",
-    },
-    pnpm: {
-      init: "pnpm init",
-      install: "pnpm install",
-      add: "pnpm add",
-      addDev: "pnpm add -D",
-      run: "pnpm",
-      create: "pnpm create",
-      x: "pnpm dlx",
-    },
-    yarn: {
-      init: "yarn init -y",
-      install: "yarn install",
-      add: "yarn add",
-      addDev: "yarn add -D",
-      run: "yarn",
-      create: "yarn create",
-      x: "yarn dlx",
-    },
-  };
-
-  return commands[pm];
-}
-
 // Template definitions
 interface Template {
   name: string;
@@ -315,6 +249,8 @@ async function initTypescriptProject(
   projectName: string,
   projectPath: string,
 ): Promise<void> {
+  await fs.mkdir(projectPath, { recursive: true });
+
   const commands = getPackageManagerCommands(pm);
 
   // Initialize project
@@ -548,7 +484,9 @@ async function initReactRouterProject(
     // tsconfig: "tsconfig.node.json",
   });
 
-  await modifyTsConfig(projectPath, "tsconfig.node.json");
+  await modifyTsConfig(projectPath, {
+    tsconfig: "tsconfig.node.json",
+  });
 
   await modifyJsoncFile(join(projectPath, "tsconfig.json"), {
     "compilerOptions.types": undefined,
@@ -611,6 +549,50 @@ export default defineConfig({
   );
 }
 
+async function initRedwoodProject(
+  pm: PackageManager,
+  projectName: string,
+  projectPath: string,
+): Promise<void> {
+  execCommand(
+    `${getPackageManagerCommands(pm).x} -y create-rwsdk@latest ${projectName}`,
+    process.cwd(),
+  );
+  execCommand(getPackageManagerCommands(pm).install, projectPath);
+  execCommand(`${getPackageManagerCommands(pm).run} dev:init`, projectPath);
+  await initWebsiteProject(pm, projectPath, {
+    scripts: {
+      deploy: "tsx --env-file .env ./alchemy.run.ts",
+      destroy: "tsx --env-file .env ./alchemy.run.ts --destroy",
+    },
+  });
+  await modifyJsoncFile(join(projectPath, "tsconfig.json"), {
+    include: undefined,
+    "compilerOptions.types": ["@cloudflare/workers-types", "types/**/*.ts"],
+  });
+  await appendEnv(projectPath);
+}
+
+async function appendEnv(projectPath: string): Promise<void> {
+  console.log(join(projectPath, ".env"));
+
+  const envContent = await fs.readFile(join(projectPath, ".env"), "utf-8");
+  await fs.writeFile(
+    join(projectPath, ".env"),
+    `${envContent}\nALCHEMY_PASSWORD=change-me`,
+  );
+
+  const envExampleContent = await fs.readFile(
+    join(projectPath, ".env.example"),
+    "utf-8",
+  );
+  await fs.writeFile(
+    join(projectPath, ".env.example"),
+    `${envExampleContent}\nALCHEMY_PASSWORD=your-alchemy-password`,
+  );
+  // End of Selection
+}
+
 interface WebsiteOptions {
   entrypoint?: string;
   tsconfig?: string;
@@ -623,13 +605,13 @@ interface WebsiteOptions {
 async function initWebsiteProject(
   pm: PackageManager,
   projectPath: string,
-  options?: WebsiteOptions,
+  options: WebsiteOptions = {},
 ): Promise<void> {
   const commands = getPackageManagerCommands(pm);
 
   await createEnvTs(projectPath);
   await cleanupWrangler(projectPath);
-  await modifyTsConfig(projectPath, options?.tsconfig);
+  await modifyTsConfig(projectPath, options);
   await modifyPackageJson(projectPath, pm, options?.scripts);
 
   // Create alchemy.run.ts
@@ -653,12 +635,11 @@ async function initWranglerRunTs(
   // Create alchemy.run.ts
   await fs.writeFile(
     join(projectPath, "alchemy.run.ts"),
-    createAlchemyRunTs(template, projectName, options),
+    createAlchemyRunTs(projectName, options),
   );
 }
 
 function createAlchemyRunTs(
-  template: string,
   projectName: string,
   options?: {
     entrypoint?: string;
@@ -681,6 +662,36 @@ console.log(worker.url);
 
 await app.finalize();
 `;
+  } else if (template === "rwsdk") {
+    return `/// <reference types="@types/node" />
+import alchemy from "alchemy";
+import { D1Database, DurableObjectNamespace, Redwood } from "alchemy/cloudflare";
+
+const app = await alchemy("${projectName}");
+    
+const database = await D1Database("database", {
+  name: "${projectName}-db",
+  migrationsDir: "migrations",
+});
+
+export const worker = await Redwood("website", {
+  name: "${projectName}-website",
+  command: "${detectPackageManager()} run build",
+  bindings: {
+    AUTH_SECRET_KEY: alchemy.secret(process.env.AUTH_SECRET_KEY),
+    DB: database,
+    SESSION_DURABLE_OBJECT: new DurableObjectNamespace("session", {
+      className: "SessionDurableObject",
+    }),
+  },
+});
+
+console.log({
+  url: worker.url,
+});
+
+await app.finalize();
+    `;
   }
 
   // Map template names to their corresponding resource names
@@ -690,7 +701,7 @@ await app.finalize();
     "react-router": "ReactRouter",
     sveltekit: "SvelteKit",
     "tanstack-start": "TanStackStart",
-    redwood: "Redwood",
+    rwsdk: "Redwood",
     nuxt: "Nuxt",
   };
 
@@ -791,7 +802,6 @@ async function modifyJsoncFile(
   }
 
   await fs.writeFile(file, modifiedContent);
-  console.log(`Modified ${file}`, modifiedContent);
 }
 
 /**
@@ -799,9 +809,9 @@ async function modifyJsoncFile(
  */
 async function modifyTsConfig(
   projectPath: string,
-  tsconfig?: string,
+  options: WebsiteOptions,
 ): Promise<void> {
-  const tsconfigPath = join(projectPath, tsconfig ?? "tsconfig.json");
+  const tsconfigPath = join(projectPath, options.tsconfig ?? "tsconfig.json");
 
   if (!existsSync(tsconfigPath)) {
     return; // No tsconfig.json to modify
@@ -922,6 +932,68 @@ async function modifyPackageJson(
 
   // Write back to file with proper formatting
   await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+}
+
+function detectPackageManager(): PackageManager {
+  // Check npm_execpath for bun
+  if (process.env.npm_execpath?.includes("bun")) {
+    return "bun";
+  }
+
+  // Check npm_config_user_agent
+  const userAgent = process.env.npm_config_user_agent;
+  if (userAgent) {
+    if (userAgent.startsWith("bun")) return "bun";
+    if (userAgent.startsWith("pnpm")) return "pnpm";
+    if (userAgent.startsWith("yarn")) return "yarn";
+    if (userAgent.startsWith("npm")) return "npm";
+  }
+
+  // Default fallback
+  return "npm";
+}
+
+function getPackageManagerCommands(pm: PackageManager) {
+  const commands = {
+    bun: {
+      init: "bun init -y",
+      install: "bun install",
+      add: "bun add",
+      addDev: "bun add -D",
+      run: "bun run",
+      create: "bun create",
+      x: "bunx",
+    },
+    npm: {
+      init: "npm init -y",
+      install: "npm install",
+      add: "npm install",
+      addDev: "npm install --save-dev",
+      run: "npm run",
+      create: "npm create",
+      x: "npx",
+    },
+    pnpm: {
+      init: "pnpm init",
+      install: "pnpm install",
+      add: "pnpm add",
+      addDev: "pnpm add -D",
+      run: "pnpm run",
+      create: "pnpm create",
+      x: "pnpm dlx",
+    },
+    yarn: {
+      init: "yarn init -y",
+      install: "yarn install",
+      add: "yarn add",
+      addDev: "yarn add -D",
+      run: "yarn",
+      create: "yarn create",
+      x: "yarn dlx",
+    },
+  };
+
+  return commands[pm];
 }
 
 async function rm(path: string): Promise<void> {
