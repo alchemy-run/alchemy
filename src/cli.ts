@@ -201,6 +201,8 @@ if (existsSync(projectPath)) {
 
 console.log(`\n🔨 Creating ${template} project in ${projectPath}...`);
 
+const alchemyVersion = `alchemy@${process.env.NODE_ENV === "test" ? "@file:../../alchemy" : ""}`;
+
 // Initialize the template
 await selectedTemplate.init(projectName, projectPath);
 
@@ -270,58 +272,48 @@ export default {
   );
 
   // Create tsconfig.json
-  await writeTsFile(
-    join(projectPath, "tsconfig.json"),
-    JSON.stringify(
-      {
-        compilerOptions: {
-          target: "ESNext",
-          module: "ESNext",
-          moduleResolution: "Bundler",
-          strict: true,
-          esModuleInterop: true,
-          skipLibCheck: true,
-          allowImportingTsExtensions: true,
-          rewriteRelativeImportExtensions: true,
-          types: ["@cloudflare/workers-types", "@types/node"],
-        },
-        include: ["src/**/*", "types/**/*", "alchemy.run.ts"],
-      },
-      null,
-      2,
-    ),
-  );
+  await writeJsonFile(join(projectPath, "tsconfig.json"), {
+    compilerOptions: {
+      target: "ESNext",
+      module: "ESNext",
+      moduleResolution: "Bundler",
+      strict: true,
+      esModuleInterop: true,
+      skipLibCheck: true,
+      allowImportingTsExtensions: true,
+      rewriteRelativeImportExtensions: true,
+      types: ["@cloudflare/workers-types", "@types/node"],
+    },
+    include: ["src/**/*", "types/**/*", "alchemy.run.ts"],
+  });
 
-  await writeJsonFile(
-    join(projectPath, "package.json"),
-    JSON.stringify(
-      {
-        name: projectName,
-        version: "0.0.0",
-        description: "Alchemy Typescript Project",
-        type: "module",
-        scripts: {
-          build: "tsc -b",
-          deploy: "tsx ./alchemy.run.ts",
-          destroy: "tsx ./alchemy.run.ts --destroy",
-        },
-        devDependencies: {
-          "@cloudflare/workers-types": "latest",
-          "@types/node": "^24.0.1",
-          alchemy: "^0.28.0",
-          typescript: "^5.8.3",
-        },
-      },
-      null,
-      2,
-    ),
-  );
+  await writeJsonFile(join(projectPath, "package.json"), {
+    name: projectName,
+    version: "0.0.0",
+    description: "Alchemy Typescript Project",
+    type: "module",
+    scripts: {
+      build: "tsc -b",
+      deploy: "tsx ./alchemy.run.ts",
+      destroy: "tsx ./alchemy.run.ts --destroy",
+    },
+    devDependencies: {
+      "@cloudflare/workers-types": "latest",
+      "@types/node": "^24.0.1",
+      alchemy: "^0.28.0",
+      typescript: "^5.8.3",
+    },
+  });
 
   // Install dependencies
-  execCommand(
-    `${commands.addDev} alchemy @cloudflare/workers-types @types/node typescript`,
-    projectPath,
-  );
+  install({
+    devDependencies: [
+      alchemyVersion,
+      "@cloudflare/workers-types",
+      "@types/node",
+      "typescript",
+    ],
+  });
 }
 
 async function initViteProject(
@@ -350,36 +342,29 @@ export default defineConfig({
 });
 `,
   );
-  await writeJsonFile(
-    join(root, "tsconfig.json"),
-    JSON.stringify(
-      {
-        compilerOptions: {
-          target: "es2021",
-          lib: ["es2021"],
-          jsx: "react-jsx",
-          module: "es2022",
-          moduleResolution: "Bundler",
-          resolveJsonModule: true,
-          allowJs: true,
-          checkJs: false,
-          noEmit: true,
-          isolatedModules: true,
-          allowSyntheticDefaultImports: true,
-          forceConsistentCasingInFileNames: true,
-          allowImportingTsExtensions: true,
-          rewriteRelativeImportExtensions: true,
-          strict: true,
-          skipLibCheck: true,
-          types: ["@cloudflare/workers-types"],
-        },
-        exclude: ["test"],
-        include: ["types/**/*.ts", "src/**/*.ts"],
-      },
-      null,
-      2,
-    ),
-  );
+  await writeJsonFile(join(root, "tsconfig.json"), {
+    compilerOptions: {
+      target: "es2021",
+      lib: ["es2021"],
+      jsx: "react-jsx",
+      module: "es2022",
+      moduleResolution: "Bundler",
+      resolveJsonModule: true,
+      allowJs: true,
+      checkJs: false,
+      noEmit: true,
+      isolatedModules: true,
+      allowSyntheticDefaultImports: true,
+      forceConsistentCasingInFileNames: true,
+      allowImportingTsExtensions: true,
+      rewriteRelativeImportExtensions: true,
+      strict: true,
+      skipLibCheck: true,
+      types: ["@cloudflare/workers-types"],
+    },
+    exclude: ["test"],
+    include: ["types/**/*.ts", "src/**/*.ts"],
+  });
   await fs.mkdir(join(root, "worker"), { recursive: true });
   await writeTsFile(
     join(root, "worker", "index.ts"),
@@ -659,7 +644,7 @@ async function initWebsiteProject(
   install({
     devDependencies: [
       "@cloudflare/workers-types",
-      `alchemy@${process.env.NODE_ENV === "test" ? "@file:../../alchemy" : ""}`,
+      alchemyVersion,
       ...(pm === "bun" ? ["tsx"] : []),
     ],
   });
@@ -826,8 +811,8 @@ declare module "cloudflare:workers" {
   );
 }
 
-async function writeJsonFile(file: string, content: string): Promise<void> {
-  await writePrettyFile(file, content, "json");
+async function writeJsonFile(file: string, content: any): Promise<void> {
+  await writePrettyFile(file, JSON.stringify(content, null, 2), "json");
 }
 
 async function writeTsFile(file: string, content: string): Promise<void> {

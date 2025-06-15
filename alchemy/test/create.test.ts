@@ -55,6 +55,7 @@ const variants = {
   "react-router": "--template=react-router",
   sveltekit: "--template=sveltekit",
   rwsdk: "--template=rwsdk",
+  "tanstack-start": "--template=tanstack-start",
 };
 
 describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
