@@ -9,8 +9,8 @@ import "../src/test/vitest.ts";
 // Get the root directory of the project
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const rootDir = join(__dirname, "..", "..");
-const cliPath = join(rootDir, "src", "cli.ts");
+const rootDir = join(__dirname, "..", "..", "alchemy");
+const cliPath = join(rootDir, "bin", "create-alchemy.ts");
 
 async function runCommand(
   command: string,

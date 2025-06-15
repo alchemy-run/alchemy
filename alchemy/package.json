@@ -10,19 +10,19 @@
     "directory": "alchemy"
   },
   "scripts": {
-    "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b",
+    "build:cli": "esbuild bin/create-alchemy.ts --bundle --platform=node --target=node18 --outfile=lib/create-alchemy.js --format=esm --banner:js='#!/usr/bin/env node' && chmod +x lib/create-alchemy.js",
+    "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && bun run build:cli",
+    "docs:gen": "rm -rf ./docs && typedoc",
     "postbuild": "cpx 'src/**/*/types.d.ts' lib",
-    "build:cli": "esbuild src/cli.ts --bundle --platform=node --target=node18 --outfile=lib/cli.js --format=esm --banner:js='#!/usr/bin/env node'",
-    "postbuild:cli": "chmod +x lib/cli.js",
-    "publish:npm": "cp ../README.md . && bun run build && bun run build:cli && npm publish && rm README.md",
-    "docs:gen": "rm -rf ./docs && typedoc"
+    "publish:npm": "cp ../README.md . && bun run build && bun run build:cli && npm publish && rm README.md"
   },
   "bin": {
-    "alchemy": "./lib/cli.js"
+    "alchemy": "./lib/create-alchemy.js"
   },
   "author": "Sam Goodwin <sam@alchemy.run>",
   "homepage": "https://alchemy.run",
   "files": [
+    "bin",
     "lib",
     "src"
   ],
