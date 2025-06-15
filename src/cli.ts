@@ -50,11 +50,8 @@ const templates: Template[] = [
   },
   {
     name: "tanstack-start",
-    description: "TanStack Start application (coming soon)",
-    init: async () => {
-      console.log("❌ TanStack Start template not yet implemented");
-      process.exit(1);
-    },
+    description: "TanStack Start application",
+    init: initTanstackStartProject,
   },
   {
     name: "rwsdk",
@@ -205,7 +202,7 @@ if (existsSync(projectPath)) {
 console.log(`\n🔨 Creating ${template} project in ${projectPath}...`);
 
 // Initialize the template
-await selectedTemplate.init(pm, projectName, projectPath);
+await selectedTemplate.init(projectName, projectPath);
 
 // Create .gitignore if it doesn't exist
 const gitignorePath = join(projectPath, ".gitignore");
@@ -237,15 +234,10 @@ console.log("\n📚 Learn more: https://alchemy.run");
 interface Template {
   name: string;
   description: string;
-  init: (
-    pm: PackageManager,
-    projectName: string,
-    projectPath: string,
-  ) => Promise<void>;
+  init: (projectName: string, projectPath: string) => Promise<void>;
 }
 
 async function initTypescriptProject(
-  pm: PackageManager,
   projectName: string,
   projectPath: string,
 ): Promise<void> {
@@ -265,7 +257,7 @@ async function initTypescriptProject(
   await fs.mkdir(join(projectPath, "src"), { recursive: true });
 
   // Create worker.ts
-  await fs.writeFile(
+  await writeTsFile(
     join(projectPath, "src", "worker.ts"),
     `import type { worker } from "../alchemy.run.ts";
 
@@ -278,7 +270,7 @@ export default {
   );
 
   // Create tsconfig.json
-  await fs.writeFile(
+  await writeTsFile(
     join(projectPath, "tsconfig.json"),
     JSON.stringify(
       {
@@ -300,7 +292,7 @@ export default {
     ),
   );
 
-  await fs.writeFile(
+  await writeJsonFile(
     join(projectPath, "package.json"),
     JSON.stringify(
       {
@@ -333,23 +325,19 @@ export default {
 }
 
 async function initViteProject(
-  pm: PackageManager,
   projectName: string,
   projectPath: string,
 ): Promise<void> {
-  execCommand(
-    `${getPackageManagerCommands(pm).x} create-vite@6.5.0 ${projectName} --template react-ts`,
-    process.cwd(),
-  );
+  npx(`create-vite@6.5.0 ${projectName} --template react-ts`);
   const root = projectPath;
   await rm(join(root, "tsconfig.app.json"));
   await rm(join(root, "tsconfig.node.json"));
 
-  await initWebsiteProject(pm, projectPath, {
+  await initWebsiteProject(projectPath, {
     entrypoint: "worker/index.ts",
   });
 
-  await fs.writeFile(
+  await writeTsFile(
     join(root, "vite.config.ts"),
     `import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -362,7 +350,7 @@ export default defineConfig({
 });
 `,
   );
-  await fs.writeFile(
+  await writeJsonFile(
     join(root, "tsconfig.json"),
     JSON.stringify(
       {
@@ -393,7 +381,7 @@ export default defineConfig({
     ),
   );
   await fs.mkdir(join(root, "worker"), { recursive: true });
-  await fs.writeFile(
+  await writeTsFile(
     join(root, "worker", "index.ts"),
     `export default {
   fetch(request) {
@@ -412,16 +400,14 @@ export default defineConfig({
 }
 
 async function initAstroProject(
-  pm: PackageManager,
   projectName: string,
   projectPath: string,
 ): Promise<void> {
-  await execCommand(
-    `${getPackageManagerCommands(pm).create} -y astro@latest ${projectName} -- --no-git --no-deploy --install ${options.yes ? "--yes" : ""}`,
-    process.cwd(),
+  create(
+    `astro@latest ${projectName} -- --no-git --no-deploy --install ${options.yes ? "--yes" : ""}`,
   );
 
-  await initWebsiteProject(pm, projectPath, {
+  await initWebsiteProject(projectPath, {
     scripts: {
       dev: "astro dev",
       build: "astro check && astro build",
@@ -429,7 +415,7 @@ async function initAstroProject(
   });
 
   // Update astro.config.mjs
-  await fs.writeFile(
+  await writeTsFile(
     join(projectPath, "astro.config.mjs"),
     `import { defineConfig } from 'astro/config';
 import cloudflare from '@astrojs/cloudflare';
@@ -444,9 +430,10 @@ export default defineConfig({
 
   // Create API route example
   await fs.mkdir(join(projectPath, "src", "pages", "api"), { recursive: true });
-  await fs.writeFile(
+  await writeTsFile(
     join(projectPath, "src", "pages", "api", "hello.ts"),
-    `import type { APIRoute } from 'astro';
+    `
+import type { APIRoute } from 'astro';
 
 export const GET: APIRoute = async ({ request }) => {
   // Access Cloudflare runtime context
@@ -470,16 +457,14 @@ export const GET: APIRoute = async ({ request }) => {
 }
 
 async function initReactRouterProject(
-  pm: PackageManager,
   projectName: string,
   projectPath: string,
 ): Promise<void> {
-  execCommand(
-    `${getPackageManagerCommands(pm).create} -y cloudflare@latest ${projectName} -- --framework=react-router --no-git --no-deploy`,
-    process.cwd(),
+  create(
+    `cloudflare@latest ${projectName} -- --framework=react-router --no-git --no-deploy`,
   );
 
-  await initWebsiteProject(pm, projectPath, {
+  await initWebsiteProject(projectPath, {
     entrypoint: "workers/app.ts",
     // tsconfig: "tsconfig.node.json",
   });
@@ -495,24 +480,22 @@ async function initReactRouterProject(
 }
 
 async function initSvelteKitProject(
-  pm: PackageManager,
   projectName: string,
   projectPath: string,
 ): Promise<void> {
-  execCommand(
-    `${getPackageManagerCommands(pm).x} -y sv@latest create --install=${pm} --types=ts ${options.yes ? "--template minimal --no-add-ons" : ""} ${projectName}`,
-    process.cwd(),
+  npx(
+    `-y sv@latest create --install=${pm} --types=ts ${options.yes ? "--template minimal --no-add-ons" : ""} ${projectName}`,
   );
 
-  await initWebsiteProject(pm, projectPath, {
+  await initWebsiteProject(projectPath, {
     // entrypoint: "src/routes/index.svelte",
   });
 
   // Update svelte.config.js
-  await fs.writeFile(
+  await writeTsFile(
     join(projectPath, "svelte.config.js"),
-    await prettier.format(
-      `import adapter from '@sveltejs/adapter-cloudflare';
+    `
+import adapter from '@sveltejs/adapter-cloudflare';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
 /** @type {import('@sveltejs/kit').Config} */
@@ -525,19 +508,10 @@ const config = {
 
 export default config;
 `,
-      {
-        parser: "typescript",
-        tabWidth: 2,
-        useTabs: false,
-        semi: true,
-        singleQuote: false,
-        trailingComma: "none",
-      },
-    ),
   );
 
   // Create vite.config.ts
-  await fs.writeFile(
+  await writeTsFile(
     join(projectPath, "vite.config.ts"),
     `import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
@@ -549,18 +523,13 @@ export default defineConfig({
   );
 }
 
-async function initRedwoodProject(
-  pm: PackageManager,
-  projectName: string,
-  projectPath: string,
-): Promise<void> {
-  execCommand(
-    `${getPackageManagerCommands(pm).x} -y create-rwsdk@latest ${projectName}`,
-    process.cwd(),
-  );
-  execCommand(getPackageManagerCommands(pm).install, projectPath);
+async function initRedwoodProject(): Promise<void> {
+  npx(`-y create-rwsdk@latest ${projectName}`);
+  install({
+    dependencies: ["@cloudflare/workers-types"],
+  });
   execCommand(`${getPackageManagerCommands(pm).run} dev:init`, projectPath);
-  await initWebsiteProject(pm, projectPath, {
+  await initWebsiteProject(projectPath, {
     scripts: {
       deploy: "tsx --env-file .env ./alchemy.run.ts",
       destroy: "tsx --env-file .env ./alchemy.run.ts --destroy",
@@ -573,24 +542,97 @@ async function initRedwoodProject(
   await appendEnv(projectPath);
 }
 
-async function appendEnv(projectPath: string): Promise<void> {
-  console.log(join(projectPath, ".env"));
-
-  const envContent = await fs.readFile(join(projectPath, ".env"), "utf-8");
-  await fs.writeFile(
-    join(projectPath, ".env"),
-    `${envContent}\nALCHEMY_PASSWORD=change-me`,
+async function initTanstackStartProject(
+  projectName: string,
+  projectPath: string,
+): Promise<void> {
+  npx(
+    `gitpick TanStack/router/tree/main/examples/react/start-basic ${projectName}`,
   );
 
-  const envExampleContent = await fs.readFile(
-    join(projectPath, ".env.example"),
-    "utf-8",
-  );
-  await fs.writeFile(
-    join(projectPath, ".env.example"),
-    `${envExampleContent}\nALCHEMY_PASSWORD=your-alchemy-password`,
-  );
-  // End of Selection
+  await initWebsiteProject(projectPath);
+
+  await Promise.all([
+    rm(join(projectPath, "postcss.config.mjs")),
+    rm(join(projectPath, "tailwind.config.mjs")),
+  ]);
+
+  install({
+    dependencies: ["tailwind-merge@3"],
+    devDependencies: ["tailwindcss@4", "@tailwindcss/vite@latest", "postcss"],
+  });
+
+  await Promise.all([
+    writeTsFile(
+      join(projectPath, "vite.config.ts"),
+      `
+import tailwindcss from "@tailwindcss/vite";
+import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import { cloudflareWorkersDevEnvironmentShim } from "alchemy/cloudflare";
+import { defineConfig, PluginOption } from "vite";
+import tsConfigPaths from "vite-tsconfig-paths";
+
+export default defineConfig({
+	server: {
+		port: 3000,
+	},
+	build: {
+		target: "esnext",
+		rollupOptions: {
+			external: ["node:async_hooks", "cloudflare:workers"],
+		},
+	},
+	plugins: [
+		tailwindcss() as PluginOption,
+		cloudflareWorkersDevEnvironmentShim(),
+		tsConfigPaths({
+			projects: ["./tsconfig.json"],
+		}),
+		tanstackStart({
+			target: "cloudflare-module",
+			tsr: {
+				routeTreeFileHeader: [
+					"/** biome-ignore-all lint/suspicious/noExplicitAny: code generated by @tanstack/react-start */",
+				],
+				quoteStyle: "double",
+			},
+		}),
+	],
+});
+`,
+    ),
+
+    writeCssFile(
+      join(projectPath, "src", "styles", "app.css"),
+      `@import "tailwindcss";
+
+:root {
+	--border: var(--color-zinc-200);
+	--popover: var(--color-white);
+	--popover-foreground: var(--color-zinc-950);
+}
+
+@theme {
+	--font-sans: var(--font-sans, Inter), ui-sans-serif, system-ui, sans-serif,
+		"Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+`,
+    ),
+  ]);
+
+  // await initWebsiteProject(projectPath, {
+  //   entrypoint: "workers/app.ts",
+  //   // tsconfig: "tsconfig.node.json",
+  // });
+
+  // await modifyTsConfig(projectPath, {
+  //   tsconfig: "tsconfig.node.json",
+  // });
+
+  // await modifyJsoncFile(join(projectPath, "tsconfig.json"), {
+  //   "compilerOptions.types": undefined,
+  //   "compilerOptions.noEmit": undefined,
+  // });
 }
 
 interface WebsiteOptions {
@@ -603,27 +645,24 @@ interface WebsiteOptions {
  * Unified initialization function for website projects that use create-cloudflare
  */
 async function initWebsiteProject(
-  pm: PackageManager,
   projectPath: string,
   options: WebsiteOptions = {},
 ): Promise<void> {
-  const commands = getPackageManagerCommands(pm);
-
   await createEnvTs(projectPath);
   await cleanupWrangler(projectPath);
   await modifyTsConfig(projectPath, options);
-  await modifyPackageJson(projectPath, pm, options?.scripts);
+  await modifyPackageJson(projectPath, options?.scripts);
 
   // Create alchemy.run.ts
   await initWranglerRunTs(projectPath, options);
 
-  // Install alchemy dependencies (always include Workers types for Cloudflare Workers projects)
-  const deps = `@cloudflare/workers-types alchemy${process.env.NODE_ENV === "test" ? "@file:../../alchemy" : ""}`;
-
-  // Add tsx for non-bun package managers
-  const alchemyDeps = pm === "bun" ? deps : `${deps} tsx`;
-
-  execCommand(`${commands.addDev} ${alchemyDeps}`, projectPath);
+  install({
+    devDependencies: [
+      "@cloudflare/workers-types",
+      `alchemy@${process.env.NODE_ENV === "test" ? "@file:../../alchemy" : ""}`,
+      ...(pm === "bun" ? ["tsx"] : []),
+    ],
+  });
 }
 
 async function initWranglerRunTs(
@@ -633,7 +672,7 @@ async function initWranglerRunTs(
   },
 ): Promise<void> {
   // Create alchemy.run.ts
-  await fs.writeFile(
+  await writeTsFile(
     join(projectPath, "alchemy.run.ts"),
     createAlchemyRunTs(projectName, options),
   );
@@ -739,14 +778,34 @@ await app.finalize();
 `;
 }
 
+async function appendEnv(projectPath: string): Promise<void> {
+  console.log(join(projectPath, ".env"));
+
+  const envContent = await fs.readFile(join(projectPath, ".env"), "utf-8");
+  await fs.writeFile(
+    join(projectPath, ".env"),
+    `${envContent}\nALCHEMY_PASSWORD=change-me`,
+  );
+
+  const envExampleContent = await fs.readFile(
+    join(projectPath, ".env.example"),
+    "utf-8",
+  );
+  await fs.writeFile(
+    join(projectPath, ".env.example"),
+    `${envExampleContent}\nALCHEMY_PASSWORD=your-alchemy-password`,
+  );
+  // End of Selection
+}
+
 async function createEnvTs(
   projectPath: string,
   identifier = "worker",
 ): Promise<void> {
-  // Create env.ts for proper typing
+  // Create env.d.ts for proper typing
   await fs.mkdir(join(projectPath, "types"), { recursive: true });
-  await fs.writeFile(
-    join(projectPath, "types", "env.ts"),
+  await writeTsFile(
+    join(projectPath, "types", "env.d.ts"),
     `// This file infers types for the cloudflare:workers environment from your Alchemy Worker.
 // @see https://alchemy.run/docs/concepts/bindings.html#type-safe-bindings
 
@@ -764,6 +823,35 @@ declare module "cloudflare:workers" {
   }
 }
 `,
+  );
+}
+
+async function writeJsonFile(file: string, content: string): Promise<void> {
+  await writePrettyFile(file, content, "json");
+}
+
+async function writeTsFile(file: string, content: string): Promise<void> {
+  await writePrettyFile(file, content, "typescript");
+}
+
+async function writeCssFile(file: string, content: string): Promise<void> {
+  await writePrettyFile(file, content, "css");
+}
+
+async function writePrettyFile(
+  file: string,
+  content: string,
+  parser: prettier.LiteralUnion<prettier.BuiltInParserName, string>,
+): Promise<void> {
+  await fs.writeFile(
+    file,
+    await prettier.format(content, {
+      parser,
+      tabWidth: 2,
+      useTabs: false,
+      semi: true,
+      singleQuote: false,
+    }),
   );
 }
 
@@ -810,7 +898,7 @@ async function modifyJsoncFile(
  */
 async function modifyTsConfig(
   projectPath: string,
-  options: WebsiteOptions,
+  options: WebsiteOptions = {},
 ): Promise<void> {
   const tsconfigPath = join(projectPath, options.tsconfig ?? "tsconfig.json");
 
@@ -824,7 +912,7 @@ async function modifyTsConfig(
   const typesEdit = modify(
     tsconfigContent,
     ["compilerOptions", "types"],
-    ["@cloudflare/workers-types"],
+    ["@cloudflare/workers-types", "./types/env.d.ts"],
     {
       formattingOptions: {
         tabSize: 2,
@@ -855,7 +943,7 @@ async function modifyTsConfig(
   );
 
   // Add required files if they don't already exist
-  if (!newIncludes.includes("types/env.ts")) {
+  if (!newIncludes.includes("types/env.d.ts")) {
     newIncludes.push("types/**/*.ts");
   }
   if (!newIncludes.includes("alchemy.run.ts")) {
@@ -895,7 +983,6 @@ async function modifyTsConfig(
  */
 async function modifyPackageJson(
   projectPath: string,
-  pm: PackageManager,
   scripts?: Record<string, string>,
 ): Promise<void> {
   const packageJsonPath = join(projectPath, "package.json");
@@ -1003,7 +1090,7 @@ async function rm(path: string): Promise<void> {
   }
 }
 
-function execCommand(command: string, cwd: string): void {
+function execCommand(command: string, cwd: string = process.cwd()): void {
   console.log(command);
   try {
     execSync(command, { stdio: "inherit", cwd });
@@ -1011,4 +1098,41 @@ function execCommand(command: string, cwd: string): void {
     console.error(`Failed to execute: ${command}`);
     process.exit(1);
   }
+}
+
+function install({
+  dependencies,
+  devDependencies,
+  cwd = projectPath,
+}: {
+  dependencies?: string[];
+  devDependencies?: string[];
+  cwd?: string;
+}) {
+  if (!dependencies && !devDependencies) {
+    execCommand(getPackageManagerCommands(pm).install, cwd);
+  }
+  if (dependencies) {
+    execCommand(
+      `${getPackageManagerCommands(pm).add} ${dependencies.join(" ")}`,
+      cwd,
+    );
+  }
+  if (devDependencies) {
+    execCommand(
+      `${getPackageManagerCommands(pm).addDev} ${devDependencies.join(" ")}`,
+      cwd,
+    );
+  }
+}
+
+function npx(command: string, cwd: string = process.cwd()): void {
+  execCommand(
+    `${getPackageManagerCommands(pm).x} ${options.yes ? "--yes" : ""} ${command}`,
+    cwd,
+  );
+}
+
+function create(command: string, cwd: string = process.cwd()): void {
+  execCommand(`${getPackageManagerCommands(pm).create} ${command}`, cwd);
 }
