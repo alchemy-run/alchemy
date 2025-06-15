@@ -8,6 +8,8 @@ import * as fs from "node:fs/promises";
 import { join, resolve } from "node:path";
 import prettier from "prettier";
 
+const isTest = process.env.NODE_ENV === "test";
+
 // Package manager detection
 type PackageManager = "bun" | "npm" | "pnpm" | "yarn";
 
@@ -60,21 +62,24 @@ const templates: Template[] = [
   },
   {
     name: "nuxt",
-    description: "Nuxt.js application (coming soon)",
-    init: async () => {
-      console.log("❌ Nuxt template not yet implemented");
-      process.exit(1);
-    },
+    description: "Nuxt.js application",
+    init: initNuxtProject,
   },
 ];
 
 const args = process.argv.slice(2);
 const options: CliOptions = {
-  yes: process.env.NODE_ENV === "test",
+  yes: isTest,
 };
 
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
+
+  // If the argument does NOT start with a dash, treat it as the project name
+  if (!arg.startsWith("-") && !options.name) {
+    options.name = arg;
+    continue;
+  }
 
   if (arg === "--help" || arg === "-h") {
     options.help = true;
@@ -85,6 +90,7 @@ for (let i = 0; i < args.length; i++) {
   } else if (arg === "--overwrite") {
     options.overwrite = true;
   } else if (arg.startsWith("--name=")) {
+    // Still support the legacy --name option for backwards compatibility
     options.name = arg.split("=")[1];
   } else if (arg.startsWith("--template=")) {
     options.template = arg.split("=")[1];
@@ -94,12 +100,12 @@ for (let i = 0; i < args.length; i++) {
 // Handle help and version flags
 if (options.help) {
   console.log(`
-Usage: alchemy [options]
+Usage: alchemy <project-name> [options]
 
 Options:
 -h, --help          Show help
 -v, --version       Show version
---name=<name>       Project name (non-interactive)
+<project-name>      Project name (positional / non-interactive)
 --template=<name>   Template name (non-interactive)
 -y, --yes           Skip confirmations (non-interactive)
 --overwrite         Overwrite existing directory
@@ -201,7 +207,7 @@ if (existsSync(projectPath)) {
 
 console.log(`\n🔨 Creating ${template} project in ${projectPath}...`);
 
-const alchemyVersion = `alchemy@${process.env.NODE_ENV === "test" ? "@file:../../alchemy" : ""}`;
+const alchemyVersion = `alchemy@${isTest ? "@file:../../alchemy" : ""}`;
 
 // Initialize the template
 await selectedTemplate.init(projectName, projectPath);
@@ -243,7 +249,7 @@ async function initTypescriptProject(
   projectName: string,
   projectPath: string,
 ): Promise<void> {
-  await fs.mkdir(projectPath, { recursive: true });
+  await mkdir(projectPath);
 
   const commands = getPackageManagerCommands(pm);
 
@@ -256,7 +262,7 @@ async function initTypescriptProject(
   });
 
   // Create basic project structure
-  await fs.mkdir(join(projectPath, "src"), { recursive: true });
+  await mkdir(projectPath, "src");
 
   // Create worker.ts
   await writeTsFile(
@@ -365,7 +371,7 @@ export default defineConfig({
     exclude: ["test"],
     include: ["types/**/*.ts", "src/**/*.ts"],
   });
-  await fs.mkdir(join(root, "worker"), { recursive: true });
+  await mkdir(root, "worker");
   await writeTsFile(
     join(root, "worker", "index.ts"),
     `export default {
@@ -414,7 +420,7 @@ export default defineConfig({
   );
 
   // Create API route example
-  await fs.mkdir(join(projectPath, "src", "pages", "api"), { recursive: true });
+  await mkdir(projectPath, "src", "pages", "api");
   await writeTsFile(
     join(projectPath, "src", "pages", "api", "hello.ts"),
     `
@@ -604,26 +610,101 @@ export default defineConfig({
 `,
     ),
   ]);
+}
 
-  // await initWebsiteProject(projectPath, {
-  //   entrypoint: "workers/app.ts",
-  //   // tsconfig: "tsconfig.node.json",
-  // });
+async function initNuxtProject(): Promise<void> {
+  // create(
+  //   `cloudflare@latest -- ${projectName} --framework=nuxt --no-git --no-deploy`,
+  // );
+  npx(
+    `nuxi@3.25.1 init nuxt --packageManager npm --no-install --no-gitInit ${isTest ? "--template=ui -M @nuxt/ui" : ""}`,
+  );
+  // npx nuxi@3.25.1 init nuxt --packageManager npm --no-install --no-gitInit
+  /*
+-M, --modules    Nuxt modules to install (comma separated without spaces)
 
-  // await modifyTsConfig(projectPath, {
-  //   tsconfig: "tsconfig.node.json",
-  // });
+  ◻ @nuxt/content – The file-based CMS with support for Markdown, YAML, JSON
+◻ @nuxt/eslint – Project-aware, easy-to-use, extensible and future-proof ESLint integration
+◻ @nuxt/fonts – Add custom web fonts with performance in mind
+◻ @nuxt/icon – Icon module for Nuxt with 200,000+ ready to use icons from Iconify
+◻ @nuxt/image – Add images with progressive processing, lazy-loading, resizing and providers
+support
+◻ @nuxt/scripts – Add 3rd-party scripts without sacrificing performance
+◻ @nuxt/test-utils – Test utilities for Nuxt
+◻ @nuxt/ui – The Intuitive UI Library powered by Reka UI and Tailwind CSS
+*/
 
-  // await modifyJsoncFile(join(projectPath, "tsconfig.json"), {
-  //   "compilerOptions.types": undefined,
-  //   "compilerOptions.noEmit": undefined,
-  // });
+  await initWebsiteProject(projectPath, {
+    scripts: {
+      build: "nuxt build",
+    },
+    include: ["server/**/*.ts"],
+  });
+
+  await writeTsFile(
+    join(projectPath, "nuxt.config.ts"),
+    `// https://nuxt.com/docs/api/configuration/nuxt-config
+export default defineNuxtConfig({
+  compatibilityDate: '2025-05-15',
+  devtools: { enabled: true },
+  nitro: {
+    preset: "cloudflare_module",
+    cloudflare: {
+      deployConfig: true,
+      nodeCompat: true
+    }
+  },
+  modules: ["nitro-cloudflare-dev"],
+});
+`,
+  );
+
+  install({
+    devDependencies: ["nitro-cloudflare-dev"],
+  });
+
+  install();
+
+  await mkdir(projectPath, "server", "api");
+  await writeTsFile(
+    join(projectPath, "server", "api", "hello.ts"),
+    `// see: https://nuxt.com/docs/guide/directory-structure/server
+
+export default defineEventHandler((event) => {
+  return {
+    hello: "world",
+  };
+});
+`,
+  );
+
+  await mkdir(projectPath, "server", "middleware");
+  await writeTsFile(
+    join(projectPath, "server", "middleware", "hello.ts"),
+    `// see: https://nuxt.com/docs/guide/directory-structure/server#server-middleware
+
+export default defineEventHandler((event) => {
+  console.log('New request: ' + getRequestURL(event))
+})
+`,
+  );
+  await writeTsFile(
+    join(projectPath, "server", "middleware", "auth.ts"),
+    `// see: https://nuxt.com/docs/guide/directory-structure/server#server-middleware
+
+export default defineEventHandler((event) => {
+  event.context.auth = { user: 123 }
+});
+`,
+  );
 }
 
 interface WebsiteOptions {
   entrypoint?: string;
   tsconfig?: string;
   scripts?: Record<string, string>;
+  include?: string[];
+  types?: string[];
 }
 
 /**
@@ -669,7 +750,7 @@ function createAlchemyRunTs(
     entrypoint?: string;
   },
 ): string {
-  const adopt = process.env.NODE_ENV === "test" ? "\n  adopt: true," : "";
+  const adopt = isTest ? "\n  adopt: true," : "";
   if (template === "typescript") {
     return `/// <reference types="@types/node" />
 
@@ -764,8 +845,6 @@ await app.finalize();
 }
 
 async function appendEnv(projectPath: string): Promise<void> {
-  console.log(join(projectPath, ".env"));
-
   const envContent = await fs.readFile(join(projectPath, ".env"), "utf-8");
   await fs.writeFile(
     join(projectPath, ".env"),
@@ -788,7 +867,7 @@ async function createEnvTs(
   identifier = "worker",
 ): Promise<void> {
   // Create env.d.ts for proper typing
-  await fs.mkdir(join(projectPath, "types"), { recursive: true });
+  await mkdir(projectPath, "types");
   await writeTsFile(
     join(projectPath, "types", "env.d.ts"),
     `// This file infers types for the cloudflare:workers environment from your Alchemy Worker.
@@ -897,7 +976,7 @@ async function modifyTsConfig(
   const typesEdit = modify(
     tsconfigContent,
     ["compilerOptions", "types"],
-    ["@cloudflare/workers-types", "./types/env.d.ts"],
+    ["@cloudflare/workers-types", "./types/env.d.ts", ...(options.types ?? [])],
     {
       formattingOptions: {
         tabSize: 2,
@@ -933,6 +1012,9 @@ async function modifyTsConfig(
   }
   if (!newIncludes.includes("alchemy.run.ts")) {
     newIncludes.push("alchemy.run.ts");
+  }
+  if (options.include) {
+    newIncludes.push(...options.include);
   }
 
   // Update the includes array
@@ -1075,6 +1157,12 @@ async function rm(path: string): Promise<void> {
   }
 }
 
+async function mkdir(...path: string[]): Promise<void> {
+  await fs.mkdir(join(...path), {
+    recursive: true,
+  });
+}
+
 function execCommand(command: string, cwd: string = process.cwd()): void {
   console.log(command);
   try {
@@ -1093,7 +1181,7 @@ function install({
   dependencies?: string[];
   devDependencies?: string[];
   cwd?: string;
-}) {
+} = {}) {
   if (!dependencies && !devDependencies) {
     execCommand(getPackageManagerCommands(pm).install, cwd);
   }
@@ -1119,5 +1207,8 @@ function npx(command: string, cwd: string = process.cwd()): void {
 }
 
 function create(command: string, cwd: string = process.cwd()): void {
-  execCommand(`${getPackageManagerCommands(pm).create} ${command}`, cwd);
+  execCommand(
+    `${getPackageManagerCommands(pm).create} ${options.yes ? "-y" : ""} ${command}`,
+    cwd,
+  );
 }

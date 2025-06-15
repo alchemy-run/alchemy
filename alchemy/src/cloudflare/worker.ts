@@ -854,6 +854,7 @@ export const _Worker = Resource(
         props.script ??
         (await bundleWorkerScript({
           ...props,
+          name: workerName,
           compatibilityDate,
           compatibilityFlags,
         }));

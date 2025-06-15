@@ -56,6 +56,7 @@ const variants = {
   sveltekit: "--template=sveltekit",
   rwsdk: "--template=rwsdk",
   "tanstack-start": "--template=tanstack-start",
+  nuxt: "--template=nuxt",
 };
 
 describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
@@ -80,7 +81,7 @@ describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
         // Create the project using CLI - run from .smoke directory
         console.log(`Creating ${templateName} project...`);
         const createResult = await runCommand(
-          `bun ${cliPath} --name=${templateName} ${templateArg} --yes`,
+          `bun ${cliPath} ${templateName} ${templateArg} --yes`,
           smokeDir, // Run from .smoke directory so project is created there
           {
             NODE_ENV: "test",
