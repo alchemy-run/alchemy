@@ -10,7 +10,7 @@
     "directory": "alchemy"
   },
   "scripts": {
-    "build:cli": "esbuild bin/create-alchemy.ts --bundle --platform=node --target=node18 --outfile=lib/create-alchemy.js --format=esm --banner:js='#!/usr/bin/env node' && chmod +x lib/create-alchemy.js",
+    "build:cli": "esbuild bin/create-alchemy.ts --bundle --platform=node --target=node18 --outfile=lib/create-alchemy.js --format=esm && chmod +x lib/create-alchemy.js",
     "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && bun run build:cli",
     "docs:gen": "rm -rf ./docs && typedoc",
     "postbuild": "cpx 'src/**/*/types.d.ts' lib",
