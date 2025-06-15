@@ -1,5 +1,5 @@
 import { apply } from "./apply.ts";
-import type { Context } from "./context.ts";
+import type { Context, DevContext } from "./context.ts";
 import { Scope as _Scope, type Scope } from "./scope.ts";
 import { logger } from "./util/logger.ts";
 
@@ -99,8 +99,11 @@ type ResourceLifecycleHandler = (
   props: any,
 ) => Promise<Resource<string>>;
 
-// separate type since we may want to use a different handler for local resources
-type LocalResourceLifecycleHandler = ResourceLifecycleHandler;
+type LocalResourceLifecycleHandler = (
+  this: DevContext<any, any>,
+  id: string,
+  props: any,
+) => Promise<Resource<string>>;
 
 const localModeHandlerUnavailable: LocalResourceLifecycleHandler & {
   [IsInvalidHandler]: true;

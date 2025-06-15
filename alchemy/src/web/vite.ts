@@ -1,7 +1,7 @@
 import { exec } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { Folder } from "../fs/folder.ts";
 import { StaticJsonFile } from "../fs/static-json-file.ts";
 import { StaticTypeScriptFile } from "../fs/static-typescript-file.ts";
@@ -137,7 +137,7 @@ export const ViteProject = LocalOnlyResource(
     alwaysUpdate: true,
   },
   async function (
-    this: Context<ViteProject>,
+    this: DevContext<ViteProject>,
     id: string,
     props: ViteProjectProps,
   ): Promise<ViteProject> {

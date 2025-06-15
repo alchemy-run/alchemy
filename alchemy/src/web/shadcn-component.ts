@@ -2,7 +2,7 @@ import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { LocalOnlyResource, type Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 
@@ -42,7 +42,7 @@ export interface ShadcnComponent extends ShadcnComponentProps, Resource {
 export const ShadcnComponent = LocalOnlyResource(
   "project::ShadcnComponent",
   async function (
-    this: Context<ShadcnComponent>,
+    this: DevContext<ShadcnComponent>,
     _id: string,
     props: ShadcnComponentProps,
   ): Promise<ShadcnComponent> {

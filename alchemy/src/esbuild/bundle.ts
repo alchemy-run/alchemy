@@ -2,7 +2,7 @@ import type esbuild from "esbuild";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { LocalOnlyResource, type Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 
@@ -116,7 +116,7 @@ export const Bundle = LocalOnlyResource(
     alwaysUpdate: true,
   },
   async function <Props extends BundleProps>(
-    this: Context<Bundle<any>>,
+    this: DevContext<Bundle<any>>,
     _id: string,
     props: Props,
   ): Promise<Bundle<Props>> {

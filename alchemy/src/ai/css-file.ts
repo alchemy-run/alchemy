@@ -1,5 +1,5 @@
 import { generateText } from "ai";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { StaticCSSFile } from "../fs/static-css-file.ts";
 import { LocalOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
@@ -150,7 +150,7 @@ const DEFAULT_CSS_SYSTEM_PROMPT =
 export const CSSFile = LocalOnlyResource(
   "ai::CSSFile",
   async function (
-    this: Context<CSSFile>,
+    this: DevContext<CSSFile>,
     _id: string,
     props: CSSFileProps,
   ): Promise<CSSFile> {

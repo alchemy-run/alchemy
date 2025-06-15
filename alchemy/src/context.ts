@@ -16,6 +16,14 @@ export type Context<
   Props extends ResourceProps = ResourceProps,
 > = CreateContext<Out> | UpdateContext<Out, Props> | DeleteContext<Out, Props>;
 
+export type DevContext<
+  Out extends Resource,
+  Props extends ResourceProps = ResourceProps,
+> =
+  | Context<Out, Props>
+  | DevStartContext<Out, Props>
+  | DevStopContext<Out, Props>;
+
 export interface CreateContext<Out extends Resource> extends BaseContext<Out> {
   phase: "create";
   output?: undefined;
@@ -40,6 +48,22 @@ export interface DeleteContext<
   props: Props;
 }
 
+export interface DevStartContext<
+  Out extends Resource,
+  Props extends ResourceProps = ResourceProps,
+> extends BaseContext<Out> {
+  phase: "dev:start";
+  output: Out;
+  props: Props;
+}
+export interface DevStopContext<
+  Out extends Resource,
+  Props extends ResourceProps = ResourceProps,
+> extends BaseContext<Out> {
+  phase: "dev:stop";
+  output: Out;
+  props: Props;
+}
 export interface BaseContext<Out extends Resource> {
   quiet: boolean;
   stage: string;

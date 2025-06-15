@@ -1,5 +1,5 @@
 import { generateText } from "ai";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { StaticVueFile } from "../fs/static-vue-file.ts";
 import { LocalOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
@@ -145,7 +145,7 @@ const DEFAULT_VUE_SYSTEM_PROMPT =
 export const VueFile = LocalOnlyResource(
   "ai::VueFile",
   async function (
-    this: Context<VueFile>,
+    this: DevContext<VueFile>,
     _id: string,
     props: VueFileProps,
   ): Promise<VueFile> {

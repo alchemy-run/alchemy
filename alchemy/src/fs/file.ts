@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { LocalOnlyResource, type Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 import { logger } from "../util/logger.ts";
@@ -158,7 +158,7 @@ export interface File extends Resource<"fs::File"> {
 export const File = LocalOnlyResource(
   "fs::File",
   async function (
-    this: Context<File>,
+    this: DevContext<File>,
     id: string,
     props: {
       path: string;

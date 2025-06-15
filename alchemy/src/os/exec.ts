@@ -1,7 +1,7 @@
 import { spawn, type SpawnOptions } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { LocalOnlyResource, type Resource } from "../resource.ts";
 
 /**
@@ -161,7 +161,7 @@ export const Exec = LocalOnlyResource(
     alwaysUpdate: true,
   },
   async function (
-    this: Context<Exec>,
+    this: DevContext<Exec>,
     id: string,
     props: ExecProps,
   ): Promise<Exec> {

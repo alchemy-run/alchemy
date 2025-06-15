@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { LocalOnlyResource, type Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 import { logger } from "../util/logger.ts";
@@ -63,7 +63,7 @@ export interface CopyFile extends Resource<"fs::CopyFile">, CopyFileProps {
 export const CopyFile = LocalOnlyResource(
   "fs::CopyFile",
   async function (
-    this: Context<CopyFile>,
+    this: DevContext<CopyFile>,
     _id: string,
     props: CopyFileProps,
   ): Promise<CopyFile> {

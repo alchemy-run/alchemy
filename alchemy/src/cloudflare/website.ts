@@ -1,5 +1,6 @@
 import path from "node:path";
 import { alchemy } from "../alchemy.ts";
+import { generateLocalResource } from "../mode.ts";
 import { Exec } from "../os/exec.ts";
 import { Scope } from "../scope.ts";
 import { Assets } from "./assets.ts";
@@ -100,7 +101,7 @@ export async function Website<B extends Bindings>(
   if (props.bindings?.ASSETS) {
     throw new Error("ASSETS binding is reserved for internal use");
   }
-  const wrangler = props.wrangler ?? true;
+  const wrangler = props.wrangler ?? generateLocalResource(Scope.current.mode);
 
   return alchemy.run(
     id,
@@ -115,8 +116,7 @@ export async function Website<B extends Bindings>(
           : typeof wrangler === "string"
             ? wrangler
             : (wrangler?.path ?? "wrangler.jsonc");
-      const wranglerPath =
-        fileName && path.relative(cwd, path.join(cwd, fileName));
+      const wranglerPath = fileName && path.join(cwd, fileName);
       const wranglerMain =
         typeof wrangler === "object"
           ? (wrangler.main ?? props.main)
@@ -153,26 +153,34 @@ export default {
         adopt: true,
       } as WorkerProps<any> & { name: string };
 
-      if (wrangler) {
-        await WranglerJson("wrangler.jsonc", {
-          path: wranglerPath,
-          worker: workerProps,
-          main: wranglerMain,
-          // hard-code the assets directory because we haven't yet included the assets binding
-          assets: {
-            binding: "ASSETS",
-            directory: assetDir,
-          },
-        });
-      }
-
       if (props.command) {
-        await Exec("build", {
-          cwd,
-          command: props.command,
-          env: props.env,
-          memoize: props.memoize,
-        });
+        await alchemy.run(
+          "hidden-localScope",
+          {
+            mode: "dev",
+          },
+          async () => {
+            if (wrangler) {
+              await WranglerJson("wrangler.jsonc", {
+                path: wranglerPath,
+                worker: workerProps,
+                main: wranglerMain,
+                // hard-code the assets directory because we haven't yet included the assets binding
+                assets: {
+                  binding: "ASSETS",
+                  directory: assetDir,
+                },
+              });
+            }
+
+            await Exec("build", {
+              cwd,
+              command: props.command!,
+              env: props.env,
+              memoize: props.memoize,
+            });
+          },
+        );
       }
 
       return (await Worker("worker", {

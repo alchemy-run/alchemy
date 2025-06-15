@@ -1,6 +1,7 @@
 import kleur from "kleur";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { alchemy } from "../../alchemy.ts";
 import { Bundle } from "../../esbuild/bundle.ts";
 import { logger } from "../../util/logger.ts";
 import type { Bindings } from "../bindings.ts";
@@ -95,46 +96,54 @@ export async function bundleWorkerScript<B extends Bindings>(
   }
 
   try {
-    const bundle = await Bundle("bundle", {
-      entryPoint: main,
-      format: props.format === "cjs" ? "cjs" : "esm", // Use the specified format or default to ESM
-      target: "esnext",
-      platform: "node",
-      minify: false,
-      ...(props.bundle || {}),
-      conditions: ["workerd", "worker", "browser"],
-      absWorkingDir: projectRoot,
-      keepNames: true, // Important for Durable Object classes
-      loader: {
-        ".sql": "text",
-        ".json": "json",
-        ...props.bundle?.loader,
+    return await alchemy.run(
+      "hidden-localScope",
+      {
+        mode: "dev",
       },
-      plugins: [
-        wasmPlugin,
-        ...(props.bundle?.plugins ?? []),
-        ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
-        ...(props.bundle?.alias
-          ? [
-              createAliasPlugin({
-                alias: props.bundle?.alias,
-                projectRoot,
-              }),
-            ]
-          : []),
-      ],
-      external: [
-        ...(nodeJsCompatMode === "als" ? external_als : external),
-        ...(props.bundle?.external ?? []),
-      ],
-    });
-    if (bundle.content) {
-      return bundle.content;
-    }
-    if (bundle.path) {
-      return await fs.readFile(bundle.path, "utf-8");
-    }
-    throw new Error("Failed to create bundle");
+      async () => {
+        const bundle = await Bundle("bundle", {
+          entryPoint: main,
+          format: props.format === "cjs" ? "cjs" : "esm", // Use the specified format or default to ESM
+          target: "esnext",
+          platform: "node",
+          minify: false,
+          ...(props.bundle || {}),
+          conditions: ["workerd", "worker", "browser"],
+          absWorkingDir: projectRoot,
+          keepNames: true, // Important for Durable Object classes
+          loader: {
+            ".sql": "text",
+            ".json": "json",
+            ...props.bundle?.loader,
+          },
+          plugins: [
+            wasmPlugin,
+            ...(props.bundle?.plugins ?? []),
+            ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
+            ...(props.bundle?.alias
+              ? [
+                  createAliasPlugin({
+                    alias: props.bundle?.alias,
+                    projectRoot,
+                  }),
+                ]
+              : []),
+          ],
+          external: [
+            ...(nodeJsCompatMode === "als" ? external_als : external),
+            ...(props.bundle?.external ?? []),
+          ],
+        });
+        if (bundle.content) {
+          return bundle.content;
+        }
+        if (bundle.path) {
+          return await fs.readFile(bundle.path, "utf-8");
+        }
+        throw new Error("Failed to create bundle");
+      },
+    );
   } catch (e: any) {
     if (e.message?.includes("No such module 'node:")) {
       throw new Error(

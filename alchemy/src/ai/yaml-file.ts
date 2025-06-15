@@ -1,6 +1,6 @@
 import { generateObject, generateText } from "ai";
 import type { JsonSchema, Type, type } from "arktype";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { StaticYamlFile } from "../fs/static-yaml-file.ts";
 import { LocalOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
@@ -195,7 +195,7 @@ const DEFAULT_YAML_SYSTEM_PROMPT =
  */
 export const YAMLFile = LocalOnlyResource("ai::YAMLFile", async function <
   const T extends Type<any, any> | undefined = undefined,
->(this: Context<YAMLFile<T extends Type<any, any> ? type.infer<T> : any>>, _id: string, props: YAMLFileProps<T>): Promise<
+>(this: DevContext<YAMLFile<T extends Type<any, any> ? type.infer<T> : any>>, _id: string, props: YAMLFileProps<T>): Promise<
   YAMLFile<T extends Type<any, any> ? type.infer<T> : any>
 > {
   // Handle deletion phase

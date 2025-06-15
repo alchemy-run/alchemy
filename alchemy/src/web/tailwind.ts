@@ -1,7 +1,7 @@
 import { exec } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { Folder } from "../fs/folder.ts";
 import { StaticTextFile } from "../fs/static-text-file.ts";
 import { LocalOnlyResource, type Resource } from "../resource.ts";
@@ -80,7 +80,7 @@ export interface TailwindConfig
 export const TailwindConfig = LocalOnlyResource(
   "config::TailwindConfig",
   async function (
-    this: Context<TailwindConfig>,
+    this: DevContext<TailwindConfig>,
     id: string,
     props: TailwindConfigProps,
   ): Promise<TailwindConfig> {

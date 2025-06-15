@@ -1,6 +1,6 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import type { Context } from "../../context.ts";
+import type { DevContext } from "../../context.ts";
 import { LocalOnlyResource, type Resource } from "../../resource.ts";
 import { logger } from "../../util/logger.ts";
 
@@ -14,7 +14,7 @@ export const InstallDependencies = LocalOnlyResource(
     alwaysUpdate: true,
   },
   async function (
-    this: Context<InstallDependencies>,
+    this: DevContext<InstallDependencies>,
     _id: string,
     {
       cwd,

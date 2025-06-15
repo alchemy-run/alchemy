@@ -6,7 +6,7 @@ import { Data } from "../../ai/data.ts";
 import { TypeScriptFile } from "../../ai/typescript-file.ts";
 import { VueFile } from "../../ai/vue-file.ts";
 import { alchemy } from "../../alchemy.ts";
-import type { Context } from "../../context.ts";
+import type { DevContext } from "../../context.ts";
 import { Folder } from "../../fs/folder.ts";
 import { LocalOnlyResource, type Resource } from "../../resource.ts";
 import type { Secret } from "../../secret.ts";
@@ -206,7 +206,7 @@ export interface CustomTheme
 export const CustomTheme = LocalOnlyResource(
   "vitepress::CustomTheme",
   async function (
-    this: Context<CustomTheme>,
+    this: DevContext<CustomTheme>,
     id: string,
     props: CustomThemeProps,
   ): Promise<CustomTheme> {

@@ -1,8 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Context } from "../context.ts";
-import { formatJson } from "../fs/static-json-file.ts";
-import { LiveOnlyResource, type Resource } from "../resource.ts";
+import type { DevContext } from "../context.ts";
+import { LocalOnlyResource, type Resource } from "../resource.ts";
 import { assertNever } from "../util/assert-never.ts";
 import { Self, type Bindings } from "./bindings.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
@@ -79,13 +78,13 @@ export interface WranglerJson
 /**
  * Resource for managing wrangler.json configuration files
  */
-export const WranglerJson = LiveOnlyResource(
+export const WranglerJson = LocalOnlyResource(
   "cloudflare::WranglerJson",
   {
     alwaysUpdate: true,
   },
   async function (
-    this: Context<WranglerJson>,
+    this: DevContext<WranglerJson>,
     _id: string,
     props: WranglerJsonProps,
   ): Promise<WranglerJson> {
@@ -128,8 +127,9 @@ export const WranglerJson = LiveOnlyResource(
       spec.triggers = { crons: worker.crons };
     }
 
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, await formatJson(spec));
+    if (path.dirname(filePath) !== ".") {
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+    }
 
     // Return the resource
     return this({

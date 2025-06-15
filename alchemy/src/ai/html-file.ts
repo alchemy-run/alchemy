@@ -1,5 +1,5 @@
 import { generateText } from "ai";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { StaticHTMLFile } from "../fs/static-html-file.ts";
 import { LocalOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
@@ -147,7 +147,7 @@ const DEFAULT_HTML_SYSTEM_PROMPT =
 export const HTMLFile = LocalOnlyResource(
   "ai::HTMLFile",
   async function (
-    this: Context<HTMLFile>,
+    this: DevContext<HTMLFile>,
     _id: string,
     props: HTMLFileProps,
   ): Promise<HTMLFile> {

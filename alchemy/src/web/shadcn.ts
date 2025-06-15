@@ -1,7 +1,7 @@
 import { exec } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { Folder } from "../fs/folder.ts";
 import { StaticJsonFile } from "../fs/static-json-file.ts";
 import { StaticTypeScriptFile } from "../fs/static-typescript-file.ts";
@@ -120,7 +120,7 @@ export interface ShadcnUI extends ShadcnUIProps, Resource<"project::ShadcnUI"> {
 export const ShadcnUI = LocalOnlyResource(
   "project::ShadcnUI",
   async function (
-    this: Context<ShadcnUI>,
+    this: DevContext<ShadcnUI>,
     _id: string,
     props: ShadcnUIProps,
   ): Promise<ShadcnUI> {

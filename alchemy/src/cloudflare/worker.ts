@@ -1,12 +1,8 @@
+import type { WorkerOptions } from "miniflare";
 import path from "node:path";
-import type { Context } from "../context.ts";
+import type { Context, DevContext } from "../context.ts";
 import type { BundleProps } from "../esbuild/bundle.ts";
-import {
-  InnerResourceScope,
-  LiveOnlyResource,
-  type Resource,
-  ResourceKind,
-} from "../resource.ts";
+import { InnerResourceScope, Resource, ResourceKind } from "../resource.ts";
 import { getBindKey, tryGetBinding } from "../runtime/bind.ts";
 import { isRuntime } from "../runtime/global.ts";
 import { bootstrapPlugin } from "../runtime/plugin.ts";
@@ -263,6 +259,17 @@ export interface BaseWorkerProps<
    * This allows workers to be routed to via dispatch namespace routing rules
    */
   namespace?: string | DispatchNamespaceResource;
+
+  /**
+   * The dev properties for the worker
+   */
+  dev?: {
+    /**
+     * Whether to automatically start the worker when the app is started
+     * @default true
+     */
+    autoStart?: boolean;
+  };
 }
 
 export interface InlineWorkerProps<
@@ -852,7 +859,7 @@ export function Worker<const B extends Bindings>(
 
 export const DEFAULT_COMPATIBILITY_DATE = "2025-04-20";
 
-export const _Worker = LiveOnlyResource(
+export const _Worker = Resource(
   "cloudflare::Worker",
   {
     alwaysUpdate: true,
@@ -1151,6 +1158,156 @@ export const _Worker = LiveOnlyResource(
       crons: props.crons,
       // Include the created routes in the output
       routes: createdRoutes.length > 0 ? createdRoutes : undefined,
+      // Include the dispatch namespace in the output
+      namespace: props.namespace,
+      // phantom property
+      Env: undefined!,
+    } as unknown as Worker<B>);
+  },
+  async function <const B extends Bindings>(
+    this: DevContext<Worker<NoInfer<B>>>,
+    id: string,
+    props: WorkerProps<B>,
+  ) {
+    if (props.noBundle && !props.entrypoint) {
+      throw new Error("entrypoint must be provided when noBundle is true");
+    }
+    await this.scope.orchestrator.addResource(id, false);
+    const port = await this.scope.orchestrator.claimNextAvailablePort(id);
+
+    if (
+      (this.phase === "create" || this.phase === "update") &&
+      (props.dev?.autoStart ?? true)
+    ) {
+      await this.scope.orchestrator.startResource(id);
+    }
+
+    const workerName = props.name ?? id;
+    const compatibilityDate =
+      props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
+    const compatibilityFlags = props.compatibilityFlags ?? [];
+    let url = `http://127.0.0.1:${port}`;
+    if (this.phase === "dev:start") {
+      //todo adoption happens here
+      const scriptBundle =
+        props.script ??
+        ((await bundleWorkerScript({
+          ...props,
+          compatibilityDate,
+          compatibilityFlags,
+        })) as string);
+      //todo upload script happens here
+      const worker: WorkerOptions = {
+        name: workerName,
+        script: scriptBundle,
+        modules: true,
+        compatibilityDate: props.compatibilityDate,
+        compatibilityFlags: props.compatibilityFlags,
+        //todo check if there is any actual route to it or if its only a service worker
+        unsafeDirectSockets: [
+          {
+            host: "localhost",
+            port: port,
+          },
+        ],
+      };
+      const workers = await this.scope.orchestrator.useFromLibrary(
+        "alchemy::miniflare::workers",
+        async () => {
+          return [
+            {
+              name: "__ALCHEMY_EXTERNAL_PROXY_WORKER",
+              routes: ["*/__ALCHEMY_EXTERNAL_PROXY_WORKER"],
+              unsafeEphemeralDurableObjects: true,
+              compatibilityDate: "2024-01-01",
+              modules: true,
+              //todo(michael): implement a DO proxy
+              // ^ this allows for interfacing with DOs running in other miniflare instances
+              script: `
+      export default {
+      	async fetch(request, env) {
+      		return new Response("DO proxy not yet implemented")
+      	}
+      }`,
+            },
+          ] as Array<WorkerOptions>;
+        },
+      );
+      const mf = await this.scope.orchestrator.useFromLibrary(
+        "alchemy::miniflare::instance",
+        async () => {
+          const miniflare = await import("miniflare");
+          return new miniflare.Miniflare({
+            kvPersist: true,
+            workers: workers,
+            liveReload: true,
+            //todo(michael): add inspector port
+          });
+        },
+      );
+      workers.push(worker);
+      mf.setOptions({
+        workers: workers,
+      });
+      await mf.ready;
+      //todo(michael): enable https?
+      //* sanity check in case miniflare uses the wrong port
+      url = (await mf.unsafeGetDirectURL(workerName)).toString();
+    }
+
+    //todo(michael): handle dev:stop
+
+    //todo(michael): I do not like that this is duplicated
+    function exportBindings() {
+      return Object.fromEntries(
+        Object.entries(props.bindings ?? ({} as B)).map(
+          ([bindingName, binding]) => [
+            bindingName,
+            isDurableObjectNamespace(binding) &&
+            binding.scriptName === undefined
+              ? new DurableObjectNamespace(binding.id, {
+                  ...binding,
+                  // re-export this binding mapping to the host worker (this worker)
+                  scriptName: workerName,
+                })
+              : isWorkflow(binding) && binding.scriptName === undefined
+                ? new Workflow(binding.id, {
+                    ...binding,
+                    // re-export this binding mapping to the host worker (this worker)
+                    scriptName: workerName,
+                  })
+                : binding,
+          ],
+        ),
+      );
+    }
+    const now = Date.now();
+
+    return this({
+      ...props,
+      type: "service",
+      id,
+      entrypoint: props.entrypoint,
+      name: workerName,
+      compatibilityDate,
+      compatibilityFlags,
+      format: props.format || "esm", // Include format in the output
+      bindings: exportBindings(),
+      env: props.env,
+      observability: {
+        enabled: false,
+      },
+      createdAt: now,
+      updatedAt: now,
+      eventSources: props.eventSources,
+      url,
+      // Include assets configuration in the output
+      assets: props.assets,
+      // Include cron triggers in the output
+      crons: props.crons,
+      // Include the created routes in the output
+      //todo(michael): are we okay with created routes always existing?
+      routes: undefined,
       // Include the dispatch namespace in the output
       namespace: props.namespace,
       // phantom property

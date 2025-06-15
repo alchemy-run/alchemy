@@ -114,4 +114,9 @@ export const createFallbackLogger = (alchemyInfo: AlchemyInfo): LoggerApi => {
   };
 };
 
-export const formatFQN = (fqn: string) => fqn.split("/").slice(2).join(" > ");
+export const formatFQN = (fqn: string) =>
+  fqn
+    .split("/")
+    .slice(2)
+    .filter((part) => !part.startsWith("hidden-"))
+    .join(" > ");

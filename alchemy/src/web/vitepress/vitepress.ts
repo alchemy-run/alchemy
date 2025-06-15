@@ -2,7 +2,7 @@ import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { Context } from "../../context.ts";
+import type { DevContext } from "../../context.ts";
 import { Folder } from "../../fs/folder.ts";
 import { StaticJsonFile } from "../../fs/static-json-file.ts";
 import { StaticTextFile } from "../../fs/static-text-file.ts";
@@ -107,7 +107,7 @@ export const VitepressProject = LocalOnlyResource(
     alwaysUpdate: true,
   },
   async function (
-    this: Context<VitePressProject>,
+    this: DevContext<VitePressProject>,
     id: string,
     props: VitePressProjectProps,
   ): Promise<VitePressProject> {

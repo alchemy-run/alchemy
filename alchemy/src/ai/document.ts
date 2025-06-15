@@ -1,5 +1,5 @@
 import { generateText, type CoreMessage } from "ai";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { StaticTextFile } from "../fs/static-text-file.ts";
 import { LocalOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
@@ -220,7 +220,7 @@ const DEFAULT_MD_SYSTEM_PROMPT =
 export const Document = LocalOnlyResource(
   "docs::Document",
   async function (
-    this: Context<Document>,
+    this: DevContext<Document>,
     id: string,
     props: DocumentProps,
   ): Promise<Document> {

@@ -1,6 +1,6 @@
 import { generateText } from "ai";
 import prettier from "prettier";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { StaticAstroFile } from "../fs/static-astro-file.ts";
 import { LocalOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
@@ -158,7 +158,7 @@ const DEFAULT_ASTRO_SYSTEM_PROMPT =
 export const AstroFile = LocalOnlyResource(
   "ai::AstroFile",
   async function (
-    this: Context<AstroFile>,
+    this: DevContext<AstroFile>,
     _id: string,
     props: AstroFileProps,
   ): Promise<AstroFile> {

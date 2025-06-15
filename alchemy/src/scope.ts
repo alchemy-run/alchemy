@@ -3,6 +3,7 @@ import type { Phase } from "./alchemy.ts";
 import { destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
 import { DEFAULT_MODE, type ModeType } from "./mode.ts";
+import { DefaultOrchestrator, type Orchestrator } from "./orchestrator.ts";
 import { ResourceID, type PendingResource } from "./resource.ts";
 import type { StateStore, StateStoreType } from "./state.ts";
 import {
@@ -87,6 +88,7 @@ export class Scope {
   private isErrored = false;
   private finalized = false;
   private startedAt = performance.now();
+  private readonly internalOrchestrator: Orchestrator | undefined;
 
   private deferred: (() => Promise<any>)[] = [];
 
@@ -129,11 +131,23 @@ export class Scope {
       this.parent?.stateStore ??
       ((scope) => new FileSystemStateStore(scope));
     this.state = this.stateStore(this);
+    //todo(michael): allow setting custom orchestrators
+    if (this.parent == null) {
+      this.internalOrchestrator = new DefaultOrchestrator(this);
+    }
     if (!options.telemetryClient && !this.parent?.telemetryClient) {
       throw new Error("Telemetry client is required");
     }
     this.telemetryClient =
       options.telemetryClient ?? this.parent?.telemetryClient!;
+  }
+
+  public get orchestrator(): Orchestrator {
+    if (this.parent) {
+      return this.root.orchestrator;
+    }
+    //* if there is no parent, then this is the root and an orchestrator exists
+    return this.internalOrchestrator!;
   }
 
   public get root(): Scope {
@@ -161,7 +175,7 @@ export class Scope {
     if (this.parent) {
       return [...this.parent.chain, ...thisScope];
     }
-    return [...app, this.stage, ...thisScope];
+    return [...app, this.stage, this.mode, ...thisScope];
   }
 
   public fail() {

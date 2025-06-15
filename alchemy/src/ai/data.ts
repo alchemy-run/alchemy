@@ -1,6 +1,6 @@
 import { generateObject, type CoreMessage } from "ai";
 import type { JsonSchema, Type, type } from "arktype";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { LocalOnlyResource, type Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { ark } from "./ark.ts";
@@ -165,7 +165,7 @@ export interface Data<T> extends Resource<"ai::Object"> {
  */
 export const Data = LocalOnlyResource("ai::Object", async function <
   const T extends Type<any, any>,
->(this: Context<Data<any>>, _id: string, props: DataProps<T>): Promise<
+>(this: DevContext<Data<any>>, _id: string, props: DataProps<T>): Promise<
   Data<type.infer<T>>
 > {
   if (this.phase === "delete") {

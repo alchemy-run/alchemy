@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import type { Context } from "../context.ts";
+import type { DevContext } from "../context.ts";
 import { LocalOnlyResource, type Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 
@@ -59,7 +59,7 @@ export interface Folder extends Resource<"fs::Folder"> {
 export const Folder = LocalOnlyResource(
   "fs::Folder",
   async function (
-    this: Context<Folder>,
+    this: DevContext<Folder>,
     id: string,
     props?: FolderProps,
   ): Promise<Folder> {
