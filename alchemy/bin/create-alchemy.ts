@@ -313,6 +313,10 @@ async function initViteProject(
     entrypoint: "worker/index.ts",
   });
 
+  install({
+    devDependencies: ["@cloudflare/vite-plugin"],
+  });
+
   await fs.writeFile(
     join(root, "vite.config.ts"),
     `import { defineConfig } from 'vite'
@@ -381,6 +385,10 @@ async function initAstroProject(
       dev: "astro dev",
       build: "astro check && astro build",
     },
+  });
+
+  install({
+    devDependencies: ["@astrojs/cloudflare"],
   });
 
   // Update astro.config.mjs
@@ -457,6 +465,13 @@ async function initSvelteKitProject(
 
   await initWebsiteProject(projectPath, {
     // entrypoint: "src/routes/index.svelte",
+  });
+
+  install({
+    devDependencies: [
+      "@sveltejs/adapter-cloudflare",
+      "@sveltejs/vite-plugin-svelte",
+    ],
   });
 
   // Update svelte.config.js
@@ -1104,7 +1119,7 @@ async function mkdir(...path: string[]): Promise<void> {
 }
 
 function execCommand(command: string, cwd: string = process.cwd()): void {
-  console.log("execCommand", command, cwd);
+  console.log(command);
   try {
     execSync(command, { stdio: "inherit", cwd });
   } catch {
