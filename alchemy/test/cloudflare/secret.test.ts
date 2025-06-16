@@ -36,7 +36,6 @@ describe("Secret Resource", () => {
       testSecret = await Secret(testId, {
         store: secretsStore,
         value: secret("test-secret-value"),
-        delete: false, // Don't delete the secret when destroyed
       });
 
       expect(testSecret).toBeTruthy();
@@ -44,14 +43,14 @@ describe("Secret Resource", () => {
       expect(testSecret.storeId).toEqual(secretsStore.id);
       expect(testSecret.value.unencrypted).toEqual("test-secret-value");
 
-      // Create a worker that binds to the secrets store and returns the secret value
+      // Create a worker that binds to the secret and returns the secret value
       worker = await Worker(workerName, {
         name: workerName,
         script: `
           export default {
             async fetch(request, env, ctx) {
               try {
-                const secretValue = await env.SECRETS.get("${testId}");
+                const secretValue = await env.TEST_SECRET.get();
                 return new Response(JSON.stringify({
                   secret: secretValue || "not-found",
                   secretName: "${testId}"
@@ -73,7 +72,7 @@ describe("Secret Resource", () => {
         format: "esm",
         url: true,
         bindings: {
-          SECRETS: secretsStore,
+          TEST_SECRET: testSecret,
         },
       });
 
