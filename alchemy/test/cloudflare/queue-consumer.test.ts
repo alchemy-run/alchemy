@@ -54,10 +54,16 @@ describe("QueueConsumer Resource", () => {
       expect(worker.id).toBeTruthy();
       expect(worker.name).toEqual(workerName);
 
-      const consumers = await listQueueConsumers(api, queue.id);
+      let thisConsumer;
+      for (let i = 0; i < 10; i++) {
+        const consumers = await listQueueConsumers(api, queue.id);
 
-      const thisConsumer = consumers.find((c) => c.scriptName === workerName);
-
+        thisConsumer = consumers.find((c) => c.scriptName === workerName);
+        if (thisConsumer) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
       expect(thisConsumer).toBeTruthy();
     } finally {
       // Always clean up, even if test assertions fail
