@@ -1,42 +1,42 @@
 ---
-order: 1.5
-title: Vite.js
-description: Quick guide to initializing and deploying a Vite.js React application to Cloudflare Workers using Alchemy.
+order: 4
+title: Nuxt
+description: Quick guide to initializing and deploying a Nuxt 3 application to Cloudflare Workers using Alchemy.
 ---
 
-# Vite
+# Nuxt
 
-This guide shows how to initialize and deploy a Vite.js React TypeScript application to Cloudflare using Alchemy.
+This guide shows how to initialize and deploy a Nuxt 3 application to Cloudflare using Alchemy.
 
 ## Init
 
-Start by creating a new Vite.js project with Alchemy:
+Start by creating a new Nuxt project with Alchemy:
 
 ::: code-group
 
 ```sh [bun]
-bunx alchemy create my-react-app --template=vite
-cd my-react-app
+bunx alchemy create my-nuxt-app --template=nuxt
+cd my-nuxt-app
 ```
 
 ```sh [npm]
-npx alchemy create my-react-app --template=vite
-cd my-react-app
+npx alchemy create my-nuxt-app --template=nuxt
+cd my-nuxt-app
 ```
 
 ```sh [pnpm]
-pnpm dlx alchemy create my-react-app --template=vite
-cd my-react-app
+pnpm dlx alchemy create my-nuxt-app --template=nuxt
+cd my-nuxt-app
 ```
 
 ```sh [yarn]
-yarn dlx alchemy create my-react-app --template=vite
-cd my-react-app
+yarn dlx alchemy create my-nuxt-app --template=nuxt
+cd my-nuxt-app
 ```
 
 :::
 
-## Log in to Cloudflare
+## Login
 
 Authenticate once with your Cloudflare account:
 
@@ -87,11 +87,11 @@ yarn run deploy
 
 :::
 
-You'll get the live URL of your Vite.js site:
+You'll get the live URL of your Nuxt site:
 
 ```sh
 {
-  url: "https://website.<your-account>.workers.dev",
+  url: "https://website.<your-account>.workers.dev"
 }
 ```
 
@@ -162,12 +162,11 @@ ALCHEMY_PASSWORD=change-me
 /// <reference types="@types/node" />
 
 import alchemy from "alchemy";
-import { Vite } from "alchemy/cloudflare";
+import { Nuxt } from "alchemy/cloudflare";
 
-const app = await alchemy("my-react-app");
+const app = await alchemy("my-nuxt-app");
 
-export const worker = await Vite("website", {
-  main: "./worker/index.ts",
+export const worker = await Nuxt("website", {
   command: "bun run build",
 });
 
@@ -208,15 +207,9 @@ The CLI updated the `tsconfig.json` to include `alchemy.run.ts` and register `@c
 
 ```json
 {
-  "exclude": ["test"],
-  "include": ["types/**/*.ts", "src/**/*.ts", "alchemy.run.ts"],
+  "extends": "./.nuxt/tsconfig.json",
+  "include": ["alchemy.run.ts", "types/**/*.ts", "server/**/*.ts"],
   "compilerOptions": {
-    "target": "es2021",
-    "lib": ["es2021"],
-    "jsx": "react-jsx",
-    "module": "es2022",
-    "moduleResolution": "Bundler",
-    // ... (omitted for brevity)
     "types": ["@cloudflare/workers-types", "./types/env.d.ts"]
   }
 }

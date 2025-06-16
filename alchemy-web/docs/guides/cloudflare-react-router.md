@@ -8,143 +8,35 @@ description: Step-by-step guide to deploying a React Router (formerly Remix) app
 
 This guide demonstrates how to deploy a [React Router](https://reactrouter.com/) (formerly Remix.js) application to Cloudflare with Alchemy.
 
-## Create a new React Router Project
+## Init
 
-Start by creating new React Router project using the [Cloudflare template](https://developers.cloudflare.com/workers/frameworks/framework-guides/react-router/). 
-
-> [!NOTE]
-> This template assumes you're using wrangler. We will adapt it to Alchemy (and learn some Alchemy concepts along the way).
-
+Start by creating a new React Router project using Alchemy:
 
 ::: code-group
 
 ```sh [bun]
-bun create cloudflare@latest my-react-router-app --framework=react-router
+bunx alchemy create my-react-router-app --template=react-router
+cd my-react-router-app
 ```
 
 ```sh [npm]
-npm create cloudflare@latest -- my-react-router-app --framework=react-router
+npx alchemy create my-react-router-app --template=react-router
+cd my-react-router-app
 ```
 
 ```sh [pnpm]
-pnpm create cloudflare@latest my-react-router-app --framework=react-router
+pnpm dlx alchemy create my-react-router-app --template=react-router
+cd my-react-router-app
 ```
 
 ```sh [yarn]
-yarn create cloudflare my-react-router-app --framework=react-router
+yarn dlx alchemy create my-react-router-app --template=react-router
+cd my-react-router-app
 ```
 
 :::
 
-## Remove Unnecessary files
-
-Cloudflare's React Router template uses `wrangler.jsonc` and `wrangler types` to generate types which are not used by Alchemy. Let's remove these.
-
-```sh
-cd ./my-react-router-app
-rm -rf worker-configuration.d.ts wrangler.jsonc
-```
-
-## Install Dependenices
-
-Now install the alchemy and cloudflare dependencies.
-
-::: code-group
-
-```sh [bun]
-bun add alchemy cloudflare
-bun add -D @cloudflare/workers-types
-```
-
-```sh [npm]
-npm install alchemy cloudflare
-bun install --save-dev @cloudflare/workers-types
-```
-
-```sh [pnpm]
-pnpm add alchemy cloudflare
-pnpm add -D @cloudflare/workers-types
-```
-
-```sh [yarn]
-yarn add alchemy cloudflare
-yarn add -D @cloudflare/workers-types
-```
-:::
-
-## Create `alchemy.run.ts`
-
-`alchemy.run.ts` can be thought of as kinda like the `wrangler.jsonc` except in pure TypeScript code.
-
-Let's create it and use the `ReactRouter` from `alchemy/cloudflare` to build and deploy our React Router project.
-
-```ts
-/// <reference types="node" />
-
-import alchemy from "alchemy";
-import { ReactRouter } from "alchemy/cloudflare";
-
-const app = await alchemy("my-react-router-app", {
-  stage: process.env.USER ?? "dev",
-  phase: process.argv.includes("--destroy") ? "destroy" : "up",
-});
-
-export const website = await ReactRouter("website", {
-  main: "./workers/app.ts",
-  command: "bun run build",
-});
-
-console.log({
-  url: website.url,
-});
-
-await app.finalize();
-```
-
-## Configure Alchemy Types
-
-As mentioned, Alchemy does not use `wrangler types` to generate `worker-configuration.d.ts` types. Instead, types are inferred from your Alchemy code directly.
-
-To configure this, first create `./workers/env.ts` with the following content:
-
-```ts
-import type { website } from "../alchemy.run.ts";
-
-export type CloudflareEnv = typeof website.Env;
-
-declare global {
-  type Env = CloudflareEnv
-}
-
-declare module "cloudflare:workers" {
-  namespace Cloudflare {
-    export interface Env extends CloudflareEnv {}
-  }
-}
-```
-
-Then, update `tsconfig.json` to include `./workers/env.ts` and `@cloudflare/workers-types` as global types:
-
-```json
-{
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.node.json" },
-    { "path": "./tsconfig.cloudflare.json" }
-  ],
-  "compilerOptions": {
-    "checkJs": true,
-    "verbatimModuleSyntax": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    // register Alchemy and Cloudflare types globally
-    "types": ["./workers/env.ts", "@cloudflare/workers-types"]
-  }
-}
-```
-
-## Log in to Cloudflare
+## Login
 
 Before you can deploy, you need to authenticate by running `wrangler login`.
 
@@ -165,6 +57,7 @@ pnpm wrangler login
 ```sh [yarn]
 yarn wrangler login
 ```
+
 :::
 
 > [!TIP]
@@ -177,36 +70,162 @@ Now we can run and deploy our Alchemy stack:
 ::: code-group
 
 ```sh [bun]
-bun ./alchemy.run
+bun run deploy
 ```
 
 ```sh [npm]
-npx tsx ./alchemy.run
+npm run deploy
 ```
 
 ```sh [pnpm]
-pnpm tsx ./alchemy.run
+pnpm run deploy
 ```
 
 ```sh [yarn]
-yarn tsx ./alchemy.run
+yarn run deploy
 ```
 
 :::
 
 It will log out the URL of your new React Router website hosted on Cloudflare:
+
 ```
 {
   url: "https://website.${your-sub-domain}.workers.dev",
 }
 ```
 
-## Destroy
+## Local
 
-For illustrative purposes, let's destroy the Alchemy stack.
+::: code-group
 
-```sh
-bun ./alchemy.run.ts --destroy
+```sh [bun]
+bun run dev
 ```
 
-You're done! Happy React-Router'ing 😎
+```sh [npm]
+npm run dev
+```
+
+```sh [pnpm]
+pnpm run dev
+```
+
+```sh [yarn]
+yarn run dev
+```
+
+:::
+
+## Destroy
+
+For illustrative purposes, let's destroy the Alchemy stack:
+
+::: code-group
+
+```sh [bun]
+bun run destroy
+```
+
+```sh [npm]
+npm run destroy
+```
+
+```sh [pnpm]
+pnpm run destroy
+```
+
+```sh [yarn]
+yarn run destroy
+```
+
+:::
+
+## Explore
+
+### `.env`
+
+Alchemy requires a locally set password to encrypt Secrets that are stored in state. Be sure to change this.
+
+> [!NOTE]
+> See the [Secret](../concepts/secret.md) documentation to learn more.
+
+```
+ALCHEMY_PASSWORD=change-me
+```
+
+### `alchemy.run.ts`
+
+The `alchemy.run.ts` file contains your infrastructure setup:
+
+```typescript
+/// <reference types="@types/node" />
+
+import alchemy from "alchemy";
+import { ReactRouter } from "alchemy/cloudflare";
+
+const app = await alchemy("my-react-router-app");
+
+export const worker = await ReactRouter("website", {
+  main: "./workers/app.ts",
+  command: "bun run build",
+});
+
+console.log({
+  url: worker.url,
+});
+
+await app.finalize();
+```
+
+### `types/env.d.ts`
+
+The `types/env.d.ts` file provides type-safe access to Cloudflare bindings:
+
+```typescript
+// This file infers types for the cloudflare:workers environment from your Alchemy Worker.
+// @see https://alchemy.run/docs/concepts/bindings.html#type-safe-bindings
+
+import type { worker } from "../alchemy.run.ts";
+
+export type CloudflareEnv = typeof worker.Env;
+
+declare global {
+  type Env = CloudflareEnv;
+}
+
+declare module "cloudflare:workers" {
+  namespace Cloudflare {
+    export interface Env extends CloudflareEnv {}
+  }
+}
+```
+
+### `tsconfig.node.json`
+
+The CLI updated the `tsconfig.node.json` to include `alchemy.run.ts` and register `@cloudflare/workers-types` + `types/env.d.ts` globally
+
+> [!TIP]
+> The `alchemy.run.ts` script will be run by `node` but still needs to infer the [Binding](../concepts/bindings.md) types which depends on `@cloudflare/workers-types`:
+
+```json
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "vite.config.ts",
+    // ensure our types and alchemy.run.ts are included
+    "types/**/*.ts",
+    "alchemy.run.ts"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "strict": true,
+    // register cloudflare types and our Env types globally
+    "types": ["@cloudflare/workers-types", "./types/env.d.ts"],
+    "lib": ["ES2022"],
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler"
+  }
+}
+```
