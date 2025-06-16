@@ -6,7 +6,6 @@ import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { join, resolve } from "node:path";
-import prettier from "prettier";
 
 const isTest = process.env.NODE_ENV === "test";
 
@@ -22,6 +21,17 @@ interface CliOptions {
   help?: boolean;
   version?: boolean;
 }
+
+// Mutable state that will be initialised inside `createAlchemy()` and
+// reused by the helper utilities defined later in the file. Keeping these
+// at module scope preserves the existing references inside helper
+// functions without requiring any further changes.
+let options: CliOptions = { yes: isTest };
+let pm: PackageManager;
+let alchemyVersion: string;
+let projectPath: string;
+let projectName: string;
+let template: string;
 
 // Define templates
 const templates: Template[] = [
@@ -67,40 +77,19 @@ const templates: Template[] = [
   },
 ];
 
-const args = process.argv.slice(2);
-const options: CliOptions = {
-  yes: isTest,
-};
+// -------------------------------------------------------------------------------------------------
+// Public API – this is invoked by the parent `alchemy` CLI wrapper. It reproduces the original
+// behaviour but relies on the caller to provide the already-parsed command-line options.
+// -------------------------------------------------------------------------------------------------
 
-for (let i = 0; i < args.length; i++) {
-  const arg = args[i];
+export async function createAlchemy(cliOptions: Partial<CliOptions> = {}): Promise<void> {
+  // Merge with defaults so helper functions can keep referencing the global `options`
+  options = { yes: isTest, ...cliOptions };
 
-  // If the argument does NOT start with a dash, treat it as the project name
-  if (!arg.startsWith("-") && !options.name) {
-    options.name = arg;
-    continue;
-  }
-
-  if (arg === "--help" || arg === "-h") {
-    options.help = true;
-  } else if (arg === "--version" || arg === "-v") {
-    options.version = true;
-  } else if (arg === "--yes" || arg === "-y") {
-    options.yes = true;
-  } else if (arg === "--overwrite") {
-    options.overwrite = true;
-  } else if (arg.startsWith("--name=")) {
-    // Still support the legacy --name option for backwards compatibility
-    options.name = arg.split("=")[1];
-  } else if (arg.startsWith("--template=")) {
-    options.template = arg.split("=")[1];
-  }
-}
-
-// Handle help and version flags
-if (options.help) {
-  console.log(`
-Usage: alchemy <project-name> [options]
+  // Handle help / version flags early
+  if (options.help) {
+    console.log(`
+Usage: alchemy create <project-name> [options]
 
 Options:
 -h, --help          Show help
@@ -113,130 +102,113 @@ Options:
 Templates:
 ${templates.map((t) => `  ${t.name.padEnd(15)} ${t.description}`).join("\n")}
 `);
-  process.exit(0);
-}
-
-if (options.version) {
-  console.log("0.28.0");
-  process.exit(0);
-}
-
-console.log("🧪 Welcome to Alchemy!");
-console.log("Creating a new Alchemy project...\n");
-
-const pm = detectPackageManager();
-console.log(`Detected package manager: ${pm}\n`);
-
-// Get project name (interactive or from CLI args)
-let projectName: string;
-if (options.name) {
-  projectName = options.name;
-  console.log(`Using project name: ${projectName}`);
-} else {
-  projectName = await input({
-    message: "What is your project name?",
-    default: "my-alchemy-app",
-    validate: (input) => {
-      if (!input.trim()) return "Project name is required";
-      if (!/^[a-z0-9-_]+$/i.test(input))
-        return "Project name can only contain letters, numbers, hyphens, and underscores";
-      return true;
-    },
-  });
-}
-
-// Validate project name even if provided via CLI
-if (!projectName.trim()) {
-  console.error("Error: Project name is required");
-  process.exit(1);
-}
-if (!/^[a-z0-9-_]+$/i.test(projectName)) {
-  console.error(
-    "Error: Project name can only contain letters, numbers, hyphens, and underscores",
-  );
-  process.exit(1);
-}
-
-// Get template (interactive or from CLI args)
-let template: string;
-if (options.template) {
-  template = options.template;
-  console.log(`Using template: ${template}`);
-  // Validate template exists
-  if (!templates.find((t) => t.name === template)) {
-    console.error(
-      `Error: Template '${template}' not found. Available templates: ${templates.map((t) => t.name).join(", ")}`,
-    );
-    process.exit(1);
+    return;
   }
-} else {
-  template = await select({
-    message: "Which template would you like to use?",
-    choices: templates.map((t) => ({
-      name: t.description,
-      value: t.name,
-    })),
-  });
-}
 
-const selectedTemplate = templates.find((t) => t.name === template)!;
+  if (options.version) {
+    console.log("0.28.0");
+    return;
+  }
 
-// Check if directory exists
-const projectPath = resolve(process.cwd(), projectName);
-if (existsSync(projectPath)) {
-  let overwrite: boolean;
-  if (options.overwrite || options.yes) {
-    overwrite = true;
-    console.log(
-      `Directory ${projectName} already exists. Overwriting due to CLI flag.`,
-    );
+  console.log("🧪 Welcome to Alchemy!");
+  console.log("Creating a new Alchemy project...\n");
+
+  pm = detectPackageManager();
+  console.log(`Detected package manager: ${pm}\n`);
+
+  // Acquire project name – prompt if not provided
+  if (options.name) {
+    projectName = options.name;
+    console.log(`Using project name: ${projectName}`);
   } else {
-    overwrite = await confirm({
-      message: `Directory ${projectName} already exists. Overwrite?`,
-      default: false,
+    projectName = await input({
+      message: "What is your project name?",
+      default: "my-alchemy-app",
+      validate: (input) => {
+        if (!input.trim()) return "Project name is required";
+        if (!/^[a-z0-9-_]+$/i.test(input))
+          return "Project name can only contain letters, numbers, hyphens, and underscores";
+        return true;
+      },
     });
   }
 
-  if (!overwrite) {
-    console.log("Cancelled.");
-    process.exit(0);
+  // Validate project name (even if provided non-interactively)
+  if (!projectName.trim()) {
+    throw new Error("Project name is required");
   }
+  if (!/^[a-z0-9-_]+$/i.test(projectName)) {
+    throw new Error("Project name can only contain letters, numbers, hyphens, and underscores");
+  }
+
+  // Select template – prompt if not provided
+  if (options.template) {
+    template = options.template;
+    console.log(`Using template: ${template}`);
+
+    if (!templates.find((t) => t.name === template)) {
+      throw new Error(
+        `Template '${template}' not found. Available templates: ${templates.map((t) => t.name).join(", ")}`,
+      );
+    }
+  } else {
+    template = await select({
+      message: "Which template would you like to use?",
+      choices: templates.map((t) => ({
+        name: t.description,
+        value: t.name,
+      })),
+    });
+  }
+
+  const selectedTemplate = templates.find((t) => t.name === template)!;
+
+  // Prepare working directory
+  projectPath = resolve(process.cwd(), projectName);
+
+  if (existsSync(projectPath)) {
+    let overwriteConfirmed: boolean;
+    if (options.overwrite || options.yes) {
+      overwriteConfirmed = true;
+      console.log(`Directory ${projectName} already exists. Overwriting due to CLI flag.`);
+    } else {
+      overwriteConfirmed = await confirm({
+        message: `Directory ${projectName} already exists. Overwrite?`,
+        default: false,
+      });
+    }
+
+    if (!overwriteConfirmed) {
+      console.log("Cancelled.");
+      return;
+    }
+  }
+
+  console.log(`\n🔨 Creating ${template} project in ${projectPath}...`);
+
+  alchemyVersion = `alchemy@${isTest ? "@file:../../alchemy" : ""}`;
+
+  // Execute the template initialisation
+  await selectedTemplate.init(projectName, projectPath);
+
+  // Ensure a .gitignore exists
+  const gitignorePath = join(projectPath, ".gitignore");
+  if (!existsSync(gitignorePath)) {
+    await fs.writeFile(
+      gitignorePath,
+      `node_modules/\n.env\n.env.local\ndist/\nlib/\n.wrangler/\nwrangler.jsonc\n*.tsbuildinfo\n`,
+    );
+  }
+
+  console.log(`\n✅ Project ${projectName} created successfully!`);
+  console.log("\n📁 Navigate to your project:");
+  console.log(`   cd ${projectName}`);
+  console.log("\n🚀 Deploy your project:");
+  console.log(`   ${pm} run deploy`);
+  console.log("\n🧹 Destroy your project:");
+  console.log(`   ${pm} run destroy`);
+  console.log("\n📚 Learn more: https://alchemy.run");
 }
-
-// Create project directory
-
-console.log(`\n🔨 Creating ${template} project in ${projectPath}...`);
-
-const alchemyVersion = `alchemy@${isTest ? "@file:../../alchemy" : ""}`;
-
-// Initialize the template
-await selectedTemplate.init(projectName, projectPath);
-
-// Create .gitignore if it doesn't exist
-const gitignorePath = join(projectPath, ".gitignore");
-if (!existsSync(gitignorePath)) {
-  await fs.writeFile(
-    gitignorePath,
-    `node_modules/
-.env
-.env.local
-dist/
-lib/
-.wrangler/
-wrangler.jsonc
-*.tsbuildinfo
-`,
-  );
-}
-
-console.log(`\n✅ Project ${projectName} created successfully!`);
-console.log("\n📁 Navigate to your project:");
-console.log(`   cd ${projectName}`);
-console.log("\n🚀 Deploy your project:");
-console.log(`   ${pm} run deploy`);
-console.log("\n🧹 Destroy your project:");
-console.log(`   ${pm} run destroy`);
-console.log("\n📚 Learn more: https://alchemy.run");
 
 // Template definitions
 interface Template {
@@ -265,7 +237,7 @@ async function initTypescriptProject(
   await mkdir(projectPath, "src");
 
   // Create worker.ts
-  await writeTsFile(
+  await fs.writeFile(
     join(projectPath, "src", "worker.ts"),
     `import type { worker } from "../alchemy.run.ts";
 
@@ -335,7 +307,7 @@ async function initViteProject(
     entrypoint: "worker/index.ts",
   });
 
-  await writeTsFile(
+  await fs.writeFile(
     join(root, "vite.config.ts"),
     `import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -372,7 +344,7 @@ export default defineConfig({
     include: ["types/**/*.ts", "src/**/*.ts"],
   });
   await mkdir(root, "worker");
-  await writeTsFile(
+  await fs.writeFile(
     join(root, "worker", "index.ts"),
     `export default {
   fetch(request) {
@@ -406,7 +378,7 @@ async function initAstroProject(
   });
 
   // Update astro.config.mjs
-  await writeTsFile(
+  await fs.writeFile(
     join(projectPath, "astro.config.mjs"),
     `import { defineConfig } from 'astro/config';
 import cloudflare from '@astrojs/cloudflare';
@@ -421,10 +393,9 @@ export default defineConfig({
 
   // Create API route example
   await mkdir(projectPath, "src", "pages", "api");
-  await writeTsFile(
+  await fs.writeFile(
     join(projectPath, "src", "pages", "api", "hello.ts"),
-    `
-import type { APIRoute } from 'astro';
+    `import type { APIRoute } from 'astro';
 
 export const GET: APIRoute = async ({ request }) => {
   // Access Cloudflare runtime context
@@ -483,10 +454,9 @@ async function initSvelteKitProject(
   });
 
   // Update svelte.config.js
-  await writeTsFile(
+  await fs.writeFile(
     join(projectPath, "svelte.config.js"),
-    `
-import adapter from '@sveltejs/adapter-cloudflare';
+    `import adapter from '@sveltejs/adapter-cloudflare';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
 /** @type {import('@sveltejs/kit').Config} */
@@ -502,7 +472,7 @@ export default config;
   );
 
   // Create vite.config.ts
-  await writeTsFile(
+  await fs.writeFile(
     join(projectPath, "vite.config.ts"),
     `import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
@@ -554,10 +524,9 @@ async function initTanstackStartProject(
   });
 
   await Promise.all([
-    writeTsFile(
+    fs.writeFile(
       join(projectPath, "vite.config.ts"),
-      `
-import tailwindcss from "@tailwindcss/vite";
+      `import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import { cloudflareWorkersDevEnvironmentShim } from "alchemy/cloudflare";
 import { defineConfig, PluginOption } from "vite";
@@ -593,7 +562,7 @@ export default defineConfig({
 `,
     ),
 
-    writeCssFile(
+    fs.writeFile(
       join(projectPath, "src", "styles", "app.css"),
       `@import "tailwindcss";
 
@@ -641,7 +610,7 @@ support
     include: ["server/**/*.ts"],
   });
 
-  await writeTsFile(
+  await fs.writeFile(
     join(projectPath, "nuxt.config.ts"),
     `// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -666,7 +635,7 @@ export default defineNuxtConfig({
   install();
 
   await mkdir(projectPath, "server", "api");
-  await writeTsFile(
+  await fs.writeFile(
     join(projectPath, "server", "api", "hello.ts"),
     `// see: https://nuxt.com/docs/guide/directory-structure/server
 
@@ -679,7 +648,7 @@ export default defineEventHandler((event) => {
   );
 
   await mkdir(projectPath, "server", "middleware");
-  await writeTsFile(
+  await fs.writeFile(
     join(projectPath, "server", "middleware", "hello.ts"),
     `// see: https://nuxt.com/docs/guide/directory-structure/server#server-middleware
 
@@ -688,7 +657,7 @@ export default defineEventHandler((event) => {
 })
 `,
   );
-  await writeTsFile(
+  await fs.writeFile(
     join(projectPath, "server", "middleware", "auth.ts"),
     `// see: https://nuxt.com/docs/guide/directory-structure/server#server-middleware
 
@@ -738,7 +707,7 @@ async function initWranglerRunTs(
   },
 ): Promise<void> {
   // Create alchemy.run.ts
-  await writeTsFile(
+  await fs.writeFile(
     join(projectPath, "alchemy.run.ts"),
     createAlchemyRunTs(projectName, options),
   );
@@ -868,7 +837,7 @@ async function createEnvTs(
 ): Promise<void> {
   // Create env.d.ts for proper typing
   await mkdir(projectPath, "types");
-  await writeTsFile(
+  await fs.writeFile(
     join(projectPath, "types", "env.d.ts"),
     `// This file infers types for the cloudflare:workers environment from your Alchemy Worker.
 // @see https://alchemy.run/docs/concepts/bindings.html#type-safe-bindings
@@ -891,32 +860,7 @@ declare module "cloudflare:workers" {
 }
 
 async function writeJsonFile(file: string, content: any): Promise<void> {
-  await writePrettyFile(file, JSON.stringify(content, null, 2), "json");
-}
-
-async function writeTsFile(file: string, content: string): Promise<void> {
-  await writePrettyFile(file, content, "typescript");
-}
-
-async function writeCssFile(file: string, content: string): Promise<void> {
-  await writePrettyFile(file, content, "css");
-}
-
-async function writePrettyFile(
-  file: string,
-  content: string,
-  parser: prettier.LiteralUnion<prettier.BuiltInParserName, string>,
-): Promise<void> {
-  await fs.writeFile(
-    file,
-    await prettier.format(content, {
-      parser,
-      tabWidth: 2,
-      useTabs: false,
-      semi: true,
-      singleQuote: false,
-    }),
-  );
+  await fs.writeFile(file, JSON.stringify(content, null, 2));
 }
 
 async function cleanupWrangler(projectPath: string): Promise<void> {
@@ -1031,17 +975,7 @@ async function modifyTsConfig(
   }
 
   // Format with Prettier
-  const prettier = await import("prettier");
-  const formatted = await prettier.format(modifiedContent, {
-    parser: "json",
-    tabWidth: 2,
-    useTabs: false,
-    semi: true,
-    singleQuote: false,
-    trailingComma: "none",
-  });
-  modifiedContent = formatted;
-
+  
   await fs.writeFile(tsconfigPath, modifiedContent);
 }
 

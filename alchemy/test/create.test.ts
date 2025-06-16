@@ -10,7 +10,7 @@ import "../src/test/vitest.ts";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const rootDir = join(__dirname, "..", "..", "alchemy");
-const cliPath = join(rootDir, "bin", "create-alchemy.ts");
+const cliPath = join(rootDir, "bin", "alchemy.ts");
 
 async function runCommand(
   command: string,
@@ -81,7 +81,7 @@ describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
         // Create the project using CLI - run from .smoke directory
         console.log(`Creating ${templateName} project...`);
         const createResult = await runCommand(
-          `bun ${cliPath} ${templateName} ${templateArg} --yes`,
+          `bun ${cliPath} create ${templateName} ${templateArg} --yes`,
           smokeDir, // Run from .smoke directory so project is created there
           {
             NODE_ENV: "test",
