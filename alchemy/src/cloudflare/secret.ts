@@ -75,6 +75,11 @@ export interface Secret
   extends Resource<"cloudflare::Secret">,
     Omit<_SecretProps, "delete"> {
   /**
+   * The binding type for Cloudflare Workers
+   */
+  type: "secrets_store_secret";
+
+  /**
    * The name of the secret
    */
   name: string;
@@ -190,6 +195,7 @@ const _Secret = Resource(
     await insertSecret(api, props.store.id, name, props.value);
 
     return this({
+      type: "secrets_store_secret",
       name,
       storeId: props.store.id,
       store: props.store,
@@ -215,7 +221,7 @@ export async function insertSecret(
       {
         name: secretName,
         value: secretValue.unencrypted,
-        scopes: [],
+        scopes: ["workers"],
       },
     ],
   );
