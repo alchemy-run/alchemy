@@ -1,7 +1,7 @@
 import net from "node:net";
 import { alchemy } from "./alchemy.ts";
 import { context } from "./context.ts";
-import type { ResourceID } from "./resource.ts";
+import type { Provider, ResourceID } from "./resource.ts";
 import {
   PROVIDERS,
   ResourceFQN,
@@ -175,7 +175,9 @@ export class DefaultOrchestrator implements Orchestrator {
       status: "success",
     });
 
-    const provider = PROVIDERS.get((resource as PendingResource)[ResourceKind]);
+    const provider: Provider = PROVIDERS.get(
+      (resource as PendingResource)[ResourceKind],
+    );
     if (!provider) {
       throw new Error(`Provider for resource ${resourceId} not found`);
     }
@@ -206,7 +208,7 @@ export class DefaultOrchestrator implements Orchestrator {
         parent: this.scope,
       },
       async (scope) => {
-        return await provider.getHandler().bind(ctx)(resourceId, state.props);
+        return await provider.localHandler.bind(ctx)(resourceId, state.props);
       },
     );
 
@@ -234,7 +236,9 @@ export class DefaultOrchestrator implements Orchestrator {
       status: "success",
     });
 
-    const provider = PROVIDERS.get((resource as PendingResource)[ResourceKind]);
+    const provider: Provider = PROVIDERS.get(
+      (resource as PendingResource)[ResourceKind],
+    );
     if (!provider) {
       throw new Error(`Provider for resource ${resourceId} not found`);
     }
@@ -264,8 +268,8 @@ export class DefaultOrchestrator implements Orchestrator {
         isResource: true,
         parent: this.scope,
       },
-      async (scope) => {
-        return await provider.getHandler().bind(ctx)(resourceId, state.props);
+      async (_scope) => {
+        return await provider.localHandler.bind(ctx)(resourceId, state.props);
       },
     );
 

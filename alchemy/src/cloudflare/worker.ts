@@ -1,4 +1,8 @@
-import type { Miniflare, WorkerOptions } from "miniflare";
+import type {
+  Miniflare,
+  MixedModeConnectionString,
+  WorkerOptions,
+} from "miniflare";
 import path from "node:path";
 import { alchemy } from "../alchemy.ts";
 import type { Context, DevContext } from "../context.ts";
@@ -27,6 +31,7 @@ import {
   type Binding,
   type Bindings,
   Json,
+  Self,
   type WorkerBindingService,
   type WorkerBindingSpec,
 } from "./bindings.ts";
@@ -1172,7 +1177,9 @@ export const _Worker = Resource(
     this: DevContext<Worker<NoInfer<B>>>,
     id: string,
     props: WorkerProps<B>,
-  ) {
+  ): Promise<Worker<B>> {
+    const api = await createCloudflareApi(props);
+
     if (props.noBundle && !props.entrypoint) {
       throw new Error("entrypoint must be provided when noBundle is true");
     }
@@ -1205,7 +1212,6 @@ export const _Worker = Resource(
       if (!resource?.port) {
         throw new Error(`Port not found for resource ${id} during dev:start`);
       }
-      //todo adoption happens here
       const scriptBundle =
         props.script ??
         //todo(michael): IDK if this should be hidden but it makes the logs nicer
@@ -1223,14 +1229,13 @@ export const _Worker = Resource(
               compatibilityFlags,
             })) as string,
         ));
-      //todo upload script happens here
       const worker: WorkerOptions = {
         name: workerName,
         script: scriptBundle,
         modules: true,
         compatibilityDate: props.compatibilityDate,
         compatibilityFlags: props.compatibilityFlags,
-        //todo check if there is any actual route to it or if its only a service worker
+        //todo(michael): check if there is any actual route to it or if its only a service worker
         unsafeDirectSockets: [
           {
             host: "localhost",
@@ -1239,6 +1244,130 @@ export const _Worker = Resource(
         ],
         unsafeInspectorProxy: true,
       };
+
+      const bindings = (props.bindings ?? {}) as Bindings;
+
+      // Convert bindings to the format expected by the API
+      for (const [bindingName, binding] of Object.entries(bindings)) {
+        // Create a copy of the binding to avoid modifying the original
+
+        if (typeof binding === "string") {
+          // (worker.textBlobBindings ??= {})[bindingName] = binding;
+        } else if (binding === Self) {
+          (worker.serviceBindings ??= {})[bindingName] = workerName;
+        } else if (binding.type === "d1") {
+          ((worker.d1Databases ??= {}) as Record<string, string>)[bindingName] =
+            binding.name;
+          // name or UUID?
+          // binding.id;
+        } else if (binding.type === "kv_namespace") {
+          ((worker.kvNamespaces ??= {}) as Record<string, string>)[
+            bindingName
+          ] = "namespaceId" in binding ? binding.namespaceId : binding.id;
+        } else if (binding.type === "service") {
+          (worker.serviceBindings ??= {})[bindingName] =
+            "service" in binding ? binding.service : binding.name;
+        } else if (binding.type === "durable_object_namespace") {
+          //todo(michael): implement this
+          throw new Error(
+            "Durable Object Namespace binding not supported in Alchemy dev mode",
+          );
+        } else if (binding.type === "r2_bucket") {
+          ((worker.r2Buckets ??= {}) as Record<string, string>)[bindingName] =
+            binding.name;
+        } else if (binding.type === "assets") {
+          if (worker.assets) {
+            throw new Error(
+              `There can only be one asset binding, but found ${worker.assets.binding} and ${bindingName}`,
+            );
+          }
+          worker.assets = {
+            directory: binding.path,
+            binding: bindingName,
+            workerName: workerName,
+            ...(props.assets
+              ? {
+                  assetConfig: {
+                    html_handling: props.assets.html_handling,
+                    not_found_handling: props.assets.not_found_handling,
+                    // TODO(sam): parse these files?
+                    // headers: props.assets._headers,
+                    // redirects: props.assets._redirects
+                    // script_id: ?? // is this needed?
+                  },
+                  routerConfig: {
+                    invoke_user_worker_ahead_of_assets:
+                      props.assets?.run_worker_first,
+                  },
+                }
+              : {}),
+          };
+        } else if (binding.type === "secret") {
+          (worker.bindings ??= {})[bindingName] = binding.unencrypted;
+        } else if (binding.type === "workflow") {
+          //todo(michael): implement this
+          throw new Error("Workflow binding not supported in Alchemy dev mode");
+        } else if (binding.type === "queue") {
+          ((worker.queueProducers ??= {}) as Record<string, string>)[
+            bindingName
+          ] = binding.name;
+        } else if (binding.type === "pipeline") {
+          ((worker.pipelines ??= {}) as Record<string, string>)[bindingName] =
+            binding.name;
+        } else if (binding.type === "vectorize") {
+          // @ts-ignore
+          (worker.vectorize ??= {})[bindingName] = {
+            index_name: binding.name,
+            // TODO(sam): where do I get this from?
+            // mixedModeConnectionString: ??
+          };
+        } else if (binding.type === "ai_gateway") {
+          // TODO(sam): can we proxy this to the real deal? e.g. "mixed" mode?
+          throw new Error("AI Gateway binding not supported in Miniflare");
+        } else if (binding.type === "hyperdrive") {
+          //   (options.hyperdrives ??= {})[bindingName] = binding.hyperdriveId
+          // TODO(sam): can we proxy this to the real deal?
+          throw new Error(
+            "Hyperdrive binding not supported in Alchemy dev mode",
+          );
+        } else if (binding.type === "browser") {
+          if (worker.browserRendering) {
+            throw new Error(
+              `Duplicate browser rendering binding: ${bindingName}, already have ${worker.browserRendering.binding}`,
+            );
+          }
+          // TODO(sam): we need a mixed mode connection string
+          worker.browserRendering = {
+            binding: bindingName,
+            // TODO(sam): how do I get this?
+            mixedModeConnectionString: new URL(
+              "http://localhost:8787",
+            ) as MixedModeConnectionString,
+          };
+          throw new Error(
+            "Browser Rendering not yet supported in Alchemy dev mode",
+          );
+        } else if (binding.type === "ai") {
+          (worker.serviceBindings ??= {})[bindingName] =
+            "__ALCHEMY_EXTERNAL_AI_PROXY_WORKER";
+        } else if (binding.type === "json") {
+          (worker.bindings ??= {})[bindingName] = binding.json;
+        } else if (binding.type === "analytics_engine") {
+          (worker.analyticsEngineDatasets ??= {})[bindingName] = {
+            dataset: binding.dataset,
+          };
+        } else if (binding.type === "version_metadata") {
+          // TODO(sam): how to configure this?
+        } else {
+          throw new Error(`Unsupported binding type: ${binding.type}`);
+        }
+      }
+
+      if (props.eventSources) {
+        //todo(michael): implement this
+        throw new Error("Event sources not supported in Alchemy dev mode");
+      }
+
       const workers = await this.scope.orchestrator.useFromLibrary(
         "alchemy::miniflare::workers",
         async () => {
@@ -1257,6 +1386,98 @@ export const _Worker = Resource(
           return new Response("DO proxy not yet implemented")
         }
       }`,
+            },
+            {
+              name: "__ALCHEMY_EXTERNAL_AI_PROXY_WORKER",
+              bindings: {
+                ACCOUNT_ID: api.accountId,
+                API_TOKEN: api.apiToken?.unencrypted,
+              },
+              modules: [
+                {
+                  type: "ESModule",
+                  path: "index.mjs",
+                  contents: `
+import { WorkerEntrypoint } from 'cloudflare:workers';
+
+class Ai {
+    constructor(accountId, apiToken) {
+        this.accountId = accountId;
+        this.apiToken = apiToken;
+        this.baseUrl = 'https://api.cloudflare.com/client/v4';
+    }
+
+    async run(model, input) {
+        const url = \`\${this.baseUrl}/accounts/\${this.accountId}/ai/run/\${model}\`;
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': \`Bearer \${this.apiToken}\`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(input)
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(\`AI API request failed: \${response.status} \${response.statusText}. Response: \${errorText}\`);
+        }
+
+        const result = await response.json();
+        
+        if (result.success === false) {
+            throw new Error(\`AI API returned error: \${JSON.stringify(result.errors)}\`);
+        }
+        
+        return result.result || result;
+    }
+
+    async listModels() {
+        const url = \`\${this.baseUrl}/accounts/\${this.accountId}/ai/models/search\`;
+        
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Authorization': \`Bearer \${this.apiToken}\`,
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(\`AI Models API request failed: \${response.status} \${response.statusText}. Response: \${errorText}\`);
+        }
+
+        const result = await response.json();
+        return result.result || result;
+    }
+}
+
+// Extend WorkerEntrypoint to support multiple RPC arguments
+export default class extends WorkerEntrypoint {
+    constructor(ctx, env) {
+        super(ctx, env);
+        this.ai = new Ai(env.ACCOUNT_ID, env.API_TOKEN);
+    }
+
+    // Standard fetch handler
+    async fetch(request) {
+        return new Response('AI Proxy Service', { status: 200 });
+    }
+    
+    // RPC methods - now support multiple arguments
+    async run(model, input) {
+        return await this.ai.run(model, input);
+    }
+    
+    async listModels() {
+        return await this.ai.listModels();
+    }
+}
+`,
+                },
+              ],
             },
           ] as Array<WorkerOptions>;
         },
