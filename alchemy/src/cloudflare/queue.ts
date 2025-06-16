@@ -176,6 +176,30 @@ export type Queue<Body = unknown> = QueueResource<Body> &
  *   dlq: dlqQueue
  * });
  *
+ * @example
+ * // Create a queue and configure Worker consumer with custom settings
+ * const processingQueue = await Queue("processing-queue", {
+ *   name: "processing-queue"
+ * });
+ *
+ * const processingWorker = await Worker("processor", {
+ *   entrypoint: "./src/processor.ts",
+ *   bindings: {
+ *     QUEUE: processingQueue  // Producer: bind queue for sending messages
+ *   },
+ *   eventSources: [{  // Consumer: configure processing settings
+ *     queue: processingQueue,
+ *     settings: {
+ *       batchSize: 25,           // Process 25 messages at once
+ *       maxConcurrency: 5,       // Allow 5 concurrent invocations
+ *       maxRetries: 3,           // Retry failed messages up to 3 times
+ *       maxWaitTimeMs: 1500,     // Wait up to 1.5 seconds to fill a batch
+ *       retryDelay: 45,          // Wait 45 seconds before retrying failed messages
+ *       deadLetterQueue: "failed-processing" // Send failed messages to DLQ
+ *     }
+ *   }]
+ * });
+ *
  * @see https://developers.cloudflare.com/queues/
  */
 export async function Queue<Body = unknown>(

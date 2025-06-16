@@ -599,6 +599,35 @@ export function WorkerRef<
  *   }
  * });
  *
+ * @example
+ * // Create a worker with queue event sources and custom consumer settings:
+ * const taskQueue = await Queue("task-queue", {
+ *   name: "task-queue"
+ * });
+ * 
+ * const dlq = await Queue("failed-tasks", {
+ *   name: "failed-tasks"
+ * });
+ *
+ * const queueWorker = await Worker("queue-processor", {
+ *   name: "queue-processor",
+ *   entrypoint: "./src/processor.ts",
+ *   bindings: {
+ *     TASK_QUEUE: taskQueue  // Producer: bind queue for sending messages
+ *   },
+ *   eventSources: [{  // Consumer: configure processing settings
+ *     queue: taskQueue,
+ *     settings: {
+ *       batchSize: 15,           // Process 15 messages at once
+ *       maxConcurrency: 3,       // Allow 3 concurrent invocations
+ *       maxRetries: 5,           // Retry failed messages up to 5 times
+ *       maxWaitTimeMs: 2500,     // Wait up to 2.5 seconds to fill a batch
+ *       retryDelay: 60,          // Wait 60 seconds before retrying failed messages
+ *       deadLetterQueue: dlq     // Send failed messages to dead letter queue
+ *     }
+ *   }]
+ * });
+ *
  * @see
  * https://developers.cloudflare.com/workers/
  */

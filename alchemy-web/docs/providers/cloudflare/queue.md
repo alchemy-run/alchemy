@@ -74,3 +74,41 @@ const queue = await Queue("main-queue", {
   dlq: dlq, // or dlq: "failed-messages-dlq"
 });
 ```
+
+## Configure Queue Consumer
+
+Configure how a Worker consumes messages from the queue using eventSources:
+
+```ts
+import { Worker, Queue } from "alchemy/cloudflare";
+
+const queue = await Queue("processing-queue", {
+  name: "processing-queue",
+});
+
+await Worker("processor", {
+  entrypoint: "./src/processor.ts",
+  eventSources: [{
+    queue,
+    settings: {
+      batchSize: 10,           // Process 10 messages at once
+      maxConcurrency: 3,       // Allow 3 concurrent invocations
+      maxRetries: 5,           // Retry failed messages up to 5 times  
+      maxWaitTimeMs: 2000,     // Wait up to 2 seconds to fill a batch
+      retryDelay: 30,          // Wait 30 seconds before retrying failed messages
+      deadLetterQueue: "failed-queue" // Send failed messages to DLQ
+    }
+  }]
+});
+```
+
+### Consumer Settings Options
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `batchSize` | `number` | 10 | Number of messages to deliver in a batch |
+| `maxConcurrency` | `number` | 2 | Maximum number of concurrent consumer worker invocations |
+| `maxRetries` | `number` | 3 | Maximum number of retries for each message |
+| `maxWaitTimeMs` | `number` | 500 | Maximum time in milliseconds to wait for batch to fill |
+| `retryDelay` | `number` | 30 | Time in seconds to delay retry after a failure |
+| `deadLetterQueue` | `string \| Queue` | - | Dead letter queue for messages that exceed max retries |

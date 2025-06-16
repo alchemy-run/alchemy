@@ -85,6 +85,26 @@ export const worker = await Worker("my-worker", {
 });
 ```
 
+### Configure Consumer Settings
+
+You can customize how your Worker consumes messages by providing settings:
+
+```ts
+export const worker = await Worker("my-worker", {
+  eventSources: [{
+    queue,
+    settings: {
+      batchSize: 25,           // Process 25 messages at once
+      maxConcurrency: 5,       // Allow 5 concurrent invocations  
+      maxRetries: 3,           // Retry failed messages up to 3 times
+      maxWaitTimeMs: 1500,     // Wait up to 1.5 seconds to fill a batch
+      retryDelay: 45,          // Wait 45 seconds before retrying failed messages
+      deadLetterQueue: dlq     // Send failed messages to dead letter queue
+    }
+  }]
+});
+```
+
 ## Process Messages Using Consumer
 
 Implement the queue handler using a type-safe batch parameter.

@@ -64,3 +64,58 @@ await Worker("my-worker", {
   },
 });
 ```
+
+## Preferred: Configure via Worker eventSources
+
+The recommended approach is to configure queue consumers through Worker `eventSources`:
+
+```ts
+import { Worker, Queue } from "alchemy/cloudflare";
+
+const queue = await Queue("task-queue", {
+  name: "task-queue",
+});
+
+await Worker("task-processor", {
+  entrypoint: "./src/processor.ts",
+  // Configure queue consumer via eventSources
+  eventSources: [{
+    queue,
+    settings: {
+      batchSize: 20,           // Process 20 messages at once
+      maxConcurrency: 4,       // Allow 4 concurrent invocations
+      maxRetries: 3,           // Retry failed messages up to 3 times
+      maxWaitTimeMs: 1000,     // Wait up to 1 second to fill a batch
+      retryDelay: 45,          // Wait 45 seconds before retrying failed messages
+      deadLetterQueue: "failed-tasks" // Send failed messages to DLQ
+    }
+  }]
+});
+```
+
+## Combined Producer and Consumer
+
+Configure a Worker as both a queue producer and consumer:
+
+```ts
+const queue = await Queue("workflow-queue", {
+  name: "workflow-queue",
+});
+
+await Worker("workflow-processor", {
+  entrypoint: "./src/workflow.ts",
+  bindings: {
+    QUEUE: queue // Producer: bind queue for sending messages
+  },
+  eventSources: [{ // Consumer: configure processing settings
+    queue,
+    settings: {
+      batchSize: 5,
+      maxConcurrency: 2,
+      maxWaitTimeMs: 3000,
+      maxRetries: 2,
+      retryDelay: 60
+    }
+  }]
+});
+```
