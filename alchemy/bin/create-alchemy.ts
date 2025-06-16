@@ -432,12 +432,13 @@ async function initReactRouterProject(
   projectPath: string,
 ): Promise<void> {
   create(
-    `cloudflare@latest ${projectName} -- --framework=react-router --no-git --no-deploy`,
+    `cloudflare@2.49.3 ${projectName} -- --framework=react-router --no-git --no-deploy ${options.yes ? "--yes" : ""}`,
   );
 
   await initWebsiteProject(projectPath, {
     entrypoint: "workers/app.ts",
-    // tsconfig: "tsconfig.node.json",
+    devDependencies: ["@cloudflare/vite-plugin"],
+    tsconfig: "tsconfig.node.json",
   });
 
   await modifyTsConfig(projectPath, {
@@ -448,6 +449,25 @@ async function initReactRouterProject(
     "compilerOptions.types": undefined,
     "compilerOptions.noEmit": undefined,
   });
+
+  await fs.writeFile(
+    join(projectPath, "vite.config.ts"),
+    `import { reactRouter } from "@react-router/dev/vite";
+import { cloudflare } from "@cloudflare/vite-plugin";
+import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from "vite";
+import tsconfigPaths from "vite-tsconfig-paths";
+
+export default defineConfig({
+  plugins: [
+    cloudflare({ viteEnvironment: { name: "ssr" } }),
+    tailwindcss(),
+    reactRouter(),
+    tsconfigPaths(),
+  ],
+});
+`,
+  );
 }
 
 async function initSvelteKitProject(
@@ -716,7 +736,7 @@ async function initWebsiteProject(
     devDependencies: [
       "@cloudflare/workers-types",
       alchemyVersion,
-      ...(pm === "bun" ? ["tsx"] : []),
+      ...(pm === "bun" ? [] : ["tsx"]),
       "typescript",
       ...(options.devDependencies ?? []),
     ],
@@ -730,6 +750,7 @@ async function appendGitignore(projectPath: string): Promise<void> {
       [
         await fs.readFile(join(projectPath, ".gitignore"), "utf-8"),
         ".alchemy/",
+        ".env",
       ].join("\n"),
     );
   } catch {
@@ -1036,7 +1057,15 @@ async function modifyPackageJson(
 
   // Determine deploy command based on package manager
   const deployCommand =
-    pm === "bun" ? "bun ./alchemy.run.ts" : "tsx ./alchemy.run.ts";
+    pm === "bun"
+      ? "bun --env-file=./.env ./alchemy.run.ts"
+      : "tsx --env-file=./.env ./alchemy.run.ts";
+
+  await fs.writeFile(
+    join(projectPath, ".env"),
+    `ALCHEMY_PASSWORD=change-me
+`,
+  );
 
   // Add/update scripts
   if (!packageJson.scripts) {
