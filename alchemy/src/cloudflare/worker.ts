@@ -1201,9 +1201,13 @@ export const _Worker = Resource(
       const mf = await this.scope.orchestrator.unsafeUseFromLibrary<Miniflare>(
         "alchemy::miniflare::instance",
       );
-      const newWorkers = workers.filter((worker) => worker.name !== workerName);
+      for (let i = workers.length - 1; i >= 0; i--) {
+        if (workers[i].name === workerName) {
+          workers.splice(i, 1);
+        }
+      }
       await mf.setOptions({
-        workers: newWorkers,
+        workers,
       });
       await mf.ready;
       //todo(michael): it may make sense to dispose here, if its the last worker
@@ -1497,7 +1501,7 @@ export default class extends WorkerEntrypoint {
         },
       );
       const inspectorPort = props.dev?.startInspector
-        ? await this.scope.orchestrator.claimNextAvailablePortAnonymously(
+        ? await this.scope.orchestrator.claimNextAvailablePort(
             MINIFLARE_DEBUG_PORT,
           )
         : undefined;

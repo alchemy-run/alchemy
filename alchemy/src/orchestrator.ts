@@ -17,8 +17,8 @@ export type Port = number;
 
 //todo(michael): document what all of these do
 export interface Orchestrator {
-  init?(): Promise<void>;
-  shutdown?(): Promise<void>;
+  init(): Promise<void>;
+  shutdown(): Promise<void>;
   listResources(isRunning?: boolean): Promise<
     Array<{
       id: ResourceID;
@@ -35,19 +35,14 @@ export interface Orchestrator {
   queueStartResource(resourceId: ResourceID): Promise<void>;
   stopResource(resourceId: ResourceID): Promise<void>;
   startResource(resourceId: ResourceID): Promise<void>;
-  processPendingStarts?(): Promise<void>;
+  processPendingStarts(): Promise<void>;
   unsafeUseFromLibrary<T = unknown>(key: string): Promise<T>;
   useFromLibrary<T = unknown>(
     key: string,
     defaultValue: (scope: Scope) => Promise<T>,
   ): Promise<T>;
   claimNextAvailablePort(
-    resourceId: ResourceID,
-    startingFrom?: Port,
-    maxPort?: Port,
-  ): Promise<Port>;
-  claimNextAvailablePortAnonymously(
-    key: symbol,
+    key: ResourceID | symbol,
     startingFrom?: Port,
     maxPort?: Port,
   ): Promise<Port>;
@@ -68,7 +63,6 @@ export class DefaultOrchestrator implements Orchestrator {
     ResourceID,
     {
       isRunning: boolean;
-      port?: Port;
     }
   > = new Map();
   private readonly scope: Scope;
@@ -84,7 +78,7 @@ export class DefaultOrchestrator implements Orchestrator {
   // non-first-party resources. (e.g. if somebody wants to make their own CF
   // worker resource they can use our miniflare instance)
   private readonly library: Map<string, unknown> = new Map();
-  private readonly anonymousClaimedPorts: Map<symbol, Port> = new Map();
+  private readonly claimedPorts: Map<symbol, Port> = new Map();
 
   constructor(scope: Scope) {
     this.scope = scope;
@@ -103,8 +97,15 @@ export class DefaultOrchestrator implements Orchestrator {
   }
 
   async shutdown(): Promise<void> {
-    // Process any pending starts before shutdown
-    await this.processPendingStarts();
+    // Stop all running resources
+    const entries = Array.from(this.resources.entries()).reverse();
+    for (const [resourceId, resource] of entries) {
+      if (resource.isRunning) {
+        await this.stopResource(resourceId);
+      }
+    }
+    this.claimedPorts.clear();
+    this.pendingStarts.clear();
   }
 
   async listResources(isRunning?: boolean): Promise<
@@ -118,6 +119,7 @@ export class DefaultOrchestrator implements Orchestrator {
       return Array.from(this.resources.entries()).map(([id, r]) => ({
         id,
         ...r,
+        port: this.claimedPorts.get(Symbol.for(id)),
       }));
     }
     return Array.from(this.resources.entries())
@@ -125,6 +127,7 @@ export class DefaultOrchestrator implements Orchestrator {
       .map(([id, r]) => ({
         id,
         ...r,
+        port: this.claimedPorts.get(Symbol.for(id)),
       }));
   }
 
@@ -140,6 +143,7 @@ export class DefaultOrchestrator implements Orchestrator {
     return {
       id: resourceId,
       ...resource,
+      port: this.claimedPorts.get(Symbol.for(resourceId)),
     };
   }
 
@@ -207,12 +211,12 @@ export class DefaultOrchestrator implements Orchestrator {
         isResource: true,
         parent: this.scope,
       },
-      async (scope) => {
+      async (_scope) => {
         return await provider.localHandler.bind(ctx)(resourceId, state.props);
       },
     );
 
-    this.resources.set(resourceId, { ...resource, isRunning: true });
+    this.resources.set(resourceId, { isRunning: true });
     logger.task(resourceId, {
       prefix: "started",
       prefixColor: "greenBright",
@@ -273,7 +277,7 @@ export class DefaultOrchestrator implements Orchestrator {
       },
     );
 
-    this.resources.set(resourceId, { ...resource, isRunning: true });
+    this.resources.set(resourceId, { isRunning: false });
     logger.task(resourceId, {
       prefix: "stopped",
       prefixColor: "redBright",
@@ -352,7 +356,7 @@ export class DefaultOrchestrator implements Orchestrator {
   }
 
   async claimNextAvailablePort(
-    resourceId: ResourceID,
+    key: ResourceID | symbol,
     startingFrom?: Port,
     maxPort?: Port,
   ): Promise<Port> {
@@ -365,69 +369,36 @@ export class DefaultOrchestrator implements Orchestrator {
     try {
       await prev; // Wait for previous claim to finish
 
-      const resource = this.resources.get(resourceId);
-      if (resource == null) {
-        throw new Error(`Resource ${resourceId} not found in orchestrator`);
-      }
-      if (resource.port) {
-        return resource.port;
-      }
-      let port: Port;
-      let existing: boolean;
-      let start = startingFrom;
-      do {
-        port = await this.getAvailablePort(start, maxPort);
-        existing =
-          Array.from(this.resources.values()).some((r) => r.port === port) ||
-          Array.from(this.anonymousClaimedPorts.values()).includes(port);
-        if (existing) {
-          start = (port + 1) as Port;
-        }
-      } while (existing);
-      // Preserve the existing isRunning state when setting the port
-      this.resources.set(resourceId, { ...resource, port });
-      return port;
-    } finally {
-      // Release the global mutex
-      release!();
-    }
-  }
-
-  async claimNextAvailablePortAnonymously(
-    key: symbol,
-    startingFrom?: Port,
-    maxPort?: Port,
-  ): Promise<Port> {
-    // Global mutex lock: all port claims must be sequential
-    let release: () => void;
-    const prev = this.globalPortClaimMutex;
-    const lock = new Promise<void>((res) => (release = res));
-    this.globalPortClaimMutex = prev.then(() => lock);
-
-    try {
-      await prev; // Wait for previous claim to finish
+      // Convert resource ID to symbol if needed
+      const symbolKey = typeof key === "symbol" ? key : Symbol.for(key);
 
       // Check if we already have a port for this key
-      const existingPort = this.anonymousClaimedPorts.get(key);
+      const existingPort = this.claimedPorts.get(symbolKey);
       if (existingPort) {
         return existingPort;
       }
 
+      // If it's a resource ID, verify the resource exists
+      if (typeof key !== "symbol") {
+        const resource = this.resources.get(key);
+        if (resource == null) {
+          throw new Error(`Resource ${key} not found in orchestrator`);
+        }
+      }
+
       let port: Port;
       let existing: boolean;
       let start = startingFrom;
       do {
         port = await this.getAvailablePort(start, maxPort);
-        existing =
-          Array.from(this.resources.values()).some((r) => r.port === port) ||
-          Array.from(this.anonymousClaimedPorts.values()).includes(port);
+        existing = Array.from(this.claimedPorts.values()).includes(port);
         if (existing) {
           start = (port + 1) as Port;
         }
       } while (existing);
 
-      // Add the port to the anonymous claimed ports map
-      this.anonymousClaimedPorts.set(key, port);
+      // Store the port in the claimed ports map
+      this.claimedPorts.set(symbolKey, port);
       return port;
     } finally {
       // Release the global mutex
