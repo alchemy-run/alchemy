@@ -439,10 +439,6 @@ async function initReactRouterProject(
     // tsconfig: "tsconfig.node.json",
   });
 
-  install({
-    devDependencies: ["@astrojs/check"],
-  });
-
   await modifyTsConfig(projectPath, {
     tsconfig: "tsconfig.node.json",
   });
