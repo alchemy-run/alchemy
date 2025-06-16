@@ -15,6 +15,7 @@ import { logger } from "./util/logger.ts";
 
 export type Port = number;
 
+//todo(michael): document what all of these do
 export interface Orchestrator {
   init?(): Promise<void>;
   shutdown?(): Promise<void>;
@@ -31,15 +32,22 @@ export interface Orchestrator {
     port?: Port;
   }>;
   addResource(resourceId: ResourceID, autoStart?: boolean): Promise<void>;
-  startResource(resourceId: ResourceID): Promise<void>;
+  queueStartResource(resourceId: ResourceID): Promise<void>;
   stopResource(resourceId: ResourceID): Promise<void>;
+  startResource(resourceId: ResourceID): Promise<void>;
   processPendingStarts?(): Promise<void>;
+  unsafeUseFromLibrary<T = unknown>(key: string): Promise<T>;
   useFromLibrary<T = unknown>(
     key: string,
-    defaultValue: () => Promise<T>,
+    defaultValue: (scope: Scope) => Promise<T>,
   ): Promise<T>;
   claimNextAvailablePort(
     resourceId: ResourceID,
+    startingFrom?: Port,
+    maxPort?: Port,
+  ): Promise<Port>;
+  claimNextAvailablePortAnonymously(
+    key: symbol,
     startingFrom?: Port,
     maxPort?: Port,
   ): Promise<Port>;
@@ -76,6 +84,7 @@ export class DefaultOrchestrator implements Orchestrator {
   // non-first-party resources. (e.g. if somebody wants to make their own CF
   // worker resource they can use our miniflare instance)
   private readonly library: Map<string, unknown> = new Map();
+  private readonly anonymousClaimedPorts: Map<symbol, Port> = new Map();
 
   constructor(scope: Scope) {
     this.scope = scope;
@@ -85,7 +94,7 @@ export class DefaultOrchestrator implements Orchestrator {
   async addResource(resourceId: ResourceID, autoStart = true): Promise<void> {
     this.resources.set(resourceId, { isRunning: false });
     if (autoStart) {
-      await this.startResource(resourceId);
+      await this.queueStartResource(resourceId);
     }
     return;
   }
@@ -134,7 +143,12 @@ export class DefaultOrchestrator implements Orchestrator {
     };
   }
 
-  async startResource(resourceId: ResourceID): Promise<void> {
+  //todo(michael):
+  // awaiting this relaly should wait until internal start finishes
+  // but i'm worried that might confused people in dev:start who do choose to
+  // await it and then get stuck since the scope never finishes and thus it
+  // never solves
+  async queueStartResource(resourceId: ResourceID): Promise<void> {
     this.pendingStarts.add(resourceId);
   }
 
@@ -143,15 +157,23 @@ export class DefaultOrchestrator implements Orchestrator {
     this.pendingStarts.clear();
 
     for (const resourceId of pendingStartsCopy) {
-      await this.internalStartResource(resourceId);
+      await this.startResource(resourceId);
     }
   }
 
-  private async internalStartResource(resourceId: ResourceID): Promise<void> {
+  public async startResource(resourceId: ResourceID): Promise<void> {
     const resource = this.scope.resources.get(resourceId);
     if (!resource) {
       throw new Error(`Resource ${resourceId} not found in scope`);
     }
+
+    logger.task(resourceId, {
+      prefix: "starting",
+      prefixColor: "greenBright",
+      resource: formatFQN(resource[ResourceFQN]),
+      message: "Starting Resource Locally",
+      status: "success",
+    });
 
     const provider = PROVIDERS.get((resource as PendingResource)[ResourceKind]);
     if (!provider) {
@@ -188,10 +210,7 @@ export class DefaultOrchestrator implements Orchestrator {
       },
     );
 
-    // Preserve the existing resource state (including port) when setting isRunning
-    const currentResource = this.resources.get(resourceId);
-    this.resources.set(resourceId, { ...currentResource, isRunning: true });
-    // console.log(`RESOURCE: ${resourceId} STARTED`);
+    this.resources.set(resourceId, { ...resource, isRunning: true });
     logger.task(resourceId, {
       prefix: "started",
       prefixColor: "greenBright",
@@ -202,17 +221,80 @@ export class DefaultOrchestrator implements Orchestrator {
   }
 
   async stopResource(resourceId: ResourceID): Promise<void> {
-    this.resources.set(resourceId, { isRunning: false });
+    const resource = this.scope.resources.get(resourceId);
+    if (!resource) {
+      throw new Error(`Resource ${resourceId} not found in scope`);
+    }
+
+    logger.task(resourceId, {
+      prefix: "stopping",
+      prefixColor: "redBright",
+      resource: formatFQN(resource[ResourceFQN]),
+      message: "Stopping Resource Locally",
+      status: "success",
+    });
+
+    const provider = PROVIDERS.get((resource as PendingResource)[ResourceKind]);
+    if (!provider) {
+      throw new Error(`Provider for resource ${resourceId} not found`);
+    }
+
+    const state = await this.scope.state.get(resourceId);
+    if (!state) {
+      throw new Error(`State for resource ${resourceId} not found`);
+    }
+
+    const ctx = context({
+      scope: this.scope,
+      phase: "dev:stop",
+      kind: (resource as PendingResource)[ResourceKind],
+      id: resourceId,
+      fqn: (resource as PendingResource)[ResourceFQN],
+      seq: (resource as PendingResource)[ResourceSeq],
+      props: state.props,
+      state,
+      replace: () => {
+        throw new Error("Cannot replace a resource that is being stopped");
+      },
+    });
+
+    await alchemy.run(
+      resourceId,
+      {
+        isResource: true,
+        parent: this.scope,
+      },
+      async (scope) => {
+        return await provider.getHandler().bind(ctx)(resourceId, state.props);
+      },
+    );
+
+    this.resources.set(resourceId, { ...resource, isRunning: true });
+    logger.task(resourceId, {
+      prefix: "stopped",
+      prefixColor: "redBright",
+      resource: formatFQN(resource[ResourceFQN]),
+      message: "Stopped Resource Locally",
+      status: "success",
+    });
     //todo actually start/stop resource
+  }
+
+  async unsafeUseFromLibrary<T = unknown>(key: string): Promise<T> {
+    const value = this.library.get(key);
+    if (value === undefined) {
+      throw new Error(`Library key ${key} not found`);
+    }
+    return value as T;
   }
 
   async useFromLibrary<T = unknown>(
     key: string,
-    defaultValue: () => Promise<T>,
+    defaultValue: (scope: Scope) => Promise<T>,
   ): Promise<T> {
     const value = this.library.get(key);
     if (value === undefined && defaultValue) {
-      const value = await defaultValue();
+      const value = await defaultValue(this.scope);
       this.library.set(key, value);
       return value;
     }
@@ -291,15 +373,57 @@ export class DefaultOrchestrator implements Orchestrator {
       let start = startingFrom;
       do {
         port = await this.getAvailablePort(start, maxPort);
-        existing = Array.from(this.resources.values()).some(
-          (r) => r.port === port,
-        );
+        existing =
+          Array.from(this.resources.values()).some((r) => r.port === port) ||
+          Array.from(this.anonymousClaimedPorts.values()).includes(port);
         if (existing) {
           start = (port + 1) as Port;
         }
       } while (existing);
       // Preserve the existing isRunning state when setting the port
       this.resources.set(resourceId, { ...resource, port });
+      return port;
+    } finally {
+      // Release the global mutex
+      release!();
+    }
+  }
+
+  async claimNextAvailablePortAnonymously(
+    key: symbol,
+    startingFrom?: Port,
+    maxPort?: Port,
+  ): Promise<Port> {
+    // Global mutex lock: all port claims must be sequential
+    let release: () => void;
+    const prev = this.globalPortClaimMutex;
+    const lock = new Promise<void>((res) => (release = res));
+    this.globalPortClaimMutex = prev.then(() => lock);
+
+    try {
+      await prev; // Wait for previous claim to finish
+
+      // Check if we already have a port for this key
+      const existingPort = this.anonymousClaimedPorts.get(key);
+      if (existingPort) {
+        return existingPort;
+      }
+
+      let port: Port;
+      let existing: boolean;
+      let start = startingFrom;
+      do {
+        port = await this.getAvailablePort(start, maxPort);
+        existing =
+          Array.from(this.resources.values()).some((r) => r.port === port) ||
+          Array.from(this.anonymousClaimedPorts.values()).includes(port);
+        if (existing) {
+          start = (port + 1) as Port;
+        }
+      } while (existing);
+
+      // Add the port to the anonymous claimed ports map
+      this.anonymousClaimedPorts.set(key, port);
       return port;
     } finally {
       // Release the global mutex

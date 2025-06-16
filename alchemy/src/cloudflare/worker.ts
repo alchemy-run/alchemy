@@ -1,5 +1,6 @@
-import type { WorkerOptions } from "miniflare";
+import type { Miniflare, WorkerOptions } from "miniflare";
 import path from "node:path";
+import { alchemy } from "../alchemy.ts";
 import type { Context, DevContext } from "../context.ts";
 import type { BundleProps } from "../esbuild/bundle.ts";
 import { InnerResourceScope, Resource, ResourceKind } from "../resource.ts";
@@ -10,6 +11,7 @@ import { Scope } from "../scope.ts";
 import { Secret, secret } from "../secret.ts";
 import { serializeScope } from "../serde.ts";
 import type { type } from "../type.ts";
+import { formatFQN } from "../util/cli.ts";
 import { getContentType } from "../util/content-type.ts";
 import { logger } from "../util/logger.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
@@ -269,6 +271,7 @@ export interface BaseWorkerProps<
      * @default true
      */
     autoStart?: boolean;
+    startInspector?: boolean;
   };
 }
 
@@ -858,6 +861,7 @@ export function Worker<const B extends Bindings>(
 }
 
 export const DEFAULT_COMPATIBILITY_DATE = "2025-04-20";
+const MINIFLARE_DEBUG_PORT = Symbol.for("alchemy::miniflare::debugPort");
 
 export const _Worker = Resource(
   "cloudflare::Worker",
@@ -1182,9 +1186,20 @@ export const _Worker = Resource(
 
     if (this.phase === "delete") {
       await this.scope.orchestrator.stopResource(id);
+      return this.destroy();
     } else if (this.phase === "dev:stop") {
-      //todo(michael): handle dev:stop
-      await this.scope.orchestrator.stopResource(id);
+      const workers = await this.scope.orchestrator.unsafeUseFromLibrary<
+        Array<WorkerOptions>
+      >("alchemy::miniflare::workers");
+      const mf = await this.scope.orchestrator.unsafeUseFromLibrary<Miniflare>(
+        "alchemy::miniflare::instance",
+      );
+      const newWorkers = workers.filter((worker) => worker.name !== workerName);
+      await mf.setOptions({
+        workers: newWorkers,
+      });
+      await mf.ready;
+      //todo(michael): it may make sense to dispose here, if its the last worker
     } else if (this.phase === "dev:start") {
       const resource = await this.scope.orchestrator.getResource(id);
       if (!resource?.port) {
@@ -1193,11 +1208,21 @@ export const _Worker = Resource(
       //todo adoption happens here
       const scriptBundle =
         props.script ??
-        ((await bundleWorkerScript({
-          ...props,
-          compatibilityDate,
-          compatibilityFlags,
-        })) as string);
+        //todo(michael): IDK if this should be hidden but it makes the logs nicer
+        (await alchemy.run(
+          "hidden-bundle",
+          {
+            mode: "dev",
+            quiet: true,
+            parent: this.scope,
+          },
+          async () =>
+            (await bundleWorkerScript({
+              ...props,
+              compatibilityDate,
+              compatibilityFlags,
+            })) as string,
+        ));
       //todo upload script happens here
       const worker: WorkerOptions = {
         name: workerName,
@@ -1212,6 +1237,7 @@ export const _Worker = Resource(
             port: resource.port,
           },
         ],
+        unsafeInspectorProxy: true,
       };
       const workers = await this.scope.orchestrator.useFromLibrary(
         "alchemy::miniflare::workers",
@@ -1227,9 +1253,9 @@ export const _Worker = Resource(
               // ^ this allows for interfacing with DOs running in other miniflare instances
               script: `
       export default {
-      	async fetch(request, env) {
-      		return new Response("DO proxy not yet implemented")
-      	}
+        async fetch(request, env) {
+          return new Response("DO proxy not yet implemented")
+        }
       }`,
             },
           ] as Array<WorkerOptions>;
@@ -1239,19 +1265,41 @@ export const _Worker = Resource(
         "alchemy::miniflare::instance",
         async () => {
           const miniflare = await import("miniflare");
-          return new miniflare.Miniflare({
+          const mf = new miniflare.Miniflare({
             kvPersist: true,
             workers: workers,
             liveReload: true,
-            //todo(michael): add inspector port
+            host: "127.0.0.1",
+            verbose: true,
           });
+          return mf;
         },
       );
+      const inspectorPort = props.dev?.startInspector
+        ? await this.scope.orchestrator.claimNextAvailablePortAnonymously(
+            MINIFLARE_DEBUG_PORT,
+          )
+        : undefined;
+
       workers.push(worker);
-      mf.setOptions({
+      await mf.setOptions({
         workers: workers,
+        inspectorPort,
       });
+      const debugUrl = await mf.getInspectorURL();
       await mf.ready;
+      if (inspectorPort != null) {
+        logger.task(id, {
+          prefix: "started",
+          prefixColor: "greenBright",
+          resource: formatFQN(this.fqn),
+          //todo(michael):
+          //this is cloudflare's hosted version, so it works in firefox
+          //this exists locally in chrome and we should switch to chrome if offline
+          message: `Debugger Started at: https://devtools.devprod.cloudflare.dev/js_app?ws=${debugUrl.host}/core:user:${workerName}`,
+          status: "success",
+        });
+      }
       //todo(michael): enable https?
       //* sanity check in case miniflare uses the wrong port
       url = (await mf.unsafeGetDirectURL(workerName)).toString();
