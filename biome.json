@@ -10,6 +10,7 @@
       "./src/**/*.ts",
       "./**/package.json",
       "./**/biome.json",
+      "./alchemy/bin/**/*.ts",
       "./alchemy/src/**/*.ts",
       "./alchemy/src/**/*.tsx",
       "./alchemy/src/**/*.js",

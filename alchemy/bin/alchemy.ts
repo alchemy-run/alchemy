@@ -4,10 +4,7 @@ import { createAlchemy } from "./create-alchemy.ts";
 
 // Parse command-line arguments. We allow unknown flags because different
 // sub-commands may accept different sets.
-const {
-  values,
-  positionals,
-} = parseArgs({
+const { values, positionals } = parseArgs({
   allowPositionals: true,
   // We keep the option list flat – sub-commands will decide which ones they care about.
   options: {
@@ -53,11 +50,6 @@ switch (command) {
       break;
     }
 
-    if (!name) {
-      console.error(usage);
-      process.exit(1);
-    }
-
     await createAlchemy({
       name,
       template: values.template as string | undefined,
@@ -73,4 +65,3 @@ switch (command) {
     console.error(`Unknown command: ${command}`);
     process.exit(1);
 }
-

@@ -82,7 +82,9 @@ const templates: Template[] = [
 // behaviour but relies on the caller to provide the already-parsed command-line options.
 // -------------------------------------------------------------------------------------------------
 
-export async function createAlchemy(cliOptions: Partial<CliOptions> = {}): Promise<void> {
+export async function createAlchemy(
+  cliOptions: Partial<CliOptions> = {},
+): Promise<void> {
   // Merge with defaults so helper functions can keep referencing the global `options`
   options = { yes: isTest, ...cliOptions };
 
@@ -138,7 +140,9 @@ ${templates.map((t) => `  ${t.name.padEnd(15)} ${t.description}`).join("\n")}
     throw new Error("Project name is required");
   }
   if (!/^[a-z0-9-_]+$/i.test(projectName)) {
-    throw new Error("Project name can only contain letters, numbers, hyphens, and underscores");
+    throw new Error(
+      "Project name can only contain letters, numbers, hyphens, and underscores",
+    );
   }
 
   // Select template – prompt if not provided
@@ -170,7 +174,9 @@ ${templates.map((t) => `  ${t.name.padEnd(15)} ${t.description}`).join("\n")}
     let overwriteConfirmed: boolean;
     if (options.overwrite || options.yes) {
       overwriteConfirmed = true;
-      console.log(`Directory ${projectName} already exists. Overwriting due to CLI flag.`);
+      console.log(
+        `Directory ${projectName} already exists. Overwriting due to CLI flag.`,
+      );
     } else {
       overwriteConfirmed = await confirm({
         message: `Directory ${projectName} already exists. Overwrite?`,
@@ -196,7 +202,7 @@ ${templates.map((t) => `  ${t.name.padEnd(15)} ${t.description}`).join("\n")}
   if (!existsSync(gitignorePath)) {
     await fs.writeFile(
       gitignorePath,
-      `node_modules/\n.env\n.env.local\ndist/\nlib/\n.wrangler/\nwrangler.jsonc\n*.tsbuildinfo\n`,
+      "node_modules/\n.env\n.env.local\ndist/\nlib/\n.wrangler/\nwrangler.jsonc\n*.tsbuildinfo\n",
     );
   }
 
@@ -975,7 +981,7 @@ async function modifyTsConfig(
   }
 
   // Format with Prettier
-  
+
   await fs.writeFile(tsconfigPath, modifiedContent);
 }
 
