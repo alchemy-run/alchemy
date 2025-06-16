@@ -183,6 +183,7 @@ async function _apply<Out extends Resource>(
         return provider.getHandler().bind(ctx)(resource[ResourceID], props);
       },
     );
+
     if (!quiet) {
       logger.task(resource[ResourceFQN], {
         prefix: phase === "create" ? "created" : "updated",

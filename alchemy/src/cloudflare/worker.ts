@@ -1172,22 +1172,24 @@ export const _Worker = Resource(
     if (props.noBundle && !props.entrypoint) {
       throw new Error("entrypoint must be provided when noBundle is true");
     }
-    await this.scope.orchestrator.addResource(id, false);
-    const port = await this.scope.orchestrator.claimNextAvailablePort(id);
 
-    if (
-      (this.phase === "create" || this.phase === "update") &&
-      (props.dev?.autoStart ?? true)
-    ) {
-      await this.scope.orchestrator.startResource(id);
-    }
+    let url = "";
 
     const workerName = props.name ?? id;
     const compatibilityDate =
       props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
     const compatibilityFlags = props.compatibilityFlags ?? [];
-    let url = `http://127.0.0.1:${port}`;
-    if (this.phase === "dev:start") {
+
+    if (this.phase === "delete") {
+      await this.scope.orchestrator.stopResource(id);
+    } else if (this.phase === "dev:stop") {
+      //todo(michael): handle dev:stop
+      await this.scope.orchestrator.stopResource(id);
+    } else if (this.phase === "dev:start") {
+      const resource = await this.scope.orchestrator.getResource(id);
+      if (!resource?.port) {
+        throw new Error(`Port not found for resource ${id} during dev:start`);
+      }
       //todo adoption happens here
       const scriptBundle =
         props.script ??
@@ -1207,7 +1209,7 @@ export const _Worker = Resource(
         unsafeDirectSockets: [
           {
             host: "localhost",
-            port: port,
+            port: resource.port,
           },
         ],
       };
@@ -1253,9 +1255,14 @@ export const _Worker = Resource(
       //todo(michael): enable https?
       //* sanity check in case miniflare uses the wrong port
       url = (await mf.unsafeGetDirectURL(workerName)).toString();
+    } else {
+      await this.scope.orchestrator.addResource(
+        id,
+        props.dev?.autoStart ?? true,
+      );
+      const port = await this.scope.orchestrator.claimNextAvailablePort(id);
+      url = `http://127.0.0.1:${port}`;
     }
-
-    //todo(michael): handle dev:stop
 
     //todo(michael): I do not like that this is duplicated
     function exportBindings() {

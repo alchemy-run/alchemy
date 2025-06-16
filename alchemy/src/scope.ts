@@ -237,6 +237,13 @@ export class Scope {
     this.finalized = true;
     // trigger and await all deferred promises
     await Promise.all(this.deferred.map((fn) => fn()));
+
+    // Process any pending resource starts after all resources are created/updated
+    // Only do this on the root scope to avoid premature starts during nested scope finalization
+    if (this.mode === "dev" && !this.parent && this.orchestrator) {
+      await this.orchestrator.processPendingStarts?.();
+    }
+
     if (!this.isErrored) {
       // TODO: need to detect if it is in error
       const resourceIds = await this.state.list();

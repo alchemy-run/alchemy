@@ -1,6 +1,17 @@
 import net from "node:net";
+import { alchemy } from "./alchemy.ts";
+import { context } from "./context.ts";
 import type { ResourceID } from "./resource.ts";
+import {
+  PROVIDERS,
+  ResourceFQN,
+  ResourceKind,
+  ResourceSeq,
+  type PendingResource,
+} from "./resource.ts";
 import type { Scope } from "./scope.ts";
+import { formatFQN } from "./util/cli.ts";
+import { logger } from "./util/logger.ts";
 
 export type Port = number;
 
@@ -14,9 +25,15 @@ export interface Orchestrator {
       port?: Port;
     }>
   >;
+  getResource(resourceId: ResourceID): Promise<{
+    id: ResourceID;
+    isRunning: boolean;
+    port?: Port;
+  }>;
   addResource(resourceId: ResourceID, autoStart?: boolean): Promise<void>;
   startResource(resourceId: ResourceID): Promise<void>;
   stopResource(resourceId: ResourceID): Promise<void>;
+  processPendingStarts?(): Promise<void>;
   useFromLibrary<T = unknown>(
     key: string,
     defaultValue: () => Promise<T>,
@@ -47,6 +64,9 @@ export class DefaultOrchestrator implements Orchestrator {
     }
   > = new Map();
   private readonly scope: Scope;
+  private readonly pendingStarts: Set<ResourceID> = new Set();
+  // Global mutex to prevent any concurrent port claims
+  private globalPortClaimMutex: Promise<void> = Promise.resolve();
   //todo(michael):
   // I do not like that this is unknown but we need to be able to
   //provide a place for resource to keep their "junk" like a reference to
@@ -62,15 +82,21 @@ export class DefaultOrchestrator implements Orchestrator {
     this.resources = new Map();
     this.library = new Map();
   }
-  addResource(resourceId: ResourceID, autoStart = true): Promise<void> {
-    this.resources.set(resourceId, { isRunning: autoStart });
-    return Promise.resolve();
+  async addResource(resourceId: ResourceID, autoStart = true): Promise<void> {
+    this.resources.set(resourceId, { isRunning: false });
+    if (autoStart) {
+      await this.startResource(resourceId);
+    }
+    return;
   }
   init(): Promise<void> {
     return Promise.resolve();
   }
 
-  async shutdown(): Promise<void> {}
+  async shutdown(): Promise<void> {
+    // Process any pending starts before shutdown
+    await this.processPendingStarts();
+  }
 
   async listResources(isRunning?: boolean): Promise<
     Array<{
@@ -93,10 +119,86 @@ export class DefaultOrchestrator implements Orchestrator {
       }));
   }
 
+  async getResource(resourceId: ResourceID): Promise<{
+    id: ResourceID;
+    isRunning: boolean;
+    port?: Port;
+  }> {
+    const resource = this.resources.get(resourceId);
+    if (!resource) {
+      throw new Error(`Resource ${resourceId} not found in orchestrator`);
+    }
+    return {
+      id: resourceId,
+      ...resource,
+    };
+  }
+
   async startResource(resourceId: ResourceID): Promise<void> {
-    this.resources.set(resourceId, { isRunning: true });
-    console.log(`RESOURCE: ${resourceId} STARTED`);
-    //todo actually start/stop resource
+    this.pendingStarts.add(resourceId);
+  }
+
+  async processPendingStarts(): Promise<void> {
+    const pendingStartsCopy = Array.from(this.pendingStarts);
+    this.pendingStarts.clear();
+
+    for (const resourceId of pendingStartsCopy) {
+      await this.internalStartResource(resourceId);
+    }
+  }
+
+  private async internalStartResource(resourceId: ResourceID): Promise<void> {
+    const resource = this.scope.resources.get(resourceId);
+    if (!resource) {
+      throw new Error(`Resource ${resourceId} not found in scope`);
+    }
+
+    const provider = PROVIDERS.get((resource as PendingResource)[ResourceKind]);
+    if (!provider) {
+      throw new Error(`Provider for resource ${resourceId} not found`);
+    }
+
+    const state = await this.scope.state.get(resourceId);
+    if (!state) {
+      throw new Error(`State for resource ${resourceId} not found`);
+    }
+
+    const ctx = context({
+      scope: this.scope,
+      phase: "dev:start",
+      kind: (resource as PendingResource)[ResourceKind],
+      id: resourceId,
+      fqn: (resource as PendingResource)[ResourceFQN],
+      seq: (resource as PendingResource)[ResourceSeq],
+      props: state.props,
+      state,
+      replace: () => {
+        throw new Error("Cannot replace a resource that is being started");
+      },
+    });
+
+    await alchemy.run(
+      resourceId,
+      {
+        isResource: true,
+        parent: this.scope,
+      },
+      async (scope) => {
+        return await provider.getHandler().bind(ctx)(resourceId, state.props);
+      },
+    );
+
+    // Preserve the existing resource state (including port) when setting isRunning
+    const currentResource = this.resources.get(resourceId);
+    this.resources.set(resourceId, { ...currentResource, isRunning: true });
+    // console.log(`RESOURCE: ${resourceId} STARTED`);
+    logger.task(resourceId, {
+      prefix: "started",
+      prefixColor: "greenBright",
+      resource: formatFQN(resource[ResourceFQN]),
+      message: "Started Resource Locally",
+      status: "success",
+    });
   }
 
   async stopResource(resourceId: ResourceID): Promise<void> {
@@ -162,30 +264,46 @@ export class DefaultOrchestrator implements Orchestrator {
       });
     });
   }
+
   async claimNextAvailablePort(
     resourceId: ResourceID,
     startingFrom?: Port,
     maxPort?: Port,
   ): Promise<Port> {
-    const resource = this.resources.get(resourceId);
-    if (resource == null) {
-      throw new Error(`Resource ${resourceId} not found in orchestrator`);
-    }
-    if (resource.port) {
-      return resource.port;
-    }
-    let port: Port;
-    let existing: boolean;
-    do {
-      port = await this.getAvailablePort(startingFrom, maxPort);
-      existing = Array.from(this.resources.values()).some(
-        (r) => r.port === port,
-      );
-      if (existing) {
-        startingFrom = (port + 1) as Port;
+    // Global mutex lock: all port claims must be sequential
+    let release: () => void;
+    const prev = this.globalPortClaimMutex;
+    const lock = new Promise<void>((res) => (release = res));
+    this.globalPortClaimMutex = prev.then(() => lock);
+
+    try {
+      await prev; // Wait for previous claim to finish
+
+      const resource = this.resources.get(resourceId);
+      if (resource == null) {
+        throw new Error(`Resource ${resourceId} not found in orchestrator`);
       }
-    } while (existing);
-    this.resources.set(resourceId, { isRunning: true, port });
-    return port;
+      if (resource.port) {
+        return resource.port;
+      }
+      let port: Port;
+      let existing: boolean;
+      let start = startingFrom;
+      do {
+        port = await this.getAvailablePort(start, maxPort);
+        existing = Array.from(this.resources.values()).some(
+          (r) => r.port === port,
+        );
+        if (existing) {
+          start = (port + 1) as Port;
+        }
+      } while (existing);
+      // Preserve the existing isRunning state when setting the port
+      this.resources.set(resourceId, { ...resource, port });
+      return port;
+    } finally {
+      // Release the global mutex
+      release!();
+    }
   }
 }

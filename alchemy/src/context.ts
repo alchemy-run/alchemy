@@ -114,7 +114,7 @@ export function context<
   props,
 }: {
   scope: Scope;
-  phase: "create" | "update" | "delete";
+  phase: "create" | "update" | "delete" | "dev:start" | "dev:stop";
   kind: ResourceKind;
   id: ResourceID;
   fqn: ResourceFQN;
