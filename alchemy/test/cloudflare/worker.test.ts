@@ -1361,8 +1361,23 @@ describe("Worker Resource", () => {
   test("create unversioned and versioned workers independently", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-versions`;
     const versionLabel = "pr-123";
+    let tempDir: string | undefined;
 
     try {
+      // Create a temporary directory to store test assets
+      tempDir = path.join(".out", "alchemy-versioned-assets-test");
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(tempDir, { recursive: true });
+
+      // Create a simple test file
+      const testContent = "Hello from versioned static assets!";
+      await fs.writeFile(path.join(tempDir, "test.txt"), testContent);
+
+      // Create assets resource
+      const assets = await Assets("versioned-static-assets", {
+        path: tempDir,
+      });
+
       // First create a base worker without version
       const baseWorker = await Worker(`${workerName}-base`, {
         name: workerName,
@@ -1392,21 +1407,30 @@ describe("Worker Resource", () => {
       const baseText = await baseResponse.text();
       expect(baseText).toEqual("Hello from base worker!");
 
-      // Now create a version of the same worker with different code
+      // Now create a version of the same worker with assets binding
       const versionWorker = await Worker(`${workerName}-version`, {
         name: workerName,
         script: `
           export default {
             async fetch(request, env, ctx) {
-              return new Response('Hello from worker version!', { 
-                status: 200,
-                headers: { 'Content-Type': 'text/plain' }
-              });
+              // Use env.ASSETS.get() to retrieve the test file
+              const asset = await env.ASSETS.get('test.txt');
+              if (asset) {
+                const content = await asset.text();
+                return new Response(content, { 
+                  status: 200,
+                  headers: { 'Content-Type': 'text/plain' }
+                });
+              }
+              return new Response('Asset not found', { status: 200 });
             }
           };
         `,
         format: "esm",
         version: versionLabel,
+        bindings: {
+          ASSETS: assets,
+        },
       });
 
       // Verify the version worker properties
@@ -1415,14 +1439,27 @@ describe("Worker Resource", () => {
         version: versionLabel,
       });
       expect(versionWorker.id).toBeTruthy();
+      console.log(
+        "Version worker:",
+        JSON.stringify(
+          {
+            id: versionWorker.id,
+            name: versionWorker.name,
+            version: versionWorker.version,
+            previewUrl: versionWorker.previewUrl,
+            url: versionWorker.url,
+          },
+          null,
+          2,
+        ),
+      );
       expect(versionWorker.previewUrl).toBeTruthy();
-      expect(versionWorker.previewUrl).toContain(versionLabel);
-      expect(versionWorker.previewUrl).toContain(workerName);
+      expect(versionWorker.bindings?.ASSETS).toBeDefined();
 
-      // Test that the preview URL works and returns different content
+      // Test that the versioned worker can access the asset via env.ASSETS.get()
       const versionResponse = await fetchAndExpectOK(versionWorker.previewUrl!);
       const versionText = await versionResponse.text();
-      expect(versionText).toEqual("Hello from worker version!");
+      expect(versionText).toEqual(testContent);
 
       // Verify that both workers exist independently by checking their responses
       const baseRecheck = await fetchAndExpectOK(baseWorker.url!);
@@ -1431,7 +1468,7 @@ describe("Worker Resource", () => {
 
       const versionRecheck = await fetchAndExpectOK(versionWorker.previewUrl!);
       const versionRecheckText = await versionRecheck.text();
-      expect(versionRecheckText).toEqual("Hello from worker version!");
+      expect(versionRecheckText).toEqual(testContent);
 
       // Verify that the responses are actually different (independent deployments)
       expect(baseRecheckText).not.toEqual(versionRecheckText);
@@ -1442,6 +1479,11 @@ describe("Worker Resource", () => {
       );
       expect(baseWorkerCheck.status).toEqual(200);
     } finally {
+      // Clean up temporary directory
+      if (tempDir) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
+
       await destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }

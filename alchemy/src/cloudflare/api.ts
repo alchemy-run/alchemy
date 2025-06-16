@@ -141,7 +141,7 @@ export class CloudflareApi {
    * @param init Fetch init options
    * @returns Raw Response object from fetch
    */
-  async fetch(path: string, init: RequestInit = {}): Promise<Response> {
+  public async fetch(path: string, init: RequestInit = {}): Promise<Response> {
     let headers: Record<string, string> = {
       "Content-Type": "application/json",
     };

@@ -1289,6 +1289,8 @@ async function putWorkerInternal(
       const finalMetadata = versionLabel
         ? {
             ...scriptMetadata,
+            // Exclude migrations for worker versions - they're not allowed
+            migrations: undefined,
             annotations: {
               "workers/tag": versionLabel,
               ...(message && { "workers/message": message.substring(0, 100) }),
@@ -1343,13 +1345,48 @@ async function putWorkerInternal(
         );
       }
 
-      const responseData: any = await uploadResponse.json();
-      const result = responseData.result;
       // Handle version response
       if (versionLabel) {
+        const responseData = (await uploadResponse.json()) as {
+          result: {
+            id: string;
+            number: number;
+            metadata: {
+              has_preview: boolean;
+            };
+            annotations?: {
+              "workers/tag"?: string;
+            };
+          };
+        };
+        const result = responseData.result;
+
+        // Get the account's workers.dev subdomain to construct preview URL
+        let previewUrl: string | undefined;
+        if (result.metadata?.has_preview) {
+          // Need to get the subdomain
+          const subdomainResponse = await api.get(
+            `/accounts/${api.accountId}/workers/subdomain`,
+          );
+
+          if (subdomainResponse.ok) {
+            const subdomainData: {
+              result: {
+                subdomain: string;
+              };
+            } = await subdomainResponse.json();
+            const subdomain = subdomainData.result?.subdomain;
+            if (subdomain) {
+              // Preview URL format: <FIRST_8_CHARS_OF_VERSION_ID>-<WORKER_NAME>.<SUBDOMAIN>.workers.dev
+              const versionPrefix = result.id.substring(0, 8);
+              previewUrl = `https://${versionPrefix}-${workerName}.${subdomain}.workers.dev`;
+            }
+          }
+        }
+
         return {
           versionId: result.id,
-          previewUrl: result.preview_url,
+          previewUrl,
         };
       }
 
