@@ -10,7 +10,7 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
-import type { SecretsStore } from "./secrets-store.ts";
+import { findSecretsStoreByName, SecretsStore } from "./secrets-store.ts";
 
 /**
  * Properties for creating or updating a Secret in a Secrets Store (internal interface)
@@ -18,8 +18,10 @@ import type { SecretsStore } from "./secrets-store.ts";
 interface _SecretProps extends CloudflareApiOptions {
   /**
    * The secrets store to add this secret to
+   *
+   * @default - the default-secret-store
    */
-  store: SecretsStore<any>;
+  store?: SecretsStore<any>;
 
   /**
    * The secret value to store (must be an AlchemySecret for security)
@@ -41,8 +43,10 @@ interface _SecretProps extends CloudflareApiOptions {
 export interface SecretProps extends CloudflareApiOptions {
   /**
    * The secrets store to add this secret to
+   *
+   * @default - the default-secret-store
    */
-  store: SecretsStore<any>;
+  store?: SecretsStore<any>;
 
   /**
    * The secret value to store
@@ -71,39 +75,38 @@ export function isSecret(resource: Resource): resource is Secret {
   return resource[ResourceKind] === "cloudflare::Secret";
 }
 
-export interface Secret
-  extends Resource<"cloudflare::Secret">,
-    Omit<_SecretProps, "delete"> {
-  /**
-   * The binding type for Cloudflare Workers
-   */
-  type: "secrets_store_secret";
+export type Secret = Resource<"cloudflare::Secret"> &
+  Omit<_SecretProps, "delete"> & {
+    /**
+     * The binding type for Cloudflare Workers
+     */
+    type: "secrets_store_secret";
 
-  /**
-   * The name of the secret
-   */
-  name: string;
+    /**
+     * The name of the secret
+     */
+    name: string;
 
-  /**
-   * The unique identifier of the secrets store this secret belongs to
-   */
-  storeId: string;
+    /**
+     * The unique identifier of the secrets store this secret belongs to
+     */
+    storeId: string;
 
-  /**
-   * The secret value (as an alchemy Secret instance)
-   */
-  value: AlchemySecret;
+    /**
+     * The secret value (as an alchemy Secret instance)
+     */
+    value: AlchemySecret;
 
-  /**
-   * Timestamp when the secret was created
-   */
-  createdAt: number;
+    /**
+     * Timestamp when the secret was created
+     */
+    createdAt: number;
 
-  /**
-   * Timestamp when the secret was last modified
-   */
-  modifiedAt: number;
-}
+    /**
+     * Timestamp when the secret was last modified
+     */
+    modifiedAt: number;
+  };
 
 /**
  * A Cloudflare Secret represents an individual secret stored in a Secrets Store.
@@ -179,9 +182,20 @@ const _Secret = Resource(
   ): Promise<Secret> {
     const api = await createCloudflareApi(props);
 
+    const storeId =
+      props.store?.id ??
+      (await findSecretsStoreByName(api, SecretsStore.Default))?.id ??
+      (
+        await SecretsStore("default-store", {
+          name: SecretsStore.Default,
+          adopt: true,
+          delete: false,
+        })
+      )?.id!;
+
     if (this.phase === "delete") {
       if (props.delete !== false) {
-        await deleteSecret(api, props.store.id, name);
+        await deleteSecret(api, storeId, name);
       }
       return this.destroy();
     }
@@ -192,12 +206,12 @@ const _Secret = Resource(
         : Date.now();
 
     // Insert or update the secret
-    await insertSecret(api, props.store.id, name, props.value);
+    await insertSecret(api, storeId, name, props.value);
 
     return this({
       type: "secrets_store_secret",
       name,
-      storeId: props.store.id,
+      storeId,
       store: props.store,
       value: props.value,
       createdAt,
@@ -317,10 +331,10 @@ export async function deleteSecret(
   storeId: string,
   secretName: string,
 ): Promise<void> {
+  const secretId = await getSecretId(api, storeId, secretName);
   const response = await api.delete(
-    `/accounts/${api.accountId}/secrets_store/stores/${storeId}/secrets`,
+    `/accounts/${api.accountId}/secrets_store/stores/${storeId}/secrets/${secretId}`,
     {
-      body: JSON.stringify([secretName]),
       headers: {
         "Content-Type": "application/json",
       },

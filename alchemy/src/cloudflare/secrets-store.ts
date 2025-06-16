@@ -168,6 +168,10 @@ export async function SecretsStore<
   return _SecretsStore(name, normalizedProps);
 }
 
+export namespace SecretsStore {
+  export const Default = "default_secrets_store";
+}
+
 const _SecretsStore = Resource("cloudflare::SecretsStore", async function <
   S extends Record<string, Secret> | undefined = undefined,
 >(this: Context<SecretsStore<S>>, id: string, props: SecretsStoreProps<S>): Promise<
@@ -206,17 +210,12 @@ const _SecretsStore = Resource("cloudflare::SecretsStore", async function <
   } else {
     // If adopt is true, first check if a store with this name already exists
     if (props.adopt) {
-      console.log(`Checking for existing secrets store '${name}' to adopt`);
       const existingStore = await findSecretsStoreByName(api, name);
 
       if (existingStore) {
-        console.log(`Found existing secrets store '${name}', adopting it`);
         storeId = existingStore.id;
         createdAt = existingStore.createdAt || Date.now();
       } else {
-        console.log(
-          `No existing secrets store '${name}' found, creating new one`,
-        );
         const { id } = await createSecretsStore(api, {
           ...props,
           name,

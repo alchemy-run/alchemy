@@ -1,46 +1,41 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { Secret } from "../../src/cloudflare/secret.ts";
-import { SecretsStore } from "../../src/cloudflare/secrets-store.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { secret } from "../../src/secret.ts";
+import "../../src/test/vitest.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 import { fetchAndExpectOK } from "./fetch-utils.ts";
-
-import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
 describe("Secret Resource", () => {
+  // test("create default secrets store", async (scope) => {
+  //   await SecretsStore("default-store", {
+  //     name: "ubuntu-test-store-with-secrets",
+  //     adopt: true,
+  //   });
+
+  //   await alchemy.destroy(scope);
+  // });
+
   test("bind secret to worker and test end-to-end", async (scope) => {
     const testId = `${BRANCH_PREFIX}-test-secret`;
     const workerName = `${BRANCH_PREFIX}-secret-worker`;
 
-    let secretsStore: SecretsStore | undefined;
     let testSecret: Secret | undefined;
     let worker: Worker | undefined;
 
     try {
-      // Adopt the default secrets store (don't create/delete it)
-      secretsStore = await SecretsStore("default-store", {
-        name: "default-secrets-store",
-        adopt: true,
-        delete: false,
-      });
-
-      expect(secretsStore).toBeTruthy();
-
       // Create a test secret in the default store
       testSecret = await Secret(testId, {
-        store: secretsStore,
         value: secret("test-secret-value"),
       });
 
       expect(testSecret).toBeTruthy();
       expect(testSecret.name).toEqual(testId);
-      expect(testSecret.storeId).toEqual(secretsStore.id);
       expect(testSecret.value.unencrypted).toEqual("test-secret-value");
 
       // Create a worker that binds to the secret and returns the secret value
