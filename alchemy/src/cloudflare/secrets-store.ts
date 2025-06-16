@@ -1,5 +1,5 @@
 import type { Context } from "../context.ts";
-import { Resource, ResourceKind } from "../resource.ts";
+import { LiveOnlyResource, ResourceKind, type Resource } from "../resource.ts";
 import { secret, type Secret } from "../secret.ts";
 import { handleApiError } from "./api-error.ts";
 import {
@@ -172,50 +172,63 @@ export namespace SecretsStore {
   export const Default = "default_secrets_store";
 }
 
-const _SecretsStore = Resource("cloudflare::SecretsStore", async function <
-  S extends Record<string, Secret> | undefined = undefined,
->(this: Context<SecretsStore<S>>, id: string, props: SecretsStoreProps<S>): Promise<
-  SecretsStore<S>
-> {
-  const api = await createCloudflareApi(props);
+const _SecretsStore = LiveOnlyResource(
+  "cloudflare::SecretsStore",
+  async function <S extends Record<string, Secret> | undefined = undefined>(
+    this: Context<SecretsStore<S>>,
+    id: string,
+    props: SecretsStoreProps<S>,
+  ): Promise<SecretsStore<S>> {
+    const api = await createCloudflareApi(props);
 
-  const name = props.name ?? id;
+    const name = props.name ?? id;
 
-  if (this.phase === "delete") {
-    const storeId = this.output?.id;
-    if (storeId && props.delete !== false) {
-      await deleteSecretsStore(api, storeId);
+    if (this.phase === "delete") {
+      const storeId = this.output?.id;
+      if (storeId && props.delete !== false) {
+        await deleteSecretsStore(api, storeId);
+      }
+
+      return this.destroy();
     }
 
-    return this.destroy();
-  }
+    let storeId = this.phase === "update" ? this.output?.id || "" : "";
+    let createdAt =
+      this.phase === "update"
+        ? this.output?.createdAt || Date.now()
+        : Date.now();
 
-  let storeId = this.phase === "update" ? this.output?.id || "" : "";
-  let createdAt =
-    this.phase === "update" ? this.output?.createdAt || Date.now() : Date.now();
+    if (this.phase === "update" && storeId) {
+      const currentSecrets = props.secrets || {};
+      const existingSecretNames = await listSecrets(api, storeId);
 
-  if (this.phase === "update" && storeId) {
-    const currentSecrets = props.secrets || {};
-    const existingSecretNames = await listSecrets(api, storeId);
+      const secretsToDelete = existingSecretNames.filter(
+        (name) => !(name in currentSecrets),
+      );
 
-    const secretsToDelete = existingSecretNames.filter(
-      (name) => !(name in currentSecrets),
-    );
+      if (secretsToDelete.length > 0) {
+        await deleteSecrets(api, storeId, secretsToDelete);
+      }
 
-    if (secretsToDelete.length > 0) {
-      await deleteSecrets(api, storeId, secretsToDelete);
-    }
+      await insertSecrets(api, storeId, props);
+    } else {
+      // If adopt is true, first check if a store with this name already exists
+      if (props.adopt) {
+        const existingStore = await findSecretsStoreByName(api, name);
 
-    await insertSecrets(api, storeId, props);
-  } else {
-    // If adopt is true, first check if a store with this name already exists
-    if (props.adopt) {
-      const existingStore = await findSecretsStoreByName(api, name);
-
-      if (existingStore) {
-        storeId = existingStore.id;
-        createdAt = existingStore.createdAt || Date.now();
+        if (existingStore) {
+          storeId = existingStore.id;
+          createdAt = existingStore.createdAt || Date.now();
+        } else {
+          const { id } = await createSecretsStore(api, {
+            ...props,
+            name,
+          });
+          createdAt = Date.now();
+          storeId = id;
+        }
       } else {
+        // Default behavior: create a new store
         const { id } = await createSecretsStore(api, {
           ...props,
           name,
@@ -223,27 +236,19 @@ const _SecretsStore = Resource("cloudflare::SecretsStore", async function <
         createdAt = Date.now();
         storeId = id;
       }
-    } else {
-      // Default behavior: create a new store
-      const { id } = await createSecretsStore(api, {
-        ...props,
-        name,
-      });
-      createdAt = Date.now();
-      storeId = id;
+
+      await insertSecrets(api, storeId, props);
     }
 
-    await insertSecrets(api, storeId, props);
-  }
-
-  return this({
-    id: storeId,
-    name: name,
-    secrets: props.secrets as S,
-    createdAt: createdAt,
-    modifiedAt: Date.now(),
-  });
-});
+    return this({
+      id: storeId,
+      name: name,
+      secrets: props.secrets as S,
+      createdAt: createdAt,
+      modifiedAt: Date.now(),
+    });
+  },
+);
 
 export async function createSecretsStore<
   S extends Record<string, Secret> | undefined = undefined,
