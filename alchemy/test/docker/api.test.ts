@@ -1,11 +1,13 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
-import { destroy } from "../../src/destroy.js";
 import { DockerApi } from "../../src/docker/api.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("DockerApi", () => {
   test("should initialize with default docker path", async (scope) => {
@@ -13,7 +15,7 @@ describe("DockerApi", () => {
       const dockerApi = new DockerApi();
       expect(dockerApi.dockerPath).toBe("docker");
     } finally {
-      await destroy(scope);
+      await alchemy.destroy(scope);
     }
   });
 
@@ -22,7 +24,7 @@ describe("DockerApi", () => {
       const dockerApi = new DockerApi({ dockerPath: "/usr/local/bin/docker" });
       expect(dockerApi.dockerPath).toBe("/usr/local/bin/docker");
     } finally {
-      await destroy(scope);
+      await alchemy.destroy(scope);
     }
   });
 
@@ -36,7 +38,7 @@ describe("DockerApi", () => {
       // Docker version output should contain the word "Docker"
       expect(result.stdout.includes("Docker")).toBe(true);
     } finally {
-      await destroy(scope);
+      await alchemy.destroy(scope);
     }
   });
 
@@ -49,7 +51,7 @@ describe("DockerApi", () => {
       // Just ensure it returns a boolean
       expect(typeof isRunning).toBe("boolean");
     } finally {
-      await destroy(scope);
+      await alchemy.destroy(scope);
     }
   });
 });

@@ -1,11 +1,13 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
-import { destroy } from "../../src/destroy.js";
 import { Volume } from "../../src/docker/volume.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("Volume", () => {
   test("should create a volume with default driver", async (scope) => {
@@ -19,7 +21,7 @@ describe("Volume", () => {
       expect(volume.driver).toBe("local"); // default value
       expect(volume.id).toBe(volumeName); // volume ID is same as name
     } finally {
-      await destroy(scope);
+      await alchemy.destroy(scope);
     }
   });
 
@@ -44,7 +46,7 @@ describe("Volume", () => {
         o: "size=100m,uid=1000",
       });
     } finally {
-      await destroy(scope);
+      await alchemy.destroy(scope);
     }
   });
 
@@ -65,7 +67,7 @@ describe("Volume", () => {
         { name: "com.example.created-by", value: "alchemy-tests" },
       ]);
     } finally {
-      await destroy(scope);
+      await alchemy.destroy(scope);
     }
   });
 
@@ -85,7 +87,7 @@ describe("Volume", () => {
       // but not reflected in the output since we're preserving the input format
       expect(volume.labels).toBeUndefined();
     } finally {
-      await destroy(scope);
+      await alchemy.destroy(scope);
     }
   });
 });

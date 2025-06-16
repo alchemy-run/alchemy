@@ -1,11 +1,13 @@
-import { describe, expect } from "bun:test";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
-import { destroy } from "../../src/destroy.js";
 import { Network } from "../../src/docker/network.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 describe("Network", () => {
   test("should create a test network with default driver", async (scope) => {
@@ -18,7 +20,7 @@ describe("Network", () => {
       expect(network.name).toBe(networkName);
       expect(network.driver).toBe("bridge"); // default value
     } finally {
-      await destroy(scope);
+      await alchemy.destroy(scope);
     }
   });
 });

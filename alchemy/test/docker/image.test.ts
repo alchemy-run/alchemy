@@ -1,13 +1,15 @@
-import { describe, expect } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.js";
-import { destroy } from "../../src/destroy.js";
 import { Image } from "../../src/docker/image.js";
+import { BRANCH_PREFIX } from "../util.js";
 
-import "../../src/test/bun.js";
+import "../../src/test/vitest.js";
 
-const test = alchemy.test(import.meta);
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
 
 // Helper function to get the absolute path to a fixture
 function getFixturePath(fixtureName: string): string {
@@ -48,7 +50,7 @@ describe("Image", () => {
         expect(image.imageId.length).toBeGreaterThan(0);
       }
     } finally {
-      await destroy(scope);
+      await alchemy.destroy(scope);
     }
   });
 
@@ -80,7 +82,7 @@ describe("Image", () => {
         VERSION: "2.0",
       });
     } finally {
-      await destroy(scope);
+      await alchemy.destroy(scope);
     }
   });
 
@@ -106,25 +108,26 @@ describe("Image", () => {
       expect(image.tag).toBe("multi");
       expect(image.build.target).toBe("builder");
     } finally {
-      await destroy(scope);
+      await alchemy.destroy(scope);
     }
   });
 
   test("should handle invalid context path", async (scope) => {
-    expect.assertions(1);
     try {
-      await Image("test-invalid-context", {
-        name: "alchemy-test",
-        tag: "invalid",
-        build: {
-          context: "/non/existent/path",
-        },
-        skipPush: true,
-      });
-    } catch (error) {
-      expect(error).toBeDefined();
+      expect(
+        await Image("test-invalid-context", {
+          name: "alchemy-test",
+          tag: "invalid",
+          build: {
+            context: "/non/existent/path",
+          },
+          skipPush: true,
+        }),
+      ).rejects.toThrow(
+        "Failed to build image: ENOENT: no such file or directory, scandir '/non/existent/path'",
+      );
     } finally {
-      await destroy(scope);
+      await alchemy.destroy(scope);
     }
   });
 });
