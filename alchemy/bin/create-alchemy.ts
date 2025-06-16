@@ -329,6 +329,8 @@ export default defineConfig({
 `,
   );
   await writeJsonFile(join(root, "tsconfig.json"), {
+    exclude: ["test"],
+    include: ["types/**/*.ts", "src/**/*.ts", "alchemy.run.ts"],
     compilerOptions: {
       target: "es2021",
       lib: ["es2021"],
@@ -346,10 +348,8 @@ export default defineConfig({
       rewriteRelativeImportExtensions: true,
       strict: true,
       skipLibCheck: true,
-      types: ["@cloudflare/workers-types"],
+      types: ["@cloudflare/workers-types", "./types/env.d.ts"],
     },
-    exclude: ["test"],
-    include: ["types/**/*.ts", "src/**/*.ts"],
   });
   await mkdir(root, "worker");
   await fs.writeFile(
@@ -522,9 +522,7 @@ export default defineConfig({
 
 async function initRedwoodProject(): Promise<void> {
   npx(`-y create-rwsdk@latest ${projectName}`);
-  install({
-    dependencies: ["@cloudflare/workers-types"],
-  });
+  install();
   execCommand(`${getPackageManagerCommands(pm).run} dev:init`, projectPath);
   await initWebsiteProject(projectPath, {
     scripts: {
@@ -536,7 +534,6 @@ async function initRedwoodProject(): Promise<void> {
     include: undefined,
     "compilerOptions.types": ["@cloudflare/workers-types", "types/**/*.ts"],
   });
-  await appendEnv(projectPath);
 }
 
 async function initTanstackStartProject(
@@ -730,6 +727,7 @@ async function initWebsiteProject(
   await initWranglerRunTs(projectPath, options);
 
   await appendGitignore(projectPath);
+  await appendEnv(projectPath);
 
   install({
     dependencies: options.dependencies,
@@ -1008,33 +1006,35 @@ async function modifyTsConfig(
       include !== "./worker-configuration.d.ts",
   );
 
-  // Add required files if they don't already exist
-  if (!newIncludes.includes("types/env.d.ts")) {
-    newIncludes.push("types/**/*.ts");
-  }
-  if (!newIncludes.includes("alchemy.run.ts")) {
-    newIncludes.push("alchemy.run.ts");
-  }
-  if (options.include) {
-    newIncludes.push(...options.include);
-  }
-
-  // Update the includes array
-  const includeEdit = modify(modifiedContent, ["include"], newIncludes, {
-    formattingOptions: {
-      tabSize: 2,
-      insertSpaces: true,
-      eol: "\n",
-    },
-  });
-
-  if (includeEdit.length > 0) {
-    modifiedContent = applyEdits(modifiedContent, includeEdit);
-  }
-
-  // Format with Prettier
-
-  await fs.writeFile(tsconfigPath, modifiedContent);
+  await fs.writeFile(
+    tsconfigPath,
+    applyEdits(
+      modifiedContent,
+      modify(
+        modifiedContent,
+        ["include"],
+        Array.from(
+          new Set([
+            "alchemy.run.ts",
+            "types/**/*.ts",
+            ...newIncludes.filter(
+              (include) =>
+                include !== "worker-configuration.d.ts" &&
+                include !== "./worker-configuration.d.ts",
+            ),
+            ...(options.include ?? []),
+          ]),
+        ),
+        {
+          formattingOptions: {
+            tabSize: 2,
+            insertSpaces: true,
+            eol: "\n",
+          },
+        },
+      ),
+    ),
+  );
 }
 
 /**
@@ -1060,12 +1060,6 @@ async function modifyPackageJson(
     pm === "bun"
       ? "bun --env-file=./.env ./alchemy.run.ts"
       : "tsx --env-file=./.env ./alchemy.run.ts";
-
-  await fs.writeFile(
-    join(projectPath, ".env"),
-    `ALCHEMY_PASSWORD=change-me
-`,
-  );
 
   // Add/update scripts
   if (!packageJson.scripts) {
