@@ -14,6 +14,7 @@ import type { HyperdriveResource as _Hyperdrive } from "./hyperdrive.ts";
 import type { Images as _Images } from "./images.ts";
 import type { PipelineResource as _Pipeline } from "./pipeline.ts";
 import type { QueueResource as _Queue } from "./queue.ts";
+import type { SecretKey } from "./secret-key.ts";
 import type { Secret as CloudflareSecret } from "./secret.ts";
 import type { VectorizeIndexResource as _VectorizeIndex } from "./vectorize-index.ts";
 import type { VersionMetadata as _VersionMetadata } from "./version-metadata.ts";
@@ -44,37 +45,39 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
             : T extends _Hyperdrive
               ? Hyperdrive
               : T extends Secret
-                ? SecretsStoreSecret
+                ? string
                 : T extends CloudflareSecret
                   ? SecretsStoreSecret
-                  : T extends Assets
-                    ? Service
-                    : T extends _Workflow<infer P>
-                      ? Workflow<P>
-                      : T extends D1DatabaseResource
-                        ? D1Database
-                        : T extends DispatchNamespaceResource
-                          ? { get(name: string): Fetcher }
-                          : T extends _VectorizeIndex
-                            ? VectorizeIndex
-                            : T extends _Queue<infer Body>
-                              ? Queue<Body>
-                              : T extends _AnalyticsEngineDataset
-                                ? AnalyticsEngineDataset
-                                : T extends _Pipeline<infer R>
-                                  ? Pipeline<R>
-                                  : T extends string
-                                    ? string
-                                    : T extends BrowserRendering
-                                      ? Fetcher
-                                      : T extends _Ai<infer M>
-                                        ? Ai<M>
-                                        : T extends _Images
-                                          ? ImagesBinding
-                                          : T extends _VersionMetadata
-                                            ? WorkerVersionMetadata
-                                            : T extends Self
-                                              ? Service
-                                              : T extends Json<infer T>
-                                                ? T
-                                                : Service;
+                  : T extends SecretKey
+                    ? CryptoKey
+                    : T extends Assets
+                      ? Service
+                      : T extends _Workflow<infer P>
+                        ? Workflow<P>
+                        : T extends D1DatabaseResource
+                          ? D1Database
+                          : T extends DispatchNamespaceResource
+                            ? { get(name: string): Fetcher }
+                            : T extends _VectorizeIndex
+                              ? VectorizeIndex
+                              : T extends _Queue<infer Body>
+                                ? Queue<Body>
+                                : T extends _AnalyticsEngineDataset
+                                  ? AnalyticsEngineDataset
+                                  : T extends _Pipeline<infer R>
+                                    ? Pipeline<R>
+                                    : T extends string
+                                      ? string
+                                      : T extends BrowserRendering
+                                        ? Fetcher
+                                        : T extends _Ai<infer M>
+                                          ? Ai<M>
+                                          : T extends _Images
+                                            ? ImagesBinding
+                                            : T extends _VersionMetadata
+                                              ? WorkerVersionMetadata
+                                              : T extends Self
+                                                ? Service
+                                                : T extends Json<infer T>
+                                                  ? T
+                                                  : Service;
