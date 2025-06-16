@@ -88,7 +88,12 @@ export class DOStateStore implements StateStore {
     const api = await createCloudflareApi(this.options);
     const [subdomain, _] = await Promise.all([
       getAccountSubdomain(api),
-      upsertStateStoreWorker(api, workerName, token),
+      upsertStateStoreWorker(
+        api,
+        workerName,
+        token,
+        this.options.worker?.force ?? false,
+      ),
     ]);
     const client = new DOStateStoreClient({
       app: this.scope.appName ?? "alchemy",
@@ -97,9 +102,26 @@ export class DOStateStore implements StateStore {
       token,
     });
     // This ensures the token is correct and the worker is ready to use.
-    // RPC methods are retried, which is what we want here in case the worker is not ready yet.
-    await client.rpc("validate", null);
-    return client;
+    let last: Response | undefined;
+    let delay = 1000;
+    for (let i = 0; i < 20; i++) {
+      const res = await client.validate();
+      if (res.ok) {
+        return client;
+      }
+      if (!last) {
+        console.log("Waiting for state store deployment...");
+      }
+      last = res;
+      // Exponential backoff with jitter
+      const jitter = Math.random() * 0.1 * delay;
+      await new Promise((resolve) => setTimeout(resolve, delay + jitter));
+      delay *= 1.5; // Increase the delay for next attempt
+      delay = Math.min(delay, 10000); // Cap at 10 seconds
+    }
+    throw new Error(
+      `Failed to access state store: ${last?.status} ${last?.statusText}`,
+    );
   }
 
   private async getClient() {

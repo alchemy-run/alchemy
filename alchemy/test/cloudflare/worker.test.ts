@@ -85,6 +85,7 @@ describe("Worker Resource", () => {
       // Create a worker with ESM format
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {

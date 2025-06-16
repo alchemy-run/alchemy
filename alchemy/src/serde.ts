@@ -5,8 +5,8 @@ import {
   ResourceKind,
   type Resource,
 } from "./resource.ts";
-import { Scope } from "./scope.ts";
-import { Secret } from "./secret.ts";
+import { isScope, Scope } from "./scope.ts";
+import { isSecret, Secret } from "./secret.ts";
 
 import type { Type } from "arktype";
 
@@ -76,7 +76,7 @@ export async function serializeScope(scope: Scope): Promise<SerializedScope> {
         }
         map[resource[ResourceFQN]] = await serialize(scope, await resource, {
           transform: (value) => {
-            if (value instanceof Secret) {
+            if (isSecret(value)) {
               return {
                 "@secret-env": value.name,
               };
@@ -111,7 +111,7 @@ export async function serialize(
 
   if (Array.isArray(value)) {
     return Promise.all(value.map((value) => serialize(scope, value, options)));
-  } else if (value instanceof Secret) {
+  } else if (isSecret(value)) {
     if (!scope.password) {
       throw new Error(
         "Cannot serialize secret without password, did you forget to set password when initializing your alchemy app?\n" +
@@ -137,7 +137,7 @@ export async function serialize(
     return {
       "@symbol": value.toString(),
     };
-  } else if (value instanceof Scope) {
+  } else if (isScope(value)) {
     return {
       "@scope": null,
     };

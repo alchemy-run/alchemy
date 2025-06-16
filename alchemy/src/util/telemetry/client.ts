@@ -51,7 +51,7 @@ export class TelemetryClient implements ITelemetryClient {
 
   record(event: Telemetry.EventInput, timestamp = Date.now()) {
     if (!this.context) {
-      throw new Error("Context not initialized");
+      return;
     }
     const payload = {
       ...event,

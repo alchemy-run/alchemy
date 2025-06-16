@@ -294,6 +294,7 @@ yarn tsx ./alchemy.run --destroy
 ## Resource Implementation
 
 ### Runtime Bindings
+
 When adding a new resource type that can be used as a binding:
 
 1. **Always update `bound.ts`**: Add the mapping from your resource type to its runtime binding interface
@@ -304,7 +305,7 @@ When adding a new resource type that can be used as a binding:
 // ❌ DON'T: Spread proxy objects
 return {
   ...this.runtime,
-  someProperty: value
+  someProperty: value,
 };
 
 // ✅ DO: Use bind function and explicitly implement methods
@@ -312,11 +313,12 @@ const binding = await bind(resource);
 return {
   ...resource,
   get: binding.get,
-  someProperty: value
+  someProperty: value,
 };
 ```
 
 ### Resource Output Properties
+
 Always include relevant metadata in resource outputs:
 
 ```ts
@@ -329,29 +331,36 @@ export interface MyResource extends Resource<"provider::my-resource"> {
 ```
 
 ### Update Validation
+
 Validate immutable properties during resource updates:
 
 ```ts
 // Check for changes to immutable properties
 if (currentResource.name !== props.name) {
-  throw new Error(`Cannot change resource name from '${currentResource.name}' to '${props.name}'. Name is immutable after creation.`);
+  throw new Error(
+    `Cannot change resource name from '${currentResource.name}' to '${props.name}'. Name is immutable after creation.`
+  );
 }
 ```
 
 ## Testing Guidelines
 
 ### Import Strategy
+
 - **Use static imports**: Avoid dynamic imports in test files for better IDE support and error detection
 
 ```ts
 // ❌ DON'T: Dynamic imports
-const { DispatchNamespace } = await import("../../src/cloudflare/dispatch-namespace.ts");
+const { DispatchNamespace } = await import(
+  "../../src/cloudflare/dispatch-namespace.ts"
+);
 
-// ✅ DO: Static imports  
+// ✅ DO: Static imports
 import { DispatchNamespace } from "../../src/cloudflare/dispatch-namespace.ts";
 ```
 
 ### Test Structure
+
 - **Comprehensive end-to-end tests**: Test the full workflow, not just individual components
 - **Use testing utilities**: Prefer `fetchAndExpectOK` for durability testing
 
@@ -359,35 +368,39 @@ import { DispatchNamespace } from "../../src/cloudflare/dispatch-namespace.ts";
 test("end-to-end workflow", async (scope) => {
   // 1. Create the infrastructure resource
   const namespace = await DispatchNamespace("test-namespace", { name: "test" });
-  
-  // 2. Create a worker that uses the resource  
+
+  // 2. Create a worker that uses the resource
   const worker = await Worker("test-worker", {
     dispatchNamespace: namespace,
-    script: "export default { fetch() { return new Response('Hello'); } }"
+    script: "export default { fetch() { return new Response('Hello'); } }",
   });
-  
+
   // 3. Create a dispatcher that binds to the resource
   const dispatcher = await Worker("dispatcher", {
     bindings: { NAMESPACE: namespace },
-    script: "export default { async fetch(req, env) { return env.NAMESPACE.get('test-worker').fetch(req); } }"
+    script:
+      "export default { async fetch(req, env) { return env.NAMESPACE.get('test-worker').fetch(req); } }",
   });
-  
+
   // 4. Test end-to-end functionality
   await fetchAndExpectOK(`https://dispatcher.${accountId}.workers.dev`);
 });
 ```
 
 ### Type Management
+
 - **Don't export internal types**: Only export types that are part of the public API
 - **Follow provider specifications**: Use exact types from official documentation
 
 ## Code Organization
 
 ### File Structure
+
 - **One concern per file**: Each resource should handle its complete lifecycle in one file
 - **Consistent naming**: Use the exact resource name from the provider's API
 
 ### Dependencies
+
 - **Minimize cross-resource dependencies**: Resources should be as independent as possible
 - **Clear separation of concerns**: Keep API calls, validation, and business logic separate
 
@@ -418,3 +431,7 @@ It is usually better to be targeted with the tests you run instead. That way you
 ```sh
 bun vitest ./alchemy/test/.. -t "..."
 ```
+
+# Pull Request
+
+When submitting a Pull Request with a change, always include a code snippet that shows how the new feature/fix is used. It is not enough to just describe it with text and bullet points.

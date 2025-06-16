@@ -9,7 +9,7 @@ import {
   ResourceScope,
   ResourceSeq,
 } from "./resource.ts";
-import { Scope } from "./scope.ts";
+import { isScope, Scope } from "./scope.ts";
 import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
 
@@ -21,7 +21,7 @@ export interface DestroyOptions {
 }
 
 function isScopeArgs(a: any): a is [scope: Scope, options?: DestroyOptions] {
-  return a[0] instanceof Scope;
+  return isScope(a[0]);
 }
 
 /**

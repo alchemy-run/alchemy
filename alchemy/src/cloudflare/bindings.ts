@@ -18,13 +18,13 @@ import type { HyperdriveResource } from "./hyperdrive.ts";
 import type { KVNamespaceResource } from "./kv-namespace.ts";
 import type { PipelineResource } from "./pipeline.ts";
 import type { QueueResource } from "./queue.ts";
-import type { SecretsStore } from "./secrets-store.ts";
 import type { VectorizeIndexResource } from "./vectorize-index.ts";
 import type { VersionMetadata } from "./version-metadata.ts";
 import type { WorkerStub } from "./worker-stub.ts";
 import type { Worker, WorkerRef } from "./worker.ts";
 import type { Workflow } from "./workflow.ts";
 import type { Images } from "./images.ts";
+import type { Secret as CloudflareSecret } from "./secret.ts";
 
 export type Bindings = {
   [bindingName: string]: Binding;
@@ -43,6 +43,7 @@ export type Binding =
   | Ai
   | AiGatewayResource
   | Assets
+  | CloudflareSecret
   | D1DatabaseResource
   | DispatchNamespaceResource
   | AnalyticsEngineDataset
@@ -53,7 +54,6 @@ export type Binding =
   | PipelineResource
   | QueueResource
   | R2BucketResource
-  | SecretsStore<any>
   | {
       type: "kv_namespace";
       id: string;
@@ -107,6 +107,7 @@ export type WorkerBindingSpec =
   | WorkerBindingR2Bucket
   | WorkerBindingSecretText
   | WorkerBindingSecretsStore
+  | WorkerBindingSecretsStoreSecret
   | WorkerBindingService
   | WorkerBindingStaticContent
   | WorkerBindingTailConsumer
@@ -307,6 +308,20 @@ export interface WorkerBindingSecretsStore {
   name: string;
   /** Type identifier for Secrets Store binding */
   type: "secrets_store";
+  /** Store ID */
+  store_id: string;
+  /** Secret name */
+  secret_name: string;
+}
+
+/**
+ * Secrets Store Secret binding type for individual secrets
+ */
+export interface WorkerBindingSecretsStoreSecret {
+  /** The name of the binding */
+  name: string;
+  /** Type identifier for Secrets Store Secret binding */
+  type: "secrets_store_secret";
   /** Store ID */
   store_id: string;
   /** Secret name */

@@ -1,3 +1,57 @@
+## v0.29.3
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Allow binding individual secrets &nbsp;-&nbsp; by **Tyler van Hensbergen** in https://github.com/sam-goodwin/alchemy/issues/393 [<samp>(39483)</samp>](https://github.com/sam-goodwin/alchemy/commit/394833a4)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **core**: Ensure global Secret list is stored on globalThis &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(8733a)</samp>](https://github.com/sam-goodwin/alchemy/commit/8733a38f)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.29.2...v0.29.3)
+
+---
+
+## v0.29.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **core**: Use Symbol instead of instanceof for checking Secret and Scope &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/391 [<samp>(be1c1)</samp>](https://github.com/sam-goodwin/alchemy/commit/be1c156e)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.29.1...v0.29.2)
+
+---
+
+## v0.29.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **core**: Ensure Scope AsyncLocalStorage is unique singleton even with multiple alchemy instances &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/390 [<samp>(1c113)</samp>](https://github.com/sam-goodwin/alchemy/commit/1c113177)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.29.0...v0.29.1)
+
+---
+
+## v0.29.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Add automatic CLI argument parsing to alchemy() function &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/356 [<samp>(ddf55)</samp>](https://github.com/sam-goodwin/alchemy/commit/ddf55085)
+- **github**: Add GitHub Comment resource for issue and PR comments &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/365 [<samp>(a4a82)</samp>](https://github.com/sam-goodwin/alchemy/commit/a4a82185)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Handle null upload result &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/367 [<samp>(d6681)</samp>](https://github.com/sam-goodwin/alchemy/commit/d66817af)
+  - SecretsStore adoption logic to check existing store before creating &nbsp;-&nbsp; by **Tyler van Hensbergen** in https://github.com/sam-goodwin/alchemy/issues/378 [<samp>(3d542)</samp>](https://github.com/sam-goodwin/alchemy/commit/3d542533)
+  - 404 error when deploying dofs state store &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/379 [<samp>(f5b7e)</samp>](https://github.com/sam-goodwin/alchemy/commit/f5b7e5d9)
+- **core**:
+  - Export Scope class &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(78877)</samp>](https://github.com/sam-goodwin/alchemy/commit/788773ca)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.28.0...v0.29.0)
+
+---
+
 ## v0.28.0
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

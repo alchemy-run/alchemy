@@ -104,6 +104,7 @@ export async function upsertStateStoreWorker(
   api: CloudflareApi,
   workerName: string,
   token: string,
+  force: boolean,
 ) {
   const key = `worker:${workerName}`;
   const cached = cache.get(key);
@@ -111,7 +112,7 @@ export async function upsertStateStoreWorker(
     return;
   }
   const { found, tag } = await getWorkerStatus(api, workerName);
-  if (found && tag === TAG) {
+  if (found && tag === TAG && !force) {
     cache.set(key, TAG);
     return;
   }

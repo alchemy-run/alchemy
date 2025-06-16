@@ -1,14 +1,22 @@
 import { alchemy } from "./alchemy.ts";
 
+declare global {
+  var __ALCHEMY_SECRETS__: {
+    [name: string]: Secret;
+  };
+}
+
 // a global registry of all secrets that we will use when serializing an application
 const globalSecrets: {
   [name: string]: Secret;
-} = {};
+} = (globalThis.__ALCHEMY_SECRETS__ ??= {});
 
 let i = 0;
 function nextName() {
   return `alchemy:anonymous-secret-${i++}`;
 }
+
+const SecretSymbol = Symbol.for("alchemy::Secret");
 
 /**
  * Internal wrapper for sensitive values like API keys and credentials.
@@ -46,6 +54,8 @@ function nextName() {
  * }
  */
 export class Secret {
+  [SecretSymbol] = true;
+
   /**
    * @internal
    */
@@ -68,7 +78,7 @@ export class Secret {
 export function isSecret(binding: any): binding is Secret {
   return (
     binding instanceof Secret ||
-    (typeof binding === "object" && binding.type === "secret_text")
+    (typeof binding === "object" && binding?.type === "secret")
   );
 }
 

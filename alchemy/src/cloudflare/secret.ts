@@ -75,6 +75,11 @@ export interface Secret
   extends Resource<"cloudflare::Secret">,
     Omit<_SecretProps, "delete"> {
   /**
+   * The binding type for Cloudflare Workers
+   */
+  type: "secrets_store_secret";
+
+  /**
    * The name of the secret
    */
   name: string;
@@ -190,6 +195,7 @@ const _Secret = Resource(
     await insertSecret(api, props.store.id, name, props.value);
 
     return this({
+      type: "secrets_store_secret",
       name,
       storeId: props.store.id,
       store: props.store,
@@ -209,24 +215,98 @@ export async function insertSecret(
   secretName: string,
   secretValue: AlchemySecret,
 ): Promise<void> {
-  const response = await api.post(
+  // First try to create the secret
+  const createResponse = await api.post(
     `/accounts/${api.accountId}/secrets_store/stores/${storeId}/secrets`,
     [
       {
         name: secretName,
         value: secretValue.unencrypted,
-        scopes: [],
+        scopes: ["workers"],
       },
     ],
   );
 
-  if (!response.ok) {
-    const errorData: any = await response.json().catch(() => ({
-      errors: [{ message: response.statusText }],
-    }));
-    const errorMessage = errorData.errors?.[0]?.message || response.statusText;
-    throw new Error(`Error creating secret '${secretName}': ${errorMessage}`);
+  if (createResponse.ok) {
+    return; // Secret created successfully
   }
+
+  // If creation failed, check if it's because the secret already exists
+  const createErrorData: any = await createResponse.json().catch(() => ({
+    errors: [{ message: createResponse.statusText }],
+  }));
+
+  const isAlreadyExists = createErrorData.errors?.some(
+    (error: any) =>
+      error.code === 10021 ||
+      error.message?.includes("secret_name_already_exists"),
+  );
+
+  if (isAlreadyExists) {
+    // Secret already exists, find its ID and update it
+    const secretId = await getSecretId(api, storeId, secretName);
+    if (!secretId) {
+      throw new Error(`Secret '${secretName}' not found in store`);
+    }
+
+    const updateResponse = await api.patch(
+      `/accounts/${api.accountId}/secrets_store/stores/${storeId}/secrets/${secretId}`,
+      {
+        value: secretValue.unencrypted,
+        scopes: ["workers"],
+      },
+    );
+
+    if (!updateResponse.ok) {
+      const updateErrorData: any = await updateResponse.json().catch(() => ({
+        errors: [{ message: updateResponse.statusText }],
+      }));
+      const updateErrorMessage =
+        updateErrorData.errors?.[0]?.message || updateResponse.statusText;
+      throw new Error(
+        `Error updating secret '${secretName}': ${updateErrorMessage}`,
+      );
+    }
+  } else {
+    // Some other error occurred during creation
+    const createErrorMessage =
+      createErrorData.errors?.[0]?.message || createResponse.statusText;
+    throw new Error(
+      `Error creating secret '${secretName}': ${createErrorMessage}`,
+    );
+  }
+}
+
+/**
+ * Get the ID of a secret by its name
+ */
+async function getSecretId(
+  api: CloudflareApi,
+  storeId: string,
+  secretName: string,
+): Promise<string | null> {
+  const response = await api.get(
+    `/accounts/${api.accountId}/secrets_store/stores/${storeId}/secrets`,
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = (await response.json()) as {
+    result: Array<{
+      id: string;
+      name: string;
+      created: string;
+      modified: string;
+      status: string;
+    }>;
+    success: boolean;
+    errors: any[];
+  };
+
+  const secret = data.result.find((s) => s.name === secretName);
+  return secret?.id || null;
 }
 
 /**
