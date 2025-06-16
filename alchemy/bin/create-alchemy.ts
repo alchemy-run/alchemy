@@ -311,9 +311,6 @@ async function initViteProject(
 
   await initWebsiteProject(projectPath, {
     entrypoint: "worker/index.ts",
-  });
-
-  install({
     devDependencies: ["@cloudflare/vite-plugin"],
   });
 
@@ -385,9 +382,6 @@ async function initAstroProject(
       dev: "astro dev",
       build: "astro check && astro build",
     },
-  });
-
-  install({
     devDependencies: ["@astrojs/cloudflare"],
   });
 
@@ -443,6 +437,10 @@ async function initReactRouterProject(
   await initWebsiteProject(projectPath, {
     entrypoint: "workers/app.ts",
     // tsconfig: "tsconfig.node.json",
+  });
+
+  install({
+    devDependencies: ["@astrojs/check"],
   });
 
   await modifyTsConfig(projectPath, {
@@ -695,6 +693,8 @@ interface WebsiteOptions {
   scripts?: Record<string, string>;
   include?: string[];
   types?: string[];
+  devDependencies?: string[];
+  dependencies?: string[];
 }
 
 /**
@@ -713,10 +713,13 @@ async function initWebsiteProject(
   await initWranglerRunTs(projectPath, options);
 
   install({
+    dependencies: options.dependencies,
     devDependencies: [
       "@cloudflare/workers-types",
       alchemyVersion,
       ...(pm === "bun" ? ["tsx"] : []),
+      "typescript",
+      ...(options.devDependencies ?? []),
     ],
   });
 }
