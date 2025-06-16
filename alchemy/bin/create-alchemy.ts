@@ -238,6 +238,7 @@ async function initTypescriptProject(
   await initWranglerRunTs(projectPath, {
     entrypoint: "src/worker.ts",
   });
+  await appendGitignore(projectPath);
 
   // Create basic project structure
   await mkdir(projectPath, "src");
@@ -708,6 +709,8 @@ async function initWebsiteProject(
   // Create alchemy.run.ts
   await initWranglerRunTs(projectPath, options);
 
+  await appendGitignore(projectPath);
+
   install({
     dependencies: options.dependencies,
     devDependencies: [
@@ -718,6 +721,20 @@ async function initWebsiteProject(
       ...(options.devDependencies ?? []),
     ],
   });
+}
+
+async function appendGitignore(projectPath: string): Promise<void> {
+  try {
+    await fs.writeFile(
+      join(projectPath, ".gitignore"),
+      [
+        await fs.readFile(join(projectPath, ".gitignore"), "utf-8"),
+        ".alchemy/",
+      ].join("\n"),
+    );
+  } catch {
+    await fs.writeFile(join(projectPath, ".gitignore"), ".alchemy/");
+  }
 }
 
 async function initWranglerRunTs(
