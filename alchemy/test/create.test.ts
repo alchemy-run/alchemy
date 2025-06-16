@@ -1,16 +1,16 @@
-import { access, mkdir, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import "../src/test/vitest.ts";
+
+import fs from "node:fs/promises";
+import path from "node:path";
+import url from "node:url";
 import { describe, expect, test } from "vitest";
 import { exec } from "../src/os/exec.ts";
 
-import "../src/test/vitest.ts";
-
 // Get the root directory of the project
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const rootDir = join(__dirname, "..", "..", "alchemy");
-const cliPath = join(rootDir, "bin", "alchemy.ts");
+const __filename = url.fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.join(__dirname, "..", "..");
+const cliPath = path.join(rootDir, "alchemy", "bin", "alchemy.mjs");
 
 async function runCommand(
   command: string,
@@ -31,7 +31,7 @@ async function runCommand(
 
 async function fileExists(path: string): Promise<boolean> {
   try {
-    await access(path);
+    await fs.access(path);
     return true;
   } catch {
     return false;
@@ -41,7 +41,7 @@ async function fileExists(path: string): Promise<boolean> {
 async function cleanupProject(projectPath: string): Promise<void> {
   try {
     if (await fileExists(projectPath)) {
-      await rm(projectPath, { recursive: true, force: true });
+      await fs.rm(projectPath, { recursive: true, force: true });
     }
   } catch (error) {
     console.warn(`Failed to cleanup ${projectPath}:`, error);
@@ -63,8 +63,8 @@ describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
   // Generate a test for each template variant
   for (const [templateName, templateArg] of Object.entries(variants)) {
     test(`${templateName} - create, deploy, and destroy`, async () => {
-      const smokeDir = join(rootDir, ".smoke");
-      const projectPath = join(smokeDir, templateName);
+      const smokeDir = path.join(rootDir, ".smoke");
+      const projectPath = path.join(smokeDir, templateName);
 
       console.log(`--- Processing: ${templateName} template ---`);
 
@@ -73,7 +73,7 @@ describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
 
       try {
         // Ensure .smoke directory exists
-        await mkdir(smokeDir, { recursive: true });
+        await fs.mkdir(smokeDir, { recursive: true });
 
         // Cleanup any existing project directory
         await cleanupProject(projectPath);
@@ -94,7 +94,7 @@ describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
         expect(projectExists).toBe(true);
 
         // Verify alchemy.run.ts was created
-        const alchemyRunPath = join(projectPath, "alchemy.run.ts");
+        const alchemyRunPath = path.join(projectPath, "alchemy.run.ts");
         const alchemyRunExists = await fileExists(alchemyRunPath);
         expect(alchemyRunExists).toBe(true);
 

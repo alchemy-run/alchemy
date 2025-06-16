@@ -192,7 +192,7 @@ ${templates.map((t) => `  ${t.name.padEnd(15)} ${t.description}`).join("\n")}
 
   console.log(`\n🔨 Creating ${template} project in ${projectPath}...`);
 
-  alchemyVersion = `alchemy@${isTest ? "@file:../../alchemy" : ""}`;
+  alchemyVersion = `alchemy${isTest ? "@file:../../alchemy" : ""}`;
 
   // Execute the template initialisation
   await selectedTemplate.init(projectName, projectPath);
@@ -1104,7 +1104,7 @@ async function mkdir(...path: string[]): Promise<void> {
 }
 
 function execCommand(command: string, cwd: string = process.cwd()): void {
-  console.log(command);
+  console.log("execCommand", command, cwd);
   try {
     execSync(command, { stdio: "inherit", cwd });
   } catch {
