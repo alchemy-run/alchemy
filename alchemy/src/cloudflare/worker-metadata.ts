@@ -1,3 +1,4 @@
+import type { WorkerOptions } from "miniflare";
 import path from "node:path";
 import type { Context } from "../context.ts";
 import { logger } from "../util/logger.ts";
@@ -566,4 +567,154 @@ export async function prepareWorkerMetadata<B extends Bindings>(
     logger.log(meta);
   }
   return meta;
+}
+
+export async function prepareWorkerOptions<B extends Bindings>(
+  workerName: string,
+  // scriptBundle: Bundle,
+  props: WorkerProps<B> & { port: number },
+): Promise<WorkerOptions> {
+  const worker: WorkerOptions = {
+    name: workerName,
+    script: props.script ?? "",
+    // modules: true,
+    modules: [
+      {
+        type: "",
+      },
+    ],
+    compatibilityDate: props.compatibilityDate,
+    compatibilityFlags: props.compatibilityFlags,
+    //todo(michael): check if there is any actual route to it or if its only a service worker
+    unsafeDirectSockets: [
+      {
+        host: "localhost",
+        port: props.port,
+      },
+    ],
+    unsafeInspectorProxy: true,
+  };
+
+  const bindings = (props.bindings ?? {}) as Bindings;
+
+  // Convert bindings to the format expected by the API
+  for (const [bindingName, binding] of Object.entries(bindings)) {
+    // Create a copy of the binding to avoid modifying the original
+
+    if (typeof binding === "string") {
+      // (worker.textBlobBindings ??= {})[bindingName] = binding;
+    } else if (binding === Self) {
+      (worker.serviceBindings ??= {})[bindingName] = workerName;
+    } else if (binding.type === "d1") {
+      ((worker.d1Databases ??= {}) as Record<string, string>)[bindingName] =
+        binding.name;
+      // name or UUID?
+      // binding.id;
+    } else if (binding.type === "kv_namespace") {
+      ((worker.kvNamespaces ??= {}) as Record<string, string>)[bindingName] =
+        "namespaceId" in binding ? binding.namespaceId : binding.id;
+    } else if (binding.type === "service") {
+      (worker.serviceBindings ??= {})[bindingName] =
+        "service" in binding ? binding.service : binding.name;
+    } else if (binding.type === "durable_object_namespace") {
+      (worker.durableObjects ??= {})[bindingName] = {
+        className: binding.className,
+        scriptName: binding.scriptName,
+        useSQLite: binding.sqlite,
+        unsafeUniqueKey: `${binding.scriptName}-${binding.className}`,
+      };
+    } else if (binding.type === "r2_bucket") {
+      ((worker.r2Buckets ??= {}) as Record<string, string>)[bindingName] =
+        binding.name;
+    } else if (binding.type === "assets") {
+      if (worker.assets) {
+        throw new Error(
+          `There can only be one asset binding, but found ${worker.assets.binding} and ${bindingName}`,
+        );
+      }
+      worker.assets = {
+        directory: binding.path,
+        binding: bindingName,
+        workerName: workerName,
+        ...(props.assets
+          ? {
+              assetConfig: {
+                html_handling: props.assets.html_handling,
+                not_found_handling: props.assets.not_found_handling,
+                // TODO(sam): parse these files?
+                // headers: props.assets._headers,
+                // redirects: props.assets._redirects
+                // script_id: ?? // is this needed?
+              },
+              routerConfig: {
+                invoke_user_worker_ahead_of_assets:
+                  props.assets?.run_worker_first,
+              },
+            }
+          : {}),
+      };
+    } else if (binding.type === "secret") {
+      (worker.bindings ??= {})[bindingName] = binding.unencrypted;
+    } else if (binding.type === "workflow") {
+      //todo(michael): implement this
+      throw new Error("Workflow binding not supported in Alchemy dev mode");
+    } else if (binding.type === "queue") {
+      ((worker.queueProducers ??= {}) as Record<string, string>)[bindingName] =
+        binding.name;
+    } else if (binding.type === "pipeline") {
+      ((worker.pipelines ??= {}) as Record<string, string>)[bindingName] =
+        binding.name;
+    } else if (binding.type === "vectorize") {
+      // @ts-ignore
+      (worker.vectorize ??= {})[bindingName] = {
+        index_name: binding.name,
+        // TODO(sam): where do I get this from?
+        // mixedModeConnectionString: ??
+      };
+    } else if (binding.type === "ai_gateway") {
+      // TODO(sam): can we proxy this to the real deal? e.g. "mixed" mode?
+      throw new Error("AI Gateway binding not supported in Miniflare");
+    } else if (binding.type === "hyperdrive") {
+      //   (options.hyperdrives ??= {})[bindingName] = binding.hyperdriveId
+      // TODO(sam): can we proxy this to the real deal?
+      throw new Error("Hyperdrive binding not supported in Alchemy dev mode");
+    } else if (binding.type === "browser") {
+      if (worker.browserRendering) {
+        throw new Error(
+          `Duplicate browser rendering binding: ${bindingName}, already have ${worker.browserRendering.binding}`,
+        );
+      }
+      // TODO(sam): we need a mixed mode connection string
+      worker.browserRendering = {
+        binding: bindingName,
+        // TODO(sam): how do I get this?
+        mixedModeConnectionString: new URL(
+          "http://localhost:8787",
+        ) as MixedModeConnectionString,
+      };
+      throw new Error(
+        "Browser Rendering not yet supported in Alchemy dev mode",
+      );
+    } else if (binding.type === "ai") {
+      (worker.serviceBindings ??= {})[bindingName] =
+        "__ALCHEMY_EXTERNAL_AI_PROXY_WORKER";
+    } else if (binding.type === "json") {
+      (worker.bindings ??= {})[bindingName] = binding.json;
+    } else if (binding.type === "analytics_engine") {
+      (worker.analyticsEngineDatasets ??= {})[bindingName] = {
+        dataset: binding.dataset,
+      };
+    } else if (binding.type === "version_metadata") {
+      // TODO(sam): how to configure this?
+    } else {
+      throw new Error(`Unsupported binding type: ${binding.type}`);
+    }
+  }
+
+  if (props.eventSources) {
+    //todo(michael): implement this
+    throw new Error("Event sources not supported in Alchemy dev mode");
+  }
+
+  return worker;
 }

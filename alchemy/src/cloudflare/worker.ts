@@ -1,12 +1,13 @@
-import type {
-  Miniflare,
-  MixedModeConnectionString,
-  WorkerOptions,
-} from "miniflare";
+import type { Miniflare, WorkerOptions } from "miniflare";
 import path from "node:path";
 import type { Context, DevContext } from "../context.ts";
 import type { BundleProps } from "../esbuild/bundle.ts";
-import { InnerResourceScope, Resource, ResourceKind } from "../resource.ts";
+import {
+  InnerResourceScope,
+  Resource,
+  ResourceFQN,
+  ResourceKind,
+} from "../resource.ts";
 import { getBindKey, tryGetBinding } from "../runtime/bind.ts";
 import { isRuntime } from "../runtime/global.ts";
 import { bootstrapPlugin } from "../runtime/plugin.ts";
@@ -30,7 +31,6 @@ import {
   type Binding,
   type Bindings,
   Json,
-  Self,
   type WorkerBindingService,
   type WorkerBindingSpec,
 } from "./bindings.ts";
@@ -71,6 +71,7 @@ import {
   type WorkerMetadata,
   type WorkerScriptMetadata,
   prepareWorkerMetadata,
+  prepareWorkerOptions,
 } from "./worker-metadata.ts";
 import type { SingleStepMigration } from "./worker-migration.ts";
 import { WorkerStub, isWorkerStub } from "./worker-stub.ts";
@@ -911,6 +912,8 @@ export const _Worker = Resource(
           name: workerName,
           compatibilityDate,
           compatibilityFlags,
+          autoStart: false,
+          returnBundle: false,
         }));
 
       // Find any assets bindings
@@ -1218,164 +1221,11 @@ export const _Worker = Resource(
           `Port not found for resource ${this.fqn} during dev:start`,
         );
       }
-      const scriptBundle =
-        props.script ??
-        (await bundleWorkerScript({
-          ...props,
-          name: workerName,
-          compatibilityDate,
-          compatibilityFlags,
-        }));
 
-      const worker: WorkerOptions = {
-        name: workerName,
-        ...(typeof scriptBundle === "string"
-          ? { script: scriptBundle, modules: true }
-          : {
-              modules: Object.entries(scriptBundle as NoBundleResult).map(
-                ([path, content]) => ({
-                  type: "ESModule" as const,
-                  path: path,
-                  contents: content.toString("utf-8"),
-                }),
-              ),
-            }),
-        compatibilityDate: props.compatibilityDate,
-        compatibilityFlags: props.compatibilityFlags,
-        //todo(michael): check if there is any actual route to it or if its only a service worker
-        unsafeDirectSockets: [
-          {
-            host: "localhost",
-            port: resource.port,
-          },
-        ],
-        unsafeInspectorProxy: true,
-      };
-
-      const bindings = (props.bindings ?? {}) as Bindings;
-
-      // Convert bindings to the format expected by the API
-      for (const [bindingName, binding] of Object.entries(bindings)) {
-        // Create a copy of the binding to avoid modifying the original
-
-        if (typeof binding === "string") {
-          // (worker.textBlobBindings ??= {})[bindingName] = binding;
-        } else if (binding === Self) {
-          (worker.serviceBindings ??= {})[bindingName] = workerName;
-        } else if (binding.type === "d1") {
-          ((worker.d1Databases ??= {}) as Record<string, string>)[bindingName] =
-            binding.name;
-          // name or UUID?
-          // binding.id;
-        } else if (binding.type === "kv_namespace") {
-          ((worker.kvNamespaces ??= {}) as Record<string, string>)[
-            bindingName
-          ] = "namespaceId" in binding ? binding.namespaceId : binding.id;
-        } else if (binding.type === "service") {
-          (worker.serviceBindings ??= {})[bindingName] =
-            "service" in binding ? binding.service : binding.name;
-        } else if (binding.type === "durable_object_namespace") {
-          (worker.durableObjects ??= {})[bindingName] = {
-            className: binding.className,
-            scriptName: binding.scriptName,
-            useSQLite: binding.sqlite,
-            unsafeUniqueKey: `${binding.scriptName}-${binding.className}`,
-          };
-        } else if (binding.type === "r2_bucket") {
-          ((worker.r2Buckets ??= {}) as Record<string, string>)[bindingName] =
-            binding.name;
-        } else if (binding.type === "assets") {
-          if (worker.assets) {
-            throw new Error(
-              `There can only be one asset binding, but found ${worker.assets.binding} and ${bindingName}`,
-            );
-          }
-          worker.assets = {
-            directory: binding.path,
-            binding: bindingName,
-            workerName: workerName,
-            ...(props.assets
-              ? {
-                  assetConfig: {
-                    html_handling: props.assets.html_handling,
-                    not_found_handling: props.assets.not_found_handling,
-                    // TODO(sam): parse these files?
-                    // headers: props.assets._headers,
-                    // redirects: props.assets._redirects
-                    // script_id: ?? // is this needed?
-                  },
-                  routerConfig: {
-                    invoke_user_worker_ahead_of_assets:
-                      props.assets?.run_worker_first,
-                  },
-                }
-              : {}),
-          };
-        } else if (binding.type === "secret") {
-          (worker.bindings ??= {})[bindingName] = binding.unencrypted;
-        } else if (binding.type === "workflow") {
-          //todo(michael): implement this
-          throw new Error("Workflow binding not supported in Alchemy dev mode");
-        } else if (binding.type === "queue") {
-          ((worker.queueProducers ??= {}) as Record<string, string>)[
-            bindingName
-          ] = binding.name;
-        } else if (binding.type === "pipeline") {
-          ((worker.pipelines ??= {}) as Record<string, string>)[bindingName] =
-            binding.name;
-        } else if (binding.type === "vectorize") {
-          // @ts-ignore
-          (worker.vectorize ??= {})[bindingName] = {
-            index_name: binding.name,
-            // TODO(sam): where do I get this from?
-            // mixedModeConnectionString: ??
-          };
-        } else if (binding.type === "ai_gateway") {
-          // TODO(sam): can we proxy this to the real deal? e.g. "mixed" mode?
-          throw new Error("AI Gateway binding not supported in Miniflare");
-        } else if (binding.type === "hyperdrive") {
-          //   (options.hyperdrives ??= {})[bindingName] = binding.hyperdriveId
-          // TODO(sam): can we proxy this to the real deal?
-          throw new Error(
-            "Hyperdrive binding not supported in Alchemy dev mode",
-          );
-        } else if (binding.type === "browser") {
-          if (worker.browserRendering) {
-            throw new Error(
-              `Duplicate browser rendering binding: ${bindingName}, already have ${worker.browserRendering.binding}`,
-            );
-          }
-          // TODO(sam): we need a mixed mode connection string
-          worker.browserRendering = {
-            binding: bindingName,
-            // TODO(sam): how do I get this?
-            mixedModeConnectionString: new URL(
-              "http://localhost:8787",
-            ) as MixedModeConnectionString,
-          };
-          throw new Error(
-            "Browser Rendering not yet supported in Alchemy dev mode",
-          );
-        } else if (binding.type === "ai") {
-          (worker.serviceBindings ??= {})[bindingName] =
-            "__ALCHEMY_EXTERNAL_AI_PROXY_WORKER";
-        } else if (binding.type === "json") {
-          (worker.bindings ??= {})[bindingName] = binding.json;
-        } else if (binding.type === "analytics_engine") {
-          (worker.analyticsEngineDatasets ??= {})[bindingName] = {
-            dataset: binding.dataset,
-          };
-        } else if (binding.type === "version_metadata") {
-          // TODO(sam): how to configure this?
-        } else {
-          throw new Error(`Unsupported binding type: ${binding.type}`);
-        }
-      }
-
-      if (props.eventSources) {
-        //todo(michael): implement this
-        throw new Error("Event sources not supported in Alchemy dev mode");
-      }
+      const worker = await prepareWorkerOptions(workerName, {
+        ...props,
+        port: resource.port,
+      });
 
       const workers = await this.scope.orchestrator.useFromLibrary(
         MiniflareWorkersSymbol,
@@ -1397,19 +1247,97 @@ export const _Worker = Resource(
           return mf;
         },
       );
+
       const inspectorPort = props.dev?.startInspector
         ? await this.scope.orchestrator.claimNextAvailablePort(
             MINIFLARE_DEBUG_PORT,
           )
         : undefined;
 
-      workers.push(worker);
-      await mf.setOptions({
-        workers: workers,
-        inspectorPort,
-      });
+      if (props.script == null && !props.noBundle) {
+        let firstStartResolve: () => void;
+        const firstStartPromise = new Promise<void>((resolve) => {
+          firstStartResolve = resolve;
+        });
+
+        const fqn = this.fqn;
+        const scriptBundle = await bundleWorkerScript({
+          ...props,
+          name: workerName,
+          compatibilityDate,
+          compatibilityFlags,
+          autoStart: false,
+          returnBundle: true,
+          bundle: {
+            ...props.bundle,
+            plugins: [
+              ...(props.bundle?.plugins ?? []),
+              {
+                name: "reload-miniflare-worker",
+                setup(build) {
+                  build.onEnd(async (newBundle) => {
+                    const outputFile = newBundle.outputFiles?.[0];
+                    if (outputFile === undefined) {
+                      throw new Error("Failed to create bundle");
+                    }
+                    //@ts-expect-error safe to overwrite here
+                    worker.script = outputFile.text;
+
+                    for (let i = workers.length - 1; i >= 0; i--) {
+                      if (workers[i].name === workerName) {
+                        workers.splice(i, 1);
+                      }
+                    }
+                    workers.push(worker);
+                    await mf.setOptions({
+                      workers: workers,
+                      inspectorPort,
+                    });
+                    await mf.ready;
+                    logger.task(id, {
+                      prefix: "reloaded",
+                      prefixColor: "magenta",
+                      resource: formatFQN(fqn),
+                      message: "Reloaded",
+                    });
+                    firstStartResolve();
+                  });
+                },
+              },
+            ],
+          },
+        });
+        await this.scope.orchestrator.startResource(scriptBundle[ResourceFQN]);
+        await firstStartPromise;
+      } else {
+        if (props.noBundle) {
+          const noBundle = await bundleWorkerScript({
+            ...props,
+            name: workerName,
+            compatibilityDate,
+            compatibilityFlags,
+            autoStart: false,
+            returnBundle: false,
+          });
+          //@ts-expect-error we can delete script we replace with modules
+          delete worker.script;
+          worker.modules = Object.entries(noBundle as NoBundleResult).map(
+            ([filePath, content]) => ({
+              type: getModuleTypeFromPath(filePath),
+              path: filePath,
+              contents: content.toString("utf-8"),
+            }),
+          );
+        }
+        workers.push(worker);
+        await mf.setOptions({
+          workers: workers,
+          inspectorPort,
+        });
+        await mf.ready;
+      }
+
       const debugUrl = await mf.getInspectorURL();
-      await mf.ready;
       if (inspectorPort != null) {
         logger.task(id, {
           prefix: "started",
@@ -1422,7 +1350,7 @@ export const _Worker = Resource(
           status: "success",
         });
       }
-      //* sanity check in case miniflare uses the wrong port
+      // //* sanity check in case miniflare uses the wrong port
       url = (await mf.unsafeGetDirectURL(workerName)).toString();
     } else {
       await this.scope.orchestrator.addResource(
@@ -1792,4 +1720,45 @@ async function deleteQueueConsumers(
       await deleteQueueConsumer(api, consumer.queueId, consumer.consumerId);
     }),
   );
+}
+
+function getModuleTypeFromPath(
+  filePath: string,
+):
+  | "ESModule"
+  | "CommonJS"
+  | "CompiledWasm"
+  | "Data"
+  | "Text"
+  | "PythonModule"
+  | "PythonRequirement" {
+  const ext = path.extname(filePath).toLowerCase();
+  const basename = path.basename(filePath).toLowerCase();
+
+  if (
+    basename === "requirements.txt" ||
+    basename === "pyproject.toml" ||
+    basename === "setup.py"
+  ) {
+    return "PythonRequirement";
+  }
+
+  switch (ext) {
+    case ".mjs":
+    case ".js":
+      return "ESModule";
+    case ".cjs":
+      return "CommonJS";
+    case ".wasm":
+      return "CompiledWasm";
+    case ".py":
+      return "PythonModule";
+    case ".bin":
+    case ".data":
+    case ".proto":
+    case "":
+      return "Data";
+    default:
+      return "Text";
+  }
 }

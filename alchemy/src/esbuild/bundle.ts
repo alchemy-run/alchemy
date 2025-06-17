@@ -68,6 +68,11 @@ export interface BundleProps extends Partial<esbuild.BuildOptions> {
    * neutral: Platform-agnostic
    */
   platform?: "browser" | "node" | "neutral";
+
+  /**
+   * Whether to automatically start the bundle
+   */
+  autoStart?: boolean;
 }
 
 /**
@@ -92,6 +97,11 @@ export interface Bundle<P extends BundleProps = BundleProps>
    * The content of the bundle (the .js or .mjs file)
    */
   content: string;
+
+  /**
+   * The live esbuild context
+   */
+  context: esbuild.BuildContext;
 }
 
 /**
@@ -120,6 +130,7 @@ export const Bundle = LocalOnlyResource(
     _id: string,
     props: Props,
   ): Promise<Bundle<Props>> {
+    const contextSymbol = Symbol.for(`esbuild::BuildContext::${this.fqn}`);
     if (this.phase === "delete") {
       if (this.output.path) {
         try {
@@ -134,8 +145,30 @@ export const Bundle = LocalOnlyResource(
       }
       return this.destroy();
     }
-
-    const result = await bundle(props);
+    let result: esbuild.BuildResult;
+    let context: esbuild.BuildContext;
+    if (this.phase === "dev:stop" || this.phase === "dev:start") {
+      context =
+        await this.scope.orchestrator.unsafeUseFromLibrary<esbuild.BuildContext>(
+          contextSymbol,
+        );
+      result = await context.rebuild();
+      if (this.phase === "dev:start") {
+        await context.watch();
+      } else {
+        await context.dispose();
+      }
+    } else {
+      context =
+        await this.scope.orchestrator.useFromLibrary<esbuild.BuildContext>(
+          contextSymbol,
+          () => bundle(props, true),
+        );
+      if (props.autoStart) {
+        await this.scope.orchestrator.addResource(this.fqn, props.autoStart);
+      }
+      result = await bundle(props, false);
+    }
 
     const bundlePath = Object.entries(result.metafile!.outputs).find(
       ([_, output]) => {
@@ -167,6 +200,7 @@ export const Bundle = LocalOnlyResource(
         path: bundlePath,
         hash: outputFile.hash,
         content: outputFile.text,
+        context,
       });
     }
     const content = await fs.readFile(bundlePath!, "utf-8");
@@ -175,12 +209,16 @@ export const Bundle = LocalOnlyResource(
       path: bundlePath,
       hash: crypto.createHash("sha256").update(content).digest("hex"),
       content,
+      context,
     });
   },
 );
 
-export async function bundle(props: BundleProps) {
-  const { entryPoint, ...rest } = props;
+export async function bundle<T extends boolean>(
+  props: BundleProps,
+  watch: T,
+): Promise<T extends true ? esbuild.BuildContext : esbuild.BuildResult> {
+  const { entryPoint, autoStart: _autoStart, ...rest } = props;
   const options = {
     ...rest,
     write: !(props.outdir === undefined && props.outfile === undefined),
@@ -203,5 +241,12 @@ export async function bundle(props: BundleProps) {
     logger.log(options);
   }
   const esbuild = await import("esbuild");
-  return await esbuild.build(options);
+  if (watch) {
+    return (await esbuild.context(options)) as T extends true
+      ? esbuild.BuildContext
+      : esbuild.BuildResult;
+  }
+  return (await esbuild.build(options)) as T extends true
+    ? esbuild.BuildContext
+    : esbuild.BuildResult;
 }

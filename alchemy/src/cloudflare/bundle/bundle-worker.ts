@@ -1,3 +1,4 @@
+import type esbuild from "esbuild";
 import kleur from "kleur";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -6,7 +7,6 @@ import { Bundle } from "../../esbuild/bundle.ts";
 import { logger } from "../../util/logger.ts";
 import type { Bindings } from "../bindings.ts";
 import type { WorkerProps } from "../worker.ts";
-import { createAliasPlugin } from "./alias-plugin.ts";
 import {
   isBuildFailure,
   rewriteNodeCompatBuildFailure,
@@ -14,20 +14,26 @@ import {
 import { external, external_als } from "./external.ts";
 import { getNodeJSCompatMode } from "./nodejs-compat-mode.ts";
 import { nodeJsCompatPlugin } from "./nodejs-compat.ts";
-import { wasmPlugin } from "./wasm-plugin.ts";
 
 export type NoBundleResult = {
   [fileName: string]: Buffer;
 };
 
-export async function bundleWorkerScript<B extends Bindings>(
+export type BundleContext = esbuild.BuildContext;
+
+export async function bundleWorkerScript<
+  B extends Bindings,
+  ReturnBundle extends boolean,
+>(
   props: WorkerProps<B> & {
     name: string;
     entrypoint: string;
     compatibilityDate: string;
     compatibilityFlags: string[];
+    autoStart?: boolean;
+    returnBundle?: ReturnBundle;
   },
-): Promise<string | NoBundleResult> {
+): Promise<ReturnBundle extends true ? Bundle : string | NoBundleResult> {
   const projectRoot = props.projectRoot ?? process.cwd();
 
   const nodeJsCompatMode = await getNodeJSCompatMode(
@@ -42,7 +48,7 @@ export async function bundleWorkerScript<B extends Bindings>(
   }
   const main = props.entrypoint;
 
-  if (props.noBundle) {
+  if (props.noBundle && !props.returnBundle) {
     const rootDir = path.dirname(path.resolve(main));
     const rules = (
       props.rules ?? [
@@ -92,7 +98,7 @@ export async function bundleWorkerScript<B extends Bindings>(
           return [file, await fs.readFile(path.resolve(rootDir, file))];
         }),
       ),
-    );
+    ) as ReturnBundle extends true ? Bundle : string | NoBundleResult;
   }
 
   try {
@@ -118,28 +124,41 @@ export async function bundleWorkerScript<B extends Bindings>(
             ...props.bundle?.loader,
           },
           plugins: [
-            wasmPlugin,
+            //   wasmPlugin,
             ...(props.bundle?.plugins ?? []),
             ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
-            ...(props.bundle?.alias
-              ? [
-                  createAliasPlugin({
-                    alias: props.bundle?.alias,
-                    projectRoot,
-                  }),
-                ]
-              : []),
+            //   ...(props.bundle?.alias
+            //     ? [
+            //         createAliasPlugin({
+            //           alias: props.bundle?.alias,
+            //           projectRoot,
+            //         }),
+            //       ]
+            //     : []),
           ],
           external: [
             ...(nodeJsCompatMode === "als" ? external_als : external),
             ...(props.bundle?.external ?? []),
           ],
+          autoStart: props.autoStart,
         });
+
+        if (props.returnBundle) {
+          return bundle as ReturnBundle extends true
+            ? Bundle
+            : string | NoBundleResult;
+        }
+
         if (bundle.content) {
-          return bundle.content;
+          return bundle.content as ReturnBundle extends true
+            ? Bundle
+            : string | NoBundleResult;
         }
         if (bundle.path) {
-          return await fs.readFile(bundle.path, "utf-8");
+          return (await fs.readFile(
+            bundle.path,
+            "utf-8",
+          )) as ReturnBundle extends true ? Bundle : string | NoBundleResult;
         }
         throw new Error("Failed to create bundle");
       },
