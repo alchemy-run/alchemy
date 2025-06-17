@@ -18,7 +18,7 @@
     "publish:npm": "cp ../README.md . && bun run build && bun run build:cli && npm publish && rm README.md"
   },
   "bin": {
-    "alchemy": "dist/alchemy.js"
+    "alchemy": "bin/alchemy.js"
   },
   "author": "Sam Goodwin <sam@alchemy.run>",
   "homepage": "https://alchemy.run",

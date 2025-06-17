@@ -3,9 +3,9 @@ import { defineConfig } from "tsdown";
 export default defineConfig({
   entry: ["bin/alchemy.ts"],
   format: ["esm"],
-  clean: true,
+  clean: false,
   shims: true,
-  outDir: "dist",
+  outDir: "bin",
   external: ["jsonc-parser"],
   outputOptions: {
     banner: "#!/usr/bin/env node",
