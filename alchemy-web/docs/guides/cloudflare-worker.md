@@ -366,9 +366,12 @@ const previewWorker = await Worker("my-worker", {
 });
 
 // Access the preview URL for testing
-console.log(`Preview URL: ${previewWorker.previewUrl}`);
+console.log(`Preview URL: ${previewWorker.url}`);
 // Output: https://{version-hash}-my-worker.subdomain.workers.dev
 ```
+
+> [!CAUTION]
+> Preview URLs cannot be generated for Workers with Durable Objects, see the [Preview URL](https://developers.cloudflare.com/workers/configuration/previews/#limitations) documentation to learn more.
 
 ## Reference Worker by Name
 

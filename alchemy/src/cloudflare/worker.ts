@@ -452,11 +452,6 @@ export type Worker<
      * Version label for this worker deployment
      */
     version?: string;
-
-    /**
-     * Preview URL for the version (when version is specified)
-     */
-    previewUrl?: string;
   };
 
 /**
@@ -658,7 +653,7 @@ export function WorkerRef<
  * });
  *
  * // The worker will have a preview URL for testing:
- * console.log(`Preview URL: ${previewWorker.previewUrl}`);
+ * console.log(`Preview URL: ${previewWorker.url}`);
  * // Output: Preview URL: https://pr-123-my-worker.subdomain.workers.dev
  */
 export function Worker<
@@ -1021,12 +1016,19 @@ export const _Worker = Resource(
       );
 
       // Handle worker URL if requested
-      const workerUrl = await configureURL(
-        this,
-        api,
-        workerName,
-        props.url ?? true,
-      );
+      let workerUrl: string | undefined;
+      if (props.version) {
+        // For versions, use the preview URL if available
+        workerUrl = versionResult?.previewUrl;
+      } else {
+        // For regular workers, use the normal URL configuration
+        workerUrl = await configureURL(
+          this,
+          api,
+          workerName,
+          props.url ?? true,
+        );
+      }
 
       // Get current timestamp
       const now = Date.now();
@@ -1111,8 +1113,7 @@ export const _Worker = Resource(
       }
     }
 
-    const { scriptMetadata, workerUrl, now, versionResult } =
-      await uploadWorkerScript(props);
+    const { scriptMetadata, workerUrl, now } = await uploadWorkerScript(props);
 
     // Create routes if provided and capture their outputs
     let createdRoutes: Route[] = [];
@@ -1197,7 +1198,6 @@ export const _Worker = Resource(
       namespace: props.namespace,
       // Include version information in the output
       version: props.version,
-      previewUrl: versionResult?.previewUrl,
       // phantom property
       Env: undefined!,
     } as unknown as Worker<B>);

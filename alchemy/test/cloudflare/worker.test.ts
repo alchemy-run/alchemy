@@ -1403,7 +1403,6 @@ describe("Worker Resource", () => {
       expect(baseWorker.id).toBeTruthy();
       expect(baseWorker.name).toEqual(workerName);
       expect(baseWorker.version).toBeUndefined();
-      expect(baseWorker.previewUrl).toBeUndefined();
       expect(baseWorker.url).toBeTruthy();
 
       // Test that the base worker URL works
@@ -1454,7 +1453,7 @@ describe("Worker Resource", () => {
       });
       expect(versionWorker.id).toBeTruthy();
 
-      expect(versionWorker.previewUrl).toBeTruthy();
+      expect(versionWorker.url).toBeTruthy();
       expect(versionWorker.bindings?.ASSETS).toBeDefined();
 
       // the live worker should not have the new content
@@ -1464,10 +1463,7 @@ describe("Worker Resource", () => {
       );
 
       // the versioned worker should have the new content
-      await fetchAndExpect(
-        `${versionWorker.previewUrl!}/test.txt`,
-        testContent,
-      );
+      await fetchAndExpect(`${versionWorker.url!}/test.txt`, testContent);
     } finally {
       // Clean up temporary directory
       if (tempDir) {
