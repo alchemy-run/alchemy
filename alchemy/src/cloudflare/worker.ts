@@ -604,7 +604,7 @@ export function WorkerRef<
  * const taskQueue = await Queue("task-queue", {
  *   name: "task-queue"
  * });
- * 
+ *
  * const dlq = await Queue("failed-tasks", {
  *   name: "failed-tasks"
  * });
@@ -628,8 +628,7 @@ export function WorkerRef<
  *   }]
  * });
  *
- * @see
- * https://developers.cloudflare.com/workers/
+ * @see https://developers.cloudflare.com/workers/
  */
 export function Worker<
   const B extends Bindings,
