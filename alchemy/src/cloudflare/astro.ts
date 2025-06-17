@@ -81,7 +81,7 @@ export async function Astro<B extends Bindings>(
     main,
     assets: {
       dist: assetsDir,
-      html_handling: "none",
+      not_found_handling: "none",
       run_worker_first: false,
     },
     wrangler,
