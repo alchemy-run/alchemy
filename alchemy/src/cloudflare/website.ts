@@ -144,9 +144,7 @@ export async function Website<B extends Bindings>(
         entrypoint: props.main,
         assets: {
           html_handling: "auto-trailing-slash",
-          not_found_handling: props.spa
-            ? "single-page-application"
-            : ((props.assets as AssetsConfig)?.not_found_handling ?? "none"),
+          not_found_handling: props.spa ? "single-page-application" : "none",
           run_worker_first: false,
           ...(typeof props.assets === "string" ? {} : props.assets),
         },
