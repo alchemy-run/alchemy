@@ -11,7 +11,11 @@ import { KVNamespace } from "../../src/cloudflare/kv-namespace.ts";
 import { Worker, WorkerRef } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
-import { fetchAndExpectOK, fetchAndExpectStatus } from "./fetch-utils.ts";
+import {
+  fetchAndExpect,
+  fetchAndExpectOK,
+  fetchAndExpectStatus,
+} from "./fetch-utils.ts";
 
 import "../../src/test/vitest.ts";
 
@@ -1413,16 +1417,21 @@ describe("Worker Resource", () => {
         script: `
           export default {
             async fetch(request, env, ctx) {
-              // Use env.ASSETS.get() to retrieve the test file
-              const asset = await env.ASSETS.get('test.txt');
-              if (asset) {
-                const content = await asset.text();
-                return new Response(content, { 
-                  status: 200,
-                  headers: { 'Content-Type': 'text/plain' }
-                });
+              try {
+                // Use env.ASSETS.get() to retrieve the test file
+                const asset = await env.ASSETS.fetch(request);
+                if (asset) {
+                  const content = await asset.text();
+                  return new Response(content, { 
+                    status: 200,
+                    headers: { 'Content-Type': 'text/plain' }
+                  });
+                }
+                return new Response('Asset not found', { status: 200 });
+              } catch (error) {
+                console.error(error);
+                return new Response(error.message, { status: 500 });
               }
-              return new Response('Asset not found', { status: 200 });
             }
           };
         `,
@@ -1431,6 +1440,11 @@ describe("Worker Resource", () => {
         bindings: {
           ASSETS: assets,
         },
+        assets: {
+          run_worker_first: true,
+          not_found_handling: "single-page-application",
+        },
+        compatibilityFlags: ["nodejs_compat"],
       });
 
       // Verify the version worker properties
@@ -1439,45 +1453,21 @@ describe("Worker Resource", () => {
         version: versionLabel,
       });
       expect(versionWorker.id).toBeTruthy();
-      console.log(
-        "Version worker:",
-        JSON.stringify(
-          {
-            id: versionWorker.id,
-            name: versionWorker.name,
-            version: versionWorker.version,
-            previewUrl: versionWorker.previewUrl,
-            url: versionWorker.url,
-          },
-          null,
-          2,
-        ),
-      );
+
       expect(versionWorker.previewUrl).toBeTruthy();
       expect(versionWorker.bindings?.ASSETS).toBeDefined();
 
-      // Test that the versioned worker can access the asset via env.ASSETS.get()
-      const versionResponse = await fetchAndExpectOK(versionWorker.previewUrl!);
-      const versionText = await versionResponse.text();
-      expect(versionText).toEqual(testContent);
-
-      // Verify that both workers exist independently by checking their responses
-      const baseRecheck = await fetchAndExpectOK(baseWorker.url!);
-      const baseRecheckText = await baseRecheck.text();
-      expect(baseRecheckText).toEqual("Hello from base worker!");
-
-      const versionRecheck = await fetchAndExpectOK(versionWorker.previewUrl!);
-      const versionRecheckText = await versionRecheck.text();
-      expect(versionRecheckText).toEqual(testContent);
-
-      // Verify that the responses are actually different (independent deployments)
-      expect(baseRecheckText).not.toEqual(versionRecheckText);
-
-      // Verify the base worker still exists in the API
-      const baseWorkerCheck = await api.get(
-        `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+      // the live worker should not have the new content
+      await fetchAndExpect(
+        `${baseWorker.url!}/test.txt`,
+        "Hello from base worker!",
       );
-      expect(baseWorkerCheck.status).toEqual(200);
+
+      // the versioned worker should have the new content
+      await fetchAndExpect(
+        `${versionWorker.previewUrl!}/test.txt`,
+        testContent,
+      );
     } finally {
       // Clean up temporary directory
       if (tempDir) {
