@@ -1227,7 +1227,6 @@ export const _Worker = Resource(
           {
             mode: "dev",
             quiet: true,
-            parent: this.scope,
           },
           async () =>
             //@ts-ignore
@@ -1543,26 +1542,6 @@ export default class extends WorkerEntrypoint {
         this.fqn,
       );
       url = `http://127.0.0.1:${port}`;
-
-      const scriptBundle =
-        props.script ??
-        //todo(michael): IDK if this should be hidden but it makes the logs nicer
-        (await alchemy.run(
-          "hidden-bundle-2",
-          {
-            // mode: "dev",
-            quiet: true,
-            parent: this.scope,
-          },
-          async () =>
-            //@ts-ignore
-            //todo(michael): this broke in an update and I was lazy
-            (await bundleWorkerScript({
-              ...props,
-              compatibilityDate,
-              compatibilityFlags,
-            })) as string,
-        ));
     }
 
     //todo(michael): I do not like that this is duplicated
