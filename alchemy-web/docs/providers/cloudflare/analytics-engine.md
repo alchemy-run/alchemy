@@ -32,8 +32,7 @@ const analytics = new AnalyticsEngineDataset("analytics", {
   dataset: "user-events",
 });
 
-// Worker entrypoint
-const entrypoint = `
+```ts title="./src/worker.ts"
 export default {
   async fetch(request, env, ctx) {
     // Log a page view event
@@ -46,15 +45,17 @@ export default {
     return new Response("Event logged!");
   }
 };
-`;
+```
 
+```ts
 await Worker("event-tracker", {
   name: "event-tracker",
-  entrypoint,
+  entrypoint: "./src/worker.ts",
   bindings: {
     ANALYTICS: analytics,
   },
 });
+```
 ```
 
 ## Real-time Event Logging
@@ -68,8 +69,7 @@ const userEvents = new AnalyticsEngineDataset("user-events", {
   dataset: "user-interaction-events",
 });
 
-// API server entrypoint
-const apiEntrypoint = `
+```ts title="./src/worker.ts"
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -113,15 +113,17 @@ export default {
     return new Response("Not Found", { status: 404 });
   }
 };
-`;
+```
 
+```ts
 await Worker("api-server", {
   name: "api-server",
-  entrypoint: apiEntrypoint,
+  entrypoint: "./src/worker.ts",
   bindings: {
     USER_EVENTS: userEvents,
   },
 });
+```
 ```
 
 ## E-commerce Analytics
@@ -135,8 +137,7 @@ const ecommerceAnalytics = new AnalyticsEngineDataset("ecommerce", {
   dataset: "store-analytics",
 });
 
-// Store API entrypoint
-const storeEntrypoint = `
+```ts title="./src/worker.ts"
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -182,15 +183,17 @@ export default {
     return new Response("Store API");
   }
 };
-`;
+```
 
+```ts
 await Worker("store-api", {
   name: "store-api",
-  entrypoint: storeEntrypoint,
+  entrypoint: "./src/worker.ts",
   bindings: {
     ANALYTICS: ecommerceAnalytics,
   },
 });
+```
 ```
 
 ## Data Structure
