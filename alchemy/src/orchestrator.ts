@@ -34,9 +34,9 @@ export interface Orchestrator {
   stopResource(resourceFQN: ResourceFQN): Promise<void>;
   startResource(resourceFQN: ResourceFQN): Promise<void>;
   processPendingStarts(): Promise<void>;
-  unsafeUseFromLibrary<T = unknown>(key: string): Promise<T>;
+  unsafeUseFromLibrary<T = unknown>(key: symbol): Promise<T>;
   useFromLibrary<T = unknown>(
-    key: string,
+    key: symbol,
     defaultValue: (scope: Scope) => Promise<T>,
   ): Promise<T>;
   claimNextAvailablePort(
@@ -67,15 +67,7 @@ export class DefaultOrchestrator implements Orchestrator {
   private readonly pendingStarts: Set<ResourceFQN> = new Set();
   // Global mutex to prevent any concurrent port claims
   private globalPortClaimMutex: Promise<void> = Promise.resolve();
-  //todo(michael):
-  // I do not like that this is unknown but we need to be able to
-  //provide a place for resource to keep their "junk" like a reference to
-  //miniflare.
-  // ^ we want to do this rather than having it just a global undefined variable
-  // because then it can be references across resources, or even by
-  // non-first-party resources. (e.g. if somebody wants to make their own CF
-  // worker resource they can use our miniflare instance)
-  private readonly library: Map<string, unknown> = new Map();
+  private readonly library: Map<symbol, unknown> = new Map();
   private readonly claimedPorts: Map<symbol, Port> = new Map();
 
   constructor(scope: Scope) {
@@ -309,16 +301,16 @@ export class DefaultOrchestrator implements Orchestrator {
     });
   }
 
-  async unsafeUseFromLibrary<T = unknown>(key: string): Promise<T> {
+  async unsafeUseFromLibrary<T = unknown>(key: symbol): Promise<T> {
     const value = this.library.get(key);
     if (value === undefined) {
-      throw new Error(`Library key ${key} not found`);
+      throw new Error(`Library key ${key.description} not found`);
     }
     return value as T;
   }
 
   async useFromLibrary<T = unknown>(
-    key: string,
+    key: symbol,
     defaultValue: (scope: Scope) => Promise<T>,
   ): Promise<T> {
     const value = this.library.get(key);

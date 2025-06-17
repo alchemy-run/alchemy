@@ -22,16 +22,3 @@ export type ModeType =
   | "hybrid-prefer-live"
   | "hybrid-prefer-dev"; // | "hybrid";
 export const DEFAULT_MODE = "hybrid-prefer-live";
-
-//todo(michael):
-// I don't like this name. It's more "generate resource needed for
-// dev resource to run". Which is only really useful for higher level constructs
-// like "Website" that don't really care if they are running in local mode.
-// Realistically this shouldn't exist since if something needed by a L1 resource
-// it should be created by the dev handler in the L1 resource, not by the L2
-// resource.
-// ^ or at worse we should have an L2 resource that gives a live only resource a
-// local capability. because this is ugly af rn.
-export function generateLocalResource(mode: ModeType) {
-  return !(mode === "dev" || mode === "hybrid-prefer-dev");
-}

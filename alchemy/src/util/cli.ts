@@ -117,6 +117,6 @@ export const createFallbackLogger = (alchemyInfo: AlchemyInfo): LoggerApi => {
 export const formatFQN = (fqn: string) =>
   fqn
     .split("/")
-    .slice(2)
+    .slice(3)
     .filter((part) => !part.startsWith("hidden-"))
     .join(" > ");

@@ -1,6 +1,7 @@
 import { apply } from "./apply.ts";
 import type { Context, DevContext } from "./context.ts";
 import { Scope as _Scope, type Scope } from "./scope.ts";
+import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
 
 export const PROVIDERS: Map<ResourceKind, Provider<string, any>> = new Map<
@@ -107,18 +108,16 @@ type LocalResourceLifecycleHandler = (
 
 const localModeHandlerUnavailable: LocalResourceLifecycleHandler & {
   [IsInvalidHandler]: true;
-} = () => {
-  logger.error("Local mode handler unavailable");
-  logger.exit();
-  //todo(michael) provide resource name in error, also just better error message
+} = function (this) {
+  logger.error(`Local mode handler unavailable for ${formatFQN(this.fqn)}`);
   throw new Error("Local mode handler unavailable");
 };
 localModeHandlerUnavailable[IsInvalidHandler] = true;
 
 const liveModeHandlerUnavailable: ResourceLifecycleHandler & {
   [IsInvalidHandler]: true;
-} = () => {
-  //todo(michael) provide resource name in error, also just better error message
+} = function (this) {
+  logger.error(`Live mode handler unavailable for ${formatFQN(this.fqn)}`);
   throw new Error("Live mode handler unavailable");
 };
 liveModeHandlerUnavailable[IsInvalidHandler] = true;
@@ -153,7 +152,6 @@ export function LiveOnlyResource<
   //@ts-expect-error: see above comment
   return Resource<Type, F, typeof localModeHandlerUnavailable>(
     type,
-    //todo(michael): need to fight with TS a little here
     //@ts-expect-error
     ...args,
     localModeHandlerUnavailable,
@@ -181,7 +179,6 @@ export function LocalOnlyResource<
   //@ts-expect-error: see above comment
   return Resource<Type, typeof liveModeHandlerUnavailable, FL>(
     type,
-    //todo(michael): need to fight with TS a little here
     //@ts-expect-error
     ...allArgsExceptLast,
     liveModeHandlerUnavailable,

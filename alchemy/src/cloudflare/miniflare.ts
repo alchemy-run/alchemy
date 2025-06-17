@@ -18,6 +18,13 @@ export interface Miniflare extends Resource<"cloudflare::Miniflare"> {
   miniflare: MiniflareInstance;
 }
 
+export const MiniflareWorkersSymbol = Symbol.for(
+  "cloudflare::Miniflare::workers",
+);
+export const MiniflareInstanceSymbol = Symbol.for(
+  "cloudflare::Miniflare::instance",
+);
+
 export const Miniflare = LocalOnlyResource(
   "cloudflare::Miniflare",
   {
@@ -41,7 +48,7 @@ export const Miniflare = LocalOnlyResource(
     }
 
     const workers = await this.scope.orchestrator.useFromLibrary(
-      "alchemy::miniflare::workers",
+      MiniflareWorkersSymbol,
       async () => {
         return (
           props?.workers ?? ([await MiniflareAiProxy()] as Array<WorkerOptions>)
@@ -49,7 +56,7 @@ export const Miniflare = LocalOnlyResource(
       },
     );
     const mf = await this.scope.orchestrator.useFromLibrary(
-      "alchemy::miniflare::instance",
+      MiniflareInstanceSymbol,
       async () => {
         const miniflare = await import("miniflare");
         const mf = new miniflare.Miniflare({

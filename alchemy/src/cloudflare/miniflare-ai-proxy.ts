@@ -72,19 +72,16 @@ class Ai {
     }
 }
 
-// Extend WorkerEntrypoint to support multiple RPC arguments
 export default class extends WorkerEntrypoint {
     constructor(ctx, env) {
         super(ctx, env);
         this.ai = new Ai(env.ACCOUNT_ID, env.API_TOKEN);
     }
 
-    // Standard fetch handler
     async fetch(request) {
         return new Response('AI Proxy Service', { status: 200 });
     }
     
-    // RPC methods - now support multiple arguments
     async run(model, input) {
         return await this.ai.run(model, input);
     }

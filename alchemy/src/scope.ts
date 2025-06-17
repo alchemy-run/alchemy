@@ -131,7 +131,6 @@ export class Scope {
       this.parent?.stateStore ??
       ((scope) => new FileSystemStateStore(scope));
     this.state = this.stateStore(this);
-    //todo(michael): allow setting custom orchestrators
     if (this.parent == null) {
       this.internalOrchestrator = new DefaultOrchestrator(this);
     }

@@ -4,7 +4,6 @@ import type {
   WorkerOptions,
 } from "miniflare";
 import path from "node:path";
-import { alchemy } from "../alchemy.ts";
 import type { Context, DevContext } from "../context.ts";
 import type { BundleProps } from "../esbuild/bundle.ts";
 import { InnerResourceScope, Resource, ResourceKind } from "../resource.ts";
@@ -54,6 +53,10 @@ import {
 } from "./event-source.ts";
 import { isKVNamespace } from "./kv-namespace.ts";
 import { MiniflareAiProxy } from "./miniflare-ai-proxy.ts";
+import {
+  MiniflareInstanceSymbol,
+  MiniflareWorkersSymbol,
+} from "./miniflare.ts";
 import { isPipeline } from "./pipeline.ts";
 import {
   QueueConsumer,
@@ -1195,9 +1198,9 @@ export const _Worker = Resource(
     } else if (this.phase === "dev:stop") {
       const workers = await this.scope.orchestrator.unsafeUseFromLibrary<
         Array<WorkerOptions>
-      >("alchemy::miniflare::workers");
+      >(MiniflareWorkersSymbol);
       const mf = await this.scope.orchestrator.unsafeUseFromLibrary<Miniflare>(
-        "alchemy::miniflare::instance",
+        MiniflareInstanceSymbol,
       );
       for (let i = workers.length - 1; i >= 0; i--) {
         if (workers[i].name === workerName) {
@@ -1208,7 +1211,6 @@ export const _Worker = Resource(
         workers,
       });
       await mf.ready;
-      //todo(michael): it may make sense to dispose here, if its the last worker
     } else if (this.phase === "dev:start") {
       const resource = await this.scope.orchestrator.getResource(this.fqn);
       if (!resource?.port) {
@@ -1218,26 +1220,26 @@ export const _Worker = Resource(
       }
       const scriptBundle =
         props.script ??
-        //todo(michael): IDK if this should be hidden but it makes the logs nicer
-        (await alchemy.run(
-          "hidden-bundle",
-          {
-            mode: "dev",
-            quiet: true,
-          },
-          async () =>
-            //@ts-ignore
-            //todo(michael): this broke in an update and I was lazy
-            (await bundleWorkerScript({
-              ...props,
-              compatibilityDate,
-              compatibilityFlags,
-            })) as string,
-        ));
+        (await bundleWorkerScript({
+          ...props,
+          name: workerName,
+          compatibilityDate,
+          compatibilityFlags,
+        }));
+
       const worker: WorkerOptions = {
         name: workerName,
-        script: scriptBundle,
-        modules: true,
+        ...(typeof scriptBundle === "string"
+          ? { script: scriptBundle, modules: true }
+          : {
+              modules: Object.entries(scriptBundle as NoBundleResult).map(
+                ([path, content]) => ({
+                  type: "ESModule" as const,
+                  path: path,
+                  contents: content.toString("utf-8"),
+                }),
+              ),
+            }),
         compatibilityDate: props.compatibilityDate,
         compatibilityFlags: props.compatibilityFlags,
         //todo(michael): check if there is any actual route to it or if its only a service worker
@@ -1273,10 +1275,12 @@ export const _Worker = Resource(
           (worker.serviceBindings ??= {})[bindingName] =
             "service" in binding ? binding.service : binding.name;
         } else if (binding.type === "durable_object_namespace") {
-          //todo(michael): implement this
-          throw new Error(
-            "Durable Object Namespace binding not supported in Alchemy dev mode",
-          );
+          (worker.durableObjects ??= {})[bindingName] = {
+            className: binding.className,
+            scriptName: binding.scriptName,
+            useSQLite: binding.sqlite,
+            unsafeUniqueKey: `${binding.scriptName}-${binding.className}`,
+          };
         } else if (binding.type === "r2_bucket") {
           ((worker.r2Buckets ??= {}) as Record<string, string>)[bindingName] =
             binding.name;
@@ -1374,13 +1378,13 @@ export const _Worker = Resource(
       }
 
       const workers = await this.scope.orchestrator.useFromLibrary(
-        "alchemy::miniflare::workers",
+        MiniflareWorkersSymbol,
         async () => {
           return [await MiniflareAiProxy()] as Array<WorkerOptions>;
         },
       );
       const mf = await this.scope.orchestrator.useFromLibrary(
-        "alchemy::miniflare::instance",
+        MiniflareInstanceSymbol,
         async () => {
           const miniflare = await import("miniflare");
           const mf = new miniflare.Miniflare({
