@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { confirm, input, select } from "@inquirer/prompts";
 import { applyEdits, modify } from "jsonc-parser";
 import { execSync } from "node:child_process";
@@ -409,7 +407,7 @@ export default defineConfig({
 export const GET: APIRoute = async ({ request }) => {
   // Access Cloudflare runtime context
   const runtime = request.cf;
-  
+
   return new Response(JSON.stringify({
     message: "Hello from Astro API on Cloudflare!",
     timestamp: new Date().toISOString(),
@@ -799,7 +797,7 @@ import alchemy from "alchemy";
 import { D1Database, DurableObjectNamespace, Redwood } from "alchemy/cloudflare";
 
 const app = await alchemy("${projectName}");
-    
+
 const database = await D1Database("database", {
   name: "${projectName}-db",${adopt}
   migrationsDir: "migrations",

@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { parseArgs } from "node:util";
 import { createAlchemy } from "./create-alchemy.ts";
 
