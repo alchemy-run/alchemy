@@ -577,12 +577,7 @@ export async function prepareWorkerOptions<B extends Bindings>(
   const worker: WorkerOptions = {
     name: workerName,
     script: props.script ?? "",
-    // modules: true,
-    modules: [
-      {
-        type: "",
-      },
-    ],
+    modules: true,
     compatibilityDate: props.compatibilityDate,
     compatibilityFlags: props.compatibilityFlags,
     //todo(michael): check if there is any actual route to it or if its only a service worker
