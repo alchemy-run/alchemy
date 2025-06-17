@@ -31,33 +31,39 @@ export type Serialized<T> = T extends
     ? {
         "@schema": string;
       }
-    : T extends Secret
+    : T extends Secret<string>
       ? {
           "@secret": string;
         }
-      : T extends Date
+      : T extends Secret<any>
         ? {
-            "@date": string;
+            "@secret": {
+              object: string;
+            };
           }
-        : T extends Symbol
+        : T extends Date
           ? {
-              "@symbol": string;
+              "@date": string;
             }
-          : T extends Scope
+          : T extends Symbol
             ? {
-                "@scope": null;
+                "@symbol": string;
               }
-            : T extends Function
-              ? undefined
-              : T extends Array<infer U>
-                ? Array<Serialized<U>>
-                : T extends object
-                  ? {
-                      [K in keyof T as K extends symbol
-                        ? string
-                        : K]: Serialized<T[K]>;
-                    }
-                  : T;
+            : T extends Scope
+              ? {
+                  "@scope": null;
+                }
+              : T extends Function
+                ? undefined
+                : T extends Array<infer U>
+                  ? Array<Serialized<U>>
+                  : T extends object
+                    ? {
+                        [K in keyof T as K extends symbol
+                          ? string
+                          : K]: Serialized<T[K]>;
+                      }
+                    : T;
 
 export type SerializedScope = {
   [fqn: ResourceFQN]: Serialized<Resource>;
@@ -121,7 +127,14 @@ export async function serialize(
     return {
       "@secret":
         options?.encrypt !== false
-          ? await encrypt(value.unencrypted, scope.password)
+          ? typeof value.unencrypted === "string"
+            ? await encrypt(value.unencrypted, scope.password)
+            : {
+                data: await encrypt(
+                  JSON.stringify(value.unencrypted),
+                  scope.password,
+                ),
+              }
           : value.unencrypted,
     };
   } else if (isType(value)) {
@@ -203,11 +216,18 @@ export async function deserialize(
     );
   }
   if (value && typeof value === "object") {
-    if (typeof value["@secret"] === "string") {
+    if (value["@secret"]) {
       if (!scope.password) {
         throw new Error(
           "Cannot deserialize secret without password, did you forget to set password when initializing your alchemy app?\n" +
             "See: https://alchemy.run/docs/concepts/secret.html#encryption-password",
+        );
+      }
+      if (typeof value["@secret"] === "object") {
+        return new Secret(
+          JSON.parse(
+            await decryptWithKey(value["@secret"].data, scope.password),
+          ),
         );
       }
       return new Secret(await decryptWithKey(value["@secret"], scope.password));

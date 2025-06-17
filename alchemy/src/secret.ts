@@ -8,7 +8,7 @@ declare global {
 
 // a global registry of all secrets that we will use when serializing an application
 const globalSecrets: {
-  [name: string]: Secret;
+  [name: string]: Secret<any>;
 } = (globalThis.__ALCHEMY_SECRETS__ ??= {});
 
 let i = 0;
@@ -53,19 +53,19 @@ const SecretSymbol = Symbol.for("alchemy::Secret");
  *   }
  * }
  */
-export class Secret {
+export class Secret<T = string> {
   [SecretSymbol] = true;
 
   /**
    * @internal
    */
-  public static all(): Secret[] {
+  public static all(): Secret<any>[] {
     return Object.values(globalSecrets);
   }
 
   public readonly type = "secret";
   constructor(
-    readonly unencrypted: string,
+    readonly unencrypted: T,
     readonly name: string = nextName(),
   ) {
     globalSecrets[name] = this;
@@ -111,10 +111,10 @@ export function isSecret(binding: any): binding is Secret {
  * @throws {Error} If the value is undefined
  * @throws {Error} If no password is set in the alchemy application options or current scope
  */
-export function secret<S extends string | undefined>(
-  unencrypted: S,
+export function secret<S = string>(
+  unencrypted: S | undefined,
   name?: string,
-): Secret {
+): Secret<S> {
   if (unencrypted === undefined) {
     throw new Error("Secret cannot be undefined");
   }

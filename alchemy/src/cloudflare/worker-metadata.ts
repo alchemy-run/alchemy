@@ -491,8 +491,8 @@ export async function prepareWorkerMetadata<B extends Bindings>(
         algorithm: binding.algorithm,
         format: binding.format,
         usages: binding.usages,
-        key_base64: binding.key_base64,
-        key_jwk: binding.key_jwk,
+        key_base64: binding.key_base64?.unencrypted,
+        key_jwk: binding.key_jwk?.unencrypted,
       });
     } else {
       // @ts-expect-error - we should never reach here

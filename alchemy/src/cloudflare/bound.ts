@@ -49,7 +49,7 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
                 : T extends CloudflareSecret
                   ? string
                   : T extends SecretKey
-                    ? any // TODO(sam): what is this type
+                    ? CryptoKey
                     : T extends Assets
                       ? Service
                       : T extends _Workflow<infer P>
