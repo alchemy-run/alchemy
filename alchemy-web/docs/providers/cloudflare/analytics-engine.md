@@ -32,22 +32,25 @@ const analytics = new AnalyticsEngineDataset("analytics", {
   dataset: "user-events",
 });
 
+// Worker entrypoint
+const entrypoint = `
+export default {
+  async fetch(request, env, ctx) {
+    // Log a page view event
+    env.ANALYTICS.writeDataPoint({
+      blobs: ["page_view", "homepage", request.url],
+      doubles: [1.0],
+      indexes: [request.headers.get("cf-connecting-ip") || "unknown"]
+    });
+    
+    return new Response("Event logged!");
+  }
+};
+`;
+
 await Worker("event-tracker", {
   name: "event-tracker",
-  script: `
-    export default {
-      async fetch(request, env, ctx) {
-        // Log a page view event
-        env.ANALYTICS.writeDataPoint({
-          blobs: ["page_view", "homepage", request.url],
-          doubles: [1.0],
-          indexes: [request.headers.get("cf-connecting-ip") || "unknown"]
-        });
-        
-        return new Response("Event logged!");
-      }
-    };
-  `,
+  entrypoint,
   bindings: {
     ANALYTICS: analytics,
   },
@@ -65,53 +68,56 @@ const userEvents = new AnalyticsEngineDataset("user-events", {
   dataset: "user-interaction-events",
 });
 
+// API server entrypoint
+const apiEntrypoint = `
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    
+    if (url.pathname === "/api/track" && request.method === "POST") {
+      try {
+        const event = await request.json();
+        
+        // Log structured event data
+        env.USER_EVENTS.writeDataPoint({
+          blobs: [
+            event.action || "unknown",        // Event type
+            event.category || "general",      // Event category  
+            event.details || "",              // Additional details
+            request.headers.get("user-agent") || "unknown"
+          ],
+          doubles: [
+            event.value || 1.0,               // Numeric value
+            Date.now()                        // Timestamp
+          ],
+          indexes: [
+            event.userId || "anonymous",      // User identifier
+            request.headers.get("cf-connecting-ip") || "unknown"
+          ]
+        });
+        
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { "Content-Type": "application/json" }
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: error.message 
+        }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+    }
+    
+    return new Response("Not Found", { status: 404 });
+  }
+};
+`;
+
 await Worker("api-server", {
   name: "api-server",
-  script: `
-    export default {
-      async fetch(request, env, ctx) {
-        const url = new URL(request.url);
-        
-        if (url.pathname === "/api/track" && request.method === "POST") {
-          try {
-            const event = await request.json();
-            
-            // Log structured event data
-            env.USER_EVENTS.writeDataPoint({
-              blobs: [
-                event.action || "unknown",        // Event type
-                event.category || "general",      // Event category  
-                event.details || "",              // Additional details
-                request.headers.get("user-agent") || "unknown"
-              ],
-              doubles: [
-                event.value || 1.0,               // Numeric value
-                Date.now()                        // Timestamp
-              ],
-              indexes: [
-                event.userId || "anonymous",      // User identifier
-                request.headers.get("cf-connecting-ip") || "unknown"
-              ]
-            });
-            
-            return new Response(JSON.stringify({ success: true }), {
-              headers: { "Content-Type": "application/json" }
-            });
-          } catch (error) {
-            return new Response(JSON.stringify({ 
-              success: false, 
-              error: error.message 
-            }), {
-              status: 400,
-              headers: { "Content-Type": "application/json" }
-            });
-          }
-        }
-        
-        return new Response("Not Found", { status: 404 });
-      }
-    };
-  `,
+  entrypoint: apiEntrypoint,
   bindings: {
     USER_EVENTS: userEvents,
   },
@@ -129,55 +135,58 @@ const ecommerceAnalytics = new AnalyticsEngineDataset("ecommerce", {
   dataset: "store-analytics",
 });
 
+// Store API entrypoint
+const storeEntrypoint = `
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    
+    if (url.pathname === "/api/purchase" && request.method === "POST") {
+      const purchase = await request.json();
+      
+      // Track purchase event
+      env.ANALYTICS.writeDataPoint({
+        blobs: [
+          "purchase",                    // Event type
+          purchase.productCategory,      // Product category
+          purchase.paymentMethod,        // Payment method
+          purchase.country || "unknown"  // User country
+        ],
+        doubles: [
+          purchase.amount,               // Purchase amount
+          purchase.quantity || 1,        // Item quantity
+          Date.now()                     // Purchase timestamp
+        ],
+        indexes: [
+          purchase.userId,               // Customer ID
+          purchase.productId,            // Product ID
+          purchase.orderId               // Order ID
+        ]
+      });
+      
+      return new Response(JSON.stringify({ 
+        success: true,
+        orderId: purchase.orderId 
+      }));
+    }
+    
+    // Track page views
+    if (request.method === "GET") {
+      env.ANALYTICS.writeDataPoint({
+        blobs: ["page_view", url.pathname, request.headers.get("referer") || "direct"],
+        doubles: [1.0, Date.now()],
+        indexes: [request.headers.get("cf-connecting-ip") || "unknown"]
+      });
+    }
+    
+    return new Response("Store API");
+  }
+};
+`;
+
 await Worker("store-api", {
-  name: "store-api", 
-  script: `
-    export default {
-      async fetch(request, env, ctx) {
-        const url = new URL(request.url);
-        
-        if (url.pathname === "/api/purchase" && request.method === "POST") {
-          const purchase = await request.json();
-          
-          // Track purchase event
-          env.ANALYTICS.writeDataPoint({
-            blobs: [
-              "purchase",                    // Event type
-              purchase.productCategory,      // Product category
-              purchase.paymentMethod,        // Payment method
-              purchase.country || "unknown"  // User country
-            ],
-            doubles: [
-              purchase.amount,               // Purchase amount
-              purchase.quantity || 1,        // Item quantity
-              Date.now()                     // Purchase timestamp
-            ],
-            indexes: [
-              purchase.userId,               // Customer ID
-              purchase.productId,            // Product ID
-              purchase.orderId               // Order ID
-            ]
-          });
-          
-          return new Response(JSON.stringify({ 
-            success: true,
-            orderId: purchase.orderId 
-          }));
-        }
-        
-        // Track page views
-        if (request.method === "GET") {
-          env.ANALYTICS.writeDataPoint({
-            blobs: ["page_view", url.pathname, request.headers.get("referer") || "direct"],
-            doubles: [1.0, Date.now()],
-            indexes: [request.headers.get("cf-connecting-ip") || "unknown"]
-          });
-        }
-        
-        return new Response("Store API");
-      }
-    };
-  `,
+  name: "store-api",
+  entrypoint: storeEntrypoint,
   bindings: {
     ANALYTICS: ecommerceAnalytics,
   },
@@ -186,28 +195,7 @@ await Worker("store-api", {
 
 ## Data Structure
 
-Analytics Engine data points consist of three types of fields:
-
-### Blobs (String Data)
-Up to 20 string values per data point. Use for:
-- Event names and categories
-- User agents and referrers  
-- Product names and descriptions
-- Geographic information
-
-### Doubles (Numeric Data)
-Up to 20 numeric values per data point. Use for:
-- Monetary amounts and quantities
-- Timestamps and durations
-- Metrics and measurements
-- Performance indicators
-
-### Indexes (Queryable Fields)
-Up to 20 indexed string values per data point. Use for:
-- User and session identifiers
-- Product and order IDs
-- IP addresses and country codes
-- Any fields you want to filter or group by
+For detailed information about Analytics Engine data structures (blobs, doubles, and indexes), see the [official Cloudflare Analytics Engine documentation](https://developers.cloudflare.com/analytics/analytics-engine/write-data/).
 
 ## Best Practices
 
@@ -251,46 +239,4 @@ try {
 - Consider batching related events when possible
 - Use `ctx.waitUntil()` for fire-and-forget analytics in request handlers
 
-## Dataset Configuration
-
-Analytics Engine datasets must be created before use:
-
-### Using Wrangler CLI
-```bash
-# Create a new dataset
-wrangler analytics-engine create my-dataset
-
-# List existing datasets  
-wrangler analytics-engine list
-```
-
-### Using Cloudflare Dashboard
-1. Go to your Cloudflare dashboard
-2. Navigate to "Analytics & Logs" > "Analytics Engine"  
-3. Click "Create dataset"
-4. Enter your dataset name
-
-## Querying Data
-
-Query your analytics data using the Analytics Engine SQL API or GraphQL API:
-
-```sql
--- Example SQL query
-SELECT
-  blob1 as event_type,
-  blob2 as category,
-  COUNT(*) as event_count,
-  SUM(double1) as total_value
-FROM my_dataset
-WHERE timestamp >= NOW() - INTERVAL '24' HOUR
-GROUP BY blob1, blob2
-ORDER BY event_count DESC
-```
-
-## Limitations
-
-- Maximum 20 blobs, 20 doubles, and 20 indexes per data point
-- Blob values limited to 512 bytes each
-- Index values limited to 96 bytes each  
-- Data retention varies by Cloudflare plan
-- Queries have rate limits and complexity restrictions
+For dataset creation, querying, and additional configuration options, see the [official Cloudflare Analytics Engine documentation](https://developers.cloudflare.com/analytics/analytics-engine/).
