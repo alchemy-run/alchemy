@@ -164,10 +164,6 @@ export function createAssetConfig(config?: AssetsConfig): AssetsConfig {
     if (config.run_worker_first !== undefined) {
       assetConfig.run_worker_first = config.run_worker_first;
     }
-
-    if (config.serve_directly !== undefined) {
-      assetConfig.serve_directly = config.serve_directly;
-    }
   }
 
   return assetConfig;

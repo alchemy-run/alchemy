@@ -80,7 +80,8 @@ export interface AssetsConfig {
 
   /**
    * Determines the redirects and rewrites of requests for HTML content
-   * @default "auto-trailing-slash"
+   *
+   * @default auto-trailing-slash
    */
   html_handling?:
     | "auto-trailing-slash"
@@ -90,22 +91,18 @@ export interface AssetsConfig {
 
   /**
    * Determines the response when a request does not match a static asset, and there is no Worker script
+   *
+   * @default none
    */
   not_found_handling?: "none" | "404-page" | "single-page-application";
 
   /**
    * When true, requests will always invoke the Worker script.
    * Otherwise, attempt to serve an asset matching the request, falling back to the Worker script.
+   *
+   * @default false
    */
   run_worker_first?: boolean;
-
-  /**
-   * When true and the incoming request matches an asset, that will be served instead of invoking the Worker script.
-   * When false, requests will always invoke the Worker script.
-   * @default true
-   * @deprecated
-   */
-  serve_directly?: boolean;
 }
 
 export interface BaseWorkerProps<
