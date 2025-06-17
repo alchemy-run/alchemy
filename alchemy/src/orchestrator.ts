@@ -1,10 +1,9 @@
 import net from "node:net";
 import { alchemy } from "./alchemy.ts";
 import { context } from "./context.ts";
-import type { Provider, ResourceID } from "./resource.ts";
+import type { Provider, ResourceFQN } from "./resource.ts";
 import {
   PROVIDERS,
-  ResourceFQN,
   ResourceKind,
   ResourceSeq,
   type PendingResource,
@@ -21,20 +20,20 @@ export interface Orchestrator {
   shutdown(): Promise<void>;
   listResources(isRunning?: boolean): Promise<
     Array<{
-      id: ResourceID;
+      fqn: ResourceFQN;
       isRunning: boolean;
       port?: Port;
     }>
   >;
-  getResource(resourceId: ResourceID): Promise<{
-    id: ResourceID;
+  getResource(resourceFQN: ResourceFQN): Promise<{
+    fqn: ResourceFQN;
     isRunning: boolean;
     port?: Port;
   }>;
-  addResource(resourceId: ResourceID, autoStart?: boolean): Promise<void>;
-  queueStartResource(resourceId: ResourceID): Promise<void>;
-  stopResource(resourceId: ResourceID): Promise<void>;
-  startResource(resourceId: ResourceID): Promise<void>;
+  addResource(resourceFQN: ResourceFQN, autoStart?: boolean): Promise<void>;
+  queueStartResource(resourceFQN: ResourceFQN): Promise<void>;
+  stopResource(resourceFQN: ResourceFQN): Promise<void>;
+  startResource(resourceFQN: ResourceFQN): Promise<void>;
   processPendingStarts(): Promise<void>;
   unsafeUseFromLibrary<T = unknown>(key: string): Promise<T>;
   useFromLibrary<T = unknown>(
@@ -42,7 +41,7 @@ export interface Orchestrator {
     defaultValue: (scope: Scope) => Promise<T>,
   ): Promise<T>;
   claimNextAvailablePort(
-    key: ResourceID | symbol,
+    key: ResourceFQN | symbol,
     startingFrom?: Port,
     maxPort?: Port,
   ): Promise<Port>;
@@ -60,13 +59,13 @@ export interface Orchestrator {
 
 export class DefaultOrchestrator implements Orchestrator {
   private resources: Map<
-    ResourceID,
+    ResourceFQN,
     {
       isRunning: boolean;
     }
   > = new Map();
   private readonly scope: Scope;
-  private readonly pendingStarts: Set<ResourceID> = new Set();
+  private readonly pendingStarts: Set<ResourceFQN> = new Set();
   // Global mutex to prevent any concurrent port claims
   private globalPortClaimMutex: Promise<void> = Promise.resolve();
   //todo(michael):
@@ -85,10 +84,38 @@ export class DefaultOrchestrator implements Orchestrator {
     this.resources = new Map();
     this.library = new Map();
   }
-  async addResource(resourceId: ResourceID, autoStart = true): Promise<void> {
-    this.resources.set(resourceId, { isRunning: false });
+
+  /**
+   * Find a scope by its FQN path
+   */
+  private findScopeByFQN(fqn: ResourceFQN): Scope {
+    // Parse the FQN to get the path segments
+    const segments = fqn.split("/");
+
+    // Remove the resource ID (last segment) and the root scope segments
+    const rootChain = this.scope.chain;
+    const scopeSegments = segments.slice(0, -1); // Remove resource ID
+    const pathSegments = scopeSegments.slice(rootChain.length); // Remove root scope path
+
+    // Navigate from root scope to find the target scope
+    let currentScope = this.scope;
+    for (const segment of pathSegments) {
+      const childScope = currentScope.children.get(segment);
+      if (!childScope) {
+        throw new Error(
+          `Scope segment '${segment}' not found in scope chain for FQN: ${fqn}`,
+        );
+      }
+      currentScope = childScope;
+    }
+
+    return currentScope;
+  }
+
+  async addResource(resourceFQN: ResourceFQN, autoStart = true): Promise<void> {
+    this.resources.set(resourceFQN, { isRunning: false });
     if (autoStart) {
-      await this.queueStartResource(resourceId);
+      await this.queueStartResource(resourceFQN);
     }
     return;
   }
@@ -99,9 +126,9 @@ export class DefaultOrchestrator implements Orchestrator {
   async shutdown(): Promise<void> {
     // Stop all running resources
     const entries = Array.from(this.resources.entries()).reverse();
-    for (const [resourceId, resource] of entries) {
+    for (const [resourceFQN, resource] of entries) {
       if (resource.isRunning) {
-        await this.stopResource(resourceId);
+        await this.stopResource(resourceFQN);
       }
     }
     this.claimedPorts.clear();
@@ -110,40 +137,40 @@ export class DefaultOrchestrator implements Orchestrator {
 
   async listResources(isRunning?: boolean): Promise<
     Array<{
-      id: ResourceID;
+      fqn: ResourceFQN;
       isRunning: boolean;
       port?: Port;
     }>
   > {
     if (isRunning === undefined) {
-      return Array.from(this.resources.entries()).map(([id, r]) => ({
-        id,
+      return Array.from(this.resources.entries()).map(([fqn, r]) => ({
+        fqn,
         ...r,
-        port: this.claimedPorts.get(Symbol.for(id)),
+        port: this.claimedPorts.get(Symbol.for(fqn)),
       }));
     }
     return Array.from(this.resources.entries())
       .filter(([_, r]) => r.isRunning === isRunning)
-      .map(([id, r]) => ({
-        id,
+      .map(([fqn, r]) => ({
+        fqn,
         ...r,
-        port: this.claimedPorts.get(Symbol.for(id)),
+        port: this.claimedPorts.get(Symbol.for(fqn)),
       }));
   }
 
-  async getResource(resourceId: ResourceID): Promise<{
-    id: ResourceID;
+  async getResource(resourceFQN: ResourceFQN): Promise<{
+    fqn: ResourceFQN;
     isRunning: boolean;
     port?: Port;
   }> {
-    const resource = this.resources.get(resourceId);
+    const resource = this.resources.get(resourceFQN);
     if (!resource) {
-      throw new Error(`Resource ${resourceId} not found in orchestrator`);
+      throw new Error(`Resource ${resourceFQN} not found in orchestrator`);
     }
     return {
-      id: resourceId,
+      fqn: resourceFQN,
       ...resource,
-      port: this.claimedPorts.get(Symbol.for(resourceId)),
+      port: this.claimedPorts.get(Symbol.for(resourceFQN)),
     };
   }
 
@@ -152,29 +179,37 @@ export class DefaultOrchestrator implements Orchestrator {
   // but i'm worried that might confused people in dev:start who do choose to
   // await it and then get stuck since the scope never finishes and thus it
   // never solves
-  async queueStartResource(resourceId: ResourceID): Promise<void> {
-    this.pendingStarts.add(resourceId);
+  async queueStartResource(resourceFQN: ResourceFQN): Promise<void> {
+    this.pendingStarts.add(resourceFQN);
   }
 
   async processPendingStarts(): Promise<void> {
     const pendingStartsCopy = Array.from(this.pendingStarts);
     this.pendingStarts.clear();
 
-    for (const resourceId of pendingStartsCopy) {
-      await this.startResource(resourceId);
+    for (const resourceFQN of pendingStartsCopy) {
+      await this.startResource(resourceFQN);
     }
   }
 
-  public async startResource(resourceId: ResourceID): Promise<void> {
-    const resource = this.scope.resources.get(resourceId);
+  public async startResource(resourceFQN: ResourceFQN): Promise<void> {
+    // Find the correct scope for this resource
+    const targetScope = this.findScopeByFQN(resourceFQN);
+
+    // Extract resource ID from FQN
+    const resourceID = resourceFQN.split("/").pop()!;
+
+    const resource = targetScope.resources.get(resourceID);
     if (!resource) {
-      throw new Error(`Resource ${resourceId} not found in scope`);
+      throw new Error(
+        `Resource ${resourceID} not found in scope for FQN ${resourceFQN}`,
+      );
     }
 
-    logger.task(resourceId, {
+    logger.task(resourceID, {
       prefix: "starting",
       prefixColor: "greenBright",
-      resource: formatFQN(resource[ResourceFQN]),
+      resource: formatFQN(resourceFQN),
       message: "Starting Resource Locally",
       status: "success",
     });
@@ -183,20 +218,20 @@ export class DefaultOrchestrator implements Orchestrator {
       (resource as PendingResource)[ResourceKind],
     );
     if (!provider) {
-      throw new Error(`Provider for resource ${resourceId} not found`);
+      throw new Error(`Provider for resource ${resourceID} not found`);
     }
 
-    const state = await this.scope.state.get(resourceId);
+    const state = await targetScope.state.get(resourceID);
     if (!state) {
-      throw new Error(`State for resource ${resourceId} not found`);
+      throw new Error(`State for resource ${resourceID} not found`);
     }
 
     const ctx = context({
-      scope: this.scope,
+      scope: targetScope,
       phase: "dev:start",
       kind: (resource as PendingResource)[ResourceKind],
-      id: resourceId,
-      fqn: (resource as PendingResource)[ResourceFQN],
+      id: resourceID,
+      fqn: resourceFQN,
       seq: (resource as PendingResource)[ResourceSeq],
       props: state.props,
       state,
@@ -206,36 +241,44 @@ export class DefaultOrchestrator implements Orchestrator {
     });
 
     await alchemy.run(
-      resourceId,
+      resourceID,
       {
         isResource: true,
-        parent: this.scope,
+        parent: targetScope,
       },
       async (_scope) => {
-        return await provider.localHandler.bind(ctx)(resourceId, state.props);
+        return await provider.localHandler.bind(ctx)(resourceID, state.props);
       },
     );
 
-    this.resources.set(resourceId, { isRunning: true });
-    logger.task(resourceId, {
+    this.resources.set(resourceFQN, { isRunning: true });
+    logger.task(resourceID, {
       prefix: "started",
       prefixColor: "greenBright",
-      resource: formatFQN(resource[ResourceFQN]),
+      resource: formatFQN(resourceFQN),
       message: "Started Resource Locally",
       status: "success",
     });
   }
 
-  async stopResource(resourceId: ResourceID): Promise<void> {
-    const resource = this.scope.resources.get(resourceId);
+  async stopResource(resourceFQN: ResourceFQN): Promise<void> {
+    // Find the correct scope for this resource
+    const targetScope = this.findScopeByFQN(resourceFQN);
+
+    // Extract resource ID from FQN
+    const resourceID = resourceFQN.split("/").pop()!;
+
+    const resource = targetScope.resources.get(resourceID);
     if (!resource) {
-      throw new Error(`Resource ${resourceId} not found in scope`);
+      throw new Error(
+        `Resource ${resourceID} not found in scope for FQN ${resourceFQN}`,
+      );
     }
 
-    logger.task(resourceId, {
+    logger.task(resourceID, {
       prefix: "stopping",
       prefixColor: "redBright",
-      resource: formatFQN(resource[ResourceFQN]),
+      resource: formatFQN(resourceFQN),
       message: "Stopping Resource Locally",
       status: "success",
     });
@@ -244,20 +287,20 @@ export class DefaultOrchestrator implements Orchestrator {
       (resource as PendingResource)[ResourceKind],
     );
     if (!provider) {
-      throw new Error(`Provider for resource ${resourceId} not found`);
+      throw new Error(`Provider for resource ${resourceID} not found`);
     }
 
-    const state = await this.scope.state.get(resourceId);
+    const state = await targetScope.state.get(resourceID);
     if (!state) {
-      throw new Error(`State for resource ${resourceId} not found`);
+      throw new Error(`State for resource ${resourceID} not found`);
     }
 
     const ctx = context({
-      scope: this.scope,
+      scope: targetScope,
       phase: "dev:stop",
       kind: (resource as PendingResource)[ResourceKind],
-      id: resourceId,
-      fqn: (resource as PendingResource)[ResourceFQN],
+      id: resourceID,
+      fqn: resourceFQN,
       seq: (resource as PendingResource)[ResourceSeq],
       props: state.props,
       state,
@@ -267,21 +310,21 @@ export class DefaultOrchestrator implements Orchestrator {
     });
 
     await alchemy.run(
-      resourceId,
+      resourceID,
       {
         isResource: true,
-        parent: this.scope,
+        parent: targetScope,
       },
       async (_scope) => {
-        return await provider.localHandler.bind(ctx)(resourceId, state.props);
+        return await provider.localHandler.bind(ctx)(resourceID, state.props);
       },
     );
 
-    this.resources.set(resourceId, { isRunning: false });
-    logger.task(resourceId, {
+    this.resources.set(resourceFQN, { isRunning: false });
+    logger.task(resourceID, {
       prefix: "stopped",
       prefixColor: "redBright",
-      resource: formatFQN(resource[ResourceFQN]),
+      resource: formatFQN(resourceFQN),
       message: "Stopped Resource Locally",
       status: "success",
     });
@@ -356,7 +399,7 @@ export class DefaultOrchestrator implements Orchestrator {
   }
 
   async claimNextAvailablePort(
-    key: ResourceID | symbol,
+    key: ResourceFQN | symbol,
     startingFrom?: Port,
     maxPort?: Port,
   ): Promise<Port> {
@@ -369,7 +412,7 @@ export class DefaultOrchestrator implements Orchestrator {
     try {
       await prev; // Wait for previous claim to finish
 
-      // Convert resource ID to symbol if needed
+      // Convert resource FQN to symbol if needed
       const symbolKey = typeof key === "symbol" ? key : Symbol.for(key);
 
       // Check if we already have a port for this key
@@ -378,7 +421,7 @@ export class DefaultOrchestrator implements Orchestrator {
         return existingPort;
       }
 
-      // If it's a resource ID, verify the resource exists
+      // If it's a resource FQN, verify the resource exists
       if (typeof key !== "symbol") {
         const resource = this.resources.get(key);
         if (resource == null) {

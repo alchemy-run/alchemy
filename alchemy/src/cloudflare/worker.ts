@@ -624,7 +624,7 @@ export function WorkerRef<
  * const taskQueue = await Queue("task-queue", {
  *   name: "task-queue"
  * });
- * 
+ *
  * const dlq = await Queue("failed-tasks", {
  *   name: "failed-tasks"
  * });
@@ -1192,7 +1192,7 @@ export const _Worker = Resource(
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
     if (this.phase === "delete") {
-      await this.scope.orchestrator.stopResource(id);
+      await this.scope.orchestrator.stopResource(this.fqn);
       return this.destroy();
     } else if (this.phase === "dev:stop") {
       const workers = await this.scope.orchestrator.unsafeUseFromLibrary<
@@ -1212,9 +1212,12 @@ export const _Worker = Resource(
       await mf.ready;
       //todo(michael): it may make sense to dispose here, if its the last worker
     } else if (this.phase === "dev:start") {
-      const resource = await this.scope.orchestrator.getResource(id);
+      console.log(this.scope.chain);
+      const resource = await this.scope.orchestrator.getResource(this.fqn);
       if (!resource?.port) {
-        throw new Error(`Port not found for resource ${id} during dev:start`);
+        throw new Error(
+          `Port not found for resource ${this.fqn} during dev:start`,
+        );
       }
       const scriptBundle =
         props.script ??
@@ -1227,6 +1230,8 @@ export const _Worker = Resource(
             parent: this.scope,
           },
           async () =>
+            //@ts-ignore
+            //todo(michael): this broke in an update and I was lazy
             (await bundleWorkerScript({
               ...props,
               compatibilityDate,
@@ -1529,12 +1534,35 @@ export default class extends WorkerEntrypoint {
       //* sanity check in case miniflare uses the wrong port
       url = (await mf.unsafeGetDirectURL(workerName)).toString();
     } else {
+      console.log(this.scope.chain);
       await this.scope.orchestrator.addResource(
-        id,
+        this.fqn,
         props.dev?.autoStart ?? true,
       );
-      const port = await this.scope.orchestrator.claimNextAvailablePort(id);
+      const port = await this.scope.orchestrator.claimNextAvailablePort(
+        this.fqn,
+      );
       url = `http://127.0.0.1:${port}`;
+
+      const scriptBundle =
+        props.script ??
+        //todo(michael): IDK if this should be hidden but it makes the logs nicer
+        (await alchemy.run(
+          "hidden-bundle-2",
+          {
+            // mode: "dev",
+            quiet: true,
+            parent: this.scope,
+          },
+          async () =>
+            //@ts-ignore
+            //todo(michael): this broke in an update and I was lazy
+            (await bundleWorkerScript({
+              ...props,
+              compatibilityDate,
+              compatibilityFlags,
+            })) as string,
+        ));
     }
 
     //todo(michael): I do not like that this is duplicated
