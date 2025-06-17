@@ -29,6 +29,7 @@ export * from "./email-rule.ts";
 export * from "./hyperdrive.ts";
 export * from "./images.ts";
 export * from "./kv-namespace.ts";
+export * from "./miniflare.ts";
 export * from "./nuxt.ts";
 export * from "./permission-groups.ts";
 export * from "./pipeline.ts";

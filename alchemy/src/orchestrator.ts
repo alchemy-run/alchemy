@@ -14,7 +14,6 @@ import { logger } from "./util/logger.ts";
 
 export type Port = number;
 
-//todo(michael): document what all of these do
 export interface Orchestrator {
   init(): Promise<void>;
   shutdown(): Promise<void>;
@@ -85,19 +84,10 @@ export class DefaultOrchestrator implements Orchestrator {
     this.library = new Map();
   }
 
-  /**
-   * Find a scope by its FQN path
-   */
   private findScopeByFQN(fqn: ResourceFQN): Scope {
-    // Parse the FQN to get the path segments
     const segments = fqn.split("/");
+    const pathSegments = segments.slice(this.scope.chain.length, -1);
 
-    // Remove the resource ID (last segment) and the root scope segments
-    const rootChain = this.scope.chain;
-    const scopeSegments = segments.slice(0, -1); // Remove resource ID
-    const pathSegments = scopeSegments.slice(rootChain.length); // Remove root scope path
-
-    // Navigate from root scope to find the target scope
     let currentScope = this.scope;
     for (const segment of pathSegments) {
       const childScope = currentScope.children.get(segment);
@@ -174,11 +164,6 @@ export class DefaultOrchestrator implements Orchestrator {
     };
   }
 
-  //todo(michael):
-  // awaiting this relaly should wait until internal start finishes
-  // but i'm worried that might confused people in dev:start who do choose to
-  // await it and then get stuck since the scope never finishes and thus it
-  // never solves
   async queueStartResource(resourceFQN: ResourceFQN): Promise<void> {
     this.pendingStarts.add(resourceFQN);
   }
@@ -193,10 +178,7 @@ export class DefaultOrchestrator implements Orchestrator {
   }
 
   public async startResource(resourceFQN: ResourceFQN): Promise<void> {
-    // Find the correct scope for this resource
     const targetScope = this.findScopeByFQN(resourceFQN);
-
-    // Extract resource ID from FQN
     const resourceID = resourceFQN.split("/").pop()!;
 
     const resource = targetScope.resources.get(resourceID);
@@ -262,10 +244,7 @@ export class DefaultOrchestrator implements Orchestrator {
   }
 
   async stopResource(resourceFQN: ResourceFQN): Promise<void> {
-    // Find the correct scope for this resource
     const targetScope = this.findScopeByFQN(resourceFQN);
-
-    // Extract resource ID from FQN
     const resourceID = resourceFQN.split("/").pop()!;
 
     const resource = targetScope.resources.get(resourceID);
@@ -328,7 +307,6 @@ export class DefaultOrchestrator implements Orchestrator {
       message: "Stopped Resource Locally",
       status: "success",
     });
-    //todo actually start/stop resource
   }
 
   async unsafeUseFromLibrary<T = unknown>(key: string): Promise<T> {
@@ -403,25 +381,18 @@ export class DefaultOrchestrator implements Orchestrator {
     startingFrom?: Port,
     maxPort?: Port,
   ): Promise<Port> {
-    // Global mutex lock: all port claims must be sequential
     let release: () => void;
     const prev = this.globalPortClaimMutex;
     const lock = new Promise<void>((res) => (release = res));
     this.globalPortClaimMutex = prev.then(() => lock);
 
     try {
-      await prev; // Wait for previous claim to finish
-
-      // Convert resource FQN to symbol if needed
+      await prev;
       const symbolKey = typeof key === "symbol" ? key : Symbol.for(key);
-
-      // Check if we already have a port for this key
       const existingPort = this.claimedPorts.get(symbolKey);
       if (existingPort) {
         return existingPort;
       }
-
-      // If it's a resource FQN, verify the resource exists
       if (typeof key !== "symbol") {
         const resource = this.resources.get(key);
         if (resource == null) {
@@ -440,11 +411,9 @@ export class DefaultOrchestrator implements Orchestrator {
         }
       } while (existing);
 
-      // Store the port in the claimed ports map
       this.claimedPorts.set(symbolKey, port);
       return port;
     } finally {
-      // Release the global mutex
       release!();
     }
   }
