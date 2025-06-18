@@ -9,6 +9,13 @@ import type {
   WebsiteOptions,
 } from "./types.ts";
 
+export function throwWithContext(error: unknown, context: string): never {
+  const errorMsg = error instanceof Error ? error.message : String(error);
+  throw new Error(`${context}: ${errorMsg}`, {
+    cause: error instanceof Error ? error : new Error(String(error)),
+  });
+}
+
 /**
  * Detect package manager from lockfiles and environment
  * This function is pure and doesn't rely on global state

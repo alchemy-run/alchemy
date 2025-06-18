@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import type { ProjectContext } from "../types.ts";
-import { create } from "../utils.ts";
+import { create, throwWithContext } from "../utils.ts";
 import { initWebsiteProjectWithContext } from "./index.ts";
 
 export default async function initSvelteKitProject(
@@ -53,11 +53,9 @@ export default async function initSvelteKitProject(
 `,
       );
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to update SvelteKit page: ${errorMsg}`);
+      throwWithContext(error, "Failed to update SvelteKit page");
     }
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    throw new Error(`SvelteKit template initialization failed: ${errorMsg}`);
+    throwWithContext(error, "SvelteKit template initialization failed");
   }
 }

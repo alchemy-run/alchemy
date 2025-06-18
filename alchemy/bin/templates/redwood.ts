@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import type { ProjectContext } from "../types.ts";
-import { create } from "../utils.ts";
+import { create, throwWithContext } from "../utils.ts";
 import { initWebsiteProjectWithContext } from "./index.ts";
 
 export default async function initRedwoodProject(
@@ -35,11 +35,9 @@ export default async function initRedwoodProject(
 `,
       );
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to create redwood.toml: ${errorMsg}`);
+      throwWithContext(error, "Failed to create redwood.toml");
     }
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    throw new Error(`Redwood template initialization failed: ${errorMsg}`);
+    throwWithContext(error, "Redwood template initialization failed");
   }
 }

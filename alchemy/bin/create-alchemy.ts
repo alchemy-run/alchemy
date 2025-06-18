@@ -16,7 +16,7 @@ import pc from "picocolors";
 import { templates } from "./templates/index.ts";
 import type { CreateInput, ProjectContext, TemplateType } from "./types.ts";
 import { ProjectNameSchema } from "./types.ts";
-import { detectPackageManager } from "./utils.ts";
+import { detectPackageManager, throwWithContext } from "./utils.ts";
 
 const isTest = process.env.NODE_ENV === "test";
 
@@ -136,8 +136,7 @@ async function handleDirectoryOverwrite(
     s.stop(`Directory ${pc.yellow(context.path)} removed.`);
   } catch (error) {
     s.stop(pc.red(`Failed to remove directory ${pc.yellow(context.path)}.`));
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    throw new Error(`Directory removal failed: ${errorMsg}`);
+    throwWithContext(error, "Directory removal failed");
   }
 }
 
@@ -154,9 +153,9 @@ async function initializeTemplate(context: ProjectContext): Promise<void> {
   try {
     await templateDefinition.init(context);
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Template initialization failed for '${context.template}': ${errorMsg}`,
+    throwWithContext(
+      error,
+      `Template initialization failed for '${context.template}'`,
     );
   }
 

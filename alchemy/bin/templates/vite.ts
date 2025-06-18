@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import type { ProjectContext } from "../types.ts";
-import { mkdir, npx, rm, writeJsonFile } from "../utils.ts";
+import { mkdir, npx, rm, throwWithContext, writeJsonFile } from "../utils.ts";
 import { initWebsiteProjectWithContext } from "./index.ts";
 
 export default async function initViteProject(
@@ -44,8 +44,7 @@ export default defineConfig({
 `,
       );
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to create vite.config.ts: ${errorMsg}`);
+      throwWithContext(error, "Failed to create vite.config.ts");
     }
 
     try {
@@ -71,8 +70,7 @@ export default defineConfig({
         include: ["src/**/*.ts", "src/**/*.tsx", "alchemy.run.ts"],
       });
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to create tsconfig.json: ${errorMsg}`);
+      throwWithContext(error, "Failed to create tsconfig.json");
     }
 
     try {
@@ -92,11 +90,9 @@ export default app
 `,
       );
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to create worker integration: ${errorMsg}`);
+      throwWithContext(error, "Failed to create worker integration");
     }
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    throw new Error(`Vite template initialization failed: ${errorMsg}`);
+    throwWithContext(error, "Vite template initialization failed");
   }
 }

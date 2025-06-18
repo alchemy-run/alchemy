@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import type { ProjectContext } from "../types.ts";
-import { create } from "../utils.ts";
+import { create, throwWithContext } from "../utils.ts";
 import { initWebsiteProjectWithContext } from "./index.ts";
 
 export default async function initNuxtProject(
@@ -32,8 +32,7 @@ export default async function initNuxtProject(
 `,
       );
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to create nuxt.config.ts: ${errorMsg}`);
+      throwWithContext(error, "Failed to create nuxt.config.ts");
     }
 
     try {
@@ -66,11 +65,9 @@ p {
 `,
       );
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to update app.vue: ${errorMsg}`);
+      throwWithContext(error, "Failed to update app.vue");
     }
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    throw new Error(`Nuxt template initialization failed: ${errorMsg}`);
+    throwWithContext(error, "Nuxt template initialization failed");
   }
 }

@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import type { ProjectContext } from "../types.ts";
-import { create, mkdir } from "../utils.ts";
+import { create, mkdir, throwWithContext } from "../utils.ts";
 import { initWebsiteProjectWithContext } from "./index.ts";
 
 export default async function initAstroProject(
@@ -35,8 +35,7 @@ export default defineConfig({
 `,
       );
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to create astro.config.mjs: ${errorMsg}`);
+      throwWithContext(error, "Failed to create astro.config.mjs");
     }
 
     try {
@@ -65,11 +64,9 @@ export const GET: APIRoute = async ({ request }) => {
 `,
       );
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to create API route: ${errorMsg}`);
+      throwWithContext(error, "Failed to create API route");
     }
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    throw new Error(`Astro template initialization failed: ${errorMsg}`);
+    throwWithContext(error, "Astro template initialization failed");
   }
 }

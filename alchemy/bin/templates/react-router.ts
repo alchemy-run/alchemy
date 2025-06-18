@@ -1,7 +1,12 @@
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import type { ProjectContext } from "../types.ts";
-import { create, modifyJsoncFile, modifyTsConfig } from "../utils.ts";
+import {
+  create,
+  modifyJsoncFile,
+  modifyTsConfig,
+  throwWithContext,
+} from "../utils.ts";
 import { initWebsiteProjectWithContext } from "./index.ts";
 
 export default async function initReactRouterProject(
@@ -43,11 +48,9 @@ export default function Home() {
 `,
       );
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to update welcome component: ${errorMsg}`);
+      throwWithContext(error, "Failed to update welcome component");
     }
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    throw new Error(`React Router template initialization failed: ${errorMsg}`);
+    throwWithContext(error, "React Router template initialization failed");
   }
 }

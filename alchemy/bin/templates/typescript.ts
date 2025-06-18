@@ -9,6 +9,7 @@ import {
   initWranglerRunTs,
   install,
   mkdir,
+  throwWithContext,
   writeJsonFile,
 } from "../utils.ts";
 
@@ -50,8 +51,7 @@ export default async function initTypescriptProject(
 `,
       );
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to create worker.ts: ${errorMsg}`);
+      throwWithContext(error, "Failed to create worker.ts");
     }
 
     try {
@@ -71,8 +71,7 @@ export default async function initTypescriptProject(
         include: ["src/**/*.ts", "alchemy.run.ts"],
       });
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to create tsconfig.json: ${errorMsg}`);
+      throwWithContext(error, "Failed to create tsconfig.json");
     }
 
     const isUsingBun = context.packageManager === "bun";
@@ -114,11 +113,9 @@ export default async function initTypescriptProject(
         ],
       });
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to install dependencies: ${errorMsg}`);
+      throwWithContext(error, "Failed to install dependencies");
     }
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    throw new Error(`TypeScript template initialization failed: ${errorMsg}`);
+    throwWithContext(error, "TypeScript template initialization failed");
   }
 }
