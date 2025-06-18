@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { createCli, trpcServer, zod as z } from "trpc-cli";
 import { createAlchemy } from "./create-alchemy.ts";
 import {

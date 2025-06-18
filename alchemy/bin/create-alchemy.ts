@@ -186,10 +186,6 @@ export async function createAlchemy(cliOptions: CreateInput): Promise<void> {
 
     await initializeTemplate(context);
 
-    outro(
-      pc.green(`✅ Project ${pc.yellow(context.name)} created successfully!`),
-    );
-
     log.message("");
     log.info(pc.cyan("📁 Navigate to your project:"));
     log.message(`   cd ${context.name}`);
@@ -202,6 +198,9 @@ export async function createAlchemy(cliOptions: CreateInput): Promise<void> {
     log.message("");
     log.info(pc.cyan("📚 Learn more:"));
     log.message("   https://alchemy.run");
+    outro(
+      pc.green(`✅ Project ${pc.yellow(context.name)} created successfully!`),
+    );
   } catch (error) {
     log.error("An unexpected error occurred:");
     if (error instanceof Error) {
