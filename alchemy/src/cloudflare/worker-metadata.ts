@@ -1,4 +1,4 @@
-import type { WorkerOptions } from "miniflare";
+import type { MixedModeConnectionString, WorkerOptions } from "miniflare";
 import path from "node:path";
 import type { Context } from "../context.ts";
 import { logger } from "../util/logger.ts";

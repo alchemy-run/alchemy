@@ -201,14 +201,17 @@ export async function getAccountSubdomain(api: CloudflareApi) {
 }
 
 async function bundleWorkerScript() {
-  const result = await bundle({
-    entryPoint: path.join(__dirname, "worker.ts"),
-    bundle: true,
-    format: "esm",
-    target: "es2022",
-    external: ["cloudflare:*", "node:crypto"],
-    write: false,
-  });
+  const result = await bundle(
+    {
+      entryPoint: path.join(__dirname, "worker.ts"),
+      bundle: true,
+      format: "esm",
+      target: "es2022",
+      external: ["cloudflare:*", "node:crypto"],
+      write: false,
+    },
+    false,
+  );
   if (!result.outputFiles?.[0]) {
     throw new Error("Failed to bundle worker.ts");
   }
