@@ -194,7 +194,7 @@ describe("Stripe Meter Resource", () => {
         status: "active", // Keep status or specify to avoid unrelated changes
       };
 
-      expect(Meter(logicalId, attemptUpdateProps)).rejects.toThrow(
+      await expect(Meter(logicalId, attemptUpdateProps)).rejects.toThrow(
         /Attempted to update immutable properties/,
       );
     } finally {

@@ -87,6 +87,13 @@ export interface WebsiteProps<B extends Bindings>
         // override main
         main?: string;
       };
+
+  /**
+   * Configures default routing to support client-side routing for Single Page Applications (SPA)
+   *
+   * @default false
+   */
+  spa?: boolean;
 }
 
 export type Website<B extends Bindings> = B extends { ASSETS: any }
@@ -124,7 +131,7 @@ export async function Website<B extends Bindings>(
         entrypoint: props.main,
         assets: {
           html_handling: "auto-trailing-slash",
-          not_found_handling: "single-page-application",
+          not_found_handling: props.spa ? "single-page-application" : "none",
           run_worker_first: false,
           ...(typeof props.assets === "string" ? {} : props.assets),
         },

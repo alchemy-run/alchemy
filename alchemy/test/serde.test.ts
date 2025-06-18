@@ -77,6 +77,37 @@ describe("serde", async () => {
     }
   });
 
+  test("serializes and deserializes complex object secrets", async (scope) => {
+    try {
+      const complexSecretData = {
+        apiKey: "sk-1234567890abcdef",
+        endpoint: "https://api.example.com",
+        metadata: {
+          version: "v1",
+          region: "us-east-1",
+        },
+      };
+      const secret = alchemy.secret(complexSecretData);
+
+      const serialized = await serialize(scope, secret);
+      expect(serialized).toHaveProperty("@secret");
+      expect(typeof serialized["@secret"]).toBe("object");
+      expect(serialized["@secret"]).toHaveProperty("data");
+      expect(typeof serialized["@secret"].data).toBe("string");
+      expect(serialized["@secret"].data).not.toContain("sk-1234567890abcdef");
+
+      const deserialized = await deserialize(scope, serialized);
+      expect(deserialized).toBeInstanceOf(Secret);
+      expect(deserialized.unencrypted).toEqual(complexSecretData);
+      expect(deserialized.unencrypted.apiKey).toBe("sk-1234567890abcdef");
+      expect(deserialized.unencrypted.endpoint).toBe("https://api.example.com");
+      expect(deserialized.unencrypted.metadata.version).toBe("v1");
+      expect(deserialized.unencrypted.metadata.region).toBe("us-east-1");
+    } finally {
+      await destroy(scope);
+    }
+  });
+
   test("serializes scope to undefined", async (scope) => {
     try {
       const objWithScope = {

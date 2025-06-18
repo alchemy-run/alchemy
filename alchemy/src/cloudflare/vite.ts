@@ -4,7 +4,8 @@ import type { Bindings } from "./bindings.ts";
 import { Website, type WebsiteProps } from "./website.ts";
 import type { Worker } from "./worker.ts";
 
-export interface ViteProps<B extends Bindings> extends WebsiteProps<B> {}
+export interface ViteProps<B extends Bindings>
+  extends Omit<WebsiteProps<B>, "spa"> {}
 
 // don't allow the ASSETS to be overriden
 export type Vite<B extends Bindings> = B extends { ASSETS: any }
@@ -18,9 +19,11 @@ export async function Vite<B extends Bindings>(
   const defaultAssets = path.join("dist", "client");
   return Website(id, {
     ...props,
+    spa: true,
     assets:
       typeof props.assets === "object"
         ? {
+            ...props.assets,
             dist: props.assets.dist ?? defaultAssets,
           }
         : (props.assets ?? defaultAssets),

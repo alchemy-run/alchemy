@@ -607,6 +607,8 @@ function processBindings(
         binding: bindingName,
         namespace: binding.namespaceName,
       });
+    } else if (binding.type === "secret_key") {
+      // no-op
     } else {
       // biome-ignore lint/correctness/noVoidTypeReturn: it returns never
       return assertNever(binding);

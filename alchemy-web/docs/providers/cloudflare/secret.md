@@ -28,7 +28,6 @@ export const worker = await Worker("worker", {
     MY_SECRET: mySecret,
   },
 });
-l;
 ```
 
 And use it at runtime:

@@ -38,6 +38,37 @@ type TaxBehavior = Stripe.PriceCreateParams.TaxBehavior;
 type BillingScheme = Stripe.PriceCreateParams.BillingScheme;
 
 /**
+ * Properties for price tier configuration
+ */
+export interface PriceTier {
+  /**
+   * The flat billing amount for an entire tier, regardless of the number of units in the tier
+   */
+  flatAmount?: number;
+
+  /**
+   * Same as flat_amount, but accepts a decimal string with at most 12 decimal places
+   */
+  flatAmountDecimal?: string;
+
+  /**
+   * The per-unit amount to charge for units within this tier
+   */
+  unitAmount?: number;
+
+  /**
+   * Same as unit_amount, but accepts a decimal string with at most 12 decimal places
+   */
+  unitAmountDecimal?: string;
+
+  /**
+   * Specifies the upper bound of the tier. Can be a number or 'inf' for infinity.
+   * The last tier should have up_to set to 'inf'.
+   */
+  upTo: number | "inf";
+}
+
+/**
  * Properties for creating a Stripe price
  */
 export interface PriceProps {
@@ -119,6 +150,36 @@ export interface PriceProps {
    * If true, adopt existing resource if creation fails due to conflict
    */
   adopt?: boolean;
+
+  /**
+   * Each element represents a pricing tier. This parameter requires `billingScheme` to be set to `tiered`.
+   * An array of up to 250 tiers. Each tier has an upper bound and a price.
+   */
+  tiers?: PriceTier[];
+
+  /**
+   * Defines if the tiering price should be `graduated` or `volume` based.
+   * In `volume`-based tiering, the maximum quantity within a period determines the per unit price.
+   * In `graduated` tiering, pricing can change as the quantity grows.
+   */
+  tiersMode?: "graduated" | "volume" | undefined;
+
+  /**
+   * Apply a transformation to the reported usage or set quantity before computing the amount billed
+   */
+  transformQuantity?:
+    | {
+        /**
+         * Divide usage by this number
+         */
+        divideBy: number;
+
+        /**
+         * After dividing usage, either round the result `up` or `down`
+         */
+        round: "up" | "down";
+      }
+    | undefined;
 }
 
 /**
@@ -149,6 +210,26 @@ export interface Price extends Resource<"stripe::Price">, PriceProps {
    * The lookup key (if any) used by the customer to identify this price object
    */
   lookupKey?: string;
+
+  /**
+   * The pricing tiers (if using tiered billing scheme)
+   */
+  tiers?: PriceTier[];
+
+  /**
+   * The tiering mode (graduated or volume)
+   */
+  tiersMode?: "graduated" | "volume" | undefined;
+
+  /**
+   * Transform quantity configuration
+   */
+  transformQuantity?:
+    | {
+        divideBy: number;
+        round: "up" | "down";
+      }
+    | undefined;
 }
 
 /**
@@ -188,17 +269,56 @@ export interface Price extends Resource<"stripe::Price">, PriceProps {
  * });
  *
  * @example
- * // Create a tiered price with tax behavior
- * const tieredPrice = await Price("enterprise", {
+ * // Create a graduated tiered price with usage-based billing
+ * const tieredPrice = await Price("api-usage", {
  *   currency: "usd",
- *   unitAmount: 10000, // $100.00
  *   product: "prod_xyz",
  *   billingScheme: "tiered",
- *   taxBehavior: "exclusive",
- *   metadata: {
- *     tier: "enterprise",
- *     features: "all"
- *   }
+ *   tiersMode: "graduated",
+ *   recurring: {
+ *     interval: "month",
+ *     usageType: "metered"
+ *   },
+ *   tiers: [
+ *     {
+ *       upTo: 10000,
+ *       unitAmount: 0 // First 10k API calls free
+ *     },
+ *     {
+ *       upTo: 50000,
+ *       unitAmount: 2 // $0.02 per call up to 50k
+ *     },
+ *     {
+ *       upTo: "inf",
+ *       unitAmount: 1 // $0.01 per call beyond 50k
+ *     }
+ *   ]
+ * });
+ *
+ * @example
+ * // Create a volume-based tiered price with overage cap
+ * const volumePrice = await Price("storage", {
+ *   currency: "usd",
+ *   product: "prod_xyz",
+ *   billingScheme: "tiered",
+ *   tiersMode: "volume",
+ *   recurring: {
+ *     interval: "month"
+ *   },
+ *   tiers: [
+ *     {
+ *       upTo: 100,
+ *       unitAmount: 500 // $5 per GB for up to 100GB
+ *     },
+ *     {
+ *       upTo: 1000,
+ *       unitAmount: 400 // $4 per GB for 101-1000GB
+ *     },
+ *     {
+ *       upTo: "inf",
+ *       flatAmount: 300000 // Cap at $3000 for unlimited storage
+ *     }
+ *   ]
  * });
  */
 export const Price = LiveOnlyResource(
@@ -222,23 +342,38 @@ export const Price = LiveOnlyResource(
 
       return this.destroy();
     }
+
+    // Validate tier-related constraints
+    if (props.tiers && props.billingScheme !== "tiered") {
+      throw new Error("Tiers can only be used with billingScheme: 'tiered'");
+    }
+
+    if (props.tiers && (props.unitAmount || props.unitAmountDecimal)) {
+      throw new Error("Cannot set both tiers and unitAmount/unitAmountDecimal");
+    }
+
+    if (props.tiersMode && !props.tiers) {
+      throw new Error("tiersMode requires tiers to be defined");
+    }
+
     try {
       let price: Stripe.Price;
 
       if (this.phase === "update" && this.output?.id) {
         // Update existing price (limited properties can be updated)
-        const updateParams: Stripe.PriceUpdateParams = {
+        const updateParams: Stripe.PriceUpdateParams & { expand?: string[] } = {
           active: props.active,
           metadata: props.metadata,
           nickname: props.nickname,
           lookup_key: props.lookupKey,
           transfer_lookup_key: props.transferLookupKey,
+          expand: ["tiers"],
         };
 
         price = await stripe.prices.update(this.output.id, updateParams);
       } else {
         // Create new price
-        const createParams: Stripe.PriceCreateParams = {
+        const createParams: Stripe.PriceCreateParams & { expand?: string[] } = {
           currency: props.currency,
           product: props.product,
           active: props.active,
@@ -248,6 +383,7 @@ export const Price = LiveOnlyResource(
           tax_behavior: props.taxBehavior,
           lookup_key: props.lookupKey,
           transfer_lookup_key: props.transferLookupKey,
+          expand: ["tiers"],
         };
 
         // Add unit amount fields
@@ -267,6 +403,29 @@ export const Price = LiveOnlyResource(
           };
         }
 
+        // Add tier configuration if present
+        if (props.tiers) {
+          createParams.tiers = props.tiers.map((tier) => ({
+            up_to: tier.upTo === "inf" ? "inf" : tier.upTo,
+            flat_amount: tier.flatAmount,
+            flat_amount_decimal: tier.flatAmountDecimal,
+            unit_amount: tier.unitAmount,
+            unit_amount_decimal: tier.unitAmountDecimal,
+          }));
+        }
+
+        if (props.tiersMode) {
+          createParams.tiers_mode = props.tiersMode;
+        }
+
+        // Add transform quantity if present
+        if (props.transformQuantity) {
+          createParams.transform_quantity = {
+            divide_by: props.transformQuantity.divideBy,
+            round: props.transformQuantity.round,
+          };
+        }
+
         if (props.lookupKey) {
           const existingPrices = await stripe.prices.list({
             lookup_keys: [props.lookupKey],
@@ -275,19 +434,25 @@ export const Price = LiveOnlyResource(
           if (existingPrices.data.length > 0) {
             if (props.adopt) {
               const existingPrice = existingPrices.data[0];
-              const updateParams: Stripe.PriceUpdateParams = {
+              const updateParams: Stripe.PriceUpdateParams & {
+                expand?: string[];
+              } = {
                 active: props.active,
                 metadata: props.metadata,
                 nickname: props.nickname,
                 lookup_key: props.lookupKey,
                 transfer_lookup_key: props.transferLookupKey,
+                expand: ["tiers"],
               };
               price = await stripe.prices.update(
                 existingPrice.id,
                 updateParams,
               );
             } else {
-              price = existingPrices.data[0];
+              // Need to retrieve with expanded tiers
+              price = await stripe.prices.retrieve(existingPrices.data[0].id, {
+                expand: ["tiers"],
+              } as any);
             }
           } else {
             price = await stripe.prices.create(createParams);
@@ -310,6 +475,25 @@ export const Price = LiveOnlyResource(
           }
         : undefined;
 
+      // Transform Stripe tiers array to our format
+      const tiers = price.tiers
+        ? price.tiers.map((tier) => ({
+            flatAmount: tier.flat_amount || undefined,
+            flatAmountDecimal: tier.flat_amount_decimal || undefined,
+            unitAmount: tier.unit_amount || undefined,
+            unitAmountDecimal: tier.unit_amount_decimal || undefined,
+            upTo: tier.up_to === null ? ("inf" as const) : tier.up_to!,
+          }))
+        : undefined;
+
+      // Transform transform_quantity if present
+      const transformQuantity = price.transform_quantity
+        ? {
+            divideBy: price.transform_quantity.divide_by,
+            round: price.transform_quantity.round as "up" | "down",
+          }
+        : undefined;
+
       // Map Stripe API response to our output format
       return this({
         id: price.id,
@@ -328,6 +512,9 @@ export const Price = LiveOnlyResource(
         livemode: price.livemode,
         type: price.type as Stripe.Price.Type,
         lookupKey: price.lookup_key || undefined,
+        tiers: tiers,
+        tiersMode: price.tiers_mode ?? undefined,
+        transformQuantity: transformQuantity,
       });
     } catch (error) {
       logger.error("Error creating/updating price:", error);

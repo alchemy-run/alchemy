@@ -869,22 +869,28 @@ await app.finalize();
 `;
 }
 
-async function appendEnv(projectPath: string): Promise<void> {
-  const envContent = await fs.readFile(join(projectPath, ".env"), "utf-8");
-  await fs.writeFile(
-    join(projectPath, ".env"),
-    `${envContent}\nALCHEMY_PASSWORD=change-me`,
-  );
+async function tryReadFile(path: string): Promise<string | undefined> {
+  try {
+    return await fs.readFile(path, "utf-8");
+  } catch {
+    return undefined;
+  }
+}
 
-  const envExampleContent = await fs.readFile(
-    join(projectPath, ".env.example"),
-    "utf-8",
-  );
+async function appendFile(path: string, content: string): Promise<void> {
+  const existingContent = await tryReadFile(path);
   await fs.writeFile(
-    join(projectPath, ".env.example"),
-    `${envExampleContent}\nALCHEMY_PASSWORD=your-alchemy-password`,
+    path,
+    `${existingContent ? `${existingContent}\n` : ""}${content}`,
   );
-  // End of Selection
+}
+
+async function appendEnv(projectPath: string): Promise<void> {
+  await appendFile(join(projectPath, ".env"), "ALCHEMY_PASSWORD=change-me");
+  await appendFile(
+    join(projectPath, ".env.example"),
+    "ALCHEMY_PASSWORD=change-me",
+  );
 }
 
 async function createEnvTs(

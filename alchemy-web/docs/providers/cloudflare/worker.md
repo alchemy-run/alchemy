@@ -350,6 +350,28 @@ export default {
 > [!TIP]
 > See the [Dispatch Namespace](./dispatch-namespace.md) documentation for more details on Workers for Platforms.
 
+## Worker Versions
+
+Deploy worker versions for testing and staging before promoting to production. Worker versions create isolated deployments with preview URLs that don't affect your live worker.
+
+```ts
+import { Worker } from "alchemy/cloudflare";
+
+// Create a versioned worker for testing
+const previewWorker = await Worker("my-worker", {
+  name: "my-worker",
+  entrypoint: "./src/worker.ts",
+  version: "pr-123", // Version label for display in the console
+});
+
+// Access the preview URL for testing
+console.log(`Preview URL: ${previewWorker.url}`);
+// Output: https://{version-hash}-my-worker.subdomain.workers.dev
+```
+
+> [!CAUTION]
+> Preview URLs cannot be generated for Workers with Durable Objects, see the [Preview URL](https://developers.cloudflare.com/workers/configuration/previews/#limitations) documentation to learn more.
+
 ## Reference Worker by Name
 
 Use `WorkerRef` to reference an existing worker by its service name rather than by resource instance. This is useful for worker-to-worker bindings when you need to reference a worker that already exists.

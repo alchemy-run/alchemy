@@ -3,7 +3,14 @@
  * eventually consistent control plane.
  */
 
+import { expect } from "vitest";
 import { safeFetch } from "../../src/util/safe-fetch.ts";
+
+export async function fetchAndExpect(url: string, expected: string) {
+  const response = await fetchAndExpectOK(url);
+  const text = await response.text();
+  expect(text).toEqual(expected);
+}
 
 /**
  * Fetch with exponential backoff retry logic for 404 responses, expecting 200 OK.

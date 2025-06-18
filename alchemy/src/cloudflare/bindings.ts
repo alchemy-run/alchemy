@@ -15,16 +15,17 @@ import type { D1DatabaseResource } from "./d1-database.ts";
 import type { DispatchNamespaceResource } from "./dispatch-namespace.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
 import type { HyperdriveResource } from "./hyperdrive.ts";
+import type { Images } from "./images.ts";
 import type { KVNamespaceResource } from "./kv-namespace.ts";
 import type { PipelineResource } from "./pipeline.ts";
 import type { QueueResource } from "./queue.ts";
+import type { SecretKey } from "./secret-key.ts";
+import type { Secret as CloudflareSecret } from "./secret.ts";
 import type { VectorizeIndexResource } from "./vectorize-index.ts";
 import type { VersionMetadata } from "./version-metadata.ts";
 import type { WorkerStub } from "./worker-stub.ts";
 import type { Worker, WorkerRef } from "./worker.ts";
 import type { Workflow } from "./workflow.ts";
-import type { Images } from "./images.ts";
-import type { Secret as CloudflareSecret } from "./secret.ts";
 
 export type Bindings = {
   [bindingName: string]: Binding;
@@ -59,6 +60,7 @@ export type Binding =
       id: string;
     }
   | Secret
+  | SecretKey
   | string
   | VectorizeIndexResource
   | Worker
@@ -105,6 +107,7 @@ export type WorkerBindingSpec =
   | WorkerBindingPlainText
   | WorkerBindingQueue
   | WorkerBindingR2Bucket
+  | WorkerBindingSecretKey
   | WorkerBindingSecretText
   | WorkerBindingSecretsStore
   | WorkerBindingSecretsStoreSecret
@@ -289,6 +292,35 @@ export interface WorkerBindingR2Bucket {
   type: "r2_bucket";
   /** Bucket name */
   bucket_name: string;
+}
+
+/**
+ * Secret Key binding type
+ */
+export interface WorkerBindingSecretKey {
+  /** The name of the binding */
+  name: string;
+  /** Type identifier for Secret Key binding */
+  type: "secret_key";
+  /** Algorithm-specific key parameters */
+  algorithm: unknown;
+  /** Data format of the key */
+  format: "raw" | "pkcs8" | "spki" | "jwk";
+  /** Allowed operations with the key */
+  usages: Array<
+    | "encrypt"
+    | "decrypt"
+    | "sign"
+    | "verify"
+    | "deriveKey"
+    | "deriveBits"
+    | "wrapKey"
+    | "unwrapKey"
+  >;
+  /** Base64-encoded key data. Required if format is "raw", "pkcs8", or "spki" */
+  key_base64?: string;
+  /** Key data in JSON Web Key format. Required if format is "jwk" */
+  key_jwk?: unknown;
 }
 
 /**

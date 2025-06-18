@@ -11,7 +11,11 @@ import { KVNamespace } from "../../src/cloudflare/kv-namespace.ts";
 import { Worker, WorkerRef } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
-import { fetchAndExpectOK, fetchAndExpectStatus } from "./fetch-utils.ts";
+import {
+  fetchAndExpect,
+  fetchAndExpectOK,
+  fetchAndExpectStatus,
+} from "./fetch-utils.ts";
 
 import "../../src/test/vitest.ts";
 
@@ -1355,6 +1359,119 @@ describe("Worker Resource", () => {
       expect(text).toEqual("Hello, world!");
     } finally {
       await destroy(scope);
+    }
+  });
+
+  test("create unversioned and versioned workers independently", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-versions`;
+    const versionLabel = "pr-123";
+    let tempDir: string | undefined;
+
+    try {
+      // Create a temporary directory to store test assets
+      tempDir = path.join(".out", "alchemy-versioned-assets-test");
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(tempDir, { recursive: true });
+
+      // Create a simple test file
+      const testContent = "Hello from versioned static assets!";
+      await fs.writeFile(path.join(tempDir, "test.txt"), testContent);
+
+      // Create assets resource
+      const assets = await Assets("versioned-static-assets", {
+        path: tempDir,
+      });
+
+      // First create a base worker without version
+      const baseWorker = await Worker(`${workerName}-base`, {
+        name: workerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from base worker!', { 
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            }
+          };
+        `,
+        format: "esm",
+        url: true,
+      });
+
+      // Verify base worker properties
+      expect(baseWorker.id).toBeTruthy();
+      expect(baseWorker.name).toEqual(workerName);
+      expect(baseWorker.version).toBeUndefined();
+      expect(baseWorker.url).toBeTruthy();
+
+      // Test that the base worker URL works
+      const baseResponse = await fetchAndExpectOK(baseWorker.url!);
+      const baseText = await baseResponse.text();
+      expect(baseText).toEqual("Hello from base worker!");
+
+      // Now create a version of the same worker with assets binding
+      const versionWorker = await Worker(`${workerName}-version`, {
+        name: workerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              try {
+                // Use env.ASSETS.get() to retrieve the test file
+                const asset = await env.ASSETS.fetch(request);
+                if (asset) {
+                  const content = await asset.text();
+                  return new Response(content, { 
+                    status: 200,
+                    headers: { 'Content-Type': 'text/plain' }
+                  });
+                }
+                return new Response('Asset not found', { status: 200 });
+              } catch (error) {
+                console.error(error);
+                return new Response(error.message, { status: 500 });
+              }
+            }
+          };
+        `,
+        format: "esm",
+        version: versionLabel,
+        bindings: {
+          ASSETS: assets,
+        },
+        assets: {
+          run_worker_first: true,
+          not_found_handling: "single-page-application",
+        },
+        compatibilityFlags: ["nodejs_compat"],
+      });
+
+      // Verify the version worker properties
+      expect(versionWorker).toMatchObject({
+        name: workerName,
+        version: versionLabel,
+      });
+      expect(versionWorker.id).toBeTruthy();
+
+      expect(versionWorker.url).toBeTruthy();
+      expect(versionWorker.bindings?.ASSETS).toBeDefined();
+
+      // the live worker should not have the new content
+      await fetchAndExpect(
+        `${baseWorker.url!}/test.txt`,
+        "Hello from base worker!",
+      );
+
+      // the versioned worker should have the new content
+      await fetchAndExpect(`${versionWorker.url!}/test.txt`, testContent);
+    } finally {
+      // Clean up temporary directory
+      if (tempDir) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
+
+      await destroy(scope);
+      await assertWorkerDoesNotExist(workerName);
     }
   });
 });

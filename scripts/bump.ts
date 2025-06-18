@@ -61,16 +61,12 @@ async function checkGithubRelease(version: string): Promise<boolean> {
   }
 }
 
-const newVersion = process.argv[2];
+const versionInput = process.argv[2];
 
-if (!newVersion) {
-  console.error("Please provide a version number");
-  process.exit(1);
-}
-
-// Validate version format
-if (!/^\d+\.\d+\.\d+$/.test(newVersion)) {
-  console.error("Version must be in format x.y.z");
+if (!versionInput) {
+  console.error(
+    "Please provide a version number or bump type (major, minor, patch)",
+  );
   process.exit(1);
 }
 
@@ -80,6 +76,52 @@ const alchemyPackageJsonPath = join(process.cwd(), "alchemy", "package.json");
 const alchemyPackageJson = JSON.parse(
   await readFile(alchemyPackageJsonPath, "utf-8"),
 );
+
+let newVersion = "";
+
+// Check if it's a semantic version bump or a specific version
+if (["major", "minor", "patch"].includes(versionInput)) {
+  // Parse current version
+  const currentVersion = alchemyPackageJson.version;
+  const versionMatch = currentVersion.match(/^(\d+)\.(\d+)\.(\d+)$/);
+
+  if (!versionMatch) {
+    console.error(`Invalid current version format: ${currentVersion}`);
+    process.exit(1);
+  }
+
+  const [, major, minor, patch] = versionMatch.map(Number);
+
+  // Calculate new version based on bump type
+  switch (versionInput) {
+    case "major":
+      newVersion = `${major + 1}.0.0`;
+      break;
+    case "minor":
+      newVersion = `${major}.${minor + 1}.0`;
+      break;
+    case "patch":
+      newVersion = `${major}.${minor}.${patch + 1}`;
+      break;
+    default:
+      throw new Error(`Invalid bump type: ${versionInput}`);
+  }
+
+  console.log(
+    `Bumping ${versionInput} version: ${currentVersion} → ${newVersion}`,
+  );
+} else {
+  // Validate specific version format
+  if (!/^\d+\.\d+\.\d+$/.test(versionInput)) {
+    console.error(
+      "Version must be in format x.y.z or use 'major', 'minor', 'patch'",
+    );
+    process.exit(1);
+  }
+
+  newVersion = versionInput;
+  console.log(`Setting specific version: ${newVersion}`);
+}
 
 // Check if version already exists
 const npmExists = await checkNpmVersion(alchemyPackageJson.name, newVersion);
