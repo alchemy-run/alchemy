@@ -1,7 +1,14 @@
+import { execa } from "execa";
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import type { ProjectContext } from "../types.ts";
-import { mkdir, npx, rm, throwWithContext, writeJsonFile } from "../utils.ts";
+import {
+  getPackageExecutionCommand,
+  mkdir,
+  rm,
+  throwWithContext,
+  writeJsonFile,
+} from "../utils.ts";
 import { initWebsiteProjectWithContext } from "./index.ts";
 
 export default async function initViteProject(
@@ -10,7 +17,11 @@ export default async function initViteProject(
   try {
     const root = context.path;
 
-    npx(context, `create-vite@6.5.0 ${context.name} --template react-ts`);
+    const command = getPackageExecutionCommand(
+      context.packageManager,
+      `create-vite@6.5.0 ${context.name} --template react-ts`,
+    );
+    await execa(command, { cwd: context.path, shell: true, stdio: "inherit" });
 
     await rm(join(root, "tsconfig.app.json"));
     await rm(join(root, "tsconfig.node.json"));

@@ -1,17 +1,23 @@
+import { execa } from "execa";
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import type { ProjectContext } from "../types.ts";
-import { create, mkdir, throwWithContext } from "../utils.ts";
+import {
+  getPackageExecutionCommand,
+  mkdir,
+  throwWithContext,
+} from "../utils.ts";
 import { initWebsiteProjectWithContext } from "./index.ts";
 
 export default async function initAstroProject(
   context: ProjectContext,
 ): Promise<void> {
   try {
-    create(
-      context,
-      `astro@latest ${context.name} --no-git --no-deploy --install ${context.options.yes ? "--yes" : ""}`,
+    const command = getPackageExecutionCommand(
+      context.packageManager,
+      `create-astro@latest ${context.name} --no-git --no-deploy --install ${context.options.yes ? "--yes" : ""}`,
     );
+    await execa(command, { cwd: context.path, shell: true, stdio: "inherit" });
 
     await initWebsiteProjectWithContext(context, {
       scripts: {

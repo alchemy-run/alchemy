@@ -1,17 +1,19 @@
+import { execa } from "execa";
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import type { ProjectContext } from "../types.ts";
-import { create, throwWithContext } from "../utils.ts";
+import { getPackageExecutionCommand, throwWithContext } from "../utils.ts";
 import { initWebsiteProjectWithContext } from "./index.ts";
 
 export default async function initNuxtProject(
   context: ProjectContext,
 ): Promise<void> {
   try {
-    create(
-      context,
-      `cloudflare@2.49.3 ${context.name} --framework=nuxt --no-git --no-deploy ${context.options.yes ? "--yes" : ""}`,
+    const command = getPackageExecutionCommand(
+      context.packageManager,
+      `create-cloudflare@2.49.3 ${context.name} --framework=nuxt --no-git --no-deploy ${context.options.yes ? "--yes" : ""}`,
     );
+    await execa(command, { cwd: context.path, shell: true, stdio: "inherit" });
 
     await initWebsiteProjectWithContext(context, {
       scripts: {

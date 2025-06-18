@@ -485,25 +485,16 @@ export function install(
   }
 }
 
-export function npx(
-  context: ProjectContext,
-  command: string,
-  cwd: string = process.cwd(),
-): void {
-  const pm = context.packageManager;
-  const yesFlag = context.options.yes ? "--yes" : "";
-  execCommand(`${getPackageManagerCommands(pm).x} ${yesFlag} ${command}`, cwd);
-}
-
-export function create(
-  context: ProjectContext,
-  command: string,
-  cwd: string = process.cwd(),
-): void {
-  const pm = context.packageManager;
-  const yesFlag = context.options.yes ? "-y" : "";
-  execCommand(
-    `${getPackageManagerCommands(pm).create} ${yesFlag} ${command}`,
-    cwd,
-  );
+export function getPackageExecutionCommand(
+  packageManager: PackageManager | null | undefined,
+  commandWithArgs: string,
+): string {
+  switch (packageManager) {
+    case "pnpm":
+      return `pnpm dlx ${commandWithArgs}`;
+    case "bun":
+      return `bunx ${commandWithArgs}`;
+    default:
+      return `npx ${commandWithArgs}`;
+  }
 }

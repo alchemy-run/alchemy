@@ -1,8 +1,9 @@
+import { execa } from "execa";
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import type { ProjectContext } from "../types.ts";
 import {
-  create,
+  getPackageExecutionCommand,
   modifyJsoncFile,
   modifyTsConfig,
   throwWithContext,
@@ -13,10 +14,11 @@ export default async function initReactRouterProject(
   context: ProjectContext,
 ): Promise<void> {
   try {
-    create(
-      context,
-      `cloudflare@2.49.3 ${context.name} --framework=react-router --no-git --no-deploy ${context.options.yes ? "--yes" : ""}`,
+    const command = getPackageExecutionCommand(
+      context.packageManager,
+      `create-cloudflare@2.49.3 ${context.name} --framework=react-router --no-git --no-deploy ${context.options.yes ? "--yes" : ""}`,
     );
+    await execa(command, { shell: true, stdio: "inherit" });
 
     await initWebsiteProjectWithContext(context, {
       scripts: {
