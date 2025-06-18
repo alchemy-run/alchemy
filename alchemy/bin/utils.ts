@@ -1,5 +1,5 @@
+import { execa } from "execa";
 import { applyEdits, modify } from "jsonc-parser";
-import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
@@ -440,19 +440,6 @@ export async function mkdir(...path: string[]): Promise<void> {
   });
 }
 
-export function execCommand(
-  command: string,
-  cwd: string = process.cwd(),
-): void {
-  console.log(command);
-  try {
-    execSync(command, { stdio: "inherit", cwd });
-  } catch {
-    console.error(`Failed to execute: ${command}`);
-    process.exit(1);
-  }
-}
-
 export function install(
   context: ProjectContext,
   {
@@ -469,18 +456,21 @@ export function install(
   const pm = context.packageManager;
 
   if (!dependencies && !devDependencies) {
-    execCommand(getPackageManagerCommands(pm).install, targetCwd);
+    execa(getPackageManagerCommands(pm).install, {
+      cwd: targetCwd,
+      shell: true,
+    });
   }
   if (dependencies) {
-    execCommand(
-      `${getPackageManagerCommands(pm).add} ${dependencies.join(" ")}`,
-      targetCwd,
-    );
+    execa(`${getPackageManagerCommands(pm).add} ${dependencies.join(" ")}`, {
+      cwd: targetCwd,
+      shell: true,
+    });
   }
   if (devDependencies) {
-    execCommand(
+    execa(
       `${getPackageManagerCommands(pm).addDev} ${devDependencies.join(" ")}`,
-      targetCwd,
+      { cwd: targetCwd, shell: true },
     );
   }
 }
@@ -494,6 +484,8 @@ export function getPackageExecutionCommand(
       return `pnpm dlx ${commandWithArgs}`;
     case "bun":
       return `bunx ${commandWithArgs}`;
+    case "yarn":
+      return `yarn dlx ${commandWithArgs}`;
     default:
       return `npx ${commandWithArgs}`;
   }

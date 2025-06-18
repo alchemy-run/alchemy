@@ -4,6 +4,7 @@ import {
   intro,
   isCancel,
   log,
+  note,
   outro,
   select,
   spinner,
@@ -83,7 +84,12 @@ async function createProjectContext(
   }
 
   const path = resolve(process.cwd(), name);
-  const packageManager = options.packageManager || detectedPm;
+  let packageManager = options.packageManager || detectedPm;
+
+  if (options.bun) packageManager = "bun";
+  else if (options.npm) packageManager = "npm";
+  else if (options.pnpm) packageManager = "pnpm";
+  else if (options.yarn) packageManager = "yarn";
 
   return {
     name,
@@ -146,13 +152,15 @@ async function initializeTemplate(context: ProjectContext): Promise<void> {
     throw new Error(`Template definition not found for: ${context.template}`);
   }
 
-  log.step(
-    `Creating ${pc.cyan(context.template)} project in ${pc.yellow(context.path)}...`,
+  const s = spinner();
+  s.start(
+    `Scaffolding ${pc.cyan(context.template)} project in ${pc.yellow(context.path)}...`,
   );
-
   try {
     await templateDefinition.init(context);
+    s.stop(pc.green("Scaffold complete."));
   } catch (error) {
+    s.stop(pc.red("Scaffolding failed."));
     throwWithContext(
       error,
       `Template initialization failed for '${context.template}'`,
@@ -186,18 +194,22 @@ export async function createAlchemy(cliOptions: CreateInput): Promise<void> {
 
     await initializeTemplate(context);
 
-    log.message("");
-    log.info(pc.cyan("📁 Navigate to your project:"));
-    log.message(`   cd ${context.name}`);
-    log.message("");
-    log.info(pc.cyan("🚀 Deploy your project:"));
-    log.message(`   ${context.packageManager} run deploy`);
-    log.message("");
-    log.info(pc.cyan("🧹 Destroy your project:"));
-    log.message(`   ${context.packageManager} run destroy`);
-    log.message("");
-    log.info(pc.cyan("📚 Learn more:"));
-    log.message("   https://alchemy.run");
+    note(
+      `
+${pc.cyan("📁 Navigate to your project:")}
+   cd ${context.name}
+
+${pc.cyan("🚀 Deploy your project:")}
+   ${context.packageManager} run deploy
+
+${pc.cyan("🧹 Destroy your project:")}
+   ${context.packageManager} run destroy
+
+${pc.cyan("📚 Learn more:")}
+   https://alchemy.run`,
+      "Next Steps:",
+    );
+
     outro(
       pc.green(`✅ Project ${pc.yellow(context.name)} created successfully!`),
     );

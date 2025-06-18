@@ -18,7 +18,8 @@ export default async function initReactRouterProject(
       context.packageManager,
       `create-cloudflare@2.49.3 ${context.name} --framework=react-router --no-git --no-deploy ${context.options.yes ? "--yes" : ""}`,
     );
-    await execa(command, { shell: true, stdio: "inherit" });
+
+    await execa(command, { shell: true });
 
     await initWebsiteProjectWithContext(context, {
       scripts: {

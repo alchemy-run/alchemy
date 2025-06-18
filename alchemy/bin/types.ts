@@ -72,6 +72,14 @@ export type CreateInput = {
   name?: string;
   template?: TemplateType;
   packageManager?: PackageManager;
+  /** Prefer Bun as the package manager */
+  bun?: boolean;
+  /** Prefer npm as the package manager */
+  npm?: boolean;
+  /** Prefer pnpm as the package manager */
+  pnpm?: boolean;
+  /** Prefer Yarn as the package manager */
+  yarn?: boolean;
   yes?: boolean;
   overwrite?: boolean;
 };

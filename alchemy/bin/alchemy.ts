@@ -33,6 +33,26 @@ const router = t.router({
               .optional()
               .default(false)
               .describe("Overwrite existing directory"),
+            bun: z
+              .boolean()
+              .optional()
+              .default(false)
+              .describe("Use Bun as the package manager"),
+            npm: z
+              .boolean()
+              .optional()
+              .default(false)
+              .describe("Use npm as the package manager"),
+            pnpm: z
+              .boolean()
+              .optional()
+              .default(false)
+              .describe("Use pnpm as the package manager"),
+            yarn: z
+              .boolean()
+              .optional()
+              .default(false)
+              .describe("Use Yarn as the package manager"),
           })
           .optional()
           .default({}),

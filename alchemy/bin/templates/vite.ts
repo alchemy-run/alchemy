@@ -21,7 +21,7 @@ export default async function initViteProject(
       context.packageManager,
       `create-vite@6.5.0 ${context.name} --template react-ts`,
     );
-    await execa(command, { cwd: context.path, shell: true, stdio: "inherit" });
+    await execa(command, { shell: true });
 
     await rm(join(root, "tsconfig.app.json"));
     await rm(join(root, "tsconfig.node.json"));

@@ -17,7 +17,7 @@ export default async function initAstroProject(
       context.packageManager,
       `create-astro@latest ${context.name} --no-git --no-deploy --install ${context.options.yes ? "--yes" : ""}`,
     );
-    await execa(command, { cwd: context.path, shell: true, stdio: "inherit" });
+    await execa(command, { shell: true });
 
     await initWebsiteProjectWithContext(context, {
       scripts: {

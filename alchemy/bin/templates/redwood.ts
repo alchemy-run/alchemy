@@ -13,7 +13,7 @@ export default async function initRedwoodProject(
       context.packageManager,
       `create-cloudflare@2.49.3 ${context.name} --framework=redwood --no-git --no-deploy ${context.options.yes ? "--yes" : ""}`,
     );
-    await execa(command, { cwd: context.path, shell: true, stdio: "inherit" });
+    await execa(command, { shell: true });
 
     await initWebsiteProjectWithContext(context, {
       scripts: {

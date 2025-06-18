@@ -1,10 +1,10 @@
+import { execa } from "execa";
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import type { ProjectContext } from "../types.ts";
 import {
   appendGitignore,
   createEnvTs,
-  execCommand,
   getPackageManagerCommands,
   initWranglerRunTs,
   install,
@@ -21,7 +21,11 @@ export default async function initTypescriptProject(
 
     const commands = getPackageManagerCommands(context.packageManager);
 
-    execCommand(commands.init, context.path);
+    await execa(commands.init, {
+      cwd: context.path,
+      shell: true,
+      stdio: "inherit",
+    });
 
     await createEnvTs(context.path);
     await initWranglerRunTs(context, {
