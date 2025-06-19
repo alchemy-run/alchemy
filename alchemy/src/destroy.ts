@@ -146,7 +146,7 @@ export async function destroy<Type extends string>(
       await destroy(nestedScope, options);
     }
 
-    await scope.delete(instance[ResourceID]);
+    await scope.deleteResource(instance[ResourceID]);
 
     if (!quiet) {
       logger.task(instance[ResourceFQN], {

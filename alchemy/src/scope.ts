@@ -47,7 +47,7 @@ export class Scope {
     new AsyncLocalStorage<Scope>());
   public static globals: Scope[] = (globalThis.__ALCHEMY_GLOBALS__ ??= []);
 
-  public static get(): Scope | undefined {
+  public static getScope(): Scope | undefined {
     const scope = Scope.storage.getStore();
     if (!scope) {
       if (Scope.globals.length > 0) {
@@ -63,7 +63,7 @@ export class Scope {
   }
 
   public static get current(): Scope {
-    const scope = Scope.get();
+    const scope = Scope.getScope();
     if (!scope) throw new Error("Not running within an Alchemy Scope");
     return scope;
   }
@@ -96,7 +96,7 @@ export class Scope {
         `Scope name ${this.scopeName} cannot contain double colons`,
       );
     }
-    this.parent = options.parent ?? Scope.get();
+    this.parent = options.parent ?? Scope.getScope();
     this.stage = options?.stage ?? this.parent?.stage ?? DEFAULT_STAGE;
     this.parent?.children.set(this.scopeName!, this);
     this.quiet = options.quiet ?? this.parent?.quiet ?? false;
@@ -141,7 +141,7 @@ export class Scope {
     return root;
   }
 
-  public async delete(resourceID: ResourceID) {
+  public async deleteResource(resourceID: ResourceID) {
     await this.state.delete(resourceID);
     this.resources.delete(resourceID);
   }
@@ -177,6 +177,38 @@ export class Scope {
 
   public fqn(resourceID: ResourceID): string {
     return [...this.chain, resourceID].join("/");
+  }
+
+  public async set(key: string, value: any): Promise<void> {
+    // Get the current scope state from the parent (if it exists)
+    if (this.parent && this.scopeName) {
+      const scopeState = await this.parent.state.get(this.scopeName);
+      if (scopeState) {
+        scopeState.data[key] = value;
+        return await this.parent.state.set(this.scopeName, scopeState);
+      }
+    }
+    throw new Error("Unable to set data on root scope");
+  }
+
+  public async get(key: string): Promise<any> {
+    // Get the current scope state from the parent (if it exists)
+    if (this.parent && this.scopeName) {
+      const scopeState = await this.parent.state.get(this.scopeName);
+      return scopeState?.data[key];
+    }
+    throw new Error("Unable to get data on root scope");
+  }
+
+  public async delete(key: string): Promise<void> {
+    if (this.parent && this.scopeName) {
+      const scopeState = await this.parent.state.get(this.scopeName);
+      if (scopeState) {
+        delete scopeState.data[key];
+        return await this.parent.state.set(this.scopeName, scopeState);
+      }
+    }
+    throw new Error("Unable to delete data on root scope");
   }
 
   public async run<T>(fn: (scope: Scope) => Promise<T>): Promise<T> {
