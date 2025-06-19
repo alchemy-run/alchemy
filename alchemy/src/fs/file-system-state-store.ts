@@ -128,7 +128,7 @@ export class FileSystemStateStore implements StateStore {
       throw new Error(`ID cannot include colons: ${key}`);
     }
     if (key.includes("/")) {
-      key = key.replaceAll("/", ":");
+      key = key.replaceAll("/", "-");
     }
     return path.join(this.dir, `${key}.json`);
   }
