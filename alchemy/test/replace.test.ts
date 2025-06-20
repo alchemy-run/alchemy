@@ -136,7 +136,7 @@ describe("Replace", () => {
         ]),
       );
       // now, we finalize the scope
-      await foo!.finalize(true);
+      await scope.finalize(true);
       // the state should no longer contain the replaced record
       expect(await foo!.get("pendingDeletions")).not.toEqual(
         expect.arrayContaining([
