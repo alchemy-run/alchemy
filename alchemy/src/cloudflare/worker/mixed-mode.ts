@@ -76,6 +76,8 @@ export async function createMixedModeProxy(input: {
   );
 }
 
+const DEBUG: boolean = false;
+
 export class MixedModeProxy {
   server: HTTPServer;
 
@@ -115,8 +117,31 @@ export class MixedModeProxy {
       redirect: "manual",
     });
 
+    // Remove headers that are not supported by miniflare
     const responseHeaders = new Headers(res.headers);
-    responseHeaders.delete("transfer-encoding"); // not supported by miniflare
+    responseHeaders.delete("transfer-encoding");
+    responseHeaders.delete("content-encoding");
+
+    if (DEBUG) {
+      const clone = res.clone();
+      console.log({
+        request: {
+          url: url.toString(),
+          method: req.method,
+          headers,
+          body: req.body,
+        },
+        response: {
+          status: res.status,
+          headers: res.headers,
+          body: await res.text(),
+        },
+      });
+      return new Response(clone.body, {
+        status: clone.status,
+        headers: responseHeaders,
+      });
+    }
 
     return new Response(res.body, {
       status: res.status,
@@ -203,9 +228,6 @@ async function parseCloudflareResponse<T>(
   res: Response,
   message: string,
 ): Promise<T> {
-  if (!res.ok) {
-    throw new Error(`${message} (${res.status} ${res.statusText})`);
-  }
   const json: CloudflareApiResponse<T> = await res.json();
   if (!json.success) {
     throw new Error(

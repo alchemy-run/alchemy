@@ -38,7 +38,7 @@ const REMOTE_OPTIONAL_BINDING_TYPES = [
   "r2_bucket",
   "queue",
   "service",
-  "workflow",
+  // "workflow", same thing
 ] satisfies BindingType[];
 
 type RemoteBindingType =
@@ -84,7 +84,7 @@ function isRemoteOnlyBinding(binding: Binding): binding is RemoteBinding {
 function buildRemoteBinding(
   name: string,
   binding: RemoteBinding,
-): WorkerBindingSpec & { raw: true } {
+): WorkerBindingSpec & { raw?: true } {
   switch (binding.type) {
     case "ai": {
       return {
@@ -169,7 +169,6 @@ function buildRemoteBinding(
         type: "service",
         name,
         service: "service" in binding ? binding.service : binding.name,
-        raw: true,
       };
     }
     case "vectorize": {
@@ -180,16 +179,16 @@ function buildRemoteBinding(
         raw: true,
       };
     }
-    case "workflow": {
-      return {
-        type: "workflow",
-        name,
-        workflow_name: binding.workflowName,
-        class_name: binding.className,
-        script_name: binding.scriptName,
-        raw: true,
-      };
-    }
+    // case "workflow": {
+    //   return {
+    //     type: "workflow",
+    //     name,
+    //     workflow_name: binding.workflowName,
+    //     class_name: binding.className,
+    //     script_name: binding.scriptName,
+    //     raw: true,
+    //   };
+    // }
     default: {
       assertNever(binding);
     }
@@ -290,8 +289,8 @@ export function buildMiniflareWorkerOptions({
         )[name] = {
           id: binding.id,
           remoteProxyConnectionString: binding.local
-            ? remoteProxyConnectionString
-            : undefined,
+            ? undefined
+            : remoteProxyConnectionString,
         };
         break;
       }
@@ -350,8 +349,8 @@ export function buildMiniflareWorkerOptions({
         options.images = {
           binding: name,
           remoteProxyConnectionString: binding.local
-            ? remoteProxyConnectionString
-            : undefined,
+            ? undefined
+            : remoteProxyConnectionString,
         };
         break;
       }
@@ -372,8 +371,8 @@ export function buildMiniflareWorkerOptions({
           id: "id" in binding ? binding.id : binding.namespaceId,
           remoteProxyConnectionString:
             "local" in binding && binding.local
-              ? remoteProxyConnectionString
-              : undefined,
+              ? undefined
+              : remoteProxyConnectionString,
         };
         break;
       }
@@ -478,10 +477,10 @@ export function buildMiniflareWorkerOptions({
           name: binding.workflowName,
           className: binding.className,
           scriptName: binding.scriptName,
-          remoteProxyConnectionString:
-            "local" in binding && binding.local
-              ? undefined
-              : remoteProxyConnectionString,
+          // remoteProxyConnectionString:
+          //   "local" in binding && binding.local
+          //     ? undefined
+          //     : remoteProxyConnectionString,
         };
         break;
       }
@@ -496,5 +495,6 @@ export function buildMiniflareWorkerOptions({
       "name" in eventSource ? eventSource.name : eventSource.queue.name,
     ];
   }
+  console.log("options", options);
   return options;
 }

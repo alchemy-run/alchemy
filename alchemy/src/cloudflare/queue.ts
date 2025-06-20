@@ -294,6 +294,7 @@ const QueueResource = Resource("cloudflare::Queue", async function <
     createdOn: queueData.result.created_on || new Date().toISOString(),
     modifiedOn: queueData.result.modified_on || new Date().toISOString(),
     accountId: api.accountId,
+    local: props.local,
     // phantom properties
     Body: undefined as T,
     Batch: undefined! as MessageBatch<T>,

@@ -908,7 +908,7 @@ export const _Worker = Resource(
       props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
-    if (this.scope.mode === "watch" && props.local) {
+    if (this.scope.mode === "watch" && props.local && this.phase !== "delete") {
       // Get current timestamp
       const now = Date.now();
 

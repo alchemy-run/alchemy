@@ -356,6 +356,7 @@ const D1DatabaseResource = Resource(
       type: "d1",
       id: dbData.result.uuid || "",
       name: databaseName,
+      local: props.local,
       fileSize: dbData.result.file_size,
       numTables: dbData.result.num_tables,
       version: dbData.result.version,

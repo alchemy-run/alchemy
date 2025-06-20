@@ -253,6 +253,7 @@ const R2BucketResource = Resource(
       jurisdiction: props.jurisdiction || "default",
       type: "r2_bucket",
       accountId: api.accountId,
+      local: props.local,
     });
   },
 );

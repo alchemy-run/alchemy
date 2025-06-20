@@ -256,6 +256,7 @@ const _KVNamespace = Resource(
       namespaceId,
       title: props.title,
       values: props.values,
+      local: props.local,
       createdAt: createdAt,
       modifiedAt: Date.now(),
     });

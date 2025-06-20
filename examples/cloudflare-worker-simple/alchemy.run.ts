@@ -1,22 +1,38 @@
 /// <reference types="@types/node" />
 
 import alchemy from "alchemy";
-import { KVNamespace, Worker } from "alchemy/cloudflare";
+import { D1Database, KVNamespace, R2Bucket, Worker } from "alchemy/cloudflare";
 
 const app = await alchemy("cloudflare-worker-simple", { mode: "watch" });
 
-const kv = await KVNamespace("my-kv", { adopt: true, local: true });
+const [d1, kv, r2] = await Promise.all([
+  D1Database("my-d1", { adopt: true, local: false }),
+  KVNamespace("my-kv", { adopt: true, local: false, values: [{ key: "test1", value: "test1" }, { key: "test2", value: "test2" }] }),
+  R2Bucket("my-r2", { adopt: true, local: false }),
+]);
 
-export const worker = await Worker("worker", {
+
+export const worker1 = await Worker("worker", {
   name: "cloudflare-worker-simple",
-  entrypoint: "src/worker.ts",
+  entrypoint: "src/worker1.ts",
   bindings: {
     KV: kv,
+    D1: d1,
+    R2: r2,
   },
   compatibilityFlags: ["nodejs_compat"],
-  local: true,
+});
+export const worker2 = await Worker("worker2", {
+  name: "cloudflare-worker-simple-2",
+  entrypoint: "src/worker2.ts",
+  bindings: {
+    WORKER: worker1,
+  },
+  compatibilityFlags: ["nodejs_compat"],
+  local: { port: 3000 },
 });
 
-console.log(`worker.url: ${worker.url}`);
+console.log(`worker1.url: ${worker1.url}`);
+console.log(`worker2.url: ${worker2.url}`);
 
 await app.finalize();
