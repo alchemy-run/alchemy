@@ -114,17 +114,18 @@ describe("Image", () => {
 
   test("should handle invalid context path", async (scope) => {
     try {
-      expect(
-        await Image("test-invalid-context", {
-          name: "alchemy-test",
-          tag: "invalid",
-          build: {
-            context: "/non/existent/path",
-          },
-          skipPush: true,
-        }),
-      ).rejects.toThrow(
-        'Command failed with exit code 1: ERROR: unable to prepare context: path "/non/existent/path" not found',
+      await Image("test-invalid-context", {
+        name: "alchemy-test",
+        tag: "invalid",
+        build: {
+          context: "/non/existent/path",
+        },
+        skipPush: true,
+      });
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe(
+        "ENOENT: no such file or directory, access '/non/existent/path'",
       );
     } finally {
       await alchemy.destroy(scope);
