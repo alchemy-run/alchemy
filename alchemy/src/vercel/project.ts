@@ -441,11 +441,6 @@ export const Project = Resource(
 
         return this.create({ ...props, ...project });
       }
-
-      // todo: make 'dev' phase backwards compatible
-      default: {
-        throw new Error(`Invalid phase: ${this.phase}`);
-      }
     }
   },
 );

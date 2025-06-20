@@ -10,6 +10,7 @@ import { Secret, secret } from "../secret.ts";
 import { serializeScope } from "../serde.ts";
 import type { type } from "../type.ts";
 import { getContentType } from "../util/content-type.ts";
+import { DeferredPromise } from "../util/deferred-promise.ts";
 import { logger } from "../util/logger.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { slugify } from "../util/slugify.ts";
@@ -270,6 +271,19 @@ export interface BaseWorkerProps<
    * @example "pr-123"
    */
   version?: string;
+
+  /**
+   * Whether to emulate the worker locally when Alchemy is running in watch mode.
+   * If true, the worker will be available at a randomly selected port.
+   * If an object is provided, the worker will be available at the specified port.
+   *
+   * @default false
+   */
+  local?:
+    | boolean
+    | {
+        port: number;
+      };
 }
 
 export interface InlineWorkerProps<
@@ -317,15 +331,6 @@ export interface EntrypointWorkerProps<
   rules?: {
     globs: string[];
   }[];
-
-  /**
-   * Whether to enable dev mode for the worker
-   * @default false
-   */
-  dev?: {
-    port?: number;
-    mixedMode?: boolean;
-  };
 }
 
 /**
@@ -903,7 +908,7 @@ export const _Worker = Resource(
       props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
-    if (this.phase === "dev") {
+    if (this.scope.mode === "watch" && props.local) {
       // Get current timestamp
       const now = Date.now();
 
@@ -912,15 +917,17 @@ export const _Worker = Resource(
         compatibilityDate,
         compatibilityFlags,
         bindings: props.bindings ?? ({} as B),
-        remote: "dev" in props ? (props.dev?.mixedMode ?? false) : false,
-        port: "dev" in props ? (props.dev?.port ?? 3000) : 3000,
+        remote: false,
+        port: typeof props.local === "object" ? props.local.port : undefined,
       };
 
-      const url = `http://localhost:${sharedOptions.port}`;
+      let url: string;
 
       // If entrypoint is provided, set up hot reloading with esbuild context
       if (props.entrypoint) {
-        const context = await createWorkerDevContext(
+        const port = new DeferredPromise<number>();
+
+        await createWorkerDevContext(
           workerName,
           {
             ...props,
@@ -930,30 +937,35 @@ export const _Worker = Resource(
           },
           async (newScript: string) => {
             // Hot reload callback - update the miniflare worker
-            console.log(`🔥 Hot reloading worker: ${workerName}`);
-            await miniflareServer.push({
+            const server = await miniflareServer.push({
               ...sharedOptions,
               script: newScript,
             });
+            if (port.status === "pending") {
+              port.resolve(server.port);
+            }
           },
         );
-        this.scope.defer(context.dispose);
+
+        url = `http://localhost:${await port.value}`;
       } else {
         // Fallback to one-time bundling for inline scripts
         const scriptContent =
           props.script ??
           (await bundleWorkerScript({
+            name: workerName,
             ...props,
             compatibilityDate,
             compatibilityFlags,
           }));
-        await miniflareServer.push({
+        const server = await miniflareServer.push({
           ...sharedOptions,
           script:
             typeof scriptContent === "string"
               ? scriptContent
               : scriptContent[props.entrypoint!].toString(),
         });
+        url = `http://localhost:${server.port}`;
       }
 
       return this({
@@ -1040,7 +1052,7 @@ export const _Worker = Resource(
       }
 
       // Prepare metadata with bindings
-      const scriptMetadata = await prepareWorkerMetadata(
+      const scriptMetadata = prepareWorkerMetadata(
         this,
         oldBindings,
         oldTags,

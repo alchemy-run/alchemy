@@ -160,11 +160,6 @@ export const ProjectDomain = Resource(
 
         return this.destroy();
       }
-
-      // todo: make 'dev' phase backwards compatible
-      default: {
-        throw new Error(`Invalid phase: ${this.phase}`);
-      }
     }
   },
 );

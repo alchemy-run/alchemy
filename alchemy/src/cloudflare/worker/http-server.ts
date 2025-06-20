@@ -45,7 +45,7 @@ function toWebRequest(request: http.IncomingMessage): Request {
     body:
       ["GET", "HEAD", "OPTIONS"].includes(method) || !request.readable
         ? undefined
-        : Readable.toWeb(request),
+        : (Readable.toWeb(request) as unknown as BodyInit),
   });
 }
 

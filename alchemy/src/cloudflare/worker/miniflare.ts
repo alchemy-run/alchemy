@@ -4,7 +4,7 @@ import {
   Miniflare,
   type MiniflareOptions,
   type Request as MiniflareRequest,
-  type MixedModeConnectionString,
+  type RemoteProxyConnectionString,
   type WorkerOptions,
 } from "miniflare";
 import { HTTPServer } from "./http-server.ts";
@@ -57,7 +57,8 @@ class MiniflareServer {
       worker.name as string,
       buildMiniflareWorkerOptions({
         ...worker,
-        mixedModeConnectionString: await this.maybeCreateMixedModeProxy(worker),
+        remoteProxyConnectionString:
+          await this.maybeCreateMixedModeProxy(worker),
       }),
     );
     if (this.miniflare) {
@@ -93,7 +94,7 @@ class MiniflareServer {
 
   private async maybeCreateMixedModeProxy(
     worker: MiniflareWorkerOptions,
-  ): Promise<MixedModeConnectionString | undefined> {
+  ): Promise<RemoteProxyConnectionString | undefined> {
     const bindings = buildRemoteBindings(worker);
     if (bindings.length === 0) {
       return undefined;
@@ -135,9 +136,12 @@ class MiniflareServer {
         return res as unknown as Response;
       } catch (error) {
         console.error(error);
-        return new Response("[Alchemy] Internal server error", {
-          status: 500,
-        });
+        return new Response(
+          `[Alchemy] Internal server error: ${String(error)}`,
+          {
+            status: 500,
+          },
+        );
       }
     };
   }
@@ -156,7 +160,7 @@ declare global {
 
 export const miniflareServer = new Proxy({} as MiniflareServer, {
   get: (_, prop: keyof MiniflareServer) => {
-    _ALCHEMY_MINIFLARE_SERVER ??= new MiniflareServer();
-    return _ALCHEMY_MINIFLARE_SERVER[prop];
+    globalThis._ALCHEMY_MINIFLARE_SERVER ??= new MiniflareServer();
+    return globalThis._ALCHEMY_MINIFLARE_SERVER[prop];
   },
 });

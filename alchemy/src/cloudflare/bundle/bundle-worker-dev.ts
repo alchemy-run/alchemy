@@ -28,9 +28,12 @@ export async function createWorkerDevContext<B extends Bindings>(
 ): Promise<{
   dispose: () => Promise<void>;
 }> {
+  console.log("Creating dev context for", workerName);
+
   // Clean up any existing context for this worker
   const existing = activeContexts().get(workerName);
   if (existing) {
+    console.log("Disposing existing dev context for", workerName);
     await existing.dispose();
     activeContexts().delete(workerName);
   }
@@ -75,7 +78,6 @@ export async function createWorkerDevContext<B extends Bindings>(
 
             if (result.outputFiles && result.outputFiles.length > 0) {
               const newScript = result.outputFiles[0].text;
-              console.log(`🔄 Rebuilt worker: ${workerName}`);
               await onBuild(newScript);
             }
           });
@@ -88,6 +90,7 @@ export async function createWorkerDevContext<B extends Bindings>(
   await context.watch();
 
   const dispose = async () => {
+    console.log("Disposing dev context for", workerName);
     await context.dispose();
     activeContexts().delete(workerName);
   };
@@ -104,6 +107,7 @@ export async function createWorkerDevContext<B extends Bindings>(
  * Disposes all active dev contexts
  */
 export async function disposeAllDevContexts(): Promise<void> {
+  console.log("Disposing all dev contexts");
   await Promise.all(
     Array.from(activeContexts().values()).map((ctx) => ctx.dispose()),
   );

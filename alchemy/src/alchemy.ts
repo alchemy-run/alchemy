@@ -33,6 +33,10 @@ function parseCliArgs(): Partial<AlchemyOptions> {
     options.phase = "read";
   }
 
+  if (args.includes("--watch")) {
+    options.mode = "watch";
+  }
+
   // Parse quiet flag
   if (args.includes("--quiet")) {
     options.quiet = true;
@@ -314,7 +318,7 @@ async function _alchemy(
   ].join("\n");
 }
 
-export type Phase = "up" | "destroy" | "read" | "dev";
+export type Phase = "up" | "destroy" | "read";
 
 export interface AlchemyOptions {
   /**
@@ -327,6 +331,12 @@ export interface AlchemyOptions {
    * @default "up"
    */
   phase?: Phase;
+  /**
+   * When set to "watch", the scope will run in watch mode.
+   *
+   * @default undefined
+   */
+  mode?: "watch";
   /**
    * Name to scope the resource state under (e.g. `.alchemy/{stage}/..`).
    *

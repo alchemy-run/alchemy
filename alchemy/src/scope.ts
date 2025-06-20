@@ -20,6 +20,7 @@ export interface ScopeOptions {
   stateStore?: StateStoreType;
   quiet?: boolean;
   phase?: Phase;
+  mode?: "watch";
   telemetryClient?: ITelemetryClient;
   logger?: LoggerApi;
 }
@@ -79,6 +80,7 @@ export class Scope {
   public readonly stateStore: StateStoreType;
   public readonly quiet: boolean;
   public readonly phase: Phase;
+  public readonly mode?: "watch";
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
 
@@ -109,6 +111,8 @@ export class Scope {
       throw new Error("Phase is required");
     }
     this.phase = phase;
+
+    this.mode = options.mode ?? this.parent?.mode;
 
     this.logger = this.quiet
       ? createDummyLogger()

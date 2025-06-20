@@ -1,6 +1,6 @@
 import {
   kCurrentWorker,
-  type MixedModeConnectionString,
+  type RemoteProxyConnectionString,
   type WorkerOptions,
 } from "miniflare";
 import assert from "node:assert";
@@ -19,7 +19,7 @@ export type MiniflareWorkerOptions = Pick<
   name: string;
   script: string;
   remote: boolean;
-  port: number;
+  port?: number;
 };
 
 type BindingType = Exclude<Binding, string | Self>["type"];
@@ -59,6 +59,7 @@ export function buildRemoteBindings(
       bindings.push(buildRemoteBinding(name, binding));
     }
   }
+  console.log("bindings", bindings);
   return bindings;
 }
 
@@ -81,24 +82,27 @@ function isRemoteOnlyBinding(binding: Binding): binding is RemoteBinding {
 function buildRemoteBinding(
   name: string,
   binding: RemoteBinding,
-): WorkerBindingSpec {
+): WorkerBindingSpec & { raw: true } {
   switch (binding.type) {
     case "ai": {
       return {
         type: "ai",
         name,
+        raw: true,
       };
     }
     case "ai_gateway": {
       return {
         type: "ai",
         name,
+        raw: true,
       };
     }
     case "browser": {
       return {
         type: "browser",
         name,
+        raw: true,
       };
     }
     case "d1": {
@@ -106,6 +110,7 @@ function buildRemoteBinding(
         type: "d1",
         name,
         id: binding.id,
+        raw: true,
       };
     }
     case "dispatch_namespace": {
@@ -113,6 +118,7 @@ function buildRemoteBinding(
         type: "dispatch_namespace",
         name,
         namespace: binding.namespace,
+        raw: true,
       };
     }
     case "durable_object_namespace": {
@@ -121,12 +127,14 @@ function buildRemoteBinding(
         name,
         class_name: binding.className,
         script_name: binding.scriptName,
+        raw: true,
       };
     }
     case "images": {
       return {
         type: "images",
         name,
+        raw: true,
       };
     }
     case "kv_namespace": {
@@ -135,6 +143,7 @@ function buildRemoteBinding(
         name,
         namespace_id:
           "namespaceId" in binding ? binding.namespaceId : binding.id,
+        raw: true,
       };
     }
     case "queue": {
@@ -142,6 +151,7 @@ function buildRemoteBinding(
         type: "queue",
         name,
         queue_name: binding.name,
+        raw: true,
       };
     }
     case "r2_bucket": {
@@ -149,6 +159,7 @@ function buildRemoteBinding(
         type: "r2_bucket",
         name,
         bucket_name: binding.name,
+        raw: true,
       };
     }
     case "service": {
@@ -156,6 +167,7 @@ function buildRemoteBinding(
         type: "service",
         name,
         service: "service" in binding ? binding.service : binding.name,
+        raw: true,
       };
     }
     case "vectorize": {
@@ -163,6 +175,7 @@ function buildRemoteBinding(
         type: "vectorize",
         name,
         index_name: binding.name,
+        raw: true,
       };
     }
     case "workflow": {
@@ -172,6 +185,7 @@ function buildRemoteBinding(
         workflow_name: binding.workflowName,
         class_name: binding.className,
         script_name: binding.scriptName,
+        raw: true,
       };
     }
     default: {
@@ -189,9 +203,9 @@ export function buildMiniflareWorkerOptions({
   compatibilityDate,
   compatibilityFlags,
   remote,
-  mixedModeConnectionString,
+  remoteProxyConnectionString,
 }: MiniflareWorkerOptions & {
-  mixedModeConnectionString: MixedModeConnectionString | undefined;
+  remoteProxyConnectionString: RemoteProxyConnectionString | undefined;
 }): WorkerOptions {
   const options: WorkerOptions = {
     name,
@@ -219,23 +233,23 @@ export function buildMiniflareWorkerOptions({
     switch (binding.type) {
       case "ai": {
         assert(
-          mixedModeConnectionString,
-          `Binding "${name}" of type "${binding.type}" requires a mixedModeConnectionString, but none was provided.`,
+          remoteProxyConnectionString,
+          `Binding "${name}" of type "${binding.type}" requires a remoteProxyConnectionString, but none was provided.`,
         );
         options.ai = {
           binding: name,
-          mixedModeConnectionString,
+          remoteProxyConnectionString,
         };
         break;
       }
       case "ai_gateway": {
         assert(
-          mixedModeConnectionString,
-          `Binding "${name}" of type "${binding.type}" requires a mixedModeConnectionString, but none was provided.`,
+          remoteProxyConnectionString,
+          `Binding "${name}" of type "${binding.type}" requires a remoteProxyConnectionString, but none was provided.`,
         );
         options.ai = {
           binding: name,
-          mixedModeConnectionString,
+          remoteProxyConnectionString,
         };
         break;
       }
@@ -254,12 +268,12 @@ export function buildMiniflareWorkerOptions({
       }
       case "browser": {
         assert(
-          mixedModeConnectionString,
-          `Binding "${name}" of type "${binding.type}" requires a mixedModeConnectionString, but none was provided.`,
+          remoteProxyConnectionString,
+          `Binding "${name}" of type "${binding.type}" requires a remoteProxyConnectionString, but none was provided.`,
         );
         options.browserRendering = {
           binding: name,
-          mixedModeConnectionString,
+          remoteProxyConnectionString,
         };
         break;
       }
@@ -269,25 +283,25 @@ export function buildMiniflareWorkerOptions({
             string,
             {
               id: string;
-              mixedModeConnectionString?: MixedModeConnectionString;
+              remoteProxyConnectionString?: RemoteProxyConnectionString;
             }
           >
         )[name] = {
           id: binding.id,
-          mixedModeConnectionString: remote
-            ? mixedModeConnectionString
+          remoteProxyConnectionString: remote
+            ? remoteProxyConnectionString
             : undefined,
         };
         break;
       }
       case "dispatch_namespace": {
         assert(
-          mixedModeConnectionString,
-          `Binding "${name}" of type "${binding.type}" requires a mixedModeConnectionString, but none was provided.`,
+          remoteProxyConnectionString,
+          `Binding "${name}" of type "${binding.type}" requires a remoteProxyConnectionString, but none was provided.`,
         );
         (options.dispatchNamespaces ??= {})[name] = {
           namespace: binding.namespace,
-          mixedModeConnectionString,
+          remoteProxyConnectionString,
         };
         break;
       }
@@ -299,8 +313,8 @@ export function buildMiniflareWorkerOptions({
           // namespaceId
           // unsafeUniqueKey?: string | typeof kUnsafeEphemeralUniqueKey | undefined;
           // unsafePreventEviction?: boolean | undefined;
-          mixedModeConnectionString: remote
-            ? mixedModeConnectionString
+          remoteProxyConnectionString: remote
+            ? remoteProxyConnectionString
             : undefined,
         };
         break;
@@ -334,8 +348,8 @@ export function buildMiniflareWorkerOptions({
       case "images": {
         options.images = {
           binding: name,
-          mixedModeConnectionString: remote
-            ? mixedModeConnectionString
+          remoteProxyConnectionString: remote
+            ? remoteProxyConnectionString
             : undefined,
         };
         break;
@@ -350,13 +364,13 @@ export function buildMiniflareWorkerOptions({
             string,
             {
               id: string;
-              mixedModeConnectionString?: MixedModeConnectionString;
+              remoteProxyConnectionString?: RemoteProxyConnectionString;
             }
           >
         )[name] = {
           id: "id" in binding ? binding.id : binding.namespaceId,
-          mixedModeConnectionString: remote
-            ? mixedModeConnectionString
+          remoteProxyConnectionString: remote
+            ? remoteProxyConnectionString
             : undefined,
         };
         break;
@@ -373,14 +387,14 @@ export function buildMiniflareWorkerOptions({
             {
               queueName: string;
               deliveryDelay?: number;
-              mixedModeConnectionString?: MixedModeConnectionString;
+              remoteProxyConnectionString?: RemoteProxyConnectionString;
             }
           >
         )[name] = {
           queueName: binding.name,
           deliveryDelay: binding.settings?.deliveryDelay,
-          mixedModeConnectionString: remote
-            ? mixedModeConnectionString
+          remoteProxyConnectionString: remote
+            ? remoteProxyConnectionString
             : undefined,
         };
         break;
@@ -391,13 +405,13 @@ export function buildMiniflareWorkerOptions({
             string,
             {
               id: string;
-              mixedModeConnectionString?: MixedModeConnectionString;
+              remoteProxyConnectionString?: RemoteProxyConnectionString;
             }
           >
         )[name] = {
           id: binding.name,
-          mixedModeConnectionString: remote
-            ? mixedModeConnectionString
+          remoteProxyConnectionString: remote
+            ? remoteProxyConnectionString
             : undefined,
         };
         break;
@@ -418,6 +432,9 @@ export function buildMiniflareWorkerOptions({
         };
         break;
       }
+      case "secret_key": {
+        throw new Error("Secret key binding is not supported"); // TODO: Implement
+      }
       case "service": {
         if ("service" in binding) {
           // WorkerRef
@@ -425,8 +442,8 @@ export function buildMiniflareWorkerOptions({
           // Worker | WorkerStub
           (options.serviceBindings ??= {})[name] = {
             name: binding.name,
-            mixedModeConnectionString: remote
-              ? mixedModeConnectionString
+            remoteProxyConnectionString: remote
+              ? remoteProxyConnectionString
               : undefined,
           };
         }
@@ -434,12 +451,12 @@ export function buildMiniflareWorkerOptions({
       }
       case "vectorize": {
         assert(
-          mixedModeConnectionString,
-          `Binding "${name}" of type "${binding.type}" requires a mixedModeConnectionString, but none was provided.`,
+          remoteProxyConnectionString,
+          `Binding "${name}" of type "${binding.type}" requires a remoteProxyConnectionString, but none was provided.`,
         );
         (options.vectorize ??= {})[name] = {
           index_name: binding.name,
-          mixedModeConnectionString,
+          remoteProxyConnectionString,
         };
         break;
       }
@@ -458,15 +475,14 @@ export function buildMiniflareWorkerOptions({
           name: binding.workflowName,
           className: binding.className,
           scriptName: binding.scriptName,
-          mixedModeConnectionString: remote
-            ? mixedModeConnectionString
+          remoteProxyConnectionString: remote
+            ? remoteProxyConnectionString
             : undefined,
         };
         break;
       }
       default: {
-        const _: never = binding;
-        throw new Error(`Unknown binding type: ${_}`);
+        assertNever(binding);
       }
     }
   }

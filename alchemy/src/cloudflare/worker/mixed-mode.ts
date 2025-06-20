@@ -1,4 +1,4 @@
-import type { MixedModeConnectionString } from "miniflare";
+import type { RemoteProxyConnectionString } from "miniflare";
 import path from "node:path";
 import { bundle } from "../../esbuild/bundle.ts";
 import { createCloudflareApi, type CloudflareApi } from "../api.ts";
@@ -78,6 +78,7 @@ export async function createMixedModeProxy(input: {
 
 export class MixedModeProxy {
   server: HTTPServer;
+
   constructor(
     readonly url: string,
     readonly token: string,
@@ -89,9 +90,11 @@ export class MixedModeProxy {
   }
 
   get connectionString() {
+    const hostname =
+      this.server.hostname === "::" ? "localhost" : this.server.hostname;
     return new URL(
-      `http://${this.server.hostname}:${this.server.port}`,
-    ) as MixedModeConnectionString;
+      `http://${hostname}:${this.server.port}`,
+    ) as RemoteProxyConnectionString;
   }
 
   async fetch(req: Request) {
@@ -105,11 +108,19 @@ export class MixedModeProxy {
     headers.set("host", new URL(this.url).hostname);
     headers.delete("cf-connecting-ip");
 
-    return await fetch(url, {
+    const res = await fetch(url, {
       method: req.method,
       headers,
       body: req.body,
       redirect: "manual",
+    });
+
+    const responseHeaders = new Headers(res.headers);
+    responseHeaders.delete("transfer-encoding"); // not supported by miniflare
+
+    return new Response(res.body, {
+      status: res.status,
+      headers: responseHeaders,
     });
   }
 }
