@@ -1,17 +1,16 @@
 /// <reference types="@types/node" />
 
 import alchemy from "alchemy";
-import { Ai, KVNamespace, Worker } from "alchemy/cloudflare";
+import { KVNamespace, Worker } from "alchemy/cloudflare";
 
-const app = await alchemy("cloudflare-worker-simple", { watch: true });
+const app = await alchemy("cloudflare-worker-simple", { mode: "watch" });
 
-const kv = await KVNamespace("my-kv");
+const kv = await KVNamespace("my-kv", { adopt: true, local: true });
 
 export const worker = await Worker("worker", {
   name: "cloudflare-worker-simple",
   entrypoint: "src/worker.ts",
   bindings: {
-    AI: new Ai(),
     KV: kv,
   },
   compatibilityFlags: ["nodejs_compat"],

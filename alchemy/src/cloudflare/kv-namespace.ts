@@ -41,6 +41,11 @@ export interface KVNamespaceProps extends CloudflareApiOptions {
    * @default true
    */
   delete?: boolean;
+
+  /**
+   * Whether to emulate the KV namespace locally when Alchemy is running in watch mode.
+   */
+  local?: boolean;
 }
 
 /**

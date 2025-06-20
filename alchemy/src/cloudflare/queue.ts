@@ -72,6 +72,11 @@ export interface QueueProps extends CloudflareApiOptions {
    * @default false
    */
   adopt?: boolean;
+
+  /**
+   * Whether to emulate the queue locally when Alchemy is running in watch mode.
+   */
+  local?: boolean;
 }
 
 export function isQueue(eventSource: any): eventSource is Queue {

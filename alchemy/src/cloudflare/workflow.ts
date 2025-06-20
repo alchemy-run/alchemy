@@ -25,6 +25,11 @@ export interface WorkflowProps {
    * @default - bound worker script
    */
   scriptName?: string;
+
+  /**
+   * Whether to emulate the workflow locally when Alchemy is running in watch mode.
+   */
+  local?: boolean;
 }
 
 export function isWorkflow(binding: Binding): binding is Workflow {

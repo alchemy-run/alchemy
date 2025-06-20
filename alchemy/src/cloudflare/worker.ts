@@ -917,7 +917,6 @@ export const _Worker = Resource(
         compatibilityDate,
         compatibilityFlags,
         bindings: props.bindings ?? ({} as B),
-        remote: false,
         port: typeof props.local === "object" ? props.local.port : undefined,
       };
 
@@ -926,6 +925,7 @@ export const _Worker = Resource(
       // If entrypoint is provided, set up hot reloading with esbuild context
       if (props.entrypoint) {
         const port = new DeferredPromise<number>();
+        console.time("createWorkerDevContext");
 
         await createWorkerDevContext(
           workerName,
@@ -935,15 +935,34 @@ export const _Worker = Resource(
             compatibilityDate,
             compatibilityFlags,
           },
-          async (newScript: string) => {
+          {
+            onBuild: async (newScript) => {
+            console.timeEnd("createWorkerDevContext");
+            try {
             // Hot reload callback - update the miniflare worker
             const server = await miniflareServer.push({
               ...sharedOptions,
               script: newScript,
             });
             if (port.status === "pending") {
-              port.resolve(server.port);
+                port.resolve(server.port);
+              }
+            } catch (error) {
+              if (port.status === "pending") {
+                port.reject(new Error(`Failed to start Miniflare server for worker "${workerName}"`, { cause: error }));
+              } else {
+                console.error(`Failed to update Miniflare server for worker "${workerName}"`, error);
+              }
             }
+          },
+            onError: (errors) => {
+              if (port.status === "pending") {
+                console.error(`Failed to build worker "${workerName}"`, errors);
+                port.reject(new Error(`Failed to build worker "${workerName}"`, { cause: errors }));
+              } else {
+                console.error(`Failed to rebuild worker "${workerName}"`, errors);
+              }
+            },
           },
         );
 

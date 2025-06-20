@@ -93,6 +93,10 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
    * This is analogous to wrangler's `migrations_dir`.
    */
   migrationsDir?: string;
+  /**
+   * Whether to emulate the database locally when Alchemy is running in watch mode.
+   */
+  local?: boolean;
 }
 
 export function isD1Database(

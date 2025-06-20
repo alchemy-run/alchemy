@@ -87,6 +87,11 @@ export interface BucketProps {
    * Whether to adopt an existing bucket
    */
   adopt?: boolean;
+
+  /**
+   * Whether to emulate the bucket locally when Alchemy is running in watch mode.
+   */
+  local?: boolean;
 }
 
 /**
