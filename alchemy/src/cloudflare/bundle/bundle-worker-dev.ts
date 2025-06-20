@@ -1,6 +1,11 @@
 import type esbuild from "esbuild";
 import type { Bindings } from "../bindings.ts";
 import type { WorkerProps } from "../worker.ts";
+import { createAliasPlugin } from "./alias-plugin.ts";
+import { external, external_als } from "./external.ts";
+import { getNodeJSCompatMode } from "./nodejs-compat-mode.ts";
+import { nodeJsCompatPlugin } from "./nodejs-compat.ts";
+import { wasmPlugin } from "./wasm-plugin.ts";
 
 interface DevWorkerContext {
   context: esbuild.BuildContext;
@@ -24,7 +29,7 @@ export async function createWorkerDevContext<B extends Bindings>(
     compatibilityDate: string;
     compatibilityFlags: string[];
   },
-  onBuild: (script: string) => Promise<void>,
+  hooks: HotReloadHooks,
 ): Promise<{
   dispose: () => Promise<void>;
 }> {
@@ -44,6 +49,12 @@ export async function createWorkerDevContext<B extends Bindings>(
 
   // Create esbuild context for watching
   const esbuild = await import("esbuild");
+  const nodeJsCompatMode = await getNodeJSCompatMode(
+    props.compatibilityDate,
+    props.compatibilityFlags,
+  );
+
+  const projectRoot = props.projectRoot ?? process.cwd();
 
   // Create the context
   const context = await esbuild.context({
@@ -53,36 +64,33 @@ export async function createWorkerDevContext<B extends Bindings>(
     platform: "node",
     minify: false,
     bundle: true,
-    write: false, // We want the result in memory for hot reloading
     ...props.bundle,
+    write: false, // We want the result in memory for hot reloading
     conditions: ["workerd", "worker", "browser"],
-    absWorkingDir: props.projectRoot ?? process.cwd(),
+    absWorkingDir: projectRoot,
     keepNames: true,
     loader: {
       ".sql": "text",
       ".json": "json",
       ...props.bundle?.loader,
     },
-    // Plugins will be added later based on compatibility flags
-    external: props.bundle?.external ?? [],
     plugins: [
+      wasmPlugin,
       ...(props.bundle?.plugins ?? []),
-      {
-        name: "alchemy-hot-reload",
-        setup(build) {
-          build.onEnd(async (result) => {
-            if (result.errors.length > 0) {
-              console.error("Build errors:", result.errors);
-              return;
-            }
-
-            if (result.outputFiles && result.outputFiles.length > 0) {
-              const newScript = result.outputFiles[0].text;
-              await onBuild(newScript);
-            }
-          });
-        },
-      },
+      ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
+      ...(props.bundle?.alias
+        ? [
+            createAliasPlugin({
+              alias: props.bundle?.alias,
+              projectRoot,
+            }),
+          ]
+        : []),
+      hotReloadPlugin(hooks),
+    ],
+    external: [
+      ...(nodeJsCompatMode === "als" ? external_als : external),
+      ...(props.bundle?.external ?? []),
     ],
   });
 
@@ -103,13 +111,26 @@ export async function createWorkerDevContext<B extends Bindings>(
   };
 }
 
-/**
- * Disposes all active dev contexts
- */
-export async function disposeAllDevContexts(): Promise<void> {
-  console.log("Disposing all dev contexts");
-  await Promise.all(
-    Array.from(activeContexts().values()).map((ctx) => ctx.dispose()),
-  );
-  activeContexts().clear();
+interface HotReloadHooks {
+  onBuild: (script: string) => Promise<void>;
+  onError: (errors: esbuild.Message[]) => void;
+}
+
+function hotReloadPlugin(hooks: HotReloadHooks): esbuild.Plugin {
+  return {
+    name: "alchemy-hot-reload",
+    setup(build) {
+      build.onEnd(async (result) => {
+        if (result.errors.length > 0) {
+          hooks.onError(result.errors);
+          return;
+        }
+
+        if (result.outputFiles && result.outputFiles.length > 0) {
+          const newScript = result.outputFiles[0].text;
+          await hooks.onBuild(newScript);
+        }
+      });
+    },
+  };
 }
