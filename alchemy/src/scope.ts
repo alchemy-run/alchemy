@@ -1,9 +1,18 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Phase } from "./alchemy.ts";
-import { destroyAll } from "./destroy.ts";
+import { destroy, destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
-import { ResourceID, type PendingResource } from "./resource.ts";
-import type { StateStore, StateStoreType } from "./state.ts";
+import {
+  ResourceFQN,
+  ResourceID,
+  ResourceKind,
+  ResourceScope,
+  ResourceSeq,
+  type PendingResource,
+  type Resource,
+  type ResourceProps,
+} from "./resource.ts";
+import type { State, StateStore, StateStoreType } from "./state.ts";
 import {
   createDummyLogger,
   createLoggerInstance,
@@ -23,6 +32,11 @@ export interface ScopeOptions {
   telemetryClient?: ITelemetryClient;
   logger?: LoggerApi;
 }
+
+export type PendingDeletions = Array<{
+  resource: Resource<string>;
+  oldProps?: ResourceProps;
+}>;
 
 // TODO: support browser
 const DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
@@ -179,7 +193,27 @@ export class Scope {
     return [...this.chain, resourceID].join("/");
   }
 
-  public async set(key: string, value: any): Promise<void> {
+  private createRootState(): State<"alchemy::Scope"> {
+    return {
+      //todo(michael): should this have a different type cause its root?
+      kind: "alchemy::Scope",
+      id: this.scopeName!,
+      fqn: this.fqn(this.scopeName!),
+      seq: this.seq(),
+      status: "created",
+      data: {},
+      output: {
+        [ResourceID]: this.scopeName!,
+        [ResourceFQN]: this.fqn(this.scopeName!),
+        [ResourceKind]: "alchemy::Scope",
+        [ResourceScope]: this,
+        [ResourceSeq]: this.seq(),
+      },
+      props: {},
+    };
+  }
+
+  public async set<T>(key: string, value: T): Promise<void> {
     // Get the current scope state from the parent (if it exists)
     if (this.parent && this.scopeName) {
       const scopeState = await this.parent.state.get(this.scopeName);
@@ -188,16 +222,23 @@ export class Scope {
         return await this.parent.state.set(this.scopeName, scopeState);
       }
     }
-    throw new Error("Unable to set data on root scope");
+    //todo(michael): ugly hack to support state in the root
+    const rootState =
+      (await this.state.get(this.chain.join("-"))) ?? this.createRootState();
+    rootState.data[key] = value;
+    await this.state.set(this.chain.join("-"), rootState);
   }
 
-  public async get(key: string): Promise<any> {
+  public async get<T>(key: string): Promise<T> {
     // Get the current scope state from the parent (if it exists)
     if (this.parent && this.scopeName) {
       const scopeState = await this.parent.state.get(this.scopeName);
       return scopeState?.data[key];
     }
-    throw new Error("Unable to get data on root scope");
+    //todo(michael): ugly hack to support state in the root
+    const rootState =
+      (await this.state.get(this.chain.join("-"))) ?? this.createRootState();
+    return rootState.data[key];
   }
 
   public async delete(key: string): Promise<void> {
@@ -208,7 +249,11 @@ export class Scope {
         return await this.parent.state.set(this.scopeName, scopeState);
       }
     }
-    throw new Error("Unable to delete data on root scope");
+    //todo(michael): ugly hack to support state in the root
+    const rootState =
+      (await this.state.get(this.chain.join("-"))) ?? this.createRootState();
+    delete rootState.data[key];
+    await this.state.set(this.chain.join("-"), rootState);
   }
 
   public async run<T>(fn: (scope: Scope) => Promise<T>): Promise<T> {
@@ -230,7 +275,7 @@ export class Scope {
     return null;
   }
 
-  public async finalize() {
+  public async finalize(force?: boolean) {
     if (this.phase === "read") {
       this.rootTelemetryClient?.record({
         event: "app.success",
@@ -238,7 +283,7 @@ export class Scope {
       });
       return;
     }
-    if (this.finalized) {
+    if (this.finalized && !force) {
       return;
     }
     if (this.parent === undefined && Scope.globals.length > 0) {
@@ -259,12 +304,23 @@ export class Scope {
       const orphanIds = Array.from(
         resourceIds.filter((id) => !aliveIds.has(id)),
       );
+
+      if (force || this.parent === undefined) {
+        await this.destroyPendingDeletions();
+        await Promise.all(
+          Array.from(this.children.values()).map((child) =>
+            child.finalize(force),
+          ),
+        );
+      }
+
       const orphans = await Promise.all(
         orphanIds.map(async (id) => (await this.state.get(id))!.output),
       );
       await destroyAll(orphans, {
         quiet: this.quiet,
         strategy: "sequential",
+        force: force || this.parent === undefined,
       });
       this.rootTelemetryClient?.record({
         event: "app.success",
@@ -280,6 +336,26 @@ export class Scope {
     }
 
     await this.rootTelemetryClient?.finalize();
+  }
+
+  public async destroyPendingDeletions() {
+    const pendingDeletions =
+      (await this.get<PendingDeletions>("pendingDeletions")) ?? [];
+    if (pendingDeletions) {
+      for (const { resource, oldProps } of pendingDeletions) {
+        //todo(michael): ugly hack due to the way scope is serialized
+        const realResource = this.resources.get(resource[ResourceID])!;
+        resource[ResourceScope] = realResource?.[ResourceScope] ?? this;
+        await destroy(resource, {
+          quiet: this.quiet,
+          strategy: "sequential",
+          replace: {
+            props: oldProps,
+            output: resource,
+          },
+        });
+      }
+    }
   }
 
   /**
