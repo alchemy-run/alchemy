@@ -10,14 +10,14 @@ const test = alchemy.test(import.meta, {
 });
 
 describe("Prisma", () => {
-  test("PrismaProject", async (scope) => {
-    const { PrismaProject } = await import("../../src/prisma/project.ts");
+  test("Project", async (scope) => {
+    const { Project } = await import("../../src/prisma/project.ts");
     const projectId = `${BRANCH_PREFIX}-prisma-project`;
     let project: any;
 
     try {
       // Create
-      project = await PrismaProject(projectId, {
+      project = await Project(projectId, {
         name: `Test Project ${BRANCH_PREFIX}`,
         description: "A test project for Alchemy",
         private: false,
@@ -35,7 +35,7 @@ describe("Prisma", () => {
       expect(Array.isArray(project.environments)).toBe(true);
 
       // Update
-      project = await PrismaProject(projectId, {
+      project = await Project(projectId, {
         name: `Updated Test Project ${BRANCH_PREFIX}`,
         description: "An updated test project for Alchemy",
         private: true,

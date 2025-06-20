@@ -1,4 +1,4 @@
-# PrismaProject
+# Project
 
 Create and manage Prisma projects for application development and deployment.
 
@@ -7,9 +7,9 @@ Create and manage Prisma projects for application development and deployment.
 ### Create a basic Prisma project
 
 ```ts
-import { PrismaProject } from "alchemy/prisma";
+import { Project } from "alchemy/prisma";
 
-const project = await PrismaProject("my-project", {
+const project = await Project("my-project", {
   name: "My App",
   description: "My application project"
 });
@@ -19,9 +19,9 @@ const project = await PrismaProject("my-project", {
 
 ```ts
 import alchemy from "alchemy";
-import { PrismaProject } from "alchemy/prisma";
+import { Project } from "alchemy/prisma";
 
-const project = await PrismaProject("my-project", {
+const project = await Project("my-project", {
   name: "My App",
   organizationId: "org-123",
   region: "us-east-1",
@@ -33,7 +33,7 @@ const project = await PrismaProject("my-project", {
 ### Create a project with environment variables
 
 ```ts
-const project = await PrismaProject("my-project", {
+const project = await Project("my-project", {
   name: "My App",
   environmentVariables: {
     "NODE_ENV": "production",
@@ -101,7 +101,7 @@ Pass the API key directly to the resource:
 ```ts
 import alchemy from "alchemy";
 
-const project = await PrismaProject("my-project", {
+const project = await Project("my-project", {
   name: "My App",
   apiKey: alchemy.secret(process.env.CUSTOM_PRISMA_KEY)
 });

@@ -1,4 +1,4 @@
-# PrismaDatabase
+# Database
 
 Creates and manages databases within Prisma projects for data storage and management.
 
@@ -6,7 +6,7 @@ Creates and manages databases within Prisma projects for data storage and manage
 
 ### Required
 
-- **`project`** - The project that this database belongs to. Can be a `PrismaProject` resource or project ID string.
+- **`project`** - The project that this database belongs to. Can be a `Project` resource or project ID string.
 - **`name`** - Name of the database.
 
 ### Optional
@@ -33,14 +33,14 @@ Creates and manages databases within Prisma projects for data storage and manage
 ### Create a basic database
 
 ```ts
-import { PrismaProject, PrismaDatabase } from "alchemy/prisma";
+import { Project, Database } from "alchemy/prisma";
 
-const project = await PrismaProject("my-project", {
+const project = await Project("my-project", {
   name: "My App",
   description: "My application project"
 });
 
-const database = await PrismaDatabase("my-database", {
+const database = await Database("my-database", {
   project: project,
   name: "my-app-db",
   region: "us-east-1"
@@ -53,7 +53,7 @@ console.log("Connection String:", database.connectionString);
 ### Create a default database
 
 ```ts
-import { PrismaDatabase } from "alchemy/prisma";
+import { Database } from "alchemy/prisma";
 
 const database = await PrismaDatabase("default-db", {
   project: "project-123",
@@ -66,9 +66,9 @@ const database = await PrismaDatabase("default-db", {
 ### Create database with custom region
 
 ```ts
-import { PrismaDatabase } from "alchemy/prisma";
+import { Database } from "alchemy/prisma";
 
-const database = await PrismaDatabase("eu-database", {
+const database = await Database("eu-database", {
   project: project,
   name: "eu-production",
   region: "eu-west-3"
@@ -78,7 +78,7 @@ const database = await PrismaDatabase("eu-database", {
 ### Access database properties
 
 ```ts
-const database = await PrismaDatabase("my-db", {
+const database = await Database("my-db", {
   project: project,
   name: "analytics",
   region: "us-west-1"
@@ -96,4 +96,4 @@ console.log("Status:", database.status);
 - Most database properties are immutable after creation
 - Only one database per project can be marked as default
 - Connection strings are only available during the initial creation response
-- Use `PrismaConnection` resources to create additional connection strings
+- Use `Connection` resources to create additional connection strings

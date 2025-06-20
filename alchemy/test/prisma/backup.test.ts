@@ -10,10 +10,10 @@ const test = alchemy.test(import.meta, {
 });
 
 describe("Prisma Backup", () => {
-  test("PrismaBackup - list backups", async (scope) => {
-    const { PrismaProject } = await import("../../src/prisma/project.ts");
-    const { PrismaDatabase } = await import("../../src/prisma/database.ts");
-    const { PrismaBackup } = await import("../../src/prisma/backup.ts");
+  test("Backup - list backups", async (scope) => {
+    const { Project } = await import("../../src/prisma/project.ts");
+    const { Database } = await import("../../src/prisma/database.ts");
+    const { Backup } = await import("../../src/prisma/backup.ts");
 
     const projectId = `${BRANCH_PREFIX}-prisma-backup-project`;
     const databaseId = `${BRANCH_PREFIX}-prisma-backup-database`;
@@ -25,7 +25,7 @@ describe("Prisma Backup", () => {
 
     try {
       // First create a project
-      project = await PrismaProject(projectId, {
+      project = await Project(projectId, {
         name: `Backup Test Project ${BRANCH_PREFIX}`,
         description: "A test project for backup testing",
       });
@@ -33,7 +33,7 @@ describe("Prisma Backup", () => {
       expect(project.id).toBeDefined();
 
       // Create database
-      database = await PrismaDatabase(databaseId, {
+      database = await Database(databaseId, {
         project: project,
         name: `test-backup-db-${BRANCH_PREFIX}`,
         region: "us-east-1",
@@ -42,7 +42,7 @@ describe("Prisma Backup", () => {
       expect(database.id).toBeDefined();
 
       // List backups
-      backup = await PrismaBackup(backupId, {
+      backup = await Backup(backupId, {
         project: project,
         database: database,
       });
@@ -69,7 +69,7 @@ describe("Prisma Backup", () => {
       }
 
       // Update (should return fresh backup list)
-      backup = await PrismaBackup(backupId, {
+      backup = await Backup(backupId, {
         project: project,
         database: database,
       });

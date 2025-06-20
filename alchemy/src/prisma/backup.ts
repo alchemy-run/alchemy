@@ -3,22 +3,22 @@ import { Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import { createPrismaApi, type PrismaApiOptions } from "./api.ts";
-import type { PrismaDatabase } from "./database.ts";
-import type { PrismaProject } from "./project.ts";
+import type { Database } from "./database.ts";
+import type { Project } from "./project.ts";
 
 /**
  * Properties for accessing Prisma database backups
  */
-export interface PrismaBackupProps extends PrismaApiOptions {
+export interface BackupProps extends PrismaApiOptions {
   /**
    * The project that the database belongs to
    */
-  project: string | PrismaProject;
+  project: string | Project;
 
   /**
    * The database to access backups for
    */
-  database: string | PrismaDatabase;
+  database: string | Database;
 
   /**
    * Optional: Restore a specific backup to a new database
@@ -39,7 +39,7 @@ export interface PrismaBackupProps extends PrismaApiOptions {
 /**
  * A single backup entry
  */
-export interface PrismaBackupEntry {
+export interface BackupEntry {
   /**
    * Backup ID
    */
@@ -79,7 +79,7 @@ export interface PrismaBackupMeta {
 /**
  * Output returned after accessing Prisma database backups
  */
-export interface PrismaBackup extends Resource<"prisma::Backup"> {
+export interface Backup extends Resource<"prisma::Backup"> {
   /**
    * The ID of the project
    */
@@ -93,7 +93,7 @@ export interface PrismaBackup extends Resource<"prisma::Backup"> {
   /**
    * List of available backups
    */
-  backups: PrismaBackupEntry[];
+  backups: BackupEntry[];
 
   /**
    * Backup metadata
@@ -121,7 +121,7 @@ export interface PrismaBackup extends Resource<"prisma::Backup"> {
  * ## List database backups
  *
  * ```ts
- * const backups = await PrismaBackup("db-backups", {
+ * const backups = await Backup("db-backups", {
  *   project: project,
  *   database: database
  * });
@@ -134,7 +134,7 @@ export interface PrismaBackup extends Resource<"prisma::Backup"> {
  * ## Restore a backup to a new database
  *
  * ```ts
- * const backups = await PrismaBackup("restore-backup", {
+ * const backups = await Backup("restore-backup", {
  *   project: project,
  *   database: database,
  *   restore: {
@@ -150,7 +150,7 @@ export interface PrismaBackup extends Resource<"prisma::Backup"> {
  * ## Find latest completed backup
  *
  * ```ts
- * const backups = await PrismaBackup("latest-backup", {
+ * const backups = await Backup("latest-backup", {
  *   project: "project-123",
  *   database: "database-456"
  * });
@@ -160,13 +160,13 @@ export interface PrismaBackup extends Resource<"prisma::Backup"> {
  *   .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
  * ```
  */
-export const PrismaBackup = Resource(
+export const Backup = Resource(
   "prisma::Backup",
   async function (
-    this: Context<PrismaBackup>,
+    this: Context<Backup>,
     id: string,
-    props: PrismaBackupProps,
-  ): Promise<PrismaBackup> {
+    props: BackupProps,
+  ): Promise<Backup> {
     const api = createPrismaApi(props);
     const projectId =
       typeof props.project === "string" ? props.project : props.project.id;

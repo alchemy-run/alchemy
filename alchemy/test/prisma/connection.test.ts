@@ -10,10 +10,10 @@ const test = alchemy.test(import.meta, {
 });
 
 describe("Prisma Connection", () => {
-  test("PrismaConnection", async (scope) => {
-    const { PrismaProject } = await import("../../src/prisma/project.ts");
-    const { PrismaDatabase } = await import("../../src/prisma/database.ts");
-    const { PrismaConnection } = await import("../../src/prisma/connection.ts");
+  test("Connection", async (scope) => {
+    const { Project } = await import("../../src/prisma/project.ts");
+    const { Database } = await import("../../src/prisma/database.ts");
+    const { Connection } = await import("../../src/prisma/connection.ts");
 
     const projectId = `${BRANCH_PREFIX}-prisma-conn-project`;
     const databaseId = `${BRANCH_PREFIX}-prisma-conn-database`;
@@ -25,7 +25,7 @@ describe("Prisma Connection", () => {
 
     try {
       // First create a project
-      project = await PrismaProject(projectId, {
+      project = await Project(projectId, {
         name: `Connection Test Project ${BRANCH_PREFIX}`,
         description: "A test project for connection testing",
       });
@@ -33,7 +33,7 @@ describe("Prisma Connection", () => {
       expect(project.id).toBeDefined();
 
       // Create database
-      database = await PrismaDatabase(databaseId, {
+      database = await Database(databaseId, {
         project: project,
         name: `test-conn-db-${BRANCH_PREFIX}`,
         region: "us-east-1",
@@ -42,7 +42,7 @@ describe("Prisma Connection", () => {
       expect(database.id).toBeDefined();
 
       // Create connection
-      connection = await PrismaConnection(connectionId, {
+      connection = await Connection(connectionId, {
         project: project,
         database: database,
         name: `test-connection-${BRANCH_PREFIX}`,
@@ -60,7 +60,7 @@ describe("Prisma Connection", () => {
       expect(typeof connection.connectionString.unencrypted).toBe("string");
 
       // Update (should return same connection as they are immutable)
-      connection = await PrismaConnection(connectionId, {
+      connection = await Connection(connectionId, {
         project: project,
         database: database,
         name: `test-connection-${BRANCH_PREFIX}`,

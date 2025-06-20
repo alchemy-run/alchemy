@@ -10,9 +10,9 @@ const test = alchemy.test(import.meta, {
 });
 
 describe("Prisma Database", () => {
-  test("PrismaDatabase", async (scope) => {
-    const { PrismaProject } = await import("../../src/prisma/project.ts");
-    const { PrismaDatabase } = await import("../../src/prisma/database.ts");
+  test("Database", async (scope) => {
+    const { Project } = await import("../../src/prisma/project.ts");
+    const { Database } = await import("../../src/prisma/database.ts");
 
     const projectId = `${BRANCH_PREFIX}-prisma-db-project`;
     const databaseId = `${BRANCH_PREFIX}-prisma-database`;
@@ -22,7 +22,7 @@ describe("Prisma Database", () => {
 
     try {
       // First create a project
-      project = await PrismaProject(projectId, {
+      project = await Project(projectId, {
         name: `DB Test Project ${BRANCH_PREFIX}`,
         description: "A test project for database testing",
       });
@@ -30,7 +30,7 @@ describe("Prisma Database", () => {
       expect(project.id).toBeDefined();
 
       // Create database
-      database = await PrismaDatabase(databaseId, {
+      database = await Database(databaseId, {
         project: project,
         name: `test-db-${BRANCH_PREFIX}`,
         region: "us-east-1",
@@ -48,7 +48,7 @@ describe("Prisma Database", () => {
       expect(database.createdAt).toBeDefined();
 
       // Update (should return same database as most properties are immutable)
-      database = await PrismaDatabase(databaseId, {
+      database = await Database(databaseId, {
         project: project,
         name: `test-db-${BRANCH_PREFIX}`,
         region: "us-east-1",

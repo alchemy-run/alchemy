@@ -1,4 +1,4 @@
-# PrismaBackup
+# Backup
 
 Accesses Prisma database backups and provides restore functionality. This is a read-only resource that lists available backups and can restore them to new databases.
 
@@ -6,8 +6,8 @@ Accesses Prisma database backups and provides restore functionality. This is a r
 
 ### Required
 
-- **`project`** - The project that the database belongs to. Can be a `PrismaProject` resource or project ID string.
-- **`database`** - The database to access backups for. Can be a `PrismaDatabase` resource or database ID string.
+- **`project`** - The project that the database belongs to. Can be a `Project` resource or project ID string.
+- **`database`** - The database to access backups for. Can be a `Database` resource or database ID string.
 
 ### Optional
 
@@ -42,18 +42,18 @@ Accesses Prisma database backups and provides restore functionality. This is a r
 ### List database backups
 
 ```ts
-import { PrismaProject, PrismaDatabase, PrismaBackup } from "alchemy/prisma";
+import { Project, Database, Backup } from "alchemy/prisma";
 
-const project = await PrismaProject("my-project", {
+const project = await Project("my-project", {
   name: "My App"
 });
 
-const database = await PrismaDatabase("my-database", {
+const database = await Database("my-database", {
   project: project,
   name: "production"
 });
 
-const backups = await PrismaBackup("db-backups", {
+const backups = await Backup("db-backups", {
   project: project,
   database: database
 });
@@ -71,9 +71,9 @@ backups.backups.forEach(backup => {
 ### Restore a backup to a new database
 
 ```ts
-import { PrismaBackup } from "alchemy/prisma";
+import { Backup } from "alchemy/prisma";
 
-const backups = await PrismaBackup("restore-backup", {
+const backups = await Backup("restore-backup", {
   project: project,
   database: database,
   restore: {
@@ -92,7 +92,7 @@ if (backups.restoredDatabase) {
 ### Find latest completed backup
 
 ```ts
-const backups = await PrismaBackup("latest-backup", {
+const backups = await Backup("latest-backup", {
   project: "project-123",
   database: "database-456"
 });

@@ -15,12 +15,12 @@ Prisma is a next-generation ORM and database platform that provides type-safe da
 
 ```ts
 import alchemy from "alchemy";
-import { PrismaProject, PrismaDatabase, PrismaConnection, PrismaBackup } from "alchemy/prisma";
+import { Project, Database, Connection, Backup } from "alchemy/prisma";
 
 const app = await alchemy("my-app");
 
 // Create a Prisma project
-const project = await PrismaProject("my-project", {
+const project = await Project("my-project", {
   name: "My Application",
   description: "A modern web application",
   region: "us-east-1",
@@ -28,7 +28,7 @@ const project = await PrismaProject("my-project", {
 });
 
 // Create a database in the project
-const database = await PrismaDatabase("main-db", {
+const database = await Database("main-db", {
   project: project,
   name: "production",
   region: "us-east-1",
@@ -36,14 +36,14 @@ const database = await PrismaDatabase("main-db", {
 });
 
 // Create a connection string for the database
-const connection = await PrismaConnection("app-connection", {
+const connection = await Connection("app-connection", {
   project: project,
   database: database,
   name: "web-app",
 });
 
 // Access backup information
-const backups = await PrismaBackup("db-backups", {
+const backups = await Backup("db-backups", {
   project: project,
   database: database,
 });

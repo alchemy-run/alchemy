@@ -9,7 +9,7 @@ import { createPrismaApi, type PrismaApiOptions } from "./api.ts";
 /**
  * Properties for creating or updating a Prisma project
  */
-export interface PrismaProjectProps extends PrismaApiOptions {
+export interface ProjectProps extends PrismaApiOptions {
   /**
    * Name of the project
    */
@@ -112,9 +112,9 @@ interface PrismaApiResponse {
  * Output returned after Prisma project creation/update
  * IMPORTANT: The interface name MUST match the exported resource name
  */
-export interface PrismaProject
+export interface Project
   extends Resource<"prisma::Project">,
-    Omit<PrismaProjectProps, "apiKey" | "existing_project_id"> {
+    Omit<ProjectProps, "apiKey" | "existing_project_id"> {
   /**
    * The ID of the project
    */
@@ -143,7 +143,7 @@ export interface PrismaProject
  * ## Create a basic Prisma project
  *
  * ```ts
- * const project = await PrismaProject("my-project", {
+ * const project = await Project("my-project", {
  *   name: "My App",
  *   description: "My application project"
  * });
@@ -153,7 +153,7 @@ export interface PrismaProject
  * ## Create a project in a specific organization and region
  *
  * ```ts
- * const project = await PrismaProject("my-project", {
+ * const project = await Project("my-project", {
  *   name: "My App",
  *   organizationId: "org-123",
  *   region: "us-east-1",
@@ -166,7 +166,7 @@ export interface PrismaProject
  * ## Create a project with environment variables
  *
  * ```ts
- * const project = await PrismaProject("my-project", {
+ * const project = await Project("my-project", {
  *   name: "My App",
  *   environmentVariables: {
  *     "NODE_ENV": "production",
@@ -175,13 +175,13 @@ export interface PrismaProject
  * });
  * ```
  */
-export const PrismaProject = Resource(
+export const Project = Resource(
   "prisma::Project",
   async function (
-    this: Context<PrismaProject>,
+    this: Context<Project>,
     id: string,
-    props: PrismaProjectProps,
-  ): Promise<PrismaProject> {
+    props: ProjectProps,
+  ): Promise<Project> {
     const api = createPrismaApi(props);
     const projectId = props.existing_project_id || this.output?.id;
 

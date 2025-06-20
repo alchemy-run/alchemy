@@ -87,12 +87,12 @@ Create your infrastructure configuration file:
 
 ```ts
 import alchemy from "alchemy";
-import { PrismaProject } from "alchemy/prisma";
+import { Project } from "alchemy/prisma";
 
 const app = await alchemy("my-prisma-app");
 
 // Create a Prisma project
-const project = await PrismaProject("main-project", {
+const project = await Project("main-project", {
   name: "My Application",
   description: "A modern web application with Prisma",
   region: "us-east-1",
@@ -120,11 +120,11 @@ For a more comprehensive setup with environment variables:
 
 ```ts
 import alchemy from "alchemy";
-import { PrismaProject } from "alchemy/prisma";
+import { Project } from "alchemy/prisma";
 
 const app = await alchemy("my-prisma-app");
 
-const project = await PrismaProject("main-project", {
+const project = await Project("main-project", {
   name: "My Application",
   description: "A production-ready application",
   organizationId: "my-org-id", // Optional

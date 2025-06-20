@@ -1,4 +1,4 @@
-# PrismaConnection
+# Connection
 
 Creates and manages database connection strings for secure access to Prisma databases.
 
@@ -6,8 +6,8 @@ Creates and manages database connection strings for secure access to Prisma data
 
 ### Required
 
-- **`project`** - The project that the database belongs to. Can be a `PrismaProject` resource or project ID string.
-- **`database`** - The database to create a connection for. Can be a `PrismaDatabase` resource or database ID string.
+- **`project`** - The project that the database belongs to. Can be a `Project` resource or project ID string.
+- **`database`** - The database to create a connection for. Can be a `Database` resource or database ID string.
 - **`name`** - Name of the connection.
 
 ### Optional
@@ -29,18 +29,18 @@ Creates and manages database connection strings for secure access to Prisma data
 ### Create a database connection
 
 ```ts
-import { PrismaProject, PrismaDatabase, PrismaConnection } from "alchemy/prisma";
+import { Project, Database, Connection } from "alchemy/prisma";
 
-const project = await PrismaProject("my-project", {
+const project = await Project("my-project", {
   name: "My App"
 });
 
-const database = await PrismaDatabase("my-database", {
+const database = await Database("my-database", {
   project: project,
   name: "production"
 });
 
-const connection = await PrismaConnection("app-connection", {
+const connection = await Connection("app-connection", {
   project: project,
   database: database,
   name: "app-production"
@@ -53,9 +53,9 @@ console.log("Created at:", connection.createdAt);
 ### Create connection with explicit IDs
 
 ```ts
-import { PrismaConnection } from "alchemy/prisma";
+import { Connection } from "alchemy/prisma";
 
-const connection = await PrismaConnection("backup-connection", {
+const connection = await Connection("backup-connection", {
   project: "project-123",
   database: "database-456",
   name: "backup-reader"
@@ -65,7 +65,7 @@ const connection = await PrismaConnection("backup-connection", {
 ### Access connection string
 
 ```ts
-const connection = await PrismaConnection("my-connection", {
+const connection = await Connection("my-connection", {
   project: project,
   database: database,
   name: "web-app"
@@ -83,21 +83,21 @@ process.env.DATABASE_URL = connectionString;
 
 ```ts
 // Read-write connection for the main application
-const appConnection = await PrismaConnection("app-connection", {
+const appConnection = await Connection("app-connection", {
   project: project,
   database: database,
   name: "main-app"
 });
 
 // Read-only connection for analytics
-const analyticsConnection = await PrismaConnection("analytics-connection", {
+const analyticsConnection = await Connection("analytics-connection", {
   project: project,
   database: database,
   name: "analytics-readonly"
 });
 
 // Backup connection for maintenance tasks
-const backupConnection = await PrismaConnection("backup-connection", {
+const backupConnection = await Connection("backup-connection", {
   project: project,
   database: database,
   name: "backup-tasks"

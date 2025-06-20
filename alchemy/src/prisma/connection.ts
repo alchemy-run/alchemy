@@ -5,22 +5,22 @@ import { alchemy } from "../alchemy.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import { createPrismaApi, type PrismaApiOptions } from "./api.ts";
-import type { PrismaDatabase } from "./database.ts";
-import type { PrismaProject } from "./project.ts";
+import type { Database } from "./database.ts";
+import type { Project } from "./project.ts";
 
 /**
  * Properties for creating a Prisma database connection
  */
-export interface PrismaConnectionProps extends PrismaApiOptions {
+export interface ConnectionProps extends PrismaApiOptions {
   /**
    * The project that the database belongs to
    */
-  project: string | PrismaProject;
+  project: string | Project;
 
   /**
    * The database to create a connection for
    */
-  database: string | PrismaDatabase;
+  database: string | Database;
 
   /**
    * Name of the connection
@@ -31,7 +31,7 @@ export interface PrismaConnectionProps extends PrismaApiOptions {
 /**
  * Output returned after Prisma database connection creation
  */
-export interface PrismaConnection extends Resource<"prisma::Connection"> {
+export interface Connection extends Resource<"prisma::Connection"> {
   /**
    * The ID of the connection
    */
@@ -70,7 +70,7 @@ export interface PrismaConnection extends Resource<"prisma::Connection"> {
  * ## Create a database connection
  *
  * ```ts
- * const connection = await PrismaConnection("app-connection", {
+ * const connection = await Connection("app-connection", {
  *   project: project,
  *   database: database,
  *   name: "app-production"
@@ -81,7 +81,7 @@ export interface PrismaConnection extends Resource<"prisma::Connection"> {
  * ## Create connection with explicit IDs
  *
  * ```ts
- * const connection = await PrismaConnection("backup-connection", {
+ * const connection = await Connection("backup-connection", {
  *   project: "project-123",
  *   database: "database-456",
  *   name: "backup-reader"
@@ -92,7 +92,7 @@ export interface PrismaConnection extends Resource<"prisma::Connection"> {
  * ## Access connection string
  *
  * ```ts
- * const connection = await PrismaConnection("my-connection", {
+ * const connection = await Connection("my-connection", {
  *   project: project,
  *   database: database,
  *   name: "web-app"
@@ -102,13 +102,13 @@ export interface PrismaConnection extends Resource<"prisma::Connection"> {
  * console.log(await connection.connectionString.unencrypted);
  * ```
  */
-export const PrismaConnection = Resource(
+export const Connection = Resource(
   "prisma::Connection",
   async function (
-    this: Context<PrismaConnection>,
+    this: Context<Connection>,
     id: string,
-    props: PrismaConnectionProps,
-  ): Promise<PrismaConnection> {
+    props: ConnectionProps,
+  ): Promise<Connection> {
     const api = createPrismaApi(props);
     const projectId =
       typeof props.project === "string" ? props.project : props.project.id;

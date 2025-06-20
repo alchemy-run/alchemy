@@ -3,16 +3,16 @@ import { Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import { createPrismaApi, type PrismaApiOptions } from "./api.ts";
-import type { PrismaProject } from "./project.ts";
+import type { Project } from "./project.ts";
 
 /**
  * Properties for creating or updating a Prisma database
  */
-export interface PrismaDatabaseProps extends PrismaApiOptions {
+export interface DatabaseProps extends PrismaApiOptions {
   /**
    * The project that this database belongs to
    */
-  project: string | PrismaProject;
+  project: string | Project;
 
   /**
    * Name of the database
@@ -40,7 +40,7 @@ export interface PrismaDatabaseProps extends PrismaApiOptions {
 /**
  * A Prisma database connection/API key
  */
-export interface PrismaDatabaseConnection {
+export interface DatabaseConnection {
   /**
    * Connection ID
    */
@@ -65,7 +65,7 @@ export interface PrismaDatabaseConnection {
 /**
  * Output returned after Prisma database creation/update
  */
-export interface PrismaDatabase extends Resource<"prisma::Database"> {
+export interface Database extends Resource<"prisma::Database"> {
   /**
    * The ID of the database
    */
@@ -119,7 +119,7 @@ export interface PrismaDatabase extends Resource<"prisma::Database"> {
  * ## Create a basic database
  *
  * ```ts
- * const database = await PrismaDatabase("my-database", {
+ * const database = await Database("my-database", {
  *   project: project,
  *   name: "my-app-db",
  *   region: "us-east-1"
@@ -130,7 +130,7 @@ export interface PrismaDatabase extends Resource<"prisma::Database"> {
  * ## Create a default database
  *
  * ```ts
- * const database = await PrismaDatabase("default-db", {
+ * const database = await Database("default-db", {
  *   project: "project-123",
  *   name: "production",
  *   region: "us-east-1",
@@ -142,20 +142,20 @@ export interface PrismaDatabase extends Resource<"prisma::Database"> {
  * ## Create database with custom region
  *
  * ```ts
- * const database = await PrismaDatabase("eu-database", {
+ * const database = await Database("eu-database", {
  *   project: project,
  *   name: "eu-production",
  *   region: "eu-west-3"
  * });
  * ```
  */
-export const PrismaDatabase = Resource(
+export const Database = Resource(
   "prisma::Database",
   async function (
-    this: Context<PrismaDatabase>,
+    this: Context<Database>,
     id: string,
-    props: PrismaDatabaseProps,
-  ): Promise<PrismaDatabase> {
+    props: DatabaseProps,
+  ): Promise<Database> {
     const api = createPrismaApi(props);
     const projectId =
       typeof props.project === "string" ? props.project : props.project.id;
