@@ -1001,6 +1001,7 @@ export const _Worker = Resource(
               queue,
               scriptName: workerName,
               accountId: api.accountId,
+              adopt: props.adopt,
               settings: isQueueEventSource(eventSource)
                 ? eventSource.settings
                 : queue.dlq
