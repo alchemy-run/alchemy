@@ -15,6 +15,7 @@ import {
   createLoggerInstance,
   type LoggerApi,
 } from "./util/cli.ts";
+import { AsyncMutex } from "./util/mutex.ts";
 import type { ITelemetryClient } from "./util/telemetry/client.ts";
 
 export interface ScopeOptions {
@@ -92,6 +93,7 @@ export class Scope {
   public readonly phase: Phase;
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
+  public readonly dataMutex: AsyncMutex;
 
   private isErrored = false;
   private finalized = false;
@@ -142,6 +144,7 @@ export class Scope {
     }
     this.telemetryClient =
       options.telemetryClient ?? this.parent?.telemetryClient!;
+    this.dataMutex = new AsyncMutex();
   }
 
   public get root(): Scope {
@@ -191,35 +194,41 @@ export class Scope {
   }
 
   public async set<T>(key: string, value: T): Promise<void> {
-    // Get the current scope state from the parent (if it exists)
-    if (this.parent && this.scopeName) {
-      const scopeState = await this.parent.state.get(this.scopeName);
-      if (scopeState) {
-        scopeState.data[key] = value;
-        return await this.parent.state.set(this.scopeName, scopeState);
+    return this.dataMutex.lock(async () => {
+      // Get the current scope state from the parent (if it exists)
+      if (this.parent && this.scopeName) {
+        const scopeState = await this.parent.state.get(this.scopeName);
+        if (scopeState) {
+          scopeState.data[key] = value;
+          return await this.parent.state.set(this.scopeName, scopeState);
+        }
       }
-    }
-    throw new Error("Root scope cannot contain state");
+      throw new Error("Root scope cannot contain state");
+    });
   }
 
   public async get<T>(key: string): Promise<T> {
-    // Get the current scope state from the parent (if it exists)
-    if (this.parent && this.scopeName) {
-      const scopeState = await this.parent.state.get(this.scopeName);
-      return scopeState?.data[key];
-    }
-    throw new Error("Root scope cannot contain state");
+    return this.dataMutex.lock(async () => {
+      // Get the current scope state from the parent (if it exists)
+      if (this.parent && this.scopeName) {
+        const scopeState = await this.parent.state.get(this.scopeName);
+        return scopeState?.data[key];
+      }
+      throw new Error("Root scope cannot contain state");
+    });
   }
 
   public async delete(key: string): Promise<void> {
-    if (this.parent && this.scopeName) {
-      const scopeState = await this.parent.state.get(this.scopeName);
-      if (scopeState) {
-        delete scopeState.data[key];
-        return await this.parent.state.set(this.scopeName, scopeState);
+    return this.dataMutex.lock(async () => {
+      if (this.parent && this.scopeName) {
+        const scopeState = await this.parent.state.get(this.scopeName);
+        if (scopeState) {
+          delete scopeState.data[key];
+          return await this.parent.state.set(this.scopeName, scopeState);
+        }
       }
-    }
-    throw new Error("Root scope cannot contain state");
+      throw new Error("Root scope cannot contain state");
+    });
   }
 
   public async run<T>(fn: (scope: Scope) => Promise<T>): Promise<T> {
