@@ -1342,7 +1342,7 @@ async function putWorkerInternal(
             // so, we catch the error and parse out the tag and then retry
             if (error.message.includes("when expected tag is")) {
               const newTag = error.message.match(
-                /when expected tag is (.*)/,
+                /when expected tag is ['"]?(v\d+)['"]?/,
               )?.[1];
               if (newTag) {
                 return await putWorkerInternal(
