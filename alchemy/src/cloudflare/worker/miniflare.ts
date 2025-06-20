@@ -69,6 +69,15 @@ class MiniflareServer {
           "Miniflare is not installed, but is required in local mode for Workers. Please run `npm install miniflare`.",
         );
       });
+
+      // Miniflare intercepts SIGINT and exits with 130, which is not a failure.
+      // No one likes to see a non-zero exit code when they Ctrl+C, so here's our workaround.
+      process.on("exit", (code) => {
+        if (code === 130) {
+          process.exit(0);
+        }
+      });
+
       this.miniflare = new Miniflare(this.miniflareOptions());
       await this.miniflare.ready;
     }
