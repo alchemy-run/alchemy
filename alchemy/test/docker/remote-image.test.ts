@@ -28,12 +28,14 @@ describe("RemoteImage", () => {
 
   test("should fail when using a non-existent tag", async (scope) => {
     try {
-      expect(
+      await expect(
         RemoteImage("non-existent-image", {
           name: "non-existent",
           tag: "test-tag-123",
         }),
-      ).rejects.toThrow("Error pulling image non-existent:test-tag-123");
+      ).rejects.toThrow(
+        "Command failed with exit code 1: Error response from daemon: pull access denied for non-existent, repository does not exist or may require 'docker login': denied: requested access to the resource is denied",
+      );
     } finally {
       await alchemy.destroy(scope);
     }

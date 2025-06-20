@@ -124,7 +124,7 @@ describe("Image", () => {
           skipPush: true,
         }),
       ).rejects.toThrow(
-        "Failed to build image: ENOENT: no such file or directory, scandir '/non/existent/path'",
+        'Command failed with exit code 1: ERROR: unable to prepare context: path "/non/existent/path" not found',
       );
     } finally {
       await alchemy.destroy(scope);
