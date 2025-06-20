@@ -1,6 +1,6 @@
 # Prisma Example
 
-This example demonstrates how to use Alchemy to create and manage Prisma projects.
+This example demonstrates how to use Alchemy to create and manage Prisma resources including projects, databases, connections, and backups.
 
 ## Prerequisites
 
@@ -31,17 +31,35 @@ Before running this example, you need:
 ## What This Example Does
 
 - Creates a Prisma project with basic configuration
-- Demonstrates how to set project properties like name, description, and region
-- Shows how to access project information and environments
-- Properly manages the lifecycle (create, update, delete) of Prisma resources
+- Creates a database within the project with regional settings
+- Sets up a secure database connection string
+- Accesses backup information for the database
+- Demonstrates resource relationships (project → database → connection → backups)
+- Shows how to access resource properties and metadata
+- Properly manages the lifecycle (create, update, delete) of all Prisma resources
 
 ## Configuration
 
-The example creates a project with these properties:
+The example creates these resources:
+
+### Project
 - **Name**: Dynamically generated with branch prefix
 - **Description**: A descriptive text about the project
 - **Region**: us-east-1 (configurable)
 - **Private**: false (public project)
+
+### Database
+- **Name**: "production" (with branch prefix)
+- **Region**: us-east-1 (same as project)
+- **Default**: true (primary database for the project)
+
+### Connection
+- **Name**: "app-connection" (with branch prefix)
+- **Purpose**: Secure database access for applications
+
+### Backups
+- **Access**: Read-only access to backup information
+- **Purpose**: Monitor backup status and retention policies
 
 ## Environment Variables
 
@@ -50,8 +68,11 @@ The example creates a project with these properties:
 
 ## Next Steps
 
-This basic example can be extended to:
-- Create additional environments within the project
-- Configure database connections
-- Deploy schema changes
-- Set up monitoring and logging
+This example can be extended to:
+- Create multiple databases for different environments (staging, production)
+- Generate additional connection strings for different purposes (read-only, admin)
+- Implement backup restoration workflows
+- Set up automated monitoring of backup status
+- Deploy Prisma schema changes
+- Configure environment-specific settings
+- Integrate with CI/CD pipelines for database migrations
