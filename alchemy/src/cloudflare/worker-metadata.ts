@@ -2,6 +2,7 @@ import path from "node:path";
 import type { Context } from "../context.ts";
 import { logger } from "../util/logger.ts";
 import { slugify } from "../util/slugify.ts";
+import type { CloudflareApi } from "./api.ts";
 import {
   Self,
   type Bindings,
@@ -13,7 +14,10 @@ import {
   type DurableObjectNamespace,
 } from "./durable-object-namespace.ts";
 import { createAssetConfig, type AssetUploadResult } from "./worker-assets.ts";
-import type { SingleStepMigration } from "./worker-migration.ts";
+import type {
+  MultiStepMigration,
+  SingleStepMigration,
+} from "./worker-migration.ts";
 import type { AssetsConfig, Worker, WorkerProps } from "./worker.ts";
 
 /**
@@ -194,9 +198,8 @@ export interface WorkerMetadata {
 }
 
 export async function prepareWorkerMetadata<B extends Bindings>(
+  api: CloudflareApi,
   ctx: Context<Worker<B>>,
-  oldBindings: WorkerBindingSpec[] | undefined,
-  oldTags: string[] | undefined,
   props: WorkerProps & {
     compatibilityDate: string;
     compatibilityFlags: string[];
@@ -204,6 +207,12 @@ export async function prepareWorkerMetadata<B extends Bindings>(
   },
   assetUploadResult?: AssetUploadResult,
 ): Promise<WorkerMetadata> {
+  const oldSettings = await getWorkerSettings(api, props.workerName);
+  const oldTags: string[] | undefined =
+    oldSettings?.default_environment?.script?.tags;
+  const oldBindings = oldSettings?.bindings;
+  const oldMigrations = oldSettings?.migrations;
+
   // we use Cloudflare Worker tags to store a mapping between Alchemy's stable identifier and the binding name
   // e.g.
   // {
@@ -212,7 +221,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
   // will be stored as alchemy:do:stable-id:BINDING_NAME
   // TODO(sam): should we base64 encode to ensure no `:` collision risk?
   const bindingNameToStableId = Object.fromEntries(
-    oldTags?.flatMap((tag) => {
+    oldTags?.flatMap((tag: string) => {
       // alchemy:do:{stableId}:{bindingName}
       if (tag.startsWith("alchemy:do:")) {
         const [, , stableId, bindingName] = tag.split(":");
@@ -296,14 +305,23 @@ export async function prepareWorkerMetadata<B extends Bindings>(
       ),
     ],
     migrations: {
-      new_classes: props.migrations?.new_classes ?? [],
-      deleted_classes: [
-        ...(deletedClasses ?? []),
-        ...(props.migrations?.deleted_classes ?? []),
-      ],
-      renamed_classes: props.migrations?.renamed_classes ?? [],
-      transferred_classes: props.migrations?.transferred_classes ?? [],
-      new_sqlite_classes: props.migrations?.new_sqlite_classes ?? [],
+      old_tag: oldMigrations?.new_tag,
+      new_tag: (function bump(tag?: string) {
+        if (tag) {
+          if (!tag.match(/^v\d+$/)) {
+            throw new Error(
+              `Invalid tag format: ${tag}. Expected format: v<number>`,
+            );
+          }
+          return `v${Number.parseInt(tag.slice(1)) + 1}`;
+        }
+        return undefined;
+      })(oldMigrations?.new_tag),
+      new_classes: [],
+      deleted_classes: [...(deletedClasses ?? [])],
+      renamed_classes: [],
+      transferred_classes: [],
+      new_sqlite_classes: [],
     },
   };
 
@@ -576,4 +594,61 @@ export async function prepareWorkerMetadata<B extends Bindings>(
     logger.log(meta);
   }
   return meta;
+}
+
+interface WorkerSettings {
+  bindings: WorkerBindingSpec[];
+  compatibility_date: string;
+  compatibility_flags: string[];
+  migrations: SingleStepMigration | MultiStepMigration;
+  [key: string]: any;
+}
+
+async function getWorkerSettings(
+  api: CloudflareApi,
+  workerName: string,
+): Promise<WorkerSettings | undefined> {
+  // Fetch the bindings for a worker by calling the Cloudflare API endpoint:
+  // GET /accounts/:account_id/workers/scripts/:script_name/bindings
+  // See: https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/script_and_version_settings/methods/get/
+  const response = await api.get(
+    `/accounts/${api.accountId}/workers/scripts/${workerName}/settings`,
+  );
+  if (response.status === 404) {
+    return undefined;
+  }
+  if (!response.ok) {
+    throw new Error(
+      `Error getting worker bindings: ${response.status} ${response.statusText}`,
+    );
+  }
+  // The result is an object with a "result" property containing the bindings array
+  const { result, success, errors } = (await response.json()) as {
+    result: {
+      bindings: WorkerBindingSpec[];
+      compatibility_date: string;
+      compatibility_flags: string[];
+      migrations: SingleStepMigration | MultiStepMigration;
+      [key: string]: any;
+    };
+    success: boolean;
+    errors: Array<{
+      code: number;
+      message: string;
+      documentation_url: string;
+      [key: string]: any;
+    }>;
+    messages: Array<{
+      code: number;
+      message: string;
+      documentation_url: string;
+      [key: string]: any;
+    }>;
+  };
+  if (!success) {
+    throw new Error(
+      `Error getting worker bindings: ${response.status} ${response.statusText}\nErrors:\n${errors.map((e) => `- [${e.code}] ${e.message} (${e.documentation_url})`).join("\n")}`,
+    );
+  }
+  return result;
 }
