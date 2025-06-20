@@ -1210,7 +1210,7 @@ export async function deleteWorker<B extends Bindings>(
 
   // Delete worker
   const deleteResponse = await api.delete(
-    `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+    `/accounts/${api.accountId}/workers/scripts/${workerName}?force=true`,
   );
 
   // Check for success (2xx status code)
