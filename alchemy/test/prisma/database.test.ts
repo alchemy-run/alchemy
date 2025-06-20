@@ -73,20 +73,8 @@ async function assertDatabaseDoesNotExist(
   const { createPrismaApi } = await import("../../src/prisma/api.ts");
   const api = createPrismaApi();
 
-  try {
-    const response = await api.get(
-      `/projects/${projectId}/databases/${databaseId}`,
-    );
-    if (response.ok) {
-      throw new Error(
-        `Database ${databaseId} still exists when it should have been deleted`,
-      );
-    }
-  } catch (error) {
-    // Expected - database should not exist
-    if (error.message.includes("still exists")) {
-      throw error;
-    }
-    // Other errors are expected (404, etc.)
-  }
+  const response = await api.get(
+    `/projects/${projectId}/databases/${databaseId}`,
+  );
+  expect(response.status).toEqual(404);
 }

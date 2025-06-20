@@ -176,7 +176,16 @@ export const Database = Resource(
     }
 
     try {
-      let database: any;
+      let database: {
+        id: string;
+        name: string;
+        region: string | null;
+        isDefault: boolean;
+        connectionString?: string;
+        status?: string;
+        apiKeys?: any[];
+        createdAt: string;
+      };
 
       if (this.phase === "update" && databaseId) {
         // For databases, we can't update most properties as they're immutable

@@ -132,13 +132,22 @@ export const Connection = Resource(
       let connection: any;
 
       if (this.phase === "update" && connectionId) {
-        // Connections are immutable once created, so just return current state
-        connection = await getConnection(
+        // Connections are immutable once created, validate no changes
+        const currentConnection = await getConnection(
           api,
           projectId,
           databaseId,
           connectionId,
         );
+
+        // Check for changes to immutable properties
+        if (currentConnection.name !== props.name) {
+          throw new Error(
+            `Cannot change connection name from '${currentConnection.name}' to '${props.name}'. Name is immutable after creation.`,
+          );
+        }
+
+        connection = currentConnection;
       } else {
         // Check if connection already exists
         if (connectionId) {
