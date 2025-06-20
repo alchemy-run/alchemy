@@ -169,7 +169,6 @@ export async function destroy<Type extends string>(
       await destroy(nestedScope, options);
     }
 
-    // await scope.deleteResource(instance[ResourceID]);
     if (options?.replace == null) {
       if (nestedScope) {
         await destroy(nestedScope, options);
