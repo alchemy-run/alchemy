@@ -110,7 +110,7 @@ export const Image = Resource(
   "docker::Image",
   async function (
     this: Context<Image>,
-    id: string,
+    _id: string,
     props: ImageProps,
   ): Promise<Image> {
     // Initialize Docker API client

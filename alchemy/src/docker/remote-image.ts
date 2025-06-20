@@ -54,7 +54,7 @@ export const RemoteImage = Resource(
   "docker::RemoteImage",
   async function (
     this: Context<RemoteImage>,
-    id: string,
+    _id: string,
     props: RemoteImageProps,
   ): Promise<RemoteImage> {
     // Initialize Docker API client

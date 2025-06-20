@@ -219,7 +219,7 @@ export class DockerApi {
     try {
       await this.exec(["inspect", containerId]);
       return true;
-    } catch (error) {
+    } catch (_error) {
       return false;
     }
   }
@@ -343,7 +343,7 @@ export class DockerApi {
     const { stdout } = await this.exec(["volume", "inspect", volumeName]);
     try {
       return JSON.parse(stdout.trim()) as VolumeInfo[];
-    } catch (error) {
+    } catch (_error) {
       return [];
     }
   }
@@ -358,7 +358,7 @@ export class DockerApi {
     try {
       await this.inspectVolume(volumeName);
       return true;
-    } catch (error) {
+    } catch (_error) {
       return false;
     }
   }

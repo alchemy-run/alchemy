@@ -94,7 +94,7 @@ export const Volume = Resource(
   "docker::Volume",
   async function (
     this: Context<Volume>,
-    id: string,
+    _id: string,
     props: VolumeProps,
   ): Promise<Volume> {
     // Initialize Docker API client

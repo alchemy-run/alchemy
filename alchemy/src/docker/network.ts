@@ -70,7 +70,7 @@ export const Network = Resource(
   "docker::Network",
   async function (
     this: Context<Network>,
-    id: string,
+    _id: string,
     props: NetworkProps,
   ): Promise<Network> {
     // Initialize Docker API client
