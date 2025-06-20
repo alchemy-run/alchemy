@@ -6,14 +6,14 @@ const app = await alchemy("prisma-app", {
   stage: BRANCH_PREFIX || undefined,
 });
 
-export const project = await Project(`prisma-project${BRANCH_PREFIX}`, {
+export const project = await Project("project", {
   name: `My Prisma Project${BRANCH_PREFIX ? ` ${BRANCH_PREFIX}` : ""}`,
   description: "A Prisma project created with Alchemy",
   region: "us-east-1",
   private: false,
 });
 
-export const database = await Database(`prisma-database${BRANCH_PREFIX}`, {
+export const database = await Database("database", {
   project: project,
   name: `production${BRANCH_PREFIX ? `-${BRANCH_PREFIX}` : ""}`,
   region: "us-east-1",
@@ -21,7 +21,7 @@ export const database = await Database(`prisma-database${BRANCH_PREFIX}`, {
 });
 
 export const connection = await Connection(
-  `prisma-connection${BRANCH_PREFIX}`,
+  "connection",
   {
     project: project,
     database: database,
@@ -29,7 +29,7 @@ export const connection = await Connection(
   },
 );
 
-export const backups = await Backup(`prisma-backups${BRANCH_PREFIX}`, {
+export const backups = await Backup("backups", {
   project: project,
   database: database,
 });
