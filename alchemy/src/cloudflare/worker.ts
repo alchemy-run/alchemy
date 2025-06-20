@@ -1333,6 +1333,13 @@ async function putWorkerInternal(
           );
         } catch (error) {
           if (error instanceof CloudflareApiError && error.status === 412) {
+            // this happens when adopting a Worker managed with Wrangler
+            // because wrangler includes a migration tag and we do not
+            // currently, the only way to discover the old_tag is through the error message
+            // Get Worker Script Settings is meant to return it (according to the docs)
+            // but it doesn't work at runtime
+            //
+            // so, we catch the error and parse out the tag and then retry
             if (error.message.includes("when expected tag is")) {
               const newTag = error.message.match(
                 /when expected tag is (.*)/,
