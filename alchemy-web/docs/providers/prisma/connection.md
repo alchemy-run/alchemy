@@ -1,56 +1,38 @@
+---
+title: Prisma Connections
+description: Learn how to create and manage database connection strings for secure access to Prisma databases using Alchemy.
+---
+
 # Connection
 
-Creates and manages database connection strings for secure access to Prisma databases.
+A [Prisma Connection](https://docs.prisma.io) creates secure connection strings for accessing Prisma databases.
 
-## Properties
+## Minimal Example
 
-### Required
-
-- **`project`** - The project that the database belongs to. Can be a `Project` resource or project ID string.
-- **`database`** - The database to create a connection for. Can be a `Database` resource or database ID string.
-- **`name`** - Name of the connection.
-
-### Optional
-
-- **`baseUrl`** - Base URL for Prisma API. Defaults to `https://api.prisma.io`.
-- **`apiKey`** - API Key to use (overrides `PRISMA_API_KEY` env var).
-
-## Outputs
-
-- **`id`** - The ID of the connection.
-- **`projectId`** - The ID of the project.
-- **`databaseId`** - The ID of the database this connection belongs to.
-- **`name`** - Name of the connection.
-- **`connectionString`** - Database connection string (sensitive, wrapped in `Secret`).
-- **`createdAt`** - Time at which the connection was created.
-
-## Examples
-
-### Create a database connection
+Create a connection string for database access:
 
 ```ts
 import { Project, Database, Connection } from "alchemy/prisma";
 
 const project = await Project("my-project", {
-  name: "My App"
+  name: "My App",
 });
 
 const database = await Database("my-database", {
   project: project,
-  name: "production"
+  name: "production",
 });
 
 const connection = await Connection("app-connection", {
   project: project,
   database: database,
-  name: "app-production"
+  name: "web-app",
 });
-
-console.log("Connection ID:", connection.id);
-console.log("Created at:", connection.createdAt);
 ```
 
-### Create connection with explicit IDs
+## Using Resource IDs
+
+Create a connection with explicit project and database IDs:
 
 ```ts
 import { Connection } from "alchemy/prisma";
@@ -58,74 +40,65 @@ import { Connection } from "alchemy/prisma";
 const connection = await Connection("backup-connection", {
   project: "project-123",
   database: "database-456",
-  name: "backup-reader"
+  name: "backup-reader",
 });
 ```
 
-### Access connection string
+## Access Connection String
+
+Use the connection string in your application:
 
 ```ts
 const connection = await Connection("my-connection", {
   project: project,
   database: database,
-  name: "web-app"
+  name: "web-app",
 });
 
 // The connection string is wrapped in a Secret for security
 const connectionString = await connection.connectionString.unencrypted;
 console.log("Connection string:", connectionString);
-
-// Use in your application
-process.env.DATABASE_URL = connectionString;
 ```
 
-### Multiple connections for different purposes
+## Multiple Connections
+
+Create different connections for various purposes:
 
 ```ts
-// Read-write connection for the main application
+// Main application connection
 const appConnection = await Connection("app-connection", {
   project: project,
   database: database,
-  name: "main-app"
+  name: "main-app",
 });
 
-// Read-only connection for analytics
+// Analytics connection
 const analyticsConnection = await Connection("analytics-connection", {
   project: project,
   database: database,
-  name: "analytics-readonly"
+  name: "analytics-readonly",
 });
 
-// Backup connection for maintenance tasks
+// Backup connection
 const backupConnection = await Connection("backup-connection", {
   project: project,
   database: database,
-  name: "backup-tasks"
+  name: "backup-tasks",
 });
 ```
 
-### Using connection in Prisma schema
+## With Prisma Schema
+
+Use the connection in your Prisma configuration:
 
 ```ts
-const connection = await PrismaConnection("schema-connection", {
+const connection = await Connection("schema-connection", {
   project: project,
   database: database,
-  name: "schema-access"
+  name: "schema-access",
 });
 
-// Use the connection string in your Prisma configuration
+// Use in your .env file:
+// DATABASE_URL=<connection.connectionString.unencrypted>
 const databaseUrl = await connection.connectionString.unencrypted;
-
-// In your .env file or environment configuration:
-// DATABASE_URL=<databaseUrl>
 ```
-
-## Notes
-
-- Connection strings provide secure access to your Prisma database
-- Each connection has its own unique credentials
-- Connection strings are sensitive and wrapped in `Secret` objects
-- Multiple connections can be created for the same database
-- Connections are immutable once created
-- Use descriptive names to identify the purpose of each connection
-- Always handle connection strings securely in production environments
