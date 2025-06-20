@@ -119,12 +119,7 @@ export const Connection = Resource(
     if (this.phase === "delete") {
       try {
         if (connectionId) {
-          const deleteResponse = await api.delete(
-            `/projects/${projectId}/databases/${databaseId}/connections/${connectionId}`,
-          );
-          if (!deleteResponse.ok && deleteResponse.status !== 404) {
-            await handleApiError(deleteResponse, "delete", "connection", id);
-          }
+          await deleteConnection(api, projectId, databaseId, connectionId, id);
         }
       } catch (error) {
         logger.error(`Error deleting Prisma connection ${id}:`, error);
@@ -138,25 +133,22 @@ export const Connection = Resource(
 
       if (this.phase === "update" && connectionId) {
         // Connections are immutable once created, so just return current state
-        const connections = await listConnections(api, projectId, databaseId);
-        connection = connections.find((c: any) => c.id === connectionId);
-        if (!connection) {
-          throw new Error(`Connection ${connectionId} not found`);
-        }
+        connection = await getConnection(
+          api,
+          projectId,
+          databaseId,
+          connectionId,
+        );
       } else {
         // Check if connection already exists
         if (connectionId) {
-          const connections = await listConnections(api, projectId, databaseId);
-          connection = connections.find((c: any) => c.id === connectionId);
-          if (!connection) {
-            // Connection doesn't exist, create new
-            connection = await createNewConnection(
-              api,
-              projectId,
-              databaseId,
-              props,
-            );
-          }
+          connection = await getConnectionOrCreate(
+            api,
+            projectId,
+            databaseId,
+            connectionId,
+            props,
+          );
         } else {
           // No output ID, create new connection
           connection = await createNewConnection(
@@ -184,13 +176,68 @@ export const Connection = Resource(
 );
 
 /**
+ * Helper function to delete a Prisma database connection
+ */
+async function deleteConnection(
+  api: any,
+  projectId: string,
+  databaseId: string,
+  connectionId: string,
+  resourceId: string,
+): Promise<void> {
+  const deleteResponse = await api.delete(
+    `/projects/${projectId}/databases/${databaseId}/connections/${connectionId}`,
+  );
+  if (!deleteResponse.ok && deleteResponse.status !== 404) {
+    await handleApiError(deleteResponse, "delete", "connection", resourceId);
+  }
+}
+
+/**
+ * Helper function to get a specific connection
+ */
+async function getConnection(
+  api: any,
+  projectId: string,
+  databaseId: string,
+  connectionId: string,
+): Promise<any> {
+  const connections = await listConnections(api, projectId, databaseId);
+  const connection = connections.find((c: any) => c.id === connectionId);
+  if (!connection) {
+    throw new Error(`Connection ${connectionId} not found`);
+  }
+  return connection;
+}
+
+/**
+ * Helper function to get a connection or create it if it doesn't exist
+ */
+async function getConnectionOrCreate(
+  api: any,
+  projectId: string,
+  databaseId: string,
+  connectionId: string,
+  props: ConnectionProps,
+): Promise<any> {
+  const connections = await listConnections(api, projectId, databaseId);
+  const connection = connections.find((c: any) => c.id === connectionId);
+  if (connection) {
+    return connection;
+  } else {
+    // Connection doesn't exist, create new
+    return await createNewConnection(api, projectId, databaseId, props);
+  }
+}
+
+/**
  * Helper function to create a new Prisma database connection
  */
 async function createNewConnection(
   api: any,
   projectId: string,
   databaseId: string,
-  props: PrismaConnectionProps,
+  props: ConnectionProps,
 ): Promise<any> {
   const connectionResponse = await api.post(
     `/projects/${projectId}/databases/${databaseId}/connections`,

@@ -180,33 +180,20 @@ export const Backup = Resource(
 
     try {
       // Get backups for the database
-      const backupResponse = await api.get(
-        `/projects/${projectId}/databases/${databaseId}/backups`,
-      );
-
-      if (!backupResponse.ok) {
-        await handleApiError(backupResponse, "get", "backups", id);
-      }
-
-      const backupData = await backupResponse.json();
+      const backupData = await getBackups(api, projectId, databaseId, id);
 
       let restoredDatabase: any;
 
       // Handle restore if requested
       if (props.restore && this.phase === "create") {
-        const restoreResponse = await api.post(
-          `/projects/${projectId}/databases/${databaseId}/backups/${props.restore.backupId}/recoveries`,
-          {
-            targetDatabaseName: props.restore.targetDatabaseName,
-          },
+        restoredDatabase = await restoreBackup(
+          api,
+          projectId,
+          databaseId,
+          props.restore.backupId,
+          props.restore.targetDatabaseName,
+          id,
         );
-
-        if (!restoreResponse.ok) {
-          await handleApiError(restoreResponse, "restore", "backup", id);
-        }
-
-        const restoreData = await restoreResponse.json();
-        restoredDatabase = restoreData.data;
       }
 
       return this({
@@ -222,3 +209,49 @@ export const Backup = Resource(
     }
   },
 );
+
+/**
+ * Helper function to get backups for a database
+ */
+async function getBackups(
+  api: any,
+  projectId: string,
+  databaseId: string,
+  resourceId: string,
+): Promise<any> {
+  const backupResponse = await api.get(
+    `/projects/${projectId}/databases/${databaseId}/backups`,
+  );
+
+  if (!backupResponse.ok) {
+    await handleApiError(backupResponse, "get", "backups", resourceId);
+  }
+
+  return await backupResponse.json();
+}
+
+/**
+ * Helper function to restore a backup to a new database
+ */
+async function restoreBackup(
+  api: any,
+  projectId: string,
+  databaseId: string,
+  backupId: string,
+  targetDatabaseName: string,
+  resourceId: string,
+): Promise<any> {
+  const restoreResponse = await api.post(
+    `/projects/${projectId}/databases/${databaseId}/backups/${backupId}/recoveries`,
+    {
+      targetDatabaseName,
+    },
+  );
+
+  if (!restoreResponse.ok) {
+    await handleApiError(restoreResponse, "restore", "backup", resourceId);
+  }
+
+  const restoreData = await restoreResponse.json();
+  return restoreData.data;
+}

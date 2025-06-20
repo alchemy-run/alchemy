@@ -189,10 +189,7 @@ export const Project = Resource(
       try {
         // Check if the project exists before attempting to delete
         if (projectId) {
-          const deleteResponse = await api.delete(`/projects/${projectId}`);
-          if (!deleteResponse.ok && deleteResponse.status !== 404) {
-            await handleApiError(deleteResponse, "delete", "project", id);
-          }
+          await deleteProject(api, projectId, id);
         }
       } catch (error) {
         logger.error(`Error deleting Prisma project ${id}:`, error);
@@ -206,46 +203,11 @@ export const Project = Resource(
     try {
       if (this.phase === "update" && projectId) {
         // Update existing project
-        const projectResponse = await api.patch(`/projects/${projectId}`, {
-          name: props.name,
-          description: props.description,
-          private: props.private,
-          environmentVariables: props.environmentVariables,
-        });
-
-        if (!projectResponse.ok) {
-          await handleApiError(projectResponse, "update", "project", id);
-        }
-
-        const data = await projectResponse.json();
-        response = data as PrismaApiResponse;
+        response = await updateProject(api, projectId, props, id);
       } else {
         // Check if a project with this ID already exists
         if (projectId) {
-          const getResponse = await api.get(`/projects/${projectId}`);
-          if (getResponse.ok) {
-            // Project exists, update it
-            const projectResponse = await api.patch(`/projects/${projectId}`, {
-              name: props.name,
-              description: props.description,
-              private: props.private,
-              environmentVariables: props.environmentVariables,
-            });
-
-            if (!projectResponse.ok) {
-              await handleApiError(projectResponse, "update", "project", id);
-            }
-
-            const data = await projectResponse.json();
-            response = data as PrismaApiResponse;
-          } else if (getResponse.status !== 404) {
-            // Unexpected error during GET check
-            await handleApiError(getResponse, "get", "project", id);
-            throw new Error("Failed to check if project exists");
-          } else {
-            // Project doesn't exist, create new
-            response = await createNewProject(api, props);
-          }
+          response = await getProjectOrCreate(api, projectId, props, id);
         } else {
           // No output ID, create new project
           response = await createNewProject(api, props);
@@ -289,11 +251,72 @@ export const Project = Resource(
 );
 
 /**
+ * Helper function to delete a Prisma project
+ */
+async function deleteProject(
+  api: any,
+  projectId: string,
+  resourceId: string,
+): Promise<void> {
+  const deleteResponse = await api.delete(`/projects/${projectId}`);
+  if (!deleteResponse.ok && deleteResponse.status !== 404) {
+    await handleApiError(deleteResponse, "delete", "project", resourceId);
+  }
+}
+
+/**
+ * Helper function to update a Prisma project
+ */
+async function updateProject(
+  api: any,
+  projectId: string,
+  props: ProjectProps,
+  resourceId: string,
+): Promise<PrismaApiResponse> {
+  const projectResponse = await api.patch(`/projects/${projectId}`, {
+    name: props.name,
+    description: props.description,
+    private: props.private,
+    environmentVariables: props.environmentVariables,
+  });
+
+  if (!projectResponse.ok) {
+    await handleApiError(projectResponse, "update", "project", resourceId);
+  }
+
+  const data = await projectResponse.json();
+  return data as PrismaApiResponse;
+}
+
+/**
+ * Helper function to get a project or create it if it doesn't exist
+ */
+async function getProjectOrCreate(
+  api: any,
+  projectId: string,
+  props: ProjectProps,
+  resourceId: string,
+): Promise<PrismaApiResponse> {
+  const getResponse = await api.get(`/projects/${projectId}`);
+  if (getResponse.ok) {
+    // Project exists, update it
+    return await updateProject(api, projectId, props, resourceId);
+  } else if (getResponse.status !== 404) {
+    // Unexpected error during GET check
+    await handleApiError(getResponse, "get", "project", resourceId);
+    throw new Error("Failed to check if project exists");
+  } else {
+    // Project doesn't exist, create new
+    return await createNewProject(api, props);
+  }
+}
+
+/**
  * Helper function to create a new Prisma project
  */
 async function createNewProject(
   api: any,
-  props: PrismaProjectProps,
+  props: ProjectProps,
 ): Promise<PrismaApiResponse> {
   const projectResponse = await api.post("/projects", {
     name: props.name,

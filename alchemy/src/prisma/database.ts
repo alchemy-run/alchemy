@@ -1,5 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
+import { alchemy } from "../alchemy.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import { createPrismaApi, type PrismaApiOptions } from "./api.ts";
@@ -59,7 +61,7 @@ export interface DatabaseConnection {
   /**
    * Database connection string
    */
-  connectionString: string;
+  connectionString: Secret;
 }
 
 /**
@@ -94,7 +96,7 @@ export interface Database extends Resource<"prisma::Database"> {
   /**
    * Database connection string (only available during creation)
    */
-  connectionString?: string;
+  connectionString?: Secret;
 
   /**
    * Database status
@@ -104,7 +106,7 @@ export interface Database extends Resource<"prisma::Database"> {
   /**
    * API keys/connections for this database
    */
-  apiKeys?: PrismaDatabaseConnection[];
+  apiKeys?: DatabaseConnection[];
 
   /**
    * Time at which the database was created
@@ -164,12 +166,7 @@ export const Database = Resource(
     if (this.phase === "delete") {
       try {
         if (databaseId) {
-          const deleteResponse = await api.delete(
-            `/projects/${projectId}/databases/${databaseId}`,
-          );
-          if (!deleteResponse.ok && deleteResponse.status !== 404) {
-            await handleApiError(deleteResponse, "delete", "database", id);
-          }
+          await deleteDatabase(api, projectId, databaseId, id);
         }
       } catch (error) {
         logger.error(`Error deleting Prisma database ${id}:`, error);
@@ -184,27 +181,17 @@ export const Database = Resource(
       if (this.phase === "update" && databaseId) {
         // For databases, we can't update most properties as they're immutable
         // Just return the current state
-        const getResponse = await api.get(
-          `/projects/${projectId}/databases/${databaseId}`,
-        );
-        if (!getResponse.ok) {
-          await handleApiError(getResponse, "get", "database", id);
-        }
-        database = await getResponse.json();
+        database = await getDatabase(api, projectId, databaseId, id);
       } else {
         // Check if database already exists
         if (databaseId) {
-          const getResponse = await api.get(
-            `/projects/${projectId}/databases/${databaseId}`,
+          database = await getDatabaseOrCreate(
+            api,
+            projectId,
+            databaseId,
+            props,
+            id,
           );
-          if (getResponse.ok) {
-            database = await getResponse.json();
-          } else if (getResponse.status !== 404) {
-            await handleApiError(getResponse, "get", "database", id);
-          } else {
-            // Database doesn't exist, create new
-            database = await createNewDatabase(api, projectId, props);
-          }
         } else {
           // No output ID, create new database
           database = await createNewDatabase(api, projectId, props);
@@ -217,9 +204,14 @@ export const Database = Resource(
         name: database.name,
         region: database.region,
         isDefault: database.isDefault,
-        connectionString: database.connectionString,
+        connectionString: database.connectionString
+          ? alchemy.secret(database.connectionString)
+          : undefined,
         status: database.status,
-        apiKeys: database.apiKeys,
+        apiKeys: database.apiKeys?.map((key: any) => ({
+          ...key,
+          connectionString: alchemy.secret(key.connectionString),
+        })),
         createdAt: database.createdAt,
       });
     } catch (error) {
@@ -230,12 +222,70 @@ export const Database = Resource(
 );
 
 /**
+ * Helper function to delete a Prisma database
+ */
+async function deleteDatabase(
+  api: any,
+  projectId: string,
+  databaseId: string,
+  resourceId: string,
+): Promise<void> {
+  const deleteResponse = await api.delete(
+    `/projects/${projectId}/databases/${databaseId}`,
+  );
+  if (!deleteResponse.ok && deleteResponse.status !== 404) {
+    await handleApiError(deleteResponse, "delete", "database", resourceId);
+  }
+}
+
+/**
+ * Helper function to get a Prisma database
+ */
+async function getDatabase(
+  api: any,
+  projectId: string,
+  databaseId: string,
+  resourceId: string,
+): Promise<any> {
+  const getResponse = await api.get(
+    `/projects/${projectId}/databases/${databaseId}`,
+  );
+  if (!getResponse.ok) {
+    await handleApiError(getResponse, "get", "database", resourceId);
+  }
+  return await getResponse.json();
+}
+
+/**
+ * Helper function to get a database or create it if it doesn't exist
+ */
+async function getDatabaseOrCreate(
+  api: any,
+  projectId: string,
+  databaseId: string,
+  props: DatabaseProps,
+  resourceId: string,
+): Promise<any> {
+  const getResponse = await api.get(
+    `/projects/${projectId}/databases/${databaseId}`,
+  );
+  if (getResponse.ok) {
+    return await getResponse.json();
+  } else if (getResponse.status !== 404) {
+    await handleApiError(getResponse, "get", "database", resourceId);
+  } else {
+    // Database doesn't exist, create new
+    return await createNewDatabase(api, projectId, props);
+  }
+}
+
+/**
  * Helper function to create a new Prisma database
  */
 async function createNewDatabase(
   api: any,
   projectId: string,
-  props: PrismaDatabaseProps,
+  props: DatabaseProps,
 ): Promise<any> {
   const databaseResponse = await api.post(`/projects/${projectId}/databases`, {
     name: props.name,
