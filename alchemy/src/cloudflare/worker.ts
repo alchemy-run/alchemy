@@ -1001,6 +1001,7 @@ export const _Worker = Resource(
               queue,
               scriptName: workerName,
               accountId: api.accountId,
+              adopt: props.adopt,
               settings: isQueueEventSource(eventSource)
                 ? eventSource.settings
                 : queue.dlq
@@ -1017,7 +1018,9 @@ export const _Worker = Resource(
       if (props.version) {
         // For versions, use the preview URL if available
         workerUrl = versionResult?.previewUrl;
-      } else {
+      } else if (!props.namespace) {
+        // namespaces don't support URLs
+
         // For regular workers, use the normal URL configuration
         workerUrl = await configureURL(
           this,
@@ -1053,23 +1056,6 @@ export const _Worker = Resource(
     if (this.phase === "delete") {
       // Delete any queue consumers attached to this worker first
       await deleteQueueConsumers(api, workerName);
-
-      // @ts-ignore
-      await uploadWorkerScript({
-        ...props,
-        entrypoint: undefined,
-        noBundle: false,
-        script:
-          props.format === "cjs"
-            ? "addEventListener('fetch', event => { event.respondWith(new Response('hello world')); });"
-            : "export default { fetch(request) { return new Response('hello world'); }, queue: () => {} }",
-        bindings: {} as B,
-        // we are writing a stub worker (to remove binding/event source dependencies)
-        // queue consumers will no longer exist by this point
-        eventSources: undefined,
-        // stub worker doesn't need dispatch namespace
-        namespace: undefined,
-      });
 
       await withExponentialBackoff(
         () =>
@@ -1210,7 +1196,9 @@ export async function deleteWorker<B extends Bindings>(
 
   // Delete worker
   const deleteResponse = await api.delete(
-    `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+    props.namespace
+      ? `/accounts/${api.accountId}/workers/dispatch/namespaces/${props.namespace}/scripts/${workerName}?force=true`
+      : `/accounts/${api.accountId}/workers/scripts/${workerName}?force=true`,
   );
 
   // Check for success (2xx status code)

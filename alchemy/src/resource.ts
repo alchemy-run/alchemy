@@ -2,11 +2,20 @@ import { apply } from "./apply.ts";
 import type { Context } from "./context.ts";
 import { Scope as _Scope, type Scope } from "./scope.ts";
 
-export const PROVIDERS: Map<ResourceKind, Provider<string, any>> = new Map<
+declare global {
+  var ALCHEMY_PROVIDERS: Map<ResourceKind, Provider<string, any>>;
+  var ALCHEMY_DYNAMIC_RESOURCE_RESOLVERS: DynamicResourceResolver[];
+}
+
+export const PROVIDERS: Map<
   ResourceKind,
   Provider<string, any>
->();
-const DYNAMIC_RESOURCE_RESOLVERS: DynamicResourceResolver[] = [];
+> = (globalThis.ALCHEMY_PROVIDERS ??= new Map<
+  ResourceKind,
+  Provider<string, any>
+>());
+const DYNAMIC_RESOURCE_RESOLVERS: DynamicResourceResolver[] =
+  (globalThis.ALCHEMY_DYNAMIC_RESOURCE_RESOLVERS ??= []);
 
 export type DynamicResourceResolver = (
   typeName: string,

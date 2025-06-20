@@ -1,3 +1,39 @@
+## v0.35.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **fs**: Better support for windows file system &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/430 [<samp>(8dd9f)</samp>](https://github.com/sam-goodwin/alchemy/commit/8dd9f196)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.35.0...v0.35.1)
+
+---
+
+## v0.35.0
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Set force=true when deleting a Worker &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/432 [<samp>(2b21d)</samp>](https://github.com/sam-goodwin/alchemy/commit/2b21d41e)
+  - Call wfp endpoint when deleting workers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/434 [<samp>(d109d)</samp>](https://github.com/sam-goodwin/alchemy/commit/d109d984)
+- **core**:
+  - Ensure alchemy providers are globally registered &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/433 [<samp>(b0528)</samp>](https://github.com/sam-goodwin/alchemy/commit/b05284f6)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.34.3...v0.35.0)
+
+---
+
+## v0.34.3
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - Support RPC type in WorkerStub &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/425 [<samp>(0b682)</samp>](https://github.com/sam-goodwin/alchemy/commit/0b682dac)
+  - Support adopting Queue Consumer &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/431 [<samp>(82b2d)</samp>](https://github.com/sam-goodwin/alchemy/commit/82b2d018)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.34.2...v0.34.3)
+
+---
+
 ## v0.34.2
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
