@@ -3,16 +3,13 @@ import type { Phase } from "./alchemy.ts";
 import { destroy, destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
 import {
-  ResourceFQN,
   ResourceID,
-  ResourceKind,
   ResourceScope,
-  ResourceSeq,
   type PendingResource,
   type Resource,
   type ResourceProps,
 } from "./resource.ts";
-import type { State, StateStore, StateStoreType } from "./state.ts";
+import type { StateStore, StateStoreType } from "./state.ts";
 import {
   createDummyLogger,
   createLoggerInstance,
@@ -193,26 +190,6 @@ export class Scope {
     return [...this.chain, resourceID].join("/");
   }
 
-  private createRootState(): State<"alchemy::Scope"> {
-    return {
-      //todo(michael): should this have a different type cause its root?
-      kind: "alchemy::Scope",
-      id: this.scopeName!,
-      fqn: this.fqn(this.scopeName!),
-      seq: this.seq(),
-      status: "created",
-      data: {},
-      output: {
-        [ResourceID]: this.scopeName!,
-        [ResourceFQN]: this.fqn(this.scopeName!),
-        [ResourceKind]: "alchemy::Scope",
-        [ResourceScope]: this,
-        [ResourceSeq]: this.seq(),
-      },
-      props: {},
-    };
-  }
-
   public async set<T>(key: string, value: T): Promise<void> {
     // Get the current scope state from the parent (if it exists)
     if (this.parent && this.scopeName) {
@@ -222,11 +199,7 @@ export class Scope {
         return await this.parent.state.set(this.scopeName, scopeState);
       }
     }
-    //todo(michael): ugly hack to support state in the root
-    const rootState =
-      (await this.state.get(this.chain.join("-"))) ?? this.createRootState();
-    rootState.data[key] = value;
-    await this.state.set(this.chain.join("-"), rootState);
+    throw new Error("Root scope cannot contain state");
   }
 
   public async get<T>(key: string): Promise<T> {
@@ -235,10 +208,7 @@ export class Scope {
       const scopeState = await this.parent.state.get(this.scopeName);
       return scopeState?.data[key];
     }
-    //todo(michael): ugly hack to support state in the root
-    const rootState =
-      (await this.state.get(this.chain.join("-"))) ?? this.createRootState();
-    return rootState.data[key];
+    throw new Error("Root scope cannot contain state");
   }
 
   public async delete(key: string): Promise<void> {
@@ -249,11 +219,7 @@ export class Scope {
         return await this.parent.state.set(this.scopeName, scopeState);
       }
     }
-    //todo(michael): ugly hack to support state in the root
-    const rootState =
-      (await this.state.get(this.chain.join("-"))) ?? this.createRootState();
-    delete rootState.data[key];
-    await this.state.set(this.chain.join("-"), rootState);
+    throw new Error("Root scope cannot contain state");
   }
 
   public async run<T>(fn: (scope: Scope) => Promise<T>): Promise<T> {
