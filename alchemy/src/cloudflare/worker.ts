@@ -909,6 +909,10 @@ export const _Worker = Resource(
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
     if (this.scope.mode === "watch" && props.local && this.phase !== "delete") {
+      logger.warnOnce(
+        "Local development mode is in beta. Please report any issues to https://github.com/sam-goodwin/alchemy/issues.",
+      );
+
       // Get current timestamp
       const now = Date.now();
 
@@ -924,8 +928,7 @@ export const _Worker = Resource(
 
       // If entrypoint is provided, set up hot reloading with esbuild context
       if (props.entrypoint) {
-        const port = new DeferredPromise<number>();
-        console.time("createWorkerDevContext");
+        const startPromise = new DeferredPromise<string>();
 
         await createWorkerDevContext(
           workerName,
@@ -936,37 +939,93 @@ export const _Worker = Resource(
             compatibilityFlags,
           },
           {
-            onBuild: async (newScript) => {
-            console.timeEnd("createWorkerDevContext");
-            try {
-            // Hot reload callback - update the miniflare worker
-            const server = await miniflareServer.push({
-              ...sharedOptions,
-              script: newScript,
-            });
-            if (port.status === "pending") {
-                port.resolve(server.port);
+            onBuildStart: () => {
+              logger.task("miniflare-server", {
+                message: `${startPromise.status === "pending" ? "Building" : "Rebuilding"}`,
+                status: "pending",
+                resource: id,
+                prefix: "build",
+                prefixColor: "cyanBright",
+              });
+            },
+            onBuildEnd: async (newScript) => {
+              try {
+                // Hot reload callback - update the miniflare worker
+                const server = await miniflareServer.push({
+                  ...sharedOptions,
+                  script: newScript,
+                });
+                if (startPromise.status === "pending") {
+                  logger.task("miniflare-server", {
+                    message: `Started Miniflare server at ${server.url}`,
+                    status: "success",
+                    resource: id,
+                    prefix: "ready",
+                    prefixColor: "cyanBright",
+                  });
+                  startPromise.resolve(server.url);
+                } else {
+                  logger.task("miniflare-server", {
+                    message: `Updated Miniflare server at ${server.url}`,
+                    status: "success",
+                    resource: id,
+                    prefix: "reload",
+                    prefixColor: "cyanBright",
+                  });
+                }
+              } catch (error) {
+                if (startPromise.status === "pending") {
+                  logger.error(error);
+                  logger.task("miniflare-server", {
+                    message: "Failed to start Miniflare server",
+                    status: "failure",
+                    resource: id,
+                    prefix: "error",
+                    prefixColor: "redBright",
+                  });
+                  startPromise.reject(
+                    new Error(
+                      `Failed to start Miniflare server for worker "${workerName}"`,
+                      { cause: error },
+                    ),
+                  );
+                } else {
+                  logger.task("miniflare-server", {
+                    message: "Failed to update Miniflare server",
+                    status: "failure",
+                    resource: id,
+                    prefix: "error",
+                    prefixColor: "redBright",
+                  });
+                  logger.error(error);
+                }
               }
-            } catch (error) {
-              if (port.status === "pending") {
-                port.reject(new Error(`Failed to start Miniflare server for worker "${workerName}"`, { cause: error }));
+            },
+            onBuildError: (errors) => {
+              if (startPromise.status === "pending") {
+                logger.task("miniflare-server", {
+                  message: "Failed to build worker",
+                  status: "failure",
+                  resource: id,
+                  prefix: "error",
+                  prefixColor: "redBright",
+                });
+                startPromise.reject(errors);
               } else {
-                console.error(`Failed to update Miniflare server for worker "${workerName}"`, error);
-              }
-            }
-          },
-            onError: (errors) => {
-              if (port.status === "pending") {
-                console.error(`Failed to build worker "${workerName}"`, errors);
-                port.reject(new Error(`Failed to build worker "${workerName}"`, { cause: errors }));
-              } else {
-                console.error(`Failed to rebuild worker "${workerName}"`, errors);
+                logger.task("miniflare-server", {
+                  message: "Failed to rebuild worker",
+                  status: "failure",
+                  resource: id,
+                  prefix: "error",
+                  prefixColor: "redBright",
+                });
+                logger.error(errors);
               }
             },
           },
         );
 
-        url = `http://localhost:${await port.value}`;
+        url = await startPromise.value;
       } else {
         // Fallback to one-time bundling for inline scripts
         const scriptContent =
@@ -984,7 +1043,7 @@ export const _Worker = Resource(
               ? scriptContent
               : scriptContent[props.entrypoint!].toString(),
         });
-        url = `http://localhost:${server.port}`;
+        url = server.url;
       }
 
       return this({
@@ -1002,6 +1061,7 @@ export const _Worker = Resource(
         updatedAt: now,
         eventSources: props.eventSources,
         url,
+        local: props.local,
         // Include assets configuration in the output
         assets: props.assets,
         // Include cron triggers in the output
@@ -1306,6 +1366,7 @@ export const _Worker = Resource(
       updatedAt: now,
       eventSources: props.eventSources,
       url: workerUrl,
+      local: props.local,
       // Include assets configuration in the output
       assets: props.assets,
       // Include cron triggers in the output

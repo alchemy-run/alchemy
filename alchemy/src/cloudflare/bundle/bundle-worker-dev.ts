@@ -30,24 +30,19 @@ export async function createWorkerDevContext<B extends Bindings>(
     compatibilityFlags: string[];
   },
   hooks: HotReloadHooks,
-): Promise<{
-  dispose: () => Promise<void>;
-}> {
-  console.log("Creating dev context for", workerName);
-
+) {
   // Clean up any existing context for this worker
   const existing = activeContexts().get(workerName);
   if (existing) {
-    console.log("Disposing existing dev context for", workerName);
     await existing.dispose();
-    activeContexts().delete(workerName);
   }
 
   if (!props.entrypoint) {
-    throw new Error("entrypoint is required for dev mode watching");
+    throw new Error(
+      "A worker dev context was created, but no entry point was provided.",
+    );
   }
 
-  // Create esbuild context for watching
   const esbuild = await import("esbuild");
   const nodeJsCompatMode = await getNodeJSCompatMode(
     props.compatibilityDate,
@@ -56,7 +51,6 @@ export async function createWorkerDevContext<B extends Bindings>(
 
   const projectRoot = props.projectRoot ?? process.cwd();
 
-  // Create the context
   const context = await esbuild.context({
     entryPoints: [props.entrypoint],
     format: props.format === "cjs" ? "cjs" : "esm",
@@ -94,41 +88,37 @@ export async function createWorkerDevContext<B extends Bindings>(
     ],
   });
 
-  // Start watching
   await context.watch();
 
-  const dispose = async () => {
-    console.log("Disposing dev context for", workerName);
-    await context.dispose();
-    activeContexts().delete(workerName);
-  };
-
-  // Store the context for cleanup
-  activeContexts().set(workerName, { context, dispose });
-
-  return {
-    dispose,
-  };
+  activeContexts().set(workerName, {
+    context,
+    dispose: async () => {
+      await context.dispose();
+      activeContexts().delete(workerName);
+    },
+  });
 }
 
 interface HotReloadHooks {
-  onBuild: (script: string) => Promise<void>;
-  onError: (errors: esbuild.Message[]) => void;
+  onBuildStart: () => void | Promise<void>;
+  onBuildEnd: (script: string) => void | Promise<void>;
+  onBuildError: (errors: esbuild.Message[]) => void | Promise<void>;
 }
 
 function hotReloadPlugin(hooks: HotReloadHooks): esbuild.Plugin {
   return {
     name: "alchemy-hot-reload",
     setup(build) {
+      build.onStart(hooks.onBuildStart);
       build.onEnd(async (result) => {
         if (result.errors.length > 0) {
-          hooks.onError(result.errors);
+          await hooks.onBuildError(result.errors);
           return;
         }
 
         if (result.outputFiles && result.outputFiles.length > 0) {
           const newScript = result.outputFiles[0].text;
-          await hooks.onBuild(newScript);
+          await hooks.onBuildEnd(newScript);
         }
       });
     },

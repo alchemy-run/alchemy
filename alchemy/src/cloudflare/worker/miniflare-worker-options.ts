@@ -321,8 +321,13 @@ export function buildMiniflareWorkerOptions({
       }
       case "hyperdrive": {
         if ("access_client_id" in binding.origin) {
-          throw new Error("Hyperdrive with access is not supported");
+          throw new Error(
+            `Hyperdrive with Cloudflare Access is not supported for locally emulated workers. Worker "${name}" is locally emulated but is bound to Hyperdrive "${name}", which has Cloudflare Access enabled.`,
+          );
         }
+        logger.warnOnce(
+          `Hyperdrive bindings in locally emulated workers are experimental and may not work as expected. Worker "${name}" is locally emulated and bound to Hyperdrive "${name}".`,
+        );
         const {
           scheme = "postgres",
           port = 5432,
@@ -434,11 +439,16 @@ export function buildMiniflareWorkerOptions({
         break;
       }
       case "secret_key": {
-        throw new Error("Secret key binding is not supported"); // TODO: Implement
+        throw new Error(
+          `Secret key bindings are not supported for locally emulated workers. Worker "${name}" is locally emulated but is bound to secret key "${name}".`,
+        );
       }
       case "service": {
-        if ("service" in binding) {
-          // WorkerRef
+        if (!("id" in binding)) {
+          throw new Error(
+            `Service bindings must have an id. Worker "${name}" is bound to service "${name}" but does not have an id.`,
+          );
+        }
         } else {
           // Worker | WorkerStub
           (options.serviceBindings ??= {})[name] = {
@@ -490,11 +500,13 @@ export function buildMiniflareWorkerOptions({
     }
   }
   for (const eventSource of eventSources ?? []) {
-    options.queueConsumers = [
-      ...((options.queueConsumers as string[]) ?? []),
-      "name" in eventSource ? eventSource.name : eventSource.queue.name,
-    ];
+    const queue = "queue" in eventSource ? eventSource.queue : eventSource;
+    if (!queue.local) {
+      throw new Error(
+        `Locally emulated workers cannot consume remote queues. Worker "${name}" is locally emulated but is consuming remote queue "${queue.name}".`,
+      );
+    }
+    ((options.queueConsumers ??= []) as string[]).push(queue.name);
   }
-  console.log("options", options);
   return options;
 }

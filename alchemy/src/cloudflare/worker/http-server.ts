@@ -4,16 +4,20 @@ import { Readable } from "node:stream";
 
 export class HTTPServer {
   server: http.Server;
+  ready: Promise<void>;
+
   constructor(options: {
     port?: number;
     fetch: (request: Request) => Promise<Response>;
   }) {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    this.ready = promise;
     this.server = http
       .createServer(async (req, res) => {
         const response = await options.fetch(toWebRequest(req));
         await writeNodeResponse(res, response);
       })
-      .listen(options.port);
+      .listen(options.port, resolve);
   }
 
   get port() {
@@ -21,7 +25,15 @@ export class HTTPServer {
   }
 
   get hostname() {
-    return (this.server.address() as AddressInfo).address;
+    const address = (this.server.address() as AddressInfo)?.address;
+    if (address === "::") {
+      return "localhost";
+    }
+    return address;
+  }
+
+  get url() {
+    return `http://${this.hostname}:${this.port}`;
   }
 
   stop() {

@@ -1,12 +1,12 @@
-import {
-  Log,
-  LogLevel,
+import type {
   Miniflare,
-  type MiniflareOptions,
-  type Request as MiniflareRequest,
-  type RemoteProxyConnectionString,
-  type WorkerOptions,
+  MiniflareOptions,
+  Request as MiniflareRequest,
+  RemoteProxyConnectionString,
+  WorkerOptions,
 } from "miniflare";
+import path from "node:path";
+import { logger } from "../../util/logger.ts";
 import { HTTPServer } from "./http-server.ts";
 import {
   buildMiniflareWorkerOptions,
@@ -64,6 +64,11 @@ class MiniflareServer {
     if (this.miniflare) {
       await this.miniflare.setOptions(this.miniflareOptions());
     } else {
+      const { Miniflare } = await import("miniflare").catch(() => {
+        throw new Error(
+          "Miniflare is not installed, but is required in local mode for Workers. Please run `npm install miniflare`.",
+        );
+      });
       this.miniflare = new Miniflare(this.miniflareOptions());
       await this.miniflare.ready;
     }
@@ -76,6 +81,7 @@ class MiniflareServer {
       fetch: this.createRequestHandler(worker.name as string),
     });
     this.servers.set(worker.name, server);
+    await server.ready;
     return server;
   }
 
@@ -135,7 +141,7 @@ class MiniflareServer {
         const res = await miniflare.fetch(req as unknown as MiniflareRequest);
         return res as unknown as Response;
       } catch (error) {
-        console.error(error);
+        logger.error(error);
         return new Response(
           `[Alchemy] Internal server error: ${String(error)}`,
           {

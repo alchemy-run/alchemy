@@ -19,7 +19,11 @@ export async function getNodeJSCompatMode(
     noBundle?: boolean;
   },
 ) {
-  const { getNodeCompat } = await import("miniflare");
+  const { getNodeCompat } = await import("miniflare").catch(() => {
+    throw new Error(
+      "Miniflare is not installed, but is required to determine the Node.js compatibility mode for Workers. Please run `npm install miniflare`.",
+    );
+  });
   const {
     mode,
     hasNodejsCompatFlag,
