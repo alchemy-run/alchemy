@@ -1,7 +1,7 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { fsExists } from "../util/fs-exists.ts";
 import { DockerApi } from "./api.ts";
 
 /**
@@ -127,12 +127,12 @@ export const Image = Resource(
 
       // Validate build context
       const { context } = props.build;
-      await fs.exists(context);
+      await fsExists(context);
 
       // Determine Dockerfile path
       const dockerfile = props.build.dockerfile || "Dockerfile";
       const dockerfilePath = path.join(context, dockerfile);
-      await fs.exists(dockerfilePath);
+      await fsExists(dockerfilePath);
 
       // Prepare build options
       const buildOptions: Record<string, string> = props.build.buildArgs || {};
