@@ -5,6 +5,7 @@ import { destroy } from "../../src/destroy.ts";
 import { createStripeClient } from "../../src/stripe/client.ts";
 import { Price } from "../../src/stripe/price.ts";
 import { Product } from "../../src/stripe/product.ts";
+import { Meter } from "../../src/stripe/meter.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
 import "../../src/test/vitest.ts";
@@ -304,7 +305,7 @@ describe("Price Resource", () => {
       // Verify with Stripe API (need to expand tiers)
       const stripePrice = await stripe.prices.retrieve(price.id, {
         expand: ["tiers"],
-      } as any);
+      });
       expect(stripePrice.billing_scheme).toEqual("tiered");
       expect(stripePrice.tiers_mode).toEqual("graduated");
       expect(stripePrice.tiers).toHaveLength(3);
@@ -459,6 +460,117 @@ describe("Price Resource", () => {
           tiersMode: "graduated",
         }),
       ).rejects.toThrow("tiersMode requires tiers to be defined");
+    } finally {
+      await destroy(scope);
+      await assertProductDeactivated(product.id);
+    }
+  });
+
+  test("create metered price with billing meter", async (scope) => {
+    let product: Product | undefined;
+    let meter: Meter | undefined;
+    let price: Price | undefined;
+
+    try {
+      // Create a test product
+      product = await Product(`${testProductId}-meter`, {
+        name: `${BRANCH_PREFIX} Meter Price Test Product`,
+        description: "A product for meter price testing",
+      });
+
+      // Create a real meter
+      meter = await Meter(`${testProductId}-meter-meter`, {
+        displayName: "API Usage Meter",
+        eventName: `${BRANCH_PREFIX}_api_usage`,
+        defaultAggregation: {
+          formula: "sum",
+        },
+        customerMapping: {
+          type: "by_id",
+          eventPayloadKey: "stripe_customer_id",
+        },
+        valueSettings: {
+          eventPayloadKey: "value",
+        },
+      });
+
+      expect(meter.id).toBeTruthy();
+
+      // Create a metered price with meter
+      price = await Price(`${testPriceId}-meter`, {
+        product: product.id,
+        currency: "usd",
+        billingScheme: "tiered",
+        tiersMode: "graduated",
+        recurring: {
+          interval: "month",
+          usageType: "metered",
+          meter: meter.id,
+        },
+        tiers: [
+          {
+            upTo: 1000,
+            unitAmount: 0,
+          },
+          {
+            upTo: "inf",
+            unitAmount: 10,
+          },
+        ],
+      });
+
+      expect(price.id).toBeTruthy();
+      expect(price).toMatchObject({
+        product: product.id,
+        currency: "usd",
+        billingScheme: "tiered",
+        tiersMode: "graduated",
+        recurring: {
+          interval: "month",
+          usageType: "metered",
+          meter: meter.id,
+        },
+      });
+
+      // Verify the meter is correctly set
+      expect(price.recurring?.meter).toEqual(meter.id);
+    } catch (err) {
+      console.log(err);
+      throw err;
+    } finally {
+      await destroy(scope);
+
+      if (price?.id) {
+        await assertPriceDeactivated(price.id);
+      }
+      if (product?.id) {
+        await assertProductDeactivated(product.id);
+      }
+      // Note: Meter cleanup is handled by destroy(scope)
+    }
+  });
+
+  test("meter validation", async (scope) => {
+    const product = await Product(`${testProductId}-meter-validation`, {
+      name: `${BRANCH_PREFIX} Meter Validation Test Product`,
+      description: "A product for meter validation testing",
+    });
+
+    try {
+      // Test: meter requires metered usage type
+      await expect(
+        Price(`${testPriceId}-meter-invalid-usage`, {
+          product: product.id,
+          currency: "usd",
+          recurring: {
+            interval: "month",
+            usageType: "licensed", // Not metered
+            meter: "meter_test_invalid",
+          },
+        }),
+      ).rejects.toThrow(
+        "Meter can only be set for prices with recurring.usageType = 'metered'",
+      );
     } finally {
       await destroy(scope);
       await assertProductDeactivated(product.id);

@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "0.34.0",
+  "version": "0.36.0",
   "type": "module",
   "module": "./lib/index.js",
   "license": "Apache-2.0",
@@ -54,6 +54,10 @@
     "./dns": {
       "bun": "./src/dns/index.ts",
       "import": "./lib/dns/index.js"
+    },
+    "./docker": {
+      "bun": "./src/docker/index.ts",
+      "import": "./lib/docker/index.js"
     },
     "./esbuild": {
       "bun": "./src/esbuild/index.ts",
@@ -158,6 +162,7 @@
     "@ai-sdk/anthropic": "^1.1.6",
     "@ai-sdk/openai": "^1.1.9",
     "@asteasolutions/zod-to-openapi": "^7.3.0",
+    "@aws-sdk/client-resource-groups-tagging-api": "^3.830.0",
     "@aws-sdk/client-s3": "3.726.1",
     "@biomejs/biome": "^1.9.4",
     "@cloudflare/puppeteer": "^1.0.2",

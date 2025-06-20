@@ -375,7 +375,8 @@ async function initAstroProject(
   projectPath: string,
 ): Promise<void> {
   create(
-    `astro@latest ${projectName} -- --no-git --no-deploy --install ${options.yes ? "--yes" : ""}`,
+    pm,
+    `astro@latest ${projectName} ${pm === "npm" ? "--" : ""} --no-git --no-deploy --install ${options.yes ? "--yes" : ""}`,
   );
 
   await initWebsiteProject(projectPath, {
@@ -432,7 +433,8 @@ async function initReactRouterProject(
   projectPath: string,
 ): Promise<void> {
   create(
-    `cloudflare@2.49.3 ${projectName} -- --framework=react-router --no-git --no-deploy ${options.yes ? "--yes" : ""}`,
+    pm,
+    `cloudflare@2.49.3 ${projectName} ${pm === "npm" ? "--" : ""} --framework=react-router --no-git --no-deploy ${options.yes ? "--yes" : ""}`,
   );
 
   await initWebsiteProject(projectPath, {
@@ -1164,7 +1166,7 @@ async function mkdir(...path: string[]): Promise<void> {
 }
 
 function execCommand(command: string, cwd: string = process.cwd()): void {
-  console.log(command);
+  console.log(command.replaceAll(/ +/g, " "));
   try {
     execSync(command, { stdio: "inherit", cwd });
   } catch {
@@ -1206,7 +1208,11 @@ function npx(command: string, cwd: string = process.cwd()): void {
   );
 }
 
-function create(command: string, cwd: string = process.cwd()): void {
+function create(
+  pm: PackageManager,
+  command: string,
+  cwd: string = process.cwd(),
+): void {
   execCommand(
     `${getPackageManagerCommands(pm).create} ${options.yes ? "-y" : ""} ${command}`,
     cwd,

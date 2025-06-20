@@ -1,14 +1,16 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
+import { CloudflareApiError } from "../../src/cloudflare/api-error.ts";
 import { createCloudflareApi } from "../../src/cloudflare/api.ts";
-import { listQueueConsumers } from "../../src/cloudflare/queue-consumer.ts";
+import {
+  listQueueConsumers,
+  QueueConsumer,
+} from "../../src/cloudflare/queue-consumer.ts";
 import { Queue } from "../../src/cloudflare/queue.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
-import { BRANCH_PREFIX } from "../util.ts";
-// must import this or else alchemy.test won't exist
-import { CloudflareApiError } from "../../src/cloudflare/api-error.ts";
 import "../../src/test/vitest.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -81,6 +83,54 @@ describe("QueueConsumer Resource", () => {
           throw err;
         }
       }
+    }
+  });
+
+  test("adopt existing queue consumer", async (scope) => {
+    let queue: Queue | undefined;
+    let worker: Worker | undefined;
+
+    try {
+      // Create a queue
+      queue = await Queue(`${testId}-adopt-queue`, {
+        name: `${testId}-adopt-queue`,
+        adopt: true,
+      });
+
+      expect(queue.id).toBeTruthy();
+
+      // Create a worker that consumes the queue (this creates a consumer)
+      worker = await Worker(`${testId}-adopt-worker`, {
+        name: `${testId}-adopt-worker`,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response("Hello Adopt");
+            },
+            async queue(batch, env, ctx) {
+              console.log("Processing", batch.messages.length, "messages");
+              return batch.messages.map(() => ({ status: "ack" }));
+            }
+          }
+        `,
+        eventSources: [queue],
+        adopt: true,
+      });
+
+      // Now try to adopt the existing consumer using QueueConsumer resource
+      await QueueConsumer(`${testId}-adopted`, {
+        queue: queue.id,
+        scriptName: worker.name,
+        adopt: true,
+        settings: {
+          batchSize: 20,
+          maxRetries: 5,
+          maxWaitTimeMs: 1000,
+        },
+      });
+    } finally {
+      // Clean up
+      await destroy(scope);
     }
   });
 });

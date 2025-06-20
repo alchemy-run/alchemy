@@ -174,6 +174,39 @@ const frontend = await Worker("frontend", {
 });
 ```
 
+## Circular Worker Bindings
+
+When workers need to bind to each other (circular dependency), use `WorkerStub` to break the cycle:
+
+```ts
+import { Worker, WorkerStub } from "alchemy/cloudflare";
+import type { MyWorkerA } from "./src/worker-a.ts";
+import type { MyWorkerB } from "./src/worker-B.ts";
+
+// Create workerA that binds to workerB stub
+const workerA = await Worker("workerA", {
+  name: "worker-a",
+  entrypoint: "./src/workerA.ts",
+  rpc: type<MyWorkerA>,
+  bindings: {
+    // bind to a stub (empty worker)
+    WORKER_B: await WorkerStub<MyWorkerB>("workerB", {
+      name: "worker-b",
+      rpc: type<MyWorkerB>,
+    });,
+  },
+});
+
+// Create workerB that binds to workerA
+const workerB = await Worker("workerB", {
+  name: "worker-b",
+  entrypoint: "./src/workerB.ts",
+  bindings: {
+    WORKER_A: workerA,
+  },
+});
+```
+
 ## RPC
 
 Create a Worker with RPC capabilities using WorkerEntrypoint and typed RPC interfaces:

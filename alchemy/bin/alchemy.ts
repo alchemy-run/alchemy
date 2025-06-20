@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
+import { bootstrapS3 } from "./bootstrap-s3.ts";
 import { createAlchemy } from "./create-alchemy.ts";
 
 // Parse command-line arguments. We allow unknown flags because different
@@ -13,6 +14,8 @@ const { values, positionals } = parseArgs({
     overwrite: { type: "boolean" },
     help: { type: "boolean", short: "h" },
     version: { type: "boolean", short: "v" },
+    region: { type: "string" },
+    prefix: { type: "string" },
   },
 });
 
@@ -23,6 +26,11 @@ const usage = `Usage: alchemy <command> [options]
 
 Available commands:
   create    Scaffold a new project
+  bootstrap Bootstrap cloud resources for alchemy
+
+Bootstrap options:
+  --region    AWS region (defaults to AWS profile default)
+  --prefix    S3 bucket name prefix (default: alchemy-state)
 `;
 
 if (!command) {
@@ -58,6 +66,24 @@ switch (command) {
       help: values.help as boolean | undefined,
       version: values.version as boolean | undefined,
     });
+    break;
+  }
+
+  case "bootstrap": {
+    const subcommand = positionals.shift();
+
+    if (subcommand === "s3") {
+      await bootstrapS3({
+        region: values.region as string | undefined,
+        prefix: values.prefix as string | undefined,
+        help: values.help as boolean | undefined,
+      });
+    } else {
+      console.error(`Unknown bootstrap subcommand: ${subcommand || "(none)"}`);
+      console.error("Available bootstrap subcommands:");
+      console.error("  s3    Create S3 bucket for state storage");
+      process.exit(1);
+    }
     break;
   }
 
