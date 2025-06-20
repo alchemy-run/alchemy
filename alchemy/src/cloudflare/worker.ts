@@ -57,6 +57,7 @@ import { type AssetUploadResult, uploadAssets } from "./worker-assets.ts";
 import {
   type WorkerMetadata,
   type WorkerScriptMetadata,
+  bumpMigrationTagVersion,
   prepareWorkerMetadata,
 } from "./worker-metadata.ts";
 import { WorkerStub, isWorkerStub } from "./worker-stub.ts";
@@ -1215,6 +1216,7 @@ interface PutWorkerOptions {
   versionLabel?: string;
   message?: string;
   dispatchNamespace?: string;
+  migrationTag?: string;
 }
 
 async function putWorkerInternal(
@@ -1267,10 +1269,19 @@ async function putWorkerInternal(
               ...(message && { "workers/message": message.substring(0, 100) }),
             },
           }
-        : scriptMetadata;
+        : {
+            ...scriptMetadata,
+            migrations: scriptMetadata.migrations
+              ? {
+                  ...scriptMetadata.migrations,
+                  old_tag: options.migrationTag,
+                  new_tag: bumpMigrationTagVersion(options.migrationTag),
+                }
+              : undefined,
+          };
 
       if (process.env.DEBUG) {
-        logger.log("finalMetadata", finalMetadata);
+        console.log("finalMetadata", finalMetadata);
       }
 
       // Add metadata as JSON
@@ -1284,7 +1295,6 @@ async function putWorkerInternal(
       // Determine endpoint and HTTP method
       let endpoint: string;
       let method: "PUT" | "POST";
-
       if (versionLabel) {
         // Upload worker version using the versions API
         endpoint = `/accounts/${api.accountId}/workers/scripts/${workerName}/versions`;
@@ -1312,12 +1322,40 @@ async function putWorkerInternal(
 
       // Check if the upload was successful
       if (!uploadResponse.ok) {
-        await handleApiError(
-          uploadResponse,
-          versionLabel ? "uploading worker version" : "uploading worker script",
-          "worker",
-          workerName,
-        );
+        try {
+          return await handleApiError(
+            uploadResponse,
+            versionLabel
+              ? "uploading worker version"
+              : "uploading worker script",
+            "worker",
+            workerName,
+          );
+        } catch (error) {
+          if (error instanceof CloudflareApiError && error.status === 412) {
+            if (error.message.includes("when expected tag is")) {
+              const newTag = error.message.match(
+                /when expected tag is (.*)/,
+              )?.[1];
+              if (newTag) {
+                return await putWorkerInternal(
+                  api,
+                  workerName,
+                  scriptBundle,
+                  scriptMetadata,
+                  {
+                    ...options,
+                    migrationTag: newTag,
+                  },
+                );
+              }
+            } else {
+              throw error;
+            }
+          } else {
+            throw error;
+          }
+        }
       }
 
       // Handle version response
@@ -1484,13 +1522,6 @@ export async function configureURL<B extends Bindings>(
 
     if (subdomain) {
       workerUrl = `https://${workerName}.${subdomain}.workers.dev`;
-
-      // Add a delay when the subdomain is first created.
-      // This is to prevent an issue where a negative cache-hit
-      // causes the subdomain to be unavailable for 30 seconds.
-      if (ctx.phase === "create" || !ctx.output?.url) {
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-      }
     }
   } else if (url === false && ctx.output?.url) {
     // Explicitly disable URL if it was previously enabled

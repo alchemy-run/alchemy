@@ -306,17 +306,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
     ],
     migrations: {
       old_tag: oldMigrations?.new_tag,
-      new_tag: (function bump(tag?: string) {
-        if (tag) {
-          if (!tag.match(/^v\d+$/)) {
-            throw new Error(
-              `Invalid tag format: ${tag}. Expected format: v<number>`,
-            );
-          }
-          return `v${Number.parseInt(tag.slice(1)) + 1}`;
-        }
-        return undefined;
-      })(oldMigrations?.new_tag),
+      new_tag: bumpMigrationTagVersion(oldMigrations?.new_tag),
       new_classes: [],
       deleted_classes: [...(deletedClasses ?? [])],
       renamed_classes: [],
@@ -594,6 +584,16 @@ export async function prepareWorkerMetadata<B extends Bindings>(
     logger.log(meta);
   }
   return meta;
+}
+
+export function bumpMigrationTagVersion(tag?: string) {
+  if (tag) {
+    if (!tag.match(/^v\d+$/)) {
+      throw new Error(`Invalid tag format: ${tag}. Expected format: v<number>`);
+    }
+    return `v${Number.parseInt(tag.slice(1)) + 1}`;
+  }
+  return undefined;
 }
 
 interface WorkerSettings {
