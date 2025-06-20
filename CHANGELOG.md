@@ -1,3 +1,15 @@
+## v0.34.3
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - Support RPC type in WorkerStub &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/425 [<samp>(0b682)</samp>](https://github.com/sam-goodwin/alchemy/commit/0b682dac)
+  - Support adopting Queue Consumer &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/431 [<samp>(82b2d)</samp>](https://github.com/sam-goodwin/alchemy/commit/82b2d018)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.34.2...v0.34.3)
+
+---
+
 ## v0.34.2
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
