@@ -1283,6 +1283,10 @@ async function putWorkerInternal(
           }
         : scriptMetadata;
 
+      if (process.env.DEBUG) {
+        logger.log("finalMetadata", finalMetadata);
+      }
+
       // Add metadata as JSON
       formData.append(
         "metadata",
