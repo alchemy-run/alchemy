@@ -6,11 +6,17 @@ import { D1Database, KVNamespace, R2Bucket, Worker } from "alchemy/cloudflare";
 const app = await alchemy("cloudflare-worker-simple", { mode: "watch" });
 
 const [d1, kv, r2] = await Promise.all([
-  D1Database("my-d1", { adopt: true, local: false }),
-  KVNamespace("my-kv", { adopt: true, local: false, values: [{ key: "test1", value: "test1" }, { key: "test2", value: "test2" }] }),
-  R2Bucket("my-r2", { adopt: true, local: false }),
+  D1Database("my-d1", { adopt: true, local: true }),
+  KVNamespace("my-kv", {
+    adopt: true,
+    local: true,
+    values: [
+      { key: "test1", value: "test1" },
+      { key: "test2", value: "test2" },
+    ],
+  }),
+  R2Bucket("my-r2", { adopt: true, local: true }),
 ]);
-
 
 export const worker1 = await Worker("worker", {
   name: "cloudflare-worker-simple",
@@ -29,7 +35,7 @@ export const worker2 = await Worker("worker2", {
     WORKER: worker1,
   },
   compatibilityFlags: ["nodejs_compat"],
-  local: { port: 3000 },
+  local: true,
 });
 
 console.log(`worker1.url: ${worker1.url}`);

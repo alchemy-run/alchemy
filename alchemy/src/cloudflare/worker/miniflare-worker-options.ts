@@ -5,6 +5,7 @@ import {
 } from "miniflare";
 import assert from "node:assert";
 import { assertNever } from "../../util/assert-never.ts";
+import { logger } from "../../util/logger.ts";
 import { Self, type Binding, type WorkerBindingSpec } from "../bindings.ts";
 import type { WorkerProps } from "../worker.ts";
 
@@ -61,7 +62,6 @@ export function buildRemoteBindings(
       bindings.push(buildRemoteBinding(name, binding));
     }
   }
-  console.log("bindings", bindings);
   return bindings;
 }
 
@@ -169,6 +169,7 @@ function buildRemoteBinding(
         type: "service",
         name,
         service: "service" in binding ? binding.service : binding.name,
+        environment: "environment" in binding ? binding.environment : undefined,
       };
     }
     case "vectorize": {
@@ -449,14 +450,12 @@ export function buildMiniflareWorkerOptions({
             `Service bindings must have an id. Worker "${name}" is bound to service "${name}" but does not have an id.`,
           );
         }
+        if (binding.local) {
+          (options.serviceBindings ??= {})[name] = binding.name;
         } else {
-          // Worker | WorkerStub
           (options.serviceBindings ??= {})[name] = {
             name: binding.name,
-            remoteProxyConnectionString:
-              "local" in binding && binding.local
-                ? undefined
-                : remoteProxyConnectionString,
+            remoteProxyConnectionString,
           };
         }
         break;

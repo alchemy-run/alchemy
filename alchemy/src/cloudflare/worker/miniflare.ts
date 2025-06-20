@@ -106,7 +106,11 @@ class MiniflareServer {
       return undefined;
     }
     const existing = this.mixedModeProxies.get(worker.name);
-    if (existing) {
+    if (
+      existing?.bindings.every((b) =>
+        bindings.find((b2) => b2.name === b.name && b2.type === b.type),
+      )
+    ) {
       return existing.connectionString;
     }
     const proxy = await createMixedModeProxy({
@@ -155,7 +159,15 @@ class MiniflareServer {
   private miniflareOptions(): MiniflareOptions {
     return {
       workers: Array.from(this.workers.values()),
-      log: new Log(LogLevel.DEBUG),
+      defaultPersistRoot: path.join(process.cwd(), ".alchemy/miniflare"),
+      analyticsEngineDatasetsPersist: true,
+      cachePersist: true,
+      d1Persist: true,
+      durableObjectsPersist: true,
+      kvPersist: true,
+      r2Persist: true,
+      secretsStorePersist: true,
+      workflowsPersist: true,
     };
   }
 }
