@@ -1,9 +1,9 @@
 import { describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy.js";
-import { DockerApi } from "../../src/docker/api.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { alchemy } from "../../src/alchemy.ts";
+import { DockerApi } from "../../src/docker/api.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import "../../src/test/vitest.js";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

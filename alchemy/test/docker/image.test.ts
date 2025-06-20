@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy.js";
-import { Image } from "../../src/docker/image.js";
-import { BRANCH_PREFIX } from "../util.js";
+import { alchemy } from "../../src/alchemy.ts";
+import { Image } from "../../src/docker/image.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
-import "../../src/test/vitest.js";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

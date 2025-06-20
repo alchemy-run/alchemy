@@ -1,4 +1,4 @@
-import { exec } from "../os/exec.js";
+import { exec } from "../os/exec.ts";
 
 /**
  * Options for Docker API requests

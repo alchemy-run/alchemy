@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { DockerApi } from "./api.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { DockerApi } from "./api.ts";
 
 /**
  * Options for building a Docker image

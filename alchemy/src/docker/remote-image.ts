@@ -1,6 +1,6 @@
-import type { Context } from "../context.js";
-import { Resource } from "../resource.js";
-import { DockerApi } from "./api.js";
+import type { Context } from "../context.ts";
+import { Resource } from "../resource.ts";
+import { DockerApi } from "./api.ts";
 
 /**
  * Properties for creating a Docker image
