@@ -98,11 +98,12 @@ export interface AssetsConfig {
 
   /**
    * When true, requests will always invoke the Worker script.
+   * If an array is passed, the worker will be invoked for matching requests.
    * Otherwise, attempt to serve an asset matching the request, falling back to the Worker script.
    *
    * @default false
    */
-  run_worker_first?: boolean;
+  run_worker_first?: boolean | string[];
 }
 
 export interface BaseWorkerProps<
