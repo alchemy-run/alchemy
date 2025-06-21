@@ -25,7 +25,8 @@
   "files": [
     "bin",
     "lib",
-    "src"
+    "src",
+    "templates"
   ],
   "exports": {
     ".": {
@@ -168,6 +169,7 @@
     "@octokit/rest": "^21.1.1",
     "@types/bun": "latest",
     "@types/diff": "^5.0.0",
+    "@types/fs-extra": "^11.0.4",
     "@types/libsodium-wrappers": "^0.7.14",
     "@types/node": "latest",
     "@types/turndown": "^5.0.5",
@@ -178,6 +180,7 @@
     "cloudflare": "^4.2.0",
     "cpx": "^1.5.0",
     "execa": "^9.6.0",
+    "fs-extra": "^11.3.0",
     "libsodium-wrappers": "^0.7.15",
     "miniflare": "^4.0.0",
     "openpgp": "^6.1.0",

@@ -1,0 +1,102 @@
+import { log, spinner } from "@clack/prompts";
+import * as fs from "fs-extra";
+import { glob } from "glob";
+import { existsSync } from "node:fs";
+import * as path from "node:path";
+import { join } from "node:path";
+
+import { PKG_ROOT } from "../constants.ts";
+import { throwWithContext } from "../errors.ts";
+import type { ProjectContext } from "../types.ts";
+import { addPackageDependencies } from "./dependencies.ts";
+import { installDependencies } from "./package-manager.ts";
+
+export async function copyTemplate(
+  templateName: string,
+  context: ProjectContext,
+): Promise<void> {
+  const templatePath = path.join(PKG_ROOT, "templates", templateName);
+
+  if (!existsSync(templatePath)) {
+    throw new Error(`Template '${templateName}' not found at ${templatePath}`);
+  }
+
+  try {
+    const copySpinner = spinner();
+    copySpinner.start("Copying template files...");
+
+    const files = await glob("**/*", {
+      cwd: templatePath,
+      dot: true,
+    });
+
+    for (const file of files) {
+      const srcPath = join(templatePath, file);
+      let destFile = file;
+
+      const basename = path.basename(file);
+      if (basename.startsWith("_")) {
+        const newBasename = `.${basename.slice(1)}`;
+        destFile = path.join(path.dirname(file), newBasename);
+      }
+
+      const destPath = join(context.path, destFile);
+
+      await fs.ensureDir(path.dirname(destPath));
+      await fs.copy(srcPath, destPath);
+    }
+
+    copySpinner.stop("Template files copied successfully");
+
+    await updateTemplatePackageJson(context);
+
+    await addPackageDependencies({
+      devDependencies: ["alchemy"],
+      projectDir: context.path,
+    });
+
+    if (context.options.install !== false) {
+      const installSpinner = spinner();
+      installSpinner.start("Installing dependencies...");
+      try {
+        await installDependencies(context);
+        installSpinner.stop("Dependencies installed successfully");
+      } catch (error) {
+        installSpinner.stop("Failed to install dependencies");
+        throw error;
+      }
+    } else {
+      log.info("Skipping dependency installation");
+    }
+
+    log.success("Project setup complete!");
+  } catch (error) {
+    throwWithContext(error, `Failed to copy template '${templateName}'`);
+  }
+}
+
+async function updateTemplatePackageJson(
+  context: ProjectContext,
+): Promise<void> {
+  const packageJsonPath = join(context.path, "package.json");
+
+  if (!existsSync(packageJsonPath)) {
+    return;
+  }
+
+  const packageJson = await fs.readJson(packageJsonPath);
+
+  packageJson.name = context.name;
+
+  const deployCommand =
+    context.packageManager === "bun"
+      ? "bun --env-file=./.env ./alchemy.run.ts"
+      : "tsx --env-file=./.env ./alchemy.run.ts";
+
+  if (packageJson.scripts) {
+    packageJson.scripts.deploy = deployCommand;
+    packageJson.scripts.destroy = `${deployCommand} --destroy`;
+  }
+
+  await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
+}

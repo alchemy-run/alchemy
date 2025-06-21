@@ -1,0 +1,44 @@
+{
+  "name": "@redwoodjs/starter-drizzle",
+  "version": "1.0.0",
+  "description": "A RedwoodSDK starter for projects with a database using Drizzle",
+  "main": "index.js",
+  "type": "module",
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "build": "vite build",
+    "dev": "NODE_ENV=${NODE_ENV:-development} vite dev",
+    "dev:init": "rw-scripts dev-init",
+    "preview": "bun run build && bun run vite preview",
+    "worker:run": "rw-scripts worker-run",
+    "clean": "bun run clean:vite",
+    "clean:vite": "rm -rf ./node_modules/.vite",
+    "release": "rw-scripts ensure-deploy-env && bun run clean && bun run migrate:new && RWSDK_DEPLOY=1 bun run build && wrangler deploy",
+    "format": "prettier --write ./src",
+    "migrate:new": "drizzle-kit generate",
+    "migrate:dev": "wrangler d1 migrations apply DB --local",
+    "seed": "bun run worker:run ./src/db/seed.ts",
+    "check": "bun run types",
+    "types": "bun run tsc",
+    "deploy": "bun tsx --env-file ../../.env ./alchemy.run.ts",
+    "destroy": "bun tsx --env-file ../../.env ./alchemy.run.ts --destroy"
+  },
+  "dependencies": {
+    "alchemy": "workspace:*",
+    "dotenv": "^16.5.0",
+    "drizzle-orm": "beta",
+    "rwsdk": "^0.0.83"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "drizzle-kit": "beta",
+    "tsx": "^4.19.3",
+    "vite": "^6.3.2",
+    "wrangler": "^4.12.1"
+  }
+}

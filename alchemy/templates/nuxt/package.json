@@ -1,0 +1,22 @@
+{
+  "name": "nuxt-pipeline",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "deploy": "bun tsx --env-file ../../.env ./alchemy.run.ts",
+    "destroy": "bun tsx --env-file ../../.env ./alchemy.run.ts --destroy"
+  },
+  "dependencies": {
+    "@cloudflare/workers-types": "^4.20250421.0",
+    "alchemy": "workspace:*",
+    "cloudflare": "^4.2.0",
+    "nuxt": "^3.16.2",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  }
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createCli, trpcServer, zod as z } from "trpc-cli";
-import { createAlchemy } from "./create-alchemy.ts";
+import { createAlchemy } from "./commands/create.ts";
 import {
   PackageManagerSchema,
   ProjectNameSchema,
@@ -53,6 +53,10 @@ const router = t.router({
               .optional()
               .default(false)
               .describe("Use Yarn as the package manager"),
+            install: z
+              .boolean()
+              .optional()
+              .describe("Install dependencies after scaffolding"),
           })
           .optional()
           .default({}),

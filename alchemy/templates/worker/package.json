@@ -1,0 +1,15 @@
+{
+  "name": "cloudflare-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "bun tsx --env-file ../../.env ./alchemy.run.ts",
+    "destroy": "bun tsx --env-file ../../.env ./alchemy.run.ts --destroy"
+  },
+  "dependencies": {
+    "braintrust": "^0.0.201",
+    "chalk": "^5.4.1",
+    "pluralize": "^8.0.0",
+    "cli-progress": "^3.12.0"
+  }
+}

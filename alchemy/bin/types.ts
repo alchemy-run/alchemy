@@ -1,16 +1,20 @@
 import { z } from "zod";
 
+export const TEMPLATE_DEFINITIONS = [
+  { name: "worker", description: "TypeScript Worker" },
+  { name: "vite", description: "React Vite" },
+  { name: "astro", description: "Astro SSR" },
+  { name: "react-router", description: "React Router" },
+  { name: "sveltekit", description: "SvelteKit" },
+  { name: "tanstack-start", description: "TanStack Start" },
+  { name: "redwood", description: "Redwood SDK" },
+  { name: "nuxt", description: "Nuxt.js" },
+] as const;
+
+const templateNames = TEMPLATE_DEFINITIONS.map((t) => t.name);
+
 export const TemplateSchema = z
-  .enum([
-    "typescript",
-    "vite",
-    "astro",
-    "react-router",
-    "sveltekit",
-    "tanstack-start",
-    "rwsdk",
-    "nuxt",
-  ])
+  .enum(templateNames as [string, ...string[]])
   .describe("Project template type");
 export type TemplateType = z.infer<typeof TemplateSchema>;
 
@@ -47,15 +51,8 @@ export interface ProjectContext {
   path: string;
   template: TemplateType;
   packageManager: PackageManager;
-  alchemyVersion: string;
   isTest: boolean;
   options: CreateInput;
-}
-
-export interface Template {
-  name: string;
-  description: string;
-  init: (context: ProjectContext) => Promise<void>;
 }
 
 export interface WebsiteOptions {
@@ -72,16 +69,13 @@ export type CreateInput = {
   name?: string;
   template?: TemplateType;
   packageManager?: PackageManager;
-  /** Prefer Bun as the package manager */
   bun?: boolean;
-  /** Prefer npm as the package manager */
   npm?: boolean;
-  /** Prefer pnpm as the package manager */
   pnpm?: boolean;
-  /** Prefer Yarn as the package manager */
   yarn?: boolean;
   yes?: boolean;
   overwrite?: boolean;
+  install?: boolean;
 };
 
 export type CLIInput = CreateInput & {
