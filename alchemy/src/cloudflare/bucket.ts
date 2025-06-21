@@ -91,7 +91,13 @@ export interface BucketProps {
   /**
    * Whether to emulate the bucket locally when Alchemy is running in watch mode.
    */
-  local?: boolean;
+  dev?: {
+    /**
+     * Whether to run the bucket remotely instead of locally
+     * @default false
+     */
+    remote?: boolean;
+  };
 }
 
 /**
@@ -253,7 +259,7 @@ const R2BucketResource = Resource(
       jurisdiction: props.jurisdiction || "default",
       type: "r2_bucket",
       accountId: api.accountId,
-      local: props.local,
+      dev: props.dev,
     });
   },
 );

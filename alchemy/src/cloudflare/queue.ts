@@ -76,7 +76,13 @@ export interface QueueProps extends CloudflareApiOptions {
   /**
    * Whether to emulate the queue locally when Alchemy is running in watch mode.
    */
-  local?: boolean;
+  dev?: {
+    /**
+     * Whether to run the queue remotely instead of locally
+     * @default false
+     */
+    remote?: boolean;
+  };
 }
 
 export function isQueue(eventSource: any): eventSource is Queue {
@@ -294,7 +300,7 @@ const QueueResource = Resource("cloudflare::Queue", async function <
     createdOn: queueData.result.created_on || new Date().toISOString(),
     modifiedOn: queueData.result.modified_on || new Date().toISOString(),
     accountId: api.accountId,
-    local: props.local,
+    dev: props.dev,
     // phantom properties
     Body: undefined as T,
     Batch: undefined! as MessageBatch<T>,

@@ -56,13 +56,18 @@
  */
 export class Images {
   public readonly type = "images";
-  public readonly local?: boolean;
+  public readonly dev?: {
+    remote?: boolean;
+  };
   constructor(props?: {
-    /**
-     * Whether to emulate the binding locally when Alchemy is running in watch mode.
-     */
-    local?: boolean;
+    dev?: {
+      /**
+       * Whether to run the images binding remotely instead of locally
+       * @default false
+       */
+      remote?: boolean;
+    };
   }) {
-    this.local = props?.local;
+    this.dev = props?.dev;
   }
 }

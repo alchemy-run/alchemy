@@ -96,7 +96,13 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
   /**
    * Whether to emulate the database locally when Alchemy is running in watch mode.
    */
-  local?: boolean;
+  dev?: {
+    /**
+     * Whether to run the database remotely instead of locally
+     * @default false
+     */
+    remote?: boolean;
+  };
 }
 
 export function isD1Database(
@@ -356,7 +362,7 @@ const D1DatabaseResource = Resource(
       type: "d1",
       id: dbData.result.uuid || "",
       name: databaseName,
-      local: props.local,
+      dev: props.dev,
       fileSize: dbData.result.file_size,
       numTables: dbData.result.num_tables,
       version: dbData.result.version,

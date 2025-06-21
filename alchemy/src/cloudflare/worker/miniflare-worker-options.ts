@@ -57,7 +57,8 @@ export function buildRemoteBindings(
       bindings.push(buildRemoteBinding(name, binding));
     } else if (
       isRemoteOptionalBinding(binding) &&
-      !("local" in binding && binding.local)
+      "dev" in binding &&
+      binding.dev?.remote === true
     ) {
       bindings.push(buildRemoteBinding(name, binding));
     }
@@ -290,9 +291,9 @@ export function buildMiniflareWorkerOptions({
           >
         )[name] = {
           id: binding.id,
-          remoteProxyConnectionString: binding.local
-            ? undefined
-            : remoteProxyConnectionString,
+          remoteProxyConnectionString: binding.dev?.remote
+            ? remoteProxyConnectionString
+            : undefined,
         };
         break;
       }
@@ -361,9 +362,9 @@ export function buildMiniflareWorkerOptions({
       case "images": {
         options.images = {
           binding: name,
-          remoteProxyConnectionString: binding.local
-            ? undefined
-            : remoteProxyConnectionString,
+          remoteProxyConnectionString: binding.dev?.remote
+            ? remoteProxyConnectionString
+            : undefined,
         };
         break;
       }
@@ -372,6 +373,10 @@ export function buildMiniflareWorkerOptions({
         break;
       }
       case "kv_namespace": {
+        const normalized =
+          "id" in binding
+            ? { id: binding.id }
+            : { id: binding.namespaceId, dev: binding.dev };
         (
           (options.kvNamespaces ??= {}) as Record<
             string,
@@ -381,11 +386,10 @@ export function buildMiniflareWorkerOptions({
             }
           >
         )[name] = {
-          id: "id" in binding ? binding.id : binding.namespaceId,
-          remoteProxyConnectionString:
-            "local" in binding && binding.local
-              ? undefined
-              : remoteProxyConnectionString,
+          id: normalized.id,
+          remoteProxyConnectionString: normalized.dev?.remote
+            ? remoteProxyConnectionString
+            : undefined,
         };
         break;
       }
@@ -407,9 +411,9 @@ export function buildMiniflareWorkerOptions({
         )[name] = {
           queueName: binding.name,
           deliveryDelay: binding.settings?.deliveryDelay,
-          remoteProxyConnectionString: binding.local
-            ? undefined
-            : remoteProxyConnectionString,
+          remoteProxyConnectionString: binding.dev?.remote
+            ? remoteProxyConnectionString
+            : undefined,
         };
         break;
       }
@@ -424,9 +428,9 @@ export function buildMiniflareWorkerOptions({
           >
         )[name] = {
           id: binding.name,
-          remoteProxyConnectionString: binding.local
-            ? undefined
-            : remoteProxyConnectionString,
+          remoteProxyConnectionString: binding.dev?.remote
+            ? remoteProxyConnectionString
+            : undefined,
         };
         break;
       }
@@ -457,7 +461,7 @@ export function buildMiniflareWorkerOptions({
             `Service bindings must have an id. Worker "${name}" is bound to service "${name}" but does not have an id.`,
           );
         }
-        if (binding.local) {
+        if (binding.dev?.remote === false) {
           (options.serviceBindings ??= {})[name] = binding.name;
         } else {
           (options.serviceBindings ??= {})[name] = {
@@ -507,7 +511,7 @@ export function buildMiniflareWorkerOptions({
   }
   for (const eventSource of eventSources ?? []) {
     const queue = "queue" in eventSource ? eventSource.queue : eventSource;
-    if (!queue.local) {
+    if (queue.dev?.remote !== false) {
       throw new Error(
         `Locally emulated workers cannot consume remote queues. Worker "${workerName}" is locally emulated but is consuming remote queue "${queue.name}".`,
       );

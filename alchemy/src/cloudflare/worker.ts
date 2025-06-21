@@ -279,11 +279,12 @@ export interface BaseWorkerProps<
    *
    * @default false
    */
-  local?:
-    | boolean
-    | {
-        port: number;
-      };
+  dev?: {
+    /**
+     * Port to use for local development
+     */
+    port?: number;
+  };
 }
 
 export interface InlineWorkerProps<
@@ -908,7 +909,7 @@ export const _Worker = Resource(
       props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
-    if (this.scope.dev && props.local && this.phase !== "delete") {
+    if (this.scope.dev && this.phase !== "delete") {
       // Get current timestamp
       const now = Date.now();
 
@@ -917,7 +918,7 @@ export const _Worker = Resource(
         compatibilityDate,
         compatibilityFlags,
         bindings: props.bindings ?? ({} as B),
-        port: typeof props.local === "object" ? props.local.port : undefined,
+        port: typeof props.dev === "object" ? props.dev.port : undefined,
       };
 
       let url: string;
@@ -1057,7 +1058,7 @@ export const _Worker = Resource(
         updatedAt: now,
         eventSources: props.eventSources,
         url,
-        local: props.local,
+        dev: props.dev,
         // Include assets configuration in the output
         assets: props.assets,
         // Include cron triggers in the output
@@ -1348,7 +1349,7 @@ export const _Worker = Resource(
       updatedAt: now,
       eventSources: props.eventSources,
       url: workerUrl,
-      local: props.local,
+      dev: props.dev,
       // Include assets configuration in the output
       assets: props.assets,
       // Include cron triggers in the output
