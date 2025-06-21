@@ -108,7 +108,6 @@ export async function Website<B extends Bindings>(
     throw new Error("ASSETS binding is reserved for internal use");
   }
   const wrangler = props.wrangler ?? true;
-  console.log(props);
 
   return alchemy.run(
     id,
