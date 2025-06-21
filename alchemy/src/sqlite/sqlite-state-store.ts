@@ -110,13 +110,14 @@ export class SqliteStateStore implements StateStore {
   async getBatch(ids: string[]): Promise<Record<string, State>> {
     const result: Record<string, State> = {};
 
-    for (const id of ids) {
+    const promises = ids.map(async (id) => {
       const state = await this.get(id);
       if (state) {
         result[id] = state;
       }
-    }
+    });
 
+    await Promise.all(promises);
     return result;
   }
 
