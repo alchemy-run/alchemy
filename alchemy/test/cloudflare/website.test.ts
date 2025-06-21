@@ -83,8 +83,8 @@ describe("Website Resource", () => {
         directory: expect.stringContaining("dist"),
       });
     } finally {
-      // await fs.rm(tempDir, { recursive: true, force: true });
-      // await destroy(scope);
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await destroy(scope);
     }
   });
 
