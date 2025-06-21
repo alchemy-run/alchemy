@@ -140,7 +140,7 @@ export async function Website<B extends Bindings>(
         compatibilityDate:
           props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
         name: workerName,
-        entrypoint: props.main,
+        entrypoint: props.main ? path.join(cwd, props.main) : undefined,
         assets: {
           html_handling: "auto-trailing-slash",
           not_found_handling: props.spa ? "single-page-application" : "none",
