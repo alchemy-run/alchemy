@@ -1,6 +1,7 @@
-import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { ResourceScope } from "../resource.ts";
 import type { Scope } from "../scope.ts";
 import { serialize } from "../serde.ts";
 import { deserializeState, type State, type StateStore } from "../state.ts";
@@ -101,7 +102,7 @@ export class SqliteStateStore implements StateStore {
       ...state,
       output: {
         ...(state.output || {}),
-        Scope: this.scope,
+        [ResourceScope]: this.scope,
       },
     };
   }
