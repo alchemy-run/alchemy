@@ -120,7 +120,7 @@ export async function Website<B extends Bindings>(
 
       function resolveAbsPath<S extends string | undefined>(f: S): S {
         return (
-          f ? (path.isAbsolute(f) ? f : path.join(cwd, f)) : undefined
+          f ? (path.isAbsolute(f) ? f : path.resolve(cwd, f)) : undefined
         ) as S;
       }
 
@@ -182,9 +182,7 @@ export default {
       if (wrangler) {
         // paths in wrangler.jsonc must be relative to it
         const relativeToWrangler = <S extends string | undefined>(f: S): S =>
-          (f
-            ? path.relative(path.dirname(wranglerJsonPath), resolveAbsPath(f))
-            : f) as S;
+          (f ? path.relative(path.dirname(wranglerJsonPath), f) : f) as S;
         await WranglerJson("wrangler.jsonc", {
           path: wranglerJsonPath,
           worker: workerProps,
