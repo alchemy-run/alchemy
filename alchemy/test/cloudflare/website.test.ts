@@ -15,10 +15,10 @@ const test = alchemy.test(import.meta, {
 describe("Website Resource", () => {
   test("respects cwd property for wrangler.jsonc placement", async (scope) => {
     const name = `${BRANCH_PREFIX}-test-website-cwd`;
-    const tempDir = path.join(".out", "alchemy-website-cwd-test");
-    const subDir = path.join(tempDir, "subproject");
-    const distDir = path.join(subDir, "dist");
-    const entrypoint = path.join(subDir, "worker.ts");
+    const tempDir = path.resolve(".out", "alchemy-website-cwd-test");
+    const subDir = path.resolve(tempDir, "subproject");
+    const distDir = path.resolve(subDir, "dist");
+    const entrypoint = path.resolve(subDir, "worker.ts");
 
     try {
       // Create temporary directory structure
@@ -46,7 +46,7 @@ describe("Website Resource", () => {
       const website = await Website(name, {
         cwd: subDir,
         main: entrypoint,
-        assets: path.resolve(distDir), // Use absolute path for assets
+        assets: distDir, // Use absolute path for assets
         wrangler: true,
         adopt: true,
       });
@@ -83,14 +83,14 @@ describe("Website Resource", () => {
         directory: expect.stringContaining("dist"),
       });
     } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
-      await destroy(scope);
+      // await fs.rm(tempDir, { recursive: true, force: true });
+      // await destroy(scope);
     }
   });
 
   test("respects cwd property with custom wrangler path", async (scope) => {
     const name = `${BRANCH_PREFIX}-test-website-cwd-custom`;
-    const tempDir = path.join(".out", "alchemy-website-cwd-custom-test");
+    const tempDir = path.resolve(".out", "alchemy-website-cwd-custom-test");
     const subDir = path.join(tempDir, "myproject");
     const distDir = path.join(subDir, "dist");
     const entrypoint = path.join(subDir, "worker.ts");
