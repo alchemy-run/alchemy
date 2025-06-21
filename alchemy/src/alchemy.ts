@@ -33,8 +33,12 @@ function parseCliArgs(): Partial<AlchemyOptions> {
     options.phase = "read";
   }
 
-  if (args.includes("--watch")) {
-    options.mode = "watch";
+  if (
+    args.includes("--dev") ||
+    args.includes("--watch") ||
+    process.execArgv.includes("--watch")
+  ) {
+    options.dev = true;
   }
 
   // Parse quiet flag
@@ -332,11 +336,11 @@ export interface AlchemyOptions {
    */
   phase?: Phase;
   /**
-   * When set to "watch", the scope will run in watch mode.
+   * Determines whether Alchemy will run in dev mode.
    *
-   * @default undefined
+   * @default - `true` if `--dev` or `--watch` is passed as a CLI argument, `false` otherwise
    */
-  mode?: "watch";
+  dev?: boolean;
   /**
    * Name to scope the resource state under (e.g. `.alchemy/{stage}/..`).
    *

@@ -9,7 +9,7 @@ import {
   Worker,
 } from "alchemy/cloudflare";
 
-const app = await alchemy("cloudflare-worker-simple", { mode: "watch" });
+const app = await alchemy("cloudflare-worker-simple", {});
 
 const [d1, kv, r2] = await Promise.all([
   D1Database("my-d1", { adopt: true, local: true }),

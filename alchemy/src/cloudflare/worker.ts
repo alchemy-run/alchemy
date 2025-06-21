@@ -908,11 +908,7 @@ export const _Worker = Resource(
       props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
-    if (this.scope.mode === "watch" && props.local && this.phase !== "delete") {
-      logger.warnOnce(
-        "Local development mode is in beta. Please report any issues to https://github.com/sam-goodwin/alchemy/issues.",
-      );
-
+    if (this.scope.dev && props.local && this.phase !== "delete") {
       // Get current timestamp
       const now = Date.now();
 

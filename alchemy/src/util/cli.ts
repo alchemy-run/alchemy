@@ -43,6 +43,7 @@ export interface Task {
 export interface LoggerApi {
   log: (...args: unknown[]) => void;
   warn: (...args: unknown[]) => void;
+  warnOnce: (message: string) => void;
   error: (...args: unknown[]) => void;
   task: (id: string, data: Task) => void;
   exit: () => void;
@@ -71,6 +72,7 @@ export const createDummyLogger = (): LoggerApi => {
     log: () => {},
     error: () => {},
     warn: () => {},
+    warnOnce: () => {},
     task: () => {},
     exit: () => {},
   };
@@ -91,6 +93,12 @@ export const createFallbackLogger = (alchemyInfo: AlchemyInfo): LoggerApi => {
       console.error(colorize("ERROR", "redBright"), ...args),
     warn: (...args: unknown[]) =>
       console.warn(colorize("WARN", "yellowBright"), ...args),
+    warnOnce: (message: string) => {
+      globalThis._ALCHEMY_WARNINGS ??= new Set();
+      if (globalThis._ALCHEMY_WARNINGS.has(message)) return;
+      globalThis._ALCHEMY_WARNINGS.add(message);
+      console.warn(colorize("WARN", "yellowBright"), message);
+    },
     task: (_id: string, data: Task) => {
       const prefix = data.prefix ? `[${data.prefix}]` : "";
 
