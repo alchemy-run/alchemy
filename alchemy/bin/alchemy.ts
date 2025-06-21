@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
-import { createAlchemy } from "./create-alchemy.ts";
 import { bootstrapS3 } from "./bootstrap-s3.ts";
+import { createAlchemy } from "./create-alchemy.ts";
 
 // Parse command-line arguments. We allow unknown flags because different
 // sub-commands may accept different sets.

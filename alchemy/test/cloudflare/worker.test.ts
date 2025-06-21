@@ -8,7 +8,12 @@ import { Assets } from "../../src/cloudflare/assets.ts";
 import { Self } from "../../src/cloudflare/bindings.ts";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.ts";
 import { KVNamespace } from "../../src/cloudflare/kv-namespace.ts";
-import { Worker, WorkerRef } from "../../src/cloudflare/worker.ts";
+import type { SingleStepMigration } from "../../src/cloudflare/worker-migration.ts";
+import {
+  deleteWorker,
+  Worker,
+  WorkerRef,
+} from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 import {
@@ -1323,6 +1328,7 @@ describe("Worker Resource", () => {
       await Worker("worker1", {
         name: workerName,
         script: `export default { async fetch(request, env, ctx) { return new Response('Hello, world!'); } };`,
+        adopt: true,
       });
 
       const worker2 = await Worker("worker1", {
@@ -1452,7 +1458,6 @@ describe("Worker Resource", () => {
         version: versionLabel,
       });
       expect(versionWorker.id).toBeTruthy();
-
       expect(versionWorker.url).toBeTruthy();
       expect(versionWorker.bindings?.ASSETS).toBeDefined();
 
@@ -1470,6 +1475,107 @@ describe("Worker Resource", () => {
         await fs.rm(tempDir, { recursive: true, force: true });
       }
 
+      await destroy(scope);
+      await assertWorkerDoesNotExist(workerName);
+    }
+  });
+
+  test("adopt worker with existing migration tag", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-adopt-migration`;
+
+    try {
+      await deleteWorker(api, {
+        workerName,
+      });
+
+      const formData = new FormData();
+      formData.append(
+        "worker.js",
+        `
+          export class MyDO {}
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from migrated worker!', { status: 200 });
+            }
+          };
+        `,
+      );
+      formData.append(
+        "metadata",
+        new Blob([
+          JSON.stringify({
+            compatibility_date: "2025-05-18",
+            bindings: [
+              {
+                type: "durable_object_namespace",
+                class_name: "MyDO",
+                name: "MY_DO",
+              },
+            ],
+            observability: {
+              enabled: true,
+            },
+            main_module: "worker.js",
+            migrations: {
+              new_tag: "v1",
+              old_tag: undefined,
+              new_classes: ["MyDO"],
+              deleted_classes: [],
+              renamed_classes: [],
+              transferred_classes: [],
+              new_sqlite_classes: [],
+            } satisfies SingleStepMigration,
+          }),
+        ]),
+      );
+
+      // Put the worker with migration tag v1
+      await api.post(
+        `/accounts/${api.accountId}/workers/scripts/${workerName}/versions`,
+        formData,
+      );
+
+      // Now adopt the worker using the Worker resource
+      await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export class MyDO2 {}
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from adopted worker with migration!', { status: 200 });
+            }
+          };
+        `,
+        format: "esm",
+        bindings: {
+          MY_DO: new DurableObjectNamespace("test-counter-migration", {
+            className: "MyDO2",
+            scriptName: workerName,
+          }),
+        },
+      });
+
+      await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export class MyDO3 {}
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from adopted worker with migration!', { status: 200 });
+            }
+          };
+        `,
+        format: "esm",
+        bindings: {
+          MY_DO: new DurableObjectNamespace("test-counter-migration", {
+            className: "MyDO3",
+            scriptName: workerName,
+          }),
+        },
+      });
+    } finally {
       await destroy(scope);
       await assertWorkerDoesNotExist(workerName);
     }

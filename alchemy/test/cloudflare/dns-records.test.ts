@@ -73,7 +73,7 @@ describe("DnsRecords Resource", async () => {
       for (const record of dnsRecords.records) {
         let response;
         const start = Date.now();
-        const timeout = 10000; // 10 seconds
+        const timeout = 120_000; // 120 seconds
         const interval = 500; // 0.5 seconds
         while (true) {
           response = await api.get(

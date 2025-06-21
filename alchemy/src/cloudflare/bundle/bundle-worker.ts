@@ -71,7 +71,7 @@ export async function bundleWorkerScript<B extends Bindings>(
         ).flat(),
       ),
     );
-    const useColor = !(process.env.CI || process.env.NO_COLOR);
+    const useColor = !process.env.NO_COLOR;
     logger.log(
       `${useColor ? kleur.gray("worker:") : "worker:"} ${useColor ? kleur.blue(props.name) : props.name}`,
     );

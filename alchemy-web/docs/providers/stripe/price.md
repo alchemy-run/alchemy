@@ -153,3 +153,33 @@ const cappedUsagePrice = await Price("api-calls-capped", {
   ],
 });
 ```
+
+## Billing Meters
+
+For advanced usage tracking, you can associate a price with a Stripe Billing Meter:
+
+```ts
+import { Price } from "alchemy/stripe";
+
+// First create a meter (not shown - requires Meter resource)
+// const meter = await Meter("api-usage-meter", { ... });
+
+const meteredPrice = await Price("api-usage-with-meter", {
+  product: "prod_xyz",
+  currency: "usd",
+  billingScheme: "tiered",
+  tiersMode: "graduated",
+  recurring: {
+    interval: "month",
+    usageType: "metered", // Required for meter association
+    meter: "meter_123abc" // Associate with billing meter
+  },
+  tiers: [
+    { upTo: 10000, unitAmountDecimal: "0" },
+    { upTo: 25000, unitAmountDecimal: "0.002" },
+    { upTo: "inf", flatAmountDecimal: "3000" }
+  ],
+});
+```
+
+**Note**: Meters can only be associated with prices that have `recurring.usageType = 'metered'`.

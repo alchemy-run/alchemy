@@ -76,7 +76,7 @@ describe("Dispatch Namespace Resource", () => {
   });
 
   test("comprehensive dispatch namespace and worker integration", async (scope) => {
-    const workerName = `${BRANCH_PREFIX}-target-worker`;
+    const workerName = `${BRANCH_PREFIX}-dispatch-namespace-target-worker`;
     const dispatcherWorkerName = `${BRANCH_PREFIX}-dispatcher-worker`;
     const namespaceName = `${BRANCH_PREFIX}-comprehensive-test`;
 
@@ -102,7 +102,6 @@ describe("Dispatch Namespace Resource", () => {
           }
         `,
         namespace: dispatchNamespace,
-        url: false,
       });
 
       // 3. Create a worker bound to the namespace (dispatcher)
@@ -131,8 +130,11 @@ describe("Dispatch Namespace Resource", () => {
       expect(text).toEqual("Dispatch response: Hello from dispatch namespace!");
     } finally {
       await alchemy.destroy(scope);
-      if (targetWorker) {
-        await assertWorkerDoesNotExist(targetWorker.name);
+      if (targetWorker && dispatchNamespace) {
+        await assertWorkerInNamespaceDoesNotExist(
+          targetWorker.name,
+          dispatchNamespace.namespace,
+        );
       }
       if (dispatcherWorker) {
         await assertWorkerDoesNotExist(dispatcherWorker.name);
@@ -232,8 +234,11 @@ describe("Dispatch Namespace Resource", () => {
       }
 
       await alchemy.destroy(scope);
-      if (assetWorker) {
-        await assertWorkerDoesNotExist(assetWorker.name);
+      if (assetWorker && dispatchNamespace) {
+        await assertWorkerInNamespaceDoesNotExist(
+          assetWorker.name,
+          dispatchNamespace.namespace,
+        );
       }
       if (dispatcherWorker) {
         await assertWorkerDoesNotExist(dispatcherWorker.name);
@@ -270,6 +275,18 @@ describe("Dispatch Namespace Resource", () => {
     const api = await createCloudflareApi();
     const response = await api.get(
       `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+    );
+
+    expect(response.status).toEqual(404);
+  }
+
+  async function assertWorkerInNamespaceDoesNotExist(
+    workerName: string,
+    namespace: string,
+  ): Promise<void> {
+    const api = await createCloudflareApi();
+    const response = await api.get(
+      `/accounts/${api.accountId}/workers/dispatch/namespaces/${namespace}/scripts/${workerName}`,
     );
 
     expect(response.status).toEqual(404);
