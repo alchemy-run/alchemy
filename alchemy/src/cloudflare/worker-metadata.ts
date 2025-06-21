@@ -1,7 +1,5 @@
 import path from "node:path";
-import type { Context } from "../context.ts";
 import { logger } from "../util/logger.ts";
-import { slugify } from "../util/slugify.ts";
 import type { CloudflareApi } from "./api.ts";
 import {
   Self,
@@ -18,7 +16,7 @@ import type {
   MultiStepMigration,
   SingleStepMigration,
 } from "./worker-migration.ts";
-import type { AssetsConfig, Worker, WorkerProps } from "./worker.ts";
+import type { AssetsConfig, WorkerProps } from "./worker.ts";
 
 /**
  * Metadata returned by Cloudflare API for a worker script
@@ -197,21 +195,20 @@ export interface WorkerMetadata {
   }[];
 }
 
-export async function prepareWorkerMetadata<B extends Bindings>(
+export async function prepareWorkerMetadata(
   api: CloudflareApi,
-  ctx: Context<Worker<B>>,
   props: WorkerProps & {
     compatibilityDate: string;
     compatibilityFlags: string[];
     workerName: string;
+    migrationTag?: string;
+    assetUploadResult?: AssetUploadResult;
   },
-  assetUploadResult?: AssetUploadResult,
 ): Promise<WorkerMetadata> {
   const oldSettings = await getWorkerSettings(api, props.workerName);
   const oldTags: string[] | undefined =
     oldSettings?.default_environment?.script?.tags;
   const oldBindings = oldSettings?.bindings;
-  const oldMigrations = oldSettings?.migrations;
 
   // we use Cloudflare Worker tags to store a mapping between Alchemy's stable identifier and the binding name
   // e.g.
@@ -230,6 +227,14 @@ export async function prepareWorkerMetadata<B extends Bindings>(
       return [];
     }) ?? [],
   );
+
+  const oldMigrationTag = oldTags?.flatMap((tag: string) => {
+    if (tag.startsWith("alchemy:migration-tag:")) {
+      return [tag.slice("alchemy:migration-tag:".length)];
+    }
+    return [];
+  })[0];
+  const newMigrationTag = bumpMigrationTagVersion(oldMigrationTag);
 
   const deletedClasses = oldBindings?.flatMap((oldBinding) => {
     if (
@@ -293,7 +298,6 @@ export async function prepareWorkerMetadata<B extends Bindings>(
     },
     // TODO(sam): base64 encode instead? 0 collision risk vs readability.
     tags: [
-      `alchemy:id:${slugify(ctx.fqn)}`,
       // encode a mapping table of Durable Object stable ID -> binding name
       // we use this to reliably compute class migrations based on server-side state
       ...Object.entries(props.bindings ?? {}).flatMap(
@@ -303,10 +307,12 @@ export async function prepareWorkerMetadata<B extends Bindings>(
               [`alchemy:do:${binding.id}:${bindingName}`]
             : [],
       ),
+      // encode the migraiton tag if there is one so we can avoid the failed PutWorker after adoption
+      ...(newMigrationTag ? [`alchemy:migration-tag:${newMigrationTag}`] : []),
     ],
     migrations: {
-      old_tag: oldMigrations?.new_tag,
-      new_tag: bumpMigrationTagVersion(oldMigrations?.new_tag),
+      old_tag: oldMigrationTag,
+      new_tag: newMigrationTag,
       new_classes: [],
       deleted_classes: [...(deletedClasses ?? [])],
       renamed_classes: [],
@@ -315,6 +321,7 @@ export async function prepareWorkerMetadata<B extends Bindings>(
     },
   };
 
+  const assetUploadResult = props.assetUploadResult;
   // If we have asset upload results, add them to the metadata
   if (assetUploadResult) {
     meta.assets = {

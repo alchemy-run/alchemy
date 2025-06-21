@@ -493,7 +493,9 @@ describe("WranglerJson Resource", () => {
         await fs.mkdir(tempDir, { recursive: true });
         await fs.writeFile(entrypoint, esmWorkerScript);
 
-        const r2Bucket = await R2Bucket(`${BRANCH_PREFIX}-test-r2-bucket`);
+        const r2Bucket = await R2Bucket(`${BRANCH_PREFIX}-test-r2-bucket`, {
+          adopt: true,
+        });
 
         const worker = await Worker(name, {
           format: "esm",

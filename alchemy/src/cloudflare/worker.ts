@@ -55,7 +55,6 @@ import { Route } from "./route.ts";
 import { isVectorizeIndex } from "./vectorize-index.ts";
 import { type AssetUploadResult, uploadAssets } from "./worker-assets.ts";
 import {
-  type WorkerMetadata,
   type WorkerScriptMetadata,
   bumpMigrationTagVersion,
   prepareWorkerMetadata,
@@ -937,33 +936,17 @@ export const _Worker = Resource(
         });
       }
 
-      // Prepare metadata with bindings
-      const scriptMetadata = await prepareWorkerMetadata(
-        api,
-        this,
-        {
-          ...props,
-          compatibilityDate,
-          compatibilityFlags,
-          workerName,
-        },
-        assetUploadResult,
-      );
-
       // Deploy worker (either as version or live worker)
-      const versionResult = await putWorker(
-        api,
+      const versionResult = await putWorker(api, {
+        ...props,
         workerName,
         scriptBundle,
-        scriptMetadata,
         dispatchNamespace,
-        props.version
-          ? {
-              versionLabel: props.version,
-              message: `Version ${props.version}`,
-            }
-          : undefined,
-      );
+        version: props.version,
+        compatibilityDate,
+        compatibilityFlags,
+        assetUploadResult,
+      });
 
       for (const workflow of workflowsBindings) {
         if (
@@ -1037,7 +1020,7 @@ export const _Worker = Resource(
         }
       }
 
-      return { scriptBundle, scriptMetadata, workerUrl, now, versionResult };
+      return { scriptBundle, workerUrl, now, versionResult };
     };
 
     if (this.phase === "delete") {
@@ -1046,9 +1029,13 @@ export const _Worker = Resource(
 
       await withExponentialBackoff(
         () =>
-          deleteWorker(this, api, {
-            ...props,
+          deleteWorker(api, {
             workerName,
+            namespace:
+              typeof props.namespace === "string"
+                ? props.namespace
+                : props.namespace?.namespaceId,
+            url: this.output.url,
           }),
         (err) =>
           (err.status === 400 &&
@@ -1062,10 +1049,6 @@ export const _Worker = Resource(
       );
 
       return this.destroy();
-    }
-    // Validate input - we need either script, entryPoint, or bundle
-    if (!props.script && !props.entrypoint) {
-      throw new Error("One of script or entrypoint must be provided");
     }
 
     if (this.phase === "create") {
@@ -1083,7 +1066,7 @@ export const _Worker = Resource(
       }
     }
 
-    const { scriptMetadata, workerUrl, now } = await uploadWorkerScript(props);
+    const { workerUrl, now } = await uploadWorkerScript(props);
 
     // Create routes if provided and capture their outputs
     let createdRoutes: Route[] = [];
@@ -1153,7 +1136,7 @@ export const _Worker = Resource(
       format: props.format || "esm", // Include format in the output
       bindings: exportBindings(),
       env: props.env,
-      observability: scriptMetadata.observability,
+      observability: props.observability,
       createdAt: now,
       updatedAt: now,
       eventSources: props.eventSources,
@@ -1174,10 +1157,13 @@ export const _Worker = Resource(
   },
 );
 
-export async function deleteWorker<B extends Bindings>(
-  ctx: Context<Worker<B>>,
+export async function deleteWorker(
   api: CloudflareApi,
-  props: WorkerProps<B> & { workerName: string },
+  props: {
+    workerName: string;
+    namespace?: string | DispatchNamespaceResource;
+    url?: string;
+  },
 ) {
   const workerName = props.workerName;
 
@@ -1194,7 +1180,7 @@ export async function deleteWorker<B extends Bindings>(
   }
 
   // Disable the URL if it was enabled
-  if (ctx.output?.url) {
+  if (props.url) {
     try {
       await api.post(
         `/accounts/${api.accountId}/workers/scripts/${workerName}/subdomain`,
@@ -1212,23 +1198,33 @@ export async function deleteWorker<B extends Bindings>(
   return;
 }
 
-interface PutWorkerOptions {
-  versionLabel?: string;
-  message?: string;
+type PutWorkerOptions = WorkerProps & {
   dispatchNamespace?: string;
   migrationTag?: string;
-}
+  workerName: string;
+  scriptBundle: string | NoBundleResult;
+  version: string | undefined;
+  compatibilityDate: string;
+  compatibilityFlags: string[];
+  assetUploadResult: AssetUploadResult | undefined;
+};
 
-async function putWorkerInternal(
+export async function putWorker(
   api: CloudflareApi,
-  workerName: string,
-  scriptBundle: string | NoBundleResult,
-  scriptMetadata: WorkerMetadata,
-  options: PutWorkerOptions = {},
+  props: PutWorkerOptions,
 ): Promise<{ versionId?: string; previewUrl?: string }> {
+  const {
+    //
+    dispatchNamespace,
+    migrationTag,
+    workerName,
+    scriptBundle,
+    version,
+  } = props;
+  const scriptMetadata = await prepareWorkerMetadata(api, props);
+
   return withExponentialBackoff(
     async () => {
-      const { versionLabel, message, dispatchNamespace } = options;
       const scriptName =
         scriptMetadata.main_module ?? scriptMetadata.body_part!;
 
@@ -1259,14 +1255,14 @@ async function putWorkerInternal(
       }
 
       // Prepare metadata - add version annotations if this is a version
-      const finalMetadata = versionLabel
+      const finalMetadata = version
         ? {
             ...scriptMetadata,
             // Exclude migrations for worker versions - they're not allowed
             migrations: undefined,
             annotations: {
-              "workers/tag": versionLabel,
-              ...(message && { "workers/message": message.substring(0, 100) }),
+              "workers/tag": version,
+              "workers/message": `Version ${version}`,
             },
           }
         : {
@@ -1274,14 +1270,14 @@ async function putWorkerInternal(
             migrations: scriptMetadata.migrations
               ? {
                   ...scriptMetadata.migrations,
-                  old_tag: options.migrationTag,
-                  new_tag: bumpMigrationTagVersion(options.migrationTag),
+                  old_tag: migrationTag,
+                  new_tag: bumpMigrationTagVersion(migrationTag),
                 }
               : undefined,
           };
 
       if (process.env.DEBUG) {
-        console.log("finalMetadata", finalMetadata);
+        console.log(`metadata(${scriptName}):`, finalMetadata);
       }
 
       // Add metadata as JSON
@@ -1295,7 +1291,12 @@ async function putWorkerInternal(
       // Determine endpoint and HTTP method
       let endpoint: string;
       let method: "PUT" | "POST";
-      if (versionLabel) {
+      if (version) {
+        if (dispatchNamespace) {
+          throw new Error(
+            "Worker Preview Versions are not supported in Workers for Platforms",
+          );
+        }
         // Upload worker version using the versions API
         endpoint = `/accounts/${api.accountId}/workers/scripts/${workerName}/versions`;
         method = "POST";
@@ -1325,9 +1326,7 @@ async function putWorkerInternal(
         try {
           return await handleApiError(
             uploadResponse,
-            versionLabel
-              ? "uploading worker version"
-              : "uploading worker script",
+            version ? "uploading worker version" : "uploading worker script",
             "worker",
             workerName,
           );
@@ -1345,16 +1344,10 @@ async function putWorkerInternal(
                 /when expected tag is ['"]?(v\d+)['"]?/,
               )?.[1];
               if (newTag) {
-                return await putWorkerInternal(
-                  api,
-                  workerName,
-                  scriptBundle,
-                  scriptMetadata,
-                  {
-                    ...options,
-                    migrationTag: newTag,
-                  },
-                );
+                return await putWorker(api, {
+                  ...props,
+                  migrationTag: newTag,
+                });
               }
             } else {
               throw error;
@@ -1366,7 +1359,7 @@ async function putWorkerInternal(
       }
 
       // Handle version response
-      if (versionLabel) {
+      if (props.version) {
         const responseData = (await uploadResponse.json()) as {
           result: {
             id: string;
@@ -1422,27 +1415,6 @@ async function putWorkerInternal(
         err.message.match(/binding.*failed to generate/)),
     10,
     100,
-  );
-}
-
-export async function putWorker(
-  api: CloudflareApi,
-  workerName: string,
-  scriptBundle: string | NoBundleResult,
-  scriptMetadata: WorkerMetadata,
-  dispatchNamespace?: string,
-  version?: { versionLabel: string; message?: string },
-): Promise<{ versionId?: string; previewUrl?: string }> {
-  return await putWorkerInternal(
-    api,
-    workerName,
-    scriptBundle,
-    scriptMetadata,
-    {
-      dispatchNamespace,
-      versionLabel: version?.versionLabel,
-      message: version?.message,
-    },
   );
 }
 
