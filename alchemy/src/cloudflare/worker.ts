@@ -281,6 +281,11 @@ export interface BaseWorkerProps<
    */
   dev?: {
     /**
+     * Whether to run the worker remotely instead of locally
+     * @default false
+     */
+    remote?: boolean;
+    /**
      * Port to use for local development
      */
     port?: number;
@@ -909,7 +914,7 @@ export const _Worker = Resource(
       props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
-    if (this.scope.dev && this.phase !== "delete") {
+    if (this.scope.dev && this.phase !== "delete" && !props.dev?.remote) {
       // Get current timestamp
       const now = Date.now();
 
