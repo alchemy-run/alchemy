@@ -1,7 +1,13 @@
 /// <reference types="@types/node" />
 
 import alchemy from "alchemy";
-import { D1Database, DurableObjectNamespace, KVNamespace, R2Bucket, Worker } from "alchemy/cloudflare";
+import {
+  D1Database,
+  DurableObjectNamespace,
+  KVNamespace,
+  R2Bucket,
+  Worker,
+} from "alchemy/cloudflare";
 
 const app = await alchemy("cloudflare-worker-simple", { mode: "watch" });
 
@@ -21,7 +27,7 @@ const doNamespace = new DurableObjectNamespace("DO", {
   className: "DO",
   scriptName: "cloudflare-worker-simple",
   sqlite: true,
-})
+});
 export const worker1 = await Worker("worker", {
   name: "cloudflare-worker-simple",
   entrypoint: "src/worker1.ts",

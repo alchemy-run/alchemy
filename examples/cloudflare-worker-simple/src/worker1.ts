@@ -6,7 +6,7 @@ export default {
   async fetch(
     request: Request,
     env: typeof worker1.Env,
-    ctx: ExecutionContext,
+    _ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
     switch (url.pathname) {
@@ -34,9 +34,9 @@ export default {
 };
 
 export class DO extends DurableObject<typeof worker1.Env> {
-  override fetch(request: Request) {
-      return Response.json({
-          message: "hello from DO",
-      });
+  override fetch(_: Request) {
+    return Response.json({
+      message: "hello from DO",
+    });
   }
 }

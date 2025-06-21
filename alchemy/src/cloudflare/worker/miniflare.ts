@@ -3,7 +3,7 @@ import type {
   MiniflareOptions,
   Request as MiniflareRequest,
   RemoteProxyConnectionString,
-  WorkerOptions
+  WorkerOptions,
 } from "miniflare";
 import path from "node:path";
 import { logger } from "../../util/logger.ts";
