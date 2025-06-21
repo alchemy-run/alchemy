@@ -1,3 +1,4 @@
+import { DurableObject } from "cloudflare:workers";
 import crypto from "node:crypto";
 import type { worker1 } from "../alchemy.run.ts";
 
@@ -31,3 +32,11 @@ export default {
     }
   },
 };
+
+export class DO extends DurableObject<typeof worker1.Env> {
+  override fetch(request: Request) {
+      return Response.json({
+          message: "hello from DO",
+      });
+  }
+}

@@ -197,7 +197,7 @@ function buildRemoteBinding(
 }
 
 export function buildMiniflareWorkerOptions({
-  name,
+  name: workerName,
   script,
   bindings,
   format,
@@ -209,11 +209,12 @@ export function buildMiniflareWorkerOptions({
   remoteProxyConnectionString: RemoteProxyConnectionString | undefined;
 }): WorkerOptions {
   const options: WorkerOptions = {
-    name,
+    name: workerName,
     script,
     modules: format !== "cjs",
     compatibilityDate,
     compatibilityFlags,
+    unsafeDirectSockets: [{ entrypoint: undefined, proxy: true }],
   };
   for (const [name, binding] of Object.entries(bindings ?? {})) {
     if (typeof binding === "string") {
@@ -318,6 +319,12 @@ export function buildMiniflareWorkerOptions({
           //   ? undefined
           //   : remoteProxyConnectionString,
         };
+        if (!binding.scriptName || binding.scriptName === workerName) {
+          options.unsafeDirectSockets!.push({
+            entrypoint: binding.className,
+            proxy: true,
+          });
+        }
         break;
       }
       case "hyperdrive": {
@@ -502,7 +509,7 @@ export function buildMiniflareWorkerOptions({
     const queue = "queue" in eventSource ? eventSource.queue : eventSource;
     if (!queue.local) {
       throw new Error(
-        `Locally emulated workers cannot consume remote queues. Worker "${name}" is locally emulated but is consuming remote queue "${queue.name}".`,
+        `Locally emulated workers cannot consume remote queues. Worker "${workerName}" is locally emulated but is consuming remote queue "${queue.name}".`,
       );
     }
     ((options.queueConsumers ??= []) as string[]).push(queue.name);

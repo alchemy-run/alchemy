@@ -3,7 +3,7 @@ import type {
   MiniflareOptions,
   Request as MiniflareRequest,
   RemoteProxyConnectionString,
-  WorkerOptions,
+  WorkerOptions
 } from "miniflare";
 import path from "node:path";
 import { logger } from "../../util/logger.ts";
@@ -62,7 +62,7 @@ class MiniflareServer {
       }),
     );
     if (this.miniflare) {
-      await this.miniflare.setOptions(this.miniflareOptions());
+      await this.miniflare.setOptions(await this.miniflareOptions());
     } else {
       const { Miniflare } = await import("miniflare").catch(() => {
         throw new Error(
@@ -78,7 +78,7 @@ class MiniflareServer {
         }
       });
 
-      this.miniflare = new Miniflare(this.miniflareOptions());
+      this.miniflare = new Miniflare(await this.miniflareOptions());
       await this.miniflare.ready;
     }
     const existing = this.servers.get(worker.name);
@@ -165,10 +165,12 @@ class MiniflareServer {
     };
   }
 
-  private miniflareOptions(): MiniflareOptions {
+  private async miniflareOptions(): Promise<MiniflareOptions> {
+    const { getDefaultDevRegistryPath } = await import("miniflare");
     return {
       workers: Array.from(this.workers.values()),
       defaultPersistRoot: path.join(process.cwd(), ".alchemy/miniflare"),
+      unsafeDevRegistryPath: getDefaultDevRegistryPath(),
       analyticsEngineDatasetsPersist: true,
       cachePersist: true,
       d1Persist: true,

@@ -1,7 +1,7 @@
 /// <reference types="@types/node" />
 
 import alchemy from "alchemy";
-import { D1Database, KVNamespace, R2Bucket, Worker } from "alchemy/cloudflare";
+import { D1Database, DurableObjectNamespace, KVNamespace, R2Bucket, Worker } from "alchemy/cloudflare";
 
 const app = await alchemy("cloudflare-worker-simple", { mode: "watch" });
 
@@ -17,7 +17,11 @@ const [d1, kv, r2] = await Promise.all([
   }),
   R2Bucket("my-r2", { adopt: true, local: true }),
 ]);
-
+const doNamespace = new DurableObjectNamespace("DO", {
+  className: "DO",
+  scriptName: "cloudflare-worker-simple",
+  sqlite: true,
+})
 export const worker1 = await Worker("worker", {
   name: "cloudflare-worker-simple",
   entrypoint: "src/worker1.ts",
@@ -25,17 +29,20 @@ export const worker1 = await Worker("worker", {
     KV: kv,
     D1: d1,
     R2: r2,
+    DO: doNamespace,
   },
   compatibilityFlags: ["nodejs_compat"],
+  local: { port: 3000 },
 });
 export const worker2 = await Worker("worker2", {
   name: "cloudflare-worker-simple-2",
   entrypoint: "src/worker2.ts",
   bindings: {
     WORKER: worker1,
+    DO: doNamespace,
   },
   compatibilityFlags: ["nodejs_compat"],
-  local: true,
+  local: { port: 3001 },
 });
 
 console.log(`worker1.url: ${worker1.url}`);
