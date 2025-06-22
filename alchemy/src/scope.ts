@@ -362,7 +362,8 @@ export class Scope {
 
   public async destroyPendingDeletions() {
     const pendingDeletions =
-      (await this.get<PendingDeletions>("pendingDeletions")) ?? [];
+      (await this.get<PendingDeletions>("pendingDeletions").catch(() => [])) ??
+      [];
     if (pendingDeletions) {
       for (const { resource, oldProps } of pendingDeletions) {
         //todo(michael): ugly hack due to the way scope is serialized
