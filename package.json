@@ -24,11 +24,11 @@
     "prepare": "husky"
   },
   "workspaces": [
-    "alchemy",
     "alchemy-web",
+    "alchemy",
+    "alchemy/templates/*",
     "examples/*",
-    "stacks",
-    "alchemy/templates/*"
+    "stacks"
   ],
   "devDependencies": {
     "@biomejs/biome": "beta",
