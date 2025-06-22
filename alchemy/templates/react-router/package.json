@@ -4,12 +4,11 @@
   "private": true,
   "scripts": {
     "build": "vite build",
-    "cf-typegen": "wrangler types",
     "deploy": "bun --env-file=./.env ./alchemy.run.ts",
     "destroy": "bun --env-file=./.env ./alchemy.run.ts --destroy",
     "dev": "react-router dev",
     "preview": "bun run build && vite preview",
-    "typecheck": "npm run cf-typegen && react-router typegen && tsc -b"
+    "typecheck": "react-router typegen && tsc -b"
   },
   "dependencies": {
     "isbot": "^5.1.27",
