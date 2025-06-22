@@ -202,7 +202,7 @@ export async function destroy<Type extends string>(
 
 export async function destroyAll(
   resources: Resource[],
-  options?: DestroyOptions & { force?: boolean },
+  options?: DestroyOptions,
 ) {
   if (options?.strategy !== "parallel") {
     const sorted = resources.sort((a, b) => b[ResourceSeq] - a[ResourceSeq]);
