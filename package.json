@@ -10,7 +10,7 @@
     "url": "https://github.com/sam-goodwin/alchemy"
   },
   "scripts": {
-    "build": "bun run --filter cloudflare-react-router types && cd ./alchemy && tsc -b && tsc -b ./tsconfig.json",
+    "build": "bun run --filter cloudflare-react-router types && cd ./alchemy && tsc -b && tsc -b ./tsconfig.json && bun run --filter alchemy build:cli",
     "check": "bun run build && biome check",
     "fix": "biome check --write",
     "deploy:repo": "bun ./stacks/src/repo.run.ts",

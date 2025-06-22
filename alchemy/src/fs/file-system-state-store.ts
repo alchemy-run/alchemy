@@ -7,6 +7,7 @@ import { deserializeState, type State, type StateStore } from "../state.ts";
 import { ignore } from "../util/ignore.ts";
 
 const stateRootDir = path.join(process.cwd(), ".alchemy");
+const ALCHEMY_SEPERATOR_CHAR = process.platform === "win32" ? "-" : ":";
 
 export class FileSystemStateStore implements StateStore {
   public readonly dir: string;
@@ -128,7 +129,10 @@ export class FileSystemStateStore implements StateStore {
       throw new Error(`ID cannot include colons: ${key}`);
     }
     if (key.includes("/")) {
-      key = key.replaceAll("/", ":");
+      //todo(michael): remove this next time we do a breaking change
+      //* windows doesn't support ":" in file paths, but we already use ":"
+      //* so now we use both to prevent breaking changes`
+      key = key.replaceAll("/", ALCHEMY_SEPERATOR_CHAR);
     }
     return path.join(this.dir, `${key}.json`);
   }

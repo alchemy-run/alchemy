@@ -1,3 +1,159 @@
+## v0.37.1
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Relax Durable Object RPC type constraint &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/445 [<samp>(107e7)</samp>](https://github.com/sam-goodwin/alchemy/commit/107e79de)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: DOStateStore init uploads a worker and not a version &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/447 [<samp>(30cc6)</samp>](https://github.com/sam-goodwin/alchemy/commit/30cc6424)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.37.0...v0.37.1)
+
+---
+
+## v0.37.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Add `run_worker_first: string[]` option &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/sam-goodwin/alchemy/issues/440 [<samp>(d4b0d)</samp>](https://github.com/sam-goodwin/alchemy/commit/d4b0de34)
+- **stripe**: Price meter support &nbsp;-&nbsp; by **Nick Balestra-Foster** in https://github.com/sam-goodwin/alchemy/issues/410 [<samp>(9315d)</samp>](https://github.com/sam-goodwin/alchemy/commit/9315d742)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Adopt DO that have migration tags &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/437 [<samp>(bcbd7)</samp>](https://github.com/sam-goodwin/alchemy/commit/bcbd7fdb)
+  - Website resource respects cwd prop for wrangler.jsonc placement &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/443 [<samp>(bef17)</samp>](https://github.com/sam-goodwin/alchemy/commit/bef17985)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.36.0...v0.37.0)
+
+---
+
+## v0.36.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **docker**: Docker provider &nbsp;-&nbsp; by **Pavitra Golchha** in https://github.com/sam-goodwin/alchemy/issues/189 [<samp>(6f973)</samp>](https://github.com/sam-goodwin/alchemy/commit/6f973983)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**: Improve package manager handling in create-alchemy &nbsp;-&nbsp; by **Nico Baier** in https://github.com/sam-goodwin/alchemy/issues/423 [<samp>(d0c7c)</samp>](https://github.com/sam-goodwin/alchemy/commit/d0c7ce83)
+- **core**: Allow colors in CI environments, only disable for NO_COLOR &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/429 [<samp>(a194a)</samp>](https://github.com/sam-goodwin/alchemy/commit/a194ab5a)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.35.1...v0.36.0)
+
+---
+
+## v0.35.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **fs**: Better support for windows file system &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/430 [<samp>(8dd9f)</samp>](https://github.com/sam-goodwin/alchemy/commit/8dd9f196)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.35.0...v0.35.1)
+
+---
+
+## v0.35.0
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Set force=true when deleting a Worker &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/432 [<samp>(2b21d)</samp>](https://github.com/sam-goodwin/alchemy/commit/2b21d41e)
+  - Call wfp endpoint when deleting workers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/434 [<samp>(d109d)</samp>](https://github.com/sam-goodwin/alchemy/commit/d109d984)
+- **core**:
+  - Ensure alchemy providers are globally registered &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/433 [<samp>(b0528)</samp>](https://github.com/sam-goodwin/alchemy/commit/b05284f6)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.34.3...v0.35.0)
+
+---
+
+## v0.34.3
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - Support RPC type in WorkerStub &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/425 [<samp>(0b682)</samp>](https://github.com/sam-goodwin/alchemy/commit/0b682dac)
+  - Support adopting Queue Consumer &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/431 [<samp>(82b2d)</samp>](https://github.com/sam-goodwin/alchemy/commit/82b2d018)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.34.2...v0.34.3)
+
+---
+
+## v0.34.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Export WorkerStub &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/424 [<samp>(34cb0)</samp>](https://github.com/sam-goodwin/alchemy/commit/34cb09b8)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.34.1...v0.34.2)
+
+---
+
+## v0.34.1
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **aws**: S3StateStore &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/419 [<samp>(73b90)</samp>](https://github.com/sam-goodwin/alchemy/commit/73b907b5)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.34.0...v0.34.1)
+
+---
+
+## v0.34.0
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Add preview IDs for KV, D1, and R2 in wrangler.json &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/413 [<samp>(4a59d)</samp>](https://github.com/sam-goodwin/alchemy/commit/4a59d3a3)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.33.1...v0.34.0)
+
+---
+
+## v0.33.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Use dispatch namespace asset upload for WFP &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/412 [<samp>(bf6b5)</samp>](https://github.com/sam-goodwin/alchemy/commit/bf6b5b80)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.33.0...v0.33.1)
+
+---
+
+## v0.33.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **stripe**: Add Full Tier Support for Stripe Prices &nbsp;-&nbsp; by **Nick Balestra-Foster** in https://github.com/sam-goodwin/alchemy/issues/406 [<samp>(7691c)</samp>](https://github.com/sam-goodwin/alchemy/commit/7691c2ce)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Configure Websites to support SSR by default &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/409 [<samp>(72521)</samp>](https://github.com/sam-goodwin/alchemy/commit/72521e8f)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.32.1...v0.33.0)
+
+---
+
+## v0.32.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Fix SSR for astro by setting not_found_hanlding=none &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/407 [<samp>(7750f)</samp>](https://github.com/sam-goodwin/alchemy/commit/7750f024)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.32.0...v0.32.1)
+
+---
+
+## v0.32.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Add Worker version/preview support with labels &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/351 [<samp>(615fc)</samp>](https://github.com/sam-goodwin/alchemy/commit/615fc9d1)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.31.0...v0.32.0)
+
+---
+
 ## v0.31.0
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

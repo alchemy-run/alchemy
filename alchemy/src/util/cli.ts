@@ -17,9 +17,7 @@ type ColorName = keyof typeof colors;
 
 // Check if colors should be disabled
 const shouldDisableColors = (): boolean => {
-  return Boolean(
-    process.env.CI || process.env.NO_COLOR || !process.stdout.isTTY,
-  );
+  return Boolean(process.env.NO_COLOR);
 };
 
 // Apply color if colors are enabled

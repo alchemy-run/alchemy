@@ -147,7 +147,7 @@ export type D1Database = D1DatabaseResource & Bound<D1DatabaseResource>;
 
 export async function D1Database(
   id: string,
-  props: Omit<D1DatabaseProps, "migrationsFiles">,
+  props: Omit<D1DatabaseProps, "migrationsFiles"> = {},
 ): Promise<D1Database> {
   const migrationsFiles = props.migrationsDir
     ? await listMigrationsFiles(props.migrationsDir)
@@ -241,13 +241,9 @@ const D1DatabaseResource = Resource(
     const databaseName = props.name ?? id;
 
     if (this.phase === "delete") {
-      logger.log("Deleting D1 database:", databaseName);
       if (props.delete !== false) {
-        // Delete D1 database
-        logger.log("Deleting D1 database:", databaseName);
         await deleteDatabase(api, this.output?.id);
       }
-
       // Return void (a deleted database has no content)
       return this.destroy();
     }
