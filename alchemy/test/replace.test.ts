@@ -281,7 +281,7 @@ describe("Replace", () => {
             child: true,
           }),
         );
-        expect(
+        await expect(
           alchemy.run("foo", () =>
             Replacable("replaceable", {
               name: "baz-4",
