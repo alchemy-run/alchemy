@@ -1,4 +1,5 @@
 import { log, spinner } from "@clack/prompts";
+import { execa } from "execa";
 import * as fs from "fs-extra";
 import { glob } from "glob";
 import { existsSync } from "node:fs";
@@ -9,7 +10,10 @@ import { PKG_ROOT } from "../constants.ts";
 import { throwWithContext } from "../errors.ts";
 import type { ProjectContext } from "../types.ts";
 import { addPackageDependencies } from "./dependencies.ts";
-import { installDependencies } from "./package-manager.ts";
+import {
+  getPackageManagerCommands,
+  installDependencies,
+} from "./package-manager.ts";
 
 export async function copyTemplate(
   templateName: string,
@@ -69,6 +73,10 @@ export async function copyTemplate(
       log.info("Skipping dependency installation");
     }
 
+    if (templateName === "rwsdk") {
+      await handleRwsdkPostInstall(context);
+    }
+
     log.success("Project setup complete!");
   } catch (error) {
     throwWithContext(error, `Failed to copy template '${templateName}'`);
@@ -99,4 +107,29 @@ async function updateTemplatePackageJson(
   }
 
   await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
+}
+
+async function handleRwsdkPostInstall(context: ProjectContext): Promise<void> {
+  try {
+    const migrationsDir = join(context.path, "migrations");
+    await fs.ensureDir(migrationsDir);
+
+    const commands = getPackageManagerCommands(context.packageManager);
+    const devInitCommand = `${commands.run} dev:init`;
+
+    if (context.options.install !== false) {
+      await execa(devInitCommand, {
+        cwd: context.path,
+        shell: true,
+      });
+    } else {
+      log.info(
+        `To complete rwsdk setup, run: cd ${context.name} && ${devInitCommand}`,
+      );
+    }
+  } catch (error) {
+    log.warn(
+      "Failed to complete rwsdk setup. You may need to run 'dev:init' manually.",
+    );
+  }
 }
