@@ -22,6 +22,7 @@ if (this.phase === "update") {
   if (this.output.name !== props.name) {
     // trigger replace and terminate this `"update"` phase
     this.replace();
+    // (unreachable code)
   } else {
     return updateResource();
   }
@@ -33,11 +34,10 @@ if (this.phase === "update") {
 After you call `this.replace()`, the `"update"` phase will terminate and be re-invoked with `"create"` (to create the new resource).
 
 ```ts
-if (this.phase === "create")
+if (this.phase === "create") {
+  return createNewResource();
+}
 ```
-
-> [!CAUTION]
-> TODO(sam/michael): It would be better if `this.replace()` returned `never` and then just trigger `create`.
 
 ## Delete old
 
