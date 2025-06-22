@@ -3,47 +3,53 @@ order: 10
 title: Replace
 description: Learn how to safely replace infrastructure resources with Alchemy. Understand the risks and best practices for resource replacement.
 ---
+
 # Replace
 
-Resource replacement in Alchemy recreates and deletes resources that can **not**
-be updated, both in your state file and in the underlying infrastructure. The
-deletion of the old resource is scheduled and will occur after the new resource
-is created.
+It is some times impossible to UPDATE a resource, e.g. you cannot rename a R2 Bucket name.
+In these cases, you need to perform a REPLACE operation to:
 
-## Basic Usage
-During the **update phase**, call `this.replace()` when a change requires
-resource replacement:
+1. create a new version of the Resource and update references
+2. delete the old veresion of the Resource (or leave it orphaned)
+
+## Trigger Replacement
+
+During the **update phase**, you can trigger a replacement by calling `this.replace()`:
 
 ```typescript
 // Implementation pattern
 if (this.phase === "update") {
   if (this.output.name !== props.name) {
+    // trigger replace and terminate this `"update"` phase
     this.replace();
+  } else {
+    return updateResource();
   }
 }
 ```
-Use inside a handler to tell alchemy a resource needs to be replaced
 
-## How It Works
+## Create new
 
-During the **update phase**, if a resource calls `this.replace()`, alchemy will create a new resource and schedule the old resource for deletion. The scheduled deletion will occur when the root scope is finalized.
+After you call `this.replace()`, the `"update"` phase will terminate and be re-invoked with `"create"` (to create the new resource).
 
-## Forcing Deletion Early
-
-Deletion of the old resource can be forced by passing `true` to the `scope.finalize` method. Forcing early deletion will still wait for the new resource to be created.
-
-```typescript
-await scope.finalize(true);
+```ts
+if (this.phase === "create")
 ```
 
-## Errors in Deletion
+> [!CAUTION]
+> TODO(sam/michael): It would be better if `this.replace()` returned `never` and then just trigger `create`.
 
-If an error occurs during deletion, the scope will be finalized and alchemy will attempt to destroy the old resource again during the next finalization process.
+## Delete old
 
-## Replacing Resources with Children
+After all downstream dependencies have been updated and you finally call `app.finalize()`, Alchemy will then invoke the `"delete"` phase on the old resource.
 
-Resources with children cannot be replaced, this will result in an error being
-thrown during finalization.
+```ts
+const app = await alchemy("app");
+
+// ... create resources
+
+await app.finalize(); // finalize scopes by deleting "orphaned" and "replaced" resources
+```
 
 ## Related Concepts
 
