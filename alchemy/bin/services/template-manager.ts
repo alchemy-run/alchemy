@@ -127,7 +127,7 @@ async function handleRwsdkPostInstall(context: ProjectContext): Promise<void> {
         `To complete rwsdk setup, run: cd ${context.name} && ${devInitCommand}`,
       );
     }
-  } catch (error) {
+  } catch (_error) {
     log.warn(
       "Failed to complete rwsdk setup. You may need to run 'dev:init' manually.",
     );
