@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { ReplacedSignal } from "./apply.ts";
 import { DestroyedSignal, destroy } from "./destroy.ts";
 import { env } from "./env.ts";
 import {
@@ -474,7 +475,9 @@ async function run<T>(
     }
     return await _scope.run(async () => fn.bind(_scope)(_scope));
   } catch (error) {
-    if (!(error instanceof DestroyedSignal)) {
+    if (
+      !(error instanceof DestroyedSignal || error instanceof ReplacedSignal)
+    ) {
       _scope.fail();
     }
     throw error;

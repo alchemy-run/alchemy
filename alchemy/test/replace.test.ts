@@ -41,7 +41,7 @@ const Replacable = Resource(
     }
     if (this.phase === "update") {
       if (props.name !== this.output.name) {
-        this.replace();
+        await this.replace();
       }
     }
     if (props.child) {
@@ -83,7 +83,7 @@ describe("Replace", () => {
         ]),
       );
 
-      await scope.finalize(true);
+      await scope.finalize();
 
       expect(await scope.get("pendingDeletions")).not.toEqual(
         expect.arrayContaining([
@@ -136,7 +136,7 @@ describe("Replace", () => {
         ]),
       );
       // now, we finalize the scope
-      await scope.finalize(true);
+      await scope.finalize();
       // the state should no longer contain the replaced record
       expect(await foo!.get("pendingDeletions")).not.toEqual(
         expect.arrayContaining([
@@ -210,7 +210,7 @@ describe("Replace", () => {
       expect(deleted).not.toContain("bar-3");
       // first deletion of replaced resource will fail
       try {
-        await scope!.finalize(true);
+        await scope!.finalize();
       } catch (e: any) {
         expect(e.message).toBe("Failed to delete foo-3");
       }
@@ -218,7 +218,7 @@ describe("Replace", () => {
       expect(deleted).not.toContain("foo-3");
       expect(deleted).not.toContain("bar-3");
       // then deletion succeeds on a re-run
-      await scope!.finalize(true);
+      await scope!.finalize();
       // foo-3 should be deleted
       expect(deleted).toContain("foo-3");
       expect(deleted).not.toContain("bar-3");
@@ -261,7 +261,7 @@ describe("Replace", () => {
             }),
           ]),
         );
-        await scope.finalize(true);
+        await scope.finalize();
         expect(deleted).toContain("foo-4");
         expect(deleted).toContain("bar-4");
       } finally {

@@ -33,6 +33,8 @@ export function apply<Out extends Resource>(
   return _apply(resource, props, options);
 }
 
+export class ReplacedSignal extends Error {}
+
 async function _apply<Out extends Resource>(
   resource: PendingResource<Out>,
   props: ResourceProps | undefined,
@@ -162,45 +164,68 @@ async function _apply<Out extends Resource>(
       seq: resource[ResourceSeq],
       props: state.oldProps,
       state,
-      replace: () => {
+      replace: async () => {
         if (isReplaced) {
           logger.warn(
             `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} is already marked as REPLACE`,
           );
           return;
         }
+        const pendingDeletions =
+          (await scope.get<PendingDeletions>("pendingDeletions")) ?? [];
+        pendingDeletions.push({
+          resource: oldOutput,
+          oldProps: state.oldProps,
+        });
+        await scope.set("pendingDeletions", pendingDeletions);
+
         isReplaced = true;
+        throw new ReplacedSignal();
       },
     });
 
-    const output = await alchemy.run(
-      resource[ResourceID],
-      {
-        isResource: true,
-        parent: scope,
-      },
-      async (scope) => {
-        const children = await scope.state.list();
-        if (children.length > 0) {
-          // TODO(sam): we need to determine how to make it possible to replace resources with children
-          // e.g. we can move the children resources and delete them later
-          // ... but, this seems like it could lead to tricky bugs where the replacement resource creates children
-          // ... that then conflict with the replaced resource's children and are either deleted or brick the stack
-          // For now, we just disallow it.
-          throw new Error(
-            `Resource "${resource[ResourceFQN]}" has children and cannot be replaced.`,
-          );
-        }
-        options?.resolveInnerScope?.(scope);
-        return provider.handler.bind(ctx)(resource[ResourceID], props);
-      },
-    );
+    let output: Resource<string>;
+    try {
+      output = await alchemy.run(
+        resource[ResourceID],
+        {
+          isResource: true,
+          parent: scope,
+        },
+        async (scope) => {
+          const children = await scope.state.list();
+          if (children.length > 0) {
+            // TODO(sam): we need to determine how to make it possible to replace resources with children
+            // e.g. we can move the children resources and delete them later
+            // ... but, this seems like it could lead to tricky bugs where the replacement resource creates children
+            // ... that then conflict with the replaced resource's children and are either deleted or brick the stack
+            // For now, we just disallow it.
+            throw new Error(
+              `Resource "${resource[ResourceFQN]}" has children and cannot be replaced.`,
+            );
+          }
+          options?.resolveInnerScope?.(scope);
+          return provider.handler.bind(ctx)(resource[ResourceID], props);
+        },
+      );
+    } catch (error) {
+      if (error instanceof ReplacedSignal) {
+        ctx.phase = "create";
+        output = await alchemy.run(
+          resource[ResourceID],
+          { isResource: true, parent: scope },
+          async () => provider.handler.bind(ctx)(resource[ResourceID], props),
+        );
+      } else {
+        throw error;
+      }
+    }
     if (!quiet) {
       logger.task(resource[ResourceFQN], {
         prefix: phase === "create" ? "created" : "updated",
         prefixColor: "greenBright",
         resource: formatFQN(resource[ResourceFQN]),
-        message: `${phase === "create" ? "Created" : "Updated"} Resource`,
+        message: `${phase === "create" ? "Created" : isReplaced ? "Replaced" : "Updated"} Resource`,
         status: "success",
       });
     }
@@ -225,15 +250,6 @@ async function _apply<Out extends Resource>(
       props,
       // deps: [...deps],
     });
-    if (isReplaced) {
-      const pendingDeletions =
-        (await scope.get<PendingDeletions>("pendingDeletions")) ?? [];
-      pendingDeletions.push({
-        resource: oldOutput,
-        oldProps: state.oldProps,
-      });
-      await scope.set("pendingDeletions", pendingDeletions);
-    }
     return output as any;
   } catch (error) {
     scope.telemetryClient.record({

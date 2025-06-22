@@ -10,7 +10,7 @@ It is some times impossible to UPDATE a resource, e.g. you cannot rename a R2 Bu
 In these cases, you need to perform a REPLACE operation to:
 
 1. create a new version of the Resource and update references
-2. delete the old veresion of the Resource (or leave it orphaned)
+2. delete the old version of the Resource (or leave it orphaned)
 
 ## Trigger Replacement
 
@@ -21,7 +21,7 @@ During the **update phase**, you can trigger a replacement by calling `this.repl
 if (this.phase === "update") {
   if (this.output.name !== props.name) {
     // trigger replace and terminate this `"update"` phase
-    this.replace();
+    await this.replace();
     // (unreachable code)
   } else {
     return updateResource();
