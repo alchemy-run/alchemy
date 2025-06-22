@@ -1,3 +1,20 @@
+## v0.37.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Add `run_worker_first: string[]` option &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/sam-goodwin/alchemy/issues/440 [<samp>(d4b0d)</samp>](https://github.com/sam-goodwin/alchemy/commit/d4b0de34)
+- **stripe**: Price meter support &nbsp;-&nbsp; by **Nick Balestra-Foster** in https://github.com/sam-goodwin/alchemy/issues/410 [<samp>(9315d)</samp>](https://github.com/sam-goodwin/alchemy/commit/9315d742)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Adopt DO that have migration tags &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/437 [<samp>(bcbd7)</samp>](https://github.com/sam-goodwin/alchemy/commit/bcbd7fdb)
+  - Website resource respects cwd prop for wrangler.jsonc placement &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/443 [<samp>(bef17)</samp>](https://github.com/sam-goodwin/alchemy/commit/bef17985)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.36.0...v0.37.0)
+
+---
+
 ## v0.36.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

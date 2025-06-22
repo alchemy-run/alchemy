@@ -3,7 +3,7 @@ import { bundle } from "../../esbuild/index.ts";
 import { withExponentialBackoff } from "../../util/retry.ts";
 import { handleApiError } from "../api-error.ts";
 import type { CloudflareApi } from "../api.ts";
-import { putWorker } from "../worker.ts";
+import type { WorkerMetadata } from "../worker-metadata.ts";
 import type { DOStateStoreAPI } from "./types.ts";
 
 interface DOStateStoreClientOptions {
@@ -116,33 +116,49 @@ export async function upsertStateStoreWorker(
     cache.set(key, TAG);
     return;
   }
-  const script = await bundleWorkerScript();
-  await putWorker(api, workerName, script, {
-    main_module: "worker.js",
-    compatibility_date: "2025-06-01",
-    compatibility_flags: ["nodejs_compat"],
-    bindings: [
-      {
-        name: "DOFS_STATE_STORE",
-        type: "durable_object_namespace",
-        class_name: "DOFSStateStore",
-      },
-      {
-        name: "DOFS_TOKEN",
-        type: "secret_text",
-        text: token,
-      },
-    ],
-    migrations: !found
-      ? {
-          new_sqlite_classes: ["DOFSStateStore"],
-        }
-      : undefined,
-    tags: [TAG],
-    observability: {
-      enabled: true,
-    },
-  });
+  const formData = new FormData();
+  formData.append("worker.js", await bundleWorkerScript());
+  formData.append(
+    "metadata",
+    new Blob([
+      JSON.stringify({
+        main_module: "worker.js",
+        compatibility_date: "2025-06-01",
+        compatibility_flags: ["nodejs_compat"],
+        bindings: [
+          {
+            name: "DOFS_STATE_STORE",
+            type: "durable_object_namespace",
+            class_name: "DOFSStateStore",
+          },
+          {
+            name: "DOFS_TOKEN",
+            type: "secret_text",
+            text: token,
+          },
+        ],
+        migrations: !found
+          ? {
+              new_sqlite_classes: ["DOFSStateStore"],
+            }
+          : undefined,
+        tags: [TAG],
+        observability: {
+          enabled: true,
+        },
+      } satisfies WorkerMetadata),
+    ]),
+  );
+
+  // Put the worker with migration tag v1
+  const response = await api.post(
+    `/accounts/${api.accountId}/workers/scripts/${workerName}/versions`,
+    formData,
+  );
+  if (!response.ok) {
+    throw await handleApiError(response, "upload", "worker", workerName);
+  }
+
   const subdomainRes = await api.post(
     `/accounts/${api.accountId}/workers/scripts/${workerName}/subdomain`,
     { enabled: true, preview_enabled: false },
@@ -151,7 +167,7 @@ export async function upsertStateStoreWorker(
     },
   );
   if (!subdomainRes.ok) {
-    await handleApiError(
+    throw await handleApiError(
       subdomainRes,
       "creating worker subdomain",
       "worker",

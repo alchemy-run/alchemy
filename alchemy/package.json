@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "0.36.0",
+  "version": "0.37.0",
   "type": "module",
   "module": "./lib/index.js",
   "license": "Apache-2.0",
