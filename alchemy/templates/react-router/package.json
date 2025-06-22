@@ -8,7 +8,6 @@
     "deploy": "bun --env-file=./.env ./alchemy.run.ts",
     "destroy": "bun --env-file=./.env ./alchemy.run.ts --destroy",
     "dev": "react-router dev",
-    "postinstall": "npm run cf-typegen",
     "preview": "bun run build && vite preview",
     "typecheck": "npm run cf-typegen && react-router typegen && tsc -b"
   },

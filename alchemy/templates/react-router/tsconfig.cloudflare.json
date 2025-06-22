@@ -5,8 +5,7 @@
     "app/**/*",
     "app/**/.server/**/*",
     "app/**/.client/**/*",
-    "workers/**/*",
-    "worker-configuration.d.ts"
+    "workers/**/*"
   ],
   "compilerOptions": {
     "composite": true,
