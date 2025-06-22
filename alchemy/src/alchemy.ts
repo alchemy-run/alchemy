@@ -181,6 +181,16 @@ async function _alchemy(
     const root = new Scope({
       ...mergedOptions,
       appName,
+      phase,
+      password: mergedOptions?.password ?? process.env.ALCHEMY_PASSWORD,
+      telemetryClient,
+    });
+    const stage = new Scope({
+      ...mergedOptions,
+      scopeName:
+        mergedOptions?.stage ?? process.env.ALCHEMY_STAGE ?? process.env.USER,
+      parent: root,
+      appName,
       stage:
         mergedOptions?.stage ?? process.env.ALCHEMY_STAGE ?? process.env.USER,
       phase,
@@ -188,17 +198,17 @@ async function _alchemy(
       telemetryClient,
     });
     try {
-      Scope.storage.enterWith(root);
+      Scope.storage.enterWith(stage);
     } catch {
       // we are in Cloudflare Workers, we will emulate the enterWith behavior
       // see Scope.finalize for where we pop the global scope
-      Scope.globals.push(root);
+      Scope.globals.push(stage);
     }
     if (mergedOptions?.phase === "destroy") {
       await destroy(root);
       return process.exit(0);
     }
-    return root;
+    return stage;
   }
   const [template, ...values] = args;
   const [, secondLine] = template[0].split("\n");

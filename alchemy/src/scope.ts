@@ -3,13 +3,16 @@ import type { Phase } from "./alchemy.ts";
 import { destroy, destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
 import {
+  ResourceFQN,
   ResourceID,
+  ResourceKind,
   ResourceScope,
+  ResourceSeq,
   type PendingResource,
   type Resource,
   type ResourceProps,
 } from "./resource.ts";
-import type { StateStore, StateStoreType } from "./state.ts";
+import type { State, StateStore, StateStoreType } from "./state.ts";
 import {
   createDummyLogger,
   createLoggerInstance,
@@ -172,7 +175,7 @@ export class Scope {
     if (this.parent) {
       return [...this.parent.chain, ...thisScope];
     }
-    return [...app, this.stage, ...thisScope];
+    return [...app, ...thisScope];
   }
 
   public fail() {
@@ -193,15 +196,43 @@ export class Scope {
     return [...this.chain, resourceID].join("/");
   }
 
+  private createRootState(): State<"alchemy::Scope"> {
+    return {
+      //todo(michael): should this have a different type cause its root?
+      kind: "alchemy::Scope",
+      id: this.scopeName!,
+      fqn: this.root.fqn(this.scopeName!),
+      seq: this.seq(),
+      status: "created",
+      data: {},
+      output: {
+        [ResourceID]: this.scopeName!,
+        [ResourceFQN]: this.root.fqn(this.scopeName!),
+        [ResourceKind]: "alchemy::Scope",
+        [ResourceScope]: this,
+        [ResourceSeq]: this.seq(),
+      },
+      props: {},
+    };
+  }
+
   public async set<T>(key: string, value: T): Promise<void> {
     return this.dataMutex.lock(async () => {
       // Get the current scope state from the parent (if it exists)
-      if (this.parent && this.scopeName) {
+      if (this.parent != null && this.scopeName) {
         const scopeState = await this.parent.state.get(this.scopeName);
         if (scopeState) {
           scopeState.data[key] = value;
           return await this.parent.state.set(this.scopeName, scopeState);
         }
+      }
+      if (this?.parent?.scopeName === this.root.scopeName) {
+        const scopeState =
+          (await this?.parent?.state.get(this.scopeName!)) ??
+          this.createRootState();
+        scopeState.data[key] = value;
+        await this.parent.state.set(this.scopeName!, scopeState);
+        return;
       }
       throw new Error("Root scope cannot contain state");
     });
@@ -213,6 +244,12 @@ export class Scope {
       if (this.parent && this.scopeName) {
         const scopeState = await this.parent.state.get(this.scopeName);
         return scopeState?.data[key];
+      }
+      if (this?.parent?.scopeName === this.root.scopeName) {
+        const scopeState =
+          (await this?.parent?.state.get(this.scopeName!)) ??
+          this.createRootState();
+        return scopeState.data[key];
       }
       throw new Error("Root scope cannot contain state");
     });
@@ -226,6 +263,12 @@ export class Scope {
           delete scopeState.data[key];
           return await this.parent.state.set(this.scopeName, scopeState);
         }
+      }
+      if (this?.parent?.scopeName === this.root.scopeName) {
+        const scopeState =
+          (await this?.parent?.state.get(this.scopeName!)) ??
+          this.createRootState();
+        return scopeState.data[key];
       }
       throw new Error("Root scope cannot contain state");
     });
@@ -251,6 +294,10 @@ export class Scope {
   }
 
   public async finalize(force?: boolean) {
+    const shouldForce =
+      force ||
+      this.parent === undefined ||
+      this?.parent?.scopeName === this.root.scopeName;
     if (this.phase === "read") {
       this.rootTelemetryClient?.record({
         event: "app.success",
@@ -258,7 +305,7 @@ export class Scope {
       });
       return;
     }
-    if (this.finalized && !force) {
+    if (this.finalized && !shouldForce) {
       return;
     }
     if (this.parent === undefined && Scope.globals.length > 0) {
@@ -280,11 +327,11 @@ export class Scope {
         resourceIds.filter((id) => !aliveIds.has(id)),
       );
 
-      if (force || this.parent === undefined) {
+      if (shouldForce) {
         await this.destroyPendingDeletions();
         await Promise.all(
           Array.from(this.children.values()).map((child) =>
-            child.finalize(force),
+            child.finalize(shouldForce),
           ),
         );
       }
@@ -295,7 +342,7 @@ export class Scope {
       await destroyAll(orphans, {
         quiet: this.quiet,
         strategy: "sequential",
-        force: force || this.parent === undefined,
+        force: shouldForce,
       });
       this.rootTelemetryClient?.record({
         event: "app.success",
