@@ -64,9 +64,11 @@ const router = t.router({
     )
     .mutation(async ({ input }) => {
       const [name, options] = input;
+      const isTest = process.env.NODE_ENV === "test";
       const combinedInput: CreateInput = {
         name,
         ...options,
+        yes: isTest || options.yes,
       };
       await createAlchemy(combinedInput);
     }),

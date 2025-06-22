@@ -19,7 +19,6 @@
     "@sveltejs/adapter-cloudflare": "^7.0.3",
     "@sveltejs/kit": "^2.21.2",
     "@sveltejs/vite-plugin-svelte": "^5.1.0",
-    "alchemy": "workspace:*",
     "svelte": "^5.33.14",
     "svelte-check": "^4.2.1",
     "typescript": "^5.8.3",
