@@ -2,6 +2,7 @@
 
 import { createCli, trpcServer, zod as z } from "trpc-cli";
 import { createAlchemy } from "./commands/create.ts";
+import { getPackageVersion } from "./services/get-package-version.ts";
 import {
   PackageManagerSchema,
   ProjectNameSchema,
@@ -79,7 +80,7 @@ export type AppRouter = typeof router;
 const cli = createCli({
   router,
   name: "alchemy",
-  version: "0.31.0",
+  version: getPackageVersion(),
   description:
     "🧪 Welcome to Alchemy! Creating infrastructure as code with JavaScript and TypeScript.",
 });
