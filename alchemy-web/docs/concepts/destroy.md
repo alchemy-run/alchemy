@@ -68,3 +68,8 @@ if (this.phase === "delete") {
   return this.destroy();
 }
 ```
+
+## Related Concepts
+
+- **[Replace](./replace.md)** - How to replace resources that can not be updated
+

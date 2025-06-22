@@ -1,5 +1,5 @@
 ---
-order: 10
+order: 11
 title: Adoption
 description: Learn how to adopt existing infrastructure with Alchemy resources instead of failing when resources already exist.
 ---
