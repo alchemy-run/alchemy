@@ -1,18 +1,23 @@
-import { describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy.ts";
-import { destroy } from "../../src/destroy.ts";
+import { describe, expect, it } from "vitest";
 import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { DOStateStore } from "../../src/cloudflare/do-state-store/index.ts";
 import { deleteWorker } from "../../src/cloudflare/worker.ts";
+import { Scope } from "../../src/scope.ts";
+import { FileSystemStateStore } from "../../src/fs/file-system-state-store.ts";
+import { NoopTelemetryClient } from "../../src/util/telemetry/client.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 import "../../src/test/vitest.ts";
 
-const test = alchemy.test(import.meta, {
-  prefix: BRANCH_PREFIX,
-});
-
 describe("DOStateStore", () => {
-  test("should initialize with lazy worker creation", async (scope) => {
+  it("should initialize with lazy worker creation", async () => {
+    // Create a minimal scope for testing
+    const scope = new Scope({
+      scopeName: `do-state-store-test-${BRANCH_PREFIX}`,
+      phase: "up",
+      stateStore: (scope) => new FileSystemStateStore(scope),
+      telemetryClient: new NoopTelemetryClient(),
+      quiet: true,
+    });
     const workerName = `alchemy-state-${BRANCH_PREFIX}`;
     const api = await createCloudflareApi();
 
@@ -48,9 +53,14 @@ describe("DOStateStore", () => {
       const count = await stateStore.count();
       expect(count).toBeGreaterThanOrEqual(1);
     } finally {
-      await destroy(scope);
-
+      // Manually delete the worker since it's not managed by alchemy
       if (stateStore) {
+        try {
+          await deleteWorker(api, { workerName });
+        } catch {
+          // Ignore errors - worker might already be deleted
+        }
+
         await assertWorkerDoesNotExist(api, workerName);
       }
     }
