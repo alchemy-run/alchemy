@@ -1,30 +1,29 @@
+/// <reference types="@types/node" />
 import alchemy from "alchemy";
-import { D1Database, DOStateStore, Redwood } from "alchemy/cloudflare";
+import { D1Database, DurableObjectNamespace, Redwood } from "alchemy/cloudflare";
 
-const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
-
-const app = await alchemy("cloudflare-redwood", {
-  stateStore:
-    process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new DOStateStore(scope)
-      : undefined,
+const app = await alchemy("my-alchemy-app");
+    
+const database = await D1Database("database", {
+  name: "my-alchemy-app-db",
+  migrationsDir: "migrations",
 });
 
-const database = await D1Database(`cloudflare-redwood-db${BRANCH_PREFIX}`, {
-  migrationsDir: "drizzle",
-});
-
-export const website = await Redwood(
-  `cloudflare-redwood-website${BRANCH_PREFIX}`,
-  {
-    bindings: {
-      DB: database,
-    },
+export const worker = await Redwood("website", {
+  name: "my-alchemy-app-website",
+  command: "bun run build",
+  bindings: {
+    AUTH_SECRET_KEY: alchemy.secret(process.env.AUTH_SECRET_KEY),
+    DB: database,
+    SESSION_DURABLE_OBJECT: new DurableObjectNamespace("session", {
+      className: "SessionDurableObject",
+    }),
   },
-);
+});
 
 console.log({
-  url: website.url,
+  url: worker.url,
 });
 
 await app.finalize();
+    

@@ -1,17 +1,18 @@
 {
-  "name": "cloudflare-react-router",
-  "private": true,
   "type": "module",
+  "name": "my-alchemy-app",
+  "private": true,
   "scripts": {
-    "build": "react-router build",
-    "deploy": "bun tsx --env-file ../../.env ./alchemy.run.ts",
-    "destroy": "bun tsx --env-file ../../.env ./alchemy.run.ts --destroy",
+    "build": "vite build",
+    "cf-typegen": "wrangler types",
+    "deploy": "bun --env-file=./.env ./alchemy.run.ts",
+    "destroy": "bun --env-file=./.env ./alchemy.run.ts --destroy",
     "dev": "react-router dev",
+    "postinstall": "npm run cf-typegen",
     "preview": "bun run build && vite preview",
-    "types": "react-router typegen"
+    "typecheck": "npm run cf-typegen && react-router typegen && tsc -b"
   },
   "dependencies": {
-    "cloudflare": "^4.3.0",
     "isbot": "^5.1.27",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -19,7 +20,6 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.0.12",
-    "@cloudflare/workers-types": "^4.20250529.0",
     "@react-router/dev": "^7.5.3",
     "@tailwindcss/vite": "^4.1.4",
     "@types/node": "^20",
@@ -29,6 +29,6 @@
     "typescript": "^5.8.3",
     "vite": "^6.3.3",
     "vite-tsconfig-paths": "^5.1.4",
-    "wrangler": "^4.18.0"
+    "wrangler": "^4.20.5"
   }
 }

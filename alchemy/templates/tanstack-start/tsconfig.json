@@ -1,5 +1,10 @@
 {
-  "include": ["**/*.ts", "**/*.tsx"],
+  "include": [
+    "alchemy.run.ts",
+    "types/**/*.ts",
+    "**/*.ts",
+    "**/*.tsx"
+  ],
   "compilerOptions": {
     "strict": true,
     "esModuleInterop": true,
@@ -17,8 +22,10 @@
     "paths": {
       "~/*": ["./src/*"]
     },
-    "noImplicitAny": false,
-    "types": ["@cloudflare/workers-types"],
-    "noEmit": true
+    "noEmit": true,
+    "types": [
+      "@cloudflare/workers-types",
+      "./types/env.d.ts"
+    ]
   }
 }

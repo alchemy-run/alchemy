@@ -11,4 +11,5 @@
 .wrangler
 .dev.vars*
 
-wrangler.json*
+.alchemy/
+.env

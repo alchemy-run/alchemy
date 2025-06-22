@@ -1,27 +1,31 @@
 {
-  "name": "cloudflare-sveltekit",
+  "type": "module",
+  "name": "my-alchemy-app",
   "private": true,
   "version": "0.0.1",
-  "type": "module",
   "scripts": {
-    "dev": "vite dev",
     "build": "vite build",
-    "preview": "vite preview",
-    "prepare": "svelte-kit sync || echo ''",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "deploy": "bun tsx --env-file ../../.env ./alchemy.run.ts",
-    "destroy": "bun tsx --env-file ../../.env ./alchemy.run.ts --destroy"
+    "deploy": "bun --env-file=./.env ./alchemy.run.ts",
+    "destroy": "bun --env-file=./.env ./alchemy.run.ts --destroy",
+    "dev": "vite dev",
+    "prepare": "svelte-kit sync || echo ''",
+    "preview": "vite preview"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250605.0",
-    "@sveltejs/adapter-auto": "^6.0.1",
-    "@sveltejs/adapter-cloudflare": "^7.0.3",
-    "@sveltejs/kit": "^2.21.2",
+    "@cloudflare/workers-types": "^4.20250620.0",
+    "@sveltejs/adapter-auto": "^6.0.0",
+    "@sveltejs/adapter-cloudflare": "^7.0.4",
+    "@sveltejs/kit": "^2.16.0",
     "@sveltejs/vite-plugin-svelte": "^5.1.0",
-    "svelte": "^5.33.14",
-    "svelte-check": "^4.2.1",
+    "@tailwindcss/vite": "^4.0.0",
+    "prettier-plugin-tailwindcss": "^0.6.11",
+    "svelte": "^5.0.0",
+    "svelte-check": "^4.0.0",
+    "tailwindcss": "^4.0.0",
     "typescript": "^5.8.3",
-    "vite": "^6.3.5"
+    "vite": "^6.2.6",
+    "vite-plugin-devtools-json": "^0.2.0"
   }
 }

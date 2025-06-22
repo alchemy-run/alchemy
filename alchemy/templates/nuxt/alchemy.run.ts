@@ -1,60 +1,16 @@
+/// <reference types="@types/node" />
+
 import alchemy from "alchemy";
-import { DOStateStore, Nuxt, Pipeline, R2Bucket } from "alchemy/cloudflare";
+import { Nuxt } from "alchemy/cloudflare";
 
-const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
+const app = await alchemy("my-alchemy-app");
 
-const app = await alchemy("cloudflare-nuxt-pipeline", {
-  stateStore:
-    process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new DOStateStore(scope)
-      : undefined,
+export const worker = await Nuxt("website", {
+  command: "bun run build",
 });
-
-const bucket = await R2Bucket(
-  `cloudflare-nuxt-pipeline-bucket${BRANCH_PREFIX}`,
-  {
-    adopt: true,
-  },
-);
-
-const pipeline = await Pipeline(
-  `cloudflare-nuxt-pipeline-pipeline${BRANCH_PREFIX}`,
-  {
-    adopt: true,
-    source: [{ type: "binding", format: "json" }],
-    destination: {
-      type: "r2",
-      format: "json",
-      path: {
-        bucket: bucket.name,
-      },
-      credentials: {
-        accessKeyId: alchemy.secret(process.env.R2_ACCESS_KEY_ID),
-        secretAccessKey: alchemy.secret(process.env.R2_SECRET_ACCESS_KEY),
-      },
-      batch: {
-        maxMb: 10,
-        // testing value. recommended - 300
-        maxSeconds: 5,
-        maxRows: 100,
-      },
-    },
-  },
-);
-
-export const website = await Nuxt(
-  `cloudflare-nuxt-pipeline-website${BRANCH_PREFIX}`,
-  {
-    adopt: true,
-    bindings: {
-      R2_BUCKET: bucket,
-      PIPELINE: pipeline,
-    },
-  },
-);
 
 console.log({
-  url: website.url,
+  url: worker.url,
 });
 
-await app.finalize(); // must be at end
+await app.finalize();

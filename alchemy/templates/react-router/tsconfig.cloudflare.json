@@ -1,19 +1,18 @@
 {
   "extends": "./tsconfig.json",
   "include": [
-    "./alchemy.run.ts",
     ".react-router/types/**/*",
     "app/**/*",
     "app/**/.server/**/*",
     "app/**/.client/**/*",
     "workers/**/*",
-    "types/**/*.ts"
+    "worker-configuration.d.ts"
   ],
   "compilerOptions": {
     "composite": true,
     "strict": true,
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
-    "types": ["vite/client", "@cloudflare/workers-types"],
+    "types": ["vite/client"],
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",
@@ -24,6 +23,6 @@
       "~/*": ["./app/*"]
     },
     "esModuleInterop": true,
-    "resolveJsonModule": true,
+    "resolveJsonModule": true
   }
 }

@@ -1,12 +1,13 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  compatibilityDate: "2025-04-21",
+  compatibilityDate: '2025-05-15',
   devtools: { enabled: true },
   nitro: {
-    preset: "cloudflare-module",
-    prerender: {
-      routes: ["/"],
-      autoSubfolderIndex: false,
-    },
+    preset: "cloudflare_module",
+    cloudflare: {
+      deployConfig: true,
+      nodeCompat: true
+    }
   },
+  modules: ["nitro-cloudflare-dev"],
 });

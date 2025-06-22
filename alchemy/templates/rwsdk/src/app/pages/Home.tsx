@@ -1,12 +1,13 @@
-import type { RequestInfo } from "rwsdk/worker";
-import { users } from "../../db/schema.js";
+import { RequestInfo } from "rwsdk/worker";
 
-export async function Home({ ctx }: RequestInfo) {
-  const allUsers = await ctx.db.select().from(users).all();
+export function Home({ ctx }: RequestInfo) {
   return (
     <div>
-      <h1>Hello World</h1>
-      <pre>{JSON.stringify(allUsers, null, 2)}</pre>
+      <p>
+        {ctx.user?.username
+          ? `You are logged in as user ${ctx.user.username}`
+          : "You are not logged in"}
+      </p>
     </div>
   );
 }

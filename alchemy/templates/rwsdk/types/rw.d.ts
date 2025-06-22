@@ -1,9 +1,5 @@
-import { AppContext } from "../src/worker.js";
-
+import { AppContext } from "../src/worker";
 
 declare module "rwsdk/worker" {
-  export interface DefaultAppContext extends AppContext {}
-  export interface RequestInfo<Params = any, AppContext = DefaultAppContext> {
-    ctx: AppContext
-  }
+  interface DefaultAppContext extends AppContext {}
 }

@@ -64,4 +64,8 @@ coverage
 *.temp
 
 .wrangler
-wrangler.jsonc
+
+generated/
+
+.alchemy/
+.env

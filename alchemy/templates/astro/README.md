@@ -1,69 +1,48 @@
-# Astro + Cloudflare + Alchemy Example
+# Astro Starter Kit: Basics
 
-This example demonstrates how to deploy an Astro application to Cloudflare Workers using Alchemy Infrastructure-as-Code.
-
-## Features
-
-- 🚀 **Astro** - Modern web framework with component islands
-- ☁️ **Cloudflare Workers** - Edge runtime with global deployment
-- 🔮 **Alchemy** - TypeScript Infrastructure-as-Code
-- 📦 **R2 Storage** - Object storage integration
-- 🗄️ **KV Cache** - Key-value caching
-
-## Getting Started
-
-1. **Install dependencies:**
-
-```bash
-bun install
+```sh
+bun create astro@latest -- --template basics
 ```
 
-2. **Login to Cloudflare:**
+[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/withastro/astro/tree/latest/examples/basics)
+[![Open with CodeSandbox](https://assets.codesandbox.io/github/button-edit-lime.svg)](https://codesandbox.io/p/sandbox/github/withastro/astro/tree/latest/examples/basics)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/withastro/astro?devcontainer_path=.devcontainer/basics/devcontainer.json)
 
-```bash
-bun wrangler login
+> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+
+![just-the-basics](https://github.com/withastro/astro/assets/2244813/a0a5533c-a856-4198-8470-2d67b1d7c554)
+
+## 🚀 Project Structure
+
+Inside of your Astro project, you'll see the following folders and files:
+
+```text
+/
+├── public/
+│   └── favicon.svg
+├── src/
+│   ├── layouts/
+│   │   └── Layout.astro
+│   └── pages/
+│       └── index.astro
+└── package.json
 ```
 
-3. **Deploy the application:**
+To learn more about the folder structure of an Astro project, refer to [our guide on project structure](https://docs.astro.build/en/basics/project-structure/).
 
-```bash
-bun run deploy
-```
+## 🧞 Commands
 
-## Local Development
+All commands are run from the root of the project, from a terminal:
 
-Run the Astro development server:
+| Command                   | Action                                           |
+| :------------------------ | :----------------------------------------------- |
+| `bun install`             | Installs dependencies                            |
+| `bun dev`             | Starts local dev server at `localhost:4321`      |
+| `bun build`           | Build your production site to `./dist/`          |
+| `bun preview`         | Preview your build locally, before deploying     |
+| `bun astro ...`       | Run CLI commands like `astro add`, `astro check` |
+| `bun astro -- --help` | Get help using the Astro CLI                     |
 
-```bash
-bun run dev
-```
+## 👀 Want to learn more?
 
-## Project Structure
-
-```
-src/
-├── layouts/
-│   └── Layout.astro       # Base layout component
-├── pages/
-│   ├── index.astro        # Homepage
-│   └── api/
-│       └── hello.ts       # API endpoint
-└── env.d.ts              # TypeScript environment types
-```
-
-## Cloudflare Bindings
-
-This example includes:
-
-- **STORAGE** - R2 bucket for file storage
-- **CACHE** - KV namespace for caching
-
-Access these in your Astro API routes via the runtime context.
-
-## Cleanup
-
-To tear down the deployed resources:
-
-```bash
-bun run destroy
-```
+Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).

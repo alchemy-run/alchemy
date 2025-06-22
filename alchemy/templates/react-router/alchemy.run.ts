@@ -1,26 +1,17 @@
-/// <reference types="node" />
+/// <reference types="@types/node" />
 
 import alchemy from "alchemy";
-import { DOStateStore, ReactRouter } from "alchemy/cloudflare";
+import { ReactRouter } from "alchemy/cloudflare";
 
-const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
-const app = await alchemy("cloudflare-react-router", {
-  stateStore:
-    process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new DOStateStore(scope)
-      : undefined,
+const app = await alchemy("my-alchemy-app");
+
+export const worker = await ReactRouter("website", {
+  main: "workers/app.ts",
+  command: "bun run build",
 });
 
-export const website = await ReactRouter(
-  `cloudflare-react-router-website${BRANCH_PREFIX}`,
-  {
-    main: "./workers/app.ts",
-    command: "bun run build",
-  },
-);
-
 console.log({
-  url: website.url,
+  url: worker.url,
 });
 
 await app.finalize();

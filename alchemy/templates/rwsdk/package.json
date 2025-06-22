@@ -1,43 +1,59 @@
 {
-  "name": "@redwoodjs/starter-drizzle",
-  "version": "1.0.0",
-  "description": "A RedwoodSDK starter for projects with a database using Drizzle",
-  "main": "index.js",
   "type": "module",
+  "name": "@redwoodjs/starter-standard",
+  "version": "1.0.0",
+  "description": "Build fast, server-driven webapps on Cloudflare with SSR, RSC, and realtime. ",
+  "main": "index.js",
   "keywords": [],
   "author": "",
   "license": "MIT",
   "private": true,
   "scripts": {
     "build": "vite build",
+    "check": "npm run generate && npm run types",
+    "clean": "npm run clean:vite",
+    "clean:vite": "rm -rf ./node_modules/.vite",
+    "deploy": "tsx --env-file .env ./alchemy.run.ts",
+    "destroy": "tsx --env-file .env ./alchemy.run.ts --destroy",
     "dev": "NODE_ENV=${NODE_ENV:-development} vite dev",
     "dev:init": "rw-scripts dev-init",
-    "preview": "bun run build && bun run vite preview",
-    "worker:run": "rw-scripts worker-run",
-    "clean": "bun run clean:vite",
-    "clean:vite": "rm -rf ./node_modules/.vite",
-    "release": "rw-scripts ensure-deploy-env && bun run clean && bun run migrate:new && RWSDK_DEPLOY=1 bun run build && wrangler deploy",
-    "format": "prettier --write ./src",
-    "migrate:new": "drizzle-kit generate",
-    "migrate:dev": "wrangler d1 migrations apply DB --local",
-    "seed": "bun run worker:run ./src/db/seed.ts",
-    "check": "bun run types",
-    "types": "bun run tsc",
-    "deploy": "bun tsx --env-file ../../.env ./alchemy.run.ts",
-    "destroy": "bun tsx --env-file ../../.env ./alchemy.run.ts --destroy"
+    "generate": "rw-scripts ensure-env && prisma generate && wrangler types",
+    "migrate:dev": "prisma generate && wrangler d1 migrations apply DB --local",
+    "migrate:new": "rw-scripts migrate-new",
+    "migrate:prd": "wrangler d1 migrations apply DB --remote",
+    "prepare": "vibe-rules install cursor",
+    "preview": "vite preview",
+    "release": "rw-scripts ensure-deploy-env && npm run clean && prisma generate && RWSDK_DEPLOY=1 npm run build && wrangler deploy",
+    "seed": "npm run worker:run ./src/scripts/seed.ts",
+    "types": "tsc",
+    "worker:run": "rw-scripts worker-run"
   },
   "dependencies": {
-    "dotenv": "^16.5.0",
-    "drizzle-orm": "beta",
-    "rwsdk": "^0.0.83"
+    "@prisma/adapter-d1": "~6.8.2",
+    "@prisma/client": "~6.8.2",
+    "@simplewebauthn/browser": "^13.1.0",
+    "@simplewebauthn/server": "^13.1.1",
+    "rwsdk": "0.0.89"
   },
   "devDependencies": {
-    "@types/node": "^22.14.1",
+    "@cloudflare/workers-types": "^4.20250620.0",
+    "@types/node": "^22.14.0",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
-    "drizzle-kit": "beta",
-    "tsx": "^4.19.3",
-    "vite": "^6.3.2",
-    "wrangler": "^4.12.1"
+    "prisma": "~6.8.2",
+    "typescript": "^5.8.3",
+    "vibe-rules": "^0.2.31",
+    "vite": "^6.2.6",
+    "wrangler": "^4.16.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma",
+      "sharp",
+      "workerd"
+    ]
   }
 }

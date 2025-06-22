@@ -1,15 +1,16 @@
 {
-  "name": "cloudflare-worker",
-  "private": true,
+  "name": "my-alchemy-app",
+  "version": "0.0.0",
+  "description": "Alchemy Typescript Project",
   "type": "module",
   "scripts": {
-    "deploy": "bun tsx --env-file ../../.env ./alchemy.run.ts",
-    "destroy": "bun tsx --env-file ../../.env ./alchemy.run.ts --destroy"
+    "build": "tsc -b",
+    "deploy": "tsx ./alchemy.run.ts",
+    "destroy": "tsx ./alchemy.run.ts --destroy"
   },
-  "dependencies": {
-    "braintrust": "^0.0.201",
-    "chalk": "^5.4.1",
-    "pluralize": "^8.0.0",
-    "cli-progress": "^3.12.0"
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250620.0",
+    "@types/node": "^24.0.3",
+    "typescript": "^5.8.3"
   }
 }
