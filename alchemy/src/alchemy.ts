@@ -205,7 +205,7 @@ async function _alchemy(
       Scope.globals.push(stage);
     }
     if (mergedOptions?.phase === "destroy") {
-      await destroy(root);
+      await destroy(stage);
       return process.exit(0);
     }
     return stage;
