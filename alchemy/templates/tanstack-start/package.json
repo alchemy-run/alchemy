@@ -1,6 +1,6 @@
 {
   "type": "module",
-  "name": "tanstack-start-example-basic",
+  "name": "tanstack-start",
   "private": true,
   "sideEffects": false,
   "scripts": {
@@ -20,6 +20,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "alchemy": "workspace:*",
     "@cloudflare/workers-types": "^4.20250620.0",
     "@tailwindcss/vite": "^4.1.10",
     "@types/node": "^22.5.4",

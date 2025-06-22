@@ -1,5 +1,5 @@
 {
-  "name": "my-alchemy-app",
+  "name": "typescript",
   "version": "0.0.0",
   "description": "Alchemy Typescript Project",
   "type": "module",
@@ -9,6 +9,7 @@
     "destroy": "tsx ./alchemy.run.ts --destroy"
   },
   "devDependencies": {
+    "alchemy": "workspace:*",
     "@cloudflare/workers-types": "^4.20250620.0",
     "miniflare": "^4.20250617.3",
     "@types/node": "^24.0.3",

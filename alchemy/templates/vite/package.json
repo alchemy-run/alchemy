@@ -1,6 +1,6 @@
 {
   "type": "module",
-  "name": "my-alchemy-app",
+  "name": "vite",
   "private": true,
   "version": "0.0.0",
   "scripts": {
@@ -16,6 +16,7 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "alchemy": "workspace:*",
     "@cloudflare/vite-plugin": "^1.7.4",
     "@cloudflare/workers-types": "^4.20250620.0",
     "miniflare": "^4.20250617.3",

@@ -20,7 +20,6 @@
       "./stacks/**/*.ts",
       "./examples/*/src/**/*.ts",
       "./examples/*/*.ts",
-      "!alchemy/templates/**",
       "!**/node_modules",
       "!examples/cloudflare-tanstack-start/src/routeTree.gen.ts",
       "!examples/cloudflare-redwood/worker-configuration.d.ts",

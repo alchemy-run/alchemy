@@ -1,6 +1,6 @@
 {
   "type": "module",
-  "name": "my-alchemy-app",
+  "name": "astro",
   "version": "0.0.1",
   "scripts": {
     "astro": "astro",
@@ -14,6 +14,7 @@
     "astro": "^5.10.0"
   },
   "devDependencies": {
+    "alchemy": "workspace:*",
     "@astrojs/cloudflare": "^12.6.0",
     "miniflare": "^4.20250617.3",
     "@cloudflare/workers-types": "^4.20250620.0",

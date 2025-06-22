@@ -1,6 +1,6 @@
 {
   "type": "module",
-  "name": "nuxt-app",
+  "name": "nuxt",
   "private": true,
   "scripts": {
     "build": "nuxt build",
@@ -17,6 +17,7 @@
     "vue-router": "^4.5.1"
   },
   "devDependencies": {
+    "alchemy": "workspace:*",
     "@cloudflare/workers-types": "^4.20250620.0",
     "miniflare": "^4.20250617.3",
     "nitro-cloudflare-dev": "^0.2.2",

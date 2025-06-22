@@ -27,7 +27,8 @@
     "alchemy",
     "alchemy-web",
     "examples/*",
-    "stacks"
+    "stacks",
+    "alchemy/templates/*"
   ],
   "devDependencies": {
     "@biomejs/biome": "beta",

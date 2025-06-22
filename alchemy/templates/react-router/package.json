@@ -1,6 +1,6 @@
 {
   "type": "module",
-  "name": "my-alchemy-app",
+  "name": "react-router",
   "private": true,
   "scripts": {
     "build": "vite build",
@@ -21,6 +21,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.0.12",
     "miniflare": "^4.20250617.3",
+    "alchemy": "workspace:*",
     "@react-router/dev": "^7.5.3",
     "@tailwindcss/vite": "^4.1.4",
     "@types/node": "^20",
