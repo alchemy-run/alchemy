@@ -293,7 +293,11 @@ export class Scope {
     return null;
   }
 
-  public async finalize() {
+  public async finalize(force?: boolean) {
+    const shouldForce =
+      force ||
+      this.parent === undefined ||
+      this?.parent?.scopeName === this.root.scopeName;
     if (this.phase === "read") {
       this.rootTelemetryClient?.record({
         event: "app.success",
@@ -301,7 +305,7 @@ export class Scope {
       });
       return;
     }
-    if (this.finalized) {
+    if (this.finalized && !shouldForce) {
       return;
     }
     if (this.parent === undefined && Scope.globals.length > 0) {
@@ -323,10 +327,14 @@ export class Scope {
         resourceIds.filter((id) => !aliveIds.has(id)),
       );
 
-      await this.destroyPendingDeletions();
-      await Promise.all(
-        Array.from(this.children.values()).map((child) => child.finalize()),
-      );
+      if (shouldForce) {
+        await this.destroyPendingDeletions();
+        await Promise.all(
+          Array.from(this.children.values()).map((child) =>
+            child.finalize(shouldForce),
+          ),
+        );
+      }
 
       const orphans = await Promise.all(
         orphanIds.map(async (id) => (await this.state.get(id))!.output),
@@ -334,6 +342,7 @@ export class Scope {
       await destroyAll(orphans, {
         quiet: this.quiet,
         strategy: "sequential",
+        force: shouldForce,
       });
       this.rootTelemetryClient?.record({
         event: "app.success",
