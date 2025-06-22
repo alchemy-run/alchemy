@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@astrojs/cloudflare": "^12.6.0",
+    "miniflare": "^4.20250617.3",
     "@cloudflare/workers-types": "^4.20250620.0",
     "typescript": "^5.8.3"
   }
