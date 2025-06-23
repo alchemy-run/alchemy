@@ -461,13 +461,13 @@ export function buildMiniflareWorkerOptions({
             `Service bindings must have an id. Worker "${name}" is bound to service "${name}" but does not have an id.`,
           );
         }
-        if (binding.dev?.remote === false) {
-          (options.serviceBindings ??= {})[name] = binding.name;
-        } else {
+        if (binding.dev?.remote) {
           (options.serviceBindings ??= {})[name] = {
             name: binding.name,
             remoteProxyConnectionString,
           };
+        } else {
+          (options.serviceBindings ??= {})[name] = binding.name;
         }
         break;
       }
