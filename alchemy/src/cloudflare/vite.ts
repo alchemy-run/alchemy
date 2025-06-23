@@ -1,4 +1,5 @@
 import path from "node:path";
+import { detectPackageManager } from "../util/detect-package-manager.ts";
 import type { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
 import { Website, type WebsiteProps } from "./website.ts";
@@ -17,6 +18,7 @@ export async function Vite<B extends Bindings>(
   props: ViteProps<B>,
 ): Promise<Vite<B>> {
   const defaultAssets = path.join("dist", "client");
+  const packageManager = detectPackageManager();
   return Website(id, {
     ...props,
     spa: true,
@@ -27,5 +29,9 @@ export async function Vite<B extends Bindings>(
             dist: props.assets.dist ?? defaultAssets,
           }
         : (props.assets ?? defaultAssets),
+    dev: props.dev ?? {
+      command: `${packageManager} run dev`,
+      url: "http://localhost:5173",
+    },
   });
 }

@@ -55,11 +55,7 @@ export function buildRemoteBindings(
   for (const [name, binding] of Object.entries(input.bindings ?? {})) {
     if (isRemoteOnlyBinding(binding)) {
       bindings.push(buildRemoteBinding(name, binding));
-    } else if (
-      isRemoteOptionalBinding(binding) &&
-      "dev" in binding &&
-      binding.dev?.remote === true
-    ) {
+    } else if (isRemoteOptionalBinding(binding) && isRemoteEnabled(binding)) {
       bindings.push(buildRemoteBinding(name, binding));
     }
   }
@@ -79,6 +75,15 @@ function isRemoteOnlyBinding(binding: Binding): binding is RemoteBinding {
     typeof binding !== "string" &&
     binding !== Self &&
     REMOTE_ONLY_BINDING_TYPES.includes(binding.type as any)
+  );
+}
+
+function isRemoteEnabled(binding: RemoteBinding): boolean {
+  return (
+    "dev" in binding &&
+    typeof binding.dev === "object" &&
+    "remote" in binding.dev &&
+    !!binding.dev.remote
   );
 }
 
@@ -461,7 +466,7 @@ export function buildMiniflareWorkerOptions({
             `Service bindings must have an id. Worker "${name}" is bound to service "${name}" but does not have an id.`,
           );
         }
-        if (binding.dev?.remote) {
+        if (isRemoteEnabled(binding)) {
           (options.serviceBindings ??= {})[name] = {
             name: binding.name,
             remoteProxyConnectionString,

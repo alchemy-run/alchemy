@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { BUILD_DATE } from "../build-date.ts";
 import type { Context } from "../context.ts";
@@ -271,20 +272,27 @@ export interface BaseWorkerProps<
    * Configuration for local development. By default, when Alchemy is running in development mode,
    * the worker will be emulated locally and available at a randomly selected port.
    */
-  dev?: {
-    /**
-     * Port to use for local development
-     */
-    port?: number;
-    /**
-     * EXPERIMENTAL: Whether to run the worker remotely instead of locally.
-     *
-     * When this is enabled, hot reloading will not work.
-     *
-     * @default false
-     */
-    remote?: boolean;
-  };
+  dev?:
+    | boolean
+    | {
+        /**
+         * Port to use for local development
+         */
+        port?: number;
+        /**
+         * EXPERIMENTAL: Whether to run the worker remotely instead of locally.
+         *
+         * When this is enabled, hot reloading will not work.
+         *
+         * @default false
+         */
+        remote?: boolean;
+      }
+    | {
+        command: string;
+        url: string;
+        cwd?: string;
+      };
 }
 
 export interface InlineWorkerProps<
@@ -909,9 +917,51 @@ export const _Worker = Resource(
       props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
-    if (this.scope.dev && this.phase !== "delete" && !props.dev?.remote) {
+    if (this.scope.dev && this.phase !== "delete" && props.dev !== false) {
       // Get current timestamp
       const now = Date.now();
+
+      if (typeof props.dev === "object" && "command" in props.dev) {
+        const command = props.dev.command.split(" ");
+        const proc = spawn(command[0], command.slice(1), {
+          env: {
+            ...process.env,
+            ...props.env,
+            ALCHEMY_CLOUDFLARE_PERSIST_PATH: path.join(
+              process.cwd(),
+              ".alchemy",
+              "miniflare",
+            ),
+          },
+          stdio: ["inherit", "inherit", "inherit"],
+        });
+        process.on("SIGINT", () => {
+          proc.kill("SIGINT");
+        });
+        return this({
+          type: "service",
+          id,
+          entrypoint: props.entrypoint,
+          name: workerName,
+          compatibilityDate,
+          compatibilityFlags,
+          format: props.format || "esm", // Include format in the output
+          bindings: props.bindings ?? ({} as B),
+          env: props.env,
+          observability: props.observability,
+          createdAt: now,
+          updatedAt: now,
+          eventSources: props.eventSources,
+          url: props.dev.url,
+          dev: props.dev,
+          // Include assets configuration in the output
+          assets: props.assets,
+          // Include cron triggers in the output
+          crons: props.crons,
+          // phantom property
+          Env: undefined!,
+        } as unknown as Worker<B>);
+      }
 
       const sharedOptions: Omit<MiniflareWorkerOptions, "script"> = {
         name: workerName,
