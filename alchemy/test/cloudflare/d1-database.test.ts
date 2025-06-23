@@ -1,6 +1,9 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
-import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import {
+  type CloudflareApi,
+  createCloudflareApi,
+} from "../../src/cloudflare/api.ts";
 import { D1Database, listDatabases } from "../../src/cloudflare/d1-database.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { BRANCH_PREFIX } from "../util.ts";
@@ -192,14 +195,11 @@ describe("D1 Database Resource", async () => {
       expect(database.id).toBeTruthy();
 
       // Now check if the test_migrations_table exists by querying the schema
-      const resp = await api.post(
-        `/accounts/${api.accountId}/d1/database/${database.id}/query`,
-        {
-          sql: "SELECT name FROM sqlite_master WHERE type='table' AND name='test_migrations_table';",
-        },
+      const tables = await getResults(
+        api,
+        database,
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='test_migrations_table';",
       );
-      const data: any = await resp.json();
-      const tables = data.result?.results || data.result?.[0]?.results || [];
 
       expect(tables.length).toBeGreaterThan(0);
       expect(tables[0]?.name).toEqual("test_migrations_table");
@@ -244,15 +244,11 @@ describe("D1 Database Resource", async () => {
       expect(cloned.id).toBeTruthy();
 
       // Verify the cloned data exists in the target database
-      const resp = await api.post(
-        `/accounts/${api.accountId}/d1/database/${cloned.id}/query`,
-        {
-          sql: "SELECT * FROM test_clone WHERE id = 1;",
-        },
+      const results = await getResults(
+        api,
+        cloned,
+        "SELECT * FROM test_clone WHERE id = 1;",
       );
-
-      const data: any = await resp.json();
-      const results = data.result?.[0]?.results || [];
 
       expect(results.length).toEqual(1);
       expect(results[0].name).toEqual("test-data");
@@ -293,18 +289,11 @@ describe("D1 Database Resource", async () => {
       expect(cloned.name).toEqual(targetDb);
       expect(cloned.id).toBeTruthy();
 
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Verify the cloned data exists in the target database
-      const resp = await api.post(
-        `/accounts/${api.accountId}/d1/database/${cloned.id}/query`,
-        {
-          sql: "SELECT * FROM test_clone_by_name WHERE id = 1;",
-        },
+      const results = await getResults(
+        api,
+        cloned,
+        "SELECT * FROM test_clone_by_name WHERE id = 1;",
       );
-
-      const data: any = await resp.json();
-      const results = data.result?.[0]?.results || [];
 
       expect(results.length).toEqual(1);
       expect(results[0].value).toEqual("name-lookup-test");
@@ -345,18 +334,12 @@ describe("D1 Database Resource", async () => {
       expect(clonedDb.name).toEqual(targetDbId);
       expect(clonedDb.id).toBeTruthy();
 
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
       // Verify the cloned data exists in the target database
-      const resp = await api.post(
-        `/accounts/${api.accountId}/d1/database/${clonedDb.id}/query`,
-        {
-          sql: "SELECT * FROM direct_clone_test WHERE id = 1;",
-        },
+      const results = await getResults(
+        api,
+        clonedDb,
+        "SELECT * FROM direct_clone_test WHERE id = 1;",
       );
-
-      const data: any = await resp.json();
-      const results = data.result?.[0]?.results || [];
 
       expect(results.length).toEqual(1);
       expect(results[0].data).toEqual("direct-clone-data");
@@ -478,6 +461,32 @@ describe("D1 Database Resource", async () => {
     }
   }, 120000); // Increased timeout for D1 database operations
 });
+
+async function getResults(
+  api: CloudflareApi,
+  database: D1Database,
+  sql: string,
+): Promise<any[]> {
+  // this query is eventually consistent, so we need to retry
+  // TODO(sam): can we use a D1 Session to ensure strong consistency?
+  for (let i = 0; i < 10; i++) {
+    // Verify the cloned data exists in the target database
+    const resp = await api.post(
+      `/accounts/${api.accountId}/d1/database/${database.id}/query`,
+      {
+        sql,
+      },
+    );
+
+    const data: any = await resp.json();
+    const results = data.result?.[0]?.results || [];
+    if (results.length > 0) {
+      return results;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error("Failed to get results from database");
+}
 
 async function assertDatabaseDeleted(database: D1Database) {
   const api = await createCloudflareApi();
