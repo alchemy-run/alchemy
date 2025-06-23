@@ -32,6 +32,7 @@ import {
   type NoBundleResult,
   bundleWorkerScript,
 } from "./bundle/bundle-worker.ts";
+import { CustomDomain } from "./custom-domain.ts";
 import { isD1Database } from "./d1-database.ts";
 import type { DispatchNamespaceResource } from "./dispatch-namespace.ts";
 import {
@@ -214,27 +215,66 @@ export interface BaseWorkerProps<
    * Routes to create for this worker.
    *
    * Each route maps a URL pattern to this worker script.
+   *
+   * @example
+   * await Worker("my-worker", {
+   *   routes: [
+   *     "sub.example.com/*",
+   *     { pattern: "sub.example.com/*", zoneId: "1234567890" },
+   *   ],
+   * });
    */
-  routes?: Array<{
-    /**
-     * URL pattern for the route
-     * @example "sub.example.com/*"
-     */
-    pattern: string;
-    /**
-     * Zone ID for the route. If not provided, will be automatically inferred from the route pattern.
-     */
-    zoneId?: string;
-    /**
-     * Whether this is a custom domain route
-     */
-    customDomain?: boolean;
-    /**
-     * Whether to adopt an existing route with the same pattern if it exists
-     * @default false
-     */
-    adopt?: boolean;
-  }>;
+  routes?: Array<
+    | string
+    | {
+        /**
+         * URL pattern for the route
+         * @example "sub.example.com/*"
+         */
+        pattern: string;
+        /**
+         * Zone ID for the route. If not provided, will be automatically inferred from the route pattern.
+         */
+        zoneId?: string;
+        /**
+         * Whether to adopt an existing route with the same pattern if it exists
+         * @default false
+         */
+        adopt?: boolean;
+      }
+  >;
+
+  /**
+   * Custom domains to bind to the worker
+   *
+   * @example
+   * await Worker("my-worker", {
+   *   domains: [
+   *     "example.com",
+   *     { name: "example.com", zoneId: "1234567890" },
+   *   ],
+   * });
+   */
+  domains?: (
+    | string
+    | {
+        /**
+         * The domain name to bind to the worker
+         */
+        domainName: string;
+        /**
+         * Zone ID for the domain.
+         *
+         * @default - If not provided, will be automatically inferred from the domain name.
+         */
+        zoneId?: string;
+        /**
+         * Whether to adopt an existing domain if it exists
+         * @default false
+         */
+        adopt?: boolean;
+      }
+  )[];
 
   /**
    * The RPC class to use for the worker.
@@ -367,7 +407,7 @@ export type Worker<
   B extends Bindings | undefined = Bindings | undefined,
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
 > = Resource<"cloudflare::Worker"> &
-  Omit<WorkerProps<B>, "url" | "script" | "routes"> &
+  Omit<WorkerProps<B>, "url" | "script" | "routes" | "domains"> &
   globalThis.Service & {
     /** @internal phantom property */
     __rpc__?: RPC;
@@ -416,6 +456,11 @@ export type Worker<
      * The routes that were created for this worker
      */
     routes?: Route[];
+
+    /**
+     * The custom domains that were created for this worker
+     */
+    domains?: CustomDomain[];
 
     // phantom property (for typeof myWorker.Env)
     Env: B extends Bindings
@@ -1069,28 +1114,70 @@ export const _Worker = Resource(
 
     const { workerUrl, now } = await uploadWorkerScript(props);
 
-    // Create routes if provided and capture their outputs
-    let createdRoutes: Route[] = [];
-    if (props.routes && props.routes.length > 0) {
-      // Validate for duplicate patterns
-      const patterns = props.routes.map((route) => route.pattern);
-      const duplicates = patterns.filter(
-        (pattern, index) => patterns.indexOf(pattern) !== index,
+    function ensureNoDuplicates(name: string, items: string[]) {
+      const duplicates = items.filter(
+        (pattern, index) => items.indexOf(pattern) !== index,
       );
       if (duplicates.length > 0) {
-        throw new Error(
-          `Duplicate route patterns found: ${duplicates.join(", ")}`,
-        );
+        throw new Error(`Duplicate ${name} found: ${duplicates.join(", ")}`);
       }
+    }
+
+    let createdDomains: CustomDomain[] | undefined;
+    if (props.domains?.length) {
+      ensureNoDuplicates(
+        "Custom Domain",
+        props.domains.map((domain) =>
+          typeof domain === "string" ? domain : domain.domainName,
+        ),
+      );
+
+      createdDomains = await Promise.all(
+        props.domains.map(async (customDomain) => {
+          const domainName =
+            typeof customDomain === "string"
+              ? customDomain
+              : customDomain.domainName;
+          return await CustomDomain(domainName, {
+            workerName,
+            name: domainName,
+            zoneId:
+              typeof customDomain === "string"
+                ? undefined
+                : customDomain.zoneId,
+            adopt:
+              typeof customDomain === "string"
+                ? false
+                : (customDomain.adopt ?? props.adopt),
+          });
+        }),
+      );
+    }
+
+    // Create routes if provided and capture their outputs
+    let createdRoutes: Route[] | undefined;
+    if (props.routes && props.routes.length > 0) {
+      ensureNoDuplicates(
+        "Route",
+        props.routes.map((route) =>
+          typeof route === "string" ? route : route.pattern,
+        ),
+      );
 
       // Create Route resources for each route and capture their outputs
       createdRoutes = await Promise.all(
         props.routes.map(async (routeConfig) => {
-          return await Route(routeConfig.pattern, {
-            pattern: routeConfig.pattern,
+          const pattern =
+            typeof routeConfig === "string" ? routeConfig : routeConfig.pattern;
+          return await Route(pattern, {
+            pattern,
             script: workerName,
-            zoneId: routeConfig.zoneId, // Route resource will handle inference if not provided
-            adopt: routeConfig.adopt ?? false,
+            zoneId:
+              typeof routeConfig === "string" ? undefined : routeConfig.zoneId, // Route resource will handle inference if not provided
+            adopt:
+              typeof routeConfig === "string"
+                ? false
+                : (routeConfig.adopt ?? props.adopt),
             accountId: props.accountId,
             apiKey: props.apiKey,
             apiToken: props.apiToken,
@@ -1147,7 +1234,9 @@ export const _Worker = Resource(
       // Include cron triggers in the output
       crons: props.crons,
       // Include the created routes in the output
-      routes: createdRoutes.length > 0 ? createdRoutes : undefined,
+      routes: createdRoutes,
+      // Include the created domains in the output
+      domains: createdDomains,
       // Include the dispatch namespace in the output
       namespace: props.namespace,
       // Include version information in the output

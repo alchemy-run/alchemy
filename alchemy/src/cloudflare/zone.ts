@@ -2,7 +2,11 @@ import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
-import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
+import {
+  createCloudflareApi,
+  type CloudflareApi,
+  type CloudflareApiOptions,
+} from "./api.ts";
 import type {
   AlwaysUseHTTPSValue,
   AutomaticHTTPSRewritesValue,
@@ -554,7 +558,7 @@ async function getZoneSettings(
  *
  * @example
  * // Look up a zone by domain name
- * const zone = await getZoneByDomain("example.com");
+ * const zone = await getZoneByDomain(api, "example.com");
  * if (zone) {
  *   console.log(`Zone ID: ${zone.id}`);
  *   console.log(`Nameservers: ${zone.nameservers.join(", ")}`);
@@ -562,17 +566,12 @@ async function getZoneSettings(
  *
  * @example
  * // Look up a zone with custom API options
- * const zone = await getZoneByDomain("example.com", {
- *   apiToken: myApiToken,
- *   accountId: "my-account-id"
- * });
+ * const zone = await getZoneByDomain(api, "example.com");
  */
 export async function getZoneByDomain(
+  api: CloudflareApi,
   domainName: string,
-  options: Partial<CloudflareApiOptions> = {},
 ): Promise<ZoneData | null> {
-  const api = await createCloudflareApi(options);
-
   const response = await api.get(
     `/zones?name=${encodeURIComponent(domainName)}`,
   );

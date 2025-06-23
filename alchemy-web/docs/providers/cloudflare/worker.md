@@ -330,6 +330,26 @@ const worker = await Worker("api", {
 > [!TIP]
 > See the [Route](./route.md) for more information.
 
+## Custom Domains
+
+Bind custom domains directly to your worker for a simpler routing setup:
+
+```ts
+import { Worker } from "alchemy/cloudflare";
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
+  domains: ["api.example.com", "admin.example.com"],
+});
+
+// Access the created domains
+console.log(worker.domains); // Array of created CustomDomain resources
+```
+
+> [!TIP]
+> See the [Routes and Domains](https://developers.cloudflare.com/workers/configuration/routing/#what-is-best-for-me) Cloudflare docs to help decide between when to use a Route vs a Domain.
+
 ## Workers for Platforms
 
 Deploy workers to dispatch namespaces for multi-tenant architectures using Cloudflare's Workers for Platforms:
