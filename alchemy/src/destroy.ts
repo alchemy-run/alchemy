@@ -108,10 +108,9 @@ export async function destroy<Type extends string>(
       return;
     }
 
-    const pendingDeletions =
-      await state.output[ResourceScope].get<PendingDeletions>(
-        "pendingDeletions",
-      );
+    const pendingDeletions = await state.output[ResourceScope]
+      .get<PendingDeletions>("pendingDeletions")
+      .catch(() => []);
     const pendingDeletion = pendingDeletions?.find(
       (deletion) => deletion.resource[ResourceID] === instance[ResourceID],
     );
