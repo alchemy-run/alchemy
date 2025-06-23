@@ -1,0 +1,83 @@
+import { z } from "zod";
+
+export const TEMPLATE_DEFINITIONS = [
+  { name: "typescript", description: "TypeScript Worker" },
+  { name: "vite", description: "React Vite" },
+  { name: "astro", description: "Astro SSR" },
+  { name: "react-router", description: "React Router" },
+  { name: "sveltekit", description: "SvelteKit" },
+  { name: "tanstack-start", description: "TanStack Start" },
+  { name: "rwsdk", description: "Redwood SDK" },
+  { name: "nuxt", description: "Nuxt.js" },
+] as const;
+
+const templateNames = TEMPLATE_DEFINITIONS.map((t) => t.name);
+
+export const TemplateSchema = z
+  .enum(templateNames as [string, ...string[]])
+  .describe("Project template type");
+export type TemplateType = z.infer<typeof TemplateSchema>;
+
+export const PackageManagerSchema = z
+  .enum(["bun", "npm", "pnpm", "yarn"])
+  .describe("Package manager");
+export type PackageManager = z.infer<typeof PackageManagerSchema>;
+
+export const ProjectNameSchema = z
+  .string()
+  .min(1, "Project name cannot be empty")
+  .max(255, "Project name must be less than 255 characters")
+  .refine(
+    (name) => name === "." || !name.startsWith("."),
+    "Project name cannot start with a dot (except for '.')",
+  )
+  .refine(
+    (name) => name === "." || !name.startsWith("-"),
+    "Project name cannot start with a dash",
+  )
+  .refine((name) => {
+    const invalidChars = ["<", ">", ":", '"', "|", "?", "*"];
+    return !invalidChars.some((char) => name.includes(char));
+  }, "Project name contains invalid characters")
+  .refine(
+    (name) => name.toLowerCase() !== "node_modules",
+    "Project name is reserved",
+  )
+  .describe("Project name or path");
+export type ProjectName = z.infer<typeof ProjectNameSchema>;
+
+export interface ProjectContext {
+  name: string;
+  path: string;
+  template: TemplateType;
+  packageManager: PackageManager;
+  isTest: boolean;
+  options: CreateInput;
+}
+
+export interface WebsiteOptions {
+  entrypoint?: string;
+  tsconfig?: string;
+  scripts?: Record<string, string>;
+  include?: string[];
+  types?: string[];
+  devDependencies?: string[];
+  dependencies?: string[];
+}
+
+export type CreateInput = {
+  name?: string;
+  template?: TemplateType;
+  packageManager?: PackageManager;
+  bun?: boolean;
+  npm?: boolean;
+  pnpm?: boolean;
+  yarn?: boolean;
+  yes?: boolean;
+  overwrite?: boolean;
+  install?: boolean;
+};
+
+export type CLIInput = CreateInput & {
+  projectDirectory?: string;
+};

@@ -1,0 +1,6 @@
+{
+  "name": "website",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-04-20",
+  "assets": { "binding": "ASSETS", "directory": "dist/client" }
+}
