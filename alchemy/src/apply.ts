@@ -12,7 +12,7 @@ import {
   type Resource,
   type ResourceProps,
 } from "./resource.ts";
-import { Scope } from "./scope.ts";
+import { Scope, type PendingDeletions } from "./scope.ts";
 import { serialize } from "./serde.ts";
 import type { State } from "./state.ts";
 import { formatFQN } from "./util/cli.ts";
@@ -32,6 +32,8 @@ export function apply<Out extends Resource>(
 ): Promise<Awaited<Out>> {
   return _apply(resource, props, options);
 }
+
+export class ReplacedSignal extends Error {}
 
 async function _apply<Out extends Resource>(
   resource: PendingResource<Out>,
@@ -88,6 +90,7 @@ async function _apply<Out extends Resource>(
       };
       await scope.state.set(resource[ResourceID], state);
     }
+    const oldOutput = state.output;
 
     const alwaysUpdate =
       options?.alwaysUpdate ?? provider.options?.alwaysUpdate ?? false;
@@ -162,33 +165,83 @@ async function _apply<Out extends Resource>(
       props: state.oldProps,
       state,
       replace: () => {
+        if (phase === "create") {
+          throw new Error(
+            `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} cannot be replaced in create phase.`,
+          );
+        }
         if (isReplaced) {
           logger.warn(
             `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} is already marked as REPLACE`,
           );
-          return;
         }
+
         isReplaced = true;
+        throw new ReplacedSignal();
       },
     });
 
-    const output = await alchemy.run(
-      resource[ResourceID],
-      {
-        isResource: true,
-        parent: scope,
-      },
-      async (scope) => {
-        options?.resolveInnerScope?.(scope);
-        return provider.handler.bind(ctx)(resource[ResourceID], props);
-      },
-    );
+    let output: Resource<string>;
+    try {
+      output = await alchemy.run(
+        resource[ResourceID],
+        {
+          isResource: true,
+          parent: scope,
+        },
+        async (scope) => {
+          options?.resolveInnerScope?.(scope);
+          return provider.handler.bind(ctx)(resource[ResourceID], props);
+        },
+      );
+    } catch (error) {
+      if (error instanceof ReplacedSignal) {
+        if (scope.children.get(resource[ResourceID])?.children.size! > 0) {
+          throw new Error(
+            `Resource ${resource[ResourceFQN]} has children and cannot be replaced.`,
+          );
+        }
+
+        output = await alchemy.run(
+          resource[ResourceID],
+          { isResource: true, parent: scope },
+          async () =>
+            provider.handler.bind(
+              context({
+                scope,
+                phase: "create",
+                kind: resource[ResourceKind],
+                id: resource[ResourceID],
+                fqn: resource[ResourceFQN],
+                seq: resource[ResourceSeq],
+                props: state.props,
+                state,
+                replace: () => {
+                  throw new Error(
+                    `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} cannot be replaced in create phase.`,
+                  );
+                },
+              }),
+            )(resource[ResourceID], props),
+        );
+
+        const pendingDeletions =
+          (await scope.get<PendingDeletions>("pendingDeletions")) ?? [];
+        pendingDeletions.push({
+          resource: oldOutput,
+          oldProps: state.oldProps,
+        });
+        await scope.set("pendingDeletions", pendingDeletions);
+      } else {
+        throw error;
+      }
+    }
     if (!quiet) {
       logger.task(resource[ResourceFQN], {
         prefix: phase === "create" ? "created" : "updated",
         prefixColor: "greenBright",
         resource: formatFQN(resource[ResourceFQN]),
-        message: `${phase === "create" ? "Created" : "Updated"} Resource`,
+        message: `${phase === "create" ? "Created" : isReplaced ? "Replaced" : "Updated"} Resource`,
         status: "success",
       });
     }
@@ -213,9 +266,6 @@ async function _apply<Out extends Resource>(
       props,
       // deps: [...deps],
     });
-    // if (output !== undefined) {
-    //   resource[Provide](output as Out);
-    // }
     return output as any;
   } catch (error) {
     scope.telemetryClient.record({

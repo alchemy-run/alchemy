@@ -53,6 +53,7 @@ describe("Worker Resource", () => {
       // Create a worker with an explicit name
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           addEventListener('fetch', event => {
             event.respondWith(new Response('Hello world!', { status: 200 }));
@@ -75,6 +76,7 @@ describe("Worker Resource", () => {
 
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: updatedScript,
         format: "cjs",
       });
@@ -121,6 +123,7 @@ describe("Worker Resource", () => {
 
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: updatedEsmScript,
         format: "esm",
       });
@@ -140,6 +143,7 @@ describe("Worker Resource", () => {
       // First create with ESM format
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {
@@ -155,6 +159,7 @@ describe("Worker Resource", () => {
       // Update to CJS format
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           addEventListener('fetch', event => {
             event.respondWith(new Response('Hello world!', { status: 200 }));
@@ -272,6 +277,7 @@ describe("Worker Resource", () => {
     // Create a KV namespace
     const testKv = await KVNamespace("test-kv-namespace", {
       title: `${BRANCH_PREFIX} Test KV Namespace 1`,
+      adopt: true,
       values: [
         {
           key: "testKey",
@@ -288,6 +294,7 @@ describe("Worker Resource", () => {
         name: workerName,
         script: multiBindingsWorkerScript,
         format: "esm",
+        adopt: true,
       });
 
       expect(worker.id).toBeTruthy();
@@ -303,6 +310,7 @@ describe("Worker Resource", () => {
           TEST_KV: testKv,
           API_KEY: "test-api-key-value",
         },
+        adopt: true,
       });
 
       expect(worker.id).toBeTruthy();
@@ -363,6 +371,7 @@ describe("Worker Resource", () => {
           APP_DEBUG: "true",
         },
         url: true, // Enable workers.dev URL to test the worker
+        adopt: true,
       });
 
       expect(worker.id).toBeTruthy();
@@ -399,6 +408,7 @@ describe("Worker Resource", () => {
           NEW_VAR: "new-value",
         },
         url: true,
+        adopt: true,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -497,6 +507,7 @@ describe("Worker Resource", () => {
         bindings: {
           ASSETS: assets,
         },
+        adopt: true,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 1000));

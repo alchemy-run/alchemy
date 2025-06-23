@@ -1,5 +1,7 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { bundle } from "../../esbuild/index.ts";
+import { exists } from "../../util/exists.ts";
 import { withExponentialBackoff } from "../../util/retry.ts";
 import { handleApiError } from "../api-error.ts";
 import type { CloudflareApi } from "../api.ts";
@@ -151,7 +153,7 @@ export async function upsertStateStoreWorker(
   );
 
   // Put the worker with migration tag v1
-  const response = await api.post(
+  const response = await api.put(
     `/accounts/${api.accountId}/workers/scripts/${workerName}`,
     formData,
   );
@@ -207,7 +209,7 @@ export async function getAccountSubdomain(api: CloudflareApi) {
   const res = await api.get(`/accounts/${api.accountId}/workers/subdomain`);
   if (!res.ok) {
     throw new Error(
-      `Failed to get account subdomain: ${res.status} ${res.statusText}`,
+      `Failed to get account subdomain: ${res.status} ${res.statusText}: ${await res.text().catch(() => "unknown error")}`,
     );
   }
   const json: { result: { subdomain: string } } = await res.json();
@@ -217,8 +219,15 @@ export async function getAccountSubdomain(api: CloudflareApi) {
 }
 
 async function bundleWorkerScript() {
+  const thisDir =
+    typeof __dirname !== "undefined"
+      ? __dirname
+      : path.dirname(fileURLToPath(import.meta.url));
+  // we can be running from .ts or .js, so resolve it defensively
+  const workerTs = path.join(thisDir, "worker.ts");
+  const workerJs = path.join(thisDir, "worker.js");
   const result = await bundle({
-    entryPoint: path.join(__dirname, "worker.ts"),
+    entryPoint: (await exists(workerTs)) ? workerTs : workerJs,
     bundle: true,
     format: "esm",
     target: "es2022",
@@ -228,5 +237,7 @@ async function bundleWorkerScript() {
   if (!result.outputFiles?.[0]) {
     throw new Error("Failed to bundle worker.ts");
   }
-  return result.outputFiles[0].text;
+  return new File([result.outputFiles[0].text], "worker.js", {
+    type: "application/javascript+module",
+  });
 }

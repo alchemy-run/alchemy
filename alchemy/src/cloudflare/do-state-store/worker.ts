@@ -63,10 +63,20 @@ export default class extends WorkerEntrypoint<Env> {
     if (!token) {
       return false;
     }
-    return timingSafeEqual(
-      new TextEncoder().encode(token),
-      new TextEncoder().encode(this.env.DOFS_TOKEN),
+
+    // Convert both to fixed-length buffers
+    const expectedBuffer = Buffer.from(this.env.DOFS_TOKEN, "utf8");
+    const providedBuffer = Buffer.alloc(expectedBuffer.length);
+
+    // Copy provided data, truncating or padding as needed
+    Buffer.from(token, "utf8").copy(
+      providedBuffer,
+      0,
+      0,
+      expectedBuffer.length,
     );
+
+    return timingSafeEqual(expectedBuffer, providedBuffer);
   }
 
   private getStub(request: Request): DurableObjectStub<DOFSStateStore> {

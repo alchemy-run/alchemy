@@ -1,15 +1,31 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Phase } from "./alchemy.ts";
-import { destroyAll } from "./destroy.ts";
+import { destroy, destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
-import { ResourceID, type PendingResource } from "./resource.ts";
-import type { StateStore, StateStoreType } from "./state.ts";
+import {
+  ResourceFQN,
+  ResourceID,
+  ResourceKind,
+  ResourceScope,
+  ResourceSeq,
+  type PendingResource,
+  type Resource,
+  type ResourceProps,
+} from "./resource.ts";
+import type { State, StateStore, StateStoreType } from "./state.ts";
 import {
   createDummyLogger,
   createLoggerInstance,
   type LoggerApi,
 } from "./util/cli.ts";
+import { AsyncMutex } from "./util/mutex.ts";
 import type { ITelemetryClient } from "./util/telemetry/client.ts";
+
+export class RootScopeStateAttemptError extends Error {
+  constructor() {
+    super("Root scope cannot contain state");
+  }
+}
 
 export interface ScopeOptions {
   appName?: string;
@@ -23,6 +39,11 @@ export interface ScopeOptions {
   telemetryClient?: ITelemetryClient;
   logger?: LoggerApi;
 }
+
+export type PendingDeletions = Array<{
+  resource: Resource<string>;
+  oldProps?: ResourceProps;
+}>;
 
 // TODO: support browser
 const DEFAULT_STAGE = process.env.ALCHEMY_STAGE ?? process.env.USER ?? "dev";
@@ -47,7 +68,7 @@ export class Scope {
     new AsyncLocalStorage<Scope>());
   public static globals: Scope[] = (globalThis.__ALCHEMY_GLOBALS__ ??= []);
 
-  public static get(): Scope | undefined {
+  public static getScope(): Scope | undefined {
     const scope = Scope.storage.getStore();
     if (!scope) {
       if (Scope.globals.length > 0) {
@@ -63,7 +84,7 @@ export class Scope {
   }
 
   public static get current(): Scope {
-    const scope = Scope.get();
+    const scope = Scope.getScope();
     if (!scope) throw new Error("Not running within an Alchemy Scope");
     return scope;
   }
@@ -81,6 +102,7 @@ export class Scope {
   public readonly phase: Phase;
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
+  public readonly dataMutex: AsyncMutex;
 
   private isErrored = false;
   private finalized = false;
@@ -96,7 +118,7 @@ export class Scope {
         `Scope name ${this.scopeName} cannot contain double colons`,
       );
     }
-    this.parent = options.parent ?? Scope.get();
+    this.parent = options.parent ?? Scope.getScope();
     this.stage = options?.stage ?? this.parent?.stage ?? DEFAULT_STAGE;
     this.parent?.children.set(this.scopeName!, this);
     this.quiet = options.quiet ?? this.parent?.quiet ?? false;
@@ -131,6 +153,7 @@ export class Scope {
     }
     this.telemetryClient =
       options.telemetryClient ?? this.parent?.telemetryClient!;
+    this.dataMutex = new AsyncMutex();
   }
 
   public get root(): Scope {
@@ -141,7 +164,7 @@ export class Scope {
     return root;
   }
 
-  public async delete(resourceID: ResourceID) {
+  public async deleteResource(resourceID: ResourceID) {
     await this.state.delete(resourceID);
     this.resources.delete(resourceID);
   }
@@ -158,7 +181,7 @@ export class Scope {
     if (this.parent) {
       return [...this.parent.chain, ...thisScope];
     }
-    return [...app, this.stage, ...thisScope];
+    return [...app, ...thisScope];
   }
 
   public fail() {
@@ -177,6 +200,78 @@ export class Scope {
 
   public fqn(resourceID: ResourceID): string {
     return [...this.chain, resourceID].join("/");
+  }
+
+  /**
+   * Centralizes the "lock → locate the right scope → hand the caller a live
+   * ScopeState instance and a persist() helper".
+   *
+   * @param fn   Your operation on the scope state.
+   *             • `state` is already resolved and, if we're at the root, created.
+   *             • `persist` will write the (possibly-mutated) state back.
+   */
+  private async withScopeState<R>(
+    fn: (
+      state: State<string, ResourceProps | undefined, Resource<string>>, // current state for this.scopeName
+      persist: (
+        next: State<string, ResourceProps | undefined, Resource<string>>,
+      ) => Promise<void>, // helper to save changes
+    ) => Promise<R>,
+  ): Promise<R> {
+    return this.dataMutex.lock(async () => {
+      // 1. We must know where to look.
+      if (!this.parent || !this.scopeName) {
+        throw new RootScopeStateAttemptError();
+      }
+
+      // 2. Pull (or lazily create) the state bucket we care about.
+      const isRoot = this.parent.scopeName === this.root.scopeName;
+      const state =
+        (await this.parent.state.get(this.scopeName)) ??
+        (isRoot
+          ? {
+              //todo(michael): should this have a different type cause its root?
+              kind: "alchemy::Scope",
+              id: this.scopeName!,
+              fqn: this.root.fqn(this.scopeName!),
+              seq: this.seq(),
+              status: "created",
+              data: {},
+              output: {
+                [ResourceID]: this.scopeName!,
+                [ResourceFQN]: this.root.fqn(this.scopeName!),
+                [ResourceKind]: "alchemy::Scope",
+                [ResourceScope]: this,
+                [ResourceSeq]: this.seq(),
+              },
+              props: {},
+            }
+          : undefined);
+
+      if (!state) throw new RootScopeStateAttemptError();
+
+      return fn(state, (updated) =>
+        this.parent!.state.set(this.scopeName!, updated),
+      );
+    });
+  }
+
+  public async set<T>(key: string, value: T): Promise<void> {
+    return this.withScopeState<void>(async (state, persist) => {
+      state.data[key] = value;
+      await persist(state); // only one line to save!
+    });
+  }
+
+  public async get<T>(key: string): Promise<T> {
+    return this.withScopeState<T>(async (state) => state.data[key]);
+  }
+
+  public async delete(key: string): Promise<void> {
+    return this.withScopeState<void>(async (state, persist) => {
+      delete state.data[key];
+      await persist(state);
+    });
   }
 
   public async run<T>(fn: (scope: Scope) => Promise<T>): Promise<T> {
@@ -198,7 +293,11 @@ export class Scope {
     return null;
   }
 
-  public async finalize() {
+  public async finalize(force?: boolean) {
+    const shouldForce =
+      force ||
+      this.parent === undefined ||
+      this?.parent?.scopeName === this.root.scopeName;
     if (this.phase === "read") {
       this.rootTelemetryClient?.record({
         event: "app.success",
@@ -206,7 +305,7 @@ export class Scope {
       });
       return;
     }
-    if (this.finalized) {
+    if (this.finalized && !shouldForce) {
       return;
     }
     if (this.parent === undefined && Scope.globals.length > 0) {
@@ -227,12 +326,23 @@ export class Scope {
       const orphanIds = Array.from(
         resourceIds.filter((id) => !aliveIds.has(id)),
       );
+
+      if (shouldForce) {
+        await this.destroyPendingDeletions();
+        await Promise.all(
+          Array.from(this.children.values()).map((child) =>
+            child.finalize(shouldForce),
+          ),
+        );
+      }
+
       const orphans = await Promise.all(
         orphanIds.map(async (id) => (await this.state.get(id))!.output),
       );
       await destroyAll(orphans, {
         quiet: this.quiet,
         strategy: "sequential",
+        force: shouldForce,
       });
       this.rootTelemetryClient?.record({
         event: "app.success",
@@ -248,6 +358,31 @@ export class Scope {
     }
 
     await this.rootTelemetryClient?.finalize();
+  }
+
+  public async destroyPendingDeletions() {
+    const pendingDeletions =
+      (await this.get<PendingDeletions>("pendingDeletions").catch((e) => {
+        if (e instanceof RootScopeStateAttemptError) {
+          return [];
+        }
+        throw e;
+      })) ?? [];
+    if (pendingDeletions) {
+      for (const { resource, oldProps } of pendingDeletions) {
+        //todo(michael): ugly hack due to the way scope is serialized
+        const realResource = this.resources.get(resource[ResourceID])!;
+        resource[ResourceScope] = realResource?.[ResourceScope] ?? this;
+        await destroy(resource, {
+          quiet: this.quiet,
+          strategy: "sequential",
+          replace: {
+            props: oldProps,
+            output: resource,
+          },
+        });
+      }
+    }
   }
 
   /**

@@ -196,7 +196,8 @@ export class CloudflareApi {
       (error) =>
         error instanceof InternalError ||
         error instanceof TooManyRequestsError ||
-        error instanceof ForbiddenError,
+        error instanceof ForbiddenError ||
+        error.code === "ECONNRESET",
       10, // Maximum 10 attempts (1 initial + 9 retries)
       1000, // Start with 1s delay, will exponentially increase
     );

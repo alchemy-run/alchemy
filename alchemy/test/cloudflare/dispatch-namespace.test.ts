@@ -94,6 +94,7 @@ describe("Dispatch Namespace Resource", () => {
       // 2. Create a worker in the dispatch namespace
       targetWorker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {
@@ -107,6 +108,7 @@ describe("Dispatch Namespace Resource", () => {
       // 3. Create a worker bound to the namespace (dispatcher)
       dispatcherWorker = await Worker(dispatcherWorkerName, {
         name: dispatcherWorkerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {
@@ -184,6 +186,7 @@ describe("Dispatch Namespace Resource", () => {
       // 4. Create a worker in the dispatch namespace with asset bindings
       assetWorker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {
@@ -201,6 +204,7 @@ describe("Dispatch Namespace Resource", () => {
       // 5. Create a dispatcher worker that routes to the asset worker
       dispatcherWorker = await Worker(dispatcherWorkerName, {
         name: dispatcherWorkerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {
