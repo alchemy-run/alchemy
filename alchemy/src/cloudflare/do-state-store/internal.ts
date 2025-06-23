@@ -153,7 +153,7 @@ export async function upsertStateStoreWorker(
   );
 
   // Put the worker with migration tag v1
-  const response = await api.post(
+  const response = await api.put(
     `/accounts/${api.accountId}/workers/scripts/${workerName}`,
     formData,
   );
@@ -219,5 +219,7 @@ async function bundleWorkerScript() {
   if (!result.outputFiles?.[0]) {
     throw new Error("Failed to bundle worker.ts");
   }
-  return result.outputFiles[0].text;
+  return new File([result.outputFiles[0].text], "worker.js", {
+    type: "application/javascript+module",
+  });
 }

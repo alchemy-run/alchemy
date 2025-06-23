@@ -15,7 +15,6 @@ import { getContentType } from "../util/content-type.ts";
 import { DeferredPromise } from "../util/deferred-promise.ts";
 import { logger } from "../util/logger.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
-import { slugify } from "../util/slugify.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   type CloudflareApi,
@@ -1297,7 +1296,7 @@ export const _Worker = Resource(
         }
         // We always "adopt" when publishing versions
       } else if (!props.adopt) {
-        await assertWorkerDoesNotExist(this, api, workerName);
+        await assertWorkerDoesNotExist(api, workerName);
       }
     }
 
@@ -1664,8 +1663,7 @@ export async function checkWorkerExists(
   return response.status === 200;
 }
 
-export async function assertWorkerDoesNotExist<B extends Bindings>(
-  ctx: Context<Worker<B>>,
+export async function assertWorkerDoesNotExist(
   api: CloudflareApi,
   workerName: string,
 ) {
@@ -1682,14 +1680,6 @@ export async function assertWorkerDoesNotExist<B extends Bindings>(
       throw new Error(
         `Worker exists but failed to fetch metadata: ${response.status} ${response.statusText}`,
       );
-    }
-
-    if (
-      metadata.default_environment?.script.tags.includes(
-        `alchemy:id:${slugify(ctx.fqn)}`,
-      )
-    ) {
-      return true;
     }
 
     throw new Error(

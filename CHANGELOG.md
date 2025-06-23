@@ -1,3 +1,13 @@
+## v0.38.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Do state store fails to upload &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/465 [<samp>(ca966)</samp>](https://github.com/sam-goodwin/alchemy/commit/ca966235)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.38.0...v0.38.1)
+
+---
+
 ## v0.38.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
