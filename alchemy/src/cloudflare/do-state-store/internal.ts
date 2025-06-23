@@ -95,7 +95,7 @@ export class DOStateStoreClient {
   }
 }
 
-const TAG = "alchemy-state-store:2025-06-03";
+const TAG = "alchemy-state-store:2025-06-23";
 
 const cache = new Map<string, string>();
 
@@ -116,12 +116,13 @@ export async function upsertStateStoreWorker(
     return;
   }
   const formData = new FormData();
-  formData.append("worker.js", await getWorkerTemplate("do-state-store"));
+  const worker = await getWorkerTemplate("do-state-store");
+  formData.append(worker.name, worker);
   formData.append(
     "metadata",
     new Blob([
       JSON.stringify({
-        main_module: "worker.js",
+        main_module: worker.name,
         compatibility_date: "2025-06-01",
         compatibility_flags: ["nodejs_compat"],
         bindings: [
