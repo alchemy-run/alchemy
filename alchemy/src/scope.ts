@@ -202,81 +202,75 @@ export class Scope {
     return [...this.chain, resourceID].join("/");
   }
 
-  private createRootState(): State<"alchemy::Scope"> {
-    return {
-      //todo(michael): should this have a different type cause its root?
-      kind: "alchemy::Scope",
-      id: this.scopeName!,
-      fqn: this.root.fqn(this.scopeName!),
-      seq: this.seq(),
-      status: "created",
-      data: {},
-      output: {
-        [ResourceID]: this.scopeName!,
-        [ResourceFQN]: this.root.fqn(this.scopeName!),
-        [ResourceKind]: "alchemy::Scope",
-        [ResourceScope]: this,
-        [ResourceSeq]: this.seq(),
-      },
-      props: {},
-    };
+  /**
+   * Centralizes the "lock → locate the right scope → hand the caller a live
+   * ScopeState instance and a persist() helper".
+   *
+   * @param fn   Your operation on the scope state.
+   *             • `state` is already resolved and, if we're at the root, created.
+   *             • `persist` will write the (possibly-mutated) state back.
+   */
+  private async withScopeState<R>(
+    fn: (
+      state: State<string, ResourceProps | undefined, Resource<string>>, // current state for this.scopeName
+      persist: (
+        next: State<string, ResourceProps | undefined, Resource<string>>,
+      ) => Promise<void>, // helper to save changes
+    ) => Promise<R>,
+  ): Promise<R> {
+    return this.dataMutex.lock(async () => {
+      // 1. We must know where to look.
+      if (!this.parent || !this.scopeName) {
+        throw new RootScopeStateAttemptError();
+      }
+
+      // 2. Pull (or lazily create) the state bucket we care about.
+      const isRoot = this.parent.scopeName === this.root.scopeName;
+      const state =
+        (await this.parent.state.get(this.scopeName)) ??
+        (isRoot
+          ? {
+              //todo(michael): should this have a different type cause its root?
+              kind: "alchemy::Scope",
+              id: this.scopeName!,
+              fqn: this.root.fqn(this.scopeName!),
+              seq: this.seq(),
+              status: "created",
+              data: {},
+              output: {
+                [ResourceID]: this.scopeName!,
+                [ResourceFQN]: this.root.fqn(this.scopeName!),
+                [ResourceKind]: "alchemy::Scope",
+                [ResourceScope]: this,
+                [ResourceSeq]: this.seq(),
+              },
+              props: {},
+            }
+          : undefined);
+
+      if (!state) throw new RootScopeStateAttemptError();
+
+      return fn(state, (updated) =>
+        this.parent!.state.set(this.scopeName!, updated),
+      );
+    });
   }
 
   public async set<T>(key: string, value: T): Promise<void> {
-    return this.dataMutex.lock(async () => {
-      // Get the current scope state from the parent (if it exists)
-      if (this.parent != null && this.scopeName) {
-        const scopeState = await this.parent.state.get(this.scopeName);
-        if (scopeState) {
-          scopeState.data[key] = value;
-          return await this.parent.state.set(this.scopeName, scopeState);
-        }
-      }
-      if (this?.parent?.scopeName === this.root.scopeName) {
-        const scopeState =
-          (await this?.parent?.state.get(this.scopeName!)) ??
-          this.createRootState();
-        scopeState.data[key] = value;
-        await this.parent.state.set(this.scopeName!, scopeState);
-        return;
-      }
-      throw new RootScopeStateAttemptError();
+    return this.withScopeState<void>(async (state, persist) => {
+      state.data[key] = value;
+      await persist(state); // only one line to save!
     });
   }
 
   public async get<T>(key: string): Promise<T> {
-    return this.dataMutex.lock(async () => {
-      // Get the current scope state from the parent (if it exists)
-      if (this.parent && this.scopeName) {
-        const scopeState = await this.parent.state.get(this.scopeName);
-        return scopeState?.data[key];
-      }
-      if (this?.parent?.scopeName === this.root.scopeName) {
-        const scopeState =
-          (await this?.parent?.state.get(this.scopeName!)) ??
-          this.createRootState();
-        return scopeState.data[key];
-      }
-      throw new RootScopeStateAttemptError();
-    });
+    return this.withScopeState<T>(async (state) => state.data[key]);
   }
 
   public async delete(key: string): Promise<void> {
-    return this.dataMutex.lock(async () => {
-      if (this.parent && this.scopeName) {
-        const scopeState = await this.parent.state.get(this.scopeName);
-        if (scopeState) {
-          delete scopeState.data[key];
-          return await this.parent.state.set(this.scopeName, scopeState);
-        }
-      }
-      if (this?.parent?.scopeName === this.root.scopeName) {
-        const scopeState =
-          (await this?.parent?.state.get(this.scopeName!)) ??
-          this.createRootState();
-        return scopeState.data[key];
-      }
-      throw new RootScopeStateAttemptError();
+    return this.withScopeState<void>(async (state, persist) => {
+      delete state.data[key];
+      await persist(state);
     });
   }
 
