@@ -25,7 +25,7 @@ export async function copyTemplate(
     throw new Error(`Template '${templateName}' not found at ${templatePath}`);
   }
 
-  const filesToRename = ["_gitignore", "_npmrc"];
+  const filesToRename = ["_gitignore", "_npmrc", "_env", "_env.example"];
 
   try {
     const copySpinner = spinner();
