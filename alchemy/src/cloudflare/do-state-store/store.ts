@@ -1,3 +1,4 @@
+import assert from "node:assert";
 import { alchemy } from "../../alchemy.ts";
 import { ResourceScope } from "../../resource.ts";
 import type { Scope } from "../../scope.ts";
@@ -171,6 +172,8 @@ export class DOStateStore implements StateStore {
   async set(key: string, value: State): Promise<void> {
     const client = await this.getClient();
     await client.rpc("set", { key: this.serializeKey(key), value });
+    const res = await client.rpc("get", { key: this.serializeKey(key) });
+    assert.equal(res, JSON.stringify(value), "State store set failed");
   }
 
   async delete(key: string): Promise<void> {

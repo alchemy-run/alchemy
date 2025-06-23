@@ -198,7 +198,8 @@ export class DOFSStateStore extends DurableObject<Env> {
           if (item === "." || item === "..") {
             return false;
           }
-          return !this.isDirectory(item);
+          const stat = this.fs.stat(item);
+          return stat.isFile;
         });
     } catch (error) {
       if (isErrorCode(error, "ENOENT")) {
@@ -215,10 +216,14 @@ export class DOFSStateStore extends DurableObject<Env> {
 
   private ensureDir(path: string): void {
     const dir = path.split("/").slice(0, -1).join("/");
-    if (this.isDirectory(dir)) {
-      return;
+    try {
+      this.fs.mkdir(dir, { recursive: true });
+    } catch (error) {
+      if (isErrorCode(error, "EEXIST")) {
+        return;
+      }
+      throw error;
     }
-    this.fs.mkdir(dir, { recursive: true });
   }
 
   private isDirectory(path: string): boolean {
