@@ -169,7 +169,6 @@ async function _apply<Out extends Resource>(
           logger.warn(
             `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} is already marked as REPLACE`,
           );
-          return;
         }
 
         isReplaced = true;
