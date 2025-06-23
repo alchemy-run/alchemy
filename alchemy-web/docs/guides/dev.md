@@ -78,10 +78,10 @@ const website = await Website("my-website", {
 
 If no command is specified, Alchemy will automatically detect and run the appropriate dev command based on your project's package manager:
 
-- **bun**: `bun run dev`
-- **npm**: `npm run dev`
-- **pnpm**: `pnpm run dev`
-- **yarn**: `yarn run dev`
+- **bun**: `bun vite dev`
+- **npm**: `npx vite dev`
+- **pnpm**: `pnpm vite dev`
+- **yarn**: `yarn vite dev`
 
 ### Vite Integration
 
