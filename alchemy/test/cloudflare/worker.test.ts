@@ -277,6 +277,7 @@ describe("Worker Resource", () => {
     // Create a KV namespace
     const testKv = await KVNamespace("test-kv-namespace", {
       title: `${BRANCH_PREFIX} Test KV Namespace 1`,
+      adopt: true,
       values: [
         {
           key: "testKey",
@@ -293,6 +294,7 @@ describe("Worker Resource", () => {
         name: workerName,
         script: multiBindingsWorkerScript,
         format: "esm",
+        adopt: true,
       });
 
       expect(worker.id).toBeTruthy();
@@ -308,6 +310,7 @@ describe("Worker Resource", () => {
           TEST_KV: testKv,
           API_KEY: "test-api-key-value",
         },
+        adopt: true,
       });
 
       expect(worker.id).toBeTruthy();
@@ -368,6 +371,7 @@ describe("Worker Resource", () => {
           APP_DEBUG: "true",
         },
         url: true, // Enable workers.dev URL to test the worker
+        adopt: true,
       });
 
       expect(worker.id).toBeTruthy();
@@ -404,6 +408,7 @@ describe("Worker Resource", () => {
           NEW_VAR: "new-value",
         },
         url: true,
+        adopt: true,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -502,6 +507,7 @@ describe("Worker Resource", () => {
         bindings: {
           ASSETS: assets,
         },
+        adopt: true,
       });
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
