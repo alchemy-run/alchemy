@@ -76,6 +76,7 @@
         "cpx": "^1.5.0",
         "execa": "^9.6.0",
         "fs-extra": "^11.3.0",
+        "globby": "^14.1.0",
         "libsodium-wrappers": "^0.7.15",
         "miniflare": "^4.0.0",
         "nitro-cloudflare-dev": "^0.2.2",

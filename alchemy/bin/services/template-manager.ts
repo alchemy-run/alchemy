@@ -1,7 +1,7 @@
 import { log, spinner } from "@clack/prompts";
 import { execa } from "execa";
 import * as fs from "fs-extra";
-import { glob } from "glob";
+import { globby } from "globby";
 import { existsSync } from "node:fs";
 import * as path from "node:path";
 import { join } from "node:path";
@@ -29,7 +29,7 @@ export async function copyTemplate(
     const copySpinner = spinner();
     copySpinner.start("Copying template files...");
 
-    const files = await glob("**/*", {
+    const files = await globby("**/*", {
       cwd: templatePath,
       dot: true,
     });
