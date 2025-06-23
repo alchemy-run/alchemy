@@ -41,3 +41,32 @@ test("worker-stub-types", () => {
     env.workerB.bar();
   }
 });
+
+test("worker-stub-url-types", () => {
+  // type-only test for URL functionality
+  async function _() {
+    // Test with URL enabled (default)
+    const stubWithUrl = await WorkerStub("stub-with-url", {
+      name: "stub-with-url",
+    });
+    
+    // Should have URL property
+    const _url1: string | undefined = stubWithUrl.url;
+
+    // Test with URL explicitly enabled
+    const stubExplicitUrl = await WorkerStub("stub-explicit-url", {
+      name: "stub-explicit-url",
+      url: true,
+    });
+    
+    const _url2: string | undefined = stubExplicitUrl.url;
+
+    // Test with URL disabled
+    const stubNoUrl = await WorkerStub("stub-no-url", {
+      name: "stub-no-url",
+      url: false,
+    });
+    
+    const _url3: string | undefined = stubNoUrl.url;
+  }
+});
