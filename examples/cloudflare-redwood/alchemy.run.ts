@@ -12,11 +12,13 @@ const app = await alchemy("cloudflare-redwood", {
 
 const database = await D1Database(`cloudflare-redwood-db${BRANCH_PREFIX}`, {
   migrationsDir: "drizzle",
+  adopt: true,
 });
 
 export const website = await Redwood(
   `cloudflare-redwood-website${BRANCH_PREFIX}`,
   {
+    adopt: true,
     bindings: {
       DB: database,
     },

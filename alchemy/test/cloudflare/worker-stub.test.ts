@@ -15,6 +15,7 @@ test("worker-stub-types", () => {
     const workerA = await Worker("workerA", {
       entrypoint: "index.ts",
       name: "workerA",
+      adopt: true,
       bindings: {
         workerB: await WorkerStub<MyWorker>("workerB", {
           name: "workerB",
@@ -25,6 +26,7 @@ test("worker-stub-types", () => {
     const _workerB = await Worker("workerB", {
       entrypoint: "index.ts",
       name: "workerB",
+      adopt: true,
       bindings: {
         workerA,
       },
@@ -37,5 +39,34 @@ test("worker-stub-types", () => {
     const _number: number = await env.workerB.foo();
     // @ts-expect-error
     env.workerB.bar();
+  }
+});
+
+test("worker-stub-url-types", () => {
+  // type-only test for URL functionality
+  async function _() {
+    // Test with URL enabled (default)
+    const stubWithUrl = await WorkerStub("stub-with-url", {
+      name: "stub-with-url",
+    });
+
+    // Should have URL property
+    const _url1: string | undefined = stubWithUrl.url;
+
+    // Test with URL explicitly enabled
+    const stubExplicitUrl = await WorkerStub("stub-explicit-url", {
+      name: "stub-explicit-url",
+      url: true,
+    });
+
+    const _url2: string | undefined = stubExplicitUrl.url;
+
+    // Test with URL disabled
+    const stubNoUrl = await WorkerStub("stub-no-url", {
+      name: "stub-no-url",
+      url: false,
+    });
+
+    const _url3: string | undefined = stubNoUrl.url;
   }
 });

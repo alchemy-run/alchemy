@@ -7,6 +7,7 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
+import { configureURL } from "./worker.ts";
 
 /**
  * Properties for creating a Worker stub
@@ -18,6 +19,14 @@ export interface WorkerStubProps<
    * Name for the worker
    */
   name: string;
+
+  /**
+   * Whether to enable a workers.dev URL for this worker
+   *
+   * If true, the worker will be available at {name}.{subdomain}.workers.dev
+   * @default true
+   */
+  url?: boolean;
 
   /**
    * The RPC class to use for the worker.
@@ -40,6 +49,12 @@ export interface WorkerStub<
   name: string;
 
   /**
+   * The worker's URL if enabled
+   * Format: {name}.{subdomain}.workers.dev
+   */
+  url?: string;
+
+  /**
    * Optional type branding for the worker's RPC entrypoint.
    *
    * @internal
@@ -59,12 +74,21 @@ export function isWorkerStub(resource: Resource): resource is WorkerStub {
  * exists and creates an empty one if needed.
  *
  * @example
- * // Reserve a worker name without deploying code
+ * // Reserve a worker name without deploying code, with URL enabled (default)
  * const workerStub = await WorkerStub("my-worker", {
  *   name: "my-reserved-worker"
  * });
  *
- * console.log(`Worker ${workerStub.name} exists: ${!workerStub.created}`);
+ * console.log(`Worker ${workerStub.name} is available at: ${workerStub.url}`);
+ *
+ * @example
+ * // Reserve a worker name without enabling URL
+ * const workerStub = await WorkerStub("my-worker", {
+ *   name: "my-reserved-worker",
+ *   url: false
+ * });
+ *
+ * console.log(`Worker ${workerStub.name} created without URL`);
  */
 export const WorkerStub = Resource("cloudflare::WorkerStub", async function <
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
@@ -84,11 +108,16 @@ export const WorkerStub = Resource("cloudflare::WorkerStub", async function <
     await createEmptyWorker(api, props.name);
   }
 
+  // Configure URL if requested (defaults to true)
+  const enableUrl = props.url ?? true;
+  const workerUrl = await configureURL(this, api, props.name, enableUrl);
+
   // Return the worker stub info
   return this({
     type: "service",
     __rpc__: props.rpc as unknown as RPC,
     ...props,
+    url: workerUrl,
   }) as WorkerStub<RPC>;
 });
 

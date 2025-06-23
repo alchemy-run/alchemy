@@ -1,4 +1,5 @@
 import path from "node:path";
+import { BUILD_DATE } from "../build-date.ts";
 import type { Context } from "../context.ts";
 import type { BundleProps } from "../esbuild/bundle.ts";
 import { InnerResourceScope, Resource, ResourceKind } from "../resource.ts";
@@ -183,7 +184,7 @@ export interface BaseWorkerProps<
 
   /**
    * The compatibility date for the worker
-   * @default "2025-04-26"
+   * @default BUILD_DATE - automatically pinned to the package build date
    */
   compatibilityDate?: string;
 
@@ -885,7 +886,7 @@ export function Worker<const B extends Bindings>(
   });
 }
 
-export const DEFAULT_COMPATIBILITY_DATE = "2025-04-20";
+export const DEFAULT_COMPATIBILITY_DATE = BUILD_DATE;
 
 export const _Worker = Resource(
   "cloudflare::Worker",
@@ -1651,7 +1652,7 @@ export async function assertWorkerDoesNotExist<B extends Bindings>(
 }
 
 export async function configureURL<B extends Bindings>(
-  ctx: Context<Worker<B>>,
+  ctx: Context<Worker<B>> | Context<WorkerStub>,
   api: CloudflareApi,
   workerName: string,
   url: boolean,

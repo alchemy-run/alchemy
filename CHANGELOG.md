@@ -1,3 +1,43 @@
+## v0.38.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cli**:
+  - Complete cli overhaul with trpc-cli, zod, and clack/prompts &nbsp;-&nbsp; by **Aman Varshney** in https://github.com/sam-goodwin/alchemy/issues/405 [<samp>(dea9e)</samp>](https://github.com/sam-goodwin/alchemy/commit/dea9ed1e)
+- **cloudflare**:
+  - Pin default worker compatibility date to build time &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/460 [<samp>(10035)</samp>](https://github.com/sam-goodwin/alchemy/commit/100355b0)
+  - Add URL support to WorkerStub &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/464 [<samp>(4fda9)</samp>](https://github.com/sam-goodwin/alchemy/commit/4fda99da)
+- **core**:
+  - Replace Resource &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/417 [<samp>(27133)</samp>](https://github.com/sam-goodwin/alchemy/commit/271331e1)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.37.2...v0.38.0)
+
+---
+
+## v0.37.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Defensively resolve __dirname and worker.ts > worker.js in DOStateStore &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/452 [<samp>(c63fd)</samp>](https://github.com/sam-goodwin/alchemy/commit/c63fdd60)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.37.1...v0.37.2)
+
+---
+
+## v0.37.1
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Relax Durable Object RPC type constraint &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/445 [<samp>(107e7)</samp>](https://github.com/sam-goodwin/alchemy/commit/107e79de)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: DOStateStore init uploads a worker and not a version &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/447 [<samp>(30cc6)</samp>](https://github.com/sam-goodwin/alchemy/commit/30cc6424)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.37.0...v0.37.1)
+
+---
+
 ## v0.37.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

@@ -1,0 +1,61 @@
+{
+  "type": "module",
+  "name": "rwsdk",
+  "version": "1.0.0",
+  "description": "Build fast, server-driven webapps on Cloudflare with SSR, RSC, and realtime. ",
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "build": "vite build",
+    "check": "npm run generate && npm run types",
+    "clean": "npm run clean:vite",
+    "clean:vite": "rm -rf ./node_modules/.vite",
+    "deploy": "tsx --env-file .env ./alchemy.run.ts",
+    "destroy": "tsx --env-file .env ./alchemy.run.ts --destroy",
+    "dev": "NODE_ENV=${NODE_ENV:-development} vite dev",
+    "dev:init": "rw-scripts dev-init",
+    "generate": "rw-scripts ensure-env && prisma generate && wrangler types",
+    "migrate:dev": "prisma generate && wrangler d1 migrations apply DB --local",
+    "migrate:new": "rw-scripts migrate-new",
+    "migrate:prd": "wrangler d1 migrations apply DB --remote",
+    "prepare": "vibe-rules install cursor",
+    "preview": "vite preview",
+    "release": "rw-scripts ensure-deploy-env && npm run clean && prisma generate && RWSDK_DEPLOY=1 npm run build && wrangler deploy",
+    "seed": "npm run worker:run ./src/scripts/seed.ts",
+    "types": "tsc",
+    "worker:run": "rw-scripts worker-run"
+  },
+  "dependencies": {
+    "@prisma/adapter-d1": "~6.8.2",
+    "@prisma/client": "~6.8.2",
+    "@simplewebauthn/browser": "^13.1.0",
+    "@simplewebauthn/server": "^13.1.1",
+    "rwsdk": "0.0.89"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250620.0",
+    "miniflare": "^4.20250617.3",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "prisma": "~6.8.2",
+    "typescript": "^5.8.3",
+    "vibe-rules": "^0.2.31",
+    "alchemy": "workspace:*",
+    "vite": "^6.2.6",
+    "wrangler": "^4.16.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma",
+      "sharp",
+      "workerd"
+    ]
+  }
+}

@@ -386,6 +386,7 @@ describe("Pipeline Resource", () => {
       // Create a worker with the pipeline binding
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: pipelineWorkerScript,
         format: "esm",
         url: true, // Enable workers.dev URL to test the worker
