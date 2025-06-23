@@ -10,12 +10,7 @@ import {
   ResourceScope,
   ResourceSeq,
 } from "./resource.ts";
-import {
-  isScope,
-  type PendingDeletions,
-  RootScopeStateAttemptError,
-  Scope,
-} from "./scope.ts";
+import { isScope, type PendingDeletions, Scope } from "./scope.ts";
 import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
 
@@ -111,27 +106,6 @@ export async function destroy<Type extends string>(
 
     if (state === undefined) {
       return;
-    }
-
-    const pendingDeletions = await state.output[ResourceScope]
-      .get<PendingDeletions>("pendingDeletions")
-      .catch((e) => {
-        if (e instanceof RootScopeStateAttemptError) {
-          return [];
-        }
-        throw e;
-      });
-    const pendingDeletion = pendingDeletions?.find(
-      (deletion) => deletion.resource[ResourceID] === instance[ResourceID],
-    );
-
-    if (options?.replace == null && pendingDeletion !== undefined) {
-      await destroy(pendingDeletion.resource, {
-        replace: {
-          props: pendingDeletion.oldProps,
-          output: pendingDeletion.resource,
-        },
-      });
     }
 
     const ctx = context({
