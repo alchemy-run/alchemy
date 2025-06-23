@@ -83,6 +83,8 @@ type test = {
 
   afterAll(fn: (scope: Scope) => Promise<void>): void;
 
+  only(fn: (scope: Scope) => Promise<void>): void;
+
   /**
    * Current test scope
    */
@@ -152,6 +154,10 @@ export function test(
 
   test.afterAll = (fn: (scope: Scope) => Promise<void>) => {
     return afterAll(() => scope.run(() => fn(scope)));
+  };
+
+  test.only = (fn: (scope: Scope) => Promise<void>) => {
+    return it.only(fn);
   };
 
   return test as test;

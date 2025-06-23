@@ -137,7 +137,16 @@ export class DOFSStateStore extends DurableObject<Env> {
 
   async all(prefix: string): Promise<Record<string, string>> {
     const keys = this.list(prefix);
-    return await this.getBatch(keys);
+    const result: Record<string, string> = {};
+    await Promise.all(
+      keys.map(async (key) => {
+        const value = await this.get(`${prefix}/${key}`);
+        if (value) {
+          result[key] = value;
+        }
+      }),
+    );
+    return result;
   }
 
   count(prefix: string): number {
@@ -145,27 +154,17 @@ export class DOFSStateStore extends DurableObject<Env> {
   }
 
   delete(key: string): void {
-    try {
+      if (this.isFile(`${key}.json`)) {
+        this.fs.unlink(`${key}.json`);
+      }
       if (this.isDirectory(key)) {
-        const files = this.list(key);
-        if (files.length > 0) {
-          throw new APIError("Directory is not empty", 400);
-        }
-        this.fs.rmdir(key, { recursive: true });
-      } else {
-        this.fs.unlink(key);
+        this.fs.rmdir(key);
       }
-    } catch (error) {
-      if (isErrorCode(error, "ENOENT")) {
-        return;
-      }
-      throw error;
-    }
   }
 
   async get(key: string): Promise<string | undefined> {
     try {
-      const file = this.fs.readFile(key);
+      const file = this.fs.readFile(`${key}.json`);
       return new Response(file).text();
     } catch (error) {
       if (isErrorCode(error, "ENOENT")) {
@@ -189,29 +188,17 @@ export class DOFSStateStore extends DurableObject<Env> {
   }
 
   list(prefix: string): string[] {
-    try {
-      return this.fs
-        .listDir(prefix.endsWith("/") ? prefix.slice(0, -1) : prefix, {
-          recursive: true,
-        })
-        .filter((item) => {
-          if (item === "." || item === "..") {
-            return false;
-          }
-          const stat = this.fs.stat(item);
-          return stat.isFile;
-        });
-    } catch (error) {
-      if (isErrorCode(error, "ENOENT")) {
-        return [];
-      }
-      throw error;
+    const path = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+    if (!this.isDirectory(path)) {
+      return [];
     }
+    const files = this.fs.listDir(path);
+    return files.filter((item) => item.endsWith(".json")).map((item) => item.slice(0, -5));
   }
 
   async set(key: string, value: State): Promise<void> {
     this.ensureDir(key);
-    await this.fs.writeFile(key, JSON.stringify(value));
+    await this.fs.writeFile(`${key}.json`, JSON.stringify(value));
   }
 
   private ensureDir(path: string): void {
@@ -226,9 +213,30 @@ export class DOFSStateStore extends DurableObject<Env> {
     }
   }
 
+  private stat(path: string): "file" | "directory" | "not-found" {
+    try {
+      const stat = this.fs.stat(path);
+      if (stat.isDirectory) {
+        return "directory";
+      }
+      if (stat.isFile) {
+        return "file";
+      }
+      throw new APIError(`Invalid file type for ${path}`, 500);
+    } catch (error) {
+      if (isErrorCode(error, "ENOENT")) {
+        return "not-found";
+      }
+      throw error;
+    }
+  }
+
+  private isFile(path: string): boolean {
+    return this.stat(path) === "file";
+  }
+
   private isDirectory(path: string): boolean {
-    const stat = this.fs.stat(path);
-    return stat.isDirectory;
+    return this.stat(path) === "directory";
   }
 }
 

@@ -1,3 +1,4 @@
+import { logger } from "../../util/logger.ts";
 import { withExponentialBackoff } from "../../util/retry.ts";
 import { handleApiError } from "../api-error.ts";
 import type { CloudflareApi } from "../api.ts";
@@ -86,6 +87,30 @@ export class DOStateStoreClient {
         params: null,
       }),
     });
+  }
+
+  async waitUntilReady(): Promise<void> {
+    // This ensures the token is correct and the worker is ready to use.
+    let last: Response | undefined;
+    let delay = 1000;
+    for (let i = 0; i < 20; i++) {
+      const res = await this.validate();
+      if (res.ok) {
+        return;
+      }
+      if (!last) {
+        logger.log("Waiting for state store deployment...");
+      }
+      last = res;
+      // Exponential backoff with jitter
+      const jitter = Math.random() * 0.1 * delay;
+      await new Promise((resolve) => setTimeout(resolve, delay + jitter));
+      delay *= 1.5; // Increase the delay for next attempt
+      delay = Math.min(delay, 10000); // Cap at 10 seconds
+    }
+    throw new Error(
+      `Failed to access state store: ${last?.status} ${last?.statusText}`,
+    );
   }
 
   async fetch(path: string, init: RequestInit = {}): Promise<Response> {
