@@ -1,2 +1,3 @@
 bin/alchemy.mjs
 !templates/**/wrangler.jsonc
+.nuxt
