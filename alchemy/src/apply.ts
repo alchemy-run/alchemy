@@ -165,6 +165,11 @@ async function _apply<Out extends Resource>(
       props: state.oldProps,
       state,
       replace: () => {
+        if (phase === "create") {
+          throw new Error(
+            `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} cannot be replaced in create phase.`,
+          );
+        }
         if (isReplaced) {
           logger.warn(
             `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} is already marked as REPLACE`,

@@ -27,8 +27,12 @@ const Replacable = Resource(
       name: string;
       fail?: boolean;
       child?: boolean;
+      replaceOnCreate?: boolean;
     },
   ) {
+    if (props.replaceOnCreate && this.phase === "create") {
+      this.replace();
+    }
     if (this.phase === "delete") {
       if (props.fail) {
         if (!failed.has(props.name)) {
@@ -41,7 +45,7 @@ const Replacable = Resource(
     }
     if (this.phase === "update") {
       if (props.name !== this.output.name) {
-        await this.replace();
+        this.replace();
       }
     }
     if (props.child) {
@@ -281,6 +285,21 @@ describe("Replace", () => {
           }),
         ),
       ).rejects.toThrow("has children and cannot be replaced.");
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("cannot replace a resource in create phase", async (scope) => {
+    try {
+      await expect(
+        alchemy.run("test", () =>
+          Replacable("replaceable", {
+            name: "foo-5",
+            replaceOnCreate: true,
+          }),
+        ),
+      ).rejects.toThrow("cannot be replaced in create phase.");
     } finally {
       await destroy(scope);
     }
