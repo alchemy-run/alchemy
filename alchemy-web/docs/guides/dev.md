@@ -63,7 +63,50 @@ const worker = await Worker("my-worker", {
 console.log(worker.url); // http://localhost:3000
 ```
 
-> **Note:** Only Cloudflare Workers can be run locally in dev mode. Support for other runtimes, such as AWS Lambda, is planned for the future.
+## Website Development
+
+When using the `Website` resource in development mode, you can specify a custom development command that Alchemy will run locally:
+
+```typescript
+const website = await Website("my-website", {
+  dev: {
+    command: "npm run dev",
+    url: "http://localhost:5173",
+  }
+});
+```
+
+If no command is specified, Alchemy will automatically detect and run the appropriate dev command based on your project's package manager:
+
+- **bun**: `bun run dev`
+- **npm**: `npm run dev`
+- **pnpm**: `pnpm run dev`
+- **yarn**: `yarn run dev`
+
+### Vite Integration
+
+For projects using Vite, Alchemy integrates with the [Cloudflare Vite plugin](https://developers.cloudflare.com/workers/development-testing/vite/) to provide enhanced local development capabilities. This integration enables better support for certain binding types when running locally.
+
+To enable Vite integration, configure your `vite.config.ts` with the Cloudflare plugin:
+
+```typescript
+import { cloudflare } from "@cloudflare/vite-plugin";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [
+    cloudflare({
+      persistState: process.env.ALCHEMY_CLOUDFLARE_PERSIST_PATH
+        ? {
+            path: process.env.ALCHEMY_CLOUDFLARE_PERSIST_PATH,
+          }
+        : undefined,
+    }),
+  ],
+});
+```
+
+The Vite integration provides improved support for the following binding types (marked with ✅ in the "Vite" column of the supported resources table below).
 
 ## Bindings
 
@@ -91,29 +134,29 @@ Some resources only support remote execution, such as [AI Gateways](../providers
 
 The following bindings are supported in dev mode:
 
-| Resource | Local | Remote | Notes |
-|----------|-------|--------|-------|
-| AI | ❌ | ✅ | |
-| Analytics Engine | ✅ | ❌ | |
-| Assets | ✅ | ❌ | |
-| Browser Rendering | ❌ | ✅ | |
-| D1 Database | ✅ | ✅ | |
-| Dispatch Namespace | ❌ | ✅ | |
-| Durable Object Namespace | ✅ | ❌ | |
-| Hyperdrive | ✅ | ❌ | |
-| Images | ✅ | ✅ | |
-| JSON | ✅ | ❌ | |
-| KV Namespace | ✅ | ✅ | |
-| Pipeline | ✅ | ❌ | |
-| Queue | ✅ | ✅ | |
-| R2 Bucket | ✅ | ✅ | |
-| Secret | ✅ | ❌ | |
-| Secret Key | ❌ | ❌ | |
-| Service | ✅ | ✅ | |
-| Vectorize Index | ❌ | ✅ | |
-| Version Metadata | ✅ | ❌ | |
-| Workflow | ✅ | ❌ | |
-| Text | ✅ | ❌ | |
+| Resource | Local | Remote | Vite |
+|----------|-------|--------|------|
+| AI | ❌ | ✅ | ❌ |
+| Analytics Engine | ✅ | ❌ | ❌ |
+| Assets | ✅ | ❌ | ❌ |
+| Browser Rendering | ❌ | ✅ | ❌ |
+| D1 Database | ✅ | ✅ | ✅ |
+| Dispatch Namespace | ❌ | ✅ | ❌ |
+| Durable Object Namespace | ✅ | ❌ | ❌ |
+| Hyperdrive | ✅ | ❌ | ❌ |
+| Images | ✅ | ✅ | ❌ |
+| JSON | ✅ | ❌ | ❌ |
+| KV Namespace | ✅ | ✅ | ✅ |
+| Pipeline | ✅ | ❌ | ❌ |
+| Queue | ✅ | ✅ | ❌ |
+| R2 Bucket | ✅ | ✅ | ✅ |
+| Secret | ✅ | ❌ | ❌ |
+| Secret Key | ❌ | ❌ | ❌ |
+| Service | ✅ | ✅ | ❌ |
+| Vectorize Index | ❌ | ✅ | ❌ |
+| Version Metadata | ✅ | ❌ | ❌ |
+| Workflow | ✅ | ❌ | ❌ |
+| Text | ✅ | ❌ | ❌ |
 
 ## Limitations
 
