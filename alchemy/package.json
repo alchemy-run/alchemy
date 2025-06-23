@@ -27,7 +27,8 @@
     "bin",
     "lib",
     "src",
-    "templates"
+    "templates",
+    "workers"
   ],
   "exports": {
     ".": {
