@@ -384,6 +384,7 @@ describe("D1 Database Resource", async () => {
       // Create a worker with the D1 database binding
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {

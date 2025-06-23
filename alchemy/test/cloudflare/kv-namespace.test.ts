@@ -150,6 +150,7 @@ describe("KV Namespace Resource", () => {
       // Create a worker with the KV Namespace binding
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {

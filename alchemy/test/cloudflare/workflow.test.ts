@@ -207,6 +207,7 @@ describe("Workflow", () => {
       // Create a worker with the workflow binding
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: workflowWorkerScript,
         format: "esm",
         bindings: {
@@ -250,6 +251,7 @@ describe("Workflow", () => {
       // Update the worker with multiple workflow bindings
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: workflowWorkerScript,
         format: "esm",
         bindings: {
@@ -317,6 +319,7 @@ describe("Workflow", () => {
       // First create the worker that defines the workflow with its own binding
       workflowProviderWorker = await Worker(workflowWorkerName, {
         name: workflowWorkerName,
+        adopt: true,
         script: workflowProviderWorkerScript,
         format: "esm",
         url: true, // Enable workers.dev URL
@@ -339,6 +342,7 @@ describe("Workflow", () => {
       // Create the client worker with the cross-script workflow binding
       clientWorker = await Worker(clientWorkerName, {
         name: clientWorkerName,
+        adopt: true,
         script: clientWorkerScript,
         format: "esm",
         url: true, // Enable workers.dev URL
@@ -434,6 +438,7 @@ describe("Workflow", () => {
       // First create the worker that defines the workflow with its own binding
       workflowProviderWorker = await Worker(workflowWorkerName, {
         name: workflowWorkerName,
+        adopt: true,
         script: workflowProviderWorkerScript,
         format: "esm",
         url: true, // Enable workers.dev URL
@@ -463,6 +468,7 @@ describe("Workflow", () => {
       // Create the client worker with the cross-script workflow binding using re-exported syntax
       clientWorker = await Worker(clientWorkerName, {
         name: clientWorkerName,
+        adopt: true,
         script: clientWorkerScript,
         format: "esm",
         url: true, // Enable workers.dev URL

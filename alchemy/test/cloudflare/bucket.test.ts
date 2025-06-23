@@ -202,6 +202,7 @@ describe("R2 Bucket Resource", async () => {
       // Create a worker with the R2 bucket binding
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {

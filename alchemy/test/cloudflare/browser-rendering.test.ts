@@ -34,6 +34,7 @@ describe("Browser Rendering Resource", () => {
       // Create a worker with browser rendering binding
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         entrypoint: path.join(import.meta.dirname, "browser-handler.ts"),
         format: "esm",
         compatibilityFlags: ["nodejs_compat"], // Required for puppeteer
