@@ -22,6 +22,7 @@ describe("AI Resource Binding", () => {
       // Create a worker with an AI binding
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env) {

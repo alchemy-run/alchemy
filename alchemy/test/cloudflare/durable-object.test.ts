@@ -68,6 +68,7 @@ describe("Durable Object Namespace", () => {
       // First create the worker without the DO binding
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: durableObjectWorkerScript,
         format: "esm",
         // No bindings yet
@@ -89,6 +90,7 @@ describe("Durable Object Namespace", () => {
       // Update the worker with the DO binding
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: durableObjectWorkerScript,
         format: "esm",
         bindings: {

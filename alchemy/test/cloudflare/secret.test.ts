@@ -41,6 +41,7 @@ describe("Secret Resource", () => {
       // Create a worker that binds to the secret and returns the secret value
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {

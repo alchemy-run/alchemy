@@ -47,6 +47,7 @@ describe("SecretKey Binding", () => {
       // Create a worker that accesses the JWK SecretKey properties and can sign data
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         format: "esm",
         url: true,
         bindings: {

@@ -53,6 +53,7 @@ describe("Worker Resource", () => {
       // Create a worker with an explicit name
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           addEventListener('fetch', event => {
             event.respondWith(new Response('Hello world!', { status: 200 }));
@@ -75,6 +76,7 @@ describe("Worker Resource", () => {
 
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: updatedScript,
         format: "cjs",
       });
@@ -121,6 +123,7 @@ describe("Worker Resource", () => {
 
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: updatedEsmScript,
         format: "esm",
       });
@@ -140,6 +143,7 @@ describe("Worker Resource", () => {
       // First create with ESM format
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {
@@ -155,6 +159,7 @@ describe("Worker Resource", () => {
       // Update to CJS format
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           addEventListener('fetch', event => {
             event.respondWith(new Response('Hello world!', { status: 200 }));

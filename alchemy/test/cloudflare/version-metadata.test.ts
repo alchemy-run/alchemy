@@ -22,6 +22,7 @@ describe("VersionMetadata Binding", () => {
     try {
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         entrypoint: path.join(
           import.meta.dirname,
           "version-metadata-handler.ts",

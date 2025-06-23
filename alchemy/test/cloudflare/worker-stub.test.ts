@@ -15,6 +15,7 @@ test("worker-stub-types", () => {
     const workerA = await Worker("workerA", {
       entrypoint: "index.ts",
       name: "workerA",
+      adopt: true,
       bindings: {
         workerB: await WorkerStub<MyWorker>("workerB", {
           name: "workerB",
@@ -25,6 +26,7 @@ test("worker-stub-types", () => {
     const _workerB = await Worker("workerB", {
       entrypoint: "index.ts",
       name: "workerB",
+      adopt: true,
       bindings: {
         workerA,
       },
