@@ -268,22 +268,22 @@ export interface BaseWorkerProps<
   version?: string;
 
   /**
-   * Whether to emulate the worker locally when Alchemy is running in watch mode.
-   * If true, the worker will be available at a randomly selected port.
-   * If an object is provided, the worker will be available at the specified port.
-   *
-   * @default false
+   * Configuration for local development. By default, when Alchemy is running in development mode,
+   * the worker will be emulated locally and available at a randomly selected port.
    */
   dev?: {
-    /**
-     * Whether to run the worker remotely instead of locally
-     * @default false
-     */
-    remote?: boolean;
     /**
      * Port to use for local development
      */
     port?: number;
+    /**
+     * EXPERIMENTAL: Whether to run the worker remotely instead of locally.
+     *
+     * When this is enabled, hot reloading will not work.
+     *
+     * @default false
+     */
+    remote?: boolean;
   };
 }
 
