@@ -7,6 +7,7 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
+import { configureURL } from "./worker.ts";
 
 /**
  * Properties for creating a Worker stub
@@ -109,12 +110,7 @@ export const WorkerStub = Resource("cloudflare::WorkerStub", async function <
 
   // Configure URL if requested (defaults to true)
   const enableUrl = props.url ?? true;
-  const workerUrl = await configureWorkerStubURL(
-    this,
-    api,
-    props.name,
-    enableUrl,
-  );
+  const workerUrl = await configureURL(this, api, props.name, enableUrl);
 
   // Return the worker stub info
   return this({
@@ -200,59 +196,4 @@ async function createEmptyWorker(
       `Failed to create empty worker: ${uploadResponse.status} ${uploadResponse.statusText}`,
     );
   }
-}
-
-async function configureWorkerStubURL(
-  ctx: Context<WorkerStub>,
-  api: CloudflareApi,
-  workerName: string,
-  url: boolean,
-): Promise<string | undefined> {
-  let workerUrl;
-  if (url) {
-    // Enable the workers.dev subdomain for this worker
-    await api.post(
-      `/accounts/${api.accountId}/workers/scripts/${workerName}/subdomain`,
-      { enabled: true, previews_enabled: true },
-      {
-        headers: { "Content-Type": "application/json" },
-      },
-    );
-
-    // Get the account's workers.dev subdomain
-    const subdomainResponse = await api.get(
-      `/accounts/${api.accountId}/workers/subdomain`,
-    );
-
-    if (!subdomainResponse.ok) {
-      throw new Error(
-        `Could not fetch workers.dev subdomain: ${subdomainResponse.status} ${subdomainResponse.statusText}`,
-      );
-    }
-    const subdomainData: {
-      result: {
-        subdomain: string;
-      };
-    } = await subdomainResponse.json();
-    const subdomain = subdomainData.result?.subdomain;
-
-    if (subdomain) {
-      workerUrl = `https://${workerName}.${subdomain}.workers.dev`;
-    }
-  } else if (url === false && ctx.output?.url) {
-    // Explicitly disable URL if it was previously enabled
-    const response = await api.post(
-      `/accounts/${api.accountId}/workers/scripts/${workerName}/subdomain`,
-      JSON.stringify({ enabled: false }),
-      {
-        headers: { "Content-Type": "application/json" },
-      },
-    );
-    if (!response.ok) {
-      throw new Error(
-        `Failed to disable worker URL: ${response.status} ${response.statusText}`,
-      );
-    }
-  }
-  return workerUrl;
 }
