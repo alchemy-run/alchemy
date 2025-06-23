@@ -7,28 +7,6 @@ import type { CloudflareApi } from "../api.ts";
 import type { WorkerMetadata } from "../worker-metadata.ts";
 import type { DOStateStoreAPI } from "./types.ts";
 
-/**
- * Get the current directory in a way that works in both ESM and CommonJS environments
- */
-function getCurrentDir(): string {
-  // First try import.meta.dir (Bun)
-  if (typeof import.meta !== 'undefined' && 'dir' in import.meta) {
-    return import.meta.dir as string;
-  }
-  
-  // Then try import.meta.url (Node.js ESM)
-  if (typeof import.meta !== 'undefined' && import.meta.url) {
-    return path.dirname(fileURLToPath(import.meta.url));
-  }
-  
-  // Fallback for CommonJS (though this shouldn't be needed in this ESM context)
-  if (typeof __dirname !== 'undefined') {
-    return __dirname;
-  }
-  
-  throw new Error('Unable to determine current directory - unsupported environment');
-}
-
 interface DOStateStoreClientOptions {
   app: string;
   stage: string;
@@ -241,7 +219,12 @@ export async function getAccountSubdomain(api: CloudflareApi) {
 
 async function bundleWorkerScript() {
   const result = await bundle({
-    entryPoint: path.join(getCurrentDir(), "worker.ts"),
+    entryPoint: path.join(
+      typeof __dirname !== "undefined"
+        ? __dirname
+        : path.dirname(fileURLToPath(import.meta.url)),
+      "worker.ts",
+    ),
     bundle: true,
     format: "esm",
     target: "es2022",
