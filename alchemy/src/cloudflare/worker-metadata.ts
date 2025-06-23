@@ -384,7 +384,10 @@ export async function prepareWorkerMetadata(
         type: "durable_object_namespace",
         name: bindingName,
         class_name: binding.className,
-        script_name: binding.scriptName,
+        script_name:
+          binding.scriptName === props.workerName
+            ? undefined
+            : binding.scriptName,
         environment: binding.environment,
         namespace_id: binding.namespaceId,
       });
