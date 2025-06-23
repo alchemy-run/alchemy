@@ -11,6 +11,7 @@
   },
   "scripts": {
     "build:cli": "./scripts/bundle-cli.sh",
+    "build:workers": "bun ./scripts/build-workers.ts",
     "build": "bun ./scripts/generate-build-date.ts && rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && bun run build:cli",
     "dev:cli": "./scripts/bundle-cli.sh --watch",
     "docs:gen": "rm -rf ./docs && typedoc",
@@ -154,7 +155,6 @@
     "ai": "^4.0.0",
     "arktype": "^2.0.0",
     "cloudflare": "^4.0.0",
-    "dofs": "^0.0.1",
     "hono": "^4.0.0",
     "prettier": "^3.0.0",
     "stripe": "^17.0.0",
@@ -185,6 +185,7 @@
     "change-case": "^5.4.4",
     "cloudflare": "^4.2.0",
     "cpx": "^1.5.0",
+    "dofs": "^0.1.0",
     "execa": "^9.6.0",
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",

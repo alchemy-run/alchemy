@@ -1,11 +1,8 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { bundle } from "../../esbuild/index.ts";
-import { exists } from "../../util/exists.ts";
 import { withExponentialBackoff } from "../../util/retry.ts";
 import { handleApiError } from "../api-error.ts";
 import type { CloudflareApi } from "../api.ts";
 import type { WorkerMetadata } from "../worker-metadata.ts";
+import { getWorkerTemplate } from "../workers/get-worker-template.ts";
 import type { DOStateStoreAPI } from "./types.ts";
 
 interface DOStateStoreClientOptions {
@@ -119,7 +116,7 @@ export async function upsertStateStoreWorker(
     return;
   }
   const formData = new FormData();
-  formData.append("worker.js", await bundleWorkerScript());
+  formData.append("worker.js", await getWorkerTemplate("do-state-store"));
   formData.append(
     "metadata",
     new Blob([
@@ -216,28 +213,4 @@ export async function getAccountSubdomain(api: CloudflareApi) {
   const subdomain = json.result.subdomain;
   cache.set(key, subdomain);
   return subdomain;
-}
-
-async function bundleWorkerScript() {
-  const thisDir =
-    typeof __dirname !== "undefined"
-      ? __dirname
-      : path.dirname(fileURLToPath(import.meta.url));
-  // we can be running from .ts or .js, so resolve it defensively
-  const workerTs = path.join(thisDir, "worker.ts");
-  const workerJs = path.join(thisDir, "worker.js");
-  const result = await bundle({
-    entryPoint: (await exists(workerTs)) ? workerTs : workerJs,
-    bundle: true,
-    format: "esm",
-    target: "es2022",
-    external: ["cloudflare:*", "node:crypto"],
-    write: false,
-  });
-  if (!result.outputFiles?.[0]) {
-    throw new Error("Failed to bundle worker.ts");
-  }
-  return new File([result.outputFiles[0].text], "worker.js", {
-    type: "application/javascript+module",
-  });
 }

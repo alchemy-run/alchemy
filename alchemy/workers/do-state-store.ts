@@ -1,8 +1,8 @@
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { Fs } from "dofs";
 import { timingSafeEqual } from "node:crypto";
-import type { State } from "../../state.ts";
-import type { DOStateStoreAPI } from "./types.ts";
+import type { DOStateStoreAPI } from "../src/cloudflare/do-state-store/types.ts";
+import type { State } from "../src/state.ts";
 
 interface Env {
   DOFS_STATE_STORE: DurableObjectNamespace<DOFSStateStore>;
@@ -146,7 +146,15 @@ export class DOFSStateStore extends DurableObject<Env> {
 
   delete(key: string): void {
     try {
-      this.fs.unlink(key);
+      if (this.isDirectory(key)) {
+        const files = this.list(key);
+        if (files.length > 0) {
+          throw new APIError("Directory is not empty", 400);
+        }
+        this.fs.rmdir(key, { recursive: true });
+      } else {
+        this.fs.unlink(key);
+      }
     } catch (error) {
       if (isErrorCode(error, "ENOENT")) {
         return;
@@ -183,8 +191,15 @@ export class DOFSStateStore extends DurableObject<Env> {
   list(prefix: string): string[] {
     try {
       return this.fs
-        .listDir(prefix, { recursive: true })
-        .filter((item) => item !== "." && item !== "..");
+        .listDir(prefix.endsWith("/") ? prefix.slice(0, -1) : prefix, {
+          recursive: true,
+        })
+        .filter((item) => {
+          if (item === "." || item === "..") {
+            return false;
+          }
+          return !this.isDirectory(item);
+        });
     } catch (error) {
       if (isErrorCode(error, "ENOENT")) {
         return [];
@@ -200,11 +215,15 @@ export class DOFSStateStore extends DurableObject<Env> {
 
   private ensureDir(path: string): void {
     const dir = path.split("/").slice(0, -1).join("/");
-    try {
-      this.fs.mkdir(dir, { recursive: true });
-    } catch {
-      // directory already exists, ignore
+    if (this.isDirectory(dir)) {
+      return;
     }
+    this.fs.mkdir(dir, { recursive: true });
+  }
+
+  private isDirectory(path: string): boolean {
+    const stat = this.fs.stat(path);
+    return stat.isDirectory;
   }
 }
 
