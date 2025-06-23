@@ -66,6 +66,8 @@ function isRemoteOptionalBinding(binding: Binding): binding is RemoteBinding {
   return (
     typeof binding !== "string" &&
     binding !== Self &&
+    typeof binding === "object" &&
+    "type" in binding &&
     REMOTE_OPTIONAL_BINDING_TYPES.includes(binding.type as any)
   );
 }
@@ -74,6 +76,8 @@ function isRemoteOnlyBinding(binding: Binding): binding is RemoteBinding {
   return (
     typeof binding !== "string" &&
     binding !== Self &&
+    typeof binding === "object" &&
+    "type" in binding &&
     REMOTE_ONLY_BINDING_TYPES.includes(binding.type as any)
   );
 }
