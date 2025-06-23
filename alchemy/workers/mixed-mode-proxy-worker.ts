@@ -1,3 +1,5 @@
+/// <reference types="@cloudflare/workers-types" />
+
 // Copied from https://github.com/cloudflare/workers-sdk/blob/70ba9fbf905a9ba5fe158d0bc8d48f6bf31712a2/packages/wrangler/templates/mixedMode/proxyServerWorker/index.ts
 /** biome-ignore-all lint/style/noNonNullAssertion: wrangler did it not me */
 

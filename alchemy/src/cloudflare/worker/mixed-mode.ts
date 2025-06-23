@@ -28,7 +28,7 @@ async function bundleWorkerScript() {
   const result = await bundle({
     entryPoint: path.join(
       __dirname,
-      "../../../templates/mixed-mode-proxy-worker.ts",
+      "../../../workers/mixed-mode-proxy-worker.ts",
     ),
     bundle: true,
     format: "esm",

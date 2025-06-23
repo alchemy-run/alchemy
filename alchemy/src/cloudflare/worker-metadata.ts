@@ -513,8 +513,13 @@ export async function prepareWorkerMetadata(
         key_jwk: binding.key_jwk?.unencrypted,
       });
     } else {
-      // @ts-expect-error - we should never reach here
-      assertNever(binding, `Unsupported binding type: ${binding.type}`);
+      assertNever(
+        binding,
+        `Unsupported binding type: ${
+          // @ts-expect-error - types think it's never
+          binding.type
+        }`,
+      );
     }
   }
 
