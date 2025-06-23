@@ -536,7 +536,7 @@ export async function createPipeline(
     if (createResponse.status === 404 && attempt < 3) {
       // bucket does not exist, this might be transient, let's retry
       await new Promise((resolve) => setTimeout(resolve, 1000 * (1 + attempt)));
-      return await createPipeline(api, pipelineName, props);
+      return await createPipeline(api, pipelineName, props, attempt + 1);
     }
     return await handleApiError(
       createResponse,
