@@ -21,7 +21,7 @@ During the **update phase**, you can trigger a replacement by calling `this.repl
 if (this.phase === "update") {
   if (this.output.name !== props.name) {
     // trigger replace and terminate this `"update"` phase
-    await this.replace();
+    this.replace();
     // (unreachable code)
   } else {
     return updateResource();

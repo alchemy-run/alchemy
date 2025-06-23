@@ -164,7 +164,7 @@ async function _apply<Out extends Resource>(
       seq: resource[ResourceSeq],
       props: state.oldProps,
       state,
-      replace: async () => {
+      replace: () => {
         if (isReplaced) {
           logger.warn(
             `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} is already marked as REPLACE`,
