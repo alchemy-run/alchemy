@@ -196,8 +196,6 @@ async function _apply<Out extends Resource>(
       );
     } catch (error) {
       if (error instanceof ReplacedSignal) {
-        ctx.phase = "create";
-
         if (scope.children.get(resource[ResourceID])?.children.size! > 0) {
           throw new Error(
             `Resource ${resource[ResourceFQN]} has children and cannot be replaced.`,
@@ -207,7 +205,24 @@ async function _apply<Out extends Resource>(
         output = await alchemy.run(
           resource[ResourceID],
           { isResource: true, parent: scope },
-          async () => provider.handler.bind(ctx)(resource[ResourceID], props),
+          async () =>
+            provider.handler.bind(
+              context({
+                scope,
+                phase: "create",
+                kind: resource[ResourceKind],
+                id: resource[ResourceID],
+                fqn: resource[ResourceFQN],
+                seq: resource[ResourceSeq],
+                props: state.props,
+                state,
+                replace: () => {
+                  throw new Error(
+                    `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} cannot be replaced in create phase.`,
+                  );
+                },
+              }),
+            )(resource[ResourceID], props),
         );
 
         const pendingDeletions =
