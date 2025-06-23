@@ -19,3 +19,6 @@ wrangler.jsonc
 
 .smoke
 .svelte-kit
+
+# Auto-generated build files
+alchemy/src/build-date.ts

@@ -13,6 +13,7 @@ import { getContentType } from "../util/content-type.ts";
 import { logger } from "../util/logger.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { slugify } from "../util/slugify.ts";
+import { BUILD_DATE } from "../build-date.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   type CloudflareApi,
@@ -178,7 +179,7 @@ export interface BaseWorkerProps<
 
   /**
    * The compatibility date for the worker
-   * @default "2025-04-26"
+   * @default BUILD_DATE - automatically pinned to the package build date
    */
   compatibilityDate?: string;
 
@@ -861,7 +862,7 @@ export function Worker<const B extends Bindings>(
   });
 }
 
-export const DEFAULT_COMPATIBILITY_DATE = "2025-04-20";
+export const DEFAULT_COMPATIBILITY_DATE = BUILD_DATE;
 
 export const _Worker = Resource(
   "cloudflare::Worker",
