@@ -194,9 +194,7 @@ async function _apply<Out extends Resource>(
       if (error instanceof ReplacedSignal) {
         ctx.phase = "create";
 
-        if (
-          Scope.current.children.get(resource[ResourceID])?.children.size! > 0
-        ) {
+        if (scope.children.get(resource[ResourceID])?.children.size! > 0) {
           throw new Error(
             `Resource ${resource[ResourceFQN]} has children and cannot be replaced.`,
           );
