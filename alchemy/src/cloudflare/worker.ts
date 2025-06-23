@@ -1,4 +1,5 @@
 import path from "node:path";
+import { BUILD_DATE } from "../build-date.ts";
 import type { Context } from "../context.ts";
 import type { BundleProps } from "../esbuild/bundle.ts";
 import { InnerResourceScope, Resource, ResourceKind } from "../resource.ts";
@@ -13,7 +14,6 @@ import { getContentType } from "../util/content-type.ts";
 import { logger } from "../util/logger.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { slugify } from "../util/slugify.ts";
-import { BUILD_DATE } from "../build-date.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   type CloudflareApi,
@@ -1468,7 +1468,7 @@ export async function assertWorkerDoesNotExist<B extends Bindings>(
 }
 
 export async function configureURL<B extends Bindings>(
-  ctx: Context<Worker<B>>,
+  ctx: Context<Worker<B>> | Context<WorkerStub>,
   api: CloudflareApi,
   workerName: string,
   url: boolean,

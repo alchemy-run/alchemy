@@ -49,7 +49,7 @@ test("worker-stub-url-types", () => {
     const stubWithUrl = await WorkerStub("stub-with-url", {
       name: "stub-with-url",
     });
-    
+
     // Should have URL property
     const _url1: string | undefined = stubWithUrl.url;
 
@@ -58,7 +58,7 @@ test("worker-stub-url-types", () => {
       name: "stub-explicit-url",
       url: true,
     });
-    
+
     const _url2: string | undefined = stubExplicitUrl.url;
 
     // Test with URL disabled
@@ -66,7 +66,7 @@ test("worker-stub-url-types", () => {
       name: "stub-no-url",
       url: false,
     });
-    
+
     const _url3: string | undefined = stubNoUrl.url;
   }
 });
