@@ -1,0 +1,37 @@
+{
+  "type": "module",
+  "name": "tanstack-start",
+  "private": true,
+  "sideEffects": false,
+  "scripts": {
+    "build": "vite build",
+    "deploy": "bun --env-file=./.env ./alchemy.run.ts",
+    "destroy": "bun --env-file=./.env ./alchemy.run.ts --destroy",
+    "dev": "vite dev",
+    "start": "node .output/server/index.mjs"
+  },
+  "dependencies": {
+    "@tanstack/react-router": "^1.121.27",
+    "@tanstack/react-router-devtools": "^1.121.27",
+    "@tanstack/react-start": "^1.121.32",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "3",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "alchemy": "workspace:*",
+    "@cloudflare/workers-types": "^4.20250620.0",
+    "@tailwindcss/vite": "^4.1.10",
+    "@types/node": "^22.5.4",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "autoprefixer": "^10.4.20",
+    "miniflare": "^4.20250617.3",
+    "postcss": "^8.5.6",
+    "tailwindcss": "4",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-tsconfig-paths": "^5.1.4"
+  }
+}
