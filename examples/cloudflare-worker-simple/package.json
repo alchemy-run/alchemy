@@ -7,7 +7,8 @@
     "build": "tsc -b",
     "deploy": "bun run ./alchemy.run.ts",
     "destroy": "bun run ./alchemy.run.ts --destroy",
-    "dev": "bun run ./alchemy.run.ts --dev"
+    "watch": "bun --watch ./alchemy.run.ts",
+    "dev": "bun --watch ./alchemy.run.ts --dev"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",
