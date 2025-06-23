@@ -49,6 +49,8 @@ export class DOStateStoreClient {
         }
         const body = await res.json<DOStateStoreAPI.Response>();
         console.log("rpc", {
+          app: this.options.app,
+          stage: this.options.stage,
           method,
           params,
           body,
