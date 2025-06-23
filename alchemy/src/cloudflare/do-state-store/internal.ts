@@ -49,13 +49,6 @@ export class DOStateStoreClient {
           );
         }
         const body = await res.json<DOStateStoreAPI.Response>();
-        console.log("rpc", {
-          app: this.options.app,
-          stage: this.options.stage,
-          method,
-          params,
-          body,
-        });
         if (!body.success) {
           throw new StateStoreError(
             `State store "${method}" request failed with status ${res.status}: ${body.error}`,
