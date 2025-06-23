@@ -1,5 +1,7 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { bundle } from "../../esbuild/index.ts";
+import { exists } from "../../util/exists.ts";
 import { withExponentialBackoff } from "../../util/retry.ts";
 import { handleApiError } from "../api-error.ts";
 import type { CloudflareApi } from "../api.ts";
@@ -217,8 +219,15 @@ export async function getAccountSubdomain(api: CloudflareApi) {
 }
 
 async function bundleWorkerScript() {
+  const thisDir =
+    typeof __dirname !== "undefined"
+      ? __dirname
+      : path.dirname(fileURLToPath(import.meta.url));
+  // we can be running from .ts or .js, so resolve it defensively
+  const workerTs = path.join(thisDir, "worker.ts");
+  const workerJs = path.join(thisDir, "worker.js");
   const result = await bundle({
-    entryPoint: path.join(__dirname, "worker.ts"),
+    entryPoint: (await exists(workerTs)) ? workerTs : workerJs,
     bundle: true,
     format: "esm",
     target: "es2022",
