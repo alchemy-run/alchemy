@@ -209,7 +209,7 @@ export async function getAccountSubdomain(api: CloudflareApi) {
   const res = await api.get(`/accounts/${api.accountId}/workers/subdomain`);
   if (!res.ok) {
     throw new Error(
-      `Failed to get account subdomain: ${res.status} ${res.statusText}`,
+      `Failed to get account subdomain: ${res.status} ${res.statusText}: ${await res.text().catch(() => "unknown error")}`,
     );
   }
   const json: { result: { subdomain: string } } = await res.json();
