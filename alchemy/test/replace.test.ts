@@ -231,66 +231,58 @@ describe("Replace", () => {
     }
   });
 
-  test(
-    "when replacing a resource multiple times, all replacements should be deleted",
-    { quiet: true },
-    async (scope) => {
-      try {
-        let _resource = await Replacable("replaceable", {
-          name: "foo-4",
-        });
-        _resource = await Replacable("replaceable", {
-          name: "bar-4",
-        });
-        _resource = await Replacable("replaceable", {
-          name: "baz-4",
-        });
-        expect(await scope.get("pendingDeletions")).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              resource: expect.objectContaining({
-                [ResourceID]: "replaceable",
-                name: "foo-4",
-              }),
+  test("when replacing a resource multiple times, all replacements should be deleted", async (scope) => {
+    try {
+      let _resource = await Replacable("replaceable", {
+        name: "foo-4",
+      });
+      _resource = await Replacable("replaceable", {
+        name: "bar-4",
+      });
+      _resource = await Replacable("replaceable", {
+        name: "baz-4",
+      });
+      expect(await scope.get("pendingDeletions")).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            resource: expect.objectContaining({
+              [ResourceID]: "replaceable",
+              name: "foo-4",
             }),
-            expect.objectContaining({
-              resource: expect.objectContaining({
-                [ResourceID]: "replaceable",
-                name: "bar-4",
-              }),
-            }),
-          ]),
-        );
-        await scope.finalize();
-        expect(deleted).toContain("foo-4");
-        expect(deleted).toContain("bar-4");
-      } finally {
-        await destroy(scope);
-      }
-    },
-  );
-
-  test(
-    "cannot replace a resource that has child resources",
-    { quiet: true },
-    async (scope) => {
-      try {
-        await alchemy.run("foo", () =>
-          Replacable("replaceable", {
-            name: "foo-4",
-            child: true,
           }),
-        );
-        await expect(
-          alchemy.run("foo", () =>
-            Replacable("replaceable", {
-              name: "baz-4",
+          expect.objectContaining({
+            resource: expect.objectContaining({
+              [ResourceID]: "replaceable",
+              name: "bar-4",
             }),
-          ),
-        ).rejects.toThrow("has children and cannot be replaced.");
-      } finally {
-        await destroy(scope);
-      }
-    },
-  );
+          }),
+        ]),
+      );
+      await scope.finalize();
+      expect(deleted).toContain("foo-4");
+      expect(deleted).toContain("bar-4");
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("cannot replace a resource that has child resources", async (scope) => {
+    try {
+      await alchemy.run("foo", () =>
+        Replacable("replaceable", {
+          name: "foo-4",
+          child: true,
+        }),
+      );
+      await expect(
+        alchemy.run("foo", () =>
+          Replacable("replaceable", {
+            name: "baz-4",
+          }),
+        ),
+      ).rejects.toThrow("has children and cannot be replaced.");
+    } finally {
+      await destroy(scope);
+    }
+  });
 });

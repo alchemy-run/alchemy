@@ -21,6 +21,12 @@ import {
 import { AsyncMutex } from "./util/mutex.ts";
 import type { ITelemetryClient } from "./util/telemetry/client.ts";
 
+export class RootScopeStateAttemptError extends Error {
+  constructor() {
+    super("Root scope cannot contain state");
+  }
+}
+
 export interface ScopeOptions {
   appName?: string;
   stage?: string;
@@ -234,7 +240,7 @@ export class Scope {
         await this.parent.state.set(this.scopeName!, scopeState);
         return;
       }
-      throw new Error("Root scope cannot contain state");
+      throw new RootScopeStateAttemptError();
     });
   }
 
@@ -251,7 +257,7 @@ export class Scope {
           this.createRootState();
         return scopeState.data[key];
       }
-      throw new Error("Root scope cannot contain state");
+      throw new RootScopeStateAttemptError();
     });
   }
 
@@ -270,7 +276,7 @@ export class Scope {
           this.createRootState();
         return scopeState.data[key];
       }
-      throw new Error("Root scope cannot contain state");
+      throw new RootScopeStateAttemptError();
     });
   }
 
@@ -362,8 +368,12 @@ export class Scope {
 
   public async destroyPendingDeletions() {
     const pendingDeletions =
-      (await this.get<PendingDeletions>("pendingDeletions").catch(() => [])) ??
-      [];
+      (await this.get<PendingDeletions>("pendingDeletions").catch((e) => {
+        if (e instanceof RootScopeStateAttemptError) {
+          return [];
+        }
+        throw e;
+      })) ?? [];
     if (pendingDeletions) {
       for (const { resource, oldProps } of pendingDeletions) {
         //todo(michael): ugly hack due to the way scope is serialized
