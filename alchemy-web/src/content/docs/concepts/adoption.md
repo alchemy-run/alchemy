@@ -1,6 +1,6 @@
 ---
 order: 11
-title: Resource Adoption
+title: Adoption
 description: Learn how to adopt existing infrastructure with Alchemy resources instead of failing when resources already exist.
 ---
 
@@ -11,13 +11,13 @@ When creating a resource, Alchemy will fail if a resource with the same name alr
 ```typescript
 // Without adoption - fails if bucket already exists
 const bucket = await R2Bucket("my-bucket", {
-  name: "existing-bucket"
+  name: "existing-bucket",
 });
 
 // With adoption - uses existing bucket if it exists
 const bucket = await R2Bucket("my-bucket", {
   name: "existing-bucket",
-  adopt: true
+  adopt: true,
 });
 ```
 
