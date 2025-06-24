@@ -195,7 +195,6 @@ async function _alchemy(
       stage:
         mergedOptions?.stage ?? process.env.ALCHEMY_STAGE ?? process.env.USER,
     });
-    root.resources.set(stage.scopeName!, stage);
     try {
       Scope.storage.enterWith(root);
       Scope.storage.enterWith(stage);

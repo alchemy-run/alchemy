@@ -338,6 +338,16 @@ export class Scope {
 
       const orphans = await Promise.all(
         orphanIds.map(async (id) => (await this.state.get(id))!.output),
+      ).then((orphans) =>
+        orphans.filter(
+          (orphan) =>
+            !(
+              orphan &&
+              orphan[ResourceKind] === "alchemy::Scope" &&
+              orphan[ResourceScope].scopeName ===
+                orphan[ResourceScope].root.scopeName
+            ),
+        ),
       );
       await destroyAll(orphans, {
         quiet: this.quiet,
