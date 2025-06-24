@@ -341,11 +341,10 @@ export class Scope {
       ).then((orphans) =>
         orphans.filter(
           (orphan) =>
+            //we never want to mark the stage scope as an orphan
             !(
-              orphan &&
               orphan[ResourceKind] === "alchemy::Scope" &&
-              orphan[ResourceScope].scopeName ===
-                orphan[ResourceScope].root.scopeName
+              orphan[ResourceFQN] === this.root.fqn(this.stage)
             ),
         ),
       );
