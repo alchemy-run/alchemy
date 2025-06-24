@@ -5,15 +5,12 @@ import { Container } from "../../src/cloudflare/index.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
 import { Image } from "../../src/docker/image.ts";
-import { BRANCH_PREFIX } from "../util.ts";
-
-import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import "../../src/test/vitest.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
-const api = await createCloudflareApi();
 
 describe("Container Resource", () => {
   test("create container", async (scope) => {
@@ -30,9 +27,7 @@ describe("Container Resource", () => {
             className: "MyContainer",
             image: await Image("test-image", {
               name: "test-image",
-              build: {
-                context: path.join(import.meta.dirname, "container"),
-              },
+              context: path.join(import.meta.dirname, "container"),
             }),
             maxInstances: 1,
             name: "test-container",

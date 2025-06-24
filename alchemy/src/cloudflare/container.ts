@@ -62,6 +62,7 @@ export type SchedulingPolicy =
 
 export interface ContainerApplication
   extends Resource<"cloudflare::ContainerApplication"> {
+  id: string;
   name: string;
 }
 
@@ -74,13 +75,17 @@ export const ContainerApplication = Resource(
   ): Promise<ContainerApplication> {
     const api = await createCloudflareApi(props);
     if (this.phase === "delete") {
+      if (this.output?.id) {
+        // Delete the container application
+        await deleteContainerApplication(api, this.output.id);
+      }
       return this.destroy();
     } else {
       const { targetImage } = await pushContainerRefToRegistry(api, {
         image: props.image,
         registryId: "registry.cloudflare.com",
       });
-      await createContainerApplication(api, {
+      const application = await createContainerApplication(api, {
         name: props.name,
         scheduling_policy: props.schedulingPolicy ?? "default",
         instances: props.instances ?? 1,
@@ -104,10 +109,12 @@ export const ContainerApplication = Resource(
           },
         },
       });
+
+      return this({
+        id: application.id,
+        name: application.name,
+      });
     }
-    return this({
-      name: "name",
-    });
   },
 );
 
@@ -208,6 +215,7 @@ export async function deleteContainerApplication(
   api: CloudflareApi,
   applicationId: string,
 ) {
+  console.log("DELETE");
   const response = await api.delete(
     `/accounts/${api.accountId}/containers/applications/${applicationId}`,
   );

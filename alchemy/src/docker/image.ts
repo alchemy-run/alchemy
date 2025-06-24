@@ -5,18 +5,34 @@ import { Resource } from "../resource.ts";
 import { DockerApi } from "./api.ts";
 
 /**
- * Options for building a Docker image
+ * Properties for creating a Docker image
  */
-export interface DockerBuildOptions {
+export interface ImageProps {
   /**
-   * Path to the build context directory
+   * Repository name for the image (e.g., "username/image")
+   *
+   * @default id
    */
-  context: string;
+  name?: string;
+
+  /**
+   * Tag for the image (e.g., "latest")
+   */
+  tag?: string;
 
   /**
    * Path to the Dockerfile, relative to context
+   *
+   * @default "./Dockerfile"
    */
   dockerfile?: string;
+
+  /**
+   * Path to the build context directory
+   *
+   * If not provided, defaults to the directory containing the Dockerfile
+   */
+  context?: string;
 
   /**
    * Target build platform (e.g., linux/amd64)
@@ -37,26 +53,6 @@ export interface DockerBuildOptions {
    * List of images to use for cache
    */
   cacheFrom?: string[];
-}
-
-/**
- * Properties for creating a Docker image
- */
-export interface ImageProps {
-  /**
-   * Repository name for the image (e.g., "username/image")
-   */
-  name: string;
-
-  /**
-   * Tag for the image (e.g., "latest")
-   */
-  tag?: string;
-
-  /**
-   * Build configuration
-   */
-  build: DockerBuildOptions;
 
   /**
    * Whether to skip pushing the image to registry
@@ -97,24 +93,31 @@ export interface Image extends Resource<"docker::Image">, ImageProps {
  * const appImage = await Image("app-image", {
  *   name: "myapp",
  *   tag: "latest",
- *   build: {
- *     context: "./app",
- *     dockerfile: "Dockerfile",
- *     buildArgs: {
- *       NODE_ENV: "production"
- *     }
+ *   context: "./app",
+ *   dockerfile: "Dockerfile",
+ *   buildArgs: {
+ *     NODE_ENV: "production"
  *   }
+ * });
+ *
+ * @example
+ * // Build using a Dockerfile in a subdirectory (context inferred)
+ * const apiImage = await Image("api-image", {
+ *   name: "myapi",
+ *   dockerfile: "./services/api/Dockerfile"
  * });
  */
 export const Image = Resource(
   "docker::Image",
   async function (
     this: Context<Image>,
-    _id: string,
+    id: string,
     props: ImageProps,
   ): Promise<Image> {
     // Initialize Docker API client
     const api = new DockerApi();
+
+    const imageName = props.name ?? id;
 
     if (this.phase === "delete") {
       // No action needed for delete as Docker images aren't automatically removed
@@ -123,35 +126,52 @@ export const Image = Resource(
     } else {
       // Normalize properties
       const tag = props.tag || "latest";
-      const imageRef = `${props.name}:${tag}`;
+      const imageRef = `${imageName}:${tag}`;
+
+      // Determine Dockerfile path and context
+      const dockerfile = props.dockerfile || "Dockerfile";
+
+      // If context is not provided, infer from dockerfile directory
+      let context: string;
+      if (props.context) {
+        context = props.context;
+      } else {
+        // If dockerfile is an absolute path, use its directory as context
+        // Otherwise, use current directory as context
+        if (path.isAbsolute(dockerfile)) {
+          context = path.dirname(dockerfile);
+        } else {
+          context = ".";
+        }
+      }
 
       // Validate build context
-      const { context } = props.build;
       await fs.access(context);
 
-      // Determine Dockerfile path
-      const dockerfile = props.build.dockerfile || "Dockerfile";
-      const dockerfilePath = path.join(context, dockerfile);
+      // Determine full Dockerfile path
+      const dockerfilePath = path.isAbsolute(dockerfile)
+        ? dockerfile
+        : path.join(context, dockerfile);
       await fs.access(dockerfilePath);
 
       // Prepare build options
-      const buildOptions: Record<string, string> = props.build.buildArgs || {};
+      const buildOptions: Record<string, string> = props.buildArgs || {};
 
       // Add platform if specified
       let buildArgs = ["build", "-t", imageRef];
 
-      if (props.build.platform) {
-        buildArgs.push("--platform", props.build.platform);
+      if (props.platform) {
+        buildArgs.push("--platform", props.platform);
       }
 
       // Add target if specified
-      if (props.build.target) {
-        buildArgs.push("--target", props.build.target);
+      if (props.target) {
+        buildArgs.push("--target", props.target);
       }
 
       // Add cache sources if specified
-      if (props.build.cacheFrom && props.build.cacheFrom.length > 0) {
-        for (const cacheSource of props.build.cacheFrom) {
+      if (props.cacheFrom && props.cacheFrom.length > 0) {
+        for (const cacheSource of props.cacheFrom) {
           buildArgs.push("--cache-from", cacheSource);
         }
       }
@@ -162,12 +182,12 @@ export const Image = Resource(
       }
 
       // Add dockerfile if not the default
-      if (props.build.dockerfile && props.build.dockerfile !== "Dockerfile") {
-        buildArgs.push("-f", props.build.dockerfile);
+      if (props.dockerfile && props.dockerfile !== "Dockerfile") {
+        buildArgs.push("-f", props.dockerfile);
       }
 
       // Add context path
-      buildArgs.push(props.build.context);
+      buildArgs.push(context);
 
       // Execute build command
       console.log(`Building Docker image: ${imageRef}`);
