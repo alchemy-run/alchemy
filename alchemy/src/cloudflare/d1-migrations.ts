@@ -10,6 +10,13 @@ export interface D1MigrationOptions {
   accountId: string;
   databaseId: string;
   api: CloudflareApi;
+  /**
+   * Name of the column used to store migration IDs.
+   * If not specified, will attempt to detect the column automatically:
+   * 1. First checks if 'name' column exists (wrangler compatibility)
+   * 2. Falls back to 'id' column (backward compatibility)
+   */
+  migrationsIdColumn?: string;
 }
 
 const getPrefix = (name: string) => {
@@ -20,6 +27,44 @@ const getPrefix = (name: string) => {
 
 async function readMigrationFile(filePath: string): Promise<string> {
   return fs.readFile(filePath, "utf-8");
+}
+
+/**
+ * Detects the migration ID column name used in the migration table.
+ * Returns the column name to use for storing migration IDs.
+ */
+async function detectMigrationIdColumn(
+  options: D1MigrationOptions,
+): Promise<string> {
+  // If explicitly specified, use that
+  if (options.migrationsIdColumn) {
+    return options.migrationsIdColumn;
+  }
+
+  try {
+    // Check if the table exists and get its schema
+    const pragmaSQL = `PRAGMA table_info(${options.migrationsTable});`;
+    const result = await executeD1SQL(options, pragmaSQL);
+    const columns = result?.result[0]?.results || [];
+
+    // Look for 'name' column first (wrangler compatibility)
+    const hasNameColumn = columns.some((col: any) => col.name === "name");
+    if (hasNameColumn) {
+      return "name";
+    }
+
+    // Look for 'id' column (backward compatibility)
+    const hasIdColumn = columns.some((col: any) => col.name === "id");
+    if (hasIdColumn) {
+      return "id";
+    }
+
+    // If table doesn't exist or no recognized columns, default to 'name' for wrangler compatibility
+    return "name";
+  } catch (error) {
+    // If there's an error querying the table (e.g., table doesn't exist), default to 'name'
+    return "name";
+  }
 }
 
 /**
@@ -59,7 +104,8 @@ export async function listMigrationsFiles(
 export async function ensureMigrationsTable(
   options: D1MigrationOptions,
 ): Promise<void> {
-  const createTableSQL = `CREATE TABLE IF NOT EXISTS ${options.migrationsTable} (id TEXT PRIMARY KEY, applied_at TEXT);`;
+  const idColumn = await detectMigrationIdColumn(options);
+  const createTableSQL = `CREATE TABLE IF NOT EXISTS ${options.migrationsTable} (${idColumn} TEXT PRIMARY KEY, applied_at TEXT);`;
 
   await executeD1SQL(options, createTableSQL);
 }
@@ -70,11 +116,14 @@ export async function ensureMigrationsTable(
 export async function getAppliedMigrations(
   options: D1MigrationOptions,
 ): Promise<Set<string>> {
-  const sql = `SELECT id FROM ${options.migrationsTable};`;
+  const idColumn = await detectMigrationIdColumn(options);
+  const sql = `SELECT ${idColumn} FROM ${options.migrationsTable};`;
 
   const result = await executeD1SQL(options, sql);
 
-  const ids = (result?.result[0]?.results || []).map((row: any) => row.id);
+  const ids = (result?.result[0]?.results || []).map(
+    (row: any) => row[idColumn],
+  );
   return new Set(ids);
 }
 
@@ -121,6 +170,7 @@ export async function applyMigrations(
 ): Promise<void> {
   await ensureMigrationsTable(options);
   const applied = await getAppliedMigrations(options);
+  const idColumn = await detectMigrationIdColumn(options);
 
   for (const migration of options.migrationsFiles) {
     const migrationId = migration.id;
@@ -130,7 +180,7 @@ export async function applyMigrations(
     // Run the migration
     await executeD1SQL(options, migration.sql);
     // Record as applied
-    const insertSQL = `INSERT INTO ${options.migrationsTable} (id, applied_at) VALUES ('${migrationId.replace("'", "''")}', datetime('now'));`;
+    const insertSQL = `INSERT INTO ${options.migrationsTable} (${idColumn}, applied_at) VALUES ('${migrationId.replace("'", "''")}', datetime('now'));`;
     await executeD1SQL(options, insertSQL);
 
     logger.log(`Applied migration: ${migrationId}`);
