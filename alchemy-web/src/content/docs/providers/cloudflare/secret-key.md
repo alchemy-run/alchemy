@@ -1,3 +1,8 @@
+---
+title: SecretKey (Cloudflare)
+description: Securely store and use cryptographic keys in Cloudflare Workers with the SecretKey binding.
+---
+
 # SecretKey
 
 A data class that represents a secret key binding for Cloudflare Workers, enabling secure cryptographic operations using the Web Crypto API.

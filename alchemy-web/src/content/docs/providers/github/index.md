@@ -1,3 +1,8 @@
+---
+title: GitHub
+description: Learn how to manage GitHub repositories, environments, secrets, and comments using Alchemy.
+---
+
 # GitHub
 
 GitHub is a web-based version control and collaboration platform that provides Git repository hosting, issue tracking, project management, and CI/CD workflows. Alchemy provides resources to manage GitHub repositories, environments, secrets, and comments programmatically.

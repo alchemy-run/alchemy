@@ -1,0 +1,7 @@
+{
+  "include": ["src/**/*"],
+  "compilerOptions": {
+    "types": ["astro/client"],
+    "noEmit": true
+  }
+}

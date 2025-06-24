@@ -1,3 +1,8 @@
+---
+title: AWS Cloud Control API
+description: Manage any AWS resource via the Cloud Control API using Alchemy.
+---
+
 # AWS Cloud Control API
 
 The AWS Cloud Control API integration in Alchemy provides a unified interface for managing AWS resources using the [AWS Cloud Control API](https://aws.amazon.com/cloudcontrol/). This integration allows you to create, read, update, and delete any AWS resource that is supported by CloudFormation, using a consistent and type-safe interface.
@@ -225,7 +230,10 @@ const policy = await AWS.S3.BucketPolicy("website-policy", {
   },
 });
 
-console.log("Website URL:", `http://${bucket.BucketName}.s3-website-${app.region}.amazonaws.com`);
+console.log(
+  "Website URL:",
+  `http://${bucket.BucketName}.s3-website-${app.region}.amazonaws.com`
+);
 ```
 
 ### DynamoDB Table with GSI
@@ -240,15 +248,11 @@ const table = await AWS.DynamoDB.Table("users", {
     { AttributeName: "email", AttributeType: "S" },
     { AttributeName: "createdAt", AttributeType: "N" },
   ],
-  KeySchema: [
-    { AttributeName: "id", KeyType: "HASH" },
-  ],
+  KeySchema: [{ AttributeName: "id", KeyType: "HASH" }],
   GlobalSecondaryIndexes: [
     {
       IndexName: "email-index",
-      KeySchema: [
-        { AttributeName: "email", KeyType: "HASH" },
-      ],
+      KeySchema: [{ AttributeName: "email", KeyType: "HASH" }],
       Projection: { ProjectionType: "ALL" },
       ProvisionedThroughput: {
         ReadCapacityUnits: 5,
@@ -257,9 +261,7 @@ const table = await AWS.DynamoDB.Table("users", {
     },
     {
       IndexName: "createdAt-index",
-      KeySchema: [
-        { AttributeName: "createdAt", KeyType: "HASH" },
-      ],
+      KeySchema: [{ AttributeName: "createdAt", KeyType: "HASH" }],
       Projection: { ProjectionType: "KEYS_ONLY" },
       ProvisionedThroughput: {
         ReadCapacityUnits: 5,
@@ -346,6 +348,7 @@ console.log("Function ARN:", func.FunctionArn);
 ### Common Issues
 
 1. Resource Creation Failures
+
    ```typescript
    try {
      const bucket = await AWS.S3.Bucket("my-bucket", config);
@@ -361,6 +364,7 @@ console.log("Function ARN:", func.FunctionArn);
    ```
 
 2. Operation Timeouts
+
    ```typescript
    const client = createCloudControlClient({
      maxPollingAttempts: 60, // Increase for slow operations
@@ -369,10 +373,12 @@ console.log("Function ARN:", func.FunctionArn);
    ```
 
 3. Rate Limiting
+
    ```typescript
    // Implement your own rate limiting
-   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-   
+   const delay = (ms: number) =>
+     new Promise((resolve) => setTimeout(resolve, ms));
+
    for (const config of resourceConfigs) {
      await delay(1000); // Wait 1 second between operations
      await AWS.S3.Bucket(`bucket-${config.id}`, config);
@@ -393,4 +399,4 @@ console.log("Function ARN:", func.FunctionArn);
 
 - [AWS Cloud Control API Documentation](https://docs.aws.amazon.com/cloudcontrolapi/latest/userguide/what-is-cloudcontrolapi.html)
 - [CloudFormation Resource Types](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html)
-- [AWS Service Quotas](https://docs.aws.amazon.com/cloudcontrolapi/latest/userguide/resource-quotas.html) 
+- [AWS Service Quotas](https://docs.aws.amazon.com/cloudcontrolapi/latest/userguide/resource-quotas.html)
