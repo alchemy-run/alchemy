@@ -126,6 +126,7 @@
         "@astrojs/starlight": "^0.34.3",
         "astro": "^5.6.1",
         "starlight-llms-txt": "^0.5.1",
+        "starlight-nextjs-theme": "^0.2.0",
         "typescript": "^5.8.3",
       },
       "devDependencies": {
@@ -3794,6 +3795,8 @@
     "standard-as-callback": ["standard-as-callback@2.1.0", "", {}, "sha512-qoRRSyROncaz1z0mvYqIE4lCd9p2R90i6GxW3uZv5ucSu8tU7B5HXUP1gG8pVZsYNVaXjk8ClXHPttLyxAL48A=="],
 
     "starlight-llms-txt": ["starlight-llms-txt@0.5.1", "", { "dependencies": { "@astrojs/mdx": "^4.0.5", "@types/hast": "^3.0.4", "@types/micromatch": "^4.0.9", "github-slugger": "^2.0.0", "hast-util-select": "^6.0.3", "micromatch": "^4.0.8", "rehype-parse": "^9.0.1", "rehype-remark": "^10.0.0", "remark-gfm": "^4.0.0", "remark-stringify": "^11.0.0", "unified": "^11.0.5", "unist-util-remove": "^4.0.0" }, "peerDependencies": { "@astrojs/starlight": ">=0.31", "astro": "^5.1.6" } }, "sha512-EPhTZ7jOhMxp6BBSpYNWuaJezzI+4eRgkwlFGV/XNNGSjNibo9JHrCvCbJO6BDk4znXcTWi0x8N7FO7ckNXLGQ=="],
+
+    "starlight-nextjs-theme": ["starlight-nextjs-theme@0.2.0", "", { "peerDependencies": { "@astrojs/starlight": ">=0.34" } }, "sha512-JM6bTGhIKSDEXp58ALuphUKQMX/2PYPNAaACxVAPoEJnLd8rx/biRsvvcHb7djsrJI9E7j3KSdNacXuyRrTLww=="],
 
     "static-extend": ["static-extend@0.1.2", "", { "dependencies": { "define-property": "^0.2.5", "object-copy": "^0.1.0" } }, "sha512-72E9+uLc27Mt718pMHt9VMNiAL4LMsmDbBva8mxWUCkT07fSzEGMYUCk0XWY6lp0j6RBAG4cJ3mWuZv2OE3s0g=="],
 

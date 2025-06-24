@@ -1,16 +1,17 @@
 // @ts-check
-import cloudflare from "@astrojs/cloudflare";
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 import starlightLlmsTxt from "starlight-llms-txt";
+import starlightThemeNextjs from "starlight-nextjs-theme";
 
 // https://astro.build/config
 export default defineConfig({
   site: "https://alchemy.run",
-  adapter: cloudflare({
-    imageService: "passthrough",
-  }),
+  // only needed if we use SSR
+  // adapter: cloudflare({
+  //   imageService: "passthrough",
+  // }),
   prefetch: !import.meta.env.DEV,
   integrations: [
     sitemap({
@@ -64,7 +65,7 @@ export default defineConfig({
           autogenerate: { directory: "providers", collapsed: true },
         },
       ],
-      plugins: [starlightLlmsTxt()],
+      plugins: [starlightThemeNextjs(), starlightLlmsTxt()],
     }),
   ],
   trailingSlash: "ignore",
