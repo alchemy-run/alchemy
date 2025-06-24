@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EKS AccessEntrys with Alchemy
+title: AccessEntry
 description: Learn how to create, update, and manage AWS EKS AccessEntrys using Alchemy Cloud Control.
 ---
-
-# AccessEntry
 
 The AccessEntry resource lets you manage access permissions for Amazon EKS clusters, enabling secure access for users and groups. For more details, refer to the AWS documentation on [AWS EKS AccessEntrys](https://docs.aws.amazon.com/eks/latest/userguide/).
 

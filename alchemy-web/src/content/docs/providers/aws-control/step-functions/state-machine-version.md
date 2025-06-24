@@ -1,9 +1,7 @@
 ---
-title: Managing AWS StepFunctions StateMachineVersions with Alchemy
+title: StateMachineVersion
 description: Learn how to create, update, and manage AWS StepFunctions StateMachineVersions using Alchemy Cloud Control.
 ---
-
-# StateMachineVersion
 
 The StateMachineVersion resource allows you to manage [AWS StepFunctions StateMachineVersions](https://docs.aws.amazon.com/stepfunctions/latest/userguide/) and their configurations, enabling you to create and manage specific versions of state machines effectively.
 

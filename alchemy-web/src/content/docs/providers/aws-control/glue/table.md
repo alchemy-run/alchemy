@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue Tables with Alchemy
+title: Table
 description: Learn how to create, update, and manage AWS Glue Tables using Alchemy Cloud Control.
 ---
-
-# Table
 
 The Table resource allows you to manage [AWS Glue Tables](https://docs.aws.amazon.com/glue/latest/userguide/) for organizing and accessing your data in AWS. Glue Tables are used in data lakes and can be queried with Amazon Athena or used in ETL processes with AWS Glue.
 

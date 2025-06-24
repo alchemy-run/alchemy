@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSMContacts Plans with Alchemy
+title: Plan
 description: Learn how to create, update, and manage AWS SSMContacts Plans using Alchemy Cloud Control.
 ---
-
-# Plan
 
 The Plan resource lets you manage [AWS SSMContacts Plans](https://docs.aws.amazon.com/ssmcontacts/latest/userguide/) for incident management and response workflows.
 

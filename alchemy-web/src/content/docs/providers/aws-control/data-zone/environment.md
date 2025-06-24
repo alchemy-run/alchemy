@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataZone Environments with Alchemy
+title: Environment
 description: Learn how to create, update, and manage AWS DataZone Environments using Alchemy Cloud Control.
 ---
-
-# Environment
 
 The Environment resource allows you to create and manage environments within AWS DataZone, enabling you to define isolated spaces for data projects and their related resources. For more information, visit the [AWS DataZone Environments documentation](https://docs.aws.amazon.com/datazone/latest/userguide/).
 

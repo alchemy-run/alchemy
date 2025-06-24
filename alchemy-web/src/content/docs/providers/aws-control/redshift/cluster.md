@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Redshift Clusters with Alchemy
+title: Cluster
 description: Learn how to create, update, and manage AWS Redshift Clusters using Alchemy Cloud Control.
 ---
-
-# Cluster
 
 The Cluster resource lets you manage [AWS Redshift Clusters](https://docs.aws.amazon.com/redshift/latest/userguide/) which are designed for data warehousing and analytics. You can create and configure clusters with various properties including node type, number of nodes, and security settings.
 

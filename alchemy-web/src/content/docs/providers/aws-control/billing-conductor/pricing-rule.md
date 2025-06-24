@@ -1,9 +1,7 @@
 ---
-title: Managing AWS BillingConductor PricingRules with Alchemy
+title: PricingRule
 description: Learn how to create, update, and manage AWS BillingConductor PricingRules using Alchemy Cloud Control.
 ---
-
-# PricingRule
 
 The PricingRule resource lets you manage [AWS BillingConductor PricingRules](https://docs.aws.amazon.com/billingconductor/latest/userguide/) for defining pricing configurations and rules for your AWS services.
 

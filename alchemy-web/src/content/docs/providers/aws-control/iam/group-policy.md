@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM GroupPolicies with Alchemy
+title: GroupPolicy
 description: Learn how to create, update, and manage AWS IAM GroupPolicies using Alchemy Cloud Control.
 ---
-
-# GroupPolicy
 
 The GroupPolicy resource lets you manage [AWS IAM GroupPolicies](https://docs.aws.amazon.com/iam/latest/userguide/) for controlling permissions associated with IAM groups.
 

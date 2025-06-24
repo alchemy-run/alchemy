@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataZone DataSources with Alchemy
+title: DataSource
 description: Learn how to create, update, and manage AWS DataZone DataSources using Alchemy Cloud Control.
 ---
-
-# DataSource
 
 The DataSource resource lets you manage [AWS DataZone DataSources](https://docs.aws.amazon.com/datazone/latest/userguide/) and their configuration settings.
 

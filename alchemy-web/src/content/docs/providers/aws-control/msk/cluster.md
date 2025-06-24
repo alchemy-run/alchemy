@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MSK Clusters with Alchemy
+title: Cluster
 description: Learn how to create, update, and manage AWS MSK Clusters using Alchemy Cloud Control.
 ---
-
-# Cluster
 
 The Cluster resource lets you manage [AWS MSK Clusters](https://docs.aws.amazon.com/msk/latest/userguide/) for running Apache Kafka in a fully managed environment.
 

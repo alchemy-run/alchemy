@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect UserHierarchyStructures with Alchemy
+title: UserHierarchyStructure
 description: Learn how to create, update, and manage AWS Connect UserHierarchyStructures using Alchemy Cloud Control.
 ---
-
-# UserHierarchyStructure
 
 The UserHierarchyStructure resource allows you to manage the user hierarchy within AWS Connect, enabling you to define the organizational structure of your contact center. This resource is essential for setting up users, groups, and their respective hierarchy in a Connect instance. For more details, visit the [AWS Connect UserHierarchyStructures documentation](https://docs.aws.amazon.com/connect/latest/userguide/).
 

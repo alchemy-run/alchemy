@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Invoicing InvoiceUnits with Alchemy
+title: InvoiceUnit
 description: Learn how to create, update, and manage AWS Invoicing InvoiceUnits using Alchemy Cloud Control.
 ---
-
-# InvoiceUnit
 
 The InvoiceUnit resource allows you to manage [AWS Invoicing InvoiceUnits](https://docs.aws.amazon.com/invoicing/latest/userguide/) for handling invoices in your AWS environment.
 

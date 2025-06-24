@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Wisdom AIPrompts with Alchemy
+title: AIPrompt
 description: Learn how to create, update, and manage AWS Wisdom AIPrompts using Alchemy Cloud Control.
 ---
-
-# AIPrompt
 
 The AIPrompt resource lets you create and manage [AWS Wisdom AIPrompts](https://docs.aws.amazon.com/wisdom/latest/userguide/). This resource enables applications to utilize AI-generated prompts that assist users in gaining insights and providing better responses.
 

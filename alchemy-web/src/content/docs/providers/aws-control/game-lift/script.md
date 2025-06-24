@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GameLift Scripts with Alchemy
+title: Script
 description: Learn how to create, update, and manage AWS GameLift Scripts using Alchemy Cloud Control.
 ---
-
-# Script
 
 The Script resource allows you to manage [AWS GameLift Scripts](https://docs.aws.amazon.com/gamelift/latest/userguide/) that define the executable code for your game servers.
 

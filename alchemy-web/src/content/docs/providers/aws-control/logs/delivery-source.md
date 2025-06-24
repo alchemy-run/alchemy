@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Logs DeliverySources with Alchemy
+title: DeliverySource
 description: Learn how to create, update, and manage AWS Logs DeliverySources using Alchemy Cloud Control.
 ---
-
-# DeliverySource
 
 The DeliverySource resource lets you manage [AWS Logs DeliverySources](https://docs.aws.amazon.com/logs/latest/userguide/) for delivering log data to specified destinations, simplifying the management and configuration of log delivery in your AWS environment.
 

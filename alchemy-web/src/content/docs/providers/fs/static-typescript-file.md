@@ -1,9 +1,7 @@
 ---
-title: Static TypeScript File
+title: StaticTypeScriptFile
 description: Learn how to create and manage static TypeScript (.ts, .tsx) files with proper formatting using Alchemy's FS provider.
 ---
-
-# StaticTypeScriptFile
 
 Creates formatted TypeScript files using [Prettier](https://prettier.io/) for consistent code style.
 

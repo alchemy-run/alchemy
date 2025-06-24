@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QuickSight Folders with Alchemy
+title: Folder
 description: Learn how to create, update, and manage AWS QuickSight Folders using Alchemy Cloud Control.
 ---
-
-# Folder
 
 The Folder resource lets you manage [AWS QuickSight Folders](https://docs.aws.amazon.com/quicksight/latest/userguide/) for organizing dashboards and analyses efficiently.
 

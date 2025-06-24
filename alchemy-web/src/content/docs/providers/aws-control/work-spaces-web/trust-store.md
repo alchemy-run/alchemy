@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WorkSpacesWeb TrustStores with Alchemy
+title: TrustStore
 description: Learn how to create, update, and manage AWS WorkSpacesWeb TrustStores using Alchemy Cloud Control.
 ---
-
-# TrustStore
 
 The TrustStore resource allows you to manage [AWS WorkSpacesWeb TrustStores](https://docs.aws.amazon.com/workspacesweb/latest/userguide/), which are used to store SSL/TLS certificates for secure communication.
 

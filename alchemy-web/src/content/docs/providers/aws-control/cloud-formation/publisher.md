@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation Publishers with Alchemy
+title: Publisher
 description: Learn how to create, update, and manage AWS CloudFormation Publishers using Alchemy Cloud Control.
 ---
-
-# Publisher
 
 The Publisher resource lets you manage [AWS CloudFormation Publishers](https://docs.aws.amazon.com/cloudformation/latest/userguide/) which are used to publish CloudFormation templates for public use.
 

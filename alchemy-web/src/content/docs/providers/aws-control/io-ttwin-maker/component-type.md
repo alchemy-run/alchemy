@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTTwinMaker ComponentTypes with Alchemy
+title: ComponentType
 description: Learn how to create, update, and manage AWS IoTTwinMaker ComponentTypes using Alchemy Cloud Control.
 ---
-
-# ComponentType
 
 The ComponentType resource allows you to define and manage [AWS IoTTwinMaker ComponentTypes](https://docs.aws.amazon.com/iottwinmaker/latest/userguide/), which are essential for creating digital twins of physical assets.
 

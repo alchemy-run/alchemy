@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FraudDetector EntityTypes with Alchemy
+title: EntityType
 description: Learn how to create, update, and manage AWS FraudDetector EntityTypes using Alchemy Cloud Control.
 ---
-
-# EntityType
 
 The EntityType resource lets you manage [AWS FraudDetector EntityTypes](https://docs.aws.amazon.com/frauddetector/latest/userguide/) which are essential for defining the types of entities that can be detected in your fraud detection models.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ImageBuilder ImageRecipes with Alchemy
+title: ImageRecipe
 description: Learn how to create, update, and manage AWS ImageBuilder ImageRecipes using Alchemy Cloud Control.
 ---
-
-# ImageRecipe
 
 The ImageRecipe resource allows you to define and manage [AWS ImageBuilder ImageRecipes](https://docs.aws.amazon.com/imagebuilder/latest/userguide/) which specify how to create images using various components and configurations.
 

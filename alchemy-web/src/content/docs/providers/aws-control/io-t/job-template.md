@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT JobTemplates with Alchemy
+title: JobTemplate
 description: Learn how to create, update, and manage AWS IoT JobTemplates using Alchemy Cloud Control.
 ---
-
-# JobTemplate
 
 The JobTemplate resource lets you manage [AWS IoT JobTemplates](https://docs.aws.amazon.com/iot/latest/userguide/) for defining job executions for IoT devices. JobTemplates provide a way to specify the actions that devices should take and manage their execution effectively.
 

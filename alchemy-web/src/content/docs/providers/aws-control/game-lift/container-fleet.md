@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GameLift ContainerFleets with Alchemy
+title: ContainerFleet
 description: Learn how to create, update, and manage AWS GameLift ContainerFleets using Alchemy Cloud Control.
 ---
-
-# ContainerFleet
 
 The ContainerFleet resource allows you to manage AWS GameLift ContainerFleets, enabling you to deploy, scale, and manage game server containers seamlessly. For more details, refer to the [AWS GameLift ContainerFleets documentation](https://docs.aws.amazon.com/gamelift/latest/userguide/).
 

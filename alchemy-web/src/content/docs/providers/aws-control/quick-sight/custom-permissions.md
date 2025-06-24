@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QuickSight CustomPermissionss with Alchemy
+title: CustomPermissions
 description: Learn how to create, update, and manage AWS QuickSight CustomPermissionss using Alchemy Cloud Control.
 ---
-
-# CustomPermissions
 
 The CustomPermissions resource allows you to manage [AWS QuickSight Custom Permissions](https://docs.aws.amazon.com/quicksight/latest/userguide/) for your AWS account, enabling fine-grained access control for QuickSight resources.
 

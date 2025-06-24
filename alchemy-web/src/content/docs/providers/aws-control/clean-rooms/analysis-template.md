@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CleanRooms AnalysisTemplates with Alchemy
+title: AnalysisTemplate
 description: Learn how to create, update, and manage AWS CleanRooms AnalysisTemplates using Alchemy Cloud Control.
 ---
-
-# AnalysisTemplate
 
 The AnalysisTemplate resource allows you to create and manage [AWS CleanRooms AnalysisTemplates](https://docs.aws.amazon.com/cleanrooms/latest/userguide/) for conducting collaborative analytics in a secure environment.
 

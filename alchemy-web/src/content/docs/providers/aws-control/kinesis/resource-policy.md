@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Kinesis ResourcePolicys with Alchemy
+title: ResourcePolicy
 description: Learn how to create, update, and manage AWS Kinesis ResourcePolicys using Alchemy Cloud Control.
 ---
-
-# ResourcePolicy
 
 The ResourcePolicy resource allows you to define resource-based policies for AWS Kinesis, enabling fine-grained access control. For more information, refer to the [AWS Kinesis ResourcePolicys documentation](https://docs.aws.amazon.com/kinesis/latest/userguide/).
 

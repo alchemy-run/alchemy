@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker InferenceExperiments with Alchemy
+title: InferenceExperiment
 description: Learn how to create, update, and manage AWS SageMaker InferenceExperiments using Alchemy Cloud Control.
 ---
-
-# InferenceExperiment
 
 The InferenceExperiment resource lets you create and manage [AWS SageMaker InferenceExperiments](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for evaluating different model variants in a production environment.
 

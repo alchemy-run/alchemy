@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGatewayV2 Authorizers with Alchemy
+title: Authorizer
 description: Learn how to create, update, and manage AWS ApiGatewayV2 Authorizers using Alchemy Cloud Control.
 ---
-
-# Authorizer
 
 The Authorizer resource allows you to manage [AWS ApiGatewayV2 Authorizers](https://docs.aws.amazon.com/apigatewayv2/latest/userguide/) to control access to your API Gateway APIs.
 

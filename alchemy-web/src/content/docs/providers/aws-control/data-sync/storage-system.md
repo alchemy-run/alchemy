@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataSync StorageSystems with Alchemy
+title: StorageSystem
 description: Learn how to create, update, and manage AWS DataSync StorageSystems using Alchemy Cloud Control.
 ---
-
-# StorageSystem
 
 The StorageSystem resource lets you manage [AWS DataSync StorageSystems](https://docs.aws.amazon.com/datasync/latest/userguide/) which enable you to automate the transfer of data between on-premises storage and AWS storage services.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkFirewall FirewallPolicys with Alchemy
+title: FirewallPolicy
 description: Learn how to create, update, and manage AWS NetworkFirewall FirewallPolicys using Alchemy Cloud Control.
 ---
-
-# FirewallPolicy
 
 The FirewallPolicy resource allows you to manage [AWS NetworkFirewall FirewallPolicys](https://docs.aws.amazon.com/networkfirewall/latest/userguide/) to define your firewall rules and behaviors.
 

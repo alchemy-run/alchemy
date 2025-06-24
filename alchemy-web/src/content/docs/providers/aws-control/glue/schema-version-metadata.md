@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue SchemaVersionMetadatas with Alchemy
+title: SchemaVersionMetadata
 description: Learn how to create, update, and manage AWS Glue SchemaVersionMetadatas using Alchemy Cloud Control.
 ---
-
-# SchemaVersionMetadata
 
 The SchemaVersionMetadata resource allows you to manage metadata associated with specific schema versions in AWS Glue. This metadata can be useful for tracking and managing schema evolution over time. For more information, visit the [AWS Glue SchemaVersionMetadatas](https://docs.aws.amazon.com/glue/latest/userguide/).
 

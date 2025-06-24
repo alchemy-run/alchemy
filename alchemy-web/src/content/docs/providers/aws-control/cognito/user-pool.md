@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cognito UserPools with Alchemy
+title: UserPool
 description: Learn how to create, update, and manage AWS Cognito UserPools using Alchemy Cloud Control.
 ---
-
-# UserPool
 
 The UserPool resource lets you manage [AWS Cognito UserPools](https://docs.aws.amazon.com/cognito/latest/userguide/) for user authentication and management in your applications.
 

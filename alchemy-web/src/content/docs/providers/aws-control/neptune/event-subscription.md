@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Neptune EventSubscriptions with Alchemy
+title: EventSubscription
 description: Learn how to create, update, and manage AWS Neptune EventSubscriptions using Alchemy Cloud Control.
 ---
-
-# EventSubscription
 
 The EventSubscription resource allows you to manage [AWS Neptune EventSubscriptions](https://docs.aws.amazon.com/neptune/latest/userguide/) that notify you of specific database events. This capability is essential for monitoring and reacting to database changes effectively.
 

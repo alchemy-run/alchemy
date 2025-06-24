@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Batch SchedulingPolicys with Alchemy
+title: SchedulingPolicy
 description: Learn how to create, update, and manage AWS Batch SchedulingPolicys using Alchemy Cloud Control.
 ---
-
-# SchedulingPolicy
 
 The SchedulingPolicy resource allows you to manage the scheduling policies for AWS Batch jobs, which define how jobs are scheduled and prioritized within the Batch environment. For more information, visit the [AWS Batch SchedulingPolicys documentation](https://docs.aws.amazon.com/batch/latest/userguide/).
 

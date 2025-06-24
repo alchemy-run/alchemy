@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GameLift GameServerGroups with Alchemy
+title: GameServerGroup
 description: Learn how to create, update, and manage AWS GameLift GameServerGroups using Alchemy Cloud Control.
 ---
-
-# GameServerGroup
 
 The GameServerGroup resource lets you manage [AWS GameLift GameServerGroups](https://docs.aws.amazon.com/gamelift/latest/userguide/) for deploying and scaling game servers effectively.
 

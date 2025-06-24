@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 EIPs with Alchemy
+title: EIP
 description: Learn how to create, update, and manage AWS EC2 EIPs using Alchemy Cloud Control.
 ---
-
-# EIP
 
 The EIP (Elastic IP) resource lets you manage [AWS EC2 Elastic IPs](https://docs.aws.amazon.com/ec2/latest/userguide/) for your cloud infrastructure.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS LookoutVision Projects with Alchemy
+title: Project
 description: Learn how to create, update, and manage AWS LookoutVision Projects using Alchemy Cloud Control.
 ---
-
-# Project
 
 The Project resource allows you to manage [AWS LookoutVision Projects](https://docs.aws.amazon.com/lookoutvision/latest/userguide/) for analyzing and detecting anomalies in images using machine learning.
 

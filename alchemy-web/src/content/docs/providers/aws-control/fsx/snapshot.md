@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FSx Snapshots with Alchemy
+title: Snapshot
 description: Learn how to create, update, and manage AWS FSx Snapshots using Alchemy Cloud Control.
 ---
-
-# Snapshot
 
 The Snapshot resource allows you to manage [AWS FSx Snapshots](https://docs.aws.amazon.com/fsx/latest/userguide/) for your Amazon FSx file systems, enabling you to create backups and restore your data efficiently.
 

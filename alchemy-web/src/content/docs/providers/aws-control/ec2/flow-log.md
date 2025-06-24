@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 FlowLogs with Alchemy
+title: FlowLog
 description: Learn how to create, update, and manage AWS EC2 FlowLogs using Alchemy Cloud Control.
 ---
-
-# FlowLog
 
 The FlowLog resource allows you to manage [AWS EC2 FlowLogs](https://docs.aws.amazon.com/ec2/latest/userguide/) which capture information about the IP traffic going to and from network interfaces in your VPC.
 

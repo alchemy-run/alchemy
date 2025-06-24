@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Forecast Datasets with Alchemy
+title: Dataset
 description: Learn how to create, update, and manage AWS Forecast Datasets using Alchemy Cloud Control.
 ---
-
-# Dataset
 
 The Dataset resource lets you manage [AWS Forecast Datasets](https://docs.aws.amazon.com/forecast/latest/userguide/) for time series forecasting and analytics.
 

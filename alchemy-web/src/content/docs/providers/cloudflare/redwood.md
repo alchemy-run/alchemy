@@ -1,9 +1,7 @@
 ---
-title: RedwoodSDK on Cloudflare
+title: Redwood
 description: Learn how to deploy RedwoodJS applications to Cloudflare Pages/Workers using Alchemy for full-stack serverless.
 ---
-
-# Redwood
 
 Deploy a RedwoodJS application to Cloudflare Pages with automatically configured defaults. This resource handles the deployment of RedwoodJS applications with optimized settings for Cloudflare Workers.
 

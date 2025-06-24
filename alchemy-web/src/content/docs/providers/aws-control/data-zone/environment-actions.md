@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataZone EnvironmentActions with Alchemy
+title: EnvironmentActions
 description: Learn how to create, update, and manage AWS DataZone EnvironmentActions using Alchemy Cloud Control.
 ---
-
-# EnvironmentActions
 
 The EnvironmentActions resource lets you manage [AWS DataZone EnvironmentActions](https://docs.aws.amazon.com/datazone/latest/userguide/) for various operations within a data environment.
 

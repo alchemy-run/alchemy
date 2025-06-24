@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WorkSpacesWeb IpAccessSettings with Alchemy
+title: IpAccessSettings
 description: Learn how to create, update, and manage AWS WorkSpacesWeb IpAccessSettings using Alchemy Cloud Control.
 ---
-
-# IpAccessSettings
 
 The IpAccessSettings resource lets you manage [AWS WorkSpacesWeb IpAccessSettings](https://docs.aws.amazon.com/workspacesweb/latest/userguide/) for controlling access to your applications based on IP address rules.
 

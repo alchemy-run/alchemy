@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSM ResourcePolicys with Alchemy
+title: ResourcePolicy
 description: Learn how to create, update, and manage AWS SSM ResourcePolicys using Alchemy Cloud Control.
 ---
-
-# ResourcePolicy
 
 The ResourcePolicy resource lets you manage [AWS SSM ResourcePolicys](https://docs.aws.amazon.com/ssm/latest/userguide/) to define access controls for your AWS Systems Manager resources.
 

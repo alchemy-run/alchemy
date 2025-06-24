@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53Resolver ResolverRules with Alchemy
+title: ResolverRule
 description: Learn how to create, update, and manage AWS Route53Resolver ResolverRules using Alchemy Cloud Control.
 ---
-
-# ResolverRule
 
 The ResolverRule resource allows you to manage [AWS Route53Resolver ResolverRules](https://docs.aws.amazon.com/route53resolver/latest/userguide/) for DNS resolution configurations, enabling you to specify how DNS queries are resolved.
 

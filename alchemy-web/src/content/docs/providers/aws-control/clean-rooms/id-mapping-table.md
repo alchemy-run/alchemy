@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CleanRooms IdMappingTables with Alchemy
+title: IdMappingTable
 description: Learn how to create, update, and manage AWS CleanRooms IdMappingTables using Alchemy Cloud Control.
 ---
-
-# IdMappingTable
 
 The IdMappingTable resource allows you to manage [AWS CleanRooms IdMappingTables](https://docs.aws.amazon.com/cleanrooms/latest/userguide/) for handling sensitive data and ensuring compliance while collaborating securely. This resource is essential for defining how identifiers are mapped within your CleanRooms membership.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppStream DirectoryConfigs with Alchemy
+title: DirectoryConfig
 description: Learn how to create, update, and manage AWS AppStream DirectoryConfigs using Alchemy Cloud Control.
 ---
-
-# DirectoryConfig
 
 The DirectoryConfig resource lets you manage [AWS AppStream DirectoryConfigs](https://docs.aws.amazon.com/appstream/latest/userguide/) for integrating your directory service with AppStream 2.0.
 

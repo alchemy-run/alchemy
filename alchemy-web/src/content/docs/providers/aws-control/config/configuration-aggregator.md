@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Config ConfigurationAggregators with Alchemy
+title: ConfigurationAggregator
 description: Learn how to create, update, and manage AWS Config ConfigurationAggregators using Alchemy Cloud Control.
 ---
-
-# ConfigurationAggregator
 
 The ConfigurationAggregator resource allows you to manage [AWS Config ConfigurationAggregators](https://docs.aws.amazon.com/config/latest/userguide/) which aggregate configuration data across multiple accounts and regions.
 

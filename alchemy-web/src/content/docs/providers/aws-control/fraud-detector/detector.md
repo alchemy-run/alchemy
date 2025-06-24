@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FraudDetector Detectors with Alchemy
+title: Detector
 description: Learn how to create, update, and manage AWS FraudDetector Detectors using Alchemy Cloud Control.
 ---
-
-# Detector
 
 The Detector resource lets you manage [AWS FraudDetector Detectors](https://docs.aws.amazon.com/frauddetector/latest/userguide/) for identifying fraudulent activities based on predefined rules and models.
 

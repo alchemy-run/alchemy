@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeStarConnections SyncConfigurations with Alchemy
+title: SyncConfiguration
 description: Learn how to create, update, and manage AWS CodeStarConnections SyncConfigurations using Alchemy Cloud Control.
 ---
-
-# SyncConfiguration
 
 The SyncConfiguration resource lets you manage [AWS CodeStarConnections SyncConfigurations](https://docs.aws.amazon.com/codestarconnections/latest/userguide/) for synchronizing resources between your source control and AWS services.
 

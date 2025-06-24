@@ -1,9 +1,7 @@
 ---
-title: Cloudflare Email Address
+title: EmailAddress
 description: Learn how to manage destination email addresses for Cloudflare email routing using Alchemy.
 ---
-
-# EmailAddress
 
 Manage destination email addresses that can receive emails forwarded by Cloudflare email routing rules.
 

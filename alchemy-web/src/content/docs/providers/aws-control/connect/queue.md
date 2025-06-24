@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect Queues with Alchemy
+title: Queue
 description: Learn how to create, update, and manage AWS Connect Queues using Alchemy Cloud Control.
 ---
-
-# Queue
 
 The Queue resource lets you manage [AWS Connect Queues](https://docs.aws.amazon.com/connect/latest/userguide/) and their configuration settings.
 

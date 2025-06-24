@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QBusiness Retrievers with Alchemy
+title: Retriever
 description: Learn how to create, update, and manage AWS QBusiness Retrievers using Alchemy Cloud Control.
 ---
-
-# Retriever
 
 The Retriever resource lets you manage [AWS QBusiness Retrievers](https://docs.aws.amazon.com/qbusiness/latest/userguide/) which enable you to retrieve data from various sources and integrate it into your applications.
 

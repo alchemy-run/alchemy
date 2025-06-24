@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTCoreDeviceAdvisor SuiteDefinitions with Alchemy
+title: SuiteDefinition
 description: Learn how to create, update, and manage AWS IoTCoreDeviceAdvisor SuiteDefinitions using Alchemy Cloud Control.
 ---
-
-# SuiteDefinition
 
 The SuiteDefinition resource allows you to create and manage [AWS IoTCoreDeviceAdvisor SuiteDefinitions](https://docs.aws.amazon.com/iotcoredeviceadvisor/latest/userguide/) for testing and validating your IoT devices.
 

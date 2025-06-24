@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EFS MountTargets with Alchemy
+title: MountTarget
 description: Learn how to create, update, and manage AWS EFS MountTargets using Alchemy Cloud Control.
 ---
-
-# MountTarget
 
 The MountTarget resource lets you manage [AWS EFS MountTargets](https://docs.aws.amazon.com/efs/latest/userguide/) for your Elastic File System (EFS). A mount target is an entry point that allows clients to access the filesystem.
 

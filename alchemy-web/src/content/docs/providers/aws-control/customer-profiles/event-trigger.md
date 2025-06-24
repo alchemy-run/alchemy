@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CustomerProfiles EventTriggers with Alchemy
+title: EventTrigger
 description: Learn how to create, update, and manage AWS CustomerProfiles EventTriggers using Alchemy Cloud Control.
 ---
-
-# EventTrigger
 
 The EventTrigger resource allows you to manage [AWS CustomerProfiles EventTriggers](https://docs.aws.amazon.com/customerprofiles/latest/userguide/) that respond to specific events within the Amazon Customer Profiles service.
 

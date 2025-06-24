@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PCS Clusters with Alchemy
+title: Cluster
 description: Learn how to create, update, and manage AWS PCS Clusters using Alchemy Cloud Control.
 ---
-
-# Cluster
 
 The Cluster resource allows you to create and manage [AWS PCS Clusters](https://docs.aws.amazon.com/pcs/latest/userguide/) for high-performance computing workloads. This resource facilitates the setup of a computing environment that can scale with your needs.
 

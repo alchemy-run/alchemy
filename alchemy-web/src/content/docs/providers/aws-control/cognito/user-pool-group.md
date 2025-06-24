@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cognito UserPoolGroups with Alchemy
+title: UserPoolGroup
 description: Learn how to create, update, and manage AWS Cognito UserPoolGroups using Alchemy Cloud Control.
 ---
-
-# UserPoolGroup
 
 The UserPoolGroup resource lets you manage [AWS Cognito UserPoolGroups](https://docs.aws.amazon.com/cognito/latest/userguide/) to organize users and control their access to resources.
 

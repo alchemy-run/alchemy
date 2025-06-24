@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS DBClusterParameterGroups with Alchemy
+title: DBClusterParameterGroup
 description: Learn how to create, update, and manage AWS RDS DBClusterParameterGroups using Alchemy Cloud Control.
 ---
-
-# DBClusterParameterGroup
 
 The DBClusterParameterGroup resource lets you manage [AWS RDS DBClusterParameterGroups](https://docs.aws.amazon.com/rds/latest/userguide/) which define the parameters for a DB cluster. These groups allow you to configure database engine settings that apply to all the DB instances in the cluster.
 

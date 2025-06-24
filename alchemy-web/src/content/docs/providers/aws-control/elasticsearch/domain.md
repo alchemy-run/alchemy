@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Elasticsearch Domains with Alchemy
+title: Domain
 description: Learn how to create, update, and manage AWS Elasticsearch Domains using Alchemy Cloud Control.
 ---
-
-# Domain
 
 The Domain resource lets you manage [AWS Elasticsearch Domains](https://docs.aws.amazon.com/elasticsearch/latest/userguide/) and their configuration settings.
 

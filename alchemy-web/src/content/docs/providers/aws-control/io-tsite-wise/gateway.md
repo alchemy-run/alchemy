@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTSiteWise Gateways with Alchemy
+title: Gateway
 description: Learn how to create, update, and manage AWS IoTSiteWise Gateways using Alchemy Cloud Control.
 ---
-
-# Gateway
 
 The Gateway resource lets you manage [AWS IoTSiteWise Gateways](https://docs.aws.amazon.com/iotsitewise/latest/userguide/) for connecting industrial devices and applications to AWS IoT SiteWise.
 

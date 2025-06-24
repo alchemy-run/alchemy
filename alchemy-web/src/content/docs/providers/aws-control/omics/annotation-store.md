@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Omics AnnotationStores with Alchemy
+title: AnnotationStore
 description: Learn how to create, update, and manage AWS Omics AnnotationStores using Alchemy Cloud Control.
 ---
-
-# AnnotationStore
 
 The AnnotationStore resource lets you manage [AWS Omics AnnotationStores](https://docs.aws.amazon.com/omics/latest/userguide/) for storing genomic annotations and enhancing data analysis workflows.
 

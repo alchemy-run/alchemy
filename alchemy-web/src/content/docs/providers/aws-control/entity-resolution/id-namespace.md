@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EntityResolution IdNamespaces with Alchemy
+title: IdNamespace
 description: Learn how to create, update, and manage AWS EntityResolution IdNamespaces using Alchemy Cloud Control.
 ---
-
-# IdNamespace
 
 The IdNamespace resource lets you create and manage [AWS EntityResolution IdNamespaces](https://docs.aws.amazon.com/entityresolution/latest/userguide/) for identifying and resolving entities across different data sources.
 

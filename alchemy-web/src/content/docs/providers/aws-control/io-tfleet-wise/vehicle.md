@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTFleetWise Vehicles with Alchemy
+title: Vehicle
 description: Learn how to create, update, and manage AWS IoTFleetWise Vehicles using Alchemy Cloud Control.
 ---
-
-# Vehicle
 
 The Vehicle resource enables you to manage [AWS IoTFleetWise Vehicles](https://docs.aws.amazon.com/iotfleetwise/latest/userguide/) for capturing and monitoring vehicle data.
 

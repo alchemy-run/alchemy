@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 ClientVpnAuthorizationRules with Alchemy
+title: ClientVpnAuthorizationRule
 description: Learn how to create, update, and manage AWS EC2 ClientVpnAuthorizationRules using Alchemy Cloud Control.
 ---
-
-# ClientVpnAuthorizationRule
 
 The ClientVpnAuthorizationRule resource allows you to manage [AWS EC2 Client VPN authorization rules](https://docs.aws.amazon.com/ec2/latest/userguide/). These rules control access for VPN clients to specific network resources.
 

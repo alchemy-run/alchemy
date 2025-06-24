@@ -1,9 +1,7 @@
 ---
-title: Vite.js on Cloudflare
+title: Vite
 description: Learn how to deploy Vite.js applications to Cloudflare Pages/Workers using Alchemy for fast and efficient builds.
 ---
-
-# Vite
 
 Deploy a [Vite](https://vitejs.dev/) application to Cloudflare Workers with automatic configuration.
 

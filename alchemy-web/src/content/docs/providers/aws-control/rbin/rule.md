@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Rbin Rules with Alchemy
+title: Rule
 description: Learn how to create, update, and manage AWS Rbin Rules using Alchemy Cloud Control.
 ---
-
-# Rule
 
 The Rule resource allows you to manage [AWS Rbin Rules](https://docs.aws.amazon.com/rbin/latest/userguide/) for retention of AWS resources. These rules help in managing the lifecycle of resources by defining retention policies.
 

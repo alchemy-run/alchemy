@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Panorama PackageVersions with Alchemy
+title: PackageVersion
 description: Learn how to create, update, and manage AWS Panorama PackageVersions using Alchemy Cloud Control.
 ---
-
-# PackageVersion
 
 The PackageVersion resource lets you manage [AWS Panorama PackageVersions](https://docs.aws.amazon.com/panorama/latest/userguide/) for deploying and updating machine learning models and applications on AWS Panorama devices.
 

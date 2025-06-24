@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppMesh Routes with Alchemy
+title: Route
 description: Learn how to create, update, and manage AWS AppMesh Routes using Alchemy Cloud Control.
 ---
-
-# Route
 
 The Route resource allows you to manage [AWS AppMesh Routes](https://docs.aws.amazon.com/appmesh/latest/userguide/) that define how traffic is routed between services in your mesh.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog ServiceActionAssociations with Alchemy
+title: ServiceActionAssociation
 description: Learn how to create, update, and manage AWS ServiceCatalog ServiceActionAssociations using Alchemy Cloud Control.
 ---
-
-# ServiceActionAssociation
 
 The ServiceActionAssociation resource allows you to associate a service action with a product in AWS Service Catalog. This enables you to define and manage the actions that can be performed on products in your catalog. For more information, see the [AWS ServiceCatalog ServiceActionAssociations documentation](https://docs.aws.amazon.com/servicecatalog/latest/userguide/).
 

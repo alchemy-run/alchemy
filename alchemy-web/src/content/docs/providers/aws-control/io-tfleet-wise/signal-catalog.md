@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTFleetWise SignalCatalogs with Alchemy
+title: SignalCatalog
 description: Learn how to create, update, and manage AWS IoTFleetWise SignalCatalogs using Alchemy Cloud Control.
 ---
-
-# SignalCatalog
 
 The SignalCatalog resource allows you to manage [AWS IoTFleetWise SignalCatalogs](https://docs.aws.amazon.com/iotfleetwise/latest/userguide/) which define the signals that can be transmitted from vehicles. It provides a way to organize and structure the data collected from different vehicle nodes.
 

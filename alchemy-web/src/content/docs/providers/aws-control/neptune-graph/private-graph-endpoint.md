@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NeptuneGraph PrivateGraphEndpoints with Alchemy
+title: PrivateGraphEndpoint
 description: Learn how to create, update, and manage AWS NeptuneGraph PrivateGraphEndpoints using Alchemy Cloud Control.
 ---
-
-# PrivateGraphEndpoint
 
 The PrivateGraphEndpoint resource allows you to manage private endpoints for AWS NeptuneGraph, enabling secure access to your graph databases. For more information, refer to the [AWS NeptuneGraph PrivateGraphEndpoints](https://docs.aws.amazon.com/neptunegraph/latest/userguide/) documentation.
 

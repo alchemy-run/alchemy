@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApplicationAutoScaling ScalableTargets with Alchemy
+title: ScalableTarget
 description: Learn how to create, update, and manage AWS ApplicationAutoScaling ScalableTargets using Alchemy Cloud Control.
 ---
-
-# ScalableTarget
 
 The ScalableTarget resource allows you to configure and manage scalable targets for various AWS services that support Application Auto Scaling. This enables you to automatically adjust the capacity of your applications based on demand. For more details, refer to the [AWS ApplicationAutoScaling ScalableTargets documentation](https://docs.aws.amazon.com/applicationautoscaling/latest/userguide/).
 

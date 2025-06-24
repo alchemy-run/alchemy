@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint APNSVoipChannels with Alchemy
+title: APNSVoipChannel
 description: Learn how to create, update, and manage AWS Pinpoint APNSVoipChannels using Alchemy Cloud Control.
 ---
-
-# APNSVoipChannel
 
 The APNSVoipChannel resource enables you to manage the Apple Push Notification service (APNs) VOIP channel for AWS Pinpoint. This service allows you to send notifications to iOS devices for VoIP applications. For more detailed information, you can refer to the [AWS Pinpoint APNSVoipChannels documentation](https://docs.aws.amazon.com/pinpoint/latest/userguide/).
 

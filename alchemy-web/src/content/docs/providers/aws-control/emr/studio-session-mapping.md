@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EMR StudioSessionMappings with Alchemy
+title: StudioSessionMapping
 description: Learn how to create, update, and manage AWS EMR StudioSessionMappings using Alchemy Cloud Control.
 ---
-
-# StudioSessionMapping
 
 The StudioSessionMapping resource allows you to manage [AWS EMR StudioSessionMappings](https://docs.aws.amazon.com/emr/latest/userguide/) which define the access and session policies for users in an EMR Studio.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass ResourceDefinitionVersions with Alchemy
+title: ResourceDefinitionVersion
 description: Learn how to create, update, and manage AWS Greengrass ResourceDefinitionVersions using Alchemy Cloud Control.
 ---
-
-# ResourceDefinitionVersion
 
 The ResourceDefinitionVersion resource allows you to manage versions of resource definitions in AWS Greengrass, facilitating the management of resources used by Greengrass groups. For more information, refer to the [AWS Greengrass ResourceDefinitionVersions documentation](https://docs.aws.amazon.com/greengrass/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS StepFunctions StateMachines with Alchemy
+title: StateMachine
 description: Learn how to create, update, and manage AWS StepFunctions StateMachines using Alchemy Cloud Control.
 ---
-
-# StateMachine
 
 The StateMachine resource allows you to define and manage [AWS StepFunctions StateMachines](https://docs.aws.amazon.com/stepfunctions/latest/userguide/) for orchestrating complex workflows in your applications.
 

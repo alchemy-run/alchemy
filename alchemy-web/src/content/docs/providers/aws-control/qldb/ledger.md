@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QLDB Ledgers with Alchemy
+title: Ledger
 description: Learn how to create, update, and manage AWS QLDB Ledgers using Alchemy Cloud Control.
 ---
-
-# Ledger
 
 The Ledger resource lets you manage [AWS QLDB Ledgers](https://docs.aws.amazon.com/qldb/latest/userguide/) for immutable and cryptographically verifiable transaction logs.
 

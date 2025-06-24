@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker DataQualityJobDefinitions with Alchemy
+title: DataQualityJobDefinition
 description: Learn how to create, update, and manage AWS SageMaker DataQualityJobDefinitions using Alchemy Cloud Control.
 ---
-
-# DataQualityJobDefinition
 
 The DataQualityJobDefinition resource lets you create and manage [AWS SageMaker DataQualityJobDefinitions](https://docs.aws.amazon.com/sagemaker/latest/userguide/) that define the inputs, outputs, and settings for running data quality monitoring jobs on your datasets.
 

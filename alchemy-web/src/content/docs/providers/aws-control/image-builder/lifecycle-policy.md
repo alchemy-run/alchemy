@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ImageBuilder LifecyclePolicys with Alchemy
+title: LifecyclePolicy
 description: Learn how to create, update, and manage AWS ImageBuilder LifecyclePolicys using Alchemy Cloud Control.
 ---
-
-# LifecyclePolicy
 
 The LifecyclePolicy resource lets you manage the lifecycle policies for AWS ImageBuilder, automating the creation, retention, and deletion of Amazon Machine Images (AMIs). For more detailed information, refer to the [AWS ImageBuilder LifecyclePolicys documentation](https://docs.aws.amazon.com/imagebuilder/latest/userguide/).
 

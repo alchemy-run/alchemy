@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lightsail Buckets with Alchemy
+title: Bucket
 description: Learn how to create, update, and manage AWS Lightsail Buckets using Alchemy Cloud Control.
 ---
-
-# Bucket
 
 The Bucket resource lets you manage [AWS Lightsail Buckets](https://docs.aws.amazon.com/lightsail/latest/userguide/) for object storage in the cloud.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAFRegional IPSets with Alchemy
+title: IPSet
 description: Learn how to create, update, and manage AWS WAFRegional IPSets using Alchemy Cloud Control.
 ---
-
-# IPSet
 
 The IPSet resource allows you to manage [AWS WAFRegional IPSets](https://docs.aws.amazon.com/wafregional/latest/userguide/) that contain a set of IP addresses. This resource is essential for controlling access to your applications based on IP address filtering.
 

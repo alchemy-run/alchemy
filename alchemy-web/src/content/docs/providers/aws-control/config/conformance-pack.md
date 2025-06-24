@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Config ConformancePacks with Alchemy
+title: ConformancePack
 description: Learn how to create, update, and manage AWS Config ConformancePacks using Alchemy Cloud Control.
 ---
-
-# ConformancePack
 
 The ConformancePack resource lets you manage [AWS Config ConformancePacks](https://docs.aws.amazon.com/config/latest/userguide/) that help ensure compliance of your AWS resources with specific rules and standards.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApplicationSignals ServiceLevelObjectives with Alchemy
+title: ServiceLevelObjective
 description: Learn how to create, update, and manage AWS ApplicationSignals ServiceLevelObjectives using Alchemy Cloud Control.
 ---
-
-# ServiceLevelObjective
 
 The ServiceLevelObjective resource allows you to define and manage [AWS ApplicationSignals ServiceLevelObjectives](https://docs.aws.amazon.com/applicationsignals/latest/userguide/) to measure the performance and reliability of your applications.
 

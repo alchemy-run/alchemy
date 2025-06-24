@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IVS EncoderConfigurations with Alchemy
+title: EncoderConfiguration
 description: Learn how to create, update, and manage AWS IVS EncoderConfigurations using Alchemy Cloud Control.
 ---
-
-# EncoderConfiguration
 
 The EncoderConfiguration resource lets you manage [AWS IVS EncoderConfigurations](https://docs.aws.amazon.com/ivs/latest/userguide/) for configuring video encoding settings in your live streaming applications.
 

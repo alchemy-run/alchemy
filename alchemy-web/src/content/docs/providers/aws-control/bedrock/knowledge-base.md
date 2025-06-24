@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Bedrock KnowledgeBases with Alchemy
+title: KnowledgeBase
 description: Learn how to create, update, and manage AWS Bedrock KnowledgeBases using Alchemy Cloud Control.
 ---
-
-# KnowledgeBase
 
 The KnowledgeBase resource allows you to create and manage [AWS Bedrock KnowledgeBases](https://docs.aws.amazon.com/bedrock/latest/userguide/) that can be used for various applications including storing and retrieving information for AI and machine learning models.
 

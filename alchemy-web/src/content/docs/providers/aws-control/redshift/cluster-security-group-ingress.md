@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Redshift ClusterSecurityGroupIngresss with Alchemy
+title: ClusterSecurityGroupIngress
 description: Learn how to create, update, and manage AWS Redshift ClusterSecurityGroupIngresss using Alchemy Cloud Control.
 ---
-
-# ClusterSecurityGroupIngress
 
 The ClusterSecurityGroupIngress resource allows you to manage ingress rules for Amazon Redshift cluster security groups. This resource is essential for controlling access to your Redshift clusters based on CIDR/IP address ranges or EC2 security groups. For more details, refer to the [AWS Redshift ClusterSecurityGroupIngresss documentation](https://docs.aws.amazon.com/redshift/latest/userguide/).
 

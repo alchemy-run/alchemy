@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SQS QueuePolicies with Alchemy
+title: QueuePolicy
 description: Learn how to create, update, and manage AWS SQS QueuePolicies using Alchemy Cloud Control.
 ---
-
-# QueuePolicy
 
 The QueuePolicy resource allows you to manage the permissions for Amazon SQS queues, enabling you to control access and define who can send messages to your queues. For detailed information, refer to the [AWS SQS QueuePolicies documentation](https://docs.aws.amazon.com/sqs/latest/userguide/).
 

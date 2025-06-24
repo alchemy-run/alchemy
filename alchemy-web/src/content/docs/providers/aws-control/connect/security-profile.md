@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect SecurityProfiles with Alchemy
+title: SecurityProfile
 description: Learn how to create, update, and manage AWS Connect SecurityProfiles using Alchemy Cloud Control.
 ---
-
-# SecurityProfile
 
 The SecurityProfile resource allows you to manage [AWS Connect SecurityProfiles](https://docs.aws.amazon.com/connect/latest/userguide/) that define permissions and access controls for users in your AWS Connect instances.
 

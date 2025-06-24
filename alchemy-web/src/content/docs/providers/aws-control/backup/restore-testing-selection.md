@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Backup RestoreTestingSelections with Alchemy
+title: RestoreTestingSelection
 description: Learn how to create, update, and manage AWS Backup RestoreTestingSelections using Alchemy Cloud Control.
 ---
-
-# RestoreTestingSelection
 
 The RestoreTestingSelection resource lets you manage [AWS Backup RestoreTestingSelections](https://docs.aws.amazon.com/backup/latest/userguide/) to facilitate the testing of restore plans. This resource allows you to specify the resources you want to include in a restore test, as well as the conditions and metadata overrides necessary for the restore operation.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3 BucketPolicies with Alchemy
+title: BucketPolicy
 description: Learn how to create, update, and manage AWS S3 BucketPolicies using Alchemy Cloud Control.
 ---
-
-# BucketPolicy
 
 The BucketPolicy resource allows you to manage [AWS S3 Bucket Policies](https://docs.aws.amazon.com/s3/latest/userguide/) to control access to your S3 buckets. This resource helps define the permissions for who can access the bucket and what actions they can perform.
 

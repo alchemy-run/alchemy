@@ -4,8 +4,6 @@ title: React Router
 description: Step-by-step guide to deploying a React Router (formerly Remix) application to Cloudflare Workers using Alchemy.
 ---
 
-# React Router
-
 This guide demonstrates how to deploy a [React Router](https://reactrouter.com/) (formerly Remix.js) application to Cloudflare with Alchemy.
 
 ## Init

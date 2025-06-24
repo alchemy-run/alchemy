@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ElastiCache ServerlessCaches with Alchemy
+title: ServerlessCache
 description: Learn how to create, update, and manage AWS ElastiCache ServerlessCaches using Alchemy Cloud Control.
 ---
-
-# ServerlessCache
 
 The ServerlessCache resource lets you manage [AWS ElastiCache ServerlessCaches](https://docs.aws.amazon.com/elasticache/latest/userguide/) for scalable in-memory data storage.
 

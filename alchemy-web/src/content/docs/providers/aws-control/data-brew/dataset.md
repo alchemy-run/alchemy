@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataBrew Datasets with Alchemy
+title: Dataset
 description: Learn how to create, update, and manage AWS DataBrew Datasets using Alchemy Cloud Control.
 ---
-
-# Dataset
 
 The Dataset resource lets you manage [AWS DataBrew Datasets](https://docs.aws.amazon.com/databrew/latest/userguide/) for data preparation and transformation tasks.
 

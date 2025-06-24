@@ -1,9 +1,7 @@
 ---
-title: Cloudflare Images Binding
+title: Images
 description: Learn how to use Cloudflare Images binding with Alchemy for image transformation and manipulation in Workers.
 ---
-
-# Images
 
 The [Cloudflare Images binding](https://developers.cloudflare.com/images/transform-images/bindings/) provides access to Cloudflare Images API for transforming, drawing, and outputting images within Workers.
 

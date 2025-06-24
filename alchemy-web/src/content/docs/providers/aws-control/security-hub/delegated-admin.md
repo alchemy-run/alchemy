@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityHub DelegatedAdmins with Alchemy
+title: DelegatedAdmin
 description: Learn how to create, update, and manage AWS SecurityHub DelegatedAdmins using Alchemy Cloud Control.
 ---
-
-# DelegatedAdmin
 
 The DelegatedAdmin resource allows you to manage [AWS SecurityHub DelegatedAdmins](https://docs.aws.amazon.com/securityhub/latest/userguide/) which enables account delegation of SecurityHub management.
 

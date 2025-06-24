@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS EventSubscriptions with Alchemy
+title: EventSubscription
 description: Learn how to create, update, and manage AWS RDS EventSubscriptions using Alchemy Cloud Control.
 ---
-
-# EventSubscription
 
 The EventSubscription resource allows you to manage [AWS RDS EventSubscriptions](https://docs.aws.amazon.com/rds/latest/userguide/) for monitoring events related to your RDS resources.
 

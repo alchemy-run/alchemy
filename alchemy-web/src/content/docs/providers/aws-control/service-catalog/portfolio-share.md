@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog PortfolioShares with Alchemy
+title: PortfolioShare
 description: Learn how to create, update, and manage AWS ServiceCatalog PortfolioShares using Alchemy Cloud Control.
 ---
-
-# PortfolioShare
 
 The PortfolioShare resource lets you manage [AWS ServiceCatalog PortfolioShares](https://docs.aws.amazon.com/servicecatalog/latest/userguide/) for sharing portfolios across AWS accounts.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeGuruProfiler ProfilingGroups with Alchemy
+title: ProfilingGroup
 description: Learn how to create, update, and manage AWS CodeGuruProfiler ProfilingGroups using Alchemy Cloud Control.
 ---
-
-# ProfilingGroup
 
 The ProfilingGroup resource lets you manage [AWS CodeGuruProfiler ProfilingGroups](https://docs.aws.amazon.com/codeguruprofiler/latest/userguide/) to monitor and optimize your applications' performance.
 

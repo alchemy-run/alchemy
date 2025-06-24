@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ECS TaskSets with Alchemy
+title: TaskSet
 description: Learn how to create, update, and manage AWS ECS TaskSets using Alchemy Cloud Control.
 ---
-
-# TaskSet
 
 The TaskSet resource lets you manage [AWS ECS TaskSets](https://docs.aws.amazon.com/ecs/latest/userguide/) that define a group of tasks within an AWS ECS service. This allows for deployment and scaling of containerized applications.
 

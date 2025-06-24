@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DocDB DBSubnetGroups with Alchemy
+title: DBSubnetGroup
 description: Learn how to create, update, and manage AWS DocDB DBSubnetGroups using Alchemy Cloud Control.
 ---
-
-# DBSubnetGroup
 
 The DBSubnetGroup resource lets you manage [AWS DocumentDB DBSubnetGroups](https://docs.aws.amazon.com/docdb/latest/userguide/) to define a group of subnets for your DocumentDB clusters.
 

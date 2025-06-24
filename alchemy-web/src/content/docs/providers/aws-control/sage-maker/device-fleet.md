@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker DeviceFleets with Alchemy
+title: DeviceFleet
 description: Learn how to create, update, and manage AWS SageMaker DeviceFleets using Alchemy Cloud Control.
 ---
-
-# DeviceFleet
 
 The DeviceFleet resource allows you to manage [AWS SageMaker DeviceFleets](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for orchestrating machine learning workloads across multiple devices.
 

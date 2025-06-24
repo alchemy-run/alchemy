@@ -1,9 +1,7 @@
 ---
-title: Managing AWS B2BI Transformers with Alchemy
+title: Transformer
 description: Learn how to create, update, and manage AWS B2BI Transformers using Alchemy Cloud Control.
 ---
-
-# Transformer
 
 The Transformer resource allows you to create, update, and manage AWS B2BI Transformers for processing and transforming business documents. For more details, refer to the [AWS B2BI Transformers documentation](https://docs.aws.amazon.com/b2bi/latest/userguide/).
 

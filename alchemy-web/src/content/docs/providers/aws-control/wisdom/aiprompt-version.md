@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Wisdom AIPromptVersions with Alchemy
+title: AIPromptVersion
 description: Learn how to create, update, and manage AWS Wisdom AIPromptVersions using Alchemy Cloud Control.
 ---
-
-# AIPromptVersion
 
 The AIPromptVersion resource allows you to manage versions of AI prompts within AWS Wisdom. This resource enables you to create, update, and configure AI prompt versions for enhanced customer support and knowledge management. For more information, visit the [AWS Wisdom AIPromptVersions](https://docs.aws.amazon.com/wisdom/latest/userguide/) documentation.
 

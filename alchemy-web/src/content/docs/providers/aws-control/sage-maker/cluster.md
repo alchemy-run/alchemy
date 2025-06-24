@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker Clusters with Alchemy
+title: Cluster
 description: Learn how to create, update, and manage AWS SageMaker Clusters using Alchemy Cloud Control.
 ---
-
-# Cluster
 
 The Cluster resource allows you to manage [AWS SageMaker Clusters](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for machine learning tasks, enabling you to specify instance types, configurations, and networking options.
 

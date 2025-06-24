@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Personalize Schemas with Alchemy
+title: Schema
 description: Learn how to create, update, and manage AWS Personalize Schemas using Alchemy Cloud Control.
 ---
-
-# Schema
 
 The Schema resource lets you define and manage [AWS Personalize Schemas](https://docs.aws.amazon.com/personalize/latest/userguide/) for your machine learning models. Schemas define the structure of your data and how it will be used in your personalization solutions.
 

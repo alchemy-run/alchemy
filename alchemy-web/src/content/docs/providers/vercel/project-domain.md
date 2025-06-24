@@ -1,9 +1,7 @@
 ---
-title: Vercel Project Domain
+title: ProjectDomain
 description: Learn how to create and manage Vercel Project Domains with Alchemy
 ---
-
-# ProjectDomain
 
 Add and manage domains for Vercel projects.
 

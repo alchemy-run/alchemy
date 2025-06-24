@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lightsail StaticIps with Alchemy
+title: StaticIp
 description: Learn how to create, update, and manage AWS Lightsail StaticIps using Alchemy Cloud Control.
 ---
-
-# StaticIp
 
 The StaticIp resource allows you to manage [AWS Lightsail Static IPs](https://docs.aws.amazon.com/lightsail/latest/userguide/) for your instances, providing a fixed IP address that can be associated with your Lightsail resources.
 

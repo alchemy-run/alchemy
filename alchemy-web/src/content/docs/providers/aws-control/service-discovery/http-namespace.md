@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceDiscovery HttpNamespaces with Alchemy
+title: HttpNamespace
 description: Learn how to create, update, and manage AWS ServiceDiscovery HttpNamespaces using Alchemy Cloud Control.
 ---
-
-# HttpNamespace
 
 The HttpNamespace resource lets you manage [AWS ServiceDiscovery HttpNamespaces](https://docs.aws.amazon.com/servicediscovery/latest/userguide/) and their configuration settings.
 

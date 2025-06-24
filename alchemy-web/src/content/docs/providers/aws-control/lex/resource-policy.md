@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lex ResourcePolicys with Alchemy
+title: ResourcePolicy
 description: Learn how to create, update, and manage AWS Lex ResourcePolicys using Alchemy Cloud Control.
 ---
-
-# ResourcePolicy
 
 The ResourcePolicy resource lets you manage [AWS Lex ResourcePolicys](https://docs.aws.amazon.com/lex/latest/userguide/) for your Lex bots, enabling you to control access to your resources through IAM policies.
 

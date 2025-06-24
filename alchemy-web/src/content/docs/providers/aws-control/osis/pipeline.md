@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OSIS Pipelines with Alchemy
+title: Pipeline
 description: Learn how to create, update, and manage AWS OSIS Pipelines using Alchemy Cloud Control.
 ---
-
-# Pipeline
 
 The Pipeline resource lets you create and manage [AWS OSIS Pipelines](https://docs.aws.amazon.com/osis/latest/userguide/) for orchestrating data processing workflows.
 

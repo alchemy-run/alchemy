@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Events Archives with Alchemy
+title: Archive
 description: Learn how to create, update, and manage AWS Events Archives using Alchemy Cloud Control.
 ---
-
-# Archive
 
 The Archive resource allows you to manage [AWS Events Archives](https://docs.aws.amazon.com/events/latest/userguide/) for storing event data from Amazon EventBridge. This enables you to retain and analyze events from various sources over time.
 

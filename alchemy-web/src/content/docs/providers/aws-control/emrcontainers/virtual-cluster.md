@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EMRContainers VirtualClusters with Alchemy
+title: VirtualCluster
 description: Learn how to create, update, and manage AWS EMRContainers VirtualClusters using Alchemy Cloud Control.
 ---
-
-# VirtualCluster
 
 The VirtualCluster resource allows you to create and manage [AWS EMRContainers VirtualClusters](https://docs.aws.amazon.com/emrcontainers/latest/userguide/) for running serverless Apache Spark applications. This resource facilitates the management of your containerized EMR workloads.
 

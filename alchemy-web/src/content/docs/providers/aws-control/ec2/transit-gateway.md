@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TransitGateways with Alchemy
+title: TransitGateway
 description: Learn how to create, update, and manage AWS EC2 TransitGateways using Alchemy Cloud Control.
 ---
-
-# TransitGateway
 
 The TransitGateway resource lets you manage [AWS EC2 TransitGateways](https://docs.aws.amazon.com/ec2/latest/userguide/) that enable customers to connect multiple VPCs and on-premises networks through a single gateway.
 

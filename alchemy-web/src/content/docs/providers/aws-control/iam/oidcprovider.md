@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM OIDCProviders with Alchemy
+title: OIDCProvider
 description: Learn how to create, update, and manage AWS IAM OIDCProviders using Alchemy Cloud Control.
 ---
-
-# OIDCProvider
 
 The OIDCProvider resource allows you to create and manage [AWS IAM OIDCProviders](https://docs.aws.amazon.com/iam/latest/userguide/), enabling identity federation and access management for applications that use OpenID Connect (OIDC) authentication.
 

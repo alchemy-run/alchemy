@@ -3,8 +3,6 @@ title: Container
 description: Deploy and manage Docker containers with Alchemy
 ---
 
-# Container
-
 The `Container` resource allows you to create and manage Docker containers using Alchemy.
 
 ## Usage

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ElastiCache GlobalReplicationGroups with Alchemy
+title: GlobalReplicationGroup
 description: Learn how to create, update, and manage AWS ElastiCache GlobalReplicationGroups using Alchemy Cloud Control.
 ---
-
-# GlobalReplicationGroup
 
 The GlobalReplicationGroup resource allows you to manage [AWS ElastiCache GlobalReplicationGroups](https://docs.aws.amazon.com/elasticache/latest/userguide/), which enable you to replicate your data across different AWS regions for better performance and disaster recovery.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VoiceID Domains with Alchemy
+title: Domain
 description: Learn how to create, update, and manage AWS VoiceID Domains using Alchemy Cloud Control.
 ---
-
-# Domain
 
 The Domain resource lets you manage [AWS VoiceID Domains](https://docs.aws.amazon.com/voiceid/latest/userguide/) for voice authentication and verification. This resource allows you to create and configure domains that can help in managing voice recognition tasks.
 

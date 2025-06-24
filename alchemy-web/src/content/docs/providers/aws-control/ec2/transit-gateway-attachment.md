@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TransitGatewayAttachments with Alchemy
+title: TransitGatewayAttachment
 description: Learn how to create, update, and manage AWS EC2 TransitGatewayAttachments using Alchemy Cloud Control.
 ---
-
-# TransitGatewayAttachment
 
 The TransitGatewayAttachment resource lets you manage [AWS EC2 Transit Gateway Attachments](https://docs.aws.amazon.com/ec2/latest/userguide/) for connecting VPCs and on-premises networks to a transit gateway.
 

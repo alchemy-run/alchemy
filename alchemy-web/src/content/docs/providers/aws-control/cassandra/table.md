@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cassandra Tables with Alchemy
+title: Table
 description: Learn how to create, update, and manage AWS Cassandra Tables using Alchemy Cloud Control.
 ---
-
-# Table
 
 The Table resource allows you to create and manage [AWS Cassandra Tables](https://docs.aws.amazon.com/cassandra/latest/userguide/) within your keyspaces, enabling you to store and query data effectively.
 

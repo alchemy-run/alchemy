@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeDeploy Applications with Alchemy
+title: Application
 description: Learn how to create, update, and manage AWS CodeDeploy Applications using Alchemy Cloud Control.
 ---
-
-# Application
 
 The Application resource allows you to create and manage [AWS CodeDeploy Applications](https://docs.aws.amazon.com/codedeploy/latest/userguide/) for deploying applications to various compute platforms.
 

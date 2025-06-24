@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VPCEndpointConnectionNotifications with Alchemy
+title: VPCEndpointConnectionNotification
 description: Learn how to create, update, and manage AWS EC2 VPCEndpointConnectionNotifications using Alchemy Cloud Control.
 ---
-
-# VPCEndpointConnectionNotification
 
 The VPCEndpointConnectionNotification resource allows you to manage notifications for AWS EC2 VPC Endpoint connection events. This resource enables you to specify various connection events and the target for those notifications. For more information, refer to the [AWS EC2 VPCEndpointConnectionNotifications](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

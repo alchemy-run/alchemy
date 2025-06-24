@@ -1,9 +1,7 @@
 ---
-title: Managing AWS M2 Environments with Alchemy
+title: Environment
 description: Learn how to create, update, and manage AWS M2 Environments using Alchemy Cloud Control.
 ---
-
-# Environment
 
 The Environment resource lets you manage [AWS M2 Environments](https://docs.aws.amazon.com/m2/latest/userguide/) for running applications in a secure and scalable manner. 
 

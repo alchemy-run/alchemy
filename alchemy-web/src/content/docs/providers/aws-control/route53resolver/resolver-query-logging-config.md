@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53Resolver ResolverQueryLoggingConfigs with Alchemy
+title: ResolverQueryLoggingConfig
 description: Learn how to create, update, and manage AWS Route53Resolver ResolverQueryLoggingConfigs using Alchemy Cloud Control.
 ---
-
-# ResolverQueryLoggingConfig
 
 The ResolverQueryLoggingConfig resource lets you manage [AWS Route53Resolver Query Logging Configurations](https://docs.aws.amazon.com/route53resolver/latest/userguide/). This resource allows you to log DNS queries for your VPCs to a specified destination, enabling better monitoring and analysis of DNS activity.
 

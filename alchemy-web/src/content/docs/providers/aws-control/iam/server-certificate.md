@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM ServerCertificates with Alchemy
+title: ServerCertificate
 description: Learn how to create, update, and manage AWS IAM ServerCertificates using Alchemy Cloud Control.
 ---
-
-# ServerCertificate
 
 The ServerCertificate resource lets you manage [AWS IAM ServerCertificates](https://docs.aws.amazon.com/iam/latest/userguide/) for securely managing SSL/TLS certificates for your AWS resources.
 

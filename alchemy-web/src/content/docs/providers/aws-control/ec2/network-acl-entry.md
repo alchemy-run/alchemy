@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 NetworkAclEntrys with Alchemy
+title: NetworkAclEntry
 description: Learn how to create, update, and manage AWS EC2 NetworkAclEntrys using Alchemy Cloud Control.
 ---
-
-# NetworkAclEntry
 
 The NetworkAclEntry resource allows you to manage [AWS EC2 Network ACL Entries](https://docs.aws.amazon.com/ec2/latest/userguide/) for configuring firewall rules for your Virtual Private Clouds (VPC). 
 

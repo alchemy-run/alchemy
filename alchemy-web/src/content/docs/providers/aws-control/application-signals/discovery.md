@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApplicationSignals Discoverys with Alchemy
+title: Discovery
 description: Learn how to create, update, and manage AWS ApplicationSignals Discoverys using Alchemy Cloud Control.
 ---
-
-# Discovery
 
 The Discovery resource lets you manage [AWS ApplicationSignals Discoverys](https://docs.aws.amazon.com/applicationsignals/latest/userguide/) for tracking application performance and signals.
 

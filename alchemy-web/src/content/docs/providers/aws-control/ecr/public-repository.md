@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ECR PublicRepositorys with Alchemy
+title: PublicRepository
 description: Learn how to create, update, and manage AWS ECR PublicRepositorys using Alchemy Cloud Control.
 ---
-
-# PublicRepository
 
 The PublicRepository resource allows you to manage [AWS ECR PublicRepositorys](https://docs.aws.amazon.com/ecr/latest/userguide/) for storing and sharing container images publicly.
 

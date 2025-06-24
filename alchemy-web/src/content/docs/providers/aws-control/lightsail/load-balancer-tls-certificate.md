@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lightsail LoadBalancerTlsCertificates with Alchemy
+title: LoadBalancerTlsCertificate
 description: Learn how to create, update, and manage AWS Lightsail LoadBalancerTlsCertificates using Alchemy Cloud Control.
 ---
-
-# LoadBalancerTlsCertificate
 
 The LoadBalancerTlsCertificate resource allows you to manage TLS certificates for your AWS Lightsail load balancers, enabling secure communication over HTTPS. For more information, see the [AWS Lightsail LoadBalancerTlsCertificates documentation](https://docs.aws.amazon.com/lightsail/latest/userguide/).
 

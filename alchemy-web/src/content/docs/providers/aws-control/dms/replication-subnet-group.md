@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DMS ReplicationSubnetGroups with Alchemy
+title: ReplicationSubnetGroup
 description: Learn how to create, update, and manage AWS DMS ReplicationSubnetGroups using Alchemy Cloud Control.
 ---
-
-# ReplicationSubnetGroup
 
 The ReplicationSubnetGroup resource allows you to define a [Replication Subnet Group](https://docs.aws.amazon.com/dms/latest/userguide/) for AWS Database Migration Service (DMS) to specify which subnets to use for replication instances. This resource helps ensure that your replication instances can communicate with your data sources and targets in a secure manner.
 

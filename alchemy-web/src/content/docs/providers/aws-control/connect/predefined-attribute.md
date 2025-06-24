@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect PredefinedAttributes with Alchemy
+title: PredefinedAttribute
 description: Learn how to create, update, and manage AWS Connect PredefinedAttributes using Alchemy Cloud Control.
 ---
-
-# PredefinedAttribute
 
 The PredefinedAttribute resource allows you to manage [AWS Connect PredefinedAttributes](https://docs.aws.amazon.com/connect/latest/userguide/) for your contact center settings.
 

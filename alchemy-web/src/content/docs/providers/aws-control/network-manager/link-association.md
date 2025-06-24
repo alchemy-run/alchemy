@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager LinkAssociations with Alchemy
+title: LinkAssociation
 description: Learn how to create, update, and manage AWS NetworkManager LinkAssociations using Alchemy Cloud Control.
 ---
-
-# LinkAssociation
 
 The LinkAssociation resource lets you manage [AWS NetworkManager LinkAssociations](https://docs.aws.amazon.com/networkmanager/latest/userguide/) for linking devices and links in your global network.
 

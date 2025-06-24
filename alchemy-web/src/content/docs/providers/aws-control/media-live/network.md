@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaLive Networks with Alchemy
+title: Network
 description: Learn how to create, update, and manage AWS MediaLive Networks using Alchemy Cloud Control.
 ---
-
-# Network
 
 The Network resource allows you to create and manage [AWS MediaLive Networks](https://docs.aws.amazon.com/medialive/latest/userguide/) for video streaming applications. This resource enables you to define IP pools, routes, and tags that are essential for your MediaLive channels.
 

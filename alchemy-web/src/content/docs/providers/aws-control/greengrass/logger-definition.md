@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass LoggerDefinitions with Alchemy
+title: LoggerDefinition
 description: Learn how to create, update, and manage AWS Greengrass LoggerDefinitions using Alchemy Cloud Control.
 ---
-
-# LoggerDefinition
 
 The LoggerDefinition resource allows you to define and manage logging configurations for AWS Greengrass, enabling you to control the log levels of your Greengrass components. For more information, visit the [AWS Greengrass LoggerDefinitions documentation](https://docs.aws.amazon.com/greengrass/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DocDB DBClusterParameterGroups with Alchemy
+title: DBClusterParameterGroup
 description: Learn how to create, update, and manage AWS DocDB DBClusterParameterGroups using Alchemy Cloud Control.
 ---
-
-# DBClusterParameterGroup
 
 The `DBClusterParameterGroup` resource allows you to manage Amazon DocumentDB (with MongoDB compatibility) cluster parameter groups, which are used to manage configuration settings for your DocumentDB clusters. For more information, refer to the [AWS DocDB DBClusterParameterGroups documentation](https://docs.aws.amazon.com/docdb/latest/userguide/).
 

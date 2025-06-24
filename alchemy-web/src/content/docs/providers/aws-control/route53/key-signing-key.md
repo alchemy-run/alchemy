@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53 KeySigningKeys with Alchemy
+title: KeySigningKey
 description: Learn how to create, update, and manage AWS Route53 KeySigningKeys using Alchemy Cloud Control.
 ---
-
-# KeySigningKey
 
 The KeySigningKey resource allows you to manage [AWS Route53 KeySigningKeys](https://docs.aws.amazon.com/route53/latest/userguide/) for signing DNSSEC records.
 

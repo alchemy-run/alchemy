@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 RouteServerPeers with Alchemy
+title: RouteServerPeer
 description: Learn how to create, update, and manage AWS EC2 RouteServerPeers using Alchemy Cloud Control.
 ---
-
-# RouteServerPeer
 
 The RouteServerPeer resource lets you manage [AWS EC2 RouteServerPeers](https://docs.aws.amazon.com/ec2/latest/userguide/) for establishing BGP peering connections with Route Servers.
 

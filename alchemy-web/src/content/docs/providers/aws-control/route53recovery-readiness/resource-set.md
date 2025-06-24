@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53RecoveryReadiness ResourceSets with Alchemy
+title: ResourceSet
 description: Learn how to create, update, and manage AWS Route53RecoveryReadiness ResourceSets using Alchemy Cloud Control.
 ---
-
-# ResourceSet
 
 The ResourceSet resource lets you manage [AWS Route53RecoveryReadiness ResourceSets](https://docs.aws.amazon.com/route53recoveryreadiness/latest/userguide/) for organizing AWS resources in a recovery readiness strategy.
 

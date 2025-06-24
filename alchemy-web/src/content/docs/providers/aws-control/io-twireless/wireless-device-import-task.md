@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTWireless WirelessDeviceImportTasks with Alchemy
+title: WirelessDeviceImportTask
 description: Learn how to create, update, and manage AWS IoTWireless WirelessDeviceImportTasks using Alchemy Cloud Control.
 ---
-
-# WirelessDeviceImportTask
 
 The WirelessDeviceImportTask resource lets you manage the import tasks for wireless devices in AWS IoT Wireless. This resource allows you to specify the destination for the imported devices and configure options for Sidewalk and tagging. For more information, refer to the [AWS IoTWireless WirelessDeviceImportTasks](https://docs.aws.amazon.com/iotwireless/latest/userguide/).
 

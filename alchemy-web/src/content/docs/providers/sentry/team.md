@@ -1,9 +1,7 @@
 ---
-title: Sentry Team
+title: Team
 description: Learn how to create, configure, and manage Sentry teams using Alchemy.
 ---
-
-# Sentry Team
 
 Create and manage Sentry teams.
 

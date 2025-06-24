@@ -1,9 +1,7 @@
 ---
-title: Managing AWS KinesisVideo SignalingChannels with Alchemy
+title: SignalingChannel
 description: Learn how to create, update, and manage AWS KinesisVideo SignalingChannels using Alchemy Cloud Control.
 ---
-
-# SignalingChannel
 
 The SignalingChannel resource allows you to manage [AWS KinesisVideo SignalingChannels](https://docs.aws.amazon.com/kinesisvideo/latest/userguide/) for real-time communication between devices and applications.
 

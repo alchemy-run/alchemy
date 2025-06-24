@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect UserHierarchyGroups with Alchemy
+title: UserHierarchyGroup
 description: Learn how to create, update, and manage AWS Connect UserHierarchyGroups using Alchemy Cloud Control.
 ---
-
-# UserHierarchyGroup
 
 The UserHierarchyGroup resource lets you manage [AWS Connect UserHierarchyGroups](https://docs.aws.amazon.com/connect/latest/userguide/) for organizing users within contact centers.
 

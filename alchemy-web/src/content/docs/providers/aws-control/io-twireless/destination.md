@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTWireless Destinations with Alchemy
+title: Destination
 description: Learn how to create, update, and manage AWS IoTWireless Destinations using Alchemy Cloud Control.
 ---
-
-# Destination
 
 The Destination resource allows you to manage [AWS IoTWireless Destinations](https://docs.aws.amazon.com/iotwireless/latest/userguide/) for routing messages from your IoT devices to AWS services. 
 

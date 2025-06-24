@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue Partitions with Alchemy
+title: Partition
 description: Learn how to create, update, and manage AWS Glue Partitions using Alchemy Cloud Control.
 ---
-
-# Partition
 
 The Partition resource allows you to manage [AWS Glue Partitions](https://docs.aws.amazon.com/glue/latest/userguide/) within your data catalog, enabling efficient data organization and retrieval.
 

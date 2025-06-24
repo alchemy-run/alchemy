@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT FleetMetrics with Alchemy
+title: FleetMetric
 description: Learn how to create, update, and manage AWS IoT FleetMetrics using Alchemy Cloud Control.
 ---
-
-# FleetMetric
 
 The FleetMetric resource allows you to create and manage [AWS IoT FleetMetrics](https://docs.aws.amazon.com/iot/latest/userguide/), which are used to define metrics for monitoring your IoT fleet.
 

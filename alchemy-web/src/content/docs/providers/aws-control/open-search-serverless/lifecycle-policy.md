@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpenSearchServerless LifecyclePolicys with Alchemy
+title: LifecyclePolicy
 description: Learn how to create, update, and manage AWS OpenSearchServerless LifecyclePolicys using Alchemy Cloud Control.
 ---
-
-# LifecyclePolicy
 
 The LifecyclePolicy resource allows you to define and manage lifecycle policies for AWS OpenSearchServerless, which automate the management of your OpenSearch indices. For more information, refer to the [AWS OpenSearchServerless LifecyclePolicys](https://docs.aws.amazon.com/opensearchserverless/latest/userguide/).
 

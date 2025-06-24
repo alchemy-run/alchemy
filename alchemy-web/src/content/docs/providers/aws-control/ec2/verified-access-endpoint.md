@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VerifiedAccessEndpoints with Alchemy
+title: VerifiedAccessEndpoint
 description: Learn how to create, update, and manage AWS EC2 VerifiedAccessEndpoints using Alchemy Cloud Control.
 ---
-
-# VerifiedAccessEndpoint
 
 The VerifiedAccessEndpoint resource allows you to manage [AWS EC2 Verified Access Endpoints](https://docs.aws.amazon.com/ec2/latest/userguide/) for secure access to your AWS resources.
 

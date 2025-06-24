@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Backup BackupSelections with Alchemy
+title: BackupSelection
 description: Learn how to create, update, and manage AWS Backup BackupSelections using Alchemy Cloud Control.
 ---
-
-# BackupSelection
 
 The BackupSelection resource allows you to manage [AWS Backup BackupSelections](https://docs.aws.amazon.com/backup/latest/userguide/) for defining the resources to back up. This resource is essential for configuring backup plans and ensuring that your data is protected and recoverable.
 

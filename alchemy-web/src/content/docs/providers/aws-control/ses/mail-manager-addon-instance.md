@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES MailManagerAddonInstances with Alchemy
+title: MailManagerAddonInstance
 description: Learn how to create, update, and manage AWS SES MailManagerAddonInstances using Alchemy Cloud Control.
 ---
-
-# MailManagerAddonInstance
 
 The MailManagerAddonInstance resource allows you to manage AWS SES Mail Manager Addon Instances, which provide additional capabilities for sending and managing email. For more information, refer to the [AWS SES MailManagerAddonInstances documentation](https://docs.aws.amazon.com/ses/latest/userguide/).
 

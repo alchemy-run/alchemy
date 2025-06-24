@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS OptionGroups with Alchemy
+title: OptionGroup
 description: Learn how to create, update, and manage AWS RDS OptionGroups using Alchemy Cloud Control.
 ---
-
-# OptionGroup
 
 The OptionGroup resource lets you manage [AWS RDS OptionGroups](https://docs.aws.amazon.com/rds/latest/userguide/) which are used to enable additional features for your Amazon RDS DB instances. An OptionGroup allows you to configure optional features for your database engine, such as Oracle's TDE or SQL Server's Transparent Data Encryption.
 

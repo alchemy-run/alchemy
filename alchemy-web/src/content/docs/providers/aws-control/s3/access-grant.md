@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3 AccessGrants with Alchemy
+title: AccessGrant
 description: Learn how to create, update, and manage AWS S3 AccessGrants using Alchemy Cloud Control.
 ---
-
-# AccessGrant
 
 The AccessGrant resource lets you manage [AWS S3 AccessGrants](https://docs.aws.amazon.com/s3/latest/userguide/) for granting permissions to objects in S3 buckets.
 

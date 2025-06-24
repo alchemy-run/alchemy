@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataBrew Recipes with Alchemy
+title: Recipe
 description: Learn how to create, update, and manage AWS DataBrew Recipes using Alchemy Cloud Control.
 ---
-
-# Recipe
 
 The Recipe resource allows you to create, update, and manage [AWS DataBrew Recipes](https://docs.aws.amazon.com/databrew/latest/userguide/) that define a series of steps to transform your data for analysis.
 

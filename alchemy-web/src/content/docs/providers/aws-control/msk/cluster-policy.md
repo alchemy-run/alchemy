@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MSK ClusterPolicys with Alchemy
+title: ClusterPolicy
 description: Learn how to create, update, and manage AWS MSK ClusterPolicys using Alchemy Cloud Control.
 ---
-
-# ClusterPolicy
 
 The ClusterPolicy resource allows you to manage [AWS MSK ClusterPolicys](https://docs.aws.amazon.com/msk/latest/userguide/) that define the access controls and policies for your Amazon MSK clusters.
 

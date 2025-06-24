@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityHub FindingAggregators with Alchemy
+title: FindingAggregator
 description: Learn how to create, update, and manage AWS SecurityHub FindingAggregators using Alchemy Cloud Control.
 ---
-
-# FindingAggregator
 
 The FindingAggregator resource allows you to manage AWS SecurityHub FindingAggregators, which helps in aggregating and consolidating findings across multiple AWS accounts and regions. For more detailed information, refer to the [AWS SecurityHub FindingAggregators documentation](https://docs.aws.amazon.com/securityhub/latest/userguide/).
 

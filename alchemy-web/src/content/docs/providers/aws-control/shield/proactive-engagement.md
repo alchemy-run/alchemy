@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Shield ProactiveEngagements with Alchemy
+title: ProactiveEngagement
 description: Learn how to create, update, and manage AWS Shield ProactiveEngagements using Alchemy Cloud Control.
 ---
-
-# ProactiveEngagement
 
 The ProactiveEngagement resource allows you to configure AWS Shield Proactive Engagement settings, which enable you to receive alerts and notifications during DDoS attacks. This resource is essential for maintaining the security and availability of your applications by ensuring that your emergency contacts are promptly notified. For more information, refer to the [AWS Shield ProactiveEngagements documentation](https://docs.aws.amazon.com/shield/latest/userguide/).
 

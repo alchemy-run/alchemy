@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cognito UserPoolResourceServers with Alchemy
+title: UserPoolResourceServer
 description: Learn how to create, update, and manage AWS Cognito UserPoolResourceServers using Alchemy Cloud Control.
 ---
-
-# UserPoolResourceServer
 
 The UserPoolResourceServer resource allows you to manage [AWS Cognito User Pool Resource Servers](https://docs.aws.amazon.com/cognito/latest/userguide/). This resource enables you to define custom resource servers for your user pool, complete with associated scopes.
 

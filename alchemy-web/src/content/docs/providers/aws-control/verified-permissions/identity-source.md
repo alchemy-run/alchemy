@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VerifiedPermissions IdentitySources with Alchemy
+title: IdentitySource
 description: Learn how to create, update, and manage AWS VerifiedPermissions IdentitySources using Alchemy Cloud Control.
 ---
-
-# IdentitySource
 
 The IdentitySource resource allows you to manage [AWS VerifiedPermissions IdentitySources](https://docs.aws.amazon.com/verifiedpermissions/latest/userguide/) that provide identity information for authorization decisions.
 

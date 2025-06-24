@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 KeyPairs with Alchemy
+title: KeyPair
 description: Learn how to create, update, and manage AWS EC2 KeyPairs using Alchemy Cloud Control.
 ---
-
-# KeyPair
 
 The KeyPair resource lets you manage [AWS EC2 KeyPairs](https://docs.aws.amazon.com/ec2/latest/userguide/) used for secure access to your EC2 instances.
 

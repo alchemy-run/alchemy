@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataZone GroupProfiles with Alchemy
+title: GroupProfile
 description: Learn how to create, update, and manage AWS DataZone GroupProfiles using Alchemy Cloud Control.
 ---
-
-# GroupProfile
 
 The GroupProfile resource lets you manage [AWS DataZone GroupProfiles](https://docs.aws.amazon.com/datazone/latest/userguide/) which define groups within your data environment and their associated permissions.
 

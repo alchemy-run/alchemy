@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAF SqlInjectionMatchSets with Alchemy
+title: SqlInjectionMatchSet
 description: Learn how to create, update, and manage AWS WAF SqlInjectionMatchSets using Alchemy Cloud Control.
 ---
-
-# SqlInjectionMatchSet
 
 The SqlInjectionMatchSet resource allows you to manage SQL injection match sets for AWS WAF, providing a way to define sets of SQL injection match tuples to inspect web requests. For more detailed information, refer to the [AWS WAF SqlInjectionMatchSets documentation](https://docs.aws.amazon.com/waf/latest/userguide/).
 

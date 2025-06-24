@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSMContacts Contacts with Alchemy
+title: Contact
 description: Learn how to create, update, and manage AWS SSMContacts Contacts using Alchemy Cloud Control.
 ---
-
-# Contact
 
 The Contact resource lets you manage [AWS SSMContacts Contacts](https://docs.aws.amazon.com/ssmcontacts/latest/userguide/) for incident management and on-call scheduling.
 

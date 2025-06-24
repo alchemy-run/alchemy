@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecretsManager ResourcePolicys with Alchemy
+title: ResourcePolicy
 description: Learn how to create, update, and manage AWS SecretsManager ResourcePolicys using Alchemy Cloud Control.
 ---
-
-# ResourcePolicy
 
 The ResourcePolicy resource allows you to manage access policies for AWS Secrets Manager secrets, enabling fine-grained control over who can access specific secrets. For more detailed information, refer to the [AWS SecretsManager ResourcePolicys](https://docs.aws.amazon.com/secretsmanager/latest/userguide/).
 

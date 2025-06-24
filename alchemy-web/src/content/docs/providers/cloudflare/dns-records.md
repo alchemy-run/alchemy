@@ -1,9 +1,7 @@
 ---
-title: Cloudflare DNS Records
+title: DnsRecords
 description: Learn how to create, update, and manage Cloudflare DNS Records for your domains using Alchemy.
 ---
-
-# DnsRecords
 
 Manages DNS records in a Cloudflare zone using the [Cloudflare DNS API](https://developers.cloudflare.com/api/operations/dns-records-for-a-zone-list-dns-records).
 

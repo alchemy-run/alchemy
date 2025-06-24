@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSMIncidents ReplicationSets with Alchemy
+title: ReplicationSet
 description: Learn how to create, update, and manage AWS SSMIncidents ReplicationSets using Alchemy Cloud Control.
 ---
-
-# ReplicationSet
 
 The ReplicationSet resource lets you manage [AWS SSMIncidents ReplicationSets](https://docs.aws.amazon.com/ssmincidents/latest/userguide/) for incident response across multiple regions.
 

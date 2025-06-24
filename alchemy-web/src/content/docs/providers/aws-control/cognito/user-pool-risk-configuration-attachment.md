@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cognito UserPoolRiskConfigurationAttachments with Alchemy
+title: UserPoolRiskConfigurationAttachment
 description: Learn how to create, update, and manage AWS Cognito UserPoolRiskConfigurationAttachments using Alchemy Cloud Control.
 ---
-
-# UserPoolRiskConfigurationAttachment
 
 The UserPoolRiskConfigurationAttachment resource allows you to manage the risk configuration settings for AWS Cognito user pools. This resource is essential for enhancing security by managing account takeover and compromised credential risks. For more information, refer to the [AWS Cognito UserPoolRiskConfigurationAttachments documentation](https://docs.aws.amazon.com/cognito/latest/userguide/).
 

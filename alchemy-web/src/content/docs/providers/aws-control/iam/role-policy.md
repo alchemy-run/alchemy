@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM RolePolicys with Alchemy
+title: RolePolicy
 description: Learn how to create, update, and manage AWS IAM RolePolicys using Alchemy Cloud Control.
 ---
-
-# RolePolicy
 
 The RolePolicy resource lets you manage [AWS IAM RolePolicys](https://docs.aws.amazon.com/iam/latest/userguide/) for fine-grained control over access to AWS resources.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Backup BackupVaults with Alchemy
+title: BackupVault
 description: Learn how to create, update, and manage AWS Backup BackupVaults using Alchemy Cloud Control.
 ---
-
-# BackupVault
 
 The BackupVault resource allows you to manage [AWS Backup BackupVaults](https://docs.aws.amazon.com/backup/latest/userguide/) for storing and organizing backup data securely.
 

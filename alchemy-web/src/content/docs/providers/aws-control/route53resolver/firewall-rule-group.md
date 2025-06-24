@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53Resolver FirewallRuleGroups with Alchemy
+title: FirewallRuleGroup
 description: Learn how to create, update, and manage AWS Route53Resolver FirewallRuleGroups using Alchemy Cloud Control.
 ---
-
-# FirewallRuleGroup
 
 The FirewallRuleGroup resource lets you manage [AWS Route53Resolver FirewallRuleGroups](https://docs.aws.amazon.com/route53resolver/latest/userguide/) for controlling DNS queries and applying firewall rules.
 

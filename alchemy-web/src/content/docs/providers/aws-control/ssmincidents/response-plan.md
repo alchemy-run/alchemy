@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSMIncidents ResponsePlans with Alchemy
+title: ResponsePlan
 description: Learn how to create, update, and manage AWS SSMIncidents ResponsePlans using Alchemy Cloud Control.
 ---
-
-# ResponsePlan
 
 The ResponsePlan resource allows you to create and manage [AWS SSMIncidents ResponsePlans](https://docs.aws.amazon.com/ssmincidents/latest/userguide/) for incident management and response workflows.
 

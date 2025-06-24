@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass Groups with Alchemy
+title: Group
 description: Learn how to create, update, and manage AWS Greengrass Groups using Alchemy Cloud Control.
 ---
-
-# Group
 
 The Group resource allows you to manage [AWS Greengrass Groups](https://docs.aws.amazon.com/greengrass/latest/userguide/) for deploying and managing IoT applications at the edge.
 

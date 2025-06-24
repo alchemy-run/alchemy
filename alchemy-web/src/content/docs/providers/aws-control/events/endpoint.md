@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Events Endpoints with Alchemy
+title: Endpoint
 description: Learn how to create, update, and manage AWS Events Endpoints using Alchemy Cloud Control.
 ---
-
-# Endpoint
 
 The Endpoint resource lets you manage [AWS Events Endpoints](https://docs.aws.amazon.com/events/latest/userguide/) for routing events to a target service. This resource enables you to define event buses, configurations, and permissions to facilitate seamless event-driven architectures.
 

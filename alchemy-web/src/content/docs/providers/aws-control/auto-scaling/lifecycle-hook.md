@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AutoScaling LifecycleHooks with Alchemy
+title: LifecycleHook
 description: Learn how to create, update, and manage AWS AutoScaling LifecycleHooks using Alchemy Cloud Control.
 ---
-
-# LifecycleHook
 
 The LifecycleHook resource allows you to manage [AWS AutoScaling LifecycleHooks](https://docs.aws.amazon.com/autoscaling/latest/userguide/) which enable you to perform custom actions during the instance launch and termination process.
 

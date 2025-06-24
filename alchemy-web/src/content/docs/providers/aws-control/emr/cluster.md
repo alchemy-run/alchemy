@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EMR Clusters with Alchemy
+title: Cluster
 description: Learn how to create, update, and manage AWS EMR Clusters using Alchemy Cloud Control.
 ---
-
-# Cluster
 
 The Cluster resource lets you manage [AWS EMR Clusters](https://docs.aws.amazon.com/emr/latest/userguide/) for processing large amounts of data using tools such as Apache Hadoop and Apache Spark.
 

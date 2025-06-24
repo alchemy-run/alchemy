@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CertificateManager Certificates with Alchemy
+title: Certificate
 description: Learn how to create, update, and manage AWS CertificateManager Certificates using Alchemy Cloud Control.
 ---
-
-# Certificate
 
 The Certificate resource allows you to manage [AWS CertificateManager Certificates](https://docs.aws.amazon.com/certificatemanager/latest/userguide/) for simplifying the process of obtaining, deploying, and managing SSL/TLS certificates.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS XRay ResourcePolicys with Alchemy
+title: ResourcePolicy
 description: Learn how to create, update, and manage AWS XRay ResourcePolicys using Alchemy Cloud Control.
 ---
-
-# ResourcePolicy
 
 The ResourcePolicy resource lets you manage [AWS XRay ResourcePolicys](https://docs.aws.amazon.com/xray/latest/userguide/) that define permissions for your XRay data.
 

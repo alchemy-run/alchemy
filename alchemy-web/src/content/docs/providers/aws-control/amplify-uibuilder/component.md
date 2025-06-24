@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AmplifyUIBuilder Components with Alchemy
+title: Component
 description: Learn how to create, update, and manage AWS AmplifyUIBuilder Components using Alchemy Cloud Control.
 ---
-
-# Component
 
 The Component resource lets you manage [AWS AmplifyUIBuilder Components](https://docs.aws.amazon.com/amplifyuibuilder/latest/userguide/) that define the UI components in your Amplify application.
 

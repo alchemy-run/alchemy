@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 IPAMPools with Alchemy
+title: IPAMPool
 description: Learn how to create, update, and manage AWS EC2 IPAMPools using Alchemy Cloud Control.
 ---
-
-# IPAMPool
 
 The IPAMPool resource allows you to manage [AWS EC2 IPAMPools](https://docs.aws.amazon.com/ec2/latest/userguide/) for efficient IP address management in your AWS environment.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkFirewall LoggingConfigurations with Alchemy
+title: LoggingConfiguration
 description: Learn how to create, update, and manage AWS NetworkFirewall LoggingConfigurations using Alchemy Cloud Control.
 ---
-
-# LoggingConfiguration
 
 The LoggingConfiguration resource allows you to manage [AWS NetworkFirewall LoggingConfigurations](https://docs.aws.amazon.com/networkfirewall/latest/userguide/) for your network firewall, enabling you to configure logging settings for your firewall traffic.
 

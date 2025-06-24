@@ -4,8 +4,6 @@ title: Phase
 description: Master the three execution phases in Alchemy - up, destroy, and read. Learn when to use each phase for deploying, tearing down, or accessing your infrastructure.
 ---
 
-# Phase
-
 An Alchemy app can run in one of three phases:
 1. `"up"` - resources should be created, updated and deleted as necessary.
 2. `"destroy"` - all resources in the stage should be deleted and the program should not proceed

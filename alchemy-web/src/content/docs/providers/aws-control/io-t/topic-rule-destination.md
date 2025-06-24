@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT TopicRuleDestinations with Alchemy
+title: TopicRuleDestination
 description: Learn how to create, update, and manage AWS IoT TopicRuleDestinations using Alchemy Cloud Control.
 ---
-
-# TopicRuleDestination
 
 The TopicRuleDestination resource allows you to manage [AWS IoT TopicRuleDestinations](https://docs.aws.amazon.com/iot/latest/userguide/) which are used to define the destinations for IoT messages based on topic rules.
 

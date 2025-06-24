@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES MailManagerIngressPoints with Alchemy
+title: MailManagerIngressPoint
 description: Learn how to create, update, and manage AWS SES MailManagerIngressPoints using Alchemy Cloud Control.
 ---
-
-# MailManagerIngressPoint
 
 The MailManagerIngressPoint resource allows you to manage inbound email processing rules for Amazon Simple Email Service (SES). You can configure how incoming emails are handled by specifying rules and traffic policies. For more details, refer to the [AWS SES MailManagerIngressPoints documentation](https://docs.aws.amazon.com/ses/latest/userguide/).
 

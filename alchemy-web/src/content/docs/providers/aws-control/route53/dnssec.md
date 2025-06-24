@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53 DNSSECs with Alchemy
+title: DNSSEC
 description: Learn how to create, update, and manage AWS Route53 DNSSECs using Alchemy Cloud Control.
 ---
-
-# DNSSEC
 
 The DNSSEC resource allows you to manage [AWS Route53 DNSSEC](https://docs.aws.amazon.com/route53/latest/userguide/) configurations, enabling you to secure your domain name system against certain types of attacks.
 

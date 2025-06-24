@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaLive InputSecurityGroups with Alchemy
+title: InputSecurityGroup
 description: Learn how to create, update, and manage AWS MediaLive InputSecurityGroups using Alchemy Cloud Control.
 ---
-
-# InputSecurityGroup
 
 The InputSecurityGroup resource allows you to manage [AWS MediaLive InputSecurityGroups](https://docs.aws.amazon.com/medialive/latest/userguide/) which control the whitelisted CIDR blocks for input sources.
 

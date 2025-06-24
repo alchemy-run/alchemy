@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSO Assignments with Alchemy
+title: Assignment
 description: Learn how to create, update, and manage AWS SSO Assignments using Alchemy Cloud Control.
 ---
-
-# Assignment
 
 The Assignment resource lets you manage [AWS SSO Assignments](https://docs.aws.amazon.com/sso/latest/userguide/) that link users or groups to permission sets for specific AWS accounts. This simplifies access management in AWS Single Sign-On.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES DedicatedIpPools with Alchemy
+title: DedicatedIpPool
 description: Learn how to create, update, and manage AWS SES DedicatedIpPools using Alchemy Cloud Control.
 ---
-
-# DedicatedIpPool
 
 The DedicatedIpPool resource allows you to manage dedicated IP pools for Amazon Simple Email Service (SES), enabling better deliverability and control over your sending reputation. For more information, see the [AWS SES DedicatedIpPools documentation](https://docs.aws.amazon.com/ses/latest/userguide/).
 

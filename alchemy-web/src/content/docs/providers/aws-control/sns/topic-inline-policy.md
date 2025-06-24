@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SNS TopicInlinePolicys with Alchemy
+title: TopicInlinePolicy
 description: Learn how to create, update, and manage AWS SNS TopicInlinePolicys using Alchemy Cloud Control.
 ---
-
-# TopicInlinePolicy
 
 The TopicInlinePolicy resource lets you manage inline policies for Amazon Simple Notification Service (SNS) topics. Inline policies help you define permissions directly associated with the SNS topic. You can find more information in the [AWS SNS TopicInlinePolicys documentation](https://docs.aws.amazon.com/sns/latest/userguide/).
 

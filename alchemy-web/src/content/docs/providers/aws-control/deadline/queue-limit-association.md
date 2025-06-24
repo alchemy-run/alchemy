@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Deadline QueueLimitAssociations with Alchemy
+title: QueueLimitAssociation
 description: Learn how to create, update, and manage AWS Deadline QueueLimitAssociations using Alchemy Cloud Control.
 ---
-
-# QueueLimitAssociation
 
 The QueueLimitAssociation resource allows you to manage associations between queue limits and farms in AWS Deadline. For more information, you can visit the [AWS Deadline QueueLimitAssociations](https://docs.aws.amazon.com/deadline/latest/userguide/) documentation.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DocDBElastic Clusters with Alchemy
+title: Cluster
 description: Learn how to create, update, and manage AWS DocDBElastic Clusters using Alchemy Cloud Control.
 ---
-
-# Cluster
 
 The Cluster resource lets you manage [AWS DocDBElastic Clusters](https://docs.aws.amazon.com/docdbelastic/latest/userguide/) for scalable and flexible document database solutions.
 

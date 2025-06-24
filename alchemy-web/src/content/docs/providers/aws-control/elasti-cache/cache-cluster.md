@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ElastiCache CacheClusters with Alchemy
+title: CacheCluster
 description: Learn how to create, update, and manage AWS ElastiCache CacheClusters using Alchemy Cloud Control.
 ---
-
-# CacheCluster
 
 The CacheCluster resource lets you manage [AWS ElastiCache CacheClusters](https://docs.aws.amazon.com/elasticache/latest/userguide/) for in-memory data storage and caching.
 

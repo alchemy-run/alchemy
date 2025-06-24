@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudTrail Channels with Alchemy
+title: Channel
 description: Learn how to create, update, and manage AWS CloudTrail Channels using Alchemy Cloud Control.
 ---
-
-# Channel
 
 The Channel resource allows you to manage [AWS CloudTrail Channels](https://docs.aws.amazon.com/cloudtrail/latest/userguide/) for streaming event data to various destinations. This resource is essential for setting up data pipelines and integrating with other AWS services.
 

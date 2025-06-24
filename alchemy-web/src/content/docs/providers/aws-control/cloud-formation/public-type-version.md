@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation PublicTypeVersions with Alchemy
+title: PublicTypeVersion
 description: Learn how to create, update, and manage AWS CloudFormation PublicTypeVersions using Alchemy Cloud Control.
 ---
-
-# PublicTypeVersion
 
 The PublicTypeVersion resource allows you to manage the versions of public types in AWS CloudFormation. This resource can be utilized to register, update, and manage the versions of public CloudFormation types. For more details, refer to the [AWS CloudFormation PublicTypeVersions documentation](https://docs.aws.amazon.com/cloudformation/latest/userguide/).
 

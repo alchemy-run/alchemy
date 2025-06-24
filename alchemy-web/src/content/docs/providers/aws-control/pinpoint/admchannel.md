@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint ADMChannels with Alchemy
+title: ADMChannel
 description: Learn how to create, update, and manage AWS Pinpoint ADMChannels using Alchemy Cloud Control.
 ---
-
-# ADMChannel
 
 The ADMChannel resource allows you to manage the Amazon Device Messaging (ADM) channel for AWS Pinpoint, enabling you to send messages to your Android applications. For more detailed information, refer to the [AWS Pinpoint ADMChannels documentation](https://docs.aws.amazon.com/pinpoint/latest/userguide/).
 

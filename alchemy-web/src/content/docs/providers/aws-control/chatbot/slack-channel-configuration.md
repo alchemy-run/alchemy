@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Chatbot SlackChannelConfigurations with Alchemy
+title: SlackChannelConfiguration
 description: Learn how to create, update, and manage AWS Chatbot SlackChannelConfigurations using Alchemy Cloud Control.
 ---
-
-# SlackChannelConfiguration
 
 The SlackChannelConfiguration resource lets you manage [AWS Chatbot Slack Channel Configurations](https://docs.aws.amazon.com/chatbot/latest/userguide/) for sending notifications and executing AWS commands directly from your Slack channels.
 

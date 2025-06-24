@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Location PlaceIndexs with Alchemy
+title: PlaceIndex
 description: Learn how to create, update, and manage AWS Location PlaceIndexs using Alchemy Cloud Control.
 ---
-
-# PlaceIndex
 
 The PlaceIndex resource lets you manage [AWS Location PlaceIndexs](https://docs.aws.amazon.com/location/latest/userguide/) for geocoding and reverse geocoding address data.
 

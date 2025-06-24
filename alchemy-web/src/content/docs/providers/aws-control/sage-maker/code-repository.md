@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker CodeRepositorys with Alchemy
+title: CodeRepository
 description: Learn how to create, update, and manage AWS SageMaker CodeRepositorys using Alchemy Cloud Control.
 ---
-
-# CodeRepository
 
 The CodeRepository resource allows you to manage [AWS SageMaker CodeRepositorys](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for version control of your machine learning code.
 

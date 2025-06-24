@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect EmailAddresss with Alchemy
+title: EmailAddress
 description: Learn how to create, update, and manage AWS Connect EmailAddresss using Alchemy Cloud Control.
 ---
-
-# EmailAddress
 
 The EmailAddress resource lets you manage [AWS Connect Email Addresses](https://docs.aws.amazon.com/connect/latest/userguide/) for your contact center, enabling email communication capabilities.
 

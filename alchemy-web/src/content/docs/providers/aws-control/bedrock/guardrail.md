@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Bedrock Guardrails with Alchemy
+title: Guardrail
 description: Learn how to create, update, and manage AWS Bedrock Guardrails using Alchemy Cloud Control.
 ---
-
-# Guardrail
 
 The Guardrail resource allows you to manage [AWS Bedrock Guardrails](https://docs.aws.amazon.com/bedrock/latest/userguide/) that help in enforcing compliance and security policies for your machine learning models.
 

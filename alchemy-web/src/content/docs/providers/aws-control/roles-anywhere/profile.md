@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RolesAnywhere Profiles with Alchemy
+title: Profile
 description: Learn how to create, update, and manage AWS RolesAnywhere Profiles using Alchemy Cloud Control.
 ---
-
-# Profile
 
 The Profile resource lets you manage [AWS RolesAnywhere Profiles](https://docs.aws.amazon.com/rolesanywhere/latest/userguide/) which are used to enable IAM roles for workloads running outside of AWS. This resource allows you to define the rules and settings that govern role assumption.
 

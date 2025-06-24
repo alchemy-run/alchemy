@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IVS Channels with Alchemy
+title: Channel
 description: Learn how to create, update, and manage AWS IVS Channels using Alchemy Cloud Control.
 ---
-
-# Channel
 
 The Channel resource lets you manage [AWS IVS Channels](https://docs.aws.amazon.com/ivs/latest/userguide/) for live streaming. This resource provides a way to configure channels for video ingestion and streaming.
 

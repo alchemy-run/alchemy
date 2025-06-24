@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Signer SigningProfiles with Alchemy
+title: SigningProfile
 description: Learn how to create, update, and manage AWS Signer SigningProfiles using Alchemy Cloud Control.
 ---
-
-# SigningProfile
 
 The SigningProfile resource allows you to create and manage signing profiles in AWS Signer, which are used to specify the signing configurations for your code and binaries. For more details, refer to the [AWS Signer SigningProfiles documentation](https://docs.aws.amazon.com/signer/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EventSchemas RegistryPolicys with Alchemy
+title: RegistryPolicy
 description: Learn how to create, update, and manage AWS EventSchemas RegistryPolicys using Alchemy Cloud Control.
 ---
-
-# RegistryPolicy
 
 The RegistryPolicy resource allows you to manage [AWS EventSchemas RegistryPolicys](https://docs.aws.amazon.com/eventschemas/latest/userguide/) for controlling access to event schemas within a specific registry.
 

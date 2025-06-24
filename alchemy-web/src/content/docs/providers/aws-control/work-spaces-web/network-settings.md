@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WorkSpacesWeb NetworkSettings with Alchemy
+title: NetworkSettings
 description: Learn how to create, update, and manage AWS WorkSpacesWeb NetworkSettings using Alchemy Cloud Control.
 ---
-
-# NetworkSettings
 
 The NetworkSettings resource allows you to manage the network settings for AWS WorkSpacesWeb, including the VPC, security groups, and subnets. For more details, visit the [AWS WorkSpacesWeb NetworkSettings documentation](https://docs.aws.amazon.com/workspacesweb/latest/userguide/).
 

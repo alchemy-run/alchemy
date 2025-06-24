@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Athena CapacityReservations with Alchemy
+title: CapacityReservation
 description: Learn how to create, update, and manage AWS Athena CapacityReservations using Alchemy Cloud Control.
 ---
-
-# CapacityReservation
 
 The CapacityReservation resource allows you to manage [AWS Athena CapacityReservations](https://docs.aws.amazon.com/athena/latest/userguide/) for provisioning dedicated query capacity in AWS Athena.
 

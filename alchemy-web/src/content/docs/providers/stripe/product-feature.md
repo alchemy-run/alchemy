@@ -1,9 +1,7 @@
 ---
-title: Stripe Product Feature
+title: ProductFeature
 description: Learn how to create and manage Stripe Product Features for attaching entitlements to products using Alchemy.
 ---
-
-# ProductFeature
 
 The ProductFeature resource lets you create and manage [Stripe Product Features](https://stripe.com/docs/api/product_features) for attaching entitlement features to products.
 

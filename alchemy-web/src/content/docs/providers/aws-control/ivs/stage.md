@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IVS Stages with Alchemy
+title: Stage
 description: Learn how to create, update, and manage AWS IVS Stages using Alchemy Cloud Control.
 ---
-
-# Stage
 
 The Stage resource allows you to create and manage [AWS IVS Stages](https://docs.aws.amazon.com/ivs/latest/userguide/) for live streaming applications, providing a way to configure streaming settings and participant recording options.
 

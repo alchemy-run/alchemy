@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSMContacts Rotations with Alchemy
+title: Rotation
 description: Learn how to create, update, and manage AWS SSMContacts Rotations using Alchemy Cloud Control.
 ---
-
-# Rotation
 
 The Rotation resource lets you manage [AWS SSMContacts Rotations](https://docs.aws.amazon.com/ssmcontacts/latest/userguide/) which define a schedule for contacting on-call personnel.
 

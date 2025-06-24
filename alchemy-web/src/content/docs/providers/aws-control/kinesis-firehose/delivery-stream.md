@@ -1,9 +1,7 @@
 ---
-title: Managing AWS KinesisFirehose DeliveryStreams with Alchemy
+title: DeliveryStream
 description: Learn how to create, update, and manage AWS KinesisFirehose DeliveryStreams using Alchemy Cloud Control.
 ---
-
-# DeliveryStream
 
 The DeliveryStream resource allows you to create and configure [AWS KinesisFirehose DeliveryStreams](https://docs.aws.amazon.com/kinesisfirehose/latest/userguide/) for streaming data to various destinations.
 

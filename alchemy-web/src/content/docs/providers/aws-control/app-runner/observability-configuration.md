@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppRunner ObservabilityConfigurations with Alchemy
+title: ObservabilityConfiguration
 description: Learn how to create, update, and manage AWS AppRunner ObservabilityConfigurations using Alchemy Cloud Control.
 ---
-
-# ObservabilityConfiguration
 
 The ObservabilityConfiguration resource allows you to manage the observability settings for AWS AppRunner services, enabling you to configure tracing and monitoring features. For more information, visit the [AWS AppRunner ObservabilityConfigurations documentation](https://docs.aws.amazon.com/apprunner/latest/userguide/).
 

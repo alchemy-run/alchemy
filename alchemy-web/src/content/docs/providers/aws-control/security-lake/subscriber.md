@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityLake Subscribers with Alchemy
+title: Subscriber
 description: Learn how to create, update, and manage AWS SecurityLake Subscribers using Alchemy Cloud Control.
 ---
-
-# Subscriber
 
 The Subscriber resource allows you to manage [AWS SecurityLake Subscribers](https://docs.aws.amazon.com/securitylake/latest/userguide/) for accessing and consuming security data stored in AWS Security Lake.
 

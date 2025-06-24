@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RoboMaker SimulationApplications with Alchemy
+title: SimulationApplication
 description: Learn how to create, update, and manage AWS RoboMaker SimulationApplications using Alchemy Cloud Control.
 ---
-
-# SimulationApplication
 
 The SimulationApplication resource lets you create and manage [AWS RoboMaker SimulationApplications](https://docs.aws.amazon.com/robomaker/latest/userguide/) for running simulations of robotic applications.
 

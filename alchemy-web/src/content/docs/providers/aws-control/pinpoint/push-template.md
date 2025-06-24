@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint PushTemplates with Alchemy
+title: PushTemplate
 description: Learn how to create, update, and manage AWS Pinpoint PushTemplates using Alchemy Cloud Control.
 ---
-
-# PushTemplate
 
 The PushTemplate resource lets you manage [AWS Pinpoint PushTemplates](https://docs.aws.amazon.com/pinpoint/latest/userguide/) used for sending push notifications across different platforms.
 

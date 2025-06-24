@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect ViewVersions with Alchemy
+title: ViewVersion
 description: Learn how to create, update, and manage AWS Connect ViewVersions using Alchemy Cloud Control.
 ---
-
-# ViewVersion
 
 The ViewVersion resource lets you manage [AWS Connect ViewVersions](https://docs.aws.amazon.com/connect/latest/userguide/) for your Amazon Connect instances. This resource is used to define and control the versions of views that are part of your customer service operations.
 

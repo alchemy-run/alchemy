@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint APNSSandboxChannels with Alchemy
+title: APNSSandboxChannel
 description: Learn how to create, update, and manage AWS Pinpoint APNSSandboxChannels using Alchemy Cloud Control.
 ---
-
-# APNSSandboxChannel
 
 The APNSSandboxChannel resource allows you to manage the Apple Push Notification service (APNs) sandbox channel in AWS Pinpoint. This enables you to send push notifications to iOS devices for testing purposes. For more information, refer to the [AWS Pinpoint APNSSandboxChannels documentation](https://docs.aws.amazon.com/pinpoint/latest/userguide/).
 

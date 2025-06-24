@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataSync LocationFSxOpenZFSs with Alchemy
+title: LocationFSxOpenZFS
 description: Learn how to create, update, and manage AWS DataSync LocationFSxOpenZFSs using Alchemy Cloud Control.
 ---
-
-# LocationFSxOpenZFS
 
 The LocationFSxOpenZFS resource lets you create and manage [AWS DataSync LocationFSxOpenZFSs](https://docs.aws.amazon.com/datasync/latest/userguide/) for transferring data between on-premises storage and AWS.
 

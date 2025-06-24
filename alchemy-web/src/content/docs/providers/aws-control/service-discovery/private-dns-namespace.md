@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceDiscovery PrivateDnsNamespaces with Alchemy
+title: PrivateDnsNamespace
 description: Learn how to create, update, and manage AWS ServiceDiscovery PrivateDnsNamespaces using Alchemy Cloud Control.
 ---
-
-# PrivateDnsNamespace
 
 The PrivateDnsNamespace resource lets you manage [AWS ServiceDiscovery PrivateDnsNamespaces](https://docs.aws.amazon.com/servicediscovery/latest/userguide/) for defining private DNS namespaces within your VPC.
 

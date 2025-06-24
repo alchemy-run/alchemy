@@ -1,9 +1,7 @@
 ---
-title: Managing AWS BillingConductor CustomLineItems with Alchemy
+title: CustomLineItem
 description: Learn how to create, update, and manage AWS BillingConductor CustomLineItems using Alchemy Cloud Control.
 ---
-
-# CustomLineItem
 
 The CustomLineItem resource lets you manage [AWS BillingConductor CustomLineItems](https://docs.aws.amazon.com/billingconductor/latest/userguide/) which are used for custom billing adjustments in AWS organizations.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront ContinuousDeploymentPolicys with Alchemy
+title: ContinuousDeploymentPolicy
 description: Learn how to create, update, and manage AWS CloudFront ContinuousDeploymentPolicys using Alchemy Cloud Control.
 ---
-
-# ContinuousDeploymentPolicy
 
 The ContinuousDeploymentPolicy resource allows you to manage deployment policies for AWS CloudFront distributions, enabling you to streamline your deployment process. For more information, refer to the [AWS CloudFront ContinuousDeploymentPolicys documentation](https://docs.aws.amazon.com/cloudfront/latest/userguide/).
 

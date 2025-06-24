@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppIntegrations EventIntegrations with Alchemy
+title: EventIntegration
 description: Learn how to create, update, and manage AWS AppIntegrations EventIntegrations using Alchemy Cloud Control.
 ---
-
-# EventIntegration
 
 The EventIntegration resource lets you manage [AWS AppIntegrations EventIntegrations](https://docs.aws.amazon.com/appintegrations/latest/userguide/) that allow you to integrate applications with event-driven architectures.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaPackage PackagingGroups with Alchemy
+title: PackagingGroup
 description: Learn how to create, update, and manage AWS MediaPackage PackagingGroups using Alchemy Cloud Control.
 ---
-
-# PackagingGroup
 
 The PackagingGroup resource lets you manage [AWS MediaPackage PackagingGroups](https://docs.aws.amazon.com/mediapackage/latest/userguide/) for organizing your media packaging configurations.
 

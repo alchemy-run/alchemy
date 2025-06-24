@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MemoryDB ACLs with Alchemy
+title: ACL
 description: Learn how to create, update, and manage AWS MemoryDB ACLs using Alchemy Cloud Control.
 ---
-
-# ACL
 
 The ACL resource allows you to manage [AWS MemoryDB Access Control Lists (ACLs)](https://docs.aws.amazon.com/memorydb/latest/userguide/) to control access to your MemoryDB clusters and resources.
 

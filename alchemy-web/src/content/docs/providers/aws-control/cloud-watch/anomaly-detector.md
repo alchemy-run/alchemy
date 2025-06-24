@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudWatch AnomalyDetectors with Alchemy
+title: AnomalyDetector
 description: Learn how to create, update, and manage AWS CloudWatch AnomalyDetectors using Alchemy Cloud Control.
 ---
-
-# AnomalyDetector
 
 The AnomalyDetector resource allows you to create and manage [AWS CloudWatch AnomalyDetectors](https://docs.aws.amazon.com/cloudwatch/latest/userguide/), which help in monitoring and detecting unusual patterns in your metrics.
 

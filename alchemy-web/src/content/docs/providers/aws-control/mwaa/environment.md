@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MWAA Environments with Alchemy
+title: Environment
 description: Learn how to create, update, and manage AWS MWAA Environments using Alchemy Cloud Control.
 ---
-
-# Environment
 
 The Environment resource allows you to manage [AWS MWAA Environments](https://docs.aws.amazon.com/mwaa/latest/userguide/) for orchestrating workflows using Apache Airflow. This resource provides capabilities to configure Airflow settings, manage plugins, and set up logging.
 

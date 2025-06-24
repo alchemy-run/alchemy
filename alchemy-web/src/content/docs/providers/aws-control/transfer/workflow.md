@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Transfer Workflows with Alchemy
+title: Workflow
 description: Learn how to create, update, and manage AWS Transfer Workflows using Alchemy Cloud Control.
 ---
-
-# Workflow
 
 The Workflow resource lets you manage [AWS Transfer Workflows](https://docs.aws.amazon.com/transfer/latest/userguide/) for automating file transfers and processing within the AWS Transfer Family service.
 

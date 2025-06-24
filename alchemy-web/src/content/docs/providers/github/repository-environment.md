@@ -1,9 +1,7 @@
 ---
-title: GitHub Repository Environment
+title: RepositoryEnvironment
 description: Learn how to create and manage deployment environments in your GitHub repositories using Alchemy.
 ---
-
-# RepositoryEnvironment
 
 The RepositoryEnvironment resource lets you manage [GitHub repository environments](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment) for deployment protection rules and secrets.
 

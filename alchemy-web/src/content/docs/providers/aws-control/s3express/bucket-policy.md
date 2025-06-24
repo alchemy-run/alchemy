@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3Express BucketPolicys with Alchemy
+title: BucketPolicy
 description: Learn how to create, update, and manage AWS S3Express BucketPolicys using Alchemy Cloud Control.
 ---
-
-# BucketPolicy
 
 The BucketPolicy resource allows you to manage [AWS S3Express BucketPolicys](https://docs.aws.amazon.com/s3express/latest/userguide/) to control access to your S3 buckets.
 

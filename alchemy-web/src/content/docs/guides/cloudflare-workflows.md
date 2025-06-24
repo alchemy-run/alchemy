@@ -1,10 +1,8 @@
 ---
 order: 5
-title: Workflows
+title: Workflow
 description: Create, bind, and trigger Cloudflare Workflows from your Alchemy-managed Worker applications. Learn how to orchestrate complex processes serverlessly.
 ---
-
-# Workflow
 
 This guide explains how to create, bind and use Cloudflare Workflows within your Worker scripts.
 

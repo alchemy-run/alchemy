@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CleanRoomsML TrainingDatasets with Alchemy
+title: TrainingDataset
 description: Learn how to create, update, and manage AWS CleanRoomsML TrainingDatasets using Alchemy Cloud Control.
 ---
-
-# TrainingDataset
 
 The TrainingDataset resource lets you manage [AWS CleanRoomsML TrainingDatasets](https://docs.aws.amazon.com/cleanroomsml/latest/userguide/) which are essential for training machine learning models in a secured environment.
 

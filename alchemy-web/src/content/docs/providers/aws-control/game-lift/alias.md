@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GameLift Aliases with Alchemy
+title: Alias
 description: Learn how to create, update, and manage AWS GameLift Aliases using Alchemy Cloud Control.
 ---
-
-# Alias
 
 The Alias resource lets you manage [AWS GameLift Aliases](https://docs.aws.amazon.com/gamelift/latest/userguide/) to route player traffic to game server fleets.
 

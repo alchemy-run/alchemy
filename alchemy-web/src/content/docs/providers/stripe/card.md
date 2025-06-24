@@ -1,9 +1,7 @@
 ---
-title: Stripe Card
+title: Card
 description: Learn how to create and manage Stripe Cards attached to customers using Alchemy.
 ---
-
-# Card
 
 The Card resource lets you create and manage [Stripe Cards](https://stripe.com/docs/api/cards) attached to customers for payment processing.
 

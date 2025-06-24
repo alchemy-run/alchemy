@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Deadline Farms with Alchemy
+title: Farm
 description: Learn how to create, update, and manage AWS Deadline Farms using Alchemy Cloud Control.
 ---
-
-# Farm
 
 The Farm resource allows you to manage your [AWS Deadline Farms](https://docs.aws.amazon.com/deadline/latest/userguide/) effectively. Deadline Farms are essential for managing render jobs in a cloud environment, providing the necessary infrastructure for handling rendering tasks and workflows.
 

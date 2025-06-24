@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QuickSight Themes with Alchemy
+title: Theme
 description: Learn how to create, update, and manage AWS QuickSight Themes using Alchemy Cloud Control.
 ---
-
-# Theme
 
 The Theme resource lets you manage [AWS QuickSight Themes](https://docs.aws.amazon.com/quicksight/latest/userguide/) for customizing the appearance of your dashboards and reports.
 

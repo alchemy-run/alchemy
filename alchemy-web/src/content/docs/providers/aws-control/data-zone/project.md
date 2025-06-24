@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataZone Projects with Alchemy
+title: Project
 description: Learn how to create, update, and manage AWS DataZone Projects using Alchemy Cloud Control.
 ---
-
-# Project
 
 The Project resource lets you manage [AWS DataZone Projects](https://docs.aws.amazon.com/datazone/latest/userguide/) to facilitate data management and collaboration across your organization.
 

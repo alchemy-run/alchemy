@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Deadline QueueFleetAssociations with Alchemy
+title: QueueFleetAssociation
 description: Learn how to create, update, and manage AWS Deadline QueueFleetAssociations using Alchemy Cloud Control.
 ---
-
-# QueueFleetAssociation
 
 The QueueFleetAssociation resource allows you to associate a queue with a fleet in AWS Deadline, enabling better management of rendering tasks across multiple resources. For more details, visit the [AWS Deadline QueueFleetAssociations documentation](https://docs.aws.amazon.com/deadline/latest/userguide/).
 

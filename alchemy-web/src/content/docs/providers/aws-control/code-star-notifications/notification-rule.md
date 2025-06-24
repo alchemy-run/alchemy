@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeStarNotifications NotificationRules with Alchemy
+title: NotificationRule
 description: Learn how to create, update, and manage AWS CodeStarNotifications NotificationRules using Alchemy Cloud Control.
 ---
-
-# NotificationRule
 
 The NotificationRule resource lets you manage [AWS CodeStarNotifications NotificationRules](https://docs.aws.amazon.com/codestarnotifications/latest/userguide/) for monitoring events and sending notifications based on specific triggers.
 

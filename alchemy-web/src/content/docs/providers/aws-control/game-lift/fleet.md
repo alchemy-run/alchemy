@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GameLift Fleets with Alchemy
+title: Fleet
 description: Learn how to create, update, and manage AWS GameLift Fleets using Alchemy Cloud Control.
 ---
-
-# Fleet
 
 The Fleet resource lets you manage [AWS GameLift Fleets](https://docs.aws.amazon.com/gamelift/latest/userguide/) for deploying and scaling game servers in the cloud.
 

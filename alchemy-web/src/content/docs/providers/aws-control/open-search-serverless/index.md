@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpenSearchServerless Indexs with Alchemy
+title: Index
 description: Learn how to create, update, and manage AWS OpenSearchServerless Indexs using Alchemy Cloud Control.
 ---
-
-# Index
 
 The Index resource lets you manage [AWS OpenSearchServerless Indexs](https://docs.aws.amazon.com/opensearchserverless/latest/userguide/) and their configuration settings.
 

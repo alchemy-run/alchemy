@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass FunctionDefinitions with Alchemy
+title: FunctionDefinition
 description: Learn how to create, update, and manage AWS Greengrass FunctionDefinitions using Alchemy Cloud Control.
 ---
-
-# FunctionDefinition
 
 The FunctionDefinition resource allows you to create and manage [AWS Greengrass FunctionDefinitions](https://docs.aws.amazon.com/greengrass/latest/userguide/) which define a collection of AWS Lambda functions that are deployed to Greengrass core devices. 
 

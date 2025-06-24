@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cognito IdentityPoolRoleAttachments with Alchemy
+title: IdentityPoolRoleAttachment
 description: Learn how to create, update, and manage AWS Cognito IdentityPoolRoleAttachments using Alchemy Cloud Control.
 ---
-
-# IdentityPoolRoleAttachment
 
 The IdentityPoolRoleAttachment resource allows you to manage role attachments for Amazon Cognito Identity Pools, enabling you to assign roles to authenticated and unauthenticated users. For more information, visit the [AWS Cognito IdentityPoolRoleAttachments](https://docs.aws.amazon.com/cognito/latest/userguide/).
 

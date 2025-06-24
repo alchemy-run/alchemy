@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES Templates with Alchemy
+title: Template
 description: Learn how to create, update, and manage AWS SES Templates using Alchemy Cloud Control.
 ---
-
-# Template
 
 The Template resource lets you manage [AWS SES Templates](https://docs.aws.amazon.com/ses/latest/userguide/) for sending personalized email messages.
 

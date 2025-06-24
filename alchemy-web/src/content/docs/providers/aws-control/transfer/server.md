@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Transfer Servers with Alchemy
+title: Server
 description: Learn how to create, update, and manage AWS Transfer Servers using Alchemy Cloud Control.
 ---
-
-# Server
 
 The Server resource lets you create and manage [AWS Transfer Servers](https://docs.aws.amazon.com/transfer/latest/userguide/) for securely transferring files over SFTP, FTPS, and FTP.
 

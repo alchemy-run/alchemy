@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ElasticBeanstalk ApplicationVersions with Alchemy
+title: ApplicationVersion
 description: Learn how to create, update, and manage AWS ElasticBeanstalk ApplicationVersions using Alchemy Cloud Control.
 ---
-
-# ApplicationVersion
 
 The ApplicationVersion resource allows you to manage [AWS ElasticBeanstalk ApplicationVersions](https://docs.aws.amazon.com/elasticbeanstalk/latest/userguide/) and their deployment configurations.
 

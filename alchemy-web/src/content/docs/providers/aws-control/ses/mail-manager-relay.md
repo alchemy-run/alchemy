@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES MailManagerRelays with Alchemy
+title: MailManagerRelay
 description: Learn how to create, update, and manage AWS SES MailManagerRelays using Alchemy Cloud Control.
 ---
-
-# MailManagerRelay
 
 The MailManagerRelay resource allows you to manage [AWS SES MailManagerRelays](https://docs.aws.amazon.com/ses/latest/userguide/) for sending email through Amazon Simple Email Service (SES). This resource provides configuration settings for authentication, server details, and optional tags.
 

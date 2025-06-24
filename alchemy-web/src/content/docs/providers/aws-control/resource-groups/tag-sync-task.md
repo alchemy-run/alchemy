@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ResourceGroups TagSyncTasks with Alchemy
+title: TagSyncTask
 description: Learn how to create, update, and manage AWS ResourceGroups TagSyncTasks using Alchemy Cloud Control.
 ---
-
-# TagSyncTask
 
 The `TagSyncTask` resource allows you to manage AWS ResourceGroups TagSync tasks, which synchronize specified tags across AWS resources in a resource group. For more information, refer to the [AWS ResourceGroups TagSyncTasks](https://docs.aws.amazon.com/resourcegroups/latest/userguide/).
 

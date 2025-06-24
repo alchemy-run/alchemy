@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTEvents AlarmModels with Alchemy
+title: AlarmModel
 description: Learn how to create, update, and manage AWS IoTEvents AlarmModels using Alchemy Cloud Control.
 ---
-
-# AlarmModel
 
 The AlarmModel resource lets you create and manage [AWS IoTEvents AlarmModels](https://docs.aws.amazon.com/iotevents/latest/userguide/) which are used to monitor and respond to events in your IoT environment.
 

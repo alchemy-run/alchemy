@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GlobalAccelerator Listeners with Alchemy
+title: Listener
 description: Learn how to create, update, and manage AWS GlobalAccelerator Listeners using Alchemy Cloud Control.
 ---
-
-# Listener
 
 The Listener resource lets you manage [AWS GlobalAccelerator Listeners](https://docs.aws.amazon.com/globalaccelerator/latest/userguide/) that route incoming traffic to your application endpoints based on specific protocols and port ranges.
 

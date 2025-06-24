@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaPackage PackagingConfigurations with Alchemy
+title: PackagingConfiguration
 description: Learn how to create, update, and manage AWS MediaPackage PackagingConfigurations using Alchemy Cloud Control.
 ---
-
-# PackagingConfiguration
 
 The PackagingConfiguration resource lets you manage [AWS MediaPackage PackagingConfigurations](https://docs.aws.amazon.com/mediapackage/latest/userguide/) for preparing and delivering video content over the internet.
 

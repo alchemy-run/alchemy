@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FraudDetector EventTypes with Alchemy
+title: EventType
 description: Learn how to create, update, and manage AWS FraudDetector EventTypes using Alchemy Cloud Control.
 ---
-
-# EventType
 
 The EventType resource allows you to define and manage event types in AWS FraudDetector. This resource is essential for creating rules and detecting fraudulent activities based on various events. For more information, refer to the [AWS FraudDetector EventTypes documentation](https://docs.aws.amazon.com/frauddetector/latest/userguide/).
 

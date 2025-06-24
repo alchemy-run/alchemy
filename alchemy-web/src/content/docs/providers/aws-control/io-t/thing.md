@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT Things with Alchemy
+title: Thing
 description: Learn how to create, update, and manage AWS IoT Things using Alchemy Cloud Control.
 ---
-
-# Thing
 
 The Thing resource allows you to manage [AWS IoT Things](https://docs.aws.amazon.com/iot/latest/userguide/) which represent physical devices or logical entities that connect to AWS IoT. This resource provides the ability to create, update, and configure IoT Things, including their attributes and names.
 

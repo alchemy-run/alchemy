@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Logs AccountPolicys with Alchemy
+title: AccountPolicy
 description: Learn how to create, update, and manage AWS Logs AccountPolicys using Alchemy Cloud Control.
 ---
-
-# AccountPolicy
 
 The AccountPolicy resource allows you to manage [AWS Logs AccountPolicys](https://docs.aws.amazon.com/logs/latest/userguide/) for your AWS account. This resource enables you to define logging policies to control access to log data across your AWS services.
 

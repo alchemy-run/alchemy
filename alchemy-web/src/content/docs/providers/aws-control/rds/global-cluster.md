@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS GlobalClusters with Alchemy
+title: GlobalCluster
 description: Learn how to create, update, and manage AWS RDS GlobalClusters using Alchemy Cloud Control.
 ---
-
-# GlobalCluster
 
 The GlobalCluster resource lets you manage [AWS RDS GlobalClusters](https://docs.aws.amazon.com/rds/latest/userguide/) for horizontally scaling your database across multiple AWS Regions, enhancing availability and recovery capabilities.
 

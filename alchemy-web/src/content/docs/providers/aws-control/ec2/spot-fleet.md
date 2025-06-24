@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 SpotFleets with Alchemy
+title: SpotFleet
 description: Learn how to create, update, and manage AWS EC2 SpotFleets using Alchemy Cloud Control.
 ---
-
-# SpotFleet
 
 The SpotFleet resource lets you manage [AWS EC2 SpotFleets](https://docs.aws.amazon.com/ec2/latest/userguide/) for efficiently provisioning and managing a fleet of EC2 Spot Instances.
 

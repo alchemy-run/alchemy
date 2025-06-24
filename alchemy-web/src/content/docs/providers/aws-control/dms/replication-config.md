@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DMS ReplicationConfigs with Alchemy
+title: ReplicationConfig
 description: Learn how to create, update, and manage AWS DMS ReplicationConfigs using Alchemy Cloud Control.
 ---
-
-# ReplicationConfig
 
 The ReplicationConfig resource allows you to manage [AWS DMS ReplicationConfigs](https://docs.aws.amazon.com/dms/latest/userguide/) for database migration tasks including configuration settings for replication tasks.
 

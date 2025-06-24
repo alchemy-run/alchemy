@@ -1,9 +1,7 @@
 ---
-title: Managing AWS KendraRanking ExecutionPlans with Alchemy
+title: ExecutionPlan
 description: Learn how to create, update, and manage AWS KendraRanking ExecutionPlans using Alchemy Cloud Control.
 ---
-
-# ExecutionPlan
 
 The ExecutionPlan resource allows you to create, update, and manage AWS KendraRanking ExecutionPlans. For more information, refer to the [AWS KendraRanking ExecutionPlans documentation](https://docs.aws.amazon.com/kendraranking/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTTwinMaker SyncJobs with Alchemy
+title: SyncJob
 description: Learn how to create, update, and manage AWS IoTTwinMaker SyncJobs using Alchemy Cloud Control.
 ---
-
-# SyncJob
 
 The SyncJob resource allows you to manage synchronization jobs within AWS IoTTwinMaker, enabling the integration of real-time data with your digital twin applications. For more detailed information, refer to the [AWS IoTTwinMaker SyncJobs documentation](https://docs.aws.amazon.com/iottwinmaker/latest/userguide/).
 

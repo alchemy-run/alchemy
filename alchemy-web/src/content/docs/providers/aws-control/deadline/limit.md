@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Deadline Limits with Alchemy
+title: Limit
 description: Learn how to create, update, and manage AWS Deadline Limits using Alchemy Cloud Control.
 ---
-
-# Limit
 
 The Limit resource allows you to manage [AWS Deadline Limits](https://docs.aws.amazon.com/deadline/latest/userguide/) for your Deadline rendering jobs and resources. This includes configuring limits on resource usage and providing descriptive metadata for better management.
 

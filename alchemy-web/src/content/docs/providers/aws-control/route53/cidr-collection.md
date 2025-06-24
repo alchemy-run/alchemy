@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53 CidrCollections with Alchemy
+title: CidrCollection
 description: Learn how to create, update, and manage AWS Route53 CidrCollections using Alchemy Cloud Control.
 ---
-
-# CidrCollection
 
 The CidrCollection resource lets you manage [AWS Route53 CidrCollections](https://docs.aws.amazon.com/route53/latest/userguide/) for grouping and managing CIDR blocks.
 

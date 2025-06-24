@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass DeviceDefinitions with Alchemy
+title: DeviceDefinition
 description: Learn how to create, update, and manage AWS Greengrass DeviceDefinitions using Alchemy Cloud Control.
 ---
-
-# DeviceDefinition
 
 The DeviceDefinition resource allows you to manage [AWS Greengrass DeviceDefinitions](https://docs.aws.amazon.com/greengrass/latest/userguide/) that define a group of devices in your Greengrass environment.
 

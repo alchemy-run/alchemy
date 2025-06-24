@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGatewayV2 Models with Alchemy
+title: Model
 description: Learn how to create, update, and manage AWS ApiGatewayV2 Models using Alchemy Cloud Control.
 ---
-
-# Model
 
 The Model resource lets you manage [AWS ApiGatewayV2 Models](https://docs.aws.amazon.com/apigatewayv2/latest/userguide/) that define the structure of request and response payloads for your API Gateway.
 

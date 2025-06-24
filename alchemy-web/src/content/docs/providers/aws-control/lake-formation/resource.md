@@ -1,9 +1,7 @@
 ---
-title: Managing AWS LakeFormation Resources with Alchemy
+title: Resource
 description: Learn how to create, update, and manage AWS LakeFormation Resources using Alchemy Cloud Control.
 ---
-
-# Resource
 
 The Resource resource allows you to manage [AWS LakeFormation Resources](https://docs.aws.amazon.com/lakeformation/latest/userguide/) for data lake management and governance, enabling fine-grained access control.
 

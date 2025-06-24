@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAFRegional SizeConstraintSets with Alchemy
+title: SizeConstraintSet
 description: Learn how to create, update, and manage AWS WAFRegional SizeConstraintSets using Alchemy Cloud Control.
 ---
-
-# SizeConstraintSet
 
 The SizeConstraintSet resource allows you to create and manage [AWS WAFRegional SizeConstraintSets](https://docs.aws.amazon.com/wafregional/latest/userguide/), which are used to specify size constraints for web requests.
 

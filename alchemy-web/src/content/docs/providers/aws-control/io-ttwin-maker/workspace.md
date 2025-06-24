@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTTwinMaker Workspaces with Alchemy
+title: Workspace
 description: Learn how to create, update, and manage AWS IoTTwinMaker Workspaces using Alchemy Cloud Control.
 ---
-
-# Workspace
 
 The Workspace resource allows you to manage [AWS IoTTwinMaker Workspaces](https://docs.aws.amazon.com/iottwinmaker/latest/userguide/) that serve as environments for modeling and managing digital twins of physical systems.
 

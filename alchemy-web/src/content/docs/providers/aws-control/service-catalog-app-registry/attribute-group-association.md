@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalogAppRegistry AttributeGroupAssociations with Alchemy
+title: AttributeGroupAssociation
 description: Learn how to create, update, and manage AWS ServiceCatalogAppRegistry AttributeGroupAssociations using Alchemy Cloud Control.
 ---
-
-# AttributeGroupAssociation
 
 The AttributeGroupAssociation resource allows you to associate an attribute group with an application in AWS Service Catalog App Registry. This association helps in organizing and managing application metadata effectively. For more information, refer to the [AWS ServiceCatalogAppRegistry AttributeGroupAssociations documentation](https://docs.aws.amazon.com/servicecatalogappregistry/latest/userguide/).
 

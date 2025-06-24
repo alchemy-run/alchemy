@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect HoursOfOperations with Alchemy
+title: HoursOfOperation
 description: Learn how to create, update, and manage AWS Connect HoursOfOperations using Alchemy Cloud Control.
 ---
-
-# HoursOfOperation
 
 The HoursOfOperation resource allows you to manage the operational hours for an AWS Connect instance, defining when your contact center is available to handle customer interactions. For more details, visit the [AWS Connect HoursOfOperations documentation](https://docs.aws.amazon.com/connect/latest/userguide/).
 

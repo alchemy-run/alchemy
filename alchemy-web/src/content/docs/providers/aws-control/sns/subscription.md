@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SNS Subscriptions with Alchemy
+title: Subscription
 description: Learn how to create, update, and manage AWS SNS Subscriptions using Alchemy Cloud Control.
 ---
-
-# Subscription
 
 The Subscription resource lets you manage [AWS SNS Subscriptions](https://docs.aws.amazon.com/sns/latest/userguide/) for receiving messages from SNS topics. Subscriptions can be configured with various protocols to deliver messages to endpoints.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Rekognition StreamProcessors with Alchemy
+title: StreamProcessor
 description: Learn how to create, update, and manage AWS Rekognition StreamProcessors using Alchemy Cloud Control.
 ---
-
-# StreamProcessor
 
 The StreamProcessor resource allows you to create and manage [AWS Rekognition StreamProcessors](https://docs.aws.amazon.com/rekognition/latest/userguide/) for analyzing video streams in real-time.
 

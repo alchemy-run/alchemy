@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect SecurityKeys with Alchemy
+title: SecurityKey
 description: Learn how to create, update, and manage AWS Connect SecurityKeys using Alchemy Cloud Control.
 ---
-
-# SecurityKey
 
 The SecurityKey resource lets you manage [AWS Connect SecurityKeys](https://docs.aws.amazon.com/connect/latest/userguide/) for secure access to your Amazon Connect instances.
 

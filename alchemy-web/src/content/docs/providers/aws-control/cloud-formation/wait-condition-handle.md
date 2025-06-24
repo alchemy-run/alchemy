@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation WaitConditionHandles with Alchemy
+title: WaitConditionHandle
 description: Learn how to create, update, and manage AWS CloudFormation WaitConditionHandles using Alchemy Cloud Control.
 ---
-
-# WaitConditionHandle
 
 The WaitConditionHandle resource in AWS CloudFormation allows you to create a handle that can be used with a WaitCondition to wait for a signal before proceeding with resource creation. This is particularly useful in scenarios where you need to wait for resources to be fully provisioned or initialized before continuing. For more information, see the [AWS CloudFormation WaitConditionHandles documentation](https://docs.aws.amazon.com/cloudformation/latest/userguide/).
 

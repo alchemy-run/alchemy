@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeArtifact PackageGroups with Alchemy
+title: PackageGroup
 description: Learn how to create, update, and manage AWS CodeArtifact PackageGroups using Alchemy Cloud Control.
 ---
-
-# PackageGroup
 
 The PackageGroup resource allows you to manage [AWS CodeArtifact PackageGroups](https://docs.aws.amazon.com/codeartifact/latest/userguide/), which are collections of packages that can be used together. This resource is essential for organizing and managing your software packages in a CodeArtifact domain.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront CachePolicys with Alchemy
+title: CachePolicy
 description: Learn how to create, update, and manage AWS CloudFront CachePolicys using Alchemy Cloud Control.
 ---
-
-# CachePolicy
 
 The CachePolicy resource lets you manage [AWS CloudFront CachePolicys](https://docs.aws.amazon.com/cloudfront/latest/userguide/) which define how CloudFront caches content based on request and response headers, cookies, and query strings.
 

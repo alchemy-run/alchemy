@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSO PermissionSets with Alchemy
+title: PermissionSet
 description: Learn how to create, update, and manage AWS SSO PermissionSets using Alchemy Cloud Control.
 ---
-
-# PermissionSet
 
 The PermissionSet resource allows you to manage [AWS SSO PermissionSets](https://docs.aws.amazon.com/sso/latest/userguide/) that define the permissions assigned to users and groups within AWS Single Sign-On.
 

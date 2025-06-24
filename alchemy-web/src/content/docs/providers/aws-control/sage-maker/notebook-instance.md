@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker NotebookInstances with Alchemy
+title: NotebookInstance
 description: Learn how to create, update, and manage AWS SageMaker NotebookInstances using Alchemy Cloud Control.
 ---
-
-# NotebookInstance
 
 The NotebookInstance resource lets you manage [AWS SageMaker NotebookInstances](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for developing and training machine learning models.
 

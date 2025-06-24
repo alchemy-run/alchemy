@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker Images with Alchemy
+title: Image
 description: Learn how to create, update, and manage AWS SageMaker Images using Alchemy Cloud Control.
 ---
-
-# Image
 
 The Image resource allows you to create and manage [AWS SageMaker Images](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for building machine learning models and workflows. 
 

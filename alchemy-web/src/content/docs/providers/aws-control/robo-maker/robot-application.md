@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RoboMaker RobotApplications with Alchemy
+title: RobotApplication
 description: Learn how to create, update, and manage AWS RoboMaker RobotApplications using Alchemy Cloud Control.
 ---
-
-# RobotApplication
 
 The RobotApplication resource allows you to create and manage [AWS RoboMaker RobotApplications](https://docs.aws.amazon.com/robomaker/latest/userguide/) that help in developing, testing, and deploying robotics applications.
 

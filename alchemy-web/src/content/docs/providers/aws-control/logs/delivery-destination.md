@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Logs DeliveryDestinations with Alchemy
+title: DeliveryDestination
 description: Learn how to create, update, and manage AWS Logs DeliveryDestinations using Alchemy Cloud Control.
 ---
-
-# DeliveryDestination
 
 The DeliveryDestination resource lets you manage [AWS Logs DeliveryDestinations](https://docs.aws.amazon.com/logs/latest/userguide/) for streaming log data to various destinations like Amazon S3, Kinesis Data Firehose, or others. 
 

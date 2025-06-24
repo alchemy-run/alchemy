@@ -1,9 +1,7 @@
 ---
-title: Managing YAML Files with AI in Alchemy
+title: YAMLFile
 description: Learn how to use Alchemy's AI provider to create, update, and manage YAML (.yaml, .yml) files with schema validation.
 ---
-
-# YAMLFile
 
 The YAMLFile resource lets you generate [YAML](https://yaml.org/) files using AI models with optional schema validation.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTAnalytics Pipelines with Alchemy
+title: Pipeline
 description: Learn how to create, update, and manage AWS IoTAnalytics Pipelines using Alchemy Cloud Control.
 ---
-
-# Pipeline
 
 The Pipeline resource lets you create and manage [AWS IoTAnalytics Pipelines](https://docs.aws.amazon.com/iotanalytics/latest/userguide/) for processing and analyzing IoT data streams.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SupportApp SlackChannelConfigurations with Alchemy
+title: SlackChannelConfiguration
 description: Learn how to create, update, and manage AWS SupportApp SlackChannelConfigurations using Alchemy Cloud Control.
 ---
-
-# SlackChannelConfiguration
 
 The SlackChannelConfiguration resource allows you to manage Slack channel configurations for AWS SupportApp, enabling notifications for case updates. For more information, refer to the [AWS SupportApp SlackChannelConfigurations documentation](https://docs.aws.amazon.com/supportapp/latest/userguide/).
 

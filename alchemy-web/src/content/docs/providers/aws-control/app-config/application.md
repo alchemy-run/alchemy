@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppConfig Applications with Alchemy
+title: Application
 description: Learn how to create, update, and manage AWS AppConfig Applications using Alchemy Cloud Control.
 ---
-
-# Application
 
 The Application resource lets you manage [AWS AppConfig Applications](https://docs.aws.amazon.com/appconfig/latest/userguide/) for deploying application configurations in a controlled manner.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint Segments with Alchemy
+title: Segment
 description: Learn how to create, update, and manage AWS Pinpoint Segments using Alchemy Cloud Control.
 ---
-
-# Segment
 
 The Segment resource allows you to manage [AWS Pinpoint Segments](https://docs.aws.amazon.com/pinpoint/latest/userguide/) which are used to define a group of endpoints that you can target with campaigns.
 

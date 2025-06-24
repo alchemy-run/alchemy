@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Redshift ClusterParameterGroups with Alchemy
+title: ClusterParameterGroup
 description: Learn how to create, update, and manage AWS Redshift ClusterParameterGroups using Alchemy Cloud Control.
 ---
-
-# ClusterParameterGroup
 
 The ClusterParameterGroup resource allows you to manage [AWS Redshift ClusterParameterGroups](https://docs.aws.amazon.com/redshift/latest/userguide/) which are used to manage database-level parameters and settings for your Amazon Redshift clusters.
 

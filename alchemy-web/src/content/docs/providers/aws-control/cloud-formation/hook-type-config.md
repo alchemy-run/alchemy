@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation HookTypeConfigs with Alchemy
+title: HookTypeConfig
 description: Learn how to create, update, and manage AWS CloudFormation HookTypeConfigs using Alchemy Cloud Control.
 ---
-
-# HookTypeConfig
 
 The HookTypeConfig resource allows you to create and manage AWS CloudFormation Hook Type configurations. This resource is essential for defining custom hooks that can be invoked during stack operations. For more detailed information, refer to the [AWS CloudFormation HookTypeConfigs documentation](https://docs.aws.amazon.com/cloudformation/latest/userguide/).
 

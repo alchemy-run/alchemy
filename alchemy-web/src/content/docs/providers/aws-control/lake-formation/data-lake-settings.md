@@ -1,9 +1,7 @@
 ---
-title: Managing AWS LakeFormation DataLakeSettingss with Alchemy
+title: DataLakeSettings
 description: Learn how to create, update, and manage AWS LakeFormation DataLakeSettingss using Alchemy Cloud Control.
 ---
-
-# DataLakeSettings
 
 The DataLakeSettings resource allows you to manage [AWS LakeFormation DataLakeSettings](https://docs.aws.amazon.com/lakeformation/latest/userguide/) which provide the configuration settings for your data lake, including permissions and data access policies.
 

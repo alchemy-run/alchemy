@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Athena DataCatalogs with Alchemy
+title: DataCatalog
 description: Learn how to create, update, and manage AWS Athena DataCatalogs using Alchemy Cloud Control.
 ---
-
-# DataCatalog
 
 The DataCatalog resource lets you manage [AWS Athena DataCatalogs](https://docs.aws.amazon.com/athena/latest/userguide/) for organizing and storing metadata about your data sources.
 

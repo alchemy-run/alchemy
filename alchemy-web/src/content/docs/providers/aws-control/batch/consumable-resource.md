@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Batch ConsumableResources with Alchemy
+title: ConsumableResource
 description: Learn how to create, update, and manage AWS Batch ConsumableResources using Alchemy Cloud Control.
 ---
-
-# ConsumableResource
 
 The ConsumableResource resource lets you manage [AWS Batch Consumable Resources](https://docs.aws.amazon.com/batch/latest/userguide/) which represent a finite quantity of resources available for job execution in AWS Batch.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Location APIKeys with Alchemy
+title: APIKey
 description: Learn how to create, update, and manage AWS Location APIKeys using Alchemy Cloud Control.
 ---
-
-# APIKey
 
 The APIKey resource allows you to manage [AWS Location APIKeys](https://docs.aws.amazon.com/location/latest/userguide/), which are used to authenticate requests made to the AWS Location Service.
 

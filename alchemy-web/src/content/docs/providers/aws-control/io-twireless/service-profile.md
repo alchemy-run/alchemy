@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTWireless ServiceProfiles with Alchemy
+title: ServiceProfile
 description: Learn how to create, update, and manage AWS IoTWireless ServiceProfiles using Alchemy Cloud Control.
 ---
-
-# ServiceProfile
 
 The ServiceProfile resource allows you to manage [AWS IoTWireless ServiceProfiles](https://docs.aws.amazon.com/iotwireless/latest/userguide/) for configuring LoRaWAN devices within your IoT setup.
 

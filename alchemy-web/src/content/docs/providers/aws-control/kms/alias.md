@@ -1,9 +1,7 @@
 ---
-title: Managing AWS KMS Aliases with Alchemy
+title: Alias
 description: Learn how to create, update, and manage AWS KMS Aliases using Alchemy Cloud Control.
 ---
-
-# Alias
 
 The Alias resource lets you manage [AWS KMS Aliases](https://docs.aws.amazon.com/kms/latest/userguide/) for your AWS Key Management Service (KMS) keys. An alias is a friendly name for a KMS key that you can use in place of the key's ID.
 

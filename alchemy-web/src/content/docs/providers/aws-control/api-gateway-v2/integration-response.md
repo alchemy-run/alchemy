@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGatewayV2 IntegrationResponses with Alchemy
+title: IntegrationResponse
 description: Learn how to create, update, and manage AWS ApiGatewayV2 IntegrationResponses using Alchemy Cloud Control.
 ---
-
-# IntegrationResponse
 
 The IntegrationResponse resource allows you to manage [AWS ApiGatewayV2 IntegrationResponses](https://docs.aws.amazon.com/apigatewayv2/latest/userguide/) which define how to handle responses from integrations with backend services.
 

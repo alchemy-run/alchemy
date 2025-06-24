@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppStream ApplicationEntitlementAssociations with Alchemy
+title: ApplicationEntitlementAssociation
 description: Learn how to create, update, and manage AWS AppStream ApplicationEntitlementAssociations using Alchemy Cloud Control.
 ---
-
-# ApplicationEntitlementAssociation
 
 The ApplicationEntitlementAssociation resource allows you to manage the association between applications and entitlements in AWS AppStream. This resource helps in controlling user access to applications based on their entitlements. For more information, visit the [AWS AppStream ApplicationEntitlementAssociations documentation](https://docs.aws.amazon.com/appstream/latest/userguide/).
 

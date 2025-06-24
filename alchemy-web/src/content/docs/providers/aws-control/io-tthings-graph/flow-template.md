@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTThingsGraph FlowTemplates with Alchemy
+title: FlowTemplate
 description: Learn how to create, update, and manage AWS IoTThingsGraph FlowTemplates using Alchemy Cloud Control.
 ---
-
-# FlowTemplate
 
 The FlowTemplate resource allows you to define and manage [AWS IoTThingsGraph FlowTemplates](https://docs.aws.amazon.com/iotthingsgraph/latest/userguide/) which represent a reusable and versioned set of workflows in your IoT applications.
 

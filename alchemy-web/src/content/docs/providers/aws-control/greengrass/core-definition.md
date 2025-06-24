@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass CoreDefinitions with Alchemy
+title: CoreDefinition
 description: Learn how to create, update, and manage AWS Greengrass CoreDefinitions using Alchemy Cloud Control.
 ---
-
-# CoreDefinition
 
 The CoreDefinition resource lets you manage [AWS Greengrass CoreDefinitions](https://docs.aws.amazon.com/greengrass/latest/userguide/) which define the core devices in your Greengrass group.
 

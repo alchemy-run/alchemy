@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 Volumes with Alchemy
+title: Volume
 description: Learn how to create, update, and manage AWS EC2 Volumes using Alchemy Cloud Control.
 ---
-
-# Volume
 
 The Volume resource allows you to create and manage [AWS EC2 Volumes](https://docs.aws.amazon.com/ec2/latest/userguide/) for your instances. These volumes provide persistent storage for your AWS EC2 instances.
 

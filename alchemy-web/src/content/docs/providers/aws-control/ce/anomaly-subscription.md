@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CE AnomalySubscriptions with Alchemy
+title: AnomalySubscription
 description: Learn how to create, update, and manage AWS CE AnomalySubscriptions using Alchemy Cloud Control.
 ---
-
-# AnomalySubscription
 
 The AnomalySubscription resource allows you to create and manage AWS Cost Explorer Anomaly Subscriptions for monitoring cost anomalies in your AWS account. For more details, refer to the [AWS CE AnomalySubscriptions documentation](https://docs.aws.amazon.com/ce/latest/userguide/).
 

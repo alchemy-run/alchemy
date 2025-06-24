@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ECR Repositorys with Alchemy
+title: Repository
 description: Learn how to create, update, and manage AWS ECR Repositorys using Alchemy Cloud Control.
 ---
-
-# Repository
 
 The Repository resource lets you manage [AWS ECR Repositories](https://docs.aws.amazon.com/ecr/latest/userguide/) for storing and managing Docker container images.
 

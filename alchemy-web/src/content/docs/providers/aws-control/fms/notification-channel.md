@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FMS NotificationChannels with Alchemy
+title: NotificationChannel
 description: Learn how to create, update, and manage AWS FMS NotificationChannels using Alchemy Cloud Control.
 ---
-
-# NotificationChannel
 
 The NotificationChannel resource lets you manage [AWS FMS NotificationChannels](https://docs.aws.amazon.com/fms/latest/userguide/) that are used to send notifications about AWS Firewall Manager policy violations.
 

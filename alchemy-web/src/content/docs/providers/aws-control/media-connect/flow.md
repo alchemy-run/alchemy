@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaConnect Flows with Alchemy
+title: Flow
 description: Learn how to create, update, and manage AWS MediaConnect Flows using Alchemy Cloud Control.
 ---
-
-# Flow
 
 The Flow resource allows you to create and manage [AWS MediaConnect Flows](https://docs.aws.amazon.com/mediaconnect/latest/userguide/) for transporting live video over the internet. This resource provides an efficient way to configure the flow of media from sources to destinations.
 

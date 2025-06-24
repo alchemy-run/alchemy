@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 SnapshotBlockPublicAccesss with Alchemy
+title: SnapshotBlockPublicAccess
 description: Learn how to create, update, and manage AWS EC2 SnapshotBlockPublicAccesss using Alchemy Cloud Control.
 ---
-
-# SnapshotBlockPublicAccess
 
 The SnapshotBlockPublicAccess resource allows you to control the public access settings for Amazon EC2 snapshots. By configuring this resource, you can ensure that your snapshots are not publicly accessible, thereby enhancing your security posture. For more details, refer to the [AWS EC2 SnapshotBlockPublicAccess documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

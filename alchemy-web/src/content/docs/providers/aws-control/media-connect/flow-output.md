@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaConnect FlowOutputs with Alchemy
+title: FlowOutput
 description: Learn how to create, update, and manage AWS MediaConnect FlowOutputs using Alchemy Cloud Control.
 ---
-
-# FlowOutput
 
 The FlowOutput resource lets you manage [AWS MediaConnect FlowOutputs](https://docs.aws.amazon.com/mediaconnect/latest/userguide/) for delivering live video streams. This resource allows you to configure various output parameters such as destination, protocol, and encryption settings.
 

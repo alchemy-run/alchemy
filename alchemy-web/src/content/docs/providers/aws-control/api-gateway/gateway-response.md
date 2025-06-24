@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway GatewayResponses with Alchemy
+title: GatewayResponse
 description: Learn how to create, update, and manage AWS ApiGateway GatewayResponses using Alchemy Cloud Control.
 ---
-
-# GatewayResponse
 
 The GatewayResponse resource allows you to manage custom responses from the AWS ApiGateway, enabling you to tailor error messages and responses for your API clients. For more details, visit the [AWS ApiGateway GatewayResponses documentation](https://docs.aws.amazon.com/apigateway/latest/userguide/).
 

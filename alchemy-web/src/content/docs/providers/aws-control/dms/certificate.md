@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DMS Certificates with Alchemy
+title: Certificate
 description: Learn how to create, update, and manage AWS DMS Certificates using Alchemy Cloud Control.
 ---
-
-# Certificate
 
 The Certificate resource lets you manage [AWS DMS Certificates](https://docs.aws.amazon.com/dms/latest/userguide/) used for SSL/TLS encryption in AWS Database Migration Service (DMS).
 

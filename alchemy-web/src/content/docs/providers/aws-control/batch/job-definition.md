@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Batch JobDefinitions with Alchemy
+title: JobDefinition
 description: Learn how to create, update, and manage AWS Batch JobDefinitions using Alchemy Cloud Control.
 ---
-
-# JobDefinition
 
 The JobDefinition resource allows you to define and manage [AWS Batch JobDefinitions](https://docs.aws.amazon.com/batch/latest/userguide/) for running batch jobs in the cloud.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaConnect Gateways with Alchemy
+title: Gateway
 description: Learn how to create, update, and manage AWS MediaConnect Gateways using Alchemy Cloud Control.
 ---
-
-# Gateway
 
 The Gateway resource lets you manage [AWS MediaConnect Gateways](https://docs.aws.amazon.com/mediaconnect/latest/userguide/) which serve as a bridge between your on-premises networks and AWS MediaConnect for transporting live video.
 

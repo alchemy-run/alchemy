@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTWireless TaskDefinitions with Alchemy
+title: TaskDefinition
 description: Learn how to create, update, and manage AWS IoTWireless TaskDefinitions using Alchemy Cloud Control.
 ---
-
-# TaskDefinition
 
 The TaskDefinition resource allows you to create and manage [AWS IoTWireless TaskDefinitions](https://docs.aws.amazon.com/iotwireless/latest/userguide/) which are used to define tasks for LoRaWAN gateways, including updates and task creation.
 

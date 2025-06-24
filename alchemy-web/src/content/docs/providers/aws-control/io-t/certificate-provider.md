@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT CertificateProviders with Alchemy
+title: CertificateProvider
 description: Learn how to create, update, and manage AWS IoT CertificateProviders using Alchemy Cloud Control.
 ---
-
-# CertificateProvider
 
 The CertificateProvider resource allows you to manage [AWS IoT CertificateProviders](https://docs.aws.amazon.com/iot/latest/userguide/) which are used to create and manage device certificates for secure communication in IoT applications.
 

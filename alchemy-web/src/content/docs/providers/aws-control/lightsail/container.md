@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lightsail Containers with Alchemy
+title: Container
 description: Learn how to create, update, and manage AWS Lightsail Containers using Alchemy Cloud Control.
 ---
-
-# Container
 
 The Container resource lets you manage [AWS Lightsail Containers](https://docs.aws.amazon.com/lightsail/latest/userguide/) for deploying and scaling containerized applications easily.
 

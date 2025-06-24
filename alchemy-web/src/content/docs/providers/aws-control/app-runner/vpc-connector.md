@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppRunner VpcConnectors with Alchemy
+title: VpcConnector
 description: Learn how to create, update, and manage AWS AppRunner VpcConnectors using Alchemy Cloud Control.
 ---
-
-# VpcConnector
 
 The VpcConnector resource allows you to manage [AWS AppRunner VpcConnectors](https://docs.aws.amazon.com/apprunner/latest/userguide/) that enable your AppRunner services to connect to your VPC resources securely.
 

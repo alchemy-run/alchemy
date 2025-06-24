@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppRunner Services with Alchemy
+title: Service
 description: Learn how to create, update, and manage AWS AppRunner Services using Alchemy Cloud Control.
 ---
-
-# Service
 
 The Service resource lets you manage [AWS AppRunner Services](https://docs.aws.amazon.com/apprunner/latest/userguide/) for deploying and running web applications and APIs at scale.
 

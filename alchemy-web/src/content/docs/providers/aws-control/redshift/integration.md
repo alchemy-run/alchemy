@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Redshift Integrations with Alchemy
+title: Integration
 description: Learn how to create, update, and manage AWS Redshift Integrations using Alchemy Cloud Control.
 ---
-
-# Integration
 
 The Integration resource allows you to manage [AWS Redshift Integrations](https://docs.aws.amazon.com/redshift/latest/userguide/) for secure data sharing between AWS services and your Redshift cluster.
 

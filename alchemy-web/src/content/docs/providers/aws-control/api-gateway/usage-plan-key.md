@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway UsagePlanKeys with Alchemy
+title: UsagePlanKey
 description: Learn how to create, update, and manage AWS ApiGateway UsagePlanKeys using Alchemy Cloud Control.
 ---
-
-# UsagePlanKey
 
 The UsagePlanKey resource allows you to create, update, and manage [AWS ApiGateway UsagePlanKeys](https://docs.aws.amazon.com/apigateway/latest/userguide/) which are used to associate API keys with usage plans in Amazon API Gateway.
 

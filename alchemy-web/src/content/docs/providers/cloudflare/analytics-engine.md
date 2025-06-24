@@ -1,9 +1,7 @@
 ---
-title: Cloudflare Analytics Engine
+title: AnalyticsEngineDataset
 description: Learn how to bind Cloudflare Analytics Engine datasets to Workers using Alchemy for real-time event tracking and analytics.
 ---
-
-# AnalyticsEngineDataset
 
 The AnalyticsEngineDataset component lets you bind [Cloudflare Analytics Engine](https://developers.cloudflare.com/analytics/analytics-engine/) datasets to your Workers for real-time event tracking and analytics data collection.
 

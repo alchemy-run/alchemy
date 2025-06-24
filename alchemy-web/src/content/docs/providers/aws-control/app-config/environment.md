@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppConfig Environments with Alchemy
+title: Environment
 description: Learn how to create, update, and manage AWS AppConfig Environments using Alchemy Cloud Control.
 ---
-
-# Environment
 
 The Environment resource allows you to manage [AWS AppConfig Environments](https://docs.aws.amazon.com/appconfig/latest/userguide/) within your applications. An environment is a set of configurations that can be deployed to various application instances.
 

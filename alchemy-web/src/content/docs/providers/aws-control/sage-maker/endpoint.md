@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker Endpoints with Alchemy
+title: Endpoint
 description: Learn how to create, update, and manage AWS SageMaker Endpoints using Alchemy Cloud Control.
 ---
-
-# Endpoint
 
 The Endpoint resource lets you manage [AWS SageMaker Endpoints](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for deploying machine learning models. Endpoints provide a way to host your model for real-time inference, allowing applications to make predictions based on input data.
 

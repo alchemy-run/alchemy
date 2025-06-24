@@ -1,9 +1,7 @@
 ---
-title: AWS S3 State Store
+title: S3StateStore
 description: Learn how to use S3StateStore for reliable, cloud-based state storage in your Alchemy applications using Amazon S3.
 ---
-
-# S3StateStore
 
 The S3StateStore provides reliable, scalable state storage for Alchemy applications using [Amazon S3](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html). It's designed for cloud-based deployments where you need durable, shared state storage across multiple environments or team members.
 

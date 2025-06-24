@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 NetworkInsightsPaths with Alchemy
+title: NetworkInsightsPath
 description: Learn how to create, update, and manage AWS EC2 NetworkInsightsPaths using Alchemy Cloud Control.
 ---
-
-# NetworkInsightsPath
 
 The NetworkInsightsPath resource allows you to create and manage paths for network insights in AWS EC2, providing visibility into the network route between a source and a destination. For more information, refer to the [AWS EC2 NetworkInsightsPaths documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

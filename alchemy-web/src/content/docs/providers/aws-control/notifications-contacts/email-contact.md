@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NotificationsContacts EmailContacts with Alchemy
+title: EmailContact
 description: Learn how to create, update, and manage AWS NotificationsContacts EmailContacts using Alchemy Cloud Control.
 ---
-
-# EmailContact
 
 The EmailContact resource allows you to manage email contacts for AWS Notifications. This resource can be utilized to create, update, and manage email contacts for notification purposes. For more information, refer to the [AWS NotificationsContacts EmailContacts documentation](https://docs.aws.amazon.com/notificationscontacts/latest/userguide/).
 

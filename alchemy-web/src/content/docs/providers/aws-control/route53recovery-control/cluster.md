@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53RecoveryControl Clusters with Alchemy
+title: Cluster
 description: Learn how to create, update, and manage AWS Route53RecoveryControl Clusters using Alchemy Cloud Control.
 ---
-
-# Cluster
 
 The Cluster resource lets you manage [AWS Route53RecoveryControl Clusters](https://docs.aws.amazon.com/route53recoverycontrol/latest/userguide/) for routing traffic and controlling failover in your applications.
 

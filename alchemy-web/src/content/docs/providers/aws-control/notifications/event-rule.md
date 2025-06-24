@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Notifications EventRules with Alchemy
+title: EventRule
 description: Learn how to create, update, and manage AWS Notifications EventRules using Alchemy Cloud Control.
 ---
-
-# EventRule
 
 The EventRule resource lets you manage [AWS Notifications EventRules](https://docs.aws.amazon.com/notifications/latest/userguide/) to automate notifications based on specific events.
 

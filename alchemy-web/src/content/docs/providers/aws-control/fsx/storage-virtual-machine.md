@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FSx StorageVirtualMachines with Alchemy
+title: StorageVirtualMachine
 description: Learn how to create, update, and manage AWS FSx StorageVirtualMachines using Alchemy Cloud Control.
 ---
-
-# StorageVirtualMachine
 
 The StorageVirtualMachine resource lets you create and manage [AWS FSx StorageVirtualMachines](https://docs.aws.amazon.com/fsx/latest/userguide/) for your Amazon FSx for Windows File Server file systems. This resource enables you to configure a virtual machine that manages data stored within your FSx file system.
 

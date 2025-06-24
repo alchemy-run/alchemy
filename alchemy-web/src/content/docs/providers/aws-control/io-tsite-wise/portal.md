@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTSiteWise Portals with Alchemy
+title: Portal
 description: Learn how to create, update, and manage AWS IoTSiteWise Portals using Alchemy Cloud Control.
 ---
-
-# Portal
 
 The Portal resource allows you to create and manage [AWS IoTSiteWise Portals](https://docs.aws.amazon.com/iotsitewise/latest/userguide/) for visualizing and analyzing industrial data.
 

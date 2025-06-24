@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue SecurityConfigurations with Alchemy
+title: SecurityConfiguration
 description: Learn how to create, update, and manage AWS Glue SecurityConfigurations using Alchemy Cloud Control.
 ---
-
-# SecurityConfiguration
 
 The SecurityConfiguration resource lets you manage [AWS Glue SecurityConfigurations](https://docs.aws.amazon.com/glue/latest/userguide/) for encrypting data at rest and in transit within your Glue jobs and crawlers.
 

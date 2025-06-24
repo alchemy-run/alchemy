@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGatewayV2 Routes with Alchemy
+title: Route
 description: Learn how to create, update, and manage AWS ApiGatewayV2 Routes using Alchemy Cloud Control.
 ---
-
-# Route
 
 The Route resource allows you to manage [AWS ApiGatewayV2 Routes](https://docs.aws.amazon.com/apigatewayv2/latest/userguide/) and their configuration settings for HTTP APIs.
 

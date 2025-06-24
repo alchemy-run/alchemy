@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudWatch Dashboards with Alchemy
+title: Dashboard
 description: Learn how to create, update, and manage AWS CloudWatch Dashboards using Alchemy Cloud Control.
 ---
-
-# Dashboard
 
 The Dashboard resource lets you manage [AWS CloudWatch Dashboards](https://docs.aws.amazon.com/cloudwatch/latest/userguide/) for visualizing metrics and logs in AWS. 
 

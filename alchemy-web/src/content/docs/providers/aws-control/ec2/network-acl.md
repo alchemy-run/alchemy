@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 NetworkAcls with Alchemy
+title: NetworkAcl
 description: Learn how to create, update, and manage AWS EC2 NetworkAcls using Alchemy Cloud Control.
 ---
-
-# NetworkAcl
 
 The NetworkAcl resource allows you to manage [AWS EC2 Network Acls](https://docs.aws.amazon.com/ec2/latest/userguide/) for controlling inbound and outbound traffic to and from your subnets.
 

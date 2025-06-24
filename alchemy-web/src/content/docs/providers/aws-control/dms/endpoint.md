@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DMS Endpoints with Alchemy
+title: Endpoint
 description: Learn how to create, update, and manage AWS DMS Endpoints using Alchemy Cloud Control.
 ---
-
-# Endpoint
 
 The Endpoint resource lets you manage [AWS DMS Endpoints](https://docs.aws.amazon.com/dms/latest/userguide/) used for database migration services, enabling connections to various database sources and targets.
 

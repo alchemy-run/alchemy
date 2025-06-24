@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ControlTower EnabledBaselines with Alchemy
+title: EnabledBaseline
 description: Learn how to create, update, and manage AWS ControlTower EnabledBaselines using Alchemy Cloud Control.
 ---
-
-# EnabledBaseline
 
 The EnabledBaseline resource allows you to manage [AWS ControlTower EnabledBaselines](https://docs.aws.amazon.com/controltower/latest/userguide/) which are essential for enforcing governance and compliance across your AWS accounts.
 

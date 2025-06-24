@@ -1,9 +1,7 @@
 ---
-title: Cloudflare Email Catch All
+title: EmailCatchAll
 description: Learn how to configure catch-all email routing rules that handle emails not matched by other rules.
 ---
-
-# EmailCatchAll
 
 Configure a catch-all email routing rule that handles emails not matched by other routing rules. This rule is processed last and typically matches all unhandled emails.
 

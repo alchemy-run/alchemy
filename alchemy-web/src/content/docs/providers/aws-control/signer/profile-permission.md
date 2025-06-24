@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Signer ProfilePermissions with Alchemy
+title: ProfilePermission
 description: Learn how to create, update, and manage AWS Signer ProfilePermissions using Alchemy Cloud Control.
 ---
-
-# ProfilePermission
 
 The ProfilePermission resource allows you to manage permissions for AWS Signer profiles, enabling access controls for signing operations. For more details, refer to the [AWS Signer ProfilePermissions documentation](https://docs.aws.amazon.com/signer/latest/userguide/).
 

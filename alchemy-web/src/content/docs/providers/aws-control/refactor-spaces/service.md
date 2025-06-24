@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RefactorSpaces Services with Alchemy
+title: Service
 description: Learn how to create, update, and manage AWS RefactorSpaces Services using Alchemy Cloud Control.
 ---
-
-# Service
 
 The Service resource allows you to create and manage [AWS RefactorSpaces Services](https://docs.aws.amazon.com/refactorspaces/latest/userguide/) that facilitate the migration of applications to microservices. This resource integrates with AWS Lambda and HTTP endpoints for seamless application management.
 

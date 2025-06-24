@@ -1,9 +1,7 @@
 ---
-title: Managing Stripe Customers with Alchemy
+title: Customer
 description: Learn how to create and manage Stripe Customers for billing relationships using Alchemy.
 ---
-
-# Customer
 
 The Customer resource lets you create and manage [Stripe Customers](https://stripe.com/docs/api/customers) for tracking billing relationships and payment information.
 

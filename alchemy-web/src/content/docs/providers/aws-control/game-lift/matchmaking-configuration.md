@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GameLift MatchmakingConfigurations with Alchemy
+title: MatchmakingConfiguration
 description: Learn how to create, update, and manage AWS GameLift MatchmakingConfigurations using Alchemy Cloud Control.
 ---
-
-# MatchmakingConfiguration
 
 The MatchmakingConfiguration resource allows you to manage [AWS GameLift MatchmakingConfigurations](https://docs.aws.amazon.com/gamelift/latest/userguide/) for creating and managing multiplayer game sessions. This resource provides various properties that define the matchmaking settings, including game properties and player count configurations.
 

@@ -1,10 +1,8 @@
 ---
 order: 1.5
-title: Vite.js
+title: Vite
 description: Quick guide to initializing and deploying a Vite.js React application to Cloudflare Workers using Alchemy.
 ---
-
-# Vite
 
 This guide shows how to initialize and deploy a Vite.js React TypeScript application to Cloudflare using Alchemy.
 

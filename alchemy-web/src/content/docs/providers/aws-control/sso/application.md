@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSO Applications with Alchemy
+title: Application
 description: Learn how to create, update, and manage AWS SSO Applications using Alchemy Cloud Control.
 ---
-
-# Application
 
 The Application resource lets you manage [AWS SSO Applications](https://docs.aws.amazon.com/sso/latest/userguide/) for your organization's Single Sign-On configuration.
 

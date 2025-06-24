@@ -1,9 +1,7 @@
 ---
-title: Bundle (with ES Build)
+title: Bundle
 description: Learn how to use Alchemy's esbuild provider to bundle JavaScript and TypeScript code for your serverless functions and web applications.
 ---
-
-# Bundle
 
 The Bundle resource uses [esbuild](https://esbuild.github.io/) to bundle JavaScript and TypeScript files into optimized output.
 

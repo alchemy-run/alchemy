@@ -1,9 +1,7 @@
 ---
-title: Managing AWS KinesisAnalyticsV2 ApplicationCloudWatchLoggingOptions with Alchemy
+title: ApplicationCloudWatchLoggingOption
 description: Learn how to create, update, and manage AWS KinesisAnalyticsV2 ApplicationCloudWatchLoggingOptions using Alchemy Cloud Control.
 ---
-
-# ApplicationCloudWatchLoggingOption
 
 The ApplicationCloudWatchLoggingOption resource lets you manage the CloudWatch logging options for your AWS Kinesis Analytics V2 applications, enabling you to configure logging settings for monitoring application performance and behavior. For more details, refer to the official AWS documentation: [AWS KinesisAnalyticsV2 ApplicationCloudWatchLoggingOptions](https://docs.aws.amazon.com/kinesisanalyticsv2/latest/userguide/).
 

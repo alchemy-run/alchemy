@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT CACertificates with Alchemy
+title: CACertificate
 description: Learn how to create, update, and manage AWS IoT CACertificates using Alchemy Cloud Control.
 ---
-
-# CACertificate
 
 The CACertificate resource allows you to manage [AWS IoT CACertificates](https://docs.aws.amazon.com/iot/latest/userguide/), which are used to authenticate devices connecting to AWS IoT.
 

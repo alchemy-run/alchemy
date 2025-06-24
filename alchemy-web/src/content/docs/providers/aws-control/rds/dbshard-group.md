@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS DBShardGroups with Alchemy
+title: DBShardGroup
 description: Learn how to create, update, and manage AWS RDS DBShardGroups using Alchemy Cloud Control.
 ---
-
-# DBShardGroup
 
 The DBShardGroup resource allows you to manage [AWS RDS DBShardGroups](https://docs.aws.amazon.com/rds/latest/userguide/) for scalable database architectures that can distribute workloads across multiple shards.
 

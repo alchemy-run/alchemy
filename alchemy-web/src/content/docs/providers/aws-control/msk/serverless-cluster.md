@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MSK ServerlessClusters with Alchemy
+title: ServerlessCluster
 description: Learn how to create, update, and manage AWS MSK ServerlessClusters using Alchemy Cloud Control.
 ---
-
-# ServerlessCluster
 
 The ServerlessCluster resource lets you manage [AWS MSK ServerlessClusters](https://docs.aws.amazon.com/msk/latest/userguide/) for running Apache Kafka without needing to provision or manage servers.
 

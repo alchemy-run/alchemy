@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MSK VpcConnections with Alchemy
+title: VpcConnection
 description: Learn how to create, update, and manage AWS MSK VpcConnections using Alchemy Cloud Control.
 ---
-
-# VpcConnection
 
 The VpcConnection resource lets you manage [AWS MSK VpcConnections](https://docs.aws.amazon.com/msk/latest/userguide/) which provide connectivity between your Amazon Managed Streaming for Apache Kafka (MSK) cluster and your VPC.
 

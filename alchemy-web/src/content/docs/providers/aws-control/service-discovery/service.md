@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceDiscovery Services with Alchemy
+title: Service
 description: Learn how to create, update, and manage AWS ServiceDiscovery Services using Alchemy Cloud Control.
 ---
-
-# Service
 
 The Service resource lets you manage [AWS ServiceDiscovery Services](https://docs.aws.amazon.com/servicediscovery/latest/userguide/) for discovering and connecting to your application resources.
 

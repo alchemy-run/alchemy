@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RUM AppMonitors with Alchemy
+title: AppMonitor
 description: Learn how to create, update, and manage AWS RUM AppMonitors using Alchemy Cloud Control.
 ---
-
-# AppMonitor
 
 The AppMonitor resource lets you create and manage [AWS RUM AppMonitors](https://docs.aws.amazon.com/rum/latest/userguide/) for monitoring the performance of web applications.
 

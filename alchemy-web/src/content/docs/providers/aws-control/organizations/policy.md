@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Organizations Policies with Alchemy
+title: Policy
 description: Learn how to create, update, and manage AWS Organizations Policies using Alchemy Cloud Control.
 ---
-
-# Policy
 
 The Policy resource lets you manage [AWS Organizations Policies](https://docs.aws.amazon.com/organizations/latest/userguide/) to enforce specific controls across your organization.
 

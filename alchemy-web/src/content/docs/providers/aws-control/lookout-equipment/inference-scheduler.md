@@ -1,9 +1,7 @@
 ---
-title: Managing AWS LookoutEquipment InferenceSchedulers with Alchemy
+title: InferenceScheduler
 description: Learn how to create, update, and manage AWS LookoutEquipment InferenceSchedulers using Alchemy Cloud Control.
 ---
-
-# InferenceScheduler
 
 The InferenceScheduler resource allows you to manage [AWS LookoutEquipment InferenceSchedulers](https://docs.aws.amazon.com/lookoutequipment/latest/userguide/) that automate the process of running inference on your equipment data.
 

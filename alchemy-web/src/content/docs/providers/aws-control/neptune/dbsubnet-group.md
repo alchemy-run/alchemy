@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Neptune DBSubnetGroups with Alchemy
+title: DBSubnetGroup
 description: Learn how to create, update, and manage AWS Neptune DBSubnetGroups using Alchemy Cloud Control.
 ---
-
-# DBSubnetGroup
 
 The DBSubnetGroup resource allows you to create and manage [AWS Neptune DBSubnetGroups](https://docs.aws.amazon.com/neptune/latest/userguide/) for your database instances. A DBSubnetGroup is a collection of subnets that you can use to designate where your Neptune database can be deployed within your Amazon VPC.
 

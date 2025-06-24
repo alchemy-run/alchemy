@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GuardDuty Members with Alchemy
+title: Member
 description: Learn how to create, update, and manage AWS GuardDuty Members using Alchemy Cloud Control.
 ---
-
-# Member
 
 The Member resource allows you to manage [AWS GuardDuty Members](https://docs.aws.amazon.com/guardduty/latest/userguide/) within your AWS account. This resource enables you to invite and manage member accounts to participate in GuardDuty threat detection.
 

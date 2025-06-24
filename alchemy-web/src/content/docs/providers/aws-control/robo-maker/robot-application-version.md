@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RoboMaker RobotApplicationVersions with Alchemy
+title: RobotApplicationVersion
 description: Learn how to create, update, and manage AWS RoboMaker RobotApplicationVersions using Alchemy Cloud Control.
 ---
-
-# RobotApplicationVersion
 
 The RobotApplicationVersion resource lets you manage versions of a robot application in AWS RoboMaker. This resource is essential for deploying and updating robot applications in your AWS environment. For more information, refer to the [AWS RoboMaker RobotApplicationVersions documentation](https://docs.aws.amazon.com/robomaker/latest/userguide/).
 

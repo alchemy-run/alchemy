@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Logs Integrations with Alchemy
+title: Integration
 description: Learn how to create, update, and manage AWS Logs Integrations using Alchemy Cloud Control.
 ---
-
-# Integration
 
 The Integration resource lets you manage [AWS Logs Integrations](https://docs.aws.amazon.com/logs/latest/userguide/) for collecting and processing log data from various sources.
 

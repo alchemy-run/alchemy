@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EMRServerless Applications with Alchemy
+title: Application
 description: Learn how to create, update, and manage AWS EMRServerless Applications using Alchemy Cloud Control.
 ---
-
-# Application
 
 The Application resource lets you manage [AWS EMRServerless Applications](https://docs.aws.amazon.com/emrserverless/latest/userguide/) for running data processing workloads without the need to manage clusters.
 

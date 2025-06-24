@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppSync DomainNameApiAssociations with Alchemy
+title: DomainNameApiAssociation
 description: Learn how to create, update, and manage AWS AppSync DomainNameApiAssociations using Alchemy Cloud Control.
 ---
-
-# DomainNameApiAssociation
 
 The DomainNameApiAssociation resource allows you to associate an API with a custom domain name for your AWS AppSync service. This resource simplifies the management of custom domains in AppSync, enabling you to enhance your API's accessibility and branding. For more details, refer to the AWS documentation: [AWS AppSync DomainNameApiAssociations](https://docs.aws.amazon.com/appsync/latest/userguide/).
 

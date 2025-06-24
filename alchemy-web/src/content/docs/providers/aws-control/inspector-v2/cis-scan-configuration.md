@@ -1,9 +1,7 @@
 ---
-title: Managing AWS InspectorV2 CisScanConfigurations with Alchemy
+title: CisScanConfiguration
 description: Learn how to create, update, and manage AWS InspectorV2 CisScanConfigurations using Alchemy Cloud Control.
 ---
-
-# CisScanConfiguration
 
 The CisScanConfiguration resource allows you to create and manage [AWS InspectorV2 CisScanConfigurations](https://docs.aws.amazon.com/inspectorv2/latest/userguide/) for assessing the security of your infrastructure against CIS benchmarks.
 

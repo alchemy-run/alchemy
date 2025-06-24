@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3Outposts BucketPolicys with Alchemy
+title: BucketPolicy
 description: Learn how to create, update, and manage AWS S3Outposts BucketPolicys using Alchemy Cloud Control.
 ---
-
-# BucketPolicy
 
 The BucketPolicy resource allows you to manage the access policies for [AWS S3Outposts Buckets](https://docs.aws.amazon.com/s3outposts/latest/userguide/). It helps define permissions for various actions on your S3Outposts resources.
 

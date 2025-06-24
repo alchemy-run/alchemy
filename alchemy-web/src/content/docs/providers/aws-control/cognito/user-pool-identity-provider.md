@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cognito UserPoolIdentityProviders with Alchemy
+title: UserPoolIdentityProvider
 description: Learn how to create, update, and manage AWS Cognito UserPoolIdentityProviders using Alchemy Cloud Control.
 ---
-
-# UserPoolIdentityProvider
 
 The UserPoolIdentityProvider resource lets you manage [AWS Cognito UserPool Identity Providers](https://docs.aws.amazon.com/cognito/latest/userguide/) for authentication within your applications.
 

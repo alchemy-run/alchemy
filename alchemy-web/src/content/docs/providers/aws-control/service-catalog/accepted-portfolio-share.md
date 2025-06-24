@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog AcceptedPortfolioShares with Alchemy
+title: AcceptedPortfolioShare
 description: Learn how to create, update, and manage AWS ServiceCatalog AcceptedPortfolioShares using Alchemy Cloud Control.
 ---
-
-# AcceptedPortfolioShare
 
 The AcceptedPortfolioShare resource allows you to manage the acceptance of portfolio shares in AWS Service Catalog. For more details, you can refer to the AWS documentation: [AWS ServiceCatalog AcceptedPortfolioShares](https://docs.aws.amazon.com/servicecatalog/latest/userguide/).
 

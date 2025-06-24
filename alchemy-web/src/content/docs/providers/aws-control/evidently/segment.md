@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Evidently Segments with Alchemy
+title: Segment
 description: Learn how to create, update, and manage AWS Evidently Segments using Alchemy Cloud Control.
 ---
-
-# Segment
 
 The Segment resource lets you manage [AWS Evidently Segments](https://docs.aws.amazon.com/evidently/latest/userguide/) for targeting specific user groups in your experiments and feature launches.
 

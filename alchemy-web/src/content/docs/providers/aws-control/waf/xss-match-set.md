@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAF XssMatchSets with Alchemy
+title: XssMatchSet
 description: Learn how to create, update, and manage AWS WAF XssMatchSets using Alchemy Cloud Control.
 ---
-
-# XssMatchSet
 
 The XssMatchSet resource allows you to configure and manage [AWS WAF XssMatchSets](https://docs.aws.amazon.com/waf/latest/userguide/), which are used to block or allow web requests based on cross-site scripting (XSS) attacks.
 

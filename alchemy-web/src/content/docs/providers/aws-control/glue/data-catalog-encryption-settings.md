@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue DataCatalogEncryptionSettings with Alchemy
+title: DataCatalogEncryptionSettings
 description: Learn how to create, update, and manage AWS Glue DataCatalogEncryptionSettings using Alchemy Cloud Control.
 ---
-
-# DataCatalogEncryptionSettings
 
 The DataCatalogEncryptionSettings resource allows you to manage the encryption settings for the AWS Glue Data Catalog. This resource is essential for ensuring that your data is securely managed and compliant with data protection regulations. For more information, refer to the [AWS Glue DataCatalogEncryptionSettings documentation](https://docs.aws.amazon.com/glue/latest/userguide/).
 

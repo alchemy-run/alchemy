@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FraudDetector Variables with Alchemy
+title: Variable
 description: Learn how to create, update, and manage AWS FraudDetector Variables using Alchemy Cloud Control.
 ---
-
-# Variable
 
 The Variable resource lets you manage [AWS FraudDetector Variables](https://docs.aws.amazon.com/frauddetector/latest/userguide/) which are crucial for defining and using customizable data inputs for fraud detection models.
 

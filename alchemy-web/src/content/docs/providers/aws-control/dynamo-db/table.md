@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DynamoDB Tables with Alchemy
+title: Table
 description: Learn how to create, update, and manage AWS DynamoDB Tables using Alchemy Cloud Control.
 ---
-
-# Table
 
 The Table resource lets you manage [AWS DynamoDB Tables](https://docs.aws.amazon.com/dynamodb/latest/userguide/) and their configuration settings.
 

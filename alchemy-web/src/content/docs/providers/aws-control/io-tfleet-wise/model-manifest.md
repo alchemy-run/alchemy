@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTFleetWise ModelManifests with Alchemy
+title: ModelManifest
 description: Learn how to create, update, and manage AWS IoTFleetWise ModelManifests using Alchemy Cloud Control.
 ---
-
-# ModelManifest
 
 The ModelManifest resource allows you to define and manage [AWS IoTFleetWise ModelManifests](https://docs.aws.amazon.com/iotfleetwise/latest/userguide/) that specify vehicle signal configurations and data collection strategies.
 

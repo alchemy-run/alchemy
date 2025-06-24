@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS DBSecurityGroups with Alchemy
+title: DBSecurityGroup
 description: Learn how to create, update, and manage AWS RDS DBSecurityGroups using Alchemy Cloud Control.
 ---
-
-# DBSecurityGroup
 
 The DBSecurityGroup resource allows you to manage [AWS RDS DBSecurityGroups](https://docs.aws.amazon.com/rds/latest/userguide/) to control access to your Amazon RDS databases.
 

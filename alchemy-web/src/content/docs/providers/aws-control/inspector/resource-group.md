@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Inspector ResourceGroups with Alchemy
+title: ResourceGroup
 description: Learn how to create, update, and manage AWS Inspector ResourceGroups using Alchemy Cloud Control.
 ---
-
-# ResourceGroup
 
 The ResourceGroup resource lets you manage [AWS Inspector ResourceGroups](https://docs.aws.amazon.com/inspector/latest/userguide/) for organizing resources to be assessed for security vulnerabilities.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint EventStreams with Alchemy
+title: EventStream
 description: Learn how to create, update, and manage AWS Pinpoint EventStreams using Alchemy Cloud Control.
 ---
-
-# EventStream
 
 The EventStream resource allows you to manage [AWS Pinpoint EventStreams](https://docs.aws.amazon.com/pinpoint/latest/userguide/) for capturing and streaming events to data sinks like Amazon Kinesis. This enables you to analyze user engagement and application usage in real-time.
 

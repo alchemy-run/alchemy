@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataSync LocationS3s with Alchemy
+title: LocationS3
 description: Learn how to create, update, and manage AWS DataSync LocationS3s using Alchemy Cloud Control.
 ---
-
-# LocationS3
 
 The LocationS3 resource allows you to manage [AWS DataSync LocationS3s](https://docs.aws.amazon.com/datasync/latest/userguide/) for transferring data to and from Amazon S3 buckets securely and efficiently.
 

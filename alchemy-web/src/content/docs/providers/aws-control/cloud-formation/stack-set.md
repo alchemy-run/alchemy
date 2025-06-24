@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation StackSets with Alchemy
+title: StackSet
 description: Learn how to create, update, and manage AWS CloudFormation StackSets using Alchemy Cloud Control.
 ---
-
-# StackSet
 
 The StackSet resource lets you manage [AWS CloudFormation StackSets](https://docs.aws.amazon.com/cloudformation/latest/userguide/) for deploying stacks across multiple accounts and regions.
 

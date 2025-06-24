@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaPackageV2 ChannelGroups with Alchemy
+title: ChannelGroup
 description: Learn how to create, update, and manage AWS MediaPackageV2 ChannelGroups using Alchemy Cloud Control.
 ---
-
-# ChannelGroup
 
 The ChannelGroup resource lets you manage [AWS MediaPackageV2 ChannelGroups](https://docs.aws.amazon.com/mediapackagev2/latest/userguide/) for organizing multiple channels under a single group.
 

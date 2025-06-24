@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation Stacks with Alchemy
+title: Stack
 description: Learn how to create, update, and manage AWS CloudFormation Stacks using Alchemy Cloud Control.
 ---
-
-# Stack
 
 The Stack resource lets you create and manage [AWS CloudFormation Stacks](https://docs.aws.amazon.com/cloudformation/latest/userguide/) which are used to provision AWS resources in a predictable and repeatable manner.
 

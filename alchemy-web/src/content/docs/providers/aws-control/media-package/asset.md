@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaPackage Assets with Alchemy
+title: Asset
 description: Learn how to create, update, and manage AWS MediaPackage Assets using Alchemy Cloud Control.
 ---
-
-# Asset
 
 The Asset resource allows you to manage [AWS MediaPackage Assets](https://docs.aws.amazon.com/mediapackage/latest/userguide/) which encapsulate the media content and its associated metadata. This resource is essential for streaming video and audio content.
 

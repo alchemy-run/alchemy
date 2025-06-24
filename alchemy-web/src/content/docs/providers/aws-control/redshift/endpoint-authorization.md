@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Redshift EndpointAuthorizations with Alchemy
+title: EndpointAuthorization
 description: Learn how to create, update, and manage AWS Redshift EndpointAuthorizations using Alchemy Cloud Control.
 ---
-
-# EndpointAuthorization
 
 The EndpointAuthorization resource allows you to manage AWS Redshift EndpointAuthorizations, which are used to grant access to your Redshift clusters from specific AWS accounts. For more information, refer to the [AWS Redshift EndpointAuthorizations documentation](https://docs.aws.amazon.com/redshift/latest/userguide/).
 

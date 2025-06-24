@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppConfig DeploymentStrategys with Alchemy
+title: DeploymentStrategy
 description: Learn how to create, update, and manage AWS AppConfig DeploymentStrategys using Alchemy Cloud Control.
 ---
-
-# DeploymentStrategy
 
 The DeploymentStrategy resource lets you manage [AWS AppConfig DeploymentStrategies](https://docs.aws.amazon.com/appconfig/latest/userguide/) for deploying application configurations in a controlled manner. 
 

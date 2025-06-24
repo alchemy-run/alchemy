@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGatewayV2 Integrations with Alchemy
+title: Integration
 description: Learn how to create, update, and manage AWS ApiGatewayV2 Integrations using Alchemy Cloud Control.
 ---
-
-# Integration
 
 The Integration resource allows you to manage [AWS ApiGatewayV2 Integrations](https://docs.aws.amazon.com/apigatewayv2/latest/userguide/) for your API Gateway, enabling you to connect various backend services to your API.
 

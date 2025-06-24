@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 Subnets with Alchemy
+title: Subnet
 description: Learn how to create, update, and manage AWS EC2 Subnets using Alchemy Cloud Control.
 ---
-
-# Subnet
 
 The Subnet resource lets you manage [AWS EC2 Subnets](https://docs.aws.amazon.com/ec2/latest/userguide/) within a Virtual Private Cloud (VPC). Subnets are a range of IP addresses in your VPC that help segment your network.
 

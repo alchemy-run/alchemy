@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpenSearchService Applications with Alchemy
+title: Application
 description: Learn how to create, update, and manage AWS OpenSearchService Applications using Alchemy Cloud Control.
 ---
-
-# Application
 
 The Application resource lets you manage [AWS OpenSearchService Applications](https://docs.aws.amazon.com/opensearchservice/latest/userguide/) and their configuration settings.
 

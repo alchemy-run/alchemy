@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GuardDuty IPSets with Alchemy
+title: IPSet
 description: Learn how to create, update, and manage AWS GuardDuty IPSets using Alchemy Cloud Control.
 ---
-
-# IPSet
 
 The IPSet resource lets you manage [AWS GuardDuty IPSets](https://docs.aws.amazon.com/guardduty/latest/userguide/) for threat detection in your AWS environment.
 

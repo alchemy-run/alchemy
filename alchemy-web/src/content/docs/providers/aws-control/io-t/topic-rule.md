@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT TopicRules with Alchemy
+title: TopicRule
 description: Learn how to create, update, and manage AWS IoT TopicRules using Alchemy Cloud Control.
 ---
-
-# TopicRule
 
 The TopicRule resource allows you to manage [AWS IoT TopicRules](https://docs.aws.amazon.com/iot/latest/userguide/) that define actions to be taken when messages are published to specific MQTT topics.
 

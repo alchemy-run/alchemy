@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataZone ProjectMemberships with Alchemy
+title: ProjectMembership
 description: Learn how to create, update, and manage AWS DataZone ProjectMemberships using Alchemy Cloud Control.
 ---
-
-# ProjectMembership
 
 The ProjectMembership resource allows you to manage [AWS DataZone ProjectMemberships](https://docs.aws.amazon.com/datazone/latest/userguide/) for collaboration on data projects within your organization.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53 HealthChecks with Alchemy
+title: HealthCheck
 description: Learn how to create, update, and manage AWS Route53 HealthChecks using Alchemy Cloud Control.
 ---
-
-# HealthCheck
 
 The HealthCheck resource lets you manage [AWS Route53 HealthChecks](https://docs.aws.amazon.com/route53/latest/userguide/) which monitor the health of your resources and ensure high availability by performing periodic checks.
 

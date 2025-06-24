@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CE AnomalyMonitors with Alchemy
+title: AnomalyMonitor
 description: Learn how to create, update, and manage AWS CE AnomalyMonitors using Alchemy Cloud Control.
 ---
-
-# AnomalyMonitor
 
 The AnomalyMonitor resource lets you create and manage AWS Cost Explorer Anomaly Monitors, which help track unusual spending patterns in your AWS accounts. For more details, refer to the official AWS documentation: [AWS CE AnomalyMonitors](https://docs.aws.amazon.com/ce/latest/userguide/).
 

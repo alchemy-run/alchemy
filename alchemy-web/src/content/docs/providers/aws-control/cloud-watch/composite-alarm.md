@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudWatch CompositeAlarms with Alchemy
+title: CompositeAlarm
 description: Learn how to create, update, and manage AWS CloudWatch CompositeAlarms using Alchemy Cloud Control.
 ---
-
-# CompositeAlarm
 
 The CompositeAlarm resource lets you manage AWS CloudWatch CompositeAlarms, which are alarms that can combine multiple other alarms into a single alarm state. For more details, refer to the [AWS CloudWatch CompositeAlarms documentation](https://docs.aws.amazon.com/cloudwatch/latest/userguide/).
 

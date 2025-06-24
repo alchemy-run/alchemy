@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint ApplicationSettingss with Alchemy
+title: ApplicationSettings
 description: Learn how to create, update, and manage AWS Pinpoint ApplicationSettingss using Alchemy Cloud Control.
 ---
-
-# ApplicationSettings
 
 The ApplicationSettings resource allows you to manage the settings for an [AWS Pinpoint application](https://docs.aws.amazon.com/pinpoint/latest/userguide/). This includes configuring limits, enabling CloudWatch metrics, and setting quiet times for campaigns.
 

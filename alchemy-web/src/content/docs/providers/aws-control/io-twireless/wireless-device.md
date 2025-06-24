@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTWireless WirelessDevices with Alchemy
+title: WirelessDevice
 description: Learn how to create, update, and manage AWS IoTWireless WirelessDevices using Alchemy Cloud Control.
 ---
-
-# WirelessDevice
 
 The WirelessDevice resource allows you to manage [AWS IoTWireless WirelessDevices](https://docs.aws.amazon.com/iotwireless/latest/userguide/) and their configurations in your AWS environment.
 

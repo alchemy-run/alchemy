@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lex BotAliases with Alchemy
+title: BotAlias
 description: Learn how to create, update, and manage AWS Lex BotAliases using Alchemy Cloud Control.
 ---
-
-# BotAlias
 
 The BotAlias resource allows you to manage [AWS Lex BotAliases](https://docs.aws.amazon.com/lex/latest/userguide/) which are used to define specific configurations for your bots, enabling different versions and settings for your Amazon Lex chatbots.
 

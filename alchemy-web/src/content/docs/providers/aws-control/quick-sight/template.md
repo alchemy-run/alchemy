@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QuickSight Templates with Alchemy
+title: Template
 description: Learn how to create, update, and manage AWS QuickSight Templates using Alchemy Cloud Control.
 ---
-
-# Template
 
 The Template resource lets you manage [AWS QuickSight Templates](https://docs.aws.amazon.com/quicksight/latest/userguide/) for reusable visualizations and dashboards.
 

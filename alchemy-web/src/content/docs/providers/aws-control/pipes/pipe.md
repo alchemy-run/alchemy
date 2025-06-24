@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pipes Pipes with Alchemy
+title: Pipe
 description: Learn how to create, update, and manage AWS Pipes Pipes using Alchemy Cloud Control.
 ---
-
-# Pipe
 
 The Pipe resource lets you create and manage [AWS Pipes](https://docs.aws.amazon.com/pipes/latest/userguide/) for orchestrating data flows between AWS services.
 

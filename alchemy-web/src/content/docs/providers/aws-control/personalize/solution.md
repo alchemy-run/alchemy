@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Personalize Solutions with Alchemy
+title: Solution
 description: Learn how to create, update, and manage AWS Personalize Solutions using Alchemy Cloud Control.
 ---
-
-# Solution
 
 The Solution resource allows you to create and manage [AWS Personalize Solutions](https://docs.aws.amazon.com/personalize/latest/userguide/) that enable personalized recommendations using machine learning.
 

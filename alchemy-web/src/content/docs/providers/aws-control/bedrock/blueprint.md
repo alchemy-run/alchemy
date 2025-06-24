@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Bedrock Blueprints with Alchemy
+title: Blueprint
 description: Learn how to create, update, and manage AWS Bedrock Blueprints using Alchemy Cloud Control.
 ---
-
-# Blueprint
 
 The Blueprint resource allows you to create, update, and manage [AWS Bedrock Blueprints](https://docs.aws.amazon.com/bedrock/latest/userguide/) that define the parameters and configurations required for your AI models.
 

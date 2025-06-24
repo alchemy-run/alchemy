@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Redshift ClusterSubnetGroups with Alchemy
+title: ClusterSubnetGroup
 description: Learn how to create, update, and manage AWS Redshift ClusterSubnetGroups using Alchemy Cloud Control.
 ---
-
-# ClusterSubnetGroup
 
 The ClusterSubnetGroup resource lets you manage [AWS Redshift ClusterSubnetGroups](https://docs.aws.amazon.com/redshift/latest/userguide/) which define a collection of subnets for your Redshift cluster.
 

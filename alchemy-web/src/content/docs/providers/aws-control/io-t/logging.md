@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT Loggings with Alchemy
+title: Logging
 description: Learn how to create, update, and manage AWS IoT Loggings using Alchemy Cloud Control.
 ---
-
-# Logging
 
 The Logging resource lets you manage [AWS IoT Loggings](https://docs.aws.amazon.com/iot/latest/userguide/) for your IoT accounts, allowing you to configure logging levels and track events within your IoT applications.
 

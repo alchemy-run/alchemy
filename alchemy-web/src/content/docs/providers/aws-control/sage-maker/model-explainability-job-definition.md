@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker ModelExplainabilityJobDefinitions with Alchemy
+title: ModelExplainabilityJobDefinition
 description: Learn how to create, update, and manage AWS SageMaker ModelExplainabilityJobDefinitions using Alchemy Cloud Control.
 ---
-
-# ModelExplainabilityJobDefinition
 
 The ModelExplainabilityJobDefinition resource allows you to create and manage model explainability jobs in AWS SageMaker for your machine learning models. For more detailed information, please refer to the [AWS SageMaker ModelExplainabilityJobDefinitions documentation](https://docs.aws.amazon.com/sagemaker/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: GitHub Secret
+title: GitHubSecret
 description: Learn how to create, update, and manage secrets for GitHub Actions and Dependabot using Alchemy.
 ---
-
-# GitHubSecret
 
 The GitHubSecret resource lets you manage [GitHub Actions secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) in repositories and environments.
 

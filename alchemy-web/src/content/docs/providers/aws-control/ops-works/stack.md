@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpsWorks Stacks with Alchemy
+title: Stack
 description: Learn how to create, update, and manage AWS OpsWorks Stacks using Alchemy Cloud Control.
 ---
-
-# Stack
 
 The Stack resource lets you manage [AWS OpsWorks Stacks](https://docs.aws.amazon.com/opsworks/latest/userguide/) for deploying and managing applications in a flexible and scalable way.
 

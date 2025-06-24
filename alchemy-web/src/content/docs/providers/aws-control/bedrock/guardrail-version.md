@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Bedrock GuardrailVersions with Alchemy
+title: GuardrailVersion
 description: Learn how to create, update, and manage AWS Bedrock GuardrailVersions using Alchemy Cloud Control.
 ---
-
-# GuardrailVersion
 
 The GuardrailVersion resource allows you to manage versions of guardrails in AWS Bedrock. Guardrails are essential for implementing safety and compliance controls in your AI models. For more information, refer to the [AWS Bedrock GuardrailVersions documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/).
 

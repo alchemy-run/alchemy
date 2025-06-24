@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAF SizeConstraintSets with Alchemy
+title: SizeConstraintSet
 description: Learn how to create, update, and manage AWS WAF SizeConstraintSets using Alchemy Cloud Control.
 ---
-
-# SizeConstraintSet
 
 The SizeConstraintSet resource allows you to define a set of size constraints for AWS WAF, which can be used to filter out web requests based on the size of specific parts of the request. This is crucial for protecting your applications from various types of attacks and ensuring performance. For more information, see the [AWS WAF SizeConstraintSets documentation](https://docs.aws.amazon.com/waf/latest/userguide/).
 

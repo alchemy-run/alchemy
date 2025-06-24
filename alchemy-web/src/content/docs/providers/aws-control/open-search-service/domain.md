@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpenSearchService Domains with Alchemy
+title: Domain
 description: Learn how to create, update, and manage AWS OpenSearchService Domains using Alchemy Cloud Control.
 ---
-
-# Domain
 
 The Domain resource lets you manage [AWS OpenSearchService Domains](https://docs.aws.amazon.com/opensearchservice/latest/userguide/) and their configuration settings. This resource allows you to create, update, and manage various attributes of OpenSearch domains, including security options, snapshot configurations, and logging.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ControlTower EnabledControls with Alchemy
+title: EnabledControl
 description: Learn how to create, update, and manage AWS ControlTower EnabledControls using Alchemy Cloud Control.
 ---
-
-# EnabledControl
 
 The EnabledControl resource allows you to manage [AWS ControlTower EnabledControls](https://docs.aws.amazon.com/controltower/latest/userguide/) in your AWS environment. This resource enables you to specify controls to be enforced on accounts within your organization.
 

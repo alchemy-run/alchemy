@@ -1,9 +1,7 @@
 ---
-title: Cloudflare Dispatch Namespace
+title: Dispatch Namespace
 description: Learn how to create and manage Cloudflare Workers for Platforms dispatch namespaces for multi-tenant architectures.
 ---
-
-# Dispatch Namespace
 
 A [Cloudflare Dispatch Namespace](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/reference/how-workers-for-platforms-works/) is a container for Workers for Platforms (WFP) that enables multi-tenant architectures by allowing you to deploy and manage multiple isolated worker scripts within a single namespace.
 

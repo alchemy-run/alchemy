@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeStarConnections Connections with Alchemy
+title: Connection
 description: Learn how to create, update, and manage AWS CodeStarConnections Connections using Alchemy Cloud Control.
 ---
-
-# Connection
 
 The Connection resource lets you manage [AWS CodeStarConnections Connections](https://docs.aws.amazon.com/codestarconnections/latest/userguide/) for integrating third-party source control providers with AWS CodeStar.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EKS Addons with Alchemy
+title: Addon
 description: Learn how to create, update, and manage AWS EKS Addons using Alchemy Cloud Control.
 ---
-
-# Addon
 
 The Addon resource allows you to manage [AWS EKS Addons](https://docs.aws.amazon.com/eks/latest/userguide/) for enhancing the capabilities of your Kubernetes clusters.
 

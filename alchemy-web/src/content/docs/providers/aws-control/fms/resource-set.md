@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FMS ResourceSets with Alchemy
+title: ResourceSet
 description: Learn how to create, update, and manage AWS FMS ResourceSets using Alchemy Cloud Control.
 ---
-
-# ResourceSet
 
 The ResourceSet resource allows you to manage [AWS FMS ResourceSets](https://docs.aws.amazon.com/fms/latest/userguide/) that define a collection of AWS resources for AWS Firewall Manager policies.
 

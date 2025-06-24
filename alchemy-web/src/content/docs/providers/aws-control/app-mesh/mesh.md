@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppMesh Meshs with Alchemy
+title: Mesh
 description: Learn how to create, update, and manage AWS AppMesh Meshs using Alchemy Cloud Control.
 ---
-
-# Mesh
 
 The Mesh resource lets you manage [AWS AppMesh Meshs](https://docs.aws.amazon.com/appmesh/latest/userguide/) for controlling microservices communication in your applications.
 

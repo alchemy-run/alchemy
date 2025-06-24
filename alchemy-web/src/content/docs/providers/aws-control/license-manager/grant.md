@@ -1,9 +1,7 @@
 ---
-title: Managing AWS LicenseManager Grants with Alchemy
+title: Grant
 description: Learn how to create, update, and manage AWS LicenseManager Grants using Alchemy Cloud Control.
 ---
-
-# Grant
 
 The Grant resource lets you manage [AWS LicenseManager Grants](https://docs.aws.amazon.com/licensemanager/latest/userguide/) which are used to grant permissions for using licenses to specified principals.
 

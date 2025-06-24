@@ -1,9 +1,7 @@
 ---
-title: Managing AWS BCMDataExports Exports with Alchemy
+title: Export
 description: Learn how to create, update, and manage AWS BCMDataExports Exports using Alchemy Cloud Control.
 ---
-
-# Export
 
 The Export resource allows you to manage [AWS BCMDataExports Exports](https://docs.aws.amazon.com/bcmdataexports/latest/userguide/) for exporting data from your AWS account. This resource enables the definition of export settings, including data sources and output formats.
 

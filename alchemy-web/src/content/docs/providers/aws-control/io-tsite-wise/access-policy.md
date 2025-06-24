@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTSiteWise AccessPolicys with Alchemy
+title: AccessPolicy
 description: Learn how to create, update, and manage AWS IoTSiteWise AccessPolicys using Alchemy Cloud Control.
 ---
-
-# AccessPolicy
 
 The AccessPolicy resource allows you to manage [AWS IoTSiteWise AccessPolicys](https://docs.aws.amazon.com/iotsitewise/latest/userguide/) which control access to your IoT SiteWise resources.
 

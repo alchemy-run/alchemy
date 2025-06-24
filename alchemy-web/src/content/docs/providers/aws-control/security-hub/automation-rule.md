@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityHub AutomationRules with Alchemy
+title: AutomationRule
 description: Learn how to create, update, and manage AWS SecurityHub AutomationRules using Alchemy Cloud Control.
 ---
-
-# AutomationRule
 
 The AutomationRule resource lets you manage [AWS SecurityHub AutomationRules](https://docs.aws.amazon.com/securityhub/latest/userguide/) for automating responses to security findings in your AWS environment.
 

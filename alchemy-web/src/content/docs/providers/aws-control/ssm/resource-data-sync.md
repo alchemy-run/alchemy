@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSM ResourceDataSyncs with Alchemy
+title: ResourceDataSync
 description: Learn how to create, update, and manage AWS SSM ResourceDataSyncs using Alchemy Cloud Control.
 ---
-
-# ResourceDataSync
 
 The ResourceDataSync resource allows you to configure and manage the synchronization of your AWS Systems Manager (SSM) data across different AWS Regions and accounts. For more detailed information, refer to the [AWS SSM ResourceDataSyncs documentation](https://docs.aws.amazon.com/ssm/latest/userguide/).
 

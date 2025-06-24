@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityLake DataLakes with Alchemy
+title: DataLake
 description: Learn how to create, update, and manage AWS SecurityLake DataLakes using Alchemy Cloud Control.
 ---
-
-# DataLake
 
 The DataLake resource lets you manage [AWS SecurityLake DataLakes](https://docs.aws.amazon.com/securitylake/latest/userguide/) and their configuration settings.
 

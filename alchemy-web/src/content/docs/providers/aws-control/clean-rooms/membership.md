@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CleanRooms Memberships with Alchemy
+title: Membership
 description: Learn how to create, update, and manage AWS CleanRooms Memberships using Alchemy Cloud Control.
 ---
-
-# Membership
 
 The Membership resource allows you to manage [AWS CleanRooms Memberships](https://docs.aws.amazon.com/cleanrooms/latest/userguide/) that enable collaboration across data in a secure environment.
 

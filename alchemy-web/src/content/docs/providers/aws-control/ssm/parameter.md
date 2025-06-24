@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSM Parameters with Alchemy
+title: Parameter
 description: Learn how to create, update, and manage AWS SSM Parameters using Alchemy Cloud Control.
 ---
-
-# Parameter
 
 The Parameter resource allows you to manage [AWS SSM Parameters](https://docs.aws.amazon.com/ssm/latest/userguide/) for storing configuration data and secrets. This includes creating, updating, and deleting parameters within the AWS Systems Manager Parameter Store.
 

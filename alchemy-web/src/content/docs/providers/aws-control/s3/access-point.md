@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3 AccessPoints with Alchemy
+title: AccessPoint
 description: Learn how to create, update, and manage AWS S3 AccessPoints using Alchemy Cloud Control.
 ---
-
-# AccessPoint
 
 The AccessPoint resource lets you manage [AWS S3 AccessPoints](https://docs.aws.amazon.com/s3/latest/userguide/) which simplify data access management for shared datasets in S3.
 

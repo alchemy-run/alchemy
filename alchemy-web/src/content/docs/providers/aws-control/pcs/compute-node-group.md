@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PCS ComputeNodeGroups with Alchemy
+title: ComputeNodeGroup
 description: Learn how to create, update, and manage AWS PCS ComputeNodeGroups using Alchemy Cloud Control.
 ---
-
-# ComputeNodeGroup
 
 The ComputeNodeGroup resource allows you to manage [AWS PCS ComputeNodeGroups](https://docs.aws.amazon.com/pcs/latest/userguide/) for your computing needs, enabling you to configure clusters of compute nodes effectively.
 

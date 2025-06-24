@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ManagedBlockchain Accessors with Alchemy
+title: Accessor
 description: Learn how to create, update, and manage AWS ManagedBlockchain Accessors using Alchemy Cloud Control.
 ---
-
-# Accessor
 
 The Accessor resource lets you manage AWS ManagedBlockchain Accessors, which are used to interact with blockchain networks. For more details, refer to the [AWS ManagedBlockchain Accessors](https://docs.aws.amazon.com/managedblockchain/latest/userguide/) documentation.
 

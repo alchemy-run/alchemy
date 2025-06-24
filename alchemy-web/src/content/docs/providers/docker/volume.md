@@ -3,8 +3,6 @@ title: Volume
 description: Create and manage Docker volumes with Alchemy
 ---
 
-# Volume
-
 The `Volume` resource allows you to create and manage persistent Docker volumes using Alchemy.
 
 ## Usage

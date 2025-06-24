@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 SecurityGroupEgresss with Alchemy
+title: SecurityGroupEgress
 description: Learn how to create, update, and manage AWS EC2 SecurityGroupEgresss using Alchemy Cloud Control.
 ---
-
-# SecurityGroupEgress
 
 The SecurityGroupEgress resource allows you to manage outbound rules for AWS EC2 Security Groups. For more details, refer to the [AWS EC2 SecurityGroupEgress documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

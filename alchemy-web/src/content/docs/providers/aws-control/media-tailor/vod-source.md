@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaTailor VodSources with Alchemy
+title: VodSource
 description: Learn how to create, update, and manage AWS MediaTailor VodSources using Alchemy Cloud Control.
 ---
-
-# VodSource
 
 The VodSource resource lets you manage [AWS MediaTailor VodSources](https://docs.aws.amazon.com/mediatailor/latest/userguide/) for delivering video on demand content. This resource allows you to define a source for your video content that MediaTailor can use to serve video streams.
 

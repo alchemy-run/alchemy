@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint Campaigns with Alchemy
+title: Campaign
 description: Learn how to create, update, and manage AWS Pinpoint Campaigns using Alchemy Cloud Control.
 ---
-
-# Campaign
 
 The Campaign resource lets you manage [AWS Pinpoint Campaigns](https://docs.aws.amazon.com/pinpoint/latest/userguide/) for targeted messaging to selected segments of your audience.
 

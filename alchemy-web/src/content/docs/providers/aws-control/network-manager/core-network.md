@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager CoreNetworks with Alchemy
+title: CoreNetwork
 description: Learn how to create, update, and manage AWS NetworkManager CoreNetworks using Alchemy Cloud Control.
 ---
-
-# CoreNetwork
 
 The CoreNetwork resource allows you to manage [AWS NetworkManager CoreNetworks](https://docs.aws.amazon.com/networkmanager/latest/userguide/) which facilitate the management of your global network. This resource provides a central point for managing your network components and policies across AWS.
 

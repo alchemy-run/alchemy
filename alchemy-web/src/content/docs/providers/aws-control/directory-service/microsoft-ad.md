@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DirectoryService MicrosoftADs with Alchemy
+title: MicrosoftAD
 description: Learn how to create, update, and manage AWS DirectoryService MicrosoftADs using Alchemy Cloud Control.
 ---
-
-# MicrosoftAD
 
 The MicrosoftAD resource lets you create and manage [AWS DirectoryService MicrosoftADs](https://docs.aws.amazon.com/directoryservice/latest/userguide/) for your applications. This resource enables you to set up a fully managed, cloud-based Microsoft Active Directory.
 

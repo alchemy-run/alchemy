@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DLM LifecyclePolicys with Alchemy
+title: LifecyclePolicy
 description: Learn how to create, update, and manage AWS DLM LifecyclePolicys using Alchemy Cloud Control.
 ---
-
-# LifecyclePolicy
 
 The LifecyclePolicy resource allows you to manage [AWS DLM LifecyclePolicys](https://docs.aws.amazon.com/dlm/latest/userguide/) for automating the creation, retention, and deletion of EBS snapshots and AMIs.
 

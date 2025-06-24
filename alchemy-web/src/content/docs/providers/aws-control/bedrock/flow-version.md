@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Bedrock FlowVersions with Alchemy
+title: FlowVersion
 description: Learn how to create, update, and manage AWS Bedrock FlowVersions using Alchemy Cloud Control.
 ---
-
-# FlowVersion
 
 The FlowVersion resource allows you to manage [AWS Bedrock FlowVersions](https://docs.aws.amazon.com/bedrock/latest/userguide/) for your applications. This resource enables you to define, update, and deploy specific versions of flows within AWS Bedrock.
 

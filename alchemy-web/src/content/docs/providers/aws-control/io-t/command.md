@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT Commands with Alchemy
+title: Command
 description: Learn how to create, update, and manage AWS IoT Commands using Alchemy Cloud Control.
 ---
-
-# Command
 
 The Command resource lets you create and manage [AWS IoT Commands](https://docs.aws.amazon.com/iot/latest/userguide/) that can be used to perform actions on IoT devices.
 

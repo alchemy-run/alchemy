@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaLive Channels with Alchemy
+title: Channel
 description: Learn how to create, update, and manage AWS MediaLive Channels using Alchemy Cloud Control.
 ---
-
-# Channel
 
 The Channel resource allows you to create and manage [AWS MediaLive Channels](https://docs.aws.amazon.com/medialive/latest/userguide/) for live video streaming. This resource provides various configurations to adapt to different streaming requirements.
 

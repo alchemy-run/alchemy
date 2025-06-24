@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTSiteWise Dashboards with Alchemy
+title: Dashboard
 description: Learn how to create, update, and manage AWS IoTSiteWise Dashboards using Alchemy Cloud Control.
 ---
-
-# Dashboard
 
 The Dashboard resource lets you manage [AWS IoTSiteWise Dashboards](https://docs.aws.amazon.com/iotsitewise/latest/userguide/) for visualizing and analyzing industrial data.
 

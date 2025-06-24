@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VpcLattice Rules with Alchemy
+title: Rule
 description: Learn how to create, update, and manage AWS VpcLattice Rules using Alchemy Cloud Control.
 ---
-
-# Rule
 
 The Rule resource lets you manage [AWS VpcLattice Rules](https://docs.aws.amazon.com/vpclattice/latest/userguide/) that define how incoming requests are routed to your services based on specified conditions.
 

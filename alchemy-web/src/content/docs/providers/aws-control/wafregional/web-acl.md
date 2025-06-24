@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAFRegional WebACLs with Alchemy
+title: WebACL
 description: Learn how to create, update, and manage AWS WAFRegional WebACLs using Alchemy Cloud Control.
 ---
-
-# WebACL
 
 The WebACL resource lets you manage [AWS WAFRegional WebACLs](https://docs.aws.amazon.com/wafregional/latest/userguide/) for controlling access to your web applications.
 

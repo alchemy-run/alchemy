@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAFRegional RegexPatternSets with Alchemy
+title: RegexPatternSet
 description: Learn how to create, update, and manage AWS WAFRegional RegexPatternSets using Alchemy Cloud Control.
 ---
-
-# RegexPatternSet
 
 The RegexPatternSet resource lets you manage [AWS WAFRegional RegexPatternSets](https://docs.aws.amazon.com/wafregional/latest/userguide/) which are used to specify a set of regular expression patterns to inspect web requests.
 

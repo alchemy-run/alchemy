@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker ModelCards with Alchemy
+title: ModelCard
 description: Learn how to create, update, and manage AWS SageMaker ModelCards using Alchemy Cloud Control.
 ---
-
-# ModelCard
 
 The ModelCard resource lets you manage [AWS SageMaker ModelCards](https://docs.aws.amazon.com/sagemaker/latest/userguide/) which provide a structured way to document machine learning models, including information about their performance, intended use, and ethical considerations.
 

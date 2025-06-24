@@ -1,9 +1,7 @@
 ---
-title: Managing AWS KMS ReplicaKeys with Alchemy
+title: ReplicaKey
 description: Learn how to create, update, and manage AWS KMS ReplicaKeys using Alchemy Cloud Control.
 ---
-
-# ReplicaKey
 
 The ReplicaKey resource allows you to create and manage [AWS KMS ReplicaKeys](https://docs.aws.amazon.com/kms/latest/userguide/) for enhancing data protection across AWS Regions. ReplicaKeys enable you to replicate your primary keys to other AWS Regions seamlessly.
 

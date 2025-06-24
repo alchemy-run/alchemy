@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTFleetWise Campaigns with Alchemy
+title: Campaign
 description: Learn how to create, update, and manage AWS IoTFleetWise Campaigns using Alchemy Cloud Control.
 ---
-
-# Campaign
 
 The Campaign resource allows you to manage [AWS IoTFleetWise Campaigns](https://docs.aws.amazon.com/iotfleetwise/latest/userguide/) that enable efficient data collection from vehicles. Campaigns define the collection schemes, signals, and other configurations to gather valuable telematics data.
 

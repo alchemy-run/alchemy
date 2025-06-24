@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodePipeline Webhooks with Alchemy
+title: Webhook
 description: Learn how to create, update, and manage AWS CodePipeline Webhooks using Alchemy Cloud Control.
 ---
-
-# Webhook
 
 The Webhook resource allows you to create and manage [AWS CodePipeline Webhooks](https://docs.aws.amazon.com/codepipeline/latest/userguide/) which enable you to trigger a pipeline execution in response to changes in a source repository.
 

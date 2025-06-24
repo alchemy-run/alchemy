@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation ModuleDefaultVersions with Alchemy
+title: ModuleDefaultVersion
 description: Learn how to create, update, and manage AWS CloudFormation ModuleDefaultVersions using Alchemy Cloud Control.
 ---
-
-# ModuleDefaultVersion
 
 The ModuleDefaultVersion resource allows you to specify the default version of a CloudFormation module. This is useful for managing versions of reusable CloudFormation components. For more details, refer to the [AWS CloudFormation ModuleDefaultVersions documentation](https://docs.aws.amazon.com/cloudformation/latest/userguide/).
 

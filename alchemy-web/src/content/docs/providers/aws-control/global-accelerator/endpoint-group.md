@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GlobalAccelerator EndpointGroups with Alchemy
+title: EndpointGroup
 description: Learn how to create, update, and manage AWS GlobalAccelerator EndpointGroups using Alchemy Cloud Control.
 ---
-
-# EndpointGroup
 
 The EndpointGroup resource lets you manage [AWS GlobalAccelerator EndpointGroups](https://docs.aws.amazon.com/globalaccelerator/latest/userguide/) that improve the availability and performance of your applications by directing traffic to optimal endpoints.
 

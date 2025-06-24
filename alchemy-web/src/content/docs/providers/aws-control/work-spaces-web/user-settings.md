@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WorkSpacesWeb UserSettingss with Alchemy
+title: UserSettings
 description: Learn how to create, update, and manage AWS WorkSpacesWeb UserSettingss using Alchemy Cloud Control.
 ---
-
-# UserSettings
 
 The UserSettings resource allows you to manage [AWS WorkSpacesWeb UserSettings](https://docs.aws.amazon.com/workspacesweb/latest/userguide/) configurations, which define user experience and permissions in the WorkSpacesWeb environment.
 

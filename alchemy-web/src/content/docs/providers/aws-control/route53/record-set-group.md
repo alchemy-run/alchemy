@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53 RecordSetGroups with Alchemy
+title: RecordSetGroup
 description: Learn how to create, update, and manage AWS Route53 RecordSetGroups using Alchemy Cloud Control.
 ---
-
-# RecordSetGroup
 
 The RecordSetGroup resource lets you manage [AWS Route53 RecordSetGroups](https://docs.aws.amazon.com/route53/latest/userguide/) for DNS configuration and management.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation HookDefaultVersions with Alchemy
+title: HookDefaultVersion
 description: Learn how to create, update, and manage AWS CloudFormation HookDefaultVersions using Alchemy Cloud Control.
 ---
-
-# HookDefaultVersion
 
 The HookDefaultVersion resource allows you to manage the default version of a CloudFormation hook, which can be used for custom resource types. This resource enables you to specify the hook's type name, version ID, and ARN. For more detailed information, visit the [AWS CloudFormation HookDefaultVersions documentation](https://docs.aws.amazon.com/cloudformation/latest/userguide/).
 

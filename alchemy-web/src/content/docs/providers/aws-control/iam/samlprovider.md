@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM SAMLProviders with Alchemy
+title: SAMLProvider
 description: Learn how to create, update, and manage AWS IAM SAMLProviders using Alchemy Cloud Control.
 ---
-
-# SAMLProvider
 
 The SAMLProvider resource allows you to manage [AWS IAM SAMLProviders](https://docs.aws.amazon.com/iam/latest/userguide/) for enabling single sign-on (SSO) authentication in AWS environments.
 

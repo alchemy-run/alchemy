@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue Crawlers with Alchemy
+title: Crawler
 description: Learn how to create, update, and manage AWS Glue Crawlers using Alchemy Cloud Control.
 ---
-
-# Crawler
 
 The Crawler resource allows you to create and manage AWS Glue Crawlers, which can automatically discover and catalog data stored in various data sources. For more detailed information, refer to the [AWS Glue Crawlers documentation](https://docs.aws.amazon.com/glue/latest/userguide/).
 

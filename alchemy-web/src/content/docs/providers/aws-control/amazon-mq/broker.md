@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AmazonMQ Brokers with Alchemy
+title: Broker
 description: Learn how to create, update, and manage AWS AmazonMQ Brokers using Alchemy Cloud Control.
 ---
-
-# Broker
 
 The Broker resource allows you to manage [AWS AmazonMQ Brokers](https://docs.aws.amazon.com/amazonmq/latest/userguide/) for messaging services in the cloud.
 

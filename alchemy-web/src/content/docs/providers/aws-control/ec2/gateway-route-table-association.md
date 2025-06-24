@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 GatewayRouteTableAssociations with Alchemy
+title: GatewayRouteTableAssociation
 description: Learn how to create, update, and manage AWS EC2 GatewayRouteTableAssociations using Alchemy Cloud Control.
 ---
-
-# GatewayRouteTableAssociation
 
 The GatewayRouteTableAssociation resource allows you to associate a gateway with a route table in your AWS EC2 environment, enabling traffic routing configurations. For more details, refer to the [AWS EC2 GatewayRouteTableAssociations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront MonitoringSubscriptions with Alchemy
+title: MonitoringSubscription
 description: Learn how to create, update, and manage AWS CloudFront MonitoringSubscriptions using Alchemy Cloud Control.
 ---
-
-# MonitoringSubscription
 
 The MonitoringSubscription resource lets you manage [AWS CloudFront MonitoringSubscriptions](https://docs.aws.amazon.com/cloudfront/latest/userguide/) to receive real-time monitoring metrics for your CloudFront distributions.
 

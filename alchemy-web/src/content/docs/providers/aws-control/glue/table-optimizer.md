@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue TableOptimizers with Alchemy
+title: TableOptimizer
 description: Learn how to create, update, and manage AWS Glue TableOptimizers using Alchemy Cloud Control.
 ---
-
-# TableOptimizer
 
 The TableOptimizer resource allows you to manage [AWS Glue TableOptimizers](https://docs.aws.amazon.com/glue/latest/userguide/) for optimizing table configurations in your Glue Data Catalog.
 

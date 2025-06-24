@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AccessAnalyzer Analyzers with Alchemy
+title: Analyzer
 description: Learn how to create, update, and manage AWS AccessAnalyzer Analyzers using Alchemy Cloud Control.
 ---
-
-# Analyzer
 
 The Analyzer resource allows you to manage [AWS AccessAnalyzer Analyzers](https://docs.aws.amazon.com/accessanalyzer/latest/userguide/) that help you identify potential resource access issues across your AWS environment.
 

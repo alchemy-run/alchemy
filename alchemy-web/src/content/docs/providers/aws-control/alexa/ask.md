@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Alexa ASKs with Alchemy
+title: ASK
 description: Learn how to create, update, and manage AWS Alexa ASKs using Alchemy Cloud Control.
 ---
-
-# ASK
 
 The ASK (Alexa Skill Kit) resource lets you create and manage [AWS Alexa ASKs](https://docs.aws.amazon.com/alexa/latest/userguide/) for developing voice-driven capabilities.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CleanRooms PrivacyBudgetTemplates with Alchemy
+title: PrivacyBudgetTemplate
 description: Learn how to create, update, and manage AWS CleanRooms PrivacyBudgetTemplates using Alchemy Cloud Control.
 ---
-
-# PrivacyBudgetTemplate
 
 The PrivacyBudgetTemplate resource allows you to manage privacy budget templates in AWS CleanRooms, which helps in maintaining compliance and control over data access. For more details, refer to the [AWS CleanRooms PrivacyBudgetTemplates documentation](https://docs.aws.amazon.com/cleanrooms/latest/userguide/).
 

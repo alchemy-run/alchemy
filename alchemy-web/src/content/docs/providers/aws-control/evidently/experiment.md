@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Evidently Experiments with Alchemy
+title: Experiment
 description: Learn how to create, update, and manage AWS Evidently Experiments using Alchemy Cloud Control.
 ---
-
-# Experiment
 
 The Experiment resource lets you manage [AWS Evidently Experiments](https://docs.aws.amazon.com/evidently/latest/userguide/) for A/B testing and feature management.
 

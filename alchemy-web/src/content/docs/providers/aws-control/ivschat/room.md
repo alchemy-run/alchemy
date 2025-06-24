@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IVSChat Rooms with Alchemy
+title: Room
 description: Learn how to create, update, and manage AWS IVSChat Rooms using Alchemy Cloud Control.
 ---
-
-# Room
 
 The Room resource allows you to manage [AWS IVSChat Rooms](https://docs.aws.amazon.com/ivschat/latest/userguide/) for real-time chat applications. This resource provides configuration options for message handling and logging.
 

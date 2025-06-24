@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataZone UserProfiles with Alchemy
+title: UserProfile
 description: Learn how to create, update, and manage AWS DataZone UserProfiles using Alchemy Cloud Control.
 ---
-
-# UserProfile
 
 The UserProfile resource lets you manage [AWS DataZone UserProfiles](https://docs.aws.amazon.com/datazone/latest/userguide/) within your AWS account, allowing you to define user types and their associated statuses.
 

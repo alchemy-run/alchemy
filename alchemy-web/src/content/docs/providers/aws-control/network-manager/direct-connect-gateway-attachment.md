@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager DirectConnectGatewayAttachments with Alchemy
+title: DirectConnectGatewayAttachment
 description: Learn how to create, update, and manage AWS NetworkManager DirectConnectGatewayAttachments using Alchemy Cloud Control.
 ---
-
-# DirectConnectGatewayAttachment
 
 The DirectConnectGatewayAttachment resource allows you to manage Direct Connect gateway attachments within AWS Network Manager. This resource facilitates the connection of your on-premises networks to AWS through Direct Connect. For more information, refer to the [AWS NetworkManager DirectConnectGatewayAttachments documentation](https://docs.aws.amazon.com/networkmanager/latest/userguide/).
 

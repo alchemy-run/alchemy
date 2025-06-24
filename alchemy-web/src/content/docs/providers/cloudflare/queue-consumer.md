@@ -1,9 +1,7 @@
 ---
-title: Cloudflare Queue Consumer
+title: QueueConsumer
 description: Learn how to configure Cloudflare Queue Consumers using Alchemy to process messages from your Cloudflare Queues.
 ---
-
-# QueueConsumer
 
 Creates a consumer for a [Cloudflare Queue](https://developers.cloudflare.com/queues/platform/consumers/) that processes messages using a Worker.
 

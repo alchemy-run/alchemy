@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue Triggers with Alchemy
+title: Trigger
 description: Learn how to create, update, and manage AWS Glue Triggers using Alchemy Cloud Control.
 ---
-
-# Trigger
 
 The Trigger resource lets you manage [AWS Glue Triggers](https://docs.aws.amazon.com/glue/latest/userguide/) which are used to start jobs based on specific events or schedules.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Omics SequenceStores with Alchemy
+title: SequenceStore
 description: Learn how to create, update, and manage AWS Omics SequenceStores using Alchemy Cloud Control.
 ---
-
-# SequenceStore
 
 The SequenceStore resource lets you manage [AWS Omics SequenceStores](https://docs.aws.amazon.com/omics/latest/userguide/) for storing and processing genomic data effectively.
 

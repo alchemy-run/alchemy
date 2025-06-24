@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Shield Protections with Alchemy
+title: Protection
 description: Learn how to create, update, and manage AWS Shield Protections using Alchemy Cloud Control.
 ---
-
-# Protection
 
 The Protection resource lets you manage [AWS Shield Protections](https://docs.aws.amazon.com/shield/latest/userguide/) to safeguard your applications against DDoS attacks and ensure high availability.
 

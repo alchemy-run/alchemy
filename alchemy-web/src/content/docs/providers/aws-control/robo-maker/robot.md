@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RoboMaker Robots with Alchemy
+title: Robot
 description: Learn how to create, update, and manage AWS RoboMaker Robots using Alchemy Cloud Control.
 ---
-
-# Robot
 
 The Robot resource allows you to create and manage [AWS RoboMaker Robots](https://docs.aws.amazon.com/robomaker/latest/userguide/). RoboMaker provides a platform for developing, testing, and deploying robotics applications at scale.
 

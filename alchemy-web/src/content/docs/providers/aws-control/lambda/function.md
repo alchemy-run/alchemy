@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lambda Functions with Alchemy
+title: Function
 description: Learn how to create, update, and manage AWS Lambda Functions using Alchemy Cloud Control.
 ---
-
-# Function
 
 The Function resource lets you manage [AWS Lambda Functions](https://docs.aws.amazon.com/lambda/latest/userguide/) and their configuration settings.
 

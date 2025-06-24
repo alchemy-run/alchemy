@@ -3,8 +3,6 @@ title: Image
 description: Build and manage Docker images with Alchemy
 ---
 
-# Image
-
 The `Image` resource allows you to build and manage Docker images from local Dockerfiles using Alchemy.
 
 ## Usage

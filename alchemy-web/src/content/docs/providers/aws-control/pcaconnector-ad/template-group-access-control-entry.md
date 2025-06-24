@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PCAConnectorAD TemplateGroupAccessControlEntrys with Alchemy
+title: TemplateGroupAccessControlEntry
 description: Learn how to create, update, and manage AWS PCAConnectorAD TemplateGroupAccessControlEntrys using Alchemy Cloud Control.
 ---
-
-# TemplateGroupAccessControlEntry
 
 The TemplateGroupAccessControlEntry resource allows you to manage access control entries (ACEs) for templates in AWS PCAConnectorAD, enabling fine-grained access control to your template resources. For more information, refer to the [AWS PCAConnectorAD TemplateGroupAccessControlEntrys](https://docs.aws.amazon.com/pcaconnectorad/latest/userguide/).
 

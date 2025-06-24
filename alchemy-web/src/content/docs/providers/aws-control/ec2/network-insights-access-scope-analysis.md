@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 NetworkInsightsAccessScopeAnalysiss with Alchemy
+title: NetworkInsightsAccessScopeAnalysis
 description: Learn how to create, update, and manage AWS EC2 NetworkInsightsAccessScopeAnalysiss using Alchemy Cloud Control.
 ---
-
-# NetworkInsightsAccessScopeAnalysis
 
 The NetworkInsightsAccessScopeAnalysis resource allows you to manage network insights access scope analyses in AWS EC2. This resource is crucial for evaluating access paths and their permissions for network configurations. For more details, refer to the official AWS documentation on [AWS EC2 NetworkInsightsAccessScopeAnalysiss](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

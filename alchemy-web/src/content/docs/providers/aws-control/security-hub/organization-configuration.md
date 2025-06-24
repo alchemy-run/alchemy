@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityHub OrganizationConfigurations with Alchemy
+title: OrganizationConfiguration
 description: Learn how to create, update, and manage AWS SecurityHub OrganizationConfigurations using Alchemy Cloud Control.
 ---
-
-# OrganizationConfiguration
 
 The OrganizationConfiguration resource lets you manage the configuration settings for AWS SecurityHub across multiple accounts within an organization. For more details, visit the [AWS SecurityHub OrganizationConfigurations documentation](https://docs.aws.amazon.com/securityhub/latest/userguide/).
 

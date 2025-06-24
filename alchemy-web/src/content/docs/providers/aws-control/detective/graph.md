@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Detective Graphs with Alchemy
+title: Graph
 description: Learn how to create, update, and manage AWS Detective Graphs using Alchemy Cloud Control.
 ---
-
-# Graph
 
 The Graph resource allows you to create and manage [AWS Detective Graphs](https://docs.aws.amazon.com/detective/latest/userguide/) that help you visualize and analyze security-related data across your AWS environment.
 

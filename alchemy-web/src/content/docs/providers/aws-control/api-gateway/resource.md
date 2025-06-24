@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway Resources with Alchemy
+title: Resource
 description: Learn how to create, update, and manage AWS ApiGateway Resources using Alchemy Cloud Control.
 ---
-
-# Resource
 
 The ApiGateway Resource allows you to manage [AWS ApiGateway Resources](https://docs.aws.amazon.com/apigateway/latest/userguide/) for creating and configuring API endpoints.
 

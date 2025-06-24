@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MSK Configurations with Alchemy
+title: Configuration
 description: Learn how to create, update, and manage AWS MSK Configurations using Alchemy Cloud Control.
 ---
-
-# Configuration
 
 The Configuration resource lets you manage [AWS MSK Configurations](https://docs.aws.amazon.com/msk/latest/userguide/) for your Apache Kafka clusters. This resource allows you to define and customize the settings used by your Kafka brokers.
 

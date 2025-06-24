@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataSync LocationNFSs with Alchemy
+title: LocationNFS
 description: Learn how to create, update, and manage AWS DataSync LocationNFSs using Alchemy Cloud Control.
 ---
-
-# LocationNFS
 
 The LocationNFS resource lets you manage [AWS DataSync LocationNFSs](https://docs.aws.amazon.com/datasync/latest/userguide/) for transferring data between your on-premises NFS servers and AWS storage services.
 

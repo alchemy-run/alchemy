@@ -1,9 +1,7 @@
 ---
-title: Managing AWS StepFunctions StateMachineAliases with Alchemy
+title: StateMachineAlias
 description: Learn how to create, update, and manage AWS StepFunctions StateMachineAliases using Alchemy Cloud Control.
 ---
-
-# StateMachineAlias
 
 The StateMachineAlias resource lets you create and manage [AWS StepFunctions StateMachineAliases](https://docs.aws.amazon.com/stepfunctions/latest/userguide/) for routing requests to specific versions of your state machines.
 

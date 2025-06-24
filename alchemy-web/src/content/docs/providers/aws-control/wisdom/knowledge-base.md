@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Wisdom KnowledgeBases with Alchemy
+title: KnowledgeBase
 description: Learn how to create, update, and manage AWS Wisdom KnowledgeBases using Alchemy Cloud Control.
 ---
-
-# KnowledgeBase
 
 The KnowledgeBase resource allows you to manage AWS Wisdom KnowledgeBases, which are used to store and retrieve information that can help support agents and customers. For more information, refer to the [AWS Wisdom KnowledgeBases documentation](https://docs.aws.amazon.com/wisdom/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RefactorSpaces Environments with Alchemy
+title: Environment
 description: Learn how to create, update, and manage AWS RefactorSpaces Environments using Alchemy Cloud Control.
 ---
-
-# Environment
 
 The Environment resource lets you manage [AWS RefactorSpaces Environments](https://docs.aws.amazon.com/refactorspaces/latest/userguide/) that facilitate the migration of applications to the cloud by providing a secure and isolated environment for your services.
 

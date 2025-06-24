@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WorkSpaces Workspaces with Alchemy
+title: Workspace
 description: Learn how to create, update, and manage AWS WorkSpaces Workspaces using Alchemy Cloud Control.
 ---
-
-# Workspace
 
 The Workspace resource allows you to create and manage [AWS WorkSpaces](https://docs.aws.amazon.com/workspaces/latest/userguide/) effectively. AWS WorkSpaces is a cloud-based service that allows you to provision virtual desktops for your users.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Bedrock Flows with Alchemy
+title: Flow
 description: Learn how to create, update, and manage AWS Bedrock Flows using Alchemy Cloud Control.
 ---
-
-# Flow
 
 The Flow resource allows you to create and manage [AWS Bedrock Flows](https://docs.aws.amazon.com/bedrock/latest/userguide/) which are essential for orchestrating AI model interactions and deployments.
 

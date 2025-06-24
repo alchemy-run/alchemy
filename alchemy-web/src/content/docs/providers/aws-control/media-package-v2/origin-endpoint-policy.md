@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaPackageV2 OriginEndpointPolicys with Alchemy
+title: OriginEndpointPolicy
 description: Learn how to create, update, and manage AWS MediaPackageV2 OriginEndpointPolicys using Alchemy Cloud Control.
 ---
-
-# OriginEndpointPolicy
 
 The OriginEndpointPolicy resource allows you to manage [AWS MediaPackageV2 OriginEndpointPolicys](https://docs.aws.amazon.com/mediapackagev2/latest/userguide/) which define access control and routing rules for your media content delivery. This resource is crucial for ensuring secure and efficient streaming of media content.
 

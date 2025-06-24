@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RedshiftServerless Workgroups with Alchemy
+title: Workgroup
 description: Learn how to create, update, and manage AWS RedshiftServerless Workgroups using Alchemy Cloud Control.
 ---
-
-# Workgroup
 
 The Workgroup resource lets you manage [AWS RedshiftServerless Workgroups](https://docs.aws.amazon.com/redshiftserverless/latest/userguide/) and their configuration settings for serverless data warehousing.
 

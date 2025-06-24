@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront KeyGroups with Alchemy
+title: KeyGroup
 description: Learn how to create, update, and manage AWS CloudFront KeyGroups using Alchemy Cloud Control.
 ---
-
-# KeyGroup
 
 The KeyGroup resource allows you to manage [AWS CloudFront KeyGroups](https://docs.aws.amazon.com/cloudfront/latest/userguide/) that specify a set of public keys used for signed URLs and signed cookies.
 

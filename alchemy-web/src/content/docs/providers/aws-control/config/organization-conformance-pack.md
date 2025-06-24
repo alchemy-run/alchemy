@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Config OrganizationConformancePacks with Alchemy
+title: OrganizationConformancePack
 description: Learn how to create, update, and manage AWS Config OrganizationConformancePacks using Alchemy Cloud Control.
 ---
-
-# OrganizationConformancePack
 
 The OrganizationConformancePack resource allows you to manage AWS Config Organization Conformance Packs, which are collections of AWS Config rules and remediation actions that can be applied across multiple accounts in an AWS Organization. For more details, refer to the [AWS Config OrganizationConformancePacks documentation](https://docs.aws.amazon.com/config/latest/userguide/).
 

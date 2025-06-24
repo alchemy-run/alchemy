@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkFirewall RuleGroups with Alchemy
+title: RuleGroup
 description: Learn how to create, update, and manage AWS NetworkFirewall RuleGroups using Alchemy Cloud Control.
 ---
-
-# RuleGroup
 
 The RuleGroup resource allows you to manage [AWS NetworkFirewall RuleGroups](https://docs.aws.amazon.com/networkfirewall/latest/userguide/) for creating and applying firewall rules to your network traffic.
 

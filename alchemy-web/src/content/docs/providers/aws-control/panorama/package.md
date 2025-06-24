@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Panorama Packages with Alchemy
+title: Package
 description: Learn how to create, update, and manage AWS Panorama Packages using Alchemy Cloud Control.
 ---
-
-# Package
 
 The Package resource allows you to create, manage, and deploy [AWS Panorama Packages](https://docs.aws.amazon.com/panorama/latest/userguide/) for edge computing applications. These packages can contain machine learning models and other assets that are deployed to AWS Panorama devices.
 

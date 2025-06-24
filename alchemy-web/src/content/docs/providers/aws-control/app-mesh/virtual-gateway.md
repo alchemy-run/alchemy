@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppMesh VirtualGateways with Alchemy
+title: VirtualGateway
 description: Learn how to create, update, and manage AWS AppMesh VirtualGateways using Alchemy Cloud Control.
 ---
-
-# VirtualGateway
 
 The VirtualGateway resource allows you to manage [AWS AppMesh VirtualGateways](https://docs.aws.amazon.com/appmesh/latest/userguide/) that facilitate communication between services across multiple meshes.
 

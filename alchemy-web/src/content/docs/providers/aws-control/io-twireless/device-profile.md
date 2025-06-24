@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTWireless DeviceProfiles with Alchemy
+title: DeviceProfile
 description: Learn how to create, update, and manage AWS IoTWireless DeviceProfiles using Alchemy Cloud Control.
 ---
-
-# DeviceProfile
 
 The DeviceProfile resource allows you to manage [AWS IoTWireless DeviceProfiles](https://docs.aws.amazon.com/iotwireless/latest/userguide/) which define the configuration settings for devices that connect to AWS IoT services.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FSx DataRepositoryAssociations with Alchemy
+title: DataRepositoryAssociation
 description: Learn how to create, update, and manage AWS FSx DataRepositoryAssociations using Alchemy Cloud Control.
 ---
-
-# DataRepositoryAssociation
 
 The DataRepositoryAssociation resource allows you to manage associations between an FSx file system and an Amazon S3 data repository. For more details, refer to the [AWS FSx DataRepositoryAssociations documentation](https://docs.aws.amazon.com/fsx/latest/userguide/).
 

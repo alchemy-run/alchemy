@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppFlow Flows with Alchemy
+title: Flow
 description: Learn how to create, update, and manage AWS AppFlow Flows using Alchemy Cloud Control.
 ---
-
-# Flow
 
 The Flow resource lets you manage [AWS AppFlow Flows](https://docs.aws.amazon.com/appflow/latest/userguide/) for transferring data between various services securely and efficiently.
 

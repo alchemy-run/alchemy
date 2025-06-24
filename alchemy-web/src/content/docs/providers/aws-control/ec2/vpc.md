@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VPCs with Alchemy
+title: VPC
 description: Learn how to create, update, and manage AWS EC2 VPCs using Alchemy Cloud Control.
 ---
-
-# VPC
 
 The VPC resource lets you create and manage [AWS EC2 VPCs](https://docs.aws.amazon.com/ec2/latest/userguide/) to isolate your AWS resources in a virtual network.
 

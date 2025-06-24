@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VpcLattice ServiceNetworkServiceAssociations with Alchemy
+title: ServiceNetworkServiceAssociation
 description: Learn how to create, update, and manage AWS VpcLattice ServiceNetworkServiceAssociations using Alchemy Cloud Control.
 ---
-
-# ServiceNetworkServiceAssociation
 
 The ServiceNetworkServiceAssociation resource allows you to manage associations between services and service networks in AWS VPC Lattice. This resource helps in organizing and controlling the flow of traffic between services. For more information, refer to the [AWS VpcLattice ServiceNetworkServiceAssociations documentation](https://docs.aws.amazon.com/vpclattice/latest/userguide/).
 

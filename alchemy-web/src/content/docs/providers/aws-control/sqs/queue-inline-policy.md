@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SQS QueueInlinePolicys with Alchemy
+title: QueueInlinePolicy
 description: Learn how to create, update, and manage AWS SQS QueueInlinePolicys using Alchemy Cloud Control.
 ---
-
-# QueueInlinePolicy
 
 The QueueInlinePolicy resource allows you to attach inline IAM policies to Amazon SQS queues, providing fine-grained access control for the queue. For more information, refer to the [AWS SQS QueueInlinePolicys documentation](https://docs.aws.amazon.com/sqs/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaLive EventBridgeRuleTemplateGroups with Alchemy
+title: EventBridgeRuleTemplateGroup
 description: Learn how to create, update, and manage AWS MediaLive EventBridgeRuleTemplateGroups using Alchemy Cloud Control.
 ---
-
-# EventBridgeRuleTemplateGroup
 
 The EventBridgeRuleTemplateGroup resource allows you to manage groups of AWS MediaLive EventBridge rule templates. This resource is essential for organizing and automating media workflows. For more information, refer to the [AWS MediaLive EventBridgeRuleTemplateGroups](https://docs.aws.amazon.com/medialive/latest/userguide/).
 

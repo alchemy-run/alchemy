@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT SoftwarePackages with Alchemy
+title: SoftwarePackage
 description: Learn how to create, update, and manage AWS IoT SoftwarePackages using Alchemy Cloud Control.
 ---
-
-# SoftwarePackage
 
 The SoftwarePackage resource lets you manage [AWS IoT SoftwarePackages](https://docs.aws.amazon.com/iot/latest/userguide/) for deploying and maintaining software on IoT devices.
 

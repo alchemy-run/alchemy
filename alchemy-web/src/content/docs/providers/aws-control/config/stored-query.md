@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Config StoredQuerys with Alchemy
+title: StoredQuery
 description: Learn how to create, update, and manage AWS Config StoredQuerys using Alchemy Cloud Control.
 ---
-
-# StoredQuery
 
 The StoredQuery resource allows you to manage [AWS Config StoredQuerys](https://docs.aws.amazon.com/config/latest/userguide/) that enable you to retrieve and analyze configuration data based on specific criteria.
 

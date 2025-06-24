@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EFS FileSystems with Alchemy
+title: FileSystem
 description: Learn how to create, update, and manage AWS EFS FileSystems using Alchemy Cloud Control.
 ---
-
-# FileSystem
 
 The FileSystem resource allows you to manage [AWS EFS FileSystems](https://docs.aws.amazon.com/efs/latest/userguide/) for scalable file storage in the AWS cloud.
 

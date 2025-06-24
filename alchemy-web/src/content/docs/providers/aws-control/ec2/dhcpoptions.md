@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 DHCPOptions with Alchemy
+title: DHCPOptions
 description: Learn how to create, update, and manage AWS EC2 DHCPOptions using Alchemy Cloud Control.
 ---
-
-# DHCPOptions
 
 The DHCPOptions resource allows you to manage [AWS EC2 DHCPOptions](https://docs.aws.amazon.com/ec2/latest/userguide/) for configuring DHCP settings in your VPC.
 

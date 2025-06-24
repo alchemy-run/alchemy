@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaConnect FlowVpcInterfaces with Alchemy
+title: FlowVpcInterface
 description: Learn how to create, update, and manage AWS MediaConnect FlowVpcInterfaces using Alchemy Cloud Control.
 ---
-
-# FlowVpcInterface
 
 The FlowVpcInterface resource allows you to manage [AWS MediaConnect FlowVpcInterfaces](https://docs.aws.amazon.com/mediaconnect/latest/userguide/) for your media workflows in a VPC.
 

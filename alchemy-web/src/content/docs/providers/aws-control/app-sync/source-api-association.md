@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppSync SourceApiAssociations with Alchemy
+title: SourceApiAssociation
 description: Learn how to create, update, and manage AWS AppSync SourceApiAssociations using Alchemy Cloud Control.
 ---
-
-# SourceApiAssociation
 
 The SourceApiAssociation resource allows you to manage [AWS AppSync Source API Associations](https://docs.aws.amazon.com/appsync/latest/userguide/), enabling you to link various APIs for enhanced data management and retrieval.
 

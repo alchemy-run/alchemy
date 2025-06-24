@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppStream Fleets with Alchemy
+title: Fleet
 description: Learn how to create, update, and manage AWS AppStream Fleets using Alchemy Cloud Control.
 ---
-
-# Fleet
 
 The Fleet resource lets you manage [AWS AppStream Fleets](https://docs.aws.amazon.com/appstream/latest/userguide/) which are used to deliver applications to users through a secure, scalable environment.
 

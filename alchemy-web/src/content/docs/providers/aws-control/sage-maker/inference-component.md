@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker InferenceComponents with Alchemy
+title: InferenceComponent
 description: Learn how to create, update, and manage AWS SageMaker InferenceComponents using Alchemy Cloud Control.
 ---
-
-# InferenceComponent
 
 The InferenceComponent resource allows you to manage [AWS SageMaker InferenceComponents](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for deploying machine learning models and serving predictions.
 

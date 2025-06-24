@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AmplifyUIBuilder Forms with Alchemy
+title: Form
 description: Learn how to create, update, and manage AWS AmplifyUIBuilder Forms using Alchemy Cloud Control.
 ---
-
-# Form
 
 The Form resource allows you to create and manage forms in AWS Amplify UI Builder, enabling developers to build custom user interfaces. For more details, refer to the [AWS AmplifyUIBuilder Forms documentation](https://docs.aws.amazon.com/amplifyuibuilder/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker UserProfiles with Alchemy
+title: UserProfile
 description: Learn how to create, update, and manage AWS SageMaker UserProfiles using Alchemy Cloud Control.
 ---
-
-# UserProfile
 
 The UserProfile resource lets you manage [AWS SageMaker UserProfiles](https://docs.aws.amazon.com/sagemaker/latest/userguide/) which are used to provide a unique environment for each user in a SageMaker domain.
 

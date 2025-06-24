@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Omics ReferenceStores with Alchemy
+title: ReferenceStore
 description: Learn how to create, update, and manage AWS Omics ReferenceStores using Alchemy Cloud Control.
 ---
-
-# ReferenceStore
 
 The ReferenceStore resource allows you to manage [AWS Omics ReferenceStores](https://docs.aws.amazon.com/omics/latest/userguide/) for storing and organizing reference data used in genomics workflows.
 

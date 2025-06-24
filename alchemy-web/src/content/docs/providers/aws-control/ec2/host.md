@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 Hosts with Alchemy
+title: Host
 description: Learn how to create, update, and manage AWS EC2 Hosts using Alchemy Cloud Control.
 ---
-
-# Host
 
 The Host resource allows you to manage [AWS EC2 Hosts](https://docs.aws.amazon.com/ec2/latest/userguide/) for your compute resources, providing options for instance family, auto placement, and recovery settings.
 

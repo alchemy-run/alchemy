@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog Portfolios with Alchemy
+title: Portfolio
 description: Learn how to create, update, and manage AWS ServiceCatalog Portfolios using Alchemy Cloud Control.
 ---
-
-# Portfolio
 
 The Portfolio resource allows you to manage [AWS ServiceCatalog Portfolios](https://docs.aws.amazon.com/servicecatalog/latest/userguide/) for organizing and managing product offerings within your AWS environment.
 

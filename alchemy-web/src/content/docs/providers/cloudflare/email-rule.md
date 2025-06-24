@@ -1,9 +1,7 @@
 ---
-title: Cloudflare Email Rule
+title: EmailRule
 description: Learn how to create and manage email routing rules that define how emails are processed in Cloudflare.
 ---
-
-# EmailRule
 
 Create email routing rules that define how emails sent to your domain are processed. Rules are evaluated in priority order (lower number = higher priority).
 

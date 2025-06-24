@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT ProvisioningTemplates with Alchemy
+title: ProvisioningTemplate
 description: Learn how to create, update, and manage AWS IoT ProvisioningTemplates using Alchemy Cloud Control.
 ---
-
-# ProvisioningTemplate
 
 The ProvisioningTemplate resource allows you to create and manage [AWS IoT ProvisioningTemplates](https://docs.aws.amazon.com/iot/latest/userguide/) that define how IoT devices are provisioned in AWS IoT.
 

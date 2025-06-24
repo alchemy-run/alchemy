@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeDeploy DeploymentConfigs with Alchemy
+title: DeploymentConfig
 description: Learn how to create, update, and manage AWS CodeDeploy DeploymentConfigs using Alchemy Cloud Control.
 ---
-
-# DeploymentConfig
 
 The DeploymentConfig resource lets you manage [AWS CodeDeploy DeploymentConfigs](https://docs.aws.amazon.com/codedeploy/latest/userguide/) for controlling deployment strategies and settings.
 

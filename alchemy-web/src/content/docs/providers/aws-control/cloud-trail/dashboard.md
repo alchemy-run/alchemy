@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudTrail Dashboards with Alchemy
+title: Dashboard
 description: Learn how to create, update, and manage AWS CloudTrail Dashboards using Alchemy Cloud Control.
 ---
-
-# Dashboard
 
 The Dashboard resource lets you manage [AWS CloudTrail Dashboards](https://docs.aws.amazon.com/cloudtrail/latest/userguide/) which provide a customizable view of CloudTrail event data. You can visualize your AWS account activity and gain insights into your resources.
 

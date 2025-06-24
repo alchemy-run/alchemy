@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppSync Apis with Alchemy
+title: Api
 description: Learn how to create, update, and manage AWS AppSync Apis using Alchemy Cloud Control.
 ---
-
-# Api
 
 The Api resource allows you to manage [AWS AppSync Apis](https://docs.aws.amazon.com/appsync/latest/userguide/) for building scalable GraphQL applications. With AppSync, you can easily connect your applications to data sources, manage real-time subscriptions, and handle offline scenarios.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Batch JobQueues with Alchemy
+title: JobQueue
 description: Learn how to create, update, and manage AWS Batch JobQueues using Alchemy Cloud Control.
 ---
-
-# JobQueue
 
 The JobQueue resource allows you to manage [AWS Batch JobQueues](https://docs.aws.amazon.com/batch/latest/userguide/) which are used for submitting and managing jobs in AWS Batch. 
 

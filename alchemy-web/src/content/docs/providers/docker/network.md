@@ -3,8 +3,6 @@ title: Network
 description: Create and manage Docker networks with Alchemy
 ---
 
-# Network
-
 The `Network` resource allows you to create and manage Docker networks using Alchemy, enabling container-to-container communication.
 
 ## Usage

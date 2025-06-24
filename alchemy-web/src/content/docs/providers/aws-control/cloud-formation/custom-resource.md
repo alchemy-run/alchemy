@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation CustomResources with Alchemy
+title: CustomResource
 description: Learn how to create, update, and manage AWS CloudFormation CustomResources using Alchemy Cloud Control.
 ---
-
-# CustomResource
 
 The CustomResource resource allows you to define custom actions and manage resources within AWS CloudFormation. For more details, refer to the [AWS CloudFormation CustomResources documentation](https://docs.aws.amazon.com/cloudformation/latest/userguide/).
 

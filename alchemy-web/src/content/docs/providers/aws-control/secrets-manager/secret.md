@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecretsManager Secrets with Alchemy
+title: Secret
 description: Learn how to create, update, and manage AWS SecretsManager Secrets using Alchemy Cloud Control.
 ---
-
-# Secret
 
 The Secret resource allows you to manage [AWS SecretsManager Secrets](https://docs.aws.amazon.com/secretsmanager/latest/userguide/) for storing and retrieving sensitive information, such as API keys or passwords.
 

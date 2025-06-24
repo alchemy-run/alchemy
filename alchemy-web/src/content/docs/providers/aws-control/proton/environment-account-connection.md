@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Proton EnvironmentAccountConnections with Alchemy
+title: EnvironmentAccountConnection
 description: Learn how to create, update, and manage AWS Proton EnvironmentAccountConnections using Alchemy Cloud Control.
 ---
-
-# EnvironmentAccountConnection
 
 The EnvironmentAccountConnection resource lets you manage [AWS Proton EnvironmentAccountConnections](https://docs.aws.amazon.com/proton/latest/userguide/) that facilitate the connection between a management account and an environment account.
 

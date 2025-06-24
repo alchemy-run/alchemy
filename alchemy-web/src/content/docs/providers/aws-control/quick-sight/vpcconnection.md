@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QuickSight VPCConnections with Alchemy
+title: VPCConnection
 description: Learn how to create, update, and manage AWS QuickSight VPCConnections using Alchemy Cloud Control.
 ---
-
-# VPCConnection
 
 The VPCConnection resource allows you to manage [AWS QuickSight VPCConnections](https://docs.aws.amazon.com/quicksight/latest/userguide/) for securely connecting QuickSight to your VPC resources.
 

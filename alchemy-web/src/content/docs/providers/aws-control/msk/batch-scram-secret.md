@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MSK BatchScramSecrets with Alchemy
+title: BatchScramSecret
 description: Learn how to create, update, and manage AWS MSK BatchScramSecrets using Alchemy Cloud Control.
 ---
-
-# BatchScramSecret
 
 The BatchScramSecret resource allows you to manage [AWS MSK BatchScramSecrets](https://docs.aws.amazon.com/msk/latest/userguide/) which are used for SCRAM authentication in Amazon MSK clusters.
 

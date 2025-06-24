@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS DBProxys with Alchemy
+title: DBProxy
 description: Learn how to create, update, and manage AWS RDS DBProxys using Alchemy Cloud Control.
 ---
-
-# DBProxy
 
 The DBProxy resource lets you manage [AWS RDS DBProxys](https://docs.aws.amazon.com/rds/latest/userguide/) for improved application scalability and performance by pooling and sharing database connections.
 

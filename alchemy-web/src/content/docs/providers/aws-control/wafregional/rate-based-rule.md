@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAFRegional RateBasedRules with Alchemy
+title: RateBasedRule
 description: Learn how to create, update, and manage AWS WAFRegional RateBasedRules using Alchemy Cloud Control.
 ---
-
-# RateBasedRule
 
 The RateBasedRule resource allows you to create and manage [AWS WAFRegional RateBasedRules](https://docs.aws.amazon.com/wafregional/latest/userguide/), which help protect your applications from excessive requests from a single IP address.
 

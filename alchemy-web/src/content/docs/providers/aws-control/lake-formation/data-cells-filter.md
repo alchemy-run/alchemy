@@ -1,9 +1,7 @@
 ---
-title: Managing AWS LakeFormation DataCellsFilters with Alchemy
+title: DataCellsFilter
 description: Learn how to create, update, and manage AWS LakeFormation DataCellsFilters using Alchemy Cloud Control.
 ---
-
-# DataCellsFilter
 
 The DataCellsFilter resource in AWS LakeFormation allows you to manage fine-grained access control for data stored in tables. By creating data cell filters, you can specify which data users can see, enhancing security and compliance. For more detailed information, refer to the [AWS LakeFormation DataCellsFilters documentation](https://docs.aws.amazon.com/lakeformation/latest/userguide/).
 

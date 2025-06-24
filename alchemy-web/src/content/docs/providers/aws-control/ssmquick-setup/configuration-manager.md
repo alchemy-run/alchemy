@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSMQuickSetup ConfigurationManagers with Alchemy
+title: ConfigurationManager
 description: Learn how to create, update, and manage AWS SSMQuickSetup ConfigurationManagers using Alchemy Cloud Control.
 ---
-
-# ConfigurationManager
 
 The ConfigurationManager resource allows you to create and manage AWS SSMQuickSetup Configuration Managers, which help in setting up and managing configurations for AWS resources. For more details, please refer to the [AWS SSMQuickSetup ConfigurationManagers documentation](https://docs.aws.amazon.com/ssmquicksetup/latest/userguide/).
 

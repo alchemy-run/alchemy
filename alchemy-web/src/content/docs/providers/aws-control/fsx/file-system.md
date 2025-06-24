@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FSx FileSystems with Alchemy
+title: FileSystem
 description: Learn how to create, update, and manage AWS FSx FileSystems using Alchemy Cloud Control.
 ---
-
-# FileSystem
 
 The FileSystem resource lets you manage [AWS FSx FileSystems](https://docs.aws.amazon.com/fsx/latest/userguide/) for your applications, providing fully managed file storage solutions that can be accessed via common file protocols.
 

@@ -4,8 +4,6 @@ title: Redwood
 description: Quick guide to initializing and deploying a RedwoodJS application with D1 database to Cloudflare Workers using Alchemy.
 ---
 
-# Redwood
-
 This guide shows how to initialize and deploy a RedwoodJS application to Cloudflare using Alchemy.
 
 ## Init

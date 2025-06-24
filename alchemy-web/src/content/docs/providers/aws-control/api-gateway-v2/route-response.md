@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGatewayV2 RouteResponses with Alchemy
+title: RouteResponse
 description: Learn how to create, update, and manage AWS ApiGatewayV2 RouteResponses using Alchemy Cloud Control.
 ---
-
-# RouteResponse
 
 The RouteResponse resource lets you manage AWS ApiGatewayV2 RouteResponses, which define how API responses are handled and formatted. For more details, you can refer to the [AWS ApiGatewayV2 RouteResponses](https://docs.aws.amazon.com/apigatewayv2/latest/userguide/) documentation.
 

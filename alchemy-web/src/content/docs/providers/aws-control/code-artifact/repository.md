@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeArtifact Repositorys with Alchemy
+title: Repository
 description: Learn how to create, update, and manage AWS CodeArtifact Repositorys using Alchemy Cloud Control.
 ---
-
-# Repository
 
 The Repository resource lets you manage [AWS CodeArtifact Repositorys](https://docs.aws.amazon.com/codeartifact/latest/userguide/) for storing and retrieving packages.
 

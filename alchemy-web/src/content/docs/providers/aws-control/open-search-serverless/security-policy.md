@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpenSearchServerless SecurityPolicys with Alchemy
+title: SecurityPolicy
 description: Learn how to create, update, and manage AWS OpenSearchServerless SecurityPolicys using Alchemy Cloud Control.
 ---
-
-# SecurityPolicy
 
 The SecurityPolicy resource lets you manage [AWS OpenSearchServerless SecurityPolicys](https://docs.aws.amazon.com/opensearchserverless/latest/userguide/) for controlling access to your OpenSearch resources.
 

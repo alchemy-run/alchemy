@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ECR RegistryPolicys with Alchemy
+title: RegistryPolicy
 description: Learn how to create, update, and manage AWS ECR RegistryPolicys using Alchemy Cloud Control.
 ---
-
-# RegistryPolicy
 
 The RegistryPolicy resource allows you to manage the registry policies for Amazon Elastic Container Registry (ECR), enabling you to set permissions for your container images. For more information, visit the [AWS ECR RegistryPolicys documentation](https://docs.aws.amazon.com/ecr/latest/userguide/).
 

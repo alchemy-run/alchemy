@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Kendra DataSources with Alchemy
+title: DataSource
 description: Learn how to create, update, and manage AWS Kendra DataSources using Alchemy Cloud Control.
 ---
-
-# DataSource
 
 The DataSource resource allows you to manage [AWS Kendra DataSources](https://docs.aws.amazon.com/kendra/latest/userguide/) to ingest data from various sources into your Kendra index.
 

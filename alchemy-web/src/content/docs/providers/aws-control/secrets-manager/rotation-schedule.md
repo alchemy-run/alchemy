@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecretsManager RotationSchedules with Alchemy
+title: RotationSchedule
 description: Learn how to create, update, and manage AWS SecretsManager RotationSchedules using Alchemy Cloud Control.
 ---
-
-# RotationSchedule
 
 The RotationSchedule resource allows you to manage [AWS SecretsManager RotationSchedules](https://docs.aws.amazon.com/secretsmanager/latest/userguide/) to automate the rotation of secrets in AWS Secrets Manager.
 

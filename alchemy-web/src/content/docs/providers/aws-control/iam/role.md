@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM Roles with Alchemy
+title: Role
 description: Learn how to create, update, and manage AWS IAM Roles using Alchemy Cloud Control.
 ---
-
-# Role
 
 The Role resource allows you to create and manage [AWS IAM Roles](https://docs.aws.amazon.com/iam/latest/userguide/) which define a set of permissions for making AWS service requests. IAM roles can be assumed by AWS services, users, or applications.
 

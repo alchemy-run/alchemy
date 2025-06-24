@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IdentityStore Groups with Alchemy
+title: Group
 description: Learn how to create, update, and manage AWS IdentityStore Groups using Alchemy Cloud Control.
 ---
-
-# Group
 
 The Group resource lets you manage [AWS IdentityStore Groups](https://docs.aws.amazon.com/identitystore/latest/userguide/) for organizing users and managing their permissions within your AWS environment.
 

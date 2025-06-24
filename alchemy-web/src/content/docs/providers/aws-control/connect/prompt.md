@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect Prompts with Alchemy
+title: Prompt
 description: Learn how to create, update, and manage AWS Connect Prompts using Alchemy Cloud Control.
 ---
-
-# Prompt
 
 The Prompt resource allows you to manage [AWS Connect Prompts](https://docs.aws.amazon.com/connect/latest/userguide/) used in contact flows for customer interactions. Prompts can include audio files that are stored in Amazon S3, enabling customized audio responses during customer interactions.
 

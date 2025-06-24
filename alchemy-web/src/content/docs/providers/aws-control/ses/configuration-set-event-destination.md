@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES ConfigurationSetEventDestinations with Alchemy
+title: ConfigurationSetEventDestination
 description: Learn how to create, update, and manage AWS SES ConfigurationSetEventDestinations using Alchemy Cloud Control.
 ---
-
-# ConfigurationSetEventDestination
 
 The `ConfigurationSetEventDestination` resource lets you manage event destinations for AWS Simple Email Service (SES) configuration sets. This enables you to track events such as bounces, complaints, and deliveries. For more details, refer to the [AWS SES ConfigurationSetEventDestinations documentation](https://docs.aws.amazon.com/ses/latest/userguide/).
 

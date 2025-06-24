@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM UserPolicys with Alchemy
+title: UserPolicy
 description: Learn how to create, update, and manage AWS IAM UserPolicys using Alchemy Cloud Control.
 ---
-
-# UserPolicy
 
 The UserPolicy resource allows you to manage [AWS IAM User Policies](https://docs.aws.amazon.com/iam/latest/userguide/) that grant permissions to AWS IAM users. This resource enables you to define fine-grained access control to AWS services and resources.
 

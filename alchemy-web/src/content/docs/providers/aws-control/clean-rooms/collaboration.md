@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CleanRooms Collaborations with Alchemy
+title: Collaboration
 description: Learn how to create, update, and manage AWS CleanRooms Collaborations using Alchemy Cloud Control.
 ---
-
-# Collaboration
 
 The Collaboration resource allows you to manage [AWS CleanRooms Collaborations](https://docs.aws.amazon.com/cleanrooms/latest/userguide/) for analyzing and sharing sensitive data securely among multiple parties.
 

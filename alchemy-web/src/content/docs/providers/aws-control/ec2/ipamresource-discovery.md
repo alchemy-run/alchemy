@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 IPAMResourceDiscoverys with Alchemy
+title: IPAMResourceDiscovery
 description: Learn how to create, update, and manage AWS EC2 IPAMResourceDiscoverys using Alchemy Cloud Control.
 ---
-
-# IPAMResourceDiscovery
 
 The IPAMResourceDiscovery resource allows you to manage IP Address Management (IPAM) resource discovery settings in AWS EC2. For more information, refer to the [AWS EC2 IPAMResourceDiscoverys documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

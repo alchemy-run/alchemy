@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cassandra Types with Alchemy
+title: Type
 description: Learn how to create, update, and manage AWS Cassandra Types using Alchemy Cloud Control.
 ---
-
-# Type
 
 The Type resource allows you to manage [AWS Cassandra Types](https://docs.aws.amazon.com/cassandra/latest/userguide/) within your keyspaces, enabling the definition of custom data structures in your Cassandra databases.
 

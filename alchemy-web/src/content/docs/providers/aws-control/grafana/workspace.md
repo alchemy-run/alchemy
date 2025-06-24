@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Grafana Workspaces with Alchemy
+title: Workspace
 description: Learn how to create, update, and manage AWS Grafana Workspaces using Alchemy Cloud Control.
 ---
-
-# Workspace
 
 The Workspace resource lets you manage [AWS Grafana Workspaces](https://docs.aws.amazon.com/grafana/latest/userguide/) and their configuration settings.
 

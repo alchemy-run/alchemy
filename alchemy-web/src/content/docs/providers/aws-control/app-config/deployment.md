@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppConfig Deployments with Alchemy
+title: Deployment
 description: Learn how to create, update, and manage AWS AppConfig Deployments using Alchemy Cloud Control.
 ---
-
-# Deployment
 
 The Deployment resource allows you to manage [AWS AppConfig Deployments](https://docs.aws.amazon.com/appconfig/latest/userguide/) for your applications, enabling you to deploy application configurations to your environments efficiently.
 

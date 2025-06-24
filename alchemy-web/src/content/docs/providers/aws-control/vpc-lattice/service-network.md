@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VpcLattice ServiceNetworks with Alchemy
+title: ServiceNetwork
 description: Learn how to create, update, and manage AWS VpcLattice ServiceNetworks using Alchemy Cloud Control.
 ---
-
-# ServiceNetwork
 
 The ServiceNetwork resource allows you to manage [AWS VpcLattice ServiceNetworks](https://docs.aws.amazon.com/vpclattice/latest/userguide/) that facilitate service communication and discovery across VPCs.
 

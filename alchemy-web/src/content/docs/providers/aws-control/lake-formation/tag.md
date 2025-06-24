@@ -1,9 +1,7 @@
 ---
-title: Managing AWS LakeFormation Tags with Alchemy
+title: Tag
 description: Learn how to create, update, and manage AWS LakeFormation Tags using Alchemy Cloud Control.
 ---
-
-# Tag
 
 The Tag resource lets you manage [AWS LakeFormation Tags](https://docs.aws.amazon.com/lakeformation/latest/userguide/) which are used to categorize data in AWS LakeFormation for better management and governance.
 

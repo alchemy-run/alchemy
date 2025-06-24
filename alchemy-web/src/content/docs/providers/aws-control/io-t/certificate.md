@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT Certificates with Alchemy
+title: Certificate
 description: Learn how to create, update, and manage AWS IoT Certificates using Alchemy Cloud Control.
 ---
-
-# Certificate
 
 The Certificate resource allows you to manage [AWS IoT Certificates](https://docs.aws.amazon.com/iot/latest/userguide/) used for secure communication with AWS IoT services.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass FunctionDefinitionVersions with Alchemy
+title: FunctionDefinitionVersion
 description: Learn how to create, update, and manage AWS Greengrass FunctionDefinitionVersions using Alchemy Cloud Control.
 ---
-
-# FunctionDefinitionVersion
 
 The FunctionDefinitionVersion resource allows you to manage [AWS Greengrass Function Definition Versions](https://docs.aws.amazon.com/greengrass/latest/userguide/) which define the functions to be executed on Greengrass core devices.
 

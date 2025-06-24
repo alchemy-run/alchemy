@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VpcLattice ResourcePolicys with Alchemy
+title: ResourcePolicy
 description: Learn how to create, update, and manage AWS VpcLattice ResourcePolicys using Alchemy Cloud Control.
 ---
-
-# ResourcePolicy
 
 The ResourcePolicy resource lets you manage AWS VpcLattice ResourcePolicys to control access to your resources. For more information, refer to the [AWS VpcLattice ResourcePolicys documentation](https://docs.aws.amazon.com/vpclattice/latest/userguide/).
 

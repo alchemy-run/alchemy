@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataSync LocationFSxONTAPs with Alchemy
+title: LocationFSxONTAP
 description: Learn how to create, update, and manage AWS DataSync LocationFSxONTAPs using Alchemy Cloud Control.
 ---
-
-# LocationFSxONTAP
 
 The LocationFSxONTAP resource allows you to manage [AWS DataSync Location FSx for ONTAP](https://docs.aws.amazon.com/datasync/latest/userguide/) configurations, enabling data transfer between on-premises storage and AWS cloud storage.
 

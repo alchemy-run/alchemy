@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Bedrock DataAutomationProjects with Alchemy
+title: DataAutomationProject
 description: Learn how to create, update, and manage AWS Bedrock DataAutomationProjects using Alchemy Cloud Control.
 ---
-
-# DataAutomationProject
 
 The DataAutomationProject resource lets you manage [AWS Bedrock DataAutomationProjects](https://docs.aws.amazon.com/bedrock/latest/userguide/) for automating data processing and workflows.
 

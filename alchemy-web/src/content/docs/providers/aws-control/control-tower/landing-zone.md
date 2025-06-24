@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ControlTower LandingZones with Alchemy
+title: LandingZone
 description: Learn how to create, update, and manage AWS ControlTower LandingZones using Alchemy Cloud Control.
 ---
-
-# LandingZone
 
 The LandingZone resource allows you to create, manage, and configure [AWS ControlTower LandingZones](https://docs.aws.amazon.com/controltower/latest/userguide/) for your AWS accounts, providing a secure and compliant environment for governance.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Comprehend Flywheels with Alchemy
+title: Flywheel
 description: Learn how to create, update, and manage AWS Comprehend Flywheels using Alchemy Cloud Control.
 ---
-
-# Flywheel
 
 The Flywheel resource allows you to manage [AWS Comprehend Flywheels](https://docs.aws.amazon.com/comprehend/latest/userguide/) which are used for automating the model training and deployment process in AWS Comprehend.
 

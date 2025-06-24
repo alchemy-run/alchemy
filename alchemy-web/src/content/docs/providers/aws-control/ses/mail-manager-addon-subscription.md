@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES MailManagerAddonSubscriptions with Alchemy
+title: MailManagerAddonSubscription
 description: Learn how to create, update, and manage AWS SES MailManagerAddonSubscriptions using Alchemy Cloud Control.
 ---
-
-# MailManagerAddonSubscription
 
 The MailManagerAddonSubscription resource allows you to manage subscriptions to various add-ons for Amazon Simple Email Service (SES). This resource is part of the AWS SES service, enabling you to enhance your email capabilities with additional features. For more details, refer to the official AWS documentation: [AWS SES MailManagerAddonSubscriptions](https://docs.aws.amazon.com/ses/latest/userguide/).
 

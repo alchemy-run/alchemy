@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Config OrganizationConfigRules with Alchemy
+title: OrganizationConfigRule
 description: Learn how to create, update, and manage AWS Config OrganizationConfigRules using Alchemy Cloud Control.
 ---
-
-# OrganizationConfigRule
 
 The OrganizationConfigRule resource allows you to create and manage AWS Config Organization Config Rules, which are used to evaluate whether your AWS resources comply with specified configurations. For more information, refer to the [AWS Config OrganizationConfigRules documentation](https://docs.aws.amazon.com/config/latest/userguide/).
 

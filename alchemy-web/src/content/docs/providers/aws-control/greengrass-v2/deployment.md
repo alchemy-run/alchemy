@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GreengrassV2 Deployments with Alchemy
+title: Deployment
 description: Learn how to create, update, and manage AWS GreengrassV2 Deployments using Alchemy Cloud Control.
 ---
-
-# Deployment
 
 The Deployment resource allows you to manage [AWS GreengrassV2 Deployments](https://docs.aws.amazon.com/greengrassv2/latest/userguide/) for deploying components to IoT devices.
 

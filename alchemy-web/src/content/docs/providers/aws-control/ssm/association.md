@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSM Associations with Alchemy
+title: Association
 description: Learn how to create, update, and manage AWS SSM Associations using Alchemy Cloud Control.
 ---
-
-# Association
 
 The Association resource lets you create, update, and manage [AWS SSM Associations](https://docs.aws.amazon.com/ssm/latest/userguide/) which define a set of actions to be performed on specified managed instances.
 

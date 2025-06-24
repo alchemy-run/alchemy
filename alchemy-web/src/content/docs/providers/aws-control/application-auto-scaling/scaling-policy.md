@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApplicationAutoScaling ScalingPolicys with Alchemy
+title: ScalingPolicy
 description: Learn how to create, update, and manage AWS ApplicationAutoScaling ScalingPolicys using Alchemy Cloud Control.
 ---
-
-# ScalingPolicy
 
 The ScalingPolicy resource lets you manage [AWS ApplicationAutoScaling ScalingPolicys](https://docs.aws.amazon.com/applicationautoscaling/latest/userguide/) for automatically adjusting the capacity of scalable resources.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RolesAnywhere TrustAnchors with Alchemy
+title: TrustAnchor
 description: Learn how to create, update, and manage AWS RolesAnywhere TrustAnchors using Alchemy Cloud Control.
 ---
-
-# TrustAnchor
 
 The TrustAnchor resource lets you manage [AWS RolesAnywhere TrustAnchors](https://docs.aws.amazon.com/rolesanywhere/latest/userguide/) which are used to establish trust between AWS and external identities.
 

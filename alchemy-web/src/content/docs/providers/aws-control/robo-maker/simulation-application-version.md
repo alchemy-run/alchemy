@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RoboMaker SimulationApplicationVersions with Alchemy
+title: SimulationApplicationVersion
 description: Learn how to create, update, and manage AWS RoboMaker SimulationApplicationVersions using Alchemy Cloud Control.
 ---
-
-# SimulationApplicationVersion
 
 The `SimulationApplicationVersion` resource allows you to manage versions of your simulation applications in AWS RoboMaker. This resource is essential for deploying updates and maintaining different versions of your simulation applications. For more information, refer to the [AWS RoboMaker SimulationApplicationVersions documentation](https://docs.aws.amazon.com/robomaker/latest/userguide/).
 

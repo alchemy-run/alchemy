@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaPackageV2 OriginEndpoints with Alchemy
+title: OriginEndpoint
 description: Learn how to create, update, and manage AWS MediaPackageV2 OriginEndpoints using Alchemy Cloud Control.
 ---
-
-# OriginEndpoint
 
 The OriginEndpoint resource allows you to manage [AWS MediaPackageV2 OriginEndpoints](https://docs.aws.amazon.com/mediapackagev2/latest/userguide/) for delivering video content. This resource enables the configuration of various settings such as manifests, segmentation, and channel associations.
 

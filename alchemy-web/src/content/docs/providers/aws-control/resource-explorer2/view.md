@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ResourceExplorer2 Views with Alchemy
+title: View
 description: Learn how to create, update, and manage AWS ResourceExplorer2 Views using Alchemy Cloud Control.
 ---
-
-# View
 
 The View resource allows you to manage [AWS ResourceExplorer2 Views](https://docs.aws.amazon.com/resourceexplorer2/latest/userguide/) for searching and filtering resources in your AWS account.
 

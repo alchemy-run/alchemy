@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Synthetics Groups with Alchemy
+title: Group
 description: Learn how to create, update, and manage AWS Synthetics Groups using Alchemy Cloud Control.
 ---
-
-# Group
 
 The Group resource lets you manage [AWS Synthetics Groups](https://docs.aws.amazon.com/synthetics/latest/userguide/) for organizing and monitoring your canaries effectively.
 

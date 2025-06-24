@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VpcLattice TargetGroups with Alchemy
+title: TargetGroup
 description: Learn how to create, update, and manage AWS VpcLattice TargetGroups using Alchemy Cloud Control.
 ---
-
-# TargetGroup
 
 The TargetGroup resource allows you to manage [AWS VpcLattice TargetGroups](https://docs.aws.amazon.com/vpclattice/latest/userguide/) which are used for routing traffic to your services.
 

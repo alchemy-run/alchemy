@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GroundStation DataflowEndpointGroups with Alchemy
+title: DataflowEndpointGroup
 description: Learn how to create, update, and manage AWS GroundStation DataflowEndpointGroups using Alchemy Cloud Control.
 ---
-
-# DataflowEndpointGroup
 
 The DataflowEndpointGroup resource lets you manage [AWS GroundStation Dataflow Endpoint Groups](https://docs.aws.amazon.com/groundstation/latest/userguide/) which define the data flow configuration for satellite communications.
 

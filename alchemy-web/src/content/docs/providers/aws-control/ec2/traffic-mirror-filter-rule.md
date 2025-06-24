@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TrafficMirrorFilterRules with Alchemy
+title: TrafficMirrorFilterRule
 description: Learn how to create, update, and manage AWS EC2 TrafficMirrorFilterRules using Alchemy Cloud Control.
 ---
-
-# TrafficMirrorFilterRule
 
 The TrafficMirrorFilterRule resource lets you manage [AWS EC2 Traffic Mirror Filter Rules](https://docs.aws.amazon.com/ec2/latest/userguide/), which define the rules for mirroring network traffic to specific targets based on source and destination criteria.
 

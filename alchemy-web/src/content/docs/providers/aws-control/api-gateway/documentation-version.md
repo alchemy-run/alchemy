@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway DocumentationVersions with Alchemy
+title: DocumentationVersion
 description: Learn how to create, update, and manage AWS ApiGateway DocumentationVersions using Alchemy Cloud Control.
 ---
-
-# DocumentationVersion
 
 The DocumentationVersion resource allows you to manage [AWS ApiGateway DocumentationVersions](https://docs.aws.amazon.com/apigateway/latest/userguide/) for your APIs, enabling you to document various stages of your API development.
 

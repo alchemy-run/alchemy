@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES ReceiptFilters with Alchemy
+title: ReceiptFilter
 description: Learn how to create, update, and manage AWS SES ReceiptFilters using Alchemy Cloud Control.
 ---
-
-# ReceiptFilter
 
 The ReceiptFilter resource lets you manage [AWS SES ReceiptFilters](https://docs.aws.amazon.com/ses/latest/userguide/) for controlling which IP addresses can send mail to your Amazon SES account.
 

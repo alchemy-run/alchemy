@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS DBProxyEndpoints with Alchemy
+title: DBProxyEndpoint
 description: Learn how to create, update, and manage AWS RDS DBProxyEndpoints using Alchemy Cloud Control.
 ---
-
-# DBProxyEndpoint
 
 The DBProxyEndpoint resource allows you to manage AWS RDS DB Proxy Endpoints, which serve as an entry point for applications to connect to a DB Proxy. For more information, refer to the [AWS RDS DBProxyEndpoints documentation](https://docs.aws.amazon.com/rds/latest/userguide/).
 

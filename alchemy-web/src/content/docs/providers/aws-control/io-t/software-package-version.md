@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT SoftwarePackageVersions with Alchemy
+title: SoftwarePackageVersion
 description: Learn how to create, update, and manage AWS IoT SoftwarePackageVersions using Alchemy Cloud Control.
 ---
-
-# SoftwarePackageVersion
 
 The SoftwarePackageVersion resource allows you to manage [AWS IoT SoftwarePackageVersions](https://docs.aws.amazon.com/iot/latest/userguide/) for your IoT devices, enabling the deployment and management of software packages.
 

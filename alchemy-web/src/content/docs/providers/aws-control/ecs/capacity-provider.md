@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ECS CapacityProviders with Alchemy
+title: CapacityProvider
 description: Learn how to create, update, and manage AWS ECS CapacityProviders using Alchemy Cloud Control.
 ---
-
-# CapacityProvider
 
 The CapacityProvider resource lets you manage [AWS ECS CapacityProviders](https://docs.aws.amazon.com/ecs/latest/userguide/) for your containerized applications, enabling you to control the scaling and availability of your resources.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect Rules with Alchemy
+title: Rule
 description: Learn how to create, update, and manage AWS Connect Rules using Alchemy Cloud Control.
 ---
-
-# Rule
 
 The Rule resource lets you manage [AWS Connect Rules](https://docs.aws.amazon.com/connect/latest/userguide/) for automating agent and customer interactions in Amazon Connect.
 

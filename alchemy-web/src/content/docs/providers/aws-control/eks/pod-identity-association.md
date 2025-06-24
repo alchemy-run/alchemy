@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EKS PodIdentityAssociations with Alchemy
+title: PodIdentityAssociation
 description: Learn how to create, update, and manage AWS EKS PodIdentityAssociations using Alchemy Cloud Control.
 ---
-
-# PodIdentityAssociation
 
 The PodIdentityAssociation resource allows you to associate an IAM role with a Kubernetes service account in an Amazon EKS cluster, enabling pods that use the service account to assume the specified IAM role. For more information, refer to the AWS documentation: [AWS EKS PodIdentityAssociations](https://docs.aws.amazon.com/eks/latest/userguide/).
 

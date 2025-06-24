@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass DeviceDefinitionVersions with Alchemy
+title: DeviceDefinitionVersion
 description: Learn how to create, update, and manage AWS Greengrass DeviceDefinitionVersions using Alchemy Cloud Control.
 ---
-
-# DeviceDefinitionVersion
 
 The DeviceDefinitionVersion resource allows you to create and manage versions of device definitions in AWS Greengrass, which is essential for deploying applications on IoT devices. For more information, refer to the [AWS Greengrass DeviceDefinitionVersions documentation](https://docs.aws.amazon.com/greengrass/latest/userguide/).
 

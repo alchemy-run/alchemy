@@ -1,9 +1,7 @@
 ---
-title: Managing AWS LakeFormation Permissions with Alchemy
+title: Permissions
 description: Learn how to create, update, and manage AWS LakeFormation Permissions using Alchemy Cloud Control.
 ---
-
-# Permissions
 
 The Permissions resource allows you to manage [AWS LakeFormation Permissions](https://docs.aws.amazon.com/lakeformation/latest/userguide/) for data lake principals, enabling fine-grained access control to your data resources.
 

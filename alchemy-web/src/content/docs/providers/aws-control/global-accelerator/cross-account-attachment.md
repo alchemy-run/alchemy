@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GlobalAccelerator CrossAccountAttachments with Alchemy
+title: CrossAccountAttachment
 description: Learn how to create, update, and manage AWS GlobalAccelerator CrossAccountAttachments using Alchemy Cloud Control.
 ---
-
-# CrossAccountAttachment
 
 The CrossAccountAttachment resource allows you to manage the cross-account attachments for AWS Global Accelerator. This resource is crucial for enabling resources in different AWS accounts to be associated with a single Global Accelerator, facilitating improved performance and availability for users. For more details, refer to the [AWS GlobalAccelerator CrossAccountAttachments documentation](https://docs.aws.amazon.com/globalaccelerator/latest/userguide/).
 

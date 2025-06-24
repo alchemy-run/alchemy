@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Timestream ScheduledQuerys with Alchemy
+title: ScheduledQuery
 description: Learn how to create, update, and manage AWS Timestream ScheduledQuerys using Alchemy Cloud Control.
 ---
-
-# ScheduledQuery
 
 The ScheduledQuery resource allows you to create and manage scheduled queries in Amazon Timestream, enabling efficient data analysis at regular intervals. For more details, refer to the [AWS Timestream ScheduledQuerys documentation](https://docs.aws.amazon.com/timestream/latest/userguide/).
 

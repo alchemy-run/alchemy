@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PaymentCryptography Keys with Alchemy
+title: Key
 description: Learn how to create, update, and manage AWS PaymentCryptography Keys using Alchemy Cloud Control.
 ---
-
-# Key
 
 The Key resource allows you to manage [AWS PaymentCryptography Keys](https://docs.aws.amazon.com/paymentcryptography/latest/userguide/) for secure payment processing and cryptographic operations.
 

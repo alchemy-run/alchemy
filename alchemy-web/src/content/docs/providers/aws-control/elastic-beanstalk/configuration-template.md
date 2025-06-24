@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ElasticBeanstalk ConfigurationTemplates with Alchemy
+title: ConfigurationTemplate
 description: Learn how to create, update, and manage AWS ElasticBeanstalk ConfigurationTemplates using Alchemy Cloud Control.
 ---
-
-# ConfigurationTemplate
 
 The ConfigurationTemplate resource lets you manage [AWS ElasticBeanstalk ConfigurationTemplates](https://docs.aws.amazon.com/elasticbeanstalk/latest/userguide/) which define the settings for your Elastic Beanstalk environments.
 

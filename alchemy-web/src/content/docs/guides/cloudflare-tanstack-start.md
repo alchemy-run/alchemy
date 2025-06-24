@@ -1,10 +1,8 @@
 ---
 order: 2
-title: TanstackStart
+title: TanStack Start
 description: Quick guide to initializing and deploying a TanStack Start application to Cloudflare Workers using Alchemy.
 ---
-
-# TanStack Start
 
 This guide shows how to initialize and deploy a TanStack Start application to Cloudflare using Alchemy.
 

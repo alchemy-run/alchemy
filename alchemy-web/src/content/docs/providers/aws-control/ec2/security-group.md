@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 SecurityGroups with Alchemy
+title: SecurityGroup
 description: Learn how to create, update, and manage AWS EC2 SecurityGroups using Alchemy Cloud Control.
 ---
-
-# SecurityGroup
 
 The SecurityGroup resource lets you manage [AWS EC2 SecurityGroups](https://docs.aws.amazon.com/ec2/latest/userguide/) and their configuration settings.
 

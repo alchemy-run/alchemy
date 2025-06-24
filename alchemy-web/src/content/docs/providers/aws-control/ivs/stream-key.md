@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IVS StreamKeys with Alchemy
+title: StreamKey
 description: Learn how to create, update, and manage AWS IVS StreamKeys using Alchemy Cloud Control.
 ---
-
-# StreamKey
 
 The StreamKey resource allows you to manage [AWS IVS StreamKeys](https://docs.aws.amazon.com/ivs/latest/userguide/) which are used to authenticate streaming sessions for your channels.
 

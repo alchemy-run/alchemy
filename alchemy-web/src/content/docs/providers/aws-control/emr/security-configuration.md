@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EMR SecurityConfigurations with Alchemy
+title: SecurityConfiguration
 description: Learn how to create, update, and manage AWS EMR SecurityConfigurations using Alchemy Cloud Control.
 ---
-
-# SecurityConfiguration
 
 The SecurityConfiguration resource allows you to manage [AWS EMR SecurityConfigurations](https://docs.aws.amazon.com/emr/latest/userguide/) that define security settings for your EMR clusters, such as encryption, access control, and logging.
 

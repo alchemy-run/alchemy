@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker FeatureGroups with Alchemy
+title: FeatureGroup
 description: Learn how to create, update, and manage AWS SageMaker FeatureGroups using Alchemy Cloud Control.
 ---
-
-# FeatureGroup
 
 The FeatureGroup resource lets you manage [AWS SageMaker FeatureGroups](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for organizing and storing features for machine learning models.
 

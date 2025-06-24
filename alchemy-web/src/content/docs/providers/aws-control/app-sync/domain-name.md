@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppSync DomainNames with Alchemy
+title: DomainName
 description: Learn how to create, update, and manage AWS AppSync DomainNames using Alchemy Cloud Control.
 ---
-
-# DomainName
 
 The DomainName resource lets you manage [AWS AppSync DomainNames](https://docs.aws.amazon.com/appsync/latest/userguide/) for your applications. This resource allows you to define a custom domain for your AppSync API, enabling better branding and easier access for clients.
 

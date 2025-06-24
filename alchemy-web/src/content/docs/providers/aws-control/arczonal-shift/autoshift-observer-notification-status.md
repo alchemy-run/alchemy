@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ARCZonalShift AutoshiftObserverNotificationStatuss with Alchemy
+title: AutoshiftObserverNotificationStatus
 description: Learn how to create, update, and manage AWS ARCZonalShift AutoshiftObserverNotificationStatuss using Alchemy Cloud Control.
 ---
-
-# AutoshiftObserverNotificationStatus
 
 The AutoshiftObserverNotificationStatus resource allows you to manage the status of Auto Shift Observer notifications in the AWS ARC Zonal Shift service. This resource can be used to track the operational status of the shift notification process within your AWS environment. For more detailed information, refer to the [AWS ARCZonalShift AutoshiftObserverNotificationStatus documentation](https://docs.aws.amazon.com/arczonalshift/latest/userguide/).
 

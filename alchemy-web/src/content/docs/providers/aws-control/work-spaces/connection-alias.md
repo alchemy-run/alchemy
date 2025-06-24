@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WorkSpaces ConnectionAliass with Alchemy
+title: ConnectionAlias
 description: Learn how to create, update, and manage AWS WorkSpaces ConnectionAliass using Alchemy Cloud Control.
 ---
-
-# ConnectionAlias
 
 The ConnectionAlias resource allows you to manage [AWS WorkSpaces ConnectionAliases](https://docs.aws.amazon.com/workspaces/latest/userguide/) which are used for associating a connection string with your WorkSpaces environment.
 

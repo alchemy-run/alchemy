@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAFRegional GeoMatchSets with Alchemy
+title: GeoMatchSet
 description: Learn how to create, update, and manage AWS WAFRegional GeoMatchSets using Alchemy Cloud Control.
 ---
-
-# GeoMatchSet
 
 The GeoMatchSet resource allows you to manage [AWS WAFRegional GeoMatchSets](https://docs.aws.amazon.com/wafregional/latest/userguide/) that specify the countries from which you want to allow or block incoming web requests.
 

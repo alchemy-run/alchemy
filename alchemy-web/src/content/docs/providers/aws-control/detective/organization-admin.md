@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Detective OrganizationAdmins with Alchemy
+title: OrganizationAdmin
 description: Learn how to create, update, and manage AWS Detective OrganizationAdmins using Alchemy Cloud Control.
 ---
-
-# OrganizationAdmin
 
 The OrganizationAdmin resource lets you manage [AWS Detective OrganizationAdmins](https://docs.aws.amazon.com/detective/latest/userguide/) and their configurations. This resource helps in managing the administrator account for AWS Detective.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager ConnectAttachments with Alchemy
+title: ConnectAttachment
 description: Learn how to create, update, and manage AWS NetworkManager ConnectAttachments using Alchemy Cloud Control.
 ---
-
-# ConnectAttachment
 
 The ConnectAttachment resource allows you to manage AWS NetworkManager ConnectAttachments, which enable connectivity between a core network and transport attachments. For more details, refer to the [AWS NetworkManager ConnectAttachments documentation](https://docs.aws.amazon.com/networkmanager/latest/userguide/).
 

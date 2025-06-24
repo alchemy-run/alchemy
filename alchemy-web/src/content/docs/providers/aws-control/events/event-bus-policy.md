@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Events EventBusPolicys with Alchemy
+title: EventBusPolicy
 description: Learn how to create, update, and manage AWS Events EventBusPolicys using Alchemy Cloud Control.
 ---
-
-# EventBusPolicy
 
 The EventBusPolicy resource allows you to manage permissions for AWS EventBridge event buses, enabling you to control which principals can send events to your event bus. For more details on this resource, refer to the [AWS Events EventBusPolicys documentation](https://docs.aws.amazon.com/events/latest/userguide/).
 

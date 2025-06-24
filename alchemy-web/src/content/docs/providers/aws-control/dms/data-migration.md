@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DMS DataMigrations with Alchemy
+title: DataMigration
 description: Learn how to create, update, and manage AWS DMS DataMigrations using Alchemy Cloud Control.
 ---
-
-# DataMigration
 
 The DataMigration resource allows you to manage [AWS DMS DataMigrations](https://docs.aws.amazon.com/dms/latest/userguide/) for migrating data between different database engines and ensuring minimal downtime.
 

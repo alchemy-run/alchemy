@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Events EventBuses with Alchemy
+title: EventBus
 description: Learn how to create, update, and manage AWS Events EventBuses using Alchemy Cloud Control.
 ---
-
-# EventBus
 
 The EventBus resource lets you manage [AWS EventBuses](https://docs.aws.amazon.com/events/latest/userguide/) for event-driven architectures, allowing you to receive and process events from various sources.
 

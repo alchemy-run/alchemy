@@ -1,9 +1,7 @@
 ---
-title: Managing AWS LakeFormation PrincipalPermissionss with Alchemy
+title: PrincipalPermissions
 description: Learn how to create, update, and manage AWS LakeFormation PrincipalPermissionss using Alchemy Cloud Control.
 ---
-
-# PrincipalPermissions
 
 The PrincipalPermissions resource lets you manage permissions for data lake principals in AWS LakeFormation. You can define granular access controls to your data lake resources. For more details, refer to the official AWS documentation: [AWS LakeFormation PrincipalPermissionss](https://docs.aws.amazon.com/lakeformation/latest/userguide/).
 

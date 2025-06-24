@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cognito ManagedLoginBrandings with Alchemy
+title: ManagedLoginBranding
 description: Learn how to create, update, and manage AWS Cognito ManagedLoginBrandings using Alchemy Cloud Control.
 ---
-
-# ManagedLoginBranding
 
 The ManagedLoginBranding resource allows you to manage the branding settings for a Cognito user pool, enabling you to customize the login experience for your users. For more information, refer to the [AWS Cognito ManagedLoginBrandings documentation](https://docs.aws.amazon.com/cognito/latest/userguide/).
 

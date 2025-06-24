@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GreengrassV2 ComponentVersions with Alchemy
+title: ComponentVersion
 description: Learn how to create, update, and manage AWS GreengrassV2 ComponentVersions using Alchemy Cloud Control.
 ---
-
-# ComponentVersion
 
 The ComponentVersion resource allows you to create and manage versions of AWS GreengrassV2 components, enabling efficient deployment and updates of your IoT applications. For more information, visit the [AWS GreengrassV2 ComponentVersions documentation](https://docs.aws.amazon.com/greengrassv2/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS DBParameterGroups with Alchemy
+title: DBParameterGroup
 description: Learn how to create, update, and manage AWS RDS DBParameterGroups using Alchemy Cloud Control.
 ---
-
-# DBParameterGroup
 
 The DBParameterGroup resource lets you manage [AWS RDS DBParameterGroups](https://docs.aws.amazon.com/rds/latest/userguide/) and their configuration settings. This resource allows you to define database engine-specific parameters that control the behavior of your RDS instances.
 

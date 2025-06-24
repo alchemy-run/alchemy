@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 IPAMPoolCidrs with Alchemy
+title: IPAMPoolCidr
 description: Learn how to create, update, and manage AWS EC2 IPAMPoolCidrs using Alchemy Cloud Control.
 ---
-
-# IPAMPoolCidr
 
 The IPAMPoolCidr resource allows you to manage [AWS EC2 IPAMPoolCidrs](https://docs.aws.amazon.com/ec2/latest/userguide/) effectively by specifying CIDR blocks within an IP address management (IPAM) pool.
 

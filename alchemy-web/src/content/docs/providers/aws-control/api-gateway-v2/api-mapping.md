@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGatewayV2 ApiMappings with Alchemy
+title: ApiMapping
 description: Learn how to create, update, and manage AWS ApiGatewayV2 ApiMappings using Alchemy Cloud Control.
 ---
-
-# ApiMapping
 
 The ApiMapping resource allows you to create and manage API mappings for your AWS ApiGatewayV2 instances. API mappings define how your API is exposed on a custom domain name. For more information, visit the [AWS ApiGatewayV2 ApiMappings](https://docs.aws.amazon.com/apigatewayv2/latest/userguide/) documentation.
 

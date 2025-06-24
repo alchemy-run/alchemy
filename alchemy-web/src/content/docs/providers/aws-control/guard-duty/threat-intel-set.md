@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GuardDuty ThreatIntelSets with Alchemy
+title: ThreatIntelSet
 description: Learn how to create, update, and manage AWS GuardDuty ThreatIntelSets using Alchemy Cloud Control.
 ---
-
-# ThreatIntelSet
 
 The ThreatIntelSet resource allows you to manage [AWS GuardDuty ThreatIntelSets](https://docs.aws.amazon.com/guardduty/latest/userguide/) which are used to provide additional intelligence data to enhance threat detection.
 

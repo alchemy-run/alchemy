@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect QuickConnects with Alchemy
+title: QuickConnect
 description: Learn how to create, update, and manage AWS Connect QuickConnects using Alchemy Cloud Control.
 ---
-
-# QuickConnect
 
 The QuickConnect resource lets you manage [AWS Connect QuickConnects](https://docs.aws.amazon.com/connect/latest/userguide/) which are used to set up quick connection capabilities for agents and customers.
 

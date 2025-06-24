@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS CustomDBEngineVersions with Alchemy
+title: CustomDBEngineVersion
 description: Learn how to create, update, and manage AWS RDS CustomDBEngineVersions using Alchemy Cloud Control.
 ---
-
-# CustomDBEngineVersion
 
 The CustomDBEngineVersion resource allows you to manage custom database engine versions for Amazon RDS. This enables you to deploy a custom version of a database engine, providing flexibility in your database environment. For more details, refer to the [AWS RDS CustomDBEngineVersions documentation](https://docs.aws.amazon.com/rds/latest/userguide/).
 

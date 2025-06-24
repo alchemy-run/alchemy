@@ -4,8 +4,6 @@ title: Bindings
 description: Connect your infrastructure resources with type-safe bindings. Learn how to bind KV namespaces, Durable Objects, R2 buckets, and environment variables to Cloudflare Workers.
 ---
 
-# Bindings
-
 Bindings allow resources to connect to each other in a type-safe way. In Alchemy, bindings are most commonly used with Cloudflare Workers to give them access to other resources.
 
 ## What are Bindings?

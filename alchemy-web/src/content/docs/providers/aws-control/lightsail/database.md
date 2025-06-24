@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lightsail Databases with Alchemy
+title: Database
 description: Learn how to create, update, and manage AWS Lightsail Databases using Alchemy Cloud Control.
 ---
-
-# Database
 
 The Database resource lets you manage [AWS Lightsail Databases](https://docs.aws.amazon.com/lightsail/latest/userguide/) including their configurations and settings.
 

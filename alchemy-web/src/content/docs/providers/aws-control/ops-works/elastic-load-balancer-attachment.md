@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpsWorks ElasticLoadBalancerAttachments with Alchemy
+title: ElasticLoadBalancerAttachment
 description: Learn how to create, update, and manage AWS OpsWorks ElasticLoadBalancerAttachments using Alchemy Cloud Control.
 ---
-
-# ElasticLoadBalancerAttachment
 
 The ElasticLoadBalancerAttachment resource allows you to manage the attachment of Elastic Load Balancers to OpsWorks layers in AWS. For more information, refer to the [AWS OpsWorks ElasticLoadBalancerAttachments](https://docs.aws.amazon.com/opsworks/latest/userguide/).
 

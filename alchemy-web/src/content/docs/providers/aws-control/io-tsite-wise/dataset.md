@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTSiteWise Datasets with Alchemy
+title: Dataset
 description: Learn how to create, update, and manage AWS IoTSiteWise Datasets using Alchemy Cloud Control.
 ---
-
-# Dataset
 
 The Dataset resource allows you to manage [AWS IoTSiteWise Datasets](https://docs.aws.amazon.com/iotsitewise/latest/userguide/) which are used to store and analyze timestamped data from your industrial assets.
 

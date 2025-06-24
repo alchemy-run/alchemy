@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodePipeline CustomActionTypes with Alchemy
+title: CustomActionType
 description: Learn how to create, update, and manage AWS CodePipeline CustomActionTypes using Alchemy Cloud Control.
 ---
-
-# CustomActionType
 
 The CustomActionType resource lets you define custom actions for your AWS CodePipeline, enabling integration with third-party services or custom processing logic. For more detailed information, refer to the [AWS CodePipeline CustomActionTypes documentation](https://docs.aws.amazon.com/codepipeline/latest/userguide/).
 

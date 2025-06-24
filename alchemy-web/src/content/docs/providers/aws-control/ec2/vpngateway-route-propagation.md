@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VPNGatewayRoutePropagations with Alchemy
+title: VPNGatewayRoutePropagation
 description: Learn how to create, update, and manage AWS EC2 VPNGatewayRoutePropagations using Alchemy Cloud Control.
 ---
-
-# VPNGatewayRoutePropagation
 
 The VPNGatewayRoutePropagation resource allows you to manage route propagation for a virtual private network (VPN) gateway in AWS. This resource is crucial for ensuring that routes from your VPN connection are properly propagated to your route tables. For more information, see the [AWS EC2 VPNGatewayRoutePropagations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

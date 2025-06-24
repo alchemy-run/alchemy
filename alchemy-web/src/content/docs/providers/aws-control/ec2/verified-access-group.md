@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VerifiedAccessGroups with Alchemy
+title: VerifiedAccessGroup
 description: Learn how to create, update, and manage AWS EC2 VerifiedAccessGroups using Alchemy Cloud Control.
 ---
-
-# VerifiedAccessGroup
 
 The VerifiedAccessGroup resource lets you manage [AWS EC2 Verified Access Groups](https://docs.aws.amazon.com/ec2/latest/userguide/) for controlling access to your EC2 instances.
 

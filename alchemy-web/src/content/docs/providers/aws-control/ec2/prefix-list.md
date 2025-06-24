@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 PrefixLists with Alchemy
+title: PrefixList
 description: Learn how to create, update, and manage AWS EC2 PrefixLists using Alchemy Cloud Control.
 ---
-
-# PrefixList
 
 The PrefixList resource allows you to manage [AWS EC2 PrefixLists](https://docs.aws.amazon.com/ec2/latest/userguide/) that are used to specify a list of IP address ranges. This is useful for simplifying security group and route table configurations.
 

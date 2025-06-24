@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 SecurityGroupIngresss with Alchemy
+title: SecurityGroupIngress
 description: Learn how to create, update, and manage AWS EC2 SecurityGroupIngresss using Alchemy Cloud Control.
 ---
-
-# SecurityGroupIngress
 
 The SecurityGroupIngress resource allows you to manage inbound rules for an Amazon EC2 security group. This resource defines which traffic is allowed to reach your EC2 instances. For more information, refer to the [AWS EC2 SecurityGroupIngress documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

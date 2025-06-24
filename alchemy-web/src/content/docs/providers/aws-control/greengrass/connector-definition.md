@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass ConnectorDefinitions with Alchemy
+title: ConnectorDefinition
 description: Learn how to create, update, and manage AWS Greengrass ConnectorDefinitions using Alchemy Cloud Control.
 ---
-
-# ConnectorDefinition
 
 The ConnectorDefinition resource lets you manage [AWS Greengrass ConnectorDefinitions](https://docs.aws.amazon.com/greengrass/latest/userguide/) that enable the integration of external services and devices with AWS Greengrass.
 

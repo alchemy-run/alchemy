@@ -1,9 +1,7 @@
 ---
-title: Managing AWS BillingConductor PricingPlans with Alchemy
+title: PricingPlan
 description: Learn how to create, update, and manage AWS BillingConductor PricingPlans using Alchemy Cloud Control.
 ---
-
-# PricingPlan
 
 The PricingPlan resource lets you create and manage [AWS BillingConductor PricingPlans](https://docs.aws.amazon.com/billingconductor/latest/userguide/) for customizing your billing management and pricing structures.
 

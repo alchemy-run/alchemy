@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront CloudFrontOriginAccessIdentitys with Alchemy
+title: CloudFrontOriginAccessIdentity
 description: Learn how to create, update, and manage AWS CloudFront CloudFrontOriginAccessIdentitys using Alchemy Cloud Control.
 ---
-
-# CloudFrontOriginAccessIdentity
 
 The CloudFrontOriginAccessIdentity resource allows you to create and manage [AWS CloudFront Origin Access Identitites](https://docs.aws.amazon.com/cloudfront/latest/userguide/) which are used to securely serve content from your Amazon S3 buckets through CloudFront.
 

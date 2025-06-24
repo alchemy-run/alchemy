@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lambda Aliases with Alchemy
+title: Alias
 description: Learn how to create, update, and manage AWS Lambda Aliases using Alchemy Cloud Control.
 ---
-
-# Alias
 
 The Alias resource allows you to manage [AWS Lambda Aliases](https://docs.aws.amazon.com/lambda/latest/userguide/) which provide the ability to create a pointer to a specific version of a Lambda function, enabling you to manage and deploy different versions easily.
 

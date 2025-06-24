@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Bedrock AgentAliases with Alchemy
+title: AgentAlias
 description: Learn how to create, update, and manage AWS Bedrock AgentAliases using Alchemy Cloud Control.
 ---
-
-# AgentAlias
 
 The AgentAlias resource lets you manage [AWS Bedrock AgentAliases](https://docs.aws.amazon.com/bedrock/latest/userguide/) and their configurations for routing requests to different agents.
 

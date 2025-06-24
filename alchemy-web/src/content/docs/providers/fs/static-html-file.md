@@ -1,9 +1,7 @@
 ---
-title: Static HTML File
+title: StaticHTMLFile
 description: Learn how to create and manage static HTML (.html) files with proper formatting using Alchemy's FS provider.
 ---
-
-# StaticHTMLFile
 
 The StaticHTMLFile resource creates static HTML files with automatic directory creation and cleanup.
 

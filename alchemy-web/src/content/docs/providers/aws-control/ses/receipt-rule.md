@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES ReceiptRules with Alchemy
+title: ReceiptRule
 description: Learn how to create, update, and manage AWS SES ReceiptRules using Alchemy Cloud Control.
 ---
-
-# ReceiptRule
 
 The ReceiptRule resource lets you manage [AWS SES ReceiptRules](https://docs.aws.amazon.com/ses/latest/userguide/) for processing incoming email. Receipt rules enable you to define actions for incoming messages, such as storing them in S3, triggering Lambda functions, or sending notifications.
 

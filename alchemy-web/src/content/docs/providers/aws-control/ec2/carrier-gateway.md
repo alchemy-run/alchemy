@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 CarrierGateways with Alchemy
+title: CarrierGateway
 description: Learn how to create, update, and manage AWS EC2 CarrierGateways using Alchemy Cloud Control.
 ---
-
-# CarrierGateway
 
 The CarrierGateway resource allows you to manage [AWS EC2 CarrierGateways](https://docs.aws.amazon.com/ec2/latest/userguide/) that connect a VPC to carrier networks, enabling the transport of data between the AWS cloud and on-premises locations.
 

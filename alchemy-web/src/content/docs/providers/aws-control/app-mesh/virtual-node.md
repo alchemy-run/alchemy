@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppMesh VirtualNodes with Alchemy
+title: VirtualNode
 description: Learn how to create, update, and manage AWS AppMesh VirtualNodes using Alchemy Cloud Control.
 ---
-
-# VirtualNode
 
 The VirtualNode resource lets you manage [AWS AppMesh VirtualNodes](https://docs.aws.amazon.com/appmesh/latest/userguide/) that define the communication between your services in a mesh. VirtualNodes are key components that represent a logical pointer to a service and facilitate traffic routing.
 

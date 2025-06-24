@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudWatch MetricStreams with Alchemy
+title: MetricStream
 description: Learn how to create, update, and manage AWS CloudWatch MetricStreams using Alchemy Cloud Control.
 ---
-
-# MetricStream
 
 The MetricStream resource lets you create and manage [AWS CloudWatch MetricStreams](https://docs.aws.amazon.com/cloudwatch/latest/userguide/) for streaming CloudWatch metrics to Amazon Kinesis Data Firehose.
 

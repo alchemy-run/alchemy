@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 IPAMAllocations with Alchemy
+title: IPAMAllocation
 description: Learn how to create, update, and manage AWS EC2 IPAMAllocations using Alchemy Cloud Control.
 ---
-
-# IPAMAllocation
 
 The IPAMAllocation resource allows you to manage IP address allocations within AWS EC2 using the AWS IP Address Manager (IPAM). For more details, refer to the [AWS EC2 IPAMAllocations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3 StorageLenss with Alchemy
+title: StorageLens
 description: Learn how to create, update, and manage AWS S3 StorageLenss using Alchemy Cloud Control.
 ---
-
-# StorageLens
 
 The StorageLens resource allows you to manage [AWS S3 StorageLens](https://docs.aws.amazon.com/s3/latest/userguide/) configurations for enhanced visibility into your S3 storage usage and activity.
 

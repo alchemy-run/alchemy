@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ElastiCache SubnetGroups with Alchemy
+title: SubnetGroup
 description: Learn how to create, update, and manage AWS ElastiCache SubnetGroups using Alchemy Cloud Control.
 ---
-
-# SubnetGroup
 
 The SubnetGroup resource lets you manage [AWS ElastiCache SubnetGroups](https://docs.aws.amazon.com/elasticache/latest/userguide/) for your caching clusters. A subnet group is a collection of subnets that you can use with ElastiCache clusters to ensure high availability and fault tolerance.
 

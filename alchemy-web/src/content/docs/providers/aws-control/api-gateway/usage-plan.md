@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway UsagePlans with Alchemy
+title: UsagePlan
 description: Learn how to create, update, and manage AWS ApiGateway UsagePlans using Alchemy Cloud Control.
 ---
-
-# UsagePlan
 
 The UsagePlan resource lets you manage [AWS ApiGateway UsagePlans](https://docs.aws.amazon.com/apigateway/latest/userguide/) which define a set of limits on how the APIs can be accessed.
 

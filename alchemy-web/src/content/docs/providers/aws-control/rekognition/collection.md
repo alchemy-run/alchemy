@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Rekognition Collections with Alchemy
+title: Collection
 description: Learn how to create, update, and manage AWS Rekognition Collections using Alchemy Cloud Control.
 ---
-
-# Collection
 
 The Collection resource allows you to manage [AWS Rekognition Collections](https://docs.aws.amazon.com/rekognition/latest/userguide/) for storing and indexing faces for facial recognition applications.
 

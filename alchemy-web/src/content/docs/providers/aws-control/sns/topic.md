@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SNS Topics with Alchemy
+title: Topic
 description: Learn how to create, update, and manage AWS SNS Topics using Alchemy Cloud Control.
 ---
-
-# Topic
 
 The Topic resource allows you to manage [AWS SNS Topics](https://docs.aws.amazon.com/sns/latest/userguide/) for sending notifications and messages to subscribers.
 

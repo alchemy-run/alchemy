@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Redshift EventSubscriptions with Alchemy
+title: EventSubscription
 description: Learn how to create, update, and manage AWS Redshift EventSubscriptions using Alchemy Cloud Control.
 ---
-
-# EventSubscription
 
 The EventSubscription resource allows you to manage [AWS Redshift EventSubscriptions](https://docs.aws.amazon.com/redshift/latest/userguide/) for monitoring events in your Amazon Redshift clusters.
 

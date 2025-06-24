@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FMS Policies with Alchemy
+title: Policy
 description: Learn how to create, update, and manage AWS FMS Policies using Alchemy Cloud Control.
 ---
-
-# Policy
 
 The Policy resource lets you manage [AWS Firewall Manager Policies](https://docs.aws.amazon.com/fms/latest/userguide/) for enforcing rules across your AWS accounts and resources.
 

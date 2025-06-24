@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PCAConnectorAD Connectors with Alchemy
+title: Connector
 description: Learn how to create, update, and manage AWS PCAConnectorAD Connectors using Alchemy Cloud Control.
 ---
-
-# Connector
 
 The Connector resource allows you to manage [AWS PCAConnectorAD Connectors](https://docs.aws.amazon.com/pcaconnectorad/latest/userguide/) used for integrating AWS Private Certificate Authority with Microsoft Active Directory.
 

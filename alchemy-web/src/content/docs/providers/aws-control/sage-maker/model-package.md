@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker ModelPackages with Alchemy
+title: ModelPackage
 description: Learn how to create, update, and manage AWS SageMaker ModelPackages using Alchemy Cloud Control.
 ---
-
-# ModelPackage
 
 The ModelPackage resource lets you create and manage AWS SageMaker [ModelPackages](https://docs.aws.amazon.com/sagemaker/latest/userguide/) which are used to package machine learning models for deployment and sharing.
 

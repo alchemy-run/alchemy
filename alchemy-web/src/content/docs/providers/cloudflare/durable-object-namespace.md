@@ -1,9 +1,7 @@
 ---
-title: Cloudflare Durable Object Namespace
+title: DurableObjectNamespace
 description: Learn how to create and manage Cloudflare Durable Object Namespaces using Alchemy for stateful serverless applications.
 ---
-
-# DurableObjectNamespace
 
 A [Durable Object Namespace](https://developers.cloudflare.com/workers/runtime-apis/durable-objects/) represents a globally unique namespace for Durable Objects that provide strongly consistent storage and coordination.
 

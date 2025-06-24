@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Athena NamedQuerys with Alchemy
+title: NamedQuery
 description: Learn how to create, update, and manage AWS Athena NamedQuerys using Alchemy Cloud Control.
 ---
-
-# NamedQuery
 
 The NamedQuery resource lets you manage [AWS Athena NamedQuerys](https://docs.aws.amazon.com/athena/latest/userguide/) for executing SQL queries against your data in Amazon S3.
 

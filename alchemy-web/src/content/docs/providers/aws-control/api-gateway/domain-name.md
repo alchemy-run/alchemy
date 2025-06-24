@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway DomainNames with Alchemy
+title: DomainName
 description: Learn how to create, update, and manage AWS ApiGateway DomainNames using Alchemy Cloud Control.
 ---
-
-# DomainName
 
 The DomainName resource lets you manage [AWS ApiGateway DomainNames](https://docs.aws.amazon.com/apigateway/latest/userguide/) and their configuration settings.
 

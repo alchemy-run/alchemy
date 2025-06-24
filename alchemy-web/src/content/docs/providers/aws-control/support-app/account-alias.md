@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SupportApp AccountAliases with Alchemy
+title: AccountAlias
 description: Learn how to create, update, and manage AWS SupportApp AccountAliases using Alchemy Cloud Control.
 ---
-
-# AccountAlias
 
 The AccountAlias resource lets you manage AWS SupportApp account aliases, which are used to identify AWS accounts more easily. For more information, refer to the [AWS SupportApp AccountAliases documentation](https://docs.aws.amazon.com/supportapp/latest/userguide/).
 

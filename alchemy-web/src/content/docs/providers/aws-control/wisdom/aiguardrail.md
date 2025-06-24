@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Wisdom AIGuardrails with Alchemy
+title: AIGuardrail
 description: Learn how to create, update, and manage AWS Wisdom AIGuardrails using Alchemy Cloud Control.
 ---
-
-# AIGuardrail
 
 The AIGuardrail resource allows you to manage [AWS Wisdom AIGuardrails](https://docs.aws.amazon.com/wisdom/latest/userguide/) to ensure that the AI models operate within defined constraints and guidelines.
 

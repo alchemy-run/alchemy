@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker Models with Alchemy
+title: Model
 description: Learn how to create, update, and manage AWS SageMaker Models using Alchemy Cloud Control.
 ---
-
-# Model
 
 The Model resource allows you to create and manage [AWS SageMaker Models](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for deploying machine learning algorithms and workflows.
 

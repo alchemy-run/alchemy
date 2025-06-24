@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DMS InstanceProfiles with Alchemy
+title: InstanceProfile
 description: Learn how to create, update, and manage AWS DMS InstanceProfiles using Alchemy Cloud Control.
 ---
-
-# InstanceProfile
 
 The InstanceProfile resource lets you manage [AWS DMS InstanceProfiles](https://docs.aws.amazon.com/dms/latest/userguide/) used for database migration tasks. This resource helps configure the instances that will perform the migration, including network, security, and performance settings.
 

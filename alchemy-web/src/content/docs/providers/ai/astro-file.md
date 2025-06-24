@@ -1,9 +1,7 @@
 ---
-title: Managing Astro Files with AI in Alchemy
+title: AstroFile
 description: Learn how to use Alchemy's AI provider to create, update, and manage Astro (.astro) files within your projects.
 ---
-
-# AstroFile
 
 The AstroFile resource lets you generate [Astro](https://astro.build) components using AI models.
 

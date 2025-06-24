@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Application Load Balancer ListenerRules with Alchemy
+title: ListenerRule
 description: Learn how to create, update, and manage AWS Application Load Balancer ListenerRules using Alchemy Cloud Control.
 ---
-
-# ListenerRule
 
 The ListenerRule resource allows you to manage [AWS Application Load Balancer ListenerRules](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/) that define how requests are routed to targets based on specified conditions.
 

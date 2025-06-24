@@ -1,9 +1,7 @@
 ---
-title: AWS SQS Queue
+title: Queue
 description: Learn how to create, configure, and manage AWS Simple Queue Service (SQS) queues using Alchemy for message queuing.
 ---
-
-# Queue
 
 The Queue resource lets you create and manage [Amazon Simple Queue Service (SQS)](https://aws.amazon.com/sqs/) queues for reliable message delivery between distributed application components.
 

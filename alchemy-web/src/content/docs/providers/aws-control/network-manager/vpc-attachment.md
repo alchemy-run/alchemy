@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager VpcAttachments with Alchemy
+title: VpcAttachment
 description: Learn how to create, update, and manage AWS NetworkManager VpcAttachments using Alchemy Cloud Control.
 ---
-
-# VpcAttachment
 
 The VpcAttachment resource allows you to manage Virtual Private Cloud (VPC) attachments within AWS Network Manager. For more details, refer to the [AWS NetworkManager VpcAttachments documentation](https://docs.aws.amazon.com/networkmanager/latest/userguide/).
 

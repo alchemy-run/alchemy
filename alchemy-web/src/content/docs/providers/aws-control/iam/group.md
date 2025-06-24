@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM Groups with Alchemy
+title: Group
 description: Learn how to create, update, and manage AWS IAM Groups using Alchemy Cloud Control.
 ---
-
-# Group
 
 The Group resource lets you manage [AWS IAM Groups](https://docs.aws.amazon.com/iam/latest/userguide/) for organizing users and permissions within your AWS account.
 

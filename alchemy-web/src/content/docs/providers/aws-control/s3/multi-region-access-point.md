@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3 MultiRegionAccessPoints with Alchemy
+title: MultiRegionAccessPoint
 description: Learn how to create, update, and manage AWS S3 MultiRegionAccessPoints using Alchemy Cloud Control.
 ---
-
-# MultiRegionAccessPoint
 
 The MultiRegionAccessPoint resource lets you manage [AWS S3 MultiRegion Access Points](https://docs.aws.amazon.com/s3/latest/userguide/) for easier access to S3 data across multiple regions.
 

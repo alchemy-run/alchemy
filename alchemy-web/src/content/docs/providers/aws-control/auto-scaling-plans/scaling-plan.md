@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AutoScalingPlans ScalingPlans with Alchemy
+title: ScalingPlan
 description: Learn how to create, update, and manage AWS AutoScalingPlans ScalingPlans using Alchemy Cloud Control.
 ---
-
-# ScalingPlan
 
 The ScalingPlan resource lets you create and manage [AWS AutoScalingPlans](https://docs.aws.amazon.com/autoscalingplans/latest/userguide/) for dynamically adjusting the capacity of your application based on demand.
 

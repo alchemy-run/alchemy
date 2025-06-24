@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront VpcOrigins with Alchemy
+title: VpcOrigin
 description: Learn how to create, update, and manage AWS CloudFront VpcOrigins using Alchemy Cloud Control.
 ---
-
-# VpcOrigin
 
 The VpcOrigin resource allows you to manage [AWS CloudFront VpcOrigins](https://docs.aws.amazon.com/cloudfront/latest/userguide/) for serving content from Amazon VPC endpoints.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppIntegrations Applications with Alchemy
+title: Application
 description: Learn how to create, update, and manage AWS AppIntegrations Applications using Alchemy Cloud Control.
 ---
-
-# Application
 
 The Application resource lets you manage [AWS AppIntegrations Applications](https://docs.aws.amazon.com/appintegrations/latest/userguide/) and their configuration settings.
 

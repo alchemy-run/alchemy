@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppStream ImageBuilders with Alchemy
+title: ImageBuilder
 description: Learn how to create, update, and manage AWS AppStream ImageBuilders using Alchemy Cloud Control.
 ---
-
-# ImageBuilder
 
 The ImageBuilder resource lets you manage [AWS AppStream ImageBuilders](https://docs.aws.amazon.com/appstream/latest/userguide/) for creating and managing application images for streaming.
 

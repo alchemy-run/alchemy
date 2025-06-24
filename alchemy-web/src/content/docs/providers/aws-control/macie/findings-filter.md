@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Macie FindingsFilters with Alchemy
+title: FindingsFilter
 description: Learn how to create, update, and manage AWS Macie FindingsFilters using Alchemy Cloud Control.
 ---
-
-# FindingsFilter
 
 The FindingsFilter resource lets you manage [AWS Macie FindingsFilters](https://docs.aws.amazon.com/macie/latest/userguide/) to filter out sensitive data findings based on specified criteria.
 

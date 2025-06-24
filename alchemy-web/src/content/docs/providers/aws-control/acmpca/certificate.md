@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ACMPCA Certificates with Alchemy
+title: Certificate
 description: Learn how to create, update, and manage AWS ACMPCA Certificates using Alchemy Cloud Control.
 ---
-
-# Certificate
 
 The Certificate resource allows you to create and manage [AWS ACMPCA Certificates](https://docs.aws.amazon.com/acmpca/latest/userguide/) for issuing and managing your public and private certificates.
 

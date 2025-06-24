@@ -1,9 +1,7 @@
 ---
-title: Managing AWS HealthLake FHIRDatastores with Alchemy
+title: FHIRDatastore
 description: Learn how to create, update, and manage AWS HealthLake FHIRDatastores using Alchemy Cloud Control.
 ---
-
-# FHIRDatastore
 
 The FHIRDatastore resource allows you to create and manage [AWS HealthLake FHIR Datastores](https://docs.aws.amazon.com/healthlake/latest/userguide/) for storing and analyzing FHIR (Fast Healthcare Interoperability Resources) data.
 

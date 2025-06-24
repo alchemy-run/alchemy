@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront KeyValueStores with Alchemy
+title: KeyValueStore
 description: Learn how to create, update, and manage AWS CloudFront KeyValueStores using Alchemy Cloud Control.
 ---
-
-# KeyValueStore
 
 The KeyValueStore resource lets you manage [AWS CloudFront KeyValueStores](https://docs.aws.amazon.com/cloudfront/latest/userguide/) for storing key-value pairs that can be used in your applications.
 

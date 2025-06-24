@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation LambdaHooks with Alchemy
+title: LambdaHook
 description: Learn how to create, update, and manage AWS CloudFormation LambdaHooks using Alchemy Cloud Control.
 ---
-
-# LambdaHook
 
 The LambdaHook resource lets you manage [AWS CloudFormation LambdaHooks](https://docs.aws.amazon.com/cloudformation/latest/userguide/) for controlling the lifecycle of your CloudFormation stacks via AWS Lambda functions.
 

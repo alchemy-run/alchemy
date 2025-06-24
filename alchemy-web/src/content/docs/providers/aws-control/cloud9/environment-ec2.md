@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cloud9 EnvironmentEC2s with Alchemy
+title: EnvironmentEC2
 description: Learn how to create, update, and manage AWS Cloud9 EnvironmentEC2s using Alchemy Cloud Control.
 ---
-
-# EnvironmentEC2
 
 The EnvironmentEC2 resource allows you to create and manage [AWS Cloud9 EnvironmentEC2s](https://docs.aws.amazon.com/cloud9/latest/userguide/) for cloud-based development environments.
 

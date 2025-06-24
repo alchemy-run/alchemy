@@ -1,9 +1,7 @@
 ---
-title: Managing AWS KinesisAnalytics ApplicationReferenceDataSources with Alchemy
+title: ApplicationReferenceDataSource
 description: Learn how to create, update, and manage AWS KinesisAnalytics ApplicationReferenceDataSources using Alchemy Cloud Control.
 ---
-
-# ApplicationReferenceDataSource
 
 The ApplicationReferenceDataSource resource allows you to manage reference data sources for AWS Kinesis Analytics applications. This is essential for analytics applications that require static datasets for processing. For more details, refer to the [AWS documentation](https://docs.aws.amazon.com/kinesisanalytics/latest/userguide/).
 

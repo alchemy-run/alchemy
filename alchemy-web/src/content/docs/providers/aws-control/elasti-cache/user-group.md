@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ElastiCache UserGroups with Alchemy
+title: UserGroup
 description: Learn how to create, update, and manage AWS ElastiCache UserGroups using Alchemy Cloud Control.
 ---
-
-# UserGroup
 
 The UserGroup resource allows you to manage [AWS ElastiCache UserGroups](https://docs.aws.amazon.com/elasticache/latest/userguide/) that provide access control for ElastiCache resources.
 

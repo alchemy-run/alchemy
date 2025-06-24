@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker EndpointConfigs with Alchemy
+title: EndpointConfig
 description: Learn how to create, update, and manage AWS SageMaker EndpointConfigs using Alchemy Cloud Control.
 ---
-
-# EndpointConfig
 
 The EndpointConfig resource lets you manage [AWS SageMaker EndpointConfigs](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for deploying machine learning models at scale.
 

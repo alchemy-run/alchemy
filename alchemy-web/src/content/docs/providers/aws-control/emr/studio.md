@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EMR Studios with Alchemy
+title: Studio
 description: Learn how to create, update, and manage AWS EMR Studios using Alchemy Cloud Control.
 ---
-
-# Studio
 
 The Studio resource lets you manage [AWS EMR Studios](https://docs.aws.amazon.com/emr/latest/userguide/) for developing and running data analytics applications. EMR Studios provide a collaborative environment for data scientists and data engineers to create, manage, and share notebooks.
 

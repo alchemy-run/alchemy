@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront ResponseHeadersPolicys with Alchemy
+title: ResponseHeadersPolicy
 description: Learn how to create, update, and manage AWS CloudFront ResponseHeadersPolicys using Alchemy Cloud Control.
 ---
-
-# ResponseHeadersPolicy
 
 The ResponseHeadersPolicy resource lets you configure HTTP response headers for your CloudFront distributions. For more information, refer to the [AWS CloudFront ResponseHeadersPolicys documentation](https://docs.aws.amazon.com/cloudfront/latest/userguide/).
 

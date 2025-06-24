@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RAM ResourceShares with Alchemy
+title: ResourceShare
 description: Learn how to create, update, and manage AWS RAM ResourceShares using Alchemy Cloud Control.
 ---
-
-# ResourceShare
 
 The ResourceShare resource lets you manage [AWS RAM ResourceShares](https://docs.aws.amazon.com/ram/latest/userguide/) for sharing resources across AWS accounts and within your organization.
 

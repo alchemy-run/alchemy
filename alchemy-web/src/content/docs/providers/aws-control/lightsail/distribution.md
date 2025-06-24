@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lightsail Distributions with Alchemy
+title: Distribution
 description: Learn how to create, update, and manage AWS Lightsail Distributions using Alchemy Cloud Control.
 ---
-
-# Distribution
 
 The Distribution resource allows you to manage [AWS Lightsail Distributions](https://docs.aws.amazon.com/lightsail/latest/userguide/) for delivering content with low latency and high transfer speeds.
 

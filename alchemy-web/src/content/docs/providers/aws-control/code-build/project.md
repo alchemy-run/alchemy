@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeBuild Projects with Alchemy
+title: Project
 description: Learn how to create, update, and manage AWS CodeBuild Projects using Alchemy Cloud Control.
 ---
-
-# Project
 
 The Project resource lets you manage [AWS CodeBuild Projects](https://docs.aws.amazon.com/codebuild/latest/userguide/) for building and testing your applications.
 

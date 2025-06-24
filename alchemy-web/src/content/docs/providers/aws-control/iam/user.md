@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM Users with Alchemy
+title: User
 description: Learn how to create, update, and manage AWS IAM Users using Alchemy Cloud Control.
 ---
-
-# User
 
 The User resource lets you manage [AWS IAM Users](https://docs.aws.amazon.com/iam/latest/userguide/) and their associated permissions, policies, and attributes.
 

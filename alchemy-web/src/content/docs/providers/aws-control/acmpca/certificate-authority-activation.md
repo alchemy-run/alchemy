@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ACMPCA CertificateAuthorityActivations with Alchemy
+title: CertificateAuthorityActivation
 description: Learn how to create, update, and manage AWS ACMPCA CertificateAuthorityActivations using Alchemy Cloud Control.
 ---
-
-# CertificateAuthorityActivation
 
 The CertificateAuthorityActivation resource allows you to manage the activation of a certificate authority in AWS Certificate Manager Private Certificate Authority (ACM PCA). For more information, refer to the [AWS ACMPCA CertificateAuthorityActivations documentation](https://docs.aws.amazon.com/acmpca/latest/userguide/).
 

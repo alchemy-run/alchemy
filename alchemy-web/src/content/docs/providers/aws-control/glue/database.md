@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue Databases with Alchemy
+title: Database
 description: Learn how to create, update, and manage AWS Glue Databases using Alchemy Cloud Control.
 ---
-
-# Database
 
 The Database resource lets you manage [AWS Glue Databases](https://docs.aws.amazon.com/glue/latest/userguide/) for organizing your data catalog. This resource enables you to define metadata for your datasets and facilitate ETL (Extract, Transform, Load) processes within AWS Glue.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation Macros with Alchemy
+title: Macro
 description: Learn how to create, update, and manage AWS CloudFormation Macros using Alchemy Cloud Control.
 ---
-
-# Macro
 
 The Macro resource lets you create and manage [AWS CloudFormation Macros](https://docs.aws.amazon.com/cloudformation/latest/userguide/) that enable you to perform custom processing on CloudFormation templates. Macros can be used to transform templates before they are processed into stacks.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DMS ReplicationTasks with Alchemy
+title: ReplicationTask
 description: Learn how to create, update, and manage AWS DMS ReplicationTasks using Alchemy Cloud Control.
 ---
-
-# ReplicationTask
 
 The ReplicationTask resource allows you to manage [AWS DMS ReplicationTasks](https://docs.aws.amazon.com/dms/latest/userguide/) for data migration and replication between different data sources.
 

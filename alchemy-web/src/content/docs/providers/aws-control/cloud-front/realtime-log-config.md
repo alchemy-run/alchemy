@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront RealtimeLogConfigs with Alchemy
+title: RealtimeLogConfig
 description: Learn how to create, update, and manage AWS CloudFront RealtimeLogConfigs using Alchemy Cloud Control.
 ---
-
-# RealtimeLogConfig
 
 The RealtimeLogConfig resource lets you manage [AWS CloudFront Realtime Log Configurations](https://docs.aws.amazon.com/cloudfront/latest/userguide/) for real-time logging of data as it is delivered through CloudFront.
 

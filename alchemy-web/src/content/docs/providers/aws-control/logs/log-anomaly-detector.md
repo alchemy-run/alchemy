@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Logs LogAnomalyDetectors with Alchemy
+title: LogAnomalyDetector
 description: Learn how to create, update, and manage AWS Logs LogAnomalyDetectors using Alchemy Cloud Control.
 ---
-
-# LogAnomalyDetector
 
 The LogAnomalyDetector resource allows you to create and manage [AWS Logs LogAnomalyDetectors](https://docs.aws.amazon.com/logs/latest/userguide/), which help identify unusual patterns in your CloudWatch Logs data.
 

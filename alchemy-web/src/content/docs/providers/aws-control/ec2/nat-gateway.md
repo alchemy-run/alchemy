@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 NatGateways with Alchemy
+title: NatGateway
 description: Learn how to create, update, and manage AWS EC2 NatGateways using Alchemy Cloud Control.
 ---
-
-# NatGateway
 
 The NatGateway resource lets you manage [AWS EC2 NatGateways](https://docs.aws.amazon.com/ec2/latest/userguide/) which allow instances in a private subnet to connect to the internet while preventing inbound traffic from the internet.
 

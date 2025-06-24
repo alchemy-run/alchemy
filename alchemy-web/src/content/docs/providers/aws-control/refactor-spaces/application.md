@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RefactorSpaces Applications with Alchemy
+title: Application
 description: Learn how to create, update, and manage AWS RefactorSpaces Applications using Alchemy Cloud Control.
 ---
-
-# Application
 
 The Application resource allows you to manage [AWS RefactorSpaces Applications](https://docs.aws.amazon.com/refactorspaces/latest/userguide/) for microservices development and deployment. This resource provides a streamlined way to create and configure applications within the RefactorSpaces environment.
 

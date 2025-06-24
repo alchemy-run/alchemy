@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Redshift ClusterSecurityGroups with Alchemy
+title: ClusterSecurityGroup
 description: Learn how to create, update, and manage AWS Redshift ClusterSecurityGroups using Alchemy Cloud Control.
 ---
-
-# ClusterSecurityGroup
 
 The ClusterSecurityGroup resource lets you manage AWS Redshift Cluster Security Groups, which control access to your Redshift clusters. For more information, refer to the [AWS Redshift ClusterSecurityGroups documentation](https://docs.aws.amazon.com/redshift/latest/userguide/).
 

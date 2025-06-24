@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog LaunchRoleConstraints with Alchemy
+title: LaunchRoleConstraint
 description: Learn how to create, update, and manage AWS ServiceCatalog LaunchRoleConstraints using Alchemy Cloud Control.
 ---
-
-# LaunchRoleConstraint
 
 The LaunchRoleConstraint resource allows you to manage the launch role constraints for AWS Service Catalog products. This enables you to specify the IAM role that users can assume when launching a product from a portfolio. For more information, visit the [AWS ServiceCatalog LaunchRoleConstraints](https://docs.aws.amazon.com/servicecatalog/latest/userguide/) documentation.
 

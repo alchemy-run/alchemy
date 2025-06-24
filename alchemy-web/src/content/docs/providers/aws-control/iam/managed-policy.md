@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM ManagedPolicys with Alchemy
+title: ManagedPolicy
 description: Learn how to create, update, and manage AWS IAM ManagedPolicys using Alchemy Cloud Control.
 ---
-
-# ManagedPolicy
 
 The ManagedPolicy resource lets you manage [AWS IAM ManagedPolicys](https://docs.aws.amazon.com/iam/latest/userguide/) which are used to define permissions for AWS resources.
 

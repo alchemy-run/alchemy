@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGatewayV2 Apis with Alchemy
+title: Api
 description: Learn how to create, update, and manage AWS ApiGatewayV2 Apis using Alchemy Cloud Control.
 ---
-
-# Api
 
 The Api resource allows you to create and manage [AWS ApiGatewayV2 Apis](https://docs.aws.amazon.com/apigatewayv2/latest/userguide/) for building and deploying APIs with various configurations.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT CustomMetrics with Alchemy
+title: CustomMetric
 description: Learn how to create, update, and manage AWS IoT CustomMetrics using Alchemy Cloud Control.
 ---
-
-# CustomMetric
 
 The CustomMetric resource allows you to manage [AWS IoT CustomMetrics](https://docs.aws.amazon.com/iot/latest/userguide/) for monitoring and analyzing IoT data. You can create and configure metrics to suit your IoT applications.
 

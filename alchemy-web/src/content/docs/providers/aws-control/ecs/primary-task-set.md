@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ECS PrimaryTaskSets with Alchemy
+title: PrimaryTaskSet
 description: Learn how to create, update, and manage AWS ECS PrimaryTaskSets using Alchemy Cloud Control.
 ---
-
-# PrimaryTaskSet
 
 The PrimaryTaskSet resource allows you to manage [AWS ECS PrimaryTaskSets](https://docs.aws.amazon.com/ecs/latest/userguide/) for your containerized applications. This resource is essential for managing the task sets that are running under an Amazon ECS service.
 

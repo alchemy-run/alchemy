@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PinpointEmail ConfigurationSetEventDestinations with Alchemy
+title: ConfigurationSetEventDestination
 description: Learn how to create, update, and manage AWS PinpointEmail ConfigurationSetEventDestinations using Alchemy Cloud Control.
 ---
-
-# ConfigurationSetEventDestination
 
 The ConfigurationSetEventDestination resource allows you to manage event destinations for AWS PinpointEmail configuration sets, enabling the tracking of email events such as bounces and complaints. For more details, refer to the [AWS PinpointEmail ConfigurationSetEventDestinations](https://docs.aws.amazon.com/pinpointemail/latest/userguide/) documentation.
 

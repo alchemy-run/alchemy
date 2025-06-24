@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSM MaintenanceWindowTargets with Alchemy
+title: MaintenanceWindowTarget
 description: Learn how to create, update, and manage AWS SSM MaintenanceWindowTargets using Alchemy Cloud Control.
 ---
-
-# MaintenanceWindowTarget
 
 The MaintenanceWindowTarget resource lets you manage [AWS SSM Maintenance Window Targets](https://docs.aws.amazon.com/ssm/latest/userguide/) for executing tasks on specific resources during a defined maintenance window.
 

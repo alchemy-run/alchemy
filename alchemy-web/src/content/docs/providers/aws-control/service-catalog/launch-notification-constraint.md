@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog LaunchNotificationConstraints with Alchemy
+title: LaunchNotificationConstraint
 description: Learn how to create, update, and manage AWS ServiceCatalog LaunchNotificationConstraints using Alchemy Cloud Control.
 ---
-
-# LaunchNotificationConstraint
 
 The LaunchNotificationConstraint resource lets you manage [AWS ServiceCatalog Launch Notification Constraints](https://docs.aws.amazon.com/servicecatalog/latest/userguide/). This resource is used to specify notification settings for when a product is launched from a portfolio.
 

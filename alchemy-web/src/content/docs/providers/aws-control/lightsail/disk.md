@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lightsail Disks with Alchemy
+title: Disk
 description: Learn how to create, update, and manage AWS Lightsail Disks using Alchemy Cloud Control.
 ---
-
-# Disk
 
 The Disk resource allows you to manage [AWS Lightsail Disks](https://docs.aws.amazon.com/lightsail/latest/userguide/) for your applications and services running on Lightsail. Disks can be attached to Lightsail instances to provide additional storage resources.
 

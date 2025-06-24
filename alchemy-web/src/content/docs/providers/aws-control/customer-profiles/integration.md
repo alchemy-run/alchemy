@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CustomerProfiles Integrations with Alchemy
+title: Integration
 description: Learn how to create, update, and manage AWS CustomerProfiles Integrations using Alchemy Cloud Control.
 ---
-
-# Integration
 
 The Integration resource allows you to manage [AWS CustomerProfiles Integrations](https://docs.aws.amazon.com/customerprofiles/latest/userguide/) that define how data is connected and integrated into your customer profiles.
 

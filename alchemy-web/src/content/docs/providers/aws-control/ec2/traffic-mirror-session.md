@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TrafficMirrorSessions with Alchemy
+title: TrafficMirrorSession
 description: Learn how to create, update, and manage AWS EC2 TrafficMirrorSessions using Alchemy Cloud Control.
 ---
-
-# TrafficMirrorSession
 
 The TrafficMirrorSession resource allows you to create, update, and manage Traffic Mirror sessions in Amazon EC2. Traffic Mirror sessions enable you to duplicate and inspect network traffic in real-time, facilitating monitoring and security analysis. For more details, refer to the [AWS EC2 TrafficMirrorSessions documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

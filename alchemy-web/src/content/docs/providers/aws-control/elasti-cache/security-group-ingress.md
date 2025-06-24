@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ElastiCache SecurityGroupIngresss with Alchemy
+title: SecurityGroupIngress
 description: Learn how to create, update, and manage AWS ElastiCache SecurityGroupIngresss using Alchemy Cloud Control.
 ---
-
-# SecurityGroupIngress
 
 The SecurityGroupIngress resource allows you to manage the inbound access rules for an Amazon ElastiCache security group. This resource is essential for controlling which EC2 security groups can communicate with your ElastiCache cluster. For more information, visit the [AWS ElastiCache SecurityGroupIngress documentation](https://docs.aws.amazon.com/elasticache/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityHub PolicyAssociations with Alchemy
+title: PolicyAssociation
 description: Learn how to create, update, and manage AWS SecurityHub PolicyAssociations using Alchemy Cloud Control.
 ---
-
-# PolicyAssociation
 
 The PolicyAssociation resource lets you manage [AWS SecurityHub PolicyAssociations](https://docs.aws.amazon.com/securityhub/latest/userguide/) for associating security policies with targets like accounts or organizational units.
 

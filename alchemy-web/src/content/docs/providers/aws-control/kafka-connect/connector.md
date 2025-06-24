@@ -1,9 +1,7 @@
 ---
-title: Managing AWS KafkaConnect Connectors with Alchemy
+title: Connector
 description: Learn how to create, update, and manage AWS KafkaConnect Connectors using Alchemy Cloud Control.
 ---
-
-# Connector
 
 The Connector resource lets you manage [AWS KafkaConnect Connectors](https://docs.aws.amazon.com/kafkaconnect/latest/userguide/) and their configuration settings.
 

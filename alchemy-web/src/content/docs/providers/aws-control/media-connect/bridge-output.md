@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaConnect BridgeOutputs with Alchemy
+title: BridgeOutput
 description: Learn how to create, update, and manage AWS MediaConnect BridgeOutputs using Alchemy Cloud Control.
 ---
-
-# BridgeOutput
 
 The BridgeOutput resource allows you to manage [AWS MediaConnect BridgeOutputs](https://docs.aws.amazon.com/mediaconnect/latest/userguide/) and their configuration settings.
 

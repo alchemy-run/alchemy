@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataSync LocationEFSs with Alchemy
+title: LocationEFS
 description: Learn how to create, update, and manage AWS DataSync LocationEFSs using Alchemy Cloud Control.
 ---
-
-# LocationEFS
 
 The LocationEFS resource lets you manage [AWS DataSync LocationEFSs](https://docs.aws.amazon.com/datasync/latest/userguide/) for transferring data between AWS and on-premises environments using Amazon Elastic File System (EFS).
 

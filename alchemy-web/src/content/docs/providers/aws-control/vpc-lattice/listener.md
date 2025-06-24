@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VpcLattice Listeners with Alchemy
+title: Listener
 description: Learn how to create, update, and manage AWS VpcLattice Listeners using Alchemy Cloud Control.
 ---
-
-# Listener
 
 The Listener resource lets you manage [AWS VpcLattice Listeners](https://docs.aws.amazon.com/vpclattice/latest/userguide/) that serve as entry points for traffic routing in your application. 
 

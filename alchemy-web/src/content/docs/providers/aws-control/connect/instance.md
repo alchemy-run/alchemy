@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect Instances with Alchemy
+title: Instance
 description: Learn how to create, update, and manage AWS Connect Instances using Alchemy Cloud Control.
 ---
-
-# Instance
 
 The Instance resource lets you manage [AWS Connect Instances](https://docs.aws.amazon.com/connect/latest/userguide/) and their configuration settings.
 

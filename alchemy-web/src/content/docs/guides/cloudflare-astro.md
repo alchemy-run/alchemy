@@ -4,8 +4,6 @@ title: Astro
 description: Quick guide to initializing and deploying an Astro SSR application to Cloudflare Workers using Alchemy.
 ---
 
-# Astro
-
 This guide shows how to initialize and deploy an Astro server-side–rendered site to Cloudflare using Alchemy.
 
 ## Init

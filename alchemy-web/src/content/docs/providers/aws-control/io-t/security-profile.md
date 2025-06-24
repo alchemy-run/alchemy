@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT SecurityProfiles with Alchemy
+title: SecurityProfile
 description: Learn how to create, update, and manage AWS IoT SecurityProfiles using Alchemy Cloud Control.
 ---
-
-# SecurityProfile
 
 The SecurityProfile resource lets you manage [AWS IoT SecurityProfiles](https://docs.aws.amazon.com/iot/latest/userguide/) for monitoring and controlling the security aspects of your IoT devices.
 

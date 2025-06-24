@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect TrafficDistributionGroups with Alchemy
+title: TrafficDistributionGroup
 description: Learn how to create, update, and manage AWS Connect TrafficDistributionGroups using Alchemy Cloud Control.
 ---
-
-# TrafficDistributionGroup
 
 The TrafficDistributionGroup resource lets you manage [AWS Connect TrafficDistributionGroups](https://docs.aws.amazon.com/connect/latest/userguide/) for distributing traffic across multiple AWS Connect instances.
 

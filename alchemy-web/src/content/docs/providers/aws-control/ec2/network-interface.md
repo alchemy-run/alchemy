@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 NetworkInterfaces with Alchemy
+title: NetworkInterface
 description: Learn how to create, update, and manage AWS EC2 NetworkInterfaces using Alchemy Cloud Control.
 ---
-
-# NetworkInterface
 
 The NetworkInterface resource allows you to manage [AWS EC2 NetworkInterfaces](https://docs.aws.amazon.com/ec2/latest/userguide/) that enable communication between your instances and other resources. 
 

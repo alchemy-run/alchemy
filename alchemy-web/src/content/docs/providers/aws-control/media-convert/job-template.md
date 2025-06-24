@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaConvert JobTemplates with Alchemy
+title: JobTemplate
 description: Learn how to create, update, and manage AWS MediaConvert JobTemplates using Alchemy Cloud Control.
 ---
-
-# JobTemplate
 
 The JobTemplate resource allows you to manage [AWS MediaConvert JobTemplates](https://docs.aws.amazon.com/mediaconvert/latest/userguide/) for video transcoding workflows. JobTemplates define the settings used for transcoding video files, enabling consistent processing and output.
 

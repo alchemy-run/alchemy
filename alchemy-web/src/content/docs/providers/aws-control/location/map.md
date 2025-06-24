@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Location Maps with Alchemy
+title: Map
 description: Learn how to create, update, and manage AWS Location Maps using Alchemy Cloud Control.
 ---
-
-# Map
 
 The Map resource lets you manage [AWS Location Maps](https://docs.aws.amazon.com/location/latest/userguide/) for geospatial applications and services.
 

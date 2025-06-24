@@ -1,9 +1,7 @@
 ---
-title: Cloudflare AI
+title: AI
 description: Learn how to use Cloudflare Workers AI binding with Alchemy to run machine learning models on Cloudflare's global network.
 ---
-
-# AI
 
 The AI binding lets you run machine learning models using [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) directly from your Workers.
 

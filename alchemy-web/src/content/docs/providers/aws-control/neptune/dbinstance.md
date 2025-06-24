@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Neptune DBInstances with Alchemy
+title: DBInstance
 description: Learn how to create, update, and manage AWS Neptune DBInstances using Alchemy Cloud Control.
 ---
-
-# DBInstance
 
 The DBInstance resource lets you manage [AWS Neptune DBInstances](https://docs.aws.amazon.com/neptune/latest/userguide/) for graph databases, providing high availability and scalability.
 

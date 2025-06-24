@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ImageBuilder InfrastructureConfigurations with Alchemy
+title: InfrastructureConfiguration
 description: Learn how to create, update, and manage AWS ImageBuilder InfrastructureConfigurations using Alchemy Cloud Control.
 ---
-
-# InfrastructureConfiguration
 
 The InfrastructureConfiguration resource allows you to define and manage the infrastructure settings for AWS ImageBuilder, enabling you to automate the creation of images in a controlled and customizable environment. For more details, refer to the [AWS ImageBuilder InfrastructureConfigurations documentation](https://docs.aws.amazon.com/imagebuilder/latest/userguide/).
 

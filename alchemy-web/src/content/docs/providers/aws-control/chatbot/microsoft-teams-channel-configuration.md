@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Chatbot MicrosoftTeamsChannelConfigurations with Alchemy
+title: MicrosoftTeamsChannelConfiguration
 description: Learn how to create, update, and manage AWS Chatbot MicrosoftTeamsChannelConfigurations using Alchemy Cloud Control.
 ---
-
-# MicrosoftTeamsChannelConfiguration
 
 The MicrosoftTeamsChannelConfiguration resource allows you to configure AWS Chatbot to send notifications and execute commands in Microsoft Teams channels. For more information, refer to the [AWS Chatbot MicrosoftTeamsChannelConfigurations](https://docs.aws.amazon.com/chatbot/latest/userguide/) documentation.
 

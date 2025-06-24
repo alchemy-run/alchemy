@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Deadline LicenseEndpoints with Alchemy
+title: LicenseEndpoint
 description: Learn how to create, update, and manage AWS Deadline LicenseEndpoints using Alchemy Cloud Control.
 ---
-
-# LicenseEndpoint
 
 The LicenseEndpoint resource allows you to manage AWS Deadline LicenseEndpoints, which are essential for licensing access to Deadline render management software. For more information, refer to the [AWS Deadline LicenseEndpoints documentation](https://docs.aws.amazon.com/deadline/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QBusiness Indexs with Alchemy
+title: Index
 description: Learn how to create, update, and manage AWS QBusiness Indexs using Alchemy Cloud Control.
 ---
-
-# Index
 
 The Index resource lets you manage [AWS QBusiness Indexs](https://docs.aws.amazon.com/qbusiness/latest/userguide/) for organizing and indexing business documents efficiently.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WorkSpacesThinClient Environments with Alchemy
+title: Environment
 description: Learn how to create, update, and manage AWS WorkSpacesThinClient Environments using Alchemy Cloud Control.
 ---
-
-# Environment
 
 The Environment resource lets you manage [AWS WorkSpacesThinClient Environments](https://docs.aws.amazon.com/workspacesthinclient/latest/userguide/) and their configuration settings.
 

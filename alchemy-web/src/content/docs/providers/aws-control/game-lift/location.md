@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GameLift Locations with Alchemy
+title: Location
 description: Learn how to create, update, and manage AWS GameLift Locations using Alchemy Cloud Control.
 ---
-
-# Location
 
 The Location resource allows you to manage [AWS GameLift Locations](https://docs.aws.amazon.com/gamelift/latest/userguide/) for deploying game servers across various geographic regions to optimize performance and latency.
 

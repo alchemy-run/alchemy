@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VPNConnections with Alchemy
+title: VPNConnection
 description: Learn how to create, update, and manage AWS EC2 VPNConnections using Alchemy Cloud Control.
 ---
-
-# VPNConnection
 
 The VPNConnection resource allows you to create and manage [AWS EC2 VPNConnections](https://docs.aws.amazon.com/ec2/latest/userguide/) for establishing secure connections between your on-premises network and your AWS environment.
 

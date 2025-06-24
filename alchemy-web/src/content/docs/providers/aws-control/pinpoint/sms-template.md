@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint SmsTemplates with Alchemy
+title: SmsTemplate
 description: Learn how to create, update, and manage AWS Pinpoint SmsTemplates using Alchemy Cloud Control.
 ---
-
-# SmsTemplate
 
 The SmsTemplate resource allows you to manage [AWS Pinpoint SmsTemplates](https://docs.aws.amazon.com/pinpoint/latest/userguide/) for sending SMS messages with predefined content.
 

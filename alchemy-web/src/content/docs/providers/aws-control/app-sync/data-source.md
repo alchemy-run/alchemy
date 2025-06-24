@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppSync DataSources with Alchemy
+title: DataSource
 description: Learn how to create, update, and manage AWS AppSync DataSources using Alchemy Cloud Control.
 ---
-
-# DataSource
 
 The DataSource resource allows you to manage [AWS AppSync DataSources](https://docs.aws.amazon.com/appsync/latest/userguide/) which serve as the integration points for your GraphQL API. You can connect to various data sources, including DynamoDB, Lambda functions, HTTP endpoints, and more.
 

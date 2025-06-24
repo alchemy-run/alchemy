@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Deadline MeteredProducts with Alchemy
+title: MeteredProduct
 description: Learn how to create, update, and manage AWS Deadline MeteredProducts using Alchemy Cloud Control.
 ---
-
-# MeteredProduct
 
 The MeteredProduct resource allows you to manage [AWS Deadline MeteredProducts](https://docs.aws.amazon.com/deadline/latest/userguide/) for licensing and tracking usage in your AWS infrastructure.
 

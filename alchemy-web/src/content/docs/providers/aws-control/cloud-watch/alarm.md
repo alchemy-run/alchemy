@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudWatch Alarms with Alchemy
+title: Alarm
 description: Learn how to create, update, and manage AWS CloudWatch Alarms using Alchemy Cloud Control.
 ---
-
-# Alarm
 
 The Alarm resource lets you manage [AWS CloudWatch Alarms](https://docs.aws.amazon.com/cloudwatch/latest/userguide/) for monitoring your AWS resources and applications. You can set alarms based on specific metrics, and take automated actions when those metrics reach a defined threshold.
 

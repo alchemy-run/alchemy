@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue Jobs with Alchemy
+title: Job
 description: Learn how to create, update, and manage AWS Glue Jobs using Alchemy Cloud Control.
 ---
-
-# Job
 
 The Job resource lets you manage [AWS Glue Jobs](https://docs.aws.amazon.com/glue/latest/userguide/) for data processing and ETL (Extract, Transform, Load) operations.
 

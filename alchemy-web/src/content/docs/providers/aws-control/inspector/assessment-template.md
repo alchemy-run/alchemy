@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Inspector AssessmentTemplates with Alchemy
+title: AssessmentTemplate
 description: Learn how to create, update, and manage AWS Inspector AssessmentTemplates using Alchemy Cloud Control.
 ---
-
-# AssessmentTemplate
 
 The AssessmentTemplate resource allows you to create and manage [AWS Inspector AssessmentTemplates](https://docs.aws.amazon.com/inspector/latest/userguide/) for automated security assessments of your AWS resources.
 

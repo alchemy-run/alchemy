@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QuickSight Analyses with Alchemy
+title: Analysis
 description: Learn how to create, update, and manage AWS QuickSight Analyses using Alchemy Cloud Control.
 ---
-
-# Analysis
 
 The Analysis resource lets you manage [AWS QuickSight Analyses](https://docs.aws.amazon.com/quicksight/latest/userguide/) for visualizing and exploring your data.
 

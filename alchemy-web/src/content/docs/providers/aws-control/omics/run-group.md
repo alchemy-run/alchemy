@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Omics RunGroups with Alchemy
+title: RunGroup
 description: Learn how to create, update, and manage AWS Omics RunGroups using Alchemy Cloud Control.
 ---
-
-# RunGroup
 
 The RunGroup resource allows you to manage AWS Omics RunGroups, which are essential for organizing and executing bioinformatics workflows. For more details, refer to the [AWS Omics RunGroups documentation](https://docs.aws.amazon.com/omics/latest/userguide/).
 

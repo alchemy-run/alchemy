@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataSync LocationAzureBlobs with Alchemy
+title: LocationAzureBlob
 description: Learn how to create, update, and manage AWS DataSync LocationAzureBlobs using Alchemy Cloud Control.
 ---
-
-# LocationAzureBlob
 
 The LocationAzureBlob resource allows you to manage [AWS DataSync LocationAzureBlobs](https://docs.aws.amazon.com/datasync/latest/userguide/) for transferring data between AWS and Azure Blob Storage.
 

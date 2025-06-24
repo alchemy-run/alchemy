@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EventSchemas Registrys with Alchemy
+title: Registry
 description: Learn how to create, update, and manage AWS EventSchemas Registrys using Alchemy Cloud Control.
 ---
-
-# Registry
 
 The Registry resource allows you to create and manage [AWS EventSchemas Registrys](https://docs.aws.amazon.com/eventschemas/latest/userguide/) for organizing event schemas in your AWS account.
 

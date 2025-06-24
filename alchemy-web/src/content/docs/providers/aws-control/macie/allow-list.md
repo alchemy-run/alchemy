@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Macie AllowLists with Alchemy
+title: AllowList
 description: Learn how to create, update, and manage AWS Macie AllowLists using Alchemy Cloud Control.
 ---
-
-# AllowList
 
 The AllowList resource lets you manage [AWS Macie AllowLists](https://docs.aws.amazon.com/macie/latest/userguide/) for identifying and allowing specific S3 objects based on defined criteria.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaLive CloudWatchAlarmTemplates with Alchemy
+title: CloudWatchAlarmTemplate
 description: Learn how to create, update, and manage AWS MediaLive CloudWatchAlarmTemplates using Alchemy Cloud Control.
 ---
-
-# CloudWatchAlarmTemplate
 
 The CloudWatchAlarmTemplate resource allows you to manage [AWS MediaLive CloudWatch Alarm Templates](https://docs.aws.amazon.com/medialive/latest/userguide/), which define the metrics and thresholds for CloudWatch alarms associated with your MediaLive resources.
 

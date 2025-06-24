@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront StreamingDistributions with Alchemy
+title: StreamingDistribution
 description: Learn how to create, update, and manage AWS CloudFront StreamingDistributions using Alchemy Cloud Control.
 ---
-
-# StreamingDistribution
 
 The StreamingDistribution resource allows you to create and manage [AWS CloudFront StreamingDistributions](https://docs.aws.amazon.com/cloudfront/latest/userguide/) for delivering streaming content to viewers.
 

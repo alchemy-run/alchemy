@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cognito IdentityPools with Alchemy
+title: IdentityPool
 description: Learn how to create, update, and manage AWS Cognito IdentityPools using Alchemy Cloud Control.
 ---
-
-# IdentityPool
 
 The IdentityPool resource allows you to manage [AWS Cognito IdentityPools](https://docs.aws.amazon.com/cognito/latest/userguide/) for user authentication and access management in your applications.
 

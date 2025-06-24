@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudWatch InsightRules with Alchemy
+title: InsightRule
 description: Learn how to create, update, and manage AWS CloudWatch InsightRules using Alchemy Cloud Control.
 ---
-
-# InsightRule
 
 The InsightRule resource lets you manage [AWS CloudWatch InsightRules](https://docs.aws.amazon.com/cloudwatch/latest/userguide/) for monitoring and analyzing log data in real-time.
 

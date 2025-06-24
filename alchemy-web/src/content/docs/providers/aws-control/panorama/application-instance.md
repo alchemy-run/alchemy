@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Panorama ApplicationInstances with Alchemy
+title: ApplicationInstance
 description: Learn how to create, update, and manage AWS Panorama ApplicationInstances using Alchemy Cloud Control.
 ---
-
-# ApplicationInstance
 
 The ApplicationInstance resource allows you to manage [AWS Panorama ApplicationInstances](https://docs.aws.amazon.com/panorama/latest/userguide/) which are used for deploying machine learning models to edge devices.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Wisdom AIGuardrailVersions with Alchemy
+title: AIGuardrailVersion
 description: Learn how to create, update, and manage AWS Wisdom AIGuardrailVersions using Alchemy Cloud Control.
 ---
-
-# AIGuardrailVersion
 
 The AIGuardrailVersion resource allows you to manage versions of AI guardrails within the AWS Wisdom service. For more information, visit the [AWS Wisdom AIGuardrailVersions](https://docs.aws.amazon.com/wisdom/latest/userguide/).
 

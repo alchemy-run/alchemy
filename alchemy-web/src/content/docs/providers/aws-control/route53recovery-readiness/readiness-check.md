@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53RecoveryReadiness ReadinessChecks with Alchemy
+title: ReadinessCheck
 description: Learn how to create, update, and manage AWS Route53RecoveryReadiness ReadinessChecks using Alchemy Cloud Control.
 ---
-
-# ReadinessCheck
 
 The ReadinessCheck resource allows you to manage [AWS Route53RecoveryReadiness ReadinessChecks](https://docs.aws.amazon.com/route53recoveryreadiness/latest/userguide/) for ensuring your applications can recover from failures.
 

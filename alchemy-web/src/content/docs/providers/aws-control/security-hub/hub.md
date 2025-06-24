@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityHub Hubs with Alchemy
+title: Hub
 description: Learn how to create, update, and manage AWS SecurityHub Hubs using Alchemy Cloud Control.
 ---
-
-# Hub
 
 The Hub resource lets you manage [AWS SecurityHub Hubs](https://docs.aws.amazon.com/securityhub/latest/userguide/) for centralizing security findings and compliance checks across your AWS accounts.
 

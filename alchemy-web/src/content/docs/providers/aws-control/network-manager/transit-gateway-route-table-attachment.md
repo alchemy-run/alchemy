@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager TransitGatewayRouteTableAttachments with Alchemy
+title: TransitGatewayRouteTableAttachment
 description: Learn how to create, update, and manage AWS NetworkManager TransitGatewayRouteTableAttachments using Alchemy Cloud Control.
 ---
-
-# TransitGatewayRouteTableAttachment
 
 The TransitGatewayRouteTableAttachment resource allows you to manage [AWS NetworkManager TransitGatewayRouteTableAttachments](https://docs.aws.amazon.com/networkmanager/latest/userguide/) and their configurations. This resource enables the attachment of a transit gateway route table to a specified peering connection, allowing for efficient routing of traffic.
 

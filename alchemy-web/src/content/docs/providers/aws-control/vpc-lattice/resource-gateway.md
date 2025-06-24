@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VpcLattice ResourceGateways with Alchemy
+title: ResourceGateway
 description: Learn how to create, update, and manage AWS VpcLattice ResourceGateways using Alchemy Cloud Control.
 ---
-
-# ResourceGateway
 
 The ResourceGateway resource allows you to manage [AWS VpcLattice ResourceGateways](https://docs.aws.amazon.com/vpclattice/latest/userguide/) which connect your VPCs and resources through a unified gateway interface.
 

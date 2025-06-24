@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TransitGatewayRouteTableAssociations with Alchemy
+title: TransitGatewayRouteTableAssociation
 description: Learn how to create, update, and manage AWS EC2 TransitGatewayRouteTableAssociations using Alchemy Cloud Control.
 ---
-
-# TransitGatewayRouteTableAssociation
 
 The TransitGatewayRouteTableAssociation resource allows you to associate a transit gateway route table with a specified transit gateway attachment in AWS. This association is essential for routing network traffic through the transit gateway. More information can be found in the [AWS EC2 TransitGatewayRouteTableAssociations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

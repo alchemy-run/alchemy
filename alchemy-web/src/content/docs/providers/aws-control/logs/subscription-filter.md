@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Logs SubscriptionFilters with Alchemy
+title: SubscriptionFilter
 description: Learn how to create, update, and manage AWS Logs SubscriptionFilters using Alchemy Cloud Control.
 ---
-
-# SubscriptionFilter
 
 The SubscriptionFilter resource allows you to manage [AWS Logs SubscriptionFilters](https://docs.aws.amazon.com/logs/latest/userguide/) for streaming log data to various destinations such as Amazon Kinesis or Lambda functions.
 

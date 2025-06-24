@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QuickSight Dashboards with Alchemy
+title: Dashboard
 description: Learn how to create, update, and manage AWS QuickSight Dashboards using Alchemy Cloud Control.
 ---
-
-# Dashboard
 
 The Dashboard resource lets you manage [AWS QuickSight Dashboards](https://docs.aws.amazon.com/quicksight/latest/userguide/) for data visualization and reporting.
 

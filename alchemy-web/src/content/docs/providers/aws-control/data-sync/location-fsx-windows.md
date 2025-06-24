@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataSync LocationFSxWindows with Alchemy
+title: LocationFSxWindows
 description: Learn how to create, update, and manage AWS DataSync LocationFSxWindows using Alchemy Cloud Control.
 ---
-
-# LocationFSxWindows
 
 The LocationFSxWindows resource allows you to create and manage an AWS DataSync location that uses FSx for Windows File Server as a source or destination for data transfer. For more information, see the [AWS DataSync LocationFSxWindows documentation](https://docs.aws.amazon.com/datasync/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IVS IngestConfigurations with Alchemy
+title: IngestConfiguration
 description: Learn how to create, update, and manage AWS IVS IngestConfigurations using Alchemy Cloud Control.
 ---
-
-# IngestConfiguration
 
 The IngestConfiguration resource lets you manage [AWS IVS IngestConfigurations](https://docs.aws.amazon.com/ivs/latest/userguide/) for configuring video ingest settings in AWS Interactive Video Service.
 

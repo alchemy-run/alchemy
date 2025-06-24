@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TransitGatewayPeeringAttachments with Alchemy
+title: TransitGatewayPeeringAttachment
 description: Learn how to create, update, and manage AWS EC2 TransitGatewayPeeringAttachments using Alchemy Cloud Control.
 ---
-
-# TransitGatewayPeeringAttachment
 
 The TransitGatewayPeeringAttachment resource lets you manage [AWS EC2 Transit Gateway Peering Attachments](https://docs.aws.amazon.com/ec2/latest/userguide/). This resource facilitates the connection between two transit gateways, allowing for the exchange of traffic between their respective networks.
 

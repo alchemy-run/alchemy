@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway DocumentationParts with Alchemy
+title: DocumentationPart
 description: Learn how to create, update, and manage AWS ApiGateway DocumentationParts using Alchemy Cloud Control.
 ---
-
-# DocumentationPart
 
 The DocumentationPart resource allows you to manage [AWS ApiGateway DocumentationParts](https://docs.aws.amazon.com/apigateway/latest/userguide/) which are used to add documentation to your API Gateway APIs.
 

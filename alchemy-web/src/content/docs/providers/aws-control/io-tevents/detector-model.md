@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTEvents DetectorModels with Alchemy
+title: DetectorModel
 description: Learn how to create, update, and manage AWS IoTEvents DetectorModels using Alchemy Cloud Control.
 ---
-
-# DetectorModel
 
 The DetectorModel resource allows you to manage [AWS IoTEvents DetectorModels](https://docs.aws.amazon.com/iotevents/latest/userguide/) for monitoring events from IoT devices and triggering actions based on defined conditions.
 

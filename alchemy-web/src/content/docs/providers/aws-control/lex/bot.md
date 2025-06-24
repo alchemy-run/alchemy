@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lex Bots with Alchemy
+title: Bot
 description: Learn how to create, update, and manage AWS Lex Bots using Alchemy Cloud Control.
 ---
-
-# Bot
 
 The Bot resource lets you create and manage [AWS Lex Bots](https://docs.aws.amazon.com/lex/latest/userguide/) for building conversational interfaces using voice and text. 
 

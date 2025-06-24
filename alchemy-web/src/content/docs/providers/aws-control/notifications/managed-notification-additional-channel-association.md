@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Notifications ManagedNotificationAdditionalChannelAssociations with Alchemy
+title: ManagedNotificationAdditionalChannelAssociation
 description: Learn how to create, update, and manage AWS Notifications ManagedNotificationAdditionalChannelAssociations using Alchemy Cloud Control.
 ---
-
-# ManagedNotificationAdditionalChannelAssociation
 
 The ManagedNotificationAdditionalChannelAssociation resource allows you to associate additional channels with a managed notification configuration in AWS. This is useful for enhancing notification delivery across different channels. For more information, refer to the [AWS Notifications ManagedNotificationAdditionalChannelAssociations](https://docs.aws.amazon.com/notifications/latest/userguide/) documentation.
 

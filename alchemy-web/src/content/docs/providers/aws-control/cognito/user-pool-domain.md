@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cognito UserPoolDomains with Alchemy
+title: UserPoolDomain
 description: Learn how to create, update, and manage AWS Cognito UserPoolDomains using Alchemy Cloud Control.
 ---
-
-# UserPoolDomain
 
 The UserPoolDomain resource allows you to manage [AWS Cognito UserPoolDomains](https://docs.aws.amazon.com/cognito/latest/userguide/) for your user pools, enabling custom authentication flow and user experience.
 

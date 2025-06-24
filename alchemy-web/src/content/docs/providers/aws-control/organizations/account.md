@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Organizations Accounts with Alchemy
+title: Account
 description: Learn how to create, update, and manage AWS Organizations Accounts using Alchemy Cloud Control.
 ---
-
-# Account
 
 The Account resource lets you manage [AWS Organizations Accounts](https://docs.aws.amazon.com/organizations/latest/userguide/) and their configurations within your AWS Organization.
 

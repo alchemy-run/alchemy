@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Bedrock PromptVersions with Alchemy
+title: PromptVersion
 description: Learn how to create, update, and manage AWS Bedrock PromptVersions using Alchemy Cloud Control.
 ---
-
-# PromptVersion
 
 The PromptVersion resource allows you to create and manage [AWS Bedrock PromptVersions](https://docs.aws.amazon.com/bedrock/latest/userguide/) which are used for versioning prompts in your AI applications.
 

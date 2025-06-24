@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataSync LocationSMBs with Alchemy
+title: LocationSMB
 description: Learn how to create, update, and manage AWS DataSync LocationSMBs using Alchemy Cloud Control.
 ---
-
-# LocationSMB
 
 The LocationSMB resource allows you to manage [AWS DataSync LocationSMBs](https://docs.aws.amazon.com/datasync/latest/userguide/) for transferring files between your on-premises SMB file shares and AWS storage services.
 

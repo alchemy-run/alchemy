@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WorkSpacesWeb DataProtectionSettingss with Alchemy
+title: DataProtectionSettings
 description: Learn how to create, update, and manage AWS WorkSpacesWeb DataProtectionSettingss using Alchemy Cloud Control.
 ---
-
-# DataProtectionSettings
 
 The DataProtectionSettings resource allows you to configure data protection settings for AWS WorkSpaces Web, including redaction configurations and encrypted data management. For more details, refer to the [AWS WorkSpacesWeb DataProtectionSettings documentation](https://docs.aws.amazon.com/workspacesweb/latest/userguide/).
 

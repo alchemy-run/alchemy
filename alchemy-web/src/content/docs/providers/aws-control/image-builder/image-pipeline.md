@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ImageBuilder ImagePipelines with Alchemy
+title: ImagePipeline
 description: Learn how to create, update, and manage AWS ImageBuilder ImagePipelines using Alchemy Cloud Control.
 ---
-
-# ImagePipeline
 
 The ImagePipeline resource lets you manage [AWS ImageBuilder ImagePipelines](https://docs.aws.amazon.com/imagebuilder/latest/userguide/) for automating the creation, updating, and management of images. This resource allows you to define how images are built and managed in your AWS environment.
 

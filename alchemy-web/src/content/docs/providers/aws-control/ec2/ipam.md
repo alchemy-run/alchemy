@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 IPAMs with Alchemy
+title: IPAM
 description: Learn how to create, update, and manage AWS EC2 IPAMs using Alchemy Cloud Control.
 ---
-
-# IPAM
 
 The IPAM (IP Address Manager) resource allows you to manage your IP address allocations and configurations within AWS EC2. For more details, refer to the [AWS EC2 IPAMs documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

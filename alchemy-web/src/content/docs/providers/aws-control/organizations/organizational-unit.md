@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Organizations OrganizationalUnits with Alchemy
+title: OrganizationalUnit
 description: Learn how to create, update, and manage AWS Organizations OrganizationalUnits using Alchemy Cloud Control.
 ---
-
-# OrganizationalUnit
 
 The OrganizationalUnit resource lets you manage [AWS Organizations OrganizationalUnits](https://docs.aws.amazon.com/organizations/latest/userguide/) within your AWS account, allowing you to organize accounts in a hierarchical structure.
 

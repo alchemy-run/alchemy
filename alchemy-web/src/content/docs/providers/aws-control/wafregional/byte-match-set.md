@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAFRegional ByteMatchSets with Alchemy
+title: ByteMatchSet
 description: Learn how to create, update, and manage AWS WAFRegional ByteMatchSets using Alchemy Cloud Control.
 ---
-
-# ByteMatchSet
 
 The ByteMatchSet resource lets you manage [AWS WAFRegional ByteMatchSets](https://docs.aws.amazon.com/wafregional/latest/userguide/) which are used to specify a sequence of bytes that you want AWS WAF to search for in web requests.
 

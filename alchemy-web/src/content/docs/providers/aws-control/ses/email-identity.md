@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES EmailIdentitys with Alchemy
+title: EmailIdentity
 description: Learn how to create, update, and manage AWS SES EmailIdentitys using Alchemy Cloud Control.
 ---
-
-# EmailIdentity
 
 The EmailIdentity resource lets you manage [AWS SES EmailIdentitys](https://docs.aws.amazon.com/ses/latest/userguide/) for sending email using the Amazon Simple Email Service (SES).
 

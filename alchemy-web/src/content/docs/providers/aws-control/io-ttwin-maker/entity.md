@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTTwinMaker Entitys with Alchemy
+title: Entity
 description: Learn how to create, update, and manage AWS IoTTwinMaker Entitys using Alchemy Cloud Control.
 ---
-
-# Entity
 
 The Entity resource lets you manage [AWS IoTTwinMaker Entities](https://docs.aws.amazon.com/iottwinmaker/latest/userguide/) which represent real-world objects in your digital twin environments.
 

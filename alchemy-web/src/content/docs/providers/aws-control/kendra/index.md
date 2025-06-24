@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Kendra Indexs with Alchemy
+title: Index
 description: Learn how to create, update, and manage AWS Kendra Indexs using Alchemy Cloud Control.
 ---
-
-# Index
 
 The Index resource lets you manage [AWS Kendra Indexs](https://docs.aws.amazon.com/kendra/latest/userguide/) for powerful search capabilities across your data sources.
 

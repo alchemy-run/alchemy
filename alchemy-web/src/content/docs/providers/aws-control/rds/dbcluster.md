@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS DBClusters with Alchemy
+title: DBCluster
 description: Learn how to create, update, and manage AWS RDS DBClusters using Alchemy Cloud Control.
 ---
-
-# DBCluster
 
 The DBCluster resource allows you to manage [AWS RDS DBClusters](https://docs.aws.amazon.com/rds/latest/userguide/) and their associated configurations. This resource facilitates the creation and management of highly available and scalable database clusters.
 

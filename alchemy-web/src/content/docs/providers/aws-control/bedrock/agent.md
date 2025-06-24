@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Bedrock Agents with Alchemy
+title: Agent
 description: Learn how to create, update, and manage AWS Bedrock Agents using Alchemy Cloud Control.
 ---
-
-# Agent
 
 The Agent resource lets you manage [AWS Bedrock Agents](https://docs.aws.amazon.com/bedrock/latest/userguide/) for building and deploying machine learning applications.
 

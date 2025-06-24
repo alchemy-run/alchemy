@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAFRegional WebACLAssociations with Alchemy
+title: WebACLAssociation
 description: Learn how to create, update, and manage AWS WAFRegional WebACLAssociations using Alchemy Cloud Control.
 ---
-
-# WebACLAssociation
 
 The WebACLAssociation resource allows you to associate a WebACL with a specified resource in AWS WAFRegional. This is essential for protecting your web applications from common web exploits and vulnerabilities. For more information, refer to the [AWS WAFRegional WebACLAssociations documentation](https://docs.aws.amazon.com/wafregional/latest/userguide/).
 

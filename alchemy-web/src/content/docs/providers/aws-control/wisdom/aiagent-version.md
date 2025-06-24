@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Wisdom AIAgentVersions with Alchemy
+title: AIAgentVersion
 description: Learn how to create, update, and manage AWS Wisdom AIAgentVersions using Alchemy Cloud Control.
 ---
-
-# AIAgentVersion
 
 The AIAgentVersion resource allows you to create and manage versions of AI Agents within AWS Wisdom. This resource is essential for maintaining the configuration and deployment of your AI agents. For more information, consult the [AWS Wisdom AIAgentVersions documentation](https://docs.aws.amazon.com/wisdom/latest/userguide/).
 

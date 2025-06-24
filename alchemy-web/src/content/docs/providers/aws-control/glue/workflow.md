@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue Workflows with Alchemy
+title: Workflow
 description: Learn how to create, update, and manage AWS Glue Workflows using Alchemy Cloud Control.
 ---
-
-# Workflow
 
 The Workflow resource lets you manage [AWS Glue Workflows](https://docs.aws.amazon.com/glue/latest/userguide/) for orchestrating complex ETL (Extract, Transform, Load) processes.
 

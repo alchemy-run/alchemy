@@ -4,8 +4,6 @@ title: Testing
 description: Write effective tests for your infrastructure resources with Alchemy's testing utilities. Learn proper test setup, resource assertions, and automatic cleanup.
 ---
 
-# Testing
-
 Alchemy resources are easy to test since they're just functions, but Alchemy also offers a simple `alchemy.test` utility to help isolate your [Scopes](../concepts/scope.md) for each test suite.
 
 ## Test Setup

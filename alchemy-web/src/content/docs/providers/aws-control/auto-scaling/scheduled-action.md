@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AutoScaling ScheduledActions with Alchemy
+title: ScheduledAction
 description: Learn how to create, update, and manage AWS AutoScaling ScheduledActions using Alchemy Cloud Control.
 ---
-
-# ScheduledAction
 
 The ScheduledAction resource lets you manage [AWS AutoScaling ScheduledActions](https://docs.aws.amazon.com/autoscaling/latest/userguide/) to automate scaling actions for your Auto Scaling groups.
 

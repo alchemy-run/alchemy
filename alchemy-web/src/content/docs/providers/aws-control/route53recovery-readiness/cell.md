@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53RecoveryReadiness Cells with Alchemy
+title: Cell
 description: Learn how to create, update, and manage AWS Route53RecoveryReadiness Cells using Alchemy Cloud Control.
 ---
-
-# Cell
 
 The Cell resource allows you to manage [AWS Route53RecoveryReadiness Cells](https://docs.aws.amazon.com/route53recoveryreadiness/latest/userguide/) that help ensure recovery readiness for your applications across multiple AWS Regions.
 

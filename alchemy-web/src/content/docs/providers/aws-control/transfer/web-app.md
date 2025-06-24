@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Transfer WebApps with Alchemy
+title: WebApp
 description: Learn how to create, update, and manage AWS Transfer WebApps using Alchemy Cloud Control.
 ---
-
-# WebApp
 
 The WebApp resource lets you manage [AWS Transfer WebApps](https://docs.aws.amazon.com/transfer/latest/userguide/) for file transfer services, providing a customizable web interface for your users.
 

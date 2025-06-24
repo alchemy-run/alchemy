@@ -1,9 +1,7 @@
 ---
-title: Managing AWS LookoutMetrics Alerts with Alchemy
+title: Alert
 description: Learn how to create, update, and manage AWS LookoutMetrics Alerts using Alchemy Cloud Control.
 ---
-
-# Alert
 
 The Alert resource allows you to manage [AWS LookoutMetrics Alerts](https://docs.aws.amazon.com/lookoutmetrics/latest/userguide/) for monitoring anomalies in your data. This resource enables you to set up alerts that notify you when anomalies are detected, allowing for proactive measures in data management.
 

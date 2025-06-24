@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityHub Standards with Alchemy
+title: Standard
 description: Learn how to create, update, and manage AWS SecurityHub Standards using Alchemy Cloud Control.
 ---
-
-# Standard
 
 The Standard resource lets you manage [AWS SecurityHub Standards](https://docs.aws.amazon.com/securityhub/latest/userguide/) to enhance your security posture by enabling various compliance frameworks and security checks.
 

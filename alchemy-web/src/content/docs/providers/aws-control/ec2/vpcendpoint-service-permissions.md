@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VPCEndpointServicePermissions with Alchemy
+title: VPCEndpointServicePermissions
 description: Learn how to create, update, and manage AWS EC2 VPCEndpointServicePermissions using Alchemy Cloud Control.
 ---
-
-# VPCEndpointServicePermissions
 
 The VPCEndpointServicePermissions resource lets you manage permissions for an AWS EC2 VPC Endpoint Service. This resource allows you to specify which AWS accounts can access your endpoint service. For more detailed information, visit the [AWS EC2 VPCEndpointServicePermissions documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

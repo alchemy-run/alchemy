@@ -4,8 +4,6 @@ title: Cloudflare Auth
 description: Configure Cloudflare authentication for your Alchemy applications. Learn to use API tokens, OAuth, or global API keys to securely manage Cloudflare resources.
 ---
 
-# Cloudflare Auth
-
 There are three supported ways of authorizing Alchemy with Cloudflare:
 1. API Token - a token you create once with limited scopes
 2. OAuth - a token created by `wrangler login`

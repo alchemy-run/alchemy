@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Deadline QueueEnvironments with Alchemy
+title: QueueEnvironment
 description: Learn how to create, update, and manage AWS Deadline QueueEnvironments using Alchemy Cloud Control.
 ---
-
-# QueueEnvironment
 
 The QueueEnvironment resource allows you to create and manage [AWS Deadline QueueEnvironments](https://docs.aws.amazon.com/deadline/latest/userguide/) for rendering jobs efficiently in a Deadline environment.
 

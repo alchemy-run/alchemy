@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QuickSight DataSources with Alchemy
+title: DataSource
 description: Learn how to create, update, and manage AWS QuickSight DataSources using Alchemy Cloud Control.
 ---
-
-# DataSource
 
 The DataSource resource lets you manage [AWS QuickSight DataSources](https://docs.aws.amazon.com/quicksight/latest/userguide/) and their configuration settings.
 

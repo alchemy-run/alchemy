@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker Projects with Alchemy
+title: Project
 description: Learn how to create, update, and manage AWS SageMaker Projects using Alchemy Cloud Control.
 ---
-
-# Project
 
 The Project resource allows you to manage [AWS SageMaker Projects](https://docs.aws.amazon.com/sagemaker/latest/userguide/) that help organize your machine learning workflows, including associated resources and configurations.
 

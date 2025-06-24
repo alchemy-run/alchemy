@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VerifiedPermissions PolicyTemplates with Alchemy
+title: PolicyTemplate
 description: Learn how to create, update, and manage AWS VerifiedPermissions PolicyTemplates using Alchemy Cloud Control.
 ---
-
-# PolicyTemplate
 
 The PolicyTemplate resource allows you to create and manage [AWS VerifiedPermissions PolicyTemplates](https://docs.aws.amazon.com/verifiedpermissions/latest/userguide/) that define permission policies for your applications.
 

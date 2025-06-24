@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpenSearchServerless SecurityConfigs with Alchemy
+title: SecurityConfig
 description: Learn how to create, update, and manage AWS OpenSearchServerless SecurityConfigs using Alchemy Cloud Control.
 ---
-
-# SecurityConfig
 
 The SecurityConfig resource lets you manage [AWS OpenSearchServerless SecurityConfigs](https://docs.aws.amazon.com/opensearchserverless/latest/userguide/) for securing your OpenSearchServerless applications.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker Pipelines with Alchemy
+title: Pipeline
 description: Learn how to create, update, and manage AWS SageMaker Pipelines using Alchemy Cloud Control.
 ---
-
-# Pipeline
 
 The Pipeline resource lets you create and manage [AWS SageMaker Pipelines](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for orchestrating complex machine learning workflows.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cognito UserPoolClients with Alchemy
+title: UserPoolClient
 description: Learn how to create, update, and manage AWS Cognito UserPoolClients using Alchemy Cloud Control.
 ---
-
-# UserPoolClient
 
 The UserPoolClient resource lets you manage [AWS Cognito UserPoolClients](https://docs.aws.amazon.com/cognito/latest/userguide/) for your applications, allowing for user authentication and management.
 

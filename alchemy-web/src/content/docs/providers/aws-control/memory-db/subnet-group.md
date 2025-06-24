@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MemoryDB SubnetGroups with Alchemy
+title: SubnetGroup
 description: Learn how to create, update, and manage AWS MemoryDB SubnetGroups using Alchemy Cloud Control.
 ---
-
-# SubnetGroup
 
 The SubnetGroup resource lets you manage [AWS MemoryDB SubnetGroups](https://docs.aws.amazon.com/memorydb/latest/userguide/) for your MemoryDB clusters, allowing you to define the network configuration and ensure connectivity within your VPC.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GuardDuty PublishingDestinations with Alchemy
+title: PublishingDestination
 description: Learn how to create, update, and manage AWS GuardDuty PublishingDestinations using Alchemy Cloud Control.
 ---
-
-# PublishingDestination
 
 The PublishingDestination resource lets you manage [AWS GuardDuty PublishingDestinations](https://docs.aws.amazon.com/guardduty/latest/userguide/) for exporting findings to external destinations such as Amazon S3 or AWS Security Hub.
 

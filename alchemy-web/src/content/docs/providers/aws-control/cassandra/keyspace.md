@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cassandra Keyspaces with Alchemy
+title: Keyspace
 description: Learn how to create, update, and manage AWS Cassandra Keyspaces using Alchemy Cloud Control.
 ---
-
-# Keyspace
 
 The Keyspace resource lets you manage [AWS Cassandra Keyspaces](https://docs.aws.amazon.com/cassandra/latest/userguide/) and their configuration settings.
 

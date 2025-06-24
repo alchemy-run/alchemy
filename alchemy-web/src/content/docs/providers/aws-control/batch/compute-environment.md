@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Batch ComputeEnvironments with Alchemy
+title: ComputeEnvironment
 description: Learn how to create, update, and manage AWS Batch ComputeEnvironments using Alchemy Cloud Control.
 ---
-
-# ComputeEnvironment
 
 The ComputeEnvironment resource allows you to manage [AWS Batch ComputeEnvironments](https://docs.aws.amazon.com/batch/latest/userguide/) to efficiently run batch jobs on AWS. This resource provides a way to configure the environment settings that determine how AWS Batch will manage compute resources.
 

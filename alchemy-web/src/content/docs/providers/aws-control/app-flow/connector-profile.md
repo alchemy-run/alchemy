@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppFlow ConnectorProfiles with Alchemy
+title: ConnectorProfile
 description: Learn how to create, update, and manage AWS AppFlow ConnectorProfiles using Alchemy Cloud Control.
 ---
-
-# ConnectorProfile
 
 The ConnectorProfile resource lets you manage [AWS AppFlow ConnectorProfiles](https://docs.aws.amazon.com/appflow/latest/userguide/) for connecting applications and services through data flows.
 

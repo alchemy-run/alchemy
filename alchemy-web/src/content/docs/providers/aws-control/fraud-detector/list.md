@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FraudDetector Lists with Alchemy
+title: List
 description: Learn how to create, update, and manage AWS FraudDetector Lists using Alchemy Cloud Control.
 ---
-
-# List
 
 The List resource lets you manage [AWS FraudDetector Lists](https://docs.aws.amazon.com/frauddetector/latest/userguide/) which are used to store and manage sets of variables for fraud detection.
 

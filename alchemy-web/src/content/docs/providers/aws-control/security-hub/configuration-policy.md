@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityHub ConfigurationPolicys with Alchemy
+title: ConfigurationPolicy
 description: Learn how to create, update, and manage AWS SecurityHub ConfigurationPolicys using Alchemy Cloud Control.
 ---
-
-# ConfigurationPolicy
 
 The ConfigurationPolicy resource lets you define and manage [AWS SecurityHub ConfigurationPolicys](https://docs.aws.amazon.com/securityhub/latest/userguide/) for your AWS environment. These policies are critical for enforcing security best practices and compliance standards.
 

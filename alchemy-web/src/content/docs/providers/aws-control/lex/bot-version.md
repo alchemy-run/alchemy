@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lex BotVersions with Alchemy
+title: BotVersion
 description: Learn how to create, update, and manage AWS Lex BotVersions using Alchemy Cloud Control.
 ---
-
-# BotVersion
 
 The BotVersion resource lets you manage [AWS Lex BotVersions](https://docs.aws.amazon.com/lex/latest/userguide/) for building conversational interfaces. You can create and maintain different versions of your bots, allowing for version control and updates without disrupting ongoing interactions.
 

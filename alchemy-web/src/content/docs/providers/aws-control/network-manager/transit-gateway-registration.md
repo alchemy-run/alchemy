@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager TransitGatewayRegistrations with Alchemy
+title: TransitGatewayRegistration
 description: Learn how to create, update, and manage AWS NetworkManager TransitGatewayRegistrations using Alchemy Cloud Control.
 ---
-
-# TransitGatewayRegistration
 
 The TransitGatewayRegistration resource allows you to manage [AWS NetworkManager TransitGatewayRegistrations](https://docs.aws.amazon.com/networkmanager/latest/userguide/) for integrating AWS Transit Gateways into your global network.
 

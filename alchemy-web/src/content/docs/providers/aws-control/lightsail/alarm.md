@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lightsail Alarms with Alchemy
+title: Alarm
 description: Learn how to create, update, and manage AWS Lightsail Alarms using Alchemy Cloud Control.
 ---
-
-# Alarm
 
 The Alarm resource allows you to manage [AWS Lightsail Alarms](https://docs.aws.amazon.com/lightsail/latest/userguide/) for monitoring your Lightsail resources. You can set thresholds for various metrics to receive notifications when those thresholds are breached.
 

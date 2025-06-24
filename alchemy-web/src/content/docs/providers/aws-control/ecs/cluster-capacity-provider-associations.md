@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ECS ClusterCapacityProviderAssociations with Alchemy
+title: ClusterCapacityProviderAssociations
 description: Learn how to create, update, and manage AWS ECS ClusterCapacityProviderAssociations using Alchemy Cloud Control.
 ---
-
-# ClusterCapacityProviderAssociations
 
 The ClusterCapacityProviderAssociations resource allows you to manage [AWS ECS Cluster Capacity Provider Associations](https://docs.aws.amazon.com/ecs/latest/userguide/) for your Amazon ECS clusters. This resource enables you to define the default capacity provider strategy and associate capacity providers with clusters, facilitating the management of containerized applications.
 

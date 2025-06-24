@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Config AggregationAuthorizations with Alchemy
+title: AggregationAuthorization
 description: Learn how to create, update, and manage AWS Config AggregationAuthorizations using Alchemy Cloud Control.
 ---
-
-# AggregationAuthorization
 
 The AggregationAuthorization resource allows you to manage [AWS Config AggregationAuthorizations](https://docs.aws.amazon.com/config/latest/userguide/) that enable the aggregation of AWS Config data across multiple accounts and regions.
 

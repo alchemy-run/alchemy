@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass SubscriptionDefinitions with Alchemy
+title: SubscriptionDefinition
 description: Learn how to create, update, and manage AWS Greengrass SubscriptionDefinitions using Alchemy Cloud Control.
 ---
-
-# SubscriptionDefinition
 
 The SubscriptionDefinition resource allows you to manage [AWS Greengrass SubscriptionDefinitions](https://docs.aws.amazon.com/greengrass/latest/userguide/) that enable communication between Greengrass components.
 

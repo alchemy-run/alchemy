@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudTrail ResourcePolicys with Alchemy
+title: ResourcePolicy
 description: Learn how to create, update, and manage AWS CloudTrail ResourcePolicys using Alchemy Cloud Control.
 ---
-
-# ResourcePolicy
 
 The ResourcePolicy resource lets you manage [AWS CloudTrail ResourcePolicys](https://docs.aws.amazon.com/cloudtrail/latest/userguide/) that define access to your CloudTrail resources. Resource policies are important for controlling which AWS accounts or IAM roles can access your CloudTrail logs.
 

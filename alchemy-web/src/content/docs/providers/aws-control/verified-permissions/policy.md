@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VerifiedPermissions Policys with Alchemy
+title: Policy
 description: Learn how to create, update, and manage AWS VerifiedPermissions Policys using Alchemy Cloud Control.
 ---
-
-# Policy
 
 The Policy resource lets you manage [AWS VerifiedPermissions Policys](https://docs.aws.amazon.com/verifiedpermissions/latest/userguide/) and their configuration settings.
 

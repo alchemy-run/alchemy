@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTSiteWise AssetModels with Alchemy
+title: AssetModel
 description: Learn how to create, update, and manage AWS IoTSiteWise AssetModels using Alchemy Cloud Control.
 ---
-
-# AssetModel
 
 The AssetModel resource lets you manage [AWS IoTSiteWise AssetModels](https://docs.aws.amazon.com/iotsitewise/latest/userguide/) for modeling and organizing industrial assets in your IoT applications.
 

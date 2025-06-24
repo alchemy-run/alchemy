@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT MitigationActions with Alchemy
+title: MitigationAction
 description: Learn how to create, update, and manage AWS IoT MitigationActions using Alchemy Cloud Control.
 ---
-
-# MitigationAction
 
 The MitigationAction resource allows you to create and manage [AWS IoT Mitigation Actions](https://docs.aws.amazon.com/iot/latest/userguide/) that are used to apply specific actions in response to detected security issues within your IoT environment.
 

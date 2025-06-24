@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3 Buckets with Alchemy
+title: Bucket
 description: Learn how to create, update, and manage AWS S3 Buckets using Alchemy Cloud Control.
 ---
-
-# Bucket
 
 The Bucket resource lets you manage [AWS S3 Buckets](https://docs.aws.amazon.com/s3/latest/userguide/) and their configuration settings.
 

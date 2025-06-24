@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue DevEndpoints with Alchemy
+title: DevEndpoint
 description: Learn how to create, update, and manage AWS Glue DevEndpoints using Alchemy Cloud Control.
 ---
-
-# DevEndpoint
 
 The DevEndpoint resource allows you to create and manage AWS Glue DevEndpoints, which are used to develop and test ETL scripts in AWS Glue. For more information, see the [AWS Glue DevEndpoints documentation](https://docs.aws.amazon.com/glue/latest/userguide/).
 

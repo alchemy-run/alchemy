@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaLive SignalMaps with Alchemy
+title: SignalMap
 description: Learn how to create, update, and manage AWS MediaLive SignalMaps using Alchemy Cloud Control.
 ---
-
-# SignalMap
 
 The SignalMap resource allows you to manage [AWS MediaLive SignalMaps](https://docs.aws.amazon.com/medialive/latest/userguide/) for video processing and signal management in your broadcasting workflows.
 

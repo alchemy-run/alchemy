@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Transfer Agreements with Alchemy
+title: Agreement
 description: Learn how to create, update, and manage AWS Transfer Agreements using Alchemy Cloud Control.
 ---
-
-# Agreement
 
 The Agreement resource lets you manage [AWS Transfer Agreements](https://docs.aws.amazon.com/transfer/latest/userguide/) for secure file transfer between your organization and external partners. This resource facilitates the establishment of agreements that define how data transfer should occur.
 

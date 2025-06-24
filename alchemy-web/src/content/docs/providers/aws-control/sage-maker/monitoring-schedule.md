@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker MonitoringSchedules with Alchemy
+title: MonitoringSchedule
 description: Learn how to create, update, and manage AWS SageMaker MonitoringSchedules using Alchemy Cloud Control.
 ---
-
-# MonitoringSchedule
 
 The MonitoringSchedule resource lets you manage [AWS SageMaker MonitoringSchedules](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for monitoring model performance and data quality over time.
 

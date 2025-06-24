@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Wisdom AIAgents with Alchemy
+title: AIAgent
 description: Learn how to create, update, and manage AWS Wisdom AIAgents using Alchemy Cloud Control.
 ---
-
-# AIAgent
 
 The AIAgent resource allows you to manage [AWS Wisdom AIAgents](https://docs.aws.amazon.com/wisdom/latest/userguide/) which are designed to assist in providing intelligent recommendations and insights based on the data available in your AWS environment.
 

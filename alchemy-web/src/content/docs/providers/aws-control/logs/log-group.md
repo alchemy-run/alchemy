@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Logs LogGroups with Alchemy
+title: LogGroup
 description: Learn how to create, update, and manage AWS Logs LogGroups using Alchemy Cloud Control.
 ---
-
-# LogGroup
 
 The LogGroup resource lets you manage [AWS Logs LogGroups](https://docs.aws.amazon.com/logs/latest/userguide/) which act as containers for log streams that share the same retention, monitoring, and access control settings.
 

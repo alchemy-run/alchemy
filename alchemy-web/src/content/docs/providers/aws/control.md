@@ -3,8 +3,6 @@ title: AWS Cloud Control API
 description: Manage any AWS resource via the Cloud Control API using Alchemy.
 ---
 
-# AWS Cloud Control API
-
 The AWS Cloud Control API integration in Alchemy provides a unified interface for managing AWS resources using the [AWS Cloud Control API](https://aws.amazon.com/cloudcontrol/). This integration allows you to create, read, update, and delete any AWS resource that is supported by CloudFormation, using a consistent and type-safe interface.
 
 ## Installation

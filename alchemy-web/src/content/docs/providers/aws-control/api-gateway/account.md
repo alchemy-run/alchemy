@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway Accounts with Alchemy
+title: Account
 description: Learn how to create, update, and manage AWS ApiGateway Accounts using Alchemy Cloud Control.
 ---
-
-# Account
 
 The Account resource lets you manage [AWS ApiGateway Accounts](https://docs.aws.amazon.com/apigateway/latest/userguide/) and their configurations for your API Gateway services.
 

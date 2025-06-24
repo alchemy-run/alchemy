@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GameLift GameSessionQueues with Alchemy
+title: GameSessionQueue
 description: Learn how to create, update, and manage AWS GameLift GameSessionQueues using Alchemy Cloud Control.
 ---
-
-# GameSessionQueue
 
 The GameSessionQueue resource allows you to manage [AWS GameLift GameSessionQueues](https://docs.aws.amazon.com/gamelift/latest/userguide/) for organizing game sessions and managing server resources effectively.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QBusiness DataSources with Alchemy
+title: DataSource
 description: Learn how to create, update, and manage AWS QBusiness DataSources using Alchemy Cloud Control.
 ---
-
-# DataSource
 
 The DataSource resource allows you to manage [AWS QBusiness DataSources](https://docs.aws.amazon.com/qbusiness/latest/userguide/) and their configuration settings for various applications.
 

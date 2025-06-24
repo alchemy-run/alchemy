@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataZone Connections with Alchemy
+title: Connection
 description: Learn how to create, update, and manage AWS DataZone Connections using Alchemy Cloud Control.
 ---
-
-# Connection
 
 The Connection resource allows you to create and manage connections within AWS DataZone, enabling connectivity and integration with various data sources and services. For more information, visit the [AWS DataZone Connections](https://docs.aws.amazon.com/datazone/latest/userguide/).
 

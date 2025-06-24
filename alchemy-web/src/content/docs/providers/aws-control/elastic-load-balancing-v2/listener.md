@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Application Load Balancer Listeners with Alchemy
+title: Listener
 description: Learn how to create, update, and manage AWS Application Load Balancer Listeners using Alchemy Cloud Control.
 ---
-
-# Listener
 
 The Listener resource allows you to manage [AWS Application Load Balancer Listeners](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/) and their associated settings.
 

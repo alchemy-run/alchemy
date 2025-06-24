@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpenSearchServerless VpcEndpoints with Alchemy
+title: VpcEndpoint
 description: Learn how to create, update, and manage AWS OpenSearchServerless VpcEndpoints using Alchemy Cloud Control.
 ---
-
-# VpcEndpoint
 
 The VpcEndpoint resource lets you manage [AWS OpenSearchServerless VpcEndpoints](https://docs.aws.amazon.com/opensearchserverless/latest/userguide/) for accessing OpenSearch Serverless from within your Amazon VPC.
 

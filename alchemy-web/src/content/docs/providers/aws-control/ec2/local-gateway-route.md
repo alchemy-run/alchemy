@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 LocalGatewayRoutes with Alchemy
+title: LocalGatewayRoute
 description: Learn how to create, update, and manage AWS EC2 LocalGatewayRoutes using Alchemy Cloud Control.
 ---
-
-# LocalGatewayRoute
 
 The LocalGatewayRoute resource allows you to manage routing within an AWS EC2 Local Gateway, facilitating communication between your VPC and on-premises networks. For more details, refer to the [AWS EC2 LocalGatewayRoutes documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VPCDHCPOptionsAssociations with Alchemy
+title: VPCDHCPOptionsAssociation
 description: Learn how to create, update, and manage AWS EC2 VPCDHCPOptionsAssociations using Alchemy Cloud Control.
 ---
-
-# VPCDHCPOptionsAssociation
 
 The VPCDHCPOptionsAssociation resource allows you to associate DHCP options with your Amazon Virtual Private Cloud (VPC). For more details, refer to the [AWS EC2 VPCDHCPOptionsAssociations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

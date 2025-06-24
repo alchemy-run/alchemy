@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint BaiduChannels with Alchemy
+title: BaiduChannel
 description: Learn how to create, update, and manage AWS Pinpoint BaiduChannels using Alchemy Cloud Control.
 ---
-
-# BaiduChannel
 
 The BaiduChannel resource allows you to manage [AWS Pinpoint BaiduChannels](https://docs.aws.amazon.com/pinpoint/latest/userguide/) for sending push notifications to users on Baidu.
 

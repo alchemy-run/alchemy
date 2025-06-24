@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Transfer Connectors with Alchemy
+title: Connector
 description: Learn how to create, update, and manage AWS Transfer Connectors using Alchemy Cloud Control.
 ---
-
-# Connector
 
 The Connector resource allows you to manage [AWS Transfer Connectors](https://docs.aws.amazon.com/transfer/latest/userguide/) for transferring files over SFTP, AS2, or FTP. This resource simplifies the setup and management of connectors in your AWS Transfer Family.
 

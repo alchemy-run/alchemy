@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint APNSChannels with Alchemy
+title: APNSChannel
 description: Learn how to create, update, and manage AWS Pinpoint APNSChannels using Alchemy Cloud Control.
 ---
-
-# APNSChannel
 
 The APNSChannel resource allows you to manage the Apple Push Notification Service (APNS) channels within AWS Pinpoint, enabling you to send notifications to iOS devices. For more details, refer to the [AWS Pinpoint APNSChannels documentation](https://docs.aws.amazon.com/pinpoint/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager Devices with Alchemy
+title: Device
 description: Learn how to create, update, and manage AWS NetworkManager Devices using Alchemy Cloud Control.
 ---
-
-# Device
 
 The Device resource lets you manage [AWS NetworkManager Devices](https://docs.aws.amazon.com/networkmanager/latest/userguide/) and their configurations within your global network. 
 

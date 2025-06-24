@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTFleetWise StateTemplates with Alchemy
+title: StateTemplate
 description: Learn how to create, update, and manage AWS IoTFleetWise StateTemplates using Alchemy Cloud Control.
 ---
-
-# StateTemplate
 
 The StateTemplate resource lets you create and manage [AWS IoTFleetWise StateTemplates](https://docs.aws.amazon.com/iotfleetwise/latest/userguide/) for vehicle state data collection and analysis.
 

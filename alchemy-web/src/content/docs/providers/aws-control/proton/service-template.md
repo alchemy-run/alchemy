@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Proton ServiceTemplates with Alchemy
+title: ServiceTemplate
 description: Learn how to create, update, and manage AWS Proton ServiceTemplates using Alchemy Cloud Control.
 ---
-
-# ServiceTemplate
 
 The ServiceTemplate resource lets you manage [AWS Proton ServiceTemplates](https://docs.aws.amazon.com/proton/latest/userguide/) that define how services are built and managed within AWS Proton.
 

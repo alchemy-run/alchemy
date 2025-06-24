@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Application Load Balancer TrustStores with Alchemy
+title: TrustStore
 description: Learn how to create, update, and manage AWS Application Load Balancer TrustStores using Alchemy Cloud Control.
 ---
-
-# TrustStore
 
 The TrustStore resource lets you manage [AWS Application Load Balancer TrustStores](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/) for securely storing CA certificates. 
 

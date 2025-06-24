@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 LocalGatewayRouteTableVirtualInterfaceGroupAssociations with Alchemy
+title: LocalGatewayRouteTableVirtualInterfaceGroupAssociation
 description: Learn how to create, update, and manage AWS EC2 LocalGatewayRouteTableVirtualInterfaceGroupAssociations using Alchemy Cloud Control.
 ---
-
-# LocalGatewayRouteTableVirtualInterfaceGroupAssociation
 
 The `LocalGatewayRouteTableVirtualInterfaceGroupAssociation` resource lets you manage associations between local gateway route tables and virtual interface groups in AWS EC2. This resource is essential for routing traffic through local gateways in your AWS infrastructure. For more details, refer to the [AWS EC2 LocalGatewayRouteTableVirtualInterfaceGroupAssociations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

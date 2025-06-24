@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lambda EventSourceMappings with Alchemy
+title: EventSourceMapping
 description: Learn how to create, update, and manage AWS Lambda EventSourceMappings using Alchemy Cloud Control.
 ---
-
-# EventSourceMapping
 
 The EventSourceMapping resource lets you manage the configuration for AWS Lambda event source mappings, allowing your Lambda function to process events from various sources such as Amazon Kinesis, DynamoDB, and SQS. For more information, refer to the [AWS Lambda EventSourceMappings documentation](https://docs.aws.amazon.com/lambda/latest/userguide/).
 

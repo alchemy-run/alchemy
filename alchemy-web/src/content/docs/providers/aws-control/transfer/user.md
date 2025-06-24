@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Transfer Users with Alchemy
+title: User
 description: Learn how to create, update, and manage AWS Transfer Users using Alchemy Cloud Control.
 ---
-
-# User
 
 The User resource lets you manage [AWS Transfer Users](https://docs.aws.amazon.com/transfer/latest/userguide/) for secure file transfers via SFTP, FTPS, and FTP. This resource allows you to configure user permissions, home directories, and other user-related properties.
 

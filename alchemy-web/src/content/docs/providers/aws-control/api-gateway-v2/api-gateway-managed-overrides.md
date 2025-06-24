@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGatewayV2 ApiGatewayManagedOverrides with Alchemy
+title: ApiGatewayManagedOverrides
 description: Learn how to create, update, and manage AWS ApiGatewayV2 ApiGatewayManagedOverrides using Alchemy Cloud Control.
 ---
-
-# ApiGatewayManagedOverrides
 
 The ApiGatewayManagedOverrides resource allows you to configure and manage overrides for API Gateway, including integration settings, stage configurations, and routing options. For more details, refer to the [AWS ApiGatewayV2 ApiGatewayManagedOverrides documentation](https://docs.aws.amazon.com/apigatewayv2/latest/userguide/).
 

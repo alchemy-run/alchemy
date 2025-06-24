@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53Resolver ResolverConfigs with Alchemy
+title: ResolverConfig
 description: Learn how to create, update, and manage AWS Route53Resolver ResolverConfigs using Alchemy Cloud Control.
 ---
-
-# ResolverConfig
 
 The ResolverConfig resource allows you to manage [AWS Route53Resolver ResolverConfigs](https://docs.aws.amazon.com/route53resolver/latest/userguide/) for configuring DNS resolution in your AWS environment.
 

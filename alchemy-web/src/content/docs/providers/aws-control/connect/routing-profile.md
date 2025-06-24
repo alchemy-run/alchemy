@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect RoutingProfiles with Alchemy
+title: RoutingProfile
 description: Learn how to create, update, and manage AWS Connect RoutingProfiles using Alchemy Cloud Control.
 ---
-
-# RoutingProfile
 
 The RoutingProfile resource allows you to manage [AWS Connect RoutingProfiles](https://docs.aws.amazon.com/connect/latest/userguide/) which define how agents within your AWS Connect instance interact with incoming communications.
 

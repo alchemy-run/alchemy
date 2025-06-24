@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront OriginAccessControls with Alchemy
+title: OriginAccessControl
 description: Learn how to create, update, and manage AWS CloudFront OriginAccessControls using Alchemy Cloud Control.
 ---
-
-# OriginAccessControl
 
 The OriginAccessControl resource lets you manage [AWS CloudFront Origin Access Controls](https://docs.aws.amazon.com/cloudfront/latest/userguide/) which help to securely access your S3 origins by restricting access to only CloudFront.
 

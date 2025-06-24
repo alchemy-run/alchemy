@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaStore Containers with Alchemy
+title: Container
 description: Learn how to create, update, and manage AWS MediaStore Containers using Alchemy Cloud Control.
 ---
-
-# Container
 
 The Container resource allows you to manage [AWS MediaStore Containers](https://docs.aws.amazon.com/mediastore/latest/userguide/) which are used to store and retrieve media assets for streaming.
 

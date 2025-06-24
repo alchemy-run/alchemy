@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect AgentStatuss with Alchemy
+title: AgentStatus
 description: Learn how to create, update, and manage AWS Connect AgentStatuss using Alchemy Cloud Control.
 ---
-
-# AgentStatus
 
 The AgentStatus resource lets you manage [AWS Connect AgentStatuss](https://docs.aws.amazon.com/connect/latest/userguide/) which define the status of agents in Amazon Connect.
 

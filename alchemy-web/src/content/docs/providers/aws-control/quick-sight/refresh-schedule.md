@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QuickSight RefreshSchedules with Alchemy
+title: RefreshSchedule
 description: Learn how to create, update, and manage AWS QuickSight RefreshSchedules using Alchemy Cloud Control.
 ---
-
-# RefreshSchedule
 
 The RefreshSchedule resource allows you to manage the refresh schedules for datasets in AWS QuickSight. With this resource, you can define when your datasets are refreshed to ensure that your reports and dashboards contain the latest data. For more information, see the [AWS QuickSight RefreshSchedules documentation](https://docs.aws.amazon.com/quicksight/latest/userguide/).
 

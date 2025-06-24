@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53Resolver FirewallDomainLists with Alchemy
+title: FirewallDomainList
 description: Learn how to create, update, and manage AWS Route53Resolver FirewallDomainLists using Alchemy Cloud Control.
 ---
-
-# FirewallDomainList
 
 The FirewallDomainList resource lets you manage [AWS Route53Resolver Firewall Domain Lists](https://docs.aws.amazon.com/route53resolver/latest/userguide/) for defining domain filtering rules in your network configurations.
 

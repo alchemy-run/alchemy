@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IVS PublicKeys with Alchemy
+title: PublicKey
 description: Learn how to create, update, and manage AWS IVS PublicKeys using Alchemy Cloud Control.
 ---
-
-# PublicKey
 
 The PublicKey resource lets you manage [AWS IVS PublicKeys](https://docs.aws.amazon.com/ivs/latest/userguide/) for securely signing video streams. This resource allows you to create and manage public keys used in the signing process of video streams.
 

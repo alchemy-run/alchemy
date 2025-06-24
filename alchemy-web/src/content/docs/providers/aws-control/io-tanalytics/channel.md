@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTAnalytics Channels with Alchemy
+title: Channel
 description: Learn how to create, update, and manage AWS IoTAnalytics Channels using Alchemy Cloud Control.
 ---
-
-# Channel
 
 The Channel resource lets you manage [AWS IoTAnalytics Channels](https://docs.aws.amazon.com/iotanalytics/latest/userguide/) for collecting and processing IoT data streams.
 

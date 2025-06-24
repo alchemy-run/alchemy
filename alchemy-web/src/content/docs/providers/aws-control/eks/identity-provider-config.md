@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EKS IdentityProviderConfigs with Alchemy
+title: IdentityProviderConfig
 description: Learn how to create, update, and manage AWS EKS IdentityProviderConfigs using Alchemy Cloud Control.
 ---
-
-# IdentityProviderConfig
 
 The IdentityProviderConfig resource lets you manage [AWS EKS IdentityProviderConfigs](https://docs.aws.amazon.com/eks/latest/userguide/) for integrating identity providers with your Amazon EKS cluster.
 

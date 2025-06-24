@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PCAConnectorAD Templates with Alchemy
+title: Template
 description: Learn how to create, update, and manage AWS PCAConnectorAD Templates using Alchemy Cloud Control.
 ---
-
-# Template
 
 The Template resource lets you manage [AWS PCAConnectorAD Templates](https://docs.aws.amazon.com/pcaconnectorad/latest/userguide/) for configuring certificate authorities and their templates.
 

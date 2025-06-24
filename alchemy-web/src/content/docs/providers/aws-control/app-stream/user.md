@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppStream Users with Alchemy
+title: User
 description: Learn how to create, update, and manage AWS AppStream Users using Alchemy Cloud Control.
 ---
-
-# User
 
 The User resource allows you to manage [AWS AppStream Users](https://docs.aws.amazon.com/appstream/latest/userguide/) within your AppStream environment. This resource is used to create, update, and delete user accounts that can access AppStream applications.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTSiteWise Projects with Alchemy
+title: Project
 description: Learn how to create, update, and manage AWS IoTSiteWise Projects using Alchemy Cloud Control.
 ---
-
-# Project
 
 The Project resource lets you manage [AWS IoTSiteWise Projects](https://docs.aws.amazon.com/iotsitewise/latest/userguide/) and their configuration settings.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ResourceExplorer2 DefaultViewAssociations with Alchemy
+title: DefaultViewAssociation
 description: Learn how to create, update, and manage AWS ResourceExplorer2 DefaultViewAssociations using Alchemy Cloud Control.
 ---
-
-# DefaultViewAssociation
 
 The DefaultViewAssociation resource allows you to manage the association of a default view within AWS Resource Explorer 2. This resource enables you to specify which view should be used as the default for resource exploration. For more details, refer to the [AWS ResourceExplorer2 DefaultViewAssociations documentation](https://docs.aws.amazon.com/resourceexplorer2/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ResilienceHub ResiliencyPolicys with Alchemy
+title: ResiliencyPolicy
 description: Learn how to create, update, and manage AWS ResilienceHub ResiliencyPolicys using Alchemy Cloud Control.
 ---
-
-# ResiliencyPolicy
 
 The ResiliencyPolicy resource enables you to define and manage [AWS ResilienceHub ResiliencyPolicys](https://docs.aws.amazon.com/resiliencehub/latest/userguide/) that govern the resiliency and recovery strategies for your applications.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SNS TopicPolicys with Alchemy
+title: TopicPolicy
 description: Learn how to create, update, and manage AWS SNS TopicPolicys using Alchemy Cloud Control.
 ---
-
-# TopicPolicy
 
 The TopicPolicy resource allows you to manage access policies for Amazon Simple Notification Service (SNS) topics. This resource is essential for controlling permissions and ensuring secure access to your SNS topics. For more information, refer to the [AWS SNS TopicPolicys documentation](https://docs.aws.amazon.com/sns/latest/userguide/).
 

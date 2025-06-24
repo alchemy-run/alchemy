@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog TagOptions with Alchemy
+title: TagOption
 description: Learn how to create, update, and manage AWS ServiceCatalog TagOptions using Alchemy Cloud Control.
 ---
-
-# TagOption
 
 The TagOption resource allows you to create and manage [AWS ServiceCatalog TagOptions](https://docs.aws.amazon.com/servicecatalog/latest/userguide/) which are used for tagging products in AWS ServiceCatalog.
 

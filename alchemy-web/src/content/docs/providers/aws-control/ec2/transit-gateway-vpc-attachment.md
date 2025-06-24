@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TransitGatewayVpcAttachments with Alchemy
+title: TransitGatewayVpcAttachment
 description: Learn how to create, update, and manage AWS EC2 TransitGatewayVpcAttachments using Alchemy Cloud Control.
 ---
-
-# TransitGatewayVpcAttachment
 
 The TransitGatewayVpcAttachment resource allows you to manage VPC attachments to an AWS Transit Gateway. This resource facilitates the connection of multiple VPCs to a single transit gateway, enabling easier network management and routing. For more details, refer to the [AWS EC2 TransitGatewayVpcAttachments documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

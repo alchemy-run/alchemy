@@ -1,9 +1,7 @@
 ---
-title: AWS IAM Policy
+title: Policy
 description: Learn how to create, update, and manage AWS IAM Policies using Alchemy to define permissions for your AWS resources.
 ---
-
-# Policy
 
 The Policy resource lets you create and manage [AWS IAM Policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) that define permissions for AWS services and resources.
 

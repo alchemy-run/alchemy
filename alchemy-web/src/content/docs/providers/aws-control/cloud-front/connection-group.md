@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront ConnectionGroups with Alchemy
+title: ConnectionGroup
 description: Learn how to create, update, and manage AWS CloudFront ConnectionGroups using Alchemy Cloud Control.
 ---
-
-# ConnectionGroup
 
 The ConnectionGroup resource allows you to manage [AWS CloudFront ConnectionGroups](https://docs.aws.amazon.com/cloudfront/latest/userguide/) for enhanced routing control across multiple origins and improved network performance.
 

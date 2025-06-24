@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 IPAMScopes with Alchemy
+title: IPAMScope
 description: Learn how to create, update, and manage AWS EC2 IPAMScopes using Alchemy Cloud Control.
 ---
-
-# IPAMScope
 
 The IPAMScope resource lets you manage [AWS EC2 IPAMScopes](https://docs.aws.amazon.com/ec2/latest/userguide/) for organizing your IP address management in a scalable and efficient manner.
 

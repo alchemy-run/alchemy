@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint SMSChannels with Alchemy
+title: SMSChannel
 description: Learn how to create, update, and manage AWS Pinpoint SMSChannels using Alchemy Cloud Control.
 ---
-
-# SMSChannel
 
 The SMSChannel resource allows you to manage SMS messaging capabilities in [AWS Pinpoint](https://docs.aws.amazon.com/pinpoint/latest/userguide/). This includes configuring settings for sending messages via SMS to your users.
 

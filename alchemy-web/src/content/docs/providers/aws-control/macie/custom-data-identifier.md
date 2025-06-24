@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Macie CustomDataIdentifiers with Alchemy
+title: CustomDataIdentifier
 description: Learn how to create, update, and manage AWS Macie CustomDataIdentifiers using Alchemy Cloud Control.
 ---
-
-# CustomDataIdentifier
 
 The CustomDataIdentifier resource allows you to create and manage [AWS Macie Custom Data Identifiers](https://docs.aws.amazon.com/macie/latest/userguide/) that help in detecting sensitive data in your organization’s data stores.
 

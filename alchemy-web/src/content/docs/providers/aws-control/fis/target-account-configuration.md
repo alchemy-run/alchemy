@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FIS TargetAccountConfigurations with Alchemy
+title: TargetAccountConfiguration
 description: Learn how to create, update, and manage AWS FIS TargetAccountConfigurations using Alchemy Cloud Control.
 ---
-
-# TargetAccountConfiguration
 
 The `TargetAccountConfiguration` resource allows you to define and manage target accounts for AWS Fault Injection Simulator (FIS) experiments. You can specify various parameters, such as the account ID and IAM role required for executing the experiments. For more details, refer to the [AWS FIS TargetAccountConfigurations documentation](https://docs.aws.amazon.com/fis/latest/userguide/).
 

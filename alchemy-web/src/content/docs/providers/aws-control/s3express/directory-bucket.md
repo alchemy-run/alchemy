@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3Express DirectoryBuckets with Alchemy
+title: DirectoryBucket
 description: Learn how to create, update, and manage AWS S3Express DirectoryBuckets using Alchemy Cloud Control.
 ---
-
-# DirectoryBucket
 
 The DirectoryBucket resource allows you to manage [AWS S3Express DirectoryBuckets](https://docs.aws.amazon.com/s3express/latest/userguide/) and configure various properties such as encryption and lifecycle management.
 

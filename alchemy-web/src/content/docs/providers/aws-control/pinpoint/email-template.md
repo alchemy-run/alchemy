@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint EmailTemplates with Alchemy
+title: EmailTemplate
 description: Learn how to create, update, and manage AWS Pinpoint EmailTemplates using Alchemy Cloud Control.
 ---
-
-# EmailTemplate
 
 The EmailTemplate resource lets you manage [AWS Pinpoint EmailTemplates](https://docs.aws.amazon.com/pinpoint/latest/userguide/) for sending targeted email communications to your users.
 

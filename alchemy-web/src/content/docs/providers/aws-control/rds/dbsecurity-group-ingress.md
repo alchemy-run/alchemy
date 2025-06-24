@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS DBSecurityGroupIngresss with Alchemy
+title: DBSecurityGroupIngress
 description: Learn how to create, update, and manage AWS RDS DBSecurityGroupIngresss using Alchemy Cloud Control.
 ---
-
-# DBSecurityGroupIngress
 
 The DBSecurityGroupIngress resource allows you to manage inbound rules for an Amazon RDS security group, controlling access to the database instances. This resource is crucial for maintaining security and ensuring that only authorized IPs or EC2 security groups can connect to your RDS instances. For more information, visit the [AWS RDS DBSecurityGroupIngress documentation](https://docs.aws.amazon.com/rds/latest/userguide/).
 

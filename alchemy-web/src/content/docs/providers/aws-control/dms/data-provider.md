@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DMS DataProviders with Alchemy
+title: DataProvider
 description: Learn how to create, update, and manage AWS DMS DataProviders using Alchemy Cloud Control.
 ---
-
-# DataProvider
 
 The DataProvider resource allows you to manage [AWS DMS DataProviders](https://docs.aws.amazon.com/dms/latest/userguide/) for database migration tasks, enabling you to specify the source and target database connections.
 

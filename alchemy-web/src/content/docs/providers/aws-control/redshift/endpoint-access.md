@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Redshift EndpointAccesss with Alchemy
+title: EndpointAccess
 description: Learn how to create, update, and manage AWS Redshift EndpointAccesss using Alchemy Cloud Control.
 ---
-
-# EndpointAccess
 
 The EndpointAccess resource allows you to manage [AWS Redshift EndpointAccess](https://docs.aws.amazon.com/redshift/latest/userguide/) configurations for your Redshift clusters, enabling secure access through specified VPC security groups and subnet groups.
 

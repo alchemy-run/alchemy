@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaConvert Presets with Alchemy
+title: Preset
 description: Learn how to create, update, and manage AWS MediaConvert Presets using Alchemy Cloud Control.
 ---
-
-# Preset
 
 The Preset resource lets you manage [AWS MediaConvert Presets](https://docs.aws.amazon.com/mediaconvert/latest/userguide/) for configuring media transcoding settings.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ManagedBlockchain Nodes with Alchemy
+title: Node
 description: Learn how to create, update, and manage AWS ManagedBlockchain Nodes using Alchemy Cloud Control.
 ---
-
-# Node
 
 The Node resource lets you manage [AWS ManagedBlockchain Nodes](https://docs.aws.amazon.com/managedblockchain/latest/userguide/) in your blockchain network. This resource allows you to create and configure nodes that participate in your managed blockchain.
 

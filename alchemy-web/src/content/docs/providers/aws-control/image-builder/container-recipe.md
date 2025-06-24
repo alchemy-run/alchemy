@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ImageBuilder ContainerRecipes with Alchemy
+title: ContainerRecipe
 description: Learn how to create, update, and manage AWS ImageBuilder ContainerRecipes using Alchemy Cloud Control.
 ---
-
-# ContainerRecipe
 
 The ContainerRecipe resource lets you manage [AWS ImageBuilder ContainerRecipes](https://docs.aws.amazon.com/imagebuilder/latest/userguide/) for building and customizing container images.
 

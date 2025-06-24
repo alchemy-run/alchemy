@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeStar GitHubRepositorys with Alchemy
+title: GitHubRepository
 description: Learn how to create, update, and manage AWS CodeStar GitHubRepositorys using Alchemy Cloud Control.
 ---
-
-# GitHubRepository
 
 The GitHubRepository resource lets you manage [AWS CodeStar GitHubRepositorys](https://docs.aws.amazon.com/codestar/latest/userguide/) for integration with GitHub repositories, facilitating project management and development workflows.
 

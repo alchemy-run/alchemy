@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 SubnetRouteTableAssociations with Alchemy
+title: SubnetRouteTableAssociation
 description: Learn how to create, update, and manage AWS EC2 SubnetRouteTableAssociations using Alchemy Cloud Control.
 ---
-
-# SubnetRouteTableAssociation
 
 The SubnetRouteTableAssociation resource allows you to associate a subnet with a specific route table in AWS EC2, enabling routing for the subnet's network traffic. For more details, refer to the [AWS EC2 SubnetRouteTableAssociations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DevOpsGuru LogAnomalyDetectionIntegrations with Alchemy
+title: LogAnomalyDetectionIntegration
 description: Learn how to create, update, and manage AWS DevOpsGuru LogAnomalyDetectionIntegrations using Alchemy Cloud Control.
 ---
-
-# LogAnomalyDetectionIntegration
 
 The LogAnomalyDetectionIntegration resource lets you manage [AWS DevOpsGuru LogAnomalyDetectionIntegrations](https://docs.aws.amazon.com/devopsguru/latest/userguide/) for anomaly detection in your log data.
 

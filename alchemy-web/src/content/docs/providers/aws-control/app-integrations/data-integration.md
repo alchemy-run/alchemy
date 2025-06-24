@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppIntegrations DataIntegrations with Alchemy
+title: DataIntegration
 description: Learn how to create, update, and manage AWS AppIntegrations DataIntegrations using Alchemy Cloud Control.
 ---
-
-# DataIntegration
 
 The DataIntegration resource allows you to manage AWS AppIntegrations DataIntegrations, enabling seamless data flow between AWS services and applications. For more detailed information, refer to the [AWS AppIntegrations DataIntegrations documentation](https://docs.aws.amazon.com/appintegrations/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSO Instances with Alchemy
+title: Instance
 description: Learn how to create, update, and manage AWS SSO Instances using Alchemy Cloud Control.
 ---
-
-# Instance
 
 The Instance resource lets you manage [AWS SSO Instances](https://docs.aws.amazon.com/sso/latest/userguide/) and their configurations.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS B2BI Partnerships with Alchemy
+title: Partnership
 description: Learn how to create, update, and manage AWS B2BI Partnerships using Alchemy Cloud Control.
 ---
-
-# Partnership
 
 The Partnership resource lets you manage [AWS B2BI Partnerships](https://docs.aws.amazon.com/b2bi/latest/userguide/) and their configurations.
 

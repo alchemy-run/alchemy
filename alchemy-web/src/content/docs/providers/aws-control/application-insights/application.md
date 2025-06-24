@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApplicationInsights Applications with Alchemy
+title: Application
 description: Learn how to create, update, and manage AWS ApplicationInsights Applications using Alchemy Cloud Control.
 ---
-
-# Application
 
 The Application resource allows you to manage [AWS ApplicationInsights Applications](https://docs.aws.amazon.com/applicationinsights/latest/userguide/), which automatically sets up monitoring for your applications and resources.
 

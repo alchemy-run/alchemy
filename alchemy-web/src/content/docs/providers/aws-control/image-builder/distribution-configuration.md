@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ImageBuilder DistributionConfigurations with Alchemy
+title: DistributionConfiguration
 description: Learn how to create, update, and manage AWS ImageBuilder DistributionConfigurations using Alchemy Cloud Control.
 ---
-
-# DistributionConfiguration
 
 The DistributionConfiguration resource allows you to manage [AWS ImageBuilder DistributionConfigurations](https://docs.aws.amazon.com/imagebuilder/latest/userguide/) which define how and where to distribute your images.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PCS Queues with Alchemy
+title: Queue
 description: Learn how to create, update, and manage AWS PCS Queues using Alchemy Cloud Control.
 ---
-
-# Queue
 
 The Queue resource allows you to create and manage [AWS PCS Queues](https://docs.aws.amazon.com/pcs/latest/userguide/) which are essential for processing jobs in a distributed manner.
 

@@ -3,8 +3,6 @@ title: File
 description: Learn how to create, read, update, and delete files using Alchemy's FS (File System) provider in your projects.
 ---
 
-# File
-
 The File resource lets you create, update and delete files in the filesystem with automatic directory creation and cleanup.
 
 ## Minimal Example

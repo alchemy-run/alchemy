@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront Distributions with Alchemy
+title: Distribution
 description: Learn how to create, update, and manage AWS CloudFront Distributions using Alchemy Cloud Control.
 ---
-
-# Distribution
 
 The Distribution resource lets you manage [AWS CloudFront Distributions](https://docs.aws.amazon.com/cloudfront/latest/userguide/) and their configuration settings for content delivery.
 

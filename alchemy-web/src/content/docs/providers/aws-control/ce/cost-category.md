@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CE CostCategorys with Alchemy
+title: CostCategory
 description: Learn how to create, update, and manage AWS CE CostCategorys using Alchemy Cloud Control.
 ---
-
-# CostCategory
 
 The CostCategory resource lets you manage [AWS Cost Categories](https://docs.aws.amazon.com/ce/latest/userguide/) for organizing your AWS cost allocation according to your business needs.
 

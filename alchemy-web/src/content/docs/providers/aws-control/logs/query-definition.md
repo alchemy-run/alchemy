@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Logs QueryDefinitions with Alchemy
+title: QueryDefinition
 description: Learn how to create, update, and manage AWS Logs QueryDefinitions using Alchemy Cloud Control.
 ---
-
-# QueryDefinition
 
 The QueryDefinition resource lets you manage [AWS Logs QueryDefinitions](https://docs.aws.amazon.com/logs/latest/userguide/) for defining queries on log data. 
 

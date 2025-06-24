@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaTailor Channels with Alchemy
+title: Channel
 description: Learn how to create, update, and manage AWS MediaTailor Channels using Alchemy Cloud Control.
 ---
-
-# Channel
 
 The Channel resource lets you manage [AWS MediaTailor Channels](https://docs.aws.amazon.com/mediatailor/latest/userguide/) for delivering video on-demand and live streaming services.
 

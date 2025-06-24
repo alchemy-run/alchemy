@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker ModelQualityJobDefinitions with Alchemy
+title: ModelQualityJobDefinition
 description: Learn how to create, update, and manage AWS SageMaker ModelQualityJobDefinitions using Alchemy Cloud Control.
 ---
-
-# ModelQualityJobDefinition
 
 The ModelQualityJobDefinition resource allows you to define and manage model quality monitoring jobs in AWS SageMaker. For more details, refer to the [AWS SageMaker ModelQualityJobDefinitions](https://docs.aws.amazon.com/sagemaker/latest/userguide/) documentation.
 

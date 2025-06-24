@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect Users with Alchemy
+title: User
 description: Learn how to create, update, and manage AWS Connect Users using Alchemy Cloud Control.
 ---
-
-# User
 
 The User resource lets you manage [AWS Connect Users](https://docs.aws.amazon.com/connect/latest/userguide/) and their associated settings in your AWS Connect instance.
 

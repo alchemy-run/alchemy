@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect InstanceStorageConfigs with Alchemy
+title: InstanceStorageConfig
 description: Learn how to create, update, and manage AWS Connect InstanceStorageConfigs using Alchemy Cloud Control.
 ---
-
-# InstanceStorageConfig
 
 The InstanceStorageConfig resource lets you manage [AWS Connect Instance Storage Configurations](https://docs.aws.amazon.com/connect/latest/userguide/) for storing various types of data associated with your AWS Connect instance.
 

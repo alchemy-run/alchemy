@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Wisdom MessageTemplates with Alchemy
+title: MessageTemplate
 description: Learn how to create, update, and manage AWS Wisdom MessageTemplates using Alchemy Cloud Control.
 ---
-
-# MessageTemplate
 
 The MessageTemplate resource allows you to manage [AWS Wisdom MessageTemplates](https://docs.aws.amazon.com/wisdom/latest/userguide/) that help in creating structured messages for various channels. This resource facilitates the configuration and customization of message templates used in customer service scenarios.
 

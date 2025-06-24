@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Oam Sinks with Alchemy
+title: Sink
 description: Learn how to create, update, and manage AWS Oam Sinks using Alchemy Cloud Control.
 ---
-
-# Sink
 
 The Sink resource allows you to create and manage [AWS Oam Sinks](https://docs.aws.amazon.com/oam/latest/userguide/) for centralized logging and monitoring of your AWS resources.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppSync ApiKeys with Alchemy
+title: ApiKey
 description: Learn how to create, update, and manage AWS AppSync ApiKeys using Alchemy Cloud Control.
 ---
-
-# ApiKey
 
 The ApiKey resource allows you to manage [AWS AppSync ApiKeys](https://docs.aws.amazon.com/appsync/latest/userguide/) for authentication of your GraphQL APIs. This resource lets you create, update, and manage API keys with various configurations for your AppSync applications.
 

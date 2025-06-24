@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53Resolver FirewallRuleGroupAssociations with Alchemy
+title: FirewallRuleGroupAssociation
 description: Learn how to create, update, and manage AWS Route53Resolver FirewallRuleGroupAssociations using Alchemy Cloud Control.
 ---
-
-# FirewallRuleGroupAssociation
 
 The FirewallRuleGroupAssociation resource allows you to associate a Route 53 Resolver Firewall Rule Group with a specified VPC, enabling DNS filtering for your network. For more details, see the [AWS Route53Resolver FirewallRuleGroupAssociations documentation](https://docs.aws.amazon.com/route53resolver/latest/userguide/).
 

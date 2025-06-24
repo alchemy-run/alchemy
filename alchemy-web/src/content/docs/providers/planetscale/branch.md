@@ -1,9 +1,7 @@
 ---
-title: PlanetScale Branch
+title: Branch
 description: Learn how to create and manage PlanetScale database branches for development workflows and production scaling.
 ---
-
-# Branch
 
 The Branch resource lets you create and manage [PlanetScale database branches](https://planetscale.com/docs/concepts/branching) for development workflows, allowing you to safely develop schema changes in isolation.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Neptune DBClusterParameterGroups with Alchemy
+title: DBClusterParameterGroup
 description: Learn how to create, update, and manage AWS Neptune DBClusterParameterGroups using Alchemy Cloud Control.
 ---
-
-# DBClusterParameterGroup
 
 The DBClusterParameterGroup resource lets you manage [AWS Neptune DBClusterParameterGroups](https://docs.aws.amazon.com/neptune/latest/userguide/) and their configuration settings.
 

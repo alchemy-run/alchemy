@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DevOpsGuru NotificationChannels with Alchemy
+title: NotificationChannel
 description: Learn how to create, update, and manage AWS DevOpsGuru NotificationChannels using Alchemy Cloud Control.
 ---
-
-# NotificationChannel
 
 The NotificationChannel resource lets you manage [AWS DevOpsGuru NotificationChannels](https://docs.aws.amazon.com/devopsguru/latest/userguide/) for receiving notifications about AWS DevOpsGuru insights and recommendations.
 

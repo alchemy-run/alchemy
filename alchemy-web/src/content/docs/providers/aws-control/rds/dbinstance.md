@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS DBInstances with Alchemy
+title: DBInstance
 description: Learn how to create, update, and manage AWS RDS DBInstances using Alchemy Cloud Control.
 ---
-
-# DBInstance
 
 The DBInstance resource lets you manage [AWS RDS DBInstances](https://docs.aws.amazon.com/rds/latest/userguide/) for relational databases, providing a scalable and reliable way to store and retrieve your data.
 

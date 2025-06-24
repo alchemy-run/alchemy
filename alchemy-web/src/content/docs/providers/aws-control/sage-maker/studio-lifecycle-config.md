@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker StudioLifecycleConfigs with Alchemy
+title: StudioLifecycleConfig
 description: Learn how to create, update, and manage AWS SageMaker StudioLifecycleConfigs using Alchemy Cloud Control.
 ---
-
-# StudioLifecycleConfig
 
 The StudioLifecycleConfig resource lets you manage [AWS SageMaker Studio Lifecycle Configurations](https://docs.aws.amazon.com/sagemaker/latest/userguide/) that define scripts to run when users start or stop their studio sessions.
 

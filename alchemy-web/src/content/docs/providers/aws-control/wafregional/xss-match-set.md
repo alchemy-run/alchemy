@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAFRegional XssMatchSets with Alchemy
+title: XssMatchSet
 description: Learn how to create, update, and manage AWS WAFRegional XssMatchSets using Alchemy Cloud Control.
 ---
-
-# XssMatchSet
 
 The XssMatchSet resource lets you manage [AWS WAFRegional XssMatchSets](https://docs.aws.amazon.com/wafregional/latest/userguide/) to help protect your web applications from cross-site scripting (XSS) attacks by specifying the XSS match criteria.
 

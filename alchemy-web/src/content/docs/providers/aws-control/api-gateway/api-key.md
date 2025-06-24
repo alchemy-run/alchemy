@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway ApiKeys with Alchemy
+title: ApiKey
 description: Learn how to create, update, and manage AWS ApiGateway ApiKeys using Alchemy Cloud Control.
 ---
-
-# ApiKey
 
 The ApiKey resource lets you manage [AWS ApiGateway ApiKeys](https://docs.aws.amazon.com/apigateway/latest/userguide/) to control access to your APIs. This resource enables you to create, update, and delete API keys as well as manage their stage keys and other properties.
 

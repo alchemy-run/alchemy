@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker ModelPackageGroups with Alchemy
+title: ModelPackageGroup
 description: Learn how to create, update, and manage AWS SageMaker ModelPackageGroups using Alchemy Cloud Control.
 ---
-
-# ModelPackageGroup
 
 The ModelPackageGroup resource allows you to manage [AWS SageMaker ModelPackageGroups](https://docs.aws.amazon.com/sagemaker/latest/userguide/) and their associated model packages. This resource is essential for organizing and managing multiple model packages as a single entity.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppConfig ConfigurationProfiles with Alchemy
+title: ConfigurationProfile
 description: Learn how to create, update, and manage AWS AppConfig ConfigurationProfiles using Alchemy Cloud Control.
 ---
-
-# ConfigurationProfile
 
 The ConfigurationProfile resource allows you to manage [AWS AppConfig ConfigurationProfiles](https://docs.aws.amazon.com/appconfig/latest/userguide/) to define how configuration data is retrieved and validated for your applications.
 

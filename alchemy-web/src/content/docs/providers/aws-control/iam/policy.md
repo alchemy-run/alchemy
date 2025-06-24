@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM Policies with Alchemy
+title: Policy
 description: Learn how to create, update, and manage AWS IAM Policies using Alchemy Cloud Control.
 ---
-
-# Policy
 
 The Policy resource allows you to manage [AWS IAM Policies](https://docs.aws.amazon.com/iam/latest/userguide/) that define permissions for AWS resources. This enables fine-grained control over who can do what in your AWS account.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS B2BI Profiles with Alchemy
+title: Profile
 description: Learn how to create, update, and manage AWS B2BI Profiles using Alchemy Cloud Control.
 ---
-
-# Profile
 
 The Profile resource allows you to manage [AWS B2BI Profiles](https://docs.aws.amazon.com/b2bi/latest/userguide/) for configuring business interactions and communication settings.
 

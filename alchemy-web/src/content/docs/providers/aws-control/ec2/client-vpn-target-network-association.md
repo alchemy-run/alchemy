@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 ClientVpnTargetNetworkAssociations with Alchemy
+title: ClientVpnTargetNetworkAssociation
 description: Learn how to create, update, and manage AWS EC2 ClientVpnTargetNetworkAssociations using Alchemy Cloud Control.
 ---
-
-# ClientVpnTargetNetworkAssociation
 
 The ClientVpnTargetNetworkAssociation resource allows you to associate a subnet with an AWS Client VPN endpoint, enabling access to resources within that subnet. For more details, refer to the [AWS EC2 ClientVpnTargetNetworkAssociations](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MemoryDB ParameterGroups with Alchemy
+title: ParameterGroup
 description: Learn how to create, update, and manage AWS MemoryDB ParameterGroups using Alchemy Cloud Control.
 ---
-
-# ParameterGroup
 
 The ParameterGroup resource lets you manage [AWS MemoryDB ParameterGroups](https://docs.aws.amazon.com/memorydb/latest/userguide/) and their configuration settings.
 

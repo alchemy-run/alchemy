@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Backup LogicallyAirGappedBackupVaults with Alchemy
+title: LogicallyAirGappedBackupVault
 description: Learn how to create, update, and manage AWS Backup LogicallyAirGappedBackupVaults using Alchemy Cloud Control.
 ---
-
-# LogicallyAirGappedBackupVault
 
 The LogicallyAirGappedBackupVault resource allows you to manage [AWS Backup Logically Air Gapped Backup Vaults](https://docs.aws.amazon.com/backup/latest/userguide/) for secure backup storage with enhanced protection against cyber threats.
 

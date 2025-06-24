@@ -1,9 +1,7 @@
 ---
-title: Managing AWS APS RuleGroupsNamespaces with Alchemy
+title: RuleGroupsNamespace
 description: Learn how to create, update, and manage AWS APS RuleGroupsNamespaces using Alchemy Cloud Control.
 ---
-
-# RuleGroupsNamespace
 
 The RuleGroupsNamespace resource allows you to create and manage [AWS APS RuleGroupsNamespaces](https://docs.aws.amazon.com/aps/latest/userguide/) for organizing your rule groups in Amazon Prometheus Service.
 

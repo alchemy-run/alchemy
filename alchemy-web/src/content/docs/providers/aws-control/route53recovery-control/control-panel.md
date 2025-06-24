@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53RecoveryControl ControlPanels with Alchemy
+title: ControlPanel
 description: Learn how to create, update, and manage AWS Route53RecoveryControl ControlPanels using Alchemy Cloud Control.
 ---
-
-# ControlPanel
 
 The ControlPanel resource allows you to create and manage [AWS Route53RecoveryControl ControlPanels](https://docs.aws.amazon.com/route53recoverycontrol/latest/userguide/) for controlling the failover and recovery of your applications across multiple AWS accounts and regions.
 

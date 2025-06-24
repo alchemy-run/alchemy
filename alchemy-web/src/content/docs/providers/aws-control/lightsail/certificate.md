@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lightsail Certificates with Alchemy
+title: Certificate
 description: Learn how to create, update, and manage AWS Lightsail Certificates using Alchemy Cloud Control.
 ---
-
-# Certificate
 
 The Certificate resource allows you to create and manage [AWS Lightsail Certificates](https://docs.aws.amazon.com/lightsail/latest/userguide/) for your domains, enabling secure HTTPS connections.
 

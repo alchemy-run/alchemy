@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3 StorageLensGroups with Alchemy
+title: StorageLensGroup
 description: Learn how to create, update, and manage AWS S3 StorageLensGroups using Alchemy Cloud Control.
 ---
-
-# StorageLensGroup
 
 The `StorageLensGroup` resource lets you manage [AWS S3 StorageLensGroups](https://docs.aws.amazon.com/s3/latest/userguide/) for monitoring storage usage and activity across multiple S3 buckets.
 

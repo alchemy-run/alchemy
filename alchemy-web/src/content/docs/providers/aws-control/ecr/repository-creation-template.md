@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ECR RepositoryCreationTemplates with Alchemy
+title: RepositoryCreationTemplate
 description: Learn how to create, update, and manage AWS ECR RepositoryCreationTemplates using Alchemy Cloud Control.
 ---
-
-# RepositoryCreationTemplate
 
 The RepositoryCreationTemplate resource allows you to define a template for creating Amazon Elastic Container Registry (ECR) repositories. For more detailed information, refer to the [AWS ECR RepositoryCreationTemplates documentation](https://docs.aws.amazon.com/ecr/latest/userguide/).
 

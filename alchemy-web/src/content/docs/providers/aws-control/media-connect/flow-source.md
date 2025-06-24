@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaConnect FlowSources with Alchemy
+title: FlowSource
 description: Learn how to create, update, and manage AWS MediaConnect FlowSources using Alchemy Cloud Control.
 ---
-
-# FlowSource
 
 The FlowSource resource lets you manage [AWS MediaConnect FlowSources](https://docs.aws.amazon.com/mediaconnect/latest/userguide/) and their configuration settings for media transport.
 

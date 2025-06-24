@@ -1,9 +1,7 @@
 ---
-title: Cloudflare Secret
+title: Secrets Store
 description: Learn how to add individual secrets to Cloudflare Secrets Store for fine-grained secret management.
 ---
-
-# Secrets Store
 
 A [Cloudflare Secret Store](https://developers.cloudflare.com/secrets-store/) is a secure way to manage and distribute Secrets in a centralized location.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaLive Inputs with Alchemy
+title: Input
 description: Learn how to create, update, and manage AWS MediaLive Inputs using Alchemy Cloud Control.
 ---
-
-# Input
 
 The Input resource allows you to manage [AWS MediaLive Inputs](https://docs.aws.amazon.com/medialive/latest/userguide/) for ingesting media content for live streaming.
 

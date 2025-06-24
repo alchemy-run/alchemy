@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WorkSpacesWeb BrowserSettingss with Alchemy
+title: BrowserSettings
 description: Learn how to create, update, and manage AWS WorkSpacesWeb BrowserSettingss using Alchemy Cloud Control.
 ---
-
-# BrowserSettings
 
 The BrowserSettings resource allows you to manage the configuration settings for browser settings in AWS WorkSpacesWeb. For more information, refer to the [AWS WorkSpacesWeb BrowserSettings documentation](https://docs.aws.amazon.com/workspacesweb/latest/userguide/).
 

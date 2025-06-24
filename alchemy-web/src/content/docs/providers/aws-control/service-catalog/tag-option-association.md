@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog TagOptionAssociations with Alchemy
+title: TagOptionAssociation
 description: Learn how to create, update, and manage AWS ServiceCatalog TagOptionAssociations using Alchemy Cloud Control.
 ---
-
-# TagOptionAssociation
 
 The TagOptionAssociation resource lets you manage [AWS ServiceCatalog TagOption Associations](https://docs.aws.amazon.com/servicecatalog/latest/userguide/) which are used to associate TagOptions with resources in AWS Service Catalog.
 

@@ -4,8 +4,6 @@ title: CLI Arguments
 description: Learn how Alchemy automatically parses CLI arguments for common operations like destroy, read, quiet mode, and staging without requiring a traditional CLI tool.
 ---
 
-# CLI Arguments
-
 Alchemy doesn't have a traditional CLI tool like `wrangler` or `terraform` because it's designed to be an embeddable TypeScript library. Instead, it provides automatic CLI argument parsing when you initialize an alchemy application, making it easy to run your infrastructure scripts with common options.
 
 ## No CLI, but CLI Arguments

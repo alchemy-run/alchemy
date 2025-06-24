@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppTest TestCases with Alchemy
+title: TestCase
 description: Learn how to create, update, and manage AWS AppTest TestCases using Alchemy Cloud Control.
 ---
-
-# TestCase
 
 The TestCase resource lets you manage [AWS AppTest TestCases](https://docs.aws.amazon.com/apptest/latest/userguide/) for automating application testing.
 

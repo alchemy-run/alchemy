@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Organizations Organizations with Alchemy
+title: Organization
 description: Learn how to create, update, and manage AWS Organizations Organizations using Alchemy Cloud Control.
 ---
-
-# Organization
 
 The Organization resource lets you manage your AWS Organizations, which allows you to consolidate multiple AWS accounts into an organization that you can centrally manage. For more information, visit the [AWS Organizations Organizations documentation](https://docs.aws.amazon.com/organizations/latest/userguide/).
 

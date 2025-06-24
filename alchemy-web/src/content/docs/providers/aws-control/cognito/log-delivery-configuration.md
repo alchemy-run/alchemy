@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cognito LogDeliveryConfigurations with Alchemy
+title: LogDeliveryConfiguration
 description: Learn how to create, update, and manage AWS Cognito LogDeliveryConfigurations using Alchemy Cloud Control.
 ---
-
-# LogDeliveryConfiguration
 
 The LogDeliveryConfiguration resource allows you to manage the logging settings for AWS Cognito User Pools. This includes configuring log delivery to different destinations for monitoring and analysis. For more details, refer to the [AWS Cognito LogDeliveryConfigurations documentation](https://docs.aws.amazon.com/cognito/latest/userguide/).
 

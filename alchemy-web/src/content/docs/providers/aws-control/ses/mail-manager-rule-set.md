@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES MailManagerRuleSets with Alchemy
+title: MailManagerRuleSet
 description: Learn how to create, update, and manage AWS SES MailManagerRuleSets using Alchemy Cloud Control.
 ---
-
-# MailManagerRuleSet
 
 The MailManagerRuleSet resource lets you manage [AWS SES MailManagerRuleSets](https://docs.aws.amazon.com/ses/latest/userguide/) for handling incoming emails and applying specific rules to them.
 

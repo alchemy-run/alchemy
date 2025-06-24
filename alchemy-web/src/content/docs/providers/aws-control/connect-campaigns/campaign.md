@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ConnectCampaigns Campaigns with Alchemy
+title: Campaign
 description: Learn how to create, update, and manage AWS ConnectCampaigns Campaigns using Alchemy Cloud Control.
 ---
-
-# Campaign
 
 The Campaign resource lets you manage [AWS ConnectCampaigns Campaigns](https://docs.aws.amazon.com/connectcampaigns/latest/userguide/) for outbound calling and communication with customers.
 

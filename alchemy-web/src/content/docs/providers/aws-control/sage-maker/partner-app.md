@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker PartnerApps with Alchemy
+title: PartnerApp
 description: Learn how to create, update, and manage AWS SageMaker PartnerApps using Alchemy Cloud Control.
 ---
-
-# PartnerApp
 
 The PartnerApp resource lets you create and manage [AWS SageMaker PartnerApps](https://docs.aws.amazon.com/sagemaker/latest/userguide/), enabling integration with third-party applications and services.
 

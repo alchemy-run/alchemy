@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT ResourceSpecificLoggings with Alchemy
+title: ResourceSpecificLogging
 description: Learn how to create, update, and manage AWS IoT ResourceSpecificLoggings using Alchemy Cloud Control.
 ---
-
-# ResourceSpecificLogging
 
 The ResourceSpecificLogging resource allows you to configure logging settings for specific AWS IoT resources, enabling you to manage logging levels for better observability and troubleshooting. For more details, refer to the [AWS IoT ResourceSpecificLoggings documentation](https://docs.aws.amazon.com/iot/latest/userguide/).
 

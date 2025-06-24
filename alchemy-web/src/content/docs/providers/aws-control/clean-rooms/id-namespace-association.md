@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CleanRooms IdNamespaceAssociations with Alchemy
+title: IdNamespaceAssociation
 description: Learn how to create, update, and manage AWS CleanRooms IdNamespaceAssociations using Alchemy Cloud Control.
 ---
-
-# IdNamespaceAssociation
 
 The IdNamespaceAssociation resource allows you to manage [AWS CleanRooms IdNamespaceAssociations](https://docs.aws.amazon.com/cleanrooms/latest/userguide/) and their configurations for data collaboration and privacy.
 

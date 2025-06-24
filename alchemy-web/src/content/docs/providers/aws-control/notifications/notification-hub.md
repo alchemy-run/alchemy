@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Notifications NotificationHubs with Alchemy
+title: NotificationHub
 description: Learn how to create, update, and manage AWS Notifications NotificationHubs using Alchemy Cloud Control.
 ---
-
-# NotificationHub
 
 The NotificationHub resource lets you manage [AWS Notifications NotificationHubs](https://docs.aws.amazon.com/notifications/latest/userguide/) and their configuration settings.
 

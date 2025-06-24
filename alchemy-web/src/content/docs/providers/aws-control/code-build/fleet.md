@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeBuild Fleets with Alchemy
+title: Fleet
 description: Learn how to create, update, and manage AWS CodeBuild Fleets using Alchemy Cloud Control.
 ---
-
-# Fleet
 
 The Fleet resource allows you to manage [AWS CodeBuild Fleets](https://docs.aws.amazon.com/codebuild/latest/userguide/) for building your applications in a scalable and efficient manner.
 

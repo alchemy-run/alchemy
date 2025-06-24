@@ -1,9 +1,7 @@
 ---
-title: Cloudflare R2 Bucket
+title: R2Bucket
 description: Learn how to create, configure, and manage Cloudflare R2 Buckets using Alchemy for scalable object storage.
 ---
-
-# R2Bucket
 
 Creates and manages [Cloudflare R2 Buckets](https://developers.cloudflare.com/r2/buckets/) for object storage with S3 compatibility.
 

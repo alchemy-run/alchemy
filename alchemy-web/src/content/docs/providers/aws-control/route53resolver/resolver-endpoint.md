@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53Resolver ResolverEndpoints with Alchemy
+title: ResolverEndpoint
 description: Learn how to create, update, and manage AWS Route53Resolver ResolverEndpoints using Alchemy Cloud Control.
 ---
-
-# ResolverEndpoint
 
 The ResolverEndpoint resource lets you manage [AWS Route53Resolver ResolverEndpoints](https://docs.aws.amazon.com/route53resolver/latest/userguide/) for handling DNS queries in a hybrid environment or between Amazon VPCs.
 

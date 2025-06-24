@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ElastiCache Users with Alchemy
+title: User
 description: Learn how to create, update, and manage AWS ElastiCache Users using Alchemy Cloud Control.
 ---
-
-# User
 
 The User resource allows you to manage [AWS ElastiCache Users](https://docs.aws.amazon.com/elasticache/latest/userguide/) for Redis and Memcached, providing the ability to control access and permissions for caching resources.
 

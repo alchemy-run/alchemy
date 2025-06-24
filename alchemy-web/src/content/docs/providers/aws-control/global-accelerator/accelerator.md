@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GlobalAccelerator Accelerators with Alchemy
+title: Accelerator
 description: Learn how to create, update, and manage AWS GlobalAccelerator Accelerators using Alchemy Cloud Control.
 ---
-
-# Accelerator
 
 The Accelerator resource lets you manage [AWS GlobalAccelerator Accelerators](https://docs.aws.amazon.com/globalaccelerator/latest/userguide/) which improve the availability and performance of your applications with dynamic routing and TCP/UDP support.
 

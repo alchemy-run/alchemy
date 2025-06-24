@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppFlow Connectors with Alchemy
+title: Connector
 description: Learn how to create, update, and manage AWS AppFlow Connectors using Alchemy Cloud Control.
 ---
-
-# Connector
 
 The Connector resource lets you manage [AWS AppFlow Connectors](https://docs.aws.amazon.com/appflow/latest/userguide/) which enable the connection to various data sources and destinations for data flow.
 

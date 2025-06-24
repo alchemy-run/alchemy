@@ -1,9 +1,7 @@
 ---
-title: Cloudflare Secret
+title: Secret
 description: Learn how to add individual secrets to Cloudflare Secrets Store for fine-grained secret management.
 ---
-
-# Secret
 
 A [Cloudflare Secret](https://developers.cloudflare.com/api/resources/secrets_store/subresources/stores/subresources/secrets/) creates an individual secret stored in a [Secrets Store](./secrets-store.md).
 

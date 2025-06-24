@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FraudDetector Outcomes with Alchemy
+title: Outcome
 description: Learn how to create, update, and manage AWS FraudDetector Outcomes using Alchemy Cloud Control.
 ---
-
-# Outcome
 
 The Outcome resource lets you manage [AWS FraudDetector Outcomes](https://docs.aws.amazon.com/frauddetector/latest/userguide/) that define the results of fraud detection predictions. These outcomes can be used to take actions based on the predictions made by the FraudDetector.
 

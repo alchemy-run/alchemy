@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 Instances with Alchemy
+title: Instance
 description: Learn how to create, update, and manage AWS EC2 Instances using Alchemy Cloud Control.
 ---
-
-# Instance
 
 The Instance resource lets you manage [AWS EC2 Instances](https://docs.aws.amazon.com/ec2/latest/userguide/) for running virtual servers in the cloud.
 

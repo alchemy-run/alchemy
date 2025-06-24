@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lambda Permissions with Alchemy
+title: Permission
 description: Learn how to create, update, and manage AWS Lambda Permissions using Alchemy Cloud Control.
 ---
-
-# Permission
 
 The Permission resource allows you to manage [AWS Lambda Permissions](https://docs.aws.amazon.com/lambda/latest/userguide/) that control which services or accounts can invoke your Lambda functions.
 

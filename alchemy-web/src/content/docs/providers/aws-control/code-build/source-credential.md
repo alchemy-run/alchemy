@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeBuild SourceCredentials with Alchemy
+title: SourceCredential
 description: Learn how to create, update, and manage AWS CodeBuild SourceCredentials using Alchemy Cloud Control.
 ---
-
-# SourceCredential
 
 The SourceCredential resource allows you to create, update, and manage credentials that AWS CodeBuild uses to access source code repositories. This can include GitHub, Bitbucket, and other supported source providers. For more information, refer to the [AWS CodeBuild SourceCredentials documentation](https://docs.aws.amazon.com/codebuild/latest/userguide/).
 

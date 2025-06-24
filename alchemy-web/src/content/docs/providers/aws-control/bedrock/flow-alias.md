@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Bedrock FlowAliases with Alchemy
+title: FlowAlias
 description: Learn how to create, update, and manage AWS Bedrock FlowAliases using Alchemy Cloud Control.
 ---
-
-# FlowAlias
 
 The FlowAlias resource lets you manage [AWS Bedrock FlowAliases](https://docs.aws.amazon.com/bedrock/latest/userguide/) for routing requests to various flows. This allows for flexible management of flow configurations.
 

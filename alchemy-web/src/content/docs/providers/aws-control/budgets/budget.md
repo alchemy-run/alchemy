@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Budgets Budgets with Alchemy
+title: Budget
 description: Learn how to create, update, and manage AWS Budgets Budgets using Alchemy Cloud Control.
 ---
-
-# Budget
 
 The Budget resource lets you manage [AWS Budgets](https://docs.aws.amazon.com/budgets/latest/userguide/) for tracking your AWS spending and usage. You can set thresholds and get notified when your costs or usage exceed your budgeted amounts.
 

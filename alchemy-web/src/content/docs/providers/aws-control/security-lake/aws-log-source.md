@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityLake AwsLogSources with Alchemy
+title: AwsLogSource
 description: Learn how to create, update, and manage AWS SecurityLake AwsLogSources using Alchemy Cloud Control.
 ---
-
-# AwsLogSource
 
 The AwsLogSource resource lets you manage [AWS SecurityLake AwsLogSources](https://docs.aws.amazon.com/securitylake/latest/userguide/) for integrating log data from various AWS accounts and services into AWS Security Lake.
 

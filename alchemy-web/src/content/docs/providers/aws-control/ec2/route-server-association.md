@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 RouteServerAssociations with Alchemy
+title: RouteServerAssociation
 description: Learn how to create, update, and manage AWS EC2 RouteServerAssociations using Alchemy Cloud Control.
 ---
-
-# RouteServerAssociation
 
 The RouteServerAssociation resource allows you to manage associations between a Route Server and a VPC within AWS EC2. This resource is essential for enabling dynamic routing capabilities in your network. For more details, visit the [AWS EC2 RouteServerAssociations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

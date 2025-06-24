@@ -1,9 +1,7 @@
 ---
-title: Managing AWS XRay TransactionSearchConfigs with Alchemy
+title: TransactionSearchConfig
 description: Learn how to create, update, and manage AWS XRay TransactionSearchConfigs using Alchemy Cloud Control.
 ---
-
-# TransactionSearchConfig
 
 The TransactionSearchConfig resource allows you to manage the configuration settings for AWS X-Ray transaction search. This resource can be used to control the indexing percentage for transaction data. For more information, refer to the [AWS XRay TransactionSearchConfigs documentation](https://docs.aws.amazon.com/xray/latest/userguide/).
 

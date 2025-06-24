@@ -1,9 +1,7 @@
 ---
-title: Managing AWS KafkaConnect CustomPlugins with Alchemy
+title: CustomPlugin
 description: Learn how to create, update, and manage AWS KafkaConnect CustomPlugins using Alchemy Cloud Control.
 ---
-
-# CustomPlugin
 
 The CustomPlugin resource enables you to manage [AWS KafkaConnect CustomPlugins](https://docs.aws.amazon.com/kafkaconnect/latest/userguide/) for extending the functionality of your Kafka Connect deployments.
 

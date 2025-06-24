@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AutoScaling WarmPools with Alchemy
+title: WarmPool
 description: Learn how to create, update, and manage AWS AutoScaling WarmPools using Alchemy Cloud Control.
 ---
-
-# WarmPool
 
 The WarmPool resource lets you manage [AWS AutoScaling WarmPools](https://docs.aws.amazon.com/autoscaling/latest/userguide/) that help reduce the time it takes to launch EC2 instances in response to scaling events.
 

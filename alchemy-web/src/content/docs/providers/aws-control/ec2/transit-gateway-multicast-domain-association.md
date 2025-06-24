@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TransitGatewayMulticastDomainAssociations with Alchemy
+title: TransitGatewayMulticastDomainAssociation
 description: Learn how to create, update, and manage AWS EC2 TransitGatewayMulticastDomainAssociations using Alchemy Cloud Control.
 ---
-
-# TransitGatewayMulticastDomainAssociation
 
 The TransitGatewayMulticastDomainAssociation resource allows you to manage associations between a transit gateway multicast domain and a subnet. This enables multicast traffic routing within your AWS environment. For more details, refer to the [AWS EC2 TransitGatewayMulticastDomainAssociations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

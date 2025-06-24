@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTWireless FuotaTasks with Alchemy
+title: FuotaTask
 description: Learn how to create, update, and manage AWS IoTWireless FuotaTasks using Alchemy Cloud Control.
 ---
-
-# FuotaTask
 
 The FuotaTask resource lets you manage [AWS IoTWireless FuotaTasks](https://docs.aws.amazon.com/iotwireless/latest/userguide/) for firmware updates over the air (FUOTA) to your devices.
 

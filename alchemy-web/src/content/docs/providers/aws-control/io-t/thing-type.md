@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT ThingTypes with Alchemy
+title: ThingType
 description: Learn how to create, update, and manage AWS IoT ThingTypes using Alchemy Cloud Control.
 ---
-
-# ThingType
 
 The ThingType resource allows you to manage [AWS IoT ThingTypes](https://docs.aws.amazon.com/iot/latest/userguide/) which are used to define the characteristics of a group of devices in AWS IoT. This resource can be utilized to create, update, and deprecate ThingTypes for your IoT devices.
 

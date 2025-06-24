@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker AppImageConfigs with Alchemy
+title: AppImageConfig
 description: Learn how to create, update, and manage AWS SageMaker AppImageConfigs using Alchemy Cloud Control.
 ---
-
-# AppImageConfig
 
 The AppImageConfig resource allows you to manage [AWS SageMaker AppImageConfigs](https://docs.aws.amazon.com/sagemaker/latest/userguide/) that define Docker container images for Jupyter notebook users and other applications in SageMaker. 
 

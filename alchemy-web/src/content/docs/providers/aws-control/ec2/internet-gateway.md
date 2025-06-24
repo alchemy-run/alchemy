@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 InternetGateways with Alchemy
+title: InternetGateway
 description: Learn how to create, update, and manage AWS EC2 InternetGateways using Alchemy Cloud Control.
 ---
-
-# InternetGateway
 
 The InternetGateway resource allows you to manage [AWS EC2 InternetGateways](https://docs.aws.amazon.com/ec2/latest/userguide/) which are used to enable communication between instances in your Virtual Private Cloud (VPC) and the internet.
 

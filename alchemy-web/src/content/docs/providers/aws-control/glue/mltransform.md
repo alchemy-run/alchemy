@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue MLTransforms with Alchemy
+title: MLTransform
 description: Learn how to create, update, and manage AWS Glue MLTransforms using Alchemy Cloud Control.
 ---
-
-# MLTransform
 
 The MLTransform resource lets you create and manage [AWS Glue MLTransforms](https://docs.aws.amazon.com/glue/latest/userguide/) for transforming data using machine learning algorithms.
 

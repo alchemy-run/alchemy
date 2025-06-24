@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ECR ReplicationConfigurations with Alchemy
+title: ReplicationConfiguration
 description: Learn how to create, update, and manage AWS ECR ReplicationConfigurations using Alchemy Cloud Control.
 ---
-
-# ReplicationConfiguration
 
 The ReplicationConfiguration resource lets you manage [AWS ECR ReplicationConfigurations](https://docs.aws.amazon.com/ecr/latest/userguide/) for replicating images across AWS Regions.
 

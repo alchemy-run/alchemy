@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IVS RecordingConfigurations with Alchemy
+title: RecordingConfiguration
 description: Learn how to create, update, and manage AWS IVS RecordingConfigurations using Alchemy Cloud Control.
 ---
-
-# RecordingConfiguration
 
 The RecordingConfiguration resource lets you manage [AWS IVS RecordingConfigurations](https://docs.aws.amazon.com/ivs/latest/userguide/) for your video streaming applications. This resource allows you to configure recording settings for your live streams, including destination storage, rendition settings, and thumbnail generation.
 

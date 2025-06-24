@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Redshift ScheduledActions with Alchemy
+title: ScheduledAction
 description: Learn how to create, update, and manage AWS Redshift ScheduledActions using Alchemy Cloud Control.
 ---
-
-# ScheduledAction
 
 The ScheduledAction resource allows you to manage [AWS Redshift Scheduled Actions](https://docs.aws.amazon.com/redshift/latest/userguide/) which automate the management of your clusters. You can schedule actions like resizing clusters or pausing them during non-usage periods.
 

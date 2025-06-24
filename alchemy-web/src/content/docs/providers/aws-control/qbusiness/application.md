@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QBusiness Applications with Alchemy
+title: Application
 description: Learn how to create, update, and manage AWS QBusiness Applications using Alchemy Cloud Control.
 ---
-
-# Application
 
 The Application resource lets you manage [AWS QBusiness Applications](https://docs.aws.amazon.com/qbusiness/latest/userguide/) including configurations such as identity type, encryption settings, and integration with QuickSight.
 

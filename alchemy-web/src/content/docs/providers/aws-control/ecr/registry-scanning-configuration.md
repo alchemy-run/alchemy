@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ECR RegistryScanningConfigurations with Alchemy
+title: RegistryScanningConfiguration
 description: Learn how to create, update, and manage AWS ECR RegistryScanningConfigurations using Alchemy Cloud Control.
 ---
-
-# RegistryScanningConfiguration
 
 The RegistryScanningConfiguration resource allows you to manage the scanning configurations for Amazon ECR (Elastic Container Registry) repositories, enabling you to automate security scanning of your container images. For more details, visit the [AWS ECR RegistryScanningConfigurations documentation](https://docs.aws.amazon.com/ecr/latest/userguide/).
 

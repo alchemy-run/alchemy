@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect IntegrationAssociations with Alchemy
+title: IntegrationAssociation
 description: Learn how to create, update, and manage AWS Connect IntegrationAssociations using Alchemy Cloud Control.
 ---
-
-# IntegrationAssociation
 
 The IntegrationAssociation resource lets you manage [AWS Connect IntegrationAssociations](https://docs.aws.amazon.com/connect/latest/userguide/) which are used to integrate AWS Connect with various third-party services.
 

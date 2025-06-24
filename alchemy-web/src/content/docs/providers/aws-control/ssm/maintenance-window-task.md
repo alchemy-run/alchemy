@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSM MaintenanceWindowTasks with Alchemy
+title: MaintenanceWindowTask
 description: Learn how to create, update, and manage AWS SSM MaintenanceWindowTasks using Alchemy Cloud Control.
 ---
-
-# MaintenanceWindowTask
 
 The MaintenanceWindowTask resource lets you create and manage tasks that can be executed during specified maintenance windows in AWS Systems Manager. For more detailed information, refer to the [AWS SSM MaintenanceWindowTasks documentation](https://docs.aws.amazon.com/ssm/latest/userguide/).
 

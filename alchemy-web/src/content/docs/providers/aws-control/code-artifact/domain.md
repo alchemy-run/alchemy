@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeArtifact Domains with Alchemy
+title: Domain
 description: Learn how to create, update, and manage AWS CodeArtifact Domains using Alchemy Cloud Control.
 ---
-
-# Domain
 
 The Domain resource allows you to manage [AWS CodeArtifact Domains](https://docs.aws.amazon.com/codeartifact/latest/userguide/) which serve as a central repository for your software packages.
 

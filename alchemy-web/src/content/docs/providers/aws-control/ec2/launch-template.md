@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 LaunchTemplates with Alchemy
+title: LaunchTemplate
 description: Learn how to create, update, and manage AWS EC2 LaunchTemplates using Alchemy Cloud Control.
 ---
-
-# LaunchTemplate
 
 The LaunchTemplate resource lets you manage [AWS EC2 LaunchTemplates](https://docs.aws.amazon.com/ec2/latest/userguide/) for configuring EC2 instance settings, including instance type, key pairs, security groups, and more.
 

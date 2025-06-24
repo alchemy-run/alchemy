@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint GCMChannels with Alchemy
+title: GCMChannel
 description: Learn how to create, update, and manage AWS Pinpoint GCMChannels using Alchemy Cloud Control.
 ---
-
-# GCMChannel
 
 The GCMChannel resource lets you manage [AWS Pinpoint GCMChannels](https://docs.aws.amazon.com/pinpoint/latest/userguide/) for sending push notifications to Android devices.
 

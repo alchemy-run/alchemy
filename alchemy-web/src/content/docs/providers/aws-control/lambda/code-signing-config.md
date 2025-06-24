@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lambda CodeSigningConfigs with Alchemy
+title: CodeSigningConfig
 description: Learn how to create, update, and manage AWS Lambda CodeSigningConfigs using Alchemy Cloud Control.
 ---
-
-# CodeSigningConfig
 
 The CodeSigningConfig resource lets you manage [AWS Lambda CodeSigningConfigs](https://docs.aws.amazon.com/lambda/latest/userguide/) for validating the code integrity of your Lambda functions.
 

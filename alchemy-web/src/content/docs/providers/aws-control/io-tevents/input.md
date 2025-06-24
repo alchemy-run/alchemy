@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTEvents Inputs with Alchemy
+title: Input
 description: Learn how to create, update, and manage AWS IoTEvents Inputs using Alchemy Cloud Control.
 ---
-
-# Input
 
 The Input resource allows you to manage [AWS IoTEvents Inputs](https://docs.aws.amazon.com/iotevents/latest/userguide/) used for detecting changes in your IoT data. Inputs define the structure of the data that your IoTEvents detectors will use.
 

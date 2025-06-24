@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway BasePathMappingV2s with Alchemy
+title: BasePathMappingV2
 description: Learn how to create, update, and manage AWS ApiGateway BasePathMappingV2s using Alchemy Cloud Control.
 ---
-
-# BasePathMappingV2
 
 The BasePathMappingV2 resource allows you to manage [AWS ApiGateway BasePathMappingV2s](https://docs.aws.amazon.com/apigateway/latest/userguide/) that define the mapping between a custom domain name and a specific API Gateway REST API.
 

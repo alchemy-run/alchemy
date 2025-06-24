@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Scheduler Schedules with Alchemy
+title: Schedule
 description: Learn how to create, update, and manage AWS Scheduler Schedules using Alchemy Cloud Control.
 ---
-
-# Schedule
 
 The Schedule resource lets you manage [AWS Scheduler Schedules](https://docs.aws.amazon.com/scheduler/latest/userguide/) for automating tasks and events based on a defined schedule.
 

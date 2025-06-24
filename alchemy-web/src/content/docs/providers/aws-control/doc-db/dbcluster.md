@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DocDB DBClusters with Alchemy
+title: DBCluster
 description: Learn how to create, update, and manage AWS DocDB DBClusters using Alchemy Cloud Control.
 ---
-
-# DBCluster
 
 The DBCluster resource allows you to create and manage [AWS DocumentDB (with MongoDB compatibility) DBClusters](https://docs.aws.amazon.com/docdb/latest/userguide/), providing a scalable and highly available database solution.
 

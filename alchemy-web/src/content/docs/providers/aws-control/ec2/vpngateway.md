@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VPNGateways with Alchemy
+title: VPNGateway
 description: Learn how to create, update, and manage AWS EC2 VPNGateways using Alchemy Cloud Control.
 ---
-
-# VPNGateway
 
 The VPNGateway resource allows you to create and manage [AWS EC2 VPNGateways](https://docs.aws.amazon.com/ec2/latest/userguide/) that enable secure VPN connections between your on-premises networks and your AWS VPCs.
 

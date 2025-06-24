@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSM PatchBaselines with Alchemy
+title: PatchBaseline
 description: Learn how to create, update, and manage AWS SSM PatchBaselines using Alchemy Cloud Control.
 ---
-
-# PatchBaseline
 
 The PatchBaseline resource allows you to manage [AWS SSM PatchBaselines](https://docs.aws.amazon.com/ssm/latest/userguide/) for automating the patching of your managed instances. Patch baselines define which patches should be approved for installation on your instances, helping ensure that they remain secure and up-to-date.
 

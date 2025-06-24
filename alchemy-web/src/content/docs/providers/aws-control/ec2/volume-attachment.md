@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VolumeAttachments with Alchemy
+title: VolumeAttachment
 description: Learn how to create, update, and manage AWS EC2 VolumeAttachments using Alchemy Cloud Control.
 ---
-
-# VolumeAttachment
 
 The VolumeAttachment resource lets you manage the attachment of Amazon EC2 volumes to instances. For more detailed information, you can refer to the [AWS EC2 VolumeAttachments documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

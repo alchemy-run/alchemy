@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lambda LayerVersions with Alchemy
+title: LayerVersion
 description: Learn how to create, update, and manage AWS Lambda LayerVersions using Alchemy Cloud Control.
 ---
-
-# LayerVersion
 
 The LayerVersion resource allows you to manage [AWS Lambda LayerVersions](https://docs.aws.amazon.com/lambda/latest/userguide/) which provide a way to package and share libraries, custom runtimes, and other dependencies across multiple Lambda functions.
 

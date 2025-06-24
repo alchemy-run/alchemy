@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Rekognition Projects with Alchemy
+title: Project
 description: Learn how to create, update, and manage AWS Rekognition Projects using Alchemy Cloud Control.
 ---
-
-# Project
 
 The Project resource lets you manage [AWS Rekognition Projects](https://docs.aws.amazon.com/rekognition/latest/userguide/) which are used to organize and manage your machine learning models and workflows.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PCAConnectorSCEP Challenges with Alchemy
+title: Challenge
 description: Learn how to create, update, and manage AWS PCAConnectorSCEP Challenges using Alchemy Cloud Control.
 ---
-
-# Challenge
 
 The Challenge resource allows you to manage [AWS PCAConnectorSCEP Challenges](https://docs.aws.amazon.com/pcaconnectorscep/latest/userguide/) for certificate management tasks like authentication and device provisioning.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaLive SdiSources with Alchemy
+title: SdiSource
 description: Learn how to create, update, and manage AWS MediaLive SdiSources using Alchemy Cloud Control.
 ---
-
-# SdiSource
 
 The SdiSource resource allows you to manage [AWS MediaLive SdiSources](https://docs.aws.amazon.com/medialive/latest/userguide/) for your media workflows. SDI (Serial Digital Interface) sources are used to ingest high-quality video feeds into AWS MediaLive.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpsWorksCM Servers with Alchemy
+title: Server
 description: Learn how to create, update, and manage AWS OpsWorksCM Servers using Alchemy Cloud Control.
 ---
-
-# Server
 
 The Server resource lets you manage [AWS OpsWorksCM Servers](https://docs.aws.amazon.com/opsworkscm/latest/userguide/) for configuration management and automation.
 

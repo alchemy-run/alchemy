@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect ContactFlowModules with Alchemy
+title: ContactFlowModule
 description: Learn how to create, update, and manage AWS Connect ContactFlowModules using Alchemy Cloud Control.
 ---
-
-# ContactFlowModule
 
 The ContactFlowModule resource allows you to create and manage [AWS Connect ContactFlowModules](https://docs.aws.amazon.com/connect/latest/userguide/) for defining interactive workflows in your contact center.
 

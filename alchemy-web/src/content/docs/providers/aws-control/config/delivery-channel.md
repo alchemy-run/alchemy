@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Config DeliveryChannels with Alchemy
+title: DeliveryChannel
 description: Learn how to create, update, and manage AWS Config DeliveryChannels using Alchemy Cloud Control.
 ---
-
-# DeliveryChannel
 
 The DeliveryChannel resource lets you manage [AWS Config DeliveryChannels](https://docs.aws.amazon.com/config/latest/userguide/) which are responsible for delivering configuration snapshots and configuration history to an Amazon S3 bucket and notifying you of changes via Amazon SNS.
 

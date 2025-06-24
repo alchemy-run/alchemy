@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RAM Permissions with Alchemy
+title: Permission
 description: Learn how to create, update, and manage AWS RAM Permissions using Alchemy Cloud Control.
 ---
-
-# Permission
 
 The Permission resource allows you to manage [AWS RAM Permissions](https://docs.aws.amazon.com/ram/latest/userguide/) that define the policies associated with resource sharing. This enables you to control access to shared resources effectively.
 

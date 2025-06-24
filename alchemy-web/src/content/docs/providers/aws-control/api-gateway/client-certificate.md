@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway ClientCertificates with Alchemy
+title: ClientCertificate
 description: Learn how to create, update, and manage AWS ApiGateway ClientCertificates using Alchemy Cloud Control.
 ---
-
-# ClientCertificate
 
 The ClientCertificate resource allows you to manage [AWS ApiGateway ClientCertificates](https://docs.aws.amazon.com/apigateway/latest/userguide/) which are used to enable mutual TLS authentication for your APIs.
 

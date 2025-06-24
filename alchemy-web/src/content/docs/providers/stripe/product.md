@@ -1,9 +1,7 @@
 ---
-title: Stripe Product
+title: Product
 description: Learn how to create and manage Stripe Products and SKUs using Alchemy for your e-commerce or subscription service.
 ---
-
-# Product
 
 The Product resource lets you create and manage [Stripe Products](https://stripe.com/docs/api/products) for your Stripe account.
 

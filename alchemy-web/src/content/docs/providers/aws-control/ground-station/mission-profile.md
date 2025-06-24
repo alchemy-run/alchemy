@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GroundStation MissionProfiles with Alchemy
+title: MissionProfile
 description: Learn how to create, update, and manage AWS GroundStation MissionProfiles using Alchemy Cloud Control.
 ---
-
-# MissionProfile
 
 The MissionProfile resource allows you to manage [AWS GroundStation MissionProfiles](https://docs.aws.amazon.com/groundstation/latest/userguide/) which define how satellite data is processed and streamed during ground station operations.
 

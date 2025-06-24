@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DynamoDB GlobalTables with Alchemy
+title: GlobalTable
 description: Learn how to create, update, and manage AWS DynamoDB GlobalTables using Alchemy Cloud Control.
 ---
-
-# GlobalTable
 
 The GlobalTable resource allows you to create and manage [AWS DynamoDB GlobalTables](https://docs.aws.amazon.com/dynamodb/latest/userguide/) for globally distributed applications with multi-region replication.
 

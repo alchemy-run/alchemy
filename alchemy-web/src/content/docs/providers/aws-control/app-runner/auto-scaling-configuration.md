@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppRunner AutoScalingConfigurations with Alchemy
+title: AutoScalingConfiguration
 description: Learn how to create, update, and manage AWS AppRunner AutoScalingConfigurations using Alchemy Cloud Control.
 ---
-
-# AutoScalingConfiguration
 
 The AutoScalingConfiguration resource allows you to manage the scaling settings for AWS AppRunner services. This resource can configure the minimum and maximum number of instances as well as concurrency settings. For more information, refer to the [AWS AppRunner AutoScalingConfigurations documentation](https://docs.aws.amazon.com/apprunner/latest/userguide/).
 

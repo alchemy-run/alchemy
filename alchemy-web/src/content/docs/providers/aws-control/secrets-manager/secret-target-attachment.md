@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecretsManager SecretTargetAttachments with Alchemy
+title: SecretTargetAttachment
 description: Learn how to create, update, and manage AWS SecretsManager SecretTargetAttachments using Alchemy Cloud Control.
 ---
-
-# SecretTargetAttachment
 
 The SecretTargetAttachment resource allows you to manage the association between a secret in AWS Secrets Manager and a specific target, such as an AWS resource. For more information, visit the [AWS SecretsManager SecretTargetAttachments documentation](https://docs.aws.amazon.com/secretsmanager/latest/userguide/).
 

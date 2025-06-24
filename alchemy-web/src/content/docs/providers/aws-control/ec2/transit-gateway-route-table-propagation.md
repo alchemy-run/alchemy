@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TransitGatewayRouteTablePropagations with Alchemy
+title: TransitGatewayRouteTablePropagation
 description: Learn how to create, update, and manage AWS EC2 TransitGatewayRouteTablePropagations using Alchemy Cloud Control.
 ---
-
-# TransitGatewayRouteTablePropagation
 
 The TransitGatewayRouteTablePropagation resource allows you to manage the propagation of routes between transit gateway route tables and attachments in Amazon EC2. This resource is crucial for enabling communication between different VPCs and on-premises networks. For more information, refer to the [AWS EC2 TransitGatewayRouteTablePropagations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

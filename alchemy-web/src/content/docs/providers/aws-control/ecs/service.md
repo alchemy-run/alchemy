@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ECS Services with Alchemy
+title: Service
 description: Learn how to create, update, and manage AWS ECS Services using Alchemy Cloud Control.
 ---
-
-# Service
 
 The Service resource lets you manage [AWS ECS Services](https://docs.aws.amazon.com/ecs/latest/userguide/) and their configuration settings.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ARCZonalShift ZonalAutoshiftConfigurations with Alchemy
+title: ZonalAutoshiftConfiguration
 description: Learn how to create, update, and manage AWS ARCZonalShift ZonalAutoshiftConfigurations using Alchemy Cloud Control.
 ---
-
-# ZonalAutoshiftConfiguration
 
 The ZonalAutoshiftConfiguration resource allows you to manage the configurations for AWS ARCZonalShift, enabling automatic shifting of resources between availability zones. This can help improve the availability and resilience of your applications. For more details, refer to the [AWS ARCZonalShift ZonalAutoshiftConfigurations documentation](https://docs.aws.amazon.com/arczonalshift/latest/userguide/).
 

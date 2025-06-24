@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation HookVersions with Alchemy
+title: HookVersion
 description: Learn how to create, update, and manage AWS CloudFormation HookVersions using Alchemy Cloud Control.
 ---
-
-# HookVersion
 
 The HookVersion resource allows you to manage [AWS CloudFormation HookVersions](https://docs.aws.amazon.com/cloudformation/latest/userguide/), which are used to define custom hooks that can be invoked during CloudFormation stack operations.
 

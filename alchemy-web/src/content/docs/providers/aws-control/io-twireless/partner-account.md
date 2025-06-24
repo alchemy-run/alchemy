@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTWireless PartnerAccounts with Alchemy
+title: PartnerAccount
 description: Learn how to create, update, and manage AWS IoTWireless PartnerAccounts using Alchemy Cloud Control.
 ---
-
-# PartnerAccount
 
 The PartnerAccount resource allows you to manage [AWS IoTWireless PartnerAccounts](https://docs.aws.amazon.com/iotwireless/latest/userguide/) for connecting and integrating with various IoT wireless partners.
 

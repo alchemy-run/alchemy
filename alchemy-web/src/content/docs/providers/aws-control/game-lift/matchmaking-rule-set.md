@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GameLift MatchmakingRuleSets with Alchemy
+title: MatchmakingRuleSet
 description: Learn how to create, update, and manage AWS GameLift MatchmakingRuleSets using Alchemy Cloud Control.
 ---
-
-# MatchmakingRuleSet
 
 The MatchmakingRuleSet resource allows you to define the rules and conditions for matchmaking in AWS GameLift, enabling you to create balanced game sessions for players. For more details, visit the [AWS GameLift MatchmakingRuleSets documentation](https://docs.aws.amazon.com/gamelift/latest/userguide/).
 

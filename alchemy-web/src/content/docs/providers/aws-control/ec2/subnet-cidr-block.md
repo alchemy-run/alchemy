@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 SubnetCidrBlocks with Alchemy
+title: SubnetCidrBlock
 description: Learn how to create, update, and manage AWS EC2 SubnetCidrBlocks using Alchemy Cloud Control.
 ---
-
-# SubnetCidrBlock
 
 The SubnetCidrBlock resource lets you manage [AWS EC2 Subnet CIDR Blocks](https://docs.aws.amazon.com/ec2/latest/userguide/) associated with your VPC subnets. This resource allows you to add IPv6 CIDR blocks to existing subnets for enhanced network configuration.
 

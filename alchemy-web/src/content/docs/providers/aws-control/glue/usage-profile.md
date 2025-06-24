@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue UsageProfiles with Alchemy
+title: UsageProfile
 description: Learn how to create, update, and manage AWS Glue UsageProfiles using Alchemy Cloud Control.
 ---
-
-# UsageProfile
 
 The UsageProfile resource allows you to manage [AWS Glue UsageProfiles](https://docs.aws.amazon.com/glue/latest/userguide/) that define the usage metrics and configurations for your Glue jobs and crawlers.
 

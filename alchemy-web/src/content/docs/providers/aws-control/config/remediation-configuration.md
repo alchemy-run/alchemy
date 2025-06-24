@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Config RemediationConfigurations with Alchemy
+title: RemediationConfiguration
 description: Learn how to create, update, and manage AWS Config RemediationConfigurations using Alchemy Cloud Control.
 ---
-
-# RemediationConfiguration
 
 The RemediationConfiguration resource lets you manage [AWS Config RemediationConfigurations](https://docs.aws.amazon.com/config/latest/userguide/) for automatically remediating non-compliant resources in your AWS environment.
 

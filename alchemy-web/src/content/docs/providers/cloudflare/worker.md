@@ -1,9 +1,7 @@
 ---
-title: Cloudflare Workers
+title: Worker
 description: Learn how to deploy, configure, and manage Cloudflare Workers using Alchemy for serverless functions at the edge.
 ---
-
-# Worker
 
 A [Cloudflare Worker](https://developers.cloudflare.com/workers/) is a serverless function that runs on Cloudflare's global network.
 

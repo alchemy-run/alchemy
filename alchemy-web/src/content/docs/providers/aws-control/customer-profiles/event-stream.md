@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CustomerProfiles EventStreams with Alchemy
+title: EventStream
 description: Learn how to create, update, and manage AWS CustomerProfiles EventStreams using Alchemy Cloud Control.
 ---
-
-# EventStream
 
 The EventStream resource allows you to manage [AWS CustomerProfiles EventStreams](https://docs.aws.amazon.com/customerprofiles/latest/userguide/) for capturing real-time events related to customer profiles.
 

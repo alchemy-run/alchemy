@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect ContactFlowVersions with Alchemy
+title: ContactFlowVersion
 description: Learn how to create, update, and manage AWS Connect ContactFlowVersions using Alchemy Cloud Control.
 ---
-
-# ContactFlowVersion
 
 The ContactFlowVersion resource allows you to manage [AWS Connect ContactFlowVersions](https://docs.aws.amazon.com/connect/latest/userguide/) for defining contact flows in your AWS Connect instance.
 

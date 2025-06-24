@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Amplify Branchs with Alchemy
+title: Branch
 description: Learn how to create, update, and manage AWS Amplify Branchs using Alchemy Cloud Control.
 ---
-
-# Branch
 
 The Branch resource lets you manage [AWS Amplify Branchs](https://docs.aws.amazon.com/amplify/latest/userguide/) for your applications, allowing for features such as preview environments, performance modes, and more.
 

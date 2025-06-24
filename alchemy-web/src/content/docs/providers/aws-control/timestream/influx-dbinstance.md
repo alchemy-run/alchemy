@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Timestream InfluxDBInstances with Alchemy
+title: InfluxDBInstance
 description: Learn how to create, update, and manage AWS Timestream InfluxDBInstances using Alchemy Cloud Control.
 ---
-
-# InfluxDBInstance
 
 The InfluxDBInstance resource lets you manage [AWS Timestream InfluxDBInstances](https://docs.aws.amazon.com/timestream/latest/userguide/) for time-series data storage and analysis.
 

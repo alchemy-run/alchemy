@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PinpointEmail DedicatedIpPools with Alchemy
+title: DedicatedIpPool
 description: Learn how to create, update, and manage AWS PinpointEmail DedicatedIpPools using Alchemy Cloud Control.
 ---
-
-# DedicatedIpPool
 
 The DedicatedIpPool resource lets you manage [AWS PinpointEmail Dedicated IP Pools](https://docs.aws.amazon.com/pinpointemail/latest/userguide/) which are used to send email using dedicated IP addresses. This can enhance your email deliverability and reputation.
 

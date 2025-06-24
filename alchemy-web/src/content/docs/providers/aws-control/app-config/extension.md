@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppConfig Extensions with Alchemy
+title: Extension
 description: Learn how to create, update, and manage AWS AppConfig Extensions using Alchemy Cloud Control.
 ---
-
-# Extension
 
 The Extension resource lets you manage [AWS AppConfig Extensions](https://docs.aws.amazon.com/appconfig/latest/userguide/) for extending application configurations with custom actions and parameters.
 

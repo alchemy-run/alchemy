@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue DataQualityRulesets with Alchemy
+title: DataQualityRuleset
 description: Learn how to create, update, and manage AWS Glue DataQualityRulesets using Alchemy Cloud Control.
 ---
-
-# DataQualityRuleset
 
 The DataQualityRuleset resource allows you to define and manage [AWS Glue DataQuality Rulesets](https://docs.aws.amazon.com/glue/latest/userguide/). These rulesets enable you to validate the quality of your data within AWS Glue.
 

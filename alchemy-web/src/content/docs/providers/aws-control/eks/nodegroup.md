@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EKS Nodegroups with Alchemy
+title: Nodegroup
 description: Learn how to create, update, and manage AWS EKS Nodegroups using Alchemy Cloud Control.
 ---
-
-# Nodegroup
 
 The Nodegroup resource lets you manage [AWS EKS Nodegroups](https://docs.aws.amazon.com/eks/latest/userguide/) for your Kubernetes cluster, enabling you to configure the EC2 instances that run your containerized applications.
 

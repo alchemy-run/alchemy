@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VerifiedAccessTrustProviders with Alchemy
+title: VerifiedAccessTrustProvider
 description: Learn how to create, update, and manage AWS EC2 VerifiedAccessTrustProviders using Alchemy Cloud Control.
 ---
-
-# VerifiedAccessTrustProvider
 
 The VerifiedAccessTrustProvider resource allows you to create and manage [AWS EC2 Verified Access Trust Providers](https://docs.aws.amazon.com/ec2/latest/userguide/). This resource is essential for implementing secure access policies for your applications.
 

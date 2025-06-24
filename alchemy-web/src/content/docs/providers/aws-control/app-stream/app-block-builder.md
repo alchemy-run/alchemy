@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppStream AppBlockBuilders with Alchemy
+title: AppBlockBuilder
 description: Learn how to create, update, and manage AWS AppStream AppBlockBuilders using Alchemy Cloud Control.
 ---
-
-# AppBlockBuilder
 
 The AppBlockBuilder resource allows you to create and manage [AWS AppStream AppBlockBuilders](https://docs.aws.amazon.com/appstream/latest/userguide/) for configuring and building application blocks in AWS AppStream.
 

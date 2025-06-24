@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaLive CloudWatchAlarmTemplateGroups with Alchemy
+title: CloudWatchAlarmTemplateGroup
 description: Learn how to create, update, and manage AWS MediaLive CloudWatchAlarmTemplateGroups using Alchemy Cloud Control.
 ---
-
-# CloudWatchAlarmTemplateGroup
 
 The CloudWatchAlarmTemplateGroup resource allows you to manage [AWS MediaLive CloudWatch Alarm Template Groups](https://docs.aws.amazon.com/medialive/latest/userguide/). This resource enables you to create and configure CloudWatch alarms for monitoring your MediaLive channels.
 

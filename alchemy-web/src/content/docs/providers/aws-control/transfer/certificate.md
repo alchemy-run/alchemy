@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Transfer Certificates with Alchemy
+title: Certificate
 description: Learn how to create, update, and manage AWS Transfer Certificates using Alchemy Cloud Control.
 ---
-
-# Certificate
 
 The Certificate resource allows you to manage [AWS Transfer Certificates](https://docs.aws.amazon.com/transfer/latest/userguide/) for secure data transfer. This resource supports the creation and management of SSL/TLS certificates for AWS Transfer Family.
 

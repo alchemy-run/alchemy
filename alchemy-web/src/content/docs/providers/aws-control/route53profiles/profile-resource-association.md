@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53Profiles ProfileResourceAssociations with Alchemy
+title: ProfileResourceAssociation
 description: Learn how to create, update, and manage AWS Route53Profiles ProfileResourceAssociations using Alchemy Cloud Control.
 ---
-
-# ProfileResourceAssociation
 
 The ProfileResourceAssociation resource lets you manage associations between profiles and resources in AWS Route53Profiles. This allows for better organization and management of resources linked to specific profiles. For more information, visit the [AWS Route53Profiles ProfileResourceAssociations documentation](https://docs.aws.amazon.com/route53profiles/latest/userguide/).
 

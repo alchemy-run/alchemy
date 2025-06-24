@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Backup RestoreTestingPlans with Alchemy
+title: RestoreTestingPlan
 description: Learn how to create, update, and manage AWS Backup RestoreTestingPlans using Alchemy Cloud Control.
 ---
-
-# RestoreTestingPlan
 
 The RestoreTestingPlan resource allows you to manage AWS Backup Restore Testing Plans, which help automate the testing of recovery points to ensure that your backup data can be properly restored. For more information, refer to the [AWS Backup RestoreTestingPlans documentation](https://docs.aws.amazon.com/backup/latest/userguide/).
 

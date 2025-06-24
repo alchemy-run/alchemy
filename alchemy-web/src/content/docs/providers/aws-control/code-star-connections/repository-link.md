@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeStarConnections RepositoryLinks with Alchemy
+title: RepositoryLink
 description: Learn how to create, update, and manage AWS CodeStarConnections RepositoryLinks using Alchemy Cloud Control.
 ---
-
-# RepositoryLink
 
 The RepositoryLink resource allows you to manage [AWS CodeStarConnections RepositoryLinks](https://docs.aws.amazon.com/codestarconnections/latest/userguide/) for linking your source code repositories to your AWS CodeStar projects.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppSync Resolvers with Alchemy
+title: Resolver
 description: Learn how to create, update, and manage AWS AppSync Resolvers using Alchemy Cloud Control.
 ---
-
-# Resolver
 
 The Resolver resource lets you manage [AWS AppSync Resolvers](https://docs.aws.amazon.com/appsync/latest/userguide/) for connecting GraphQL operations to data sources.
 

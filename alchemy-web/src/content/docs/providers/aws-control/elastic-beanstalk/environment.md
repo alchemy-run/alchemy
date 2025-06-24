@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ElasticBeanstalk Environments with Alchemy
+title: Environment
 description: Learn how to create, update, and manage AWS ElasticBeanstalk Environments using Alchemy Cloud Control.
 ---
-
-# Environment
 
 The Environment resource lets you manage [AWS ElasticBeanstalk Environments](https://docs.aws.amazon.com/elasticbeanstalk/latest/userguide/) to deploy and scale web applications and services. 
 

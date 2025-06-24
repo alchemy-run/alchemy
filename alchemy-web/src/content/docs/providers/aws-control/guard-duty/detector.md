@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GuardDuty Detectors with Alchemy
+title: Detector
 description: Learn how to create, update, and manage AWS GuardDuty Detectors using Alchemy Cloud Control.
 ---
-
-# Detector
 
 The Detector resource allows you to manage [AWS GuardDuty Detectors](https://docs.aws.amazon.com/guardduty/latest/userguide/) for continuous security monitoring of your AWS accounts and workloads.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppMesh GatewayRoutes with Alchemy
+title: GatewayRoute
 description: Learn how to create, update, and manage AWS AppMesh GatewayRoutes using Alchemy Cloud Control.
 ---
-
-# GatewayRoute
 
 The GatewayRoute resource allows you to manage [AWS AppMesh GatewayRoutes](https://docs.aws.amazon.com/appmesh/latest/userguide/) that define how requests are routed to virtual services. This resource helps you direct traffic based on specified criteria, enabling fine-grained control over your application’s traffic flow.
 

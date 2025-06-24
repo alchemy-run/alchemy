@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation WaitConditions with Alchemy
+title: WaitCondition
 description: Learn how to create, update, and manage AWS CloudFormation WaitConditions using Alchemy Cloud Control.
 ---
-
-# WaitCondition
 
 The WaitCondition resource allows you to create a wait condition in AWS CloudFormation that pauses the stack creation until a specified number of signals are received. This is useful for coordinating the completion of asynchronous tasks. You can learn more in the [AWS CloudFormation WaitConditions documentation](https://docs.aws.amazon.com/cloudformation/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager CustomerGatewayAssociations with Alchemy
+title: CustomerGatewayAssociation
 description: Learn how to create, update, and manage AWS NetworkManager CustomerGatewayAssociations using Alchemy Cloud Control.
 ---
-
-# CustomerGatewayAssociation
 
 The CustomerGatewayAssociation resource allows you to manage [AWS NetworkManager Customer Gateway Associations](https://docs.aws.amazon.com/networkmanager/latest/userguide/) within your AWS environment. This resource is essential for linking customer gateways with specific devices in your global network.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 EgressOnlyInternetGateways with Alchemy
+title: EgressOnlyInternetGateway
 description: Learn how to create, update, and manage AWS EC2 EgressOnlyInternetGateways using Alchemy Cloud Control.
 ---
-
-# EgressOnlyInternetGateway
 
 The `EgressOnlyInternetGateway` resource allows you to create an Egress-Only Internet Gateway for your Amazon VPC, enabling instances in the VPC to access the internet while preventing the internet from initiating connections with those instances. For more details, visit the [AWS EC2 EgressOnlyInternetGateways](https://docs.aws.amazon.com/ec2/latest/userguide/) documentation.
 

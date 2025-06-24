@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeDeploy DeploymentGroups with Alchemy
+title: DeploymentGroup
 description: Learn how to create, update, and manage AWS CodeDeploy DeploymentGroups using Alchemy Cloud Control.
 ---
-
-# DeploymentGroup
 
 The DeploymentGroup resource lets you manage [AWS CodeDeploy DeploymentGroups](https://docs.aws.amazon.com/codedeploy/latest/userguide/) for deploying applications across Amazon EC2 instances or other compute platforms.
 

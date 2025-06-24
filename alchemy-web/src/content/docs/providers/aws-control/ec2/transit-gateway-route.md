@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TransitGatewayRoutes with Alchemy
+title: TransitGatewayRoute
 description: Learn how to create, update, and manage AWS EC2 TransitGatewayRoutes using Alchemy Cloud Control.
 ---
-
-# TransitGatewayRoute
 
 The TransitGatewayRoute resource allows you to manage [AWS EC2 Transit Gateway Routes](https://docs.aws.amazon.com/ec2/latest/userguide/). This resource is essential for controlling the routing of traffic between multiple VPCs and on-premises networks via a Transit Gateway.
 

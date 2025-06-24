@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TrafficMirrorTargets with Alchemy
+title: TrafficMirrorTarget
 description: Learn how to create, update, and manage AWS EC2 TrafficMirrorTargets using Alchemy Cloud Control.
 ---
-
-# TrafficMirrorTarget
 
 The TrafficMirrorTarget resource allows you to create and manage AWS EC2 Traffic Mirror Targets, which are used to specify the destination for mirrored traffic. For detailed information, refer to the [AWS EC2 TrafficMirrorTargets documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

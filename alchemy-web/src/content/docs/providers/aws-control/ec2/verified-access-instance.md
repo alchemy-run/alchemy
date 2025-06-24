@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VerifiedAccessInstances with Alchemy
+title: VerifiedAccessInstance
 description: Learn how to create, update, and manage AWS EC2 VerifiedAccessInstances using Alchemy Cloud Control.
 ---
-
-# VerifiedAccessInstance
 
 The VerifiedAccessInstance resource allows you to manage [AWS EC2 Verified Access Instances](https://docs.aws.amazon.com/ec2/latest/userguide/) for secure and controlled access to your applications and services.
 

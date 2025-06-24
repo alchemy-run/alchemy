@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lambda EventInvokeConfigs with Alchemy
+title: EventInvokeConfig
 description: Learn how to create, update, and manage AWS Lambda EventInvokeConfigs using Alchemy Cloud Control.
 ---
-
-# EventInvokeConfig
 
 The EventInvokeConfig resource allows you to manage the configuration settings for asynchronous invocation of AWS Lambda functions, including retry behavior and destination settings for failed invocations. For more details, refer to the [AWS Lambda EventInvokeConfigs documentation](https://docs.aws.amazon.com/lambda/latest/userguide/).
 

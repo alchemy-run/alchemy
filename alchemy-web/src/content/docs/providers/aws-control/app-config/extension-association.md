@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppConfig ExtensionAssociations with Alchemy
+title: ExtensionAssociation
 description: Learn how to create, update, and manage AWS AppConfig ExtensionAssociations using Alchemy Cloud Control.
 ---
-
-# ExtensionAssociation
 
 The ExtensionAssociation resource allows you to manage [AWS AppConfig ExtensionAssociations](https://docs.aws.amazon.com/appconfig/latest/userguide/), which are used to associate extensions with AppConfig resources.
 

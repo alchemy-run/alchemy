@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Bedrock ApplicationInferenceProfiles with Alchemy
+title: ApplicationInferenceProfile
 description: Learn how to create, update, and manage AWS Bedrock ApplicationInferenceProfiles using Alchemy Cloud Control.
 ---
-
-# ApplicationInferenceProfile
 
 The ApplicationInferenceProfile resource allows you to manage [AWS Bedrock Application Inference Profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/) that define how models are used for inference in your applications.
 

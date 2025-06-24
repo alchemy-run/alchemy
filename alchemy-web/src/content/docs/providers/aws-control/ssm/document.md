@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSM Documents with Alchemy
+title: Document
 description: Learn how to create, update, and manage AWS SSM Documents using Alchemy Cloud Control.
 ---
-
-# Document
 
 The Document resource allows you to create and manage [AWS SSM Documents](https://docs.aws.amazon.com/ssm/latest/userguide/) which define actions for AWS Systems Manager. These documents can be used to automate tasks such as software installation, configuration, and execution of scripts on managed instances.
 

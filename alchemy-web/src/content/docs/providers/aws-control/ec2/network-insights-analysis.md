@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 NetworkInsightsAnalysiss with Alchemy
+title: NetworkInsightsAnalysis
 description: Learn how to create, update, and manage AWS EC2 NetworkInsightsAnalysiss using Alchemy Cloud Control.
 ---
-
-# NetworkInsightsAnalysis
 
 The NetworkInsightsAnalysis resource allows you to analyze network paths within your Amazon EC2 environment, providing insights into connectivity and performance. For more details, refer to the [AWS EC2 NetworkInsightsAnalysiss documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

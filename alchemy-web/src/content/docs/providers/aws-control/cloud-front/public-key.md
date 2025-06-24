@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront PublicKeys with Alchemy
+title: PublicKey
 description: Learn how to create, update, and manage AWS CloudFront PublicKeys using Alchemy Cloud Control.
 ---
-
-# PublicKey
 
 The PublicKey resource lets you manage [AWS CloudFront PublicKeys](https://docs.aws.amazon.com/cloudfront/latest/userguide/) for use in your CloudFront distributions, allowing you to serve content securely.
 

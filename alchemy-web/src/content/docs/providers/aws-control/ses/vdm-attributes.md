@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES VdmAttributes with Alchemy
+title: VdmAttributes
 description: Learn how to create, update, and manage AWS SES VdmAttributes using Alchemy Cloud Control.
 ---
-
-# VdmAttributes
 
 The VdmAttributes resource allows you to manage the [AWS SES VdmAttributes](https://docs.aws.amazon.com/ses/latest/userguide/), which are essential for configuring the Virtual Deliverability Manager (VDM) settings for your Amazon SES sending domains.
 

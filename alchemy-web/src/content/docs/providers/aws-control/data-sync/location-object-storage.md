@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataSync LocationObjectStorages with Alchemy
+title: LocationObjectStorage
 description: Learn how to create, update, and manage AWS DataSync LocationObjectStorages using Alchemy Cloud Control.
 ---
-
-# LocationObjectStorage
 
 The LocationObjectStorage resource lets you manage [AWS DataSync LocationObjectStorages](https://docs.aws.amazon.com/datasync/latest/userguide/) for transferring data between on-premises storage and AWS storage services.
 

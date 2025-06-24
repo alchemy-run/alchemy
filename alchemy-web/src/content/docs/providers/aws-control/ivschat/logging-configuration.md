@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IVSChat LoggingConfigurations with Alchemy
+title: LoggingConfiguration
 description: Learn how to create, update, and manage AWS IVSChat LoggingConfigurations using Alchemy Cloud Control.
 ---
-
-# LoggingConfiguration
 
 The LoggingConfiguration resource allows you to manage logging configurations for AWS IVSChat, enabling you to capture chat events and send them to specified destinations. For more details, refer to the [AWS IVSChat LoggingConfigurations documentation](https://docs.aws.amazon.com/ivschat/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ConnectCampaignsV2 Campaigns with Alchemy
+title: Campaign
 description: Learn how to create, update, and manage AWS ConnectCampaignsV2 Campaigns using Alchemy Cloud Control.
 ---
-
-# Campaign
 
 The Campaign resource lets you manage [AWS ConnectCampaignsV2 Campaigns](https://docs.aws.amazon.com/connectcampaignsv2/latest/userguide/) for running and managing outreach campaigns in Amazon Connect.
 

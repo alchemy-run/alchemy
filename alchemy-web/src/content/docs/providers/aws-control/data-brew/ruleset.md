@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataBrew Rulesets with Alchemy
+title: Ruleset
 description: Learn how to create, update, and manage AWS DataBrew Rulesets using Alchemy Cloud Control.
 ---
-
-# Ruleset
 
 The Ruleset resource allows you to manage [AWS DataBrew Rulesets](https://docs.aws.amazon.com/databrew/latest/userguide/) for data quality checks and validation. With this resource, you can define rules that help ensure your data meets specific criteria before processing or analysis.
 

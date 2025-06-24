@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53RecoveryControl RoutingControls with Alchemy
+title: RoutingControl
 description: Learn how to create, update, and manage AWS Route53RecoveryControl RoutingControls using Alchemy Cloud Control.
 ---
-
-# RoutingControl
 
 The RoutingControl resource allows you to manage [AWS Route53RecoveryControl RoutingControls](https://docs.aws.amazon.com/route53recoverycontrol/latest/userguide/) for controlling traffic routing across multiple endpoints.
 

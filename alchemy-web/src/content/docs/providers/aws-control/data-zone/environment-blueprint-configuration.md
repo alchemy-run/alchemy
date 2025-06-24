@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataZone EnvironmentBlueprintConfigurations with Alchemy
+title: EnvironmentBlueprintConfiguration
 description: Learn how to create, update, and manage AWS DataZone EnvironmentBlueprintConfigurations using Alchemy Cloud Control.
 ---
-
-# EnvironmentBlueprintConfiguration
 
 The EnvironmentBlueprintConfiguration resource lets you manage [AWS DataZone Environment Blueprint Configurations](https://docs.aws.amazon.com/datazone/latest/userguide/) for configuring environments in your DataZone. 
 

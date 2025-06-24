@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GameLift Builds with Alchemy
+title: Build
 description: Learn how to create, update, and manage AWS GameLift Builds using Alchemy Cloud Control.
 ---
-
-# Build
 
 The Build resource lets you manage [AWS GameLift Builds](https://docs.aws.amazon.com/gamelift/latest/userguide/) for deploying your game server binaries to the GameLift service.
 

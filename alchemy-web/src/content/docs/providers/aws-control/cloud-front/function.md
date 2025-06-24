@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront Functions with Alchemy
+title: Function
 description: Learn how to create, update, and manage AWS CloudFront Functions using Alchemy Cloud Control.
 ---
-
-# Function
 
 The Function resource allows you to create, update, and manage [AWS CloudFront Functions](https://docs.aws.amazon.com/cloudfront/latest/userguide/) for lightweight serverless code execution at the edge.
 

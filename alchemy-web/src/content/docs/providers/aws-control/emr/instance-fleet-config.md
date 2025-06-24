@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EMR InstanceFleetConfigs with Alchemy
+title: InstanceFleetConfig
 description: Learn how to create, update, and manage AWS EMR InstanceFleetConfigs using Alchemy Cloud Control.
 ---
-
-# InstanceFleetConfig
 
 The InstanceFleetConfig resource allows you to manage [AWS EMR Instance Fleets](https://docs.aws.amazon.com/emr/latest/userguide/) for dynamic scaling and optimized resource allocation in your EMR cluster.
 

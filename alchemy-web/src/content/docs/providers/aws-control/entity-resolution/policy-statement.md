@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EntityResolution PolicyStatements with Alchemy
+title: PolicyStatement
 description: Learn how to create, update, and manage AWS EntityResolution PolicyStatements using Alchemy Cloud Control.
 ---
-
-# PolicyStatement
 
 The PolicyStatement resource allows you to define and manage IAM policies that specify permissions for actions in AWS Entity Resolution. For more information, refer to the [AWS EntityResolution PolicyStatements](https://docs.aws.amazon.com/entityresolution/latest/userguide/).
 

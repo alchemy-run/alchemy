@@ -1,9 +1,7 @@
 ---
-title: Managing AWS APS Workspaces with Alchemy
+title: Workspace
 description: Learn how to create, update, and manage AWS APS Workspaces using Alchemy Cloud Control.
 ---
-
-# Workspace
 
 The Workspace resource lets you manage [AWS APS Workspaces](https://docs.aws.amazon.com/aps/latest/userguide/) for your applications, providing an environment for your analytical workloads.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TransitGatewayConnects with Alchemy
+title: TransitGatewayConnect
 description: Learn how to create, update, and manage AWS EC2 TransitGatewayConnects using Alchemy Cloud Control.
 ---
-
-# TransitGatewayConnect
 
 The TransitGatewayConnect resource allows you to create and manage AWS EC2 Transit Gateway Connect attachments, facilitating seamless connectivity between your Virtual Private Clouds (VPCs) and on-premises networks. For more information, refer to the [AWS EC2 TransitGatewayConnects documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

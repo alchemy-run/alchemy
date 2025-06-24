@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES ContactLists with Alchemy
+title: ContactList
 description: Learn how to create, update, and manage AWS SES ContactLists using Alchemy Cloud Control.
 ---
-
-# ContactList
 
 The ContactList resource allows you to manage [AWS SES ContactLists](https://docs.aws.amazon.com/ses/latest/userguide/) for organizing email contacts into lists for your email campaigns.
 

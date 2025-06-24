@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Shield DRTAccess with Alchemy
+title: DRTAccess
 description: Learn how to create, update, and manage AWS Shield DRTAccess using Alchemy Cloud Control.
 ---
-
-# DRTAccess
 
 The DRTAccess resource allows you to manage access to the AWS Shield DDoS Response Team (DRT) for your AWS resources. This resource is essential for enabling AWS Shield to log and monitor your resources for potential DDoS attacks. For more information, visit the [AWS Shield DRTAccess](https://docs.aws.amazon.com/shield/latest/userguide/).
 

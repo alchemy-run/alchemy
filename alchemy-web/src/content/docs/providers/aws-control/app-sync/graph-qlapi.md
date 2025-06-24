@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppSync GraphQLApis with Alchemy
+title: GraphQLApi
 description: Learn how to create, update, and manage AWS AppSync GraphQLApis using Alchemy Cloud Control.
 ---
-
-# GraphQLApi
 
 The GraphQLApi resource lets you manage [AWS AppSync GraphQL APIs](https://docs.aws.amazon.com/appsync/latest/userguide/) and their configuration settings.
 

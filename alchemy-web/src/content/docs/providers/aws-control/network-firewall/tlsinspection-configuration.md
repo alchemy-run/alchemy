@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkFirewall TLSInspectionConfigurations with Alchemy
+title: TLSInspectionConfiguration
 description: Learn how to create, update, and manage AWS NetworkFirewall TLSInspectionConfigurations using Alchemy Cloud Control.
 ---
-
-# TLSInspectionConfiguration
 
 The TLSInspectionConfiguration resource allows you to manage and configure TLS inspection settings for AWS Network Firewall, enabling you to monitor and inspect encrypted traffic. For more details, refer to the [AWS NetworkFirewall TLSInspectionConfigurations documentation](https://docs.aws.amazon.com/networkfirewall/latest/userguide/).
 

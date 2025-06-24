@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppSync GraphQLSchemas with Alchemy
+title: GraphQLSchema
 description: Learn how to create, update, and manage AWS AppSync GraphQLSchemas using Alchemy Cloud Control.
 ---
-
-# GraphQLSchema
 
 The GraphQLSchema resource allows you to manage [AWS AppSync GraphQLSchemas](https://docs.aws.amazon.com/appsync/latest/userguide/) for your applications. This resource helps define the shape of your API and manage its schema effectively.
 

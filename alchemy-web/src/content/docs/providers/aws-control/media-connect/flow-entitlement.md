@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaConnect FlowEntitlements with Alchemy
+title: FlowEntitlement
 description: Learn how to create, update, and manage AWS MediaConnect FlowEntitlements using Alchemy Cloud Control.
 ---
-
-# FlowEntitlement
 
 The FlowEntitlement resource allows you to manage [AWS MediaConnect FlowEntitlements](https://docs.aws.amazon.com/mediaconnect/latest/userguide/) which provide control over how media flows are shared between different users and services.
 

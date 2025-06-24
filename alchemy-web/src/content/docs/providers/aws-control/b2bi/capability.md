@@ -1,9 +1,7 @@
 ---
-title: Managing AWS B2BI Capabilitys with Alchemy
+title: Capability
 description: Learn how to create, update, and manage AWS B2BI Capabilitys using Alchemy Cloud Control.
 ---
-
-# Capability
 
 The Capability resource lets you manage [AWS B2BI Capabilitys](https://docs.aws.amazon.com/b2bi/latest/userguide/) for enabling various integration functionalities within the B2B Integration service.
 

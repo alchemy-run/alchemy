@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalogAppRegistry AttributeGroups with Alchemy
+title: AttributeGroup
 description: Learn how to create, update, and manage AWS ServiceCatalogAppRegistry AttributeGroups using Alchemy Cloud Control.
 ---
-
-# AttributeGroup
 
 The AttributeGroup resource lets you manage [AWS ServiceCatalogAppRegistry AttributeGroups](https://docs.aws.amazon.com/servicecatalogappregistry/latest/userguide/) which are used to group application attributes in AWS Service Catalog App Registry.
 

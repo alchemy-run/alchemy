@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataZone SubscriptionTargets with Alchemy
+title: SubscriptionTarget
 description: Learn how to create, update, and manage AWS DataZone SubscriptionTargets using Alchemy Cloud Control.
 ---
-
-# SubscriptionTarget
 
 The SubscriptionTarget resource allows you to manage [AWS DataZone SubscriptionTargets](https://docs.aws.amazon.com/datazone/latest/userguide/) which facilitate access to data assets within a defined environment.
 

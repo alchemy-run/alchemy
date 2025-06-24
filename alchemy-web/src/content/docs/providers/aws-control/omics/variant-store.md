@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Omics VariantStores with Alchemy
+title: VariantStore
 description: Learn how to create, update, and manage AWS Omics VariantStores using Alchemy Cloud Control.
 ---
-
-# VariantStore
 
 The VariantStore resource lets you manage [AWS Omics VariantStores](https://docs.aws.amazon.com/omics/latest/userguide/) for storing and querying genomic variant data.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Logs MetricFilters with Alchemy
+title: MetricFilter
 description: Learn how to create, update, and manage AWS Logs MetricFilters using Alchemy Cloud Control.
 ---
-
-# MetricFilter
 
 The MetricFilter resource lets you create and manage [AWS Logs MetricFilters](https://docs.aws.amazon.com/logs/latest/userguide/) for monitoring and analyzing log data. Metric filters allow you to extract metric data from logs for use in CloudWatch.
 

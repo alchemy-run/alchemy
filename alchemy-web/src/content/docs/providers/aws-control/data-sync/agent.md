@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataSync Agents with Alchemy
+title: Agent
 description: Learn how to create, update, and manage AWS DataSync Agents using Alchemy Cloud Control.
 ---
-
-# Agent
 
 The Agent resource lets you manage [AWS DataSync Agents](https://docs.aws.amazon.com/datasync/latest/userguide/) for transferring data between on-premises storage and AWS storage services.
 

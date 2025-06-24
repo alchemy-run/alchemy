@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ResourceGroups Groups with Alchemy
+title: Group
 description: Learn how to create, update, and manage AWS ResourceGroups Groups using Alchemy Cloud Control.
 ---
-
-# Group
 
 The Group resource lets you manage [AWS ResourceGroups Groups](https://docs.aws.amazon.com/resourcegroups/latest/userguide/) which help you organize AWS resources in a logical manner.
 

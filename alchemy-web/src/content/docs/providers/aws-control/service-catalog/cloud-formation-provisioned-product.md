@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog CloudFormationProvisionedProducts with Alchemy
+title: CloudFormationProvisionedProduct
 description: Learn how to create, update, and manage AWS ServiceCatalog CloudFormationProvisionedProducts using Alchemy Cloud Control.
 ---
-
-# CloudFormationProvisionedProduct
 
 The CloudFormationProvisionedProduct resource allows you to manage [AWS ServiceCatalog CloudFormation Provisioned Products](https://docs.aws.amazon.com/servicecatalog/latest/userguide/). This resource is used to provision products from the AWS Service Catalog, enabling organizations to create and manage cloud resources quickly and efficiently.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EntityResolution MatchingWorkflows with Alchemy
+title: MatchingWorkflow
 description: Learn how to create, update, and manage AWS EntityResolution MatchingWorkflows using Alchemy Cloud Control.
 ---
-
-# MatchingWorkflow
 
 The MatchingWorkflow resource allows you to create and manage [AWS EntityResolution MatchingWorkflows](https://docs.aws.amazon.com/entityresolution/latest/userguide/) for identifying and resolving entities within your data sets.
 

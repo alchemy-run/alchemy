@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudTrail EventDataStores with Alchemy
+title: EventDataStore
 description: Learn how to create, update, and manage AWS CloudTrail EventDataStores using Alchemy Cloud Control.
 ---
-
-# EventDataStore
 
 The EventDataStore resource lets you manage [AWS CloudTrail EventDataStores](https://docs.aws.amazon.com/cloudtrail/latest/userguide/) for storing and querying CloudTrail events.
 

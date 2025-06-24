@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WorkSpaces WorkspacesPools with Alchemy
+title: WorkspacesPool
 description: Learn how to create, update, and manage AWS WorkSpaces WorkspacesPools using Alchemy Cloud Control.
 ---
-
-# WorkspacesPool
 
 The WorkspacesPool resource allows you to manage [AWS WorkSpaces WorkspacesPools](https://docs.aws.amazon.com/workspaces/latest/userguide/) for provisioning and managing virtual desktops in the cloud.
 

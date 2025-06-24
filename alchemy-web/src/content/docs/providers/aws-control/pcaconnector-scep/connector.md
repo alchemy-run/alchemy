@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PCAConnectorSCEP Connectors with Alchemy
+title: Connector
 description: Learn how to create, update, and manage AWS PCAConnectorSCEP Connectors using Alchemy Cloud Control.
 ---
-
-# Connector
 
 The Connector resource lets you manage [AWS PCAConnectorSCEP Connectors](https://docs.aws.amazon.com/pcaconnectorscep/latest/userguide/) for integrating with a certificate authority and enabling mobile device management.
 

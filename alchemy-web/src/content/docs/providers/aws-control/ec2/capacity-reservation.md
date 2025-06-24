@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 CapacityReservations with Alchemy
+title: CapacityReservation
 description: Learn how to create, update, and manage AWS EC2 CapacityReservations using Alchemy Cloud Control.
 ---
-
-# CapacityReservation
 
 The CapacityReservation resource allows you to manage [AWS EC2 CapacityReservations](https://docs.aws.amazon.com/ec2/latest/userguide/) which provide dedicated capacity for EC2 instances in specific Availability Zones.
 

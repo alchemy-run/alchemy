@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTWireless MulticastGroups with Alchemy
+title: MulticastGroup
 description: Learn how to create, update, and manage AWS IoTWireless MulticastGroups using Alchemy Cloud Control.
 ---
-
-# MulticastGroup
 
 The MulticastGroup resource allows you to manage [AWS IoTWireless MulticastGroups](https://docs.aws.amazon.com/iotwireless/latest/userguide/) to facilitate communication with multiple devices in a single operation.
 

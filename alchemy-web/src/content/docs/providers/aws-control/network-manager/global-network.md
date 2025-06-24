@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager GlobalNetworks with Alchemy
+title: GlobalNetwork
 description: Learn how to create, update, and manage AWS NetworkManager GlobalNetworks using Alchemy Cloud Control.
 ---
-
-# GlobalNetwork
 
 The GlobalNetwork resource lets you manage [AWS NetworkManager GlobalNetworks](https://docs.aws.amazon.com/networkmanager/latest/userguide/) which facilitate the creation and management of a global network across multiple AWS Regions.
 

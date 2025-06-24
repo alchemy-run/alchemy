@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect EvaluationForms with Alchemy
+title: EvaluationForm
 description: Learn how to create, update, and manage AWS Connect EvaluationForms using Alchemy Cloud Control.
 ---
-
-# EvaluationForm
 
 The EvaluationForm resource allows you to manage evaluation forms within AWS Connect. These forms are essential for assessing the performance of agents and ensuring quality control. For more detailed information, refer to the [AWS Connect EvaluationForms documentation](https://docs.aws.amazon.com/connect/latest/userguide/).
 

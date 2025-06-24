@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PCAConnectorAD DirectoryRegistrations with Alchemy
+title: DirectoryRegistration
 description: Learn how to create, update, and manage AWS PCAConnectorAD DirectoryRegistrations using Alchemy Cloud Control.
 ---
-
-# DirectoryRegistration
 
 The DirectoryRegistration resource allows you to manage [AWS PCAConnectorAD DirectoryRegistrations](https://docs.aws.amazon.com/pcaconnectorad/latest/userguide/) which enable the integration of AWS Private Certificate Authority with Active Directory.
 

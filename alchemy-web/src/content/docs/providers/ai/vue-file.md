@@ -1,9 +1,7 @@
 ---
-title: Managing Vue Files with AI in Alchemy
+title: VueFile
 description: Learn how to use Alchemy's AI provider to create, update, and manage Vue (.vue) single-file components.
 ---
-
-# VueFile
 
 The VueFile resource lets you generate [Vue.js](https://vuejs.org/) single-file components using AI models.
 

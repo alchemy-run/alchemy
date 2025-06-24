@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ECS TaskDefinitions with Alchemy
+title: TaskDefinition
 description: Learn how to create, update, and manage AWS ECS TaskDefinitions using Alchemy Cloud Control.
 ---
-
-# TaskDefinition
 
 The TaskDefinition resource lets you manage [AWS ECS TaskDefinitions](https://docs.aws.amazon.com/ecs/latest/userguide/) which define how your containers should run, including specifying the CPU, memory, and networking configurations.
 

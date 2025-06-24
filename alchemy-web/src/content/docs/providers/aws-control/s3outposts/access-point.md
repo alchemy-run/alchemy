@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3Outposts AccessPoints with Alchemy
+title: AccessPoint
 description: Learn how to create, update, and manage AWS S3Outposts AccessPoints using Alchemy Cloud Control.
 ---
-
-# AccessPoint
 
 The AccessPoint resource lets you manage [AWS S3Outposts AccessPoints](https://docs.aws.amazon.com/s3outposts/latest/userguide/) for your S3Outposts buckets, providing specific access control and network configuration.
 

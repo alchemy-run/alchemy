@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass ConnectorDefinitionVersions with Alchemy
+title: ConnectorDefinitionVersion
 description: Learn how to create, update, and manage AWS Greengrass ConnectorDefinitionVersions using Alchemy Cloud Control.
 ---
-
-# ConnectorDefinitionVersion
 
 The ConnectorDefinitionVersion resource allows you to manage versions of connector definitions in AWS Greengrass, enabling you to define how your Greengrass connectors should behave and interact with your devices. For more details, visit the [AWS Greengrass ConnectorDefinitionVersions documentation](https://docs.aws.amazon.com/greengrass/latest/userguide/).
 

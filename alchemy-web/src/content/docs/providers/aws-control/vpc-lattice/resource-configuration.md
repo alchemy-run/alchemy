@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VpcLattice ResourceConfigurations with Alchemy
+title: ResourceConfiguration
 description: Learn how to create, update, and manage AWS VpcLattice ResourceConfigurations using Alchemy Cloud Control.
 ---
-
-# ResourceConfiguration
 
 The ResourceConfiguration resource allows you to manage [AWS VpcLattice ResourceConfigurations](https://docs.aws.amazon.com/vpclattice/latest/userguide/) and their associated settings, enabling you to define the behavior and properties of your service network resources.
 

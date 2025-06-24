@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SystemsManagerSAP Applications with Alchemy
+title: Application
 description: Learn how to create, update, and manage AWS SystemsManagerSAP Applications using Alchemy Cloud Control.
 ---
-
-# Application
 
 The Application resource lets you manage [AWS SystemsManagerSAP Applications](https://docs.aws.amazon.com/systemsmanagersap/latest/userguide/) and their associated configurations.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAFv2 IPSets with Alchemy
+title: IPSet
 description: Learn how to create, update, and manage AWS WAFv2 IPSets using Alchemy Cloud Control.
 ---
-
-# IPSet
 
 The IPSet resource lets you manage [AWS WAFv2 IPSets](https://docs.aws.amazon.com/wafv2/latest/userguide/) for controlling access to your applications based on IP addresses.
 

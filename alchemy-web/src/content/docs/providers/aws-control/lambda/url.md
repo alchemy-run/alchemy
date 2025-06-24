@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lambda Urls with Alchemy
+title: Url
 description: Learn how to create, update, and manage AWS Lambda Urls using Alchemy Cloud Control.
 ---
-
-# Url
 
 The Url resource lets you manage [AWS Lambda Urls](https://docs.aws.amazon.com/lambda/latest/userguide/) for your Lambda functions, allowing you to expose them directly over HTTP(S).
 

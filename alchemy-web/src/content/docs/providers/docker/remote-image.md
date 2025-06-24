@@ -3,8 +3,6 @@ title: RemoteImage
 description: Pull and manage Docker images with Alchemy
 ---
 
-# RemoteImage
-
 The `RemoteImage` resource allows you to pull and manage Docker images using Alchemy.
 
 ## Usage

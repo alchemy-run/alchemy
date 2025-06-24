@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Evidently Projects with Alchemy
+title: Project
 description: Learn how to create, update, and manage AWS Evidently Projects using Alchemy Cloud Control.
 ---
-
-# Project
 
 The Project resource allows you to create and manage [AWS Evidently Projects](https://docs.aws.amazon.com/evidently/latest/userguide/) for running experiments and feature flagging in your applications.
 

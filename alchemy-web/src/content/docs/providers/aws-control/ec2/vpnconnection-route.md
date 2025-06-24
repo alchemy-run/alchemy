@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VPNConnectionRoutes with Alchemy
+title: VPNConnectionRoute
 description: Learn how to create, update, and manage AWS EC2 VPNConnectionRoutes using Alchemy Cloud Control.
 ---
-
-# VPNConnectionRoute
 
 The VPNConnectionRoute resource allows you to manage [AWS EC2 VPN Connection Routes](https://docs.aws.amazon.com/ec2/latest/userguide/) for your virtual private cloud (VPC) connections. This includes specifying the destination CIDR block and associating it with a specific VPN connection.
 

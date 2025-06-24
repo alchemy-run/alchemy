@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Neptune DBClusters with Alchemy
+title: DBCluster
 description: Learn how to create, update, and manage AWS Neptune DBClusters using Alchemy Cloud Control.
 ---
-
-# DBCluster
 
 The DBCluster resource lets you manage [AWS Neptune DBClusters](https://docs.aws.amazon.com/neptune/latest/userguide/) and their configuration settings.
 

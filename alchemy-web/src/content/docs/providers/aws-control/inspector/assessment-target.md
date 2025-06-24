@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Inspector AssessmentTargets with Alchemy
+title: AssessmentTarget
 description: Learn how to create, update, and manage AWS Inspector AssessmentTargets using Alchemy Cloud Control.
 ---
-
-# AssessmentTarget
 
 The AssessmentTarget resource lets you manage [AWS Inspector AssessmentTargets](https://docs.aws.amazon.com/inspector/latest/userguide/) which define the resources to be assessed for security vulnerabilities.
 

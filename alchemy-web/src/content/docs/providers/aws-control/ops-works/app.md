@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpsWorks Apps with Alchemy
+title: App
 description: Learn how to create, update, and manage AWS OpsWorks Apps using Alchemy Cloud Control.
 ---
-
-# App
 
 The App resource allows you to manage [AWS OpsWorks Apps](https://docs.aws.amazon.com/opsworks/latest/userguide/) and their configuration settings within the AWS ecosystem.
 

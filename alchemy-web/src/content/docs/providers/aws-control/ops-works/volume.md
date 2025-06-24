@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpsWorks Volumes with Alchemy
+title: Volume
 description: Learn how to create, update, and manage AWS OpsWorks Volumes using Alchemy Cloud Control.
 ---
-
-# Volume
 
 The Volume resource lets you manage [AWS OpsWorks Volumes](https://docs.aws.amazon.com/opsworks/latest/userguide/) for your applications, providing persistent storage options for your instances.
 

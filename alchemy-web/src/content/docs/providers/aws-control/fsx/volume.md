@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FSx Volumes with Alchemy
+title: Volume
 description: Learn how to create, update, and manage AWS FSx Volumes using Alchemy Cloud Control.
 ---
-
-# Volume
 
 The Volume resource lets you manage [AWS FSx Volumes](https://docs.aws.amazon.com/fsx/latest/userguide/) for file storage solutions, allowing you to create, configure, and manage scalable file systems.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT ThingPrincipalAttachments with Alchemy
+title: ThingPrincipalAttachment
 description: Learn how to create, update, and manage AWS IoT ThingPrincipalAttachments using Alchemy Cloud Control.
 ---
-
-# ThingPrincipalAttachment
 
 The ThingPrincipalAttachment resource allows you to manage the attachment of principals (such as IAM identities) to AWS IoT Things. This enables you to control access to your IoT devices through AWS Identity and Access Management (IAM). For more information, refer to the [AWS IoT ThingPrincipalAttachments documentation](https://docs.aws.amazon.com/iot/latest/userguide/).
 

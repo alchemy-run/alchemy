@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ResourceExplorer2 Indexs with Alchemy
+title: Index
 description: Learn how to create, update, and manage AWS ResourceExplorer2 Indexs using Alchemy Cloud Control.
 ---
-
-# Index
 
 The Index resource lets you manage [AWS ResourceExplorer2 Indexs](https://docs.aws.amazon.com/resourceexplorer2/latest/userguide/) for indexing your AWS resources for easier discovery and management.
 

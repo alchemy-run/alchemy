@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppSync ApiCaches with Alchemy
+title: ApiCache
 description: Learn how to create, update, and manage AWS AppSync ApiCaches using Alchemy Cloud Control.
 ---
-
-# ApiCache
 
 The ApiCache resource lets you manage [AWS AppSync ApiCaches](https://docs.aws.amazon.com/appsync/latest/userguide/) for caching responses from your GraphQL APIs, enhancing performance and reducing latency.
 

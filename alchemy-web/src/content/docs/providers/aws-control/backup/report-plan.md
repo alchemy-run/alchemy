@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Backup ReportPlans with Alchemy
+title: ReportPlan
 description: Learn how to create, update, and manage AWS Backup ReportPlans using Alchemy Cloud Control.
 ---
-
-# ReportPlan
 
 The ReportPlan resource allows you to create and manage [AWS Backup ReportPlans](https://docs.aws.amazon.com/backup/latest/userguide/) which help automate and manage backup reports for your AWS resources.
 

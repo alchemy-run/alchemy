@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeCommit Repositorys with Alchemy
+title: Repository
 description: Learn how to create, update, and manage AWS CodeCommit Repositorys using Alchemy Cloud Control.
 ---
-
-# Repository
 
 The Repository resource lets you manage [AWS CodeCommit repositories](https://docs.aws.amazon.com/codecommit/latest/userguide/) and their configuration settings.
 

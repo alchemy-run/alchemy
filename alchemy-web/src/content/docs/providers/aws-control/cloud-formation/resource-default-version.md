@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation ResourceDefaultVersions with Alchemy
+title: ResourceDefaultVersion
 description: Learn how to create, update, and manage AWS CloudFormation ResourceDefaultVersions using Alchemy Cloud Control.
 ---
-
-# ResourceDefaultVersion
 
 The ResourceDefaultVersion resource allows you to manage the default version of a custom resource type in AWS CloudFormation. This resource is essential for ensuring that your CloudFormation stacks use the latest version of your resource types. For more details, refer to the [AWS CloudFormation ResourceDefaultVersions documentation](https://docs.aws.amazon.com/cloudformation/latest/userguide/).
 

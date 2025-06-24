@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaConnect Bridges with Alchemy
+title: Bridge
 description: Learn how to create, update, and manage AWS MediaConnect Bridges using Alchemy Cloud Control.
 ---
-
-# Bridge
 
 The Bridge resource lets you manage [AWS MediaConnect Bridges](https://docs.aws.amazon.com/mediaconnect/latest/userguide/) which facilitate reliable transport of video across the cloud.
 

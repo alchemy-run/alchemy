@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 ClientVpnEndpoints with Alchemy
+title: ClientVpnEndpoint
 description: Learn how to create, update, and manage AWS EC2 ClientVpnEndpoints using Alchemy Cloud Control.
 ---
-
-# ClientVpnEndpoint
 
 The ClientVpnEndpoint resource lets you create and manage [AWS EC2 ClientVpnEndpoints](https://docs.aws.amazon.com/ec2/latest/userguide/) for providing secure access to your AWS resources. 
 

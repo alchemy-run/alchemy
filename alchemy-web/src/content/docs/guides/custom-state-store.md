@@ -4,8 +4,6 @@ title: Custom State Store
 description: Learn how to create your own state storage backend for Alchemy to persist infrastructure state in databases, cloud storage, or custom solutions.
 ---
 
-# Custom State Store
-
 Alchemy's state management system is designed to be pluggable, allowing you to implement your own storage backends. This guide walks you through creating a custom state store implementation.
 
 > [!NOTE]  

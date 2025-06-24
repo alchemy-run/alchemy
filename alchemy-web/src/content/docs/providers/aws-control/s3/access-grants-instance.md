@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3 AccessGrantsInstances with Alchemy
+title: AccessGrantsInstance
 description: Learn how to create, update, and manage AWS S3 AccessGrantsInstances using Alchemy Cloud Control.
 ---
-
-# AccessGrantsInstance
 
 The AccessGrantsInstance resource allows you to manage access grants for AWS S3 buckets and objects. For more information, refer to the official AWS documentation on [AWS S3 AccessGrantsInstances](https://docs.aws.amazon.com/s3/latest/userguide/).
 

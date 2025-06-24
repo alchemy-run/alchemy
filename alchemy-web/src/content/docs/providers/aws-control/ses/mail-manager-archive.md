@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES MailManagerArchives with Alchemy
+title: MailManagerArchive
 description: Learn how to create, update, and manage AWS SES MailManagerArchives using Alchemy Cloud Control.
 ---
-
-# MailManagerArchive
 
 The MailManagerArchive resource lets you manage [AWS SES MailManagerArchives](https://docs.aws.amazon.com/ses/latest/userguide/) for storing and retaining email data securely.
 

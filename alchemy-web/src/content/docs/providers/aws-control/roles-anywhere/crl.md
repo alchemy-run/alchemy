@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RolesAnywhere CRLs with Alchemy
+title: CRL
 description: Learn how to create, update, and manage AWS RolesAnywhere CRLs using Alchemy Cloud Control.
 ---
-
-# CRL
 
 The CRL (Certificate Revocation List) resource allows you to manage [AWS RolesAnywhere CRLs](https://docs.aws.amazon.com/rolesanywhere/latest/userguide/) for validating certificate-based identities in AWS. This resource is essential for maintaining security by ensuring that revoked certificates are not used for authentication.
 

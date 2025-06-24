@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CleanRooms ConfiguredTables with Alchemy
+title: ConfiguredTable
 description: Learn how to create, update, and manage AWS CleanRooms ConfiguredTables using Alchemy Cloud Control.
 ---
-
-# ConfiguredTable
 
 The ConfiguredTable resource lets you manage [AWS CleanRooms ConfiguredTables](https://docs.aws.amazon.com/cleanrooms/latest/userguide/) that facilitate collaborative data analysis while ensuring data privacy and compliance.
 

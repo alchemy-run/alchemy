@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PaymentCryptography Aliases with Alchemy
+title: Alias
 description: Learn how to create, update, and manage AWS PaymentCryptography Aliases using Alchemy Cloud Control.
 ---
-
-# Alias
 
 The Alias resource allows you to manage [AWS PaymentCryptography Aliases](https://docs.aws.amazon.com/paymentcryptography/latest/userguide/) for your cryptographic keys. Aliases are friendly names that provide a way to refer to a cryptographic key.
 

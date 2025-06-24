@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataSync LocationFSxLustres with Alchemy
+title: LocationFSxLustre
 description: Learn how to create, update, and manage AWS DataSync LocationFSxLustres using Alchemy Cloud Control.
 ---
-
-# LocationFSxLustre
 
 The LocationFSxLustre resource allows you to manage [AWS DataSync Location FSx Lustre](https://docs.aws.amazon.com/datasync/latest/userguide/) for transferring data to and from Amazon FSx for Lustre file systems.
 

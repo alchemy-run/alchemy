@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpenSearchServerless AccessPolicys with Alchemy
+title: AccessPolicy
 description: Learn how to create, update, and manage AWS OpenSearchServerless AccessPolicys using Alchemy Cloud Control.
 ---
-
-# AccessPolicy
 
 The AccessPolicy resource allows you to manage access policies for AWS OpenSearchServerless, providing fine-grained control over who can access your OpenSearch resources. For more information, refer to the [AWS OpenSearchServerless AccessPolicys](https://docs.aws.amazon.com/opensearchserverless/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ElastiCache ParameterGroups with Alchemy
+title: ParameterGroup
 description: Learn how to create, update, and manage AWS ElastiCache ParameterGroups using Alchemy Cloud Control.
 ---
-
-# ParameterGroup
 
 The ParameterGroup resource allows you to manage [AWS ElastiCache ParameterGroups](https://docs.aws.amazon.com/elasticache/latest/userguide/) for configuring cache settings in your ElastiCache clusters.
 

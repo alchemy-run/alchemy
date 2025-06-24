@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTAnalytics Datastores with Alchemy
+title: Datastore
 description: Learn how to create, update, and manage AWS IoTAnalytics Datastores using Alchemy Cloud Control.
 ---
-
-# Datastore
 
 The Datastore resource lets you manage [AWS IoTAnalytics Datastores](https://docs.aws.amazon.com/iotanalytics/latest/userguide/) for storing and querying data from IoT devices.
 

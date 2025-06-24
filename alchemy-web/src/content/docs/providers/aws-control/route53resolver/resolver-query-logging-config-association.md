@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53Resolver ResolverQueryLoggingConfigAssociations with Alchemy
+title: ResolverQueryLoggingConfigAssociation
 description: Learn how to create, update, and manage AWS Route53Resolver ResolverQueryLoggingConfigAssociations using Alchemy Cloud Control.
 ---
-
-# ResolverQueryLoggingConfigAssociation
 
 The ResolverQueryLoggingConfigAssociation resource allows you to associate a Resolver Query Logging Configuration with a specific resource in AWS Route 53 Resolver. This enables you to log DNS queries to the specified logging configuration. For more details, refer to the [AWS Route53Resolver ResolverQueryLoggingConfigAssociations documentation](https://docs.aws.amazon.com/route53resolver/latest/userguide/).
 

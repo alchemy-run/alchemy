@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaTailor SourceLocations with Alchemy
+title: SourceLocation
 description: Learn how to create, update, and manage AWS MediaTailor SourceLocations using Alchemy Cloud Control.
 ---
-
-# SourceLocation
 
 The SourceLocation resource lets you manage [AWS MediaTailor SourceLocations](https://docs.aws.amazon.com/mediatailor/latest/userguide/) for configuring video streaming sources.
 

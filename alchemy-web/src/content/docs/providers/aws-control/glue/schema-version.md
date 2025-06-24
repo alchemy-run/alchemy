@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue SchemaVersions with Alchemy
+title: SchemaVersion
 description: Learn how to create, update, and manage AWS Glue SchemaVersions using Alchemy Cloud Control.
 ---
-
-# SchemaVersion
 
 The SchemaVersion resource allows you to manage [AWS Glue SchemaVersions](https://docs.aws.amazon.com/glue/latest/userguide/) for your data catalog. This resource provides capabilities to define and update the schema for your datasets.
 

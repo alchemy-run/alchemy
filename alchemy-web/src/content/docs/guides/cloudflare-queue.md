@@ -4,8 +4,6 @@ title: Queue
 description: Learn how to create, configure, and use Cloudflare Queues for background job processing in your Worker applications managed by Alchemy.
 ---
 
-# Queue
-
 This guide explains how to create and use Cloudflare Queues with your Worker applications.
 
 > [!TIP]

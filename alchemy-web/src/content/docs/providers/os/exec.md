@@ -1,9 +1,7 @@
 ---
-title: Execute Command
+title: Exec
 description: Learn how to run operating system commands during your Alchemy deployments using the OS Exec provider.
 ---
-
-# Exec
 
 The Exec resource allows you to execute shell commands as part of your Alchemy infrastructure. It provides a way to run system commands with full control over the execution environment and output handling.
 

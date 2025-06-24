@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppStream Stacks with Alchemy
+title: Stack
 description: Learn how to create, update, and manage AWS AppStream Stacks using Alchemy Cloud Control.
 ---
-
-# Stack
 
 The Stack resource lets you manage [AWS AppStream Stacks](https://docs.aws.amazon.com/appstream/latest/userguide/) which provide users access to applications streamed from the cloud.
 

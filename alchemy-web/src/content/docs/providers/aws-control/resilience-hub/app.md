@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ResilienceHub Apps with Alchemy
+title: App
 description: Learn how to create, update, and manage AWS ResilienceHub Apps using Alchemy Cloud Control.
 ---
-
-# App
 
 The App resource lets you manage [AWS ResilienceHub Apps](https://docs.aws.amazon.com/resiliencehub/latest/userguide/) for assessing and improving the resiliency of your applications.
 

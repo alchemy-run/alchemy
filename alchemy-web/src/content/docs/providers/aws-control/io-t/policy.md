@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT Policies with Alchemy
+title: Policy
 description: Learn how to create, update, and manage AWS IoT Policies using Alchemy Cloud Control.
 ---
-
-# Policy
 
 The Policy resource allows you to manage [AWS IoT Policies](https://docs.aws.amazon.com/iot/latest/userguide/) which define the permissions for AWS IoT devices and applications to interact with AWS IoT services.
 

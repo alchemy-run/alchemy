@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WorkSpacesWeb IdentityProviders with Alchemy
+title: IdentityProvider
 description: Learn how to create, update, and manage AWS WorkSpacesWeb IdentityProviders using Alchemy Cloud Control.
 ---
-
-# IdentityProvider
 
 The IdentityProvider resource lets you manage [AWS WorkSpacesWeb IdentityProviders](https://docs.aws.amazon.com/workspacesweb/latest/userguide/) for user authentication in your applications.
 

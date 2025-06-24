@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Amplify Apps with Alchemy
+title: App
 description: Learn how to create, update, and manage AWS Amplify Apps using Alchemy Cloud Control.
 ---
-
-# App
 
 The App resource lets you manage [AWS Amplify Apps](https://docs.aws.amazon.com/amplify/latest/userguide/) for building, deploying, and hosting web applications.
 

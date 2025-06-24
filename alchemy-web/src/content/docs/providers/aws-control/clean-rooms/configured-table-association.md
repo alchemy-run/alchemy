@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CleanRooms ConfiguredTableAssociations with Alchemy
+title: ConfiguredTableAssociation
 description: Learn how to create, update, and manage AWS CleanRooms ConfiguredTableAssociations using Alchemy Cloud Control.
 ---
-
-# ConfiguredTableAssociation
 
 The ConfiguredTableAssociation resource allows you to manage associations between configured tables and memberships in AWS CleanRooms. This resource enables you to set analysis rules and manage access through IAM policies. For more information, refer to the [AWS CleanRooms ConfiguredTableAssociations documentation](https://docs.aws.amazon.com/cleanrooms/latest/userguide/).
 

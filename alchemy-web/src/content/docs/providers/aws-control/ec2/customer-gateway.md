@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 CustomerGateways with Alchemy
+title: CustomerGateway
 description: Learn how to create, update, and manage AWS EC2 CustomerGateways using Alchemy Cloud Control.
 ---
-
-# CustomerGateway
 
 The CustomerGateway resource allows you to manage [AWS EC2 CustomerGateways](https://docs.aws.amazon.com/ec2/latest/userguide/) which are used to set up a VPN connection between your network and AWS. 
 

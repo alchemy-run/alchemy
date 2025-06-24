@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager SiteToSiteVpnAttachments with Alchemy
+title: SiteToSiteVpnAttachment
 description: Learn how to create, update, and manage AWS NetworkManager SiteToSiteVpnAttachments using Alchemy Cloud Control.
 ---
-
-# SiteToSiteVpnAttachment
 
 The SiteToSiteVpnAttachment resource allows you to manage AWS NetworkManager Site-to-Site VPN attachments, enabling secure communication between your on-premises networks and AWS. For more details, refer to the [AWS NetworkManager SiteToSiteVpnAttachments documentation](https://docs.aws.amazon.com/networkmanager/latest/userguide/).
 

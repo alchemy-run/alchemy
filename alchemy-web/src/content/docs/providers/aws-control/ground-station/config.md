@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GroundStation Configs with Alchemy
+title: Config
 description: Learn how to create, update, and manage AWS GroundStation Configs using Alchemy Cloud Control.
 ---
-
-# Config
 
 The Config resource allows you to manage [AWS GroundStation Configs](https://docs.aws.amazon.com/groundstation/latest/userguide/) for satellite communications and data processing.
 

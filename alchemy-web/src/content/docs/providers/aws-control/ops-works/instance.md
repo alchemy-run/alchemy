@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpsWorks Instances with Alchemy
+title: Instance
 description: Learn how to create, update, and manage AWS OpsWorks Instances using Alchemy Cloud Control.
 ---
-
-# Instance
 
 The Instance resource lets you manage [AWS OpsWorks Instances](https://docs.aws.amazon.com/opsworks/latest/userguide/) in your applications, providing the ability to configure, deploy, and manage EC2 instances within a stack.
 

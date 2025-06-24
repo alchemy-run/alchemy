@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppSync ChannelNamespaces with Alchemy
+title: ChannelNamespace
 description: Learn how to create, update, and manage AWS AppSync ChannelNamespaces using Alchemy Cloud Control.
 ---
-
-# ChannelNamespace
 
 The ChannelNamespace resource allows you to create and manage [AWS AppSync ChannelNamespaces](https://docs.aws.amazon.com/appsync/latest/userguide/) for real-time data synchronization and messaging in your applications.
 

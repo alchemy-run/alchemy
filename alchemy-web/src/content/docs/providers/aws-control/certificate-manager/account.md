@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CertificateManager Accounts with Alchemy
+title: Account
 description: Learn how to create, update, and manage AWS CertificateManager Accounts using Alchemy Cloud Control.
 ---
-
-# Account
 
 The Account resource lets you manage [AWS CertificateManager Accounts](https://docs.aws.amazon.com/certificatemanager/latest/userguide/) for configuring certificate expiry notifications and other settings.
 

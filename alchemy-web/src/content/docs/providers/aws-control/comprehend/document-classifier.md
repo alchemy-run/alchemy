@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Comprehend DocumentClassifiers with Alchemy
+title: DocumentClassifier
 description: Learn how to create, update, and manage AWS Comprehend DocumentClassifiers using Alchemy Cloud Control.
 ---
-
-# DocumentClassifier
 
 The DocumentClassifier resource allows you to create and manage document classifiers in [AWS Comprehend](https://docs.aws.amazon.com/comprehend/latest/userguide/). Document classifiers use machine learning to categorize documents based on their content.
 

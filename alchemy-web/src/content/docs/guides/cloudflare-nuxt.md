@@ -4,8 +4,6 @@ title: Nuxt
 description: Quick guide to initializing and deploying a Nuxt 3 application to Cloudflare Workers using Alchemy.
 ---
 
-# Nuxt
-
 This guide shows how to initialize and deploy a Nuxt 3 application to Cloudflare using Alchemy.
 
 ## Init

@@ -1,9 +1,7 @@
 ---
-title: Cloudflare Routes
+title: Route
 description: Learn how to configure Cloudflare Routes for your Workers using Alchemy to map URL patterns to Worker scripts.
 ---
-
-# Route
 
 Routes map URL patterns to [Cloudflare Workers](https://developers.cloudflare.com/workers/configuration/routing/routes/), controlling which requests are handled by your Workers.
 

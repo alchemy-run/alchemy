@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Organizations ResourcePolicys with Alchemy
+title: ResourcePolicy
 description: Learn how to create, update, and manage AWS Organizations ResourcePolicys using Alchemy Cloud Control.
 ---
-
-# ResourcePolicy
 
 The ResourcePolicy resource lets you manage [AWS Organizations ResourcePolicys](https://docs.aws.amazon.com/organizations/latest/userguide/) to define permissions for your AWS accounts and organizational units.
 

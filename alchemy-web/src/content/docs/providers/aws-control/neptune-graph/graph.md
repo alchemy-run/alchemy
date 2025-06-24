@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NeptuneGraph Graphs with Alchemy
+title: Graph
 description: Learn how to create, update, and manage AWS NeptuneGraph Graphs using Alchemy Cloud Control.
 ---
-
-# Graph
 
 The Graph resource lets you manage [AWS NeptuneGraph Graphs](https://docs.aws.amazon.com/neptunegraph/latest/userguide/) and their configuration settings.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ACMPCA Permissions with Alchemy
+title: Permission
 description: Learn how to create, update, and manage AWS ACMPCA Permissions using Alchemy Cloud Control.
 ---
-
-# Permission
 
 The Permission resource allows you to manage [AWS ACMPCA Permissions](https://docs.aws.amazon.com/acmpca/latest/userguide/) for certificate authorities, enabling you to specify actions that can be performed by specific principals.
 

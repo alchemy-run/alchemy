@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 LocalGatewayRouteTableVPCAssociations with Alchemy
+title: LocalGatewayRouteTableVPCAssociation
 description: Learn how to create, update, and manage AWS EC2 LocalGatewayRouteTableVPCAssociations using Alchemy Cloud Control.
 ---
-
-# LocalGatewayRouteTableVPCAssociation
 
 The LocalGatewayRouteTableVPCAssociation resource allows you to associate a VPC with a local gateway route table in AWS EC2. This association enables routing of traffic from the VPC to the local gateway. For more detailed information, refer to the [AWS EC2 LocalGatewayRouteTableVPCAssociations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker NotebookInstanceLifecycleConfigs with Alchemy
+title: NotebookInstanceLifecycleConfig
 description: Learn how to create, update, and manage AWS SageMaker NotebookInstanceLifecycleConfigs using Alchemy Cloud Control.
 ---
-
-# NotebookInstanceLifecycleConfig
 
 The NotebookInstanceLifecycleConfig resource allows you to manage the lifecycle configuration for AWS SageMaker Notebook Instances. This includes specifying scripts that run on instance creation and start. For more information, refer to the [AWS SageMaker NotebookInstanceLifecycleConfigs documentation](https://docs.aws.amazon.com/sagemaker/latest/userguide/).
 

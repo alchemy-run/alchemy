@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway Methods with Alchemy
+title: Method
 description: Learn how to create, update, and manage AWS ApiGateway Methods using Alchemy Cloud Control.
 ---
-
-# Method
 
 The Method resource lets you create and manage [AWS ApiGateway Methods](https://docs.aws.amazon.com/apigateway/latest/userguide/) for your REST APIs, enabling you to define HTTP methods and their integrations.
 

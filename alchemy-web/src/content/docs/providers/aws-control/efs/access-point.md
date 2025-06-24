@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EFS AccessPoints with Alchemy
+title: AccessPoint
 description: Learn how to create, update, and manage AWS EFS AccessPoints using Alchemy Cloud Control.
 ---
-
-# AccessPoint
 
 The AccessPoint resource allows you to manage [AWS EFS AccessPoints](https://docs.aws.amazon.com/efs/latest/userguide/) that simplify the management of file system permissions and access for your applications.
 

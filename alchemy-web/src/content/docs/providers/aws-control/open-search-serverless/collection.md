@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpenSearchServerless Collections with Alchemy
+title: Collection
 description: Learn how to create, update, and manage AWS OpenSearchServerless Collections using Alchemy Cloud Control.
 ---
-
-# Collection
 
 The Collection resource allows you to create and manage [AWS OpenSearchServerless Collections](https://docs.aws.amazon.com/opensearchserverless/latest/userguide/), which are designed to help you efficiently manage your search workloads without the overhead of traditional OpenSearch clusters.
 

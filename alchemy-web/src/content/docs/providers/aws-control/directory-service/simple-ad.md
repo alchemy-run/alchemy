@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DirectoryService SimpleADs with Alchemy
+title: SimpleAD
 description: Learn how to create, update, and manage AWS DirectoryService SimpleADs using Alchemy Cloud Control.
 ---
-
-# SimpleAD
 
 The SimpleAD resource lets you manage [AWS DirectoryService SimpleADs](https://docs.aws.amazon.com/directoryservice/latest/userguide/) for directory services in your AWS environment.
 

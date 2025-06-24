@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ImageBuilder Workflows with Alchemy
+title: Workflow
 description: Learn how to create, update, and manage AWS ImageBuilder Workflows using Alchemy Cloud Control.
 ---
-
-# Workflow
 
 The Workflow resource lets you manage [AWS ImageBuilder Workflows](https://docs.aws.amazon.com/imagebuilder/latest/userguide/) for automating the creation of Virtual Machine images. This resource enables you to define the workflow type, version, and additional configurations.
 

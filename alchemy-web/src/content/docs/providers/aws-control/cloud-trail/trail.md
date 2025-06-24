@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudTrail Trails with Alchemy
+title: Trail
 description: Learn how to create, update, and manage AWS CloudTrail Trails using Alchemy Cloud Control.
 ---
-
-# Trail
 
 The Trail resource allows you to manage [AWS CloudTrail Trails](https://docs.aws.amazon.com/cloudtrail/latest/userguide/) for logging and monitoring account activity across your AWS infrastructure.
 

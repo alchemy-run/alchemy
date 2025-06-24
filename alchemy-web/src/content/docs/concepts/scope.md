@@ -4,8 +4,6 @@ title: Scope
 description: Learn how Alchemy uses hierarchical scopes to organize and manage infrastructure resources. Master application scopes, stage scopes, and resource scopes.
 ---
 
-# Scope
-
 Scopes in Alchemy are hierarchical containers that organize resources and other scopes, similar to a file system.
 
 ```typescript

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 NetworkInterfacePermissions with Alchemy
+title: NetworkInterfacePermission
 description: Learn how to create, update, and manage AWS EC2 NetworkInterfacePermissions using Alchemy Cloud Control.
 ---
-
-# NetworkInterfacePermission
 
 The NetworkInterfacePermission resource allows you to manage permissions on an Amazon EC2 Network Interface. This includes controlling access to network interfaces for other AWS accounts. For more information, refer to the [AWS EC2 NetworkInterfacePermissions](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

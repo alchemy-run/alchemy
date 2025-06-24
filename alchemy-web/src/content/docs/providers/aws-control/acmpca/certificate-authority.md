@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ACMPCA CertificateAuthoritys with Alchemy
+title: CertificateAuthority
 description: Learn how to create, update, and manage AWS ACMPCA CertificateAuthoritys using Alchemy Cloud Control.
 ---
-
-# CertificateAuthority
 
 The CertificateAuthority resource lets you create and manage [AWS ACMPCA CertificateAuthoritys](https://docs.aws.amazon.com/acmpca/latest/userguide/) for issuing and managing digital certificates.
 

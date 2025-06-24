@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Timestream Databases with Alchemy
+title: Database
 description: Learn how to create, update, and manage AWS Timestream Databases using Alchemy Cloud Control.
 ---
-
-# Database
 
 The Database resource lets you manage [AWS Timestream Databases](https://docs.aws.amazon.com/timestream/latest/userguide/) for time-series data storage and analysis.
 

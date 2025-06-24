@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 EC2Fleets with Alchemy
+title: EC2Fleet
 description: Learn how to create, update, and manage AWS EC2 EC2Fleets using Alchemy Cloud Control.
 ---
-
-# EC2Fleet
 
 The EC2Fleet resource allows you to manage [AWS EC2 Fleets](https://docs.aws.amazon.com/ec2/latest/userguide/) for deploying and scaling Amazon EC2 instances across different instance types and purchasing options. This resource provides a way to create a fleet of EC2 instances that can include both On-Demand and Spot instances.
 

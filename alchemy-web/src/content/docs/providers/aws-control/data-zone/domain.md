@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataZone Domains with Alchemy
+title: Domain
 description: Learn how to create, update, and manage AWS DataZone Domains using Alchemy Cloud Control.
 ---
-
-# Domain
 
 The Domain resource lets you manage [AWS DataZone Domains](https://docs.aws.amazon.com/datazone/latest/userguide/) and their configuration settings.
 

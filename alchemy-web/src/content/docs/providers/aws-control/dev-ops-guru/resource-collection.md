@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DevOpsGuru ResourceCollections with Alchemy
+title: ResourceCollection
 description: Learn how to create, update, and manage AWS DevOpsGuru ResourceCollections using Alchemy Cloud Control.
 ---
-
-# ResourceCollection
 
 The ResourceCollection resource allows you to manage [AWS DevOpsGuru ResourceCollections](https://docs.aws.amazon.com/devopsguru/latest/userguide/) that help in identifying and organizing AWS resources for monitoring and automated insights.
 

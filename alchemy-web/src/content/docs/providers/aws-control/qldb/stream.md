@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QLDB Streams with Alchemy
+title: Stream
 description: Learn how to create, update, and manage AWS QLDB Streams using Alchemy Cloud Control.
 ---
-
-# Stream
 
 The Stream resource allows you to manage [AWS QLDB Streams](https://docs.aws.amazon.com/qldb/latest/userguide/) for capturing changes to your ledger's data. This resource facilitates real-time processing of changes, enabling applications to respond to updates in your QLDB ledgers.
 

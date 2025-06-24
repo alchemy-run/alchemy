@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataBrew Jobs with Alchemy
+title: Job
 description: Learn how to create, update, and manage AWS DataBrew Jobs using Alchemy Cloud Control.
 ---
-
-# Job
 
 The Job resource lets you manage [AWS DataBrew Jobs](https://docs.aws.amazon.com/databrew/latest/userguide/) for transforming and preparing your data visually without writing code. 
 

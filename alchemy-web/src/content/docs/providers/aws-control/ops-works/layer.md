@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpsWorks Layers with Alchemy
+title: Layer
 description: Learn how to create, update, and manage AWS OpsWorks Layers using Alchemy Cloud Control.
 ---
-
-# Layer
 
 The Layer resource lets you manage [AWS OpsWorks Layers](https://docs.aws.amazon.com/opsworks/latest/userguide/) and their configuration settings for deploying and managing applications.
 

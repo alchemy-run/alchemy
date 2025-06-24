@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DocDB EventSubscriptions with Alchemy
+title: EventSubscription
 description: Learn how to create, update, and manage AWS DocDB EventSubscriptions using Alchemy Cloud Control.
 ---
-
-# EventSubscription
 
 The EventSubscription resource lets you manage [AWS DocDB EventSubscriptions](https://docs.aws.amazon.com/docdb/latest/userguide/) for monitoring events related to your Amazon DocumentDB clusters.
 

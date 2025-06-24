@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 RouteServerEndpoints with Alchemy
+title: RouteServerEndpoint
 description: Learn how to create, update, and manage AWS EC2 RouteServerEndpoints using Alchemy Cloud Control.
 ---
-
-# RouteServerEndpoint
 
 The RouteServerEndpoint resource allows you to manage [AWS EC2 RouteServerEndpoints](https://docs.aws.amazon.com/ec2/latest/userguide/) which enable customers to connect to the AWS Direct Connect and transit gateway services through a centralized routing mechanism.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Evidently Features with Alchemy
+title: Feature
 description: Learn how to create, update, and manage AWS Evidently Features using Alchemy Cloud Control.
 ---
-
-# Feature
 
 The Feature resource lets you manage [AWS Evidently Features](https://docs.aws.amazon.com/evidently/latest/userguide/) used for feature flagging and experimentation.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AutoScaling LaunchConfigurations with Alchemy
+title: LaunchConfiguration
 description: Learn how to create, update, and manage AWS AutoScaling LaunchConfigurations using Alchemy Cloud Control.
 ---
-
-# LaunchConfiguration
 
 The LaunchConfiguration resource lets you define an EC2 instance configuration used by Auto Scaling groups to launch instances. For more details, refer to the [AWS AutoScaling LaunchConfigurations documentation](https://docs.aws.amazon.com/autoscaling/latest/userguide/).
 

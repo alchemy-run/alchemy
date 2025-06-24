@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MemoryDB Users with Alchemy
+title: User
 description: Learn how to create, update, and manage AWS MemoryDB Users using Alchemy Cloud Control.
 ---
-
-# User
 
 The User resource lets you manage [AWS MemoryDB Users](https://docs.aws.amazon.com/memorydb/latest/userguide/), which are essential for controlling access to your MemoryDB clusters.
 

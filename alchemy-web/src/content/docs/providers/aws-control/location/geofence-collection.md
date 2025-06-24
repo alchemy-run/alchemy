@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Location GeofenceCollections with Alchemy
+title: GeofenceCollection
 description: Learn how to create, update, and manage AWS Location GeofenceCollections using Alchemy Cloud Control.
 ---
-
-# GeofenceCollection
 
 The GeofenceCollection resource allows you to manage [GeofenceCollections](https://docs.aws.amazon.com/location/latest/userguide/) in AWS Location Service, enabling you to define geofences for location-based applications.
 

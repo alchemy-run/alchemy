@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog LaunchTemplateConstraints with Alchemy
+title: LaunchTemplateConstraint
 description: Learn how to create, update, and manage AWS ServiceCatalog LaunchTemplateConstraints using Alchemy Cloud Control.
 ---
-
-# LaunchTemplateConstraint
 
 The LaunchTemplateConstraint resource allows you to manage [AWS ServiceCatalog LaunchTemplateConstraints](https://docs.aws.amazon.com/servicecatalog/latest/userguide/) that define rules for launch template constraints in your service catalog.
 

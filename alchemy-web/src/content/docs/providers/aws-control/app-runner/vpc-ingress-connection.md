@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppRunner VpcIngressConnections with Alchemy
+title: VpcIngressConnection
 description: Learn how to create, update, and manage AWS AppRunner VpcIngressConnections using Alchemy Cloud Control.
 ---
-
-# VpcIngressConnection
 
 The VpcIngressConnection resource allows you to create and manage [AWS AppRunner VpcIngressConnections](https://docs.aws.amazon.com/apprunner/latest/userguide/) that enable secure connections between your AppRunner services and your Amazon VPC.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EventSchemas Discoverers with Alchemy
+title: Discoverer
 description: Learn how to create, update, and manage AWS EventSchemas Discoverers using Alchemy Cloud Control.
 ---
-
-# Discoverer
 
 The Discoverer resource lets you manage [AWS EventSchemas Discoverers](https://docs.aws.amazon.com/eventschemas/latest/userguide/) to facilitate the discovery of event schemas in your AWS environment.
 

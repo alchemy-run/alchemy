@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM AccessKeys with Alchemy
+title: AccessKey
 description: Learn how to create, update, and manage AWS IAM AccessKeys using Alchemy Cloud Control.
 ---
-
-# AccessKey
 
 The AccessKey resource allows you to manage [AWS IAM AccessKeys](https://docs.aws.amazon.com/iam/latest/userguide/) for IAM users, enabling programmatic access to AWS services.
 

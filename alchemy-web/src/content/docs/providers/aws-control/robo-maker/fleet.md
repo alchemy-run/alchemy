@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RoboMaker Fleets with Alchemy
+title: Fleet
 description: Learn how to create, update, and manage AWS RoboMaker Fleets using Alchemy Cloud Control.
 ---
-
-# Fleet
 
 The Fleet resource lets you manage [AWS RoboMaker Fleets](https://docs.aws.amazon.com/robomaker/latest/userguide/) for deploying and running robotics applications in the cloud.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VpcLattice AuthPolicys with Alchemy
+title: AuthPolicy
 description: Learn how to create, update, and manage AWS VpcLattice AuthPolicys using Alchemy Cloud Control.
 ---
-
-# AuthPolicy
 
 The AuthPolicy resource lets you manage [AWS VpcLattice AuthPolicys](https://docs.aws.amazon.com/vpclattice/latest/userguide/) for controlling access to your VPC resources based on defined rules.
 

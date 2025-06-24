@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GameLift ContainerGroupDefinitions with Alchemy
+title: ContainerGroupDefinition
 description: Learn how to create, update, and manage AWS GameLift ContainerGroupDefinitions using Alchemy Cloud Control.
 ---
-
-# ContainerGroupDefinition
 
 The ContainerGroupDefinition resource allows you to define a group of containers that run on AWS GameLift. This resource is essential for deploying game server processes in a containerized environment. For more details, refer to the [AWS GameLift ContainerGroupDefinitions documentation](https://docs.aws.amazon.com/gamelift/latest/userguide/).
 

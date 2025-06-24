@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53Resolver OutpostResolvers with Alchemy
+title: OutpostResolver
 description: Learn how to create, update, and manage AWS Route53Resolver OutpostResolvers using Alchemy Cloud Control.
 ---
-
-# OutpostResolver
 
 The OutpostResolver resource allows you to create and manage AWS Route53Resolver OutpostResolvers, enabling DNS resolution for resources in your AWS Outposts. For more information, visit the [AWS Route53Resolver OutpostResolvers documentation](https://docs.aws.amazon.com/route53resolver/latest/userguide/).
 

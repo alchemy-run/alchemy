@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaLive Multiplexs with Alchemy
+title: Multiplex
 description: Learn how to create, update, and manage AWS MediaLive Multiplexs using Alchemy Cloud Control.
 ---
-
-# Multiplex
 
 The Multiplex resource allows you to manage [AWS MediaLive Multiplexs](https://docs.aws.amazon.com/medialive/latest/userguide/) which serve as containers for managing multiple input streams and output destinations for live video broadcasting.
 

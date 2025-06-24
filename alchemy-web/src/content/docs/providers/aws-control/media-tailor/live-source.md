@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaTailor LiveSources with Alchemy
+title: LiveSource
 description: Learn how to create, update, and manage AWS MediaTailor LiveSources using Alchemy Cloud Control.
 ---
-
-# LiveSource
 
 The LiveSource resource lets you manage [AWS MediaTailor LiveSources](https://docs.aws.amazon.com/mediatailor/latest/userguide/) for live video streaming. This resource allows you to define a source of live content for your MediaTailor configurations.
 

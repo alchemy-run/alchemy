@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT AccountAuditConfigurations with Alchemy
+title: AccountAuditConfiguration
 description: Learn how to create, update, and manage AWS IoT AccountAuditConfigurations using Alchemy Cloud Control.
 ---
-
-# AccountAuditConfiguration
 
 The AccountAuditConfiguration resource allows you to manage the audit configuration for AWS IoT, enabling you to set up and monitor security checks. You can find more information in the [AWS IoT AccountAuditConfigurations documentation](https://docs.aws.amazon.com/iot/latest/userguide/).
 

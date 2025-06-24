@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 IPAMResourceDiscoveryAssociations with Alchemy
+title: IPAMResourceDiscoveryAssociation
 description: Learn how to create, update, and manage AWS EC2 IPAMResourceDiscoveryAssociations using Alchemy Cloud Control.
 ---
-
-# IPAMResourceDiscoveryAssociation
 
 The IPAMResourceDiscoveryAssociation resource allows you to associate an IPAM (IP Address Manager) resource discovery with your AWS EC2 resources. This resource is important for managing IP addresses across your AWS account. For more detailed information, refer to the [AWS EC2 IPAMResourceDiscoveryAssociations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

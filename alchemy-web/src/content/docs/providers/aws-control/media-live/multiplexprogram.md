@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaLive Multiplexprograms with Alchemy
+title: Multiplexprogram
 description: Learn how to create, update, and manage AWS MediaLive Multiplexprograms using Alchemy Cloud Control.
 ---
-
-# Multiplexprogram
 
 The Multiplexprogram resource allows you to manage [AWS MediaLive Multiplex programs](https://docs.aws.amazon.com/medialive/latest/userguide/) for streaming video content. This resource lets you define program settings, multiplex ID, and pipeline details for efficient media streaming.
 

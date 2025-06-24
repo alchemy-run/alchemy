@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 RouteServerPropagations with Alchemy
+title: RouteServerPropagation
 description: Learn how to create, update, and manage AWS EC2 RouteServerPropagations using Alchemy Cloud Control.
 ---
-
-# RouteServerPropagation
 
 The RouteServerPropagation resource allows you to manage the propagation of routes from a route server to a specified route table in an AWS EC2 environment. For more details, refer to the [AWS EC2 RouteServerPropagations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

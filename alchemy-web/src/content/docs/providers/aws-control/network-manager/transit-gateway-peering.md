@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager TransitGatewayPeerings with Alchemy
+title: TransitGatewayPeering
 description: Learn how to create, update, and manage AWS NetworkManager TransitGatewayPeerings using Alchemy Cloud Control.
 ---
-
-# TransitGatewayPeering
 
 The TransitGatewayPeering resource allows you to manage [AWS NetworkManager TransitGatewayPeerings](https://docs.aws.amazon.com/networkmanager/latest/userguide/) for connecting transit gateways across different AWS accounts and regions.
 

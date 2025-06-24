@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Logs ResourcePolicys with Alchemy
+title: ResourcePolicy
 description: Learn how to create, update, and manage AWS Logs ResourcePolicys using Alchemy Cloud Control.
 ---
-
-# ResourcePolicy
 
 The ResourcePolicy resource allows you to create and manage resource policies for AWS CloudWatch Logs. Resource policies enable you to grant cross-account permissions for your CloudWatch Logs, allowing other AWS accounts or services to access your logs. For more information, refer to the [AWS Logs ResourcePolicys documentation](https://docs.aws.amazon.com/logs/latest/userguide/).
 

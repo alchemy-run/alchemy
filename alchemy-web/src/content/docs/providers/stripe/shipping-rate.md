@@ -1,9 +1,7 @@
 ---
-title: Stripe Shipping Rate
+title: ShippingRate
 description: Learn how to create and manage Stripe Shipping Rates for checkout and invoices using Alchemy.
 ---
-
-# ShippingRate
 
 The ShippingRate resource lets you create and manage [Stripe Shipping Rates](https://stripe.com/docs/api/shipping_rates) for calculating shipping costs in checkout sessions and invoices.
 

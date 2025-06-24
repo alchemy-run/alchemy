@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM InstanceProfiles with Alchemy
+title: InstanceProfile
 description: Learn how to create, update, and manage AWS IAM InstanceProfiles using Alchemy Cloud Control.
 ---
-
-# InstanceProfile
 
 The InstanceProfile resource allows you to manage [AWS IAM InstanceProfiles](https://docs.aws.amazon.com/iam/latest/userguide/) which are used to associate IAM roles with EC2 instances to grant them permissions.
 

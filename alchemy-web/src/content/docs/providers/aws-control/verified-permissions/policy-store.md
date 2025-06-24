@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VerifiedPermissions PolicyStores with Alchemy
+title: PolicyStore
 description: Learn how to create, update, and manage AWS VerifiedPermissions PolicyStores using Alchemy Cloud Control.
 ---
-
-# PolicyStore
 
 The PolicyStore resource lets you manage [AWS VerifiedPermissions PolicyStores](https://docs.aws.amazon.com/verifiedpermissions/latest/userguide/) for handling and validating permissions for your applications.
 

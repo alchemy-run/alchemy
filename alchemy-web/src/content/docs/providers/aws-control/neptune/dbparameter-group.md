@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Neptune DBParameterGroups with Alchemy
+title: DBParameterGroup
 description: Learn how to create, update, and manage AWS Neptune DBParameterGroups using Alchemy Cloud Control.
 ---
-
-# DBParameterGroup
 
 The DBParameterGroup resource lets you manage [AWS Neptune DBParameterGroups](https://docs.aws.amazon.com/neptune/latest/userguide/) which define database engine configuration settings for your Neptune databases.
 

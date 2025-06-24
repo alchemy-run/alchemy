@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 InstanceConnectEndpoints with Alchemy
+title: InstanceConnectEndpoint
 description: Learn how to create, update, and manage AWS EC2 InstanceConnectEndpoints using Alchemy Cloud Control.
 ---
-
-# InstanceConnectEndpoint
 
 The InstanceConnectEndpoint resource allows you to manage [AWS EC2 InstanceConnectEndpoints](https://docs.aws.amazon.com/ec2/latest/userguide/) which enable secure connections to your EC2 instances using temporary SSH keys.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Application Load Balancer ListenerCertificates with Alchemy
+title: ListenerCertificate
 description: Learn how to create, update, and manage AWS Application Load Balancer ListenerCertificates using Alchemy Cloud Control.
 ---
-
-# ListenerCertificate
 
 The `ListenerCertificate` resource allows you to manage SSL/TLS certificates for your AWS Application Load Balancer listeners. This enables secure communication for your applications. For more information, refer to the [AWS Application Load Balancer ListenerCertificates](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/).
 

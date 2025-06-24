@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DMS ReplicationInstances with Alchemy
+title: ReplicationInstance
 description: Learn how to create, update, and manage AWS DMS ReplicationInstances using Alchemy Cloud Control.
 ---
-
-# ReplicationInstance
 
 The ReplicationInstance resource allows you to create and manage [AWS DMS ReplicationInstances](https://docs.aws.amazon.com/dms/latest/userguide/) that facilitate data replication across different data sources. This resource is essential for setting up data migration tasks and ensuring efficient data flow between databases.
 

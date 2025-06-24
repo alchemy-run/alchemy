@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FIS ExperimentTemplates with Alchemy
+title: ExperimentTemplate
 description: Learn how to create, update, and manage AWS FIS ExperimentTemplates using Alchemy Cloud Control.
 ---
-
-# ExperimentTemplate
 
 The ExperimentTemplate resource allows you to define and manage AWS Fault Injection Simulator (FIS) ExperimentTemplates, which are used to orchestrate chaos engineering experiments. For more details, refer to the [AWS FIS ExperimentTemplates documentation](https://docs.aws.amazon.com/fis/latest/userguide/).
 

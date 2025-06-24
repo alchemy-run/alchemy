@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect PhoneNumbers with Alchemy
+title: PhoneNumber
 description: Learn how to create, update, and manage AWS Connect PhoneNumbers using Alchemy Cloud Control.
 ---
-
-# PhoneNumber
 
 The PhoneNumber resource allows you to manage [AWS Connect PhoneNumbers](https://docs.aws.amazon.com/connect/latest/userguide/) for your Amazon Connect instances, enabling you to assign phone numbers to your contact center for handling communications.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Proton EnvironmentTemplates with Alchemy
+title: EnvironmentTemplate
 description: Learn how to create, update, and manage AWS Proton EnvironmentTemplates using Alchemy Cloud Control.
 ---
-
-# EnvironmentTemplate
 
 The EnvironmentTemplate resource lets you create and manage [AWS Proton EnvironmentTemplates](https://docs.aws.amazon.com/proton/latest/userguide/) for deploying and managing environments in AWS Proton.
 

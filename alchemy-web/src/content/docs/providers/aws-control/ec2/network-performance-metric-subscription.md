@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 NetworkPerformanceMetricSubscriptions with Alchemy
+title: NetworkPerformanceMetricSubscription
 description: Learn how to create, update, and manage AWS EC2 NetworkPerformanceMetricSubscriptions using Alchemy Cloud Control.
 ---
-
-# NetworkPerformanceMetricSubscription
 
 The NetworkPerformanceMetricSubscription resource lets you manage subscriptions for network performance metrics in AWS EC2. This allows you to monitor network performance effectively. For more information, refer to the [AWS EC2 NetworkPerformanceMetricSubscriptions documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

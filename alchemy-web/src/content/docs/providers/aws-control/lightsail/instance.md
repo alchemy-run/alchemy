@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lightsail Instances with Alchemy
+title: Instance
 description: Learn how to create, update, and manage AWS Lightsail Instances using Alchemy Cloud Control.
 ---
-
-# Instance
 
 The Instance resource lets you manage [AWS Lightsail Instances](https://docs.aws.amazon.com/lightsail/latest/userguide/) and their configuration settings.
 

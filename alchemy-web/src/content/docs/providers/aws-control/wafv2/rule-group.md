@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAFv2 RuleGroups with Alchemy
+title: RuleGroup
 description: Learn how to create, update, and manage AWS WAFv2 RuleGroups using Alchemy Cloud Control.
 ---
-
-# RuleGroup
 
 The RuleGroup resource allows you to manage [AWS WAFv2 RuleGroups](https://docs.aws.amazon.com/wafv2/latest/userguide/) which define a set of rules for inspecting and controlling web traffic to your applications.
 

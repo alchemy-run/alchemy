@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EventSchemas Schemas with Alchemy
+title: Schema
 description: Learn how to create, update, and manage AWS EventSchemas Schemas using Alchemy Cloud Control.
 ---
-
-# Schema
 
 The Schema resource allows you to define and manage [AWS EventSchemas Schemas](https://docs.aws.amazon.com/eventschemas/latest/userguide/) for configuring event-driven architectures in AWS.
 

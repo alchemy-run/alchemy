@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3ObjectLambda AccessPointPolicys with Alchemy
+title: AccessPointPolicy
 description: Learn how to create, update, and manage AWS S3ObjectLambda AccessPointPolicys using Alchemy Cloud Control.
 ---
-
-# AccessPointPolicy
 
 The AccessPointPolicy resource lets you manage access point policies for [AWS S3ObjectLambda](https://docs.aws.amazon.com/s3objectlambda/latest/userguide/). This allows you to define permissions for actions on your S3ObjectLambda access points.
 

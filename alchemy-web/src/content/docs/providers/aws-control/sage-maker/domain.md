@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker Domains with Alchemy
+title: Domain
 description: Learn how to create, update, and manage AWS SageMaker Domains using Alchemy Cloud Control.
 ---
-
-# Domain
 
 The Domain resource lets you manage [AWS SageMaker Domains](https://docs.aws.amazon.com/sagemaker/latest/userguide/) and their configuration settings.
 

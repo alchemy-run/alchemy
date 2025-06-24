@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VPCEndpoints with Alchemy
+title: VPCEndpoint
 description: Learn how to create, update, and manage AWS EC2 VPCEndpoints using Alchemy Cloud Control.
 ---
-
-# VPCEndpoint
 
 The VPCEndpoint resource lets you manage [AWS EC2 VPCEndpoints](https://docs.aws.amazon.com/ec2/latest/userguide/) for connecting your VPC to supported AWS services and VPC endpoint services. 
 

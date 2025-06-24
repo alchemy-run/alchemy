@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EKS FargateProfiles with Alchemy
+title: FargateProfile
 description: Learn how to create, update, and manage AWS EKS FargateProfiles using Alchemy Cloud Control.
 ---
-
-# FargateProfile
 
 The FargateProfile resource allows you to manage [AWS EKS FargateProfiles](https://docs.aws.amazon.com/eks/latest/userguide/) for running your Kubernetes pods on AWS Fargate, enabling serverless compute for containers.
 

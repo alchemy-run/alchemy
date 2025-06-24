@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Budgets BudgetsActions with Alchemy
+title: BudgetsAction
 description: Learn how to create, update, and manage AWS Budgets BudgetsActions using Alchemy Cloud Control.
 ---
-
-# BudgetsAction
 
 The BudgetsAction resource allows you to manage [AWS Budgets BudgetsActions](https://docs.aws.amazon.com/budgets/latest/userguide/) that automate actions based on budget thresholds.
 

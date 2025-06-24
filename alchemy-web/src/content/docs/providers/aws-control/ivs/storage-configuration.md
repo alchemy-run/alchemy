@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IVS StorageConfigurations with Alchemy
+title: StorageConfiguration
 description: Learn how to create, update, and manage AWS IVS StorageConfigurations using Alchemy Cloud Control.
 ---
-
-# StorageConfiguration
 
 The StorageConfiguration resource lets you manage [AWS IVS StorageConfigurations](https://docs.aws.amazon.com/ivs/latest/userguide/) for storing video stream data in S3.
 

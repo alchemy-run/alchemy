@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AmplifyUIBuilder Themes with Alchemy
+title: Theme
 description: Learn how to create, update, and manage AWS AmplifyUIBuilder Themes using Alchemy Cloud Control.
 ---
-
-# Theme
 
 The Theme resource allows you to manage [AWS AmplifyUIBuilder Themes](https://docs.aws.amazon.com/amplifyuibuilder/latest/userguide/) for your applications, enabling you to define the visual appearance and style of your UI components.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityHub SecurityControls with Alchemy
+title: SecurityControl
 description: Learn how to create, update, and manage AWS SecurityHub SecurityControls using Alchemy Cloud Control.
 ---
-
-# SecurityControl
 
 The SecurityControl resource lets you manage [AWS SecurityHub SecurityControls](https://docs.aws.amazon.com/securityhub/latest/userguide/) for enhancing your cloud security posture.
 

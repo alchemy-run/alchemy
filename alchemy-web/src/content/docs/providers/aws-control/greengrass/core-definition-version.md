@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass CoreDefinitionVersions with Alchemy
+title: CoreDefinitionVersion
 description: Learn how to create, update, and manage AWS Greengrass CoreDefinitionVersions using Alchemy Cloud Control.
 ---
-
-# CoreDefinitionVersion
 
 The CoreDefinitionVersion resource lets you manage [AWS Greengrass CoreDefinitionVersions](https://docs.aws.amazon.com/greengrass/latest/userguide/) which define a set of Greengrass core devices and their properties.
 

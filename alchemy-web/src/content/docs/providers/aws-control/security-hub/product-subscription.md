@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityHub ProductSubscriptions with Alchemy
+title: ProductSubscription
 description: Learn how to create, update, and manage AWS SecurityHub ProductSubscriptions using Alchemy Cloud Control.
 ---
-
-# ProductSubscription
 
 The ProductSubscription resource allows you to manage subscriptions for AWS SecurityHub products, enabling you to receive alerts and insights from various security services. For more information, refer to the [AWS SecurityHub ProductSubscriptions documentation](https://docs.aws.amazon.com/securityhub/latest/userguide/).
 

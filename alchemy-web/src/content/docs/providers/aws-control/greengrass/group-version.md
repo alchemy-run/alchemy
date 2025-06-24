@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass GroupVersions with Alchemy
+title: GroupVersion
 description: Learn how to create, update, and manage AWS Greengrass GroupVersions using Alchemy Cloud Control.
 ---
-
-# GroupVersion
 
 The GroupVersion resource allows you to create, update, and manage AWS Greengrass GroupVersions. This resource is essential for defining the configuration of your Greengrass groups, including devices, functions, subscriptions, and more. For further details, refer to the [AWS Greengrass GroupVersions documentation](https://docs.aws.amazon.com/greengrass/latest/userguide/).
 

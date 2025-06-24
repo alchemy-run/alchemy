@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Backup Frameworks with Alchemy
+title: Framework
 description: Learn how to create, update, and manage AWS Backup Frameworks using Alchemy Cloud Control.
 ---
-
-# Framework
 
 The Framework resource lets you manage [AWS Backup Frameworks](https://docs.aws.amazon.com/backup/latest/userguide/) to define backup policies and compliance for your AWS resources.
 

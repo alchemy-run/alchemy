@@ -1,9 +1,7 @@
 ---
-title: Upstash Redis
+title: UpstashRedis
 description: Learn how to create and manage Upstash Redis databases with global replication.
 ---
-
-# UpstashRedis
 
 The UpstashRedis component lets you create and manage [Upstash Redis](https://upstash.com/redis) databases with global replication.
 

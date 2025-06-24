@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Backup BackupPlans with Alchemy
+title: BackupPlan
 description: Learn how to create, update, and manage AWS Backup BackupPlans using Alchemy Cloud Control.
 ---
-
-# BackupPlan
 
 The BackupPlan resource allows you to create and manage [AWS Backup BackupPlans](https://docs.aws.amazon.com/backup/latest/userguide/) that define how AWS resources are backed up. Backup plans can include rules for backup frequency, retention, and lifecycle management.
 

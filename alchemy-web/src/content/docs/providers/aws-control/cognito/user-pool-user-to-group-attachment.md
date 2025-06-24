@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cognito UserPoolUserToGroupAttachments with Alchemy
+title: UserPoolUserToGroupAttachment
 description: Learn how to create, update, and manage AWS Cognito UserPoolUserToGroupAttachments using Alchemy Cloud Control.
 ---
-
-# UserPoolUserToGroupAttachment
 
 The `UserPoolUserToGroupAttachment` resource lets you manage the association of users with groups in an AWS Cognito User Pool. This resource is essential for organizing users and controlling access to application features based on group membership. For more information, refer to the [AWS Cognito UserPoolUserToGroupAttachments documentation](https://docs.aws.amazon.com/cognito/latest/userguide/).
 

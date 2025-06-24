@@ -1,9 +1,7 @@
 ---
-title: Stripe Promotion Code
+title: PromotionCode
 description: Learn how to create and manage Stripe Promotion Codes for coupons using Alchemy.
 ---
-
-# PromotionCode
 
 The PromotionCode resource lets you create and manage [Stripe Promotion Codes](https://stripe.com/docs/api/promotion_codes) for distributing coupons to customers.
 

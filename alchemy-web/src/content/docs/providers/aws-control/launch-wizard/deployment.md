@@ -1,9 +1,7 @@
 ---
-title: Managing AWS LaunchWizard Deployments with Alchemy
+title: Deployment
 description: Learn how to create, update, and manage AWS LaunchWizard Deployments using Alchemy Cloud Control.
 ---
-
-# Deployment
 
 The Deployment resource allows you to manage [AWS LaunchWizard Deployments](https://docs.aws.amazon.com/launchwizard/latest/userguide/) for deploying applications with minimal effort. It simplifies the process by automating the deployment of resources based on predefined specifications.
 

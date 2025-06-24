@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VPCPeeringConnections with Alchemy
+title: VPCPeeringConnection
 description: Learn how to create, update, and manage AWS EC2 VPCPeeringConnections using Alchemy Cloud Control.
 ---
-
-# VPCPeeringConnection
 
 The VPCPeeringConnection resource allows you to create and manage [AWS EC2 VPC Peering Connections](https://docs.aws.amazon.com/ec2/latest/userguide/) which enable networking between two VPCs, allowing instances in either VPC to communicate with each other as if they were within the same network.
 

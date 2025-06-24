@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTFleetWise DecoderManifests with Alchemy
+title: DecoderManifest
 description: Learn how to create, update, and manage AWS IoTFleetWise DecoderManifests using Alchemy Cloud Control.
 ---
-
-# DecoderManifest
 
 The DecoderManifest resource allows you to manage [AWS IoTFleetWise DecoderManifests](https://docs.aws.amazon.com/iotfleetwise/latest/userguide/) which define the structure and behavior of the vehicle data collected from various signals.
 

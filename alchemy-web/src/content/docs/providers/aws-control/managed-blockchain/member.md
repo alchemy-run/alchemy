@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ManagedBlockchain Members with Alchemy
+title: Member
 description: Learn how to create, update, and manage AWS ManagedBlockchain Members using Alchemy Cloud Control.
 ---
-
-# Member
 
 The Member resource lets you manage [AWS ManagedBlockchain Members](https://docs.aws.amazon.com/managedblockchain/latest/userguide/) within a blockchain network.
 

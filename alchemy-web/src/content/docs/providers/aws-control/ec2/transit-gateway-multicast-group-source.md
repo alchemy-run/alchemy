@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TransitGatewayMulticastGroupSources with Alchemy
+title: TransitGatewayMulticastGroupSource
 description: Learn how to create, update, and manage AWS EC2 TransitGatewayMulticastGroupSources using Alchemy Cloud Control.
 ---
-
-# TransitGatewayMulticastGroupSource
 
 The TransitGatewayMulticastGroupSource resource allows you to manage the multicast group sources for an Amazon EC2 Transit Gateway. This resource is essential for enabling multicast traffic in your AWS environment. For more details, refer to the [AWS EC2 TransitGatewayMulticastGroupSources documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

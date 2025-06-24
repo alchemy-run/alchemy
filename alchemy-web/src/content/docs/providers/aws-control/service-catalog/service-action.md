@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog ServiceActions with Alchemy
+title: ServiceAction
 description: Learn how to create, update, and manage AWS ServiceCatalog ServiceActions using Alchemy Cloud Control.
 ---
-
-# ServiceAction
 
 The ServiceAction resource lets you manage AWS ServiceCatalog ServiceActions, which allow you to define and execute actions on AWS resources within a service catalog. For more details, refer to the [AWS ServiceCatalog ServiceActions](https://docs.aws.amazon.com/servicecatalog/latest/userguide/).
 

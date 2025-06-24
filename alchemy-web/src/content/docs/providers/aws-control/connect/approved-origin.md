@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect ApprovedOrigins with Alchemy
+title: ApprovedOrigin
 description: Learn how to create, update, and manage AWS Connect ApprovedOrigins using Alchemy Cloud Control.
 ---
-
-# ApprovedOrigin
 
 The ApprovedOrigin resource allows you to manage [AWS Connect ApprovedOrigins](https://docs.aws.amazon.com/connect/latest/userguide/) which are essential for controlling the origins that can connect to your Amazon Connect instance.
 

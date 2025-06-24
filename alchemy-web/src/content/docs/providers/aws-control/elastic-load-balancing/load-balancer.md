@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ElasticLoadBalancing LoadBalancers with Alchemy
+title: LoadBalancer
 description: Learn how to create, update, and manage AWS ElasticLoadBalancing LoadBalancers using Alchemy Cloud Control.
 ---
-
-# LoadBalancer
 
 The LoadBalancer resource lets you manage [AWS ElasticLoadBalancing LoadBalancers](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/) and their configuration settings.
 

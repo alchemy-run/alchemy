@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalogAppRegistry ResourceAssociations with Alchemy
+title: ResourceAssociation
 description: Learn how to create, update, and manage AWS ServiceCatalogAppRegistry ResourceAssociations using Alchemy Cloud Control.
 ---
-
-# ResourceAssociation
 
 The ResourceAssociation resource allows you to associate existing AWS resources with an application in AWS Service Catalog AppRegistry. This enables you to manage and visualize the resources that comprise an application. For more information, see the official AWS documentation: [AWS ServiceCatalogAppRegistry ResourceAssociations](https://docs.aws.amazon.com/servicecatalogappregistry/latest/userguide/).
 

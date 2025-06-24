@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager Links with Alchemy
+title: Link
 description: Learn how to create, update, and manage AWS NetworkManager Links using Alchemy Cloud Control.
 ---
-
-# Link
 
 The Link resource allows you to manage [AWS NetworkManager Links](https://docs.aws.amazon.com/networkmanager/latest/userguide/) which connect sites and enable communication between them.
 

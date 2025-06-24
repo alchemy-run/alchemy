@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTWireless WirelessGateways with Alchemy
+title: WirelessGateway
 description: Learn how to create, update, and manage AWS IoTWireless WirelessGateways using Alchemy Cloud Control.
 ---
-
-# WirelessGateway
 
 The WirelessGateway resource allows you to manage [AWS IoTWireless WirelessGateways](https://docs.aws.amazon.com/iotwireless/latest/userguide/) for connecting and managing LoRaWAN devices. 
 

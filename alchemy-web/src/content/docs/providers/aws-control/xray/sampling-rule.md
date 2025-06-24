@@ -1,9 +1,7 @@
 ---
-title: Managing AWS XRay SamplingRules with Alchemy
+title: SamplingRule
 description: Learn how to create, update, and manage AWS XRay SamplingRules using Alchemy Cloud Control.
 ---
-
-# SamplingRule
 
 The SamplingRule resource lets you manage [AWS XRay SamplingRules](https://docs.aws.amazon.com/xray/latest/userguide/) for controlling the amount of data recorded by AWS XRay. SamplingRules help optimize the cost and performance of tracing requests in your applications.
 

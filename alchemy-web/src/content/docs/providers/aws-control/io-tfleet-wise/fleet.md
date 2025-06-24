@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTFleetWise Fleets with Alchemy
+title: Fleet
 description: Learn how to create, update, and manage AWS IoTFleetWise Fleets using Alchemy Cloud Control.
 ---
-
-# Fleet
 
 The Fleet resource allows you to manage [AWS IoTFleetWise Fleets](https://docs.aws.amazon.com/iotfleetwise/latest/userguide/) for collecting and processing vehicle data efficiently.
 

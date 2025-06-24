@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Scheduler ScheduleGroups with Alchemy
+title: ScheduleGroup
 description: Learn how to create, update, and manage AWS Scheduler ScheduleGroups using Alchemy Cloud Control.
 ---
-
-# ScheduleGroup
 
 The ScheduleGroup resource lets you manage [AWS Scheduler ScheduleGroups](https://docs.aws.amazon.com/scheduler/latest/userguide/) for organizing and controlling scheduled tasks.
 

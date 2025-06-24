@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PinpointEmail Identitys with Alchemy
+title: Identity
 description: Learn how to create, update, and manage AWS PinpointEmail Identitys using Alchemy Cloud Control.
 ---
-
-# Identity
 
 The Identity resource allows you to manage [AWS PinpointEmail Identitys](https://docs.aws.amazon.com/pinpointemail/latest/userguide/) for sending email messages. This resource helps in configuring email identity settings, including feedback forwarding and DKIM signing.
 

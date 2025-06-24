@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager ConnectPeers with Alchemy
+title: ConnectPeer
 description: Learn how to create, update, and manage AWS NetworkManager ConnectPeers using Alchemy Cloud Control.
 ---
-
-# ConnectPeer
 
 The ConnectPeer resource lets you manage [AWS NetworkManager ConnectPeers](https://docs.aws.amazon.com/networkmanager/latest/userguide/) which enable connectivity between two networks using an existing Connect Attachment.
 

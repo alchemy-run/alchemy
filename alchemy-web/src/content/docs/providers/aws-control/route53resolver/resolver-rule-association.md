@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53Resolver ResolverRuleAssociations with Alchemy
+title: ResolverRuleAssociation
 description: Learn how to create, update, and manage AWS Route53Resolver ResolverRuleAssociations using Alchemy Cloud Control.
 ---
-
-# ResolverRuleAssociation
 
 The ResolverRuleAssociation resource allows you to associate a Resolver Rule with a VPC in AWS Route 53 Resolver. This enables you to route DNS queries according to the specified Resolver Rule. For more details, refer to the [AWS Route53Resolver ResolverRuleAssociations documentation](https://docs.aws.amazon.com/route53resolver/latest/userguide/).
 

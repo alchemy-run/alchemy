@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppStream AppBlocks with Alchemy
+title: AppBlock
 description: Learn how to create, update, and manage AWS AppStream AppBlocks using Alchemy Cloud Control.
 ---
-
-# AppBlock
 
 The AppBlock resource allows you to create and manage [AWS AppStream AppBlocks](https://docs.aws.amazon.com/appstream/latest/userguide/), which are used to define the applications that can be streamed to users. AppBlocks contain the applications and their associated settings.
 

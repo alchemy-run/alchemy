@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT ScheduledAudits with Alchemy
+title: ScheduledAudit
 description: Learn how to create, update, and manage AWS IoT ScheduledAudits using Alchemy Cloud Control.
 ---
-
-# ScheduledAudit
 
 The ScheduledAudit resource allows you to manage [AWS IoT Scheduled Audits](https://docs.aws.amazon.com/iot/latest/userguide/) that help ensure your IoT devices comply with security best practices.
 

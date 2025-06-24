@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Location RouteCalculators with Alchemy
+title: RouteCalculator
 description: Learn how to create, update, and manage AWS Location RouteCalculators using Alchemy Cloud Control.
 ---
-
-# RouteCalculator
 
 The RouteCalculator resource lets you manage [AWS Location RouteCalculators](https://docs.aws.amazon.com/location/latest/userguide/) for routing and navigation services.
 

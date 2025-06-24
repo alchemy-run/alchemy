@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CustomerProfiles CalculatedAttributeDefinitions with Alchemy
+title: CalculatedAttributeDefinition
 description: Learn how to create, update, and manage AWS CustomerProfiles CalculatedAttributeDefinitions using Alchemy Cloud Control.
 ---
-
-# CalculatedAttributeDefinition
 
 The CalculatedAttributeDefinition resource allows you to define calculated attributes within the AWS Customer Profiles service, enabling the aggregation of various data points into meaningful metrics. For more information, refer to the [AWS CustomerProfiles CalculatedAttributeDefinitions documentation](https://docs.aws.amazon.com/customerprofiles/latest/userguide/).
 

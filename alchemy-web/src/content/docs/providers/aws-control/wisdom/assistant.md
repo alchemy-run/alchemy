@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Wisdom Assistants with Alchemy
+title: Assistant
 description: Learn how to create, update, and manage AWS Wisdom Assistants using Alchemy Cloud Control.
 ---
-
-# Assistant
 
 The Assistant resource lets you create and manage [AWS Wisdom Assistants](https://docs.aws.amazon.com/wisdom/latest/userguide/) which provide contextual information and insights to support agents in customer interactions.
 

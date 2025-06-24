@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataBrew Schedules with Alchemy
+title: Schedule
 description: Learn how to create, update, and manage AWS DataBrew Schedules using Alchemy Cloud Control.
 ---
-
-# Schedule
 
 The Schedule resource allows you to manage [AWS DataBrew Schedules](https://docs.aws.amazon.com/databrew/latest/userguide/) for automating jobs on a specified cadence. 
 

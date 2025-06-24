@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSMContacts ContactChannels with Alchemy
+title: ContactChannel
 description: Learn how to create, update, and manage AWS SSMContacts ContactChannels using Alchemy Cloud Control.
 ---
-
-# ContactChannel
 
 The ContactChannel resource allows you to manage [AWS SSMContacts ContactChannels](https://docs.aws.amazon.com/ssmcontacts/latest/userguide/) for notifying users through various communication methods.
 

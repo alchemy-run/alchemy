@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT Dimensions with Alchemy
+title: Dimension
 description: Learn how to create, update, and manage AWS IoT Dimensions using Alchemy Cloud Control.
 ---
-
-# Dimension
 
 The Dimension resource allows you to manage [AWS IoT Dimensions](https://docs.aws.amazon.com/iot/latest/userguide/) that help in categorizing and filtering IoT data streams effectively.
 

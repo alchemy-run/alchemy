@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Detective MemberInvitations with Alchemy
+title: MemberInvitation
 description: Learn how to create, update, and manage AWS Detective MemberInvitations using Alchemy Cloud Control.
 ---
-
-# MemberInvitation
 
 The MemberInvitation resource allows you to manage [AWS Detective MemberInvitations](https://docs.aws.amazon.com/detective/latest/userguide/) for inviting members to your AWS Detective graph.
 

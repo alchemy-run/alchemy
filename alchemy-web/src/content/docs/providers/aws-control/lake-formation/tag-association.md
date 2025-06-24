@@ -1,9 +1,7 @@
 ---
-title: Managing AWS LakeFormation TagAssociations with Alchemy
+title: TagAssociation
 description: Learn how to create, update, and manage AWS LakeFormation TagAssociations using Alchemy Cloud Control.
 ---
-
-# TagAssociation
 
 The TagAssociation resource allows you to manage [AWS LakeFormation TagAssociations](https://docs.aws.amazon.com/lakeformation/latest/userguide/) which are used to associate tags with LakeFormation resources, enabling fine-grained access control.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CustomerProfiles Domains with Alchemy
+title: Domain
 description: Learn how to create, update, and manage AWS CustomerProfiles Domains using Alchemy Cloud Control.
 ---
-
-# Domain
 
 The Domain resource lets you manage [AWS CustomerProfiles Domains](https://docs.aws.amazon.com/customerprofiles/latest/userguide/) that help you unify customer profiles across different data sources.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS InspectorV2 Filters with Alchemy
+title: Filter
 description: Learn how to create, update, and manage AWS InspectorV2 Filters using Alchemy Cloud Control.
 ---
-
-# Filter
 
 The Filter resource allows you to create and manage [AWS InspectorV2 Filters](https://docs.aws.amazon.com/inspectorv2/latest/userguide/) that help define criteria for the assessment of your AWS resources.
 

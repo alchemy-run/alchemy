@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lambda LayerVersionPermissions with Alchemy
+title: LayerVersionPermission
 description: Learn how to create, update, and manage AWS Lambda LayerVersionPermissions using Alchemy Cloud Control.
 ---
-
-# LayerVersionPermission
 
 The LayerVersionPermission resource allows you to manage permissions for AWS Lambda Layer Versions, enabling you to control which AWS accounts or organizations can use a specific layer version. For more detailed information, refer to the [AWS Lambda LayerVersionPermissions documentation](https://docs.aws.amazon.com/lambda/latest/userguide/).
 

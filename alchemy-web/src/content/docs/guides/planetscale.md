@@ -1,10 +1,8 @@
 ---
 order: 20
-title: PlanetScale
+title: Getting Started with PlanetScale
 description: Get started with PlanetScale serverless MySQL databases using Alchemy's Infrastructure-as-Code approach for database and branch management.
 ---
-
-# Getting Started with PlanetScale
 
 This guide will walk you through setting up a PlanetScale serverless MySQL database with branching workflow using Alchemy.
 

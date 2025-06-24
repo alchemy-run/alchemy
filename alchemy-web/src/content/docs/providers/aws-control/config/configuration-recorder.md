@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Config ConfigurationRecorders with Alchemy
+title: ConfigurationRecorder
 description: Learn how to create, update, and manage AWS Config ConfigurationRecorders using Alchemy Cloud Control.
 ---
-
-# ConfigurationRecorder
 
 The ConfigurationRecorder resource allows you to manage [AWS Config ConfigurationRecorders](https://docs.aws.amazon.com/config/latest/userguide/) that track changes to your AWS resources and record their configuration history.
 

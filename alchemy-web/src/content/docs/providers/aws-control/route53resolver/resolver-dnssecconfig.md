@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53Resolver ResolverDNSSECConfigs with Alchemy
+title: ResolverDNSSECConfig
 description: Learn how to create, update, and manage AWS Route53Resolver ResolverDNSSECConfigs using Alchemy Cloud Control.
 ---
-
-# ResolverDNSSECConfig
 
 The ResolverDNSSECConfig resource allows you to manage DNSSEC configurations for Route 53 Resolver in AWS. This resource is crucial for ensuring the integrity and authenticity of DNS responses. For more information, refer to the [AWS Route53Resolver ResolverDNSSECConfigs](https://docs.aws.amazon.com/route53resolver/latest/userguide/).
 

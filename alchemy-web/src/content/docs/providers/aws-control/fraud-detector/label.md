@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FraudDetector Labels with Alchemy
+title: Label
 description: Learn how to create, update, and manage AWS FraudDetector Labels using Alchemy Cloud Control.
 ---
-
-# Label
 
 The Label resource lets you manage [AWS FraudDetector Labels](https://docs.aws.amazon.com/frauddetector/latest/userguide/) for identifying and categorizing events for fraud detection.
 

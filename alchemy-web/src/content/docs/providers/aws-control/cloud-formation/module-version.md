@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation ModuleVersions with Alchemy
+title: ModuleVersion
 description: Learn how to create, update, and manage AWS CloudFormation ModuleVersions using Alchemy Cloud Control.
 ---
-
-# ModuleVersion
 
 The ModuleVersion resource allows you to create and manage [AWS CloudFormation ModuleVersions](https://docs.aws.amazon.com/cloudformation/latest/userguide/aws-resource-cloudformation-moduleversion.html), which are useful for versioning your CloudFormation modules.
 

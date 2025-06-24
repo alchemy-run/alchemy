@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS DBProxyTargetGroups with Alchemy
+title: DBProxyTargetGroup
 description: Learn how to create, update, and manage AWS RDS DBProxyTargetGroups using Alchemy Cloud Control.
 ---
-
-# DBProxyTargetGroup
 
 The DBProxyTargetGroup resource allows you to manage an Amazon RDS DB Proxy target group, which is a collection of RDS database instances that the proxy can connect to. For further details, refer to the official AWS documentation: [AWS RDS DBProxyTargetGroups](https://docs.aws.amazon.com/rds/latest/userguide/).
 

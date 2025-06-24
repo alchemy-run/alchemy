@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MemoryDB MultiRegionClusters with Alchemy
+title: MultiRegionCluster
 description: Learn how to create, update, and manage AWS MemoryDB MultiRegionClusters using Alchemy Cloud Control.
 ---
-
-# MultiRegionCluster
 
 The MultiRegionCluster resource allows you to create and manage [AWS MemoryDB MultiRegionClusters](https://docs.aws.amazon.com/memorydb/latest/userguide/) which provide a fully managed, Redis-compatible in-memory database service across multiple AWS regions.
 

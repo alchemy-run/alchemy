@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Logs Destinations with Alchemy
+title: Destination
 description: Learn how to create, update, and manage AWS Logs Destinations using Alchemy Cloud Control.
 ---
-
-# Destination
 
 The Destination resource lets you manage [AWS Logs Destinations](https://docs.aws.amazon.com/logs/latest/userguide/) for routing log events to AWS services. A destination is an AWS resource that allows you to send logs from Amazon CloudWatch Logs to other services like Amazon Kinesis Data Streams or Amazon Kinesis Data Firehose.
 

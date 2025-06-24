@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 EnclaveCertificateIamRoleAssociations with Alchemy
+title: EnclaveCertificateIamRoleAssociation
 description: Learn how to create, update, and manage AWS EC2 EnclaveCertificateIamRoleAssociations using Alchemy Cloud Control.
 ---
-
-# EnclaveCertificateIamRoleAssociation
 
 The EnclaveCertificateIamRoleAssociation resource allows you to associate an IAM role with an AWS EC2 Enclave Certificate, enabling secure communications for EC2 instances. For more details, refer to the [AWS EC2 EnclaveCertificateIamRoleAssociations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

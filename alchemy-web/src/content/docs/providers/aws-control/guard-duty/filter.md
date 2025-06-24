@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GuardDuty Filters with Alchemy
+title: Filter
 description: Learn how to create, update, and manage AWS GuardDuty Filters using Alchemy Cloud Control.
 ---
-
-# Filter
 
 The Filter resource lets you manage [AWS GuardDuty Filters](https://docs.aws.amazon.com/guardduty/latest/userguide/) that help in defining which findings should be included in the detection of threats. Filters allow you to take specific actions on the findings based on the defined criteria.
 

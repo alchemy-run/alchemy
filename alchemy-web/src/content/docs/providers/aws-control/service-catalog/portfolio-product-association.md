@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog PortfolioProductAssociations with Alchemy
+title: PortfolioProductAssociation
 description: Learn how to create, update, and manage AWS ServiceCatalog PortfolioProductAssociations using Alchemy Cloud Control.
 ---
-
-# PortfolioProductAssociation
 
 The PortfolioProductAssociation resource allows you to associate a product with a portfolio in AWS Service Catalog. This resource is crucial for managing access to products within portfolios. For more information, refer to the [AWS ServiceCatalog PortfolioProductAssociations documentation](https://docs.aws.amazon.com/servicecatalog/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Application Load Balancer TrustStoreRevocations with Alchemy
+title: TrustStoreRevocation
 description: Learn how to create, update, and manage AWS Application Load Balancer TrustStoreRevocations using Alchemy Cloud Control.
 ---
-
-# TrustStoreRevocation
 
 The TrustStoreRevocation resource allows you to manage trust store revocations for AWS Application Load Balancers. This resource is essential for maintaining the security of your load balancers by revoking certificates as needed. For more information, see the [AWS Application Load Balancer TrustStoreRevocations documentation](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/).
 

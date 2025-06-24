@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkManager Sites with Alchemy
+title: Site
 description: Learn how to create, update, and manage AWS NetworkManager Sites using Alchemy Cloud Control.
 ---
-
-# Site
 
 The Site resource lets you manage [AWS NetworkManager Sites](https://docs.aws.amazon.com/networkmanager/latest/userguide/) and their configuration settings.
 

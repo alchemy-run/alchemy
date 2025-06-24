@@ -1,9 +1,7 @@
 ---
-title: AWS DynamoDB Table
+title: DynamoDB Table
 description: Learn how to create, configure, and manage AWS DynamoDB Tables using Alchemy for NoSQL database solutions.
 ---
-
-# DynamoDB Table
 
 The Table resource lets you create and manage [Amazon DynamoDB tables](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html) for NoSQL database storage.
 

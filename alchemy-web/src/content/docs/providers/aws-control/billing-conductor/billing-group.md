@@ -1,9 +1,7 @@
 ---
-title: Managing AWS BillingConductor BillingGroups with Alchemy
+title: BillingGroup
 description: Learn how to create, update, and manage AWS BillingConductor BillingGroups using Alchemy Cloud Control.
 ---
-
-# BillingGroup
 
 The BillingGroup resource lets you manage [AWS BillingConductor BillingGroups](https://docs.aws.amazon.com/billingconductor/latest/userguide/) for organizing and managing billing across multiple accounts.
 

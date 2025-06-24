@@ -1,9 +1,7 @@
 ---
-title: Cloudflare Queue
+title: Queue
 description: Learn how to create, configure, and manage Cloudflare Queues using Alchemy for reliable message delivery.
 ---
-
-# Queue
 
 The Queue component lets you add [Cloudflare Queue](https://developers.cloudflare.com/queues/) to your app for reliable message delivery between workers.
 

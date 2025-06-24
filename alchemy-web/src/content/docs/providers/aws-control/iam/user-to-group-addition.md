@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM UserToGroupAdditions with Alchemy
+title: UserToGroupAddition
 description: Learn how to create, update, and manage AWS IAM UserToGroupAdditions using Alchemy Cloud Control.
 ---
-
-# UserToGroupAddition
 
 The UserToGroupAddition resource allows you to add IAM users to an IAM group, helping you manage permissions efficiently. For more details, refer to the official AWS documentation on [AWS IAM UserToGroupAdditions](https://docs.aws.amazon.com/iam/latest/userguide/).
 

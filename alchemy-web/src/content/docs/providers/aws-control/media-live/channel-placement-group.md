@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaLive ChannelPlacementGroups with Alchemy
+title: ChannelPlacementGroup
 description: Learn how to create, update, and manage AWS MediaLive ChannelPlacementGroups using Alchemy Cloud Control.
 ---
-
-# ChannelPlacementGroup
 
 The ChannelPlacementGroup resource allows you to manage [AWS MediaLive ChannelPlacementGroups](https://docs.aws.amazon.com/medialive/latest/userguide/) to optimize the placement of your media live channels.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 NetworkInterfaceAttachments with Alchemy
+title: NetworkInterfaceAttachment
 description: Learn how to create, update, and manage AWS EC2 NetworkInterfaceAttachments using Alchemy Cloud Control.
 ---
-
-# NetworkInterfaceAttachment
 
 The NetworkInterfaceAttachment resource lets you manage [AWS EC2 NetworkInterfaceAttachments](https://docs.aws.amazon.com/ec2/latest/userguide/) for associating network interfaces with EC2 instances.
 

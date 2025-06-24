@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cognito IdentityPoolPrincipalTags with Alchemy
+title: IdentityPoolPrincipalTag
 description: Learn how to create, update, and manage AWS Cognito IdentityPoolPrincipalTags using Alchemy Cloud Control.
 ---
-
-# IdentityPoolPrincipalTag
 
 The IdentityPoolPrincipalTag resource allows you to manage principal tags for AWS Cognito Identity Pools. These tags are used to control access to resources in AWS based on user attributes. For more information, refer to the [AWS Cognito IdentityPoolPrincipalTags documentation](https://docs.aws.amazon.com/cognito/latest/userguide/).
 

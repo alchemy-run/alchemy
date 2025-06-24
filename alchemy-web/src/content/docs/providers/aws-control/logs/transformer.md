@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Logs Transformers with Alchemy
+title: Transformer
 description: Learn how to create, update, and manage AWS Logs Transformers using Alchemy Cloud Control.
 ---
-
-# Transformer
 
 The Transformer resource allows you to manage [AWS Logs Transformers](https://docs.aws.amazon.com/logs/latest/userguide/) and their configuration for processing log data efficiently.
 

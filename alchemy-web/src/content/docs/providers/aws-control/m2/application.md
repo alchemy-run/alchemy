@@ -1,9 +1,7 @@
 ---
-title: Managing AWS M2 Applications with Alchemy
+title: Application
 description: Learn how to create, update, and manage AWS M2 Applications using Alchemy Cloud Control.
 ---
-
-# Application
 
 The Application resource lets you manage [AWS M2 Applications](https://docs.aws.amazon.com/m2/latest/userguide/) and their configurations in the AWS Cloud environment.
 

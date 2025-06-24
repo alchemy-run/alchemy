@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Chatbot CustomActions with Alchemy
+title: CustomAction
 description: Learn how to create, update, and manage AWS Chatbot CustomActions using Alchemy Cloud Control.
 ---
-
-# CustomAction
 
 The CustomAction resource lets you manage [AWS Chatbot CustomActions](https://docs.aws.amazon.com/chatbot/latest/userguide/) for integrating AWS services with chat platforms like Slack and Amazon Chime.
 

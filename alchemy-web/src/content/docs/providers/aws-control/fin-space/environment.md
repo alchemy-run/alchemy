@@ -1,9 +1,7 @@
 ---
-title: Managing AWS FinSpace Environments with Alchemy
+title: Environment
 description: Learn how to create, update, and manage AWS FinSpace Environments using Alchemy Cloud Control.
 ---
-
-# Environment
 
 The Environment resource allows you to create and manage [AWS FinSpace Environments](https://docs.aws.amazon.com/finspace/latest/userguide/) for your financial data analysis and management needs.
 

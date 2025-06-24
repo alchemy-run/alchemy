@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RefactorSpaces Routes with Alchemy
+title: Route
 description: Learn how to create, update, and manage AWS RefactorSpaces Routes using Alchemy Cloud Control.
 ---
-
-# Route
 
 The Route resource lets you manage [AWS RefactorSpaces Routes](https://docs.aws.amazon.com/refactorspaces/latest/userguide/) for directing traffic to various services in your application. This resource allows you to define the environment and application context for your routes.
 

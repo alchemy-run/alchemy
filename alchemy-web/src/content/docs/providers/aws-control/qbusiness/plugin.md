@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QBusiness Plugins with Alchemy
+title: Plugin
 description: Learn how to create, update, and manage AWS QBusiness Plugins using Alchemy Cloud Control.
 ---
-
-# Plugin
 
 The Plugin resource allows you to manage [AWS QBusiness Plugins](https://docs.aws.amazon.com/qbusiness/latest/userguide/) for integrating custom functionalities into your applications.
 

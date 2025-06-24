@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DAX SubnetGroups with Alchemy
+title: SubnetGroup
 description: Learn how to create, update, and manage AWS DAX SubnetGroups using Alchemy Cloud Control.
 ---
-
-# SubnetGroup
 
 The SubnetGroup resource allows you to manage [AWS DAX SubnetGroups](https://docs.aws.amazon.com/dax/latest/userguide/) for your Amazon DynamoDB Accelerator (DAX) clusters. A subnet group is a collection of subnets that you can use to define a DAX cluster's network configuration.
 

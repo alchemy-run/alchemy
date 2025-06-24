@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaPackageV2 ChannelPolicys with Alchemy
+title: ChannelPolicy
 description: Learn how to create, update, and manage AWS MediaPackageV2 ChannelPolicys using Alchemy Cloud Control.
 ---
-
-# ChannelPolicy
 
 The ChannelPolicy resource allows you to manage [AWS MediaPackageV2 ChannelPolicys](https://docs.aws.amazon.com/mediapackagev2/latest/userguide/) for controlling access to your media channels.
 

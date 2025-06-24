@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Notifications ManagedNotificationAccountContactAssociations with Alchemy
+title: ManagedNotificationAccountContactAssociation
 description: Learn how to create, update, and manage AWS Notifications ManagedNotificationAccountContactAssociations using Alchemy Cloud Control.
 ---
-
-# ManagedNotificationAccountContactAssociation
 
 The ManagedNotificationAccountContactAssociation resource lets you manage associations between AWS notifications and account contacts for notifications. For more information, refer to the [AWS Notifications ManagedNotificationAccountContactAssociations documentation](https://docs.aws.amazon.com/notifications/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityHub Insights with Alchemy
+title: Insight
 description: Learn how to create, update, and manage AWS SecurityHub Insights using Alchemy Cloud Control.
 ---
-
-# Insight
 
 The Insight resource lets you manage [AWS SecurityHub Insights](https://docs.aws.amazon.com/securityhub/latest/userguide/) for aggregating and analyzing security findings within your AWS account.
 

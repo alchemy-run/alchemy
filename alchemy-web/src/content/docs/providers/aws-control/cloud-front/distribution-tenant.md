@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront DistributionTenants with Alchemy
+title: DistributionTenant
 description: Learn how to create, update, and manage AWS CloudFront DistributionTenants using Alchemy Cloud Control.
 ---
-
-# DistributionTenant
 
 The DistributionTenant resource lets you manage [AWS CloudFront DistributionTenants](https://docs.aws.amazon.com/cloudfront/latest/userguide/) for serving content with customizable domain settings and configurations.
 

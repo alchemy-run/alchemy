@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint EmailChannels with Alchemy
+title: EmailChannel
 description: Learn how to create, update, and manage AWS Pinpoint EmailChannels using Alchemy Cloud Control.
 ---
-
-# EmailChannel
 
 The EmailChannel resource lets you manage [AWS Pinpoint EmailChannels](https://docs.aws.amazon.com/pinpoint/latest/userguide/) for sending emails to users through your applications.
 

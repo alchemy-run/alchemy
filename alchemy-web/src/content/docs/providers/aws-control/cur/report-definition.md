@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CUR ReportDefinitions with Alchemy
+title: ReportDefinition
 description: Learn how to create, update, and manage AWS CUR ReportDefinitions using Alchemy Cloud Control.
 ---
-
-# ReportDefinition
 
 The ReportDefinition resource lets you create and manage [AWS CUR ReportDefinitions](https://docs.aws.amazon.com/cur/latest/userguide/) for cost and usage reporting in AWS.
 

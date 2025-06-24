@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Events Connections with Alchemy
+title: Connection
 description: Learn how to create, update, and manage AWS Events Connections using Alchemy Cloud Control.
 ---
-
-# Connection
 
 The Connection resource allows you to manage [AWS Events Connections](https://docs.aws.amazon.com/events/latest/userguide/) that facilitate communication between AWS services and external systems. 
 

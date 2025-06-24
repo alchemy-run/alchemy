@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AutoScaling AutoScalingGroups with Alchemy
+title: AutoScalingGroup
 description: Learn how to create, update, and manage AWS AutoScaling AutoScalingGroups using Alchemy Cloud Control.
 ---
-
-# AutoScalingGroup
 
 The AutoScalingGroup resource allows you to manage [AWS AutoScaling AutoScalingGroups](https://docs.aws.amazon.com/autoscaling/latest/userguide/) that automatically adjust the number of EC2 instances in response to demand.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront AnycastIpLists with Alchemy
+title: AnycastIpList
 description: Learn how to create, update, and manage AWS CloudFront AnycastIpLists using Alchemy Cloud Control.
 ---
-
-# AnycastIpList
 
 The AnycastIpList resource allows you to manage [AWS CloudFront Anycast IP lists](https://docs.aws.amazon.com/cloudfront/latest/userguide/) for your distribution, enabling efficient routing and improved performance.
 

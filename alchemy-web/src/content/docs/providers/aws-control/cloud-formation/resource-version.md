@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation ResourceVersions with Alchemy
+title: ResourceVersion
 description: Learn how to create, update, and manage AWS CloudFormation ResourceVersions using Alchemy Cloud Control.
 ---
-
-# ResourceVersion
 
 The ResourceVersion resource lets you manage [AWS CloudFormation ResourceVersions](https://docs.aws.amazon.com/cloudformation/latest/userguide/) which define the schema and behavior of custom AWS CloudFormation resources.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker Spaces with Alchemy
+title: Space
 description: Learn how to create, update, and manage AWS SageMaker Spaces using Alchemy Cloud Control.
 ---
-
-# Space
 
 The Space resource lets you manage [AWS SageMaker Spaces](https://docs.aws.amazon.com/sagemaker/latest/userguide/) which provide a collaborative environment for data scientists and developers to share resources, tools, and workflows.
 

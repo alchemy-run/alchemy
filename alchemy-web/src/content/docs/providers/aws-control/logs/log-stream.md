@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Logs LogStreams with Alchemy
+title: LogStream
 description: Learn how to create, update, and manage AWS Logs LogStreams using Alchemy Cloud Control.
 ---
-
-# LogStream
 
 The LogStream resource allows you to manage [AWS Logs LogStreams](https://docs.aws.amazon.com/logs/latest/userguide/) which are used to collect log events from your applications and services. LogStreams are associated with a LogGroup and are crucial for organizing and processing log data.
 

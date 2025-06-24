@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 RouteTables with Alchemy
+title: RouteTable
 description: Learn how to create, update, and manage AWS EC2 RouteTables using Alchemy Cloud Control.
 ---
-
-# RouteTable
 
 The RouteTable resource lets you manage [AWS EC2 RouteTables](https://docs.aws.amazon.com/ec2/latest/userguide/) and their routing configurations within your VPC.
 

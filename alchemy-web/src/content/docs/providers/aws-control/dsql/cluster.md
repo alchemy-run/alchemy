@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DSQL Clusters with Alchemy
+title: Cluster
 description: Learn how to create, update, and manage AWS DSQL Clusters using Alchemy Cloud Control.
 ---
-
-# Cluster
 
 The Cluster resource allows you to manage [AWS DSQL Clusters](https://docs.aws.amazon.com/dsql/latest/userguide/) for your applications, providing features like high availability, scalability, and enhanced performance.
 

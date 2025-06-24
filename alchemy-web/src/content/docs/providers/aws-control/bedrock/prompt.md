@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Bedrock Prompts with Alchemy
+title: Prompt
 description: Learn how to create, update, and manage AWS Bedrock Prompts using Alchemy Cloud Control.
 ---
-
-# Prompt
 
 The Prompt resource allows you to create and manage [AWS Bedrock Prompts](https://docs.aws.amazon.com/bedrock/latest/userguide/) for generating and customizing prompts in AI applications.
 

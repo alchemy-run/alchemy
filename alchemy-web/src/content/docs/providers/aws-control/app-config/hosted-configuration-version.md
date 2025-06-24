@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppConfig HostedConfigurationVersions with Alchemy
+title: HostedConfigurationVersion
 description: Learn how to create, update, and manage AWS AppConfig HostedConfigurationVersions using Alchemy Cloud Control.
 ---
-
-# HostedConfigurationVersion
 
 The HostedConfigurationVersion resource allows you to manage [AWS AppConfig HostedConfigurationVersions](https://docs.aws.amazon.com/appconfig/latest/userguide/) for your applications. This resource enables you to create and manage versions of your application configurations hosted in AWS AppConfig.
 

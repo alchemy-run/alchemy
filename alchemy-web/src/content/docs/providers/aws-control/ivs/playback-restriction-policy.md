@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IVS PlaybackRestrictionPolicys with Alchemy
+title: PlaybackRestrictionPolicy
 description: Learn how to create, update, and manage AWS IVS PlaybackRestrictionPolicys using Alchemy Cloud Control.
 ---
-
-# PlaybackRestrictionPolicy
 
 The PlaybackRestrictionPolicy resource allows you to manage playback restrictions for AWS Interactive Video Service (IVS) streams, providing control over allowed origins and countries for playback. For more details, refer to the [AWS IVS PlaybackRestrictionPolicys documentation](https://docs.aws.amazon.com/ivs/latest/userguide/).
 

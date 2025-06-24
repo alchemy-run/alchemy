@@ -1,9 +1,7 @@
 ---
-title: Managing AWS BackupGateway Hypervisors with Alchemy
+title: Hypervisor
 description: Learn how to create, update, and manage AWS BackupGateway Hypervisors using Alchemy Cloud Control.
 ---
-
-# Hypervisor
 
 The Hypervisor resource lets you manage [AWS BackupGateway Hypervisors](https://docs.aws.amazon.com/backupgateway/latest/userguide/) for backup solutions in your environment.
 

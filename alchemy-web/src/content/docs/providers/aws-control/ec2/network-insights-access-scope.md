@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 NetworkInsightsAccessScopes with Alchemy
+title: NetworkInsightsAccessScope
 description: Learn how to create, update, and manage AWS EC2 NetworkInsightsAccessScopes using Alchemy Cloud Control.
 ---
-
-# NetworkInsightsAccessScope
 
 The NetworkInsightsAccessScope resource lets you define and manage access scopes for network insights in Amazon EC2. This resource provides a way to specify the paths and conditions under which network insights are applied. For more details, refer to the [AWS EC2 NetworkInsightsAccessScopes documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT PolicyPrincipalAttachments with Alchemy
+title: PolicyPrincipalAttachment
 description: Learn how to create, update, and manage AWS IoT PolicyPrincipalAttachments using Alchemy Cloud Control.
 ---
-
-# PolicyPrincipalAttachment
 
 The PolicyPrincipalAttachment resource lets you manage [AWS IoT PolicyPrincipalAttachments](https://docs.aws.amazon.com/iot/latest/userguide/) which are used to attach an IoT policy to a principal (such as a device or user). This allows you to control access to IoT resources.
 

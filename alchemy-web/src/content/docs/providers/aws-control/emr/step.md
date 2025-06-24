@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EMR Steps with Alchemy
+title: Step
 description: Learn how to create, update, and manage AWS EMR Steps using Alchemy Cloud Control.
 ---
-
-# Step
 
 The Step resource lets you manage [AWS EMR Steps](https://docs.aws.amazon.com/emr/latest/userguide/) for executing specific tasks in an EMR cluster.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RedshiftServerless Namespaces with Alchemy
+title: Namespace
 description: Learn how to create, update, and manage AWS RedshiftServerless Namespaces using Alchemy Cloud Control.
 ---
-
-# Namespace
 
 The Namespace resource allows you to create and manage [AWS RedshiftServerless Namespaces](https://docs.aws.amazon.com/redshiftserverless/latest/userguide/) for serverless data warehousing.
 

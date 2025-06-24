@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QuickSight DataSets with Alchemy
+title: DataSet
 description: Learn how to create, update, and manage AWS QuickSight DataSets using Alchemy Cloud Control.
 ---
-
-# DataSet
 
 The DataSet resource lets you manage [AWS QuickSight DataSets](https://docs.aws.amazon.com/quicksight/latest/userguide/) for data analysis and visualization.
 

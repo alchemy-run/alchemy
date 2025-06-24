@@ -1,9 +1,7 @@
 ---
-title: Managing AWS GuardDuty Masters with Alchemy
+title: Master
 description: Learn how to create, update, and manage AWS GuardDuty Masters using Alchemy Cloud Control.
 ---
-
-# Master
 
 The Master resource allows you to manage [AWS GuardDuty Masters](https://docs.aws.amazon.com/guardduty/latest/userguide/) and their configurations for threat detection across multiple accounts.
 

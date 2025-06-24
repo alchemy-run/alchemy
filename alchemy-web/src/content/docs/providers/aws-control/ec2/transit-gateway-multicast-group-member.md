@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TransitGatewayMulticastGroupMembers with Alchemy
+title: TransitGatewayMulticastGroupMember
 description: Learn how to create, update, and manage AWS EC2 TransitGatewayMulticastGroupMembers using Alchemy Cloud Control.
 ---
-
-# TransitGatewayMulticastGroupMember
 
 The TransitGatewayMulticastGroupMember resource allows you to manage multicast group members associated with an AWS EC2 Transit Gateway Multicast Domain. This resource is essential for enabling multicast traffic across your AWS infrastructure. For more information, refer to the [AWS EC2 TransitGatewayMulticastGroupMembers documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

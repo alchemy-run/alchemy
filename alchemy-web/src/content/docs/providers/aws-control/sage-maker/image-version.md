@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker ImageVersions with Alchemy
+title: ImageVersion
 description: Learn how to create, update, and manage AWS SageMaker ImageVersions using Alchemy Cloud Control.
 ---
-
-# ImageVersion
 
 The ImageVersion resource lets you manage [AWS SageMaker ImageVersions](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for deploying machine learning models and algorithms.
 

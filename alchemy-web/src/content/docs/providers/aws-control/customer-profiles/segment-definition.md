@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CustomerProfiles SegmentDefinitions with Alchemy
+title: SegmentDefinition
 description: Learn how to create, update, and manage AWS CustomerProfiles SegmentDefinitions using Alchemy Cloud Control.
 ---
-
-# SegmentDefinition
 
 The SegmentDefinition resource allows you to define segments in AWS Customer Profiles, enabling you to create targeted marketing efforts and better understand customer behavior. For more information, refer to the [AWS CustomerProfiles SegmentDefinitions documentation](https://docs.aws.amazon.com/customerprofiles/latest/userguide/).
 

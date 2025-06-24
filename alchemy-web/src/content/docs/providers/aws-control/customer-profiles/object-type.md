@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CustomerProfiles ObjectTypes with Alchemy
+title: ObjectType
 description: Learn how to create, update, and manage AWS CustomerProfiles ObjectTypes using Alchemy Cloud Control.
 ---
-
-# ObjectType
 
 The ObjectType resource lets you manage [AWS CustomerProfiles ObjectTypes](https://docs.aws.amazon.com/customerprofiles/latest/userguide/) which define the structure of customer profiles in your application.
 

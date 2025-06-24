@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaConvert Queues with Alchemy
+title: Queue
 description: Learn how to create, update, and manage AWS MediaConvert Queues using Alchemy Cloud Control.
 ---
-
-# Queue
 
 The Queue resource lets you manage [AWS MediaConvert Queues](https://docs.aws.amazon.com/mediaconvert/latest/userguide/) for processing media files using AWS MediaConvert service.
 

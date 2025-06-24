@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT BillingGroups with Alchemy
+title: BillingGroup
 description: Learn how to create, update, and manage AWS IoT BillingGroups using Alchemy Cloud Control.
 ---
-
-# BillingGroup
 
 The BillingGroup resource lets you manage [AWS IoT BillingGroups](https://docs.aws.amazon.com/iot/latest/userguide/) that allow you to group billing for multiple devices. This is essential for tracking costs associated with your IoT devices efficiently.
 

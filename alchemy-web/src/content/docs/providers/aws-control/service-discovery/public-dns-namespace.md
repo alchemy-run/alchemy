@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceDiscovery PublicDnsNamespaces with Alchemy
+title: PublicDnsNamespace
 description: Learn how to create, update, and manage AWS ServiceDiscovery PublicDnsNamespaces using Alchemy Cloud Control.
 ---
-
-# PublicDnsNamespace
 
 The PublicDnsNamespace resource allows you to create and manage public DNS namespaces in AWS Service Discovery. This enables you to register services and manage DNS records for those services. For more information, visit the [AWS ServiceDiscovery PublicDnsNamespaces documentation](https://docs.aws.amazon.com/servicediscovery/latest/userguide/).
 

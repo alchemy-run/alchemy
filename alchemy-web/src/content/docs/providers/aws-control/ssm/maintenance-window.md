@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSM MaintenanceWindows with Alchemy
+title: MaintenanceWindow
 description: Learn how to create, update, and manage AWS SSM MaintenanceWindows using Alchemy Cloud Control.
 ---
-
-# MaintenanceWindow
 
 The MaintenanceWindow resource lets you manage AWS Systems Manager Maintenance Windows, which define a set of time periods during which maintenance tasks can be performed on your instances. For more details, refer to the [AWS SSM MaintenanceWindows documentation](https://docs.aws.amazon.com/ssm/latest/userguide/).
 

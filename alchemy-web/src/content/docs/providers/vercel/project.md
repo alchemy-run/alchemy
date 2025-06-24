@@ -1,9 +1,7 @@
 ---
-title: Vercel Project
+title: Project
 description: Learn how to create and manage Vercel Projects with Alchemy
 ---
-
-# Project
 
 Create and manage Vercel projects.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3Outposts Endpoints with Alchemy
+title: Endpoint
 description: Learn how to create, update, and manage AWS S3Outposts Endpoints using Alchemy Cloud Control.
 ---
-
-# Endpoint
 
 The Endpoint resource allows you to manage [AWS S3Outposts Endpoints](https://docs.aws.amazon.com/s3outposts/latest/userguide/) effectively. This resource facilitates the creation and configuration of S3 endpoints within an AWS Outposts environment.
 

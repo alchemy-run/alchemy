@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint Apps with Alchemy
+title: App
 description: Learn how to create, update, and manage AWS Pinpoint Apps using Alchemy Cloud Control.
 ---
-
-# App
 
 The App resource lets you manage [AWS Pinpoint Apps](https://docs.aws.amazon.com/pinpoint/latest/userguide/) for sending targeted push notifications, emails, and SMS messages to your users.
 

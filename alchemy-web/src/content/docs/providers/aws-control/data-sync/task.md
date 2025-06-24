@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataSync Tasks with Alchemy
+title: Task
 description: Learn how to create, update, and manage AWS DataSync Tasks using Alchemy Cloud Control.
 ---
-
-# Task
 
 The Task resource allows you to manage [AWS DataSync Tasks](https://docs.aws.amazon.com/datasync/latest/userguide/) that automate moving data between on-premises storage and AWS storage services.
 

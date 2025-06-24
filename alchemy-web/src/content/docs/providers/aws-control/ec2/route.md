@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 Routes with Alchemy
+title: Route
 description: Learn how to create, update, and manage AWS EC2 Routes using Alchemy Cloud Control.
 ---
-
-# Route
 
 The Route resource allows you to manage [AWS EC2 Routes](https://docs.aws.amazon.com/ec2/latest/userguide/) for directing network traffic within your Amazon Virtual Private Cloud (VPC).
 

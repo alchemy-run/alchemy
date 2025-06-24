@@ -1,9 +1,7 @@
 ---
-title: Managing AWS InternetMonitor Monitors with Alchemy
+title: Monitor
 description: Learn how to create, update, and manage AWS InternetMonitor Monitors using Alchemy Cloud Control.
 ---
-
-# Monitor
 
 The Monitor resource allows you to manage [AWS InternetMonitor Monitors](https://docs.aws.amazon.com/internetmonitor/latest/userguide/) for tracking the health and performance of your internet applications.
 

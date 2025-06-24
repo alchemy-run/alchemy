@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT RoleAliases with Alchemy
+title: RoleAlias
 description: Learn how to create, update, and manage AWS IoT RoleAliases using Alchemy Cloud Control.
 ---
-
-# RoleAlias
 
 The RoleAlias resource lets you manage [AWS IoT RoleAliases](https://docs.aws.amazon.com/iot/latest/userguide/) and their configurations. RoleAliases are used to simplify the management of AWS IoT policies and permissions for devices.
 

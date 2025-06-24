@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway BasePathMappings with Alchemy
+title: BasePathMapping
 description: Learn how to create, update, and manage AWS ApiGateway BasePathMappings using Alchemy Cloud Control.
 ---
-
-# BasePathMapping
 
 The BasePathMapping resource lets you manage [AWS ApiGateway BasePathMappings](https://docs.aws.amazon.com/apigateway/latest/userguide/) to route API requests to specific stages of your API.
 

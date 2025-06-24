@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MSK Replicators with Alchemy
+title: Replicator
 description: Learn how to create, update, and manage AWS MSK Replicators using Alchemy Cloud Control.
 ---
-
-# Replicator
 
 The Replicator resource allows you to manage [AWS MSK Replicators](https://docs.aws.amazon.com/msk/latest/userguide/) for replicating data across Kafka clusters.
 

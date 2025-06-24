@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EntityResolution IdMappingWorkflows with Alchemy
+title: IdMappingWorkflow
 description: Learn how to create, update, and manage AWS EntityResolution IdMappingWorkflows using Alchemy Cloud Control.
 ---
-
-# IdMappingWorkflow
 
 The IdMappingWorkflow resource allows you to create and manage workflows for mapping entity identifiers in AWS EntityResolution. For more detailed information, refer to the [AWS EntityResolution IdMappingWorkflows documentation](https://docs.aws.amazon.com/entityresolution/latest/userguide/).
 

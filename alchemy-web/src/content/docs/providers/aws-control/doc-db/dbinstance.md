@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DocDB DBInstances with Alchemy
+title: DBInstance
 description: Learn how to create, update, and manage AWS DocDB DBInstances using Alchemy Cloud Control.
 ---
-
-# DBInstance
 
 The DBInstance resource lets you manage [AWS DocumentDB DBInstances](https://docs.aws.amazon.com/docdb/latest/userguide/) for your database applications.
 

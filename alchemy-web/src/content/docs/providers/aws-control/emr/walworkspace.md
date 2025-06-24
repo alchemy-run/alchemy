@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EMR WALWorkspaces with Alchemy
+title: WALWorkspace
 description: Learn how to create, update, and manage AWS EMR WALWorkspaces using Alchemy Cloud Control.
 ---
-
-# WALWorkspace
 
 The WALWorkspace resource allows you to manage [AWS EMR WALWorkspaces](https://docs.aws.amazon.com/emr/latest/userguide/) for your data processing and analytics needs.
 

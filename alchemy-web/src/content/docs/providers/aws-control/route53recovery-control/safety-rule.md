@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53RecoveryControl SafetyRules with Alchemy
+title: SafetyRule
 description: Learn how to create, update, and manage AWS Route53RecoveryControl SafetyRules using Alchemy Cloud Control.
 ---
-
-# SafetyRule
 
 The SafetyRule resource lets you manage [AWS Route53RecoveryControl SafetyRules](https://docs.aws.amazon.com/route53recoverycontrol/latest/userguide/) that define the conditions under which traffic is allowed to flow to your resources.
 

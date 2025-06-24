@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker MlflowTrackingServers with Alchemy
+title: MlflowTrackingServer
 description: Learn how to create, update, and manage AWS SageMaker MlflowTrackingServers using Alchemy Cloud Control.
 ---
-
-# MlflowTrackingServer
 
 The MlflowTrackingServer resource allows you to manage an [AWS SageMaker MlflowTrackingServer](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for tracking machine learning experiments and managing model artifacts.
 

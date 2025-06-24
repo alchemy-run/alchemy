@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppStream Entitlements with Alchemy
+title: Entitlement
 description: Learn how to create, update, and manage AWS AppStream Entitlements using Alchemy Cloud Control.
 ---
-
-# Entitlement
 
 The Entitlement resource lets you manage [AWS AppStream Entitlements](https://docs.aws.amazon.com/appstream/latest/userguide/) which define the visibility of applications for users in a specified stack.
 

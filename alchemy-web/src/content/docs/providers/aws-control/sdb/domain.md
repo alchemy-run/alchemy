@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SDB Domains with Alchemy
+title: Domain
 description: Learn how to create, update, and manage AWS SDB Domains using Alchemy Cloud Control.
 ---
-
-# Domain
 
 The Domain resource lets you manage [AWS SDB Domains](https://docs.aws.amazon.com/sdb/latest/userguide/) and their configuration settings.
 

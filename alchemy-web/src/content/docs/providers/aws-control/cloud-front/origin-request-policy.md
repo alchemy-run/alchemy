@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFront OriginRequestPolicys with Alchemy
+title: OriginRequestPolicy
 description: Learn how to create, update, and manage AWS CloudFront OriginRequestPolicys using Alchemy Cloud Control.
 ---
-
-# OriginRequestPolicy
 
 The OriginRequestPolicy resource allows you to manage [AWS CloudFront Origin Request Policies](https://docs.aws.amazon.com/cloudfront/latest/userguide/) to control the headers, cookies, and query strings that CloudFront includes in requests to your origin.
 

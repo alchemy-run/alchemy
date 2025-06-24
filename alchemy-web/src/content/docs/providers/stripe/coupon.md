@@ -1,9 +1,7 @@
 ---
-title: Stripe Coupon
+title: Coupon
 description: Learn how to create and manage Stripe Coupons for discounts using Alchemy.
 ---
-
-# Coupon
 
 The Coupon resource lets you create and manage [Stripe Coupons](https://stripe.com/docs/api/coupons) for applying discounts to customers and subscriptions.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Logs Deliverys with Alchemy
+title: Delivery
 description: Learn how to create, update, and manage AWS Logs Deliverys using Alchemy Cloud Control.
 ---
-
-# Delivery
 
 The Delivery resource enables you to configure AWS Logs Delivery for managing and directing log data to specified destinations. For more details, refer to the [AWS Logs Delivery documentation](https://docs.aws.amazon.com/logs/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker Workteams with Alchemy
+title: Workteam
 description: Learn how to create, update, and manage AWS SageMaker Workteams using Alchemy Cloud Control.
 ---
-
-# Workteam
 
 The Workteam resource allows you to manage [AWS SageMaker Workteams](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for building and training machine learning models with human labeling tasks.
 

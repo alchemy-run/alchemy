@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation GuardHooks with Alchemy
+title: GuardHook
 description: Learn how to create, update, and manage AWS CloudFormation GuardHooks using Alchemy Cloud Control.
 ---
-
-# GuardHook
 
 The GuardHook resource allows you to manage [AWS CloudFormation GuardHooks](https://docs.aws.amazon.com/cloudformation/latest/userguide/), which enable you to define custom rules that can be applied during CloudFormation stack operations.
 

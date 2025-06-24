@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAFv2 WebACLAssociations with Alchemy
+title: WebACLAssociation
 description: Learn how to create, update, and manage AWS WAFv2 WebACLAssociations using Alchemy Cloud Control.
 ---
-
-# WebACLAssociation
 
 The WebACLAssociation resource lets you associate a WebACL with an AWS resource, such as an Application Load Balancer, CloudFront distribution, or API Gateway. This integration allows for the application of security policies to incoming web traffic. For more information, visit the [AWS WAFv2 WebACLAssociations documentation](https://docs.aws.amazon.com/wafv2/latest/userguide/).
 

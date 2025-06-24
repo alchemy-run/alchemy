@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VpcLattice Services with Alchemy
+title: Service
 description: Learn how to create, update, and manage AWS VpcLattice Services using Alchemy Cloud Control.
 ---
-
-# Service
 
 The Service resource lets you manage [AWS VpcLattice Services](https://docs.aws.amazon.com/vpclattice/latest/userguide/) and their associated settings.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53Profiles Profiles with Alchemy
+title: Profile
 description: Learn how to create, update, and manage AWS Route53Profiles Profiles using Alchemy Cloud Control.
 ---
-
-# Profile
 
 The Profile resource lets you manage [AWS Route53Profiles Profiles](https://docs.aws.amazon.com/route53profiles/latest/userguide/) for configuring and managing DNS settings in AWS Route 53.
 

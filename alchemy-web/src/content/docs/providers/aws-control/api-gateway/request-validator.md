@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway RequestValidators with Alchemy
+title: RequestValidator
 description: Learn how to create, update, and manage AWS ApiGateway RequestValidators using Alchemy Cloud Control.
 ---
-
-# RequestValidator
 
 The RequestValidator resource allows you to manage [AWS ApiGateway RequestValidators](https://docs.aws.amazon.com/apigateway/latest/userguide/) which validate request parameters and request bodies for API requests.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WorkSpacesWeb Portals with Alchemy
+title: Portal
 description: Learn how to create, update, and manage AWS WorkSpacesWeb Portals using Alchemy Cloud Control.
 ---
-
-# Portal
 
 The Portal resource lets you manage [AWS WorkSpacesWeb Portals](https://docs.aws.amazon.com/workspacesweb/latest/userguide/) which provide secure access to web applications. 
 

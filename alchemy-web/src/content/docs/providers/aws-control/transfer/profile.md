@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Transfer Profiles with Alchemy
+title: Profile
 description: Learn how to create, update, and manage AWS Transfer Profiles using Alchemy Cloud Control.
 ---
-
-# Profile
 
 The Profile resource lets you manage [AWS Transfer Profiles](https://docs.aws.amazon.com/transfer/latest/userguide/) to facilitate secure file transfers using AWS Transfer Family.
 

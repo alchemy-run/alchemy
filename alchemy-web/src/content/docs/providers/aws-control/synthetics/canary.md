@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Synthetics Canarys with Alchemy
+title: Canary
 description: Learn how to create, update, and manage AWS Synthetics Canarys using Alchemy Cloud Control.
 ---
-
-# Canary
 
 The Canary resource allows you to create and manage [AWS Synthetics Canarys](https://docs.aws.amazon.com/synthetics/latest/userguide/) that enable you to monitor your applications by running scripts that simulate user interactions.
 

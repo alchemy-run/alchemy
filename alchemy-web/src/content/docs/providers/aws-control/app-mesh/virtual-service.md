@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppMesh VirtualServices with Alchemy
+title: VirtualService
 description: Learn how to create, update, and manage AWS AppMesh VirtualServices using Alchemy Cloud Control.
 ---
-
-# VirtualService
 
 The VirtualService resource allows you to manage [AWS AppMesh VirtualServices](https://docs.aws.amazon.com/appmesh/latest/userguide/) which provide a way to route traffic to your services. 
 

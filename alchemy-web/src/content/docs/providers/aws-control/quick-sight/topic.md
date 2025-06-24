@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QuickSight Topics with Alchemy
+title: Topic
 description: Learn how to create, update, and manage AWS QuickSight Topics using Alchemy Cloud Control.
 ---
-
-# Topic
 
 The Topic resource lets you manage [AWS QuickSight Topics](https://docs.aws.amazon.com/quicksight/latest/userguide/) for organizing and managing data sets in your QuickSight environment.
 

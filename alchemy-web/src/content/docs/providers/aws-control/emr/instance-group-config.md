@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EMR InstanceGroupConfigs with Alchemy
+title: InstanceGroupConfig
 description: Learn how to create, update, and manage AWS EMR InstanceGroupConfigs using Alchemy Cloud Control.
 ---
-
-# InstanceGroupConfig
 
 The InstanceGroupConfig resource allows you to configure and manage [AWS EMR Instance Groups](https://docs.aws.amazon.com/emr/latest/userguide/) within your EMR clusters.
 

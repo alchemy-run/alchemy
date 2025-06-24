@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AuditManager Assessments with Alchemy
+title: Assessment
 description: Learn how to create, update, and manage AWS AuditManager Assessments using Alchemy Cloud Control.
 ---
-
-# Assessment
 
 The Assessment resource lets you manage [AWS AuditManager Assessments](https://docs.aws.amazon.com/auditmanager/latest/userguide/) to help you evaluate the compliance of your AWS resources against your organization's standards and regulations.
 

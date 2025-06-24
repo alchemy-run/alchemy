@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Notifications NotificationConfigurations with Alchemy
+title: NotificationConfiguration
 description: Learn how to create, update, and manage AWS Notifications NotificationConfigurations using Alchemy Cloud Control.
 ---
-
-# NotificationConfiguration
 
 The NotificationConfiguration resource allows you to manage notification configurations in AWS Notifications. This resource enables you to customize how notifications are delivered and aggregated. For more information, refer to the [AWS Notifications NotificationConfigurations documentation](https://docs.aws.amazon.com/notifications/latest/userguide/).
 

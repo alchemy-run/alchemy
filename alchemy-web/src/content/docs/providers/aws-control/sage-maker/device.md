@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker Devices with Alchemy
+title: Device
 description: Learn how to create, update, and manage AWS SageMaker Devices using Alchemy Cloud Control.
 ---
-
-# Device
 
 The Device resource allows you to manage [AWS SageMaker Devices](https://docs.aws.amazon.com/sagemaker/latest/userguide/) for deploying machine learning models on edge devices.
 

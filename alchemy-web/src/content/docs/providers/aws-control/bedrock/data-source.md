@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Bedrock DataSources with Alchemy
+title: DataSource
 description: Learn how to create, update, and manage AWS Bedrock DataSources using Alchemy Cloud Control.
 ---
-
-# DataSource
 
 The DataSource resource allows you to create and manage [AWS Bedrock DataSources](https://docs.aws.amazon.com/bedrock/latest/userguide/) that can be used for various data processing and machine learning tasks.
 

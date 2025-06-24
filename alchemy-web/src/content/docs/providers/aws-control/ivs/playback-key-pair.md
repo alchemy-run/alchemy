@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IVS PlaybackKeyPairs with Alchemy
+title: PlaybackKeyPair
 description: Learn how to create, update, and manage AWS IVS PlaybackKeyPairs using Alchemy Cloud Control.
 ---
-
-# PlaybackKeyPair
 
 The PlaybackKeyPair resource lets you manage AWS IVS Playback Key Pairs, which are used for securely delivering video playback keys. For more information, refer to the [AWS IVS PlaybackKeyPairs documentation](https://docs.aws.amazon.com/ivs/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VPCBlockPublicAccessExclusions with Alchemy
+title: VPCBlockPublicAccessExclusion
 description: Learn how to create, update, and manage AWS EC2 VPCBlockPublicAccessExclusions using Alchemy Cloud Control.
 ---
-
-# VPCBlockPublicAccessExclusion
 
 The VPCBlockPublicAccessExclusion resource allows you to manage the public access settings for your Amazon EC2 VPCs by excluding specific components such as internet gateways from public access blocking. For more details, refer to the [AWS EC2 VPCBlockPublicAccessExclusions documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

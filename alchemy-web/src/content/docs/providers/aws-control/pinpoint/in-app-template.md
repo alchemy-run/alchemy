@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint InAppTemplates with Alchemy
+title: InAppTemplate
 description: Learn how to create, update, and manage AWS Pinpoint InAppTemplates using Alchemy Cloud Control.
 ---
-
-# InAppTemplate
 
 The InAppTemplate resource allows you to manage [AWS Pinpoint InAppTemplates](https://docs.aws.amazon.com/pinpoint/latest/userguide/) for creating rich in-app messaging experiences.
 

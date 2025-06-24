@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ElastiCache SecurityGroups with Alchemy
+title: SecurityGroup
 description: Learn how to create, update, and manage AWS ElastiCache SecurityGroups using Alchemy Cloud Control.
 ---
-
-# SecurityGroup
 
 The SecurityGroup resource lets you manage [AWS ElastiCache SecurityGroups](https://docs.aws.amazon.com/elasticache/latest/userguide/) for controlling access to your ElastiCache clusters.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Location Trackers with Alchemy
+title: Tracker
 description: Learn how to create, update, and manage AWS Location Trackers using Alchemy Cloud Control.
 ---
-
-# Tracker
 
 The Tracker resource allows you to manage [AWS Location Trackers](https://docs.aws.amazon.com/location/latest/userguide/) for tracking the location of devices and assets in real-time.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue CustomEntityTypes with Alchemy
+title: CustomEntityType
 description: Learn how to create, update, and manage AWS Glue CustomEntityTypes using Alchemy Cloud Control.
 ---
-
-# CustomEntityType
 
 The CustomEntityType resource lets you manage [AWS Glue CustomEntityTypes](https://docs.aws.amazon.com/glue/latest/userguide/) for defining custom entities in your data catalog.
 

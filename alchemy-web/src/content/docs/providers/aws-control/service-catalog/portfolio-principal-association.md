@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog PortfolioPrincipalAssociations with Alchemy
+title: PortfolioPrincipalAssociation
 description: Learn how to create, update, and manage AWS ServiceCatalog PortfolioPrincipalAssociations using Alchemy Cloud Control.
 ---
-
-# PortfolioPrincipalAssociation
 
 The PortfolioPrincipalAssociation resource allows you to associate a principal, such as a user or a group, with a portfolio in AWS Service Catalog. This enables the principal to have the necessary permissions to access the portfolio's products. For more details, refer to the [AWS ServiceCatalog PortfolioPrincipalAssociations documentation](https://docs.aws.amazon.com/servicecatalog/latest/userguide/).
 

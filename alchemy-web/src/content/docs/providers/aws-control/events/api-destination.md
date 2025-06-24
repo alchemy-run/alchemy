@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Events ApiDestinations with Alchemy
+title: ApiDestination
 description: Learn how to create, update, and manage AWS Events ApiDestinations using Alchemy Cloud Control.
 ---
-
-# ApiDestination
 
 The ApiDestination resource lets you manage [AWS Events ApiDestinations](https://docs.aws.amazon.com/events/latest/userguide/) that route event data to HTTP endpoints based on configuration settings.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lightsail LoadBalancers with Alchemy
+title: LoadBalancer
 description: Learn how to create, update, and manage AWS Lightsail LoadBalancers using Alchemy Cloud Control.
 ---
-
-# LoadBalancer
 
 The LoadBalancer resource allows you to manage [AWS Lightsail LoadBalancers](https://docs.aws.amazon.com/lightsail/latest/userguide/) for distributing traffic across multiple instances.
 

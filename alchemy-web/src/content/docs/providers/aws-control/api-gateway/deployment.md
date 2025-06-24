@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway Deployments with Alchemy
+title: Deployment
 description: Learn how to create, update, and manage AWS ApiGateway Deployments using Alchemy Cloud Control.
 ---
-
-# Deployment
 
 The Deployment resource lets you manage [AWS ApiGateway Deployments](https://docs.aws.amazon.com/apigateway/latest/userguide/) for deploying your APIs and managing their versions.
 

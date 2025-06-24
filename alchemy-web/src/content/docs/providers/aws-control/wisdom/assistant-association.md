@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Wisdom AssistantAssociations with Alchemy
+title: AssistantAssociation
 description: Learn how to create, update, and manage AWS Wisdom AssistantAssociations using Alchemy Cloud Control.
 ---
-
-# AssistantAssociation
 
 The AssistantAssociation resource allows you to create and manage associations between AWS Wisdom assistants and other resources. This can enhance the functionality of your assistants by connecting them with the required data sources and services. For more information, refer to the [AWS Wisdom AssistantAssociations documentation](https://docs.aws.amazon.com/wisdom/latest/userguide/).
 

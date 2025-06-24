@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker Apps with Alchemy
+title: App
 description: Learn how to create, update, and manage AWS SageMaker Apps using Alchemy Cloud Control.
 ---
-
-# App
 
 The App resource lets you manage [AWS SageMaker Apps](https://docs.aws.amazon.com/sagemaker/latest/userguide/) that provide users with access to SageMaker notebooks and other tools.
 

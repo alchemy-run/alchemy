@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway DomainNameAccessAssociations with Alchemy
+title: DomainNameAccessAssociation
 description: Learn how to create, update, and manage AWS ApiGateway DomainNameAccessAssociations using Alchemy Cloud Control.
 ---
-
-# DomainNameAccessAssociation
 
 The DomainNameAccessAssociation resource allows you to manage associations between API Gateway domain names and their access sources. This enables you to control access for APIs that use custom domain names. For more information, visit the [AWS ApiGateway DomainNameAccessAssociations documentation](https://docs.aws.amazon.com/apigateway/latest/userguide/).
 

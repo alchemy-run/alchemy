@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataZone EnvironmentProfiles with Alchemy
+title: EnvironmentProfile
 description: Learn how to create, update, and manage AWS DataZone EnvironmentProfiles using Alchemy Cloud Control.
 ---
-
-# EnvironmentProfile
 
 The EnvironmentProfile resource allows you to manage [AWS DataZone EnvironmentProfiles](https://docs.aws.amazon.com/datazone/latest/userguide/) for your data environments, enabling better organization and management of your data projects.
 

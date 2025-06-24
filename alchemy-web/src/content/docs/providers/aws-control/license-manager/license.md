@@ -1,9 +1,7 @@
 ---
-title: Managing AWS LicenseManager Licenses with Alchemy
+title: License
 description: Learn how to create, update, and manage AWS LicenseManager Licenses using Alchemy Cloud Control.
 ---
-
-# License
 
 The License resource allows you to manage [AWS LicenseManager Licenses](https://docs.aws.amazon.com/licensemanager/latest/userguide/) for software usage tracking and compliance.
 

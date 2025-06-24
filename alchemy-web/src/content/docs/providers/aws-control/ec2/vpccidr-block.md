@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VPCCidrBlocks with Alchemy
+title: VPCCidrBlock
 description: Learn how to create, update, and manage AWS EC2 VPCCidrBlocks using Alchemy Cloud Control.
 ---
-
-# VPCCidrBlock
 
 The VPCCidrBlock resource lets you manage [AWS EC2 VPCCidrBlocks](https://docs.aws.amazon.com/ec2/latest/userguide/) for a specified VPC, allowing you to add IPv4 and IPv6 CIDR blocks to your Virtual Private Cloud (VPC).
 

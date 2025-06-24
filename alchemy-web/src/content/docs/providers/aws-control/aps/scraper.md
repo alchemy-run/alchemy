@@ -1,9 +1,7 @@
 ---
-title: Managing AWS APS Scrapers with Alchemy
+title: Scraper
 description: Learn how to create, update, and manage AWS APS Scrapers using Alchemy Cloud Control.
 ---
-
-# Scraper
 
 The Scraper resource allows you to manage AWS APS Scrapers, enabling you to extract data from various sources and route it to specified destinations. For more detailed information, refer to the [AWS APS Scrapers documentation](https://docs.aws.amazon.com/aps/latest/userguide/).
 

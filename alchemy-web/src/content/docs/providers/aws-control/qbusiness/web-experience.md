@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QBusiness WebExperiences with Alchemy
+title: WebExperience
 description: Learn how to create, update, and manage AWS QBusiness WebExperiences using Alchemy Cloud Control.
 ---
-
-# WebExperience
 
 The WebExperience resource allows you to create and manage [AWS QBusiness WebExperiences](https://docs.aws.amazon.com/qbusiness/latest/userguide/) for building interactive web applications. This resource provides configuration options to tailor the user experience.
 

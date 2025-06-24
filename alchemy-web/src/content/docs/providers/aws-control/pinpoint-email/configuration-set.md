@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PinpointEmail ConfigurationSets with Alchemy
+title: ConfigurationSet
 description: Learn how to create, update, and manage AWS PinpointEmail ConfigurationSets using Alchemy Cloud Control.
 ---
-
-# ConfigurationSet
 
 The ConfigurationSet resource lets you manage [AWS PinpointEmail ConfigurationSets](https://docs.aws.amazon.com/pinpointemail/latest/userguide/) which are essential for controlling email sending settings and tracking options in Amazon Pinpoint.
 

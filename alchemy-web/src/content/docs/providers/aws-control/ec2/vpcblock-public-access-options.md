@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VPCBlockPublicAccessOptions with Alchemy
+title: VPCBlockPublicAccessOptions
 description: Learn how to create, update, and manage AWS EC2 VPCBlockPublicAccessOptions using Alchemy Cloud Control.
 ---
-
-# VPCBlockPublicAccessOptions
 
 The VPCBlockPublicAccessOptions resource allows you to manage the public access settings for your Amazon EC2 VPCs. This resource helps ensure that your VPCs are configured to block public access as per your security requirements. For more information, refer to the [AWS EC2 VPCBlockPublicAccessOptions documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ImageBuilder Images with Alchemy
+title: Image
 description: Learn how to create, update, and manage AWS ImageBuilder Images using Alchemy Cloud Control.
 ---
-
-# Image
 
 The Image resource allows you to create and manage [AWS ImageBuilder Images](https://docs.aws.amazon.com/imagebuilder/latest/userguide/) for automating the creation, management, and deployment of virtual machine images.
 

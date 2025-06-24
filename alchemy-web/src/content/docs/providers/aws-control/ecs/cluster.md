@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ECS Clusters with Alchemy
+title: Cluster
 description: Learn how to create, update, and manage AWS ECS Clusters using Alchemy Cloud Control.
 ---
-
-# Cluster
 
 The Cluster resource lets you manage [AWS ECS Clusters](https://docs.aws.amazon.com/ecs/latest/userguide/) which provide the infrastructure for running containerized applications.
 

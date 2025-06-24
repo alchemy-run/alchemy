@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Pinpoint VoiceChannels with Alchemy
+title: VoiceChannel
 description: Learn how to create, update, and manage AWS Pinpoint VoiceChannels using Alchemy Cloud Control.
 ---
-
-# VoiceChannel
 
 The VoiceChannel resource allows you to manage [AWS Pinpoint VoiceChannels](https://docs.aws.amazon.com/pinpoint/latest/userguide/) for sending voice messages to your users through Amazon Pinpoint.
 

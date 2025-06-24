@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaTailor PlaybackConfigurations with Alchemy
+title: PlaybackConfiguration
 description: Learn how to create, update, and manage AWS MediaTailor PlaybackConfigurations using Alchemy Cloud Control.
 ---
-
-# PlaybackConfiguration
 
 The PlaybackConfiguration resource lets you manage [AWS MediaTailor PlaybackConfigurations](https://docs.aws.amazon.com/mediatailor/latest/userguide/) for streaming video content. This resource allows you to configure settings related to content playback, ad decision servers, and more.
 

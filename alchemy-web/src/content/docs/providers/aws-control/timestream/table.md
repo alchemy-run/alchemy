@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Timestream Tables with Alchemy
+title: Table
 description: Learn how to create, update, and manage AWS Timestream Tables using Alchemy Cloud Control.
 ---
-
-# Table
 
 The Table resource allows you to manage [AWS Timestream Tables](https://docs.aws.amazon.com/timestream/latest/userguide/) for time series data storage and analysis.
 

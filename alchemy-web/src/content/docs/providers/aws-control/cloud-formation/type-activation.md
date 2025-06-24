@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CloudFormation TypeActivations with Alchemy
+title: TypeActivation
 description: Learn how to create, update, and manage AWS CloudFormation TypeActivations using Alchemy Cloud Control.
 ---
-
-# TypeActivation
 
 The TypeActivation resource allows you to register a CloudFormation type for use in your stacks. This includes custom resource types that are defined by your organization or other AWS resources. For more information, refer to the [AWS CloudFormation TypeActivations](https://docs.aws.amazon.com/cloudformation/latest/userguide/).
 

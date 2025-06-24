@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAF WebACLs with Alchemy
+title: WebACL
 description: Learn how to create, update, and manage AWS WAF WebACLs using Alchemy Cloud Control.
 ---
-
-# WebACL
 
 The WebACL resource lets you manage [AWS WAF WebACLs](https://docs.aws.amazon.com/waf/latest/userguide/) to control web traffic to your applications. A WebACL defines a set of rules that are evaluated for each incoming request.
 

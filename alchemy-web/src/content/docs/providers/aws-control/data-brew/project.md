@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataBrew Projects with Alchemy
+title: Project
 description: Learn how to create, update, and manage AWS DataBrew Projects using Alchemy Cloud Control.
 ---
-
-# Project
 
 The Project resource allows you to manage [AWS DataBrew Projects](https://docs.aws.amazon.com/databrew/latest/userguide/) for data preparation and transformation workflows.
 

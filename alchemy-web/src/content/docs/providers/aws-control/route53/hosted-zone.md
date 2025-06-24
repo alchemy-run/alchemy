@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53 HostedZones with Alchemy
+title: HostedZone
 description: Learn how to create, update, and manage AWS Route53 HostedZones using Alchemy Cloud Control.
 ---
-
-# HostedZone
 
 The HostedZone resource lets you manage [AWS Route53 HostedZones](https://docs.aws.amazon.com/route53/latest/userguide/) for DNS management. Hosted zones allow you to route traffic for your domain and manage DNS records.
 

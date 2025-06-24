@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTAnalytics Datasets with Alchemy
+title: Dataset
 description: Learn how to create, update, and manage AWS IoTAnalytics Datasets using Alchemy Cloud Control.
 ---
-
-# Dataset
 
 The Dataset resource lets you manage [AWS IoTAnalytics Datasets](https://docs.aws.amazon.com/iotanalytics/latest/userguide/) for analyzing and processing IoT data.
 

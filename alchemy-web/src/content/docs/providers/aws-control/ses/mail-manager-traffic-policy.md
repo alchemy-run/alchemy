@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES MailManagerTrafficPolicys with Alchemy
+title: MailManagerTrafficPolicy
 description: Learn how to create, update, and manage AWS SES MailManagerTrafficPolicys using Alchemy Cloud Control.
 ---
-
-# MailManagerTrafficPolicy
 
 The MailManagerTrafficPolicy resource allows you to create and manage AWS SES Mail Manager traffic policies, which define the rules for handling email traffic in your application. For more information, refer to the [AWS SES MailManagerTrafficPolicys documentation](https://docs.aws.amazon.com/ses/latest/userguide/).
 

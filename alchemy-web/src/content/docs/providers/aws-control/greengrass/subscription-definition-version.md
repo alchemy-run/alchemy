@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass SubscriptionDefinitionVersions with Alchemy
+title: SubscriptionDefinitionVersion
 description: Learn how to create, update, and manage AWS Greengrass SubscriptionDefinitionVersions using Alchemy Cloud Control.
 ---
-
-# SubscriptionDefinitionVersion
 
 The SubscriptionDefinitionVersion resource allows you to manage versions of subscription definitions in AWS Greengrass, enabling you to define how different components of your IoT application communicate with each other. For more information, see the [AWS Greengrass SubscriptionDefinitionVersions](https://docs.aws.amazon.com/greengrass/latest/userguide/).
 

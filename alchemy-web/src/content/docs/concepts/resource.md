@@ -4,8 +4,6 @@ title: Resource
 description: Learn about Resources, the core building blocks of Alchemy. Understand how to create, update, and manage infrastructure with async functions in TypeScript.
 ---
 
-# Resource
-
 Resources are the core building blocks of Alchemy. Each resource represents a piece of infrastructure or configuration that can be created, updated, and deleted automatically.
 
 ## What is a Resource?

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS KinesisAnalyticsV2 ApplicationOutputs with Alchemy
+title: ApplicationOutput
 description: Learn how to create, update, and manage AWS KinesisAnalyticsV2 ApplicationOutputs using Alchemy Cloud Control.
 ---
-
-# ApplicationOutput
 
 The ApplicationOutput resource allows you to manage [AWS KinesisAnalyticsV2 ApplicationOutputs](https://docs.aws.amazon.com/kinesisanalyticsv2/latest/userguide/) for your streaming data applications. This resource is essential for defining how your application will output processed data to various destinations.
 

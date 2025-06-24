@@ -1,9 +1,7 @@
 ---
-title: Managing AWS StepFunctions Activitys with Alchemy
+title: Activity
 description: Learn how to create, update, and manage AWS StepFunctions Activitys using Alchemy Cloud Control.
 ---
-
-# Activity
 
 The Activity resource lets you manage [AWS StepFunctions Activities](https://docs.aws.amazon.com/stepfunctions/latest/userguide/) which are used to perform work within a Step Functions state machine.
 

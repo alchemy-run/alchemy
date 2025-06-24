@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaConnect BridgeSources with Alchemy
+title: BridgeSource
 description: Learn how to create, update, and manage AWS MediaConnect BridgeSources using Alchemy Cloud Control.
 ---
-
-# BridgeSource
 
 The BridgeSource resource lets you manage [AWS MediaConnect BridgeSources](https://docs.aws.amazon.com/mediaconnect/latest/userguide/) for streaming video content across various networks.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodePipeline Pipelines with Alchemy
+title: Pipeline
 description: Learn how to create, update, and manage AWS CodePipeline Pipelines using Alchemy Cloud Control.
 ---
-
-# Pipeline
 
 The Pipeline resource lets you create and manage [AWS CodePipeline Pipelines](https://docs.aws.amazon.com/codepipeline/latest/userguide/) for automating the building, testing, and deployment of applications.
 

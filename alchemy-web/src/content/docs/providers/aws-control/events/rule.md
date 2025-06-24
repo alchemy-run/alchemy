@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Events Rules with Alchemy
+title: Rule
 description: Learn how to create, update, and manage AWS Events Rules using Alchemy Cloud Control.
 ---
-
-# Rule
 
 The Rule resource allows you to manage [AWS Events Rules](https://docs.aws.amazon.com/events/latest/userguide/) that enable you to respond to events across AWS services. You can set up rules to trigger actions based on events, schedules, or specific patterns.
 

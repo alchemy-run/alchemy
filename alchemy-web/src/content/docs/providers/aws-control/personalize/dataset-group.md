@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Personalize DatasetGroups with Alchemy
+title: DatasetGroup
 description: Learn how to create, update, and manage AWS Personalize DatasetGroups using Alchemy Cloud Control.
 ---
-
-# DatasetGroup
 
 The DatasetGroup resource lets you manage [AWS Personalize DatasetGroups](https://docs.aws.amazon.com/personalize/latest/userguide/) for organizing datasets and models tailored for personalized recommendations.
 

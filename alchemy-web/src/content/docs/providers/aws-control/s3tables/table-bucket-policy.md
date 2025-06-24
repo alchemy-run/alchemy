@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3Tables TableBucketPolicys with Alchemy
+title: TableBucketPolicy
 description: Learn how to create, update, and manage AWS S3Tables TableBucketPolicys using Alchemy Cloud Control.
 ---
-
-# TableBucketPolicy
 
 The TableBucketPolicy resource allows you to manage bucket policies for Amazon S3 Tables, providing fine-grained control over access to your S3 data. For more information, refer to the [AWS S3Tables TableBucketPolicys documentation](https://docs.aws.amazon.com/s3tables/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS QBusiness DataAccessors with Alchemy
+title: DataAccessor
 description: Learn how to create, update, and manage AWS QBusiness DataAccessors using Alchemy Cloud Control.
 ---
-
-# DataAccessor
 
 The DataAccessor resource allows you to create and manage AWS QBusiness DataAccessors, which are used to define how your application interacts with data. For more information, visit the [AWS QBusiness DataAccessors documentation](https://docs.aws.amazon.com/qbusiness/latest/userguide/).
 

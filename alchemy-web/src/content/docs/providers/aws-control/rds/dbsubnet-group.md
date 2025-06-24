@@ -1,9 +1,7 @@
 ---
-title: Managing AWS RDS DBSubnetGroups with Alchemy
+title: DBSubnetGroup
 description: Learn how to create, update, and manage AWS RDS DBSubnetGroups using Alchemy Cloud Control.
 ---
-
-# DBSubnetGroup
 
 The DBSubnetGroup resource allows you to manage [AWS RDS DBSubnetGroups](https://docs.aws.amazon.com/rds/latest/userguide/) and their configuration settings, making it essential for defining the subnets that your RDS instances can use.
 

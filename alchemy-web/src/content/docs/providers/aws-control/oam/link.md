@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Oam Links with Alchemy
+title: Link
 description: Learn how to create, update, and manage AWS Oam Links using Alchemy Cloud Control.
 ---
-
-# Link
 
 The Link resource allows you to manage AWS Oam Links, which facilitate the integration of AWS services with external monitoring and logging solutions. For more information, refer to the [AWS Oam Links documentation](https://docs.aws.amazon.com/oam/latest/userguide/).
 

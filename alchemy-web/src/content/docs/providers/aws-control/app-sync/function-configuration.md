@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppSync FunctionConfigurations with Alchemy
+title: FunctionConfiguration
 description: Learn how to create, update, and manage AWS AppSync FunctionConfigurations using Alchemy Cloud Control.
 ---
-
-# FunctionConfiguration
 
 The FunctionConfiguration resource allows you to define and manage [AWS AppSync FunctionConfigurations](https://docs.aws.amazon.com/appsync/latest/userguide/) that are used to handle request and response mapping templates for AWS AppSync resolvers.
 

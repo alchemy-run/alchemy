@@ -1,9 +1,7 @@
 ---
-title: Managing AWS KinesisVideo Streams with Alchemy
+title: Stream
 description: Learn how to create, update, and manage AWS KinesisVideo Streams using Alchemy Cloud Control.
 ---
-
-# Stream
 
 The Stream resource lets you manage [AWS KinesisVideo Streams](https://docs.aws.amazon.com/kinesisvideo/latest/userguide/) for processing and analyzing video data in real-time.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS LookoutMetrics AnomalyDetectors with Alchemy
+title: AnomalyDetector
 description: Learn how to create, update, and manage AWS LookoutMetrics AnomalyDetectors using Alchemy Cloud Control.
 ---
-
-# AnomalyDetector
 
 The AnomalyDetector resource allows you to create and manage [AWS LookoutMetrics AnomalyDetectors](https://docs.aws.amazon.com/lookoutmetrics/latest/userguide/) for detecting anomalies in your data and improving decision-making.
 

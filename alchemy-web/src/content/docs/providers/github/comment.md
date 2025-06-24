@@ -1,9 +1,7 @@
 ---
-title: GitHub Comment
+title: Comment
 description: Learn how to create, update, and manage comments on GitHub issues and pull requests using Alchemy.
 ---
-
-# Comment
 
 The Comment resource lets you manage [GitHub issue and pull request comments](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/commenting-on-an-issue). Comments support full GitHub Markdown and can be updated or deleted as needed.
 

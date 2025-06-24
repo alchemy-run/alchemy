@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Lambda Versions with Alchemy
+title: Version
 description: Learn how to create, update, and manage AWS Lambda Versions using Alchemy Cloud Control.
 ---
-
-# Version
 
 The Version resource lets you manage [AWS Lambda Versions](https://docs.aws.amazon.com/lambda/latest/userguide/) to ensure your functions are versioned and can be easily deployed or rolled back.
 

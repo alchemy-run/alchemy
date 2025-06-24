@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Personalize Datasets with Alchemy
+title: Dataset
 description: Learn how to create, update, and manage AWS Personalize Datasets using Alchemy Cloud Control.
 ---
-
-# Dataset
 
 The Dataset resource allows you to manage [AWS Personalize Datasets](https://docs.aws.amazon.com/personalize/latest/userguide/) for building recommendation systems.
 

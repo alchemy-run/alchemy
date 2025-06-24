@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Evidently Launchs with Alchemy
+title: Launch
 description: Learn how to create, update, and manage AWS Evidently Launchs using Alchemy Cloud Control.
 ---
-
-# Launch
 
 The Launch resource lets you create and manage [AWS Evidently Launches](https://docs.aws.amazon.com/evidently/latest/userguide/) for running experiments and feature launches.
 

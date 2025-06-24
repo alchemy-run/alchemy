@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DataSync LocationHDFSs with Alchemy
+title: LocationHDFS
 description: Learn how to create, update, and manage AWS DataSync LocationHDFSs using Alchemy Cloud Control.
 ---
-
-# LocationHDFS
 
 The LocationHDFS resource lets you configure and manage [AWS DataSync LocationHDFS](https://docs.aws.amazon.com/datasync/latest/userguide/) to facilitate data transfer between on-premises Hadoop Distributed File System (HDFS) and AWS storage services.
 

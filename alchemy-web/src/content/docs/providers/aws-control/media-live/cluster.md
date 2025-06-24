@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaLive Clusters with Alchemy
+title: Cluster
 description: Learn how to create, update, and manage AWS MediaLive Clusters using Alchemy Cloud Control.
 ---
-
-# Cluster
 
 The Cluster resource lets you manage [AWS MediaLive Clusters](https://docs.aws.amazon.com/medialive/latest/userguide/) which are used for video processing in the cloud.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MemoryDB Clusters with Alchemy
+title: Cluster
 description: Learn how to create, update, and manage AWS MemoryDB Clusters using Alchemy Cloud Control.
 ---
-
-# Cluster
 
 The Cluster resource lets you manage [AWS MemoryDB Clusters](https://docs.aws.amazon.com/memorydb/latest/userguide/) and their configuration settings.
 

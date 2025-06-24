@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaTailor ChannelPolicies with Alchemy
+title: ChannelPolicy
 description: Learn how to create, update, and manage AWS MediaTailor ChannelPolicies using Alchemy Cloud Control.
 ---
-
-# ChannelPolicy
 
 The ChannelPolicy resource allows you to manage policies for AWS MediaTailor channels, enabling you to control various settings and permissions for media playback. For more details, refer to the [AWS MediaTailor ChannelPolicies documentation](https://docs.aws.amazon.com/mediatailor/latest/userguide/).
 

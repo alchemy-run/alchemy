@@ -1,9 +1,7 @@
 ---
-title: Managing AWS OpsWorks UserProfiles with Alchemy
+title: UserProfile
 description: Learn how to create, update, and manage AWS OpsWorks UserProfiles using Alchemy Cloud Control.
 ---
-
-# UserProfile
 
 The UserProfile resource allows you to manage [AWS OpsWorks UserProfiles](https://docs.aws.amazon.com/opsworks/latest/userguide/) for your applications, providing options for SSH access and management capabilities.
 

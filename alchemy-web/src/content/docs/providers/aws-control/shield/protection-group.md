@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Shield ProtectionGroups with Alchemy
+title: ProtectionGroup
 description: Learn how to create, update, and manage AWS Shield ProtectionGroups using Alchemy Cloud Control.
 ---
-
-# ProtectionGroup
 
 The ProtectionGroup resource lets you manage [AWS Shield ProtectionGroups](https://docs.aws.amazon.com/shield/latest/userguide/) for your AWS resources, providing an additional layer of protection against DDoS attacks.
 

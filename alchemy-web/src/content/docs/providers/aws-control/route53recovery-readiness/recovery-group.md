@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53RecoveryReadiness RecoveryGroups with Alchemy
+title: RecoveryGroup
 description: Learn how to create, update, and manage AWS Route53RecoveryReadiness RecoveryGroups using Alchemy Cloud Control.
 ---
-
-# RecoveryGroup
 
 The RecoveryGroup resource allows you to manage [AWS Route53RecoveryReadiness RecoveryGroups](https://docs.aws.amazon.com/route53recoveryreadiness/latest/userguide/) for improving the recovery readiness of your applications.
 

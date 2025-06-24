@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3 MultiRegionAccessPointPolicys with Alchemy
+title: MultiRegionAccessPointPolicy
 description: Learn how to create, update, and manage AWS S3 MultiRegionAccessPointPolicys using Alchemy Cloud Control.
 ---
-
-# MultiRegionAccessPointPolicy
 
 The MultiRegionAccessPointPolicy resource lets you manage policies associated with AWS S3 Multi-Region Access Points, allowing you to control access to your S3 data across multiple regions. For more information, refer to the [AWS S3 MultiRegionAccessPointPolicys documentation](https://docs.aws.amazon.com/s3/latest/userguide/).
 

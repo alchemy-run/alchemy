@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 SecurityGroupVpcAssociations with Alchemy
+title: SecurityGroupVpcAssociation
 description: Learn how to create, update, and manage AWS EC2 SecurityGroupVpcAssociations using Alchemy Cloud Control.
 ---
-
-# SecurityGroupVpcAssociation
 
 The SecurityGroupVpcAssociation resource allows you to associate a security group with a VPC (Virtual Private Cloud) in AWS. This is essential for configuring network security settings for your EC2 instances. For more information, refer to the [AWS EC2 SecurityGroupVpcAssociations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

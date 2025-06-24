@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Omics Workflows with Alchemy
+title: Workflow
 description: Learn how to create, update, and manage AWS Omics Workflows using Alchemy Cloud Control.
 ---
-
-# Workflow
 
 The Workflow resource allows you to create, manage, and update [AWS Omics Workflows](https://docs.aws.amazon.com/omics/latest/userguide/) for executing bioinformatics applications and data processing tasks.
 

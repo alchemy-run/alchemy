@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Deadline StorageProfiles with Alchemy
+title: StorageProfile
 description: Learn how to create, update, and manage AWS Deadline StorageProfiles using Alchemy Cloud Control.
 ---
-
-# StorageProfile
 
 The StorageProfile resource lets you manage [AWS Deadline StorageProfiles](https://docs.aws.amazon.com/deadline/latest/userguide/) to define storage configurations for your rendering jobs.
 

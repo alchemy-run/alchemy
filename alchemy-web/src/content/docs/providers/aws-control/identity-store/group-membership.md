@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IdentityStore GroupMemberships with Alchemy
+title: GroupMembership
 description: Learn how to create, update, and manage AWS IdentityStore GroupMemberships using Alchemy Cloud Control.
 ---
-
-# GroupMembership
 
 The GroupMembership resource allows you to manage memberships of users in groups within the AWS IdentityStore. You can create, update, and delete group memberships to ensure proper user-group associations. For more information, refer to the [AWS IdentityStore GroupMemberships documentation](https://docs.aws.amazon.com/identitystore/latest/userguide/).
 

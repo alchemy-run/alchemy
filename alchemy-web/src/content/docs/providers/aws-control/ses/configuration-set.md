@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SES ConfigurationSets with Alchemy
+title: ConfigurationSet
 description: Learn how to create, update, and manage AWS SES ConfigurationSets using Alchemy Cloud Control.
 ---
-
-# ConfigurationSet
 
 The ConfigurationSet resource allows you to manage [AWS SES ConfigurationSets](https://docs.aws.amazon.com/ses/latest/userguide/) which are used to enable different sending options and features for your email sending activities.
 

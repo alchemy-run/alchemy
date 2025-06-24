@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 RouteServers with Alchemy
+title: RouteServer
 description: Learn how to create, update, and manage AWS EC2 RouteServers using Alchemy Cloud Control.
 ---
-
-# RouteServer
 
 The RouteServer resource lets you manage [AWS EC2 RouteServers](https://docs.aws.amazon.com/ec2/latest/userguide/) for facilitating dynamic routing between your network and AWS. RouteServers help in managing BGP (Border Gateway Protocol) sessions and routing updates.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGatewayV2 VpcLinks with Alchemy
+title: VpcLink
 description: Learn how to create, update, and manage AWS ApiGatewayV2 VpcLinks using Alchemy Cloud Control.
 ---
-
-# VpcLink
 
 The VpcLink resource allows you to create and manage [AWS ApiGatewayV2 VpcLinks](https://docs.aws.amazon.com/apigatewayv2/latest/userguide/) that enable your API Gateway to connect to resources in your Virtual Private Cloud (VPC).
 

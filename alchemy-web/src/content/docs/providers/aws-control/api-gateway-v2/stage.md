@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGatewayV2 Stages with Alchemy
+title: Stage
 description: Learn how to create, update, and manage AWS ApiGatewayV2 Stages using Alchemy Cloud Control.
 ---
-
-# Stage
 
 The Stage resource lets you manage [AWS ApiGatewayV2 Stages](https://docs.aws.amazon.com/apigatewayv2/latest/userguide/) and their configurations for API deployments.
 

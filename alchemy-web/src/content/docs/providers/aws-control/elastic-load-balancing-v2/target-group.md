@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Application Load Balancer TargetGroups with Alchemy
+title: TargetGroup
 description: Learn how to create, update, and manage AWS Application Load Balancer TargetGroups using Alchemy Cloud Control.
 ---
-
-# TargetGroup
 
 The TargetGroup resource lets you manage [AWS Application Load Balancer TargetGroups](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/) and their configuration settings.
 

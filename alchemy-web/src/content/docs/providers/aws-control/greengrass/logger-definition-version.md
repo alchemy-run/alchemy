@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass LoggerDefinitionVersions with Alchemy
+title: LoggerDefinitionVersion
 description: Learn how to create, update, and manage AWS Greengrass LoggerDefinitionVersions using Alchemy Cloud Control.
 ---
-
-# LoggerDefinitionVersion
 
 The LoggerDefinitionVersion resource allows you to manage logger definitions for AWS Greengrass, enabling you to control logging configurations for your Greengrass components. For more details, refer to the [AWS Greengrass LoggerDefinitionVersions documentation](https://docs.aws.amazon.com/greengrass/latest/userguide/).
 

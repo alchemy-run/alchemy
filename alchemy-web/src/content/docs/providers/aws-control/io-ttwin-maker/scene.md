@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTTwinMaker Scenes with Alchemy
+title: Scene
 description: Learn how to create, update, and manage AWS IoTTwinMaker Scenes using Alchemy Cloud Control.
 ---
-
-# Scene
 
 The Scene resource lets you manage [AWS IoTTwinMaker Scenes](https://docs.aws.amazon.com/iottwinmaker/latest/userguide/) for visualizing and interacting with digital twins of real-world systems.
 

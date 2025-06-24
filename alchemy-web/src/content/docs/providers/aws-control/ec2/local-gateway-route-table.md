@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 LocalGatewayRouteTables with Alchemy
+title: LocalGatewayRouteTable
 description: Learn how to create, update, and manage AWS EC2 LocalGatewayRouteTables using Alchemy Cloud Control.
 ---
-
-# LocalGatewayRouteTable
 
 The LocalGatewayRouteTable resource allows you to manage route tables associated with a local gateway in AWS EC2. For more details, visit the [AWS EC2 LocalGatewayRouteTables documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

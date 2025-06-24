@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Wisdom MessageTemplateVersions with Alchemy
+title: MessageTemplateVersion
 description: Learn how to create, update, and manage AWS Wisdom MessageTemplateVersions using Alchemy Cloud Control.
 ---
-
-# MessageTemplateVersion
 
 The MessageTemplateVersion resource allows you to manage versions of message templates within AWS Wisdom. For more information, refer to the [AWS Wisdom MessageTemplateVersions](https://docs.aws.amazon.com/wisdom/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppStream ApplicationFleetAssociations with Alchemy
+title: ApplicationFleetAssociation
 description: Learn how to create, update, and manage AWS AppStream ApplicationFleetAssociations using Alchemy Cloud Control.
 ---
-
-# ApplicationFleetAssociation
 
 The ApplicationFleetAssociation resource lets you associate an application with a fleet in AWS AppStream. This is crucial for deploying applications to users in a managed environment. For more details, visit the [AWS AppStream ApplicationFleetAssociations documentation](https://docs.aws.amazon.com/appstream/latest/userguide/).
 

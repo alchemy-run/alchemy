@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppStream StackFleetAssociations with Alchemy
+title: StackFleetAssociation
 description: Learn how to create, update, and manage AWS AppStream StackFleetAssociations using Alchemy Cloud Control.
 ---
-
-# StackFleetAssociation
 
 The StackFleetAssociation resource allows you to associate an AppStream stack with a fleet, enabling the distribution of resources across your application. For more details, refer to the [AWS AppStream StackFleetAssociations](https://docs.aws.amazon.com/appstream/latest/userguide/).
 

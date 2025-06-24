@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM ServiceLinkedRoles with Alchemy
+title: ServiceLinkedRole
 description: Learn how to create, update, and manage AWS IAM ServiceLinkedRoles using Alchemy Cloud Control.
 ---
-
-# ServiceLinkedRole
 
 The ServiceLinkedRole resource lets you create and manage [AWS IAM ServiceLinkedRoles](https://docs.aws.amazon.com/iam/latest/userguide/) that allow AWS services to perform actions on your behalf.
 

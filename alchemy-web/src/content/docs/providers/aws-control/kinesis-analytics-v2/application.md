@@ -1,9 +1,7 @@
 ---
-title: Managing AWS KinesisAnalyticsV2 Applications with Alchemy
+title: Application
 description: Learn how to create, update, and manage AWS KinesisAnalyticsV2 Applications using Alchemy Cloud Control.
 ---
-
-# Application
 
 The Application resource lets you manage [AWS KinesisAnalyticsV2 Applications](https://docs.aws.amazon.com/kinesisanalyticsv2/latest/userguide/) for real-time data analytics on streaming data.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ECR PullThroughCacheRules with Alchemy
+title: PullThroughCacheRule
 description: Learn how to create, update, and manage AWS ECR PullThroughCacheRules using Alchemy Cloud Control.
 ---
-
-# PullThroughCacheRule
 
 The PullThroughCacheRule resource allows you to manage [AWS ECR PullThroughCacheRules](https://docs.aws.amazon.com/ecr/latest/userguide/) which enable you to cache images from an upstream registry in your Amazon Elastic Container Registry (ECR).
 

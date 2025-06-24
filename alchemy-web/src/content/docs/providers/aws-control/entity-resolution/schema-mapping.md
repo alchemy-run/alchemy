@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EntityResolution SchemaMappings with Alchemy
+title: SchemaMapping
 description: Learn how to create, update, and manage AWS EntityResolution SchemaMappings using Alchemy Cloud Control.
 ---
-
-# SchemaMapping
 
 The SchemaMapping resource allows you to create and manage AWS EntityResolution SchemaMappings, which define how input fields are mapped to a specific schema. For more details, visit the [AWS EntityResolution SchemaMappings documentation](https://docs.aws.amazon.com/entityresolution/latest/userguide/).
 

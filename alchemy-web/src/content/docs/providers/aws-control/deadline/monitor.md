@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Deadline Monitors with Alchemy
+title: Monitor
 description: Learn how to create, update, and manage AWS Deadline Monitors using Alchemy Cloud Control.
 ---
-
-# Monitor
 
 The Monitor resource lets you create and manage [AWS Deadline Monitors](https://docs.aws.amazon.com/deadline/latest/userguide/) for tracking and managing deadlines within your AWS environment.
 

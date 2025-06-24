@@ -1,9 +1,7 @@
 ---
-title: Managing AWS KafkaConnect WorkerConfigurations with Alchemy
+title: WorkerConfiguration
 description: Learn how to create, update, and manage AWS KafkaConnect WorkerConfigurations using Alchemy Cloud Control.
 ---
-
-# WorkerConfiguration
 
 The WorkerConfiguration resource lets you manage [AWS KafkaConnect WorkerConfigurations](https://docs.aws.amazon.com/kafkaconnect/latest/userguide/) and their settings.
 

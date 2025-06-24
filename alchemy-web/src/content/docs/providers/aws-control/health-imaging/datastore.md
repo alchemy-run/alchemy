@@ -1,9 +1,7 @@
 ---
-title: Managing AWS HealthImaging Datastores with Alchemy
+title: Datastore
 description: Learn how to create, update, and manage AWS HealthImaging Datastores using Alchemy Cloud Control.
 ---
-
-# Datastore
 
 The Datastore resource lets you manage [AWS HealthImaging Datastores](https://docs.aws.amazon.com/healthimaging/latest/userguide/) for storing and retrieving medical imaging data.
 

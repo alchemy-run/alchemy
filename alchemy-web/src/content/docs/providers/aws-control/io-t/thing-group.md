@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT ThingGroups with Alchemy
+title: ThingGroup
 description: Learn how to create, update, and manage AWS IoT ThingGroups using Alchemy Cloud Control.
 ---
-
-# ThingGroup
 
 The ThingGroup resource allows you to manage [AWS IoT ThingGroups](https://docs.aws.amazon.com/iot/latest/userguide/) which are collections of AWS IoT Things. ThingGroups help you organize and manage your IoT devices easily.
 

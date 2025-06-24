@@ -4,8 +4,6 @@ title: SvelteKit
 description: Quick guide to initializing and deploying a SvelteKit application to Cloudflare Workers using Alchemy.
 ---
 
-# SvelteKit
-
 This guide shows how to initialize and deploy a SvelteKit application to Cloudflare using Alchemy.
 
 ## Init

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DAX Clusters with Alchemy
+title: Cluster
 description: Learn how to create, update, and manage AWS DAX Clusters using Alchemy Cloud Control.
 ---
-
-# Cluster
 
 The Cluster resource lets you manage [AWS DAX Clusters](https://docs.aws.amazon.com/dax/latest/userguide/) for caching DynamoDB queries to improve performance and reduce response times.
 

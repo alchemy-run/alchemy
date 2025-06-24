@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 VPCGatewayAttachments with Alchemy
+title: VPCGatewayAttachment
 description: Learn how to create, update, and manage AWS EC2 VPCGatewayAttachments using Alchemy Cloud Control.
 ---
-
-# VPCGatewayAttachment
 
 The VPCGatewayAttachment resource allows you to attach a Virtual Private Cloud (VPC) to either an Internet Gateway or a Virtual Private Network (VPN) Gateway, enabling connectivity to the internet or other networks. For more details, refer to the [AWS EC2 VPCGatewayAttachments](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

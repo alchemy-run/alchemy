@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Athena PreparedStatements with Alchemy
+title: PreparedStatement
 description: Learn how to create, update, and manage AWS Athena PreparedStatements using Alchemy Cloud Control.
 ---
-
-# PreparedStatement
 
 The PreparedStatement resource allows you to manage [AWS Athena PreparedStatements](https://docs.aws.amazon.com/athena/latest/userguide/) for executing SQL queries with predefined parameters in a specified workgroup.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceDiscovery Instances with Alchemy
+title: Instance
 description: Learn how to create, update, and manage AWS ServiceDiscovery Instances using Alchemy Cloud Control.
 ---
-
-# Instance
 
 The Instance resource lets you manage [AWS ServiceDiscovery Instances](https://docs.aws.amazon.com/servicediscovery/latest/userguide/) for service discovery and health checking of your applications.
 

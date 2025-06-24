@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3 AccessGrantsLocations with Alchemy
+title: AccessGrantsLocation
 description: Learn how to create, update, and manage AWS S3 AccessGrantsLocations using Alchemy Cloud Control.
 ---
-
-# AccessGrantsLocation
 
 The AccessGrantsLocation resource allows you to define access grants for specific locations in Amazon S3. This resource is useful for managing permissions and access control at a granular level for S3 buckets. For more information, refer to the AWS documentation on [AWS S3 AccessGrantsLocations](https://docs.aws.amazon.com/s3/latest/userguide/).
 

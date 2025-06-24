@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ElastiCache ReplicationGroups with Alchemy
+title: ReplicationGroup
 description: Learn how to create, update, and manage AWS ElastiCache ReplicationGroups using Alchemy Cloud Control.
 ---
-
-# ReplicationGroup
 
 The ReplicationGroup resource allows you to manage [AWS ElastiCache ReplicationGroups](https://docs.aws.amazon.com/elasticache/latest/userguide/) for high availability and fault tolerance in your caching layers.
 

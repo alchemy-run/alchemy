@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 EIPAssociations with Alchemy
+title: EIPAssociation
 description: Learn how to create, update, and manage AWS EC2 EIPAssociations using Alchemy Cloud Control.
 ---
-
-# EIPAssociation
 
 The EIPAssociation resource allows you to associate an Elastic IP address with an EC2 instance or a network interface. This resource is essential for managing static IP addresses in your AWS environment. For more information, refer to the [AWS EC2 EIPAssociations documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

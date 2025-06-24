@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect TaskTemplates with Alchemy
+title: TaskTemplate
 description: Learn how to create, update, and manage AWS Connect TaskTemplates using Alchemy Cloud Control.
 ---
-
-# TaskTemplate
 
 The TaskTemplate resource allows you to manage [AWS Connect TaskTemplates](https://docs.aws.amazon.com/connect/latest/userguide/) for defining tasks within your Amazon Connect instance.
 

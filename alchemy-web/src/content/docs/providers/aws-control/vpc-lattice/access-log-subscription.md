@@ -1,9 +1,7 @@
 ---
-title: Managing AWS VpcLattice AccessLogSubscriptions with Alchemy
+title: AccessLogSubscription
 description: Learn how to create, update, and manage AWS VpcLattice AccessLogSubscriptions using Alchemy Cloud Control.
 ---
-
-# AccessLogSubscription
 
 The AccessLogSubscription resource lets you manage [AWS VpcLattice AccessLogSubscriptions](https://docs.aws.amazon.com/vpclattice/latest/userguide/) for logging access to service network traffic in VPC Lattice.
 

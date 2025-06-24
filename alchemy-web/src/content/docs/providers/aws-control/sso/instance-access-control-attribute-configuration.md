@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSO InstanceAccessControlAttributeConfigurations with Alchemy
+title: InstanceAccessControlAttributeConfiguration
 description: Learn how to create, update, and manage AWS SSO InstanceAccessControlAttributeConfigurations using Alchemy Cloud Control.
 ---
-
-# InstanceAccessControlAttributeConfiguration
 
 The `InstanceAccessControlAttributeConfiguration` resource allows you to configure access control attributes for your AWS SSO instance. This is essential for managing user access and permissions based on specific attributes. For more details, refer to the [AWS SSO InstanceAccessControlAttributeConfigurations](https://docs.aws.amazon.com/sso/latest/userguide/) documentation.
 

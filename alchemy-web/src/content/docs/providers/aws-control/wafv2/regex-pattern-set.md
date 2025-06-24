@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAFv2 RegexPatternSets with Alchemy
+title: RegexPatternSet
 description: Learn how to create, update, and manage AWS WAFv2 RegexPatternSets using Alchemy Cloud Control.
 ---
-
-# RegexPatternSet
 
 The RegexPatternSet resource allows you to manage [AWS WAFv2 RegexPatternSets](https://docs.aws.amazon.com/wafv2/latest/userguide/) that contain regular expressions for filtering web requests.
 

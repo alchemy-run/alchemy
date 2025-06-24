@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Cognito UserPoolUICustomizationAttachments with Alchemy
+title: UserPoolUICustomizationAttachment
 description: Learn how to create, update, and manage AWS Cognito UserPoolUICustomizationAttachments using Alchemy Cloud Control.
 ---
-
-# UserPoolUICustomizationAttachment
 
 The UserPoolUICustomizationAttachment resource allows you to customize the UI for your AWS Cognito User Pools. This customization can include visual elements such as CSS styles that enhance the user experience. For more information, refer to the [AWS Cognito UserPoolUICustomizationAttachments documentation](https://docs.aws.amazon.com/cognito/latest/userguide/).
 

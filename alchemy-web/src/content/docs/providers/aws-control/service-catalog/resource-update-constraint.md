@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog ResourceUpdateConstraints with Alchemy
+title: ResourceUpdateConstraint
 description: Learn how to create, update, and manage AWS ServiceCatalog ResourceUpdateConstraints using Alchemy Cloud Control.
 ---
-
-# ResourceUpdateConstraint
 
 The ResourceUpdateConstraint resource allows you to manage resource update constraints in the AWS Service Catalog, enabling you to control how resources can be updated. For more details, refer to the [AWS ServiceCatalog ResourceUpdateConstraints documentation](https://docs.aws.amazon.com/servicecatalog/latest/userguide/).
 

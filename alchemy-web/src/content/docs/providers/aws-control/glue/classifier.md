@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue Classifiers with Alchemy
+title: Classifier
 description: Learn how to create, update, and manage AWS Glue Classifiers using Alchemy Cloud Control.
 ---
-
-# Classifier
 
 The Classifier resource allows you to manage [AWS Glue Classifiers](https://docs.aws.amazon.com/glue/latest/userguide/) which are used to categorize the data in AWS Glue Data Catalog. Classifiers help AWS Glue to infer the schema of the data you are working with, making it easier to transform and analyze data.
 

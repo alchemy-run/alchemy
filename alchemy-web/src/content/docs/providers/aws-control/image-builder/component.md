@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ImageBuilder Components with Alchemy
+title: Component
 description: Learn how to create, update, and manage AWS ImageBuilder Components using Alchemy Cloud Control.
 ---
-
-# Component
 
 The Component resource allows you to manage [AWS ImageBuilder Components](https://docs.aws.amazon.com/imagebuilder/latest/userguide/) that define how to install and configure software on an image. Components can be reused across multiple image builds and are essential for customizing the software that runs on your EC2 instances.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53Profiles ProfileAssociations with Alchemy
+title: ProfileAssociation
 description: Learn how to create, update, and manage AWS Route53Profiles ProfileAssociations using Alchemy Cloud Control.
 ---
-
-# ProfileAssociation
 
 The ProfileAssociation resource allows you to associate a resource with a profile in AWS Route53Profiles. This is essential for managing resources in a controlled manner, ensuring that they adhere to the policies and settings defined in the associated profile. For more information, refer to the [AWS Route53Profiles ProfileAssociations documentation](https://docs.aws.amazon.com/route53profiles/latest/userguide/).
 

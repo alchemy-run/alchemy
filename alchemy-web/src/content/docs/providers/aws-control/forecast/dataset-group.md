@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Forecast DatasetGroups with Alchemy
+title: DatasetGroup
 description: Learn how to create, update, and manage AWS Forecast DatasetGroups using Alchemy Cloud Control.
 ---
-
-# DatasetGroup
 
 The DatasetGroup resource lets you manage [AWS Forecast DatasetGroups](https://docs.aws.amazon.com/forecast/latest/userguide/) for organizing and managing datasets used in forecasting models.
 

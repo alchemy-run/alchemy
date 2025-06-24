@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Macie Sessions with Alchemy
+title: Session
 description: Learn how to create, update, and manage AWS Macie Sessions using Alchemy Cloud Control.
 ---
-
-# Session
 
 The Session resource lets you manage [AWS Macie Sessions](https://docs.aws.amazon.com/macie/latest/userguide/) for data security and compliance within your AWS environment. AWS Macie helps you discover and protect sensitive data in your AWS accounts.
 

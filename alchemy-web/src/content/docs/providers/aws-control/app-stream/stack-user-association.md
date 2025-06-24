@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppStream StackUserAssociations with Alchemy
+title: StackUserAssociation
 description: Learn how to create, update, and manage AWS AppStream StackUserAssociations using Alchemy Cloud Control.
 ---
-
-# StackUserAssociation
 
 The StackUserAssociation resource allows you to manage user associations with AppStream stacks, enabling users to access applications and resources. For more information, refer to the [AWS AppStream StackUserAssociations documentation](https://docs.aws.amazon.com/appstream/latest/userguide/).
 

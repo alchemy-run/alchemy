@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 TransitGatewayMulticastDomains with Alchemy
+title: TransitGatewayMulticastDomain
 description: Learn how to create, update, and manage AWS EC2 TransitGatewayMulticastDomains using Alchemy Cloud Control.
 ---
-
-# TransitGatewayMulticastDomain
 
 The TransitGatewayMulticastDomain resource allows you to manage multicast domains within AWS EC2 Transit Gateways, enabling efficient multicast traffic routing across your VPCs. For more information, see the [AWS EC2 TransitGatewayMulticastDomains documentation](https://docs.aws.amazon.com/ec2/latest/userguide/).
 

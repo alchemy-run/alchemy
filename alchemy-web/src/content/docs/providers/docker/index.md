@@ -3,8 +3,6 @@ title: Docker Provider
 description: Deploy and manage Docker resources using Alchemy
 ---
 
-# Docker Provider
-
 The Docker provider allows you to create, manage, and orchestrate Docker resources directly from your Alchemy applications. With this provider, you can pull images, run containers, create networks, and more, all using the familiar Alchemy Resource syntax.
 
 ## Resources

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS PCAConnectorAD ServicePrincipalNames with Alchemy
+title: ServicePrincipalName
 description: Learn how to create, update, and manage AWS PCAConnectorAD ServicePrincipalNames using Alchemy Cloud Control.
 ---
-
-# ServicePrincipalName
 
 The ServicePrincipalName resource lets you manage [AWS PCAConnectorAD ServicePrincipalNames](https://docs.aws.amazon.com/pcaconnectorad/latest/userguide/) for integrating AWS Private Certificate Authority with Active Directory.
 

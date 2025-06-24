@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Greengrass ResourceDefinitions with Alchemy
+title: ResourceDefinition
 description: Learn how to create, update, and manage AWS Greengrass ResourceDefinitions using Alchemy Cloud Control.
 ---
-
-# ResourceDefinition
 
 The ResourceDefinition resource allows you to manage [AWS Greengrass ResourceDefinitions](https://docs.aws.amazon.com/greengrass/latest/userguide/) which define the resources that your Greengrass group can access.
 

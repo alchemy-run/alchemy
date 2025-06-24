@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Connect Views with Alchemy
+title: View
 description: Learn how to create, update, and manage AWS Connect Views using Alchemy Cloud Control.
 ---
-
-# View
 
 The View resource allows you to manage [AWS Connect Views](https://docs.aws.amazon.com/connect/latest/userguide/) which define how information is displayed in the AWS Connect interface.
 

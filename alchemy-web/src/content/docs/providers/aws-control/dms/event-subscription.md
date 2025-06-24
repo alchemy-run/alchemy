@@ -1,9 +1,7 @@
 ---
-title: Managing AWS DMS EventSubscriptions with Alchemy
+title: EventSubscription
 description: Learn how to create, update, and manage AWS DMS EventSubscriptions using Alchemy Cloud Control.
 ---
-
-# EventSubscription
 
 The EventSubscription resource allows you to manage [AWS DMS EventSubscriptions](https://docs.aws.amazon.com/dms/latest/userguide/) for real-time notifications about database migration events.
 

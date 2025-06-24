@@ -1,9 +1,7 @@
 ---
-title: Managing AWS S3ObjectLambda AccessPoints with Alchemy
+title: AccessPoint
 description: Learn how to create, update, and manage AWS S3ObjectLambda AccessPoints using Alchemy Cloud Control.
 ---
-
-# AccessPoint
 
 The AccessPoint resource allows you to manage [AWS S3ObjectLambda AccessPoints](https://docs.aws.amazon.com/s3objectlambda/latest/userguide/) which provide a way to customize the retrieval of objects from S3, including the ability to modify the data returned.
 

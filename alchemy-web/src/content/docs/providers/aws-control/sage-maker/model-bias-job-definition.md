@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SageMaker ModelBiasJobDefinitions with Alchemy
+title: ModelBiasJobDefinition
 description: Learn how to create, update, and manage AWS SageMaker ModelBiasJobDefinitions using Alchemy Cloud Control.
 ---
-
-# ModelBiasJobDefinition
 
 The ModelBiasJobDefinition resource allows you to define and manage model bias monitoring jobs in AWS SageMaker. This resource is essential for ensuring that your machine learning models are not exhibiting unintended biases. For more information, refer to the [AWS SageMaker ModelBiasJobDefinitions documentation](https://docs.aws.amazon.com/sagemaker/latest/userguide/).
 

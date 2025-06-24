@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Route53 RecordSets with Alchemy
+title: RecordSet
 description: Learn how to create, update, and manage AWS Route53 RecordSets using Alchemy Cloud Control.
 ---
-
-# RecordSet
 
 The RecordSet resource lets you manage [AWS Route53 RecordSets](https://docs.aws.amazon.com/route53/latest/userguide/) for DNS configurations and settings.
 

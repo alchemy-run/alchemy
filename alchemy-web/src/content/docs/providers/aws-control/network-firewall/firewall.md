@@ -1,9 +1,7 @@
 ---
-title: Managing AWS NetworkFirewall Firewalls with Alchemy
+title: Firewall
 description: Learn how to create, update, and manage AWS NetworkFirewall Firewalls using Alchemy Cloud Control.
 ---
-
-# Firewall
 
 The Firewall resource lets you manage [AWS NetworkFirewall Firewalls](https://docs.aws.amazon.com/networkfirewall/latest/userguide/) to protect your virtual networks from unwanted traffic. This resource allows you to define firewall policies, configure network settings, and set up various protection features.
 

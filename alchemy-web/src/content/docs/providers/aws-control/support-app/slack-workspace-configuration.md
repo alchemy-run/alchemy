@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SupportApp SlackWorkspaceConfigurations with Alchemy
+title: SlackWorkspaceConfiguration
 description: Learn how to create, update, and manage AWS SupportApp SlackWorkspaceConfigurations using Alchemy Cloud Control.
 ---
-
-# SlackWorkspaceConfiguration
 
 The SlackWorkspaceConfiguration resource lets you manage the integration of AWS Support with Slack, allowing notifications and updates to be sent to your Slack channels. For more detailed information, visit the [AWS SupportApp SlackWorkspaceConfigurations](https://docs.aws.amazon.com/supportapp/latest/userguide/) documentation.
 

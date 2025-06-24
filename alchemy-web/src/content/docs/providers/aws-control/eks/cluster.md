@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EKS Clusters with Alchemy
+title: Cluster
 description: Learn how to create, update, and manage AWS EKS Clusters using Alchemy Cloud Control.
 ---
-
-# Cluster
 
 The Cluster resource lets you manage [AWS EKS Clusters](https://docs.aws.amazon.com/eks/latest/userguide/) and their configuration settings.
 

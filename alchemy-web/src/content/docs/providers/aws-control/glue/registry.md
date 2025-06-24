@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue Registrys with Alchemy
+title: Registry
 description: Learn how to create, update, and manage AWS Glue Registrys using Alchemy Cloud Control.
 ---
-
-# Registry
 
 The Registry resource lets you manage [AWS Glue Registrys](https://docs.aws.amazon.com/glue/latest/userguide/) for organizing and managing schemas in AWS Glue Data Catalog.
 

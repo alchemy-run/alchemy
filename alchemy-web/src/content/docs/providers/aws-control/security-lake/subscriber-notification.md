@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SecurityLake SubscriberNotifications with Alchemy
+title: SubscriberNotification
 description: Learn how to create, update, and manage AWS SecurityLake SubscriberNotifications using Alchemy Cloud Control.
 ---
-
-# SubscriberNotification
 
 The SubscriberNotification resource allows you to manage notifications for AWS Security Lake subscribers. For more information, refer to the [AWS SecurityLake SubscriberNotifications](https://docs.aws.amazon.com/securitylake/latest/userguide/).
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS EC2 PlacementGroups with Alchemy
+title: PlacementGroup
 description: Learn how to create, update, and manage AWS EC2 PlacementGroups using Alchemy Cloud Control.
 ---
-
-# PlacementGroup
 
 The PlacementGroup resource allows you to manage [AWS EC2 PlacementGroups](https://docs.aws.amazon.com/ec2/latest/userguide/) for your instances, enabling you to control how instances are placed in relation to each other to achieve better performance and resource utilization.
 

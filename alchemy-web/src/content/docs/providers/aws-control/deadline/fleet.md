@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Deadline Fleets with Alchemy
+title: Fleet
 description: Learn how to create, update, and manage AWS Deadline Fleets using Alchemy Cloud Control.
 ---
-
-# Fleet
 
 The Fleet resource lets you manage [AWS Deadline Fleets](https://docs.aws.amazon.com/deadline/latest/userguide/) for rendering and processing tasks in a scalable and efficient manner.
 

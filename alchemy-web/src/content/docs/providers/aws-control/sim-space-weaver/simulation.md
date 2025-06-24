@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SimSpaceWeaver Simulations with Alchemy
+title: Simulation
 description: Learn how to create, update, and manage AWS SimSpaceWeaver Simulations using Alchemy Cloud Control.
 ---
-
-# Simulation
 
 The Simulation resource allows you to manage [AWS SimSpaceWeaver Simulations](https://docs.aws.amazon.com/simspaceweaver/latest/userguide/) for building and running large-scale simulations in the AWS cloud.
 

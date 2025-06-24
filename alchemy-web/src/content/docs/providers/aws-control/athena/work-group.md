@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Athena WorkGroups with Alchemy
+title: WorkGroup
 description: Learn how to create, update, and manage AWS Athena WorkGroups using Alchemy Cloud Control.
 ---
-
-# WorkGroup
 
 The WorkGroup resource lets you manage [AWS Athena WorkGroups](https://docs.aws.amazon.com/athena/latest/userguide/) and their configurations for query execution and resource management.
 

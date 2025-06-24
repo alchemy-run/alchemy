@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeConnections Connections with Alchemy
+title: Connection
 description: Learn how to create, update, and manage AWS CodeConnections Connections using Alchemy Cloud Control.
 ---
-
-# Connection
 
 The Connection resource allows you to manage [AWS CodeConnections Connections](https://docs.aws.amazon.com/codeconnections/latest/userguide/) that facilitate integrations between AWS services and external tools.
 

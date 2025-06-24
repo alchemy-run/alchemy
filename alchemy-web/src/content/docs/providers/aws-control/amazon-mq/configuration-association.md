@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AmazonMQ ConfigurationAssociations with Alchemy
+title: ConfigurationAssociation
 description: Learn how to create, update, and manage AWS AmazonMQ ConfigurationAssociations using Alchemy Cloud Control.
 ---
-
-# ConfigurationAssociation
 
 The ConfigurationAssociation resource allows you to manage [AWS AmazonMQ ConfigurationAssociations](https://docs.aws.amazon.com/amazonmq/latest/userguide/) for your message brokers. This resource links a broker to a configuration, enabling you to customize the messaging environment.
 

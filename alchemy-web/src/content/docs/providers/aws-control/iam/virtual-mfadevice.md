@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IAM VirtualMFADevices with Alchemy
+title: VirtualMFADevice
 description: Learn how to create, update, and manage AWS IAM VirtualMFADevices using Alchemy Cloud Control.
 ---
-
-# VirtualMFADevice
 
 The VirtualMFADevice resource allows you to create and manage [AWS IAM Virtual MFA Devices](https://docs.aws.amazon.com/iam/latest/userguide/). Virtual MFA devices provide an additional layer of security for your AWS resources by requiring a second form of authentication.
 

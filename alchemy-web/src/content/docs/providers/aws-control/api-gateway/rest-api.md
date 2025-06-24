@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ApiGateway RestApis with Alchemy
+title: RestApi
 description: Learn how to create, update, and manage AWS ApiGateway RestApis using Alchemy Cloud Control.
 ---
-
-# RestApi
 
 The RestApi resource allows you to create and manage [AWS ApiGateway RestApis](https://docs.aws.amazon.com/apigateway/latest/userguide/) for building and deploying APIs for your applications.
 

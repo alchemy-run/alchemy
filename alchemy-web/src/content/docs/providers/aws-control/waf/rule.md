@@ -1,9 +1,7 @@
 ---
-title: Managing AWS WAF Rules with Alchemy
+title: Rule
 description: Learn how to create, update, and manage AWS WAF Rules using Alchemy Cloud Control.
 ---
-
-# Rule
 
 The Rule resource allows you to manage [AWS WAF Rules](https://docs.aws.amazon.com/waf/latest/userguide/) for protecting your web applications from common web exploits.
 

@@ -1,9 +1,7 @@
 ---
-title: Managing AWS AppMesh VirtualRouters with Alchemy
+title: VirtualRouter
 description: Learn how to create, update, and manage AWS AppMesh VirtualRouters using Alchemy Cloud Control.
 ---
-
-# VirtualRouter
 
 The VirtualRouter resource lets you manage [AWS AppMesh VirtualRouters](https://docs.aws.amazon.com/appmesh/latest/userguide/) which are used to route traffic between different services in your mesh.
 

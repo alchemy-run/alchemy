@@ -1,9 +1,7 @@
 ---
-title: Managing AWS MediaPackage Channels with Alchemy
+title: Channel
 description: Learn how to create, update, and manage AWS MediaPackage Channels using Alchemy Cloud Control.
 ---
-
-# Channel
 
 The Channel resource lets you manage [AWS MediaPackage Channels](https://docs.aws.amazon.com/mediapackage/latest/userguide/) for delivering video content over the internet.
 

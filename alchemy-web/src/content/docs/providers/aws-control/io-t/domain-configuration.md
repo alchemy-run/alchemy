@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT DomainConfigurations with Alchemy
+title: DomainConfiguration
 description: Learn how to create, update, and manage AWS IoT DomainConfigurations using Alchemy Cloud Control.
 ---
-
-# DomainConfiguration
 
 The DomainConfiguration resource allows you to manage [AWS IoT DomainConfigurations](https://docs.aws.amazon.com/iot/latest/userguide/), enabling you to set up custom domains for your AWS IoT endpoints.
 

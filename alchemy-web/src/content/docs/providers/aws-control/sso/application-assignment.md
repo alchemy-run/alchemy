@@ -1,9 +1,7 @@
 ---
-title: Managing AWS SSO ApplicationAssignments with Alchemy
+title: ApplicationAssignment
 description: Learn how to create, update, and manage AWS SSO ApplicationAssignments using Alchemy Cloud Control.
 ---
-
-# ApplicationAssignment
 
 The ApplicationAssignment resource allows you to manage [AWS SSO ApplicationAssignments](https://docs.aws.amazon.com/sso/latest/userguide/) for assigning applications to users or groups within AWS Single Sign-On (SSO).
 

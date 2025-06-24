@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Kendra Faqs with Alchemy
+title: Faq
 description: Learn how to create, update, and manage AWS Kendra Faqs using Alchemy Cloud Control.
 ---
-
-# Faq
 
 The Faq resource lets you manage [AWS Kendra Faqs](https://docs.aws.amazon.com/kendra/latest/userguide/) to improve search capabilities by providing frequently asked questions and their answers.
 

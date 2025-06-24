@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoTWireless NetworkAnalyzerConfigurations with Alchemy
+title: NetworkAnalyzerConfiguration
 description: Learn how to create, update, and manage AWS IoTWireless NetworkAnalyzerConfigurations using Alchemy Cloud Control.
 ---
-
-# NetworkAnalyzerConfiguration
 
 The NetworkAnalyzerConfiguration resource enables you to manage [AWS IoTWireless NetworkAnalyzerConfigurations](https://docs.aws.amazon.com/iotwireless/latest/userguide/) which are used for analyzing network performance and troubleshooting in IoT environments.
 

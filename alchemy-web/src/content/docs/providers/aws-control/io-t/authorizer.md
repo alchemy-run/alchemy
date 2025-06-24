@@ -1,9 +1,7 @@
 ---
-title: Managing AWS IoT Authorizers with Alchemy
+title: Authorizer
 description: Learn how to create, update, and manage AWS IoT Authorizers using Alchemy Cloud Control.
 ---
-
-# Authorizer
 
 The Authorizer resource lets you manage [AWS IoT Authorizers](https://docs.aws.amazon.com/iot/latest/userguide/) which are used to control access to AWS IoT devices and services.
 

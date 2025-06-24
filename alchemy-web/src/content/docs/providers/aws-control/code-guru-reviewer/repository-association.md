@@ -1,9 +1,7 @@
 ---
-title: Managing AWS CodeGuruReviewer RepositoryAssociations with Alchemy
+title: RepositoryAssociation
 description: Learn how to create, update, and manage AWS CodeGuruReviewer RepositoryAssociations using Alchemy Cloud Control.
 ---
-
-# RepositoryAssociation
 
 The RepositoryAssociation resource allows you to manage [AWS CodeGuruReviewer RepositoryAssociations](https://docs.aws.amazon.com/codegurureviewer/latest/userguide/) that link your repositories to CodeGuru Reviewer for automated code reviews.
 

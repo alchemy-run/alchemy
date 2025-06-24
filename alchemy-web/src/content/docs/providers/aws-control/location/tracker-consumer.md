@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Location TrackerConsumers with Alchemy
+title: TrackerConsumer
 description: Learn how to create, update, and manage AWS Location TrackerConsumers using Alchemy Cloud Control.
 ---
-
-# TrackerConsumer
 
 The TrackerConsumer resource allows you to manage [AWS Location TrackerConsumers](https://docs.aws.amazon.com/location/latest/userguide/) for integrating tracking capabilities within your applications.
 

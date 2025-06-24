@@ -1,9 +1,7 @@
 ---
-title: Managing AWS Glue Schemas with Alchemy
+title: Schema
 description: Learn how to create, update, and manage AWS Glue Schemas using Alchemy Cloud Control.
 ---
-
-# Schema
 
 The Schema resource allows you to manage [AWS Glue Schemas](https://docs.aws.amazon.com/glue/latest/userguide/) for organizing and validating your data. This resource is essential for defining the structure of your data and ensuring compatibility across different data formats.
 

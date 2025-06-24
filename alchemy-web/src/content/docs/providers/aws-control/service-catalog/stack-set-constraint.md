@@ -1,9 +1,7 @@
 ---
-title: Managing AWS ServiceCatalog StackSetConstraints with Alchemy
+title: StackSetConstraint
 description: Learn how to create, update, and manage AWS ServiceCatalog StackSetConstraints using Alchemy Cloud Control.
 ---
-
-# StackSetConstraint
 
 The StackSetConstraint resource allows you to manage AWS ServiceCatalog StackSetConstraints, which help enforce constraints on AWS CloudFormation StackSets. For more information, refer to the [AWS ServiceCatalog StackSetConstraints documentation](https://docs.aws.amazon.com/servicecatalog/latest/userguide/).
 
