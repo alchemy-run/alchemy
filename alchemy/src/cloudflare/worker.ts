@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { BUILD_DATE } from "../build-date.ts";
 import type { Context } from "../context.ts";
@@ -921,21 +922,11 @@ export const _Worker = Resource(
       const now = Date.now();
 
       if (typeof props.dev === "object" && "command" in props.dev) {
-        const command = props.dev.command.split(" ");
-        const proc = spawn(command[0], command.slice(1), {
-          env: {
-            ...process.env,
-            ...props.env,
-            ALCHEMY_CLOUDFLARE_PERSIST_PATH: path.join(
-              process.cwd(),
-              ".alchemy",
-              "miniflare",
-            ),
-          },
-          stdio: ["inherit", "inherit", "inherit"],
-        });
-        process.on("SIGINT", () => {
-          proc.kill("SIGINT");
+        upsertDevCommand({
+          id,
+          command: props.dev.command,
+          cwd: props.dev.cwd ?? process.cwd(),
+          env: props.env ?? {},
         });
         return this({
           type: "service",
@@ -1431,6 +1422,52 @@ export async function deleteWorker(
 
   // Return minimal output for deleted state
   return;
+}
+
+function upsertDevCommand(props: {
+  id: string;
+  command: string;
+  cwd: string;
+  env: Record<string, string>;
+}) {
+  const persistFile = path.join(process.cwd(), ".alchemy", `${props.id}.pid`);
+  if (existsSync(persistFile)) {
+    const pid = Number.parseInt(readFileSync(persistFile, "utf8"));
+    try {
+      // Check if the process is alive by sending signal 0
+      process.kill(pid, 0);
+      // If no error is thrown, the process is alive
+      return;
+    } catch (e) {
+      // If error, process is not alive, continue
+      unlinkSync(persistFile);
+    }
+  }
+  const command = props.command.split(" ");
+  const proc = spawn(command[0], command.slice(1), {
+    env: {
+      ...process.env,
+      ...props.env,
+      ALCHEMY_CLOUDFLARE_PERSIST_PATH: path.join(
+        process.cwd(),
+        ".alchemy",
+        "miniflare",
+      ),
+    },
+    stdio: ["inherit", "inherit", "inherit"],
+  });
+  process.on("SIGINT", () => {
+    try {
+      unlinkSync(persistFile);
+    } catch {
+      // ignore
+    }
+    proc.kill("SIGINT");
+    process.exit(0);
+  });
+  if (proc.pid) {
+    writeFileSync(persistFile, proc.pid.toString());
+  }
 }
 
 type PutWorkerOptions = WorkerProps & {
