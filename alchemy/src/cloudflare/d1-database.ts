@@ -208,6 +208,14 @@ export async function D1Database(
  * });
  *
  * @example
+ * // Create a database with migrations using a custom migration table (compatible with Drizzle)
+ * const dbWithCustomMigrations = await D1Database("mydb", {
+ *   name: "mydb",
+ *   migrationsDir: "./migrations",
+ *   migrationsTable: "drizzle_migrations",
+ * });
+ *
+ * @example
  * // Clone an existing database by ID
  * const clonedDb = await D1Database("cloned-db", {
  *   name: "cloned-db",

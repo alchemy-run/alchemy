@@ -211,6 +211,52 @@ describe("D1 Database Resource", async () => {
     }
   });
 
+  test("create database with custom migrationsTable", async (scope) => {
+    const customMigrationsDb = `${testId}-custom-migrations-table`;
+    let database: D1Database | undefined;
+
+    try {
+      database = await D1Database(customMigrationsDb, {
+        name: customMigrationsDb,
+        migrationsDir: `${__dirname}/migrations`,
+        migrationsTable: "custom_migration_tracking",
+        adopt: true,
+      });
+
+      expect(database.name).toEqual(customMigrationsDb);
+      expect(database.id).toBeTruthy();
+
+      // Verify the actual migration content was applied (same as the existing test)
+      const tables = await getResults(
+        api,
+        database,
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='test_migrations_table';",
+      );
+
+      expect(tables.length).toBeGreaterThan(0);
+      expect(tables[0]?.name).toEqual("test_migrations_table");
+
+      // Verify the custom migration table was created instead of the default
+      const allTables = await getResults(
+        api,
+        database,
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('custom_migration_tracking', 'd1_migrations') ORDER BY name;",
+      );
+
+      // Should have the custom table but not the default one
+      expect(allTables.length).toBeGreaterThan(0);
+      expect(
+        allTables.some((t) => t.name === "custom_migration_tracking"),
+      ).toBe(true);
+      expect(allTables.some((t) => t.name === "d1_migrations")).toBe(false);
+    } finally {
+      await alchemy.destroy(scope);
+      if (database) {
+        await assertDatabaseDeleted(database);
+      }
+    }
+  });
+
   test("clone from existing database by ID", async (scope) => {
     const sourceDb = `${testId}-source-for-clone`;
     const targetDb = `${testId}-cloned-from-id`;
