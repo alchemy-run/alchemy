@@ -14,6 +14,14 @@ import {
 //   prefix: BRANCH_PREFIX,
 // });
 
+/**
+ * A Container binding that enables Workers to communicate with containerized Durable Objects.
+ * This class represents a container configuration that can be bound to a Worker.
+ *
+ * Containers allow you to run any Docker image as a Durable Object on Cloudflare's global network.
+ * They provide full control over the runtime environment while maintaining the benefits of
+ * Durable Objects like global distribution and automatic scaling.
+ */
 export class Container {
   public readonly type = "container" as const;
   public readonly className: string;
@@ -66,6 +74,70 @@ export interface ContainerApplication
   name: string;
 }
 
+/**
+ * Deploy and manage container applications on Cloudflare's global network.
+ *
+ * ContainerApplication creates a managed container deployment that runs your Docker images
+ * with automatic scaling, scheduling, and integration with Cloudflare's services.
+ *
+ * @example
+ * // Deploy a simple web application container
+ * const webApp = await ContainerApplication("my-web-app", {
+ *   name: "my-web-app",
+ *   image: await Image("web-app", {
+ *     name: "web-app",
+ *     context: "./docker/web-app"
+ *   }),
+ *   instances: 1,
+ *   maxInstances: 3
+ * });
+ *
+ * @example
+ * // Deploy a container with GPU support for AI workloads
+ * const aiApp = await ContainerApplication("ai-inference", {
+ *   name: "ai-inference",
+ *   image: await Image("ai-model", {
+ *     name: "ai-model",
+ *     context: "./docker/ai"
+ *   }),
+ *   schedulingPolicy: "gpu",
+ *   instances: 2,
+ *   maxInstances: 5
+ * });
+ *
+ * @example
+ * // Deploy a container integrated with Durable Objects
+ * const doApp = await ContainerApplication("stateful-app", {
+ *   name: "stateful-app",
+ *   image: await Image("do-app", {
+ *     name: "do-app",
+ *     context: "./docker/stateful"
+ *   }),
+ *   durableObjects: {
+ *     namespaceId: myDurableObjectNamespace.id
+ *   },
+ *   instances: 1,
+ *   maxInstances: 10
+ * });
+ *
+ * @example
+ * // Create a Container binding for use in a Worker
+ * const worker = await Worker("my-worker", {
+ *   name: "my-worker",
+ *   entrypoint: "./src/worker.ts",
+ *   bindings: {
+ *     MY_CONTAINER: new Container("my-container", {
+ *       className: "MyContainerClass",
+ *       image: await Image("container-do", {
+ *         name: "container-do",
+ *         context: "./docker/durable-object"
+ *       }),
+ *       maxInstances: 100,
+ *       name: "my-container-do"
+ *     })
+ *   }
+ * });
+ */
 export const ContainerApplication = Resource(
   "cloudflare::ContainerApplication",
   async function (

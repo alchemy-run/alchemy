@@ -27,32 +27,34 @@ export interface ImageProps {
    */
   dockerfile?: string;
 
-  /**
-   * Path to the build context directory
-   *
-   * If not provided, defaults to the directory containing the Dockerfile
-   */
-  context?: string;
+  build?: {
+    /**
+     * Path to the build context directory
+     *
+     * If not provided, defaults to the directory containing the Dockerfile
+     */
+    context?: string;
 
-  /**
-   * Target build platform (e.g., linux/amd64)
-   */
-  platform?: string;
+    /**
+     * Target build platform (e.g., linux/amd64)
+     */
+    platform?: string;
 
-  /**
-   * Build arguments as key-value pairs
-   */
-  buildArgs?: Record<string, string>;
+    /**
+     * Build arguments as key-value pairs
+     */
+    args?: Record<string, string>;
 
-  /**
-   * Target build stage in multi-stage builds
-   */
-  target?: string;
+    /**
+     * Target build stage in multi-stage builds
+     */
+    target?: string;
 
-  /**
-   * List of images to use for cache
-   */
-  cacheFrom?: string[];
+    /**
+     * List of images to use for cache
+     */
+    cacheFrom?: string[];
+  };
 
   /**
    * Whether to skip pushing the image to registry
@@ -133,8 +135,8 @@ export const Image = Resource(
 
       // If context is not provided, infer from dockerfile directory
       let context: string;
-      if (props.context) {
-        context = props.context;
+      if (props.build?.context) {
+        context = props.build.context;
       } else {
         // If dockerfile is an absolute path, use its directory as context
         // Otherwise, use current directory as context
@@ -155,23 +157,23 @@ export const Image = Resource(
       await fs.access(dockerfilePath);
 
       // Prepare build options
-      const buildOptions: Record<string, string> = props.buildArgs || {};
+      const buildOptions: Record<string, string> = props.build?.args || {};
 
       // Add platform if specified
       let buildArgs = ["build", "-t", imageRef];
 
-      if (props.platform) {
-        buildArgs.push("--platform", props.platform);
+      if (props.build?.platform) {
+        buildArgs.push("--platform", props.build.platform);
       }
 
       // Add target if specified
-      if (props.target) {
-        buildArgs.push("--target", props.target);
+      if (props.build?.target) {
+        buildArgs.push("--target", props.build.target);
       }
 
       // Add cache sources if specified
-      if (props.cacheFrom && props.cacheFrom.length > 0) {
-        for (const cacheSource of props.cacheFrom) {
+      if (props.build?.cacheFrom && props.build.cacheFrom.length > 0) {
+        for (const cacheSource of props.build.cacheFrom) {
           buildArgs.push("--cache-from", cacheSource);
         }
       }
