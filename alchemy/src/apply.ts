@@ -238,7 +238,8 @@ async function _apply<Out extends Resource>(
     }
     if (!quiet) {
       logger.task(resource[ResourceFQN], {
-        prefix: phase === "create" ? "created" : "updated",
+        prefix:
+          phase === "create" ? "created" : isReplaced ? "replaced" : "updated",
         prefixColor: "greenBright",
         resource: formatFQN(resource[ResourceFQN]),
         message: `${phase === "create" ? "Created" : isReplaced ? "Replaced" : "Updated"} Resource`,
