@@ -1,5 +1,11 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { BUILD_DATE } from "../build-date.ts";
 import type { Context } from "../context.ts";
@@ -1434,13 +1440,15 @@ function upsertDevCommand(props: {
   if (existsSync(persistFile)) {
     const pid = Number.parseInt(readFileSync(persistFile, "utf8"));
     try {
-      // Check if the process is alive by sending signal 0
-      process.kill(pid, 0);
-      // If no error is thrown, the process is alive
-      return;
-    } catch (e) {
-      // If error, process is not alive, continue
+      // Actually kill the process if it's alive
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // ignore
+    }
+    try {
       unlinkSync(persistFile);
+    } catch {
+      // ignore
     }
   }
   const command = props.command.split(" ");
@@ -1466,6 +1474,7 @@ function upsertDevCommand(props: {
     process.exit(0);
   });
   if (proc.pid) {
+    mkdirSync(path.dirname(persistFile), { recursive: true });
     writeFileSync(persistFile, proc.pid.toString());
   }
 }
