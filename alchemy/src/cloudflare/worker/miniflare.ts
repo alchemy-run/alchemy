@@ -1,7 +1,6 @@
 import type {
   Miniflare,
   MiniflareOptions,
-  Request as MiniflareRequest,
   RemoteProxyConnectionString,
   WorkerOptions,
 } from "miniflare";
@@ -150,8 +149,12 @@ class MiniflareServer {
             },
           );
         }
-        // The types aren't identical but they're close enough
-        const res = await miniflare.fetch(req as unknown as MiniflareRequest);
+        const res = await miniflare.fetch(req.url, {
+          method: req.method,
+          headers: req.headers as any,
+          body: req.body as any,
+          redirect: "manual",
+        });
         return res as unknown as Response;
       } catch (error) {
         logger.error(error);
