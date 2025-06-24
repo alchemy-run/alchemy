@@ -447,6 +447,9 @@ function processBindings(
     binding: string;
     namespace: string;
   }[] = [];
+  const containers: {
+    class_name: string;
+  }[] = [];
 
   for (const eventSource of eventSources ?? []) {
     if (isQueueEventSource(eventSource)) {
@@ -619,6 +622,15 @@ function processBindings(
       });
     } else if (binding.type === "secret_key") {
       // no-op
+    } else if (binding.type === "container") {
+      durableObjects.push({
+        name: bindingName,
+        class_name: binding.className,
+        script_name: binding.scriptName,
+      });
+      containers.push({
+        class_name: binding.className,
+      });
     } else {
       // biome-ignore lint/correctness/noVoidTypeReturn: it returns never
       return assertNever(binding);

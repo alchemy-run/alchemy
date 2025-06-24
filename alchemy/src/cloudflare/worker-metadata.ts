@@ -7,6 +7,7 @@ import {
   type WorkerBindingDurableObjectNamespace,
   type WorkerBindingSpec,
 } from "./bindings.ts";
+import type { Container } from "./container.ts";
 import {
   isDurableObjectNamespace,
   type DurableObjectNamespace,
@@ -193,6 +194,7 @@ export interface WorkerMetadata {
     cron: string;
     suspended: boolean;
   }[];
+  containers?: { class_name: string }[];
 }
 
 export async function prepareWorkerMetadata(
@@ -509,6 +511,21 @@ export async function prepareWorkerMetadata(
         key_base64: binding.key_base64?.unencrypted,
         key_jwk: binding.key_jwk?.unencrypted,
       });
+    } else if (binding.type === "container") {
+      meta.bindings.push({
+        type: "durable_object_namespace",
+        class_name: binding.className,
+        name: bindingName,
+      });
+      if (
+        binding.scriptName === undefined ||
+        // TODO(sam): not sure if Cloudflare Api would like us using `this` worker name here
+        binding.scriptName === props.workerName
+      ) {
+        // we do not need configure class migrations for cross-script bindings
+        configureClassMigration(bindingName, binding);
+      }
+      (meta.containers ??= []).push({ class_name: binding.className });
     } else {
       // @ts-expect-error - we should never reach here
       throw new Error(`Unsupported binding type: ${binding.type}`);
@@ -517,7 +534,7 @@ export async function prepareWorkerMetadata(
 
   function configureClassMigration(
     bindingName: string,
-    newBinding: DurableObjectNamespace<any>,
+    newBinding: DurableObjectNamespace<any> | Container,
   ) {
     let prevBinding: WorkerBindingDurableObjectNamespace | undefined;
     if (oldBindings) {

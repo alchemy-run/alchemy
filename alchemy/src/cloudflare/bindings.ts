@@ -11,6 +11,7 @@ import type { Assets } from "./assets.ts";
 import type { Bound } from "./bound.ts";
 import type { BrowserRendering } from "./browser-rendering.ts";
 import type { R2BucketResource } from "./bucket.ts";
+import type { Container } from "./container.ts";
 import type { D1DatabaseResource } from "./d1-database.ts";
 import type { DispatchNamespaceResource } from "./dispatch-namespace.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
@@ -44,6 +45,7 @@ export type Binding =
   | Ai
   | AiGatewayResource
   | Assets
+  | Container
   | CloudflareSecret
   | D1DatabaseResource
   | DispatchNamespaceResource
