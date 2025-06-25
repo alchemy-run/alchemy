@@ -20,6 +20,10 @@ export default defineConfig({
     }),
     starlight({
       title: "Alchemy",
+      logo: {
+        src: "/public/alchemy-logo.svg",
+        replacesTitle: true,
+      },
       prerender: true,
       social: [
         {
@@ -42,7 +46,6 @@ export default defineConfig({
         baseUrl: "https://github.com/sam-goodwin/alchemy/edit/main/alchemy-web",
       },
       components: {
-        Head: "./src/components/Head.astro",
         Hero: "./src/components/Hero.astro",
       },
       sidebar: [
