@@ -1,7 +1,12 @@
-import { afterAll, describe } from "vitest";
+import { afterAll, beforeAll, describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { DOStateStore } from "../../src/cloudflare/do-state-store/index.ts";
+import {
+  DOStateStoreClient,
+  getAccountSubdomain,
+  upsertStateStoreWorker,
+} from "../../src/cloudflare/do-state-store/internal.ts";
 import {
   assertWorkerDoesNotExist,
   deleteWorker,
@@ -13,6 +18,8 @@ import { BRANCH_PREFIX } from "../util.ts";
 const workerName = `alchemy-state-${BRANCH_PREFIX}`;
 
 const api = await createCloudflareApi();
+const token = await alchemy.secret.env.ALCHEMY_STATE_TOKEN;
+const subdomain = await getAccountSubdomain(api);
 
 const test = alchemy.test(import.meta, {
   stateStore: (scope) =>
@@ -38,5 +45,96 @@ describe("DOStateStore", () => {
     } finally {
       alchemy.destroy(scope);
     }
+  });
+
+  describe("Internal", () => {
+    const name = `${workerName}-internal`;
+
+    const client = new DOStateStoreClient({
+      app: "alchemy",
+      stage: "internal",
+      url: `https://${name}.${subdomain}.workers.dev`,
+      token: token.unencrypted,
+    });
+
+    beforeAll(async () => {
+      await upsertStateStoreWorker(api, name, token.unencrypted, true);
+      await client.waitUntilReady();
+    });
+
+    afterAll(async () => {
+      await deleteWorker(api, { workerName: name });
+      await assertWorkerDoesNotExist(api, name);
+    });
+
+    async function expectKeys(prefix: string, keys: string[]) {
+      const list = await client.rpc("list", { prefix });
+      expect(list).toEqual(keys);
+      const count = await client.rpc("count", { prefix });
+      expect(count).toEqual(keys.length);
+    }
+
+    function createTestState(data: any) {
+      return {
+        status: "created" as const,
+        kind: "test",
+        id: "test-id",
+        fqn: "test::test-id",
+        seq: 1,
+        data: {},
+        props: undefined,
+        output: data,
+      };
+    }
+
+    test("get, set, list, count, delete", async () => {
+      const value1 = createTestState({ value: "test-data1" });
+      const value2 = createTestState({ value: "test-data2" });
+      await client.rpc("set", { key: "root/prefix1/key1", value: value1 });
+      await client.rpc("set", { key: "root/prefix2/key2", value: value2 });
+
+      await expectKeys("root/prefix1", ["key1"]);
+      await expect(
+        client.rpc("get", { key: "root/prefix1/key1" }),
+      ).resolves.toEqual(JSON.stringify(value1));
+      await expect(
+        client.rpc("get", { key: "root/prefix1/key2" }),
+      ).resolves.toBeUndefined();
+      await expect(
+        client.rpc("all", { prefix: "root/prefix1" }),
+      ).resolves.toEqual({ key1: JSON.stringify(value1) });
+
+      await expectKeys("root/prefix2", ["key2"]);
+      await expect(
+        client.rpc("get", { key: "root/prefix2/key2" }),
+      ).resolves.toEqual(JSON.stringify(value2));
+      await expect(
+        client.rpc("get", { key: "root/prefix2/key1" }),
+      ).resolves.toBeUndefined();
+      await expect(
+        client.rpc("all", { prefix: "root/prefix2" }),
+      ).resolves.toEqual({ key2: JSON.stringify(value2) });
+
+      await client.rpc("delete", { key: "root/prefix1/key1" });
+      await client.rpc("delete", { key: "root/prefix1" });
+      await expect(
+        client.rpc("get", { key: "root/prefix1/key1" }),
+      ).resolves.toBeUndefined();
+      await expect(
+        client.rpc("all", { prefix: "root/prefix1" }),
+      ).resolves.toEqual({});
+
+      await client.rpc("delete", { key: "root/prefix2/key2" });
+      await client.rpc("delete", { key: "root/prefix2" });
+      await expect(
+        client.rpc("get", { key: "root/prefix2/key2" }),
+      ).resolves.toBeUndefined();
+      await expect(
+        client.rpc("all", { prefix: "root/prefix2" }),
+      ).resolves.toEqual({});
+
+      await expectKeys("root/prefix1", []);
+      await expectKeys("root/prefix2", []);
+    });
   });
 });
