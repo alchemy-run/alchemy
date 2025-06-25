@@ -43,6 +43,7 @@ export default defineConfig({
       },
       components: {
         Head: "./src/components/Head.astro",
+        Hero: "./src/components/Hero.astro",
       },
       sidebar: [
         {
