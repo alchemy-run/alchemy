@@ -1,5 +1,6 @@
 import alchemy from "alchemy";
 import { DOStateStore, Website } from "alchemy/cloudflare";
+import { GitHubComment } from "alchemy/github";
 
 const app = await alchemy("alchemy:website", {
   stateStore: (scope) => new DOStateStore(scope),
@@ -13,14 +14,24 @@ const website = await Website("alchemy-website-test", {
   version: process.env.PULL_REQUEST,
 });
 
-// if (process.env.PULL_REQUEST) {
-//   await GitHubComment("alchemy-website-test", {
-//     owner: "sam-goodwin",
-//     repository: "alchemy",
-//     issueNumber: Number(process.env.PULL_REQUEST),
-//     body: `Website deployed to ${website.url}`,
-//   });
-// }
+if (process.env.PULL_REQUEST) {
+  await GitHubComment("alchemy-website-test", {
+    owner: "sam-goodwin",
+    repository: "alchemy",
+    issueNumber: Number(process.env.PULL_REQUEST),
+    body: `
+## 🚀 Website Preview Deployed
+
+Your website preview is ready! 
+
+**Preview URL:** ${website.url}
+
+This preview was built from commit ${process.env.GITHUB_SHA}
+
+---
+<sub>🤖 This comment will be updated automatically when you push new commits to this PR.</sub>`,
+  });
+}
 
 console.log(website.url);
 
