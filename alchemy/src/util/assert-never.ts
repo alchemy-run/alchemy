@@ -1,3 +1,3 @@
-export function assertNever(value: never): never {
-  throw new Error(`Unexpected value: ${value}`);
+export function assertNever(value: never, message?: string): never {
+  throw new Error(message ?? `Unexpected value: ${value}`);
 }

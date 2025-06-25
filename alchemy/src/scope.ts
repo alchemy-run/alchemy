@@ -36,6 +36,7 @@ export interface ScopeOptions {
   stateStore?: StateStoreType;
   quiet?: boolean;
   phase?: Phase;
+  dev?: boolean;
   telemetryClient?: ITelemetryClient;
   logger?: LoggerApi;
 }
@@ -100,6 +101,7 @@ export class Scope {
   public readonly stateStore: StateStoreType;
   public readonly quiet: boolean;
   public readonly phase: Phase;
+  public readonly dev?: boolean;
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
@@ -142,6 +144,14 @@ export class Scope {
           },
           options.logger,
         );
+
+    this.dev = options.dev ?? this.parent?.dev ?? false;
+
+    if (this.dev) {
+      this.logger.warnOnce(
+        "Local development mode is in beta. Please report any issues to https://github.com/sam-goodwin/alchemy/issues.",
+      );
+    }
 
     this.stateStore =
       options.stateStore ??

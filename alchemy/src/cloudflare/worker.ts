@@ -1,3 +1,11 @@
+import { spawn } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { BUILD_DATE } from "../build-date.ts";
 import type { Context } from "../context.ts";
@@ -11,6 +19,7 @@ import { Secret, secret } from "../secret.ts";
 import { serializeScope } from "../serde.ts";
 import type { type } from "../type.ts";
 import { getContentType } from "../util/content-type.ts";
+import { DeferredPromise } from "../util/deferred-promise.ts";
 import { logger } from "../util/logger.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
@@ -28,6 +37,7 @@ import {
 } from "./bindings.ts";
 import type { Bound } from "./bound.ts";
 import { isBucket } from "./bucket.ts";
+import { createWorkerDevContext } from "./bundle/bundle-worker-dev.ts";
 import {
   type NoBundleResult,
   bundleWorkerScript,
@@ -61,6 +71,9 @@ import {
   prepareWorkerMetadata,
 } from "./worker-metadata.ts";
 import { WorkerStub, isWorkerStub } from "./worker-stub.ts";
+import type { MiniflareWorkerOptions } from "./worker/miniflare-worker-options.ts";
+import { miniflareServer } from "./worker/miniflare.ts";
+import { getAccountSubdomain } from "./worker/subdomain.ts";
 import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 
 /**
@@ -300,6 +313,32 @@ export interface BaseWorkerProps<
    * @example "pr-123"
    */
   version?: string;
+
+  /**
+   * Configuration for local development. By default, when Alchemy is running in development mode,
+   * the worker will be emulated locally and available at a randomly selected port.
+   */
+  dev?:
+    | boolean
+    | {
+        /**
+         * Port to use for local development
+         */
+        port?: number;
+        /**
+         * EXPERIMENTAL: Whether to run the worker remotely instead of locally.
+         *
+         * When this is enabled, hot reloading will not work.
+         *
+         * @default false
+         */
+        remote?: boolean;
+      }
+    | {
+        command: string;
+        url: string;
+        cwd?: string;
+      };
 }
 
 export interface InlineWorkerProps<
@@ -922,15 +961,206 @@ export const _Worker = Resource(
       throw new Error("entrypoint must be provided when noBundle is true");
     }
 
-    // Create Cloudflare API client with automatic account discovery
-    const api = await createCloudflareApi(props);
-
     // Use the provided name
     const workerName = props.name ?? id;
 
     const compatibilityDate =
       props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
     const compatibilityFlags = props.compatibilityFlags ?? [];
+
+    if (this.scope.dev && this.phase !== "delete" && props.dev !== false) {
+      // Get current timestamp
+      const now = Date.now();
+
+      if (typeof props.dev === "object" && "command" in props.dev) {
+        upsertDevCommand({
+          id,
+          command: props.dev.command,
+          cwd: props.dev.cwd ?? process.cwd(),
+          env: props.env ?? {},
+        });
+        return this({
+          type: "service",
+          id,
+          entrypoint: props.entrypoint,
+          name: workerName,
+          compatibilityDate,
+          compatibilityFlags,
+          format: props.format || "esm", // Include format in the output
+          bindings: props.bindings ?? ({} as B),
+          env: props.env,
+          observability: props.observability,
+          createdAt: now,
+          updatedAt: now,
+          eventSources: props.eventSources,
+          url: props.dev.url,
+          dev: props.dev,
+          // Include assets configuration in the output
+          assets: props.assets,
+          // Include cron triggers in the output
+          crons: props.crons,
+          // phantom property
+          Env: undefined!,
+        } as unknown as Worker<B>);
+      }
+
+      const sharedOptions: Omit<MiniflareWorkerOptions, "script"> = {
+        name: workerName,
+        compatibilityDate,
+        compatibilityFlags,
+        bindings: props.bindings ?? ({} as B),
+        port: typeof props.dev === "object" ? props.dev.port : undefined,
+      };
+
+      let url: string;
+
+      // If entrypoint is provided, set up hot reloading with esbuild context
+      if (props.entrypoint) {
+        const startPromise = new DeferredPromise<string>();
+
+        await createWorkerDevContext(
+          workerName,
+          {
+            ...props,
+            entrypoint: props.entrypoint,
+            compatibilityDate,
+            compatibilityFlags,
+          },
+          {
+            onBuildStart: () => {
+              logger.task("miniflare-server", {
+                message: `${startPromise.status === "pending" ? "Building" : "Rebuilding"}`,
+                status: "pending",
+                resource: id,
+                prefix: "build",
+                prefixColor: "cyanBright",
+              });
+            },
+            onBuildEnd: async (newScript) => {
+              try {
+                // Hot reload callback - update the miniflare worker
+                const server = await miniflareServer.push({
+                  ...sharedOptions,
+                  script: newScript,
+                });
+                if (startPromise.status === "pending") {
+                  logger.task("miniflare-server", {
+                    message: `Started Miniflare server at ${server.url}`,
+                    status: "success",
+                    resource: id,
+                    prefix: "ready",
+                    prefixColor: "cyanBright",
+                  });
+                  startPromise.resolve(server.url);
+                } else {
+                  logger.task("miniflare-server", {
+                    message: `Updated Miniflare server at ${server.url}`,
+                    status: "success",
+                    resource: id,
+                    prefix: "reload",
+                    prefixColor: "cyanBright",
+                  });
+                }
+              } catch (error) {
+                if (startPromise.status === "pending") {
+                  logger.error(error);
+                  logger.task("miniflare-server", {
+                    message: "Failed to start Miniflare server",
+                    status: "failure",
+                    resource: id,
+                    prefix: "error",
+                    prefixColor: "redBright",
+                  });
+                  startPromise.reject(
+                    new Error(
+                      `Failed to start Miniflare server for worker "${workerName}"`,
+                      { cause: error },
+                    ),
+                  );
+                } else {
+                  logger.task("miniflare-server", {
+                    message: "Failed to update Miniflare server",
+                    status: "failure",
+                    resource: id,
+                    prefix: "error",
+                    prefixColor: "redBright",
+                  });
+                  logger.error(error);
+                }
+              }
+            },
+            onBuildError: (errors) => {
+              if (startPromise.status === "pending") {
+                logger.task("miniflare-server", {
+                  message: "Failed to build worker",
+                  status: "failure",
+                  resource: id,
+                  prefix: "error",
+                  prefixColor: "redBright",
+                });
+                startPromise.reject(errors);
+              } else {
+                logger.task("miniflare-server", {
+                  message: "Failed to rebuild worker",
+                  status: "failure",
+                  resource: id,
+                  prefix: "error",
+                  prefixColor: "redBright",
+                });
+                logger.error(errors);
+              }
+            },
+          },
+        );
+
+        url = await startPromise.value;
+      } else {
+        // Fallback to one-time bundling for inline scripts
+        const scriptContent =
+          props.script ??
+          (await bundleWorkerScript({
+            name: workerName,
+            ...props,
+            compatibilityDate,
+            compatibilityFlags,
+          }));
+        const server = await miniflareServer.push({
+          ...sharedOptions,
+          script:
+            typeof scriptContent === "string"
+              ? scriptContent
+              : scriptContent[props.entrypoint!].toString(),
+        });
+        url = server.url;
+      }
+
+      return this({
+        type: "service",
+        id,
+        entrypoint: props.entrypoint,
+        name: workerName,
+        compatibilityDate,
+        compatibilityFlags,
+        format: props.format || "esm", // Include format in the output
+        bindings: props.bindings ?? ({} as B),
+        env: props.env,
+        observability: props.observability,
+        createdAt: now,
+        updatedAt: now,
+        eventSources: props.eventSources,
+        url,
+        dev: props.dev,
+        // Include assets configuration in the output
+        assets: props.assets,
+        // Include cron triggers in the output
+        crons: props.crons,
+        // phantom property
+        Env: undefined!,
+      } as unknown as Worker<B>);
+    }
+
+    // Create Cloudflare API client with automatic account discovery
+    const api = await createCloudflareApi(props);
 
     const uploadWorkerScript = async (props: WorkerProps<B>) => {
       // Get the script content - either from props.script, or by bundling
@@ -1229,6 +1459,7 @@ export const _Worker = Resource(
       updatedAt: now,
       eventSources: props.eventSources,
       url: workerUrl,
+      dev: props.dev,
       // Include assets configuration in the output
       assets: props.assets,
       // Include cron triggers in the output
@@ -1286,6 +1517,55 @@ export async function deleteWorker(
 
   // Return minimal output for deleted state
   return;
+}
+
+function upsertDevCommand(props: {
+  id: string;
+  command: string;
+  cwd: string;
+  env: Record<string, string>;
+}) {
+  const persistFile = path.join(process.cwd(), ".alchemy", `${props.id}.pid`);
+  if (existsSync(persistFile)) {
+    const pid = Number.parseInt(readFileSync(persistFile, "utf8"));
+    try {
+      // Actually kill the process if it's alive
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // ignore
+    }
+    try {
+      unlinkSync(persistFile);
+    } catch {
+      // ignore
+    }
+  }
+  const command = props.command.split(" ");
+  const proc = spawn(command[0], command.slice(1), {
+    env: {
+      ...process.env,
+      ...props.env,
+      ALCHEMY_CLOUDFLARE_PERSIST_PATH: path.join(
+        process.cwd(),
+        ".alchemy",
+        "miniflare",
+      ),
+    },
+    stdio: ["inherit", "inherit", "inherit"],
+  });
+  process.on("SIGINT", () => {
+    try {
+      unlinkSync(persistFile);
+    } catch {
+      // ignore
+    }
+    proc.kill("SIGINT");
+    process.exit(0);
+  });
+  if (proc.pid) {
+    mkdirSync(path.dirname(persistFile), { recursive: true });
+    writeFileSync(persistFile, proc.pid.toString());
+  }
 }
 
 type PutWorkerOptions = WorkerProps & {
@@ -1564,21 +1844,7 @@ export async function configureURL<B extends Bindings>(
     );
 
     // Get the account's workers.dev subdomain
-    const subdomainResponse = await api.get(
-      `/accounts/${api.accountId}/workers/subdomain`,
-    );
-
-    if (!subdomainResponse.ok) {
-      throw new Error(
-        `Could not fetch workers.dev subdomain: ${subdomainResponse.status} ${subdomainResponse.statusText}`,
-      );
-    }
-    const subdomainData: {
-      result: {
-        subdomain: string;
-      };
-    } = await subdomainResponse.json();
-    const subdomain = subdomainData.result?.subdomain;
+    const subdomain = await getAccountSubdomain(api);
 
     if (subdomain) {
       workerUrl = `https://${workerName}.${subdomain}.workers.dev`;
