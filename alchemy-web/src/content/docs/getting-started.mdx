@@ -3,10 +3,13 @@ title: Getting Started
 description: Quick start guide to using Alchemy, the TypeScript-native Infrastructure-as-Code library. Deploy your first Cloudflare Worker with type-safe infrastructure code.
 ---
 
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
 This guide will deploy a Cloudflare Worker and bind resources to it with Alchemy.
 
-> [!TIP]
-> Read [What is Alchemy](./what-is-alchemy.md) to get an overview of Alchemy and how it's different than traditional IaC
+<Aside type="tip">
+Read [What is Alchemy](./what-is-alchemy.md) to get an overview of Alchemy and how it's different than traditional IaC
+</Aside>
 
 ## Prerequisites
 
@@ -15,62 +18,68 @@ This guide will deploy a Cloudflare Worker and bind resources to it with Alchemy
 
 ## Initialize Project
 
-::: code-group
-
-```sh [bun]
-mkdir my-alchemy-app
-cd my-alchemy-app
-bun init -y
-```
-
-```sh [npm]
-mkdir my-alchemy-app
-cd my-alchemy-app
-npm init -y
-npm install -D typescript @types/node tsx
-```
-
-```sh [pnpm]
-mkdir my-alchemy-app
-cd my-alchemy-app
-pnpm init
-pnpm add -D typescript @types/node tsx
-```
-
-```sh [yarn]
-mkdir my-alchemy-app
-cd my-alchemy-app
-yarn init -y
-yarn add -D typescript @types/node tsx
-```
-
-:::
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    mkdir my-alchemy-app
+    cd my-alchemy-app
+    bun init -y
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    mkdir my-alchemy-app
+    cd my-alchemy-app
+    npm init -y
+    npm install -D typescript @types/node tsx
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    mkdir my-alchemy-app
+    cd my-alchemy-app
+    pnpm init
+    pnpm add -D typescript @types/node tsx
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    mkdir my-alchemy-app
+    cd my-alchemy-app
+    yarn init -y
+    yarn add -D typescript @types/node tsx
+    ```
+  </TabItem>
+</Tabs>
 
 ## Install Dependencies
 
-::: code-group
-
-```sh [bun]
-bun add alchemy
-bun add -g wrangler
-```
-
-```sh [npm]
-npm install alchemy
-npm install -g wrangler
-```
-
-```sh [pnpm]
-pnpm add alchemy
-pnpm add -g wrangler
-```
-
-```sh [yarn]
-yarn add alchemy
-yarn global add wrangler
-```
-
-:::
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    bun add alchemy
+    bun add -g wrangler
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npm install alchemy
+    npm install -g wrangler
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    pnpm add alchemy
+    pnpm add -g wrangler
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    yarn add alchemy
+    yarn global add wrangler
+    ```
+  </TabItem>
+</Tabs>
 
 ## Login to Cloudflare
 
@@ -80,8 +89,9 @@ wrangler login
 
 This will open your browser to authenticate with your Cloudflare account.
 
-> [!TIP]
-> Alchemy automatically uses your wrangler OAuth token. See the [Cloudflare Auth](./guides/cloudflare-auth.md) guide for alternative authentication methods.
+<Aside type="tip">
+Alchemy automatically uses your wrangler OAuth token. See the [Cloudflare Auth](./guides/cloudflare-auth.md) guide for alternative authentication methods.
+</Aside>
 
 ## Create `alchemy.run.ts`
 
@@ -150,25 +160,28 @@ export default {
 
 Simply run your `alchemy.run.ts` script to deploy this Worker to Cloudflare:
 
-::: code-group
-
-```sh [bun]
-bun ./alchemy.run.ts
-```
-
-```sh [npm]
-npx tsx ./alchemy.run.ts
-```
-
-```sh [pnpm]
-pnpm tsx ./alchemy.run.ts
-```
-
-```sh [yarn]
-yarn tsx ./alchemy.run.ts
-```
-
-:::
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    bun ./alchemy.run.ts
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npx tsx ./alchemy.run.ts
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    pnpm tsx ./alchemy.run.ts
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    yarn tsx ./alchemy.run.ts
+    ```
+  </TabItem>
+</Tabs>
 
 You will see output similar to:
 
@@ -180,8 +193,9 @@ Worker deployed at: https://hello-worker.your-subdomain.workers.dev
 
 Visit the URL to see your worker in action!
 
-> [!TIP]
-> If you're familiar with other IaC tools, this should feel similar to `terraform apply`, `pulumi up`, `cdk deploy` or `sst deploy`
+<Aside type="tip">
+If you're familiar with other IaC tools, this should feel similar to `terraform apply`, `pulumi up`, `cdk deploy` or `sst deploy`
+</Aside>
 
 ## Add Bindings
 
@@ -211,8 +225,9 @@ const worker = await Worker("hello-worker", {
 });
 ```
 
-> [!NOTE]
-> Learn more in the [Cloudflare Bindings documentation](./concepts/bindings.md).
+<Aside>
+Learn more in the [Cloudflare Bindings documentation](./concepts/bindings.md).
+</Aside>
 
 Finally, update your `./src/worker.ts` to use these bindings:
 
@@ -237,11 +252,13 @@ export default {
 };
 ```
 
-> [!NOTE]
-> The `typeof worker.Env` type infers types directly from your infrastructure definition in `alchemy.run.ts`. No code generation required!
+<Aside>
+The `typeof worker.Env` type infers types directly from your infrastructure definition in `alchemy.run.ts`. No code generation required!
+</Aside>
 
-> [!TIP]
-> You can also infer types for `import { env } from "cloudflare:workers"`, see the [type-safe bindings](./concepts/bindings.md#type-safe-bindings) documentation to learn more.
+<Aside type="tip">
+You can also infer types for `import { env } from "cloudflare:workers"`, see the [type-safe bindings](./concepts/bindings.md#type-safe-bindings) documentation to learn more.
+</Aside>
 
 ## Understanding State
 
@@ -256,8 +273,9 @@ After running your app, Alchemy creates a `.alchemy` directory to store state:
 
 State files help Alchemy determine whether to create, update, delete, or skip resources on subsequent runs.
 
-> [!TIP]
-> For production environments or CI/CD, you should use a persistent state store like [DOStateStore](./concepts/state.md#durable-objects-state-store-recommended) (preferred) or [R2RestStateStore](./concepts/state.md#r2-rest-state-store).
+<Aside type="tip">
+For production environments or CI/CD, you should use a persistent state store like [DOStateStore](./concepts/state.md#durable-objects-state-store-recommended) (preferred) or [R2RestStateStore](./concepts/state.md#r2-rest-state-store).
+</Aside>
 
 ## Local Development
 
@@ -279,25 +297,28 @@ await WranglerJson("wrangler.json", {
 
 Deploy again to generate the `wrangler.json` with your bindings:
 
-::: code-group
-
-```sh [bun]
-bun ./alchemy.run.ts
-```
-
-```sh [npm]
-npx tsx ./alchemy.run.ts
-```
-
-```sh [pnpm]
-pnpm tsx ./alchemy.run.ts
-```
-
-```sh [yarn]
-yarn tsx ./alchemy.run.ts
-```
-
-:::
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    bun ./alchemy.run.ts
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npx tsx ./alchemy.run.ts
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    pnpm tsx ./alchemy.run.ts
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    yarn tsx ./alchemy.run.ts
+    ```
+  </TabItem>
+</Tabs>
 
 Now you can your worker locally using `wrangler dev`:
 
@@ -311,25 +332,28 @@ Visit `http://localhost:8787` to test your worker locally with all your bindings
 
 When you're done, you can destroy all resources:
 
-::: code-group
-
-```sh [bun]
-bun ./alchemy.run.ts --destroy
-```
-
-```sh [npm]
-npx tsx ./alchemy.run.ts --destroy
-```
-
-```sh [pnpm]
-pnpm tsx ./alchemy.run.ts --destroy
-```
-
-```sh [yarn]
-yarn tsx ./alchemy.run.ts --destroy
-```
-
-:::
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    bun ./alchemy.run.ts --destroy
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npx tsx ./alchemy.run.ts --destroy
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    pnpm tsx ./alchemy.run.ts --destroy
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    yarn tsx ./alchemy.run.ts --destroy
+    ```
+  </TabItem>
+</Tabs>
 
 Output:
 
