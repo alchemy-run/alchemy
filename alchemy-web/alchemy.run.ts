@@ -15,7 +15,7 @@ const website = await Website("alchemy-website-test", {
 });
 
 if (process.env.PULL_REQUEST) {
-  await GitHubComment("alchemy-website-test", {
+  await GitHubComment("comment", {
     owner: "sam-goodwin",
     repository: "alchemy",
     issueNumber: Number(process.env.PULL_REQUEST),
