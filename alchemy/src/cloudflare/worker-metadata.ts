@@ -1,4 +1,5 @@
 import path from "node:path";
+import { assertNever } from "../util/assert-never.ts";
 import { logger } from "../util/logger.ts";
 import type { CloudflareApi } from "./api.ts";
 import {
@@ -209,7 +210,6 @@ export async function prepareWorkerMetadata(
   const oldTags: string[] | undefined =
     oldSettings?.default_environment?.script?.tags;
   const oldBindings = oldSettings?.bindings;
-
   // we use Cloudflare Worker tags to store a mapping between Alchemy's stable identifier and the binding name
   // e.g.
   // {
@@ -384,7 +384,10 @@ export async function prepareWorkerMetadata(
         type: "durable_object_namespace",
         name: bindingName,
         class_name: binding.className,
-        script_name: binding.scriptName,
+        script_name:
+          binding.scriptName === props.workerName
+            ? undefined
+            : binding.scriptName,
         environment: binding.environment,
         namespace_id: binding.namespaceId,
       });
@@ -510,8 +513,13 @@ export async function prepareWorkerMetadata(
         key_jwk: binding.key_jwk?.unencrypted,
       });
     } else {
-      // @ts-expect-error - we should never reach here
-      throw new Error(`Unsupported binding type: ${binding.type}`);
+      assertNever(
+        binding,
+        `Unsupported binding type: ${
+          // @ts-expect-error - types think it's never
+          binding.type
+        }`,
+      );
     }
   }
 

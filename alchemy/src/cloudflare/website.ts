@@ -94,6 +94,14 @@ export interface WebsiteProps<B extends Bindings>
    * @default false
    */
   spa?: boolean;
+
+  /**
+   * Configure the command to use in development mode
+   */
+  dev?: {
+    command: string;
+    url: string;
+  };
 }
 
 export type Website<B extends Bindings> = B extends { ASSETS: any }
@@ -114,7 +122,7 @@ export async function Website<B extends Bindings>(
     {
       parent: Scope.current,
     },
-    async () => {
+    async (scope) => {
       // directory from which all relative paths are resolved
       const cwd = path.resolve(props.cwd || process.cwd());
 
@@ -177,6 +185,13 @@ export default {
 };`,
         url: true,
         adopt: true,
+        dev: props.dev
+          ? {
+              command: props.dev.command,
+              url: props.dev.url,
+              cwd,
+            }
+          : undefined,
       } as WorkerProps<any> & { name: string };
 
       if (wrangler) {
@@ -196,7 +211,9 @@ export default {
         });
       }
 
-      if (props.command) {
+      const isDev = scope.dev && !!props.dev;
+
+      if (props.command && !isDev) {
         await Exec("build", {
           cwd,
           command: props.command,
@@ -211,10 +228,12 @@ export default {
           ...workerProps.bindings,
           // we don't include the Assets binding until after build to make sure the asset manifest is correct
           // we generate the wrangler.json using all the bind
-          ASSETS: await Assets("assets", {
-            // Assets are discovered from proces.cwd(), not Website.cwd or wrangler.jsonc
-            path: path.relative(process.cwd(), assetsDirPath),
-          }),
+          ASSETS: isDev
+            ? undefined
+            : await Assets("assets", {
+                // Assets are discovered from proces.cwd(), not Website.cwd or wrangler.jsonc
+                path: path.relative(process.cwd(), assetsDirPath),
+              }),
         },
       } as WorkerProps<any> & { name: string })) as Website<B>;
     },

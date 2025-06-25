@@ -4,7 +4,7 @@ import { logger } from "./logger.ts";
 export async function safeFetch(
   url: string | URL | Request,
   options: RequestInit = {},
-  retries = 3,
+  retries = 10,
 ) {
   let latestErr: any;
   for (let attempt = 1; attempt <= retries; attempt++) {

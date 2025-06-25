@@ -617,9 +617,7 @@ describe("Route Resource", () => {
         ],
       });
 
-      await expect(workerPromise).rejects.toThrow(
-        /Duplicate route patterns found/,
-      );
+      await expect(workerPromise).rejects.toThrow(/Duplicate Route found: /);
     } finally {
       await destroy(scope);
       // Worker should not exist since creation failed

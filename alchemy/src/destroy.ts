@@ -95,10 +95,12 @@ export async function destroy<Type extends string>(
   try {
     if (!quiet) {
       logger.task(instance[ResourceFQN], {
-        prefix: "deleting",
-        prefixColor: "redBright",
+        prefix: options?.replace ? "cleanup" : "deleting",
+        prefixColor: options?.replace ? "magenta" : "redBright",
         resource: formatFQN(instance[ResourceFQN]),
-        message: "Deleting Resource...",
+        message: options?.replace
+          ? "Cleaning Up Old Resource..."
+          : "Deleting Resource...",
       });
     }
 
@@ -170,10 +172,12 @@ export async function destroy<Type extends string>(
 
     if (!quiet) {
       logger.task(instance[ResourceFQN], {
-        prefix: "deleted",
+        prefix: options?.replace ? "cleaned" : "deleted",
         prefixColor: "greenBright",
         resource: formatFQN(instance[ResourceFQN]),
-        message: "Deleted Resource",
+        message: options?.replace
+          ? "Old Resource Cleanup Complete"
+          : "Deleted Resource",
         status: "success",
       });
     }

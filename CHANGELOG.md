@@ -1,3 +1,23 @@
+## v0.39.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **core**: Stage scope not being adopted &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/469 [<samp>(b949a)</samp>](https://github.com/sam-goodwin/alchemy/commit/b949aade)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.39.0...v0.39.1)
+
+---
+
+## v0.39.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Support Worker.domains for custom domains &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/468 [<samp>(7a357)</samp>](https://github.com/sam-goodwin/alchemy/commit/7a357763)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.38.1...v0.39.0)
+
+---
+
 ## v0.38.1
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
