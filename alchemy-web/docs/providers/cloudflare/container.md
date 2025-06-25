@@ -16,7 +16,9 @@ import { Container, Worker } from "alchemy/cloudflare";
 import { Image } from "alchemy/docker";
 
 const image = await Image("container-do", {
-  dockerfile: "./Dockerfile",
+  build: {
+    dockerfile: "./Dockerfile.container",
+  },
 });
 
 const container = new Container("my-container", {
