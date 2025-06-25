@@ -1,7 +1,13 @@
 {
-  "include": ["src/**/*"],
+  "extends": "../tsconfig.base.json",
+  "include": ["src/**/*", "alchemy.run.ts"],
   "compilerOptions": {
     "types": ["astro/client"],
     "noEmit": true
-  }
+  },
+  "references": [
+    {
+      "path": "../alchemy"
+    }
+  ]
 }

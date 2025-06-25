@@ -3,15 +3,16 @@
   "type": "module",
   "version": "0.0.1",
   "scripts": {
-    "docs:dev": "astro dev",
-    "docs:build": "astro build",
-    "docs:preview": "astro preview",
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
     "astro": "astro"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
     "@astrojs/cloudflare": "^12.5.4",
     "@astrojs/starlight": "^0.34.3",
+    "alchemy": "workspace:*",
     "astro": "^5.6.1",
     "starlight-llms-txt": "^0.5.1",
     "starlight-nextjs-theme": "^0.2.0",

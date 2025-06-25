@@ -1,10 +1,8 @@
 ---
 order: 7
-title: Development Mode
+title: Development Mode (Beta)
 description: Learn how to use Alchemy's development mode to run your application locally.
 ---
-
-# Development Mode (Beta)
 
 Alchemy's development mode provides a powerful local development experience for Cloudflare Workers, featuring hot reloading, local resource emulation, and seamless integration with remote Cloudflare services.
 
@@ -44,7 +42,7 @@ You can also enable dev mode programmatically by setting the `dev` option:
 
 ```typescript
 const app = await alchemy("my-app", {
-  dev: true
+  dev: true,
 });
 ```
 
@@ -56,8 +54,8 @@ When running in dev mode, Alchemy runs your Cloudflare Workers locally using Min
 const worker = await Worker("my-worker", {
   entrypoint: "worker.ts",
   dev: {
-    port: 3000
-  }
+    port: 3000,
+  },
 });
 
 console.log(worker.url); // http://localhost:3000
@@ -72,7 +70,7 @@ const website = await Website("my-website", {
   dev: {
     command: "npm run dev",
     url: "http://localhost:5173",
-  }
+  },
 });
 ```
 
@@ -116,15 +114,15 @@ Alchemy also supports [remote bindings](https://developers.cloudflare.com/worker
 
 ```typescript
 const db = await D1Database("my-db", {
-  dev: { remote: true }
+  dev: { remote: true },
 });
 
 const kv = await KVNamespace("my-kv", {
-  dev: { remote: true }
+  dev: { remote: true },
 });
 
 const r2 = await R2Bucket("my-r2", {
-  dev: { remote: true }
+  dev: { remote: true },
 });
 ```
 
@@ -134,29 +132,29 @@ Some resources only support remote execution, such as [AI Gateways](../providers
 
 The following bindings are supported in dev mode:
 
-| Resource | Local | Remote | Vite |
-|----------|-------|--------|------|
-| AI | ❌ | ✅ | ❌ |
-| Analytics Engine | ✅ | ❌ | ❌ |
-| Assets | ✅ | ❌ | ❌ |
-| Browser Rendering | ❌ | ✅ | ❌ |
-| D1 Database | ✅ | ✅ | ✅ |
-| Dispatch Namespace | ❌ | ✅ | ❌ |
-| Durable Object Namespace | ✅ | ❌ | ❌ |
-| Hyperdrive | ✅ | ❌ | ❌ |
-| Images | ✅ | ✅ | ❌ |
-| JSON | ✅ | ❌ | ❌ |
-| KV Namespace | ✅ | ✅ | ✅ |
-| Pipeline | ✅ | ❌ | ❌ |
-| Queue | ✅ | ✅ | ❌ |
-| R2 Bucket | ✅ | ✅ | ✅ |
-| Secret | ✅ | ❌ | ❌ |
-| Secret Key | ❌ | ❌ | ❌ |
-| Service | ✅ | ✅ | ❌ |
-| Vectorize Index | ❌ | ✅ | ❌ |
-| Version Metadata | ✅ | ❌ | ❌ |
-| Workflow | ✅ | ❌ | ❌ |
-| Text | ✅ | ❌ | ❌ |
+| Resource                 | Local | Remote | Vite |
+| ------------------------ | ----- | ------ | ---- |
+| AI                       | ❌    | ✅     | ❌   |
+| Analytics Engine         | ✅    | ❌     | ❌   |
+| Assets                   | ✅    | ❌     | ❌   |
+| Browser Rendering        | ❌    | ✅     | ❌   |
+| D1 Database              | ✅    | ✅     | ✅   |
+| Dispatch Namespace       | ❌    | ✅     | ❌   |
+| Durable Object Namespace | ✅    | ❌     | ❌   |
+| Hyperdrive               | ✅    | ❌     | ❌   |
+| Images                   | ✅    | ✅     | ❌   |
+| JSON                     | ✅    | ❌     | ❌   |
+| KV Namespace             | ✅    | ✅     | ✅   |
+| Pipeline                 | ✅    | ❌     | ❌   |
+| Queue                    | ✅    | ✅     | ❌   |
+| R2 Bucket                | ✅    | ✅     | ✅   |
+| Secret                   | ✅    | ❌     | ❌   |
+| Secret Key               | ❌    | ❌     | ❌   |
+| Service                  | ✅    | ✅     | ❌   |
+| Vectorize Index          | ❌    | ✅     | ❌   |
+| Version Metadata         | ✅    | ❌     | ❌   |
+| Workflow                 | ✅    | ❌     | ❌   |
+| Text                     | ✅    | ❌     | ❌   |
 
 ## Limitations
 
