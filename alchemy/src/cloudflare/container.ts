@@ -7,12 +7,6 @@ import {
   type CloudflareApiOptions,
   createCloudflareApi,
 } from "./api.ts";
-// must import this or else alchemy.test won't exist
-// import "../../src/test/vitest.ts";
-
-// const test = alchemy.test(import.meta, {
-//   prefix: BRANCH_PREFIX,
-// });
 
 /**
  * A Container binding that enables Workers to communicate with containerized Durable Objects.
@@ -86,7 +80,9 @@ export interface ContainerApplication
  *   name: "my-web-app",
  *   image: await Image("web-app", {
  *     name: "web-app",
- *     context: "./docker/web-app"
+ *     build: {
+ *       context: "./docker/web-app"
+ *     }
  *   }),
  *   instances: 1,
  *   maxInstances: 3
@@ -98,7 +94,9 @@ export interface ContainerApplication
  *   name: "ai-inference",
  *   image: await Image("ai-model", {
  *     name: "ai-model",
- *     context: "./docker/ai"
+ *     build: {
+ *       context: "./docker/ai"
+ *     }
  *   }),
  *   schedulingPolicy: "gpu",
  *   instances: 2,
@@ -111,7 +109,9 @@ export interface ContainerApplication
  *   name: "stateful-app",
  *   image: await Image("do-app", {
  *     name: "do-app",
- *     context: "./docker/stateful"
+ *     build: {
+ *       context: "./container"
+ *     }
  *   }),
  *   durableObjects: {
  *     namespaceId: myDurableObjectNamespace.id
@@ -287,7 +287,6 @@ export async function deleteContainerApplication(
   api: CloudflareApi,
   applicationId: string,
 ) {
-  console.log("DELETE");
   const response = await api.delete(
     `/accounts/${api.accountId}/containers/applications/${applicationId}`,
   );
@@ -471,82 +470,3 @@ export async function getContainerIdentity(api: CloudflareApi) {
     `Failed to get container me: ${result.errors.map((e: { message: string }) => e.message).join(", ")}`,
   );
 }
-
-// describe("Container Resources", () => {
-//   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
-//   const testId = `${BRANCH_PREFIX}-test-container`;
-
-//   test("create and delete a simple container deployment", async (scope) => {
-//     let deployment: ContainerDeployment | undefined;
-//     try {
-//       // Create a simple deployment using a public nginx image
-//       deployment = await ContainerDeployment(`${testId}-nginx`, {
-//         image: "docker.io/nginx:latest",
-//         location: "sfo06",
-//         instanceType: "dev",
-//       });
-
-//       expect(deployment.id).toBeTruthy();
-//       expect(deployment.state?.current).toBeTruthy();
-//       expect(deployment.name).toEqual(`${testId}-nginx`);
-
-//       // Verify deployment was created by querying the API directly
-//       const api = await createCloudflareApi();
-//       const getResponse = await api.get(
-//         `/containers/deployments/${deployment.id}/v2`,
-//       );
-//       expect(getResponse.status).toEqual(200);
-
-//       const responseData: any = await getResponse.json();
-//       expect(responseData.result.id).toEqual(deployment.id);
-//     } catch (err) {
-//       // log the error or else it's silently swallowed by destroy errors
-//       console.log(err);
-//       throw err;
-//     } finally {
-//       // Always clean up, even if test assertions fail
-//       await destroy(scope);
-
-//       if (deployment?.id) {
-//         // Verify deployment was deleted
-//         const api = await createCloudflareApi();
-//         const getDeletedResponse = await api.get(
-//           `/containers/deployments/${deployment.id}/v2`,
-//         );
-//         expect(getDeletedResponse.status).toEqual(404);
-//       }
-//     }
-//   });
-
-//   test("create deployment with environment variables and ports", async (scope) => {
-//     let deployment: ContainerDeployment | undefined;
-//     try {
-//       // Create a deployment with more configuration
-//       deployment = await ContainerDeployment(`${testId}-httpd`, {
-//         image: "docker.io/httpd:2.4",
-//         location: "sfo06",
-//         instanceType: "dev",
-//         environmentVariables: [
-//           { name: "SERVER_NAME", value: "test.example.com" },
-//           { name: "SERVER_ADMIN", value: "admin@example.com" },
-//         ],
-//         ports: [
-//           {
-//             name: "http",
-//             port: 80,
-//           },
-//         ],
-//       });
-
-//       expect(deployment.id).toBeTruthy();
-//       expect(deployment.environmentVariables).toHaveLength(2);
-//       expect(deployment.ports).toHaveLength(1);
-//       expect(deployment.ports?.[0].name).toEqual("http");
-//     } catch (err) {
-//       console.log(err);
-//       throw err;
-//     } finally {
-//       await destroy(scope);
-//     }
-//   });
-// });

@@ -27,7 +27,10 @@ describe("Container Resource", () => {
             className: "MyContainer",
             image: await Image("test-image", {
               name: "test-image",
-              context: path.join(import.meta.dirname, "container"),
+              tag: "latest",
+              build: {
+                context: path.join(import.meta.dirname, "container"),
+              },
             }),
             maxInstances: 1,
             name: "test-container",
