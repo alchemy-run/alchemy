@@ -95,8 +95,8 @@ const product = await Product("pro-plan", {
     --hero-shadow: rgba(0, 0, 0, 0.25);
   }
 
-  /* Global page background override */
-  :global(body) {
+  /* Global page background override - only for pages with hero class */
+  :global(body:has(.hero)) {
     background: linear-gradient(
       135deg,
       var(--sl-color-bg) 0%,
