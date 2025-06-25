@@ -12,8 +12,7 @@ export interface Props {
   }>;
 }
 
-// @ts-ignore - Starlight types not available in this context
-const { data } = Astro.locals.starlightRoute?.entry || {};
+const { data } = Astro.locals.starlightRoute.entry;
 const { title = data?.title, tagline, actions = [] } = data?.hero || {};
 
 const codeContent = `const database = await D1Database("my-app-db", {
