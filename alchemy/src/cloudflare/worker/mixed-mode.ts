@@ -1,10 +1,9 @@
 import type { RemoteProxyConnectionString } from "miniflare";
-import path from "node:path";
-import { bundle } from "../../esbuild/bundle.ts";
 import { createCloudflareApi, type CloudflareApi } from "../api.ts";
 import type { WorkerBindingSpec } from "../bindings.ts";
 import type { CloudflareApiResponse } from "../types.ts";
 import type { WorkerMetadata } from "../worker-metadata.ts";
+import { getWorkerTemplate } from "./get-worker-template.ts";
 import { HTTPServer } from "./http-server.ts";
 import { getAccountSubdomain } from "./subdomain.ts";
 
@@ -24,32 +23,12 @@ interface WorkersPreviewSession {
   token: string;
 }
 
-async function bundleWorkerScript() {
-  const result = await bundle({
-    entryPoint: path.join(
-      __dirname,
-      "../../../workers/mixed-mode-proxy-worker.ts",
-    ),
-    bundle: true,
-    format: "esm",
-    target: "es2022",
-    external: ["cloudflare:*"],
-    write: false,
-  });
-  if (!result.outputFiles?.[0]) {
-    throw new Error("Failed to bundle worker.ts");
-  }
-  return new File([result.outputFiles[0].text], "worker.js", {
-    type: "application/javascript+module",
-  });
-}
-
 export async function createMixedModeProxy(input: {
   name: string;
   bindings: WorkerBindingSpec[];
 }) {
   const api = await createCloudflareApi();
-  const script = await bundleWorkerScript();
+  const script = await getWorkerTemplate("mixed-mode-proxy-worker");
   const [token, subdomain] = await Promise.all([
     createWorkersPreviewToken(api, {
       name: input.name,

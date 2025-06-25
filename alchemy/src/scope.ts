@@ -113,7 +113,7 @@ export class Scope {
   private deferred: (() => Promise<any>)[] = [];
 
   constructor(options: ScopeOptions) {
-    this.appName = options.appName;
+    this.appName = options.appName ?? options.parent?.appName;
     this.scopeName = options.scopeName ?? null;
     if (this.scopeName?.includes(":")) {
       throw new Error(

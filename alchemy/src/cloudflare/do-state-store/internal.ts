@@ -1,11 +1,9 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { bundle } from "../../esbuild/index.ts";
-import { exists } from "../../util/exists.ts";
+import { logger } from "../../util/logger.ts";
 import { withExponentialBackoff } from "../../util/retry.ts";
 import { handleApiError } from "../api-error.ts";
 import type { CloudflareApi } from "../api.ts";
 import type { WorkerMetadata } from "../worker-metadata.ts";
+import { getWorkerTemplate } from "../worker/get-worker-template.ts";
 import type { DOStateStoreAPI } from "./types.ts";
 
 interface DOStateStoreClientOptions {
@@ -84,6 +82,30 @@ export class DOStateStoreClient {
     });
   }
 
+  async waitUntilReady(): Promise<void> {
+    // This ensures the token is correct and the worker is ready to use.
+    let last: Response | undefined;
+    let delay = 1000;
+    for (let i = 0; i < 20; i++) {
+      const res = await this.validate();
+      if (res.ok) {
+        return;
+      }
+      if (!last) {
+        logger.log("Waiting for state store deployment...");
+      }
+      last = res;
+      // Exponential backoff with jitter
+      const jitter = Math.random() * 0.1 * delay;
+      await new Promise((resolve) => setTimeout(resolve, delay + jitter));
+      delay *= 1.5; // Increase the delay for next attempt
+      delay = Math.min(delay, 10000); // Cap at 10 seconds
+    }
+    throw new Error(
+      `Failed to access state store: ${last?.status} ${last?.statusText}`,
+    );
+  }
+
   async fetch(path: string, init: RequestInit = {}): Promise<Response> {
     const url = new URL(path, this.options.url);
     url.searchParams.set("app", this.options.app);
@@ -98,7 +120,7 @@ export class DOStateStoreClient {
   }
 }
 
-const TAG = "alchemy-state-store:2025-06-03";
+const TAG = "alchemy-state-store:2025-06-23";
 
 const cache = new Map<string, string>();
 
@@ -119,12 +141,13 @@ export async function upsertStateStoreWorker(
     return;
   }
   const formData = new FormData();
-  formData.append("worker.js", await bundleWorkerScript());
+  const worker = await getWorkerTemplate("do-state-store");
+  formData.append(worker.name, worker);
   formData.append(
     "metadata",
     new Blob([
       JSON.stringify({
-        main_module: "worker.js",
+        main_module: worker.name,
         compatibility_date: "2025-06-01",
         compatibility_flags: ["nodejs_compat"],
         bindings: [
@@ -200,26 +223,20 @@ async function getWorkerStatus(api: CloudflareApi, workerName: string) {
   };
 }
 
-async function bundleWorkerScript() {
-  const thisDir =
-    typeof __dirname !== "undefined"
-      ? __dirname
-      : path.dirname(fileURLToPath(import.meta.url));
-  // we can be running from .ts or .js, so resolve it defensively
-  const workerTs = path.join(thisDir, "worker.ts");
-  const workerJs = path.join(thisDir, "worker.js");
-  const result = await bundle({
-    entryPoint: (await exists(workerTs)) ? workerTs : workerJs,
-    bundle: true,
-    format: "esm",
-    target: "es2022",
-    external: ["cloudflare:*", "node:crypto"],
-    write: false,
-  });
-  if (!result.outputFiles?.[0]) {
-    throw new Error("Failed to bundle worker.ts");
+export async function getAccountSubdomain(api: CloudflareApi) {
+  const key = `subdomain:${api.accountId}`;
+  const cached = cache.get(key);
+  if (cached) {
+    return cached;
   }
-  return new File([result.outputFiles[0].text], "worker.js", {
-    type: "application/javascript+module",
-  });
+  const res = await api.get(`/accounts/${api.accountId}/workers/subdomain`);
+  if (!res.ok) {
+    throw new Error(
+      `Failed to get account subdomain: ${res.status} ${res.statusText}: ${await res.text().catch(() => "unknown error")}`,
+    );
+  }
+  const json: { result: { subdomain: string } } = await res.json();
+  const subdomain = json.result.subdomain;
+  cache.set(key, subdomain);
+  return subdomain;
 }
