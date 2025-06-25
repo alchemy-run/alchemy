@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "deploy": "bun --env-file=../.env alchemy.run.ts",
     "preview": "astro preview",
     "astro": "astro"
   },
