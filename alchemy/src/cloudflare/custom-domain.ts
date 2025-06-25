@@ -7,6 +7,7 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
+import { inferZoneIdFromPattern } from "./route.ts";
 
 /**
  * Properties for creating or updating a CustomDomain
@@ -19,8 +20,10 @@ export interface CustomDomainProps extends CloudflareApiOptions {
 
   /**
    * Cloudflare Zone ID for the domain
+   *
+   * @default - inferred from the domain name
    */
-  zoneId: string;
+  zoneId?: string;
 
   /**
    * Name of the worker to bind to the domain
@@ -32,6 +35,14 @@ export interface CustomDomainProps extends CloudflareApiOptions {
    * @default "production"
    */
   environment?: string;
+
+  /**
+   * If true, adopt an existing custom domain binding during creation.
+   * If false and the domain already exists, creation will fail.
+   * This only applies during the create phase.
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -85,6 +96,15 @@ export interface CustomDomain
  *   workerName: apiWorker.name // Use the name from the Worker resource
  * });
  *
+ * @example
+ * // Adopt an existing domain binding during creation
+ * const existingDomain = await CustomDomain("api-domain", {
+ *   name: "api.example.com",
+ *   zoneId: "YOUR_ZONE_ID",
+ *   workerName: "my-api-worker",
+ *   adopt: true  // If domain already exists, adopt it instead of failing
+ * });
+ *
  * @see https://developers.cloudflare.com/api/resources/workers/subresources/domains/
  */
 export const CustomDomain = Resource(
@@ -97,23 +117,15 @@ export const CustomDomain = Resource(
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
 
-    // Validate required properties
-    if (!props.name) {
-      throw new Error("Domain name (props.name) is required");
-    }
-    if (!props.zoneId) {
-      throw new Error("Zone ID (props.zoneId) is required");
-    }
-    if (!props.workerName) {
-      throw new Error("Worker name (props.workerName) is required");
-    }
-
     if (this.phase === "delete") {
       await deleteCustomDomain(this, api, logicalId, props);
       return this.destroy();
     }
     // Create or Update phase
-    return await ensureCustomDomain(this, api, logicalId, props);
+    return await ensureCustomDomain(this, api, logicalId, {
+      ...props,
+      zoneId: props.zoneId ?? (await inferZoneIdFromPattern(api, props.name)),
+    });
   },
 );
 
@@ -134,17 +146,8 @@ async function deleteCustomDomain(
     return; // Exit early if no ID
   }
 
-  logger.log(
-    `Deleting CustomDomain binding ${domainIdToDelete} for ${domainHostname}`,
-  );
   const response = await api.delete(
     `/accounts/${api.accountId}/workers/domains/${domainIdToDelete}`,
-  );
-
-  logger.log(
-    `Delete result for ${domainIdToDelete} (${domainHostname}):`,
-    response.status,
-    response.statusText,
   );
 
   // 404 is acceptable during deletion for idempotency
@@ -167,13 +170,14 @@ async function ensureCustomDomain(
   context: Context<CustomDomain>,
   api: CloudflareApi,
   _logicalId: string,
-  props: CustomDomainProps,
+  props: CustomDomainProps & {
+    zoneId: string;
+  },
 ): Promise<CustomDomain> {
   const environment = props.environment || "production";
   const domainHostname = props.name;
 
   // Check if domain binding already exists for this account
-  logger.log(`Checking existing domain bindings for account ${api.accountId}`);
   const listResponse = await api.get(
     `/accounts/${api.accountId}/workers/domains`,
   );
@@ -211,12 +215,15 @@ async function ensureCustomDomain(
   let currentDomainId = existingBinding?.id;
   const bindingExists = !!existingBinding;
 
-  logger.log(
-    `Domain binding status for ${domainHostname} (Zone: ${props.zoneId}):`,
-    bindingExists
-      ? `Found (ID: ${currentDomainId}, Worker: ${existingBinding.service}, Env: ${existingBinding.environment})`
-      : "Not found",
-  );
+  // Handle the case where domain already exists during create phase
+  if (context.phase === "create" && bindingExists) {
+    if (!props.adopt) {
+      throw new Error(
+        `CustomDomain for ${domainHostname} already exists in zone ${props.zoneId}. ` +
+          "Set adopt: true to take control of the existing domain binding.",
+      );
+    }
+  }
 
   // Determine if we need to update (binding exists but has different service or environment)
   const needsUpdate =
@@ -231,9 +238,6 @@ async function ensureCustomDomain(
   // Cloudflare's PUT /accounts/{account_id}/workers/domains acts as an upsert
   if (!bindingExists || needsUpdate) {
     operationPerformed = bindingExists ? "update" : "create";
-    logger.log(
-      `${operationPerformed === "update" ? "Updating" : "Creating"} domain binding: ${domainHostname} (Zone: ${props.zoneId}) → ${props.workerName}:${environment}`,
-    );
 
     const putPayload = {
       zone_id: props.zoneId,
@@ -273,13 +277,6 @@ async function ensureCustomDomain(
 
     resultantBinding = putResult.result;
     currentDomainId = resultantBinding.id; // Update ID from the PUT response
-    logger.log(
-      `Successfully ${operationPerformed}d binding, new ID: ${currentDomainId}`,
-    );
-  } else {
-    logger.log(
-      `Domain binding already exists and is up to date: ${domainHostname} (ID: ${currentDomainId}) → ${props.workerName}:${environment}`,
-    );
   }
 
   // Ensure we have the final binding details

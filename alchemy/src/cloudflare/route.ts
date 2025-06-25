@@ -153,13 +153,7 @@ export const Route = Resource(
     // Get or infer zone ID (only needed for create/update phases)
     let zoneId = props.zoneId;
     if (!zoneId) {
-      const inferredZoneId = await inferZoneIdFromPattern(props.pattern, {
-        accountId: props.accountId,
-        apiKey: props.apiKey,
-        apiToken: props.apiToken,
-        baseUrl: props.baseUrl,
-        email: props.email,
-      });
+      const inferredZoneId = await inferZoneIdFromPattern(api, props.pattern);
 
       if (!inferredZoneId) {
         throw new Error(
@@ -423,17 +417,17 @@ function extractDomainFromPattern(pattern: string): string {
  * @param apiOptions API options for Cloudflare API calls
  * @returns Promise resolving to zone ID or null if not found
  */
-async function inferZoneIdFromPattern(
+export async function inferZoneIdFromPattern(
+  api: CloudflareApi,
   pattern: string,
-  apiOptions: Partial<CloudflareApiOptions>,
-): Promise<string | null> {
+): Promise<string> {
   const domain = extractDomainFromPattern(pattern);
 
   // Handle wildcard domains by removing the wildcard part
   const cleanDomain = domain.replace(/^\*\./, "");
 
   // Try to find zone for the exact domain first
-  let zone = await getZoneByDomain(cleanDomain, apiOptions);
+  let zone = await getZoneByDomain(api, cleanDomain);
   if (zone) {
     return zone.id;
   }
@@ -442,11 +436,14 @@ async function inferZoneIdFromPattern(
   const domainParts = cleanDomain.split(".");
   for (let i = 1; i < domainParts.length - 1; i++) {
     const parentDomain = domainParts.slice(i).join(".");
-    zone = await getZoneByDomain(parentDomain, apiOptions);
+    zone = await getZoneByDomain(api, parentDomain);
     if (zone) {
       return zone.id;
     }
   }
 
-  return null;
+  throw new Error(
+    `Could not infer zone ID for route pattern "${pattern}". ` +
+      "Please ensure the domain is managed by Cloudflare or specify an explicit zoneId.",
+  );
 }

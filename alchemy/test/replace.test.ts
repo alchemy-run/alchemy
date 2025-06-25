@@ -1,4 +1,4 @@
-import { describe, expect } from "vitest";
+import { describe, expect, test as vitestTest } from "vitest";
 import { alchemy } from "../src/alchemy.js";
 import type { Context } from "../src/context.js";
 import { destroy } from "../src/destroy.js";
@@ -304,4 +304,43 @@ describe("Replace", () => {
       await destroy(scope);
     }
   });
+
+  vitestTest(
+    "replace should not trigger deletion of entire stage scope",
+    async () => {
+      let app: Scope;
+      try {
+        app = await alchemy("Replace-Testing", {
+          stage: "dev",
+          quiet: true,
+        });
+
+        await Replacable("foo-6", {
+          name: "foo-6",
+        });
+        await Replacable("bar-6", {
+          name: "bar-6",
+        });
+        await Replacable("bar-6", {
+          name: "baz-6",
+        });
+
+        expect(deleted).not.toContain("foo-6");
+        expect(deleted).not.toContain("bar-6");
+        expect(deleted).not.toContain("baz-6");
+
+        await app.finalize();
+
+        expect(deleted).not.toContain("foo-6");
+        expect(deleted).toContain("bar-6");
+        expect(deleted).not.toContain("baz-6");
+      } finally {
+        await destroy(app!);
+
+        expect(deleted).toContain("foo-6");
+        expect(deleted).toContain("bar-6");
+        expect(deleted).toContain("baz-6");
+      }
+    },
+  );
 });
