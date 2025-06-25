@@ -4,31 +4,36 @@ title: Getting Started with PlanetScale
 description: Get started with PlanetScale serverless MySQL databases using Alchemy's Infrastructure-as-Code approach for database and branch management.
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 This guide will walk you through setting up a PlanetScale serverless MySQL database with branching workflow using Alchemy.
 
 ## Install
 
 First, install Alchemy and the necessary dependencies:
 
-::: code-group
-
-```sh [bun]
-bun add -D alchemy
-```
-
-```sh [npm]
-npm install --save-dev alchemy
-```
-
-```sh [pnpm]
-pnpm add -D alchemy
-```
-
-```sh [yarn]
-yarn add --dev alchemy
-```
-
-:::
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    bun add -D alchemy
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npm install --save-dev alchemy
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    pnpm add -D alchemy
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    yarn add --dev alchemy
+    ```
+  </TabItem>
+</Tabs>
 
 ## Credentials
 
@@ -52,33 +57,36 @@ When creating your service token in PlanetScale, make sure to copy the token in 
 
 If you don't have a project yet, create one:
 
-::: code-group
-
-```sh [bun]
-mkdir my-planetscale-app
-cd my-planetscale-app
-bun init
-```
-
-```sh [npm]
-mkdir my-planetscale-app
-cd my-planetscale-app
-npm init -y
-```
-
-```sh [pnpm]
-mkdir my-planetscale-app
-cd my-planetscale-app
-pnpm init
-```
-
-```sh [yarn]
-mkdir my-planetscale-app
-cd my-planetscale-app
-yarn init -y
-```
-
-:::
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    mkdir my-planetscale-app
+    cd my-planetscale-app
+    bun init
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    mkdir my-planetscale-app
+    cd my-planetscale-app
+    npm init -y
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    mkdir my-planetscale-app
+    cd my-planetscale-app
+    pnpm init
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    mkdir my-planetscale-app
+    cd my-planetscale-app
+    yarn init -y
+    ```
+  </TabItem>
+</Tabs>
 
 ## Create `alchemy.run.ts`
 
@@ -189,25 +197,28 @@ console.log(`🚀 Worker deployed: ${worker.url}`);
 
 Run the Alchemy script to deploy your PlanetScale infrastructure:
 
-::: code-group
-
-```sh [bun]
-bun ./alchemy.run.ts
-```
-
-```sh [npm]
-npx tsx ./alchemy.run.ts
-```
-
-```sh [pnpm]
-pnpm tsx ./alchemy.run.ts
-```
-
-```sh [yarn]
-yarn tsx ./alchemy.run.ts
-```
-
-:::
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    bun ./alchemy.run.ts
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npx tsx ./alchemy.run.ts
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    pnpm tsx ./alchemy.run.ts
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    yarn tsx ./alchemy.run.ts
+    ```
+  </TabItem>
+</Tabs>
 
 The script will create your database and branches. You should see output like:
 
@@ -229,24 +240,34 @@ You can now:
 
 That's it! You can now tear down the infrastructure (if you want to):
 
-::: code-group
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    bun ./alchemy.run.ts --destroy
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    npx tsx ./alchemy.run.ts --destroy
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    pnpm tsx ./alchemy.run.ts --destroy
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    yarn tsx ./alchemy.run.ts --destroy
+    ```
+  </TabItem>
+</Tabs>
 
-```sh [bun]
-bun ./alchemy.run.ts --destroy
-```
+## Next Steps
 
-```sh [npm]
-npx tsx ./alchemy.run.ts --destroy
-```
+- **Connect your application**: Use the connection strings provided by PlanetScale to connect your application
+- **Schema migrations**: Use PlanetScale's schema migration tools or Drizzle ORM
+- **Branching workflow**: Create feature branches for schema changes before merging to production
+- **Monitoring**: Set up monitoring and alerts through PlanetScale's dashboard
 
-```sh [pnpm]
-pnpm tsx ./alchemy.run.ts --destroy
-```
-
-```sh [yarn]
-yarn tsx ./alchemy.run.ts --destroy
-```
-
-:::
-
-This will delete all created databases and branches from your PlanetScale organization.
+Learn more about PlanetScale features in their [official documentation](https://planetscale.com/docs). 

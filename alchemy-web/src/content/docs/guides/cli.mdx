@@ -4,6 +4,8 @@ title: CLI Arguments
 description: Learn how Alchemy automatically parses CLI arguments for common operations like destroy, read, quiet mode, and staging without requiring a traditional CLI tool.
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 Alchemy doesn't have a traditional CLI tool like `wrangler` or `terraform` because it's designed to be an embeddable TypeScript library. Instead, it provides automatic CLI argument parsing when you initialize an alchemy application, making it easy to run your infrastructure scripts with common options.
 
 ## No CLI, but CLI Arguments
@@ -116,31 +118,35 @@ await app.finalize();
 
 Deploy commands:
 
-::: code-group
-
-```sh [Deploy]
+<Tabs syncKey="pkgManager">
+<TabItem label="Deploy">
+```sh
 bun ./alchemy.run
 ```
-
-```sh [Deploy to Production]
+</TabItem>
+<TabItem label="Deploy to Production">
+```sh
 bun ./alchemy.run --stage production
 ```
-
-```sh [Read-only Check]
+</TabItem>
+<TabItem label="Read-only Check">
+```sh
 bun ./alchemy.run --read
 ```
-
-```sh [Quiet Deploy]
+</TabItem>
+<TabItem label="Quiet Deploy">
+```sh
 bun ./alchemy.run --quiet
 ```
-
-```sh [Destroy Everything]
+</TabItem>
+<TabItem label="Destroy Everything">
+```sh
 bun ./alchemy.run --destroy
 ```
-
-```sh [Deploy with Secrets]
+</TabItem>
+<TabItem label="Deploy with Secrets">
+```sh
 ALCHEMY_PASSWORD=my-secret-key bun ./alchemy.run
 ```
-
-:::
-
+</TabItem>
+</Tabs> 

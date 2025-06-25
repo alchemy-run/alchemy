@@ -302,4 +302,4 @@ const product = await Product("pro-plan", {
 
 ## Getting Started
 
-Ready to try Alchemy? Check out our [Getting Started guide](./getting-started.md) to build your first Alchemy app.
+Ready to try Alchemy? Check out our [Getting Started guide](getting-started.mdx) to build your first Alchemy app.
