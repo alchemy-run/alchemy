@@ -21,4 +21,6 @@ export const worker = await Worker("test-worker", {
   },
 });
 
+console.log(worker.url);
+
 await app.finalize();

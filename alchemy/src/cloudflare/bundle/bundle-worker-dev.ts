@@ -60,7 +60,8 @@ export async function createWorkerDevContext<B extends Bindings>(
     bundle: true,
     ...props.bundle,
     write: false, // We want the result in memory for hot reloading
-    conditions: ["workerd", "worker", "browser"],
+    conditions: ["workerd", "worker", "import", "module", "browser"],
+    mainFields: ["module", "main"],
     absWorkingDir: projectRoot,
     keepNames: true,
     loader: {

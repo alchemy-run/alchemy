@@ -2,10 +2,8 @@ FROM oven/bun:latest
 
 WORKDIR /app
 
-COPY . .
+RUN echo "export default { fetch: () => new Response('Hello, world!') }" > src/index.ts
 
-RUN sed -i 's/"workspace:\*"/"latest"/g' package.json
+EXPOSE 8080
 
-RUN bun install
-
-CMD ["bun", "run", "start"]
+CMD ["bun", "--port=8080", "src/index.ts"]

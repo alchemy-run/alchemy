@@ -225,6 +225,11 @@ export function buildMiniflareWorkerOptions({
     compatibilityDate,
     compatibilityFlags,
     unsafeDirectSockets: [{ entrypoint: undefined, proxy: true }],
+    // containerEngine: {
+    //   localDocker: {
+    //     socketPath: "/var/run/docker.sock",
+    //   }
+    // }
   };
   for (const [name, binding] of Object.entries(bindings ?? {})) {
     if (typeof binding === "string") {
