@@ -14,7 +14,15 @@ export interface ContainerProps
   className: string;
   maxInstances?: number;
   scriptName?: string;
+  instanceType?: InstanceType;
+  observability?: DeploymentObservability;
+  schedulingPolicy?: SchedulingPolicy;
 }
+
+/**
+ * @see https://developers.cloudflare.com/containers/pricing/
+ */
+export type InstanceType = "dev" | "basic" | "standard" | (string & {});
 
 export function isContainer(binding: any): binding is Container {
   return binding.type === "container";
@@ -29,7 +37,9 @@ export type Container<T = any> = {
   maxInstances?: number;
   scriptName?: string;
   sqlite?: true;
-
+  instanceType?: InstanceType;
+  observability?: DeploymentObservability;
+  schedulingPolicy?: SchedulingPolicy;
   /**
    * @internal
    */
@@ -78,6 +88,9 @@ export async function Container<T>(
     image,
     maxInstances: props.maxInstances,
     scriptName: props.scriptName,
+    instanceType: props.instanceType,
+    observability: props.observability,
+    schedulingPolicy: props.schedulingPolicy,
     sqlite: true,
   };
 }
@@ -88,6 +101,7 @@ export interface ContainerApplicationRollout {
   stepPercentage: number;
   targetConfiguration: {
     image: string;
+    instance_type?: InstanceType;
     observability: {
       logs: {
         enabled: boolean;
@@ -100,6 +114,19 @@ export interface ContainerApplicationProps extends CloudflareApiOptions {
   name: string;
   schedulingPolicy?: SchedulingPolicy;
   instances?: number;
+  /**
+   * The instance type to be used for the deployment.
+   *
+   * @default "dev"
+   */
+  instanceType?: InstanceType;
+  /**
+   * The observability configuration for the deployment.
+   */
+  observability?: DeploymentObservability;
+  /**
+   * The maximum number of instances to be used for the deployment.
+   */
   maxInstances?: number;
   image: Image;
   registryId?: string;
@@ -206,17 +233,31 @@ export const ContainerApplication = Resource(
         await deleteContainerApplication(api, this.output.id);
       }
       return this.destroy();
-    } else if (this.phase === "update") {
+    }
+    // Prefer the immutable repo digest if present. Falls back to the tag reference.
+    const imageReference = props.image.repoDigest ?? props.image.imageRef;
+
+    const configuration = {
+      image: imageReference,
+      instance_type: props.instanceType ?? "dev",
+      observability: {
+        logs: {
+          enabled: true,
+        },
+        logging: {
+          enabled: true,
+        },
+      },
+    };
+    if (this.phase === "update") {
       const application = await updateContainerApplication(
         api,
         this.output.id,
         {
           instances: props.instances ?? 1,
-          max_instances: props.maxInstances ?? 1,
+          max_instances: props.maxInstances ?? 10,
           scheduling_policy: props.schedulingPolicy ?? "default",
-          configuration: {
-            image: props.image.imageRef,
-          },
+          configuration,
         },
       );
       // TODO(sam): should we wait for the rollout to complete?
@@ -225,18 +266,13 @@ export const ContainerApplication = Resource(
         strategy: "rolling",
         kind: props.rollout?.kind ?? "full_auto",
         step_percentage: props.rollout?.stepPercentage ?? 25,
-        target_configuration: {
-          image: props.image.imageRef,
-        },
+        target_configuration: configuration,
       });
       return this({
         id: application.id,
         name: application.name,
       });
     } else {
-      // Prefer the immutable repo digest if present. Falls back to the tag reference.
-      const imageReference = props.image.repoDigest ?? props.image.imageRef;
-
       const application = await createContainerApplication(api, {
         name: props.name,
         scheduling_policy: props.schedulingPolicy ?? "default",
@@ -252,13 +288,12 @@ export const ContainerApplication = Resource(
         },
         configuration: {
           image: imageReference,
-          // TODO(sam): what?
-          // instance_type: "dev",
-          // observability: {
-          //   logs: {
-          //     enabled: true,
-          //   },
-          // },
+          instance_type: props.instanceType ?? "dev",
+          observability: {
+            logs: {
+              enabled: true,
+            },
+          },
         },
       });
 
@@ -643,11 +678,25 @@ export async function getContainerIdentity(api: CloudflareApi) {
  */
 export type Duration = string;
 
+interface DeploymentObservability {
+  logs?: {
+    enabled: boolean;
+  };
+}
+
 export type DeploymentConfiguration = {
   /**
    * The image to be used for the deployment.
    */
   image: string;
+  /**
+   * The instance type to be used for the deployment.
+   */
+  instance_type?: InstanceType;
+  /**
+   * The observability configuration for the deployment.
+   */
+  observability?: DeploymentObservability;
   /**
    * A list of SSH public key IDs from the account
    */

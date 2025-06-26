@@ -1269,12 +1269,19 @@ export const _Worker = Resource(
           return namespaceId;
         }
         await ContainerApplication(container.id, {
-          ...props,
+          accountId: props.accountId,
+          apiKey: props.apiKey,
+          apiToken: props.apiToken,
+          baseUrl: props.baseUrl,
+          email: props.email,
           image: container.image,
           name: container.id,
+          instanceType: container.instanceType,
+          observability: container.observability,
           durableObjects: {
             namespaceId: await findNamespaceId(),
           },
+          schedulingPolicy: container.schedulingPolicy,
         });
       }
 
