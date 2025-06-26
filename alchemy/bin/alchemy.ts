@@ -24,7 +24,6 @@ const router = t.router({
         z
           .object({
             template: TemplateSchema.optional(),
-            packageManager: PackageManagerSchema.optional(),
             yes: z
               .boolean()
               .optional()
@@ -35,30 +34,13 @@ const router = t.router({
               .optional()
               .default(false)
               .describe("Overwrite existing directory"),
-            bun: z
-              .boolean()
-              .optional()
-              .default(false)
-              .describe("Use Bun as the package manager"),
-            npm: z
-              .boolean()
-              .optional()
-              .default(false)
-              .describe("Use npm as the package manager"),
-            pnpm: z
-              .boolean()
-              .optional()
-              .default(false)
-              .describe("Use pnpm as the package manager"),
-            yarn: z
-              .boolean()
-              .optional()
-              .default(false)
-              .describe("Use Yarn as the package manager"),
             install: z
               .boolean()
               .optional()
               .describe("Install dependencies after scaffolding"),
+            pm: PackageManagerSchema.optional().describe(
+              "Package manager to use (bun, npm, pnpm, yarn)",
+            ),
             vibeRules: EditorSchema.optional().describe(
               "Setup vibe-rules for the specified editor (cursor, windsurf, vscode, zed, claude-code, gemini, codex, amp, clinerules, roo, unified)",
             ),

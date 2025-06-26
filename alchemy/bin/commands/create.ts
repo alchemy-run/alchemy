@@ -96,12 +96,7 @@ async function createProjectContext(
   }
 
   const path = resolve(process.cwd(), name);
-  let packageManager = options.packageManager || detectedPm;
-
-  if (options.bun) packageManager = "bun";
-  else if (options.npm) packageManager = "npm";
-  else if (options.pnpm) packageManager = "pnpm";
-  else if (options.yarn) packageManager = "yarn";
+  let packageManager = options.pm || detectedPm;
 
   let shouldInstall = true;
   if (options.install !== undefined) {

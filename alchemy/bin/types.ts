@@ -68,11 +68,7 @@ export interface WebsiteOptions {
 export type CreateInput = {
   name?: string;
   template?: TemplateType;
-  packageManager?: PackageManager;
-  bun?: boolean;
-  npm?: boolean;
-  pnpm?: boolean;
-  yarn?: boolean;
+  pm?: PackageManager;
   yes?: boolean;
   overwrite?: boolean;
   install?: boolean;
