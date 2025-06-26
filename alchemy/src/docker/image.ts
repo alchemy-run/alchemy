@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import { logger } from "../util/logger.ts";
+import type { Secret } from "../secret.ts";
 import { DockerApi } from "./api.ts";
 
 /**
@@ -44,6 +44,12 @@ export interface DockerBuildOptions {
   cacheFrom?: string[];
 }
 
+export interface ImageRegistry {
+  username: string;
+  password: Secret;
+  server: string;
+}
+
 /**
  * Properties for creating a Docker image
  */
@@ -62,6 +68,11 @@ export interface ImageProps {
    * Build configuration
    */
   build?: DockerBuildOptions;
+
+  /**
+   * Registry credentials
+   */
+  registry?: ImageRegistry;
 
   /**
    * Whether to skip pushing the image to registry
@@ -195,16 +206,61 @@ export const Image = Resource(
 
       // Handle push if required
       let repoDigest: string | undefined;
-      if (!props.skipPush) {
-        // TODO: Implement push once API supports it
-        logger.warn("Image pushing is not yet implemented");
+      let finalImageRef = imageRef;
+      if (props.registry && !props.skipPush) {
+        const { server, username, password } = props.registry;
+
+        // Ensure the registry server does not have trailing slash
+        const registryHost = server.replace(/\/$/, "");
+
+        // Determine if the built image already includes a registry host (e.g. ghcr.io/user/repo)
+        const firstSegment = imageRef.split("/")[0];
+        const hasRegistryPrefix = firstSegment.includes(".");
+
+        // Compose the target image reference that will be pushed
+        const targetImage = hasRegistryPrefix
+          ? imageRef // already fully-qualified
+          : `${registryHost}/${imageRef}`;
+
+        try {
+          // Authenticate to registry
+          await api.login(registryHost, username, password.unencrypted);
+
+          // Tag local image with fully qualified name if necessary
+          if (targetImage !== imageRef) {
+            await api.exec(["tag", imageRef, targetImage]);
+          }
+
+          // Push the image
+          const { stdout: pushOut } = await api.exec(["push", targetImage]);
+
+          // Attempt to extract the repo digest from push output
+          const digestMatch = /digest:\s+([a-z0-9]+:[a-f0-9]{64})/.exec(
+            pushOut,
+          );
+          if (digestMatch) {
+            const digestHash = digestMatch[1];
+            // Strip tag (anything after last :) to build image@digest reference
+            const [repoWithoutTag] =
+              targetImage.split(":").length > 2
+                ? [targetImage] // unlikely but safety
+                : [targetImage.substring(0, targetImage.lastIndexOf(":"))];
+            repoDigest = `${repoWithoutTag}@${digestHash}`;
+          }
+
+          // Update the final image reference to point at the pushed image
+          finalImageRef = targetImage;
+        } finally {
+          // Always try to logout – failures are non-fatal
+          await api.logout(registryHost);
+        }
       }
 
       // Return the resource using this() to construct output
       return this({
         ...props,
         name,
-        imageRef,
+        imageRef: finalImageRef,
         imageId,
         repoDigest,
         builtAt: Date.now(),

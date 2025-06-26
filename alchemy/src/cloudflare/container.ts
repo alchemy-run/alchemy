@@ -1,14 +1,16 @@
 import type { Context } from "../context.ts";
-import { DockerApi } from "../docker/api.ts";
-import { Image, type ImageProps } from "../docker/image.ts";
+import { Image, type ImageProps, type ImageRegistry } from "../docker/image.ts";
 import { Resource } from "../resource.ts";
+import { secret } from "../secret.ts";
 import {
   type CloudflareApi,
   type CloudflareApiOptions,
   createCloudflareApi,
 } from "./api.ts";
 
-export interface ContainerProps extends ImageProps {
+export interface ContainerProps
+  extends Omit<ImageProps, "registry" | "skipPush">,
+    Partial<CloudflareApiOptions> {
   className: string;
   maxInstances?: number;
   scriptName?: string;
@@ -38,15 +40,59 @@ export async function Container<T>(
   id: string,
   props: ContainerProps,
 ): Promise<Container<T>> {
+  // Otherwise, obtain Cloudflare registry credentials automatically
+  const api = await createCloudflareApi(props);
+  const creds = await getContainerCredentials(api);
+
+  const registry: ImageRegistry = {
+    server: "registry.cloudflare.com",
+    username: creds.username || creds.user!,
+    password: secret(creds.password),
+  };
+
+  // Ensure repository name is namespaced with accountId
+  const repoBase = props.name ?? id;
+  const repoName = repoBase.includes("/")
+    ? repoBase
+    : `${api.accountId}/${repoBase}`;
+
+  // Replace disallowed "latest" tag with timestamp
+  const finalTag =
+    props.tag === undefined || props.tag === "latest"
+      ? `latest-${Date.now()}`
+      : props.tag;
+
+  const image = await Image(id, {
+    build: props.build,
+    name: repoName,
+    tag: finalTag,
+    skipPush: false,
+    registry,
+  });
+
   return {
     type: "container",
     id,
     name: props.name ?? id,
     className: props.className,
-    image: await Image(id, props),
+    image,
     maxInstances: props.maxInstances,
     scriptName: props.scriptName,
     sqlite: true,
+  };
+}
+
+export interface ContainerApplicationRollout {
+  strategy: "rolling";
+  kind?: "full_auto";
+  stepPercentage: number;
+  targetConfiguration: {
+    image: string;
+    observability: {
+      logs: {
+        enabled: boolean;
+      };
+    };
   };
 }
 
@@ -60,6 +106,7 @@ export interface ContainerApplicationProps extends CloudflareApiOptions {
   durableObjects?: {
     namespaceId: string;
   };
+  rollout?: ContainerApplicationRollout;
 }
 
 export type SchedulingPolicy =
@@ -159,11 +206,37 @@ export const ContainerApplication = Resource(
         await deleteContainerApplication(api, this.output.id);
       }
       return this.destroy();
-    } else {
-      const { targetImage } = await pushContainerRefToRegistry(api, {
-        image: props.image,
-        registryId: "registry.cloudflare.com",
+    } else if (this.phase === "update") {
+      const application = await updateContainerApplication(
+        api,
+        this.output.id,
+        {
+          instances: props.instances ?? 1,
+          max_instances: props.maxInstances ?? 1,
+          scheduling_policy: props.schedulingPolicy ?? "default",
+          configuration: {
+            image: props.image.imageRef,
+          },
+        },
+      );
+      // TODO(sam): should we wait for the rollout to complete?
+      await createContainerApplicationRollout(api, application.id, {
+        description: "Progressive update",
+        strategy: "rolling",
+        kind: props.rollout?.kind ?? "full_auto",
+        step_percentage: props.rollout?.stepPercentage ?? 25,
+        target_configuration: {
+          image: props.image.imageRef,
+        },
       });
+      return this({
+        id: application.id,
+        name: application.name,
+      });
+    } else {
+      // Prefer the immutable repo digest if present. Falls back to the tag reference.
+      const imageReference = props.image.repoDigest ?? props.image.imageRef;
+
       const application = await createContainerApplication(api, {
         name: props.name,
         scheduling_policy: props.schedulingPolicy ?? "default",
@@ -178,14 +251,14 @@ export const ContainerApplication = Resource(
           tier: 1,
         },
         configuration: {
-          image: targetImage,
+          image: imageReference,
           // TODO(sam): what?
-          instance_type: "dev",
-          observability: {
-            logs: {
-              enabled: true,
-            },
-          },
+          // instance_type: "dev",
+          // observability: {
+          //   logs: {
+          //     enabled: true,
+          //   },
+          // },
         },
       });
 
@@ -258,11 +331,7 @@ export async function listContainerApplications(
 export interface CreateContainerApplicationBody {
   name: string;
   max_instances: number;
-  configuration: {
-    image: string;
-    observability?: any;
-    instance_type?: string;
-  };
+  configuration: DeploymentConfiguration;
   durable_objects?: {
     namespace_id: string;
   };
@@ -280,7 +349,83 @@ export async function createContainerApplication(
     `/accounts/${api.accountId}/containers/applications`,
     body,
   );
-  const result = (await response.json()) as any;
+  const result = (await response.json()) as {
+    result: ContainerApplicationData;
+    errors: { message: string }[];
+  };
+  if (response.ok) {
+    return result.result;
+  }
+
+  throw Error(
+    `Failed to create container application: ${result.errors?.map((e: { message: string }) => e.message).join(", ") ?? "Unknown error"}`,
+  );
+}
+
+type Region =
+  | "AFR"
+  | "APAC"
+  | "EEUR"
+  | "ENAM"
+  | "WNAM"
+  | "ME"
+  | "OC"
+  | "SAM"
+  | "WEUR"
+  | (string & {});
+
+type City =
+  | "AFR"
+  | "APAC"
+  | "EEUR"
+  | "ENAM"
+  | "WNAM"
+  | "ME"
+  | "OC"
+  | "SAM"
+  | "WEUR"
+  | (string & {});
+
+export type UpdateApplicationRequestBody = {
+  /**
+   * Number of deployments to maintain within this applicaiton. This can be used to scale the appliation up/down.
+   */
+  instances?: number;
+  max_instances?: number;
+  affinities?: {
+    colocation?: "datacenter";
+  };
+  scheduling_policy?: SchedulingPolicy;
+  constraints?: {
+    region?: Region;
+    tier?: number;
+    regions?: Array<Region>;
+    cities?: Array<City>;
+  };
+  /**
+   * The deployment configuration of all deployments created by this application.
+   * Right now, if you modify the application configuration, only new deployments
+   * created will have the new configuration. You can delete old deployments to
+   * release new instances.
+   *
+   * TODO(sam): should this trigger a replacement?
+   */
+  configuration?: DeploymentConfiguration;
+};
+
+export async function updateContainerApplication(
+  api: CloudflareApi,
+  applicationId: string,
+  body: UpdateApplicationRequestBody,
+) {
+  const response = await api.patch(
+    `/accounts/${api.accountId}/containers/applications/${applicationId}`,
+    body,
+  );
+  const result = (await response.json()) as {
+    result: ContainerApplicationData;
+    errors: { message: string }[];
+  };
   if (response.ok) {
     return result.result;
   }
@@ -306,6 +451,82 @@ export async function deleteContainerApplication(
   );
 }
 
+interface CreateRolloutApplicationRequest {
+  description: string;
+  strategy: "rolling";
+  kind?: "full_auto";
+  step_percentage: number;
+  target_configuration: DeploymentConfiguration;
+}
+
+interface CreateRolloutApplicationResponse {
+  id: string;
+  created_at: string;
+  last_updated_at: string;
+  description: string;
+  status: "progressing" | "completed" | "failed" | (string & {});
+  health: {
+    instances: {
+      healthy: number;
+      failed: number;
+      starting: number;
+      scheduling: number;
+    };
+  };
+  kind: "full_auto" | (string & {});
+  strategy: "rolling" | (string & {});
+  current_configuration: {
+    image: string;
+    observability?: {
+      logs?: {
+        enabled: boolean;
+      };
+      logging?: {
+        enabled: boolean;
+      };
+    };
+  };
+  target_configuration: DeploymentConfiguration;
+  current_version: number;
+  target_version: number;
+  steps: Array<{
+    id: number;
+    status: "progressing" | "pending" | "completed" | "failed" | (string & {});
+    step_size: {
+      percentage: number;
+    };
+    description: string;
+    started_at?: string;
+  }>;
+  progress: {
+    total_steps: number;
+    current_step: number;
+    updated_instances: number;
+    total_instances: number;
+  };
+}
+
+export async function createContainerApplicationRollout(
+  api: CloudflareApi,
+  applicationId: string,
+  body: CreateRolloutApplicationRequest,
+) {
+  const response = await api.post(
+    `/accounts/${api.accountId}/containers/applications/${applicationId}/rollouts`,
+    body,
+  );
+  const result = (await response.json()) as {
+    result: CreateRolloutApplicationResponse;
+    errors: { message: string }[];
+  };
+  if (response.ok) {
+    return result.result;
+  }
+  throw Error(
+    `Failed to create container application rollout: ${result.errors.map((e: { message: string }) => e.message).join(", ")}`,
+  );
+}
+
 export type ImageRegistryCredentialsConfiguration = {
   permissions: Array<"pull" | "push">;
   expiration_minutes: number;
@@ -322,84 +543,20 @@ export async function getContainerCredentials(
       expiration_minutes: 60,
     } satisfies ImageRegistryCredentialsConfiguration,
   );
-  const result = (await credentials.json()) as any;
+  const result = (await credentials.json()) as {
+    result: {
+      user?: string;
+      username?: string;
+      password: string;
+    };
+    errors: { message: string }[];
+  };
   if (credentials.ok) {
     return result.result;
   }
   throw Error(
     `Failed to get container credentials: ${result.errors.map((e: { message: string }) => e.message).join(", ")}`,
   );
-}
-
-export async function pushContainerRefToRegistry(
-  api: CloudflareApi,
-  props: {
-    image: Image;
-    registryId?: string;
-  },
-) {
-  const registryId = props.registryId || "registry.cloudflare.com";
-  const credentials = await getContainerCredentials(api, registryId);
-
-  // Initialize Docker API
-  const dockerApi = new DockerApi();
-
-  // Check if Docker is running
-  const isRunning = await dockerApi.isRunning();
-  if (!isRunning) {
-    throw new Error("Docker daemon is not running");
-  }
-
-  try {
-    // Docker login to Cloudflare registry using the secure login method
-    await dockerApi.login(
-      registryId,
-      credentials.username || credentials.user,
-      credentials.password,
-    );
-
-    // Get the source image reference
-    const sourceImage =
-      typeof props.image === "string" ? props.image : props.image.imageRef;
-
-    // Parse image name and tag
-    const imageWithoutRegistry = sourceImage.split("/").pop() || sourceImage;
-    const [imageName, imageTag] = imageWithoutRegistry.includes(":")
-      ? imageWithoutRegistry.split(":")
-      : [imageWithoutRegistry, "latest"];
-
-    // Replace "latest" tag with a timestamp-based tag since Cloudflare doesn't allow "latest"
-    const targetTag = imageTag === "latest" ? `build-${Date.now()}` : imageTag;
-
-    // Construct the target image name for Cloudflare registry
-    // Format: registry.cloudflare.com/account-id/image-name:tag
-    const targetImage = getCloudflareRegistryWithAccountNamespace(
-      api.accountId,
-      `${imageName}:${targetTag}`,
-    );
-
-    // Tag the image for Cloudflare registry if needed
-    if (sourceImage !== targetImage) {
-      await dockerApi.exec(["tag", sourceImage, targetImage]);
-    }
-
-    // Push the image to Cloudflare registry
-    await dockerApi.exec(["push", targetImage]);
-
-    // Return the pushed image reference
-    return {
-      sourceImage,
-      targetImage,
-      registryId,
-    };
-  } catch (error) {
-    throw new Error(
-      `Failed to push image to Cloudflare registry: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  } finally {
-    // Logout from the registry for security
-    await dockerApi.logout(registryId);
-  }
 }
 
 // The Cloudflare managed registry is special in that the namespaces for repos should always
@@ -477,3 +634,161 @@ export async function getContainerIdentity(api: CloudflareApi) {
     `Failed to get container me: ${result.errors.map((e: { message: string }) => e.message).join(", ")}`,
   );
 }
+
+/**
+ * Duration string. From Go documentation:
+ * A string representing the duration in the form "3d1h3m". Leading zero units are omitted.
+ * As a special case, durations less than one second format use a smaller unit (milli-, micro-, or nanoseconds)
+ * to ensure that the leading digit is non-zero.
+ */
+export type Duration = string;
+
+export type DeploymentConfiguration = {
+  /**
+   * The image to be used for the deployment.
+   */
+  image: string;
+  /**
+   * A list of SSH public key IDs from the account
+   */
+  ssh_public_key_ids?: Array<string>;
+  /**
+   * A list of objects with secret names and the their access types from the account
+   */
+  secrets?: Array<{
+    /**
+     * The name of the secret within the container
+     */
+    name: string;
+    type: "env";
+    /**
+     * Corresponding secret name from the account
+     */
+    secret: string;
+  }>;
+  /**
+   * Specify the vcpu to be used for the deployment. The default will be the one configured for the account.
+   */
+  vcpu?: number;
+  /**
+   * Specify the memory to be used for the deployment. The default will be the one configured for the account.
+   */
+  memory?: string;
+  /**
+   * The disk configuration for this deployment
+   */
+  disk?: {
+    size: string;
+  };
+  /**
+   * Container environment variables
+   */
+  environment_variables?: Array<{
+    name: string;
+    value: string;
+  }>;
+  /**
+   * Deployment labels
+   */
+  labels?: Array<{
+    name: string;
+    value: string;
+  }>;
+  network?: {
+    /**
+     * Assign an IPv4 address to the deployment. One of 'none' (default), 'predefined' (allocate one from a set of IPv4 addresses in the global pool), 'account' (allocate one from a set of IPv4 addresses preassigned in the account pool). Only applicable to "public" mode.
+     *
+     */
+    assign_ipv4?: "none" | "predefined" | "account";
+    /**
+     * Assign an IPv6 address to the deployment. One of 'predefined' (allocate one from a set of IPv6 addresses in the global pool), 'account' (allocate one from a set of IPv6 addresses preassigned in the account pool). The container will always be assigned to an IPv6 if the networking mode is "public".
+     *
+     */
+    assign_ipv6?: "none" | "predefined" | "account";
+    mode?: "public" | "private";
+  };
+  command?: string[];
+  entrypoint?: string[];
+  dns?: {
+    /**
+     * List of DNS servers that the deployment will use to resolve domain names. You can only specify a maximum of 3.
+     */
+    servers?: Array<string>;
+    /**
+     * The container resolver will append these domains to every resolve query. For example, if you have 'google.com',
+     * and your deployment queries 'web', it will append 'google.com' to 'web' in the search query before trying 'web'.
+     * Limited to 6 domains.
+     */
+    searches?: Array<string>;
+  };
+  ports?: Array<{
+    /**
+     * The name of the port. The port name should be unique for each deployment. Minimum length of 1 and maximum length of 15. No consecutive dashes. If the name is 'web-ui', the container will receive an environment variable as follows:
+     * - CLOUDFLARE_PORT_WEB_UI: Port inside the container
+     * - CLOUDFLARE_HOST_PORT_WEB_UI: Port outside the container
+     * - CLOUDFLARE_HOST_IP_WEB_UI: Address of the external network interface the port is allocated on
+     * - CLOUDFLARE_HOST_ADDR_WEB_UI: CLOUDFLARE_HOST_ADDR_WEB_UI ':' CLOUDFLARE_HOST_PORT_WEB_UI
+     *
+     */
+    name: string;
+    /**
+     * Optional port number, it's assigned only if the user specified it. If it's not specified, the datacenter scheduler will decide it.
+     */
+    port?: number;
+  }>;
+  /**
+   * Health and readiness checks for this deployment.
+   */
+  checks?: Array<{
+    /**
+     * Optional name for the check. If omitted, a name will be generated automatically.
+     */
+    name?: string;
+    /**
+     * The type of check to perform. A TCP check succeeds if it can connect to the provided port. An HTTP check succeeds if it receives a successful HTTP response (2XX)
+     */
+    type: "http" | "tcp";
+    /**
+     * Connect to the port using TLS
+     */
+    tls?: boolean;
+    /**
+     * The name of the port defined in the "ports" property of the deployment
+     */
+    port: string;
+    /**
+     * Configuration for HTTP checks. Only valid when "type" is "http"
+     */
+    http?: {
+      method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS" | "HEAD";
+      /**
+       * If the method is one of POST, PATCH or PUT, this is required. It's the body that will be passed to the HTTP healthcheck request.
+       */
+      body?: string;
+      /**
+       * Path that will be used to perform the healthcheck.
+       */
+      path?: string;
+      /**
+       * HTTP headers to include in the request.
+       */
+      headers?: Record<string, any>;
+    };
+    /**
+     * How often the check should be performed
+     */
+    interval: Duration;
+    /**
+     * The amount of time to wait for the check to complete before considering the check to have failed
+     */
+    timeout: Duration;
+    /**
+     * Number of times to attempt the check before considering it to have failed
+     */
+    retries?: number;
+    /**
+     * The kind of check. A failed "healthy" check affects a deployment's "healthy" status, while a failed "ready" check affects a deployment's "ready" status.
+     */
+    kind: "health" | "ready";
+  }>;
+};
