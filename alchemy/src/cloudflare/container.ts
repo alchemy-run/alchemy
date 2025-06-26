@@ -14,6 +14,10 @@ export interface ContainerProps extends ImageProps {
   scriptName?: string;
 }
 
+export function isContainer(binding: any): binding is Container {
+  return binding.type === "container";
+}
+
 export type Container<T = any> = {
   type: "container";
   id: string;

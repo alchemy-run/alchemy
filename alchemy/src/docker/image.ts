@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { logger } from "../util/logger.ts";
 import { DockerApi } from "./api.ts";
 
 /**
@@ -186,21 +187,17 @@ export const Image = Resource(
       buildArgs.push(context);
 
       // Execute build command
-      console.log(`Building Docker image: ${imageRef}`);
       const { stdout } = await api.exec(buildArgs);
 
       // Extract image ID from build output if available
       const imageIdMatch = /Successfully built ([a-f0-9]+)/.exec(stdout);
       const imageId = imageIdMatch ? imageIdMatch[1] : undefined;
 
-      console.log(`Successfully built Docker image: ${imageRef}`);
-
       // Handle push if required
       let repoDigest: string | undefined;
       if (!props.skipPush) {
-        console.log(`Pushing Docker image: ${imageRef}`);
         // TODO: Implement push once API supports it
-        console.warn("Image pushing is not yet implemented");
+        logger.warn("Image pushing is not yet implemented");
       }
 
       // Return the resource using this() to construct output

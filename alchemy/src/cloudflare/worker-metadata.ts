@@ -8,7 +8,7 @@ import {
   type WorkerBindingDurableObjectNamespace,
   type WorkerBindingSpec,
 } from "./bindings.ts";
-import type { Container } from "./container.ts";
+import { isContainer, type Container } from "./container.ts";
 import {
   isDurableObjectNamespace,
   type DurableObjectNamespace,
@@ -209,8 +209,12 @@ export async function prepareWorkerMetadata(
   },
 ): Promise<WorkerMetadata> {
   const oldSettings = await getWorkerSettings(api, props.workerName);
-  const oldTags: string[] | undefined =
-    oldSettings?.default_environment?.script?.tags;
+  const oldTags: string[] | undefined = Array.from(
+    new Set([
+      ...(oldSettings?.default_environment?.script?.tags ?? []),
+      ...(oldSettings?.tags ?? []),
+    ]),
+  );
   const oldBindings = oldSettings?.bindings;
   // we use Cloudflare Worker tags to store a mapping between Alchemy's stable identifier and the binding name
   // e.g.
@@ -256,8 +260,9 @@ export async function prepareWorkerMetadata(
 
         // try and find the DO binding by stable id
         const object = Object.values(props.bindings).find(
-          (binding): binding is DurableObjectNamespace<any> =>
-            isDurableObjectNamespace(binding) && binding.id === stableId,
+          (binding): binding is DurableObjectNamespace | Container =>
+            (isDurableObjectNamespace(binding) || isContainer(binding)) &&
+            binding.id === stableId,
         );
         if (object) {
           // we found the corresponding object, it should not be deleted
@@ -304,7 +309,7 @@ export async function prepareWorkerMetadata(
       // we use this to reliably compute class migrations based on server-side state
       ...Object.entries(props.bindings ?? {}).flatMap(
         ([bindingName, binding]) =>
-          isDurableObjectNamespace(binding)
+          isDurableObjectNamespace(binding) || isContainer(binding)
             ? // TODO(sam): base64 encode if contains `:`?
               [`alchemy:do:${binding.id}:${bindingName}`]
             : [],
