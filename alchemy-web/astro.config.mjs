@@ -20,6 +20,7 @@ export default defineConfig({
     }),
     starlight({
       title: "Alchemy",
+      favicon: "/public/flask.svg",
       logo: {
         src: "/public/alchemy-logo.svg",
         replacesTitle: true,
