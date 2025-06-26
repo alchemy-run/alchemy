@@ -33,7 +33,9 @@ import {
   type Binding,
   type Bindings,
   Json,
+  type WorkerBindingDurableObjectNamespace,
   type WorkerBindingService,
+  type WorkerBindingSpec,
 } from "./bindings.ts";
 import type { Bound } from "./bound.ts";
 import { isBucket } from "./bucket.ts";
@@ -42,6 +44,7 @@ import {
   type NoBundleResult,
   bundleWorkerScript,
 } from "./bundle/bundle-worker.ts";
+import { type Container, ContainerApplication } from "./container.ts";
 import { CustomDomain } from "./custom-domain.ts";
 import { isD1Database } from "./d1-database.ts";
 import type { DispatchNamespaceResource } from "./dispatch-namespace.ts";
@@ -1176,6 +1179,7 @@ export const _Worker = Resource(
       // Find any assets bindings
       const assetsBindings: { name: string; assets: Assets }[] = [];
       const workflowsBindings: Workflow[] = [];
+      const containersBindings: Container[] = [];
 
       if (props.bindings) {
         for (const [bindingName, binding] of Object.entries(props.bindings)) {
@@ -1184,6 +1188,8 @@ export const _Worker = Resource(
               assetsBindings.push({ name: bindingName, assets: binding });
             } else if (binding.type === "workflow") {
               workflowsBindings.push(binding);
+            } else if (binding.type === "container") {
+              containersBindings.push(binding);
             }
           }
         }
@@ -1223,6 +1229,7 @@ export const _Worker = Resource(
         compatibilityFlags,
         assetUploadResult,
       });
+      versionResult.versionId;
 
       for (const workflow of workflowsBindings) {
         if (
@@ -1235,6 +1242,47 @@ export const _Worker = Resource(
             scriptName: workflow.scriptName ?? workerName,
           });
         }
+      }
+
+      for (const container of containersBindings) {
+        async function findNamespaceId() {
+          const response = await api.get(
+            `/accounts/${api.accountId}/workers/scripts/${workerName}/versions/${versionResult.deploymentId}`,
+          );
+          const result = (await response.json()) as {
+            result: {
+              resources: {
+                bindings: WorkerBindingSpec[];
+              };
+            };
+          };
+          const namespaceId = result.result.resources.bindings.find(
+            (binding): binding is WorkerBindingDurableObjectNamespace =>
+              binding.type === "durable_object_namespace" &&
+              binding.class_name === container.className,
+          )?.namespace_id;
+          if (!namespaceId) {
+            throw new Error(
+              `Namespace ID not found for container ${container.id}`,
+            );
+          }
+          return namespaceId;
+        }
+        await ContainerApplication(container.id, {
+          accountId: props.accountId,
+          apiKey: props.apiKey,
+          apiToken: props.apiToken,
+          baseUrl: props.baseUrl,
+          email: props.email,
+          image: container.image,
+          name: container.id,
+          instanceType: container.instanceType,
+          observability: container.observability,
+          durableObjects: {
+            namespaceId: await findNamespaceId(),
+          },
+          schedulingPolicy: container.schedulingPolicy,
+        });
       }
 
       await Promise.all(
@@ -1582,7 +1630,7 @@ type PutWorkerOptions = WorkerProps & {
 export async function putWorker(
   api: CloudflareApi,
   props: PutWorkerOptions,
-): Promise<{ versionId?: string; previewUrl?: string }> {
+): Promise<{ versionId?: string; previewUrl?: string; deploymentId: string }> {
   const {
     //
     dispatchNamespace,
@@ -1727,23 +1775,23 @@ export async function putWorker(
           }
         }
       }
+      const responseData = (await uploadResponse.json()) as {
+        result: {
+          id: string;
+          number: number;
+          metadata: {
+            has_preview: boolean;
+          };
+          annotations?: {
+            "workers/tag"?: string;
+          };
+          deployment_id: string;
+        };
+      };
+      const result = responseData.result;
 
       // Handle version response
       if (props.version) {
-        const responseData = (await uploadResponse.json()) as {
-          result: {
-            id: string;
-            number: number;
-            metadata: {
-              has_preview: boolean;
-            };
-            annotations?: {
-              "workers/tag"?: string;
-            };
-          };
-        };
-        const result = responseData.result;
-
         // Get the account's workers.dev subdomain to construct preview URL
         let previewUrl: string | undefined;
         if (result.metadata?.has_preview) {
@@ -1770,10 +1818,13 @@ export async function putWorker(
         return {
           versionId: result.id,
           previewUrl,
+          deploymentId: result.deployment_id,
         };
       }
 
-      return {};
+      return {
+        deploymentId: result.deployment_id,
+      };
     },
     (err) =>
       err.status === 404 ||

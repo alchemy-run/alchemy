@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import util from "node:util";
 import type { Phase } from "./alchemy.ts";
 import { destroy, destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
@@ -286,6 +287,10 @@ export class Scope {
 
   public async run<T>(fn: (scope: Scope) => Promise<T>): Promise<T> {
     return Scope.storage.run(this, () => fn(this));
+  }
+
+  [util.inspect.custom]() {
+    return `Scope(${this.chain.join("/")})`;
   }
 
   [Symbol.asyncDispose]() {

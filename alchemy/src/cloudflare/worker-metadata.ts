@@ -8,6 +8,7 @@ import {
   type WorkerBindingDurableObjectNamespace,
   type WorkerBindingSpec,
 } from "./bindings.ts";
+import { isContainer, type Container } from "./container.ts";
 import {
   isDurableObjectNamespace,
   type DurableObjectNamespace,
@@ -194,6 +195,7 @@ export interface WorkerMetadata {
     cron: string;
     suspended: boolean;
   }[];
+  containers?: { class_name: string }[];
 }
 
 export async function prepareWorkerMetadata(
@@ -207,8 +209,12 @@ export async function prepareWorkerMetadata(
   },
 ): Promise<WorkerMetadata> {
   const oldSettings = await getWorkerSettings(api, props.workerName);
-  const oldTags: string[] | undefined =
-    oldSettings?.default_environment?.script?.tags;
+  const oldTags: string[] | undefined = Array.from(
+    new Set([
+      ...(oldSettings?.default_environment?.script?.tags ?? []),
+      ...(oldSettings?.tags ?? []),
+    ]),
+  );
   const oldBindings = oldSettings?.bindings;
   // we use Cloudflare Worker tags to store a mapping between Alchemy's stable identifier and the binding name
   // e.g.
@@ -254,8 +260,9 @@ export async function prepareWorkerMetadata(
 
         // try and find the DO binding by stable id
         const object = Object.values(props.bindings).find(
-          (binding): binding is DurableObjectNamespace<any> =>
-            isDurableObjectNamespace(binding) && binding.id === stableId,
+          (binding): binding is DurableObjectNamespace | Container =>
+            (isDurableObjectNamespace(binding) || isContainer(binding)) &&
+            binding.id === stableId,
         );
         if (object) {
           // we found the corresponding object, it should not be deleted
@@ -302,7 +309,7 @@ export async function prepareWorkerMetadata(
       // we use this to reliably compute class migrations based on server-side state
       ...Object.entries(props.bindings ?? {}).flatMap(
         ([bindingName, binding]) =>
-          isDurableObjectNamespace(binding)
+          isDurableObjectNamespace(binding) || isContainer(binding)
             ? // TODO(sam): base64 encode if contains `:`?
               [`alchemy:do:${binding.id}:${bindingName}`]
             : [],
@@ -512,6 +519,21 @@ export async function prepareWorkerMetadata(
         key_base64: binding.key_base64?.unencrypted,
         key_jwk: binding.key_jwk?.unencrypted,
       });
+    } else if (binding.type === "container") {
+      meta.bindings.push({
+        type: "durable_object_namespace",
+        class_name: binding.className,
+        name: bindingName,
+      });
+      if (
+        binding.scriptName === undefined ||
+        // TODO(sam): not sure if Cloudflare Api would like us using `this` worker name here
+        binding.scriptName === props.workerName
+      ) {
+        // we do not need configure class migrations for cross-script bindings
+        configureClassMigration(bindingName, binding);
+      }
+      (meta.containers ??= []).push({ class_name: binding.className });
     } else {
       assertNever(
         binding,
@@ -525,7 +547,7 @@ export async function prepareWorkerMetadata(
 
   function configureClassMigration(
     bindingName: string,
-    newBinding: DurableObjectNamespace<any>,
+    newBinding: DurableObjectNamespace<any> | Container,
   ) {
     let prevBinding: WorkerBindingDurableObjectNamespace | undefined;
     if (oldBindings) {

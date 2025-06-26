@@ -1,3 +1,14 @@
+## v0.41.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Containers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/476 [<samp>(43e88)</samp>](https://github.com/sam-goodwin/alchemy/commit/43e88e95)
+- **github**: Add repo webhook resource &nbsp;-&nbsp; by **Justin Bennett** in https://github.com/sam-goodwin/alchemy/issues/477 [<samp>(2c997)</samp>](https://github.com/sam-goodwin/alchemy/commit/2c997d6f)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.40.1...v0.41.0)
+
+---
+
 ## v0.40.1
 
 *No significant changes*

@@ -97,7 +97,8 @@ export async function bundleWorkerScript<B extends Bindings>(
       platform: "node",
       minify: false,
       ...(props.bundle || {}),
-      conditions: ["workerd", "worker", "browser"],
+      conditions: ["workerd", "worker", "import", "module", "browser"],
+      mainFields: ["module", "main"],
       absWorkingDir: projectRoot,
       keepNames: true, // Important for Durable Object classes
       loader: {

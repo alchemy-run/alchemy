@@ -1,0 +1,20 @@
+{
+  "name": "cloudflare-container",
+  "version": "0.0.0",
+  "description": "Alchemy Typescript Project",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "deploy": "bun run ./alchemy.run.ts",
+    "destroy": "bun run ./alchemy.run.ts --destroy",
+    "watch": "bun --watch ./alchemy.run.ts",
+    "dev": "bun --watch ./alchemy.run.ts --dev"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "@types/node": "^24.0.1",
+    "alchemy": "workspace:*",
+    "hono": "^4.8.3",
+    "typescript": "^5.8.3"
+  }
+}
