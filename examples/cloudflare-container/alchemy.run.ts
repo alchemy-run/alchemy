@@ -4,7 +4,7 @@ import alchemy from "alchemy";
 import { Container, Worker } from "alchemy/cloudflare";
 import type { MyContainer } from "./src/worker.ts";
 
-const app = await alchemy("cloudflare-worker-simple");
+const app = await alchemy("cloudflare-container");
 
 const container = await Container<MyContainer>("test-container", {
   className: "MyContainer",
