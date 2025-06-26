@@ -57,6 +57,7 @@ export class DOStateStore implements StateStore {
 
   private async createClient() {
     const token =
+      this.options.apiToken?.unencrypted ??
       this.options.worker?.token ??
       (await alchemy.secret.env.ALCHEMY_STATE_TOKEN).unencrypted;
     if (this.options.worker && "url" in this.options.worker) {
