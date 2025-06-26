@@ -34,8 +34,9 @@ const worker = await Worker("api", {
 console.log(worker.routes); // Array of created Route resources
 ```
 
-> [!NOTE]
-> Zone IDs are inferred from the domain from the pattern and finding the matching zone in your Cloudflare account.
+:::note
+Zone IDs are inferred from the domain from the pattern and finding the matching zone in your Cloudflare account.
+:::
 
 ## Explicit Zone ID
 

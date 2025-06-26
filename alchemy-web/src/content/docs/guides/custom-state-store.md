@@ -6,8 +6,9 @@ description: Learn how to create your own state storage backend for Alchemy to p
 
 Alchemy's state management system is designed to be pluggable, allowing you to implement your own storage backends. This guide walks you through creating a custom state store implementation.
 
-> [!NOTE]  
-> This guide builds on the concepts from [State Management](../concepts/state.md). Familiarize yourself with how Alchemy handles state before creating a custom state store.
+:::note  
+This guide builds on the concepts from [State Management](../concepts/state.md). Familiarize yourself with how Alchemy handles state before creating a custom state store.
+:::
 
 ## Understanding the StateStore Interface
 
@@ -68,8 +69,9 @@ const serializedData = await serialize(this.scope, value);
 const state = await deserialize(this.scope, rawData) as State;
 ```
 
-> [!IMPORTANT]
-> For detailed information on Alchemy's serialization system, see the [Serialization and Deserialization](../advanced/serde.md) guide.
+:::important
+For detailed information on Alchemy's serialization system, see the [Serialization and Deserialization](../advanced/serde.md) guide.
+:::
 
 ## Creating a Custom State Store
 

@@ -6,8 +6,10 @@ description: Create, bind, and trigger Cloudflare Workflows from your Alchemy-ma
 
 This guide explains how to create, bind and use Cloudflare Workflows within your Worker scripts.
 
-> [!TIP]
-> We assume you're familiar with Cloudflare Workflows already. If not, read [Cloudflare Workflows](https://developers.cloudflare.com/workflows/) first.
+
+:::tip
+We assume you're familiar with Cloudflare Workflows already. If not, read [Cloudflare Workflows](https://developers.cloudflare.com/workflows/) first.
+:::
 
 ## Create a Workflow
 
@@ -64,8 +66,9 @@ export class OrderProcessor extends WorkflowEntrypoint {
 }
 ```
 
-> [!TIP]
-> See Cloudflare's [Workflow Guide](https://developers.cloudflare.com/workflows/get-started/guide/) for more details on implementing workflows.
+:::tip
+See Cloudflare's [Workflow Guide](https://developers.cloudflare.com/workflows/get-started/guide/) for more details on implementing workflows.
+:::
 
 ## Trigger the Workflow from your Worker
 
@@ -108,8 +111,9 @@ declare module "cloudflare:workers" {
 }
 ```
 
-> [!TIP]
-> See the [Bindings](../concepts/bindings.md) for more information.
+:::tip
+See the [Bindings](../concepts/bindings.md) for more information.
+:::
 
 ## Cross-Script Workflow Binding
 

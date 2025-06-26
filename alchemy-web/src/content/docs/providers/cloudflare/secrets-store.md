@@ -22,5 +22,6 @@ await Secret("my-secret", {
 });
 ```
 
-> [!CAUTION]
-> While Cloudflare's API supports creating, updating and deleting Secrets Store resources, it is still in Beta and only allows maximum one per account and the UI does not support displaying more than 1. You should not provide a store and instead rely on [Secret](./secret.md) to auto-create and use the `default_secrets_store`.
+:::caution
+While Cloudflare's API supports creating, updating and deleting Secrets Store resources, it is still in Beta and only allows maximum one per account and the UI does not support displaying more than 1. You should not provide a store and instead rely on [Secret](./secret.md) to auto-create and use the `default_secrets_store`.
+:::

@@ -105,8 +105,9 @@ const app = await alchemy("my-app", {
 });
 ```
 
-> [!TIP]
-> Credentials can be inferred from environment variables or OAuth. See the [Cloudflare Auth Guide](../guides/cloudflare-auth.md) for setup instructions.
+:::tip
+Credentials can be inferred from environment variables or OAuth. See the [Cloudflare Auth Guide](../guides/cloudflare-auth.md) for setup instructions.
+:::
 
 You can also provide explicit configuration:
 
@@ -167,8 +168,9 @@ const app = await alchemy("my-app", {
 
 S3StateStore provides durable, scalable state storage with automatic retry logic and proper error handling. The S3 bucket must be created beforehand, and AWS credentials must be configured with appropriate S3 permissions.
 
-> [!TIP]
-> Learn how to implement your own state storage in [Custom State Stores Guide](../guides/custom-state-store.md)
+:::tip
+Learn how to implement your own state storage in [Custom State Stores Guide](../guides/custom-state-store.md)
+:::
 
 ## Security and Secrets
 
@@ -194,8 +196,10 @@ Secrets are encrypted in state files:
 }
 ```
 
-> [!IMPORTANT]
-> Always use `alchemy.secret()` for sensitive values to prevent them from being stored in plain text.
+:::important
+Always use `alchemy.secret()` for sensitive values to prevent them from being stored in plain text.
+:::
 
-> [!NOTE]
-> Learn more about secrets management in [Concepts: Secrets](./secret.md)
+:::note
+Learn more about secrets management in [Concepts: Secrets](./secret.md)
+:::

@@ -112,8 +112,9 @@ State is stored as plain JSON files you can inspect, edit, and version control.
 }
 ```
 
-> [!NOTE]
-> You usually don't want to edit these files, but when things go wrong, having state that is easy to understand and change is useful.
+:::note
+You usually don't want to edit these files, but when things go wrong, having state that is easy to understand and change is useful.
+:::
 
 ## Pluggable State
 

@@ -115,8 +115,9 @@ And register `env.ts` in your `tsconfig.json`'s `types`.
 }
 ```
 
-> [!TIP]
-> See [Bindings](../concepts/bindings.md) for more information.
+:::tip
+See [Bindings](../concepts/bindings.md) for more information.
+:::
 
 ## Static Assets
 
@@ -292,8 +293,10 @@ export default {
 
 ## Durable Object
 
-> [!TIP]
-> See the [Durable Object Guide](./cloudflare-durable-objects.md) for more information.
+
+:::tip
+See the [Durable Object Guide](./cloudflare-durable-objects.md) for more information.
+:::
 
 ### Cross-Script Durable Object
 
@@ -352,8 +355,9 @@ const worker = await Worker("api", {
 });
 ```
 
-> [!TIP]
-> See the [Route](../providers/cloudflare/route.md) for more information.
+:::tip
+See the [Route](../providers/cloudflare/route.md) for more information.
+:::
 
 ## Custom Domains
 
@@ -372,8 +376,9 @@ const worker = await Worker("api", {
 console.log(worker.domains); // Array of created CustomDomain resources
 ```
 
-> [!TIP]
-> See the [Routes and Domains](https://developers.cloudflare.com/workers/configuration/routing/#what-is-best-for-me) Cloudflare docs to help decide between when to use a Route vs a Domain.
+:::tip
+See the [Routes and Domains](https://developers.cloudflare.com/workers/configuration/routing/#what-is-best-for-me) Cloudflare docs to help decide between when to use a Route vs a Domain.
+:::
 
 ## Workers for Platforms
 
@@ -422,11 +427,13 @@ export default {
 };
 ```
 
-> [!NOTE]
-> Workers for Platforms enables multi-tenant architectures where each tenant can have isolated worker scripts with their own bindings and configuration.
+:::note
+Workers for Platforms enables multi-tenant architectures where each tenant can have isolated worker scripts with their own bindings and configuration.
+:::
 
-> [!TIP]
-> See the [Dispatch Namespace](../providers/cloudflare/dispatch-namespace.md) documentation for more details on Workers for Platforms.
+:::tip
+See the [Dispatch Namespace](../providers/cloudflare/dispatch-namespace.md) documentation for more details on Workers for Platforms.
+:::
 
 ## Worker Versions
 
@@ -447,8 +454,9 @@ console.log(`Preview URL: ${previewWorker.url}`);
 // Output: https://{version-hash}-my-worker.subdomain.workers.dev
 ```
 
-> [!CAUTION]
-> Preview URLs cannot be generated for Workers with Durable Objects, see the [Preview URL](https://developers.cloudflare.com/workers/configuration/previews/#limitations) documentation to learn more.
+:::caution
+Preview URLs cannot be generated for Workers with Durable Objects, see the [Preview URL](https://developers.cloudflare.com/workers/configuration/previews/#limitations) documentation to learn more.
+:::
 
 ## Reference Worker by Name
 
@@ -467,8 +475,9 @@ const callerWorker = await Worker("caller", {
 });
 ```
 
-> [!NOTE]
-> Learn more in the [Route Documentation](../providers/cloudflare/route.md)
+:::note
+Learn more in the [Route Documentation](../providers/cloudflare/route.md)
+:::
 
 ### RPC Type
 

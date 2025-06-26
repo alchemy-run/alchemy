@@ -10,8 +10,9 @@ In Alchemy, a Resource is "just a function". This makes it super easy to generat
 
 To start generating resources, copy Alchemy's [.cursorrules](https://github.com/sam-goodwin/alchemy/blob/main/.cursorrules) into your repo
 
-> [!NOTE]
-> All of Alchemy's "built-in" resouces are generated this way, so it is tried and tested.
+:::note
+All of Alchemy's "built-in" resouces are generated this way, so it is tried and tested.
+:::
 
 ## Simple Prompt Example
 

@@ -48,8 +48,9 @@ export interface Database extends Resource<"neon::Database">, DatabaseProps {
 }
 ```
 
-> [!CAUTION]
-> This interface must extend `Resource<..>`
+:::caution
+This interface must extend `Resource<..>`
+:::
 
 ## Resource Provider
 
@@ -76,8 +77,9 @@ export const Database = Resource(
 );
 ```
 
-> [!TIP]
-> By Convention, the name of this exported `const` should match the name of your Resource's interface.
+:::tip
+By Convention, the name of this exported `const` should match the name of your Resource's interface.
+:::
 
 Let's break this down a bit futher, since it may seem confusing at first.
 
@@ -106,8 +108,9 @@ async function(
 ): Promise<Database>
 ```
 
-> [!CAUTION]
-> It must be function declaration (not an arrow function) because the Resource's context is passed through as the `this: Context<Database>` parameter.
+:::caution
+It must be function declaration (not an arrow function) because the Resource's context is passed through as the `this: Context<Database>` parameter.
+:::
 
 ## Lifecycle Phases
 
@@ -133,8 +136,10 @@ if (this.phase === "delete") {
 
 When a resource is being deleted, you must return `this.destroy()` to signal that the resource deletion process is complete.
 
-> [!TIP]
-> This also enables type inference since `this.destroy()` returns `never`, so the type of the resource can be inferred from the return type of the function.
+
+:::tip
+This also enables type inference since `this.destroy()` returns `never`, so the type of the resource can be inferred from the return type of the function.
+:::
 
 ## `this({..})`
 
@@ -153,11 +158,12 @@ Alchemy resources are implemented with pure functions, but are designed to emula
 return super({/* updated properties */});
 ```
 
-> [!TIP]
-> If this syntax freaks you out too much, it is also aliased as `this.create`:
-> ```ts
-> return this.create({/* updated properties */});
-> ```
+:::tip
+If this syntax freaks you out too much, it is also aliased as `this.create`:
+```ts
+return this.create({/* updated properties */});
+```
+:::
 
 ## Testing
 

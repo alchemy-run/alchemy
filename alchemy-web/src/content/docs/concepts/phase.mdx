@@ -55,9 +55,10 @@ worker.url; // <- populated from `.alchemy/` state
 await app.finalize() // <- will not delete any orphaned resources
 ```
 
-> [!TIP]
-> You can write your own scripts that run commands and pass infrstructure properties as environment variables with a very simple node script.
-> 1. Set the `phase` to `"read"`, e.g. using an env variable:
+:::tip
+You can write your own scripts that run commands and pass infrstructure properties as environment variables with a very simple node script.
+1. Set the `phase` to `"read"`, e.g. using an env variable:
+:::
 > ```ts
 > // ./alchemy.run.ts
 > const app = await alchemy({

@@ -55,8 +55,9 @@ await Worker("my-worker", {
 });
 ```
 
-> [!CAUTION]
-> To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts/secret.md#encryption-password).
+:::caution
+To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts/secret.md#encryption-password).
+:::
 
 ## OAuth Token
 
@@ -116,10 +117,11 @@ Then, run your script (without `CLOUDFLARE_API_KEY` or `CLOUDFLARE_API_TOKEN` en
 
 After you verify your Cloudflare Account's Email, you will be given a [Global API Key](https://developers.cloudflare.com/fundamentals/api/get-started/keys/).
 
-> [!CAUTION]
-> These keys have several limitations that make them less secure than API tokens. Whenever possible, use API tokens to interact with the Cloudflare API. 
->
-> See [Cloudflare's API Docs](https://developers.cloudflare.com/api/).
+:::caution
+These keys have several limitations that make them less secure than API tokens. Whenever possible, use API tokens to interact with the Cloudflare API. 
+
+See [Cloudflare's API Docs](https://developers.cloudflare.com/api/).
+:::
 
 By default, Alchemy will use the `CLOUDFLARE_API_KEY` environment variable if set.
 
@@ -161,8 +163,9 @@ await Worker("my-worker", {
 });
 ```
 
-> [!CAUTION]
-> To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts/secret.md#encryption-password).
+:::caution
+To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts/secret.md#encryption-password).
+:::
 
 ## Email
 
@@ -202,8 +205,9 @@ await Worker("my-worker", {
 });
 ```
 
-> [!CAUTION]
-> To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts/secret.md#encryption-password).
+:::caution
+To use `alchemy.secret`, you must set a `password` when initializing your alchemy app. See [Encryption Password](../concepts/secret.md#encryption-password).
+:::
 
 ## Account ID
 
@@ -236,8 +240,9 @@ By default, Alchemy will resolve the account ID from the API or OAuth token.
   </TabItem>
 </Tabs>
 
-> [!CAUTION]
-> If your token has access to more than one account, Alchemy chooses the first one arbitrarily.
+:::caution
+If your token has access to more than one account, Alchemy chooses the first one arbitrarily.
+:::
 
 You can override the default account ID with the `CLOUDFLARE_ACCOUNT_ID` environment variable:
 

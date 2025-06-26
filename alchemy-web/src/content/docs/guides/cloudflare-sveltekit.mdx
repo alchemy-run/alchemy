@@ -66,8 +66,9 @@ Authenticate once with your Cloudflare account:
   </TabItem>
 </Tabs>
 
-> [!TIP]
-> Alchemy automatically re-uses your Wrangler OAuth tokens. See the [Cloudflare Auth](../guides/cloudflare-auth.md) guide for other options.
+:::tip
+Alchemy automatically re-uses your Wrangler OAuth tokens. See the [Cloudflare Auth](../guides/cloudflare-auth.md) guide for other options.
+:::
 
 ## Deploy
 
@@ -164,8 +165,9 @@ Clean up all Cloudflare resources created by this stack:
 
 Alchemy requires a locally set password to encrypt Secrets that are stored in state. Be sure to change this.
 
-> [!NOTE]
-> See the [Secret](../concepts/secret.md) documentation to learn more.
+:::note
+See the [Secret](../concepts/secret.md) documentation to learn more.
+:::
 
 ```
 ALCHEMY_PASSWORD=change-me
@@ -217,8 +219,9 @@ declare module "cloudflare:workers" {
 
 The CLI updated the `tsconfig.json` to include `alchemy.run.ts` and register `@cloudflare/workers-types` + `types/env.d.ts` globally
 
-> [!TIP]
-> The `alchemy.run.ts` script will be run by `node` but still needs to infer the [Binding](../concepts/bindings.md) types which depends on `@cloudflare/workers-types`:
+:::tip
+The `alchemy.run.ts` script will be run by `node` but still needs to infer the [Binding](../concepts/bindings.md) types which depends on `@cloudflare/workers-types`:
+:::
 
 ```json
 {

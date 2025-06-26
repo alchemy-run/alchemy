@@ -15,8 +15,9 @@ const mySecret = await Secret("my-secret", {
 });
 ```
 
-> [!TIP]
-> This will auto-create a Secrets Store, `default_secrets_store` if one does not exist. Cloudflare's UI does the same.
+:::tip
+This will auto-create a Secrets Store, `default_secrets_store` if one does not exist. Cloudflare's UI does the same.
+:::
 
 Then bind the Secret to your Worker:
 
@@ -57,5 +58,6 @@ const mySecret = await Secret("my-secret", {
 });
 ```
 
-> [!CAUTION]
-> During the Beta, Cloudflare does not support more than one [SecretsStore](./secrets-store.md) per account, so you should instead rely on the default behavior until then.
+:::caution
+During the Beta, Cloudflare does not support more than one [SecretsStore](./secrets-store.md) per account, so you should instead rely on the default behavior until then.
+:::
