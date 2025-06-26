@@ -34,6 +34,14 @@ function parseCliArgs(): Partial<AlchemyOptions> {
     options.phase = "read";
   }
 
+  if (
+    args.includes("--dev") ||
+    args.includes("--watch") ||
+    process.execArgv.includes("--watch")
+  ) {
+    options.dev = true;
+  }
+
   // Parse quiet flag
   if (args.includes("--quiet")) {
     options.quiet = true;
@@ -337,6 +345,12 @@ export interface AlchemyOptions {
    * @default "up"
    */
   phase?: Phase;
+  /**
+   * Determines whether Alchemy will run in dev mode.
+   *
+   * @default - `true` if `--dev` or `--watch` is passed as a CLI argument, `false` otherwise
+   */
+  dev?: boolean;
   /**
    * Name to scope the resource state under (e.g. `.alchemy/{stage}/..`).
    *

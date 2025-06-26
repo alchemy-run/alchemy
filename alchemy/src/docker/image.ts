@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
 import { DockerApi } from "./api.ts";
 
 /**
@@ -10,11 +11,15 @@ import { DockerApi } from "./api.ts";
 export interface DockerBuildOptions {
   /**
    * Path to the build context directory
+   *
+   * @default - the `dirname(dockerfile)` if provided or otherwise `process.cwd()`
    */
-  context: string;
+  context?: string;
 
   /**
    * Path to the Dockerfile, relative to context
+   *
+   * @default - `Dockerfile`
    */
   dockerfile?: string;
 
@@ -39,6 +44,12 @@ export interface DockerBuildOptions {
   cacheFrom?: string[];
 }
 
+export interface ImageRegistry {
+  username: string;
+  password: Secret;
+  server: string;
+}
+
 /**
  * Properties for creating a Docker image
  */
@@ -46,7 +57,7 @@ export interface ImageProps {
   /**
    * Repository name for the image (e.g., "username/image")
    */
-  name: string;
+  name?: string;
 
   /**
    * Tag for the image (e.g., "latest")
@@ -56,7 +67,12 @@ export interface ImageProps {
   /**
    * Build configuration
    */
-  build: DockerBuildOptions;
+  build?: DockerBuildOptions;
+
+  /**
+   * Registry credentials
+   */
+  registry?: ImageRegistry;
 
   /**
    * Whether to skip pushing the image to registry
@@ -68,6 +84,11 @@ export interface ImageProps {
  * Docker Image resource
  */
 export interface Image extends Resource<"docker::Image">, ImageProps {
+  /**
+   * Image name
+   */
+  name: string;
+
   /**
    * Full image reference (name:tag)
    */
@@ -110,7 +131,7 @@ export const Image = Resource(
   "docker::Image",
   async function (
     this: Context<Image>,
-    _id: string,
+    id: string,
     props: ImageProps,
   ): Promise<Image> {
     // Initialize Docker API client
@@ -123,34 +144,44 @@ export const Image = Resource(
     } else {
       // Normalize properties
       const tag = props.tag || "latest";
-      const imageRef = `${props.name}:${tag}`;
+      const name = props.name || id;
+      const imageRef = `${name}:${tag}`;
 
-      // Validate build context
-      const { context } = props.build;
+      let context: string;
+      let dockerfile: string;
+      if (props.build?.dockerfile && props.build?.context) {
+        context = path.resolve(props.build.context);
+        dockerfile = path.resolve(context, props.build.dockerfile);
+      } else if (props.build?.dockerfile) {
+        context = process.cwd();
+        dockerfile = path.resolve(context, props.build.dockerfile);
+      } else if (props.build?.context) {
+        context = path.resolve(props.build.context);
+        dockerfile = path.resolve(context, "Dockerfile");
+      } else {
+        context = process.cwd();
+        dockerfile = path.resolve(context, "Dockerfile");
+      }
       await fs.access(context);
-
-      // Determine Dockerfile path
-      const dockerfile = props.build.dockerfile || "Dockerfile";
-      const dockerfilePath = path.join(context, dockerfile);
-      await fs.access(dockerfilePath);
+      await fs.access(dockerfile);
 
       // Prepare build options
-      const buildOptions: Record<string, string> = props.build.buildArgs || {};
+      const buildOptions: Record<string, string> = props.build?.buildArgs || {};
 
       // Add platform if specified
       let buildArgs = ["build", "-t", imageRef];
 
-      if (props.build.platform) {
+      if (props.build?.platform) {
         buildArgs.push("--platform", props.build.platform);
       }
 
       // Add target if specified
-      if (props.build.target) {
+      if (props.build?.target) {
         buildArgs.push("--target", props.build.target);
       }
 
       // Add cache sources if specified
-      if (props.build.cacheFrom && props.build.cacheFrom.length > 0) {
+      if (props.build?.cacheFrom && props.build.cacheFrom.length > 0) {
         for (const cacheSource of props.build.cacheFrom) {
           buildArgs.push("--cache-from", cacheSource);
         }
@@ -161,36 +192,75 @@ export const Image = Resource(
         buildArgs.push("--build-arg", `${key}="${value}"`);
       }
 
-      // Add dockerfile if not the default
-      if (props.build.dockerfile && props.build.dockerfile !== "Dockerfile") {
-        buildArgs.push("-f", props.build.dockerfile);
-      }
+      buildArgs.push("-f", dockerfile);
 
       // Add context path
-      buildArgs.push(props.build.context);
+      buildArgs.push(context);
 
       // Execute build command
-      console.log(`Building Docker image: ${imageRef}`);
       const { stdout } = await api.exec(buildArgs);
 
       // Extract image ID from build output if available
       const imageIdMatch = /Successfully built ([a-f0-9]+)/.exec(stdout);
       const imageId = imageIdMatch ? imageIdMatch[1] : undefined;
 
-      console.log(`Successfully built Docker image: ${imageRef}`);
-
       // Handle push if required
       let repoDigest: string | undefined;
-      if (!props.skipPush) {
-        console.log(`Pushing Docker image: ${imageRef}`);
-        // TODO: Implement push once API supports it
-        console.warn("Image pushing is not yet implemented");
+      let finalImageRef = imageRef;
+      if (props.registry && !props.skipPush) {
+        const { server, username, password } = props.registry;
+
+        // Ensure the registry server does not have trailing slash
+        const registryHost = server.replace(/\/$/, "");
+
+        // Determine if the built image already includes a registry host (e.g. ghcr.io/user/repo)
+        const firstSegment = imageRef.split("/")[0];
+        const hasRegistryPrefix = firstSegment.includes(".");
+
+        // Compose the target image reference that will be pushed
+        const targetImage = hasRegistryPrefix
+          ? imageRef // already fully-qualified
+          : `${registryHost}/${imageRef}`;
+
+        try {
+          // Authenticate to registry
+          await api.login(registryHost, username, password.unencrypted);
+
+          // Tag local image with fully qualified name if necessary
+          if (targetImage !== imageRef) {
+            await api.exec(["tag", imageRef, targetImage]);
+          }
+
+          // Push the image
+          const { stdout: pushOut } = await api.exec(["push", targetImage]);
+
+          // Attempt to extract the repo digest from push output
+          const digestMatch = /digest:\s+([a-z0-9]+:[a-f0-9]{64})/.exec(
+            pushOut,
+          );
+          if (digestMatch) {
+            const digestHash = digestMatch[1];
+            // Strip tag (anything after last :) to build image@digest reference
+            const [repoWithoutTag] =
+              targetImage.split(":").length > 2
+                ? [targetImage] // unlikely but safety
+                : [targetImage.substring(0, targetImage.lastIndexOf(":"))];
+            repoDigest = `${repoWithoutTag}@${digestHash}`;
+          }
+
+          // Update the final image reference to point at the pushed image
+          finalImageRef = targetImage;
+        } finally {
+          // Always try to logout – failures are non-fatal
+          await api.logout(registryHost);
+        }
       }
 
       // Return the resource using this() to construct output
       return this({
         ...props,
-        imageRef,
+        name,
+        imageRef: finalImageRef,
         imageId,
         repoDigest,
         builtAt: Date.now(),

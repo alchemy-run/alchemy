@@ -1,8 +1,8 @@
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { Fs } from "dofs";
 import { timingSafeEqual } from "node:crypto";
-import type { State } from "../../state.ts";
-import type { DOStateStoreAPI } from "./types.ts";
+import type { DOStateStoreAPI } from "../src/cloudflare/do-state-store/types.ts";
+import type { State } from "../src/state.ts";
 
 interface Env {
   DOFS_STATE_STORE: DurableObjectNamespace<DOFSStateStore>;
@@ -137,7 +137,16 @@ export class DOFSStateStore extends DurableObject<Env> {
 
   async all(prefix: string): Promise<Record<string, string>> {
     const keys = this.list(prefix);
-    return await this.getBatch(keys);
+    const result: Record<string, string> = {};
+    await Promise.all(
+      keys.map(async (key) => {
+        const value = await this.get(`${prefix}/${key}`);
+        if (value) {
+          result[key] = value;
+        }
+      }),
+    );
+    return result;
   }
 
   count(prefix: string): number {
@@ -145,19 +154,17 @@ export class DOFSStateStore extends DurableObject<Env> {
   }
 
   delete(key: string): void {
-    try {
-      this.fs.unlink(key);
-    } catch (error) {
-      if (isErrorCode(error, "ENOENT")) {
-        return;
+      if (this.isFile(`${key}.json`)) {
+        this.fs.unlink(`${key}.json`);
       }
-      throw error;
-    }
+      if (this.isDirectory(key)) {
+        this.fs.rmdir(key);
+      }
   }
 
   async get(key: string): Promise<string | undefined> {
     try {
-      const file = this.fs.readFile(key);
+      const file = this.fs.readFile(`${key}.json`);
       return new Response(file).text();
     } catch (error) {
       if (isErrorCode(error, "ENOENT")) {
@@ -181,30 +188,55 @@ export class DOFSStateStore extends DurableObject<Env> {
   }
 
   list(prefix: string): string[] {
-    try {
-      return this.fs
-        .listDir(prefix, { recursive: true })
-        .filter((item) => item !== "." && item !== "..");
-    } catch (error) {
-      if (isErrorCode(error, "ENOENT")) {
-        return [];
-      }
-      throw error;
+    const path = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+    if (!this.isDirectory(path)) {
+      return [];
     }
+    const files = this.fs.listDir(path);
+    return files.filter((item) => item.endsWith(".json")).map((item) => item.slice(0, -5));
   }
 
   async set(key: string, value: State): Promise<void> {
     this.ensureDir(key);
-    await this.fs.writeFile(key, JSON.stringify(value));
+    await this.fs.writeFile(`${key}.json`, JSON.stringify(value));
   }
 
   private ensureDir(path: string): void {
     const dir = path.split("/").slice(0, -1).join("/");
     try {
       this.fs.mkdir(dir, { recursive: true });
-    } catch {
-      // directory already exists, ignore
+    } catch (error) {
+      if (isErrorCode(error, "EEXIST")) {
+        return;
+      }
+      throw error;
     }
+  }
+
+  private stat(path: string): "file" | "directory" | "not-found" {
+    try {
+      const stat = this.fs.stat(path);
+      if (stat.isDirectory) {
+        return "directory";
+      }
+      if (stat.isFile) {
+        return "file";
+      }
+      throw new APIError(`Invalid file type for ${path}`, 500);
+    } catch (error) {
+      if (isErrorCode(error, "ENOENT")) {
+        return "not-found";
+      }
+      throw error;
+    }
+  }
+
+  private isFile(path: string): boolean {
+    return this.stat(path) === "file";
+  }
+
+  private isDirectory(path: string): boolean {
+    return this.stat(path) === "directory";
   }
 }
 

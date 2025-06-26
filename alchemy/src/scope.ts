@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import util from "node:util";
 import type { Phase } from "./alchemy.ts";
 import { destroy, destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
@@ -36,6 +37,7 @@ export interface ScopeOptions {
   stateStore?: StateStoreType;
   quiet?: boolean;
   phase?: Phase;
+  dev?: boolean;
   telemetryClient?: ITelemetryClient;
   logger?: LoggerApi;
 }
@@ -100,6 +102,7 @@ export class Scope {
   public readonly stateStore: StateStoreType;
   public readonly quiet: boolean;
   public readonly phase: Phase;
+  public readonly dev?: boolean;
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
@@ -111,7 +114,7 @@ export class Scope {
   private deferred: (() => Promise<any>)[] = [];
 
   constructor(options: ScopeOptions) {
-    this.appName = options.appName;
+    this.appName = options.appName ?? options.parent?.appName;
     this.scopeName = options.scopeName ?? null;
     if (this.scopeName?.includes(":")) {
       throw new Error(
@@ -142,6 +145,14 @@ export class Scope {
           },
           options.logger,
         );
+
+    this.dev = options.dev ?? this.parent?.dev ?? false;
+
+    if (this.dev) {
+      this.logger.warnOnce(
+        "Local development mode is in beta. Please report any issues to https://github.com/sam-goodwin/alchemy/issues.",
+      );
+    }
 
     this.stateStore =
       options.stateStore ??
@@ -276,6 +287,10 @@ export class Scope {
 
   public async run<T>(fn: (scope: Scope) => Promise<T>): Promise<T> {
     return Scope.storage.run(this, () => fn(this));
+  }
+
+  [util.inspect.custom]() {
+    return `Scope(${this.chain.join("/")})`;
   }
 
   [Symbol.asyncDispose]() {

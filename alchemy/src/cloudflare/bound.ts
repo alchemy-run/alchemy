@@ -7,6 +7,7 @@ import type { Assets } from "./assets.ts";
 import type { Binding, Json, Self } from "./bindings.ts";
 import type { BrowserRendering } from "./browser-rendering.ts";
 import type { R2BucketResource as _R2Bucket } from "./bucket.ts";
+import type { Container as _Container } from "./container.ts";
 import type { D1DatabaseResource } from "./d1-database.ts";
 import type { DispatchNamespaceResource } from "./dispatch-namespace.ts";
 import type { DurableObjectNamespace as _DurableObjectNamespace } from "./durable-object-namespace.ts";
@@ -87,4 +88,11 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
                                                   ? Service
                                                   : T extends Json<infer T>
                                                     ? T
-                                                    : Service;
+                                                    : T extends _Container<
+                                                          infer Obj
+                                                        >
+                                                      ? DurableObjectNamespace<
+                                                          Obj &
+                                                            Rpc.DurableObjectBranded
+                                                        >
+                                                      : Service;

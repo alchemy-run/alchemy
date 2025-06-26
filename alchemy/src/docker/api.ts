@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { exec } from "../os/exec.ts";
 
 /**
@@ -360,6 +361,79 @@ export class DockerApi {
       return true;
     } catch (_error) {
       return false;
+    }
+  }
+
+  /**
+   * Login to a Docker registry
+   *
+   * @param registry Registry URL
+   * @param username Username for authentication
+   * @param password Password for authentication
+   * @returns Promise that resolves when login is successful
+   */
+  async login(
+    registry: string,
+    username: string,
+    password: string,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const args = [
+        "login",
+        registry,
+        "--username",
+        username,
+        "--password-stdin",
+      ];
+
+      const child = spawn(this.dockerPath, args, {
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      child.stdout.on("data", (data) => {
+        stdout += data.toString();
+      });
+
+      child.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+
+      child.on("close", (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(
+            new Error(
+              `Docker login failed with exit code ${code}: ${stderr || stdout}`,
+            ),
+          );
+        }
+      });
+
+      child.on("error", (err) => {
+        reject(new Error(`Docker login failed: ${err.message}`));
+      });
+
+      // Write password to stdin and close the stream
+      child.stdin.write(password);
+      child.stdin.end();
+    });
+  }
+
+  /**
+   * Logout from a Docker registry
+   *
+   * @param registry Registry URL
+   */
+  async logout(registry: string): Promise<void> {
+    try {
+      await this.exec(["logout", registry]);
+    } catch (error) {
+      // Ignore logout errors as they're not critical
+      console.warn(`Docker logout failed: ${error}`);
     }
   }
 }

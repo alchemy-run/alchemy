@@ -10,7 +10,7 @@
     "url": "https://github.com/sam-goodwin/alchemy"
   },
   "scripts": {
-    "build": "cd ./alchemy && bunx tsc -b && bun run --filter alchemy build:cli",
+    "build": "cd ./alchemy && bunx tsc -b && bun run --filter alchemy build",
     "check": "bun run build && biome check",
     "fix": "biome check --write",
     "deploy:repo": "bun ./stacks/src/repo.run.ts",

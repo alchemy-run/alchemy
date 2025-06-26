@@ -346,6 +346,7 @@ describe("Pipeline Resource", () => {
         name: bucketName,
         accessKey: accessKeyId,
         secretAccessKey: secretAccessKey,
+        adopt: true,
         delete: true,
         empty: true,
       });
