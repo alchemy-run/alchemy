@@ -513,6 +513,29 @@ export function buildMiniflareWorkerOptions({
         };
         break;
       }
+      case "container": {
+        (options.durableObjects ??= {})[name] = {
+          className: binding.className,
+          scriptName: binding.scriptName,
+          useSQLite: binding.sqlite,
+          container: {
+            imageName: binding.image.name,
+          },
+          // namespaceId: binding.namespaceId,
+          // unsafeUniqueKey?: string | typeof kUnsafeEphemeralUniqueKey | undefined;
+          // unsafePreventEviction?: boolean | undefined;
+          // remoteProxyConnectionString: binding.local
+          //   ? undefined
+          //   : remoteProxyConnectionString,
+        };
+        if (!binding.scriptName || binding.scriptName === workerName) {
+          options.unsafeDirectSockets!.push({
+            entrypoint: binding.className,
+            proxy: true,
+          });
+        }
+        break;
+      }
       default: {
         assertNever(binding);
       }

@@ -1,6 +1,6 @@
 import type { Context } from "../context.ts";
 import { DockerApi } from "../docker/api.ts";
-import type { Image } from "../docker/image.ts";
+import { Image, type ImageProps } from "../docker/image.ts";
 import { Resource } from "../resource.ts";
 import {
   type CloudflareApi,
@@ -8,39 +8,42 @@ import {
   createCloudflareApi,
 } from "./api.ts";
 
-/**
- * A Container binding that enables Workers to communicate with containerized Durable Objects.
- * This class represents a container configuration that can be bound to a Worker.
- *
- * Containers allow you to run any Docker image as a Durable Object on Cloudflare's global network.
- * They provide full control over the runtime environment while maintaining the benefits of
- * Durable Objects like global distribution and automatic scaling.
- */
-export class Container {
-  public readonly type = "container" as const;
-  public readonly className: string;
-  public readonly image: Image;
-  public readonly maxInstances: number | undefined;
-  public readonly name: string | undefined;
-  public readonly scriptName: string | undefined;
-  public readonly sqlite: boolean | undefined;
-  constructor(
-    public readonly id: string,
-    options: {
-      className: string;
-      image: Image;
-      maxInstances?: number;
-      name?: string;
-      scriptName?: string;
-    },
-  ) {
-    this.className = options.className;
-    this.image = options.image;
-    this.maxInstances = options.maxInstances;
-    this.name = options.name;
-    this.scriptName = options.scriptName;
-    this.sqlite = true;
-  }
+export interface ContainerProps extends ImageProps {
+  className: string;
+  maxInstances?: number;
+  scriptName?: string;
+}
+
+export type Container<T = any> = {
+  type: "container";
+  id: string;
+  name?: string;
+  className: string;
+  image: Image;
+  maxInstances?: number;
+  scriptName?: string;
+  sqlite?: true;
+
+  /**
+   * @internal
+   */
+  __phantom?: T;
+};
+
+export async function Container<T>(
+  id: string,
+  props: ContainerProps,
+): Promise<Container<T>> {
+  return {
+    type: "container",
+    id,
+    name: props.name ?? id,
+    className: props.className,
+    image: await Image(id, props),
+    maxInstances: props.maxInstances,
+    scriptName: props.scriptName,
+    sqlite: true,
+  };
 }
 
 export interface ContainerApplicationProps extends CloudflareApiOptions {

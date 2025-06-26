@@ -88,6 +88,11 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
                                                   ? Service
                                                   : T extends Json<infer T>
                                                     ? T
-                                                    : T extends _Container
-                                                      ? Container
+                                                    : T extends _Container<
+                                                          infer Obj
+                                                        >
+                                                      ? DurableObjectNamespace<
+                                                          Obj &
+                                                            Rpc.DurableObjectBranded
+                                                        >
                                                       : Service;

@@ -50,7 +50,7 @@ export interface ImageProps {
   /**
    * Repository name for the image (e.g., "username/image")
    */
-  name: string;
+  name?: string;
 
   /**
    * Tag for the image (e.g., "latest")
@@ -60,7 +60,7 @@ export interface ImageProps {
   /**
    * Build configuration
    */
-  build: DockerBuildOptions;
+  build?: DockerBuildOptions;
 
   /**
    * Whether to skip pushing the image to registry
@@ -72,6 +72,11 @@ export interface ImageProps {
  * Docker Image resource
  */
 export interface Image extends Resource<"docker::Image">, ImageProps {
+  /**
+   * Image name
+   */
+  name: string;
+
   /**
    * Full image reference (name:tag)
    */
@@ -114,7 +119,7 @@ export const Image = Resource(
   "docker::Image",
   async function (
     this: Context<Image>,
-    _id: string,
+    id: string,
     props: ImageProps,
   ): Promise<Image> {
     // Initialize Docker API client
@@ -127,7 +132,8 @@ export const Image = Resource(
     } else {
       // Normalize properties
       const tag = props.tag || "latest";
-      const imageRef = `${props.name}:${tag}`;
+      const name = props.name || id;
+      const imageRef = `${name}:${tag}`;
 
       let context: string;
       let dockerfile: string;
@@ -148,22 +154,22 @@ export const Image = Resource(
       await fs.access(dockerfile);
 
       // Prepare build options
-      const buildOptions: Record<string, string> = props.build.buildArgs || {};
+      const buildOptions: Record<string, string> = props.build?.buildArgs || {};
 
       // Add platform if specified
       let buildArgs = ["build", "-t", imageRef];
 
-      if (props.build.platform) {
+      if (props.build?.platform) {
         buildArgs.push("--platform", props.build.platform);
       }
 
       // Add target if specified
-      if (props.build.target) {
+      if (props.build?.target) {
         buildArgs.push("--target", props.build.target);
       }
 
       // Add cache sources if specified
-      if (props.build.cacheFrom && props.build.cacheFrom.length > 0) {
+      if (props.build?.cacheFrom && props.build.cacheFrom.length > 0) {
         for (const cacheSource of props.build.cacheFrom) {
           buildArgs.push("--cache-from", cacheSource);
         }
@@ -200,6 +206,7 @@ export const Image = Resource(
       // Return the resource using this() to construct output
       return this({
         ...props,
+        name,
         imageRef,
         imageId,
         repoDigest,

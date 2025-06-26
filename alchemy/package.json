@@ -192,7 +192,7 @@
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
     "libsodium-wrappers": "^0.7.15",
-    "miniflare": "^4.20250617.3",
+    "miniflare": "^4.20250617.4",
     "nitro-cloudflare-dev": "^0.2.2",
     "openpgp": "^6.1.0",
     "picocolors": "^1.1.1",

@@ -1,12 +1,14 @@
 import alchemy, { type } from "alchemy";
 import {
-  Container,
   DOStateStore,
+  DurableObjectNamespace,
   Queue,
+  R2Bucket,
   Worker,
+  Workflow,
   WranglerJson,
 } from "alchemy/cloudflare";
-import { Image } from "alchemy/docker";
+import type { HelloWorldDO } from "./src/do.ts";
 import type MyRPC from "./src/rpc.ts";
 
 const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
@@ -31,22 +33,35 @@ export const rpc = await Worker(`cloudflare-worker-rpc${BRANCH_PREFIX}`, {
   rpc: type<MyRPC>,
 });
 
-export const worker = await Worker("worker", {
+export const worker = await Worker(`cloudflare-worker-worker${BRANCH_PREFIX}`, {
   entrypoint: "./src/worker.ts",
   bindings: {
-    MY_CONTAINER: new Container("test-container", {
-      className: "MyContainer",
-      image: await Image("test-image", {
-        dockerfile: "Dockerfile",
-      }),
+    BUCKET: await R2Bucket(`cloudflare-worker-bucket${BRANCH_PREFIX}`, {
+      // so that CI is idempotent
+      adopt: true,
     }),
+    QUEUE: queue,
+    WORKFLOW: new Workflow("OFACWorkflow", {
+      className: "OFACWorkflow",
+      workflowName: "ofac-workflow",
+    }),
+    DO: new DurableObjectNamespace<HelloWorldDO>("HelloWorldDO", {
+      className: "HelloWorldDO",
+      sqlite: true,
+    }),
+    RPC: rpc,
   },
+  url: true,
+  eventSources: [queue],
+  bundle: {
+    metafile: true,
+    format: "esm",
+    target: "es2020",
+  },
+  adopt: true,
 });
 
-import { env } from "cloudflare:workers";
-
-env.MY_CONTAINER.await;
-WranglerJson("wrangler.jsonc", {
+await WranglerJson("wrangler.jsonc", {
   worker,
 });
 
