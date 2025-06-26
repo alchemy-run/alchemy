@@ -2,7 +2,7 @@
 
 import alchemy from "alchemy";
 import { Container, Worker } from "alchemy/cloudflare";
-import type { MyContainer } from "./src/container.ts";
+import type { MyContainer } from "./src/worker.ts";
 
 const app = await alchemy("cloudflare-worker-simple");
 
@@ -17,7 +17,7 @@ const container = await Container<MyContainer>("test-container", {
 export const worker = await Worker("test-worker", {
   entrypoint: "src/worker.ts",
   bindings: {
-    CONTAINER: container,
+    MY_CONTAINER: container,
   },
 });
 
