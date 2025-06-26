@@ -89,14 +89,6 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
   migrationsTable?: string;
 
   /**
-   * Name of the column used to store migration IDs in the migrations table.
-   * If not specified, will attempt to detect the column automatically:
-   * 1. First checks if 'name' column exists (wrangler compatibility)
-   * 2. Falls back to 'id' column (backward compatibility)
-   */
-  migrationsIdColumn?: string;
-
-  /**
    * Directory containing migration SQL files. If not set, no migrations will be applied.
    * This is analogous to wrangler's `migrations_dir`.
    */
@@ -369,7 +361,6 @@ const D1DatabaseResource = Resource(
         await applyMigrations({
           migrationsFiles: props.migrationsFiles,
           migrationsTable,
-          migrationsIdColumn: props.migrationsIdColumn,
           accountId: api.accountId,
           databaseId,
           api,
