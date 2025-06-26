@@ -60,6 +60,15 @@ const url = domain ? `https://${domain}` : website.url;
 
 console.log(url);
 
+export const ogWorker = await Worker("alchemy-og-worker", {
+  entrypoint: "./src/og-worker.ts",
+  routes: [
+    {
+      pattern: "og.alchemy.run/*",
+    },
+  ],
+});
+
 if (process.env.PULL_REQUEST) {
   await GitHubComment("comment", {
     owner: "sam-goodwin",
@@ -68,7 +77,7 @@ if (process.env.PULL_REQUEST) {
     body: `
 ## 🚀 Website Preview Deployed
 
-Your website preview is ready! 
+Your website preview is ready!
 
 **Preview URL:** ${url}
 
