@@ -4,6 +4,7 @@ import { createCli, trpcServer, zod as z } from "trpc-cli";
 import { createAlchemy } from "./commands/create.ts";
 import { getPackageVersion } from "./services/get-package-version.ts";
 import {
+  EditorSchema,
   PackageManagerSchema,
   ProjectNameSchema,
   TemplateSchema,
@@ -58,6 +59,9 @@ const router = t.router({
               .boolean()
               .optional()
               .describe("Install dependencies after scaffolding"),
+            vibeRules: EditorSchema.optional().describe(
+              "Setup vibe-rules for the specified editor (cursor, windsurf, vscode, zed, claude-code, gemini, codex, amp, clinerules, roo, unified)",
+            ),
           })
           .optional()
           .default({}),

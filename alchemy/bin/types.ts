@@ -76,8 +76,32 @@ export type CreateInput = {
   yes?: boolean;
   overwrite?: boolean;
   install?: boolean;
+  vibeRules?: EditorType;
 };
 
 export type CLIInput = CreateInput & {
   projectDirectory?: string;
 };
+
+export type InstallInput = {
+  editor: EditorType;
+  packageManager?: PackageManager;
+  cwd?: string;
+};
+
+export const EditorSchema = z
+  .enum([
+    "cursor",
+    "windsurf",
+    "vscode",
+    "zed",
+    "claude-code",
+    "gemini",
+    "codex",
+    "amp",
+    "clinerules",
+    "roo",
+    "unified",
+  ])
+  .describe("Editor for vibe-rules");
+export type EditorType = z.infer<typeof EditorSchema>;
