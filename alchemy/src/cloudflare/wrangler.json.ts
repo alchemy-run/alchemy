@@ -47,6 +47,13 @@ export interface WranglerJsonProps {
     binding: string;
     directory: string;
   };
+
+  /**
+   * Base directory for resolving relative paths
+   *
+   * @default process.cwd()
+   */
+  cwd?: string;
 }
 
 /**
@@ -89,6 +96,9 @@ export const WranglerJson = Resource(
     _id: string,
     props: WranglerJsonProps,
   ): Promise<WranglerJson> {
+    // Base directory for resolving relative paths
+    const cwd = props.cwd || process.cwd();
+
     // Default path is wrangler.json in current directory
     const filePath = props.path || "wrangler.jsonc";
 
@@ -108,10 +118,10 @@ export const WranglerJson = Resource(
     const mainPath = props.main ?? worker.entrypoint;
     const absoluteMainPath =
       mainPath && !path.isAbsolute(mainPath)
-        ? path.resolve(process.cwd(), mainPath)
+        ? path.resolve(cwd, mainPath)
         : mainPath;
 
-    // Make main path relative to the wrangler.json file location (similar to Website resource)
+    // Make main path relative to the wrangler.json file location
     const relativeMainPath = absoluteMainPath
       ? path.relative(path.dirname(filePath), absoluteMainPath)
       : undefined;
@@ -125,7 +135,7 @@ export const WranglerJson = Resource(
                 path.dirname(filePath),
                 path.isAbsolute(props.assets.directory)
                   ? props.assets.directory
-                  : path.resolve(process.cwd(), props.assets.directory),
+                  : path.resolve(cwd, props.assets.directory),
               )
             : props.assets.directory,
         }
@@ -149,6 +159,7 @@ export const WranglerJson = Resource(
         worker.eventSources,
         worker.name,
         filePath,
+        cwd,
       );
     }
 
@@ -415,6 +426,7 @@ function processBindings(
   eventSources: EventSource[] | undefined,
   workerName: string,
   wranglerFilePath: string,
+  cwd: string,
 ): void {
   // Arrays to collect different binding types
   const kvNamespaces: { binding: string; id: string; preview_id: string }[] =
@@ -563,7 +575,7 @@ function processBindings(
       // Make assets directory path relative to wrangler.json file location
       const absoluteAssetsPath = path.isAbsolute(binding.path)
         ? binding.path
-        : path.resolve(process.cwd(), binding.path);
+        : path.resolve(cwd, binding.path);
       const relativeAssetsPath = path.relative(
         path.dirname(wranglerFilePath),
         absoluteAssetsPath,
