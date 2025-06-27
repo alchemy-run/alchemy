@@ -9,8 +9,8 @@ hero:
     - text: Quick Start
       link: /getting-started
       variant: primary
-    - text: Learn more
-      link: /what-is-alchemy
-      variant: minimal
+    - text: ⭐ Star on GitHub
+      link: https://github.com/sam-goodwin/alchemy
+      variant: secondary 
 ---
 
