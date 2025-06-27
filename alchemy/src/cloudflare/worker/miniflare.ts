@@ -5,6 +5,7 @@ import type {
   WorkerOptions,
 } from "miniflare";
 import path from "node:path";
+import { findOpenPort } from "../../util/find-open-port.ts";
 import { logger } from "../../util/logger.ts";
 import { HTTPServer } from "./http-server.ts";
 import {
@@ -85,7 +86,7 @@ class MiniflareServer {
       return existing;
     }
     const server = new HTTPServer({
-      port: worker.port,
+      port: worker.port ?? (await findOpenPort()),
       fetch: this.createRequestHandler(worker.name as string),
     });
     this.servers.set(worker.name, server);

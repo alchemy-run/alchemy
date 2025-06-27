@@ -1,6 +1,6 @@
 {
   "type": "module",
-  "name": "vite",
+  "name": "@alchemy.run/vite-template",
   "private": true,
   "version": "0.0.0",
   "scripts": {
