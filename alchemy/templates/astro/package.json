@@ -1,6 +1,6 @@
 {
   "type": "module",
-  "name": "astro",
+  "name": "@alchemy.run/astro-template",
   "version": "0.0.1",
   "scripts": {
     "astro": "astro",

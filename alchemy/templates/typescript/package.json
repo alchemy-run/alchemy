@@ -1,5 +1,5 @@
 {
-  "name": "typescript",
+  "name": "@alchemy.run/typescript-template",
   "version": "0.0.0",
   "description": "Alchemy Typescript Project",
   "type": "module",
