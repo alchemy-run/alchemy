@@ -104,19 +104,52 @@ export const WranglerJson = Resource(
 
     const worker = props.worker;
 
+    // Resolve main entrypoint path to absolute, then make it relative to wrangler.json file
+    const mainPath = props.main ?? worker.entrypoint;
+    const absoluteMainPath =
+      mainPath && !path.isAbsolute(mainPath)
+        ? path.resolve(process.cwd(), mainPath)
+        : mainPath;
+
+    // Make main path relative to the wrangler.json file location (similar to Website resource)
+    const relativeMainPath = absoluteMainPath
+      ? path.relative(path.dirname(filePath), absoluteMainPath)
+      : undefined;
+
+    // Handle assets directory path similarly
+    const assetsConfig = props.assets
+      ? {
+          ...props.assets,
+          directory: props.assets.directory
+            ? path.relative(
+                path.dirname(filePath),
+                path.isAbsolute(props.assets.directory)
+                  ? props.assets.directory
+                  : path.resolve(process.cwd(), props.assets.directory),
+              )
+            : props.assets.directory,
+        }
+      : undefined;
+
     const spec: WranglerJsonSpec = {
       name: worker.name,
-      // Use entrypoint as main if it exists
-      main: props.main ?? worker.entrypoint,
+      // Use relative path for main entrypoint
+      main: relativeMainPath,
       // see: https://developers.cloudflare.com/workers/configuration/compatibility-dates/
       compatibility_date: worker.compatibilityDate,
       compatibility_flags: props.worker.compatibilityFlags,
-      assets: props.assets,
+      assets: assetsConfig,
     };
 
     // Process bindings if they exist
     if (worker.bindings) {
-      processBindings(spec, worker.bindings, worker.eventSources, worker.name);
+      processBindings(
+        spec,
+        worker.bindings,
+        worker.eventSources,
+        worker.name,
+        filePath,
+      );
     }
 
     // Add environment variables as vars
@@ -381,6 +414,7 @@ function processBindings(
   bindings: Bindings,
   eventSources: EventSource[] | undefined,
   workerName: string,
+  wranglerFilePath: string,
 ): void {
   // Arrays to collect different binding types
   const kvNamespaces: { binding: string; id: string; preview_id: string }[] =
@@ -526,8 +560,17 @@ function processBindings(
       // Secret binding
       secrets.push(bindingName);
     } else if (binding.type === "assets") {
+      // Make assets directory path relative to wrangler.json file location
+      const absoluteAssetsPath = path.isAbsolute(binding.path)
+        ? binding.path
+        : path.resolve(process.cwd(), binding.path);
+      const relativeAssetsPath = path.relative(
+        path.dirname(wranglerFilePath),
+        absoluteAssetsPath,
+      );
+
       spec.assets = {
-        directory: binding.path,
+        directory: relativeAssetsPath,
         binding: bindingName,
       };
     } else if (binding.type === "workflow") {
