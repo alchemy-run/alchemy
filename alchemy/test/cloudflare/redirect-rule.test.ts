@@ -201,11 +201,14 @@ describe("RedirectRule", () => {
       });
 
       // Should NOT throw error when neither requestUrl nor expression are provided (static redirect)
-      const redirectRule = await RedirectRule(`${BRANCH_PREFIX}-static-redirect2`, {
-        zone: zone.id,
-        targetUrl: `https://${testDomain}/`,
-        statusCode: 301,
-      });
+      const redirectRule = await RedirectRule(
+        `${BRANCH_PREFIX}-static-redirect2`,
+        {
+          zone: zone.id,
+          targetUrl: `https://${testDomain}/`,
+          statusCode: 301,
+        },
+      );
 
       expect(redirectRule.requestUrl).toBeUndefined();
       expect(redirectRule.expression).toBeUndefined();
