@@ -25,6 +25,9 @@ export default defineConfig({
         src: "/public/alchemy-logo.svg",
         replacesTitle: true,
       },
+      customCss: [
+        './src/styles/custom.css',
+      ],
       prerender: true,
       social: [
         {

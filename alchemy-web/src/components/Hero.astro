@@ -69,7 +69,12 @@ const product = await Product("pro-plan", {
           <span class="code-title">alchemy.run.ts</span>
         </div>
         <div class="code-content">
-          <Code code={codeContent} lang="typescript" theme="vitesse-dark" />
+          <div id="code-block-light" class="code-theme light-theme">
+            <Code code={codeContent} lang="typescript" theme="vitesse-light" />
+          </div>
+          <div id="code-block-dark" class="code-theme dark-theme">
+            <Code code={codeContent} lang="typescript" theme="vitesse-dark" />
+          </div>
         </div>
       </div>
     </div>
@@ -79,20 +84,24 @@ const product = await Product("pro-plan", {
 <style>
   /* CSS Custom Properties */
   :root {
+    /* Dark mode (default) */
     --hero-code-bg: #121212;
     --hero-code-border: rgba(255, 255, 255, 0.1);
     --hero-code-text: #e5e7eb;
     --hero-code-title: #d1d5db;
-    --hero-dot-red: #ef4444;
-    --hero-dot-yellow: #f59e0b;
-    --hero-dot-green: #10b981;
-    --hero-syntax-keyword: #c792ea;
-    --hero-syntax-function: #82aaff;
-    --hero-syntax-string: #c3e88d;
-    --hero-syntax-operator: #89ddff;
-    --hero-syntax-punctuation: #89ddff;
-    --hero-syntax-property: #f78c6c;
+    --hero-dot-color: #404040; /* Lighter than dark background */
     --hero-shadow: rgba(0, 0, 0, 0.25);
+  }
+
+  /* Light mode - manual theme selection */
+  :root[data-theme="light"] {
+    --hero-code-bg: #fff;
+    --hero-code-border: rgba(0, 0, 0, 0.1);
+    --hero-code-text: #374151;
+    --hero-code-title: #4b5563;
+    --hero-dot-color: #a7a7a7; /* Darker than light background */
+    --hero-shadow: rgba(0, 0, 0, 0.1);
+    --sl-color-text-accent: #c5a943;
   }
 
   /* Global page background override - only for pages with hero class */
@@ -124,6 +133,11 @@ const product = await Product("pro-plan", {
     font-weight: 800;
     line-height: 1.1;
     margin: 0 0 1rem 0;
+    text-align: center;
+  }
+
+  :root[data-theme="dark"] .hero-title {
+    /* Dark mode gradient (default) */
     background: linear-gradient(
       135deg,
       var(--sl-color-text) 0%,
@@ -132,17 +146,27 @@ const product = await Product("pro-plan", {
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    text-align: center;
+  }
+
+  /* Light mode title - solid gold */
+  :root[data-theme="light"] .hero-title {
+    color: var(--sl-color-text-accent);
   }
 
   .hero-tagline {
     font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+    /* Dark mode color (default) */
     color: var(--sl-color-text-accent);
     margin: 0 0 2rem 0;
     max-width: 600px;
     margin-left: auto;
     margin-right: auto;
     line-height: 1.4;
+  }
+
+  /* Override system preference if manually set to dark */
+  :root[data-theme="dark"] .hero-tagline {
+    color: var(--sl-color-text-accent);
   }
 
   .hero-visual {
@@ -180,16 +204,7 @@ const product = await Product("pro-plan", {
     width: 12px;
     height: 12px;
     border-radius: 50%;
-  }
-
-  .dot.red {
-    background: var(--hero-dot-red);
-  }
-  .dot.yellow {
-    background: var(--hero-dot-yellow);
-  }
-  .dot.green {
-    background: var(--hero-dot-green);
+    background: var(--hero-dot-color);
   }
 
   .code-title {
@@ -220,24 +235,27 @@ const product = await Product("pro-plan", {
     color: inherit;
   }
 
-  /* Syntax highlighting */
-  .language-typescript .token.keyword {
-    color: var(--hero-syntax-keyword);
+  /* Theme switching */
+  .code-theme {
+    display: none;
   }
-  .language-typescript .token.function {
-    color: var(--hero-syntax-function);
+
+  .code-theme.active {
+    display: block;
   }
-  .language-typescript .token.string {
-    color: var(--hero-syntax-string);
+
+  /* Default to dark theme */
+  .dark-theme {
+    display: block;
   }
-  .language-typescript .token.operator {
-    color: var(--hero-syntax-operator);
+
+  /* Show light theme when manually set to light */
+  :root[data-theme="light"] .light-theme {
+    display: block;
   }
-  .language-typescript .token.punctuation {
-    color: var(--hero-syntax-punctuation);
-  }
-  .language-typescript .token.property {
-    color: var(--hero-syntax-property);
+
+  :root[data-theme="light"] .dark-theme {
+    display: none;
   }
 
   .hero-actions {
@@ -262,14 +280,16 @@ const product = await Product("pro-plan", {
   }
 
   .hero-button.primary {
-    background: var(--sl-color-accent);
-    color: var(--sl-color-text-accent);
+    background: var(--sl-color-text-accent);
+    color: var(--sl-color-bg);
   }
 
   .hero-button.primary:hover {
-    background: var(--sl-color-accent-high);
+    background: color-mix(in srgb, var(--sl-color-text-accent) 80%, white 20%);
     color: var(--sl-color-bg);
-    transform: translateY(-2px);
+    transform: scale(1.05);
+    box-shadow: 0 0 0 2px transparent;
+    animation: glow-border 2s linear infinite;
   }
 
   .hero-button.secondary {
@@ -280,7 +300,17 @@ const product = await Product("pro-plan", {
 
   .hero-button.secondary:hover {
     background: var(--sl-color-gray-6);
-    transform: translateY(-2px);
+    transform: scale(1.05);
+    box-shadow: 0 0 0 2px transparent;
+  }
+
+  .hero-button.minimal {
+    color: var(--sl-color-text-accent);
+    font-weight: bold;
+  }
+
+  .hero-button.minimal:hover {
+    color: color-mix(in srgb, var(--sl-color-text-accent) 80%, white 40%);
   }
 
   /* Responsive Design */
@@ -288,7 +318,7 @@ const product = await Product("pro-plan", {
     .hero-content {
       grid-template-columns: 1fr 1fr;
       text-align: left;
-      gap: 4rem;
+      gap: 3.5rem;
     }
 
     .hero-title,
@@ -311,13 +341,13 @@ const product = await Product("pro-plan", {
       padding: 2rem 1rem;
     }
 
+    .astro-code {
+      text-align: left;
+    }
+
     .code-content {
       font-size: 12px;
       padding: 16px;
-    }
-
-    .code-window {
-      max-width: 100%;
     }
   }
 </style>

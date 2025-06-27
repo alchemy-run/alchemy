@@ -1,9 +1,10 @@
 ---
-title: Infrastructure as TypeScript
+# title: Infrastructure for Developers
+title: Deploy with TypeScript
 template: splash
 editUrl: false
 hero:
-  tagline: From code to cloud in seconds — deploy to AWS, Cloudflare, and beyond.
+  tagline: Manage your infrastructure with a single file. Supports Cloudflare, AWS, and more. 
   actions:
     - text: Quick Start
       link: /getting-started
