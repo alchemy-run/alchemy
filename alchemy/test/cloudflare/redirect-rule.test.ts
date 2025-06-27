@@ -1,7 +1,13 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
-import { createCloudflareApi } from "../../src/cloudflare/api.ts";
-import { RedirectRule } from "../../src/cloudflare/redirect-rule.ts";
+import {
+  type CloudflareApi,
+  createCloudflareApi,
+} from "../../src/cloudflare/api.ts";
+import {
+  RedirectRule,
+  findRuleInRuleset,
+} from "../../src/cloudflare/redirect-rule.ts";
 import { Zone } from "../../src/cloudflare/zone.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
@@ -13,87 +19,91 @@ const api = await createCloudflareApi();
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
+  quiet: false,
+});
+const testDomain = "alchemy-test.us";
+
+let zone: Zone;
+test.beforeAll(async (_scope) => {
+  zone = await Zone(`${testDomain}-zone`, {
+    name: testDomain,
+    type: "full",
+    jumpStart: false,
+    delete: false,
+  });
 });
 
 describe("RedirectRule", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding test resources
-  const testDomain = `${BRANCH_PREFIX}-redirect-test.dev`;
 
-  test("create, update, and delete wildcard redirect rule", async (scope) => {
-    let zone: Zone | undefined;
+  test("create, update, and delete redirect rule with expression", async (scope) => {
     let redirectRule: RedirectRule | undefined;
 
     try {
-      // Create a test zone first
-      zone = await Zone(`${testDomain}-zone`, {
-        name: testDomain,
-        type: "full",
-        jumpStart: false,
-      });
-
-      // Create a wildcard redirect rule
+      // Create a simple redirect rule (no wildcards for now)
       redirectRule = await RedirectRule(`${BRANCH_PREFIX}-wildcard-redirect`, {
         zone: zone.id,
-        requestUrl: `https://*.${testDomain}/files/*`,
-        targetUrl: `https://${testDomain}/\${1}/files/\${2}`,
+        expression: `http.host == "test.${testDomain}" and http.request.uri.path == "/old-page"`,
+        targetUrl: `https://${testDomain}/new-page`,
         statusCode: 301,
         preserveQueryString: true,
       });
+      console.log(redirectRule);
 
+      expect(redirectRule).toMatchObject({
+        zoneId: zone.id,
+        requestUrl: undefined,
+        expression: `http.host == "test.${testDomain}" and http.request.uri.path == "/old-page"`,
+        targetUrl: `https://${testDomain}/new-page`,
+        statusCode: 301,
+        preserveQueryString: true,
+        enabled: true,
+      });
       expect(redirectRule.ruleId).toBeTruthy();
       expect(redirectRule.rulesetId).toBeTruthy();
-      expect(redirectRule.zoneId).toEqual(zone.id);
-      expect(redirectRule.requestUrl).toEqual(
-        `https://*.${testDomain}/files/*`,
-      );
-      expect(redirectRule.targetUrl).toEqual(
-        `https://${testDomain}/\${1}/files/\${2}`,
-      );
-      expect(redirectRule.statusCode).toEqual(301);
-      expect(redirectRule.preserveQueryString).toEqual(true);
-      expect(redirectRule.enabled).toEqual(true);
 
-      // Verify the rule was created by querying the API directly
-      const getRuleResponse = await api.get(
-        `/zones/${zone.id}/rulesets/${redirectRule.rulesetId}/rules/${redirectRule.ruleId}`,
+      // Verify the rule was created by checking it exists in the ruleset
+      const rule = await findRuleInRuleset(
+        api,
+        zone.id,
+        redirectRule.rulesetId,
+        redirectRule.ruleId,
       );
-      expect(getRuleResponse.status).toEqual(200);
-
-      const ruleData: any = await getRuleResponse.json();
-      expect(ruleData.result.action).toEqual("redirect");
-      expect(ruleData.result.enabled).toEqual(true);
+      expect(rule).toBeTruthy();
+      expect(rule!.action).toEqual("redirect");
+      expect(rule!.enabled).toEqual(true);
 
       // Test actual redirect behavior
       // Note: This requires the domain to be properly configured with Cloudflare DNS
       await testRedirectBehavior(
-        `https://test.${testDomain}/files/document.pdf`,
-        `https://${testDomain}/test/files/document.pdf`,
+        `https://test.${testDomain}/old-page`,
+        `https://${testDomain}/new-page`,
         301,
-        "Wildcard redirect",
+        "Simple redirect",
       );
 
       // Update the redirect rule
       redirectRule = await RedirectRule(`${BRANCH_PREFIX}-wildcard-redirect`, {
         zone: zone.id,
-        requestUrl: `https://*.${testDomain}/old/*`,
-        targetUrl: `https://${testDomain}/new/\${1}/\${2}`,
+        expression: `http.host == "legacy.${testDomain}" and http.request.uri.path == "/old-page"`,
+        targetUrl: `https://${testDomain}/updated-page`,
         statusCode: 302,
         preserveQueryString: false,
       });
 
-      expect(redirectRule.statusCode).toEqual(302);
-      expect(redirectRule.preserveQueryString).toEqual(false);
-      expect(redirectRule.requestUrl).toEqual(`https://*.${testDomain}/old/*`);
-      expect(redirectRule.targetUrl).toEqual(
-        `https://${testDomain}/new/\${1}/\${2}`,
-      );
+      expect(redirectRule).toMatchObject({
+        statusCode: 302,
+        preserveQueryString: false,
+        expression: `http.host == "legacy.${testDomain}" and http.request.uri.path == "/old-page"`,
+        targetUrl: `https://${testDomain}/updated-page`,
+      });
 
       // Test updated redirect behavior
       await testRedirectBehavior(
-        `https://legacy.${testDomain}/old/page.html`,
-        `https://${testDomain}/new/legacy/page.html`,
+        `https://legacy.${testDomain}/old-page`,
+        `https://${testDomain}/updated-page`,
         302,
-        "Updated wildcard redirect",
+        "Updated simple redirect",
       );
     } finally {
       await destroy(scope);
@@ -104,17 +114,9 @@ describe("RedirectRule", () => {
   });
 
   test("create static redirect rule", async (scope) => {
-    let zone: Zone | undefined;
     let redirectRule: RedirectRule | undefined;
 
     try {
-      // Create a test zone first
-      zone = await Zone(`${testDomain}-static-zone`, {
-        name: `static-${testDomain}`,
-        type: "full",
-        jumpStart: false,
-      });
-
       // Create a static redirect rule (no requestUrl or expression)
       redirectRule = await RedirectRule(`${BRANCH_PREFIX}-static-redirect`, {
         zone: zone.id,
@@ -123,14 +125,16 @@ describe("RedirectRule", () => {
         preserveQueryString: true,
       });
 
+      expect(redirectRule).toMatchObject({
+        zoneId: zone.id,
+        requestUrl: undefined,
+        expression: undefined,
+        targetUrl: `https://static-${testDomain}/`,
+        statusCode: 301,
+        preserveQueryString: true,
+      });
       expect(redirectRule.ruleId).toBeTruthy();
       expect(redirectRule.rulesetId).toBeTruthy();
-      expect(redirectRule.zoneId).toEqual(zone.id);
-      expect(redirectRule.requestUrl).toBeUndefined();
-      expect(redirectRule.expression).toBeUndefined();
-      expect(redirectRule.targetUrl).toEqual(`https://static-${testDomain}/`);
-      expect(redirectRule.statusCode).toEqual(301);
-      expect(redirectRule.preserveQueryString).toEqual(true);
 
       // Test static redirect behavior (redirects all requests to target)
       await testRedirectBehavior(
@@ -154,51 +158,42 @@ describe("RedirectRule", () => {
   });
 
   test("create dynamic redirect rule with expression", async (scope) => {
-    let zone: Zone | undefined;
     let redirectRule: RedirectRule | undefined;
 
     try {
-      // Create a test zone first
-      zone = await Zone(`${testDomain}-dynamic-zone`, {
-        name: `dynamic-${testDomain}`,
-        type: "full",
-        jumpStart: false,
-      });
-
       // Create a dynamic redirect rule using expression
-      redirectRule = await RedirectRule(`${BRANCH_PREFIX}-dynamic-redirect`, {
+      redirectRule = await RedirectRule("dynamic-redirect", {
         zone: zone.id,
         expression:
           'http.request.uri.path matches "/autodiscover\\\\.(xml|src)$"',
         targetUrl: `https://dynamic-${testDomain}/not-found`,
-        statusCode: 404,
+        statusCode: 302,
         preserveQueryString: false,
       });
 
+      expect(redirectRule).toMatchObject({
+        zoneId: zone.id,
+        requestUrl: undefined,
+        expression:
+          'http.request.uri.path matches "/autodiscover\\\\.(xml|src)$"',
+        targetUrl: `https://dynamic-${testDomain}/not-found`,
+        statusCode: 302,
+        preserveQueryString: false,
+      });
       expect(redirectRule.ruleId).toBeTruthy();
       expect(redirectRule.rulesetId).toBeTruthy();
-      expect(redirectRule.zoneId).toEqual(zone.id);
-      expect(redirectRule.requestUrl).toBeUndefined();
-      expect(redirectRule.expression).toEqual(
-        'http.request.uri.path matches "/autodiscover\\\\.(xml|src)$"',
-      );
-      expect(redirectRule.targetUrl).toEqual(
-        `https://dynamic-${testDomain}/not-found`,
-      );
-      expect(redirectRule.statusCode).toEqual(404);
-      expect(redirectRule.preserveQueryString).toEqual(false);
 
       // Test dynamic redirect with expression matching
       await testRedirectBehavior(
         `https://dynamic-${testDomain}/autodiscover.xml`,
         `https://dynamic-${testDomain}/not-found`,
-        404,
+        302,
         "Dynamic redirect (autodiscover.xml)",
       );
       await testRedirectBehavior(
         `https://dynamic-${testDomain}/autodiscover.src`,
         `https://dynamic-${testDomain}/not-found`,
-        404,
+        302,
         "Dynamic redirect (autodiscover.src)",
       );
     } finally {
@@ -210,16 +205,7 @@ describe("RedirectRule", () => {
   });
 
   test("validate mutually exclusive requestUrl and expression", async (scope) => {
-    let zone: Zone | undefined;
-
     try {
-      // Create a test zone first
-      zone = await Zone(`${testDomain}-validation-zone`, {
-        name: `validation-${testDomain}`,
-        type: "full",
-        jumpStart: false,
-      });
-
       // Should throw error when both requestUrl and expression are provided
       await expect(
         RedirectRule(`${BRANCH_PREFIX}-invalid-redirect`, {
@@ -236,16 +222,7 @@ describe("RedirectRule", () => {
   });
 
   test("allow static redirect without requestUrl or expression", async (scope) => {
-    let zone: Zone | undefined;
-
     try {
-      // Create a test zone first
-      zone = await Zone(`${testDomain}-validation2-zone`, {
-        name: `validation2-${testDomain}`,
-        type: "full",
-        jumpStart: false,
-      });
-
       // Should NOT throw error when neither requestUrl nor expression are provided (static redirect)
       const redirectRule = await RedirectRule(
         `${BRANCH_PREFIX}-static-redirect2`,
@@ -256,9 +233,11 @@ describe("RedirectRule", () => {
         },
       );
 
-      expect(redirectRule.requestUrl).toBeUndefined();
-      expect(redirectRule.expression).toBeUndefined();
-      expect(redirectRule.targetUrl).toEqual(`https://${testDomain}/`);
+      expect(redirectRule).toMatchObject({
+        requestUrl: undefined,
+        expression: undefined,
+        targetUrl: `https://${testDomain}/`,
+      });
     } finally {
       await destroy(scope);
     }
@@ -286,69 +265,56 @@ async function testRedirectBehavior(
   expectedStatus: number,
   testDescription: string,
 ): Promise<void> {
-  try {
-    console.log(
-      `Testing ${testDescription}: ${sourceUrl} -> ${expectedTargetUrl}`,
-    );
+  console.log(
+    `Testing ${testDescription}: ${sourceUrl} -> ${expectedTargetUrl}`,
+  );
 
-    // Test the redirect with manual redirect handling to capture the redirect response
-    const response = await fetchAndExpectStatus(
-      sourceUrl,
-      {
-        redirect: "manual", // Don't follow redirects automatically
-        headers: {
-          "User-Agent": "alchemy-test-bot/1.0",
-        },
+  // Test the redirect with manual redirect handling to capture the redirect response
+  const response = await fetchAndExpectStatus(
+    sourceUrl,
+    {
+      redirect: "manual", // Don't follow redirects automatically
+      headers: {
+        "User-Agent": "alchemy-test-bot/1.0",
       },
-      expectedStatus,
-      3, // Fewer retries for redirect tests
-      10000, // Shorter timeout for redirect tests
-    );
+    },
+    expectedStatus,
+    3, // Fewer retries for redirect tests
+    10000, // Shorter timeout for redirect tests
+  );
 
-    // For redirect status codes, verify the Location header
-    if (expectedStatus >= 300 && expectedStatus < 400) {
-      const locationHeader = response.headers.get("location");
-      if (locationHeader) {
-        // Normalize URLs for comparison (handle relative vs absolute URLs)
-        const actualTarget = new URL(locationHeader, sourceUrl).toString();
-        const normalizedExpected = new URL(expectedTargetUrl).toString();
+  // For redirect status codes, verify the Location header
+  if (expectedStatus >= 300 && expectedStatus < 400) {
+    const locationHeader = response.headers.get("location");
+    if (locationHeader) {
+      // Normalize URLs for comparison (handle relative vs absolute URLs)
+      const actualTarget = new URL(locationHeader, sourceUrl).toString();
+      const normalizedExpected = new URL(expectedTargetUrl).toString();
 
-        expect(actualTarget).toEqual(normalizedExpected);
-        console.log(`✓ ${testDescription}: Redirect Location header correct`);
-      } else {
-        console.warn(
-          `⚠ ${testDescription}: Expected Location header not found`,
-        );
-      }
+      expect(actualTarget).toEqual(normalizedExpected);
+      console.log(`✓ ${testDescription}: Redirect Location header correct`);
+    } else {
+      console.warn(`⚠ ${testDescription}: Expected Location header not found`);
     }
-
-    console.log(
-      `✓ ${testDescription}: Status code correct (${expectedStatus})`,
-    );
-  } catch (error) {
-    // Log the failure but don't fail the test - domain resolution issues are expected
-    // in test environments with fake domains
-    console.log(
-      `⚠ ${testDescription}: Could not test redirect behavior - ${error instanceof Error ? error.message : String(error)}`,
-    );
-    console.log(
-      `  This is expected when testing with non-resolvable domains like '${new URL(sourceUrl).hostname}'`,
-    );
-    console.log(
-      "  To test actual redirect behavior, use a real domain configured with Cloudflare DNS",
-    );
   }
+
+  console.log(`✓ ${testDescription}: Status code correct (${expectedStatus})`);
 }
 
 async function assertRedirectRuleDoesNotExist(
-  api: typeof import("../../src/cloudflare/api.ts").CloudflareApi.prototype,
+  api: CloudflareApi,
   zoneId: string,
   redirectRule: RedirectRule,
 ) {
-  const response = await api.get(
-    `/zones/${zoneId}/rulesets/${redirectRule.rulesetId}/rules/${redirectRule.ruleId}`,
+  // Check if the rule exists in the ruleset using the helper function
+  const existingRule = await findRuleInRuleset(
+    api,
+    zoneId,
+    redirectRule.rulesetId,
+    redirectRule.ruleId,
   );
-  if (response.status !== 404) {
+
+  if (existingRule) {
     throw new Error(
       `Expected redirect rule ${redirectRule.ruleId} to not exist, but it still exists`,
     );

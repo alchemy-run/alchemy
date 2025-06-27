@@ -1,7 +1,5 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import { logger } from "../util/logger.ts";
-import { handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
@@ -213,20 +211,13 @@ export const RedirectRule = Resource(
 
     if (this.phase === "delete") {
       if (this.output?.ruleId && this.output?.rulesetId) {
-        const deleteResponse = await api.delete(
-          `/zones/${zoneId}/rulesets/${this.output.rulesetId}/rules/${this.output.ruleId}`,
+        // Let delete errors propagate instead of swallowing them
+        await deleteRedirectRule(
+          api,
+          zoneId,
+          this.output.rulesetId,
+          this.output.ruleId,
         );
-
-        if (!deleteResponse.ok && deleteResponse.status !== 404) {
-          await handleApiError(
-            deleteResponse,
-            "delete",
-            "redirect rule",
-            this.output.ruleId,
-          );
-        }
-      } else {
-        logger.warn("Redirect rule not found, skipping delete");
       }
       return this.destroy();
     }
@@ -259,36 +250,18 @@ export const RedirectRule = Resource(
       this.output?.rulesetId
     ) {
       // Update existing rule
-      const updateResponse = await api.patch(
-        `/zones/${zoneId}/rulesets/${this.output.rulesetId}/rules/${this.output.ruleId}`,
+      const updatedRule = await updateRedirectRule(
+        api,
+        zoneId,
+        this.output.rulesetId,
+        this.output.ruleId,
         {
-          action: "redirect",
           expression: ruleExpression,
-          action_parameters: {
-            from_value: {
-              status_code: statusCode,
-              target_url: {
-                value: props.targetUrl,
-              },
-              preserve_query_string: preserveQueryString,
-            },
-          },
-          enabled: true,
+          targetUrl: props.targetUrl,
+          statusCode,
+          preserveQueryString,
         },
       );
-
-      if (!updateResponse.ok) {
-        await handleApiError(
-          updateResponse,
-          "update",
-          "redirect rule",
-          this.output.ruleId,
-        );
-      }
-
-      const updateResult =
-        (await updateResponse.json()) as CloudflareResponse<CloudflareRule>;
-      const updatedRule = updateResult.result;
 
       return this({
         ruleId: updatedRule.id,
@@ -299,7 +272,7 @@ export const RedirectRule = Resource(
         targetUrl: props.targetUrl,
         statusCode,
         preserveQueryString,
-        enabled: updatedRule.enabled,
+        enabled: updatedRule.enabled ?? true,
         lastUpdated: updatedRule.last_updated,
       });
     }
@@ -308,34 +281,12 @@ export const RedirectRule = Resource(
     const rulesetId = await getOrCreateRedirectRuleset(api, zoneId);
 
     // Create the rule
-    const createResponse = await api.post(
-      `/zones/${zoneId}/rulesets/${rulesetId}/rules`,
-      {
-        action: "redirect",
-        expression: ruleExpression,
-        action_parameters: {
-          from_value: {
-            status_code: statusCode,
-            target_url: {
-              value: props.targetUrl,
-            },
-            preserve_query_string: preserveQueryString,
-          },
-        },
-        enabled: true,
-      },
-    );
-
-    if (!createResponse.ok) {
-      const errorBody = await createResponse.text();
-      throw new Error(
-        `Failed to create redirect rule: ${createResponse.statusText}\nResponse: ${errorBody}`,
-      );
-    }
-
-    const createResult =
-      (await createResponse.json()) as CloudflareResponse<CloudflareRule>;
-    const createdRule = createResult.result;
+    const createdRule = await createRedirectRule(api, zoneId, rulesetId, {
+      expression: ruleExpression,
+      targetUrl: props.targetUrl,
+      statusCode,
+      preserveQueryString,
+    });
 
     return this({
       ruleId: createdRule.id,
@@ -346,11 +297,59 @@ export const RedirectRule = Resource(
       targetUrl: props.targetUrl,
       statusCode,
       preserveQueryString,
-      enabled: createdRule.enabled,
+      enabled: createdRule.enabled ?? true,
       lastUpdated: createdRule.last_updated,
     });
   },
 );
+
+/**
+ * Get existing redirect ruleset for a zone
+ */
+async function getRedirectRuleset(
+  api: CloudflareApi,
+  zoneId: string,
+): Promise<string | null> {
+  const response = await api.get(`/zones/${zoneId}/rulesets`);
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const result = (await response.json()) as CloudflareResponse<
+    CloudflareRuleset[]
+  >;
+  const redirectRuleset = result.result.find(
+    (ruleset) => ruleset.phase === "http_request_dynamic_redirect",
+  );
+
+  return redirectRuleset?.id || null;
+}
+
+/**
+ * Create a new redirect ruleset for a zone
+ */
+async function createRedirectRuleset(
+  api: CloudflareApi,
+  zoneId: string,
+): Promise<string> {
+  const response = await api.post(`/zones/${zoneId}/rulesets`, {
+    name: "Zone-level redirect ruleset",
+    description: "Redirect rules for the zone",
+    kind: "zone",
+    phase: "http_request_dynamic_redirect",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to create redirect ruleset: ${response.statusText}`,
+    );
+  }
+
+  const result =
+    (await response.json()) as CloudflareResponse<CloudflareRuleset>;
+  return result.result.id;
+}
 
 /**
  * Get or create the redirect ruleset for a zone
@@ -359,45 +358,217 @@ async function getOrCreateRedirectRuleset(
   api: CloudflareApi,
   zoneId: string,
 ): Promise<string> {
-  // First, try to get existing redirect ruleset
-  const rulesetsResponse = await api.get(`/zones/${zoneId}/rulesets`);
-
-  if (!rulesetsResponse.ok) {
-    throw new Error(`Failed to get rulesets: ${rulesetsResponse.statusText}`);
+  const existingRulesetId = await getRedirectRuleset(api, zoneId);
+  if (existingRulesetId) {
+    return existingRulesetId;
   }
 
-  const rulesetsResult = (await rulesetsResponse.json()) as CloudflareResponse<
-    CloudflareRuleset[]
-  >;
-  const redirectRuleset = rulesetsResult.result.find(
-    (ruleset) => ruleset.phase === "http_request_redirect",
-  );
+  return await createRedirectRuleset(api, zoneId);
+}
 
-  if (redirectRuleset) {
-    return redirectRuleset.id;
+/**
+ * Create a new redirect rule by updating the ruleset
+ */
+async function createRedirectRule(
+  api: CloudflareApi,
+  zoneId: string,
+  rulesetId: string,
+  ruleData: {
+    expression: string;
+    targetUrl: string;
+    statusCode: number;
+    preserveQueryString: boolean;
+  },
+): Promise<CloudflareRule> {
+  // Get current ruleset
+  const ruleset = await getRuleset(api, zoneId, rulesetId);
+  if (!ruleset) {
+    throw new Error(`Ruleset ${rulesetId} not found`);
   }
 
-  // Create new redirect ruleset
-  const createRulesetResponse = await api.post(`/zones/${zoneId}/rulesets`, {
-    name: "Zone-level redirect ruleset",
-    description: "Redirect rules for the zone",
-    kind: "zone",
-    phase: "http_request_redirect",
+  // Create new rule object
+  const newRule = {
+    action: "redirect" as const,
+    expression: ruleData.expression,
+    action_parameters: {
+      from_value: {
+        status_code: ruleData.statusCode,
+        target_url: {
+          value: ruleData.targetUrl,
+        },
+        preserve_query_string: ruleData.preserveQueryString,
+      },
+    },
+    enabled: true,
+  };
+
+  // Update ruleset with new rule
+  const response = await api.put(`/zones/${zoneId}/rulesets/${rulesetId}`, {
+    name: ruleset.name,
+    description: ruleset.description,
+    kind: ruleset.kind,
+    phase: ruleset.phase,
+    rules: [...ruleset.rules, newRule],
   });
 
-  if (!createRulesetResponse.ok) {
+  if (!response.ok) {
+    const errorBody = await response.text();
     throw new Error(
-      `Failed to create redirect ruleset: ${createRulesetResponse.statusText}`,
+      `Failed to create redirect rule: ${response.statusText}\nResponse: ${errorBody}`,
     );
   }
 
-  const createRulesetResult =
-    (await createRulesetResponse.json()) as CloudflareResponse<CloudflareRuleset>;
-  return createRulesetResult.result.id;
+  const result =
+    (await response.json()) as CloudflareResponse<CloudflareRuleset>;
+  // Return the last rule (the one we just added)
+  const createdRule = result.result.rules[result.result.rules.length - 1];
+  return createdRule;
+}
+
+/**
+ * Update an existing redirect rule by updating the ruleset
+ */
+async function updateRedirectRule(
+  api: CloudflareApi,
+  zoneId: string,
+  rulesetId: string,
+  ruleId: string,
+  ruleData: {
+    expression: string;
+    targetUrl: string;
+    statusCode: number;
+    preserveQueryString: boolean;
+  },
+): Promise<CloudflareRule> {
+  // Get current ruleset
+  const ruleset = await getRuleset(api, zoneId, rulesetId);
+  if (!ruleset) {
+    throw new Error(`Ruleset ${rulesetId} not found`);
+  }
+
+  // Find and update the rule
+  const updatedRules = ruleset.rules.map((rule) => {
+    if (rule.id === ruleId) {
+      return {
+        ...rule,
+        action: "redirect" as const,
+        expression: ruleData.expression,
+        action_parameters: {
+          from_value: {
+            status_code: ruleData.statusCode,
+            target_url: {
+              value: ruleData.targetUrl,
+            },
+            preserve_query_string: ruleData.preserveQueryString,
+          },
+        },
+        enabled: true,
+      };
+    }
+    return rule;
+  });
+
+  // Update ruleset with modified rules
+  const response = await api.put(`/zones/${zoneId}/rulesets/${rulesetId}`, {
+    name: ruleset.name,
+    description: ruleset.description,
+    kind: ruleset.kind,
+    phase: ruleset.phase,
+    rules: updatedRules,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to update redirect rule: ${response.statusText}`);
+  }
+
+  const result =
+    (await response.json()) as CloudflareResponse<CloudflareRuleset>;
+  // Find and return the updated rule
+  const updatedRule = result.result.rules.find((rule) => rule.id === ruleId);
+  if (!updatedRule) {
+    throw new Error(`Updated rule ${ruleId} not found in response`);
+  }
+  return updatedRule;
+}
+
+/**
+ * Get a ruleset with its rules
+ */
+async function getRuleset(
+  api: CloudflareApi,
+  zoneId: string,
+  rulesetId: string,
+): Promise<CloudflareRuleset | null> {
+  const response = await api.get(`/zones/${zoneId}/rulesets/${rulesetId}`);
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const result =
+    (await response.json()) as CloudflareResponse<CloudflareRuleset>;
+  return result.result;
+}
+
+/**
+ * Find a specific rule in a ruleset
+ */
+export async function findRuleInRuleset(
+  api: CloudflareApi,
+  zoneId: string,
+  rulesetId: string,
+  ruleId: string,
+): Promise<CloudflareRule | null> {
+  const response = await api.get(`/zones/${zoneId}/rulesets/${rulesetId}`);
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to get ruleset: ${response.status} ${response.statusText}`,
+    );
+  }
+
+  const rulesetData =
+    (await response.json()) as CloudflareResponse<CloudflareRuleset>;
+  const rule = rulesetData.result.rules.find((r) => r.id === ruleId);
+
+  return rule || null;
+}
+
+/**
+ * Delete a redirect rule by updating the ruleset to exclude it
+ */
+async function deleteRedirectRule(
+  api: CloudflareApi,
+  zoneId: string,
+  rulesetId: string,
+  ruleId: string,
+): Promise<void> {
+  const ruleset = await getRuleset(api, zoneId, rulesetId);
+
+  if (!ruleset) {
+    throw new Error(`Ruleset ${rulesetId} not found for deletion`);
+  }
+
+  // Filter out the rule to delete
+  const updatedRules = ruleset.rules.filter((rule) => rule.id !== ruleId);
+
+  // Update the ruleset with the filtered rules
+  const response = await api.put(`/zones/${zoneId}/rulesets/${rulesetId}`, {
+    name: ruleset.name,
+    description: ruleset.description,
+    kind: ruleset.kind,
+    phase: ruleset.phase,
+    rules: updatedRules,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete redirect rule: ${response.statusText}`);
+  }
 }
 
 /**
  * Convert a wildcard URL pattern to a Cloudflare Rules expression
+ * Uses operators available on Free plans (no regex matching)
  */
 function convertWildcardUrlToExpression(wildcardUrl: string): string {
   // Parse the URL to extract components
@@ -409,22 +580,53 @@ function convertWildcardUrlToExpression(wildcardUrl: string): string {
 
   // Handle hostname wildcards
   if (hostname.includes("*")) {
-    // Convert hostname wildcard to regex pattern
-    const hostnamePattern = hostname
-      .replace(/\./g, "\\.")
-      .replace(/\*/g, "([^.]+)");
-    expression += `http.request.uri.authority matches "^${hostnamePattern}$"`;
+    // For simple wildcard patterns, use contains or ends_with operators
+    if (hostname.startsWith("*")) {
+      // *.example.com -> http.host ends_with ".example.com"
+      const suffix = hostname.substring(1); // Remove the *
+      expression += `http.host ends_with "${suffix}"`;
+    } else if (hostname.endsWith("*")) {
+      // subdomain.* -> http.host starts_with "subdomain."
+      const prefix = hostname.substring(0, hostname.length - 1); // Remove the *
+      expression += `http.host starts_with "${prefix}"`;
+    } else {
+      // More complex wildcards - fallback to a broader match
+      const parts = hostname.split("*");
+      if (parts.length === 2) {
+        expression += `http.host starts_with "${parts[0]}" and http.host ends_with "${parts[1]}"`;
+      } else {
+        // Fallback to domain contains for complex patterns
+        const baseDomain = hostname.replace(/^\*\./, "").replace(/\.\*$/, "");
+        expression += `http.host contains "${baseDomain}"`;
+      }
+    }
   } else {
-    expression += `http.request.uri.authority == "${hostname}"`;
+    expression += `http.host == "${hostname}"`;
   }
 
   // Handle pathname wildcards
   if (pathname.includes("*")) {
-    // Convert pathname wildcard to regex pattern
-    const pathnamePattern = pathname
-      .replace(/\./g, "\\.")
-      .replace(/\*/g, "(.*)");
-    expression += ` and http.request.uri.path matches "^${pathnamePattern}$"`;
+    if (pathname.endsWith("*")) {
+      // /files/* -> starts_with "/files/"
+      const prefix = pathname.substring(0, pathname.length - 1); // Remove the *
+      expression += ` and http.request.uri.path starts_with "${prefix}"`;
+    } else if (pathname.startsWith("*")) {
+      // *.html -> ends_with ".html"
+      const suffix = pathname.substring(1); // Remove the *
+      expression += ` and http.request.uri.path ends_with "${suffix}"`;
+    } else {
+      // More complex wildcards - use contains
+      const parts = pathname.split("*");
+      if (parts.length === 2 && parts[0] && parts[1]) {
+        expression += ` and http.request.uri.path starts_with "${parts[0]}" and http.request.uri.path ends_with "${parts[1]}"`;
+      } else {
+        // Fallback to contains for the non-wildcard part
+        const nonWildcardPart = parts.find((part) => part.length > 0) || "";
+        if (nonWildcardPart) {
+          expression += ` and http.request.uri.path contains "${nonWildcardPart}"`;
+        }
+      }
+    }
   } else if (pathname !== "/") {
     expression += ` and http.request.uri.path == "${pathname}"`;
   }
