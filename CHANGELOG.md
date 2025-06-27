@@ -1,3 +1,13 @@
+## v0.41.2
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Cloudflare Advanced Certificate Pack resource &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/487 [<samp>(b3a2f)</samp>](https://github.com/sam-goodwin/alchemy/commit/b3a2f425)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.41.1...v0.41.2)
+
+---
+
 ## v0.41.1
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

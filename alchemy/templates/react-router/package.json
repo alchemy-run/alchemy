@@ -1,6 +1,6 @@
 {
   "type": "module",
-  "name": "react-router",
+  "name": "@alchemy.run/react-router-template",
   "private": true,
   "scripts": {
     "build": "vite build",

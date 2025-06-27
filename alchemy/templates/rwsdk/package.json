@@ -1,6 +1,6 @@
 {
   "type": "module",
-  "name": "rwsdk",
+  "name": "@alchemy.run/rwsdk-template",
   "version": "1.0.0",
   "description": "Build fast, server-driven webapps on Cloudflare with SSR, RSC, and realtime. ",
   "main": "index.js",
