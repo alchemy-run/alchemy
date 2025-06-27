@@ -91,6 +91,8 @@ const product = await Product("pro-plan", {
     --hero-code-title: #d1d5db;
     --hero-dot-color: #404040; /* Lighter than dark background */
     --hero-shadow: rgba(0, 0, 0, 0.25);
+    /* controls the color of the title, tagline, and actions */
+    --hero-accent: var(--sl-color-text-accent);
   }
 
   /* Light mode - manual theme selection */
@@ -102,6 +104,7 @@ const product = await Product("pro-plan", {
     --hero-dot-color: #a7a7a7; /* Darker than light background */
     --hero-shadow: rgba(0, 0, 0, 0.1);
     --sl-color-text-accent: #c5a943;
+    --hero-accent: #488f48;
   }
 
   /* Global page background override - only for pages with hero class */
@@ -148,9 +151,10 @@ const product = await Product("pro-plan", {
     -webkit-text-fill-color: transparent;
   }
 
-  /* Light mode title - solid gold */
-  :root[data-theme="light"] .hero-title {
-    color: var(--sl-color-text-accent);
+  :root[data-theme="light"] .hero-title,
+  :root[data-theme="light"] .hero-tagline,
+  :root[data-theme="light"] .hero-actions {
+    color: var(--hero-accent);
   }
 
   .hero-tagline {
@@ -280,12 +284,12 @@ const product = await Product("pro-plan", {
   }
 
   .hero-button.primary {
-    background: var(--sl-color-text-accent);
+    background: var(--hero-accent);
     color: var(--sl-color-bg);
   }
 
   .hero-button.primary:hover {
-    background: color-mix(in srgb, var(--sl-color-text-accent) 80%, white 20%);
+    background: color-mix(in srgb, var(--hero-accent) 80%, white 20%);
     color: var(--sl-color-bg);
     transform: scale(1.05);
     box-shadow: 0 0 0 2px transparent;
@@ -305,12 +309,12 @@ const product = await Product("pro-plan", {
   }
 
   .hero-button.minimal {
-    color: var(--sl-color-text-accent);
+    color: var(--hero-accent);
     font-weight: bold;
   }
 
   .hero-button.minimal:hover {
-    color: color-mix(in srgb, var(--sl-color-text-accent) 80%, white 40%);
+    color: color-mix(in srgb, var(--sl-color-accent) 80%, white 40%);
   }
 
   /* Responsive Design */
