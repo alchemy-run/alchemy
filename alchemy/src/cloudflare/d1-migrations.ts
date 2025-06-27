@@ -119,7 +119,7 @@ async function migrateLegacySchema(
     const copyDataSQL = `
       INSERT INTO ${tempTableName} (id, name, applied_at)
       SELECT 
-        printf('%05d', row_number()) as id,
+        printf('%05d', row_number() OVER (ORDER BY applied_at)) as id,
         ${primaryColumn} as name,
         applied_at
       FROM ${options.migrationsTable}
