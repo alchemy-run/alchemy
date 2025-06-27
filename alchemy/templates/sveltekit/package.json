@@ -1,6 +1,6 @@
 {
   "type": "module",
-  "name": "sveltekit",
+  "name": "@alchemy.run/sveltekit-template",
   "private": true,
   "version": "0.0.1",
   "scripts": {

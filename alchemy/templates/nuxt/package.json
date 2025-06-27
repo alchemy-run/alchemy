@@ -1,6 +1,6 @@
 {
   "type": "module",
-  "name": "nuxt",
+  "name": "@alchemy.run/nuxt-template",
   "private": true,
   "scripts": {
     "build": "nuxt build",
