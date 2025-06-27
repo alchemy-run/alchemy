@@ -1,6 +1,6 @@
 {
   "type": "module",
-  "name": "tanstack-start",
+  "name": "@alchemy.run/tanstack-start-template",
   "private": true,
   "sideEffects": false,
   "scripts": {
