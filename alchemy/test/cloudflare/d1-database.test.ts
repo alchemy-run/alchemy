@@ -541,7 +541,7 @@ describe("D1 Database Resource", async () => {
 
       // Create test migration files
       await fs.writeFile(
-        path.join(tempDir, "001_create_users.sql"),
+        path.join(tempDir, "0002_create_users.sql"),
         `CREATE TABLE users (
           id INTEGER PRIMARY KEY,
           name TEXT NOT NULL,
@@ -551,7 +551,7 @@ describe("D1 Database Resource", async () => {
       );
 
       await fs.writeFile(
-        path.join(tempDir, "002_create_posts.sql"),
+        path.join(tempDir, "0003_create_posts.sql"),
         `CREATE TABLE posts (
           id INTEGER PRIMARY KEY,
           user_id INTEGER,
@@ -563,7 +563,7 @@ describe("D1 Database Resource", async () => {
       );
 
       await fs.writeFile(
-        path.join(tempDir, "003_add_users_data.sql"),
+        path.join(tempDir, "0004_add_users_data.sql"),
         `INSERT INTO users (name, email) VALUES 
           ('Alice', 'alice@example.com'),
           ('Bob', 'bob@example.com');`,
@@ -601,8 +601,8 @@ describe("D1 Database Resource", async () => {
 
       // Step 3: Insert some fake migration records into the legacy table (simulating old migrations)
       const insertLegacySQL = `INSERT INTO ${legacyMigrationsTable} (id, applied_at) VALUES 
-        ('000_initial_setup.sql', datetime('now', '-1 day')),
-        ('000_add_indexes.sql', datetime('now', '-1 hour'));`;
+        ('0000_initial_setup.sql', datetime('now', '-1 day')),
+        ('0001_add_indexes.sql', datetime('now', '-1 hour'));`;
 
       await executeD1SQL(
         {
@@ -658,11 +658,11 @@ describe("D1 Database Resource", async () => {
 
       // Should have the migrated legacy records plus new migrations
       expect(finalApplied.size).toBeGreaterThanOrEqual(5); // 2 legacy + 3 new
-      expect(finalApplied.has("000_initial_setup.sql")).toBe(true);
-      expect(finalApplied.has("000_add_indexes.sql")).toBe(true);
-      expect(finalApplied.has("001_create_users.sql")).toBe(true);
-      expect(finalApplied.has("002_create_posts.sql")).toBe(true);
-      expect(finalApplied.has("003_add_users_data.sql")).toBe(true);
+      expect(finalApplied.has("0000_initial_setup.sql")).toBe(true);
+      expect(finalApplied.has("0001_add_indexes.sql")).toBe(true);
+      expect(finalApplied.has("0002_create_users.sql")).toBe(true);
+      expect(finalApplied.has("0003_create_posts.sql")).toBe(true);
+      expect(finalApplied.has("0004_add_users_data.sql")).toBe(true);
 
       // Step 7: Verify the actual table structure was created by the migrations
       const tables = await getResults(
@@ -690,7 +690,7 @@ describe("D1 Database Resource", async () => {
 
       // Step 9: Add a new migration file after initial adoption to test subsequent updates
       await fs.writeFile(
-        path.join(tempDir, "004_add_posts_data.sql"),
+        path.join(tempDir, "0005_add_posts_data.sql"),
         `INSERT INTO posts (user_id, title, content) VALUES 
           (1, 'First Post', 'This is Alice first post'),
           (2, 'Welcome Post', 'Bob welcomes everyone');`,
@@ -717,12 +717,12 @@ describe("D1 Database Resource", async () => {
 
       // Should now have all 6 migrations (2 legacy + 3 initial + 1 new)
       expect(finalAppliedAfterUpdate.size).toBeGreaterThanOrEqual(6);
-      expect(finalAppliedAfterUpdate.has("000_initial_setup.sql")).toBe(true);
-      expect(finalAppliedAfterUpdate.has("000_add_indexes.sql")).toBe(true);
-      expect(finalAppliedAfterUpdate.has("001_create_users.sql")).toBe(true);
-      expect(finalAppliedAfterUpdate.has("002_create_posts.sql")).toBe(true);
-      expect(finalAppliedAfterUpdate.has("003_add_users_data.sql")).toBe(true);
-      expect(finalAppliedAfterUpdate.has("004_add_posts_data.sql")).toBe(true);
+      expect(finalAppliedAfterUpdate.has("0000_initial_setup.sql")).toBe(true);
+      expect(finalAppliedAfterUpdate.has("0001_add_indexes.sql")).toBe(true);
+      expect(finalAppliedAfterUpdate.has("0002_create_users.sql")).toBe(true);
+      expect(finalAppliedAfterUpdate.has("0003_create_posts.sql")).toBe(true);
+      expect(finalAppliedAfterUpdate.has("0004_add_users_data.sql")).toBe(true);
+      expect(finalAppliedAfterUpdate.has("0005_add_posts_data.sql")).toBe(true);
 
       // Step 12: Verify the new posts data was inserted
       const posts = await getResults(
@@ -777,7 +777,7 @@ describe("D1 Database Resource", async () => {
 
       // Step 14: Add another migration file and verify ID continues sequentially
       await fs.writeFile(
-        path.join(tempDir, "005_add_more_data.sql"),
+        path.join(tempDir, "0006_add_more_data.sql"),
         `INSERT INTO posts (user_id, title, content) VALUES 
           (1, 'Second Post', 'Alice second post'),
           (2, 'Another Post', 'Bob another post');`,
@@ -813,7 +813,7 @@ describe("D1 Database Resource", async () => {
       // The last migration should have ID 00007
       const lastRecord = finalRecords[finalRecords.length - 1];
       expect(lastRecord.id).toBe("00007");
-      expect(lastRecord.name).toBe("005_add_more_data.sql");
+      expect(lastRecord.name).toBe("0006_add_more_data.sql");
     } finally {
       // Clean up temporary directory
       if (tempDir) {
