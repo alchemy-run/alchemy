@@ -122,17 +122,36 @@ export async function applyMigrations(
   await ensureMigrationsTable(options);
   const applied = await getAppliedMigrations(options);
 
+  // Helper to create a 5-digit, zero-padded ID (Wrangler style)
+  const padId = (n: number): string => n.toString().padStart(5, "0");
+
+  // Build a lookup of numeric IDs we have already seen ("00001", "00002", …)
+  const appliedNumericIds = new Set(
+    [...applied].filter((id) => /^\d+$/.test(id)),
+  );
+
+  let sequence = appliedNumericIds.size; // how many numeric IDs already exist
+
   for (const migration of options.migrationsFiles) {
-    const migrationId = migration.id;
+    sequence += 1;
+    const numericId = padId(sequence);
 
-    if (applied.has(migrationId)) continue;
+    // Consider the migration already applied if EITHER the numeric ID or the
+    // filename-based ID exists in the migrations table.
+    if (applied.has(numericId) || applied.has(migration.id)) {
+      // If we skipped because the numeric ID is taken we must keep the counter
+      // in sync so continue without spraying gaps.
+      continue;
+    }
 
-    // Run the migration
+    // Run the migration SQL against D1
     await executeD1SQL(options, migration.sql);
-    // Record as applied
-    const insertSQL = `INSERT INTO ${options.migrationsTable} (id, applied_at) VALUES ('${migrationId.replace("'", "''")}', datetime('now'));`;
-    await executeD1SQL(options, insertSQL);
 
-    logger.log(`Applied migration: ${migrationId}`);
+    // Record the migration using the deterministic numeric ID
+    const insertSQL = `INSERT INTO ${options.migrationsTable} (id, applied_at) VALUES ('${numericId}', datetime('now'));`;
+    await executeD1SQL(options, insertSQL);
+    logger.log(`Applied migration: ${migration.id}  ->  ${numericId}`);
   }
+
+  logger.log("All migrations applied successfully");
 }

@@ -460,6 +460,129 @@ describe("D1 Database Resource", async () => {
       await destroy(scope);
     }
   }, 120000); // Increased timeout for D1 database operations
+
+  test("migration IDs increment monotonically with legacy filename support", async (scope) => {
+    const migrationsDb = `${testId}-monotonic-migrations`;
+    let database: D1Database | undefined;
+
+    try {
+      // First, create a database and manually insert some legacy numeric IDs
+      // to simulate an existing database that was created with wrangler
+      database = await D1Database(migrationsDb, {
+        name: migrationsDb,
+        adopt: true,
+      });
+
+      expect(database.name).toEqual(migrationsDb);
+      expect(database.id).toBeTruthy();
+
+      // Create the migrations table manually and insert some old wrangler-style numeric IDs
+      // This simulates a database that already had migrations applied via wrangler
+      await api.post(
+        `/accounts/${api.accountId}/d1/database/${database.id}/query`,
+        {
+          sql: `
+            CREATE TABLE IF NOT EXISTS d1_migrations (id TEXT PRIMARY KEY, applied_at TEXT);
+            INSERT INTO d1_migrations (id, applied_at) VALUES 
+              ('00001', '2024-01-01 10:00:00'),
+              ('00002', '2024-01-01 11:00:00'),
+              ('00003', '2024-01-01 12:00:00'),
+              ('00004', '2024-01-01 13:00:00'),
+              ('00005', '2024-01-01 14:00:00');
+          `,
+        },
+      );
+
+      // Now apply migrations using our migration system - it should continue from 00006, 00007, 00008
+      // and not restart from 00001 or use random/filename-based IDs
+      database = await D1Database(migrationsDb, {
+        name: migrationsDb,
+        migrationsDir: `${__dirname}/migrations`,
+        adopt: true,
+      });
+
+      // Verify the migrations table has the expected sequential IDs
+      const migrationsResults = await getResults(
+        api,
+        database,
+        "SELECT id, applied_at FROM d1_migrations ORDER BY id;",
+      );
+
+      // Should have 5 legacy + 3 new migrations = 8 total
+      expect(migrationsResults.length).toBe(8);
+
+      // Extract all IDs and verify they're all numeric and sequential
+      const allIds = migrationsResults.map((r) => r.id).sort();
+
+      expect(allIds).toEqual([
+        "00001",
+        "00002",
+        "00003",
+        "00004",
+        "00005", // existing legacy IDs
+        "00006",
+        "00007",
+        "00008", // new IDs that should continue the sequence
+      ]);
+
+      // Verify that the migrations actually ran by checking the table structure and data
+      const tableSchema = await getResults(
+        api,
+        database,
+        "PRAGMA table_info(test_migrations_table);",
+      );
+
+      // Should have id, name, and description columns (description added by migration 002)
+      const columnNames = tableSchema.map((col) => col.name);
+      expect(columnNames).toContain("id");
+      expect(columnNames).toContain("name");
+      expect(columnNames).toContain("description");
+
+      // Check that the data was inserted by migration 003
+      const testData = await getResults(
+        api,
+        database,
+        "SELECT * FROM test_migrations_table WHERE name = 'test-row';",
+      );
+
+      expect(testData.length).toBe(1);
+      expect(testData[0].description).toBe("inserted by migration");
+
+      // Run the migration system again to ensure idempotency
+      database = await D1Database(migrationsDb, {
+        name: migrationsDb,
+        migrationsDir: `${__dirname}/migrations`,
+        adopt: true,
+      });
+
+      // Should still have the same number of migration entries (no duplicates)
+      const finalMigrationsResults = await getResults(
+        api,
+        database,
+        "SELECT id FROM d1_migrations ORDER BY id;",
+      );
+
+      expect(finalMigrationsResults.length).toBe(8);
+
+      // Verify IDs are still sequential and haven't changed
+      const finalIds = finalMigrationsResults.map((r) => r.id).sort();
+      expect(finalIds).toEqual([
+        "00001",
+        "00002",
+        "00003",
+        "00004",
+        "00005",
+        "00006",
+        "00007",
+        "00008",
+      ]);
+    } finally {
+      await alchemy.destroy(scope);
+      if (database) {
+        await assertDatabaseDeleted(database);
+      }
+    }
+  });
 });
 
 async function getResults(
