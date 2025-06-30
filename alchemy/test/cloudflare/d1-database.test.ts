@@ -206,6 +206,21 @@ describe("D1 Database Resource", async () => {
       expect(database.name).toEqual(migrationsDb);
       expect(database.id).toBeTruthy();
 
+      // Verify the migration table structure by querying migration records
+      const migrationRecords = await executeD1SQL(
+        {
+          accountId: api.accountId,
+          databaseId: database.id,
+          api: api,
+          migrationsFiles: [],
+          migrationsTable: "d1_migrations",
+        },
+        "SELECT id, name FROM d1_migrations ORDER BY id;",
+      );
+
+      const records = migrationRecords.result[0].results;
+      expect(records).toEqual([{ id: "00001", name: "001_create_table.sql" }]);
+
       // Now check if the test_migrations_table exists by querying the schema
       const tables = await getResults(
         api,
