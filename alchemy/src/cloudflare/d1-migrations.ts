@@ -284,21 +284,48 @@ export async function applyMigrations(
   await ensureMigrationsTable(options);
   const applied = await getAppliedMigrations(options);
 
+  // Determine the starting point for sequential IDs by querying existing IDs from the database
+  const existingIdsResult = await executeD1SQL(
+    options,
+    `SELECT id FROM ${options.migrationsTable} ORDER BY id;`,
+  );
+
+  const existingIds = (existingIdsResult?.result[0]?.results || []).map(
+    (row: any) => row.id,
+  );
+
+  let maxNumeric = 0;
+  for (const id of existingIds) {
+    if (/^\d+$/.test(id)) {
+      const num = Number.parseInt(id, 10);
+      maxNumeric = Math.max(maxNumeric, num);
+    }
+  }
+  let nextSeq = maxNumeric + 1;
+
   for (const migration of options.migrationsFiles) {
     const migrationName = migration.id;
 
     if (applied.has(migrationName)) continue;
 
-    // Run the migration
+    // Run the migration SQL
     await executeD1SQL(options, migration.sql);
 
-    // Record as applied with wrangler-compatible schema
-    // Generate a sequential ID for this migration
-    const migrationId =
-      Date.now().toString() + Math.random().toString(36).substr(2, 9);
+    // Generate a migration id: prefer sequential zero-padded numeric ids (e.g. 00014)
+    // to keep consistency with legacy/imported data. If we cannot produce a numeric id
+    // (e.g. existing IDs are not numeric), fall back to a unique timestamp-based ID.
+    let migrationId: string;
+    if (nextSeq > 0) {
+      migrationId = nextSeq.toString().padStart(5, "0");
+      nextSeq += 1;
+    } else {
+      migrationId =
+        Date.now().toString() + Math.random().toString(36).substr(2, 9);
+    }
+
     const insertSQL = `INSERT INTO ${options.migrationsTable} (id, name, applied_at) VALUES (?, ?, datetime('now'));`;
 
-    // Use parameterized query to avoid SQL injection
+    // Use parameterised query to record the migration
     const response = await options.api.post(
       `/accounts/${options.accountId}/d1/database/${options.databaseId}/query`,
       {
