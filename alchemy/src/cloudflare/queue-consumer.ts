@@ -55,16 +55,9 @@ export interface QueueConsumerSettings {
  */
 export interface QueueConsumerProps extends CloudflareApiOptions {
   /**
-   * The queue to consume
-   * Either queue or queueId must be provided
+   * The {@link QueueResource} or Queue ID to consume
    */
-  queue?: QueueResource;
-
-  /**
-   * The queue ID to consume (alternative to providing a queue)
-   * Either queue or queueId must be provided
-   */
-  queueId?: string;
+  queue: string | QueueResource;
 
   /**
    * Name of the worker script that will consume the queue
@@ -82,6 +75,13 @@ export interface QueueConsumerProps extends CloudflareApiOptions {
    * @default true
    */
   delete?: boolean;
+
+  /**
+   * Whether to adopt an existing consumer.
+   * If set to true, the consumer will be updated if it already exists.
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 /**
@@ -151,7 +151,8 @@ export const QueueConsumer = Resource(
     const api = await createCloudflareApi(props);
 
     // Get queueId from either props.queue or props.queueId
-    const queueId = props.queue?.id || props.queueId;
+    const queueId =
+      typeof props.queue === "string" ? props.queue : props.queue.id;
 
     if (!queueId) {
       throw new Error("Either queue or queueId must be provided");
@@ -169,17 +170,43 @@ export const QueueConsumer = Resource(
     }
     let consumerData: CloudflareQueueConsumerResponse;
 
-    if (this.phase === "create") {
-      consumerData = await createQueueConsumer(api, queueId, props);
-    } else if (this.output?.id) {
+    if (this.phase === "create" || this.output?.id === undefined) {
+      try {
+        consumerData = await createQueueConsumer(api, queueId, props);
+      } catch (err) {
+        if (
+          err instanceof CloudflareApiError &&
+          err.status === 400 &&
+          err.message.includes("already has a consumer") &&
+          props.adopt
+        ) {
+          const consumerId = await findQueueConsumerId(
+            api,
+            props.scriptName,
+            queueId,
+          );
+          if (!consumerId) {
+            throw new Error(
+              `Consumer for worker ${props.scriptName} and queue ${queueId} not found`,
+            );
+          }
+          consumerData = await updateQueueConsumer(
+            api,
+            queueId,
+            consumerId,
+            props,
+          );
+        } else {
+          throw err;
+        }
+      }
+    } else {
       consumerData = await updateQueueConsumer(
         api,
         queueId,
         this.output.id,
         props,
       );
-    } else {
-      consumerData = await createQueueConsumer(api, queueId, props);
     }
 
     return this({
@@ -305,12 +332,11 @@ export async function deleteQueueConsumer(
   );
 
   if (!deleteResponse.ok && deleteResponse.status !== 404) {
-    const errorData: any = await deleteResponse.json().catch(() => ({
-      errors: [{ message: deleteResponse.statusText }],
-    }));
-    throw new CloudflareApiError(
-      `Error deleting Queue Consumer '${consumerId}': ${errorData.errors?.[0]?.message || deleteResponse.statusText}`,
+    await handleApiError(
       deleteResponse,
+      "deleting",
+      "Queue Consumer",
+      consumerId,
     );
   }
 }
@@ -450,6 +476,16 @@ export async function listQueueConsumers(
         }
       : undefined,
   }));
+}
+
+export async function findQueueConsumerId(
+  api: CloudflareApi,
+  workerName: string,
+  queueId: string,
+): Promise<string | undefined> {
+  const consumers = await listQueueConsumersForWorker(api, workerName);
+  const consumer = consumers.find((c) => c.queueId === queueId);
+  return consumer?.consumerId;
 }
 
 export async function listQueueConsumersForWorker(

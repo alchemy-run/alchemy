@@ -6,10 +6,11 @@ import {
   ResourceFQN,
   ResourceID,
   ResourceKind,
+  type ResourceProps,
   ResourceScope,
   ResourceSeq,
 } from "./resource.ts";
-import { isScope, Scope } from "./scope.ts";
+import { isScope, type PendingDeletions, Scope } from "./scope.ts";
 import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
 
@@ -18,6 +19,10 @@ export class DestroyedSignal extends Error {}
 export interface DestroyOptions {
   quiet?: boolean;
   strategy?: "sequential" | "parallel";
+  replace?: {
+    props?: ResourceProps | undefined;
+    output?: Resource<string>;
+  };
 }
 
 function isScopeArgs(a: any): a is [scope: Scope, options?: DestroyOptions] {
@@ -40,7 +45,8 @@ export async function destroy<Type extends string>(
     } satisfies DestroyOptions;
 
     await scope.run(async () => {
-      // destroy all active resources
+      // destroy all active and pending resources
+      await scope.destroyPendingDeletions();
       await destroyAll(Array.from(scope.resources.values()), options);
 
       // then detect orphans and destroy them
@@ -89,10 +95,12 @@ export async function destroy<Type extends string>(
   try {
     if (!quiet) {
       logger.task(instance[ResourceFQN], {
-        prefix: "deleting",
-        prefixColor: "redBright",
+        prefix: options?.replace ? "cleanup" : "deleting",
+        prefixColor: options?.replace ? "magenta" : "redBright",
         resource: formatFQN(instance[ResourceFQN]),
-        message: "Deleting Resource...",
+        message: options?.replace
+          ? "Cleaning Up Old Resource..."
+          : "Deleting Resource...",
       });
     }
 
@@ -109,7 +117,7 @@ export async function destroy<Type extends string>(
       id: instance[ResourceID],
       fqn: instance[ResourceFQN],
       seq: instance[ResourceSeq],
-      props: state.props,
+      props: options?.replace?.props ?? state.props,
       state,
       replace: () => {
         throw new Error("Cannot replace a resource that is being deleted");
@@ -127,10 +135,10 @@ export async function destroy<Type extends string>(
           parent: scope,
         },
         async (scope) => {
-          nestedScope = scope;
+          nestedScope = options?.replace?.props == null ? scope : undefined;
           return await Provider.handler.bind(ctx)(
             instance[ResourceID],
-            state.props!,
+            options?.replace?.props ?? state.props!,
           );
         },
       );
@@ -146,14 +154,30 @@ export async function destroy<Type extends string>(
       await destroy(nestedScope, options);
     }
 
-    await scope.delete(instance[ResourceID]);
+    if (options?.replace == null) {
+      if (nestedScope) {
+        await destroy(nestedScope, options);
+      }
+      await scope.deleteResource(instance[ResourceID]);
+    } else {
+      let pendingDeletions =
+        await state.output[ResourceScope].get<PendingDeletions>(
+          "pendingDeletions",
+        );
+      pendingDeletions = pendingDeletions?.filter(
+        (deletion) => deletion.resource[ResourceID] !== instance[ResourceID],
+      );
+      await scope.set("pendingDeletions", pendingDeletions);
+    }
 
     if (!quiet) {
       logger.task(instance[ResourceFQN], {
-        prefix: "deleted",
+        prefix: options?.replace ? "cleaned" : "deleted",
         prefixColor: "greenBright",
         resource: formatFQN(instance[ResourceFQN]),
-        message: "Deleted Resource",
+        message: options?.replace
+          ? "Old Resource Cleanup Complete"
+          : "Deleted Resource",
         status: "success",
       });
     }
@@ -165,11 +189,14 @@ export async function destroy<Type extends string>(
 
 export async function destroyAll(
   resources: Resource[],
-  options?: DestroyOptions,
+  options?: DestroyOptions & { force?: boolean },
 ) {
   if (options?.strategy !== "parallel") {
     const sorted = resources.sort((a, b) => b[ResourceSeq] - a[ResourceSeq]);
     for (const resource of sorted) {
+      if (isScope(resource)) {
+        await resource.destroyPendingDeletions();
+      }
       await destroy(resource, options);
     }
   } else {

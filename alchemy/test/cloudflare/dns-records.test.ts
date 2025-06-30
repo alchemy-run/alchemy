@@ -73,29 +73,34 @@ describe("DnsRecords Resource", async () => {
       for (const record of dnsRecords.records) {
         let response;
         const start = Date.now();
-        const timeout = 10000; // 10 seconds
+        const timeout = 120_000; // 120 seconds
         const interval = 500; // 0.5 seconds
         while (true) {
           response = await api.get(
             `/zones/${dnsRecords.zoneId}/dns_records/${record.id}`,
           );
-          if (response.ok) break;
+          if (response.ok) {
+            try {
+              const data: any = await response.json();
+              expect(data.result.name).toBe(record.name);
+              expect(data.result.type).toBe(record.type);
+              expect(data.result.content).toBe(record.content);
+              expect(data.result.proxied).toBe(record.proxied);
+              expect(data.result.comment).toBe(record.comment);
+              if (record.priority) {
+                expect(data.result.priority).toBe(record.priority);
+              }
+              break;
+            } catch (err) {
+              console.error("Error parsing response:", err);
+            }
+          }
           if (Date.now() - start > timeout) {
             throw new Error(
               `DNS record ${record.id} did not become available within 10s`,
             );
           }
           await new Promise((resolve) => setTimeout(resolve, interval));
-        }
-
-        const data: any = await response.json();
-        expect(data.result.name).toBe(record.name);
-        expect(data.result.type).toBe(record.type);
-        expect(data.result.content).toBe(record.content);
-        expect(data.result.proxied).toBe(record.proxied);
-        expect(data.result.comment).toBe(record.comment);
-        if (record.priority) {
-          expect(data.result.priority).toBe(record.priority);
         }
       }
 

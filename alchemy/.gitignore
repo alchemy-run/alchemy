@@ -1,2 +1,4 @@
-bin/*
-!bin/*.ts
+bin/alchemy.mjs
+!templates/**/wrangler.jsonc
+.nuxt
+workers/*.js

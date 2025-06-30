@@ -1,0 +1,15 @@
+{
+  // https://nuxt.com/docs/guide/concepts/typescript
+  "extends": "./.nuxt/tsconfig.json",
+  "compilerOptions": {
+    "types": [
+      "@cloudflare/workers-types",
+      "./types/env.d.ts"
+    ]
+  },
+  "include": [
+    "alchemy.run.ts",
+    "types/**/*.ts",
+    "server/**/*.ts"
+  ]
+}

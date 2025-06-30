@@ -174,6 +174,65 @@ const frontend = await Worker("frontend", {
 });
 ```
 
+## Self-Binding
+
+A worker can bind to itself using `Self` or `WorkerRef`:
+
+```ts
+import { Worker, Self, WorkerRef } from "alchemy/cloudflare";
+
+// Using Self
+const workerWithSelf = await Worker("my-worker", {
+  name: "my-worker",
+  entrypoint: "./src/worker.ts",
+  bindings: {
+    SELF: Self,
+  },
+});
+
+// Using WorkerRef with the worker's own ID
+const workerWithRef = await Worker("my-worker", {
+  name: "my-worker",
+  entrypoint: "./src/worker.ts",
+  bindings: {
+    SELF: WorkerRef("my-worker"),
+  },
+});
+```
+
+## Circular Worker Bindings
+
+When workers need to bind to each other (circular dependency), use `WorkerStub` to break the cycle:
+
+```ts
+import { Worker, WorkerStub } from "alchemy/cloudflare";
+import type { MyWorkerA } from "./src/worker-a.ts";
+import type { MyWorkerB } from "./src/worker-B.ts";
+
+// Create workerA that binds to workerB stub
+const workerA = await Worker("workerA", {
+  name: "worker-a",
+  entrypoint: "./src/workerA.ts",
+  rpc: type<MyWorkerA>,
+  bindings: {
+    // bind to a stub (empty worker)
+    WORKER_B: await WorkerStub<MyWorkerB>("workerB", {
+      name: "worker-b",
+      rpc: type<MyWorkerB>,
+    });,
+  },
+});
+
+// Create workerB that binds to workerA
+const workerB = await Worker("workerB", {
+  name: "worker-b",
+  entrypoint: "./src/workerB.ts",
+  bindings: {
+    WORKER_A: workerA,
+  },
+});
+```
+
 ## RPC
 
 Create a Worker with RPC capabilities using WorkerEntrypoint and typed RPC interfaces:
@@ -296,6 +355,26 @@ const worker = await Worker("api", {
 
 > [!TIP]
 > See the [Route](./route.md) for more information.
+
+## Custom Domains
+
+Bind custom domains directly to your worker for a simpler routing setup:
+
+```ts
+import { Worker } from "alchemy/cloudflare";
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
+  domains: ["api.example.com", "admin.example.com"],
+});
+
+// Access the created domains
+console.log(worker.domains); // Array of created CustomDomain resources
+```
+
+> [!TIP]
+> See the [Routes and Domains](https://developers.cloudflare.com/workers/configuration/routing/#what-is-best-for-me) Cloudflare docs to help decide between when to use a Route vs a Domain.
 
 ## Workers for Platforms
 

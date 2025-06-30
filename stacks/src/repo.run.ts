@@ -1,8 +1,8 @@
 // ensure providers are registered (for deletion purposes)
-import "../alchemy/src/aws/index.ts";
-import "../alchemy/src/aws/oidc/index.ts";
-import "../alchemy/src/cloudflare/index.ts";
-import "../alchemy/src/os/index.ts";
+import "alchemy/aws";
+import "alchemy/aws/oidc";
+import "alchemy/cloudflare";
+import "alchemy/os";
 
 import alchemy from "alchemy";
 import { AccountId, Role, SSMParameter } from "alchemy/aws";
@@ -53,6 +53,7 @@ const githubRole = await Role("github-oidc-role", {
 
 const stateStore = await R2Bucket("state-store", {
   name: "alchemy-state-store",
+  adopt: true,
 });
 
 const testEnvironment = await RepositoryEnvironment("test environment", {

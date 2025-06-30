@@ -347,7 +347,7 @@ export const Project = Resource(
         }
 
         if (!response.ok) {
-          throw new Error(`API error: ${response.statusText}`);
+          throw new Error(`API error: ${await response.text()}`);
         }
 
         const data = (await response.json()) as Omit<

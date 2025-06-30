@@ -383,14 +383,19 @@ function processBindings(
   workerName: string,
 ): void {
   // Arrays to collect different binding types
-  const kvNamespaces: { binding: string; id: string }[] = [];
+  const kvNamespaces: { binding: string; id: string; preview_id: string }[] =
+    [];
   const durableObjects: {
     name: string;
     class_name: string;
     script_name?: string;
     environment?: string;
   }[] = [];
-  const r2Buckets: { binding: string; bucket_name: string }[] = [];
+  const r2Buckets: {
+    binding: string;
+    bucket_name: string;
+    preview_bucket_name: string;
+  }[] = [];
   const services: { binding: string; service: string; environment?: string }[] =
     [];
   const secrets: string[] = [];
@@ -405,6 +410,7 @@ function processBindings(
     database_id: string;
     database_name: string;
     migrations_dir?: string;
+    preview_database_id: string;
   }[] = [];
   const queues: {
     producers: { queue: string; binding: string }[];
@@ -440,6 +446,9 @@ function processBindings(
   const dispatchNamespaces: {
     binding: string;
     namespace: string;
+  }[] = [];
+  const containers: {
+    class_name: string;
   }[] = [];
 
   for (const eventSource of eventSources ?? []) {
@@ -484,9 +493,11 @@ function processBindings(
       });
     } else if (binding.type === "kv_namespace") {
       // KV Namespace binding
+      const id = "namespaceId" in binding ? binding.namespaceId : binding.id;
       kvNamespaces.push({
         binding: bindingName,
-        id: "namespaceId" in binding ? binding.namespaceId : binding.id,
+        id: id,
+        preview_id: id,
       });
     } else if (
       typeof binding === "object" &&
@@ -509,6 +520,7 @@ function processBindings(
       r2Buckets.push({
         binding: bindingName,
         bucket_name: binding.name,
+        preview_bucket_name: binding.name,
       });
     } else if (binding.type === "secret") {
       // Secret binding
@@ -531,6 +543,7 @@ function processBindings(
         database_id: binding.id,
         database_name: binding.name,
         migrations_dir: binding.migrationsDir,
+        preview_database_id: binding.id,
       });
     } else if (binding.type === "queue") {
       queues.producers.push({
@@ -609,6 +622,15 @@ function processBindings(
       });
     } else if (binding.type === "secret_key") {
       // no-op
+    } else if (binding.type === "container") {
+      durableObjects.push({
+        name: bindingName,
+        class_name: binding.className,
+        script_name: binding.scriptName,
+      });
+      containers.push({
+        class_name: binding.className,
+      });
     } else {
       // biome-ignore lint/correctness/noVoidTypeReturn: it returns never
       return assertNever(binding);

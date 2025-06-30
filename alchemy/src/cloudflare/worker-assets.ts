@@ -58,9 +58,17 @@ interface UploadResponse {
  */
 export async function uploadAssets(
   api: CloudflareApi,
-  workerName: string,
-  assets: Assets,
-  assetConfig?: WorkerProps["assets"],
+  {
+    workerName,
+    assets,
+    assetConfig,
+    namespace,
+  }: {
+    workerName: string;
+    assets: Assets;
+    assetConfig?: WorkerProps["assets"];
+    namespace?: string;
+  },
 ): Promise<AssetUploadResult> {
   // Process the assets configuration once at the beginning
   const processedConfig = createAssetConfig(assetConfig);
@@ -69,7 +77,9 @@ export async function uploadAssets(
 
   // Start the upload session
   const uploadSessionResponse = await api.post(
-    `/accounts/${api.accountId}/workers/scripts/${workerName}/assets-upload-session`,
+    namespace
+      ? `/accounts/${api.accountId}/workers/dispatch/namespaces/${namespace}/scripts/${workerName}/assets-upload-session`
+      : `/accounts/${api.accountId}/workers/scripts/${workerName}/assets-upload-session`,
     JSON.stringify({ manifest }),
     {
       headers: { "Content-Type": "application/json" },

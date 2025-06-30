@@ -76,6 +76,7 @@ describe("Hyperdrive Resource", () => {
       const workerName = `${BRANCH_PREFIX}-hyperdrive-test-worker`;
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {

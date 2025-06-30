@@ -1,31 +1,65 @@
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
+import type { type } from "../type.ts";
 import { handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
+import { configureURL } from "./worker.ts";
 
 /**
  * Properties for creating a Worker stub
  */
-export interface WorkerStubProps extends CloudflareApiOptions {
+export interface WorkerStubProps<
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> extends CloudflareApiOptions {
   /**
    * Name for the worker
    */
   name: string;
+
+  /**
+   * Whether to enable a workers.dev URL for this worker
+   *
+   * If true, the worker will be available at {name}.{subdomain}.workers.dev
+   * @default true
+   */
+  url?: boolean;
+
+  /**
+   * The RPC class to use for the worker.
+   *
+   * This is only used when using the rpc property.
+   */
+  rpc?: (new (...args: any[]) => RPC) | type<RPC>;
 }
 
 /**
  * Output returned after WorkerStub creation
  */
-export interface WorkerStub extends Resource<"cloudflare::WorkerStub"> {
+export interface WorkerStub<
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> extends Resource<"cloudflare::WorkerStub"> {
   type: "service";
   /**
    * The name of the worker
    */
   name: string;
+
+  /**
+   * The worker's URL if enabled
+   * Format: {name}.{subdomain}.workers.dev
+   */
+  url?: string;
+
+  /**
+   * Optional type branding for the worker's RPC entrypoint.
+   *
+   * @internal
+   */
+  __rpc__?: RPC;
 }
 
 export function isWorkerStub(resource: Resource): resource is WorkerStub {
@@ -40,40 +74,52 @@ export function isWorkerStub(resource: Resource): resource is WorkerStub {
  * exists and creates an empty one if needed.
  *
  * @example
- * // Reserve a worker name without deploying code
+ * // Reserve a worker name without deploying code, with URL enabled (default)
  * const workerStub = await WorkerStub("my-worker", {
  *   name: "my-reserved-worker"
  * });
  *
- * console.log(`Worker ${workerStub.name} exists: ${!workerStub.created}`);
+ * console.log(`Worker ${workerStub.name} is available at: ${workerStub.url}`);
+ *
+ * @example
+ * // Reserve a worker name without enabling URL
+ * const workerStub = await WorkerStub("my-worker", {
+ *   name: "my-reserved-worker",
+ *   url: false
+ * });
+ *
+ * console.log(`Worker ${workerStub.name} created without URL`);
  */
-export const WorkerStub = Resource(
-  "cloudflare::WorkerStub",
-  async function (
-    this: Context<WorkerStub>,
-    _id: string,
-    props: WorkerStubProps,
-  ): Promise<WorkerStub> {
-    // Create Cloudflare API client with automatic account discovery
-    const api = await createCloudflareApi(props);
+export const WorkerStub = Resource("cloudflare::WorkerStub", async function <
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+>(this: Context<WorkerStub>, _id: string, props: WorkerStubProps<RPC>): Promise<
+  WorkerStub<RPC>
+> {
+  // Create Cloudflare API client with automatic account discovery
+  const api = await createCloudflareApi(props);
 
-    if (this.phase === "delete") {
-      // We don't actually delete the worker, just mark the resource as destroyed
-      return this.destroy();
-    }
+  if (this.phase === "delete") {
+    // We don't actually delete the worker, just mark the resource as destroyed
+    return this.destroy();
+  }
 
-    // If worker doesn't exist and we're in create phase, create an empty one
-    if (!(await exists(api, props.name)) && this.phase === "create") {
-      await createEmptyWorker(api, props.name);
-    }
+  // If worker doesn't exist and we're in create phase, create an empty one
+  if (!(await exists(api, props.name)) && this.phase === "create") {
+    await createEmptyWorker(api, props.name);
+  }
 
-    // Return the worker stub info
-    return this({
-      type: "service",
-      ...props,
-    });
-  },
-);
+  // Configure URL if requested (defaults to true)
+  const enableUrl = props.url ?? true;
+  const workerUrl = await configureURL(this, api, props.name, enableUrl);
+
+  // Return the worker stub info
+  return this({
+    type: "service",
+    __rpc__: props.rpc as unknown as RPC,
+    ...props,
+    url: workerUrl,
+  }) as WorkerStub<RPC>;
+});
 
 async function exists(
   api: CloudflareApi,

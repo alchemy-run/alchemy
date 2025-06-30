@@ -172,7 +172,7 @@ describe("Zone Resource", () => {
       expect(zone.name).toEqual(lookupTestDomain);
 
       // Use getZoneByDomain to look up the zone we just created
-      const foundZone = await getZoneByDomain(lookupTestDomain);
+      const foundZone = await getZoneByDomain(api, lookupTestDomain);
 
       // Verify the lookup returned the correct zone
       expect(foundZone).toBeTruthy();
@@ -186,6 +186,7 @@ describe("Zone Resource", () => {
 
       // Test lookup of non-existent domain
       const nonExistentZone = await getZoneByDomain(
+        api,
         `${BRANCH_PREFIX}-non-existent.dev`,
       );
       expect(nonExistentZone).toBeNull();

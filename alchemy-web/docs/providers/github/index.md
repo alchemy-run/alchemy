@@ -8,12 +8,13 @@ GitHub is a web-based version control and collaboration platform that provides G
 
 - [Comment](./comment.md) - Create and manage comments on issues and pull requests
 - [RepositoryEnvironment](./repository-environment.md) - Create and manage deployment environments with protection rules
+- [RepositoryWebhook](./repository-webhook.md) - Create and manage repository webhooks for event notifications
 - [Secret](./secret.md) - Create and manage GitHub Actions and Dependabot secrets
 
 ## Example Usage
 
 ```ts
-import { Comment, RepositoryEnvironment, GitHubSecret } from "alchemy/github";
+import { Comment, RepositoryEnvironment, RepositoryWebhook, GitHubSecret } from "alchemy/github";
 
 // Create a repository environment
 const prodEnv = await RepositoryEnvironment("production", {
@@ -30,6 +31,15 @@ const prodEnv = await RepositoryEnvironment("production", {
     protectedBranches: true,
     customBranchPolicies: false,
   },
+});
+
+// Create a webhook for CI/CD notifications
+const webhook = await RepositoryWebhook("ci-webhook", {
+  owner: "my-org", 
+  repository: "my-repo",
+  url: "https://ci.example.com/webhook",
+  secret: alchemy.secret("GITHUB_WEBHOOK_SECRET"),
+  events: ["push", "pull_request", "release"],
 });
 
 // Create a secret for the environment

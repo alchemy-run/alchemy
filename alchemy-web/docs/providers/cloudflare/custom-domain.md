@@ -7,9 +7,43 @@ description: Learn how to configure and manage Custom Domains for your Cloudflar
 
 The CustomDomain resource lets you attach a [custom domain](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/) to a Cloudflare Worker.
 
-## Minimal Example
+## Worker Domains
 
-Bind a domain to a worker:
+The simplest way to bind custom domains is directly on the Worker:
+
+```ts
+import { Worker } from "alchemy/cloudflare";
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
+  domains: ["api.example.com", "admin.example.com"],
+});
+
+// Access the created domains
+console.log(worker.domains); // Array of created CustomDomain resources
+```
+
+With additional options:
+
+```ts
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
+  domains: [
+    {
+      domainName: "api.example.com",
+      zoneId: "YOUR_ZONE_ID", // Optional - will be inferred if not provided
+      adopt: true, // Adopt existing domain if it exists
+    },
+    "admin.example.com", // Zone ID will be inferred
+  ],
+});
+```
+
+## CustomDomain Resource
+
+You can also create custom domains independently:
 
 ```ts
 import { Worker, CustomDomain } from "alchemy/cloudflare";
@@ -26,7 +60,7 @@ const domain = await CustomDomain("api-domain", {
 });
 ```
 
-## With Environment
+### With Environment
 
 Bind a domain to a specific worker environment:
 
@@ -40,3 +74,6 @@ const domain = await CustomDomain("staging-domain", {
   environment: "staging",
 });
 ```
+
+> [!TIP]
+> See the [Routes and Domains](https://developers.cloudflare.com/workers/configuration/routing/#what-is-best-for-me) Cloudflare docs to help decide between when to use a Route vs a Domain.

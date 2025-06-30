@@ -150,6 +150,25 @@ const app = await alchemy("my-app", {
 });
 ```
 
+### S3 State Store
+
+For AWS-based deployments, use S3StateStore for reliable cloud state storage with Amazon S3:
+
+```typescript
+import { S3StateStore } from "alchemy/aws";
+
+const app = await alchemy("my-app", {
+  stage: "prod",
+  phase: process.argv.includes("--destroy") ? "destroy" : "up",
+  stateStore: (scope) => new S3StateStore(scope, {
+    bucketName: "my-app-alchemy-state",
+    region: "us-east-1"
+  })
+});
+```
+
+S3StateStore provides durable, scalable state storage with automatic retry logic and proper error handling. The S3 bucket must be created beforehand, and AWS credentials must be configured with appropriate S3 permissions.
+
 > [!TIP]
 > Learn how to implement your own state storage in [Custom State Stores Guide](../guides/custom-state-store.md)
 

@@ -1,9 +1,9 @@
-import path from "node:path";
-import { bundle } from "../../esbuild/index.ts";
+import { logger } from "../../util/logger.ts";
 import { withExponentialBackoff } from "../../util/retry.ts";
 import { handleApiError } from "../api-error.ts";
 import type { CloudflareApi } from "../api.ts";
-import { putWorker } from "../worker.ts";
+import type { WorkerMetadata } from "../worker-metadata.ts";
+import { getWorkerTemplate } from "../worker/get-worker-template.ts";
 import type { DOStateStoreAPI } from "./types.ts";
 
 interface DOStateStoreClientOptions {
@@ -82,6 +82,30 @@ export class DOStateStoreClient {
     });
   }
 
+  async waitUntilReady(): Promise<void> {
+    // This ensures the token is correct and the worker is ready to use.
+    let last: Response | undefined;
+    let delay = 1000;
+    for (let i = 0; i < 20; i++) {
+      const res = await this.validate();
+      if (res.ok) {
+        return;
+      }
+      if (!last) {
+        logger.log("Waiting for state store deployment...");
+      }
+      last = res;
+      // Exponential backoff with jitter
+      const jitter = Math.random() * 0.1 * delay;
+      await new Promise((resolve) => setTimeout(resolve, delay + jitter));
+      delay *= 1.5; // Increase the delay for next attempt
+      delay = Math.min(delay, 10000); // Cap at 10 seconds
+    }
+    throw new Error(
+      `Failed to access state store: ${last?.status} ${last?.statusText}`,
+    );
+  }
+
   async fetch(path: string, init: RequestInit = {}): Promise<Response> {
     const url = new URL(path, this.options.url);
     url.searchParams.set("app", this.options.app);
@@ -96,7 +120,7 @@ export class DOStateStoreClient {
   }
 }
 
-const TAG = "alchemy-state-store:2025-06-03";
+const TAG = "alchemy-state-store:2025-06-23";
 
 const cache = new Map<string, string>();
 
@@ -116,33 +140,50 @@ export async function upsertStateStoreWorker(
     cache.set(key, TAG);
     return;
   }
-  const script = await bundleWorkerScript();
-  await putWorker(api, workerName, script, {
-    main_module: "worker.js",
-    compatibility_date: "2025-06-01",
-    compatibility_flags: ["nodejs_compat"],
-    bindings: [
-      {
-        name: "DOFS_STATE_STORE",
-        type: "durable_object_namespace",
-        class_name: "DOFSStateStore",
-      },
-      {
-        name: "DOFS_TOKEN",
-        type: "secret_text",
-        text: token,
-      },
-    ],
-    migrations: !found
-      ? {
-          new_sqlite_classes: ["DOFSStateStore"],
-        }
-      : undefined,
-    tags: [TAG],
-    observability: {
-      enabled: true,
-    },
-  });
+  const formData = new FormData();
+  const worker = await getWorkerTemplate("do-state-store");
+  formData.append(worker.name, worker);
+  formData.append(
+    "metadata",
+    new Blob([
+      JSON.stringify({
+        main_module: worker.name,
+        compatibility_date: "2025-06-01",
+        compatibility_flags: ["nodejs_compat"],
+        bindings: [
+          {
+            name: "DOFS_STATE_STORE",
+            type: "durable_object_namespace",
+            class_name: "DOFSStateStore",
+          },
+          {
+            name: "DOFS_TOKEN",
+            type: "secret_text",
+            text: token,
+          },
+        ],
+        migrations: !found
+          ? {
+              new_sqlite_classes: ["DOFSStateStore"],
+            }
+          : undefined,
+        tags: [TAG],
+        observability: {
+          enabled: true,
+        },
+      } satisfies WorkerMetadata),
+    ]),
+  );
+
+  // Put the worker with migration tag v1
+  const response = await api.put(
+    `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+    formData,
+  );
+  if (!response.ok) {
+    throw await handleApiError(response, "upload", "worker", workerName);
+  }
+
   const subdomainRes = await api.post(
     `/accounts/${api.accountId}/workers/scripts/${workerName}/subdomain`,
     { enabled: true, preview_enabled: false },
@@ -151,7 +192,7 @@ export async function upsertStateStoreWorker(
     },
   );
   if (!subdomainRes.ok) {
-    await handleApiError(
+    throw await handleApiError(
       subdomainRes,
       "creating worker subdomain",
       "worker",
@@ -191,26 +232,11 @@ export async function getAccountSubdomain(api: CloudflareApi) {
   const res = await api.get(`/accounts/${api.accountId}/workers/subdomain`);
   if (!res.ok) {
     throw new Error(
-      `Failed to get account subdomain: ${res.status} ${res.statusText}`,
+      `Failed to get account subdomain: ${res.status} ${res.statusText}: ${await res.text().catch(() => "unknown error")}`,
     );
   }
   const json: { result: { subdomain: string } } = await res.json();
   const subdomain = json.result.subdomain;
   cache.set(key, subdomain);
   return subdomain;
-}
-
-async function bundleWorkerScript() {
-  const result = await bundle({
-    entryPoint: path.join(__dirname, "worker.ts"),
-    bundle: true,
-    format: "esm",
-    target: "es2022",
-    external: ["cloudflare:*", "node:crypto"],
-    write: false,
-  });
-  if (!result.outputFiles?.[0]) {
-    throw new Error("Failed to bundle worker.ts");
-  }
-  return result.outputFiles[0].text;
 }

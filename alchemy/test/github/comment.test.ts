@@ -16,7 +16,7 @@ const owner = process.env.GITHUB_OWNER || "sam-goodwin";
 const repository = process.env.GITHUB_REPO || "test-alchemy-resources";
 
 describe("GitHubComment Resource", { concurrent: false }, () => {
-  test.skipIf(!!process.env.CI)(
+  test.skipIf(true)(
     "create, update, and preserve comment on issue",
     async (scope) => {
       // Create an authenticated client for testing

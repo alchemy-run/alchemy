@@ -184,9 +184,12 @@ export const File = Resource(
     }
 
     // Create directory and write file
-    await fs.promises.mkdir(path.dirname(filePath), {
-      recursive: true,
-    });
+    const dirName = path.dirname(filePath);
+    if (dirName !== ".") {
+      await fs.promises.mkdir(dirName, {
+        recursive: true,
+      });
+    }
 
     await fs.promises.writeFile(filePath, props.content);
 

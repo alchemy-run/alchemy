@@ -93,6 +93,16 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
    * This is analogous to wrangler's `migrations_dir`.
    */
   migrationsDir?: string;
+  /**
+   * Whether to emulate the database locally when Alchemy is running in watch mode.
+   */
+  dev?: {
+    /**
+     * Whether to run the database remotely instead of locally
+     * @default false
+     */
+    remote?: boolean;
+  };
 }
 
 export function isD1Database(
@@ -147,7 +157,7 @@ export type D1Database = D1DatabaseResource & Bound<D1DatabaseResource>;
 
 export async function D1Database(
   id: string,
-  props: Omit<D1DatabaseProps, "migrationsFiles">,
+  props: Omit<D1DatabaseProps, "migrationsFiles"> = {},
 ): Promise<D1Database> {
   const migrationsFiles = props.migrationsDir
     ? await listMigrationsFiles(props.migrationsDir)
@@ -241,13 +251,9 @@ const D1DatabaseResource = Resource(
     const databaseName = props.name ?? id;
 
     if (this.phase === "delete") {
-      logger.log("Deleting D1 database:", databaseName);
       if (props.delete !== false) {
-        // Delete D1 database
-        logger.log("Deleting D1 database:", databaseName);
         await deleteDatabase(api, this.output?.id);
       }
-
       // Return void (a deleted database has no content)
       return this.destroy();
     }
@@ -352,6 +358,7 @@ const D1DatabaseResource = Resource(
       type: "d1",
       id: dbData.result.uuid || "",
       name: databaseName,
+      dev: props.dev,
       fileSize: dbData.result.file_size,
       numTables: dbData.result.num_tables,
       version: dbData.result.version,

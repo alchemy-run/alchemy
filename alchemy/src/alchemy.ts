@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { ReplacedSignal } from "./apply.ts";
 import { DestroyedSignal, destroy } from "./destroy.ts";
 import { env } from "./env.ts";
 import {
@@ -15,9 +16,9 @@ import { isRuntime } from "./runtime/global.ts";
 import { Scope } from "./scope.ts";
 import { secret } from "./secret.ts";
 import type { StateStoreType } from "./state.ts";
+import type { LoggerApi } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
 import { TelemetryClient } from "./util/telemetry/client.ts";
-import type { LoggerApi } from "./util/cli.ts";
 
 /**
  * Parses CLI arguments to extract alchemy options
@@ -31,6 +32,14 @@ function parseCliArgs(): Partial<AlchemyOptions> {
     options.phase = "destroy";
   } else if (args.includes("--read")) {
     options.phase = "read";
+  }
+
+  if (
+    args.includes("--dev") ||
+    args.includes("--watch") ||
+    process.execArgv.includes("--watch")
+  ) {
+    options.dev = true;
   }
 
   // Parse quiet flag
@@ -181,21 +190,30 @@ async function _alchemy(
     const root = new Scope({
       ...mergedOptions,
       appName,
-      stage:
-        mergedOptions?.stage ?? process.env.ALCHEMY_STAGE ?? process.env.USER,
       phase,
       password: mergedOptions?.password ?? process.env.ALCHEMY_PASSWORD,
       telemetryClient,
     });
+    const stage = new Scope({
+      ...mergedOptions,
+      scopeName:
+        mergedOptions?.stage ?? process.env.ALCHEMY_STAGE ?? process.env.USER,
+      parent: root,
+      appName,
+      stage:
+        mergedOptions?.stage ?? process.env.ALCHEMY_STAGE ?? process.env.USER,
+    });
     try {
       Scope.storage.enterWith(root);
+      Scope.storage.enterWith(stage);
     } catch {
       // we are in Cloudflare Workers, we will emulate the enterWith behavior
       // see Scope.finalize for where we pop the global scope
       Scope.globals.push(root);
+      Scope.globals.push(stage);
     }
     if (mergedOptions?.phase === "destroy") {
-      await destroy(root);
+      await destroy(stage);
       return process.exit(0);
     }
     return root;
@@ -327,6 +345,12 @@ export interface AlchemyOptions {
    * @default "up"
    */
   phase?: Phase;
+  /**
+   * Determines whether Alchemy will run in dev mode.
+   *
+   * @default - `true` if `--dev` or `--watch` is passed as a CLI argument, `false` otherwise
+   */
+  dev?: boolean;
   /**
    * Name to scope the resource state under (e.g. `.alchemy/{stage}/..`).
    *
@@ -464,7 +488,9 @@ async function run<T>(
     }
     return await _scope.run(async () => fn.bind(_scope)(_scope));
   } catch (error) {
-    if (!(error instanceof DestroyedSignal)) {
+    if (
+      !(error instanceof DestroyedSignal || error instanceof ReplacedSignal)
+    ) {
       _scope.fail();
     }
     throw error;

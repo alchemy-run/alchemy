@@ -41,9 +41,8 @@ export function isDurableObjectNamespace(
  *   environment: "production"
  * });
  */
-export class DurableObjectNamespace<
-  T extends Rpc.DurableObjectBranded | undefined = undefined,
-> implements DurableObjectNamespaceInput
+export class DurableObjectNamespace<T = any>
+  implements DurableObjectNamespaceInput
 {
   public readonly type = "durable_object_namespace" as const;
   // alias for bindingName to be consistent with other bindings

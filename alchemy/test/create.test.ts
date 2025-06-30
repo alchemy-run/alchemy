@@ -1,10 +1,10 @@
 import "../src/test/vitest.ts";
 
+import { execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import url from "node:url";
 import { describe, expect, test } from "vitest";
-import { exec } from "../src/os/exec.ts";
 
 // Get the root directory of the project
 const __filename = url.fileURLToPath(import.meta.url);
@@ -20,11 +20,18 @@ async function runCommand(
   console.log(`Running: ${command} in ${cwd}`);
 
   try {
-    await exec(command, { cwd, stdio: "inherit", env });
-    return { stdout: "", stderr: "" };
+    const result = execSync(command, {
+      cwd,
+      env: {
+        ...process.env,
+        ...env,
+      },
+    });
+    return { stdout: result.toString(), stderr: "" };
   } catch (error: any) {
     console.error(`Command failed: ${command}`);
-    console.error(`Error: ${error.message}`);
+    console.error(error.stdout.toString());
+    console.error(error.stderr.toString());
     throw error;
   }
 }

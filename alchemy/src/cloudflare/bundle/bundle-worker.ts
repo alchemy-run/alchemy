@@ -34,11 +34,6 @@ export async function bundleWorkerScript<B extends Bindings>(
     props.compatibilityFlags,
   );
 
-  if (nodeJsCompatMode === "v1") {
-    throw new Error(
-      "You must set your compatibilty date >= 2024-09-23 when using 'nodejs_compat' compatibility flag",
-    );
-  }
   const main = props.entrypoint;
 
   if (props.noBundle) {
@@ -71,7 +66,7 @@ export async function bundleWorkerScript<B extends Bindings>(
         ).flat(),
       ),
     );
-    const useColor = !(process.env.CI || process.env.NO_COLOR);
+    const useColor = !process.env.NO_COLOR;
     logger.log(
       `${useColor ? kleur.gray("worker:") : "worker:"} ${useColor ? kleur.blue(props.name) : props.name}`,
     );
@@ -102,7 +97,8 @@ export async function bundleWorkerScript<B extends Bindings>(
       platform: "node",
       minify: false,
       ...(props.bundle || {}),
-      conditions: ["workerd", "worker", "browser"],
+      conditions: ["workerd", "worker", "import", "module", "browser"],
+      mainFields: ["module", "main"],
       absWorkingDir: projectRoot,
       keepNames: true, // Important for Durable Object classes
       loader: {
