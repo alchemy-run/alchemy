@@ -205,12 +205,12 @@ export default {
         if (inputWranglerPath && path.isAbsolute(inputWranglerPath)) {
           const wranglerDir = path.dirname(wranglerJsonPath);
           inputWranglerPath = path.relative(cwd, inputWranglerPath);
-          if (inputMainPath) {
+          if (inputMainPath && path.isAbsolute(inputMainPath)) {
             inputMainPath = path.relative(wranglerDir, inputMainPath);
           }
           inputAssetsDirPath = path.relative(wranglerDir, inputAssetsDirPath);
         } else {
-          if (inputMainPath) {
+          if (inputMainPath && path.isAbsolute(inputMainPath)) {
             inputMainPath = path.relative(cwd, inputMainPath);
           }
           inputAssetsDirPath = path.relative(cwd, inputAssetsDirPath);
