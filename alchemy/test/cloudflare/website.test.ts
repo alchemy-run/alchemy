@@ -133,7 +133,7 @@ describe("Website Resource", () => {
 
       // Verify wrangler.jsonc was created in the correct location (subDir)
       const wranglerPath = path.join(subDir, "wrangler.jsonc");
-      await expect(fs.access(wranglerPath)).resolves.toBe(true);
+      await expect(fs.access(wranglerPath)).resolves.toBeUndefined();
 
       // Verify wrangler.jsonc was NOT created in the root tempDir
       const rootWranglerPath = path.join(tempDir, "wrangler.jsonc");
@@ -197,7 +197,7 @@ describe("Website Resource", () => {
 
       // Verify custom wrangler file was created in the correct location (subDir)
       const wranglerPath = path.join(subDir, "custom-wrangler.json");
-      await expect(fs.access(wranglerPath)).resolves.toBe(true);
+      await expect(fs.access(wranglerPath)).resolves.toBeUndefined();
 
       // Verify custom wrangler file was NOT created in the root tempDir
       const rootWranglerPath = path.join(tempDir, "custom-wrangler.json");

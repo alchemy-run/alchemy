@@ -522,5 +522,37 @@ describe("WranglerJson Resource", () => {
         await destroy(scope);
       }
     });
+
+    test("with cwd", async (scope) => {
+      const name = `${BRANCH_PREFIX}-test-worker-cwd`;
+      const tempDir = path.join(".out", "alchemy-cwd-test");
+      const entrypoint = path.join(tempDir, "worker.ts");
+
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        await fs.mkdir(tempDir, { recursive: true });
+        await fs.writeFile(entrypoint, esmWorkerScript);
+
+        const worker = await Worker(name, {
+          format: "esm",
+          entrypoint: "worker.ts",
+          cwd: tempDir,
+          adopt: true,
+        });
+
+        const { spec } = await WranglerJson(
+          `${BRANCH_PREFIX}-test-wrangler-json-cwd`,
+          { worker },
+        );
+
+        expect(spec.main).toBe("worker.ts");
+        await expect(
+          fs.access(path.join(tempDir, "wrangler.jsonc")),
+        ).resolves.toBeUndefined();
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        await destroy(scope);
+      }
+    });
   });
 });

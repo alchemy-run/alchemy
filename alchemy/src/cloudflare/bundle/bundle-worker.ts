@@ -25,10 +25,9 @@ export async function bundleWorkerScript<B extends Bindings>(
     entrypoint: string;
     compatibilityDate: string;
     compatibilityFlags: string[];
+    cwd: string;
   },
 ): Promise<string | NoBundleResult> {
-  const projectRoot = props.projectRoot ?? process.cwd();
-
   const nodeJsCompatMode = await getNodeJSCompatMode(
     props.compatibilityDate,
     props.compatibilityFlags,
@@ -99,7 +98,7 @@ export async function bundleWorkerScript<B extends Bindings>(
       ...(props.bundle || {}),
       conditions: ["workerd", "worker", "import", "module", "browser"],
       mainFields: ["module", "main"],
-      absWorkingDir: projectRoot,
+      absWorkingDir: props.cwd,
       keepNames: true, // Important for Durable Object classes
       loader: {
         ".sql": "text",
@@ -114,7 +113,7 @@ export async function bundleWorkerScript<B extends Bindings>(
           ? [
               createAliasPlugin({
                 alias: props.bundle?.alias,
-                projectRoot,
+                projectRoot: props.cwd,
               }),
             ]
           : []),

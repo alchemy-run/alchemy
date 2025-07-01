@@ -135,6 +135,12 @@ export interface BaseWorkerProps<
   /**
    * The root directory of the project
    */
+  cwd?: string;
+
+  /**
+   * The root directory of the project
+   * @deprecated Use `cwd` instead
+   */
   projectRoot?: string;
 
   /**
@@ -465,6 +471,12 @@ export type Worker<
      * The name of the worker
      */
     name: string;
+
+    /**
+     * The root directory of the project
+     * @default process.cwd()
+     */
+    cwd: string;
 
     /**
      * Time at which the worker was created
@@ -967,6 +979,15 @@ export const _Worker = Resource(
     // Use the provided name
     const workerName = props.name ?? id;
 
+    if (props.projectRoot) {
+      logger.warn("projectRoot is deprecated, use cwd instead");
+      props.cwd = props.projectRoot;
+    }
+
+    const cwd = props.cwd ? path.resolve(props.cwd) : process.cwd();
+    const relativeCwd =
+      cwd === process.cwd() ? undefined : path.relative(process.cwd(), cwd);
+
     const compatibilityDate =
       props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
     const compatibilityFlags = props.compatibilityFlags ?? [];
@@ -979,7 +1000,7 @@ export const _Worker = Resource(
         upsertDevCommand({
           id,
           command: props.dev.command,
-          cwd: props.dev.cwd ?? process.cwd(),
+          cwd: props.dev.cwd ?? cwd,
           env: props.env ?? {},
         });
         return this({
@@ -987,6 +1008,7 @@ export const _Worker = Resource(
           id,
           entrypoint: props.entrypoint,
           name: workerName,
+          cwd: relativeCwd,
           compatibilityDate,
           compatibilityFlags,
           format: props.format || "esm", // Include format in the output
@@ -1026,6 +1048,7 @@ export const _Worker = Resource(
           {
             ...props,
             entrypoint: props.entrypoint,
+            cwd,
             compatibilityDate,
             compatibilityFlags,
           },
@@ -1124,6 +1147,7 @@ export const _Worker = Resource(
           (await bundleWorkerScript({
             name: workerName,
             ...props,
+            cwd,
             compatibilityDate,
             compatibilityFlags,
           }));
@@ -1142,6 +1166,7 @@ export const _Worker = Resource(
         id,
         entrypoint: props.entrypoint,
         name: workerName,
+        cwd: relativeCwd,
         compatibilityDate,
         compatibilityFlags,
         format: props.format || "esm", // Include format in the output
@@ -1172,6 +1197,7 @@ export const _Worker = Resource(
         (await bundleWorkerScript({
           ...props,
           name: workerName,
+          cwd,
           compatibilityDate,
           compatibilityFlags,
         }));
@@ -1497,6 +1523,7 @@ export const _Worker = Resource(
       id,
       entrypoint: props.entrypoint,
       name: workerName,
+      cwd: relativeCwd,
       compatibilityDate,
       compatibilityFlags,
       format: props.format || "esm", // Include format in the output

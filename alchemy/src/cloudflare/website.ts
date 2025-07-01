@@ -125,6 +125,7 @@ export async function Website<B extends Bindings>(
     async (scope) => {
       // directory from which all relative paths are resolved
       const cwd = path.resolve(props.cwd || process.cwd());
+      const relativeCwd = path.relative(cwd, process.cwd());
 
       function resolveAbsPath<S extends string | undefined>(f: S): S {
         return (
@@ -144,13 +145,6 @@ export async function Website<B extends Bindings>(
       // absolute path to the worker entrypoint
       const mainPath = resolveAbsPath(props.main);
 
-      // absolute path to the worker entrypoint (if different in wrangler.jsonc)
-      const wranglerMainPath = resolveAbsPath(
-        typeof wrangler === "object"
-          ? (wrangler.main ?? props.main!)
-          : props.main,
-      );
-
       // absolute path to the assets directory
       const assetsDirPath = resolveAbsPath(
         typeof props.assets === "string"
@@ -165,10 +159,11 @@ export async function Website<B extends Bindings>(
         compatibilityDate:
           props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
         name: workerName,
-        entrypoint: mainPath
-          ? // this path should be relative to the process.cwd() because it is used by esbuild
-            path.relative(process.cwd(), mainPath)
-          : undefined,
+        cwd:
+          props.cwd && path.isAbsolute(props.cwd)
+            ? path.relative(process.cwd(), props.cwd)
+            : props.cwd,
+        entrypoint: mainPath,
         assets: {
           html_handling: "auto-trailing-slash",
           not_found_handling: props.spa ? "single-page-application" : "none",
@@ -195,18 +190,41 @@ export default {
       } as WorkerProps<any> & { name: string };
 
       if (wrangler) {
-        // paths in wrangler.jsonc must be relative to it
-        const relativeToWrangler = <S extends string | undefined>(f: S): S =>
-          (f ? path.relative(path.dirname(wranglerJsonPath), f) : f) as S;
+        let inputWranglerPath =
+          typeof wrangler === "boolean"
+            ? undefined
+            : typeof wrangler === "string"
+              ? wrangler
+              : wrangler?.path;
+        let inputMainPath =
+          typeof wrangler === "object" && wrangler.main
+            ? wrangler.main
+            : props.main;
+        let inputAssetsDirPath = assetsDirPath;
+
+        if (inputWranglerPath && path.isAbsolute(inputWranglerPath)) {
+          const wranglerDir = path.dirname(wranglerJsonPath);
+          inputWranglerPath = path.relative(cwd, inputWranglerPath);
+          if (inputMainPath) {
+            inputMainPath = path.relative(wranglerDir, inputMainPath);
+          }
+          inputAssetsDirPath = path.relative(wranglerDir, inputAssetsDirPath);
+        } else {
+          if (inputMainPath) {
+            inputMainPath = path.relative(cwd, inputMainPath);
+          }
+          inputAssetsDirPath = path.relative(cwd, inputAssetsDirPath);
+        }
+
         await WranglerJson("wrangler.jsonc", {
-          path: wranglerJsonPath,
+          path: inputWranglerPath,
           worker: workerProps,
-          main: relativeToWrangler(wranglerMainPath),
+          main: inputMainPath,
           // hard-code the assets directory because we haven't yet included the assets binding
           assets: {
             binding: "ASSETS",
             // path must be relative to the wrangler.jsonc file
-            directory: relativeToWrangler(assetsDirPath),
+            directory: inputAssetsDirPath,
           },
         });
       }

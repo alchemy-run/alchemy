@@ -27,7 +27,7 @@ export interface WranglerJsonProps {
   /**
    * Path to write the wrangler.json file to
    *
-   * @default cwd/wrangler.json
+   * @default worker.cwd/wrangler.json
    */
   path?: string;
 
@@ -90,7 +90,10 @@ export const WranglerJson = Resource(
     props: WranglerJsonProps,
   ): Promise<WranglerJson> {
     // Default path is wrangler.json in current directory
-    const filePath = props.path || "wrangler.jsonc";
+    const directory = props.worker.cwd
+      ? path.resolve(props.worker.cwd)
+      : process.cwd();
+    const filePath = path.join(directory, props.path || "wrangler.jsonc");
 
     if (this.phase === "delete") {
       return this.destroy();
@@ -134,7 +137,7 @@ export const WranglerJson = Resource(
     // Return the resource
     return this({
       ...props,
-      path: filePath,
+      path: path.relative(directory, filePath),
       spec,
       createdAt: Date.now(),
       updatedAt: Date.now(),
