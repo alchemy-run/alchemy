@@ -1,4 +1,5 @@
 import type esbuild from "esbuild";
+import { toAbsolutePath } from "../../util/path-normalization.ts";
 import type { Bindings } from "../bindings.ts";
 import type { WorkerProps } from "../worker.ts";
 import { createAliasPlugin } from "./alias-plugin.ts";
@@ -49,7 +50,7 @@ export async function createWorkerDevContext<B extends Bindings>(
     props.compatibilityFlags,
   );
 
-  const projectRoot = props.projectRoot ?? process.cwd();
+  const absWorkingDir = toAbsolutePath(props.directory ?? process.cwd());
 
   const context = await esbuild.context({
     entryPoints: [props.entrypoint],
@@ -62,7 +63,7 @@ export async function createWorkerDevContext<B extends Bindings>(
     write: false, // We want the result in memory for hot reloading
     conditions: ["workerd", "worker", "import", "module", "browser"],
     mainFields: ["module", "main"],
-    absWorkingDir: projectRoot,
+    absWorkingDir,
     keepNames: true,
     loader: {
       ".sql": "text",
@@ -77,7 +78,7 @@ export async function createWorkerDevContext<B extends Bindings>(
         ? [
             createAliasPlugin({
               alias: props.bundle?.alias,
-              projectRoot,
+              absWorkingDir,
             }),
           ]
         : []),

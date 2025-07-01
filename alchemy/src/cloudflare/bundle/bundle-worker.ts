@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Bundle } from "../../esbuild/bundle.ts";
 import { logger } from "../../util/logger.ts";
+import { toAbsolutePath } from "../../util/path-normalization.ts";
 import type { Bindings } from "../bindings.ts";
 import type { WorkerProps } from "../worker.ts";
 import { createAliasPlugin } from "./alias-plugin.ts";
@@ -27,7 +28,7 @@ export async function bundleWorkerScript<B extends Bindings>(
     compatibilityFlags: string[];
   },
 ): Promise<string | NoBundleResult> {
-  const projectRoot = props.projectRoot ?? process.cwd();
+  const absWorkingDir = toAbsolutePath(props.directory ?? process.cwd());
 
   const nodeJsCompatMode = await getNodeJSCompatMode(
     props.compatibilityDate,
@@ -99,7 +100,7 @@ export async function bundleWorkerScript<B extends Bindings>(
       ...(props.bundle || {}),
       conditions: ["workerd", "worker", "import", "module", "browser"],
       mainFields: ["module", "main"],
-      absWorkingDir: projectRoot,
+      absWorkingDir,
       keepNames: true, // Important for Durable Object classes
       loader: {
         ".sql": "text",
@@ -114,7 +115,7 @@ export async function bundleWorkerScript<B extends Bindings>(
           ? [
               createAliasPlugin({
                 alias: props.bundle?.alias,
-                projectRoot,
+                absWorkingDir,
               }),
             ]
           : []),
