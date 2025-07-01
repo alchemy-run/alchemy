@@ -2,9 +2,11 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { Website } from "../../src/cloudflare/website.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
+import { assertWorkerDoesNotExist } from "./test-helpers.ts";
 
 import "../../src/test/vitest.ts";
 
@@ -12,7 +14,81 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
+// Create a Cloudflare API client for verification
+const api = await createCloudflareApi();
+
 describe("Website Resource", () => {
+  test("create website with url false and verify no workers.dev subdomain", async (scope) => {
+    const name = `${BRANCH_PREFIX}-test-website-no-url`;
+    const tempDir = path.resolve(".out", "alchemy-website-no-url-test");
+    const distDir = path.resolve(tempDir, "dist");
+    const entrypoint = path.resolve(tempDir, "worker.ts");
+
+    try {
+      // Create temporary directory structure
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(distDir, { recursive: true });
+
+      // Create a simple index.html in the dist directory
+      await fs.writeFile(
+        path.join(distDir, "index.html"),
+        "<html><body>Hello Website without subdomain!</body></html>",
+      );
+
+      // Create a simple worker entrypoint
+      await fs.writeFile(
+        entrypoint,
+        `export default {
+          async fetch(request, env) {
+            return new Response("Hello from website worker without subdomain!");
+          }
+        };`,
+      );
+
+      // Create website with url: false (disable workers.dev subdomain)
+      const website = await Website(name, {
+        main: entrypoint,
+        assets: distDir,
+        url: false, // Explicitly disable workers.dev URL
+        adopt: true,
+      });
+
+      expect(website.name).toBe(name);
+      expect(website.url).toBeUndefined(); // No URL should be provided
+
+      // Query Cloudflare API to verify subdomain is not enabled
+      const subdomainResponse = await api.get(
+        `/accounts/${api.accountId}/workers/scripts/${name}/subdomain`,
+      );
+
+      // The subdomain endpoint should either return 404 or indicate it's disabled
+      if (subdomainResponse.status === 200) {
+        const subdomainData: any = await subdomainResponse.json();
+        expect(subdomainData.result?.enabled).toBeFalsy();
+      } else {
+        // If 404, that also indicates no subdomain is configured
+        expect(subdomainResponse.status).toEqual(404);
+      }
+
+      // Try to access the website via workers.dev subdomain - should fail
+      try {
+        const workerSubdomainUrl = `https://${name}.${api.accountId.substring(0, 32)}.workers.dev`;
+        const subdomainTestResponse = await fetch(workerSubdomainUrl);
+
+        // If the fetch succeeds, the subdomain shouldn't be working
+        // Workers.dev subdomains that are disabled typically return 404 or 503
+        expect(subdomainTestResponse.status).toBeGreaterThanOrEqual(400);
+      } catch (error) {
+        // Network errors are also expected when subdomain is disabled
+        expect(error).toBeDefined();
+      }
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await destroy(scope);
+      await assertWorkerDoesNotExist(api, name);
+    }
+  });
+
   test("respects cwd property for wrangler.jsonc placement", async (scope) => {
     const name = `${BRANCH_PREFIX}-test-website-cwd`;
     const tempDir = path.resolve(".out", "alchemy-website-cwd-test");

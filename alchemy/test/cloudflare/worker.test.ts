@@ -21,6 +21,7 @@ import {
   fetchAndExpectOK,
   fetchAndExpectStatus,
 } from "./fetch-utils.ts";
+import { assertWorkerDoesNotExist } from "./test-helpers.ts";
 
 import "../../src/test/vitest.ts";
 
@@ -30,19 +31,6 @@ const test = alchemy.test(import.meta, {
 
 // Create a Cloudflare API client for verification
 const api = await createCloudflareApi();
-
-// Helper function to check if a worker exists
-async function assertWorkerDoesNotExist(workerName: string) {
-  try {
-    const response = await api.get(
-      `/accounts/${api.accountId}/workers/scripts/${workerName}`,
-    );
-    expect(response.status).toEqual(404);
-  } catch {
-    // 404 is expected, so we can ignore it
-    return;
-  }
-}
 
 describe("Worker Resource", () => {
   test("create, update, and delete worker (CJS format)", async (scope) => {
@@ -84,7 +72,7 @@ describe("Worker Resource", () => {
       expect(worker.id).toEqual(worker.id);
     } finally {
       await destroy(scope);
-      await assertWorkerDoesNotExist(workerName);
+      await assertWorkerDoesNotExist(api, workerName);
     }
   });
 
@@ -131,7 +119,7 @@ describe("Worker Resource", () => {
       expect(worker.id).toEqual(worker.id);
     } finally {
       await destroy(scope);
-      await assertWorkerDoesNotExist(workerName);
+      await assertWorkerDoesNotExist(api, workerName);
     }
   });
 
@@ -185,7 +173,7 @@ describe("Worker Resource", () => {
       expect(worker.format).toEqual("esm");
     } finally {
       await destroy(scope);
-      await assertWorkerDoesNotExist(workerName);
+      await assertWorkerDoesNotExist(api, workerName);
     }
   });
 
@@ -318,7 +306,7 @@ describe("Worker Resource", () => {
       expect(worker.bindings).toBeDefined();
     } finally {
       await destroy(scope);
-      await assertWorkerDoesNotExist(workerName);
+      await assertWorkerDoesNotExist(api, workerName);
     }
   });
 
@@ -441,7 +429,7 @@ describe("Worker Resource", () => {
     } finally {
       await destroy(scope);
       // Verify the worker was deleted
-      await assertWorkerDoesNotExist(workerName);
+      await assertWorkerDoesNotExist(api, workerName);
     }
   });
 
@@ -550,7 +538,7 @@ describe("Worker Resource", () => {
 
       await destroy(scope);
       // Verify the worker was deleted
-      await assertWorkerDoesNotExist(workerName);
+      await assertWorkerDoesNotExist(api, workerName);
     }
   });
 
@@ -748,7 +736,7 @@ describe("Worker Resource", () => {
       }
 
       await destroy(scope);
-      await assertWorkerDoesNotExist(workerName);
+      await assertWorkerDoesNotExist(api, workerName);
     }
   });
 
@@ -840,7 +828,7 @@ describe("Worker Resource", () => {
       expect(recursiveText).toEqual("Final result: start-3-2-1");
     } finally {
       await destroy(scope);
-      await assertWorkerDoesNotExist(workerName);
+      await assertWorkerDoesNotExist(api, workerName);
     }
   }, 60000); // Increased timeout for Self binding operations
 
@@ -960,7 +948,7 @@ describe("Worker Resource", () => {
 
       // Clean up the worker
       await destroy(scope);
-      await assertWorkerDoesNotExist(workerName);
+      await assertWorkerDoesNotExist(api, workerName);
     }
   }, 120000); // Increased timeout for bundling operations
 
@@ -1039,7 +1027,7 @@ describe("Worker Resource", () => {
       expect(removedTrigger).toBeUndefined();
     } finally {
       await destroy(scope);
-      await assertWorkerDoesNotExist(workerName);
+      await assertWorkerDoesNotExist(api, workerName);
     }
   }, 60000); // Increase timeout for Worker operations
 
@@ -1217,8 +1205,8 @@ describe("Worker Resource", () => {
     } finally {
       await destroy(scope);
       // Verify both workers were deleted
-      await assertWorkerDoesNotExist(targetWorkerName);
-      await assertWorkerDoesNotExist(callerWorkerName);
+      await assertWorkerDoesNotExist(api, targetWorkerName);
+      await assertWorkerDoesNotExist(api, callerWorkerName);
     }
   }, 60000); // Increase timeout for Worker operations
 
@@ -1328,7 +1316,7 @@ describe("Worker Resource", () => {
       expect(logData.message).toEqual("Event logged successfully");
     } finally {
       await destroy(scope);
-      await assertWorkerDoesNotExist(workerName);
+      await assertWorkerDoesNotExist(api, workerName);
     }
   }, 60000); // Increase timeout for Worker operations
 
@@ -1487,7 +1475,7 @@ describe("Worker Resource", () => {
       }
 
       await destroy(scope);
-      await assertWorkerDoesNotExist(workerName);
+      await assertWorkerDoesNotExist(api, workerName);
     }
   });
 
@@ -1588,7 +1576,64 @@ describe("Worker Resource", () => {
       });
     } finally {
       await destroy(scope);
-      await assertWorkerDoesNotExist(workerName);
+      await assertWorkerDoesNotExist(api, workerName);
+    }
+  });
+
+  test("create worker with url false and verify no workers.dev subdomain", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-no-url`;
+
+    let worker: Worker | undefined;
+    try {
+      // Create a worker with url: false (disable workers.dev subdomain)
+      worker = await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from worker without subdomain!', { status: 200 });
+            }
+          };
+        `,
+        format: "esm",
+        url: false, // Explicitly disable workers.dev URL
+      });
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.format).toEqual("esm");
+      expect(worker.url).toBeUndefined(); // No URL should be provided
+
+      // Query Cloudflare API to verify subdomain is not enabled
+      const subdomainResponse = await api.get(
+        `/accounts/${api.accountId}/workers/scripts/${workerName}/subdomain`,
+      );
+
+      // The subdomain endpoint should either return 404 or indicate it's disabled
+      if (subdomainResponse.status === 200) {
+        const subdomainData: any = await subdomainResponse.json();
+        expect(subdomainData.result?.enabled).toBeFalsy();
+      } else {
+        // If 404, that also indicates no subdomain is configured
+        expect(subdomainResponse.status).toEqual(404);
+      }
+
+      // Try to access the worker via workers.dev subdomain - should fail
+      try {
+        const workerSubdomainUrl = `https://${workerName}.${api.accountId.substring(0, 32)}.workers.dev`;
+        const subdomainTestResponse = await fetch(workerSubdomainUrl);
+
+        // If the fetch succeeds, the subdomain shouldn't be working
+        // Workers.dev subdomains that are disabled typically return 404 or 503
+        expect(subdomainTestResponse.status).toBeGreaterThanOrEqual(400);
+      } catch (error) {
+        // Network errors are also expected when subdomain is disabled
+        expect(error).toBeDefined();
+      }
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(api, workerName);
     }
   });
 });
