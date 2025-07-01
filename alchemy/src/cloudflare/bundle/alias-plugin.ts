@@ -2,10 +2,10 @@ import type { Plugin } from "esbuild";
 
 export const createAliasPlugin = ({
   alias,
-  absWorkingDir,
+  projectRoot,
 }: {
   alias: Record<string, string>;
-  absWorkingDir: string;
+  projectRoot: string;
 }): Plugin => ({
   name: "alias",
   setup(build) {
@@ -30,7 +30,7 @@ export const createAliasPlugin = ({
           path: require.resolve(aliasPath, {
             // From the esbuild alias docs: "Note that when an import path is substituted using an alias, the resulting import path is resolved in the working directory instead of in the directory containing the source file with the import path."
             // https://esbuild.github.io/api/#alias:~:text=Note%20that%20when%20an%20import%20path%20is%20substituted%20using%20an%20alias%2C%20the%20resulting%20import%20path%20is%20resolved%20in%20the%20working%20directory%20instead%20of%20in%20the%20directory%20containing%20the%20source%20file%20with%20the%20import%20path.
-            paths: [absWorkingDir],
+            paths: [projectRoot],
           }),
         };
       }

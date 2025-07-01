@@ -4,7 +4,6 @@ import type { Context } from "../context.ts";
 import { formatJson } from "../fs/static-json-file.ts";
 import { Resource } from "../resource.ts";
 import { assertNever } from "../util/assert-never.ts";
-import { toAbsolutePath, toRelativePath } from "../util/path-normalization.ts";
 import { Self, type Bindings } from "./bindings.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
 import type { EventSource } from "./event-source.ts";
@@ -16,15 +15,7 @@ import type { Worker, WorkerProps } from "./worker.ts";
  * Properties for wrangler.json configuration file
  */
 export interface WranglerJsonProps {
-  /**
-   * Name of the wrangler configuration file
-   *
-   * The file will be created in the Worker's directory.
-   *
-   * @default "wrangler.jsonc"
-   */
   name?: string;
-
   /**
    * The worker to generate the wrangler.json file for
    */
@@ -33,11 +24,9 @@ export interface WranglerJsonProps {
     | (WorkerProps<any> & {
         name: string;
       });
-
   /**
    * Path to write the wrangler.json file to
    *
-   * @deprecated Use `name` instead. The path will be resolved relative to the Worker's directory.
    * @default cwd/wrangler.json
    */
   path?: string;
@@ -100,21 +89,8 @@ export const WranglerJson = Resource(
     _id: string,
     props: WranglerJsonProps,
   ): Promise<WranglerJson> {
-    const normalizePath = () => {
-      if (props.path) {
-        const fileName =
-          props.name ?? path.basename(props.path) ?? "wrangler.jsonc";
-        return path.join(toAbsolutePath(path.dirname(props.path)), fileName);
-      }
-
-      const name = props.name ?? "wrangler.jsonc";
-      return path.join(
-        props.worker.directory
-          ? toAbsolutePath(props.worker.directory)
-          : process.cwd(),
-        name,
-      );
-    };
+    // Default path is wrangler.json in current directory
+    const filePath = props.path || "wrangler.jsonc";
 
     if (this.phase === "delete") {
       return this.destroy();
@@ -152,15 +128,13 @@ export const WranglerJson = Resource(
       spec.triggers = { crons: worker.crons };
     }
 
-    const absoluteFilePath = normalizePath();
-
-    await fs.mkdir(path.dirname(absoluteFilePath), { recursive: true });
-    await fs.writeFile(absoluteFilePath, await formatJson(spec));
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, await formatJson(spec));
 
     // Return the resource
     return this({
       ...props,
-      path: toRelativePath(absoluteFilePath),
+      path: filePath,
       spec,
       createdAt: Date.now(),
       updatedAt: Date.now(),

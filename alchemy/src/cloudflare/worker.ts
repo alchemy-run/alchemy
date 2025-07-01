@@ -21,7 +21,6 @@ import type { type } from "../type.ts";
 import { getContentType } from "../util/content-type.ts";
 import { DeferredPromise } from "../util/deferred-promise.ts";
 import { logger } from "../util/logger.ts";
-import { toAbsolutePath, toRelativePath } from "../util/path-normalization.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
@@ -135,19 +134,8 @@ export interface BaseWorkerProps<
 
   /**
    * The root directory of the project
-   * @deprecated Use `directory` instead
    */
   projectRoot?: string;
-
-  /**
-   * The root directory of the worker project
-   *
-   * This is used as the base directory for bundling and resolving paths.
-   * Paths are stored as relative paths in Alchemy state for portability.
-   *
-   * @default process.cwd()
-   */
-  directory?: string;
 
   /**
    * Module format for the worker script
@@ -372,7 +360,6 @@ export interface EntrypointWorkerProps<
   script?: undefined;
   /**
    * The entrypoint for the worker script.
-   * If a `directory` is provided, the entrypoint will be resolved relative to it.
    */
   entrypoint: string;
 
@@ -543,11 +530,6 @@ export type Worker<
      * Version label for this worker deployment
      */
     version?: string;
-
-    /**
-     * The root directory of the worker project
-     */
-    directory: string;
   };
 
 /**
@@ -982,18 +964,6 @@ export const _Worker = Resource(
       throw new Error("entrypoint must be provided when noBundle is true");
     }
 
-    // Handle deprecation of projectRoot
-    if (props.projectRoot && !props.directory) {
-      logger.warnOnce(
-        "The 'projectRoot' property is deprecated. Please use 'directory' instead.",
-      );
-      props.directory = props.projectRoot;
-    }
-
-    // Normalize directory path - store as relative for portability
-    const cwd = toAbsolutePath(props.directory || process.cwd());
-    const directory = toRelativePath(cwd);
-
     // Use the provided name
     const workerName = props.name ?? id;
 
@@ -1009,7 +979,7 @@ export const _Worker = Resource(
         upsertDevCommand({
           id,
           command: props.dev.command,
-          cwd: props.dev.cwd ?? cwd,
+          cwd: props.dev.cwd ?? process.cwd(),
           env: props.env ?? {},
         });
         return this({
@@ -1032,8 +1002,6 @@ export const _Worker = Resource(
           assets: props.assets,
           // Include cron triggers in the output
           crons: props.crons,
-          // Store directory as relative for portability
-          directory,
           // phantom property
           Env: undefined!,
         } as unknown as Worker<B>);
@@ -1189,8 +1157,6 @@ export const _Worker = Resource(
         assets: props.assets,
         // Include cron triggers in the output
         crons: props.crons,
-        // Store directory as relative for portability
-        directory,
         // phantom property
         Env: undefined!,
       } as unknown as Worker<B>);
@@ -1554,8 +1520,6 @@ export const _Worker = Resource(
       namespace: props.namespace,
       // Include version information in the output
       version: props.version,
-      // Store directory as relative for portability
-      directory,
       // phantom property
       Env: undefined!,
     } as unknown as Worker<B>);
