@@ -1,11 +1,27 @@
-/* Custom Starlight styles */
+/* Central Color System for Alchemy Website */
+
 :root {
-  --sl-color-text-accent: #D4AF37;
-  --sl-color-accent: #0C991B;
-  --sl-color-accent-high: #E6C965;
-} 
+  /* Typography - Sans-serif for docs */
+  --sl-font: sans-serif;
+  /* --sl-font: serif; */
+  --sl-font-headings: serif;
+  /* Brand Colors - Monochrome Theme */
+  --alchemy-primary: #000000;        /* Pure Black */
+  --alchemy-secondary: #374151;      /* Dark Gray */
+  --alchemy-accent: #7a7a7b;         /* Medium Gray */
+  
+  /* Dark Theme (Default) */
+  --sl-color-text-accent: #E5E7EB;
+  --sl-color-accent: #9CA3AF;
+  --sl-color-accent-high: #F3F4F6;
+  
+  /* Override Starlight's default accent colors with our brand colors */
+  --sl-color-accent-low: color-mix(in srgb, #9CA3AF 20%, transparent);
+  --sl-color-accent-light: color-mix(in srgb, #9CA3AF 60%, white);
+}
 
 [data-theme="light"] {
-  --sl-color-accent: #3EA248;
-  --sl-color-text-accent: #B38D12;
+  /* Light Theme Overrides */
+  --sl-color-accent: #374151;
+  --sl-color-text-accent: #111827;
 }

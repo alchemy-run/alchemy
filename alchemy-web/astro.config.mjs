@@ -3,7 +3,13 @@ import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 import starlightLlmsTxt from "starlight-llms-txt";
-import starlightThemeNextjs from "starlight-nextjs-theme";
+// import theme from "starlight-nextjs-theme";
+// import theme from 'starlight-theme-flexoki';
+// import theme from 'starlight-theme-rapide';
+// import theme from 'starlight-theme-obsidian';
+import theme from 'starlight-theme-nova';
+
+// import { ion as theme } from "starlight-ion-theme";
 
 
 // https://astro.build/config
@@ -13,16 +19,20 @@ export default defineConfig({
   // adapter: cloudflare({
   //   imageService: "passthrough",
   // }),
-  prefetch: !import.meta.env.DEV,
+  prefetch: true,
   integrations: [
     sitemap({
       filter: (page) => !page.endsWith(".html") && !page.endsWith(".md"),
     }),
+    // expressiveCode({
+    //   themes: [{}]
+    // }),
     starlight({
       title: "Alchemy",
       favicon: "/public/flask.svg",
       logo: {
-        src: "/public/alchemy-logo.svg",
+        light: "./public/alchemy-logo-light.svg",
+        dark: "./public/alchemy-logo-dark.svg",
         replacesTitle: true,
       },
       customCss: [
@@ -74,7 +84,7 @@ export default defineConfig({
           autogenerate: { directory: "providers", collapsed: true },
         },
       ],
-      plugins: [starlightThemeNextjs(), starlightLlmsTxt()],
+      plugins: [theme(), starlightLlmsTxt()],
     }),
   ],
   trailingSlash: "ignore",

@@ -1,5 +1,7 @@
 ---
 import { Code } from "astro:components";
+// import { Code } from '@astrojs/starlight/components';
+
 
 export interface Props {
   title: string;
@@ -70,10 +72,10 @@ const product = await Product("pro-plan", {
         </div>
         <div class="code-content">
           <div id="code-block-light" class="code-theme light-theme">
-            <Code code={codeContent} lang="typescript" theme="vitesse-light" />
+            <Code code={codeContent} lang="typescript" theme="one-light" />
           </div>
           <div id="code-block-dark" class="code-theme dark-theme">
-            <Code code={codeContent} lang="typescript" theme="vitesse-dark" />
+            <Code code={codeContent} lang="typescript" theme="github-dark-dimmed" />
           </div>
         </div>
       </div>
@@ -82,29 +84,33 @@ const product = await Product("pro-plan", {
 </div>
 
 <style>
-  /* CSS Custom Properties */
+  /* Hero-specific CSS variables */
   :root {
-    /* Dark mode (default) */
+    /* Hero Section Colors - Dark Theme */
+    --hero-text-primary: #ffffff;
+    --hero-text-secondary: #E5E7EB;    /* Keep subtitle white */
+    --hero-title-accent: #A78BFA;      /* Purple only for title gradient */
     --hero-code-bg: #121212;
-    --hero-code-border: rgba(255, 255, 255, 0.1);
+    --hero-code-border: rgba(255, 255, 255, 0.2);
     --hero-code-text: #e5e7eb;
     --hero-code-title: #d1d5db;
-    --hero-dot-color: #404040; /* Lighter than dark background */
-    --hero-shadow: rgba(0, 0, 0, 0.25);
-    /* controls the color of the title, tagline, and actions */
-    --hero-accent: var(--sl-color-text-accent);
+    --hero-dot-color: #4B5563;
+    --hero-shadow: rgba(0, 0, 0, 0.3);
+    --hero-accent: #F3F4F6;            /* Keep buttons white */
   }
 
-  /* Light mode - manual theme selection */
   :root[data-theme="light"] {
-    --hero-code-bg: #fff;
-    --hero-code-border: rgba(0, 0, 0, 0.1);
+    /* Hero Section Colors - Light Theme */
+    --hero-text-primary: #6B46C1;      /* Medium purple - clearly purple but not too bright */
+    --hero-text-secondary: #374151;    /* Keep subtitle dark gray */
+    --hero-title-accent: #5B21B6;      /* Deeper purple for title */
+    --hero-code-bg: #ffffff;
+    --hero-code-border: rgba(0, 0, 0, 0.15);
     --hero-code-text: #374151;
     --hero-code-title: #4b5563;
-    --hero-dot-color: #a7a7a7; /* Darker than light background */
+    --hero-dot-color: #D1D5DB;
     --hero-shadow: rgba(0, 0, 0, 0.1);
-    --sl-color-text-accent: #c5a943;
-    --hero-accent: #488f48;
+    --hero-accent: #111827;            /* Keep buttons dark */
   }
 
   /* Global page background override - only for pages with hero class */
@@ -118,9 +124,9 @@ const product = await Product("pro-plan", {
   }
 
   .hero {
-    padding: 4rem 2rem;
+    padding: 0rem 2rem;
     text-align: center;
-    background: transparent; /* Remove duplicate background since it's now on body */
+    background: transparent;
   }
 
   .hero-content {
@@ -137,40 +143,30 @@ const product = await Product("pro-plan", {
     line-height: 1.1;
     margin: 0 0 1rem 0;
     text-align: center;
+    color: var(--hero-text-primary);
+    font-family: serif;
   }
 
   :root[data-theme="dark"] .hero-title {
-    /* Dark mode gradient (default) */
+    /* Dark mode gradient */
     background: linear-gradient(
       135deg,
       var(--sl-color-text) 0%,
-      var(--sl-color-text-accent) 100%
+      var(--hero-title-accent) 100%
     );
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
 
-  :root[data-theme="light"] .hero-title,
-  :root[data-theme="light"] .hero-tagline,
-  :root[data-theme="light"] .hero-actions {
-    color: var(--hero-accent);
-  }
-
   .hero-tagline {
     font-size: clamp(1.1rem, 2.5vw, 1.5rem);
-    /* Dark mode color (default) */
-    color: var(--sl-color-text-accent);
-    margin: 0 0 2rem 0;
+    color: var(--hero-text-secondary);
+    margin: 0 auto 2rem auto;
+    padding: 0;
     max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
     line-height: 1.4;
-  }
-
-  /* Override system preference if manually set to dark */
-  :root[data-theme="dark"] .hero-tagline {
-    color: var(--sl-color-text-accent);
+    font-family: serif;
   }
 
   .hero-visual {
@@ -179,7 +175,6 @@ const product = await Product("pro-plan", {
     margin: 2rem 0;
   }
 
-  /* Code Window Styling */
   .code-window {
     background: var(--hero-code-bg);
     border-radius: 12px;
@@ -222,21 +217,19 @@ const product = await Product("pro-plan", {
     font-family: "Monaco", "Menlo", "Consolas", monospace;
     font-size: 14px;
     line-height: 1.6;
-    color: var(--hero-code-text);
     overflow-x: auto;
   }
 
   .code-content pre {
     margin: 0;
-    background: transparent;
+    background: transparent !important;
     padding: 0;
   }
 
   .code-content code {
-    background: transparent;
+    background: transparent !important;
     padding: 0;
     font-size: inherit;
-    color: inherit;
   }
 
   /* Theme switching */
@@ -268,6 +261,7 @@ const product = await Product("pro-plan", {
     justify-content: center;
     flex-wrap: wrap;
     margin-top: 1.5rem;
+    
   }
 
   .hero-button {
@@ -293,7 +287,6 @@ const product = await Product("pro-plan", {
     color: var(--sl-color-bg);
     transform: scale(1.05);
     box-shadow: 0 0 0 2px transparent;
-    animation: glow-border 2s linear infinite;
   }
 
   .hero-button.secondary {
@@ -331,8 +324,8 @@ const product = await Product("pro-plan", {
     }
 
     .hero-tagline {
-      margin-left: 0;
-      margin-right: 0;
+      margin: 0 0 2rem 0;
+      max-width: none;
     }
 
     .hero-actions {
