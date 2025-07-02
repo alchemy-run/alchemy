@@ -5,12 +5,7 @@ description: Quick start guide to using Alchemy, the TypeScript-native Infrastru
 
 import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 
-Get up and running with Alchemy in minutes. This guide deploys a simple Cloudflare Worker and walks through the complete development cycle.
-
-## Prerequisites
-
-- [Bun](https://bun.sh/), [Node](https://nodejs.org/en), or [Deno](https://deno.com/)
-- A [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier works)
+Alchemy is a simple TypeScript script that you run to deploy infrastructure. All you need is a Node.js runtime and a Cloudflare account to get started.
 
 <Steps>
 
@@ -33,6 +28,10 @@ Get up and running with Alchemy in minutes. This guide deploys a simple Cloudfla
    ```sh
    wrangler login
    ```
+
+   :::tip
+   Make sure you have a [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier works)
+   :::
 
 3. **Create your infrastructure**
 
@@ -107,7 +106,6 @@ Get up and running with Alchemy in minutes. This guide deploys a simple Cloudfla
 
 </Steps>
 
-## Next Steps
 
 You've successfully deployed your first Cloudflare Worker with Alchemy! Here are some next steps:
 

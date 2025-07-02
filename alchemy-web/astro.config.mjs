@@ -32,8 +32,8 @@ export default defineConfig({
       favicon: "/potion.png",
       
       logo: {
-        light: "./public/alchemy-logo-light.svg",
-        dark: "./public/alchemy-logo-dark.svg",
+        light: "./public/alchemy-logo-light-mage.svg",
+        dark: "./public/alchemy-logo-dark-mage.svg",
         replacesTitle: true,
       },
       customCss: [
