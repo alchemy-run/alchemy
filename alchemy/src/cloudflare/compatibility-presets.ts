@@ -5,18 +5,18 @@
  * users having to remember which flags they need for common use cases.
  */
 
-export type CompatibilityPreset = "node";
-
 /**
  * Mapping of compatibility presets to their respective compatibility flags
  */
-export const COMPATIBILITY_PRESETS: Record<CompatibilityPreset, string[]> = {
+export const COMPATIBILITY_PRESETS = {
   /**
    * Node.js compatibility preset
    * Enables Node.js APIs and runtime compatibility
    */
   node: ["nodejs_compat"],
-};
+} as const;
+
+export type CompatibilityPreset = keyof typeof COMPATIBILITY_PRESETS;
 
 /**
  * Get the compatibility flags for a given preset
