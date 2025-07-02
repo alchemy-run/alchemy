@@ -5,151 +5,56 @@ description: Quick start guide to using Alchemy, the TypeScript-native Infrastru
 
 import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 
-This guide will deploy a Cloudflare Worker and bind resources to it with Alchemy.
-
-:::tip
-Read [What is Alchemy](./what-is-alchemy.md) to get an overview of Alchemy and
-how it's different than traditional IaC
-:::
+Get up and running with Alchemy in minutes. This guide deploys a simple Cloudflare Worker and walks through the complete development cycle.
 
 ## Prerequisites
 
-- [Node](https://nodejs.org/en), [Bun](https://bun.sh/) or [Deno](https://deno.com/)
+- [Bun](https://bun.sh/), [Node](https://nodejs.org/en), or [Deno](https://deno.com/)
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier works)
-
-## Initialize App
 
 <Steps>
 
-1. Initialize a new TypeScript project:
+1. **Create your project**
 
-   <Tabs syncKey="pkgManager">
-     <TabItem label="bun">
-       ```sh
-       mkdir my-alchemy-app
-       cd my-alchemy-app
-       bun init -y
-       ```
-     </TabItem>
-     <TabItem label="npm">
-       ```sh
-       mkdir my-alchemy-app
-       cd my-alchemy-app
-       npm init -y
-       npm install -D typescript @types/node tsx
-       ```
-     </TabItem>
-     <TabItem label="pnpm">
-       ```sh
-       mkdir my-alchemy-app
-       cd my-alchemy-app
-       pnpm init
-       pnpm add -D typescript @types/node tsx
-       ```
-     </TabItem>
-     <TabItem label="yarn">
-       ```sh
-       mkdir my-alchemy-app
-       cd my-alchemy-app
-       yarn init -y
-       yarn add -D typescript @types/node tsx
-       ```
-     </TabItem>
-   </Tabs>
+   Start by creating a new project and installing Alchemy.
 
-2. Install alchemy dependencies:
+   ```sh
+   mkdir my-alchemy-app
+   cd my-alchemy-app
+   bun init -y
+   bun add alchemy
+   bun add -g wrangler
+   ```
 
-   <Tabs syncKey="pkgManager">
-     <TabItem label="bun">
-       ```sh
-       bun add alchemy
-       bun add -g wrangler
-       ```
-     </TabItem>
-     <TabItem label="npm">
-       ```sh
-       npm install alchemy
-       npm install -g wrangler
-       ```
-     </TabItem>
-     <TabItem label="pnpm">
-       ```sh
-       pnpm add alchemy
-       pnpm add -g wrangler
-       ```
-     </TabItem>
-     <TabItem label="yarn">
-       ```sh
-       yarn add alchemy
-       yarn global add wrangler
-       ```
-     </TabItem>
-   </Tabs>
+2. **Login to Cloudflare**
 
-3. Login to Cloudflare:
+   Authenticate with your Cloudflare account.
 
    ```sh
    wrangler login
    ```
 
-   This will open your browser to authenticate with your Cloudflare account.
+3. **Create your infrastructure**
 
-   :::tip
-   Alchemy automatically uses your wrangler OAuth token. See the [Cloudflare
-   Auth](./guides/cloudflare-auth.md) guide for alternative authentication methods.
-   :::
-
-4. Create your `alchemy.run.ts` file:
-
-   ```sh
-   my-project/
-   └── alchemy.run.ts
-   ```
-
-   In `alchemy.run.ts`, import `alchemy` and initialize the application:
+   Create `alchemy.run.ts` with a simple Worker:
 
    ```typescript
    import alchemy from "alchemy";
    import { Worker } from "alchemy/cloudflare";
 
    const app = await alchemy("my-first-app");
-   ```
 
-   Deploy a Cloudflare [`Worker`](./providers/cloudflare/worker.md):
-
-   ```typescript
    const worker = await Worker("hello-worker", {
-     // reference the worker script (we will create that next)
      entrypoint: "./src/worker.ts",
    });
-   ```
 
-   Print out its URL:
-
-   ```ts
-   // log out its URL
    console.log(`Worker deployed at: ${worker.url}`);
-   ```
-
-   Finally, make sure to call `app.finalize()` at the very end to delete resources that are no longer needed:
-
-   ```typescript
-   // Finalize the app to apply changes
    await app.finalize();
    ```
 
-5. Create the worker entrypoint file:
+4. **Create your worker code**
 
-   The `Worker` resource we created before will try to bundle `entrypoint: "./src/worker.ts"`.
-
-   ```sh
-   my-project/
-   ├── src/
-   │   └── worker.ts
-   └── alchemy.run.ts
-   ```
-
-   Let's create this script and implement our HTTP server:
+   Create `src/worker.ts`:
 
    ```typescript
    export default {
@@ -162,215 +67,45 @@ how it's different than traditional IaC
    };
    ```
 
-6. Deploy the worker to Cloudflare:
+5. **Start development mode**
 
-   Simply run your `alchemy.run.ts` script to deploy this Worker to Cloudflare:
+   Run with `--watch` for hot reloading during development:
 
-   <Tabs syncKey="pkgManager">
-     <TabItem label="bun">
-       ```sh
-       bun ./alchemy.run.ts
-       ```
-     </TabItem>
-     <TabItem label="npm">
-       ```sh
-       npx tsx ./alchemy.run.ts
-       ```
-     </TabItem>
-     <TabItem label="pnpm">
-       ```sh
-       pnpm tsx ./alchemy.run.ts
-       ```
-     </TabItem>
-     <TabItem label="yarn">
-       ```sh
-       yarn tsx ./alchemy.run.ts
-       ```
-     </TabItem>
-   </Tabs>
-
-   You will see output similar to:
-
-   ```
-   Create:  "my-first-app/dev/hello-worker"
-   Created: "my-first-app/dev/hello-worker"
-   Worker deployed at: https://hello-worker.your-subdomain.workers.dev
+   ```sh
+   bun --watch ./alchemy.run.ts
    ```
 
-   Visit the URL to see your worker in action!
+   Your worker will be available locally with live updates as you edit your code.
 
-   :::tip
-   If you're familiar with other IaC tools, this should feel similar to `terraform
-   apply`, `pulumi up`, `cdk deploy` or `sst deploy`
-   :::
+6. **Make a change**
 
-</Steps>
-
-## Add Bindings
-
-Now let's add some infrastructure to our worker. We'll add a KV namespace for storage.
-
-<Steps>
-
-1. Update your `alchemy.run.ts` to import the [`KVNamespace`](../providers/cloudflare/kv-namespace) Resource:
+   Update your worker message in `src/worker.ts`:
 
    ```typescript
-   import { KVNamespace } from "alchemy/cloudflare";
+   message: "Hello from Alchemy! 🧪",
    ```
 
-2. Create a new `KVNamespace`:
+   Save the file and see the change reflected immediately.
 
-   ```ts
-   const kv = await KVNamespace("my-app-storage");
+7. **Deploy to production**
+
+   Remove `--watch` to deploy to Cloudflare:
+
+   ```sh
+   bun ./alchemy.run.ts
    ```
 
-3. Bind the `KVNamespace` to the `Worker`:
+   Visit the URL to see your worker live on Cloudflare's edge network.
 
-   ```ts
-   const worker = await Worker("hello-worker", {
-     entrypoint: "./src/worker.ts",
-     bindings: {
-       // bind the KV Namespace to the Worker
-       KV: kv,
-     },
-   });
+8. **Tear down**
+
+   Clean up all resources when you're done:
+
+   ```sh
+   bun ./alchemy.run.ts --destroy
    ```
-
-   :::note
-   Learn more in the [Cloudflare Bindings documentation](./concepts/bindings.md).
-   :::
-
-4. Update your `./src/worker.ts` to use these bindings:
-
-   ```typescript
-   // type-only import the worker from your `alchemy.run.ts`
-   import type { worker } from "../alchemy.run.ts";
-
-   export default {
-     // use `typeof worker.Env` to infer the environment types from the bindings
-     async fetch(request: Request, env: typeof worker.Env): Promise<Response> {
-       // Store and retrieve data with type safety
-       await env.KV.put("last-visit", new Date().toISOString());
-       const lastVisit = await env.KV.get("last-visit");
-
-       return Response.json({
-         message: "Hello from Alchemy!",
-         timestamp: new Date().toISOString(),
-         lastVisit: lastVisit,
-         apiKey: env.API_KEY, // TypeScript knows this is a string
-       });
-     },
-   };
-   ```
-    :::note
-    The `typeof worker.Env` type infers types directly from your infrastructure definition in `alchemy.run.ts`. No code generation required!
-    :::
-
-    :::tip
-    You can also infer types for `import { env } from "cloudflare:workers"`, see the [type-safe bindings](./concepts/bindings.md#type-safe-bindings) documentation to learn more.
-    :::
 
 </Steps>
-
-## Local Development
-
-Alchemy supports running in a "dev mode" that runs your Workers locally with hot module reloading and continuous deployment of your infrastructure.
-
-<Steps>
-
-1. Run `alchemy.run.ts` script with the `--watch` flag to start local development:
-
-    <Tabs syncKey="pkgManager">
-      <TabItem label="bun">
-        ```sh
-        bun --watch ./alchemy.run.ts
-        ```
-      </TabItem>
-      <TabItem label="npm">
-        ```sh
-        npx tsx --watch ./alchemy.run.ts
-        ```
-      </TabItem>
-      <TabItem label="pnpm">
-        ```sh
-        pnpm tsx --watch ./alchemy.run.ts
-        ```
-      </TabItem>
-      <TabItem label="yarn">
-        ```sh
-        yarn tsx --watch ./alchemy.run.ts
-        ```
-      </TabItem>
-    </Tabs>
-
-2. Configure the `KVNamespace` resource to run remotely instead of locally:
-
-    ```typescript
-    const kv = await KVNamespace("my-app-storage", {
-      dev: {
-        // use the actual remote KV namespace instead of a local one
-        remote: true,
-      },
-    });
-    ```
-
-    :::tip
-    Development mode emulates most Cloudflare resources locally for faster iteration and no API costs. For resources that need remote access, you can configure them with `dev: { remote: true }`. Learn more in the [Development Mode guide](./guides/dev.md).
-    :::
-
-</Steps>
-## Understanding State
-
-After running your app, Alchemy creates a `.alchemy` directory to store state:
-
-```sh
-.alchemy/
-  my-first-app/         # app
-    dev/                # stage
-      hello-worker.json # resource state
-```
-
-State files help Alchemy determine whether to create, update, delete, or skip resources on subsequent runs.
-
-:::tip
-For production environments or CI/CD, you should use a persistent state store like [DOStateStore](./concepts/state.md#durable-objects-state-store-recommended) (preferred) or [R2RestStateStore](./concepts/state.md#r2-rest-state-store).
-:::
-
-## Tear Down
-
-When you're done, you can destroy all resources:
-
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun">
-    ```sh
-    bun ./alchemy.run.ts --destroy
-    ```
-  </TabItem>
-  <TabItem label="npm">
-    ```sh
-    npx tsx ./alchemy.run.ts --destroy
-    ```
-  </TabItem>
-  <TabItem label="pnpm">
-    ```sh
-    pnpm tsx ./alchemy.run.ts --destroy
-    ```
-  </TabItem>
-  <TabItem label="yarn">
-    ```sh
-    yarn tsx ./alchemy.run.ts --destroy
-    ```
-  </TabItem>
-</Tabs>
-
-Output:
-
-```
-Delete:  "my-first-app/dev/hello-worker"
-Deleted: "my-first-app/dev/hello-worker"
-```
-
-Your worker is now removed from Cloudflare.
 
 ## Next Steps
 
