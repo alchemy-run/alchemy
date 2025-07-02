@@ -1,12 +1,17 @@
 /**
- * Node 20+ compatible implementation of Promise.withResolvers()
- * This provides the same functionality as the built-in Promise.withResolvers in Node 22+
+ * Interface for the return type of promiseWithResolvers
  */
-export function promiseWithResolvers<T>(): {
+export interface PromiseWithResolvers<T> {
   promise: Promise<T>;
   resolve: (value: T | PromiseLike<T>) => void;
   reject: (reason?: any) => void;
-} {
+}
+
+/**
+ * Node 20+ compatible implementation of Promise.withResolvers()
+ * This provides the same functionality as the built-in Promise.withResolvers in Node 22+
+ */
+export function promiseWithResolvers<T>(): PromiseWithResolvers<T> {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: any) => void;
 
@@ -17,10 +22,3 @@ export function promiseWithResolvers<T>(): {
 
   return { promise, resolve, reject };
 }
-
-/**
- * Type alias for the return type of promiseWithResolvers
- */
-export type PromiseWithResolvers<T> = ReturnType<
-  typeof promiseWithResolvers<T>
->;
