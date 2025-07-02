@@ -2,11 +2,6 @@ import type { Plugin, PluginBuild } from "esbuild";
 import kleur from "kleur";
 import { logger } from "../../util/logger.ts";
 
-export interface NodeJsImportWarningPluginOptions {
-  compatibilityFlags: string[];
-  compatibilityDate: string;
-}
-
 /**
  * ESBuild plugin to detect node:* imports and warn about missing compatibility flags.
  *
@@ -14,18 +9,7 @@ export interface NodeJsImportWarningPluginOptions {
  * - Any node:* import is found without nodejs_compat flag
  * - node:async_hooks is imported without nodejs_compat or nodejs_als flags
  */
-export function nodeJsImportWarningPlugin(
-  options: NodeJsImportWarningPluginOptions,
-): Plugin {
-  const { compatibilityFlags } = options;
-
-  const hasNodejsCompat = compatibilityFlags.includes("nodejs_compat");
-  const hasNodejsCompatV2 = compatibilityFlags.includes("nodejs_compat_v2");
-  const hasNodejsAls = compatibilityFlags.includes("nodejs_als");
-
-  // Consider nodejs_compat enabled if either flag is present or v2 with recent date
-  const hasAnyNodejsCompat = hasNodejsCompat || hasNodejsCompatV2;
-
+export function nodeJsImportWarningPlugin(mode: "als" | null): Plugin {
   return {
     name: "nodejs-import-warning",
     setup(build: PluginBuild) {
@@ -52,7 +36,7 @@ export function nodeJsImportWarningPlugin(
         const nodeAsyncHooksImported = detectedImports.has("node:async_hooks");
 
         // Check for general node:* imports without nodejs_compat
-        if (!hasAnyNodejsCompat) {
+        if (!mode) {
           const importList = Array.from(detectedImports).sort();
           const useColor = !process.env.NO_COLOR;
           const formattedImports = importList
@@ -66,7 +50,7 @@ export function nodeJsImportWarningPlugin(
         }
 
         // Special check for node:async_hooks requiring nodejs_compat or nodejs_als
-        if (nodeAsyncHooksImported && !hasAnyNodejsCompat && !hasNodejsAls) {
+        if (nodeAsyncHooksImported && !mode) {
           const useColor = !process.env.NO_COLOR;
           warnings.push(
             `Detected ${useColor ? kleur.yellow("node:async_hooks") : "node:async_hooks"} import but neither ` +

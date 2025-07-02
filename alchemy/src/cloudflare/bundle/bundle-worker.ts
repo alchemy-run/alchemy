@@ -108,13 +108,11 @@ export async function bundleWorkerScript<B extends Bindings>(
         ...props.bundle?.loader,
       },
       plugins: [
-        nodeJsImportWarningPlugin({
-          compatibilityFlags: props.compatibilityFlags,
-          compatibilityDate: props.compatibilityDate,
-        }),
         wasmPlugin,
         ...(props.bundle?.plugins ?? []),
-        ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
+        nodeJsCompatMode === "v2"
+          ? await nodeJsCompatPlugin()
+          : nodeJsImportWarningPlugin(nodeJsCompatMode),
         ...(props.bundle?.alias
           ? [
               createAliasPlugin({
