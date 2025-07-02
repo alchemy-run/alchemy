@@ -1,7 +1,7 @@
 ---
 # Top-level doc metadata
 order: 0
-title: What is Alchemy
+title: Overview
 description: Alchemy is a TypeScript library that creates and manages cloud infrastructure when you run it.
 sidebar:
   order: 0
@@ -29,17 +29,42 @@ const worker = await Worker("api", {
 await app.finalize();
 ```
 
-Run it to create, update or destroy cloud resources:
+Alchemy doesn't have a traditional CLI tool like `wrangler` or `terraform`. Instead, it automatically parses CLI arguments when you run your TypeScript scripts:
+
 ```bash
 bun ./alchemy.run.ts                # deploy to cloud
 bun ./alchemy.run.ts --destroy      # tear down (destroy all resources)
+bun ./alchemy.run.ts --read         # read-only mode
+bun ./alchemy.run.ts --stage prod   # deploy to specific stage
+
+# local dev & hot redeployment
+bun --watch ./alchemy.run.ts        # hot redeployment to cloud
+bun --watch ./alchemy.run.ts --dev  # local development with hot redeployment
 ```
 
-Or test locally with hot reloading:
-```bash
-bun --watch ./alchemy.run.ts        # hot re-deployment to cloud
-bun --watch ./alchemy.run.ts --dev  # local development with hot reloading
+:::tip
+See the [CLI](/concepts/cli) documentation for all available options and environment variables.
+:::
+
+## Embeddable
+
+Since Alchemy is a TypeScript library, you can override any CLI arguments programmatically. Explicit options always take precedence over CLI arguments:
+
+```typescript
+// CLI args are parsed automatically
+const app = await alchemy("my-app");
+
+// Override CLI args with explicit options
+const app = await alchemy("my-app", {
+  phase: "up",        // Overrides --destroy or --read
+  stage: "prod",      // Overrides --stage
+  quiet: false,       // Overrides --quiet
+  password: "secret", // Overrides ALCHEMY_PASSWORD env var
+  dev: true,          // Overrides --dev detection
+});
 ```
+
+This makes Alchemy embeddable in larger applications where you need programmatic control over infrastructure deployment.
 
 ## Resources
 
@@ -72,9 +97,7 @@ By default, Alchemy tracks what it creates in `.alchemy/` directory:
       api.json
 ```
 
-:::tip
 You can also use a remote state store like Durable Objects, R2, S3, etc. See [State](../concepts/state) for more information.
-:::
 
 
 ## Phases
@@ -90,6 +113,10 @@ const app = await alchemy("my-app", {
   phase: "destroy" // or pass --destroy flag
 });
 ```
+
+:::tip
+See the [Phases](/concepts/phase) documentation for more information.
+:::
 
 ## Scopes
 
@@ -107,6 +134,26 @@ await alchemy.run("backend", async () => {
   const api = await Worker("api");
 });
 ```
+
+## Secrets
+
+Alchemy provides built-in encryption for sensitive data like API keys, passwords, and credentials:
+
+```typescript
+const app = await alchemy("my-app", {
+  password: process.env.SECRET_PASSPHRASE, // Used to encrypt secrets
+});
+
+// Create encrypted secrets from environment variables
+const apiKey = alchemy.secret(process.env.API_KEY);
+const databaseUrl = alchemy.secret(process.env.DATABASE_URL);
+```
+
+Secrets are automatically encrypted when stored in state files and can be safely used in your infrastructure.
+
+:::tip
+See the [Secrets](/concepts/secret) documentation for more information.
+:::
 
 ## Bindings
 
@@ -126,7 +173,23 @@ const worker = await Worker("processor", {
 });
 ```
 
-## Development Mode
+:::tip
+Alchemy does not use code-generation for bindings. Instead, the runtime types of bindings can be inferred from the `worker`:
+
+```ts
+type Env = typeof worker.Env;
+
+export default {
+  fetch(request: Request, env: Env) {
+    return new Response("Hello, world!");
+  }
+}
+```
+
+See the [Type-safe Bindings](/concepts/bindings#type-safe-bindings) documentation for more information.
+:::
+
+## Local Development
 
 Run locally with hot reloading:
 
@@ -142,9 +205,82 @@ const db = await D1Database("app-db", {
 });
 ```
 
+## Resource Adoption
+
+When creating a resource, Alchemy will fail if a resource with the same name already exists. You can opt in to adopt existing resources instead:
+
+```typescript
+// Without adoption - fails if bucket already exists
+const bucket = await R2Bucket("my-bucket", {
+  name: "existing-bucket",
+});
+
+// With adoption - uses existing bucket if it exists
+const bucket = await R2Bucket("my-bucket", {
+  name: "existing-bucket",
+  adopt: true,
+});
+```
+
+This is useful when you want to manage existing infrastructure with Alchemy.
+
+:::tip
+See the [Resource Adoption](/concepts/adoption) documentation for more information.
+:::
+
+## Resource Replacement
+
+Sometimes it's impossible to update a resource (like renaming an R2 bucket). In these cases, Alchemy can replace the resource by:
+
+1. Creating a new version of the resource
+2. Updating all references to point to the new resource
+3. Deleting the old resource during finalization
+
+```typescript
+// If you change immutable properties, Alchemy will automatically
+// trigger a replacement during the update phase
+const bucket = await R2Bucket("data", {
+  name: "new-bucket-name" // This will trigger replacement
+});
+```
+
+The replacement happens seamlessly - downstream resources are updated to reference the new resource before the old one is deleted.
+
+:::tip
+See the [Resource Replacement](/concepts/replace) documentation for more information.
+:::
+
+## Custom Resources
+
+All resources in Alchemy are equal - they're just async functions that handle create, update, and delete operations. This means you can easily create your own resources for any service or API:
+
+```typescript
+export const MyResource = Resource(
+  "my-service::MyResource",
+  async function(this: Context<MyResource>, id: string, props: MyResourceProps): Promise<MyResource> {
+    if (this.phase === "delete") {
+      // Delete logic
+      return this.destroy();
+    } else if (this.phase === "update") {
+      // Update logic
+      return this({ ...props, id: this.output.id });
+    } else {
+      // Create logic
+      return this({ ...props, id: "new-id" });
+    }
+  }
+);
+```
+
+Resources handle their own lifecycle and can integrate with any API or service. All built-in Alchemy resources use the same pattern.
+
+:::tip
+See the [Resource](/concepts/resource) documentation for detailed implementation guidance and [Custom Resources](/guides/custom-resources) for a step-by-step guide.
+:::
+
 ## Testing
 
-Test resources in isolation:
+Test your own custom resources with Alchemy's built-in test helper that :
 
 ```typescript
 import { alchemy, destroy } from "alchemy";
@@ -153,16 +289,21 @@ import "alchemy/test/vitest";
 const test = alchemy.test(import.meta);
 
 test("create worker", async (scope) => {
-  const worker = await Worker("test-worker", {
-    script: "export default { fetch() { return new Response('ok') } }"
-  });
-  
-  expect(worker.url).toBeTruthy();
-  
-  // Cleanup
-  await destroy(scope);
+  try {
+    const worker = await Worker("test-worker", {
+      script: "export default { fetch() { return new Response('ok') } }"
+    });
+    const response = await fetch(worker.url);
+    expect(response.status).toBe(200);
+  } finally {
+    await destroy(scope); // Clean up test resources
+  }
 });
 ```
+
+:::tip
+See the [Testing](/concepts/testing) documentation for comprehensive test setup and best practices.
+:::
 
 ## Available Providers
 
