@@ -164,7 +164,7 @@ export default {
 ```
 
 > [!TIP]
-> Notice how the type of our Worker environment is inferred with `typeof worker.Env`, see the [Type-safe Bindings](../../concepts/bindings.md#type-safe-bindings) documentation for more information.
+> Notice how the type of our Worker environment is inferred with `typeof worker.Env`, see the [Type-safe Bindings](/concepts/bindings#type-safe-bindings) documentation for more information.
 
 ## Complex Routing
 

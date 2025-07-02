@@ -179,5 +179,5 @@ The Cloudflare API token for authentication.
 
 ## See Also
 
-- [Worker](./worker.md) - Deploy workers to dispatch namespaces
+- [Worker](/providers/cloudflare/worker) - Deploy workers to dispatch namespaces
 - [Workers for Platforms Documentation](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/)

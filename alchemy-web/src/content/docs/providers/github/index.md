@@ -9,10 +9,10 @@ GitHub is a web-based version control and collaboration platform that provides G
 
 ## Resources
 
-- [Comment](./comment.md) - Create and manage comments on issues and pull requests
-- [RepositoryEnvironment](./repository-environment.md) - Create and manage deployment environments with protection rules
-- [RepositoryWebhook](./repository-webhook.md) - Create and manage repository webhooks for event notifications
-- [Secret](./secret.md) - Create and manage GitHub Actions and Dependabot secrets
+- [Comment](/providers/github/comment) - Create and manage comments on issues and pull requests
+- [RepositoryEnvironment](/providers/github/repository-environment) - Create and manage deployment environments with protection rules
+- [RepositoryWebhook](/providers/github/repository-webhook) - Create and manage repository webhooks for event notifications
+- [Secret](/providers/github/secret) - Create and manage GitHub Actions and Dependabot secrets
 
 ## Example Usage
 

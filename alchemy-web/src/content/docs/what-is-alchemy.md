@@ -11,6 +11,8 @@ Alchemy is a TypeScript library that creates and manages cloud infrastructure wh
 
 ## How it works
 
+You start with an `alchemy.run.ts` file (or any other name you want) that contains your infrastructure code:
+
 ```typescript
 import alchemy from "alchemy";
 import { Worker } from "alchemy/cloudflare";
@@ -27,11 +29,16 @@ const worker = await Worker("api", {
 await app.finalize();
 ```
 
-Run it:
+Run it to create, update or destroy cloud resources:
 ```bash
-bun ./alchemy.run.ts         # deploy
-bun ./alchemy.run.ts --dev   # local development
-bun ./alchemy.run.ts --destroy # tear down
+bun ./alchemy.run.ts                # deploy to cloud
+bun ./alchemy.run.ts --destroy      # tear down (destroy all resources)
+```
+
+Or test locally with hot reloading:
+```bash
+bun --watch ./alchemy.run.ts        # hot re-deployment to cloud
+bun --watch ./alchemy.run.ts --dev  # local development with hot reloading
 ```
 
 ## Resources
@@ -55,7 +62,7 @@ const worker = await Worker("api", {
 
 ## State
 
-Alchemy tracks what it creates in `.alchemy/` directory:
+By default, Alchemy tracks what it creates in `.alchemy/` directory:
 
 ```
 .alchemy/
@@ -65,7 +72,10 @@ Alchemy tracks what it creates in `.alchemy/` directory:
       api.json
 ```
 
-Each file contains the resource's current state. If you run the script again, Alchemy compares the desired state with the actual state and updates only what changed.
+:::tip
+You can also use a remote state store like Durable Objects, R2, S3, etc. See [State](../concepts/state) for more information.
+:::
+
 
 ## Phases
 
@@ -162,8 +172,8 @@ test("create worker", async (scope) => {
 
 ## Next Steps
 
-- [Getting Started](../getting-started.mdx) - Deploy your first worker
-- [Concepts](../concepts/resource.mdx) - Deep dive into how Alchemy works
-- [Guides](../guides/cloudflare-worker.mdx) - Build real applications
+- [Getting Started](/getting-started) - Deploy your first worker
+- [Concepts](/concepts/resource) - Deep dive into how Alchemy works
+- [Guides](/guides/cloudflare-worker) - Build real applications
 
 Happy transmutation! ✨

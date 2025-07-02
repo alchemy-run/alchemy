@@ -50,7 +50,3 @@ const app = await alchemy("app");
 await app.finalize(); // finalize scopes by deleting "orphaned" and "replaced" resources
 ```
 
-## Related Concepts
-
-- **[Destroy](./destroy.md)** - How to destroy resources
-- **[Scope](./scope.md)** - Scope lifecycle

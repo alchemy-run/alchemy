@@ -1,0 +1,206 @@
+---
+title: DOStateStore
+description: Configure cloud state storage using Cloudflare Durable Objects for high-performance, distributed state management with Alchemy.
+sidebar:
+  order: 10
+---
+
+import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
+
+DOStateStore provides a [State Store](/concepts/state-store) using a Cloudflare Worker and a SQLite3 Durable Object.
+
+<Steps>
+
+1. **Generate a state token**
+
+   Create a secure token for state store authentication:
+
+   ```sh
+   openssl rand -base64 32
+   ```
+
+   Copy the generated token - you'll need it in the next step.
+
+2. **Set environment variables**
+
+   Add the token to your environment:
+
+   ```sh
+   # .env
+   ALCHEMY_STATE_TOKEN=your-generated-token-here
+   ```
+
+   :::tip
+   Store this token securely and don't commit it to version control.
+   :::
+
+3. **Configure DOStateStore**
+
+   Update your `alchemy.run.ts` to use cloud state storage:
+
+   ```typescript
+   import alchemy from "alchemy";
+   import { DOStateStore } from "alchemy/cloudflare";
+
+   const app = await alchemy("my-app", {
+     stateStore: (scope) => new DOStateStore(scope)
+   });
+
+   // Your resources here...
+
+   await app.finalize();
+   ```
+
+4. **Deploy your app**
+
+   Run your Alchemy script to create the state store worker:
+
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+   </Tabs>
+
+   Alchemy automatically creates an `alchemy-state` worker in your Cloudflare account.
+
+5. **Verify the state store**
+
+   Check your Cloudflare dashboard to see the deployed worker:
+
+   ```
+   https://dash.cloudflare.com/workers
+   ```
+
+   You should see an `alchemy-state` worker handling your application state.
+
+</Steps>
+
+## Customization
+
+### Custom Worker Name
+
+Change the worker name to avoid conflicts or organize by environment:
+
+```typescript
+const app = await alchemy("my-app", {
+  stateStore: (scope) => new DOStateStore(scope, {
+    worker: {
+      name: "my-app-state-prod"
+    }
+  })
+});
+```
+
+### Custom Token
+
+Override the environment variable token:
+
+```typescript
+const app = await alchemy("my-app", {
+  stateStore: (scope) => new DOStateStore(scope, {
+    worker: {
+      name: "my-app-state",
+      token: alchemy.secret(process.env.CUSTOM_STATE_TOKEN)
+    }
+  })
+});
+```
+
+### Use Existing Worker
+
+Connect to a pre-deployed state store worker:
+
+```typescript
+const app = await alchemy("my-app", {
+  stateStore: (scope) => new DOStateStore(scope, {
+    worker: {
+      url: "https://my-state-store.my-subdomain.workers.dev",
+      token: alchemy.secret(process.env.STATE_TOKEN)
+    }
+  })
+});
+```
+
+### Force Worker Recreation
+
+Force the worker to be recreated even if it exists:
+
+```typescript
+const app = await alchemy("my-app", {
+  stateStore: (scope) => new DOStateStore(scope, {
+    worker: {
+      name: "my-app-state",
+      force: true
+    }
+  })
+});
+```
+
+## Environment-Specific Configuration
+
+### Development
+
+Use local filesystem for development, cloud for production:
+
+```typescript
+const app = await alchemy("my-app", {
+  stateStore: process.env.NODE_ENV === "production" 
+    ? (scope) => new DOStateStore(scope)
+    : undefined // Uses default FileSystemStateStore
+});
+```
+
+### Per-Environment Workers
+
+Use different workers for different environments:
+
+```typescript
+const stage = process.env.STAGE ?? "dev";
+
+const app = await alchemy("my-app", {
+  stage,
+  stateStore: (scope) => new DOStateStore(scope, {
+    worker: {
+      name: `my-app-state-${stage}`
+    }
+  })
+});
+```
+
+## Authentication Requirements
+
+DOStateStore requires Cloudflare authentication. See the [Cloudflare Auth Guide](/guides/cloudflare) for setup options:
+
+- **API Token** (recommended)
+- **OAuth** via `wrangler login` 
+- **Global API Key** (legacy)
+
+:::tip
+The same Cloudflare credentials used for other resources work with DOStateStore.
+:::
+
+## How It Works
+
+1. **Worker Creation**: DOStateStore automatically deploys a Cloudflare Worker with Durable Objects
+2. **State Storage**: Your application state is stored in Durable Objects for high performance
+3. **Authentication**: All requests use your generated token for secure access
+4. **Automatic Management**: The worker handles state operations (get, set, delete, list)
+
+The generated worker appears in your Cloudflare dashboard and can be managed like any other worker. 

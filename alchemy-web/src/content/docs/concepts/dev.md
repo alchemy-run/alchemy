@@ -109,7 +109,7 @@ The Vite integration provides improved support for the following binding types (
 
 ## Bindings
 
-By default, Alchemy emulates resources such as [D1 Databases](../providers/cloudflare/d1-database.md), [KV Namespaces](../providers/cloudflare/kv-namespace.md), and [R2 Buckets](../providers/cloudflare/bucket.md) locally.
+By default, Alchemy emulates resources such as [D1 Databases](/providers/cloudflare/d1-database), [KV Namespaces](/providers/cloudflare/kv-namespace), and [R2 Buckets](/providers/cloudflare/bucket) locally.
 
 Alchemy also supports [remote bindings](https://developers.cloudflare.com/workers/development-testing/#remote-bindings) for select resources. For resources that allow either local or remote execution, you can set the `dev` property on the resource to `{ remote: true }`:
 
@@ -127,7 +127,7 @@ const r2 = await R2Bucket("my-r2", {
 });
 ```
 
-Some resources only support remote execution, such as [AI Gateways](../providers/cloudflare/ai-gateway.md). These resources will automatically be run remotely, so usage will be billed the same as if you were running them in production.
+Some resources only support remote execution, such as [AI Gateways](/providers/cloudflare/ai-gateway). These resources will automatically be run remotely, so usage will be billed the same as if you were running them in production.
 
 ### Supported Resources
 

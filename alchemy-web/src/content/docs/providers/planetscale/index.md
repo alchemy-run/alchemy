@@ -9,8 +9,8 @@ PlanetScale is a serverless database platform based on MySQL that provides horiz
 
 ## Resources
 
-- [Database](./database.md) - Create and manage PlanetScale databases with configuration options
-- [Branch](./branch.md) - Create and manage database branches for development workflows
+- [Database](/providers/planetscale/database) - Create and manage PlanetScale databases with configuration options
+- [Branch](/providers/planetscale/branch) - Create and manage database branches for development workflows
 
 ## Example Usage
 

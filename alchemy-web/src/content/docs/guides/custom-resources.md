@@ -28,8 +28,8 @@ This will generate the Resource implementation and tests.
 
 ## Resource Implememtation
 
-See the [Resource Documentation](../concepts/resource.md) for a comprehensive overview of a Resource.
+See the [Resource Documentation](/concepts/resource) for a comprehensive overview of a Resource.
 
 ## Test Suite Implementation
 
-See the [Testing Documentation](../concepts/testing.md) for a comprehensive overview of how to test your Resources.
+See the [Testing Documentation](/concepts/testing) for a comprehensive overview of how to test your Resources.

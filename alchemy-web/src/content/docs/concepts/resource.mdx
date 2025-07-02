@@ -16,7 +16,7 @@ A Resource is simply a memoized async function that implemented a lifecycle hand
 
 ## Resource ID
 
-When creating a resource, you always pass an `id` that is unique within the Resource's [Scope](../concepts/scope.md).
+When creating a resource, you always pass an `id` that is unique within the Resource's [Scope](/concepts/scope).
 
 ```ts
 await MyResource("id")
@@ -92,7 +92,7 @@ Each Resource has a globally unique name (aka. fully qualified name), e.g `"neon
 export const Database = Resource("neon::Database"),
 ```
 
-Alchemy and uses this FQN to delete orphaned resources (stored in your [State](../concepts/state.md) files) by looking up the corresponding "provider".
+Alchemy and uses this FQN to delete orphaned resources (stored in your [State](/concepts/state) files) by looking up the corresponding "provider".
 
 ## Lifecycle Function
 
@@ -168,4 +168,4 @@ return this.create({/* updated properties */});
 
 ## Testing
 
-See the [Testing](./testing.md) documentation for a comprehensive walkthrough on how to test your own resources.
+See the [Testing](/concepts/testing) documentation for a comprehensive walkthrough on how to test your own resources.

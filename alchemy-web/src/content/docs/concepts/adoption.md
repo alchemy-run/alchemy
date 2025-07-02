@@ -47,5 +47,5 @@ if (this.phase === "create") {
 
 ## Related Concepts
 
-- **[Resource](./resource.md)** - Understanding Alchemy's resource model
-- **[State](./state.md)** - How Alchemy tracks resource state
+- **[Resource](/concepts/resource)** - Understanding Alchemy's resource model
+- **[State](/concepts/state)** - How Alchemy tracks resource state

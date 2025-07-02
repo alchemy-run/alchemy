@@ -179,4 +179,4 @@ describe("Worker Resource", () => {
 });
 ```
 
-For more details on testing with Alchemy, see [Testing in Alchemy](./testing.md).
+For more details on testing with Alchemy, see [Testing in Alchemy](/concepts/testing).

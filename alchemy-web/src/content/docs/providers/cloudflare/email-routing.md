@@ -11,7 +11,7 @@ Email Routing resources do not work with `wrangler login` (OAuth tokens) due to 
 - **Zone:Read** - to read zone information
 - **Zone:Edit** - to manage email routing settings
 
-See the [Cloudflare Auth guide](../../guides/cloudflare-auth.md) for details on setting up API token authentication.
+See the [Cloudflare guide](/guides/cloudflare-auth.md) for details on setting up API token authentication.
 :::
 
 ## Minimal Example
@@ -105,9 +105,9 @@ When email routing is enabled, Cloudflare automatically creates the necessary MX
 
 After enabling email routing:
 
-1. [Create destination email addresses](./email-address.md) to receive forwarded emails
-2. [Set up routing rules](./email-rule.md) to define how emails are processed
-3. [Configure a catch-all rule](./email-catch-all.md) for unmatched emails
+1. [Create destination email addresses](/providers/cloudflare/email-address) to receive forwarded emails
+2. [Set up routing rules](/providers/cloudflare/email-rule) to define how emails are processed
+3. [Configure a catch-all rule](/providers/cloudflare/email-catch-all) for unmatched emails
 
 ## Learn More
 

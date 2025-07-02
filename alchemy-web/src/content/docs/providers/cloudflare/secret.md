@@ -3,7 +3,7 @@ title: Secret
 description: Learn how to add individual secrets to Cloudflare Secrets Store for fine-grained secret management.
 ---
 
-A [Cloudflare Secret](https://developers.cloudflare.com/api/resources/secrets_store/subresources/stores/subresources/secrets/) creates an individual secret stored in a [Secrets Store](./secrets-store.md).
+A [Cloudflare Secret](https://developers.cloudflare.com/api/resources/secrets_store/subresources/stores/subresources/secrets/) creates an individual secret stored in a [Secrets Store](/providers/cloudflare/secrets-store).
 
 ## Basic Usage
 
@@ -59,5 +59,5 @@ const mySecret = await Secret("my-secret", {
 ```
 
 :::caution
-During the Beta, Cloudflare does not support more than one [SecretsStore](./secrets-store.md) per account, so you should instead rely on the default behavior until then.
+During the Beta, Cloudflare does not support more than one [SecretsStore](/providers/cloudflare/secrets-store) per account, so you should instead rely on the default behavior until then.
 :::
