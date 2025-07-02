@@ -118,7 +118,7 @@ export class Scope {
     this.scopeName = options.scopeName ?? null;
     if (this.scopeName?.includes(":")) {
       throw new Error(
-        `Scope name ${this.scopeName} cannot contain double colons`,
+        `Scope name "${this.scopeName}" cannot contain double colons`,
       );
     }
     this.parent = options.parent ?? Scope.getScope();

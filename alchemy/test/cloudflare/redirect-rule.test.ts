@@ -39,6 +39,7 @@ describe("RedirectRule", () => {
     await Worker("worker", {
       name: `${BRANCH_PREFIX}-wildcard-redirect`,
       domains: [testDomain],
+      adopt: true,
       script: `
         export default {
           async fetch(request) {

@@ -183,8 +183,8 @@ export default {
     return new Response("Not Found", { status: 404 });
   },
 };`,
-        url: true,
-        adopt: true,
+        url: props.url ?? true,
+        adopt: props.adopt ?? true,
         dev: props.dev
           ? {
               command: props.dev.command,
