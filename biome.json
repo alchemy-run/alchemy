@@ -99,7 +99,7 @@
     "indentWidth": 2,
     "lineWidth": 80,
     "lineEnding": "lf",
-    "includes": ["**", "!**/node_modules/**", "!**/*.d.ts"]
+    "includes": ["**", "!**/node_modules/**", "!**/*.d.ts", "!**/*.mdx"]
   },
   "javascript": {
     "formatter": {

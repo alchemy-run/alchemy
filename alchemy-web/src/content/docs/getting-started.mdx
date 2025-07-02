@@ -3,8 +3,8 @@ title: Getting Started
 description: Quick start guide to using Alchemy, the TypeScript-native Infrastructure-as-Code library. Deploy your first Cloudflare Worker with type-safe infrastructure code.
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
- 
+import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
+
 This guide will deploy a Cloudflare Worker and bind resources to it with Alchemy.
 
 :::tip
@@ -17,188 +17,194 @@ how it's different than traditional IaC
 - [Node](https://nodejs.org/en), [Bun](https://bun.sh/) or [Deno](https://deno.com/)
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier works)
 
-## Initialize Project 
+## Quick Start
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun">
-    ```sh
-    mkdir my-alchemy-app
-    cd my-alchemy-app
-    bun init -y
-    ``` 
-  </TabItem>
-  <TabItem label="npm">
-    ```sh
-    mkdir my-alchemy-app
-    cd my-alchemy-app
-    npm init -y
-    npm install -D typescript @types/node tsx
-    ```
-  </TabItem>
-  <TabItem label="pnpm"> 
-    ```sh
-    mkdir my-alchemy-app 
-    cd my-alchemy-app
-    pnpm init
-    pnpm add -D typescript @types/node tsx
-    ```
-  </TabItem>
-  <TabItem label="yarn">
-    ```sh
-    mkdir my-alchemy-app
-    cd my-alchemy-app
-    yarn init -y
-    yarn add -D typescript @types/node tsx
-    ```
-  </TabItem>
-</Tabs>
+<Steps>
 
-## Install Dependencies
+1. Initialize a new TypeScript project:
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun">
-    ```sh
-    bun add alchemy
-    bun add -g wrangler
-    ```
-  </TabItem>
-  <TabItem label="npm">
-    ```sh
-    npm install alchemy
-    npm install -g wrangler
-    ```
-  </TabItem>
-  <TabItem label="pnpm">
-    ```sh
-    pnpm add alchemy
-    pnpm add -g wrangler
-    ```
-  </TabItem>
-  <TabItem label="yarn">
-    ```sh
-    yarn add alchemy
-    yarn global add wrangler
-    ```
-  </TabItem>
-</Tabs>
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       mkdir my-alchemy-app
+       cd my-alchemy-app
+       bun init -y
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       mkdir my-alchemy-app
+       cd my-alchemy-app
+       npm init -y
+       npm install -D typescript @types/node tsx
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       mkdir my-alchemy-app
+       cd my-alchemy-app
+       pnpm init
+       pnpm add -D typescript @types/node tsx
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       mkdir my-alchemy-app
+       cd my-alchemy-app
+       yarn init -y
+       yarn add -D typescript @types/node tsx
+       ```
+     </TabItem>
+   </Tabs>
 
-## Login to Cloudflare
+2. Install alchemy dependencies:
 
-```sh
-wrangler login
-```
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun add alchemy
+       bun add -g wrangler
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npm install alchemy
+       npm install -g wrangler
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm add alchemy
+       pnpm add -g wrangler
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn add alchemy
+       yarn global add wrangler
+       ```
+     </TabItem>
+   </Tabs>
 
-This will open your browser to authenticate with your Cloudflare account.
+3. Login to Cloudflare:
 
-:::tip
-Alchemy automatically uses your wrangler OAuth token. See the [Cloudflare
-Auth](./guides/cloudflare-auth.md) guide for alternative authentication methods.
-:::
+   ```sh
+   wrangler login
+   ```
 
-## Create `alchemy.run.ts`
+   This will open your browser to authenticate with your Cloudflare account.
 
-```sh
-my-project/
-└── alchemy.run.ts
-```
+   :::tip
+   Alchemy automatically uses your wrangler OAuth token. See the [Cloudflare
+   Auth](./guides/cloudflare-auth.md) guide for alternative authentication methods.
+   :::
 
-In `alchemy.run.ts`, import `alchemy` and initialize the application:
+4. Create your `alchemy.run.ts` file:
 
-```typescript
-import alchemy from "alchemy";
-import { Worker } from "alchemy/cloudflare";
+   ```sh
+   my-project/
+   └── alchemy.run.ts
+   ```
 
-const app = await alchemy("my-first-app");
-```
+   In `alchemy.run.ts`, import `alchemy` and initialize the application:
 
-Deploy a Cloudflare [`Worker`](./providers/cloudflare/worker.md):
+   ```typescript
+   import alchemy from "alchemy";
+   import { Worker } from "alchemy/cloudflare";
 
-```typescript
-const worker = await Worker("hello-worker", {
-  // reference the worker script (we will create that next)
-  entrypoint: "./src/worker.ts",
-});
-```
+   const app = await alchemy("my-first-app");
+   ```
 
-Print out its URL:
+   Deploy a Cloudflare [`Worker`](./providers/cloudflare/worker.md):
 
-```ts
-// log out its URL
-console.log(`Worker deployed at: ${worker.url}`);
-```
+   ```typescript
+   const worker = await Worker("hello-worker", {
+     // reference the worker script (we will create that next)
+     entrypoint: "./src/worker.ts",
+   });
+   ```
 
-Finally, make sure to call `app.finalize()` at the very end to delete resources that are no longer needed:
+   Print out its URL:
 
-```typescript
-// Finalize the app to apply changes
-await app.finalize();
-```
+   ```ts
+   // log out its URL
+   console.log(`Worker deployed at: ${worker.url}`);
+   ```
 
-## Create Worker Entrypoint
+   Finally, make sure to call `app.finalize()` at the very end to delete resources that are no longer needed:
 
-The `Worker` resource we created before will try to bundle `entrypoint: "./src/worker.ts"`.
+   ```typescript
+   // Finalize the app to apply changes
+   await app.finalize();
+   ```
 
-```sh
-my-project/
-├── src/
-│   └── worker.ts
-└── alchemy.run.ts
-```
+5. Create the worker entrypoint file:
 
-Let's create this script and implement our HTTP server:
+   The `Worker` resource we created before will try to bundle `entrypoint: "./src/worker.ts"`.
 
-```typescript
-export default {
-  async fetch(request: Request): Promise<Response> {
-    return Response.json({
-      message: "Hello from Alchemy!",
-      timestamp: new Date().toISOString(),
-    });
-  },
-};
-```
+   ```sh
+   my-project/
+   ├── src/
+   │   └── worker.ts
+   └── alchemy.run.ts
+   ```
 
-## Deploy the Worker
+   Let's create this script and implement our HTTP server:
 
-Simply run your `alchemy.run.ts` script to deploy this Worker to Cloudflare:
+   ```typescript
+   export default {
+     async fetch(request: Request): Promise<Response> {
+       return Response.json({
+         message: "Hello from Alchemy!",
+         timestamp: new Date().toISOString(),
+       });
+     },
+   };
+   ```
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun">
-    ```sh
-    bun ./alchemy.run.ts
-    ```
-  </TabItem>
-  <TabItem label="npm">
-    ```sh
-    npx tsx ./alchemy.run.ts
-    ```
-  </TabItem>
-  <TabItem label="pnpm">
-    ```sh
-    pnpm tsx ./alchemy.run.ts
-    ```
-  </TabItem>
-  <TabItem label="yarn">
-    ```sh
-    yarn tsx ./alchemy.run.ts
-    ```
-  </TabItem>
-</Tabs>
+6. Deploy the worker to Cloudflare:
 
-You will see output similar to:
+   Simply run your `alchemy.run.ts` script to deploy this Worker to Cloudflare:
 
-```
-Create:  "my-first-app/dev/hello-worker"
-Created: "my-first-app/dev/hello-worker"
-Worker deployed at: https://hello-worker.your-subdomain.workers.dev
-```
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+   </Tabs>
 
-Visit the URL to see your worker in action!
+   You will see output similar to:
 
-:::tip
-If you're familiar with other IaC tools, this should feel similar to `terraform
-apply`, `pulumi up`, `cdk deploy` or `sst deploy`
-:::
+   ```
+   Create:  "my-first-app/dev/hello-worker"
+   Created: "my-first-app/dev/hello-worker"
+   Worker deployed at: https://hello-worker.your-subdomain.workers.dev
+   ```
+
+   Visit the URL to see your worker in action!
+
+   :::tip
+   If you're familiar with other IaC tools, this should feel similar to `terraform
+   apply`, `pulumi up`, `cdk deploy` or `sst deploy`
+   :::
+
+</Steps>
 
 ## Add Bindings
 
@@ -284,52 +290,62 @@ For production environments or CI/CD, you should use a persistent state store li
 
 Alchemy currently relies on `wrangler` CLI for local development.
 
-You can generate a `wrangler.json` from your `Worker` using the [`WranglerJson`](./providers/cloudflare/wrangler.json.md) Resource:
+<Steps>
 
-```typescript
-// Add this import
-import { WranglerJson } from "alchemy/cloudflare";
+1. Generate a wrangler.json configuration file:
 
-// ... after creating the worker with bindings ...
+   You can generate a `wrangler.json` from your `Worker` using the [`WranglerJson`](./providers/cloudflare/wrangler.json.md) Resource:
 
-// Generate wrangler.json for local development
-await WranglerJson("wrangler.json", {
-  worker,
-});
-```
+   ```typescript
+   // Add this import
+   import { WranglerJson } from "alchemy/cloudflare";
 
-Deploy again to generate the `wrangler.json` with your bindings:
+   // ... after creating the worker with bindings ...
 
-<Tabs syncKey="pkgManager">
-  <TabItem label="bun">
-    ```sh
-    bun ./alchemy.run.ts
-    ```
-  </TabItem>
-  <TabItem label="npm">
-    ```sh
-    npx tsx ./alchemy.run.ts
-    ```
-  </TabItem>
-  <TabItem label="pnpm">
-    ```sh
-    pnpm tsx ./alchemy.run.ts
-    ```
-  </TabItem>
-  <TabItem label="yarn">
-    ```sh
-    yarn tsx ./alchemy.run.ts
-    ```
-  </TabItem>
-</Tabs>
+   // Generate wrangler.json for local development
+   await WranglerJson("wrangler.json", {
+     worker,
+   });
+   ```
 
-Now you can your worker locally using `wrangler dev`:
+2. Deploy again to generate the wrangler.json:
 
-```sh
-wrangler dev
-```
+   Deploy again to generate the `wrangler.json` with your bindings:
 
-Visit `http://localhost:8787` to test your worker locally with all your bindings!
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+   </Tabs>
+
+3. Start local development with wrangler:
+
+   Now you can your worker locally using `wrangler dev`:
+
+   ```sh
+   wrangler dev
+   ```
+
+   Visit `http://localhost:8787` to test your worker locally with all your bindings!
+
+</Steps>
 
 ## Tear Down
 

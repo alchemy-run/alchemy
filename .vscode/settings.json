@@ -8,7 +8,7 @@
     "source.organizeImports": "explicit",
     "source.organizeImports.biome": "explicit"
   },
-  "rewrap.autoWrap.enabled": true,
+  "rewrap.autoWrap.enabled": false,
   "[rust]": {
     "editor.insertSpaces": true,
     "editor.tabSize": 4
@@ -23,7 +23,7 @@
   },
   "[markdown]": {
     "editor.formatOnSave": false,
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": null
   },
   "[mdx]": {
     "editor.defaultFormatter": null,

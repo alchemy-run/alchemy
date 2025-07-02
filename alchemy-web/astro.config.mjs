@@ -29,7 +29,8 @@ export default defineConfig({
     // }),
     starlight({
       title: "Alchemy",
-      favicon: "/public/flask.svg",
+      favicon: "/potion.png",
+      
       logo: {
         light: "./public/alchemy-logo-light.svg",
         dark: "./public/alchemy-logo-dark.svg",
@@ -84,6 +85,13 @@ export default defineConfig({
           autogenerate: { directory: "providers", collapsed: true },
         },
       ],
+      expressiveCode: {
+        themes: [
+          // "github-light-high-contrast",
+          "github-light",
+          "github-dark-dimmed",
+        ],
+      },
       plugins: [theme(), starlightLlmsTxt()],
     }),
   ],

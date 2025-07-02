@@ -5,23 +5,24 @@
   --sl-font: sans-serif;
   /* --sl-font: serif; */
   --sl-font-headings: serif;
-  /* Brand Colors - Monochrome Theme */
-  --alchemy-primary: #000000;        /* Pure Black */
-  --alchemy-secondary: #374151;      /* Dark Gray */
-  --alchemy-accent: #7a7a7b;         /* Medium Gray */
-  
-  /* Dark Theme (Default) */
-  --sl-color-text-accent: #E5E7EB;
-  --sl-color-accent: #9CA3AF;
-  --sl-color-accent-high: #F3F4F6;
-  
-  /* Override Starlight's default accent colors with our brand colors */
-  --sl-color-accent-low: color-mix(in srgb, #9CA3AF 20%, transparent);
-  --sl-color-accent-light: color-mix(in srgb, #9CA3AF 60%, white);
 }
 
 [data-theme="light"] {
-  /* Light Theme Overrides */
-  --sl-color-accent: #374151;
-  --sl-color-text-accent: #111827;
+  /* Light Theme */
+  --sl-color-text-invert: rgb(107, 33, 168);
+  --sl-color-text-accent: black;
+  --sl-color-accent: rgb(243, 232, 255);
+  --sl-color-accent-high: #F3E8FF;
+  --sl-color-accent-low: color-mix(in srgb, #F3E8FF 40%, transparent);
+  --sl-color-accent-light: color-mix(in srgb, #F3E8FF 60%, white);
+}
+
+[data-theme="dark"] {
+  /* Dark Theme */
+  --sl-color-text-invert: black;                                          /* Text color that contrasts with accent backgrounds */
+  --sl-color-text-accent: white;                                          /* Sidebar links, TOC active items, current page indicators - white for readability */
+  --sl-color-accent: #F3E8FF;                                             /* Sidebar highlights, TOC backgrounds, active states */
+  --sl-color-accent-high: #F3E8FF;                                        /* High contrast accent elements, focused states */
+  --sl-color-accent-low: color-mix(in srgb, #F3E8FF 40%, transparent);    /* Subtle hover states, borders */
+  --sl-color-accent-light: color-mix(in srgb, #F3E8FF 60%, transparent);  /* Light accent backgrounds */
 }

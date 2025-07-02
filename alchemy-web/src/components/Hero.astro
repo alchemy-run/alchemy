@@ -72,7 +72,8 @@ const product = await Product("pro-plan", {
         </div>
         <div class="code-content">
           <div id="code-block-light" class="code-theme light-theme">
-            <Code code={codeContent} lang="typescript" theme="one-light" />
+            <!-- <Code code={codeContent} lang="typescript" theme="catppuccin-latte" /> -->
+            <Code code={codeContent} lang="typescript" theme="github-light" />
           </div>
           <div id="code-block-dark" class="code-theme dark-theme">
             <Code code={codeContent} lang="typescript" theme="github-dark-dimmed" />
@@ -84,6 +85,9 @@ const product = await Product("pro-plan", {
 </div>
 
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Modern+Antiqua&family=Tinos:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
   /* Hero-specific CSS variables */
   :root {
     /* Hero Section Colors - Dark Theme */
@@ -97,6 +101,8 @@ const product = await Product("pro-plan", {
     --hero-dot-color: #4B5563;
     --hero-shadow: rgba(0, 0, 0, 0.3);
     --hero-accent: #F3F4F6;            /* Keep buttons white */
+    --hero-glow-color: rgba(167, 139, 250, 0.1); /* Subtle purple glow for dark theme */
+    --hero-noise-opacity: 0.4;
   }
 
   :root[data-theme="light"] {
@@ -111,16 +117,38 @@ const product = await Product("pro-plan", {
     --hero-dot-color: #D1D5DB;
     --hero-shadow: rgba(0, 0, 0, 0.1);
     --hero-accent: #111827;            /* Keep buttons dark */
+    --hero-glow-color: rgba(147, 51, 234, 0.15); /* Brighter purple glow for light theme */
+    --hero-noise-opacity: 0.3;
   }
 
   /* Global page background override - only for pages with hero class */
   :global(body:has(.hero)) {
-    background: linear-gradient(
-      135deg,
-      var(--sl-color-bg) 0%,
-      var(--sl-color-bg-nav) 100%
-    );
+    background: 
+        radial-gradient(
+            circle at 50% 50%,
+            var(--hero-glow-color) 0%,
+            transparent 85%
+        ),
+        linear-gradient(
+            135deg,
+            var(--sl-color-bg) 0%,
+            var(--sl-color-bg-nav) 100%
+        );
     min-height: 100vh;
+    position: relative;
+  }
+
+  :global(body:has(.hero))::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: var(--hero-noise-opacity);
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    mix-blend-mode: overlay;
   }
 
   .hero {
@@ -144,7 +172,10 @@ const product = await Product("pro-plan", {
     margin: 0 0 1rem 0;
     text-align: center;
     color: var(--hero-text-primary);
-    font-family: serif;
+    font-family: Tinos, sans-serif;
+    /* font-family: Modern Antiqua, sans-serif */
+
+    /* font-family: serif; */
   }
 
   :root[data-theme="dark"] .hero-title {
@@ -336,6 +367,57 @@ const product = await Product("pro-plan", {
   @media (max-width: 767px) {
     .hero {
       padding: 2rem 1rem;
+    }
+
+    .hero-content {
+      display: block !important; /* Override grid */
+      position: relative;
+    }
+
+    /* Position text independently */
+    .hero-text {
+      position: relative;
+      width: 100%;
+      margin: 0 auto;
+      text-align: center;
+      transform: translateX(0);
+      left: 0;
+      right: 0;
+    }
+
+    .hero-title {
+      text-align: center;
+      width: 100%;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .hero-tagline {
+      text-align: center;
+      width: 100%;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .hero-actions {
+      justify-content: center;
+      width: 100%;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* Keep code window independent and allow overflow */
+    .hero-visual {
+      position: relative;
+      width: 100vw;
+      margin-left: -1rem; /* Counter the hero padding */
+      margin-right: -1rem;
+      padding: 0 1rem;
+      overflow-x: visible;
+    }
+
+    .code-window {
+      max-width: none;
     }
 
     .astro-code {
