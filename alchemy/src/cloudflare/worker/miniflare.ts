@@ -63,7 +63,9 @@ class MiniflareServer {
       }),
     );
     if (this.miniflare) {
-      await this.miniflare.setOptions(await this.miniflareOptions());
+      await withErrorRewrite(
+        this.miniflare.setOptions(await this.miniflareOptions()),
+      );
     } else {
       const { Miniflare } = await import("miniflare").catch(() => {
         throw new Error(
@@ -78,12 +80,8 @@ class MiniflareServer {
           process.exit(0);
         }
       });
-
-      this.miniflare = await withErrorRewrite(async () => {
-        const miniflare = new Miniflare(await this.miniflareOptions());
-        await miniflare.ready;
-        return miniflare;
-      });
+      this.miniflare = new Miniflare(await this.miniflareOptions());
+      await withErrorRewrite(this.miniflare.ready);
     }
     const existing = this.servers.get(worker.name);
     if (existing) {
@@ -94,7 +92,7 @@ class MiniflareServer {
       fetch: this.createRequestHandler(worker.name as string),
     });
     this.servers.set(worker.name, server);
-    await withErrorRewrite(() => server.ready);
+    await server.ready;
     return server;
   }
 
@@ -191,17 +189,23 @@ class MiniflareServer {
   }
 }
 
-async function withErrorRewrite<T>(fn: () => Promise<T>) {
+export class ExternalDependencyError extends Error {
+  constructor() {
+    super(
+      'Miniflare detected an external dependency that could not be resolved. This typically occurs when the "nodejs_compat" or "nodejs_als" compatibility flag is not enabled.',
+    );
+  }
+}
+
+async function withErrorRewrite<T>(promise: Promise<T>) {
   try {
-    return await fn();
+    return await promise;
   } catch (error) {
     if (
       error instanceof MiniflareCoreError &&
       error.code === "ERR_MODULE_STRING_SCRIPT"
     ) {
-      throw new Error(
-        'Miniflare detected an external dependency that could not be resolved. This typically occurs when the "nodejs_compat" or "nodejs_als" compatibility flag is not enabled.',
-      );
+      throw new ExternalDependencyError();
     } else {
       throw error;
     }

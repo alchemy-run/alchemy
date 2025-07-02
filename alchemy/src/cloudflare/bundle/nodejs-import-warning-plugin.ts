@@ -1,6 +1,12 @@
 import type { Plugin, PluginBuild } from "esbuild";
 import kleur from "kleur";
+import module from "node:module";
+import path from "node:path";
 import { logger } from "../../util/logger.ts";
+
+const NODE_REGEX = new RegExp(
+  `^(node:)?(${module.builtinModules.filter((m) => m !== "async_hooks").join("|")})$`,
+);
 
 /**
  * ESBuild plugin to detect node:* imports and warn about missing compatibility flags.
@@ -13,57 +19,76 @@ export function nodeJsImportWarningPlugin(mode: "als" | null): Plugin {
   return {
     name: "nodejs-import-warning",
     setup(build: PluginBuild) {
-      const detectedImports = new Set<string>();
+      const packages = new Set<string>();
+      const nodeImporters = new Set<string>();
+      const alsImporters = new Set<string>();
 
       build.onStart(() => {
-        detectedImports.clear();
+        packages.clear();
+        nodeImporters.clear();
+        alsImporters.clear();
       });
 
-      // Intercept resolution of node:* imports to detect them
-      build.onResolve({ filter: /^node:/ }, (args) => {
-        detectedImports.add(args.path);
+      build.onResolve(
+        {
+          filter: NODE_REGEX,
+        },
+        (args) => {
+          packages.add(args.path);
+          nodeImporters.add(args.importer);
+          return null;
+        },
+      );
 
-        // Let the resolution continue normally
-        return null;
-      });
+      build.onResolve(
+        {
+          filter: /^(node:)?async_hooks$/,
+        },
+        (args) => {
+          alsImporters.add(args.importer);
+          return null;
+        },
+      );
 
       build.onEnd(() => {
-        if (detectedImports.size === 0) {
-          return;
-        }
-
-        const warnings: string[] = [];
-        const nodeAsyncHooksImported = detectedImports.has("node:async_hooks");
-
-        // Check for general node:* imports without nodejs_compat
-        if (!mode) {
-          const importList = Array.from(detectedImports).sort();
-          const useColor = !process.env.NO_COLOR;
-          const formattedImports = importList
-            .map((imp) => (useColor ? kleur.yellow(imp) : imp))
+        if (packages.size > 0) {
+          const formattedImports = Array.from(packages)
+            .sort()
+            .map((imp) => kleur.yellow(imp))
             .join(", ");
 
-          warnings.push(
-            `Detected Node.js imports (${formattedImports}) but ${useColor ? kleur.red("nodejs_compat") : "nodejs_compat"} compatibility flag is not set. ` +
-              `Add ${useColor ? kleur.blue("nodejs_compat") : "nodejs_compat"} to your compatibility flags and ensure compatibilityDate >= 2024-09-23.`,
+          logger.warn(
+            [
+              `Detected Node.js imports (${formattedImports}) but ${kleur.red("nodejs_compat")} compatibility flag is not set. `,
+              `Add ${kleur.blue("nodejs_compat")} to your compatibility flags and ensure compatibilityDate >= 2024-09-23. Imported from:`,
+              formatImporters(
+                nodeImporters,
+                build.initialOptions.absWorkingDir ?? process.cwd(),
+              ),
+            ].join("\n"),
           );
         }
 
-        // Special check for node:async_hooks requiring nodejs_compat or nodejs_als
-        if (nodeAsyncHooksImported && !mode) {
-          const useColor = !process.env.NO_COLOR;
-          warnings.push(
-            `Detected ${useColor ? kleur.yellow("node:async_hooks") : "node:async_hooks"} import but neither ` +
-              `${useColor ? kleur.red("nodejs_compat") : "nodejs_compat"} nor ${useColor ? kleur.red("nodejs_als") : "nodejs_als"} ` +
-              "compatibility flags are set. Add one of these flags to enable async hooks support.",
+        if (alsImporters.size > 0 && !mode) {
+          logger.warn(
+            [
+              `Detected Node.js imports but ${kleur.red("nodejs_als")} compatibility flag is not set. `,
+              `Add ${kleur.blue("nodejs_als")} to your compatibility flags. Imported from:`,
+              formatImporters(
+                alsImporters,
+                build.initialOptions.absWorkingDir ?? process.cwd(),
+              ),
+            ].join("\n"),
           );
-        }
-
-        // Log all warnings
-        for (const warning of warnings) {
-          logger.warn(warning);
         }
       });
     },
   };
+}
+
+function formatImporters(importers: Set<string>, cwd: string) {
+  return Array.from(importers)
+    .sort()
+    .map((imp) => `- ${kleur.yellow(path.relative(cwd, imp))}`)
+    .join("\n");
 }
