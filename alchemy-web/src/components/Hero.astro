@@ -155,6 +155,10 @@ const price = await Price("basic-license", {
     text-align: center;
     background: transparent;
     font-family: "IBM Plex Serif";
+    min-height: clamp(500px, calc(90vh - var(--sl-nav-height, 4rem)), 800px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .hero-content {
@@ -364,6 +368,7 @@ const price = await Price("basic-license", {
   @media (max-width: 767px) {
     .hero {
       padding: 2rem 1rem;
+      min-height: clamp(400px, calc(85vh - var(--sl-nav-height, 4rem)), 600px);
     }
 
     .hero-content {
