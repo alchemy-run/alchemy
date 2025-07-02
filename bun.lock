@@ -18,6 +18,7 @@
         "jsonc-parser": "^3.3.1",
         "lint-staged": "^15.3.0",
         "openai": "^4.103.0",
+        "run-script-os": "^1.1.6",
         "typescript": "latest",
         "vite": "^6.3.5",
         "vitest": "^3.1.4",
@@ -3586,6 +3587,8 @@
     "run-applescript": ["run-applescript@7.0.0", "", {}, "sha512-9by4Ij99JUr/MCFBUkDKLWK3G9HVXmabKz9U5MlIAIuvuzkiOicRYs8XJLxX+xahD+mLiiCYDqF9dKAgtzKP1A=="],
 
     "run-parallel": ["run-parallel@1.2.0", "", { "dependencies": { "queue-microtask": "^1.2.2" } }, "sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA=="],
+
+    "run-script-os": ["run-script-os@1.1.6", "", { "bin": { "run-script-os": "index.js", "run-os": "index.js" } }, "sha512-ql6P2LzhBTTDfzKts+Qo4H94VUKpxKDFz6QxxwaUZN0mwvi7L3lpOI7BqPCq7lgDh3XLl0dpeXwfcVIitlrYrw=="],
 
     "rwsdk": ["rwsdk@0.0.89", "", { "dependencies": { "@cloudflare/vite-plugin": "0.0.0-1bae8618b", "@cloudflare/workers-types": "^4.20250407.0", "@puppeteer/browsers": "^2.8.0", "@types/fs-extra": "^11.0.4", "@types/react": "^19.1.2", "@types/react-dom": "^19.1.2", "@types/react-is": "^19.0.0", "@vitejs/plugin-react": "^4.3.4", "debug": "^4.4.0", "enhanced-resolve": "^5.18.1", "eventsource-parser": "^3.0.0", "execa": "^9.5.2", "fs-extra": "^11.3.0", "glob": "^11.0.1", "ignore": "^7.0.4", "jsonc-parser": "^3.3.1", "lodash": "^4.17.21", "magic-string": "^0.30.17", "miniflare": "^4.20250405.0", "picocolors": "^1.1.1", "puppeteer-core": "^22.8.1", "react": "19.2.0-canary-39cad7af-20250411", "react-dom": "19.2.0-canary-39cad7af-20250411", "react-is": "^19.0.0", "react-server-dom-webpack": "19.2.0-canary-39cad7af-20250411", "rsc-html-stream": "^0.0.6", "tmp-promise": "^3.0.3", "ts-morph": "^25.0.1", "unique-names-generator": "^4.7.1", "vibe-rules": "^0.2.31", "vite-tsconfig-paths": "^5.1.4", "wrangler": "^4.16.0" }, "peerDependencies": { "vite": "^6.2.6" }, "bin": { "rw-scripts": "bin/rw-scripts.mjs" } }, "sha512-xmkgfYgu+Z/H+uQ9TZhsxMdoB8eFetvJpi+kGAjc+RNuXom2IZDEa8Y+gnVyYf6zbErsxCpjmFyib2W92m3ddA=="],
 
