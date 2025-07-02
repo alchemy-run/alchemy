@@ -9,9 +9,15 @@ export interface PromiseWithResolvers<T> {
 
 /**
  * Node 20+ compatible implementation of Promise.withResolvers()
- * This provides the same functionality as the built-in Promise.withResolvers in Node 22+
+ * Falls back to native Promise.withResolvers when available (Node 22+)
  */
 export function promiseWithResolvers<T>(): PromiseWithResolvers<T> {
+  // Use native implementation if available
+  if (typeof Promise.withResolvers === "function") {
+    return Promise.withResolvers<T>();
+  }
+
+  // Fallback implementation for Node 20+
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: any) => void;
 
