@@ -75,6 +75,7 @@ export default defineConfig({
         {
           label: "Guides",
           autogenerate: { directory: "guides" },
+          collapsed: true,
         },
         {
           label: "Concepts",

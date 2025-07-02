@@ -1,7 +1,8 @@
 ---
-order: 7
-title: Development Mode (Beta)
+title: Local Development
 description: Learn how to use Alchemy's development mode to run your application locally.
+sidebar:
+  order: 1
 ---
 
 Alchemy's development mode provides a powerful local development experience for Cloudflare Workers, featuring hot reloading, local resource emulation, and seamless integration with remote Cloudflare services.

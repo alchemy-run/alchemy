@@ -1,7 +1,8 @@
 ---
-order: 10
-title: Replace
+title: Replacement
 description: Learn how to safely replace infrastructure resources with Alchemy. Understand the risks and best practices for resource replacement.
+sidebar:
+  order: 7
 ---
 
 It is some times impossible to UPDATE a resource, e.g. you cannot rename a R2 Bucket name.

@@ -1,7 +1,8 @@
 ---
-order: 11
 title: Adoption
 description: Learn how to adopt existing infrastructure with Alchemy resources instead of failing when resources already exist.
+sidebar:
+  order: 6
 ---
 
 When creating a resource, Alchemy will fail if a resource with the same name already exists. Resource adoption allows you to opt in to using the pre-existing resource instead.
