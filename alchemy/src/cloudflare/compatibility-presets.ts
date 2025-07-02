@@ -19,13 +19,6 @@ export const COMPATIBILITY_PRESETS = {
 export type CompatibilityPreset = keyof typeof COMPATIBILITY_PRESETS;
 
 /**
- * Get the compatibility flags for a given preset
- */
-export function getCompatibilityFlags(preset: CompatibilityPreset): string[] {
-  return COMPATIBILITY_PRESETS[preset] || [];
-}
-
-/**
  * Union preset compatibility flags with user-provided flags
  */
 export function unionCompatibilityFlags(
@@ -36,6 +29,6 @@ export function unionCompatibilityFlags(
     return userFlags;
   }
   
-  const presetFlags = getCompatibilityFlags(preset);
+  const presetFlags = COMPATIBILITY_PRESETS[preset];
   return Array.from(new Set([...presetFlags, ...userFlags]));
 }
