@@ -13,6 +13,7 @@ import {
 import { external, external_als } from "./external.ts";
 import { getNodeJSCompatMode } from "./nodejs-compat-mode.ts";
 import { nodeJsCompatPlugin } from "./nodejs-compat.ts";
+import { nodeJsImportWarningPlugin } from "./nodejs-import-warning-plugin.ts";
 import { wasmPlugin } from "./wasm-plugin.ts";
 
 export type NoBundleResult = {
@@ -107,6 +108,10 @@ export async function bundleWorkerScript<B extends Bindings>(
         ...props.bundle?.loader,
       },
       plugins: [
+        nodeJsImportWarningPlugin({
+          compatibilityFlags: props.compatibilityFlags,
+          compatibilityDate: props.compatibilityDate,
+        }),
         wasmPlugin,
         ...(props.bundle?.plugins ?? []),
         ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
