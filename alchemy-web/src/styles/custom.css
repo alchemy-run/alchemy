@@ -11,8 +11,10 @@
 
 [data-theme="light"] {
   /* Light Theme */
-  --sl-color-text-invert: rgb(243, 232, 255);
+  /* --sl-color-text-invert: rgb(243, 232, 255); */
+  --sl-color-text-invert: white;
   --sl-color-text-accent: black;
+  /* --sl-color-text-accent: rgb(88, 28, 135); */
   --sl-color-accent: rgb(243, 232, 255);
   --sl-color-accent-high: #F3E8FF;
   --sl-color-accent-low: color-mix(in srgb, #F3E8FF 40%, transparent);

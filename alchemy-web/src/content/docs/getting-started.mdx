@@ -17,7 +17,7 @@ how it's different than traditional IaC
 - [Node](https://nodejs.org/en), [Bun](https://bun.sh/) or [Deno](https://deno.com/)
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier works)
 
-## Quick Start
+## Initialize App
 
 <Steps>
 
@@ -210,65 +210,115 @@ how it's different than traditional IaC
 
 Now let's add some infrastructure to our worker. We'll add a KV namespace for storage.
 
-First, update your `alchemy.run.ts` to import the [`KVNamespace`](./providers/cloudflare/kv-namespace.md) Resource
+<Steps>
 
-```typescript
-import { KVNamespace } from "alchemy/cloudflare";
-```
+1. Update your `alchemy.run.ts` to import the [`KVNamespace`](../providers/cloudflare/kv-namespace) Resource:
 
-Then, create a new `KVNamespace`:
+   ```typescript
+   import { KVNamespace } from "alchemy/cloudflare";
+   ```
 
-```ts
-const kv = await KVNamespace("my-app-storage");
-```
+2. Create a new `KVNamespace`:
 
-And bind it to our `Worker` resource we created before:
+   ```ts
+   const kv = await KVNamespace("my-app-storage");
+   ```
 
-```ts
-const worker = await Worker("hello-worker", {
-  entrypoint: "./src/worker.ts",
-  bindings: {
-    // bind the KV Namespace to the Worker
-    KV: kv,
-  },
-});
-```
+3. Bind the `KVNamespace` to the `Worker`:
 
-:::note
-Learn more in the [Cloudflare Bindings documentation](./concepts/bindings.md).
-:::
+   ```ts
+   const worker = await Worker("hello-worker", {
+     entrypoint: "./src/worker.ts",
+     bindings: {
+       // bind the KV Namespace to the Worker
+       KV: kv,
+     },
+   });
+   ```
 
-Finally, update your `./src/worker.ts` to use these bindings:
+   :::note
+   Learn more in the [Cloudflare Bindings documentation](./concepts/bindings.md).
+   :::
 
-```typescript
-// type-only import the worker from your `alchemy.run.ts`
-import type { worker } from "../alchemy.run.ts";
+4. Update your `./src/worker.ts` to use these bindings:
 
-export default {
-  // use `typeof worker.Env` to infer the environment types from the bindings
-  async fetch(request: Request, env: typeof worker.Env): Promise<Response> {
-    // Store and retrieve data with type safety
-    await env.KV.put("last-visit", new Date().toISOString());
-    const lastVisit = await env.KV.get("last-visit");
+   ```typescript
+   // type-only import the worker from your `alchemy.run.ts`
+   import type { worker } from "../alchemy.run.ts";
 
-    return Response.json({
-      message: "Hello from Alchemy!",
-      timestamp: new Date().toISOString(),
-      lastVisit: lastVisit,
-      apiKey: env.API_KEY, // TypeScript knows this is a string
+   export default {
+     // use `typeof worker.Env` to infer the environment types from the bindings
+     async fetch(request: Request, env: typeof worker.Env): Promise<Response> {
+       // Store and retrieve data with type safety
+       await env.KV.put("last-visit", new Date().toISOString());
+       const lastVisit = await env.KV.get("last-visit");
+
+       return Response.json({
+         message: "Hello from Alchemy!",
+         timestamp: new Date().toISOString(),
+         lastVisit: lastVisit,
+         apiKey: env.API_KEY, // TypeScript knows this is a string
+       });
+     },
+   };
+   ```
+    :::note
+    The `typeof worker.Env` type infers types directly from your infrastructure definition in `alchemy.run.ts`. No code generation required!
+    :::
+
+    :::tip
+    You can also infer types for `import { env } from "cloudflare:workers"`, see the [type-safe bindings](./concepts/bindings.md#type-safe-bindings) documentation to learn more.
+    :::
+
+</Steps>
+
+## Local Development
+
+Alchemy supports running in a "dev mode" that runs your Workers locally with hot module reloading and continuous deployment of your infrastructure.
+
+<Steps>
+
+1. Run `alchemy.run.ts` script with the `--watch` flag to start local development:
+
+    <Tabs syncKey="pkgManager">
+      <TabItem label="bun">
+        ```sh
+        bun --watch ./alchemy.run.ts
+        ```
+      </TabItem>
+      <TabItem label="npm">
+        ```sh
+        npx tsx --watch ./alchemy.run.ts
+        ```
+      </TabItem>
+      <TabItem label="pnpm">
+        ```sh
+        pnpm tsx --watch ./alchemy.run.ts
+        ```
+      </TabItem>
+      <TabItem label="yarn">
+        ```sh
+        yarn tsx --watch ./alchemy.run.ts
+        ```
+      </TabItem>
+    </Tabs>
+
+2. Configure the `KVNamespace` resource to run remotely instead of locally:
+
+    ```typescript
+    const kv = await KVNamespace("my-app-storage", {
+      dev: {
+        // use the actual remote KV namespace instead of a local one
+        remote: true,
+      },
     });
-  },
-};
-```
+    ```
 
-:::note
-The `typeof worker.Env` type infers types directly from your infrastructure definition in `alchemy.run.ts`. No code generation required!
-:::
+    :::tip
+    Development mode emulates most Cloudflare resources locally for faster iteration and no API costs. For resources that need remote access, you can configure them with `dev: { remote: true }`. Learn more in the [Development Mode guide](./guides/dev.md).
+    :::
 
-:::tip
-You can also infer types for `import { env } from "cloudflare:workers"`, see the [type-safe bindings](./concepts/bindings.md#type-safe-bindings) documentation to learn more.
-:::
-
+</Steps>
 ## Understanding State
 
 After running your app, Alchemy creates a `.alchemy` directory to store state:
@@ -285,67 +335,6 @@ State files help Alchemy determine whether to create, update, delete, or skip re
 :::tip
 For production environments or CI/CD, you should use a persistent state store like [DOStateStore](./concepts/state.md#durable-objects-state-store-recommended) (preferred) or [R2RestStateStore](./concepts/state.md#r2-rest-state-store).
 :::
-
-## Local Development
-
-Alchemy currently relies on `wrangler` CLI for local development.
-
-<Steps>
-
-1. Generate a wrangler.json configuration file:
-
-   You can generate a `wrangler.json` from your `Worker` using the [`WranglerJson`](./providers/cloudflare/wrangler.json.md) Resource:
-
-   ```typescript
-   // Add this import
-   import { WranglerJson } from "alchemy/cloudflare";
-
-   // ... after creating the worker with bindings ...
-
-   // Generate wrangler.json for local development
-   await WranglerJson("wrangler.json", {
-     worker,
-   });
-   ```
-
-2. Deploy again to generate the wrangler.json:
-
-   Deploy again to generate the `wrangler.json` with your bindings:
-
-   <Tabs syncKey="pkgManager">
-     <TabItem label="bun">
-       ```sh
-       bun ./alchemy.run.ts
-       ```
-     </TabItem>
-     <TabItem label="npm">
-       ```sh
-       npx tsx ./alchemy.run.ts
-       ```
-     </TabItem>
-     <TabItem label="pnpm">
-       ```sh
-       pnpm tsx ./alchemy.run.ts
-       ```
-     </TabItem>
-     <TabItem label="yarn">
-       ```sh
-       yarn tsx ./alchemy.run.ts
-       ```
-     </TabItem>
-   </Tabs>
-
-3. Start local development with wrangler:
-
-   Now you can your worker locally using `wrangler dev`:
-
-   ```sh
-   wrangler dev
-   ```
-
-   Visit `http://localhost:8787` to test your worker locally with all your bindings!
-
-</Steps>
 
 ## Tear Down
 
