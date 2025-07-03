@@ -17,6 +17,10 @@ import pc from "picocolors";
 import { throwWithContext } from "../errors.ts";
 import { detectPackageManager } from "../services/package-manager.ts";
 import { copyTemplate } from "../services/template-manager.ts";
+import {
+  ensureVibeRulesPostinstall,
+  installAlchemyRules,
+} from "../services/vibe-rules.ts";
 import type {
   CreateInput,
   EditorType,
@@ -24,10 +28,6 @@ import type {
   TemplateType,
 } from "../types.ts";
 import { ProjectNameSchema, TEMPLATE_DEFINITIONS } from "../types.ts";
-import {
-  ensureVibeRulesPostinstall,
-  installAlchemyRules,
-} from "./vibe-rules.ts";
 
 const isTest = process.env.NODE_ENV === "test";
 
