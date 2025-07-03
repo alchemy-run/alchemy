@@ -58,6 +58,8 @@ import {
   isQueueEventSource,
 } from "./event-source.ts";
 import { isKVNamespace } from "./kv-namespace.ts";
+import type { MiniflareWorkerOptions } from "./miniflare/miniflare-worker-options.ts";
+import { miniflareServer } from "./miniflare/miniflare.ts";
 import { isPipeline } from "./pipeline.ts";
 import {
   QueueConsumer,
@@ -74,9 +76,7 @@ import {
   prepareWorkerMetadata,
 } from "./worker-metadata.ts";
 import { WorkerStub, isWorkerStub } from "./worker-stub.ts";
-import type { MiniflareWorkerOptions } from "./worker/miniflare-worker-options.ts";
-import { miniflareServer } from "./worker/miniflare.ts";
-import { getAccountSubdomain } from "./worker/subdomain.ts";
+import { getAccountSubdomain } from "./worker/shared.ts";
 import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 
 /**
