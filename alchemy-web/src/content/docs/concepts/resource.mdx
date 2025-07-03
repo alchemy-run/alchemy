@@ -166,6 +166,46 @@ return this.create({/* updated properties */});
 ```
 :::
 
+# Adoption
+
+When creating a resource, Alchemy will fail if a resource with the same name already exists. Resource adoption allows you to opt in to using the pre-existing resource instead.
+
+```typescript
+// Without adoption - fails if bucket already exists
+const bucket = await R2Bucket("my-bucket", {
+  name: "existing-bucket",
+});
+
+// With adoption - uses existing bucket if it exists
+const bucket = await R2Bucket("my-bucket", {
+  name: "existing-bucket",
+  adopt: true,
+});
+```
+
+During the **create phase**, if a resource already exists:
+- **Without adoption** (default): Throws an "already exists" error
+- **With adoption**: Finds and adopts the existing resource
+
+# Replacement
+
+Sometimes it's impossible to UPDATE a resource (e.g., you cannot rename an R2 Bucket). In these cases, you need to perform a REPLACE operation to create a new version and delete the old one.
+
+```typescript
+// Trigger replacement during update phase
+if (this.phase === "update") {
+  if (this.output.name !== props.name) {
+    // Trigger replace and terminate this "update" phase
+    this.replace();
+    // (unreachable code)
+  } else {
+    return updateResource();
+  }
+}
+```
+
+After calling `this.replace()`, the "update" phase terminates and re-invokes with "create" to create the new resource. The old resource is deleted when you call `app.finalize()`.
+
 ## Testing
 
 See the [Testing](/concepts/testing) documentation for a comprehensive walkthrough on how to test your own resources.

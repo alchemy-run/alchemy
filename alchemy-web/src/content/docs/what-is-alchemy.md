@@ -205,6 +205,10 @@ const db = await D1Database("app-db", {
 });
 ```
 
+:::caution
+Not all resources support local development. See the [Local Development](/concepts/dev) documentation for more information.
+:::
+
 ## Resource Adoption
 
 When creating a resource, Alchemy will fail if a resource with the same name already exists. You can opt in to adopt existing resources instead:

@@ -5,6 +5,8 @@ sidebar:
   order: 1
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 Alchemy's development mode provides a powerful local development experience for Cloudflare Workers, featuring hot reloading, local resource emulation, and seamless integration with remote Cloudflare services.
 
 > **Note:** Development mode is currently in beta. Some features may not work as expected.
@@ -13,10 +15,28 @@ Alchemy's development mode provides a powerful local development experience for 
 
 To run Alchemy in development mode, use the `--dev` flag when running your `alchemy.run.ts` script:
 
-```bash
-bun run alchemy.run.ts --dev
-npx tsx alchemy.run.ts --dev
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```bash
+    bun run alchemy.run.ts --dev
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```bash
+    npx tsx alchemy.run.ts --dev
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm tsx alchemy.run.ts --dev
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn tsx alchemy.run.ts --dev
+    ```
+  </TabItem>
+</Tabs>
 
 This starts Alchemy in development mode, which will:
 
@@ -27,13 +47,32 @@ This starts Alchemy in development mode, which will:
 
 Alchemy does not watch your `alchemy.run.ts` file for changes. To automatically apply changes to your configuration, you can the watch mode associated with your runtime environment. For example:
 
-```bash
-# Using bun's watch mode
-bun run --watch alchemy.run.ts
-
-# Using Node.js watch mode
-npx tsx --watch alchemy.run.ts
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```bash
+    # Using bun's watch mode
+    bun run --watch alchemy.run.ts
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```bash
+    # Using Node.js watch mode
+    npx tsx --watch alchemy.run.ts
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    # Using pnpm watch mode
+    pnpm tsx --watch alchemy.run.ts
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    # Using yarn watch mode
+    yarn tsx --watch alchemy.run.ts
+    ```
+  </TabItem>
+</Tabs>
 
 Development mode is enabled automatically when the `--watch` flag is detected.
 
@@ -77,10 +116,28 @@ const website = await Website("my-website", {
 
 If no command is specified, Alchemy will automatically detect and run the appropriate dev command based on your project's package manager:
 
-- **bun**: `bun vite dev`
-- **npm**: `npx vite dev`
-- **pnpm**: `pnpm vite dev`
-- **yarn**: `yarn vite dev`
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```bash
+    bun vite dev
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```bash
+    npx vite dev
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm vite dev
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn vite dev
+    ```
+  </TabItem>
+</Tabs>
 
 ### Vite Integration
 

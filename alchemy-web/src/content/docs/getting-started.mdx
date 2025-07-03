@@ -16,18 +16,65 @@ Alchemy is a simple TypeScript script that you run to deploy infrastructure. All
    ```sh
    mkdir my-alchemy-app
    cd my-alchemy-app
-   bun init -y
-   bun add alchemy
-   bun add -g wrangler
    ```
+
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun init -y
+       bun add alchemy
+       bun add -g wrangler
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npm init -y
+       npm install alchemy
+       npm install -g wrangler
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm init
+       pnpm add alchemy
+       pnpm add -g wrangler
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn init -y
+       yarn add alchemy
+       yarn global add wrangler
+       ```
+     </TabItem>
+   </Tabs>
 
 2. **Login to Cloudflare**
 
    Authenticate with your Cloudflare account.
 
-   ```sh
-   wrangler login
-   ```
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun wrangler login
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx wrangler login
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm wrangler login
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn wrangler login
+       ```
+     </TabItem>
+   </Tabs>
 
    :::tip
    Make sure you have a [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier works)
@@ -70,9 +117,28 @@ Alchemy is a simple TypeScript script that you run to deploy infrastructure. All
 
    Run with `--watch` for hot reloading during development:
 
-   ```sh
-   bun --watch ./alchemy.run.ts
-   ```
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun --watch ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx tsx --watch ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm tsx --watch ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn tsx --watch ./alchemy.run.ts
+       ```
+     </TabItem>
+   </Tabs>
 
    Your worker will be available locally with live updates as you edit your code.
 
@@ -90,19 +156,57 @@ Alchemy is a simple TypeScript script that you run to deploy infrastructure. All
 
    Remove `--watch` to deploy to Cloudflare:
 
-   ```sh
-   bun ./alchemy.run.ts
-   ```
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+   </Tabs>
 
    Visit the URL to see your worker live on Cloudflare's edge network.
 
-8. **Tear down**
+8. **(Optional) Tear down**
 
-   Clean up all resources when you're done:
+   Pass `--destroy` to delete all of the resources:
 
-   ```sh
-   bun ./alchemy.run.ts --destroy
-   ```
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun ./alchemy.run.ts --destroy
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx tsx ./alchemy.run.ts --destroy
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm tsx ./alchemy.run.ts --destroy
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn tsx ./alchemy.run.ts --destroy
+       ```
+     </TabItem>
+   </Tabs>
 
 </Steps>
 

@@ -25,16 +25,56 @@ This design choice keeps Alchemy simple while still providing the convenience of
 
 Control what phase your infrastructure script runs in:
 
-```sh
-# Deploy/update resources (default)
-bun ./alchemy.run
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    # Deploy/update resources (default)
+    bun ./alchemy.run
 
-# Read-only mode - doesn't modify resources
-bun ./alchemy.run --read
+    # Read-only mode - doesn't modify resources
+    bun ./alchemy.run --read
 
-# Destroy all resources
-bun ./alchemy.run --destroy
-```
+    # Destroy all resources
+    bun ./alchemy.run --destroy
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    # Deploy/update resources (default)
+    npx tsx ./alchemy.run
+
+    # Read-only mode - doesn't modify resources
+    npx tsx ./alchemy.run --read
+
+    # Destroy all resources
+    npx tsx ./alchemy.run --destroy
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    # Deploy/update resources (default)
+    pnpm tsx ./alchemy.run
+
+    # Read-only mode - doesn't modify resources
+    pnpm tsx ./alchemy.run --read
+
+    # Destroy all resources
+    pnpm tsx ./alchemy.run --destroy
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    # Deploy/update resources (default)
+    yarn tsx ./alchemy.run
+
+    # Read-only mode - doesn't modify resources
+    yarn tsx ./alchemy.run --read
+
+    # Destroy all resources
+    yarn tsx ./alchemy.run --destroy
+    ```
+  </TabItem>
+</Tabs>
 
 Learn more about phases in the [phase concepts guide](/concepts/phase).
 
@@ -42,21 +82,71 @@ Learn more about phases in the [phase concepts guide](/concepts/phase).
 
 Control logging output:
 
-```sh
-# Quiet mode - suppress Create/Update/Delete messages  
-bun ./alchemy.run --quiet
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    # Quiet mode - suppress Create/Update/Delete messages  
+    bun ./alchemy.run --quiet
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    # Quiet mode - suppress Create/Update/Delete messages  
+    npx tsx ./alchemy.run --quiet
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    # Quiet mode - suppress Create/Update/Delete messages  
+    pnpm tsx ./alchemy.run --quiet
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    # Quiet mode - suppress Create/Update/Delete messages  
+    yarn tsx ./alchemy.run --quiet
+    ```
+  </TabItem>
+</Tabs>
 
 ### Environment Control
 
 Specify which stage/environment to target:
 
-```sh
-# Deploy to a specific stage
-bun ./alchemy.run --stage production
-bun ./alchemy.run --stage staging
-bun ./alchemy.run --stage dev
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    # Deploy to a specific stage
+    bun ./alchemy.run --stage production
+    bun ./alchemy.run --stage staging
+    bun ./alchemy.run --stage dev
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    # Deploy to a specific stage
+    npx tsx ./alchemy.run --stage production
+    npx tsx ./alchemy.run --stage staging
+    npx tsx ./alchemy.run --stage dev
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    # Deploy to a specific stage
+    pnpm tsx ./alchemy.run --stage production
+    pnpm tsx ./alchemy.run --stage staging
+    pnpm tsx ./alchemy.run --stage dev
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    # Deploy to a specific stage
+    yarn tsx ./alchemy.run --stage production
+    yarn tsx ./alchemy.run --stage staging
+    yarn tsx ./alchemy.run --stage dev
+    ```
+  </TabItem>
+</Tabs>
 
 By default, the stage is set to `process.env.USER` (your username). You can also use `ALCHEMY_STAGE` or `PASSWORD` environment variables to control staging behavior.
 
@@ -64,10 +154,32 @@ By default, the stage is set to `process.env.USER` (your username). You can also
 
 Provide encryption password via environment variable:
 
-```sh
-# Set password for encrypting/decrypting secrets
-ALCHEMY_PASSWORD=my-secret-key bun ./alchemy.run
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun">
+    ```sh
+    # Set password for encrypting/decrypting secrets
+    ALCHEMY_PASSWORD=my-secret-key bun ./alchemy.run
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    # Set password for encrypting/decrypting secrets
+    ALCHEMY_PASSWORD=my-secret-key npx tsx ./alchemy.run
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    # Set password for encrypting/decrypting secrets
+    ALCHEMY_PASSWORD=my-secret-key pnpm tsx ./alchemy.run
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    # Set password for encrypting/decrypting secrets
+    ALCHEMY_PASSWORD=my-secret-key yarn tsx ./alchemy.run
+    ```
+  </TabItem>
+</Tabs>
 
 ## How It Works
 
@@ -120,34 +232,88 @@ await app.finalize();
 Deploy commands:
 
 <Tabs syncKey="pkgManager">
-<TabItem label="Deploy">
-```sh
-bun ./alchemy.run
-```
-</TabItem>
-<TabItem label="Deploy to Production">
-```sh
-bun ./alchemy.run --stage production
-```
-</TabItem>
-<TabItem label="Read-only Check">
-```sh
-bun ./alchemy.run --read
-```
-</TabItem>
-<TabItem label="Quiet Deploy">
-```sh
-bun ./alchemy.run --quiet
-```
-</TabItem>
-<TabItem label="Destroy Everything">
-```sh
-bun ./alchemy.run --destroy
-```
-</TabItem>
-<TabItem label="Deploy with Secrets">
-```sh
-ALCHEMY_PASSWORD=my-secret-key bun ./alchemy.run
-```
-</TabItem>
+  <TabItem label="bun">
+    ```sh
+    # Deploy
+    bun ./alchemy.run
+
+    # Deploy to Production
+    bun ./alchemy.run --stage production
+
+    # Read-only Check
+    bun ./alchemy.run --read
+
+    # Quiet Deploy
+    bun ./alchemy.run --quiet
+
+    # Destroy Everything
+    bun ./alchemy.run --destroy
+
+    # Deploy with Secrets
+    ALCHEMY_PASSWORD=my-secret-key bun ./alchemy.run
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```sh
+    # Deploy
+    npx tsx ./alchemy.run
+
+    # Deploy to Production
+    npx tsx ./alchemy.run --stage production
+
+    # Read-only Check
+    npx tsx ./alchemy.run --read
+
+    # Quiet Deploy
+    npx tsx ./alchemy.run --quiet
+
+    # Destroy Everything
+    npx tsx ./alchemy.run --destroy
+
+    # Deploy with Secrets
+    ALCHEMY_PASSWORD=my-secret-key npx tsx ./alchemy.run
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```sh
+    # Deploy
+    pnpm tsx ./alchemy.run
+
+    # Deploy to Production
+    pnpm tsx ./alchemy.run --stage production
+
+    # Read-only Check
+    pnpm tsx ./alchemy.run --read
+
+    # Quiet Deploy
+    pnpm tsx ./alchemy.run --quiet
+
+    # Destroy Everything
+    pnpm tsx ./alchemy.run --destroy
+
+    # Deploy with Secrets
+    ALCHEMY_PASSWORD=my-secret-key pnpm tsx ./alchemy.run
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```sh
+    # Deploy
+    yarn tsx ./alchemy.run
+
+    # Deploy to Production
+    yarn tsx ./alchemy.run --stage production
+
+    # Read-only Check
+    yarn tsx ./alchemy.run --read
+
+    # Quiet Deploy
+    yarn tsx ./alchemy.run --quiet
+
+    # Destroy Everything
+    yarn tsx ./alchemy.run --destroy
+
+    # Deploy with Secrets
+    ALCHEMY_PASSWORD=my-secret-key yarn tsx ./alchemy.run
+    ```
+  </TabItem>
 </Tabs> 
