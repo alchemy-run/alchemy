@@ -1451,7 +1451,7 @@ export const _Worker = Resource(
                 : customDomain.zoneId,
             adopt:
               typeof customDomain === "string"
-                ? false
+                ? (props.adopt ?? false)
                 : (customDomain.adopt ?? props.adopt),
           });
         }),
@@ -1480,7 +1480,7 @@ export const _Worker = Resource(
               typeof routeConfig === "string" ? undefined : routeConfig.zoneId, // Route resource will handle inference if not provided
             adopt:
               typeof routeConfig === "string"
-                ? false
+                ? (props.adopt ?? false)
                 : (routeConfig.adopt ?? props.adopt),
             accountId: props.accountId,
             apiKey: props.apiKey,
