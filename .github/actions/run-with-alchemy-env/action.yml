@@ -1,25 +1,25 @@
-name: 'Run Command with Alchemy Environment'
-description: 'Runs a command with all standard Alchemy environment variables set'
+name: "Run Command with Alchemy Environment"
+description: "Runs a command with all standard Alchemy environment variables set"
 
 inputs:
   command:
-    description: 'Command to run'
+    description: "Command to run"
     required: true
   working-directory:
-    description: 'Working directory to run the command in'
+    description: "Working directory to run the command in"
     required: false
-    default: '.'
+    default: "."
   aws-region:
-    description: 'AWS region to use'
+    description: "AWS region to use"
     required: false
-    default: 'us-west-2'
+    default: "us-west-2"
   branch-prefix:
-    description: 'Branch prefix for resource naming'
+    description: "Branch prefix for resource naming"
     required: false
-    default: ''
+    default: ""
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Run command with Alchemy environment
       shell: bash
@@ -28,6 +28,7 @@ runs:
       env:
         CI: true
         ALCHEMY_STATE_STORE: cloudflare
+        ALCHEMY_STATE_TOKEN: ${{ env.ALCHEMY_STATE_TOKEN }}
         AWS_REGION: ${{ inputs.aws-region }}
         BRANCH_PREFIX: ${{ inputs.branch-prefix }}
         # All secrets loaded from SSM parameter via setup-alchemy action
@@ -47,6 +48,6 @@ runs:
         UPSTASH_EMAIL: sam@alchemy.run
         SENTRY_AUTH_TOKEN: ${{ env.SENTRY_AUTH_TOKEN }}
         SENTRY_ORG: ${{ env.SENTRY_ORG }}
-        VERCEL_ACCESS_TOKEN: ${{ env.VERCEL_ACCESS_TOKEN }} 
+        VERCEL_ACCESS_TOKEN: ${{ env.VERCEL_ACCESS_TOKEN }}
         PLANETSCALE_ORG_ID: ${{ env.PLANETSCALE_ORG_ID }}
         PLANETSCALE_API_TOKEN: ${{ env.PLANETSCALE_API_TOKEN }}

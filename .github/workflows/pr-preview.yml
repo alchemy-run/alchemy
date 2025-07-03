@@ -28,24 +28,19 @@ jobs:
 
       - name: Deploy Website Preview
         id: deploy
-        run: |
-          echo "Deploying website preview for PR #${{ github.event.pull_request.number }}"
-          cd alchemy-web
-          bun run deploy 2>&1 | tee deploy.log
+        run: bun deploy:website
         env:
-          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
-          PULL_REQUEST: ${{ github.event.pull_request.number }}
-          BRANCH_PREFIX: pr-${{ github.event.pull_request.number }}
+          ALCHEMY_PASSWORD: ${{ env.ALCHEMY_PASSWORD }}
           ALCHEMY_STATE_STORE: cloudflare
           ALCHEMY_STATE_TOKEN: ${{ env.ALCHEMY_STATE_TOKEN }}
           AWS_REGION: us-west-2
-          # Pass GitHub token for GitHubComment resource
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # All secrets loaded from SSM parameter
-          ALCHEMY_PASSWORD: ${{ env.ALCHEMY_PASSWORD }}
+          BRANCH_PREFIX: pr-${{ github.event.pull_request.number }}
           CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_KEY: ${{ env.CLOUDFLARE_API_KEY }}
           CLOUDFLARE_EMAIL: ${{ env.CLOUDFLARE_EMAIL }}
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
 
   cleanup-preview:
     if: ${{ github.event.action == 'closed' }}
@@ -64,21 +59,16 @@ jobs:
           aws-region: us-west-2
 
       - name: Cleanup Website Preview
-        run: |
-          echo "Cleaning up website preview for PR #${{ github.event.pull_request.number }}"
-          # Change to alchemy-web directory to run the same alchemy.run.ts with --destroy flag
-          cd alchemy-web
-          bun run alchemy.run.ts --destroy
+        run: bun deploy:website --destroy
         env:
-          PULL_REQUEST: ${{ github.event.pull_request.number }}
-          BRANCH_PREFIX: pr-${{ github.event.pull_request.number }}
+          ALCHEMY_PASSWORD: ${{ env.ALCHEMY_PASSWORD }}
           ALCHEMY_STATE_STORE: cloudflare
           ALCHEMY_STATE_TOKEN: ${{ env.ALCHEMY_STATE_TOKEN }}
           AWS_REGION: us-west-2
-          # Pass GitHub token for GitHubComment resource
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # All secrets loaded from SSM parameter
-          ALCHEMY_PASSWORD: ${{ env.ALCHEMY_PASSWORD }}
+          BRANCH_PREFIX: pr-${{ github.event.pull_request.number }}
           CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_KEY: ${{ env.CLOUDFLARE_API_KEY }}
           CLOUDFLARE_EMAIL: ${{ env.CLOUDFLARE_EMAIL }}
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
