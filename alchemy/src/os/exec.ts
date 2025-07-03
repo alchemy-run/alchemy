@@ -48,7 +48,7 @@ export interface ExecProps {
   /**
    * Environment variables to set
    */
-  env?: Record<string, string | Secret>;
+  env?: Record<string, string | Secret<string>>;
 
   /**
    * Whether to inherit stdio from parent process
@@ -125,14 +125,14 @@ export interface Exec extends Resource<"os::Exec">, ExecProps {
  *
  * @example
  * // Run a command with secrets in environment variables
- * import { secret } from "../secret.ts";
+ * import alchemy from "alchemy";
  *
  * const deploy = await Exec("deploy-app", {
  *   command: "npm run deploy",
  *   env: {
  *     NODE_ENV: "production",
- *     API_KEY: secret(process.env.API_KEY),
- *     DATABASE_URL: secret(process.env.DATABASE_URL)
+ *     API_KEY: alchemy.secret(process.env.API_KEY),
+ *     DATABASE_URL: alchemy.secret(process.env.DATABASE_URL)
  *   }
  * });
  *
