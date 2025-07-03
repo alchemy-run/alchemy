@@ -1636,4 +1636,91 @@ describe("Worker Resource", () => {
       await assertWorkerDoesNotExist(api, workerName);
     }
   });
+
+  test("destroy versioned worker does not delete base worker", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-version-preserve-base`;
+    const versionLabel = "test-version";
+
+    let baseWorker: Worker | undefined;
+    let versionedWorker: Worker | undefined;
+
+    try {
+      // First create a base worker
+      baseWorker = await Worker(`${workerName}-base`, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from base worker!', {
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            }
+          };
+        `,
+        format: "esm",
+        url: true,
+      });
+
+      expect(baseWorker.id).toBeTruthy();
+      expect(baseWorker.name).toEqual(workerName);
+      expect(baseWorker.version).toBeUndefined();
+      expect(baseWorker.url).toBeTruthy();
+
+      // Verify base worker exists and works
+      const baseResponse = await fetchAndExpectOK(baseWorker.url!);
+      const baseText = await baseResponse.text();
+      expect(baseText).toEqual("Hello from base worker!");
+
+      // Create a versioned worker with the same name
+      versionedWorker = await Worker(`${workerName}-version`, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from versioned worker!', {
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            }
+          };
+        `,
+        format: "esm",
+        version: versionLabel,
+      });
+
+      expect(versionedWorker.id).toBeTruthy();
+      expect(versionedWorker.name).toEqual(workerName);
+      expect(versionedWorker.version).toEqual(versionLabel);
+      expect(versionedWorker.url).toBeTruthy();
+
+      // Verify versioned worker exists and works
+      const versionResponse = await fetchAndExpectOK(versionedWorker.url!);
+      const versionText = await versionResponse.text();
+      expect(versionText).toEqual("Hello from versioned worker!");
+
+      // Now destroy ONLY the versioned worker
+      await destroy(versionedWorker);
+
+      // Verify the base worker still exists via API
+      const baseWorkerCheckResponse = await api.get(
+        `/accounts/${api.accountId}/workers/scripts/${workerName}`,
+      );
+      expect(baseWorkerCheckResponse.status).toEqual(200);
+
+      // Verify the base worker still works
+      const baseStillWorksResponse = await fetchAndExpectOK(baseWorker.url!);
+      const baseStillWorksText = await baseStillWorksResponse.text();
+      expect(baseStillWorksText).toEqual("Hello from base worker!");
+
+      // The versioned worker should no longer be accessible
+      // (Note: The version URL may still respond but it's effectively "deleted" from a management perspective)
+    } finally {
+      // Clean up the remaining base worker
+      await destroy(scope);
+      await assertWorkerDoesNotExist(api, workerName);
+    }
+  });
 });

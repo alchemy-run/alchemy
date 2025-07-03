@@ -1,6 +1,7 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { Readable } from "node:stream";
+import { promiseWithResolvers } from "../../util/promise-with-resolvers.ts";
 
 export class HTTPServer {
   server: http.Server;
@@ -10,7 +11,7 @@ export class HTTPServer {
     port?: number;
     fetch: (request: Request) => Promise<Response>;
   }) {
-    const { promise, resolve } = Promise.withResolvers<void>();
+    const { promise, resolve } = promiseWithResolvers<void>();
     this.ready = promise;
     this.server = http
       .createServer(async (req, res) => {
