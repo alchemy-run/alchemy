@@ -1,11 +1,11 @@
 import type esbuild from "esbuild";
 import type { Bindings } from "../bindings.ts";
+import { esbuildPluginAlias } from "../worker-bundle/plugin-alias.ts";
+import { esbuildPluginHybridNodeCompat } from "../worker-bundle/plugin-hybrid-node-compat.ts";
+import { esbuildPluginWasm } from "../worker-bundle/plugin-wasm.ts";
 import type { WorkerProps } from "../worker.ts";
-import { createAliasPlugin } from "./alias-plugin.ts";
 import { external, external_als } from "./external.ts";
 import { getNodeJSCompatMode } from "./nodejs-compat-mode.ts";
-import { nodeJsCompatPlugin } from "./nodejs-compat.ts";
-import { wasmPlugin } from "./wasm-plugin.ts";
 
 interface DevWorkerContext {
   context: esbuild.BuildContext;
@@ -70,17 +70,10 @@ export async function createWorkerDevContext<B extends Bindings>(
       ...props.bundle?.loader,
     },
     plugins: [
-      wasmPlugin,
+      esbuildPluginWasm(),
       ...(props.bundle?.plugins ?? []),
-      ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
-      ...(props.bundle?.alias
-        ? [
-            createAliasPlugin({
-              alias: props.bundle?.alias,
-              projectRoot,
-            }),
-          ]
-        : []),
+      ...(nodeJsCompatMode === "v2" ? [esbuildPluginHybridNodeCompat()] : []),
+      ...(props.bundle?.alias ? [esbuildPluginAlias(props.bundle.alias)] : []),
       hotReloadPlugin(hooks),
     ],
     external: [
