@@ -1374,31 +1374,34 @@ export const _Worker = Resource(
     };
 
     if (this.phase === "delete") {
-      // Delete any queue consumers attached to this worker first
-      await deleteQueueConsumers(api, workerName);
+      // only delete the worker if it's not a version
+      if (!props.version) {
+        // Delete any queue consumers attached to this worker first
+        await deleteQueueConsumers(api, workerName);
 
-      await withExponentialBackoff(
-        () =>
-          deleteWorker(api, {
-            workerName,
-            namespace:
-              typeof props.namespace === "string"
-                ? props.namespace
-                : props.namespace?.namespaceId,
-            url: this.output.url,
-          }),
-        (err) =>
-          (err.status === 400 &&
-            err.message.includes(
-              "is still referenced by service bindings in Workers",
-            )) ||
-          err.status === 500 ||
-          err.status === 503,
-        10,
-        100,
-      );
+        await withExponentialBackoff(
+          () =>
+            deleteWorker(api, {
+              workerName,
+              namespace:
+                typeof props.namespace === "string"
+                  ? props.namespace
+                  : props.namespace?.namespaceId,
+              url: this.output.url,
+            }),
+          (err) =>
+            (err.status === 400 &&
+              err.message.includes(
+                "is still referenced by service bindings in Workers",
+              )) ||
+            err.status === 500 ||
+            err.status === 503,
+          10,
+          100,
+        );
 
-      return this.destroy();
+        return this.destroy();
+      }
     }
 
     if (this.phase === "create") {
