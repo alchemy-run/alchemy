@@ -2,7 +2,7 @@ import alchemy from "alchemy";
 import { DOStateStore, Website } from "alchemy/cloudflare";
 import { GitHubComment } from "alchemy/github";
 
-const stage = process.env.PULL_REQUEST ?? process.env.STAGE ?? "dev";
+const stage = process.env.STAGE ?? process.env.PULL_REQUEST ?? "dev";
 
 const app = await alchemy("alchemy:website", {
   stateStore: (scope) => new DOStateStore(scope),
@@ -14,7 +14,7 @@ const domain =
     ? "alchemy.run"
     : stage === "dev"
       ? "dev.alchemy.run"
-      : `pr-${process.env.PULL_REQUEST}.alchemy.run`;
+      : undefined;
 
 const website = await Website("website", {
   name: "alchemy-website",
@@ -23,8 +23,12 @@ const website = await Website("website", {
   adopt: true,
   wrangler: false,
   version: stage === "prod" ? undefined : stage,
-  domains: process.env.PULL_REQUEST ? undefined : [domain],
+  domains: domain ? [domain] : undefined,
 });
+
+const url = domain ? `https://${domain}` : website.url;
+
+console.log(url);
 
 if (process.env.PULL_REQUEST) {
   await GitHubComment("comment", {
@@ -36,7 +40,7 @@ if (process.env.PULL_REQUEST) {
 
 Your website preview is ready! 
 
-**Preview URL:** ${website.url}
+**Preview URL:** ${url}
 
 This preview was built from commit ${process.env.GITHUB_SHA}
 
@@ -44,7 +48,5 @@ This preview was built from commit ${process.env.GITHUB_SHA}
 <sub>🤖 This comment will be updated automatically when you push new commits to this PR.</sub>`,
   });
 }
-
-console.log(domain ? `https://${domain}` : website.url);
 
 await app.finalize();
