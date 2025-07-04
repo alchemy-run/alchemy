@@ -114,12 +114,11 @@ async function resolveOutputs(
   metafile: esbuild.Metafile,
   props: ESBuildBundleProps,
 ): Promise<WorkerBundle> {
-  const root = path.resolve(props.outdir, props.cwd);
+  const root = path.resolve(props.outdir);
   const paths: string[] = [];
   let entrypoint: string | undefined;
   for (const [key, value] of Object.entries(metafile.outputs)) {
-    const fullPath = path.join(props.cwd, key);
-    const name = path.relative(root, fullPath);
+    const name = path.relative(root, path.join(props.cwd, key));
     paths.push(name);
     if (value.entryPoint === props.entrypoint) {
       entrypoint = name;

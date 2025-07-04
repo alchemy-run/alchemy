@@ -1,4 +1,5 @@
 import type esbuild from "esbuild";
+import kleur from "kleur";
 import { spawn } from "node:child_process";
 import {
   existsSync,
@@ -79,6 +80,7 @@ import {
 } from "./worker-metadata.ts";
 import { WorkerStub, isWorkerStub } from "./worker-stub.ts";
 import { WorkerSubdomain } from "./worker-subdomain.ts";
+import { tail } from "./worker/tail.ts";
 import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 
 /**
@@ -1134,7 +1136,8 @@ export const _Worker = Resource(
     let putWorkerResult: PutWorkerResult;
     if (dev.type === "remote") {
       // todo(john): clean this up and add log tail
-      const controller = createAbortController();
+      const controller = new AbortController();
+      cleanups.push(() => controller.abort());
       const watcher = await bundle.watch(controller.signal);
       const promise = new DeferredPromise<PutWorkerResult>();
       void watcher.pipeTo(
@@ -1207,6 +1210,8 @@ export const _Worker = Resource(
         }),
       );
       putWorkerResult = await promise.value;
+      const closeTail = await tail(api, id, workerName);
+      cleanups.push(closeTail);
     } else {
       putWorkerResult = await uploadWorkerScript(props, await bundle.create());
     }
@@ -1322,14 +1327,21 @@ export const _Worker = Resource(
   },
 );
 
-const createAbortController = () => {
-  const controller = new AbortController();
-  process.on("SIGINT", () => {
-    controller.abort();
-    process.exit(0);
-  });
-  return controller;
-};
+const cleanups: (() => any)[] = [];
+let exiting = false;
+
+process.on("SIGINT", async () => {
+  if (cleanups.length > 0) {
+    if (!exiting) {
+      exiting = true;
+      logger.log(`\n${kleur.gray("Exiting...")}`);
+    }
+    // TODO: for some reason this runs twice...
+    // and this whole thing feels hacky anyway
+    await Promise.allSettled(cleanups.map((cleanup) => cleanup()));
+  }
+  process.exit(0);
+});
 
 type Dev =
   | {
@@ -1617,7 +1629,8 @@ async function provisionMiniflare(props: {
         type: "miniflare-error";
         error: Error;
       };
-  const controller = createAbortController();
+  const controller = new AbortController();
+  cleanups.push(() => controller.abort());
   (await props.bundle.watch(controller.signal))
     .pipeThrough(
       new TransformStream<WorkerBundleChunk, Events>({
@@ -1767,14 +1780,13 @@ function upsertDevCommand(props: {
     },
     stdio: ["inherit", "inherit", "inherit"],
   });
-  process.on("SIGINT", () => {
+  cleanups.push(() => {
     try {
       unlinkSync(persistFile);
     } catch {
       // ignore
     }
-    proc.kill("SIGINT");
-    process.exit(0);
+    proc.kill();
   });
   if (proc.pid) {
     mkdirSync(path.dirname(persistFile), { recursive: true });
