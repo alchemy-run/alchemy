@@ -22,7 +22,8 @@ interface WorkerSubdomainProps extends CloudflareApiOptions {
   retain?: boolean;
 }
 
-interface WorkerSubdomain extends Resource<"cloudflare::WorkerSubdomain"> {
+export interface WorkerSubdomain
+  extends Resource<"cloudflare::WorkerSubdomain"> {
   /**
    * The `workers.dev` URL for the worker or preview version.
    */

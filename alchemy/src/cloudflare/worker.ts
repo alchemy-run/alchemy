@@ -974,8 +974,6 @@ export const _Worker = Resource(
     id: string,
     props: WorkerProps<B>,
   ): Promise<Worker<B>> {
-    // Use the provided name
-
     if (props.projectRoot) {
       logger.warn("projectRoot is deprecated, use cwd instead");
       props.cwd = props.projectRoot;
@@ -1184,33 +1182,29 @@ export const _Worker = Resource(
       }),
     );
 
-    await Promise.all(tasks);
-
-    const domains = await provisionDomains({
-      scriptName: workerName,
-      adopt: props.adopt,
-      domains: props.domains,
-      apiOptions,
-    });
-    const routes = await provisionRoutes({
-      scriptName: workerName,
-      adopt: props.adopt,
-      routes: props.routes,
-      apiOptions,
-    });
-
-    const subdomain =
-      (props.url ?? dispatchNamespace === undefined)
-        ? await WorkerSubdomain("url", {
-            scriptName: workerName,
-            previewVersionId:
-              props.version && putWorkerResult.metadata.has_preview
-                ? putWorkerResult.id
-                : undefined,
-            retain: !!props.version,
-            ...apiOptions,
-          })
-        : undefined;
+    const [domains, routes, subdomain] = await Promise.all([
+      // TODO: can you provision domains and routes in parallel, or is there a dependency?
+      provisionDomains({
+        scriptName: workerName,
+        adopt: props.adopt,
+        domains: props.domains,
+        apiOptions,
+      }),
+      provisionRoutes({
+        scriptName: workerName,
+        adopt: props.adopt,
+        routes: props.routes,
+        apiOptions,
+      }),
+      provisionSubdomain({
+        scriptName: workerName,
+        enable: props.url ?? dispatchNamespace === undefined,
+        isVersion: !!props.version,
+        putWorkerResult,
+        apiOptions,
+      }),
+      ...tasks,
+    ]);
 
     const now = Date.now();
 
@@ -1555,6 +1549,26 @@ async function provisionRoutes(props: {
       });
     }),
   );
+}
+
+async function provisionSubdomain(props: {
+  scriptName: string;
+  enable: boolean;
+  isVersion: boolean;
+  putWorkerResult: PutWorkerResult;
+  apiOptions: CloudflareApiOptions;
+}): Promise<WorkerSubdomain | undefined> {
+  if (props.enable) {
+    return await WorkerSubdomain("url", {
+      scriptName: props.scriptName,
+      previewVersionId:
+        props.isVersion && props.putWorkerResult.metadata.has_preview
+          ? props.putWorkerResult.id
+          : undefined,
+      retain: props.isVersion,
+      ...props.apiOptions,
+    });
+  }
 }
 
 async function provisionMiniflare(props: {
