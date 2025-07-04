@@ -1,3 +1,21 @@
+## v0.43.1
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **os**: Allow secrets in Exec environment variables &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/538 [<samp>(911f7)</samp>](https://github.com/sam-goodwin/alchemy/commit/911f7ec0)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Node LTS compatibility - replace Promise.withResolvers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/521 [<samp>(cb3af)</samp>](https://github.com/sam-goodwin/alchemy/commit/cb3af3aa)
+- **cloudflare**:
+  - Resolve wrangler.jsonc relative to worker cwd &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/519 [<samp>(e1b4c)</samp>](https://github.com/sam-goodwin/alchemy/commit/e1b4cdec)
+  - Adopt inner CustomDomain and Route if Worker.adopt &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/540 [<samp>(c21c5)</samp>](https://github.com/sam-goodwin/alchemy/commit/c21c55a5)
+  - Don't delete a versioned Worker &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/541 [<samp>(fef08)</samp>](https://github.com/sam-goodwin/alchemy/commit/fef086f8)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.43.0...v0.43.1)
+
+---
+
 ## v0.43.0
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

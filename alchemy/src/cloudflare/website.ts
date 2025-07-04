@@ -123,7 +123,6 @@ export async function Website<B extends Bindings>(
       parent: Scope.current,
     },
     async (scope) => {
-      // directory from which all relative paths are resolved
       const cwd = path.resolve(props.cwd || process.cwd());
 
       function resolveAbsPath<S extends string | undefined>(f: S): S {
@@ -132,30 +131,18 @@ export async function Website<B extends Bindings>(
         ) as S;
       }
 
-      // absolute path to the wrangler.jsonc file
+      const mainPath = resolveAbsPath(props.main);
+      const assetsDirPath = resolveAbsPath(
+        typeof props.assets === "string"
+          ? props.assets
+          : (props.assets?.dist ?? "dist"),
+      );
       const wranglerJsonPath = resolveAbsPath(
         typeof wrangler === "boolean"
           ? "wrangler.jsonc"
           : typeof wrangler === "string"
             ? wrangler
             : (wrangler?.path ?? "wrangler.jsonc"),
-      );
-
-      // absolute path to the worker entrypoint
-      const mainPath = resolveAbsPath(props.main);
-
-      // absolute path to the worker entrypoint (if different in wrangler.jsonc)
-      const wranglerMainPath = resolveAbsPath(
-        typeof wrangler === "object"
-          ? (wrangler.main ?? props.main!)
-          : props.main,
-      );
-
-      // absolute path to the assets directory
-      const assetsDirPath = resolveAbsPath(
-        typeof props.assets === "string"
-          ? props.assets
-          : (props.assets?.dist ?? "dist"),
       );
 
       const workerName = props.name ?? id;
@@ -165,10 +152,8 @@ export async function Website<B extends Bindings>(
         compatibilityDate:
           props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
         name: workerName,
-        entrypoint: mainPath
-          ? // this path should be relative to the process.cwd() because it is used by esbuild
-            path.relative(process.cwd(), mainPath)
-          : undefined,
+        cwd: path.relative(process.cwd(), cwd),
+        entrypoint: mainPath,
         assets: {
           html_handling: "auto-trailing-slash",
           not_found_handling: props.spa ? "single-page-application" : "none",
@@ -189,24 +174,23 @@ export default {
           ? {
               command: props.dev.command,
               url: props.dev.url,
-              cwd,
             }
           : undefined,
       } as WorkerProps<any> & { name: string };
 
       if (wrangler) {
-        // paths in wrangler.jsonc must be relative to it
-        const relativeToWrangler = <S extends string | undefined>(f: S): S =>
-          (f ? path.relative(path.dirname(wranglerJsonPath), f) : f) as S;
+        const wranglerPath = path.relative(cwd, wranglerJsonPath);
+        const wranglerDir = path.dirname(wranglerPath);
+
         await WranglerJson("wrangler.jsonc", {
-          path: wranglerJsonPath,
+          path: wranglerPath,
           worker: workerProps,
-          main: relativeToWrangler(wranglerMainPath),
+          main: mainPath ? path.relative(wranglerDir, mainPath) : undefined,
           // hard-code the assets directory because we haven't yet included the assets binding
           assets: {
             binding: "ASSETS",
             // path must be relative to the wrangler.jsonc file
-            directory: relativeToWrangler(assetsDirPath),
+            directory: path.relative(wranglerDir, assetsDirPath),
           },
         });
       }

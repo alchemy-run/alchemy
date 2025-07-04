@@ -136,6 +136,12 @@ export interface BaseWorkerProps<
   /**
    * The root directory of the project
    */
+  cwd?: string;
+
+  /**
+   * The root directory of the project
+   * @deprecated Use `cwd` instead
+   */
   projectRoot?: string;
 
   /**
@@ -466,6 +472,12 @@ export type Worker<
      * The name of the worker
      */
     name: string;
+
+    /**
+     * The root directory of the project
+     * @default process.cwd()
+     */
+    cwd: string;
 
     /**
      * Time at which the worker was created
@@ -962,11 +974,20 @@ export const _Worker = Resource(
     props: WorkerProps<B>,
   ): Promise<Worker<B>> {
     // Use the provided name
+
+    if (props.projectRoot) {
+      logger.warn("projectRoot is deprecated, use cwd instead");
+      props.cwd = props.projectRoot;
+    }
+
+    const cwd = props.cwd ? path.resolve(props.cwd) : process.cwd();
+    const relativeCwd =
+      cwd === process.cwd() ? undefined : path.relative(process.cwd(), cwd);
+
     const workerName = props.name ?? id;
     const compatibilityDate =
       props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
     const compatibilityFlags = props.compatibilityFlags ?? [];
-    const cwd = props.projectRoot ?? process.cwd();
 
     const bundle = await normalizeWorkerBundle({
       entrypoint: props.entrypoint,
@@ -994,7 +1015,7 @@ export const _Worker = Resource(
           });
           url = dev.url;
           break;
-        case "miniflare":
+        case "miniflare": {
           url = await provisionMiniflare({
             id,
             workerName,
@@ -1005,12 +1026,14 @@ export const _Worker = Resource(
             port: dev.port,
           });
           break;
+        }
       }
       return this({
         type: "service",
         id,
         entrypoint: props.entrypoint,
         name: workerName,
+        cwd: relativeCwd,
         compatibilityDate,
         compatibilityFlags,
         format: props.format || "esm", // Include format in the output
@@ -1047,8 +1070,10 @@ export const _Worker = Resource(
 
     if (this.phase === "delete") {
       await bundle.delete?.();
-      await deleteQueueConsumers(api, workerName);
-      await deleteWorker(api, workerName, dispatchNamespace);
+      if (!props.version) {
+        await deleteQueueConsumers(api, workerName);
+        await deleteWorker(api, workerName, dispatchNamespace);
+      }
       return this.destroy();
     }
 
@@ -1093,9 +1118,7 @@ export const _Worker = Resource(
         assetUploadResult,
       });
     };
-
     let scriptBundle = await bundle.run();
-
     if (this.phase === "create") {
       if (props.version) {
         // When version is specified, we adopt existing workers or create them if they don't exist
@@ -1271,6 +1294,7 @@ export const _Worker = Resource(
       id,
       entrypoint: props.entrypoint,
       name: workerName,
+      cwd: relativeCwd,
       compatibilityDate,
       compatibilityFlags,
       format: props.format || "esm", // Include format in the output
@@ -1972,15 +1996,28 @@ async function deleteWorker(
   scriptName: string,
   dispatchNamespace: string | undefined,
 ) {
-  const deleteResponse = await api.delete(
-    dispatchNamespace
-      ? `/accounts/${api.accountId}/workers/dispatch/namespaces/${dispatchNamespace}/scripts/${scriptName}?force=true`
-      : `/accounts/${api.accountId}/workers/scripts/${scriptName}?force=true`,
-  );
+  await withExponentialBackoff(
+    async () => {
+      const deleteResponse = await api.delete(
+        dispatchNamespace
+          ? `/accounts/${api.accountId}/workers/dispatch/namespaces/${dispatchNamespace}/scripts/${scriptName}?force=true`
+          : `/accounts/${api.accountId}/workers/scripts/${scriptName}?force=true`,
+      );
 
-  if (!deleteResponse.ok && deleteResponse.status !== 404) {
-    await handleApiError(deleteResponse, "delete", "worker", scriptName);
-  }
+      if (!deleteResponse.ok && deleteResponse.status !== 404) {
+        await handleApiError(deleteResponse, "delete", "worker", scriptName);
+      }
+    },
+    (err) =>
+      (err.status === 400 &&
+        err.message.includes(
+          "is still referenced by service bindings in Workers",
+        )) ||
+      err.status === 500 ||
+      err.status === 503,
+    10,
+    100,
+  );
 }
 
 async function getVersionMetadata(

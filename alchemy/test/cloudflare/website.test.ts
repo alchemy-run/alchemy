@@ -133,21 +133,11 @@ describe("Website Resource", () => {
 
       // Verify wrangler.jsonc was created in the correct location (subDir)
       const wranglerPath = path.join(subDir, "wrangler.jsonc");
-      const wranglerExists = await fs
-        .access(wranglerPath)
-        .then(() => true)
-        .catch(() => false);
-
-      expect(wranglerExists).toBe(true);
+      await expect(fs.access(wranglerPath)).resolves.toBeUndefined();
 
       // Verify wrangler.jsonc was NOT created in the root tempDir
       const rootWranglerPath = path.join(tempDir, "wrangler.jsonc");
-      const rootWranglerExists = await fs
-        .access(rootWranglerPath)
-        .then(() => true)
-        .catch(() => false);
-
-      expect(rootWranglerExists).toBe(false);
+      await expect(fs.access(rootWranglerPath)).rejects.toThrow();
 
       // Verify the contents of wrangler.jsonc
       const wranglerContent = await fs.readFile(wranglerPath, "utf-8");
@@ -207,21 +197,11 @@ describe("Website Resource", () => {
 
       // Verify custom wrangler file was created in the correct location (subDir)
       const wranglerPath = path.join(subDir, "custom-wrangler.json");
-      const wranglerExists = await fs
-        .access(wranglerPath)
-        .then(() => true)
-        .catch(() => false);
-
-      expect(wranglerExists).toBe(true);
+      await expect(fs.access(wranglerPath)).resolves.toBeUndefined();
 
       // Verify custom wrangler file was NOT created in the root tempDir
       const rootWranglerPath = path.join(tempDir, "custom-wrangler.json");
-      const rootWranglerExists = await fs
-        .access(rootWranglerPath)
-        .then(() => true)
-        .catch(() => false);
-
-      expect(rootWranglerExists).toBe(false);
+      await expect(fs.access(rootWranglerPath)).rejects.toThrow();
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
       await destroy(scope);

@@ -27,7 +27,7 @@ export interface WranglerJsonProps {
   /**
    * Path to write the wrangler.json file to
    *
-   * @default cwd/wrangler.json
+   * @default worker.cwd/wrangler.json
    */
   path?: string;
 
@@ -89,14 +89,27 @@ export const WranglerJson = Resource(
     _id: string,
     props: WranglerJsonProps,
   ): Promise<WranglerJson> {
-    // Default path is wrangler.json in current directory
-    const filePath = props.path || "wrangler.jsonc";
-
     if (this.phase === "delete") {
       return this.destroy();
     }
 
-    if (props.worker.entrypoint === undefined) {
+    const cwd = props.worker.cwd
+      ? path.resolve(props.worker.cwd)
+      : process.cwd();
+
+    const toAbsolute = <T extends string | undefined>(input: T): T => {
+      return (input ? path.resolve(cwd, input) : undefined) as T;
+    };
+
+    const main = toAbsolute(props.main ?? props.worker.entrypoint);
+    let filePath = toAbsolute(props.path ?? cwd);
+    if (!path.basename(filePath).match(".json")) {
+      filePath = path.join(filePath, props.name ?? "wrangler.jsonc");
+    }
+
+    const dirname = path.dirname(filePath);
+
+    if (!main) {
       throw new Error(
         "Worker must have an entrypoint to generate a wrangler.json",
       );
@@ -107,16 +120,27 @@ export const WranglerJson = Resource(
     const spec: WranglerJsonSpec = {
       name: worker.name,
       // Use entrypoint as main if it exists
-      main: props.main ?? worker.entrypoint,
+      main: path.relative(dirname, main),
       // see: https://developers.cloudflare.com/workers/configuration/compatibility-dates/
       compatibility_date: worker.compatibilityDate,
       compatibility_flags: props.worker.compatibilityFlags,
-      assets: props.assets,
+      assets: props.assets
+        ? {
+            directory: toAbsolute(props.assets.directory),
+            binding: props.assets.binding,
+          }
+        : undefined,
     };
 
     // Process bindings if they exist
     if (worker.bindings) {
-      processBindings(spec, worker.bindings, worker.eventSources, worker.name);
+      processBindings(
+        spec,
+        worker.bindings,
+        worker.eventSources,
+        worker.name,
+        cwd,
+      );
     }
 
     // Add environment variables as vars
@@ -128,13 +152,17 @@ export const WranglerJson = Resource(
       spec.triggers = { crons: worker.crons };
     }
 
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    if (spec.assets) {
+      spec.assets.directory = path.relative(dirname, spec.assets.directory);
+    }
+
+    await fs.mkdir(dirname, { recursive: true });
     await fs.writeFile(filePath, await formatJson(spec));
 
     // Return the resource
     return this({
       ...props,
-      path: filePath,
+      path: path.relative(cwd, filePath),
       spec,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -381,6 +409,7 @@ function processBindings(
   bindings: Bindings,
   eventSources: EventSource[] | undefined,
   workerName: string,
+  workerCwd: string,
 ): void {
   // Arrays to collect different binding types
   const kvNamespaces: { binding: string; id: string; preview_id: string }[] =
@@ -527,7 +556,7 @@ function processBindings(
       secrets.push(bindingName);
     } else if (binding.type === "assets") {
       spec.assets = {
-        directory: binding.path,
+        directory: path.resolve(workerCwd, binding.path),
         binding: bindingName,
       };
     } else if (binding.type === "workflow") {

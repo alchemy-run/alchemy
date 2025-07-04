@@ -15,7 +15,8 @@
       "./alchemy/src/**/*.tsx",
       "./alchemy/src/**/*.js",
       "./alchemy/test/**/*.ts",
-      "./alchemy-web/.vitepress/**/*.ts",
+      "./alchemy-web/**/*.ts",
+      "./alchemy-web/**/*.js",
       "./scripts/**/*.ts",
       "./stacks/**/*.ts",
       "./examples/*/src/**/*.ts",
@@ -98,7 +99,7 @@
     "indentWidth": 2,
     "lineWidth": 80,
     "lineEnding": "lf",
-    "includes": ["**", "!**/node_modules/**", "!**/*.d.ts"]
+    "includes": ["**", "!**/node_modules/**", "!**/*.d.ts", "!**/*.mdx"]
   },
   "javascript": {
     "formatter": {
