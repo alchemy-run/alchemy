@@ -2,7 +2,7 @@ import type esbuild from "esbuild";
 
 export interface HotReloadPluginProps {
   onBuildStart?: () => void | Promise<void>;
-  onBuildEnd?: (files: esbuild.OutputFile[]) => void | Promise<void>;
+  onBuildEnd?: (result: esbuild.BuildResult) => void | Promise<void>;
   onBuildError?: (errors: esbuild.Message[]) => void | Promise<void>;
 }
 
@@ -12,16 +12,14 @@ export function esbuildPluginHotReload(
   return {
     name: "alchemy-hot-reload",
     setup(build) {
-      build.onStart(props.onBuildStart ?? (() => {}));
+      if (props.onBuildStart) {
+        build.onStart(props.onBuildStart);
+      }
       build.onEnd(async (result) => {
         if (result.errors.length > 0) {
           await props.onBuildError?.(result.errors);
-          return;
-        }
-      });
-      build.onEnd(async (result) => {
-        if (result.outputFiles && result.outputFiles.length > 0) {
-          await props.onBuildEnd?.(result.outputFiles);
+        } else {
+          await props.onBuildEnd?.(result);
         }
       });
     },
