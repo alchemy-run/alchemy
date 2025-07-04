@@ -62,6 +62,7 @@ console.log(url);
 
 export const ogWorker = await Worker("alchemy-og-worker", {
   entrypoint: "./src/og-worker.ts",
+  compatibilityFlags: ["nodejs_compat"],
   routes: [
     {
       pattern: "og.alchemy.run/*",
