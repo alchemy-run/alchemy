@@ -1534,6 +1534,7 @@ async function provisionRoutes(props: {
     if (typeof route === "string") {
       return {
         pattern: route,
+        adopt: props.adopt,
       };
     }
     return {
