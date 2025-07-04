@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { BUILD_DATE } from "../build-date.ts";
 import type { Context } from "../context.ts";
 import type { BundleProps } from "../esbuild/bundle.ts";
@@ -1166,11 +1167,11 @@ export const _Worker = Resource(
       );
     }
 
-    if (props.crons) {
+    if (!isDeepStrictEqual(props.crons, this.output?.crons)) {
       tasks.push(
         api.put(
           `/accounts/${api.accountId}/workers/scripts/${workerName}/schedules`,
-          props.crons.map((cron) => ({ cron })),
+          props.crons?.map((cron) => ({ cron })) ?? [],
         ),
       );
     }
@@ -1202,10 +1203,11 @@ export const _Worker = Resource(
       (props.url ?? dispatchNamespace === undefined)
         ? await WorkerSubdomain("url", {
             scriptName: workerName,
-            versionId:
+            previewVersionId:
               props.version && putWorkerResult.metadata.has_preview
                 ? putWorkerResult.id
                 : undefined,
+            retain: !!props.version,
             ...apiOptions,
           })
         : undefined;

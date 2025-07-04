@@ -4,11 +4,28 @@ import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
 import { getAccountSubdomain } from "./worker/shared.ts";
 
 interface WorkerSubdomainProps extends CloudflareApiOptions {
+  /**
+   * The name of the script to create a subdomain for.
+   */
   scriptName: string;
-  versionId?: string;
+  /**
+   * The version ID of the worker, if versioning is enabled and the worker is a preview.
+   *
+   * @default undefined
+   */
+  previewVersionId?: string;
+  /**
+   * Prevents the subdomain from being deleted when the worker is deleted.
+   *
+   * @default false
+   */
+  retain?: boolean;
 }
 
 interface WorkerSubdomain extends Resource<"cloudflare::WorkerSubdomain"> {
+  /**
+   * The `workers.dev` URL for the worker or preview version.
+   */
   url: string;
 }
 
@@ -21,13 +38,15 @@ export const WorkerSubdomain = Resource(
   ) {
     const api = await createCloudflareApi(props);
     if (this.phase === "delete") {
-      await api.post(
-        `/accounts/${api.accountId}/workers/scripts/${props.scriptName}/subdomain`,
-        { enabled: false },
-        {
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      if (!props.retain) {
+        await api.post(
+          `/accounts/${api.accountId}/workers/scripts/${props.scriptName}/subdomain`,
+          { enabled: false },
+          {
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
       return this.destroy();
     }
     await api.post(
@@ -40,8 +59,8 @@ export const WorkerSubdomain = Resource(
     const subdomain = await getAccountSubdomain(api);
     const base = `${subdomain}.workers.dev`;
     let url: string;
-    if (props.versionId) {
-      url = `https://${props.versionId.substring(0, 8)}-${props.scriptName}.${base}`;
+    if (props.previewVersionId) {
+      url = `https://${props.previewVersionId.substring(0, 8)}-${props.scriptName}.${base}`;
     } else {
       url = `https://${props.scriptName}.${base}`;
     }
