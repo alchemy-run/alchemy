@@ -990,6 +990,7 @@ export const _Worker = Resource(
 
     const bundle = normalizeWorkerBundle({
       entrypoint: props.entrypoint,
+      script: props.script,
       format: props.format,
       noBundle: props.noBundle,
       rules: "rules" in props ? props.rules : undefined,
