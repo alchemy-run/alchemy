@@ -7,7 +7,7 @@ import assert from "node:assert";
 import { assertNever } from "../../util/assert-never.ts";
 import { logger } from "../../util/logger.ts";
 import { Self, type Binding, type WorkerBindingSpec } from "../bindings.ts";
-import type { WorkerBundle } from "../worker-bundle.ts";
+import type { WorkerBundle } from "../bundle/index.ts";
 import type { WorkerProps } from "../worker.ts";
 
 export type MiniflareWorkerOptions = Pick<
