@@ -1008,7 +1008,7 @@ export const _Worker = Resource(
 
       switch (dev.type) {
         case "command":
-          upsertDevCommand({
+          createDevCommand({
             id,
             command: dev.command,
             cwd: dev.cwd ?? process.cwd(),
@@ -1017,7 +1017,7 @@ export const _Worker = Resource(
           url = dev.url;
           break;
         case "miniflare": {
-          url = await provisionMiniflare({
+          url = await createMiniflare({
             id,
             workerName,
             compatibilityDate,
@@ -1095,7 +1095,7 @@ export const _Worker = Resource(
       }
     }
 
-    const uploadWorkerScript = async (
+    const putWorkerWithAssets = async (
       props: WorkerProps<B>,
       scriptBundle: WorkerBundle,
     ) => {
@@ -1120,13 +1120,14 @@ export const _Worker = Resource(
         assetUploadResult,
       });
     };
+
     if (this.phase === "create") {
       if (props.version) {
         // When version is specified, we adopt existing workers or create them if they don't exist
         if (!(await workerExists(api, workerName))) {
           // Create the base worker first if it doesn't exist
           const baseWorkerProps = { ...props, version: undefined };
-          await uploadWorkerScript(baseWorkerProps, await bundle.create());
+          await putWorkerWithAssets(baseWorkerProps, await bundle.create());
         }
         // We always "adopt" when publishing versions
       } else if (!props.adopt) {
@@ -1156,7 +1157,7 @@ export const _Worker = Resource(
                 break;
               case "end": {
                 if (promise.status === "pending") {
-                  await uploadWorkerScript(props, chunk.result)
+                  await putWorkerWithAssets(props, chunk.result)
                     .then((result) => promise.resolve(result))
                     .catch((error) => {
                       controller.abort();
@@ -1214,7 +1215,7 @@ export const _Worker = Resource(
       const tail = await createTail(api, id, workerName);
       cleanups.push(() => tail.close());
     } else {
-      putWorkerResult = await uploadWorkerScript(props, await bundle.create());
+      putWorkerResult = await putWorkerWithAssets(props, await bundle.create());
     }
 
     const tasks: Promise<unknown>[] = [];
@@ -1595,7 +1596,7 @@ async function provisionSubdomain(props: {
   }
 }
 
-async function provisionMiniflare(props: {
+async function createMiniflare(props: {
   id: string;
   workerName: string;
   compatibilityDate: string;
@@ -1747,7 +1748,7 @@ async function provisionMiniflare(props: {
   return await startPromise.value;
 }
 
-function upsertDevCommand(props: {
+function createDevCommand(props: {
   id: string;
   command: string;
   cwd: string;
