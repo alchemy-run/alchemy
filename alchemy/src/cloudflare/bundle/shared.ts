@@ -29,8 +29,8 @@ export type WorkerBundleChunk =
     };
 
 export interface WorkerBundleProvider {
-  run(): Promise<WorkerBundle>;
-  watch(): Promise<ReadableStream<WorkerBundleChunk>>;
+  create(): Promise<WorkerBundle>;
+  watch(signal: AbortSignal): Promise<ReadableStream<WorkerBundleChunk>>;
   delete?(): Promise<void>;
 }
 

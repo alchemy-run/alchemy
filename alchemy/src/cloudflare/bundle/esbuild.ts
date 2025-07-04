@@ -22,25 +22,23 @@ interface ESBuildBundleProps
   entrypoint: string;
   cwd: string;
   outdir: string;
-  signal: AbortSignal;
 }
 
 export class ESBuildBundleProvider implements WorkerBundleProvider {
   constructor(private props: ESBuildBundleProps) {}
 
-  async run(): Promise<WorkerBundle> {
+  async create(): Promise<WorkerBundle> {
     const options = buildOptions(this.props);
     const result = await esbuild.build(options);
     return resolveOutputs(result.metafile, this.props);
   }
 
-  async watch(): Promise<ReadableStream<WorkerBundleChunk>> {
+  async watch(signal: AbortSignal): Promise<ReadableStream<WorkerBundleChunk>> {
     const options = buildOptions(this.props);
-    let context: esbuild.BuildContext | undefined;
 
     return new ReadableStream<WorkerBundleChunk>({
       start: async (controller) => {
-        context = await esbuild.context({
+        const context = await esbuild.context({
           ...options,
           plugins: [
             ...(options.plugins ?? []),
@@ -61,15 +59,10 @@ export class ESBuildBundleProvider implements WorkerBundleProvider {
           ],
         });
         await context.watch();
-        this.props.signal.addEventListener("abort", () => {
-          context?.dispose();
-          context = undefined;
+        signal.addEventListener("abort", async () => {
+          await context.dispose();
           controller.close();
         });
-      },
-      cancel: async () => {
-        context?.dispose();
-        context = undefined;
       },
     });
   }
@@ -82,7 +75,6 @@ function buildOptions({
   entrypoint,
   nodeCompat: compatibility,
   cwd,
-  signal: _,
   ...props
 }: ESBuildBundleProps) {
   return {

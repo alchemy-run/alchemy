@@ -1002,6 +1002,7 @@ export const _Worker = Resource(
 
     if (dev.local) {
       let url: string | undefined;
+
       switch (dev.type) {
         case "command":
           upsertDevCommand({
@@ -1025,6 +1026,7 @@ export const _Worker = Resource(
           break;
         }
       }
+
       return this({
         type: "service",
         id,
@@ -1115,14 +1117,13 @@ export const _Worker = Resource(
         assetUploadResult,
       });
     };
-    let scriptBundle = await bundle.run();
     if (this.phase === "create") {
       if (props.version) {
         // When version is specified, we adopt existing workers or create them if they don't exist
         if (!(await workerExists(api, workerName))) {
           // Create the base worker first if it doesn't exist
           const baseWorkerProps = { ...props, version: undefined };
-          await uploadWorkerScript(baseWorkerProps, scriptBundle);
+          await uploadWorkerScript(baseWorkerProps, await bundle.create());
         }
         // We always "adopt" when publishing versions
       } else if (!props.adopt) {
@@ -1130,7 +1131,85 @@ export const _Worker = Resource(
       }
     }
 
-    const putWorkerResult = await uploadWorkerScript(props, scriptBundle);
+    let putWorkerResult: PutWorkerResult;
+    if (dev.type === "remote") {
+      // todo(john): clean this up and add log tail
+      const controller = createAbortController();
+      const watcher = await bundle.watch(controller.signal);
+      const promise = new DeferredPromise<PutWorkerResult>();
+      void watcher.pipeTo(
+        new WritableStream({
+          async write(chunk) {
+            switch (chunk.type) {
+              case "start":
+                logger.task("", {
+                  message: "start",
+                  status: "pending",
+                  resource: id,
+                  prefix: "build",
+                  prefixColor: "cyanBright",
+                });
+                break;
+              case "end": {
+                if (promise.status === "pending") {
+                  await uploadWorkerScript(props, chunk.result)
+                    .then((result) => promise.resolve(result))
+                    .catch((error) => {
+                      controller.abort();
+                      promise.reject(error);
+                    });
+                  return;
+                }
+
+                logger.task("", {
+                  message: "reload",
+                  status: "success",
+                  resource: id,
+                  prefix: "build",
+                  prefixColor: "cyanBright",
+                });
+                await putWorker(api, {
+                  ...props,
+                  workerName,
+                  scriptBundle: chunk.result,
+                  dispatchNamespace,
+                  version: props.version,
+                  compatibilityDate,
+                  compatibilityFlags,
+                  assetUploadResult: assetsBinding
+                    ? {
+                        keepAssets: true,
+                        assetConfig: props.assets,
+                      }
+                    : undefined,
+                });
+                logger.task("", {
+                  message: "updated",
+                  status: "success",
+                  resource: id,
+                  prefix: "build",
+                  prefixColor: "greenBright",
+                });
+                break;
+              }
+              case "error":
+                logger.task("", {
+                  message: "error",
+                  status: "failure",
+                  resource: id,
+                  prefix: "build",
+                  prefixColor: "redBright",
+                });
+                logger.error(chunk.errors);
+                break;
+            }
+          },
+        }),
+      );
+      putWorkerResult = await promise.value;
+    } else {
+      putWorkerResult = await uploadWorkerScript(props, await bundle.create());
+    }
 
     const tasks: Promise<unknown>[] = [];
 
@@ -1206,81 +1285,6 @@ export const _Worker = Resource(
 
     const now = Date.now();
 
-    if (dev.type === "remote") {
-      // todo(john): clean this up and add log tail
-      const watcher = await bundle.watch();
-      void watcher.pipeTo(
-        new WritableStream({
-          async write(chunk) {
-            switch (chunk.type) {
-              case "start":
-                logger.task("", {
-                  message: "start",
-                  status: "pending",
-                  resource: id,
-                  prefix: "build",
-                  prefixColor: "cyanBright",
-                });
-                break;
-              case "end": {
-                if (scriptBundle.hash === chunk.result.hash) {
-                  logger.task("", {
-                    message: "no-change",
-                    status: "success",
-                    resource: id,
-                    prefix: "build",
-                    prefixColor: "greenBright",
-                  });
-                  return;
-                }
-                logger.task("", {
-                  message: "upload",
-                  status: "success",
-                  resource: id,
-                  prefix: "build",
-                  prefixColor: "greenBright",
-                });
-                await putWorker(api, {
-                  ...props,
-                  workerName,
-                  scriptBundle: chunk.result,
-                  dispatchNamespace,
-                  version: props.version,
-                  compatibilityDate,
-                  compatibilityFlags,
-                  assetUploadResult: assetsBinding
-                    ? {
-                        keepAssets: true,
-                        assetConfig: props.assets,
-                      }
-                    : undefined,
-                });
-                logger.task("", {
-                  message: "updated",
-                  status: "success",
-                  resource: id,
-                  prefix: "build",
-                  prefixColor: "greenBright",
-                });
-                scriptBundle = chunk.result;
-                break;
-              }
-              case "error":
-                logger.task("", {
-                  message: "error",
-                  status: "failure",
-                  resource: id,
-                  prefix: "build",
-                  prefixColor: "redBright",
-                });
-                logger.error(chunk.errors);
-                break;
-            }
-          },
-        }),
-      );
-    }
-
     // Construct the output
     return this({
       ...props,
@@ -1317,6 +1321,15 @@ export const _Worker = Resource(
     } as unknown as Worker<B>);
   },
 );
+
+const createAbortController = () => {
+  const controller = new AbortController();
+  process.on("SIGINT", () => {
+    controller.abort();
+    process.exit(0);
+  });
+  return controller;
+};
 
 type Dev =
   | {
@@ -1604,7 +1617,8 @@ async function provisionMiniflare(props: {
         type: "miniflare-error";
         error: Error;
       };
-  (await props.bundle.watch())
+  const controller = createAbortController();
+  (await props.bundle.watch(controller.signal))
     .pipeThrough(
       new TransformStream<WorkerBundleChunk, Events>({
         async transform(chunk, controller) {
@@ -1676,6 +1690,7 @@ async function provisionMiniflare(props: {
                 prefixColor: "redBright",
               });
               if (startPromise.status === "pending") {
+                controller.abort();
                 startPromise.reject(chunk.errors);
               } else {
                 logger.error(chunk.errors);

@@ -13,7 +13,7 @@ interface InlineBundleProps extends WorkerBundleBaseProps {
 export class InlineBundleProvider implements WorkerBundleProvider {
   constructor(private props: InlineBundleProps) {}
 
-  async run(): Promise<WorkerBundle> {
+  async create(): Promise<WorkerBundle> {
     return {
       entrypoint: "worker.js",
       files: [
@@ -34,7 +34,7 @@ export class InlineBundleProvider implements WorkerBundleProvider {
   async watch(): Promise<ReadableStream<WorkerBundleChunk>> {
     return new ReadableStream<WorkerBundleChunk>({
       start: async (controller) => {
-        controller.enqueue({ type: "end", result: await this.run() });
+        controller.enqueue({ type: "end", result: await this.create() });
         controller.close();
       },
     });

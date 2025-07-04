@@ -15,7 +15,6 @@ interface FSBundleProps extends WorkerBundleBaseProps {
   globs?: string[];
   cwd: string;
   sourcemaps?: boolean;
-  signal: AbortSignal;
 }
 
 export class FSBundleProvider implements WorkerBundleProvider {
@@ -23,7 +22,6 @@ export class FSBundleProvider implements WorkerBundleProvider {
   private entrypoint: string;
   private globs: string[];
   private format: "esm" | "cjs";
-  private signal: AbortSignal;
 
   constructor(props: FSBundleProps) {
     const entrypoint = path.resolve(props.entrypoint, props.cwd);
@@ -36,10 +34,9 @@ export class FSBundleProvider implements WorkerBundleProvider {
       ...(props.sourcemaps ? ["**/*.js.map"] : []),
     ];
     this.format = props.format;
-    this.signal = props.signal;
   }
 
-  async run(log = true): Promise<WorkerBundle> {
+  async create(log = true): Promise<WorkerBundle> {
     const fileNames = new Set<string>();
     await Promise.all(
       this.globs.map(async (glob) => {
@@ -67,16 +64,16 @@ export class FSBundleProvider implements WorkerBundleProvider {
     };
   }
 
-  async watch(): Promise<ReadableStream<WorkerBundleChunk>> {
-    let prev = await this.run();
+  async watch(signal: AbortSignal): Promise<ReadableStream<WorkerBundleChunk>> {
+    let result = await this.create();
     const watcher = fs.watch(this.root, {
       recursive: true,
-      signal: this.signal,
+      signal,
     });
     const iterator = watcher[Symbol.asyncIterator]();
     return new ReadableStream({
       start: async (controller) => {
-        controller.enqueue({ type: "end", result: await this.run() });
+        controller.enqueue({ type: "end", result });
       },
       pull: async (controller) => {
         const next = await iterator.next().catch((err) => {
@@ -89,10 +86,10 @@ export class FSBundleProvider implements WorkerBundleProvider {
           controller.close();
         } else {
           controller.enqueue({ type: "start" });
-          const current = await this.run(false);
-          if (current.hash !== prev.hash) {
-            controller.enqueue({ type: "end", result: current });
-            prev = current;
+          const update = await this.create(false);
+          if (update.hash !== result.hash) {
+            result = update;
+            controller.enqueue({ type: "end", result });
           }
         }
       },
