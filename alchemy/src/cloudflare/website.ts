@@ -185,7 +185,6 @@ export default {
         await WranglerJson("wrangler.jsonc", {
           path: wranglerPath,
           worker: workerProps,
-          main: mainPath ? path.relative(wranglerDir, mainPath) : undefined,
           // hard-code the assets directory because we haven't yet included the assets binding
           assets: {
             binding: "ASSETS",
