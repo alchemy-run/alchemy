@@ -337,9 +337,7 @@ export interface BaseWorkerProps<
          */
         port?: number;
         /**
-         * EXPERIMENTAL: Whether to run the worker remotely instead of locally.
-         *
-         * When this is enabled, hot reloading will not work.
+         * Whether to run the worker remotely instead of locally.
          *
          * @default false
          */
@@ -988,7 +986,7 @@ export const _Worker = Resource(
       props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
     const compatibilityFlags = props.compatibilityFlags ?? [];
 
-    const bundle = await normalizeWorkerBundle({
+    const bundle = normalizeWorkerBundle({
       entrypoint: props.entrypoint,
       format: props.format,
       noBundle: props.noBundle,

@@ -23,9 +23,9 @@ interface NormalizeWorkerBundleProps {
   outdir: string;
 }
 
-export async function normalizeWorkerBundle(
+export function normalizeWorkerBundle(
   props: NormalizeWorkerBundleProps,
-): Promise<WorkerBundleProvider> {
+): WorkerBundleProvider {
   const nodeCompat = validateNodeCompat({
     compatibilityDate: props.compatibilityDate,
     compatibilityFlags: props.compatibilityFlags,
@@ -43,12 +43,18 @@ export async function normalizeWorkerBundle(
       "Either `script` or `entrypoint` must be provided for workers",
     );
   }
+  const controller = new AbortController();
+  process.on("SIGINT", () => {
+    controller.abort();
+    process.exit(0);
+  });
   if (props.noBundle) {
     return new FSBundleProvider({
       entrypoint: props.entrypoint,
       format: props.format ?? "esm",
       nodeCompat,
       cwd: props.cwd,
+      signal: controller.signal,
     });
   }
   return new ESBuildBundleProvider({
@@ -57,6 +63,7 @@ export async function normalizeWorkerBundle(
     nodeCompat,
     cwd: props.cwd,
     outdir: props.outdir,
+    signal: controller.signal,
     ...props.bundle,
   });
 }

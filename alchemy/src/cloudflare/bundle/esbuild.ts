@@ -22,6 +22,7 @@ interface ESBuildBundleProps
   entrypoint: string;
   cwd: string;
   outdir: string;
+  signal: AbortSignal;
 }
 
 export class ESBuildBundleProvider implements WorkerBundleProvider {
@@ -60,6 +61,11 @@ export class ESBuildBundleProvider implements WorkerBundleProvider {
           ],
         });
         await context.watch();
+        this.props.signal.addEventListener("abort", () => {
+          context?.dispose();
+          context = undefined;
+          controller.close();
+        });
       },
       cancel: async () => {
         context?.dispose();
@@ -76,6 +82,7 @@ function buildOptions({
   entrypoint,
   nodeCompat: compatibility,
   cwd,
+  signal: _,
   ...props
 }: ESBuildBundleProps) {
   return {

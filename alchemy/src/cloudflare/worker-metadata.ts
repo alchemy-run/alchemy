@@ -1,5 +1,6 @@
 import { assertNever } from "../util/assert-never.ts";
 import { logger } from "../util/logger.ts";
+import { memoize } from "../util/memoize.ts";
 import type { CloudflareApi } from "./api.ts";
 import {
   Self,
@@ -624,51 +625,54 @@ interface WorkerSettings {
   [key: string]: any;
 }
 
-async function getWorkerSettings(
-  api: CloudflareApi,
-  workerName: string,
-): Promise<WorkerSettings | undefined> {
-  // Fetch the bindings for a worker by calling the Cloudflare API endpoint:
-  // GET /accounts/:account_id/workers/scripts/:script_name/bindings
-  // See: https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/script_and_version_settings/methods/get/
-  const response = await api.get(
-    `/accounts/${api.accountId}/workers/scripts/${workerName}/settings`,
-  );
-  if (response.status === 404) {
-    return undefined;
-  }
-  if (!response.ok) {
-    throw new Error(
-      `Error getting worker bindings: ${response.status} ${response.statusText}`,
+const getWorkerSettings = memoize(
+  async function getWorkerSettings(
+    api: CloudflareApi,
+    workerName: string,
+  ): Promise<WorkerSettings | undefined> {
+    // Fetch the bindings for a worker by calling the Cloudflare API endpoint:
+    // GET /accounts/:account_id/workers/scripts/:script_name/bindings
+    // See: https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/script_and_version_settings/methods/get/
+    const response = await api.get(
+      `/accounts/${api.accountId}/workers/scripts/${workerName}/settings`,
     );
-  }
-  // The result is an object with a "result" property containing the bindings array
-  const { result, success, errors } = (await response.json()) as {
-    result: {
-      bindings: WorkerBindingSpec[];
-      compatibility_date: string;
-      compatibility_flags: string[];
-      migrations: SingleStepMigration | MultiStepMigration;
-      [key: string]: any;
+    if (response.status === 404) {
+      return undefined;
+    }
+    if (!response.ok) {
+      throw new Error(
+        `Error getting worker bindings: ${response.status} ${response.statusText}`,
+      );
+    }
+    // The result is an object with a "result" property containing the bindings array
+    const { result, success, errors } = (await response.json()) as {
+      result: {
+        bindings: WorkerBindingSpec[];
+        compatibility_date: string;
+        compatibility_flags: string[];
+        migrations: SingleStepMigration | MultiStepMigration;
+        [key: string]: any;
+      };
+      success: boolean;
+      errors: Array<{
+        code: number;
+        message: string;
+        documentation_url: string;
+        [key: string]: any;
+      }>;
+      messages: Array<{
+        code: number;
+        message: string;
+        documentation_url: string;
+        [key: string]: any;
+      }>;
     };
-    success: boolean;
-    errors: Array<{
-      code: number;
-      message: string;
-      documentation_url: string;
-      [key: string]: any;
-    }>;
-    messages: Array<{
-      code: number;
-      message: string;
-      documentation_url: string;
-      [key: string]: any;
-    }>;
-  };
-  if (!success) {
-    throw new Error(
-      `Error getting worker bindings: ${response.status} ${response.statusText}\nErrors:\n${errors.map((e) => `- [${e.code}] ${e.message} (${e.documentation_url})`).join("\n")}`,
-    );
-  }
-  return result;
-}
+    if (!success) {
+      throw new Error(
+        `Error getting worker bindings: ${response.status} ${response.statusText}\nErrors:\n${errors.map((e) => `- [${e.code}] ${e.message} (${e.documentation_url})`).join("\n")}`,
+      );
+    }
+    return result;
+  },
+  (api, workerName) => `${api.accountId}:${workerName}`,
+);

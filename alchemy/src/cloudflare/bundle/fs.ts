@@ -15,6 +15,7 @@ interface FSBundleProps extends WorkerBundleBaseProps {
   globs?: string[];
   cwd: string;
   sourcemaps?: boolean;
+  signal: AbortSignal;
 }
 
 export class FSBundleProvider implements WorkerBundleProvider {
@@ -22,6 +23,7 @@ export class FSBundleProvider implements WorkerBundleProvider {
   private entrypoint: string;
   private globs: string[];
   private format: "esm" | "cjs";
+  private signal: AbortSignal;
 
   constructor(props: FSBundleProps) {
     const entrypoint = path.resolve(props.entrypoint, props.cwd);
@@ -34,6 +36,7 @@ export class FSBundleProvider implements WorkerBundleProvider {
       ...(props.sourcemaps ? ["**/*.js.map"] : []),
     ];
     this.format = props.format;
+    this.signal = props.signal;
   }
 
   async run(log = true): Promise<WorkerBundle> {
@@ -66,10 +69,9 @@ export class FSBundleProvider implements WorkerBundleProvider {
 
   async watch(): Promise<ReadableStream<WorkerBundleChunk>> {
     let prev = await this.run();
-    const controller = new AbortController();
     const watcher = fs.watch(this.root, {
       recursive: true,
-      signal: controller.signal,
+      signal: this.signal,
     });
     const iterator = watcher[Symbol.asyncIterator]();
     return new ReadableStream({
@@ -93,9 +95,6 @@ export class FSBundleProvider implements WorkerBundleProvider {
             prev = current;
           }
         }
-      },
-      cancel: () => {
-        controller.abort();
       },
     });
   }
