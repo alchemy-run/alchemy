@@ -80,7 +80,7 @@ import {
 } from "./worker-metadata.ts";
 import { WorkerStub, isWorkerStub } from "./worker-stub.ts";
 import { WorkerSubdomain } from "./worker-subdomain.ts";
-import { tail } from "./worker/tail.ts";
+import { createTail } from "./worker/tail.ts";
 import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 
 /**
@@ -1210,8 +1210,8 @@ export const _Worker = Resource(
         }),
       );
       putWorkerResult = await promise.value;
-      const closeTail = await tail(api, id, workerName);
-      cleanups.push(closeTail);
+      const tail = await createTail(api, id, workerName);
+      cleanups.push(() => tail.close());
     } else {
       putWorkerResult = await uploadWorkerScript(props, await bundle.create());
     }
