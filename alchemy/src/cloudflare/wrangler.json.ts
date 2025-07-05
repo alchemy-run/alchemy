@@ -269,6 +269,7 @@ export interface WranglerJsonSpec {
      * The ID of the KV namespace used during `wrangler dev`
      */
     preview_id?: string;
+    experimental_remote?: boolean;
   }[];
 
   /**
@@ -293,6 +294,7 @@ export interface WranglerJsonSpec {
      * The preview name of this R2 bucket at the edge.
      */
     preview_bucket_name?: string;
+    experimental_remote?: boolean;
   }[];
 
   /**
@@ -355,6 +357,7 @@ export interface WranglerJsonSpec {
      * The ID of the D1 database used during `wrangler dev`
      */
     preview_database_id?: string;
+    experimental_remote?: boolean;
   }[];
 
   /**
@@ -441,8 +444,12 @@ function processBindings(
   workerCwd: string,
 ): void {
   // Arrays to collect different binding types
-  const kvNamespaces: { binding: string; id: string; preview_id: string }[] =
-    [];
+  const kvNamespaces: {
+    binding: string;
+    id: string;
+    preview_id: string;
+    experimental_remote?: boolean;
+  }[] = [];
   const durableObjects: {
     name: string;
     class_name: string;
@@ -469,6 +476,7 @@ function processBindings(
     database_name: string;
     migrations_dir?: string;
     preview_database_id: string;
+    experimental_remote?: boolean;
   }[] = [];
   const queues: {
     producers: { queue: string; binding: string }[];
@@ -561,6 +569,9 @@ function processBindings(
         binding: bindingName,
         id: id,
         preview_id: id,
+        ...("dev" in binding && binding.dev?.remote
+          ? { experimental_remote: true }
+          : {}),
       });
     } else if (
       typeof binding === "object" &&
@@ -584,6 +595,7 @@ function processBindings(
         binding: bindingName,
         bucket_name: binding.name,
         preview_bucket_name: binding.name,
+        ...(binding.dev?.remote ? { experimental_remote: true } : {}),
       });
     } else if (binding.type === "secret") {
       // Secret binding
@@ -607,6 +619,7 @@ function processBindings(
         database_name: binding.name,
         migrations_dir: binding.migrationsDir,
         preview_database_id: binding.id,
+        ...(binding.dev?.remote ? { experimental_remote: true } : {}),
       });
     } else if (binding.type === "queue") {
       queues.producers.push({

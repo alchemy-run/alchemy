@@ -628,4 +628,49 @@ describe("WranglerJson Resource", () => {
       await destroy(scope);
     }
   });
+
+  test("with dev.remote enabled should set experimental_remote to true", async (scope) => {
+    const name = `${BRANCH_PREFIX}-test-worker-dev-remote`;
+    const tempDir = path.join(".out", "alchemy-dev-remote-test");
+    const entrypoint = path.join(tempDir, "worker.ts");
+
+    try {
+      // Create a temporary directory for the entrypoint file
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(tempDir, { recursive: true });
+      await fs.writeFile(entrypoint, esmWorkerScript);
+
+      const worker = await Worker(name, {
+        format: "esm",
+        entrypoint,
+        bindings: {
+          D1: await D1Database("test-d1-db-dev-remote", {
+            dev: { remote: true },
+          }),
+          KV: await KVNamespace("test-kv-ns-dev-remote", {
+            dev: { remote: true },
+          }),
+          R2: await R2Bucket("test-r2-bucket-dev-remote", {
+            dev: { remote: true },
+          }),
+        },
+        adopt: true,
+      });
+
+      const { spec } = await WranglerJson(
+        `${BRANCH_PREFIX}-test-wrangler-json-dev-remote`,
+        { worker },
+      );
+
+      expect(spec).toMatchObject({
+        name,
+        d1_databases: [{ binding: "D1", experimental_remote: true }],
+        kv_namespaces: [{ binding: "KV", experimental_remote: true }],
+        r2_buckets: [{ binding: "R2", experimental_remote: true }],
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await destroy(scope);
+    }
+  });
 });
