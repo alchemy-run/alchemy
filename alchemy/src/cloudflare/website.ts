@@ -212,11 +212,7 @@ export default {
             // path must be relative to the wrangler.jsonc file
             directory: path.relative(wranglerDir, assetsDirPath),
           },
-          transform: props.transform
-            ? {
-                wrangler: props.transform.wrangler,
-              }
-            : undefined,
+          transform: props.transform,
         });
       }
 
