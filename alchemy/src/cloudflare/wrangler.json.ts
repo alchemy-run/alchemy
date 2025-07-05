@@ -47,6 +47,18 @@ export interface WranglerJsonProps {
     binding: string;
     directory: string;
   };
+
+  /**
+   * Hook to modify the wrangler.json object before it's written
+   *
+   * This function receives the generated wrangler.json spec and should return
+   * a modified version. It's applied as the final transformation before the
+   * file is written to disk.
+   *
+   * @param spec - The generated wrangler.json specification
+   * @returns The modified wrangler.json specification
+   */
+  configureWrangler?: (spec: WranglerJsonSpec) => WranglerJsonSpec;
 }
 
 /**
@@ -156,14 +168,19 @@ export const WranglerJson = Resource(
       spec.assets.directory = path.relative(dirname, spec.assets.directory);
     }
 
+    // Apply the wrangler configuration hook as the final transformation
+    const finalSpec = props.configureWrangler
+      ? props.configureWrangler(spec)
+      : spec;
+
     await fs.mkdir(dirname, { recursive: true });
-    await fs.writeFile(filePath, await formatJson(spec));
+    await fs.writeFile(filePath, await formatJson(finalSpec));
 
     // Return the resource
     return this({
       ...props,
       path: path.relative(cwd, filePath),
-      spec,
+      spec: finalSpec,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
