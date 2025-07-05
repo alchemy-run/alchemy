@@ -50,6 +50,7 @@ describe("Route Resource", () => {
       // First create a worker to connect the route to
       const workerName = `${BRANCH_PREFIX}-worker-1`;
       worker = await Worker(workerName, {
+        adopt: true,
         script: `
           export default {
             fetch(request, env) {
@@ -125,6 +126,7 @@ describe("Route Resource", () => {
       // First create a worker to connect the route to
       const workerName = `${BRANCH_PREFIX}-worker-2`;
       worker = await Worker(workerName, {
+        adopt: true,
         script: `
           export default {
             fetch(request, env) {
@@ -179,6 +181,7 @@ describe("Route Resource", () => {
       // First create a worker to connect the route to
       const workerName = `${BRANCH_PREFIX}-worker-3`;
       worker = await Worker(workerName, {
+        adopt: true,
         script: `
           export default {
             fetch(request, env) {
@@ -239,6 +242,7 @@ describe("Route Resource", () => {
       // First create a worker to connect the route to
       const workerName = `${BRANCH_PREFIX}-worker-4`;
       worker = await Worker(workerName, {
+        adopt: true,
         script: `
           export default {
             fetch(request, env) {
@@ -326,6 +330,7 @@ describe("Route Resource", () => {
       // Create a worker with explicit routes
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {
@@ -397,6 +402,7 @@ describe("Route Resource", () => {
       // Create a worker with routes that will auto-infer zone ID
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {
@@ -472,6 +478,7 @@ describe("Route Resource", () => {
       // Create a worker with mixed explicit and auto-inferred routes
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {
@@ -557,6 +564,7 @@ describe("Route Resource", () => {
       // Try to create worker with routes for non-existent domain
       const workerPromise = Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {
@@ -597,6 +605,7 @@ describe("Route Resource", () => {
       // Try to create worker with duplicate route patterns
       const workerPromise = Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {
@@ -642,6 +651,7 @@ describe("Route Resource", () => {
       // Create first worker with routes
       worker1 = await Worker(workerName1, {
         name: workerName1,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {
@@ -663,6 +673,7 @@ describe("Route Resource", () => {
       // Create second worker that adopts the existing route
       worker2 = await Worker(workerName2, {
         name: workerName2,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {
@@ -718,6 +729,7 @@ describe("Route Resource", () => {
       // Create worker with initial routes
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {
@@ -740,6 +752,7 @@ describe("Route Resource", () => {
       // Update worker with different routes
       worker = await Worker(workerName, {
         name: workerName,
+        adopt: true,
         script: `
           export default {
             async fetch(request, env, ctx) {

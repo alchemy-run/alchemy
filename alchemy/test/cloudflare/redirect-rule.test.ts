@@ -1,12 +1,16 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
-import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import {
+  type CloudflareApi,
+  createCloudflareApi,
+} from "../../src/cloudflare/api.ts";
 import {
   RedirectRule,
   findRuleInRuleset,
 } from "../../src/cloudflare/redirect-rule.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { Zone } from "../../src/cloudflare/zone.ts";
+import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 import { fetchAndExpectStatus } from "./fetch-utils.ts";
 
@@ -30,10 +34,11 @@ test.beforeAll(async (_scope) => {
   });
 });
 
-describe("RedirectRule", () => {
+// this test relies on DNS prop and is therefore flaky
+describe.skipIf(!process.env.ALL_TESTS)("RedirectRule", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding test resources
 
-  test("create, update, and delete redirect rule with expression", async () => {
+  test("create, update, and delete redirect rule with expression", async (scope) => {
     let redirectRule: RedirectRule | undefined;
 
     await Worker("worker", {
@@ -114,13 +119,35 @@ describe("RedirectRule", () => {
         "Updated simple redirect",
       );
     } finally {
-      // await destroy(scope);
-      // if (redirectRule) {
-      //   await assertRedirectRuleDoesNotExist(api, zone!.id, redirectRule);
-      // }
+      await destroy(scope);
+      if (redirectRule) {
+        await assertRedirectRuleDoesNotExist(api, zone!.id, redirectRule);
+      }
     }
   });
 });
+
+/**
+ * Assert that a redirect rule does not exist in Cloudflare.
+ * This is used to verify that a redirect rule has been properly deleted.
+ *
+ * @param api - Cloudflare API client
+ * @param zoneId - Zone ID where the rule should have been deleted
+ * @param redirectRule - The redirect rule that should no longer exist
+ */
+async function assertRedirectRuleDoesNotExist(
+  api: CloudflareApi,
+  zoneId: string,
+  redirectRule: RedirectRule,
+): Promise<void> {
+  const rule = await findRuleInRuleset(
+    api,
+    zoneId,
+    redirectRule.rulesetId,
+    redirectRule.ruleId,
+  );
+  expect(rule).toBeNull();
+}
 
 /**
  * Test actual HTTP redirect behavior.
@@ -175,6 +202,4 @@ async function testRedirectBehavior(
       console.warn(`⚠ ${testDescription}: Expected Location header not found`);
     }
   }
-
-  console.log(`✓ ${testDescription}: Status code correct (${expectedStatus})`);
 }

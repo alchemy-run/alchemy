@@ -351,6 +351,21 @@ export async function prepareWorkerMetadata(
 
   const bindings = (props.bindings ?? {}) as Bindings;
 
+  // Validate that all Container and DurableObjectNamespace bindings have unique IDs
+  const bindingIds = new Map<string, string>();
+  for (const [bindingName, binding] of Object.entries(bindings)) {
+    if (typeof binding === "object" && binding !== null && "id" in binding) {
+      if (isDurableObjectNamespace(binding) || isContainer(binding)) {
+        if (bindingIds.has(binding.id)) {
+          throw new Error(
+            `Duplicate binding ID '${binding.id}' found for bindings '${bindingIds.get(binding.id)}' and '${bindingName}'. Container and DurableObjectNamespace bindings must have unique IDs.`,
+          );
+        }
+        bindingIds.set(binding.id, bindingName);
+      }
+    }
+  }
+
   // Convert bindings to the format expected by the API
   for (const [bindingName, binding] of Object.entries(bindings)) {
     // Create a copy of the binding to avoid modifying the original
