@@ -73,32 +73,6 @@ await Worker("my-worker", {
 
 ## With Transform Hook
 
-Customize the generated wrangler.json configuration for your RedwoodJS application:
-
-```ts
-import { Redwood } from "alchemy/cloudflare";
-
-const redwoodApp = await Redwood("my-redwood-app", {
-  command: "RWSDK_DEPLOY=1 bun run build",
-  transform: {
-    wrangler: (spec) => ({
-      ...spec,
-      // Add RedwoodJS-specific compatibility flags
-      compatibility_flags: ["nodejs_compat", "streams_enable_constructors"],
-      // Override the main entry point for RedwoodJS
-      main: "dist/worker.js",
-      // Add custom environment variables for RedwoodJS
-      vars: {
-        ...spec.vars,
-        REDWOOD_ENV: "production",
-        RWSDK_VERSION: "1.0.0",
-        API_VERSION: "v1",
-      },
-    }),
-  },
-});
-```
-
 The transform hook allows you to customize the wrangler.json configuration. For example, adding a custom environment variable:
 
 ```ts

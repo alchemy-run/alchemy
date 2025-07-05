@@ -79,37 +79,10 @@ await Worker("api", {
 
 ## With Transform Hook
 
-Use the `transform.wrangler` hook to customize the generated wrangler.json configuration:
-
-```ts
-const site = await Website("my-site", {
-  name: "my-site",
-  command: "npm run build",
-  assets: "./dist",
-  main: "./src/worker.ts",
-  wrangler: true,
-  transform: {
-    wrangler: (spec) => ({
-      ...spec,
-      // Override the main entry point
-      main: "custom/entry.js",
-      // Add custom compatibility flags
-      compatibility_flags: ["nodejs_compat"],
-      // Add custom environment variables
-      vars: {
-        ...spec.vars,
-        SITE_VERSION: "v1.0.0",
-        ENVIRONMENT: "production",
-      },
-    }),
-  },
-});
-```
-
 The transform hook allows you to customize the wrangler.json configuration. For example, adding a custom environment variable:
 
 ```ts
-await Website("my-site", {
+await Website("my-app", {
   transform: {
     wrangler: (spec) => ({
       ...spec,
@@ -121,7 +94,3 @@ await Website("my-site", {
   },
 });
 ```
-
-:::tip
-The transform hook is only applied when `wrangler` is enabled (set to `true` or an object with configuration).
-:::
