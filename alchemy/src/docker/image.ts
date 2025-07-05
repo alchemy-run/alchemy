@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
@@ -134,8 +135,16 @@ export const Image = Resource(
     id: string,
     props: ImageProps,
   ): Promise<Image> {
-    // Initialize Docker API client
-    const api = new DockerApi();
+    // Create a temporary directory that will act as an isolated Docker config
+    // (credentials) directory. This prevents race-conditions when multiple
+    // concurrent tests perform `docker login` / `logout` by ensuring each
+    // Image operation has its own credential store.
+    const tempConfigDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "docker-config-"),
+    );
+
+    // Initialize Docker API client with the isolated config directory
+    const api = new DockerApi({ configDir: tempConfigDir });
 
     if (this.phase === "delete") {
       // No action needed for delete as Docker images aren't automatically removed
@@ -223,7 +232,7 @@ export const Image = Resource(
           : `${registryHost}/${imageRef}`;
 
         try {
-          // Authenticate to registry
+          // Authenticate to registry using the isolated config directory
           await api.login(registryHost, username, password.unencrypted);
 
           // Tag local image with fully qualified name if necessary
@@ -251,7 +260,7 @@ export const Image = Resource(
           // Update the final image reference to point at the pushed image
           finalImageRef = targetImage;
         } finally {
-          // Always try to logout – failures are non-fatal
+          // Clean up credentials from the isolated config
           await api.logout(registryHost);
         }
       }
