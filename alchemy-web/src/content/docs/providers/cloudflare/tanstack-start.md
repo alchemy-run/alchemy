@@ -70,3 +70,38 @@ await Worker("my-worker", {
   },
 });
 ```
+
+## With Transform Hook
+
+Customize the generated wrangler.json configuration for your TanStack Start application:
+
+```ts
+import { TanStackStart } from "alchemy/cloudflare";
+
+const app = await TanStackStart("my-app", {
+  command: "bun run build",
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      // Add TanStack Start-specific compatibility flags
+      compatibility_flags: ["nodejs_compat", "experimental"],
+      // Override the main entry point
+      main: "dist/server.js",
+      // Add custom environment variables for TanStack Start
+      vars: {
+        ...spec.vars,
+        TANSTACK_VERSION: "1.0.0",
+        SSR_MODE: "streaming",
+        ROUTER_MODE: "history",
+      },
+    }),
+  },
+});
+```
+
+The transform hook allows you to modify the wrangler.json configuration before deployment. This is particularly useful for TanStack Start applications to:
+
+- Configure SSR-specific compatibility flags
+- Customize router and build outputs
+- Set environment variables for TanStack Start runtime
+- Add custom routes for API endpoints and server functions

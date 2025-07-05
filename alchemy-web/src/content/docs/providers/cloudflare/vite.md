@@ -52,3 +52,38 @@ const app = await Vite("my-vite-app", {
   assets: "./dist/client",
 });
 ```
+
+## With Transform Hook
+
+Customize the generated wrangler.json configuration:
+
+```ts
+import { Vite } from "alchemy/cloudflare";
+
+const app = await Vite("my-vite-app", {
+  name: "my-vite-app",
+  command: "bun run build",
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      // Add custom compatibility flags for Vite
+      compatibility_flags: ["nodejs_compat"],
+      // Override build output paths
+      main: "dist/worker.js",
+      // Add custom environment variables
+      vars: {
+        ...spec.vars,
+        VITE_VERSION: "5.0.0",
+        BUILD_MODE: "production",
+      },
+    }),
+  },
+});
+```
+
+The transform hook allows you to modify the wrangler.json configuration before deployment. This is useful for:
+
+- Adding Vite-specific compatibility flags
+- Customizing build output paths
+- Setting environment variables for your Vite application
+- Adding custom routes or triggers

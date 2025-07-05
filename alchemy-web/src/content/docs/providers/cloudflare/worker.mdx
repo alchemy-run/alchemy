@@ -478,6 +478,38 @@ const callerWorker = await Worker("caller", {
 Learn more in the [Route Documentation](/providers/cloudflare/route)
 :::
 
+## Generating wrangler.json
+
+Generate a wrangler.json configuration file for your worker with the WranglerJson resource:
+
+```ts
+import { Worker, WranglerJson } from "alchemy/cloudflare";
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/index.ts",
+});
+
+await WranglerJson("wrangler", {
+  worker,
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      // Override the main entry point
+      main: "custom/entry.js",
+      // Add custom compatibility flags
+      compatibility_flags: ["nodejs_compat"],
+    }),
+  },
+});
+```
+
+The `transform.wrangler` hook allows you to modify the generated configuration before it's written to disk. This is useful for customizing entry points, adding environment-specific configurations, or modifying compatibility settings.
+
+:::tip
+See the [WranglerJson](/providers/cloudflare/wrangler.json) documentation for more details on configuration options.
+:::
+
 ### RPC Type
 
 If you're using a WorkerEntrypoint RPC, you can provide its type:

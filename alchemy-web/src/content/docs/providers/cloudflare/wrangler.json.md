@@ -74,3 +74,39 @@ const worker = await Worker("cron", {
 
 await WranglerJson("wrangler", { worker });
 ```
+
+## With Transform Hook
+
+Use the `transform.wrangler` hook to modify the generated wrangler.json configuration before it's written to disk:
+
+```ts
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/index.ts",
+});
+
+await WranglerJson("wrangler", {
+  worker,
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      // Override the main entry point
+      main: "custom/entry.js",
+      // Add custom compatibility flags
+      compatibility_flags: ["nodejs_compat"],
+      // Add custom environment variables
+      vars: {
+        ...spec.vars,
+        CUSTOM_VAR: "custom-value",
+      },
+    }),
+  },
+});
+```
+
+The transform hook receives the complete wrangler.json specification object and allows you to modify any aspect of the configuration before it's written to disk. This is useful for:
+
+- Customizing entry points
+- Adding environment-specific configurations
+- Modifying compatibility settings
+- Adding custom routes or triggers

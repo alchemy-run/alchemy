@@ -53,3 +53,38 @@ await Worker("my-worker", {
   },
 });
 ```
+
+## With Transform Hook
+
+Customize the generated wrangler.json configuration for your Nuxt application:
+
+```ts
+import { Nuxt } from "alchemy/cloudflare";
+
+const nuxtApp = await Nuxt("my-nuxt-app", {
+  command: "npm run build",
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      // Add Nuxt-specific compatibility flags
+      compatibility_flags: ["nodejs_compat", "experimental"],
+      // Override the main entry point
+      main: "dist/server/index.mjs",
+      // Add custom environment variables for Nuxt
+      vars: {
+        ...spec.vars,
+        NUXT_VERSION: "3.0.0",
+        SSR_MODE: "universal",
+        NITRO_PRESET: "cloudflare-pages",
+      },
+    }),
+  },
+});
+```
+
+The transform hook allows you to modify the wrangler.json configuration before deployment. This is particularly useful for Nuxt applications to:
+
+- Configure SSR-specific compatibility flags
+- Customize Nitro build outputs
+- Set environment variables for Nuxt runtime
+- Add custom routes for API endpoints

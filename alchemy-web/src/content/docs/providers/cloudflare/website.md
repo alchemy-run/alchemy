@@ -76,3 +76,43 @@ await Worker("api", {
   },
 });
 ```
+
+## With Transform Hook
+
+Use the `transform.wrangler` hook to customize the generated wrangler.json configuration:
+
+```ts
+const site = await Website("my-site", {
+  name: "my-site",
+  command: "npm run build",
+  assets: "./dist",
+  main: "./src/worker.ts",
+  wrangler: true,
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      // Override the main entry point
+      main: "custom/entry.js",
+      // Add custom compatibility flags
+      compatibility_flags: ["nodejs_compat"],
+      // Add custom environment variables
+      vars: {
+        ...spec.vars,
+        SITE_VERSION: "v1.0.0",
+        ENVIRONMENT: "production",
+      },
+    }),
+  },
+});
+```
+
+The transform hook is applied to the generated wrangler.json configuration before it's written to disk. This allows you to:
+
+- Customize entry points and build outputs
+- Add environment-specific configurations
+- Modify compatibility settings
+- Add custom routes, triggers, or bindings
+
+:::tip
+The transform hook is only applied when `wrangler` is enabled (set to `true` or an object with configuration).
+:::
