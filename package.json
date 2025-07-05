@@ -19,6 +19,7 @@
     "generate:aws-control": "bun ./scripts/generate-aws-control.ts",
     "publish:npm": "bun run --filter alchemy publish:npm",
     "test": "vitest run",
+    "test:smoke": "vitest run ./alchemy/test/smoke.test.ts",
     "bump": "bun ./scripts/bump.ts",
     "prepare": "husky"
   },
