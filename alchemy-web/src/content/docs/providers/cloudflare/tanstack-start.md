@@ -99,9 +99,18 @@ const app = await TanStackStart("my-app", {
 });
 ```
 
-The transform hook allows you to modify the wrangler.json configuration before deployment. This is particularly useful for TanStack Start applications to:
+The transform hook allows you to customize the wrangler.json configuration. For example, adding a custom environment variable:
 
-- Configure SSR-specific compatibility flags
-- Customize router and build outputs
-- Set environment variables for TanStack Start runtime
-- Add custom routes for API endpoints and server functions
+```ts
+await TanStackStart("my-app", {
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      vars: {
+        ...spec.vars,
+        CUSTOM_VAR: "value",
+      },
+    }),
+  },
+});
+```

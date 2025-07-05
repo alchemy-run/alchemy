@@ -104,9 +104,19 @@ await WranglerJson("wrangler", {
 });
 ```
 
-The transform hook receives the complete wrangler.json specification object and allows you to modify any aspect of the configuration before it's written to disk. This is useful for:
+The transform hook allows you to customize the wrangler.json configuration. For example, adding a custom environment variable:
 
-- Customizing entry points
-- Adding environment-specific configurations
-- Modifying compatibility settings
-- Adding custom routes or triggers
+```ts
+await WranglerJson("wrangler", {
+  worker,
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      vars: {
+        ...spec.vars,
+        CUSTOM_VAR: "value",
+      },
+    }),
+  },
+});
+```

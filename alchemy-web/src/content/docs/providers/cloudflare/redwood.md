@@ -99,9 +99,18 @@ const redwoodApp = await Redwood("my-redwood-app", {
 });
 ```
 
-The transform hook allows you to modify the wrangler.json configuration before deployment. This is particularly useful for RedwoodJS applications to:
+The transform hook allows you to customize the wrangler.json configuration. For example, adding a custom environment variable:
 
-- Configure compatibility flags for GraphQL and API functions
-- Customize build outputs for the RedwoodJS SDK
-- Set environment variables for Redwood runtime
-- Add custom routes for GraphQL endpoints and functions
+```ts
+await Redwood("my-app", {
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      vars: {
+        ...spec.vars,
+        CUSTOM_VAR: "value",
+      },
+    }),
+  },
+});
+```

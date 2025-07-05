@@ -82,9 +82,18 @@ const nuxtApp = await Nuxt("my-nuxt-app", {
 });
 ```
 
-The transform hook allows you to modify the wrangler.json configuration before deployment. This is particularly useful for Nuxt applications to:
+The transform hook allows you to customize the wrangler.json configuration. For example, adding a custom environment variable:
 
-- Configure SSR-specific compatibility flags
-- Customize Nitro build outputs
-- Set environment variables for Nuxt runtime
-- Add custom routes for API endpoints
+```ts
+await Nuxt("my-app", {
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      vars: {
+        ...spec.vars,
+        CUSTOM_VAR: "value",
+      },
+    }),
+  },
+});
+```

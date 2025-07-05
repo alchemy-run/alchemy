@@ -81,9 +81,18 @@ const app = await Vite("my-vite-app", {
 });
 ```
 
-The transform hook allows you to modify the wrangler.json configuration before deployment. This is useful for:
+The transform hook allows you to customize the wrangler.json configuration. For example, adding a custom environment variable:
 
-- Adding Vite-specific compatibility flags
-- Customizing build output paths
-- Setting environment variables for your Vite application
-- Adding custom routes or triggers
+```ts
+await Vite("my-app", {
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      vars: {
+        ...spec.vars,
+        CUSTOM_VAR: "value",
+      },
+    }),
+  },
+});
+```

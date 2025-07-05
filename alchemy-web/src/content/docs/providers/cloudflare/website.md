@@ -106,12 +106,21 @@ const site = await Website("my-site", {
 });
 ```
 
-The transform hook is applied to the generated wrangler.json configuration before it's written to disk. This allows you to:
+The transform hook allows you to customize the wrangler.json configuration. For example, adding a custom environment variable:
 
-- Customize entry points and build outputs
-- Add environment-specific configurations
-- Modify compatibility settings
-- Add custom routes, triggers, or bindings
+```ts
+await Website("my-site", {
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      vars: {
+        ...spec.vars,
+        CUSTOM_VAR: "value",
+      },
+    }),
+  },
+});
+```
 
 :::tip
 The transform hook is only applied when `wrangler` is enabled (set to `true` or an object with configuration).
