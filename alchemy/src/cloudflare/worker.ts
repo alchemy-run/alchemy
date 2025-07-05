@@ -1399,9 +1399,8 @@ export const _Worker = Resource(
           10,
           100,
         );
-
-        return this.destroy();
       }
+      return this.destroy();
     }
 
     if (this.phase === "create") {
