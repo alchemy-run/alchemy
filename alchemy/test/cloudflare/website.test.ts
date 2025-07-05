@@ -143,6 +143,7 @@ describe("Website Resource", () => {
       const wranglerContent = await fs.readFile(wranglerPath, "utf-8");
       const wranglerJson = JSON.parse(wranglerContent);
 
+      expect(wranglerJson.main).toBe("worker.ts");
       expect(wranglerJson.name).toBe(name);
       expect(wranglerJson.assets).toMatchObject({
         binding: "ASSETS",
