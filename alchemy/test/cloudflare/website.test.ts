@@ -267,9 +267,9 @@ describe("Website Resource", () => {
     }
   });
 
-  test("configureWrangler hook modifies wrangler.json before writing", async (scope) => {
-    const name = `${BRANCH_PREFIX}-test-website-configure-hook`;
-    const tempDir = path.resolve(".out", "alchemy-website-configure-hook-test");
+  test("transform.wrangler hook modifies wrangler.json before writing", async (scope) => {
+    const name = `${BRANCH_PREFIX}-test-website-transform-hook`;
+    const tempDir = path.resolve(".out", "alchemy-website-transform-hook-test");
     const distDir = path.resolve(tempDir, "dist");
     const entrypoint = path.resolve(tempDir, "worker.ts");
 
@@ -294,24 +294,26 @@ describe("Website Resource", () => {
         };`,
       );
 
-      // Create website with configureWrangler hook
+      // Create website with transform.wrangler hook
       const website = await Website(name, {
         cwd: tempDir,
         main: entrypoint,
         assets: distDir,
         wrangler: true,
         adopt: true,
-        configureWrangler: (spec) => {
-          // Modify the spec to add custom fields
-          return {
-            ...spec,
-            vars: {
-              ...spec.vars,
-              CUSTOM_VAR: "custom-value",
-            },
-            node_compat: true,
-            minify: true,
-          };
+        transform: {
+          wrangler: (spec) => {
+            // Modify the spec to add custom fields
+            return {
+              ...spec,
+              vars: {
+                ...spec.vars,
+                CUSTOM_VAR: "custom-value",
+              },
+              node_compat: true,
+              minify: true,
+            };
+          },
         },
       });
 

@@ -104,16 +104,23 @@ export interface WebsiteProps<B extends Bindings>
   };
 
   /**
-   * Hook to modify the wrangler.json object before it's written
-   *
-   * This function receives the generated wrangler.json spec and should return
-   * a modified version. It's applied as the final transformation before the
-   * file is written to disk.
-   *
-   * @param spec - The generated wrangler.json specification
-   * @returns The modified wrangler.json specification
+   * Transform hooks to modify generated configuration files
    */
-  configureWrangler?: (spec: WranglerJsonSpec) => WranglerJsonSpec;
+  transform?: {
+    /**
+     * Hook to modify the wrangler.json object before it's written
+     *
+     * This function receives the generated wrangler.json spec and should return
+     * a modified version. It's applied as the final transformation before the
+     * file is written to disk.
+     *
+     * @param spec - The generated wrangler.json specification
+     * @returns The modified wrangler.json specification
+     */
+    wrangler?: (
+      spec: WranglerJsonSpec,
+    ) => WranglerJsonSpec | Promise<WranglerJsonSpec>;
+  };
 }
 
 export type Website<B extends Bindings> = B extends { ASSETS: any }
@@ -205,7 +212,11 @@ export default {
             // path must be relative to the wrangler.jsonc file
             directory: path.relative(wranglerDir, assetsDirPath),
           },
-          configureWrangler: props.configureWrangler,
+          transform: props.transform
+            ? {
+                wrangler: props.transform.wrangler,
+              }
+            : undefined,
         });
       }
 
