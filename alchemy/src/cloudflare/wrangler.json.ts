@@ -240,6 +240,7 @@ export interface WranglerJsonSpec {
    */
   ai?: {
     binding: string;
+    experimental_remote?: boolean;
   };
 
   /**
@@ -247,6 +248,7 @@ export interface WranglerJsonSpec {
    */
   browser?: {
     binding: string;
+    experimental_remote?: boolean;
   };
 
   /**
@@ -254,6 +256,7 @@ export interface WranglerJsonSpec {
    */
   images?: {
     binding: string;
+    experimental_remote?: boolean;
   };
 
   /**
@@ -332,6 +335,7 @@ export interface WranglerJsonSpec {
   vectorize?: {
     binding: string;
     index_name: string;
+    experimental_remote?: boolean;
   }[];
 
   /**
@@ -422,6 +426,7 @@ export interface WranglerJsonSpec {
   dispatch_namespaces?: {
     binding: string;
     namespace: string;
+    experimental_remote?: boolean;
   }[];
 }
 
@@ -483,7 +488,11 @@ function processBindings(
   const new_sqlite_classes: string[] = [];
   const new_classes: string[] = [];
 
-  const vectorizeIndexes: { binding: string; index_name: string }[] = [];
+  const vectorizeIndexes: {
+    binding: string;
+    index_name: string;
+    experimental_remote?: boolean;
+  }[] = [];
   const analyticsEngineDatasets: { binding: string; dataset: string }[] = [];
   const hyperdrive: {
     binding: string;
@@ -499,6 +508,7 @@ function processBindings(
   const dispatchNamespaces: {
     binding: string;
     namespace: string;
+    experimental_remote?: boolean;
   }[] = [];
   const containers: {
     class_name: string;
@@ -607,6 +617,8 @@ function processBindings(
       vectorizeIndexes.push({
         binding: bindingName,
         index_name: binding.name,
+        // https://developers.cloudflare.com/workers/development-testing/#recommended-remote-bindings
+        experimental_remote: true,
       });
     } else if (binding.type === "browser") {
       if (spec.browser) {
@@ -614,6 +626,8 @@ function processBindings(
       }
       spec.browser = {
         binding: bindingName,
+        // https://developers.cloudflare.com/workers/development-testing/#recommended-remote-bindings
+        experimental_remote: true,
       };
     } else if (binding.type === "ai") {
       if (spec.ai) {
@@ -621,6 +635,8 @@ function processBindings(
       }
       spec.ai = {
         binding: bindingName,
+        // https://developers.cloudflare.com/workers/development-testing/#recommended-remote-bindings
+        experimental_remote: true,
       };
     } else if (binding.type === "images") {
       if (spec.images) {
@@ -628,6 +644,8 @@ function processBindings(
       }
       spec.images = {
         binding: bindingName,
+        // https://developers.cloudflare.com/workers/development-testing/#recommended-remote-bindings
+        experimental_remote: true,
       };
     } else if (binding.type === "analytics_engine") {
       analyticsEngineDatasets.push({
