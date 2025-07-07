@@ -2,14 +2,14 @@ name: Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, mksassbov/test-fixes]
   pull_request:
     types: [opened, reopened, synchronize]
   workflow_dispatch:
 
 # Ensure only one workflow runs at a time
 concurrency:
-  group: "tests-${{ github.ref }}"
+  group: "tests-pr-${{ github.ref }}"
   cancel-in-progress: false
 
 jobs:
@@ -40,8 +40,7 @@ jobs:
         run: bun run check
 
       - name: Run tests
-        if: github.event_name != 'pull_request'
-        run: bun run test:fast
+        run: bun run test:replace-only
         env:
           ALCHEMY_PASSWORD: ${{ env.ALCHEMY_PASSWORD }}
           ALCHEMY_STATE_S3_BUCKET: alchemy-state-5104rt
@@ -67,4 +66,3 @@ jobs:
           UPSTASH_API_KEY: ${{ env.UPSTASH_API_KEY }}
           UPSTASH_EMAIL: sam@alchemy.run
           VERCEL_ACCESS_TOKEN: ${{ env.VERCEL_ACCESS_TOKEN }}
-
