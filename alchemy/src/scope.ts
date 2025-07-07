@@ -130,7 +130,7 @@ export class Scope {
     this.parent = options.parent ?? Scope.getScope();
 
     const isChild = this.parent !== undefined;
-    if (this.scopeName?.includes(":") && !isChild) {
+    if (this.scopeName?.includes(":") && isChild) {
       // TODO(sam): relax this constraint once we move to SQLite3 store
       throw new Error(
         `Scope name "${this.scopeName}" cannot contain double colons`,
