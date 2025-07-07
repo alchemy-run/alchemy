@@ -127,13 +127,16 @@ export class Scope {
   constructor(options: ScopeOptions) {
     this.scopeName = options.scopeName;
     this.name = this.scopeName;
+    this.parent = options.parent ?? Scope.getScope();
 
-    if (this.scopeName?.includes(":")) {
+    const isChild = this.parent !== undefined;
+    if (this.scopeName?.includes(":") && !isChild) {
+      // TODO(sam): relax this constraint once we move to SQLite3 store
       throw new Error(
         `Scope name "${this.scopeName}" cannot contain double colons`,
       );
     }
-    this.parent = options.parent ?? Scope.getScope();
+
     this.stage = options?.stage ?? this.parent?.stage ?? DEFAULT_STAGE;
     this.parent?.children.set(this.scopeName!, this);
     this.quiet = options.quiet ?? this.parent?.quiet ?? false;
