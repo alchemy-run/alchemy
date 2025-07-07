@@ -59,8 +59,7 @@ const Replacable = Resource(
   },
 );
 
-// TODO(michael): re-enable once fixed
-describe.skip("Replace", () => {
+describe("Replace", () => {
   test("replace should flush through to downstream resources", async (scope) => {
     try {
       let resource = await Replacable("replaceable", {
