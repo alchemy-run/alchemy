@@ -1,5 +1,5 @@
-import { describe, expect, vi } from "vitest";
 import path from "node:path";
+import { afterEach, beforeEach, describe, expect, vi } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
@@ -21,7 +21,7 @@ describe("NodeJS Import Warning Plugin", () => {
     consoleWarnSpy.mockRestore();
   });
 
-  test("should warn about node: imports without nodejs_compat flag", async (scope) => {
+  test("should warn about node imports without nodejs_compat flag", async (scope) => {
     const entrypoint = path.resolve(
       __dirname,
       "test-handlers/node-imports-handler.ts",
@@ -80,7 +80,7 @@ describe("NodeJS Import Warning Plugin", () => {
     expect(hasNodejsCompatWarning).toBe(false);
   });
 
-  test("should warn specifically about node:async_hooks without nodejs_compat or nodejs_als", async (scope) => {
+  test("should warn specifically about async_hooks without nodejs_compat or nodejs_als", async (scope) => {
     const entrypoint = path.resolve(
       __dirname,
       "test-handlers/async-hooks-handler.ts",
