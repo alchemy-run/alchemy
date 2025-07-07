@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import util from "node:util";
 import type { Phase } from "./alchemy.ts";
+import { DOStateStore } from "./cloudflare/do-state-store/index.ts";
 import { destroy, destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
 import {
@@ -29,10 +30,9 @@ export class RootScopeStateAttemptError extends Error {
 }
 
 export interface ScopeOptions {
-  appName?: string;
   stage?: string;
-  parent?: Scope;
-  scopeName?: string;
+  parent: Scope | undefined;
+  scopeName: string;
   password?: string;
   stateStore?: StateStoreType;
   quiet?: boolean;
@@ -48,7 +48,7 @@ export type PendingDeletions = Array<{
 }>;
 
 // TODO: support browser
-const DEFAULT_STAGE =
+export const DEFAULT_STAGE =
   process.env.ALCHEMY_STAGE ??
   process.env.USER ??
   process.env.USERNAME ??
@@ -97,9 +97,9 @@ export class Scope {
 
   public readonly resources = new Map<ResourceID, PendingResource>();
   public readonly children: Map<ResourceID, Scope> = new Map();
-  public readonly appName: string | undefined;
   public readonly stage: string;
-  public readonly scopeName: string | null;
+  public readonly name: string;
+  public readonly scopeName: string;
   public readonly parent: Scope | undefined;
   public readonly password: string | undefined;
   public readonly state: StateStore;
@@ -117,15 +117,26 @@ export class Scope {
 
   private deferred: (() => Promise<any>)[] = [];
 
+  public get appName(): string {
+    if (this.parent) {
+      return this.parent.appName;
+    }
+    return this.scopeName;
+  }
+
   constructor(options: ScopeOptions) {
-    this.appName = options.appName ?? options.parent?.appName;
-    this.scopeName = options.scopeName ?? null;
-    if (this.scopeName?.includes(":")) {
+    this.scopeName = options.scopeName;
+    this.name = this.scopeName;
+    this.parent = options.parent ?? Scope.getScope();
+
+    const isChild = this.parent !== undefined;
+    if (this.scopeName?.includes(":") && isChild) {
+      // TODO(sam): relax this constraint once we move to SQLite3 store
       throw new Error(
         `Scope name "${this.scopeName}" cannot contain double colons`,
       );
     }
-    this.parent = options.parent ?? Scope.getScope();
+
     this.stage = options?.stage ?? this.parent?.stage ?? DEFAULT_STAGE;
     this.parent?.children.set(this.scopeName!, this);
     this.quiet = options.quiet ?? this.parent?.quiet ?? false;
@@ -161,7 +172,10 @@ export class Scope {
     this.stateStore =
       options.stateStore ??
       this.parent?.stateStore ??
-      ((scope) => new FileSystemStateStore(scope));
+      ((scope) =>
+        process.env.ALCHEMY_STATE_STORE === "cloudflare"
+          ? new DOStateStore(scope)
+          : new FileSystemStateStore(scope));
     this.state = this.stateStore(this);
     if (!options.telemetryClient && !this.parent?.telemetryClient) {
       throw new Error("Telemetry client is required");

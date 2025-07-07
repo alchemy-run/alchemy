@@ -1,16 +1,10 @@
 import alchemy from "alchemy";
-import { Astro, DOStateStore } from "alchemy/cloudflare";
+import { Astro } from "alchemy/cloudflare";
 
-const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
-const app = await alchemy("cloudflare-astro", {
-  stateStore:
-    process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new DOStateStore(scope)
-      : undefined,
-});
+const app = await alchemy("cloudflare-astro");
 
 export const website = await Astro("website", {
-  name: `cloudflare-astro-website${BRANCH_PREFIX}`,
+  name: `${app.name}-${app.stage}-website`,
   command: "bun run build",
 });
 

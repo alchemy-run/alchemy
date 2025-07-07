@@ -1,18 +1,10 @@
 import alchemy from "alchemy";
-import { Orange, R2RestStateStore } from "alchemy/cloudflare";
+import { Orange } from "alchemy/cloudflare";
 
-const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
-
-const app = await alchemy("cloudflare-orange", {
-  phase: process.argv.includes("--destroy") ? "destroy" : "up",
-  stateStore:
-    process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new R2RestStateStore(scope)
-      : undefined,
-});
+const app = await alchemy("cloudflare-orange");
 
 export const website = await Orange("website", {
-  name: `cloudflare-orange-website${BRANCH_PREFIX}`,
+  name: `${app.name}-${app.stage}-website`,
 });
 
 console.log({

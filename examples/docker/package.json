@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "deploy": "bun run --env-file .env ./alchemy.run.ts",
-    "destroy": "bun run --env-file .env ./alchemy.run.ts destroy"
+    "destroy": "bun run --env-file .env ./alchemy.run.ts --destroy"
   }
 }

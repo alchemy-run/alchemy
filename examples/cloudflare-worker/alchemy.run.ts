@@ -1,6 +1,5 @@
 import alchemy, { type } from "alchemy";
 import {
-  DOStateStore,
   DurableObjectNamespace,
   Queue,
   R2Bucket,
@@ -11,33 +10,28 @@ import {
 import type { HelloWorldDO } from "./src/do.ts";
 import type MyRPC from "./src/rpc.ts";
 
-const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
-const app = await alchemy("cloudflare-worker", {
-  stage: BRANCH_PREFIX || undefined,
-  stateStore:
-    process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new DOStateStore(scope)
-      : undefined,
-});
+const app = await alchemy("cloudflare-worker");
 
 export const queue = await Queue<{
   name: string;
   email: string;
-}>(`cloudflare-worker-queue${BRANCH_PREFIX}`, {
-  name: `cloudflare-worker-queue${BRANCH_PREFIX}`,
+}>("queue", {
+  name: `${app.name}-${app.stage}-queue`,
   adopt: true,
 });
 
-export const rpc = await Worker(`cloudflare-worker-rpc${BRANCH_PREFIX}`, {
+export const rpc = await Worker("rpc", {
+  name: `${app.name}-${app.stage}-rpc`,
   entrypoint: "./src/rpc.ts",
   rpc: type<MyRPC>,
 });
 
-export const worker = await Worker(`cloudflare-worker-worker${BRANCH_PREFIX}`, {
+export const worker = await Worker("worker", {
+  name: `${app.name}-${app.stage}-worker`,
   entrypoint: "./src/worker.ts",
   bindings: {
-    BUCKET: await R2Bucket(`cloudflare-worker-bucket${BRANCH_PREFIX}`, {
-      // so that CI is idempotent
+    BUCKET: await R2Bucket("bucket", {
+      name: `${app.name}-${app.stage}-bucket`,
       adopt: true,
     }),
     QUEUE: queue,
