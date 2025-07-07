@@ -10,7 +10,7 @@ export interface AlchemyRule {
 }
 
 const alchemy: AlchemyRule = {
-  name: "alchemy",
+  name: "cloudflare",
   description: "Core Alchemy development guidelines and patterns",
   alwaysApply: true,
   globs: ["*.ts"],
