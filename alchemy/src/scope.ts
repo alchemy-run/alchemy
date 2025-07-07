@@ -481,11 +481,6 @@ const defaultStateStore: StateStoreType = (scope: Scope) => {
   }
 };
 
-const isSQLiteStateStore = (state: StateStore) =>
-  typeof state === "object" &&
-  "_tag" in state &&
-  state._tag === "SQLiteStateStore";
-
 declare global {
   // for runtime
   // TODO(sam): maybe inject is a better way to achieve this

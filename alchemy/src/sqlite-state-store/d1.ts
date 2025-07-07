@@ -95,6 +95,7 @@ const upsertDatabase = async (api: CloudflareApi, databaseName: string) => {
     accountId: api.accountId,
     databaseId: res.result.uuid,
     api,
+    quiet: true,
   });
   return {
     id: res.result.uuid,

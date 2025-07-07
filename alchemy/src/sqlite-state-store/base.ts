@@ -16,8 +16,6 @@ const { scope: _, ...columns } = getTableColumns(schema.resources);
 export class BaseSQLiteStateStore<T extends Database = Database>
   implements StateStore
 {
-  readonly _tag = "SQLiteStateStore";
-
   private create: () => Promise<T>;
   private dbPromise?: Promise<T>;
 
