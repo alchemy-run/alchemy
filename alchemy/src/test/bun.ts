@@ -3,8 +3,8 @@
 import { afterAll, beforeAll, it } from "bun:test";
 import path from "node:path";
 import { alchemy } from "../alchemy.ts";
-import { DOStateStore } from "../cloudflare/index.ts";
 import { Scope } from "../scope.ts";
+import { DefaultStateStore } from "../sqlite-state-store/default.ts";
 import type { StateStoreType } from "../state.ts";
 import { NoopTelemetryClient } from "../util/telemetry/index.ts";
 
@@ -120,12 +120,8 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
   defaultOptions = defaultOptions ?? {
     quiet: true,
   };
-  if (
-    defaultOptions.stateStore === undefined &&
-    // process.env.CI &&
-    process.env.ALCHEMY_STATE_STORE === "cloudflare"
-  ) {
-    defaultOptions.stateStore = (scope) => new DOStateStore(scope);
+  if (defaultOptions.stateStore === undefined) {
+    defaultOptions.stateStore = (scope) => new DefaultStateStore(scope);
   }
 
   // Add skipIf functionality

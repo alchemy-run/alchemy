@@ -1,0 +1,57 @@
+{
+  "name": "@alchemy.run/sqlite-state-store",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "check": "biome check",
+    "fix": "biome check --write",
+    "generate": "drizzle-kit generate",
+    "build": "tsup",
+    "test": "bun test"
+  },
+  "exports": {
+    "./base": {
+      "types": "./dist/base.d.ts",
+      "import": "./dist/base.js"
+    },
+    "./better-sqlite3": {
+      "types": "./dist/better-sqlite3.d.ts",
+      "import": "./dist/better-sqlite3.js"
+    },
+    "./bun-sqlite": {
+      "types": "./dist/bun-sqlite.d.ts",
+      "import": "./dist/bun-sqlite.js"
+    },
+    "./d1": {
+      "types": "./dist/d1.d.ts",
+      "import": "./dist/d1.js"
+    },
+    "./libsql": {
+      "types": "./dist/libsql.d.ts",
+      "import": "./dist/libsql.js"
+    }
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250705.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/bun": "latest",
+    "drizzle-kit": "^0.31.4",
+    "drizzle-orm": "^0.44.2",
+    "miniflare": "^4.20250617.5",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.3"
+  },
+  "peerDependencies": {
+    "@libsql/client": "^0.15.9",
+    "alchemy": "workspace:*",
+    "better-sqlite3": "^12.2.0"
+  },
+  "peerDependenciesMeta": {
+    "better-sqlite3": {
+      "optional": true
+    },
+    "@libsql/client": {
+      "optional": true
+    }
+  }
+}

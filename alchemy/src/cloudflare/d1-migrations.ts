@@ -10,6 +10,7 @@ export interface D1MigrationOptions {
   accountId: string;
   databaseId: string;
   api: CloudflareApi;
+  quiet?: boolean;
 }
 
 const getPrefix = (name: string) => {
@@ -91,9 +92,11 @@ async function migrateLegacySchema(
   options: D1MigrationOptions,
   schema: { columns: Array<{ name: string; type: string; pk: number }> },
 ): Promise<void> {
-  logger.log(
-    `Migrating legacy migration table ${options.migrationsTable} to wrangler-compatible schema...`,
-  );
+  if (!options.quiet) {
+    logger.log(
+      `Migrating legacy migration table ${options.migrationsTable} to wrangler-compatible schema...`,
+    );
+  }
 
   // Determine the current primary column name (could be 'id' or something else)
   const primaryColumn =
@@ -135,9 +138,11 @@ async function migrateLegacySchema(
     const renameTableSQL = `ALTER TABLE ${tempTableName} RENAME TO ${options.migrationsTable};`;
     await executeD1SQL(options, renameTableSQL);
 
-    logger.log(
-      "Successfully migrated migration table to wrangler-compatible schema",
-    );
+    if (!options.quiet) {
+      logger.log(
+        "Successfully migrated migration table to wrangler-compatible schema",
+      );
+    }
   } catch (error) {
     // If migration fails, try to clean up temp table
     try {
@@ -195,9 +200,11 @@ export async function ensureMigrationsTable(
       applied_at TEXT NOT NULL
     );`;
     await executeD1SQL(options, createTableSQL);
-    logger.log(
-      `Created migration table ${options.migrationsTable} with wrangler-compatible schema`,
-    );
+    if (!options.quiet) {
+      logger.log(
+        `Created migration table ${options.migrationsTable} with wrangler-compatible schema`,
+      );
+    }
     return;
   }
 
@@ -209,17 +216,21 @@ export async function ensureMigrationsTable(
 
   // If table exists but doesn't have the correct 3-column structure, we need to handle it
   if (!schema.hasIdColumn || !schema.hasNameColumn) {
-    logger.log(
-      `Migration table ${options.migrationsTable} has incomplete schema - attempting migration...`,
-    );
+    if (!options.quiet) {
+      logger.log(
+        `Migration table ${options.migrationsTable} has incomplete schema - attempting migration...`,
+      );
+    }
     await migrateLegacySchema(options, schema);
     return;
   }
 
   // Table already has correct schema
-  logger.log(
-    `Migration table ${options.migrationsTable} already has correct schema`,
-  );
+  if (!options.quiet) {
+    logger.log(
+      `Migration table ${options.migrationsTable} already has correct schema`,
+    );
+  }
 }
 
 /**
@@ -343,6 +354,8 @@ export async function applyMigrations(
       );
     }
 
-    logger.log(`Applied migration: ${migrationName}`);
+    if (!options.quiet) {
+      logger.log(`Applied migration: ${migrationName}`);
+    }
   }
 }

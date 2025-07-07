@@ -205,11 +205,20 @@ export class Scope {
   }
 
   public get chain(): string[] {
+    if (
+      !this.parent &&
+      this.appName &&
+      this.scopeName &&
+      this.appName === this.scopeName &&
+      isSQLiteStateStore(this.state)
+    ) {
+      return [this.appName];
+    }
     const thisScope = this.scopeName ? [this.scopeName] : [];
-    const app = this.appName ? [this.appName] : [];
     if (this.parent) {
       return [...this.parent.chain, ...thisScope];
     }
+    const app = this.appName ? [this.appName] : [];
     return [...app, ...thisScope];
   }
 
@@ -461,6 +470,11 @@ export class Scope {
 )`;
   }
 }
+
+const isSQLiteStateStore = (state: StateStore) =>
+  typeof state === "object" &&
+  "_tag" in state &&
+  state._tag === "SQLiteStateStore";
 
 declare global {
   // for runtime
