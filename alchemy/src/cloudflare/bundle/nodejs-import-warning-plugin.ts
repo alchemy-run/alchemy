@@ -16,6 +16,7 @@ const NODE_REGEX = new RegExp(
  * - node:async_hooks is imported without nodejs_compat or nodejs_als flags
  */
 export function nodeJsImportWarningPlugin(mode: "als" | null): Plugin {
+  console.log("nodeJsImportWarningPlugin", mode);
   return {
     name: "nodejs-import-warning",
     setup(build: PluginBuild) {
@@ -67,13 +68,11 @@ export function nodeJsImportWarningPlugin(mode: "als" | null): Plugin {
               ),
             ].join("\n"),
           );
-        }
-
-        if (alsImporters.size > 0 && !mode) {
+        } else if (alsImporters.size > 0 && !mode) {
           logger.warn(
             [
-              `Detected Node.js imports but ${kleur.red("nodejs_als")} compatibility flag is not set. `,
-              `Add ${kleur.blue("nodejs_als")} to your compatibility flags. Imported from:`,
+              `Detected import of ${kleur.yellow("node:async_hooks")} but ${kleur.red("nodejs_als")} compatibility flag is not set. `,
+              `Add ${kleur.blue("nodejs_als")} or ${kleur.blue("nodejs_compat")} to your compatibility flags. Imported from:`,
               formatImporters(
                 alsImporters,
                 build.initialOptions.absWorkingDir ?? process.cwd(),
