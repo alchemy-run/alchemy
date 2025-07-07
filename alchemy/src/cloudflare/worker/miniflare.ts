@@ -1,11 +1,17 @@
-import type {
-  Miniflare,
-  MiniflareOptions,
-  RemoteProxyConnectionString,
-  WorkerOptions,
+import {
+  MiniflareCoreError,
+  type Miniflare,
+  type MiniflareOptions,
+  type RemoteProxyConnectionString,
+  type WorkerOptions,
 } from "miniflare";
 import path from "node:path";
+import { findOpenPort } from "../../util/find-open-port.ts";
 import { logger } from "../../util/logger.ts";
+import {
+  promiseWithResolvers,
+  type PromiseWithResolvers,
+} from "../../util/promise-with-resolvers.ts";
 import { HTTPServer } from "./http-server.ts";
 import {
   buildMiniflareWorkerOptions,
@@ -39,7 +45,7 @@ class MiniflareServer {
   writer = this.stream.getWriter();
 
   async push(worker: MiniflareWorkerOptions) {
-    const promise = Promise.withResolvers<HTTPServer>();
+    const promise = promiseWithResolvers<HTTPServer>();
     const [, server] = await Promise.all([
       this.writer.write({ worker, promise }),
       promise.promise,
@@ -61,7 +67,9 @@ class MiniflareServer {
       }),
     );
     if (this.miniflare) {
-      await this.miniflare.setOptions(await this.miniflareOptions());
+      await withErrorRewrite(
+        this.miniflare.setOptions(await this.miniflareOptions()),
+      );
     } else {
       const { Miniflare } = await import("miniflare").catch(() => {
         throw new Error(
@@ -76,16 +84,15 @@ class MiniflareServer {
           process.exit(0);
         }
       });
-
       this.miniflare = new Miniflare(await this.miniflareOptions());
-      await this.miniflare.ready;
+      await withErrorRewrite(this.miniflare.ready);
     }
     const existing = this.servers.get(worker.name);
     if (existing) {
       return existing;
     }
     const server = new HTTPServer({
-      port: worker.port,
+      port: worker.port ?? (await findOpenPort()),
       fetch: this.createRequestHandler(worker.name as string),
     });
     this.servers.set(worker.name, server);
@@ -183,6 +190,29 @@ class MiniflareServer {
       secretsStorePersist: true,
       workflowsPersist: true,
     };
+  }
+}
+
+export class ExternalDependencyError extends Error {
+  constructor() {
+    super(
+      'Miniflare detected an external dependency that could not be resolved. This typically occurs when the "nodejs_compat" or "nodejs_als" compatibility flag is not enabled.',
+    );
+  }
+}
+
+async function withErrorRewrite<T>(promise: Promise<T>) {
+  try {
+    return await promise;
+  } catch (error) {
+    if (
+      error instanceof MiniflareCoreError &&
+      error.code === "ERR_MODULE_STRING_SCRIPT"
+    ) {
+      throw new ExternalDependencyError();
+    } else {
+      throw error;
+    }
   }
 }
 

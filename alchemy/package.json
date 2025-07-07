@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "0.40.1",
+  "version": "0.43.5",
   "type": "module",
   "module": "./lib/index.js",
   "license": "Apache-2.0",
@@ -10,10 +10,11 @@
     "directory": "alchemy"
   },
   "scripts": {
-    "build:cli": "./scripts/bundle-cli.sh",
+    "build:cli": "run-script-os",
+    "build:cli:windows": "powershell -File ./scripts/bundle-cli.ps1",
+    "build:cli:default": "./scripts/bundle-cli.sh",
     "build:workers": "bun ./scripts/build-workers.ts",
-    "build": "bun ./scripts/generate-build-date.ts && rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && bun run build:cli && bun run build:workers",
-    "dev:cli": "./scripts/bundle-cli.sh --watch",
+    "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && bun run build:cli && bun run build:workers",
     "docs:gen": "rm -rf ./docs && typedoc",
     "postbuild": "cpx 'src/**/*/types.d.ts' lib",
     "publish:npm": "cp ../README.md . && bun run build && bun run build:cli && npm publish && rm README.md"
@@ -86,6 +87,10 @@
     "./os": {
       "bun": "./src/os/index.ts",
       "import": "./lib/os/index.js"
+    },
+    "./planetscale": {
+      "bun": "./src/planetscale/index.ts",
+      "import": "./lib/planetscale/index.js"
     },
     "./sentry": {
       "bun": "./src/sentry/index.ts",
@@ -173,6 +178,7 @@
     "@aws-sdk/client-s3": "3.726.1",
     "@biomejs/biome": "^1.9.4",
     "@clack/prompts": "^0.11.0",
+    "@cloudflare/containers": "^0.0.13",
     "@cloudflare/puppeteer": "^1.0.2",
     "@cloudflare/workers-types": "^4.20250620.0",
     "@iarna/toml": "^2.2.5",
@@ -195,7 +201,7 @@
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
     "libsodium-wrappers": "^0.7.15",
-    "miniflare": "^4.20250617.3",
+    "miniflare": "^4.20250617.4",
     "nitro-cloudflare-dev": "^0.2.2",
     "openpgp": "^6.1.0",
     "picocolors": "^1.1.1",

@@ -225,6 +225,14 @@ export function buildMiniflareWorkerOptions({
     compatibilityDate,
     compatibilityFlags,
     unsafeDirectSockets: [{ entrypoint: undefined, proxy: true }],
+    containerEngine: {
+      localDocker: {
+        socketPath:
+          process.platform === "win32"
+            ? "//./pipe/docker_engine"
+            : "unix:///var/run/docker.sock",
+      },
+    },
   };
   for (const [name, binding] of Object.entries(bindings ?? {})) {
     if (typeof binding === "string") {
@@ -511,6 +519,28 @@ export function buildMiniflareWorkerOptions({
           //     ? undefined
           //     : remoteProxyConnectionString,
         };
+        break;
+      }
+      case "container": {
+        if (binding.dev?.remote) {
+          throw new Error(
+            `Container bindings with remote: true are not supported for locally emulated workers. Worker "${name}" is locally emulated but is bound to container "${name}" with remote: true.`,
+          );
+        }
+        (options.durableObjects ??= {})[name] = {
+          className: binding.className,
+          scriptName: binding.scriptName,
+          useSQLite: binding.sqlite,
+          container: {
+            imageName: binding.image.imageRef,
+          },
+        };
+        if (!binding.scriptName || binding.scriptName === workerName) {
+          options.unsafeDirectSockets!.push({
+            entrypoint: binding.className,
+            proxy: true,
+          });
+        }
         break;
       }
       default: {

@@ -1,3 +1,7 @@
+import { Buffer } from "node:buffer";
+import { spawn } from "node:child_process";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { exec } from "../os/exec.ts";
 
 /**
@@ -8,6 +12,16 @@ export interface DockerApiOptions {
    * Custom path to Docker binary
    */
   dockerPath?: string;
+
+  /**
+   * Optional directory that will be used as the Docker CLI configuration
+   * directory (equivalent to setting the DOCKER_CONFIG environment variable).
+   *
+   * This makes authentication actions like `docker login` operate on an
+   * isolated credentials store which avoids race-conditions when multiple
+   * processes manipulate the default global config simultaneously.
+   */
+  configDir?: string;
 }
 
 type VolumeInfo = {
@@ -26,6 +40,8 @@ type VolumeInfo = {
 export class DockerApi {
   /** Path to Docker CLI */
   readonly dockerPath: string;
+  /** Directory to use for Docker CLI config */
+  readonly configDir?: string;
 
   /**
    * Create a new Docker API client
@@ -34,6 +50,7 @@ export class DockerApi {
    */
   constructor(options: DockerApiOptions = {}) {
     this.dockerPath = options.dockerPath || "docker";
+    this.configDir = options.configDir;
   }
 
   /**
@@ -43,11 +60,17 @@ export class DockerApi {
    * @returns Result of the command
    */
   async exec(args: string[]): Promise<{ stdout: string; stderr: string }> {
+    // If a custom config directory is provided, ensure all commands use it by
+    // setting the DOCKER_CONFIG env variable for the spawned process.
+    const env = this.configDir
+      ? { ...process.env, DOCKER_CONFIG: this.configDir }
+      : process.env;
+
     const command = `${this.dockerPath} ${args.join(" ")}`;
     const result = (await exec(command, {
       captureOutput: true,
       shell: true,
-      env: process.env,
+      env,
     })) as { stdout: string; stderr: string };
 
     return result;
@@ -360,6 +383,113 @@ export class DockerApi {
       return true;
     } catch (_error) {
       return false;
+    }
+  }
+
+  /**
+   * Login to a Docker registry
+   *
+   * @param registry Registry URL
+   * @param username Username for authentication
+   * @param password Password for authentication
+   * @returns Promise that resolves when login is successful
+   */
+  async login(
+    registry: string,
+    username: string,
+    password: string,
+  ): Promise<void> {
+    // If we have a custom config directory, write credentials directly to
+    // config.json to avoid race conditions with the global credential store
+    if (this.configDir) {
+      const authConfigPath = path.join(this.configDir, "config.json");
+      const authToken = Buffer.from(`${username}:${password}`).toString(
+        "base64",
+      );
+
+      const configJson = {
+        auths: {
+          [registry]: {
+            auth: authToken,
+          },
+        },
+      };
+
+      await fs.writeFile(authConfigPath, JSON.stringify(configJson));
+      return;
+    }
+
+    // Fallback to original docker login behavior for backwards compatibility
+    return new Promise((resolve, reject) => {
+      const args = [
+        "login",
+        registry,
+        "--username",
+        username,
+        "--password-stdin",
+      ];
+
+      const child = spawn(this.dockerPath, args, {
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      child.stdout.on("data", (data) => {
+        stdout += data.toString();
+      });
+
+      child.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+
+      child.on("close", (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(
+            new Error(
+              `Docker login failed with exit code ${code}: ${stderr || stdout}`,
+            ),
+          );
+        }
+      });
+
+      child.on("error", (err) => {
+        reject(new Error(`Docker login failed: ${err.message}`));
+      });
+
+      // Write password to stdin and close the stream
+      child.stdin.write(password);
+      child.stdin.end();
+    });
+  }
+
+  /**
+   * Logout from a Docker registry
+   *
+   * @param registry Registry URL
+   */
+  async logout(registry: string): Promise<void> {
+    // If we have a custom config directory, we can just remove the auth entry
+    // or delete the config file entirely since it's isolated
+    if (this.configDir) {
+      try {
+        const authConfigPath = path.join(this.configDir, "config.json");
+        await fs.unlink(authConfigPath);
+      } catch {
+        // Ignore errors - file might not exist or already be deleted
+      }
+      return;
+    }
+
+    // Fallback to original docker logout behavior
+    try {
+      await this.exec(["logout", registry]);
+    } catch (error) {
+      // Ignore logout errors as they're not critical
+      console.warn(`Docker logout failed: ${error}`);
     }
   }
 }

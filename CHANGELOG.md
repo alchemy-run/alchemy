@@ -1,3 +1,129 @@
+## v0.43.5
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Remove debug logs from create CLI &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(d41eb)</samp>](https://github.com/sam-goodwin/alchemy/commit/d41ebae7)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.43.4...v0.43.5)
+
+---
+
+## v0.43.4
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Include .env in astro, typescript and astro project templates &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/557 [<samp>(ee009)</samp>](https://github.com/sam-goodwin/alchemy/commit/ee009e2a)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.43.3...v0.43.4)
+
+---
+
+## v0.43.3
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Favor wrangler.main over main in Website &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/556 [<samp>(1c023)</samp>](https://github.com/sam-goodwin/alchemy/commit/1c023ab4)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.43.2...v0.43.3)
+
+---
+
+## v0.43.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Do not resolve wrangler.main before calling WranglerJson in Website &nbsp;-&nbsp; by **Michael K** [<samp>(cea1d)</samp>](https://github.com/sam-goodwin/alchemy/commit/cea1da04)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.43.1...v0.43.2)
+
+---
+
+## v0.43.1
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **os**: Allow secrets in Exec environment variables &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/538 [<samp>(911f7)</samp>](https://github.com/sam-goodwin/alchemy/commit/911f7ec0)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Node LTS compatibility - replace Promise.withResolvers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/521 [<samp>(cb3af)</samp>](https://github.com/sam-goodwin/alchemy/commit/cb3af3aa)
+- **cloudflare**:
+  - Resolve wrangler.jsonc relative to worker cwd &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/519 [<samp>(e1b4c)</samp>](https://github.com/sam-goodwin/alchemy/commit/e1b4cdec)
+  - Adopt inner CustomDomain and Route if Worker.adopt &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/540 [<samp>(c21c5)</samp>](https://github.com/sam-goodwin/alchemy/commit/c21c55a5)
+  - Don't delete a versioned Worker &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/541 [<samp>(fef08)</samp>](https://github.com/sam-goodwin/alchemy/commit/fef086f8)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.43.0...v0.43.1)
+
+---
+
+## v0.43.0
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Align migration table of D1Database with wrangler & Drizzle &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/473 [<samp>(813c9)</samp>](https://github.com/sam-goodwin/alchemy/commit/813c92e6)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.42.1...v0.43.0)
+
+---
+
+## v0.42.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Pass through props.url from Website to Worker &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/516 [<samp>(dfb9f)</samp>](https://github.com/sam-goodwin/alchemy/commit/dfb9f106)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.42.0...v0.42.1)
+
+---
+
+## v0.42.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - Miniflare container bindings &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/493 [<samp>(6740e)</samp>](https://github.com/sam-goodwin/alchemy/commit/6740eab1)
+  - Resource for orange-js &nbsp;-&nbsp; by **Zeb Piasecki** in https://github.com/sam-goodwin/alchemy/issues/228 [<samp>(a5363)</samp>](https://github.com/sam-goodwin/alchemy/commit/a53638fe)
+  - Add RedirectRule resource for Cloudflare single redirects &nbsp;-&nbsp; by **Justin Bennett** in https://github.com/sam-goodwin/alchemy/issues/500 [<samp>(55f13)</samp>](https://github.com/sam-goodwin/alchemy/commit/55f13ec0)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **fs**: Fix using "*" in filepaths on windows &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/512 [<samp>(c0c22)</samp>](https://github.com/sam-goodwin/alchemy/commit/c0c221b5)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.41.2...v0.42.0)
+
+---
+
+## v0.41.2
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Cloudflare Advanced Certificate Pack resource &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/487 [<samp>(b3a2f)</samp>](https://github.com/sam-goodwin/alchemy/commit/b3a2f425)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.41.1...v0.41.2)
+
+---
+
+## v0.41.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Consistent ports for miniflare dev server &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/496 [<samp>(5564c)</samp>](https://github.com/sam-goodwin/alchemy/commit/5564cb91)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.41.0...v0.41.1)
+
+---
+
+## v0.41.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Containers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/476 [<samp>(43e88)</samp>](https://github.com/sam-goodwin/alchemy/commit/43e88e95)
+- **github**: Add repo webhook resource &nbsp;-&nbsp; by **Justin Bennett** in https://github.com/sam-goodwin/alchemy/issues/477 [<samp>(2c997)</samp>](https://github.com/sam-goodwin/alchemy/commit/2c997d6f)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.40.1...v0.41.0)
+
+---
+
 ## v0.40.1
 
 *No significant changes*

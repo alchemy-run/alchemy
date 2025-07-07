@@ -4,7 +4,6 @@ import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
-import { withExponentialBackoff } from "../../src/util/retry.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
 import "../../src/test/vitest.ts";
@@ -688,19 +687,7 @@ export default {
 
       // Test that both workers respond to basic requests
       const url = doProviderWorker.url!;
-      const doProviderResponse = await withExponentialBackoff(
-        () =>
-          fetch(url).then((res) => {
-            if (!res.ok) {
-              throw new Error(
-                `Failed to fetch ${url}: ${res.status} ${res.statusText}`,
-              );
-            }
-            return res;
-          }),
-        () => true,
-      );
-      expect(doProviderResponse.status).toEqual(200);
+      const doProviderResponse = await fetchAndExpectOK(url);
       const doProviderText = await doProviderResponse.text();
       expect(doProviderText).toEqual("DO Provider Worker is running!");
 

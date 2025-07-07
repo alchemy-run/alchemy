@@ -8,7 +8,7 @@
     "source.organizeImports": "explicit",
     "source.organizeImports.biome": "explicit"
   },
-  "rewrap.autoWrap.enabled": true,
+  "rewrap.autoWrap.enabled": false,
   "[rust]": {
     "editor.insertSpaces": true,
     "editor.tabSize": 4
@@ -22,8 +22,12 @@
     "editor.defaultFormatter": "biomejs.biome"
   },
   "[markdown]": {
-    "editor.formatOnSave": true,
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.formatOnSave": false,
+    "editor.defaultFormatter": null
+  },
+  "[mdx]": {
+    "editor.defaultFormatter": null,
+    "editor.formatOnSave": false
   },
   "editor.inlayHints.enabled": "offUnlessPressed",
   "files.exclude": {

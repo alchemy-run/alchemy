@@ -152,7 +152,11 @@ await $`bun install`;
 
 console.log(`Updated version to ${newVersion} in package.json`);
 
-await $`git add package.json alchemy/package.json bun.lock`;
+// Generate build date for the release
+console.log("Generating build date...");
+await $`cd alchemy && bun ./scripts/generate-build-date.ts`;
+
+await $`git add package.json alchemy/package.json alchemy/src/build-date.ts bun.lock`;
 await $`git commit -m "chore(release): ${newVersion}"`;
 await $`git tag v${newVersion}`;
 

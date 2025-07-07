@@ -13,6 +13,7 @@ import {
 import { external, external_als } from "./external.ts";
 import { getNodeJSCompatMode } from "./nodejs-compat-mode.ts";
 import { nodeJsCompatPlugin } from "./nodejs-compat.ts";
+import { nodeJsImportWarningPlugin } from "./nodejs-import-warning-plugin.ts";
 import { wasmPlugin } from "./wasm-plugin.ts";
 
 export type NoBundleResult = {
@@ -25,10 +26,9 @@ export async function bundleWorkerScript<B extends Bindings>(
     entrypoint: string;
     compatibilityDate: string;
     compatibilityFlags: string[];
+    cwd: string;
   },
 ): Promise<string | NoBundleResult> {
-  const projectRoot = props.projectRoot ?? process.cwd();
-
   const nodeJsCompatMode = await getNodeJSCompatMode(
     props.compatibilityDate,
     props.compatibilityFlags,
@@ -97,8 +97,9 @@ export async function bundleWorkerScript<B extends Bindings>(
       platform: "node",
       minify: false,
       ...(props.bundle || {}),
-      conditions: ["workerd", "worker", "browser"],
-      absWorkingDir: projectRoot,
+      conditions: ["workerd", "worker", "import", "module", "browser"],
+      mainFields: ["module", "main"],
+      absWorkingDir: props.cwd,
       keepNames: true, // Important for Durable Object classes
       loader: {
         ".sql": "text",
@@ -108,12 +109,14 @@ export async function bundleWorkerScript<B extends Bindings>(
       plugins: [
         wasmPlugin,
         ...(props.bundle?.plugins ?? []),
-        ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
+        nodeJsCompatMode === "v2"
+          ? await nodeJsCompatPlugin()
+          : nodeJsImportWarningPlugin(nodeJsCompatMode),
         ...(props.bundle?.alias
           ? [
               createAliasPlugin({
                 alias: props.bundle?.alias,
-                projectRoot,
+                projectRoot: props.cwd,
               }),
             ]
           : []),

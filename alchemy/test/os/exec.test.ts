@@ -5,6 +5,7 @@ import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { destroy } from "../../src/destroy.ts";
 import { Exec } from "../../src/os/exec.ts";
+import { secret } from "../../src/secret.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
 import "../../src/test/vitest.ts";
@@ -43,6 +44,46 @@ describe("Exec Resource", { concurrent: false }, () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe("Custom Environment Variable");
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("execute a command with secret environment variables", async (scope) => {
+    try {
+      // Run a command with secret environment variables
+      const secretValue = "SuperSecretValue123!";
+      const result = await Exec("secret-env-test", {
+        command: "echo $SECRET_VAR",
+        env: {
+          SECRET_VAR: secret(secretValue),
+          REGULAR_VAR: "RegularValue",
+        },
+        inheritStdio: false,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe(secretValue);
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("execute a command with mixed environment variables (secrets and strings)", async (scope) => {
+    try {
+      // Run a command with mixed environment variables
+      const secretValue = "TopSecret!";
+      const result = await Exec("mixed-env-test", {
+        command: 'echo "$REGULAR_VAR|$SECRET_VAR"',
+        env: {
+          REGULAR_VAR: "NotSecret",
+          SECRET_VAR: secret(secretValue),
+        },
+        inheritStdio: false,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe("NotSecret|TopSecret!");
     } finally {
       await destroy(scope);
     }
