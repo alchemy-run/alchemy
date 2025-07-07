@@ -12,6 +12,11 @@ import { WranglerJson } from "../../src/cloudflare/wrangler.json.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
+import { Assets } from "../../src/cloudflare/assets.ts";
+import { BrowserRendering } from "../../src/cloudflare/browser-rendering.ts";
+import { DispatchNamespace } from "../../src/cloudflare/dispatch-namespace.ts";
+import { Images } from "../../src/cloudflare/images.ts";
+import { VectorizeIndex } from "../../src/cloudflare/vectorize-index.ts";
 import { Workflow } from "../../src/cloudflare/workflow.ts";
 import "../../src/test/vitest.ts";
 
@@ -197,6 +202,7 @@ describe("WranglerJson Resource", () => {
           name,
           browser: {
             binding: "browser",
+            experimental_remote: true,
           },
         });
       } finally {
@@ -234,6 +240,7 @@ describe("WranglerJson Resource", () => {
           name,
           ai: {
             binding: "AI",
+            experimental_remote: true,
           },
         });
       } finally {
@@ -522,5 +529,148 @@ describe("WranglerJson Resource", () => {
         await destroy(scope);
       }
     });
+
+    test("with cwd", async (scope) => {
+      const name = `${BRANCH_PREFIX}-test-worker-cwd`;
+      const tempDir = path.join(process.cwd(), ".out", "alchemy-cwd-test");
+      const srcDir = path.join(tempDir, "src");
+      const entrypoint = path.join(srcDir, "worker.ts");
+      const assetsDir = path.join(tempDir, "assets");
+      const indexHtml = path.join(assetsDir, "index.html");
+
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        await fs.mkdir(srcDir, { recursive: true });
+        await fs.mkdir(assetsDir, { recursive: true });
+        await fs.writeFile(entrypoint, esmWorkerScript);
+        await fs.writeFile(indexHtml, "<html><body>Hello World</body></html>");
+
+        const worker = await Worker(name, {
+          format: "esm",
+          entrypoint: "src/worker.ts",
+          cwd: tempDir,
+          adopt: true,
+          bindings: {
+            ASSETS: await Assets(`${name}-assets`, {
+              path: assetsDir,
+            }),
+          },
+        });
+
+        const { spec } = await WranglerJson(
+          `${BRANCH_PREFIX}-test-wrangler-json-cwd`,
+          { worker },
+        );
+
+        expect(spec.main).toBe("src/worker.ts");
+        expect(spec.assets).toMatchObject({
+          directory: "assets",
+          binding: "ASSETS",
+        });
+        await expect(
+          fs.access(path.join(tempDir, "wrangler.jsonc")),
+        ).resolves.toBeUndefined();
+        await expect(fs.access(entrypoint)).resolves.toBeUndefined();
+        await expect(fs.access(indexHtml)).resolves.toBeUndefined();
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        await destroy(scope);
+      }
+    });
+  });
+
+  test("with recommended remote bindings should automatically set experimental_remote to true", async (scope) => {
+    const name = `${BRANCH_PREFIX}-test-worker-recommended-remote`;
+    const tempDir = path.join(".out", "alchemy-recommended-remote-test");
+    const entrypoint = path.join(tempDir, "worker.ts");
+
+    try {
+      // Create a temporary directory for the entrypoint file
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(tempDir, { recursive: true });
+      await fs.writeFile(entrypoint, esmWorkerScript);
+
+      const worker = await Worker(name, {
+        format: "esm",
+        entrypoint,
+        bindings: {
+          AI: new Ai(),
+          BROWSER: new BrowserRendering(),
+          DISPATCH: await DispatchNamespace("dispatch"),
+          IMAGES: new Images(),
+          VECTORIZE: await VectorizeIndex("vector", {
+            name: "vector",
+            dimensions: 768,
+            metric: "cosine",
+            adopt: true,
+          }),
+        },
+        adopt: true,
+      });
+
+      const { spec } = await WranglerJson(
+        `${BRANCH_PREFIX}-test-wrangler-json-recommended-remote`,
+        { worker },
+      );
+
+      expect(spec).toMatchObject({
+        name,
+        ai: { binding: "AI", experimental_remote: true },
+        browser: { binding: "BROWSER", experimental_remote: true },
+        dispatch_namespaces: [
+          { binding: "DISPATCH", experimental_remote: true },
+        ],
+        images: { binding: "IMAGES", experimental_remote: true },
+        vectorize: [{ binding: "VECTORIZE", experimental_remote: true }],
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await destroy(scope);
+    }
+  });
+
+  test("with dev.remote enabled should set experimental_remote to true", async (scope) => {
+    const name = `${BRANCH_PREFIX}-test-worker-dev-remote`;
+    const tempDir = path.join(".out", "alchemy-dev-remote-test");
+    const entrypoint = path.join(tempDir, "worker.ts");
+
+    try {
+      // Create a temporary directory for the entrypoint file
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(tempDir, { recursive: true });
+      await fs.writeFile(entrypoint, esmWorkerScript);
+
+      const worker = await Worker(name, {
+        format: "esm",
+        entrypoint,
+        bindings: {
+          D1: await D1Database("test-d1-db-dev-remote", {
+            dev: { remote: true },
+          }),
+          KV: await KVNamespace("test-kv-ns-dev-remote", {
+            dev: { remote: true },
+          }),
+          R2: await R2Bucket("test-r2-bucket-dev-remote", {
+            dev: { remote: true },
+          }),
+        },
+        adopt: true,
+      });
+
+      const { spec } = await WranglerJson(
+        `${BRANCH_PREFIX}-test-wrangler-json-dev-remote`,
+        { worker },
+      );
+
+      expect(spec).toMatchObject({
+        name,
+        d1_databases: [{ binding: "D1", experimental_remote: true }],
+        kv_namespaces: [{ binding: "KV", experimental_remote: true }],
+        r2_buckets: [{ binding: "R2", experimental_remote: true }],
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await destroy(scope);
+    }
   });
 });

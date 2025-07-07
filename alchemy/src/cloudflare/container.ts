@@ -96,6 +96,7 @@ export async function Container<T>(
   const image = await Image(id, {
     name: `${api.accountId}/${name}`,
     tag,
+    build: props.build,
     registry: {
       server: "registry.cloudflare.com",
       username: credentials.username || credentials.user!,

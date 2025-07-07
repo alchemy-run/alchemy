@@ -29,6 +29,7 @@ export async function createWorkerDevContext<B extends Bindings>(
     entrypoint: string;
     compatibilityDate: string;
     compatibilityFlags: string[];
+    cwd: string;
   },
   hooks: HotReloadHooks,
 ) {
@@ -50,8 +51,6 @@ export async function createWorkerDevContext<B extends Bindings>(
     props.compatibilityFlags,
   );
 
-  const projectRoot = props.projectRoot ?? process.cwd();
-
   const context = await esbuild.context({
     entryPoints: [props.entrypoint],
     format: props.format === "cjs" ? "cjs" : "esm",
@@ -63,7 +62,7 @@ export async function createWorkerDevContext<B extends Bindings>(
     write: false, // We want the result in memory for hot reloading
     conditions: ["workerd", "worker", "import", "module", "browser"],
     mainFields: ["module", "main"],
-    absWorkingDir: projectRoot,
+    absWorkingDir: props.cwd,
     keepNames: true,
     loader: {
       ".sql": "text",
@@ -80,7 +79,7 @@ export async function createWorkerDevContext<B extends Bindings>(
         ? [
             createAliasPlugin({
               alias: props.bundle?.alias,
-              projectRoot,
+              projectRoot: props.cwd,
             }),
           ]
         : []),

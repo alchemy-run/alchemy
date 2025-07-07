@@ -8,6 +8,10 @@ import {
 import path from "node:path";
 import { findOpenPort } from "../../util/find-open-port.ts";
 import { logger } from "../../util/logger.ts";
+import {
+  promiseWithResolvers,
+  type PromiseWithResolvers,
+} from "../../util/promise-with-resolvers.ts";
 import { HTTPServer } from "./http-server.ts";
 import {
   buildMiniflareWorkerOptions,
@@ -41,7 +45,7 @@ class MiniflareServer {
   writer = this.stream.getWriter();
 
   async push(worker: MiniflareWorkerOptions) {
-    const promise = Promise.withResolvers<HTTPServer>();
+    const promise = promiseWithResolvers<HTTPServer>();
     const [, server] = await Promise.all([
       this.writer.write({ worker, promise }),
       promise.promise,

@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "0.43.0",
+  "version": "0.43.5",
   "type": "module",
   "module": "./lib/index.js",
   "license": "Apache-2.0",
@@ -10,10 +10,11 @@
     "directory": "alchemy"
   },
   "scripts": {
-    "build:cli": "./scripts/bundle-cli.sh",
+    "build:cli": "run-script-os",
+    "build:cli:windows": "powershell -File ./scripts/bundle-cli.ps1",
+    "build:cli:default": "./scripts/bundle-cli.sh",
     "build:workers": "bun ./scripts/build-workers.ts",
     "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && bun run build:cli && bun run build:workers",
-    "dev:cli": "./scripts/bundle-cli.sh --watch",
     "docs:gen": "rm -rf ./docs && typedoc",
     "postbuild": "cpx 'src/**/*/types.d.ts' lib",
     "publish:npm": "cp ../README.md . && bun run build && bun run build:cli && npm publish && rm README.md"
@@ -82,6 +83,10 @@
     "./os": {
       "bun": "./src/os/index.ts",
       "import": "./lib/os/index.js"
+    },
+    "./planetscale": {
+      "bun": "./src/planetscale/index.ts",
+      "import": "./lib/planetscale/index.js"
     },
     "./sentry": {
       "bun": "./src/sentry/index.ts",

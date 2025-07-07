@@ -408,7 +408,7 @@ async function createRedirectRule(
     description: ruleset.description,
     kind: ruleset.kind,
     phase: ruleset.phase,
-    rules: [...ruleset.rules, newRule],
+    rules: [...(ruleset.rules ?? []), newRule],
   });
 
   if (!response.ok) {

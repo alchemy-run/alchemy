@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import type { Secret } from "../secret.ts";
 
 /**
  * Properties for executing a shell command
@@ -47,7 +48,7 @@ export interface ExecProps {
   /**
    * Environment variables to set
    */
-  env?: Record<string, string>;
+  env?: Record<string, string | Secret<string>>;
 
   /**
    * Whether to inherit stdio from parent process
@@ -120,6 +121,19 @@ export interface Exec extends Resource<"os::Exec">, ExecProps {
  *   command: "npm run build",
  *   cwd: "./my-project",
  *   env: { NODE_ENV: "production" }
+ * });
+ *
+ * @example
+ * // Run a command with secrets in environment variables
+ * import alchemy from "alchemy";
+ *
+ * const deploy = await Exec("deploy-app", {
+ *   command: "npm run deploy",
+ *   env: {
+ *     NODE_ENV: "production",
+ *     API_KEY: alchemy.secret(process.env.API_KEY),
+ *     DATABASE_URL: alchemy.secret(process.env.DATABASE_URL)
+ *   }
  * });
  *
  * @example
@@ -198,10 +212,23 @@ export const Exec = Resource(
       // Parse the command into command and args
       const [cmd, ...args] = props.command.split(/\s+/);
 
+      // Process environment variables, extracting values from secrets
+      const processedEnv: Record<string, string> = {};
+      if (props.env) {
+        for (const [key, value] of Object.entries(props.env)) {
+          if (typeof value === "string") {
+            processedEnv[key] = value;
+          } else {
+            // Handle Secret objects
+            processedEnv[key] = value.unencrypted;
+          }
+        }
+      }
+
       // Use spawn for better stdio control
       const childProcess = spawn(cmd, args, {
         cwd: props.cwd || process.cwd(),
-        env: { ...process.env, ...props.env },
+        env: { ...process.env, ...processedEnv },
         shell: true, // Use shell to handle complex commands
         stdio: inheritStdio ? "inherit" : "pipe", // Inherit stdio when requested
       });
@@ -342,13 +369,14 @@ export async function exec(
 }
 
 async function hashInputs(cwd: string, patterns: string[]) {
-  const { glob, readFile } = await import("node:fs/promises");
+  const { glob } = await import("glob");
+  const { readFile } = await import("node:fs/promises");
 
   const hashes = new Map<string, string>();
 
   await Promise.all(
     patterns.flatMap(async (pattern) => {
-      const files = await Array.fromAsync(glob(pattern, { cwd }));
+      const files = await glob(pattern, { cwd });
       return Promise.all(
         files.map(async (file: string) => {
           const path = join(cwd, file);

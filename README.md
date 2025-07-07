@@ -57,4 +57,4 @@ await app.finalize();
 
 # Getting Started
 
-See the [Getting Started Guide](https://alchemy.run/docs/getting-started.html).
+See the [Getting Started Guide](https://alchemy.run/getting-started).
