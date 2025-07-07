@@ -7,7 +7,11 @@ const distPath = path.dirname(__filename);
 export const PKG_ROOT = path.join(distPath, "../");
 
 export const dependencyVersionMap = {
-  alchemy: getPackageVersion(),
+  alchemy:
+    process.env.NODE_ENV === "test"
+      ? `file:${path.resolve(PKG_ROOT)}`
+      : getPackageVersion(),
 } as const;
+console.log({ dependencyVersionMap });
 
 export type DependencyVersionMap = keyof typeof dependencyVersionMap;

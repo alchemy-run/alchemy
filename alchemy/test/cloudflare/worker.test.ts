@@ -23,6 +23,7 @@ import {
 } from "./fetch-utils.ts";
 import { assertWorkerDoesNotExist } from "./test-helpers.ts";
 
+import { Container } from "../../src/cloudflare/container.ts";
 import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
@@ -204,6 +205,79 @@ describe("Worker Resource", () => {
       });
       await expect(duplicateWorker).rejects.toThrow(
         `Worker with name '${workerName}' already exists. Please use a unique name.`,
+      );
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  test("fails when creating worker with duplicate binding IDs", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-duplicate-binding-ids`;
+
+    try {
+      // Test 1: Duplicate DurableObjectNamespace IDs
+      const namespace1 = new DurableObjectNamespace("duplicate-id", {
+        className: "Counter1",
+        scriptName: workerName,
+      });
+
+      const namespace2 = new DurableObjectNamespace("duplicate-id", {
+        className: "Counter2",
+        scriptName: workerName,
+      });
+
+      // Try to create a worker with duplicate binding IDs
+      const duplicateBindingsWorker = Worker(workerName, {
+        name: workerName,
+        script: `
+          export class Counter1 {}
+          export class Counter2 {}
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Should not work!', { status: 200 });
+            }
+          };
+        `,
+        format: "esm",
+        bindings: {
+          NAMESPACE1: namespace1,
+          NAMESPACE2: namespace2, // Same ID as namespace1
+        },
+      });
+
+      await expect(duplicateBindingsWorker).rejects.toThrow(
+        "Duplicate binding ID 'duplicate-id' found for bindings 'NAMESPACE1' and 'NAMESPACE2'. Container and DurableObjectNamespace bindings must have unique IDs.",
+      );
+
+      const container = await Container("duplicate-id", {
+        className: "ContainerClass",
+        scriptName: workerName,
+        build: {
+          dockerfile: "Dockerfile",
+          context: path.join(import.meta.dirname, "container"),
+        },
+      });
+
+      const mixedDuplicateWorker = Worker(workerName, {
+        name: workerName,
+        script: `
+          export class Counter1 {}
+          export class ContainerClass {}
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Should not work!', { status: 200 });
+            }
+          };
+        `,
+        format: "esm",
+        bindings: {
+          NAMESPACE1: namespace1,
+          CONTAINER: container, // Same ID as namespace1
+        },
+      });
+
+      await expect(mixedDuplicateWorker).rejects.toThrow(
+        "Duplicate binding ID 'duplicate-id' found for bindings 'NAMESPACE1' and 'CONTAINER'. Container and DurableObjectNamespace bindings must have unique IDs.",
       );
     } finally {
       await destroy(scope);

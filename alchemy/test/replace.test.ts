@@ -343,4 +343,48 @@ describe("Replace", () => {
       }
     },
   );
+
+  test("replace is able to recover from corrupted DoStateStore", async (scope) => {
+    try {
+      let resource = await Replacable("replaceable", {
+        name: "foo-7",
+      });
+      expect(deleted).not.toContain("foo-7");
+      expect(resource.name).toBe("foo-7");
+      resource = await Replacable("replaceable", {
+        name: "bar-7",
+      });
+      // the output should have changed
+      expect(resource.name).toBe("bar-7");
+      // but the resource should not have been deleted
+      expect(deleted).not.toContain("foo-7");
+      expect(deleted).not.toContain("bar-7");
+      // the state should contain a record of the replaced resource
+      expect(await scope.get("pendingDeletions")).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            resource: expect.objectContaining({
+              [ResourceID]: "replaceable",
+              name: "foo-7",
+            }),
+          }),
+        ]),
+      );
+
+      //* force pending deletions to be the corrupted state that occurred when
+      //* DOSS wasn't serializing
+      await scope.set("pendingDeletions", [
+        { resource: { name: "foo-7" }, oldProps: { name: "foo-7" } },
+      ]);
+
+      await scope.finalize();
+
+      expect(await scope.get("pendingDeletions")).toHaveLength(0);
+
+      expect(deleted).not.toContain("bar-7");
+    } finally {
+      await destroy(scope);
+      expect(deleted).toContain("bar-7");
+    }
+  });
 });

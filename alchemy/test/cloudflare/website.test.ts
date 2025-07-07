@@ -143,6 +143,7 @@ describe("Website Resource", () => {
       const wranglerContent = await fs.readFile(wranglerPath, "utf-8");
       const wranglerJson = JSON.parse(wranglerContent);
 
+      expect(wranglerJson.main).toBe("worker.ts");
       expect(wranglerJson.name).toBe(name);
       expect(wranglerJson.assets).toMatchObject({
         binding: "ASSETS",
@@ -263,6 +264,88 @@ describe("Website Resource", () => {
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
       await destroy(scope);
+    }
+  });
+
+  test("transform.wrangler hook modifies wrangler.json before writing", async (scope) => {
+    const name = `${BRANCH_PREFIX}-test-website-transform-hook`;
+    const tempDir = path.resolve(".out", "alchemy-website-transform-hook-test");
+    const distDir = path.resolve(tempDir, "dist");
+    const entrypoint = path.resolve(tempDir, "worker.ts");
+
+    try {
+      // Create temporary directory structure
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(distDir, { recursive: true });
+
+      // Create a simple index.html in the dist directory
+      await fs.writeFile(
+        path.join(distDir, "index.html"),
+        "<html><body>Hello Website with Hook!</body></html>",
+      );
+
+      // Create a simple worker entrypoint
+      await fs.writeFile(
+        entrypoint,
+        `export default {
+          async fetch(request, env) {
+            return new Response("Hello from worker with hook!");
+          }
+        };`,
+      );
+
+      // Create website with transform.wrangler hook
+      const website = await Website(name, {
+        cwd: tempDir,
+        main: entrypoint,
+        assets: distDir,
+        wrangler: true,
+        adopt: true,
+        transform: {
+          wrangler: (spec) => {
+            // Modify the spec to add custom fields
+            return {
+              ...spec,
+              vars: {
+                ...spec.vars,
+                CUSTOM_VAR: "custom-value",
+              },
+              node_compat: true,
+              minify: true,
+            };
+          },
+        },
+      });
+
+      // Verify the website was created successfully
+      expect(website.name).toBe(name);
+      expect(website.url).toBeDefined();
+
+      // Verify wrangler.jsonc was created with the hook modifications
+      const wranglerPath = path.join(tempDir, "wrangler.jsonc");
+      await expect(fs.access(wranglerPath)).resolves.toBeUndefined();
+
+      // Verify the contents of wrangler.jsonc include the hook modifications
+      const wranglerContent = await fs.readFile(wranglerPath, "utf-8");
+      const wranglerJson = JSON.parse(wranglerContent);
+
+      expect(wranglerJson.name).toBe(name);
+      expect(wranglerJson.main).toBe("worker.ts");
+      expect(wranglerJson.assets).toMatchObject({
+        binding: "ASSETS",
+        directory: expect.stringContaining("dist"),
+      });
+
+      // Verify the hook modifications were applied
+      expect(wranglerJson.vars).toMatchObject({
+        CUSTOM_VAR: "custom-value",
+      });
+      expect(wranglerJson.node_compat).toBe(true);
+      expect(wranglerJson.minify).toBe(true);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await destroy(scope);
+      await assertWorkerDoesNotExist(api, name);
     }
   });
 });

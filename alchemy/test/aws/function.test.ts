@@ -111,7 +111,7 @@ describe("AWS Resources", () => {
       try {
         let bundle = await Bundle(`${BRANCH_PREFIX}-test-lambda-bundle`, {
           entryPoint: path.join(__dirname, "..", "handler.ts"),
-          outdir: ".out",
+          outdir: `.out/${BRANCH_PREFIX}-test-lambda-bundle`,
           format: "cjs",
           platform: "node",
           target: "node18",
@@ -195,7 +195,7 @@ describe("AWS Resources", () => {
       try {
         let bundle = await Bundle(`${BRANCH_PREFIX}-test-lambda-url-bundle`, {
           entryPoint: path.join(__dirname, "..", "handler.ts"),
-          outdir: ".out",
+          outdir: `.out/${BRANCH_PREFIX}-test-lambda-url-bundle`,
           format: "cjs",
           platform: "node",
           target: "node18",
@@ -308,7 +308,7 @@ describe("AWS Resources", () => {
           `${BRANCH_PREFIX}-test-lambda-url-remove-bundle`,
           {
             entryPoint: path.join(__dirname, "..", "handler.ts"),
-            outdir: ".out",
+            outdir: `.out/${BRANCH_PREFIX}-test-lambda-url-remove-bundle`,
             format: "cjs",
             platform: "node",
             target: "node18",
@@ -430,7 +430,7 @@ describe("AWS Resources", () => {
           `${BRANCH_PREFIX}-test-lambda-add-url-bundle`,
           {
             entryPoint: path.join(__dirname, "..", "handler.ts"),
-            outdir: ".out",
+            outdir: `.out/${BRANCH_PREFIX}-test-lambda-add-url-bundle`,
             format: "cjs",
             platform: "node",
             target: "node18",
@@ -544,7 +544,7 @@ describe("AWS Resources", () => {
           `${BRANCH_PREFIX}-test-lambda-invoke-mode-bundle`,
           {
             entryPoint: path.join(__dirname, "..", "handler.ts"),
-            outdir: ".out",
+            outdir: `.out/${BRANCH_PREFIX}-test-lambda-invoke-mode-bundle`,
             format: "cjs",
             platform: "node",
             target: "node18",
@@ -771,7 +771,7 @@ describe("AWS Resources", () => {
       try {
         let bundle = await Bundle("bundle", {
           entryPoint: path.join(__dirname, "..", "handler.ts"),
-          outdir: ".out",
+          outdir: `.out/${BRANCH_PREFIX}-test-lambda-special-chars-bundle`,
           format: "cjs",
           platform: "node",
           target: "node18",

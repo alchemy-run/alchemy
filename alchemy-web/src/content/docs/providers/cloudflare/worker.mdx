@@ -478,6 +478,36 @@ const callerWorker = await Worker("caller", {
 Learn more in the [Route Documentation](/providers/cloudflare/route)
 :::
 
+## Generating wrangler.json
+
+Generate a wrangler.json configuration file for your worker with the WranglerJson resource:
+
+```ts
+import { Worker, WranglerJson } from "alchemy/cloudflare";
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/index.ts",
+});
+
+await WranglerJson("wrangler", {
+  worker,
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      vars: {
+        ...spec.vars,
+        CUSTOM_VAR: "value",
+      },
+    }),
+  },
+});
+```
+
+:::tip
+See the [WranglerJson](/providers/cloudflare/wrangler.json) documentation for more details on configuration options.
+:::
+
 ### RPC Type
 
 If you're using a WorkerEntrypoint RPC, you can provide its type:

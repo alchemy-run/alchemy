@@ -56,14 +56,14 @@ async function cleanupProject(projectPath: string): Promise<void> {
 }
 
 const variants = {
-  typescript: "--template=typescript",
-  vite: "--template=vite",
-  astro: "--template=astro",
-  "react-router": "--template=react-router",
-  sveltekit: "--template=sveltekit",
-  rwsdk: "--template=rwsdk",
-  "tanstack-start": "--template=tanstack-start",
-  nuxt: "--template=nuxt",
+  "typescript-template": "--template=typescript",
+  "vite-template": "--template=vite",
+  "astro-template": "--template=astro",
+  "react-router-template": "--template=react-router",
+  "sveltekit-template": "--template=sveltekit",
+  "rwsdk-template": "--template=rwsdk",
+  "tanstack-start-template": "--template=tanstack-start",
+  "nuxt-template": "--template=nuxt",
 };
 
 describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
@@ -79,31 +79,22 @@ describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
       await cleanupProject(smokeDir);
 
       try {
-        // Ensure .smoke directory exists
+        // Ensure smoke directory exists
         await fs.mkdir(smokeDir, { recursive: true });
 
         // Cleanup any existing project directory
         await cleanupProject(projectPath);
 
-        // Create the project using CLI - run from .smoke directory
+        // Create the project using CLI - run from smoke directory
         console.log(`Creating ${templateName} project...`);
         const createResult = await runCommand(
-          `bun ${cliPath} create ${templateName} ${templateArg} --yes`,
-          smokeDir, // Run from .smoke directory so project is created there
+          `bun ${cliPath} create ${templateName} ${templateArg} --vibe-rules=cursor --yes`,
+          smokeDir, // Run from smoke directory so project is created there
           {
             NODE_ENV: "test",
           },
         );
         expect(createResult).toBeDefined();
-
-        // Verify project was created
-        const projectExists = await fileExists(projectPath);
-        expect(projectExists).toBe(true);
-
-        // Verify alchemy.run.ts was created
-        const alchemyRunPath = path.join(projectPath, "alchemy.run.ts");
-        const alchemyRunExists = await fileExists(alchemyRunPath);
-        expect(alchemyRunExists).toBe(true);
 
         // Try to deploy the project
         console.log(`Deploying ${templateName} project...`);
@@ -121,7 +112,7 @@ describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
         throw error;
       } finally {
         // Always cleanup the project directory
-        // await cleanupProject(projectPath);
+        await cleanupProject(projectPath);
       }
     }, 600000); // 10 minutes timeout per test
   }

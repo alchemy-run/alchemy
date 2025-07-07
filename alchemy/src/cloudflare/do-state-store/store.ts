@@ -1,6 +1,7 @@
 import { alchemy } from "../../alchemy.ts";
 import { ResourceScope } from "../../resource.ts";
 import type { Scope } from "../../scope.ts";
+import { serialize } from "../../serde.ts";
 import type { State, StateStore } from "../../state.ts";
 import { deserializeState } from "../../state.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "../api.ts";
@@ -153,7 +154,10 @@ export class DOStateStore implements StateStore {
 
   async set(key: string, value: State): Promise<void> {
     const client = await this.getClient();
-    await client.rpc("set", { key: this.serializeKey(key), value });
+    await client.rpc("set", {
+      key: this.serializeKey(key),
+      value: await serialize(this.scope, value),
+    });
   }
 
   async delete(key: string): Promise<void> {

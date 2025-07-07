@@ -1,3 +1,80 @@
+## v0.44.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Do not working with replace &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/587 [<samp>(16264)</samp>](https://github.com/sam-goodwin/alchemy/commit/16264513)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.44.0...v0.44.1)
+
+---
+
+## v0.44.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cli**:
+  - Support vibe-rules integration &nbsp;-&nbsp; by **Aman Varshney** in https://github.com/sam-goodwin/alchemy/issues/484 [<samp>(02388)</samp>](https://github.com/sam-goodwin/alchemy/commit/02388806)
+- **cloudflare**:
+  - Add transform?: { wrangler } hook to WranglerJson resource &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/559 [<samp>(68fe1)</samp>](https://github.com/sam-goodwin/alchemy/commit/68fe11fd)
+  - Enable experimental_remote to target preview resources &nbsp;-&nbsp; by **Eric Clemmons** in https://github.com/sam-goodwin/alchemy/issues/573 [<samp>(0f4fd)</samp>](https://github.com/sam-goodwin/alchemy/commit/0f4fd88c)
+  - Add esbuild plugin to detect node:* imports and warn about compatibility flags &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/527 [<samp>(28ced)</samp>](https://github.com/sam-goodwin/alchemy/commit/28ced5ee)
+  - Add adopt property to ContainerApplication for existing app adoption &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/570 [<samp>(2054a)</samp>](https://github.com/sam-goodwin/alchemy/commit/2054a07e)
+- **core**:
+  - Simplify Scope's arguments and re-enable CI/CD &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/563 [<samp>(e63c7)</samp>](https://github.com/sam-goodwin/alchemy/commit/e63c7077)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Remove colons from nodejs-import-warning test &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/586 [<samp>(7fd8b)</samp>](https://github.com/sam-goodwin/alchemy/commit/7fd8b947)
+- **cloudflare**:
+  - Error on duplicate DO or Container Stable ID in bindings &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/561 [<samp>(75c7e)</samp>](https://github.com/sam-goodwin/alchemy/commit/75c7e9e6)
+  - Set experimental_remote: true for dispatch namespace &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(4b12e)</samp>](https://github.com/sam-goodwin/alchemy/commit/4b12e354)
+- **docker**:
+  - Race condition in authorizing to docker registry &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/562 [<samp>(825ae)</samp>](https://github.com/sam-goodwin/alchemy/commit/825aef5f)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.43.5...v0.44.0)
+
+---
+
+## v0.43.5
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Remove debug logs from create CLI &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(d41eb)</samp>](https://github.com/sam-goodwin/alchemy/commit/d41ebae7)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.43.4...v0.43.5)
+
+---
+
+## v0.43.4
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Include .env in astro, typescript and astro project templates &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/557 [<samp>(ee009)</samp>](https://github.com/sam-goodwin/alchemy/commit/ee009e2a)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.43.3...v0.43.4)
+
+---
+
+## v0.43.3
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Favor wrangler.main over main in Website &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/556 [<samp>(1c023)</samp>](https://github.com/sam-goodwin/alchemy/commit/1c023ab4)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.43.2...v0.43.3)
+
+---
+
+## v0.43.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Do not resolve wrangler.main before calling WranglerJson in Website &nbsp;-&nbsp; by **Michael K** [<samp>(cea1d)</samp>](https://github.com/sam-goodwin/alchemy/commit/cea1da04)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.43.1...v0.43.2)
+
+---
+
 ## v0.43.1
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

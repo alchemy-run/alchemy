@@ -74,3 +74,21 @@ const worker = await Worker("cron", {
 
 await WranglerJson("wrangler", { worker });
 ```
+
+## With Transform Hook
+
+The transform hook allows you to customize the wrangler.json configuration. For example, adding a custom environment variable:
+
+```ts
+await WranglerJson("my-app", {
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      vars: {
+        ...spec.vars,
+        CUSTOM_VAR: "value",
+      },
+    }),
+  },
+});
+```

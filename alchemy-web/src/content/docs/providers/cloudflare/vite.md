@@ -52,3 +52,21 @@ const app = await Vite("my-vite-app", {
   assets: "./dist/client",
 });
 ```
+
+## With Transform Hook
+
+The transform hook allows you to customize the wrangler.json configuration. For example, adding a custom environment variable:
+
+```ts
+await Vite("my-app", {
+  transform: {
+    wrangler: (spec) => ({
+      ...spec,
+      vars: {
+        ...spec.vars,
+        CUSTOM_VAR: "value",
+      },
+    }),
+  },
+});
+```

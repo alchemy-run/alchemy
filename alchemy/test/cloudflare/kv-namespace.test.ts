@@ -50,6 +50,7 @@ describe("KV Namespace Resource", () => {
       // Update the KV namespace with new values
       kvNamespace = await KVNamespace(testId, {
         title: `${BRANCH_PREFIX}-Test Namespace ${testId}`,
+        adopt: true,
         values: [
           {
             key: "test-key-1",
@@ -140,6 +141,7 @@ describe("KV Namespace Resource", () => {
       // Create a KV namespace with initial values
       testKv = await KVNamespace("test-kv-namespace", {
         title: `${BRANCH_PREFIX} Test KV Namespace 2`,
+        adopt: true,
         values: [
           {
             key: "testKey",

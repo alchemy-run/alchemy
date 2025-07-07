@@ -6,7 +6,8 @@ import type { MyContainer } from "./src/worker.ts";
 
 const app = await alchemy("cloudflare-container");
 
-const container = await Container<MyContainer>("test-container", {
+const container = await Container<MyContainer>("container", {
+  name: `${app.name}-container-${app.stage}`,
   className: "MyContainer",
   build: {
     context: import.meta.dirname,
@@ -15,7 +16,9 @@ const container = await Container<MyContainer>("test-container", {
 });
 
 export const worker = await Worker("test-worker", {
+  name: `${app.name}-worker-${app.stage}`,
   entrypoint: "src/worker.ts",
+  adopt: true,
   bindings: {
     MY_CONTAINER: container,
   },

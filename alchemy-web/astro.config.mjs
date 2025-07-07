@@ -2,15 +2,15 @@
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
-import starlightLlmsTxt from "starlight-llms-txt";
 // import theme from "starlight-nextjs-theme";
 // import theme from 'starlight-theme-flexoki';
 // import theme from 'starlight-theme-rapide';
 // import theme from 'starlight-theme-obsidian';
-import theme from 'starlight-theme-nova';
+import theme from "starlight-theme-nova";
+//@ts-expect-error
+import postHogScript from "./src/scripts/posthog.js?raw";
 
 // import { ion as theme } from "starlight-ion-theme";
-
 
 // https://astro.build/config
 export default defineConfig({
@@ -30,15 +30,23 @@ export default defineConfig({
     starlight({
       title: "Alchemy",
       favicon: "/potion.png",
-      
+      head: [
+        {
+          tag: "script",
+          content: postHogScript
+            .replace(
+              "<POSTHOG_CLIENT_API_HOST>",
+              process.env.POSTHOG_CLIENT_API_HOST,
+            )
+            .replace("<POSTHOG_PROJECT_ID>", process.env.POSTHOG_PROJECT_ID),
+        },
+      ],
       logo: {
         light: "./public/alchemy-logo-light.svg",
         dark: "./public/alchemy-logo-dark.svg",
         replacesTitle: true,
       },
-      customCss: [
-        './src/styles/custom.css',
-      ],
+      customCss: ["./src/styles/custom.css"],
       prerender: true,
       social: [
         {
@@ -93,7 +101,7 @@ export default defineConfig({
           "github-dark-dimmed",
         ],
       },
-      plugins: [theme(), starlightLlmsTxt()],
+      plugins: [theme()],
     }),
   ],
   trailingSlash: "ignore",
