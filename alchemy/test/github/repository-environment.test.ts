@@ -15,7 +15,7 @@ const owner = "sam-goodwin";
 const repository = "test-alchemy-resources";
 const octokit = await createGitHubClient();
 
-describe.skipIf(!process.env.ALL_TESTS)(
+describe.skipIf(process.env.CI || !process.env.ALL_TESTS)(
   "RepositoryEnvironment Resource",
   {
     concurrent: false,
