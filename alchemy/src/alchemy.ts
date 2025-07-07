@@ -13,7 +13,7 @@ import {
   ResourceSeq,
 } from "./resource.ts";
 import { isRuntime } from "./runtime/global.ts";
-import { Scope } from "./scope.ts";
+import { DEFAULT_STAGE, Scope } from "./scope.ts";
 import { secret } from "./secret.ts";
 import type { StateStoreType } from "./state.ts";
 import type { LoggerApi } from "./util/cli.ts";
@@ -52,6 +52,7 @@ function parseCliArgs(): Partial<AlchemyOptions> {
   if (stageIndex !== -1 && stageIndex + 1 < args.length) {
     options.stage = args[stageIndex + 1];
   }
+  options.stage ??= process.env.STAGE;
 
   // Get password from environment variables
   if (process.env.ALCHEMY_PASSWORD) {
@@ -189,25 +190,18 @@ async function _alchemy(
       });
     const root = new Scope({
       ...mergedOptions,
-      appName,
+      parent: undefined,
+      scopeName: appName,
       phase,
       password: mergedOptions?.password ?? process.env.ALCHEMY_PASSWORD,
       telemetryClient,
     });
+    const stageName = mergedOptions?.stage ?? DEFAULT_STAGE;
     const stage = new Scope({
       ...mergedOptions,
-      scopeName:
-        mergedOptions?.stage ??
-        process.env.ALCHEMY_STAGE ??
-        process.env.USER ??
-        process.env.USERNAME,
       parent: root,
-      appName,
-      stage:
-        mergedOptions?.stage ??
-        process.env.ALCHEMY_STAGE ??
-        process.env.USER ??
-        process.env.USERNAME,
+      scopeName: stageName,
+      stage: stageName,
     });
     try {
       Scope.storage.enterWith(root);
@@ -455,6 +449,7 @@ async function run<T>(
     });
   const _scope = new Scope({
     ...options,
+    parent: options?.parent,
     scopeName: id,
     telemetryClient,
   });

@@ -32,7 +32,7 @@ export interface DockerBuildOptions {
   /**
    * Build arguments as key-value pairs
    */
-  buildArgs?: Record<string, string>;
+  args?: Record<string, string>;
 
   /**
    * Target build stage in multi-stage builds
@@ -175,7 +175,7 @@ export const Image = Resource(
       await fs.access(dockerfile);
 
       // Prepare build options
-      const buildOptions: Record<string, string> = props.build?.buildArgs || {};
+      const buildOptions: Record<string, string> = props.build?.args || {};
 
       // Add platform if specified
       let buildArgs = ["build", "-t", imageRef];

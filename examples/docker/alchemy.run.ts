@@ -2,12 +2,7 @@ import alchemy from "alchemy";
 import * as docker from "alchemy/docker";
 
 // Initialize Alchemy
-const app = await alchemy("docker", {
-  // Determine the phase based on command line arguments
-  phase: process.argv[2] === "destroy" ? "destroy" : "up",
-  stage: process.argv[3],
-  quiet: process.argv.includes("--quiet"),
-});
+const app = await alchemy("docker");
 
 // Get configuration values (matching the provided Pulumi config)
 const frontendPort = 3001;
