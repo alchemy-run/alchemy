@@ -2,12 +2,14 @@ import type { RemoteCallback } from "drizzle-orm/sqlite-proxy";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import assert from "node:assert";
 import crypto from "node:crypto";
-import type { CloudflareApi, CloudflareApiOptions } from "../cloudflare/api.ts";
 import type { Scope } from "../scope.ts";
+import {
+  BaseSQLiteStateStore,
+  resolveMigrationsPath,
+} from "../sqlite/internal/base-sqlite-state-store.ts";
+import * as schema from "../sqlite/internal/schema.ts";
 import { memoize } from "../util/memoize.ts";
-import { BaseSQLiteStateStore } from "./base.ts";
-import { migrations } from "./internal/migrations.ts";
-import * as schema from "./internal/schema.ts";
+import type { CloudflareApi, CloudflareApiOptions } from "./api.ts";
 
 export interface D1StateStoreOptions extends CloudflareApiOptions {
   databaseName?: string;
@@ -35,7 +37,7 @@ export class D1StateStore extends BaseSQLiteStateStore {
 
 const createDatabaseClient = memoize(
   async (options: D1StateStoreOptions) => {
-    const { createCloudflareApi } = await import("../cloudflare/api.ts");
+    const { createCloudflareApi } = await import("./api.ts");
     const api = await createCloudflareApi(options);
     const database = await upsertDatabase(
       api,
@@ -63,19 +65,21 @@ const createDatabaseClient = memoize(
         rows: Object.values(result.results.rows),
       };
     };
-    return drizzle(remoteCallback, {
-      schema,
-    });
+    return {
+      db: drizzle(remoteCallback, {
+        schema,
+      }),
+    };
   },
   (options) =>
     crypto.createHash("sha256").update(JSON.stringify(options)).digest("hex"),
 );
 
 const upsertDatabase = async (api: CloudflareApi, databaseName: string) => {
-  const { listDatabases, createDatabase } = await import(
-    "../cloudflare/d1-database.ts"
+  const { listDatabases, createDatabase } = await import("./d1-database.ts");
+  const { applyMigrations, listMigrationsFiles } = await import(
+    "./d1-migrations.ts"
   );
-  const { applyMigrations } = await import("../cloudflare/d1-migrations.ts");
   const databases = await listDatabases(api, databaseName);
   if (databases[0]) {
     return {
@@ -87,10 +91,7 @@ const upsertDatabase = async (api: CloudflareApi, databaseName: string) => {
   });
   assert(res.result.uuid, "Missing UUID for database");
   await applyMigrations({
-    migrationsFiles: migrations.map((it) => ({
-      id: it.hash,
-      sql: it.sql.join("\n"),
-    })),
+    migrationsFiles: await listMigrationsFiles(resolveMigrationsPath()),
     migrationsTable: "migrations",
     accountId: api.accountId,
     databaseId: res.result.uuid,

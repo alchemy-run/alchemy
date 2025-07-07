@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import util from "node:util";
 import type { Phase } from "./alchemy.ts";
+import { D1StateStore } from "./cloudflare/d1-state-store.ts";
 import { DOStateStore } from "./cloudflare/do-state-store/index.ts";
 import { destroy, destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
@@ -14,7 +15,6 @@ import {
   type Resource,
   type ResourceProps,
 } from "./resource.ts";
-import { D1StateStore } from "./sqlite-state-store/d1.ts";
 import type { State, StateStore, StateStoreType } from "./state.ts";
 import {
   createDummyLogger,

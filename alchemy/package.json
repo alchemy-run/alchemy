@@ -104,21 +104,9 @@
       "bun": "./src/web/shadcn.ts",
       "import": "./lib/web/shadcn.js"
     },
-    "./sqlite-state-store/better-sqlite3": {
-      "bun": "./src/sqlite-state-store/better-sqlite3.ts",
-      "import": "./lib/sqlite-state-store/better-sqlite3.js"
-    },
-    "./sqlite-state-store/bun-sqlite": {
-      "bun": "./src/sqlite-state-store/bun-sqlite.ts",
-      "import": "./lib/sqlite-state-store/bun-sqlite.js"
-    },
-    "./sqlite-state-store/d1": {
-      "bun": "./src/sqlite-state-store/d1.ts",
-      "import": "./lib/sqlite-state-store/d1.js"
-    },
-    "./sqlite-state-store/libsql": {
-      "bun": "./src/sqlite-state-store/libsql.ts",
-      "import": "./lib/sqlite-state-store/libsql.js"
+    "./sqlite": {
+      "bun": "./src/sqlite/index.ts",
+      "import": "./lib/sqlite/index.js"
     },
     "./web/astro": {
       "bun": "./src/web/astro.ts",

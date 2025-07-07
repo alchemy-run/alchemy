@@ -1,14 +1,20 @@
 import { and, eq, getTableColumns, inArray, notExists } from "drizzle-orm";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
-import type { Scope } from "../scope.ts";
-import { deserialize, serialize } from "../serde.ts";
-import type { State, StateStore } from "../state.ts";
-import * as schema from "./internal/schema.ts";
+import path from "node:path";
+import type { Scope } from "../../scope.ts";
+import { deserialize, serialize } from "../../serde.ts";
+import type { State, StateStore } from "../../state.ts";
+import * as schema from "./schema.ts";
 
 type Database = BaseSQLiteDatabase<any, any, typeof schema>;
 
+interface DatabaseWithDestroy<T extends Database = Database> {
+  db: T;
+  destroy?: () => Promise<void>;
+}
+
 export interface SQLiteStateStoreOptions<T extends Database = Database> {
-  create: () => Promise<T>;
+  create: () => Promise<DatabaseWithDestroy<T>>;
 }
 
 const { scope: _, ...columns } = getTableColumns(schema.resources);
@@ -16,8 +22,8 @@ const { scope: _, ...columns } = getTableColumns(schema.resources);
 export class BaseSQLiteStateStore<T extends Database = Database>
   implements StateStore
 {
-  private create: () => Promise<T>;
-  private dbPromise?: Promise<T>;
+  private create: () => Promise<DatabaseWithDestroy<T>>;
+  private dbPromise?: Promise<DatabaseWithDestroy<T>>;
 
   constructor(
     private readonly scope: Scope,
@@ -31,7 +37,7 @@ export class BaseSQLiteStateStore<T extends Database = Database>
   }
 
   private async createWithScope() {
-    const db = await this.create();
+    const { db, destroy } = await this.create();
     const parent = this.chain.length > 1 ? this.chain.slice(0, -1) : null;
     // Alchemy doesn't always initialize the app scope before creating the stage scope
     // so we create it here to avoid a foreign key constraint error.
@@ -45,12 +51,13 @@ export class BaseSQLiteStateStore<T extends Database = Database>
       .insert(schema.scopes)
       .values({ chain: this.chain, parent })
       .onConflictDoNothing();
-    return db;
+    return { db, destroy };
   }
 
   private async db() {
     this.dbPromise ??= this.createWithScope();
-    return await this.dbPromise;
+    const { db } = await this.dbPromise;
+    return db;
   }
 
   async init() {
@@ -61,7 +68,7 @@ export class BaseSQLiteStateStore<T extends Database = Database>
     if (!this.dbPromise) {
       return;
     }
-    const db = await this.dbPromise;
+    const { db, destroy } = await this.dbPromise;
     await db.delete(schema.scopes).where(eq(schema.scopes.chain, this.chain));
     if (this.chain.length === 2) {
       // When deinitializing the stage scope, we also delete the app scope
@@ -80,6 +87,15 @@ export class BaseSQLiteStateStore<T extends Database = Database>
             ),
           ),
         );
+    }
+    if (destroy) {
+      const [scopeCount, resourceCount] = await Promise.all([
+        db.$count(schema.scopes),
+        db.$count(schema.resources),
+      ]);
+      if (scopeCount === 0 && resourceCount === 0) {
+        await destroy();
+      }
     }
   }
 
@@ -193,3 +209,7 @@ export class BaseSQLiteStateStore<T extends Database = Database>
     return map;
   }
 }
+
+export const resolveMigrationsPath = () => {
+  return path.join(import.meta.dirname, "..", "..", "..", "drizzle");
+};
