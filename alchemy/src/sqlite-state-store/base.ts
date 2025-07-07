@@ -1,13 +1,9 @@
-import {
-  deserialize,
-  serialize,
-  type Scope,
-  type State,
-  type StateStore,
-} from "alchemy";
 import { and, eq, getTableColumns, inArray, notExists } from "drizzle-orm";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
-import * as schema from "./internal/schema";
+import type { Scope } from "../scope.ts";
+import { deserialize, serialize } from "../serde.ts";
+import type { State, StateStore } from "../state.ts";
+import * as schema from "./internal/schema.ts";
 
 type Database = BaseSQLiteDatabase<any, any, typeof schema>;
 
@@ -38,7 +34,6 @@ export class BaseSQLiteStateStore<T extends Database = Database>
 
   private async createWithScope() {
     const db = await this.create();
-    console.log("[BaseSQLiteStateStore] createWithScope", this.chain);
     const parent = this.chain.length > 1 ? this.chain.slice(0, -1) : null;
     // Alchemy doesn't always initialize the app scope before creating the stage scope
     // so we create it here to avoid a foreign key constraint error.

@@ -14,6 +14,7 @@ import {
   type Resource,
   type ResourceProps,
 } from "./resource.ts";
+import { D1StateStore } from "./sqlite-state-store/d1.ts";
 import type { State, StateStore, StateStoreType } from "./state.ts";
 import {
   createDummyLogger,
@@ -170,12 +171,7 @@ export class Scope {
     }
 
     this.stateStore =
-      options.stateStore ??
-      this.parent?.stateStore ??
-      ((scope) =>
-        process.env.ALCHEMY_STATE_STORE === "cloudflare"
-          ? new DOStateStore(scope)
-          : new FileSystemStateStore(scope));
+      options.stateStore ?? this.parent?.stateStore ?? defaultStateStore;
     this.state = this.stateStore(this);
     if (!options.telemetryClient && !this.parent?.telemetryClient) {
       throw new Error("Telemetry client is required");
@@ -205,19 +201,22 @@ export class Scope {
   }
 
   public get chain(): string[] {
+    // Since the root scope name is the same as the app name, this ensures
+    // the root scope chain is "<app-name>" instead of "<app-name>/<app-name>".
     if (
       !this.parent &&
       this.appName &&
       this.scopeName &&
-      this.appName === this.scopeName &&
-      isSQLiteStateStore(this.state)
+      this.appName === this.scopeName
     ) {
       return [this.appName];
     }
+
     const thisScope = this.scopeName ? [this.scopeName] : [];
     if (this.parent) {
       return [...this.parent.chain, ...thisScope];
     }
+
     const app = this.appName ? [this.appName] : [];
     return [...app, ...thisScope];
   }
@@ -470,6 +469,17 @@ export class Scope {
 )`;
   }
 }
+
+const defaultStateStore: StateStoreType = (scope: Scope) => {
+  switch (process.env.ALCHEMY_STATE_STORE) {
+    case "cloudflare-d1":
+      return new D1StateStore(scope);
+    case "cloudflare":
+      return new DOStateStore(scope);
+    default:
+      return new FileSystemStateStore(scope);
+  }
+};
 
 const isSQLiteStateStore = (state: StateStore) =>
   typeof state === "object" &&

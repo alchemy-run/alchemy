@@ -1,10 +1,13 @@
-import type { Resource as AlchemyResource, ResourceProps } from "alchemy";
 import {
   integer,
   primaryKey,
   sqliteTable,
   text,
 } from "drizzle-orm/sqlite-core";
+import type {
+  Resource as AlchemyResource,
+  ResourceProps,
+} from "../../resource.ts";
 
 export const scopes = sqliteTable("scopes", {
   chain: text("chain", { mode: "json" }).primaryKey().$type<string[]>(),

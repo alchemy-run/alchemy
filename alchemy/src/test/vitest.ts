@@ -2,7 +2,6 @@ import path from "node:path";
 import { afterAll, beforeAll, it } from "vitest";
 import { alchemy } from "../alchemy.ts";
 import { Scope } from "../scope.ts";
-import { DefaultStateStore } from "../sqlite-state-store/default.ts";
 import type { StateStoreType } from "../state.ts";
 import { NoopTelemetryClient } from "../util/telemetry/client.ts";
 
@@ -122,10 +121,6 @@ export function test(
 ): test {
   if (!("quiet" in defaultOptions)) {
     defaultOptions.quiet = true;
-  }
-
-  if (defaultOptions.stateStore === undefined) {
-    defaultOptions.stateStore = (scope) => new DefaultStateStore(scope);
   }
 
   test.skipIf = (condition: boolean) => {

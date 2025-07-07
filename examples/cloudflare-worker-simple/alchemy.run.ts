@@ -8,11 +8,8 @@ import {
   R2Bucket,
   Worker,
 } from "alchemy/cloudflare";
-import { D1StateStore } from "alchemy/sqlite-state-store/d1";
 
-const app = await alchemy("cloudflare-worker-simple", {
-  stateStore: (scope) => new D1StateStore(scope),
-});
+const app = await alchemy("cloudflare-worker-simple");
 
 const [d1, kv, r2] = await Promise.all([
   D1Database("d1", {
