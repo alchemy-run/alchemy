@@ -40,12 +40,8 @@ jobs:
         run: bun run check
 
       - name: Run tests
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            bun run test:smoke
-          else
-            bun run test
-          fi
+        if: github.event_name != 'pull_request'
+        run: bun run test:fast
         env:
           ALCHEMY_PASSWORD: ${{ env.ALCHEMY_PASSWORD }}
           ALCHEMY_STATE_S3_BUCKET: alchemy-state-5104rt
