@@ -57,27 +57,33 @@ export class SQLiteStateStore extends BaseSQLiteStateStore {
   }
 }
 
+const isPeerInstalled = (name: string) =>
+  import(name).then(() => true).catch(() => false);
+
+const assertPeers = async (names: string[]) => {
+  const missing = await Promise.all(
+    names.filter((name) => !isPeerInstalled(name)),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `[SQLiteStateStore] Missing peer dependencies: ${missing.join(", ")}`,
+    );
+  }
+};
+
 async function createDefaultDatabase() {
-  try {
-    await import("bun:sqlite");
+  if (await isPeerInstalled("bun:sqlite")) {
     return createBunSQLiteDatabase();
-  } catch {
-    //ignore
   }
-  try {
-    await import("@libsql/client");
+  if (await isPeerInstalled("@libsql/client")) {
     return createLibSQLDatabase();
-  } catch {
-    //ignore
   }
-  try {
-    await import("better-sqlite3");
+  if (await isPeerInstalled("better-sqlite3")) {
     return createBetterSQLite3Database();
-  } catch {
-    //ignore
   }
+  const hasDrizzle = await isPeerInstalled("drizzle-orm");
   throw new Error(
-    "No supported SQLite engine found for SQLiteStateStore. Please install `@libsql/client` or `better-sqlite3`.",
+    `No supported SQLite engine found for SQLiteStateStore. Please install ${hasDrizzle ? "" : "`drizzle-orm` and "} \`@libsql/client\` or \`better-sqlite3\`.`,
   );
 }
 
@@ -85,6 +91,7 @@ async function createBunSQLiteDatabase(
   filename: string = process.env.ALCHEMY_STATE_FILE ?? ".alchemy/state.sqlite",
   options?: BunSQLiteOptions,
 ) {
+  await assertPeers(["drizzle-orm", "bun:sqlite"]);
   ensureDirectory(filename);
   const { Database } = await import("bun:sqlite");
   const { drizzle } = await import("drizzle-orm/bun-sqlite");
@@ -103,6 +110,7 @@ async function createBetterSQLite3Database(
   filename: string = process.env.ALCHEMY_STATE_FILE ?? ".alchemy/state.sqlite",
   options?: BetterSQLite3Options,
 ) {
+  await assertPeers(["drizzle-orm", "better-sqlite3"]);
   ensureDirectory(filename);
   const { default: Client } = await import("better-sqlite3");
   const { drizzle } = await import("drizzle-orm/better-sqlite3");
@@ -118,6 +126,7 @@ async function createBetterSQLite3Database(
 }
 
 async function createLibSQLDatabase(options?: LibSQLConfig) {
+  await assertPeers(["drizzle-orm", "@libsql/client"]);
   const url =
     options?.url ??
     `file:${process.env.ALCHEMY_STATE_FILE ?? ".alchemy/state.sqlite"}`;
