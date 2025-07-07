@@ -4,6 +4,7 @@ import { Resource, ResourceKind } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
+import { withExponentialBackoff } from "../util/retry.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import { type CloudflareApi, createCloudflareApi } from "./api.ts";
 import type { Bound } from "./bound.ts";
@@ -600,22 +601,29 @@ export async function updatePublicAccess(
 ): Promise<void> {
   const headers = withJurisdiction({}, jurisdiction);
 
-  const response = await api.put(
-    `/accounts/${api.accountId}/r2/buckets/${bucketName}/domains/managed`,
-    {
-      enabled: allowPublicAccess,
-    },
-    { headers },
-  );
+  await withExponentialBackoff(
+    async () => {
+      const response = await api.put(
+        `/accounts/${api.accountId}/r2/buckets/${bucketName}/domains/managed`,
+        {
+          enabled: allowPublicAccess,
+        },
+        { headers },
+      );
 
-  if (!response.ok) {
-    await handleApiError(
-      response,
-      "updating public access for",
-      "R2 bucket",
-      bucketName,
-    );
-  }
+      if (!response.ok) {
+        await handleApiError(
+          response,
+          "updating public access for",
+          "R2 bucket",
+          bucketName,
+        );
+      }
+    },
+    (err) => err.status === 404,
+    10,
+    1000,
+  );
 }
 
 /**

@@ -1,10 +1,22 @@
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import {
   type CloudflareApi,
   createCloudflareApi,
 } from "../../src/cloudflare/api.ts";
-import { D1Database, listDatabases } from "../../src/cloudflare/d1-database.ts";
+import {
+  createDatabase,
+  D1Database,
+  deleteDatabase,
+  listDatabases,
+} from "../../src/cloudflare/d1-database.ts";
+import {
+  executeD1SQL,
+  getAppliedMigrations,
+} from "../../src/cloudflare/d1-migrations.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
@@ -194,6 +206,21 @@ describe("D1 Database Resource", async () => {
       expect(database.name).toEqual(migrationsDb);
       expect(database.id).toBeTruthy();
 
+      // Verify the migration table structure by querying migration records
+      const migrationRecords = await executeD1SQL(
+        {
+          accountId: api.accountId,
+          databaseId: database.id,
+          api: api,
+          migrationsFiles: [],
+          migrationsTable: "d1_migrations",
+        },
+        "SELECT id, name FROM d1_migrations ORDER BY id;",
+      );
+
+      const records = migrationRecords.result[0].results;
+      expect(records).toEqual([{ id: "00001", name: "001_create_table.sql" }]);
+
       // Now check if the test_migrations_table exists by querying the schema
       const tables = await getResults(
         api,
@@ -203,6 +230,52 @@ describe("D1 Database Resource", async () => {
 
       expect(tables.length).toBeGreaterThan(0);
       expect(tables[0]?.name).toEqual("test_migrations_table");
+    } finally {
+      await alchemy.destroy(scope);
+      if (database) {
+        await assertDatabaseDeleted(database);
+      }
+    }
+  });
+
+  test("create database with custom migrationsTable", async (scope) => {
+    const customMigrationsDb = `${testId}-custom-migrations-table`;
+    let database: D1Database | undefined;
+
+    try {
+      database = await D1Database(customMigrationsDb, {
+        name: customMigrationsDb,
+        migrationsDir: `${__dirname}/migrations`,
+        migrationsTable: "custom_migration_tracking",
+        adopt: true,
+      });
+
+      expect(database.name).toEqual(customMigrationsDb);
+      expect(database.id).toBeTruthy();
+
+      // Verify the actual migration content was applied (same as the existing test)
+      const tables = await getResults(
+        api,
+        database,
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='test_migrations_table';",
+      );
+
+      expect(tables.length).toBeGreaterThan(0);
+      expect(tables[0]?.name).toEqual("test_migrations_table");
+
+      // Verify the custom migration table was created instead of the default
+      const allTables = await getResults(
+        api,
+        database,
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('custom_migration_tracking', 'd1_migrations') ORDER BY name;",
+      );
+
+      // Should have the custom table but not the default one
+      expect(allTables.length).toBeGreaterThan(0);
+      expect(
+        allTables.some((t) => t.name === "custom_migration_tracking"),
+      ).toBe(true);
+      expect(allTables.some((t) => t.name === "d1_migrations")).toBe(false);
     } finally {
       await alchemy.destroy(scope);
       if (database) {
@@ -460,6 +533,328 @@ describe("D1 Database Resource", async () => {
       await destroy(scope);
     }
   }, 120000); // Increased timeout for D1 database operations
+
+  test("migrates legacy migration schema and applies new migrations", async (scope) => {
+    const legacyMigrationDb = `${testId}-legacy-migration`;
+    let tempDir: string | undefined;
+    let databaseId: string | undefined;
+
+    try {
+      // Step 0: Clean up any existing database with the same name
+      try {
+        const existingDatabases = await listDatabases(api);
+        const existingDb = existingDatabases.find(
+          (db) => db.name === legacyMigrationDb,
+        );
+        if (existingDb) {
+          await deleteDatabase(api, existingDb.id);
+        }
+      } catch {}
+
+      // Create a temporary directory for migration files
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "d1-test-migrations-"));
+
+      // Create test migration files
+      await fs.writeFile(
+        path.join(tempDir, "0002_create_users.sql"),
+        `CREATE TABLE users (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          email TEXT UNIQUE NOT NULL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );`,
+      );
+
+      await fs.writeFile(
+        path.join(tempDir, "0003_create_posts.sql"),
+        `CREATE TABLE posts (
+          id INTEGER PRIMARY KEY,
+          user_id INTEGER,
+          title TEXT NOT NULL,
+          content TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        );`,
+      );
+
+      await fs.writeFile(
+        path.join(tempDir, "0004_add_users_data.sql"),
+        `INSERT INTO users (name, email) VALUES 
+          ('Alice', 'alice@example.com'),
+          ('Bob', 'bob@example.com');`,
+      );
+
+      // Step 1: Create a D1 database manually using the createDatabase function
+      const dbResponse = await createDatabase(api, legacyMigrationDb, {
+        primaryLocationHint: "wnam",
+      });
+
+      databaseId = dbResponse.result.uuid;
+      expect(databaseId).toBeTruthy();
+
+      if (!databaseId) {
+        throw new Error("Database creation failed - no ID returned");
+      }
+
+      // Step 2: Create a legacy migration table manually (2-column schema)
+      const legacyMigrationsTable = "d1_migrations";
+      const createLegacyTableSQL = `CREATE TABLE ${legacyMigrationsTable} (
+        id TEXT PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      );`;
+
+      await executeD1SQL(
+        {
+          accountId: api.accountId,
+          databaseId: databaseId,
+          api: api,
+          migrationsFiles: [],
+          migrationsTable: legacyMigrationsTable,
+        },
+        createLegacyTableSQL,
+      );
+
+      // Step 3: Insert some fake migration records into the legacy table (simulating old migrations)
+      const insertLegacySQL = `INSERT INTO ${legacyMigrationsTable} (id, applied_at) VALUES 
+        ('0000_initial_setup.sql', datetime('now', '-1 day')),
+        ('0001_add_indexes.sql', datetime('now', '-1 hour'));`;
+
+      await executeD1SQL(
+        {
+          accountId: api.accountId,
+          databaseId: databaseId,
+          api: api,
+          migrationsFiles: [],
+          migrationsTable: legacyMigrationsTable,
+        },
+        insertLegacySQL,
+      );
+
+      // Step 4: Use D1Database resource with adopt: true and migrations
+      // This should trigger the migration of the legacy schema and apply new migrations
+      const database = await D1Database(legacyMigrationDb, {
+        name: legacyMigrationDb,
+        migrationsDir: tempDir,
+        migrationsTable: legacyMigrationsTable,
+        adopt: true,
+      });
+
+      expect(database.name).toEqual(legacyMigrationDb);
+      expect(database.id).toBeTruthy();
+
+      // Step 5: Verify the migration table structure was upgraded by checking for 'name' column
+      const tableInfo = await executeD1SQL(
+        {
+          accountId: api.accountId,
+          databaseId: database.id,
+          api: api,
+          migrationsFiles: [],
+          migrationsTable: legacyMigrationsTable,
+        },
+        `PRAGMA table_info(${legacyMigrationsTable});`,
+      );
+
+      const columns = tableInfo.result[0].results;
+      const hasNameColumn = columns.some((col: any) => col.name === "name");
+      const hasIdColumn = columns.some((col: any) => col.name === "id");
+
+      expect(hasIdColumn).toBe(true);
+      expect(hasNameColumn).toBe(true);
+      expect(columns.length).toBe(3); // id, name, applied_at
+
+      // Step 6: Verify old migration records were preserved and new migrations were applied
+      const finalApplied = await getAppliedMigrations({
+        accountId: api.accountId,
+        databaseId: database.id,
+        api: api,
+        migrationsFiles: [],
+        migrationsTable: legacyMigrationsTable,
+      });
+
+      // Should have the migrated legacy records plus new migrations
+      expect(finalApplied.size).toBeGreaterThanOrEqual(5); // 2 legacy + 3 new
+      expect(finalApplied.has("0000_initial_setup.sql")).toBe(true);
+      expect(finalApplied.has("0001_add_indexes.sql")).toBe(true);
+      expect(finalApplied.has("0002_create_users.sql")).toBe(true);
+      expect(finalApplied.has("0003_create_posts.sql")).toBe(true);
+      expect(finalApplied.has("0004_add_users_data.sql")).toBe(true);
+
+      // Step 7: Verify the actual table structure was created by the migrations
+      const tables = await getResults(
+        api,
+        database,
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users', 'posts') ORDER BY name;",
+      );
+
+      expect(tables.length).toBe(2);
+      expect(tables[0].name).toBe("posts");
+      expect(tables[1].name).toBe("users");
+
+      // Step 8: Verify the data was inserted
+      const users = await getResults(
+        api,
+        database,
+        "SELECT name, email FROM users ORDER BY name;",
+      );
+
+      expect(users.length).toBe(2);
+      expect(users[0].name).toBe("Alice");
+      expect(users[0].email).toBe("alice@example.com");
+      expect(users[1].name).toBe("Bob");
+      expect(users[1].email).toBe("bob@example.com");
+
+      // Step 9: Add a new migration file after initial adoption to test subsequent updates
+      await fs.writeFile(
+        path.join(tempDir, "0005_add_posts_data.sql"),
+        `INSERT INTO posts (user_id, title, content) VALUES 
+          (1, 'First Post', 'This is Alice first post'),
+          (2, 'Welcome Post', 'Bob welcomes everyone');`,
+      );
+
+      // Step 10: Run migrations again with the new migration file
+      const updatedDatabase = await D1Database(legacyMigrationDb, {
+        name: legacyMigrationDb,
+        migrationsDir: tempDir,
+        migrationsTable: legacyMigrationsTable,
+        adopt: true,
+      });
+
+      expect(updatedDatabase.id).toEqual(database.id); // Should be the same database
+
+      // Step 11: Verify the new migration was applied
+      const finalAppliedAfterUpdate = await getAppliedMigrations({
+        accountId: api.accountId,
+        databaseId: updatedDatabase.id,
+        api: api,
+        migrationsFiles: [],
+        migrationsTable: legacyMigrationsTable,
+      });
+
+      // Should now have all 6 migrations (2 legacy + 3 initial + 1 new)
+      expect(finalAppliedAfterUpdate.size).toBeGreaterThanOrEqual(6);
+      expect(finalAppliedAfterUpdate.has("0000_initial_setup.sql")).toBe(true);
+      expect(finalAppliedAfterUpdate.has("0001_add_indexes.sql")).toBe(true);
+      expect(finalAppliedAfterUpdate.has("0002_create_users.sql")).toBe(true);
+      expect(finalAppliedAfterUpdate.has("0003_create_posts.sql")).toBe(true);
+      expect(finalAppliedAfterUpdate.has("0004_add_users_data.sql")).toBe(true);
+      expect(finalAppliedAfterUpdate.has("0005_add_posts_data.sql")).toBe(true);
+
+      // Step 12: Verify the new posts data was inserted
+      const posts = await getResults(
+        api,
+        updatedDatabase,
+        "SELECT user_id, title, content FROM posts ORDER BY user_id;",
+      );
+
+      expect(posts.length).toBe(2);
+      expect(posts[0].user_id).toBe(1);
+      expect(posts[0].title).toBe("First Post");
+      expect(posts[0].content).toBe("This is Alice first post");
+      expect(posts[1].user_id).toBe(2);
+      expect(posts[1].title).toBe("Welcome Post");
+      expect(posts[1].content).toBe("Bob welcomes everyone");
+
+      // Step 13: Verify that migration IDs follow the monotonically increasing, zero-padded format
+      const allMigrationRecords = await executeD1SQL(
+        {
+          accountId: api.accountId,
+          databaseId: updatedDatabase.id,
+          api: api,
+          migrationsFiles: [],
+          migrationsTable: legacyMigrationsTable,
+        },
+        `SELECT id, name FROM ${legacyMigrationsTable} ORDER BY id;`,
+      );
+
+      const migrationRecords = allMigrationRecords.result[0].results as Array<{
+        id: string;
+        name: string;
+      }>;
+
+      // Verify we have all expected migrations
+      expect(migrationRecords.length).toBe(6);
+
+      // Extract the IDs and verify they follow the expected pattern
+      const migrationIds = migrationRecords.map((r) => r.id);
+
+      // All IDs should be 5-digit zero-padded numbers
+      for (const id of migrationIds) {
+        expect(id).toMatch(/^\d{5}$/);
+      }
+
+      // IDs should be sequential starting from 00001
+      expect(migrationIds[0]).toBe("00001");
+      expect(migrationIds[1]).toBe("00002");
+      expect(migrationIds[2]).toBe("00003");
+      expect(migrationIds[3]).toBe("00004");
+      expect(migrationIds[4]).toBe("00005");
+      expect(migrationIds[5]).toBe("00006");
+
+      // Step 14: Add another migration file and verify ID continues sequentially
+      await fs.writeFile(
+        path.join(tempDir, "0006_add_more_data.sql"),
+        `INSERT INTO posts (user_id, title, content) VALUES 
+          (1, 'Second Post', 'Alice second post'),
+          (2, 'Another Post', 'Bob another post');`,
+      );
+
+      // Step 15: Apply the additional migration
+      const finalDatabase = await D1Database(legacyMigrationDb, {
+        name: legacyMigrationDb,
+        migrationsDir: tempDir,
+        migrationsTable: legacyMigrationsTable,
+        adopt: true,
+      });
+
+      // Step 16: Verify the final migration ID continues the sequence
+      const finalMigrationRecords = await executeD1SQL(
+        {
+          accountId: api.accountId,
+          databaseId: finalDatabase.id,
+          api: api,
+          migrationsFiles: [],
+          migrationsTable: legacyMigrationsTable,
+        },
+        `SELECT id, name FROM ${legacyMigrationsTable} ORDER BY id;`,
+      );
+
+      const finalRecords = finalMigrationRecords.result[0].results as Array<{
+        id: string;
+        name: string;
+      }>;
+
+      expect(finalRecords.length).toBe(7);
+
+      // The last migration should have ID 00007
+      const lastRecord = finalRecords[finalRecords.length - 1];
+      expect(lastRecord.id).toBe("00007");
+      expect(lastRecord.name).toBe("0006_add_more_data.sql");
+    } finally {
+      // Clean up temporary directory
+      if (tempDir) {
+        try {
+          await fs.rm(tempDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+          console.warn("Failed to clean up temp directory:", cleanupError);
+        }
+      }
+
+      // Clean up database through Alchemy's destroy
+      await destroy(scope);
+
+      // If we created a database manually but Alchemy destroy didn't handle it, clean it up
+      if (databaseId) {
+        try {
+          await deleteDatabase(api, databaseId);
+        } catch (cleanupError) {
+          console.warn(
+            "Failed to clean up manually created database:",
+            cleanupError,
+          );
+        }
+      }
+    }
+  }, 120000); // Extended timeout for complex migration operations
 });
 
 async function getResults(

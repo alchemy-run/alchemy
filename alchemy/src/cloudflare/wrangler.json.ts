@@ -27,7 +27,7 @@ export interface WranglerJsonProps {
   /**
    * Path to write the wrangler.json file to
    *
-   * @default cwd/wrangler.json
+   * @default worker.cwd/wrangler.json
    */
   path?: string;
 
@@ -46,6 +46,25 @@ export interface WranglerJsonProps {
   assets?: {
     binding: string;
     directory: string;
+  };
+
+  /**
+   * Transform hooks to modify generated configuration files
+   */
+  transform?: {
+    /**
+     * Hook to modify the wrangler.json object before it's written
+     *
+     * This function receives the generated wrangler.json spec and should return
+     * a modified version. It's applied as the final transformation before the
+     * file is written to disk.
+     *
+     * @param spec - The generated wrangler.json specification
+     * @returns The modified wrangler.json specification
+     */
+    wrangler?: (
+      spec: WranglerJsonSpec,
+    ) => WranglerJsonSpec | Promise<WranglerJsonSpec>;
   };
 }
 
@@ -89,14 +108,27 @@ export const WranglerJson = Resource(
     _id: string,
     props: WranglerJsonProps,
   ): Promise<WranglerJson> {
-    // Default path is wrangler.json in current directory
-    const filePath = props.path || "wrangler.jsonc";
-
     if (this.phase === "delete") {
       return this.destroy();
     }
 
-    if (props.worker.entrypoint === undefined) {
+    const cwd = props.worker.cwd
+      ? path.resolve(props.worker.cwd)
+      : process.cwd();
+
+    const toAbsolute = <T extends string | undefined>(input: T): T => {
+      return (input ? path.resolve(cwd, input) : undefined) as T;
+    };
+
+    const main = toAbsolute(props.main ?? props.worker.entrypoint);
+    let filePath = toAbsolute(props.path ?? cwd);
+    if (!path.basename(filePath).match(".json")) {
+      filePath = path.join(filePath, props.name ?? "wrangler.jsonc");
+    }
+
+    const dirname = path.dirname(filePath);
+
+    if (!main) {
       throw new Error(
         "Worker must have an entrypoint to generate a wrangler.json",
       );
@@ -107,16 +139,27 @@ export const WranglerJson = Resource(
     const spec: WranglerJsonSpec = {
       name: worker.name,
       // Use entrypoint as main if it exists
-      main: props.main ?? worker.entrypoint,
+      main: path.relative(dirname, main),
       // see: https://developers.cloudflare.com/workers/configuration/compatibility-dates/
       compatibility_date: worker.compatibilityDate,
       compatibility_flags: props.worker.compatibilityFlags,
-      assets: props.assets,
+      assets: props.assets
+        ? {
+            directory: toAbsolute(props.assets.directory),
+            binding: props.assets.binding,
+          }
+        : undefined,
     };
 
     // Process bindings if they exist
     if (worker.bindings) {
-      processBindings(spec, worker.bindings, worker.eventSources, worker.name);
+      processBindings(
+        spec,
+        worker.bindings,
+        worker.eventSources,
+        worker.name,
+        cwd,
+      );
     }
 
     // Add environment variables as vars
@@ -128,14 +171,23 @@ export const WranglerJson = Resource(
       spec.triggers = { crons: worker.crons };
     }
 
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, await formatJson(spec));
+    if (spec.assets) {
+      spec.assets.directory = path.relative(dirname, spec.assets.directory);
+    }
+
+    // Apply the wrangler configuration hook as the final transformation
+    const finalSpec = props.transform?.wrangler
+      ? await props.transform.wrangler(spec)
+      : spec;
+
+    await fs.mkdir(dirname, { recursive: true });
+    await fs.writeFile(filePath, await formatJson(finalSpec));
 
     // Return the resource
     return this({
       ...props,
-      path: filePath,
-      spec,
+      path: path.relative(cwd, filePath),
+      spec: finalSpec,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -188,6 +240,7 @@ export interface WranglerJsonSpec {
    */
   ai?: {
     binding: string;
+    experimental_remote?: boolean;
   };
 
   /**
@@ -195,6 +248,7 @@ export interface WranglerJsonSpec {
    */
   browser?: {
     binding: string;
+    experimental_remote?: boolean;
   };
 
   /**
@@ -202,6 +256,7 @@ export interface WranglerJsonSpec {
    */
   images?: {
     binding: string;
+    experimental_remote?: boolean;
   };
 
   /**
@@ -214,6 +269,7 @@ export interface WranglerJsonSpec {
      * The ID of the KV namespace used during `wrangler dev`
      */
     preview_id?: string;
+    experimental_remote?: boolean;
   }[];
 
   /**
@@ -238,6 +294,7 @@ export interface WranglerJsonSpec {
      * The preview name of this R2 bucket at the edge.
      */
     preview_bucket_name?: string;
+    experimental_remote?: boolean;
   }[];
 
   /**
@@ -280,6 +337,7 @@ export interface WranglerJsonSpec {
   vectorize?: {
     binding: string;
     index_name: string;
+    experimental_remote?: boolean;
   }[];
 
   /**
@@ -299,6 +357,7 @@ export interface WranglerJsonSpec {
      * The ID of the D1 database used during `wrangler dev`
      */
     preview_database_id?: string;
+    experimental_remote?: boolean;
   }[];
 
   /**
@@ -370,6 +429,7 @@ export interface WranglerJsonSpec {
   dispatch_namespaces?: {
     binding: string;
     namespace: string;
+    experimental_remote?: boolean;
   }[];
 }
 
@@ -381,10 +441,15 @@ function processBindings(
   bindings: Bindings,
   eventSources: EventSource[] | undefined,
   workerName: string,
+  workerCwd: string,
 ): void {
   // Arrays to collect different binding types
-  const kvNamespaces: { binding: string; id: string; preview_id: string }[] =
-    [];
+  const kvNamespaces: {
+    binding: string;
+    id: string;
+    preview_id: string;
+    experimental_remote?: boolean;
+  }[] = [];
   const durableObjects: {
     name: string;
     class_name: string;
@@ -411,6 +476,7 @@ function processBindings(
     database_name: string;
     migrations_dir?: string;
     preview_database_id: string;
+    experimental_remote?: boolean;
   }[] = [];
   const queues: {
     producers: { queue: string; binding: string }[];
@@ -430,7 +496,11 @@ function processBindings(
   const new_sqlite_classes: string[] = [];
   const new_classes: string[] = [];
 
-  const vectorizeIndexes: { binding: string; index_name: string }[] = [];
+  const vectorizeIndexes: {
+    binding: string;
+    index_name: string;
+    experimental_remote?: boolean;
+  }[] = [];
   const analyticsEngineDatasets: { binding: string; dataset: string }[] = [];
   const hyperdrive: {
     binding: string;
@@ -446,6 +516,7 @@ function processBindings(
   const dispatchNamespaces: {
     binding: string;
     namespace: string;
+    experimental_remote?: boolean;
   }[] = [];
   const containers: {
     class_name: string;
@@ -498,6 +569,9 @@ function processBindings(
         binding: bindingName,
         id: id,
         preview_id: id,
+        ...("dev" in binding && binding.dev?.remote
+          ? { experimental_remote: true }
+          : {}),
       });
     } else if (
       typeof binding === "object" &&
@@ -521,13 +595,14 @@ function processBindings(
         binding: bindingName,
         bucket_name: binding.name,
         preview_bucket_name: binding.name,
+        ...(binding.dev?.remote ? { experimental_remote: true } : {}),
       });
     } else if (binding.type === "secret") {
       // Secret binding
       secrets.push(bindingName);
     } else if (binding.type === "assets") {
       spec.assets = {
-        directory: binding.path,
+        directory: path.resolve(workerCwd, binding.path),
         binding: bindingName,
       };
     } else if (binding.type === "workflow") {
@@ -544,6 +619,7 @@ function processBindings(
         database_name: binding.name,
         migrations_dir: binding.migrationsDir,
         preview_database_id: binding.id,
+        ...(binding.dev?.remote ? { experimental_remote: true } : {}),
       });
     } else if (binding.type === "queue") {
       queues.producers.push({
@@ -554,6 +630,8 @@ function processBindings(
       vectorizeIndexes.push({
         binding: bindingName,
         index_name: binding.name,
+        // https://developers.cloudflare.com/workers/development-testing/#recommended-remote-bindings
+        experimental_remote: true,
       });
     } else if (binding.type === "browser") {
       if (spec.browser) {
@@ -561,6 +639,8 @@ function processBindings(
       }
       spec.browser = {
         binding: bindingName,
+        // https://developers.cloudflare.com/workers/development-testing/#recommended-remote-bindings
+        experimental_remote: true,
       };
     } else if (binding.type === "ai") {
       if (spec.ai) {
@@ -568,6 +648,8 @@ function processBindings(
       }
       spec.ai = {
         binding: bindingName,
+        // https://developers.cloudflare.com/workers/development-testing/#recommended-remote-bindings
+        experimental_remote: true,
       };
     } else if (binding.type === "images") {
       if (spec.images) {
@@ -575,6 +657,8 @@ function processBindings(
       }
       spec.images = {
         binding: bindingName,
+        // https://developers.cloudflare.com/workers/development-testing/#recommended-remote-bindings
+        experimental_remote: true,
       };
     } else if (binding.type === "analytics_engine") {
       analyticsEngineDatasets.push({
@@ -619,6 +703,7 @@ function processBindings(
       dispatchNamespaces.push({
         binding: bindingName,
         namespace: binding.namespaceName,
+        experimental_remote: true,
       });
     } else if (binding.type === "secret_key") {
       // no-op

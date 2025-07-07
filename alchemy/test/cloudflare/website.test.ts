@@ -2,9 +2,11 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { Website } from "../../src/cloudflare/website.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
+import { assertWorkerDoesNotExist } from "./test-helpers.ts";
 
 import "../../src/test/vitest.ts";
 
@@ -12,7 +14,81 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
+// Create a Cloudflare API client for verification
+const api = await createCloudflareApi();
+
 describe("Website Resource", () => {
+  test("create website with url false and verify no workers.dev subdomain", async (scope) => {
+    const name = `${BRANCH_PREFIX}-test-website-no-url`;
+    const tempDir = path.resolve(".out", "alchemy-website-no-url-test");
+    const distDir = path.resolve(tempDir, "dist");
+    const entrypoint = path.resolve(tempDir, "worker.ts");
+
+    try {
+      // Create temporary directory structure
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(distDir, { recursive: true });
+
+      // Create a simple index.html in the dist directory
+      await fs.writeFile(
+        path.join(distDir, "index.html"),
+        "<html><body>Hello Website without subdomain!</body></html>",
+      );
+
+      // Create a simple worker entrypoint
+      await fs.writeFile(
+        entrypoint,
+        `export default {
+          async fetch(request, env) {
+            return new Response("Hello from website worker without subdomain!");
+          }
+        };`,
+      );
+
+      // Create website with url: false (disable workers.dev subdomain)
+      const website = await Website(name, {
+        main: entrypoint,
+        assets: distDir,
+        url: false, // Explicitly disable workers.dev URL
+        adopt: true,
+      });
+
+      expect(website.name).toBe(name);
+      expect(website.url).toBeUndefined(); // No URL should be provided
+
+      // Query Cloudflare API to verify subdomain is not enabled
+      const subdomainResponse = await api.get(
+        `/accounts/${api.accountId}/workers/scripts/${name}/subdomain`,
+      );
+
+      // The subdomain endpoint should either return 404 or indicate it's disabled
+      if (subdomainResponse.status === 200) {
+        const subdomainData: any = await subdomainResponse.json();
+        expect(subdomainData.result?.enabled).toBeFalsy();
+      } else {
+        // If 404, that also indicates no subdomain is configured
+        expect(subdomainResponse.status).toEqual(404);
+      }
+
+      // Try to access the website via workers.dev subdomain - should fail
+      try {
+        const workerSubdomainUrl = `https://${name}.${api.accountId.substring(0, 32)}.workers.dev`;
+        const subdomainTestResponse = await fetch(workerSubdomainUrl);
+
+        // If the fetch succeeds, the subdomain shouldn't be working
+        // Workers.dev subdomains that are disabled typically return 404 or 503
+        expect(subdomainTestResponse.status).toBeGreaterThanOrEqual(400);
+      } catch (error) {
+        // Network errors are also expected when subdomain is disabled
+        expect(error).toBeDefined();
+      }
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await destroy(scope);
+      await assertWorkerDoesNotExist(api, name);
+    }
+  });
+
   test("respects cwd property for wrangler.jsonc placement", async (scope) => {
     const name = `${BRANCH_PREFIX}-test-website-cwd`;
     const tempDir = path.resolve(".out", "alchemy-website-cwd-test");
@@ -57,26 +133,17 @@ describe("Website Resource", () => {
 
       // Verify wrangler.jsonc was created in the correct location (subDir)
       const wranglerPath = path.join(subDir, "wrangler.jsonc");
-      const wranglerExists = await fs
-        .access(wranglerPath)
-        .then(() => true)
-        .catch(() => false);
-
-      expect(wranglerExists).toBe(true);
+      await expect(fs.access(wranglerPath)).resolves.toBeUndefined();
 
       // Verify wrangler.jsonc was NOT created in the root tempDir
       const rootWranglerPath = path.join(tempDir, "wrangler.jsonc");
-      const rootWranglerExists = await fs
-        .access(rootWranglerPath)
-        .then(() => true)
-        .catch(() => false);
-
-      expect(rootWranglerExists).toBe(false);
+      await expect(fs.access(rootWranglerPath)).rejects.toThrow();
 
       // Verify the contents of wrangler.jsonc
       const wranglerContent = await fs.readFile(wranglerPath, "utf-8");
       const wranglerJson = JSON.parse(wranglerContent);
 
+      expect(wranglerJson.main).toBe("worker.ts");
       expect(wranglerJson.name).toBe(name);
       expect(wranglerJson.assets).toMatchObject({
         binding: "ASSETS",
@@ -131,21 +198,11 @@ describe("Website Resource", () => {
 
       // Verify custom wrangler file was created in the correct location (subDir)
       const wranglerPath = path.join(subDir, "custom-wrangler.json");
-      const wranglerExists = await fs
-        .access(wranglerPath)
-        .then(() => true)
-        .catch(() => false);
-
-      expect(wranglerExists).toBe(true);
+      await expect(fs.access(wranglerPath)).resolves.toBeUndefined();
 
       // Verify custom wrangler file was NOT created in the root tempDir
       const rootWranglerPath = path.join(tempDir, "custom-wrangler.json");
-      const rootWranglerExists = await fs
-        .access(rootWranglerPath)
-        .then(() => true)
-        .catch(() => false);
-
-      expect(rootWranglerExists).toBe(false);
+      await expect(fs.access(rootWranglerPath)).rejects.toThrow();
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
       await destroy(scope);
@@ -207,6 +264,88 @@ describe("Website Resource", () => {
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
       await destroy(scope);
+    }
+  });
+
+  test("transform.wrangler hook modifies wrangler.json before writing", async (scope) => {
+    const name = `${BRANCH_PREFIX}-test-website-transform-hook`;
+    const tempDir = path.resolve(".out", "alchemy-website-transform-hook-test");
+    const distDir = path.resolve(tempDir, "dist");
+    const entrypoint = path.resolve(tempDir, "worker.ts");
+
+    try {
+      // Create temporary directory structure
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(distDir, { recursive: true });
+
+      // Create a simple index.html in the dist directory
+      await fs.writeFile(
+        path.join(distDir, "index.html"),
+        "<html><body>Hello Website with Hook!</body></html>",
+      );
+
+      // Create a simple worker entrypoint
+      await fs.writeFile(
+        entrypoint,
+        `export default {
+          async fetch(request, env) {
+            return new Response("Hello from worker with hook!");
+          }
+        };`,
+      );
+
+      // Create website with transform.wrangler hook
+      const website = await Website(name, {
+        cwd: tempDir,
+        main: entrypoint,
+        assets: distDir,
+        wrangler: true,
+        adopt: true,
+        transform: {
+          wrangler: (spec) => {
+            // Modify the spec to add custom fields
+            return {
+              ...spec,
+              vars: {
+                ...spec.vars,
+                CUSTOM_VAR: "custom-value",
+              },
+              node_compat: true,
+              minify: true,
+            };
+          },
+        },
+      });
+
+      // Verify the website was created successfully
+      expect(website.name).toBe(name);
+      expect(website.url).toBeDefined();
+
+      // Verify wrangler.jsonc was created with the hook modifications
+      const wranglerPath = path.join(tempDir, "wrangler.jsonc");
+      await expect(fs.access(wranglerPath)).resolves.toBeUndefined();
+
+      // Verify the contents of wrangler.jsonc include the hook modifications
+      const wranglerContent = await fs.readFile(wranglerPath, "utf-8");
+      const wranglerJson = JSON.parse(wranglerContent);
+
+      expect(wranglerJson.name).toBe(name);
+      expect(wranglerJson.main).toBe("worker.ts");
+      expect(wranglerJson.assets).toMatchObject({
+        binding: "ASSETS",
+        directory: expect.stringContaining("dist"),
+      });
+
+      // Verify the hook modifications were applied
+      expect(wranglerJson.vars).toMatchObject({
+        CUSTOM_VAR: "custom-value",
+      });
+      expect(wranglerJson.node_compat).toBe(true);
+      expect(wranglerJson.minify).toBe(true);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await destroy(scope);
+      await assertWorkerDoesNotExist(api, name);
     }
   });
 });

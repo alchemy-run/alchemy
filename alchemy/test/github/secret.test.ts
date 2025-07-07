@@ -19,176 +19,154 @@ const repository = process.env.GITHUB_REPO || "test-alchemy-resources";
 // Use a fixed environment name for testing
 const environmentName = `${BRANCH_PREFIX}-test-env`;
 
-describe("GitHubSecret Resource", { concurrent: false }, () => {
-  // Use a fixed resource ID
-  const testId = `${BRANCH_PREFIX}-github-secret-test`;
+describe.skipIf(!process.env.ALL_TESTS)(
+  "GitHubSecret Resource",
+  { concurrent: false },
+  () => {
+    // Use a fixed resource ID
+    const testId = `${BRANCH_PREFIX}-github-secret-test`;
 
-  test.skipIf(!!process.env.CI)(
-    "create, update, and delete secret",
-    async (scope) => {
-      // Create an authenticated client for testing - will use the same auth as the resource
-      const octokit = await createGitHubClient();
+    test.skipIf(!!process.env.CI)(
+      "create, update, and delete secret",
+      async (scope) => {
+        // Create an authenticated client for testing - will use the same auth as the resource
+        const octokit = await createGitHubClient();
 
-      // Use a hardcoded secret name instead of timestamps for repeatability
-      const secretName = `${BRANCH_PREFIX.toUpperCase()}_TEST_SECRET_1`;
-      const secretValue = secret("this-is-a-test-secret-value");
-      const updatedSecretValue = secret("this-is-an-updated-test-secret-value");
-
-      // Create a test secret
-
-      try {
-        const ghSecret = await GitHubSecret(testId, {
-          owner,
-          repository,
-          name: secretName,
-          value: secretValue,
-        });
-
-        // Apply to create the secret - resource will handle authentication
-        expect(ghSecret.id).toBeTruthy();
-        expect(ghSecret.owner).toEqual(owner);
-        expect(ghSecret.repository).toEqual(repository);
-        expect(ghSecret.name).toEqual(secretName);
-
-        // Try to verify with the API
-        // Verify secret exists by checking if it's in the list of repository secrets
-        const { data: secretList } = await octokit.rest.actions.listRepoSecrets(
-          {
-            owner,
-            repo: repository,
-          },
+        // Use a hardcoded secret name instead of timestamps for repeatability
+        const secretName = `${BRANCH_PREFIX.toUpperCase()}_TEST_SECRET_1`;
+        const secretValue = secret("this-is-a-test-secret-value");
+        const updatedSecretValue = secret(
+          "this-is-an-updated-test-secret-value",
         );
 
-        const secretInfo = secretList.secrets.find(
-          (s) => s.name === secretName,
-        );
-        expect(secretInfo).toBeDefined();
+        // Create a test secret
 
-        const updatedSecret = await GitHubSecret(testId, {
-          owner,
-          repository,
-          name: secretName,
-          value: updatedSecretValue,
-        });
-
-        expect(updatedSecret.id).toEqual(ghSecret.id);
-      } catch (error: any) {
-        console.error(`Test error: ${error.message}`);
-        throw error;
-      } finally {
-        await destroy(scope);
-      }
-    },
-  );
-
-  test.skipIf(!!process.env.CI)(
-    "transition between repository and environment secrets",
-    async (scope) => {
-      // Create an authenticated client for testing
-      const octokit = await createGitHubClient();
-
-      // Unique secret name for this test
-      const secretName = `${BRANCH_PREFIX.toUpperCase()}_TRANSITION_SECRET`;
-      const secretValue = secret("repository-level-secret");
-      const envSecretValue = secret("environment-level-secret");
-
-      try {
-        // Create a test environment using our RepositoryEnvironment resource
-        console.log(`Creating test environment: ${environmentName}`);
-        const testEnv = await RepositoryEnvironment("test-env", {
-          owner,
-          repository,
-          name: environmentName,
-          // Optional: add protection rules if needed for test
-        });
-
-        console.log(
-          `Created test environment: ${environmentName} with ID: ${testEnv.environmentId}`,
-        );
-
-        // Step 1: Create a repository-level secret
-        console.log("Creating repository-level secret...");
-        const repoSecret = await GitHubSecret("transition-test", {
-          owner,
-          repository,
-          name: secretName,
-          value: secretValue,
-        });
-
-        expect(repoSecret.environment).toBeUndefined();
-        expect(repoSecret.name).toEqual(secretName);
-
-        // Verify repo secret exists
-        const { data: secretList } = await octokit.rest.actions.listRepoSecrets(
-          {
-            owner,
-            repo: repository,
-          },
-        );
-
-        const secretExists = secretList.secrets.some(
-          (s) => s.name === secretName,
-        );
-        expect(secretExists).toBe(true);
-
-        // Step 2: Transition to environment secret
-        console.log("Transitioning to environment secret...");
-        const envSecret = await GitHubSecret("transition-test", {
-          owner,
-          repository,
-          name: secretName,
-          environment: environmentName,
-          value: envSecretValue,
-        });
-
-        expect(envSecret.environment).toEqual(environmentName);
-        expect(envSecret.name).toEqual(secretName);
-
-        // Verify repo secret is gone
         try {
-          const { data: repoSecrets } =
+          const ghSecret = await GitHubSecret(testId, {
+            owner,
+            repository,
+            name: secretName,
+            value: secretValue,
+          });
+
+          // Apply to create the secret - resource will handle authentication
+          expect(ghSecret.id).toBeTruthy();
+          expect(ghSecret.owner).toEqual(owner);
+          expect(ghSecret.repository).toEqual(repository);
+          expect(ghSecret.name).toEqual(secretName);
+
+          // Try to verify with the API
+          // Verify secret exists by checking if it's in the list of repository secrets
+          const { data: secretList } =
             await octokit.rest.actions.listRepoSecrets({
               owner,
               repo: repository,
             });
 
-          const repoSecretExists = repoSecrets.secrets.some(
+          const secretInfo = secretList.secrets.find(
             (s) => s.name === secretName,
           );
-          expect(repoSecretExists).toBe(false);
-          console.log("Verified repository secret was removed");
-        } catch (error: any) {
-          console.log(`Couldn't verify repo secret removal: ${error.message}`);
-        }
+          expect(secretInfo).toBeDefined();
 
-        // Verify env secret exists
-        const { data: envSecrets } =
-          await octokit.rest.actions.listEnvironmentSecrets({
+          const updatedSecret = await GitHubSecret(testId, {
             owner,
-            repo: repository,
-            environment_name: environmentName,
+            repository,
+            name: secretName,
+            value: updatedSecretValue,
           });
 
-        const envSecretExists = envSecrets.secrets.some(
-          (s) => s.name === secretName,
-        );
-        expect(envSecretExists).toBe(true);
+          expect(updatedSecret.id).toEqual(ghSecret.id);
+        } catch (error: any) {
+          console.error(`Test error: ${error.message}`);
+          throw error;
+        } finally {
+          await destroy(scope);
+        }
+      },
+    );
 
-        // Step 3: Transition back to repository secret
-        console.log("Transitioning back to repository secret...");
-        const backToRepoSecret = await GitHubSecret("transition-test", {
-          owner,
-          repository,
-          name: secretName,
-          value: secretValue,
-          // No environmentName here
-        });
+    test.skipIf(!!process.env.CI)(
+      "transition between repository and environment secrets",
+      async (scope) => {
+        // Create an authenticated client for testing
+        const octokit = await createGitHubClient();
 
-        expect(backToRepoSecret.environment).toBeUndefined();
-        expect(backToRepoSecret.name).toEqual(secretName);
+        // Unique secret name for this test
+        const secretName = `${BRANCH_PREFIX.toUpperCase()}_TRANSITION_SECRET`;
+        const secretValue = secret("repository-level-secret");
+        const envSecretValue = secret("environment-level-secret");
 
-        {
-          // Verify env secret is gone
+        try {
+          // Create a test environment using our RepositoryEnvironment resource
+          console.log(`Creating test environment: ${environmentName}`);
+          const testEnv = await RepositoryEnvironment("test-env", {
+            owner,
+            repository,
+            name: environmentName,
+            // Optional: add protection rules if needed for test
+          });
+
+          console.log(
+            `Created test environment: ${environmentName} with ID: ${testEnv.environmentId}`,
+          );
+
+          // Step 1: Create a repository-level secret
+          console.log("Creating repository-level secret...");
+          const repoSecret = await GitHubSecret("transition-test", {
+            owner,
+            repository,
+            name: secretName,
+            value: secretValue,
+          });
+
+          expect(repoSecret.environment).toBeUndefined();
+          expect(repoSecret.name).toEqual(secretName);
+
+          // Verify repo secret exists
+          const { data: secretList } =
+            await octokit.rest.actions.listRepoSecrets({
+              owner,
+              repo: repository,
+            });
+
+          const secretExists = secretList.secrets.some(
+            (s) => s.name === secretName,
+          );
+          expect(secretExists).toBe(true);
+
+          // Step 2: Transition to environment secret
+          console.log("Transitioning to environment secret...");
+          const envSecret = await GitHubSecret("transition-test", {
+            owner,
+            repository,
+            name: secretName,
+            environment: environmentName,
+            value: envSecretValue,
+          });
+
+          expect(envSecret.environment).toEqual(environmentName);
+          expect(envSecret.name).toEqual(secretName);
+
+          // Verify repo secret is gone
+          try {
+            const { data: repoSecrets } =
+              await octokit.rest.actions.listRepoSecrets({
+                owner,
+                repo: repository,
+              });
+
+            const repoSecretExists = repoSecrets.secrets.some(
+              (s) => s.name === secretName,
+            );
+            expect(repoSecretExists).toBe(false);
+            console.log("Verified repository secret was removed");
+          } catch (error: any) {
+            console.log(
+              `Couldn't verify repo secret removal: ${error.message}`,
+            );
+          }
+
+          // Verify env secret exists
           const { data: envSecrets } =
             await octokit.rest.actions.listEnvironmentSecrets({
               owner,
@@ -199,27 +177,55 @@ describe("GitHubSecret Resource", { concurrent: false }, () => {
           const envSecretExists = envSecrets.secrets.some(
             (s) => s.name === secretName,
           );
-          expect(envSecretExists).toBe(false);
-        }
+          expect(envSecretExists).toBe(true);
 
-        // Verify repo secret exists again
-        const { data: repoSecrets } =
-          await octokit.rest.actions.listRepoSecrets({
+          // Step 3: Transition back to repository secret
+          console.log("Transitioning back to repository secret...");
+          const backToRepoSecret = await GitHubSecret("transition-test", {
             owner,
-            repo: repository,
+            repository,
+            name: secretName,
+            value: secretValue,
+            // No environmentName here
           });
 
-        const repoSecretExists = repoSecrets.secrets.some(
-          (s) => s.name === secretName,
-        );
-        expect(repoSecretExists).toBe(true);
-      } catch (error: any) {
-        console.error(`Test error: ${error.message}`);
-        throw error;
-      } finally {
-        // Clean up all resources including the environment
-        await destroy(scope);
-      }
-    },
-  );
-});
+          expect(backToRepoSecret.environment).toBeUndefined();
+          expect(backToRepoSecret.name).toEqual(secretName);
+
+          {
+            // Verify env secret is gone
+            const { data: envSecrets } =
+              await octokit.rest.actions.listEnvironmentSecrets({
+                owner,
+                repo: repository,
+                environment_name: environmentName,
+              });
+
+            const envSecretExists = envSecrets.secrets.some(
+              (s) => s.name === secretName,
+            );
+            expect(envSecretExists).toBe(false);
+          }
+
+          // Verify repo secret exists again
+          const { data: repoSecrets } =
+            await octokit.rest.actions.listRepoSecrets({
+              owner,
+              repo: repository,
+            });
+
+          const repoSecretExists = repoSecrets.secrets.some(
+            (s) => s.name === secretName,
+          );
+          expect(repoSecretExists).toBe(true);
+        } catch (error: any) {
+          console.error(`Test error: ${error.message}`);
+          throw error;
+        } finally {
+          // Clean up all resources including the environment
+          await destroy(scope);
+        }
+      },
+    );
+  },
+);

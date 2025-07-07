@@ -1,5 +1,7 @@
+import { promiseWithResolvers } from "./promise-with-resolvers.ts";
+
 export class DeferredPromise<T> {
-  private promise = Promise.withResolvers<T>();
+  private promise = promiseWithResolvers<T>();
 
   status: "pending" | "fulfilled" | "rejected" = "pending";
 

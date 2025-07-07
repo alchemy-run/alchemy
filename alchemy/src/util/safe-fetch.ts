@@ -15,7 +15,6 @@ export async function safeFetch(
         dispatcher: await dispatcher(),
       } as RequestInit);
     } catch (err: any) {
-      console.log(url, err);
       latestErr = err;
       const shouldRetry =
         err?.code === "UND_ERR_SOCKET" ||

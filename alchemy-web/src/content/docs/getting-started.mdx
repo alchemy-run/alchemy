@@ -1,0 +1,218 @@
+---
+title: Getting Started
+description: Quick start guide to using Alchemy, the TypeScript-native Infrastructure-as-Code library. Deploy your first Cloudflare Worker with type-safe infrastructure code.
+---
+
+import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
+
+Alchemy is a simple TypeScript script that you run to deploy infrastructure. All you need is a Node.js runtime and a Cloudflare account to get started.
+
+<Steps>
+
+1. **Create your project**
+
+   Start by creating a new project and installing Alchemy.
+
+   ```sh
+   mkdir my-alchemy-app
+   cd my-alchemy-app
+   ```
+
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun init -y
+       bun add alchemy
+       bun add -g wrangler
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npm init -y
+       npm install alchemy
+       npm install -g wrangler
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm init
+       pnpm add alchemy
+       pnpm add -g wrangler
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn init -y
+       yarn add alchemy
+       yarn global add wrangler
+       ```
+     </TabItem>
+   </Tabs>
+
+2. **Login to Cloudflare**
+
+   Authenticate with your Cloudflare account.
+
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun wrangler login
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx wrangler login
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm wrangler login
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn wrangler login
+       ```
+     </TabItem>
+   </Tabs>
+
+   :::tip
+   Make sure you have a [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier works)
+   :::
+
+3. **Create your infrastructure**
+
+   Create `alchemy.run.ts` with a simple Worker:
+
+   ```typescript
+   import alchemy from "alchemy";
+   import { Worker } from "alchemy/cloudflare";
+
+   const app = await alchemy("my-first-app");
+
+   const worker = await Worker("hello-worker", {
+     entrypoint: "./src/worker.ts",
+   });
+
+   console.log(`Worker deployed at: ${worker.url}`);
+   await app.finalize();
+   ```
+
+4. **Create your worker code**
+
+   Create `src/worker.ts`:
+
+   ```typescript
+   export default {
+     async fetch(request: Request): Promise<Response> {
+       return Response.json({
+         message: "Hello from Alchemy!",
+         timestamp: new Date().toISOString(),
+       });
+     },
+   };
+   ```
+
+5. **Start development mode**
+
+   Run with `--watch` for hot reloading during development:
+
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun --watch ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx tsx --watch ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm tsx --watch ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn tsx --watch ./alchemy.run.ts
+       ```
+     </TabItem>
+   </Tabs>
+
+   Your worker will be available locally with live updates as you edit your code.
+
+6. **Make a change**
+
+   Update your worker message in `src/worker.ts`:
+
+   ```typescript
+   message: "Hello from Alchemy! 🧪",
+   ```
+
+   Save the file and see the change reflected immediately.
+
+7. **Deploy to production**
+
+   Remove `--watch` to deploy to Cloudflare:
+
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn tsx ./alchemy.run.ts
+       ```
+     </TabItem>
+   </Tabs>
+
+   Visit the URL to see your worker live on Cloudflare's edge network.
+
+8. **(Optional) Tear down**
+
+   Pass `--destroy` to delete all of the resources:
+
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun ./alchemy.run.ts --destroy
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx tsx ./alchemy.run.ts --destroy
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm tsx ./alchemy.run.ts --destroy
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn tsx ./alchemy.run.ts --destroy
+       ```
+     </TabItem>
+   </Tabs>
+
+</Steps>
+
+
+You've successfully deployed your first Cloudflare Worker with Alchemy! Here are some next steps:
+
+- [Deploy a ViteJS site to Cloudflare](/guides/cloudflare-vitejs) - Build full-stack applications
+- [Learn about Cloudflare Workers](/guides/cloudflare-worker) - Advanced worker features
+- [Build your own Custom Resource](/guides/custom-resources) - Extend Alchemy

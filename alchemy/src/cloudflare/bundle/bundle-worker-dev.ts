@@ -5,6 +5,7 @@ import { createAliasPlugin } from "./alias-plugin.ts";
 import { external, external_als } from "./external.ts";
 import { getNodeJSCompatMode } from "./nodejs-compat-mode.ts";
 import { nodeJsCompatPlugin } from "./nodejs-compat.ts";
+import { nodeJsImportWarningPlugin } from "./nodejs-import-warning-plugin.ts";
 import { wasmPlugin } from "./wasm-plugin.ts";
 
 interface DevWorkerContext {
@@ -28,6 +29,7 @@ export async function createWorkerDevContext<B extends Bindings>(
     entrypoint: string;
     compatibilityDate: string;
     compatibilityFlags: string[];
+    cwd: string;
   },
   hooks: HotReloadHooks,
 ) {
@@ -49,8 +51,6 @@ export async function createWorkerDevContext<B extends Bindings>(
     props.compatibilityFlags,
   );
 
-  const projectRoot = props.projectRoot ?? process.cwd();
-
   const context = await esbuild.context({
     entryPoints: [props.entrypoint],
     format: props.format === "cjs" ? "cjs" : "esm",
@@ -62,7 +62,7 @@ export async function createWorkerDevContext<B extends Bindings>(
     write: false, // We want the result in memory for hot reloading
     conditions: ["workerd", "worker", "import", "module", "browser"],
     mainFields: ["module", "main"],
-    absWorkingDir: projectRoot,
+    absWorkingDir: props.cwd,
     keepNames: true,
     loader: {
       ".sql": "text",
@@ -72,12 +72,14 @@ export async function createWorkerDevContext<B extends Bindings>(
     plugins: [
       wasmPlugin,
       ...(props.bundle?.plugins ?? []),
-      ...(nodeJsCompatMode === "v2" ? [await nodeJsCompatPlugin()] : []),
+      nodeJsCompatMode === "v2"
+        ? await nodeJsCompatPlugin()
+        : nodeJsImportWarningPlugin(nodeJsCompatMode),
       ...(props.bundle?.alias
         ? [
             createAliasPlugin({
               alias: props.bundle?.alias,
-              projectRoot,
+              projectRoot: props.cwd,
             }),
           ]
         : []),
