@@ -1,7 +1,6 @@
 import type { RemoteCallback } from "drizzle-orm/sqlite-proxy";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import assert from "node:assert";
-import crypto from "node:crypto";
 import type { Scope } from "../scope.ts";
 import {
   BaseSQLiteStateStore,
@@ -35,45 +34,41 @@ export class D1StateStore extends BaseSQLiteStateStore {
   }
 }
 
-const createDatabaseClient = memoize(
-  async (options: D1StateStoreOptions) => {
-    const { createCloudflareApi } = await import("./api.ts");
-    const api = await createCloudflareApi(options);
-    const database = await upsertDatabase(
-      api,
-      options.databaseName ?? "alchemy-state",
-    );
-    const remoteCallback: RemoteCallback = async (sql, params) => {
-      const res = await api.post(
-        `/accounts/${api.accountId}/d1/database/${database.id}/raw`,
-        { sql, params },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
+const createDatabaseClient = memoize(async (options: D1StateStoreOptions) => {
+  const { createCloudflareApi } = await import("./api.ts");
+  const api = await createCloudflareApi(options);
+  const database = await upsertDatabase(
+    api,
+    options.databaseName ?? "alchemy-state",
+  );
+  const remoteCallback: RemoteCallback = async (sql, params) => {
+    const res = await api.post(
+      `/accounts/${api.accountId}/d1/database/${database.id}/raw`,
+      { sql, params },
+      {
+        headers: {
+          "Content-Type": "application/json",
         },
+      },
+    );
+    const data = (await res.json()) as D1Response;
+    if (!data.success) {
+      throw new Error(
+        data.errors.map((it) => `${it.code}: ${it.message}`).join("\n"),
       );
-      const data = (await res.json()) as D1Response;
-      if (!data.success) {
-        throw new Error(
-          data.errors.map((it) => `${it.code}: ${it.message}`).join("\n"),
-        );
-      }
-      const [result] = data.result;
-      assert(result, "Missing result");
-      return {
-        rows: Object.values(result.results.rows),
-      };
-    };
+    }
+    const [result] = data.result;
+    assert(result, "Missing result");
     return {
-      db: drizzle(remoteCallback, {
-        schema,
-      }),
+      rows: Object.values(result.results.rows),
     };
-  },
-  (options) =>
-    crypto.createHash("sha256").update(JSON.stringify(options)).digest("hex"),
-);
+  };
+  return {
+    db: drizzle(remoteCallback, {
+      schema,
+    }),
+  };
+});
 
 const upsertDatabase = async (api: CloudflareApi, databaseName: string) => {
   const { listDatabases, createDatabase } = await import("./d1-database.ts");

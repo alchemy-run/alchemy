@@ -1,10 +1,12 @@
+import { createHash } from "node:crypto";
+
 type AsyncReturnType<T> = T extends (...args: any[]) => Promise<infer R>
   ? R
   : T;
 
 export function memoize<F extends (...args: any[]) => Promise<any>>(
   fn: F,
-  keyFn: (...args: Parameters<F>) => string,
+  keyFn: (...args: Parameters<F>) => string = defaultKeyFn,
 ) {
   const cache = new Map<string, Promise<AsyncReturnType<F>>>();
   return async (...args: Parameters<F>): Promise<AsyncReturnType<F>> => {
@@ -21,3 +23,11 @@ export function memoize<F extends (...args: any[]) => Promise<any>>(
     return await promise;
   };
 }
+
+const defaultKeyFn = (...args: any[]) => {
+  const hash = createHash("sha256");
+  args.forEach((arg) => {
+    hash.update(JSON.stringify(arg));
+  });
+  return hash.digest("hex");
+};

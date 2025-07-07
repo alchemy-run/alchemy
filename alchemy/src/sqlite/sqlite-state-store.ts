@@ -4,6 +4,7 @@ import type { Database } from "bun:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import type { Scope } from "../scope.ts";
+import { memoize } from "../util/memoize.ts";
 import {
   BaseSQLiteStateStore,
   resolveMigrationsPath,
@@ -37,25 +38,26 @@ type SQLiteStateStoreOptions =
 export class SQLiteStateStore extends BaseSQLiteStateStore {
   constructor(scope: Scope, options?: SQLiteStateStoreOptions) {
     super(scope, {
-      create: async () => {
-        switch (options?.engine) {
-          case "bun":
-            return createBunSQLiteDatabase(options.filename, options.options);
-          case "better-sqlite3":
-            return createBetterSQLite3Database(
-              options.filename,
-              options.options,
-            );
-          case "libsql":
-            return createLibSQLDatabase(options.options);
-          default: {
-            return createDefaultDatabase();
-          }
-        }
-      },
+      create: async () => createDatabase(options),
     });
   }
 }
+
+const createDatabase = memoize(
+  async (options: SQLiteStateStoreOptions | undefined) => {
+    switch (options?.engine) {
+      case "bun":
+        return createBunSQLiteDatabase(options.filename, options.options);
+      case "better-sqlite3":
+        return createBetterSQLite3Database(options.filename, options.options);
+      case "libsql":
+        return createLibSQLDatabase(options.options);
+      default: {
+        return createDefaultDatabase();
+      }
+    }
+  },
+);
 
 const isPeerInstalled = (name: string) =>
   import(name).then(() => true).catch(() => false);
