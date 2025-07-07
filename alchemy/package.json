@@ -153,11 +153,9 @@
     "@aws-sdk/client-sqs": "^3.0.0",
     "@aws-sdk/client-ssm": "^3.0.0",
     "@aws-sdk/client-sts": "^3.0.0",
-    "@libsql/client": "^0.15.9",
     "@octokit/rest": "^21.1.1",
     "ai": "^4.0.0",
     "arktype": "^2.0.0",
-    "better-sqlite3": "^12.2.0",
     "cloudflare": "^4.0.0",
     "hono": "^4.0.0",
     "prettier": "^3.0.0",
@@ -177,7 +175,6 @@
     "@cloudflare/workers-types": "^4.20250620.0",
     "@iarna/toml": "^2.2.5",
     "@octokit/rest": "^21.1.1",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/bun": "latest",
     "@types/diff": "^5.0.0",
     "@types/fs-extra": "^11.0.4",
@@ -192,7 +189,6 @@
     "cloudflare": "^4.2.0",
     "cpx": "^1.5.0",
     "dofs": "^0.1.0",
-    "drizzle-orm": "^0.44.2",
     "execa": "^9.6.0",
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
@@ -211,13 +207,5 @@
     "vitepress": "^1.6.3",
     "wrangler": "^3.114.0",
     "yaml": "^2.7.1"
-  },
-  "peerDependenciesMeta": {
-    "better-sqlite3": {
-      "optional": true
-    },
-    "@libsql/client": {
-      "optional": true
-    }
   }
 }
