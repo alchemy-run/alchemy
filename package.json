@@ -20,7 +20,7 @@
     "publish:npm": "bun run --filter alchemy publish:npm",
     "test": "vitest run",
     "test:all": "ALL_TESTS=1 vitest run",
-    "test:replace-only": "vitest run /alchemy/test/replace.test.ts",
+    "test:replace-only": "vitest run ./alchemy/test/replace.test.ts",
     "test:fast": "vitest run --exclude ./alchemy/test/create.test.ts --exclude ./alchemy/test/smoke.test.ts",
     "test:smoke": "vitest run ./alchemy/test/smoke.test.ts",
     "bump": "bun ./scripts/bump.ts",

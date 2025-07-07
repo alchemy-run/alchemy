@@ -31,6 +31,7 @@ export function registerDynamicResource(
 }
 
 export function resolveDeletionHandler(typeName: string): Provider | undefined {
+  console.log("rdh", typeName);
   const provider: Provider<string, any> | undefined = PROVIDERS.get(typeName);
   if (provider) {
     return provider;

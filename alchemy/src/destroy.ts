@@ -37,6 +37,7 @@ export async function destroy<Type extends string>(
     | [scope: Scope, options?: DestroyOptions]
     | [resource: Resource<Type> | undefined | null, options?: DestroyOptions]
 ): Promise<void> {
+  console.log("A", args);
   if (isScopeArgs(args)) {
     const [scope] = args;
     const options = {
@@ -65,12 +66,14 @@ export async function destroy<Type extends string>(
     return;
   }
 
+  console.log("B -- not scope args");
   const [instance, options] = args;
 
   if (!instance) {
     return;
   }
 
+  console.log("C -- instance exists in args");
   if (instance[ResourceKind] === Scope.KIND) {
     const scope = new Scope({
       parent: instance[ResourceScope],
@@ -78,6 +81,7 @@ export async function destroy<Type extends string>(
     });
     return await destroy(scope, options);
   }
+  console.log("D -- resource is not scope");
 
   const Provider = resolveDeletionHandler(instance[ResourceKind]);
   if (!Provider) {

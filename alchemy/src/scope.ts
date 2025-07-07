@@ -403,6 +403,8 @@ export class Scope {
   }
 
   public async destroyPendingDeletions() {
+    console.log("destroyPendingDeletions");
+    console.log(this);
     const pendingDeletions =
       (await this.get<PendingDeletions>("pendingDeletions").catch((e) => {
         if (e instanceof RootScopeStateAttemptError) {
