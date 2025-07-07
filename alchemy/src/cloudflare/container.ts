@@ -165,7 +165,8 @@ export type SchedulingPolicy =
   | "gpu"
   | "regional"
   | "fill_metals"
-  | "default";
+  | "default"
+  | (string & {});
 
 export interface ContainerApplication
   extends Resource<"cloudflare::ContainerApplication"> {
@@ -395,7 +396,7 @@ export const ContainerApplication = Resource(
 
 export interface ContainerApplicationData {
   name: string;
-  scheduling_policy: string;
+  scheduling_policy: SchedulingPolicy;
   instances: number;
   max_instances: number;
   constraints: {
@@ -574,12 +575,14 @@ export async function deleteContainerApplication(
     `/accounts/${api.accountId}/containers/applications/${applicationId}`,
   );
   const result = (await response.json()) as any;
-  if (response.ok) {
-    return result.result;
+  // Treat missing applications as already-deleted so that destroy() is idempotent
+  if (response.ok || response.status === 404) {
+    return result?.result;
   }
-  throw Error(
-    `Failed to delete container application: ${result.errors?.map((e: { message: string }) => e.message).join(", ") ?? "Unknown error"}`,
-  );
+  const errorMessages = Array.isArray(result?.errors)
+    ? result.errors.map((e: { message: string }) => e.message).join(", ")
+    : (result?.error ?? "Unknown error");
+  throw Error(`Failed to delete container application: ${errorMessages}`);
 }
 
 interface CreateRolloutApplicationRequest {

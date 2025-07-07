@@ -1,5 +1,5 @@
 import path from "node:path";
-import { describe } from "vitest";
+import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { Container, ContainerApplication } from "../../src/cloudflare/index.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
@@ -47,7 +47,7 @@ describe("Container Resource", () => {
 
   test("container application adoption", async (scope) => {
     const applicationId = `${BRANCH_PREFIX}-container-app-adopt`;
-    
+
     // Create a container to get the properly configured image
     const container = await Container(`${BRANCH_PREFIX}-container-for-app`, {
       className: "TestContainer",
@@ -122,16 +122,19 @@ describe("Container Resource", () => {
 
   test("container application adoption with non-existent app", async (scope) => {
     const applicationId = `${BRANCH_PREFIX}-container-app-nonexistent`;
-    
+
     // Create a container to get the properly configured image
-    const container = await Container(`${BRANCH_PREFIX}-container-for-nonexistent`, {
-      className: "TestContainer",
-      name: "test-container-nonexistent",
-      tag: "latest",
-      build: {
-        context: path.join(import.meta.dirname, "container"),
+    const container = await Container(
+      `${BRANCH_PREFIX}-container-for-nonexistent`,
+      {
+        className: "TestContainer",
+        name: "test-container-nonexistent",
+        tag: "latest",
+        build: {
+          context: path.join(import.meta.dirname, "container"),
+        },
       },
-    });
+    );
 
     try {
       // Test that adopting a non-existent application creates it normally
