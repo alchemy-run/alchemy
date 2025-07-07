@@ -1,8 +1,8 @@
 import { execa } from "execa";
 import * as fs from "fs-extra";
 import { join } from "node:path";
-import { getPackageManagerCommands } from "./package-manager.ts";
 import type { InstallInput } from "../types.ts";
+import { getPackageManagerCommands } from "./package-manager.ts";
 
 export async function ensureVibeRulesPostinstall(
   cwd: string,

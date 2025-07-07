@@ -15,7 +15,10 @@ import { resolve } from "node:path";
 import pc from "picocolors";
 
 import { throwWithContext } from "../errors.ts";
-import { detectPackageManager } from "../services/package-manager.ts";
+import {
+  detectPackageManager,
+  installDependencies,
+} from "../services/package-manager.ts";
 import { copyTemplate } from "../services/template-manager.ts";
 import {
   ensureVibeRulesPostinstall,
@@ -244,9 +247,12 @@ async function setupVibeRules(context: ProjectContext): Promise<void> {
       cwd: context.path,
     });
 
-    s.stop("vibe-rules configured");
-
     await ensureVibeRulesPostinstall(context.path, selectedEditor);
+
+    // we need to install dependencies to trigger the postinstall script
+    await installDependencies(context);
+
+    s.stop("vibe-rules configured");
   } catch (error) {
     s.stop("Failed to configure vibe-rules");
     throwWithContext(error, "Failed to configure vibe-rules");
