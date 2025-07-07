@@ -3,7 +3,7 @@ import { ResourceScope } from "../../resource.ts";
 import type { Scope } from "../../scope.ts";
 import { serialize } from "../../serde.ts";
 import type { State, StateStore } from "../../state.ts";
-import { deserializeState } from "../../state.ts";
+import { deserialize } from "../../serde.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "../api.ts";
 import { getAccountSubdomain } from "../worker/subdomain.ts";
 import { DOStateStoreClient, upsertStateStoreWorker } from "./internal.ts";
@@ -179,7 +179,7 @@ export class DOStateStore implements StateStore {
   }
 
   private async deserializeState(input: string): Promise<State> {
-    const state = await deserializeState(this.scope, input);
+    const state = (await deserialize(this.scope, JSON.parse(input))) as State;
     if (state.output === undefined) {
       state.output = {} as any;
     }
