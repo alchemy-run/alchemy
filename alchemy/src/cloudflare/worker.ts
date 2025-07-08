@@ -1908,9 +1908,10 @@ export async function assertWorkerDoesNotExist(
 export async function configureURL<B extends Bindings>(
   ctx: Context<Worker<B>> | Context<WorkerStub>,
   api: CloudflareApi,
-  props: WorkerProps<B> & {
+  props: {
     workerName: string;
     url: boolean;
+    adopt?: boolean;
   },
 ) {
   const { workerName, url } = props;
