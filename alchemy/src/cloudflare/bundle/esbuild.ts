@@ -73,7 +73,7 @@ export class ESBuildBundleProvider implements WorkerBundleProvider {
 }
 function buildOptions({
   entrypoint,
-  nodeCompat: compatibility,
+  nodeCompat,
   cwd,
   ...props
 }: ESBuildBundleProps) {
@@ -97,14 +97,14 @@ function buildOptions({
     },
     plugins: [
       esbuildPluginWasm(),
-      compatibility === "v2"
+      nodeCompat === "v2"
         ? esbuildPluginHybridNodeCompat()
-        : esbuildPluginCompatWarning(compatibility ?? null),
+        : esbuildPluginCompatWarning(nodeCompat ?? null),
       ...(props.plugins ?? []),
     ],
     alias: props.alias,
     external: [
-      ...(compatibility === "als" ? external_als : external),
+      ...(nodeCompat === "als" ? external_als : external),
       ...(props.external ?? []),
     ],
   } satisfies esbuild.BuildOptions;

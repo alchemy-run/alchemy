@@ -23,6 +23,14 @@ interface NormalizeWorkerBundleProps {
   outdir: string;
 }
 
+export function wrap<T>(fn: () => T): [T, null] | [null, Error] {
+  try {
+    return [fn(), null];
+  } catch (e) {
+    return [null, e instanceof Error ? e : new Error(String(e))];
+  }
+}
+
 export function normalizeWorkerBundle(
   props: NormalizeWorkerBundleProps,
 ): WorkerBundleProvider {

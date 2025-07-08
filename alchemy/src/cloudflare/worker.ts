@@ -47,6 +47,7 @@ import {
   type WorkerBundleProvider,
   normalizeWorkerBundle,
 } from "./bundle/index.ts";
+import { wrap } from "./bundle/normalize.ts";
 import { type Container, ContainerApplication } from "./container.ts";
 import { CustomDomain } from "./custom-domain.ts";
 import { isD1Database } from "./d1-database.ts";
@@ -987,24 +988,33 @@ export const _Worker = Resource(
     const compatibilityDate =
       props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
     const compatibilityFlags = props.compatibilityFlags ?? [];
-
-    const bundle = normalizeWorkerBundle({
-      entrypoint: props.entrypoint,
-      script: props.script,
-      format: props.format,
-      noBundle: props.noBundle,
-      rules: "rules" in props ? props.rules : undefined,
-      bundle: props.bundle,
-      cwd,
-      compatibilityDate,
-      compatibilityFlags,
-      outdir: path.join(process.cwd(), ".alchemy", ...this.scope.chain, id),
-    });
+    const dispatchNamespace =
+      typeof props.namespace === "string"
+        ? props.namespace
+        : props.namespace?.namespaceId;
 
     const dev = normalizeDev(this, props.dev);
 
+    const [bundle, error] = wrap(() =>
+      normalizeWorkerBundle({
+        entrypoint: props.entrypoint,
+        script: props.script,
+        format: props.format,
+        noBundle: props.noBundle,
+        rules: "rules" in props ? props.rules : undefined,
+        bundle: props.bundle,
+        cwd,
+        compatibilityDate,
+        compatibilityFlags,
+        outdir: path.join(process.cwd(), ".alchemy", ...this.scope.chain, id),
+      }),
+    );
+
     if (dev.local) {
       let url: string | undefined;
+      if (error) {
+        throw error;
+      }
 
       switch (dev.type) {
         case "command":
@@ -1065,13 +1075,9 @@ export const _Worker = Resource(
       email: props.email,
     };
     const api = await createCloudflareApi(apiOptions);
-    const dispatchNamespace =
-      typeof props.namespace === "string"
-        ? props.namespace
-        : props.namespace?.namespaceId;
 
     if (this.phase === "delete") {
-      await bundle.delete?.();
+      await bundle?.delete?.();
       if (!props.version) {
         await deleteQueueConsumers(api, workerName);
         await deleteWorker(api, {
@@ -1080,6 +1086,8 @@ export const _Worker = Resource(
         });
       }
       return this.destroy();
+    } else if (error) {
+      throw error;
     }
 
     let assetsBinding: Assets | undefined;
