@@ -11,57 +11,57 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-const deleted: string[] = [];
-const failed = new Set();
-
-interface Replacable extends Resource<"Replacable"> {
-  name: string;
-}
-
-const Replacable = Resource(
-  "Replacable",
-  async function (
-    this: Context<Replacable>,
-    _id: string,
-    props: {
-      name: string;
-      fail?: boolean;
-      child?: boolean;
-      replaceOnCreate?: boolean;
-    },
-  ) {
-    if (props.replaceOnCreate && this.phase === "create") {
-      this.replace();
-    }
-    if (this.phase === "delete") {
-      if (props.fail) {
-        if (!failed.has(props.name)) {
-          failed.add(props.name);
-          throw new Error(`Failed to delete ${props.name}`);
-        }
-      }
-      deleted.push(props.name);
-      return this.destroy();
-    }
-    if (this.phase === "update") {
-      if (props.name !== this.output.name) {
-        this.replace();
-      }
-    }
-    if (props.child) {
-      await Replacable("child", {
-        name: "child",
-      });
-    }
-    return this({
-      name: props.name,
-    });
-  },
-);
-
 describe.concurrent("Replace", () => {
   for (const storeType of ["fs", "dofs", "sqlite", "d1"]) {
     describe(storeType, () => {
+      const deleted: string[] = [];
+      const failed = new Set();
+
+      interface Replacable extends Resource<`Replacable-${string}`> {
+        name: string;
+      }
+
+      const Replacable = Resource(
+        `Replacable-${storeType}`,
+        async function (
+          this: Context<Replacable>,
+          _id: string,
+          props: {
+            name: string;
+            fail?: boolean;
+            child?: boolean;
+            replaceOnCreate?: boolean;
+          },
+        ) {
+          if (props.replaceOnCreate && this.phase === "create") {
+            this.replace();
+          }
+          if (this.phase === "delete") {
+            if (props.fail) {
+              if (!failed.has(props.name)) {
+                failed.add(props.name);
+                throw new Error(`Failed to delete ${props.name}`);
+              }
+            }
+            deleted.push(props.name);
+            return this.destroy();
+          }
+          if (this.phase === "update") {
+            if (props.name !== this.output.name) {
+              this.replace();
+            }
+          }
+          if (props.child) {
+            await Replacable("child", {
+              name: "child",
+            });
+          }
+          return this({
+            name: props.name,
+          });
+        },
+      );
+
       test(
         "replace should flush through to downstream resources",
         createTestOptions(storeType),
