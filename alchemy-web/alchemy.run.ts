@@ -23,16 +23,21 @@ const app = await alchemy("alchemy:website", {
 const domain =
   stage === "prod" ? ZONE : stage === "dev" ? `dev.${ZONE}` : undefined;
 
-export const posthogProxy = await Worker("posthog-proxy", {
-  adopt: true,
-  name: "alchemy-posthog-proxy",
-  entrypoint: "src/proxy.ts",
-  domains: [POSTHOG_PROXY_HOST],
-  bindings: {
-    POSTHOG_DESTINATION_HOST: POSTHOG_DESTINATION_HOST,
-    POSTHOT_ASSET_DESTINATION_HOST: POSTHOT_ASSET_DESTINATION_HOST,
-  },
-});
+const proxyBindings = {
+  POSTHOG_DESTINATION_HOST: POSTHOG_DESTINATION_HOST,
+  POSTHOT_ASSET_DESTINATION_HOST: POSTHOT_ASSET_DESTINATION_HOST,
+};
+export type PosthogProxy = Worker<typeof proxyBindings>;
+
+if (stage === "prod") {
+  await Worker("posthog-proxy", {
+    adopt: true,
+    name: "alchemy-posthog-proxy",
+    entrypoint: "src/proxy.ts",
+    domains: [POSTHOG_PROXY_HOST],
+    bindings: proxyBindings,
+  });
+}
 
 const website = await Website("website", {
   name: "alchemy-website",
