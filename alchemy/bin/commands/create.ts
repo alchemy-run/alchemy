@@ -20,10 +20,7 @@ import {
   installDependencies,
 } from "../services/package-manager.ts";
 import { copyTemplate } from "../services/template-manager.ts";
-import {
-  ensureVibeRulesPostinstall,
-  installAlchemyRules,
-} from "../services/vibe-rules.ts";
+import { ensureVibeRulesPostinstall } from "../services/vibe-rules.ts";
 import type {
   CreateInput,
   EditorType,
@@ -241,13 +238,11 @@ async function setupVibeRules(context: ProjectContext): Promise<void> {
   s.start("Configuring vibe-rules...");
 
   try {
-    await installAlchemyRules({
-      editor: selectedEditor,
-      packageManager: context.packageManager,
-      cwd: context.path,
-    });
-
     await ensureVibeRulesPostinstall(context.path, selectedEditor);
+
+    await installDependencies(context, {
+      devDependencies: ["vibe-rules"],
+    });
 
     // we need to install dependencies to trigger the postinstall script
     await installDependencies(context);
