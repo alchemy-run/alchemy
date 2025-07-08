@@ -7,7 +7,7 @@ import {
 import type {
   Resource as AlchemyResource,
   ResourceProps,
-} from "../../resource.ts";
+} from "../resource.ts";
 
 export const scopes = sqliteTable("scopes", {
   chain: text("chain", { mode: "json" }).primaryKey().$type<string[]>(),
