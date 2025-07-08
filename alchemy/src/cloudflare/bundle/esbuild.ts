@@ -114,19 +114,20 @@ async function resolveOutputs(
   metafile: esbuild.Metafile,
   props: ESBuildBundleProps,
 ): Promise<WorkerBundle> {
+  const relativeEntrypoint = path.relative(props.cwd, props.entrypoint);
   const root = path.resolve(props.outdir);
   const paths: string[] = [];
   let entrypoint: string | undefined;
   for (const [key, value] of Object.entries(metafile.outputs)) {
     const name = path.relative(root, path.join(props.cwd, key));
     paths.push(name);
-    if (value.entryPoint === props.entrypoint) {
+    if (value.entryPoint === relativeEntrypoint) {
       entrypoint = name;
     }
   }
   if (!entrypoint) {
     throw new Error(
-      `Failed to find entrypoint in metafile: ${JSON.stringify(metafile)}`,
+      `Failed to find entrypoint in metafile - expected ${relativeEntrypoint} but got ${Object.keys(metafile.outputs).join(", ")}`,
     );
   }
   const { files, hash } = await parseFiles(root, paths, props.format);
