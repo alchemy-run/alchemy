@@ -1,5 +1,5 @@
 ---
-title: Cloudflare Certificate Pack
+title: CertificatePack
 description: Learn how to create and manage Cloudflare Advanced Certificate Packs for flexible SSL/TLS certificates with multiple Certificate Authorities and custom configurations.
 ---
 
