@@ -1342,12 +1342,11 @@ export const _Worker = Resource(
         // namespaces don't support URLs
 
         // For regular workers, use the normal URL configuration
-        workerUrl = await configureURL(
-          this,
-          api,
+        workerUrl = await configureURL(this, api, {
+          ...props,
           workerName,
-          props.url ?? true,
-        );
+          url: props.url ?? true,
+        });
       }
 
       // Get current timestamp
@@ -1909,9 +1908,13 @@ export async function assertWorkerDoesNotExist(
 export async function configureURL<B extends Bindings>(
   ctx: Context<Worker<B>> | Context<WorkerStub>,
   api: CloudflareApi,
-  workerName: string,
-  url: boolean,
+  props: {
+    workerName: string;
+    url: boolean;
+    adopt?: boolean;
+  },
 ) {
+  const { workerName, url } = props;
   let workerUrl;
   if (url) {
     // Enable the workers.dev subdomain for this worker
@@ -1929,7 +1932,10 @@ export async function configureURL<B extends Bindings>(
     if (subdomain) {
       workerUrl = `https://${workerName}.${subdomain}.workers.dev`;
     }
-  } else if (url === false && ctx.output?.url) {
+  } else if (
+    url === false &&
+    (ctx.output?.url || (ctx.phase === "create" && props.adopt))
+  ) {
     // Explicitly disable URL if it was previously enabled
     const response = await api.post(
       `/accounts/${api.accountId}/workers/scripts/${workerName}/subdomain`,
@@ -1945,6 +1951,26 @@ export async function configureURL<B extends Bindings>(
     }
   }
   return workerUrl;
+}
+
+export async function getWorkerSubdomainConfig(
+  api: CloudflareApi,
+  workerName: string,
+) {
+  // Query Cloudflare API to verify subdomain is disabled
+  const subdomainResponse = await api.get(
+    `/accounts/${api.accountId}/workers/scripts/${workerName}/subdomain`,
+  );
+
+  if (subdomainResponse.status === 404) {
+    return undefined;
+  }
+
+  const subdomainData: any = await subdomainResponse.json();
+  return subdomainData.result as {
+    enabled: boolean;
+    previews_enabled: boolean;
+  };
 }
 
 export async function getWorkerScriptMetadata(

@@ -29,14 +29,14 @@
   "dependencies": {
     "alchemy": "workspace:*",
     "dotenv": "^16.5.0",
-    "drizzle-orm": "beta",
+    "drizzle-orm": "^0.44.2",
     "rwsdk": "^0.1.10"
   },
   "devDependencies": {
     "@types/node": "^22.14.1",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
-    "drizzle-kit": "beta",
+    "drizzle-kit": "^0.31.4",
     "tsx": "^4.19.3",
     "vite": "^6.3.2",
     "wrangler": "^4.12.1"
