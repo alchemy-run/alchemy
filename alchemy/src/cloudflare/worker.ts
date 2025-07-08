@@ -1378,29 +1378,25 @@ const normalizeDev = (ctx: Context<any>, dev: WorkerProps["dev"]): Dev => {
       local: false,
     };
   }
-  if (typeof dev !== "object") {
-    return {
-      type: "miniflare",
-      local: true,
-    };
-  }
-  if ("command" in dev) {
+  const devObj = dev === true ? {} : (dev ?? {});
+  if ("command" in devObj) {
+    // Commands are always local
     return {
       type: "command",
-      ...dev,
+      ...devObj,
       local: true,
     };
   }
-  if (dev.remote) {
+  if (devObj.remote === false || ctx.scope.dev === "prefer-local") {
     return {
-      type: "remote",
-      local: false,
+      type: "miniflare",
+      port: devObj.port,
+      local: true,
     };
   }
   return {
-    type: "miniflare",
-    port: dev.port,
-    local: true,
+    type: "remote",
+    local: false,
   };
 };
 

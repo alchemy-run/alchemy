@@ -34,12 +34,14 @@ function parseCliArgs(): Partial<AlchemyOptions> {
     options.phase = "read";
   }
 
-  if (
-    args.includes("--dev") ||
+  if (args.includes("--local") || args.includes("--dev")) {
+    options.dev = "prefer-local";
+  } else if (
+    args.includes("--remote") ||
     args.includes("--watch") ||
     process.execArgv.includes("--watch")
   ) {
-    options.dev = true;
+    options.dev = "prefer-remote";
   }
 
   // Parse quiet flag
@@ -346,11 +348,11 @@ export interface AlchemyOptions {
    */
   phase?: Phase;
   /**
-   * Determines whether Alchemy will run in dev mode.
+   * Determines how Alchemy will run in development mode.
    *
-   * @default - `true` if `--dev` or `--watch` is passed as a CLI argument, `false` otherwise
+   * @default - `"prefer-local"` if `--dev` or `--local` is passed as a CLI argument, `"prefer-remote"` if `--remote` or `--watch` is passed as a CLI argument, `undefined` otherwise
    */
-  dev?: boolean;
+  dev?: "prefer-local" | "prefer-remote";
   /**
    * Name to scope the resource state under (e.g. `.alchemy/{stage}/..`).
    *
