@@ -39,7 +39,7 @@ export const BRANCH_PREFIX = sanitizeForAwsResourceName(
   process.env.BRANCH_PREFIX || os.userInfo().username,
 );
 
-export const createTestOptions = (storeType: string) =>
+export const createTestOptions = (storeType: string, namespace: string) =>
   ({
     stateStore: (scope) => {
       switch (storeType) {
@@ -52,6 +52,8 @@ export const createTestOptions = (storeType: string) =>
         default:
           return new SQLiteStateStore(scope, {
             engine: "libsql",
+            url: `file:.alchemy/${namespace}.sqlite`,
+            retain: true,
           });
       }
     },

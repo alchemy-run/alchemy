@@ -138,6 +138,8 @@ export function test(
       default:
         return new SQLiteStateStore(scope, {
           engine: "libsql",
+          url: `file:.alchemy/${path.relative(process.cwd(), meta.filename)}.sqlite`,
+          retain: true,
         });
     }
   };

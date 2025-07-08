@@ -140,7 +140,7 @@ async function createBunSQLiteDatabase(options?: BunSQLiteStateStoreOptions) {
   migrate(db, { migrationsFolder: resolveMigrationsPath() });
   return {
     db,
-    destroy: () => fs.promises.unlink(filename),
+    destroy: createDestroy(filename),
   };
 }
 
@@ -162,7 +162,7 @@ async function createBetterSQLite3Database(
   migrate(db, { migrationsFolder: resolveMigrationsPath() });
   return {
     db,
-    destroy: () => fs.promises.unlink(filename),
+    destroy: createDestroy(filename),
   };
 }
 
@@ -184,14 +184,20 @@ async function createLibSQLDatabase(options?: LibSQLStateStoreOptions) {
   await migrate(db, { migrationsFolder: resolveMigrationsPath() });
   return {
     db,
-    destroy: filename ? () => fs.promises.unlink(filename) : undefined,
+    destroy: createDestroy(filename),
   };
 }
+
+const createDestroy = (filename: string | undefined) => {
+  if (filename) {
+    return () => fs.promises.unlink(filename).catch(() => {});
+  }
+  return undefined;
+};
 
 const ensureDirectory = (filename: string) => {
   const dir = path.dirname(filename);
   if (!fs.existsSync(dir)) {
-    console.log("Creating directory", dir);
     fs.mkdirSync(dir, { recursive: true });
   }
 };

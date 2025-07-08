@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ResourceScope } from "../resource.ts";
 import type { Scope } from "../scope.ts";
-import { serialize, deserialize } from "../serde.ts";
+import { deserialize, serialize } from "../serde.ts";
 import type { State, StateStore } from "../state.ts";
 import { ignore } from "../util/ignore.ts";
 

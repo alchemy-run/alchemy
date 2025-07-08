@@ -14,6 +14,7 @@ const test = alchemy.test(import.meta, {
 describe.concurrent("Replace", () => {
   for (const storeType of ["fs", "dofs", "sqlite", "d1"]) {
     describe(storeType, () => {
+      const options = createTestOptions(storeType, "replace");
       const deleted: string[] = [];
       const failed = new Set();
 
@@ -64,7 +65,7 @@ describe.concurrent("Replace", () => {
 
       test(
         "replace should flush through to downstream resources",
-        createTestOptions(storeType),
+        options,
         async (scope) => {
           try {
             let resource = await Replacable("replaceable", {
@@ -113,102 +114,94 @@ describe.concurrent("Replace", () => {
         },
       );
 
-      test(
-        "replace in subsequent scopes",
-        createTestOptions(storeType),
-        async (scope) => {
-          try {
-            let resource = await alchemy.run("foo", () =>
-              Replacable("replaceable", {
-                name: "foo-1",
-              }),
-            );
-            expect(deleted).not.toContain("foo-1");
-            expect(resource.name).toBe("foo-1");
-            let foo: Scope;
-            resource = await alchemy.run("foo", (scope) => {
-              foo = scope;
-              return Replacable("replaceable", {
-                name: "bar-1",
-              });
+      test("replace in subsequent scopes", options, async (scope) => {
+        try {
+          let resource = await alchemy.run("foo", () =>
+            Replacable("replaceable", {
+              name: "foo-1",
+            }),
+          );
+          expect(deleted).not.toContain("foo-1");
+          expect(resource.name).toBe("foo-1");
+          let foo: Scope;
+          resource = await alchemy.run("foo", (scope) => {
+            foo = scope;
+            return Replacable("replaceable", {
+              name: "bar-1",
             });
-            // the output should have changed
-            expect(resource.name).toBe("bar-1");
-            // but the resource should not have been deleted
-            expect(deleted).not.toContain("foo-1");
-            expect(deleted).not.toContain("bar-1");
-            // the state should contain a record of the replaced resource
-            expect(await foo!.get("pendingDeletions")).toEqual(
-              expect.arrayContaining([
-                expect.objectContaining({
-                  resource: expect.objectContaining({
-                    [ResourceID]: "replaceable",
-                    name: "foo-1",
-                  }),
+          });
+          // the output should have changed
+          expect(resource.name).toBe("bar-1");
+          // but the resource should not have been deleted
+          expect(deleted).not.toContain("foo-1");
+          expect(deleted).not.toContain("bar-1");
+          // the state should contain a record of the replaced resource
+          expect(await foo!.get("pendingDeletions")).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                resource: expect.objectContaining({
+                  [ResourceID]: "replaceable",
+                  name: "foo-1",
                 }),
-              ]),
-            );
-            // now, we finalize the scope
-            await scope.finalize();
-            // the state should no longer contain the replaced record
-            expect(await foo!.get("pendingDeletions")).not.toEqual(
-              expect.arrayContaining([
-                expect.objectContaining({
-                  resource: expect.objectContaining({
-                    [ResourceID]: "replaceable",
-                  }),
+              }),
+            ]),
+          );
+          // now, we finalize the scope
+          await scope.finalize();
+          // the state should no longer contain the replaced record
+          expect(await foo!.get("pendingDeletions")).not.toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                resource: expect.objectContaining({
+                  [ResourceID]: "replaceable",
                 }),
-              ]),
-            );
-            // the delete of the replaced resource should have been flushed through
-            expect(deleted).toContain("foo-1");
-            expect(deleted).not.toContain("bar-1");
-          } finally {
-            await destroy(scope);
-            expect(deleted).toContain("bar-1");
-          }
-        },
-      );
+              }),
+            ]),
+          );
+          // the delete of the replaced resource should have been flushed through
+          expect(deleted).toContain("foo-1");
+          expect(deleted).not.toContain("bar-1");
+        } finally {
+          await destroy(scope);
+          expect(deleted).toContain("bar-1");
+        }
+      });
 
-      test(
-        "replace and destroy simultaneously",
-        createTestOptions(storeType),
-        async (scope) => {
-          try {
-            let resource = await alchemy.run("foo", () =>
-              Replacable("replaceable", {
-                name: "foo-2",
-              }),
-            );
-            expect(deleted).not.toContain("foo-2");
-            expect(resource.name).toBe("foo-2");
-            resource = await alchemy.run("foo", () =>
-              Replacable("replaceable", {
-                name: "bar-2",
-              }),
-            );
-            // the output should have changed
-            expect(resource.name).toBe("bar-2");
-            // but the resource should not have been deleted
-            expect(deleted).not.toContain("foo-2");
-            expect(deleted).not.toContain("bar-2");
-            // now, we destroy the scope that contains both replaced and replacement resources
-            // both must be deleted
-            await destroy(scope);
-            // the delete of the replaced resource should have been flushed through
-            expect(deleted).toContain("foo-2");
-            expect(deleted).toContain("bar-2");
-            // replaced resource should be deleted first
-            expect(deleted.indexOf("foo-2") < deleted.indexOf("bar-2"));
-          } finally {
-            await destroy(scope);
-          }
-        },
-      );
+      test("replace and destroy simultaneously", options, async (scope) => {
+        try {
+          let resource = await alchemy.run("foo", () =>
+            Replacable("replaceable", {
+              name: "foo-2",
+            }),
+          );
+          expect(deleted).not.toContain("foo-2");
+          expect(resource.name).toBe("foo-2");
+          resource = await alchemy.run("foo", () =>
+            Replacable("replaceable", {
+              name: "bar-2",
+            }),
+          );
+          // the output should have changed
+          expect(resource.name).toBe("bar-2");
+          // but the resource should not have been deleted
+          expect(deleted).not.toContain("foo-2");
+          expect(deleted).not.toContain("bar-2");
+          // now, we destroy the scope that contains both replaced and replacement resources
+          // both must be deleted
+          await destroy(scope);
+          // the delete of the replaced resource should have been flushed through
+          expect(deleted).toContain("foo-2");
+          expect(deleted).toContain("bar-2");
+          // replaced resource should be deleted first
+          expect(deleted.indexOf("foo-2") < deleted.indexOf("bar-2"));
+        } finally {
+          await destroy(scope);
+        }
+      });
 
       test(
         "replaced resource should be deleted on second try if it fails the first time",
-        createTestOptions(storeType),
+        options,
         async (scope) => {
           try {
             let resource = await alchemy.run("foo", () =>
@@ -255,7 +248,7 @@ describe.concurrent("Replace", () => {
 
       test(
         "when replacing a resource multiple times, all replacements should be deleted",
-        createTestOptions(storeType),
+        options,
         async (scope) => {
           try {
             let _resource = await Replacable("replaceable", {
@@ -294,7 +287,7 @@ describe.concurrent("Replace", () => {
 
       test(
         "cannot replace a resource that has child resources",
-        createTestOptions(storeType),
+        options,
         async (scope) => {
           try {
             await alchemy.run("foo", () =>
@@ -318,7 +311,7 @@ describe.concurrent("Replace", () => {
 
       test(
         "cannot replace a resource in create phase",
-        createTestOptions(storeType),
+        options,
         async (scope) => {
           try {
             await expect(
@@ -376,7 +369,7 @@ describe.concurrent("Replace", () => {
 
       test(
         "replace is able to recover from corrupted DoStateStore",
-        createTestOptions(storeType),
+        options,
         async (scope) => {
           try {
             let resource = await Replacable("replaceable", {

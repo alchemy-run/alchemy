@@ -18,9 +18,11 @@ const test = alchemy.test(import.meta, {
 describe.concurrent("Scope", () => {
   for (const storeType of ["fs", "dofs", "sqlite", "d1"]) {
     describe(storeType, () => {
+      const options = createTestOptions(storeType, "scope");
+
       test(
         "should maintain scope context and track resources",
-        createTestOptions(storeType),
+        options,
         async (scope) => {
           try {
             await File("file", {
@@ -42,7 +44,7 @@ describe.concurrent("Scope", () => {
 
       test(
         "should have phase available in stateStore callback",
-        createTestOptions(storeType),
+        options,
         async (scope) => {
           try {
             let observedPhase: string | undefined;
@@ -64,7 +66,7 @@ describe.concurrent("Scope", () => {
 
       test(
         "serialized scope should be equal to the original scope",
-        createTestOptions(storeType),
+        options,
         async (scope) => {
           try {
             await File("foo", {
@@ -79,7 +81,7 @@ describe.concurrent("Scope", () => {
               await Nested("gaz");
             });
 
-            const serialized: any = await serializeScope(scope.root);
+            const serialized = await serializeScope(scope);
 
             const fqn = scope.chain.join("/");
 
@@ -133,34 +135,27 @@ describe.concurrent("Scope", () => {
         },
       );
 
-      test(
-        "scope CRUD operations should work",
-        createTestOptions(storeType),
-        async (scope) => {
-          try {
-            const innerScope = await alchemy.run(
-              "innerScope",
-              async (scope) => {
-                await scope.set("foo", "foo-1");
-                expect(await scope.get("foo")).toBe("foo-1");
-                await scope.delete("foo");
-                expect(await scope.get("foo")).toBeUndefined();
-                await scope.set("bar", "baz-1");
-                return scope;
-              },
-            );
-            expect(await innerScope.get("bar")).toBe("baz-1");
-            await innerScope.delete("bar");
-            expect(await innerScope.get("bar")).toBeUndefined();
-          } finally {
-            await destroy(scope);
-          }
-        },
-      );
+      test("scope CRUD operations should work", options, async (scope) => {
+        try {
+          const innerScope = await alchemy.run("innerScope", async (scope) => {
+            await scope.set("foo", "foo-1");
+            expect(await scope.get("foo")).toBe("foo-1");
+            await scope.delete("foo");
+            expect(await scope.get("foo")).toBeUndefined();
+            await scope.set("bar", "baz-1");
+            return scope;
+          });
+          expect(await innerScope.get("bar")).toBe("baz-1");
+          await innerScope.delete("bar");
+          expect(await innerScope.get("bar")).toBeUndefined();
+        } finally {
+          await destroy(scope);
+        }
+      });
 
       test(
         "scope CRUD operations should work across instances of the same scope",
-        createTestOptions(storeType),
+        options,
         async (scope) => {
           try {
             await alchemy.run("innerScope", async (scope) => {
