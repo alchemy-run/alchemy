@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "0.43.5",
+  "version": "0.44.1",
   "type": "module",
   "module": "./lib/index.js",
   "license": "Apache-2.0",
@@ -16,7 +16,7 @@
     "build:workers": "bun ./scripts/build-workers.ts",
     "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && bun run build:cli && bun run build:workers",
     "docs:gen": "rm -rf ./docs && typedoc",
-    "postbuild": "cpx 'src/**/*/types.d.ts' lib",
+    "postbuild": "cpx 'src/**/*/types.d.ts' lib && cpx 'src/**/*.txt' lib",
     "publish:npm": "cp ../README.md . && bun run build && bun run build:cli && npm publish && rm README.md"
   },
   "bin": {
@@ -35,6 +35,10 @@
     ".": {
       "bun": "./src/index.ts",
       "import": "./lib/index.js"
+    },
+    "./llms": {
+      "bun": "./src/llms.ts",
+      "import": "./lib/llms.js"
     },
     "./ai": {
       "bun": "./src/ai/index.ts",
@@ -83,6 +87,10 @@
     "./os": {
       "bun": "./src/os/index.ts",
       "import": "./lib/os/index.js"
+    },
+    "./planetscale": {
+      "bun": "./src/planetscale/index.ts",
+      "import": "./lib/planetscale/index.js"
     },
     "./sentry": {
       "bun": "./src/sentry/index.ts",

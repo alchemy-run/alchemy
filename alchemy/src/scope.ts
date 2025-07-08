@@ -21,6 +21,7 @@ import {
   createLoggerInstance,
   type LoggerApi,
 } from "./util/cli.ts";
+import { logger } from "./util/logger.ts";
 import { AsyncMutex } from "./util/mutex.ts";
 import type { ITelemetryClient } from "./util/telemetry/client.ts";
 
@@ -227,7 +228,12 @@ export class Scope {
   }
 
   public async init() {
-    await Promise.all([this.state.init?.(), this.telemetryClient.ready]);
+    await Promise.all([
+      this.state.init?.(),
+      this.telemetryClient.ready.catch((error) => {
+        this.logger.warn("Telemetry initialization failed:", error);
+      }),
+    ]);
   }
 
   public async deinit() {
@@ -407,7 +413,9 @@ export class Scope {
       });
     }
 
-    await this.rootTelemetryClient?.finalize();
+    await this.rootTelemetryClient?.finalize()?.catch((error) => {
+      this.logger.warn("Telemetry finalization failed:", error);
+    });
   }
 
   public async destroyPendingDeletions() {
@@ -418,11 +426,20 @@ export class Scope {
         }
         throw e;
       })) ?? [];
+    //todo(michael): remove once we deprecate doss; see: https://github.com/sam-goodwin/alchemy/issues/585
+    let hasCorruptedResources = false;
     if (pendingDeletions) {
       for (const { resource, oldProps } of pendingDeletions) {
         //todo(michael): ugly hack due to the way scope is serialized
         const realResource = this.resources.get(resource[ResourceID])!;
         resource[ResourceScope] = realResource?.[ResourceScope] ?? this;
+        if (realResource == null && resource[ResourceID] == null) {
+          logger.warn(
+            "A replaced resource pending deletion is corrupted and will NOT be deleted. This is likely a bug with the state store.",
+          );
+          hasCorruptedResources = true;
+          continue;
+        }
         await destroy(resource, {
           quiet: this.quiet,
           strategy: "sequential",
@@ -432,6 +449,16 @@ export class Scope {
           },
         });
       }
+    }
+    if (hasCorruptedResources) {
+      const newPendingDeletions =
+        (await this.get<PendingDeletions>("pendingDeletions").catch(
+          () => [],
+        )) ?? [];
+      await this.set(
+        "pendingDeletions",
+        newPendingDeletions.filter((d) => d.resource[ResourceID] != null),
+      );
     }
   }
 

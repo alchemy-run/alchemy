@@ -15,7 +15,7 @@ describe("alchemy.run", async () => {
 
       await alchemy.run("child", { phase: "read" }, async (child) => {
         expect(child.phase).toBe("read");
-        expect(child.appName).toEqual("samgoodwin-alchemy.test.ts");
+        expect(child.appName).toEqual(`${BRANCH_PREFIX}-alchemy.test.ts`);
         expect(child.scopeName).toBe("child");
         expect(child.parent).toBe(scope);
       });

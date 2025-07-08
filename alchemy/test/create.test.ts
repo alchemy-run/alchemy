@@ -88,7 +88,7 @@ describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
         // Create the project using CLI - run from smoke directory
         console.log(`Creating ${templateName} project...`);
         const createResult = await runCommand(
-          `bun ${cliPath} create ${templateName} ${templateArg} --yes`,
+          `bun ${cliPath} create ${templateName} ${templateArg} --vibe-rules=cursor --yes`,
           smokeDir, // Run from smoke directory so project is created there
           {
             NODE_ENV: "test",
@@ -112,7 +112,7 @@ describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
         throw error;
       } finally {
         // Always cleanup the project directory
-        // await cleanupProject(projectPath);
+        await cleanupProject(projectPath);
       }
     }, 600000); // 10 minutes timeout per test
   }
