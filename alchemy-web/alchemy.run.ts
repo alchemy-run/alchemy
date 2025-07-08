@@ -32,7 +32,7 @@ export type PosthogProxy = Worker<typeof proxyBindings>;
 if (stage === "prod") {
   await Worker("posthog-proxy", {
     adopt: true,
-    name: "alchemy-posthog-proxy",
+    name: `${app.name}-${app.stage}-posthog-proxy`,
     entrypoint: "src/proxy.ts",
     domains: [POSTHOG_PROXY_HOST],
     bindings: proxyBindings,
@@ -40,7 +40,7 @@ if (stage === "prod") {
 }
 
 const website = await Website("website", {
-  name: "alchemy-website",
+  name: `${app.name}-${app.stage}-website`,
   command: "bun run build",
   assets: "./dist",
   adopt: true,
