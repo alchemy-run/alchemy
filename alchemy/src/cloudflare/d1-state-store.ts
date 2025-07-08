@@ -77,6 +77,14 @@ const upsertDatabase = async (api: CloudflareApi, databaseName: string) => {
   );
   const databases = await listDatabases(api, databaseName);
   if (databases[0]) {
+    await applyMigrations({
+      migrationsFiles: await listMigrationsFiles(resolveMigrationsPath()),
+      migrationsTable: "migrations",
+      accountId: api.accountId,
+      databaseId: databases[0].id,
+      api,
+      quiet: true,
+    });
     return {
       id: databases[0].id,
     };

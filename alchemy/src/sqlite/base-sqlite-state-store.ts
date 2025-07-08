@@ -1,9 +1,9 @@
 import { and, eq, getTableColumns, inArray, notExists } from "drizzle-orm";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import path from "node:path";
-import type { Scope } from "../../scope.ts";
-import { deserialize, serialize } from "../../serde.ts";
-import type { State, StateStore } from "../../state.ts";
+import type { Scope } from "../scope.ts";
+import { deserialize, serialize } from "../serde.ts";
+import type { State, StateStore } from "../state.ts";
 import * as schema from "./schema.ts";
 
 type Database = BaseSQLiteDatabase<any, any, typeof schema>;
