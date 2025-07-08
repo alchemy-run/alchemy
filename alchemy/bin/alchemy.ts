@@ -44,6 +44,12 @@ const router = t.router({
             vibeRules: EditorSchema.optional().describe(
               "Setup vibe-rules for the specified editor (cursor, windsurf, vscode, zed, claude-code, gemini, codex, amp, clinerules, roo, unified)",
             ),
+            githubActions: z
+              .boolean()
+              .optional()
+              .describe(
+                "Setup GitHub Actions for PR previews and production deployments",
+              ),
           })
           .optional()
           .default({}),

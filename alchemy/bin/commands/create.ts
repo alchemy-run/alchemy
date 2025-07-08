@@ -15,6 +15,7 @@ import { resolve } from "node:path";
 import pc from "picocolors";
 
 import { throwWithContext } from "../errors.ts";
+import { addGitHubWorkflowToAlchemy } from "../services/github-workflow.ts";
 import {
   detectPackageManager,
   installDependencies,
@@ -254,6 +255,38 @@ async function setupVibeRules(context: ProjectContext): Promise<void> {
   }
 }
 
+async function setupGitHubActions(context: ProjectContext): Promise<void> {
+  let shouldSetupGitHub = context.options.githubActions;
+
+  if (
+    shouldSetupGitHub === undefined &&
+    !context.isTest &&
+    !context.options.yes
+  ) {
+    const setupResult = await confirm({
+      message: "Add GitHub Actions for PR previews and production deployments?",
+      initialValue: false,
+    });
+
+    if (isCancel(setupResult) || !setupResult) {
+      return;
+    }
+
+    shouldSetupGitHub = true;
+  }
+
+  if (!shouldSetupGitHub) {
+    return;
+  }
+
+  try {
+    await addGitHubWorkflowToAlchemy(context);
+  } catch (error) {
+    log.error("Failed to setup GitHub workflow");
+    throwWithContext(error, "GitHub workflow setup failed");
+  }
+}
+
 export async function createAlchemy(cliOptions: CreateInput): Promise<void> {
   try {
     intro(pc.cyan("🧪 Welcome to Alchemy!"));
@@ -278,6 +311,8 @@ ${pc.cyan("📦 Install dependencies:")}
         : "";
 
     await setupVibeRules(context);
+
+    await setupGitHubActions(context);
 
     note(
       `
