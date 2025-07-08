@@ -383,7 +383,7 @@ export interface EntrypointWorkerProps<
    *
    * @default true
    */
-  uploadSourceMaps?: boolean;
+  sourceMap?: boolean;
 
   /**
    * Rules for adding additional files to the bundle.
