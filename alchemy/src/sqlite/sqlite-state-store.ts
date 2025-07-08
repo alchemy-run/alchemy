@@ -13,19 +13,27 @@ import * as schema from "./schema.ts";
 
 type BunSQLiteOptions = ConstructorParameters<typeof Database>[1];
 
-interface BunSQLiteStateStoreOptions {
+interface BaseSQLiteStateStoreOptions {
+  /**
+   * Whether to retain the database file after the state store is destroyed.
+   * @default false
+   */
+  retain?: boolean;
+}
+
+interface BunSQLiteStateStoreOptions extends BaseSQLiteStateStoreOptions {
   engine: "bun";
   filename?: string;
   options?: BunSQLiteOptions;
 }
 
-interface BetterSQLite3StateStoreOptions {
+interface BetterSQLite3StateStoreOptions extends BaseSQLiteStateStoreOptions {
   engine: "better-sqlite3";
   filename?: string;
   options?: BetterSQLite3Options;
 }
 
-interface LibSQLStateStoreOptions {
+interface LibSQLStateStoreOptions extends BaseSQLiteStateStoreOptions {
   engine: "libsql";
   options?: LibSQLConfig;
 }
@@ -45,17 +53,32 @@ export class SQLiteStateStore extends BaseSQLiteStateStore {
 
 const createDatabase = memoize(
   async (options: SQLiteStateStoreOptions | undefined) => {
+    let result;
     switch (options?.engine) {
       case "bun":
-        return createBunSQLiteDatabase(options.filename, options.options);
+        result = await createBunSQLiteDatabase(
+          options.filename,
+          options.options,
+        );
+        break;
       case "better-sqlite3":
-        return createBetterSQLite3Database(options.filename, options.options);
+        result = await createBetterSQLite3Database(
+          options.filename,
+          options.options,
+        );
+        break;
       case "libsql":
-        return createLibSQLDatabase(options.options);
+        result = await createLibSQLDatabase(options.options);
+        break;
       default: {
-        return createDefaultDatabase();
+        result = await createDefaultDatabase();
+        break;
       }
     }
+    if (options?.retain) {
+      return { db: result.db };
+    }
+    return result;
   },
 );
 
@@ -104,7 +127,10 @@ async function createBunSQLiteDatabase(
   migrate(db, { migrationsFolder: resolveMigrationsPath() });
   return {
     db,
-    destroy: filename ? () => fs.promises.unlink(filename) : undefined,
+    destroy:
+      filename && !options?.retain
+        ? () => fs.promises.unlink(filename)
+        : undefined,
   };
 }
 
