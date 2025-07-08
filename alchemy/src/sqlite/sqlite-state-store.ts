@@ -127,10 +127,7 @@ async function createBunSQLiteDatabase(
   migrate(db, { migrationsFolder: resolveMigrationsPath() });
   return {
     db,
-    destroy:
-      filename && !options?.retain
-        ? () => fs.promises.unlink(filename)
-        : undefined,
+    destroy: () => fs.promises.unlink(filename),
   };
 }
 
@@ -149,7 +146,7 @@ async function createBetterSQLite3Database(
   migrate(db, { migrationsFolder: resolveMigrationsPath() });
   return {
     db,
-    destroy: filename ? () => fs.promises.unlink(filename) : undefined,
+    destroy: () => fs.promises.unlink(filename),
   };
 }
 
