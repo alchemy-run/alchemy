@@ -80,24 +80,3 @@ See the [D1StateStore documentation](/providers/cloudflare/d1-state-store) for m
    ```
 
 </Steps>
-
-## Authentication Requirements
-
-D1StateStore requires Cloudflare authentication. See the [Cloudflare Auth Guide](/guides/cloudflare) for setup options:
-
-- **API Token** (recommended)
-- **OAuth** via `wrangler login` 
-- **Global API Key** (legacy)
-
-:::tip
-The same Cloudflare credentials used for other resources work with D1StateStore.
-:::
-
-## How It Works
-
-1. **Database Creation**: D1StateStore automatically creates a Cloudflare D1 database
-2. **Remote SQLite**: Your application state is stored in D1's serverless SQLite
-3. **Automatic Migrations**: Database schema is managed automatically
-4. **Global Distribution**: D1 provides low-latency access worldwide
-
-The D1 database appears in your Cloudflare dashboard and can be managed using Wrangler CLI or the dashboard interface. 

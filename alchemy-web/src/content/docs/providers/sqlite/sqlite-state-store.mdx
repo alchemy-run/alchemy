@@ -3,9 +3,9 @@ title: SQLiteStateStore
 description: Learn how to manage state with a SQLite DB.
 ---
 
-## Engine Selection
+import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 
-### Automatic Detection
+## Automatic Engine Detection
 
 SQLiteStateStore automatically detects available SQLite engines in this order:
 
@@ -13,7 +13,7 @@ SQLiteStateStore automatically detects available SQLite engines in this order:
 2. **libSQL** (`@libsql/client`) - Turso-compatible SQLite
 3. **better-sqlite3** - Node.js native SQLite binding
 
-### Explicit Engine Selection
+## Explicit Engine Selection
 
 Force a specific SQLite engine:
 
@@ -51,9 +51,7 @@ Force a specific SQLite engine:
   </TabItem>
 </Tabs>
 
-## Customization
-
-### Custom Database Location
+## Custom Database Location
 
 Change the database file location:
 
@@ -65,7 +63,7 @@ const app = await alchemy("my-app", {
 });
 ```
 
-### Environment Variable Configuration
+## Environment Variable Configuration
 
 Use environment variables for flexible configuration:
 
@@ -81,7 +79,7 @@ const app = await alchemy("my-app", {
 });
 ```
 
-### Retain Database
+## Retain Database
 
 Keep the database file after the state store is destroyed:
 
@@ -94,7 +92,7 @@ const app = await alchemy("my-app", {
 });
 ```
 
-### Engine-Specific Options
+## Engine-Specific Options
 
 Configure engine-specific options:
 
@@ -139,9 +137,7 @@ Configure engine-specific options:
   </TabItem>
 </Tabs>
 
-## Environment-Specific Configuration
-
-### Development vs Production
+## Development vs Production
 
 Use different configurations for different environments:
 
@@ -158,7 +154,7 @@ const app = await alchemy("my-app", {
 });
 ```
 
-### Per-Stage Databases
+## Per-Stage Databases
 
 Use separate databases for different deployment stages:
 
@@ -174,9 +170,7 @@ const app = await alchemy("my-app", {
 });
 ```
 
-## Remote SQLite with libSQL
-
-### Turso Database
+## Turso Database
 
 Connect to a remote Turso database:
 
@@ -190,7 +184,7 @@ const app = await alchemy("my-app", {
 });
 ```
 
-### Local Replica with Sync
+## Local Replica with Sync
 
 Use a local replica that syncs with remote:
 
@@ -205,15 +199,14 @@ const app = await alchemy("my-app", {
   })
 });
 ```
-## Performance Considerations
 
-### Engine Performance
+## Engine Performance
 
 - **Bun SQLite**: Fastest for Bun runtime, zero additional dependencies
 - **better-sqlite3**: Best Node.js performance, synchronous API
 - **libSQL**: Best for remote/distributed scenarios, async API
 
-### Database Optimization
+## Database Optimization
 
 ```typescript
 const app = await alchemy("my-app", {
@@ -231,9 +224,7 @@ const app = await alchemy("my-app", {
 });
 ```
 
-## Troubleshooting
-
-### Missing Dependencies
+## Missing Dependencies
 
 If you see dependency errors:
 
@@ -247,7 +238,7 @@ Install the required packages:
 bun add drizzle-orm better-sqlite3
 ```
 
-### Permission Errors
+## Permission Errors
 
 Ensure the directory is writable:
 
