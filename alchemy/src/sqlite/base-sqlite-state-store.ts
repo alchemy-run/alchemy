@@ -211,5 +211,5 @@ export class BaseSQLiteStateStore<T extends Database = Database>
 }
 
 export const resolveMigrationsPath = () => {
-  return path.join(import.meta.dirname, "..", "..", "..", "drizzle");
+  return path.join(import.meta.dirname, "..", "..", "drizzle");
 };
