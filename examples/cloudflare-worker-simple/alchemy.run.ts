@@ -8,8 +8,15 @@ import {
   R2Bucket,
   Worker,
 } from "alchemy/cloudflare";
+import { SQLiteStateStore } from "alchemy/sqlite";
 
-const app = await alchemy("cloudflare-worker-simple");
+const app = await alchemy("cloudflare-worker-simple", {
+  stateStore: (scope) =>
+    new SQLiteStateStore(scope, {
+      engine: "libsql",
+      retain: true,
+    }),
+});
 
 const [d1, kv, r2] = await Promise.all([
   D1Database("d1", {
