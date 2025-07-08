@@ -2,6 +2,7 @@ import path from "node:path";
 import { afterAll, beforeAll, it } from "vitest";
 import { alchemy } from "../alchemy.ts";
 import { Scope } from "../scope.ts";
+import { SQLiteStateStore } from "../sqlite/sqlite-state-store.ts";
 import type { StateStoreType } from "../state.ts";
 import { NoopTelemetryClient } from "../util/telemetry/client.ts";
 
@@ -122,6 +123,15 @@ export function test(
   if (!("quiet" in defaultOptions)) {
     defaultOptions.quiet = true;
   }
+  defaultOptions.stateStore ??= (scope) => {
+    console.log("stateStore", scope);
+    return new SQLiteStateStore(scope, {
+      engine: "libsql",
+      // options: {
+      //   url: "file:test.db?mode=memory",
+      // }
+    });
+  };
 
   test.skipIf = (condition: boolean) => {
     if (condition) {

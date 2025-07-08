@@ -37,7 +37,7 @@ export const resources = sqliteTable(
     fqn: text("fqn").notNull(),
     seq: integer("seq").notNull(),
     data: text("data", { mode: "json" }).notNull().$type<Record<string, any>>(),
-    props: text("props", { mode: "json" }).notNull().$type<ResourceProps>(),
+    props: text("props", { mode: "json" }).$type<ResourceProps>(),
     oldProps: text("oldProps", { mode: "json" }).$type<ResourceProps>(),
     output: text("output", { mode: "json" }).notNull().$type<AlchemyResource>(),
   },

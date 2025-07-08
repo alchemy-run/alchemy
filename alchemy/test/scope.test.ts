@@ -38,6 +38,7 @@ describe("Scope", () => {
     try {
       let observedPhase: string | undefined;
       new Scope({
+        parent: scope,
         scopeName: "phase-test",
         phase: "read",
         stateStore: (scope) => {
