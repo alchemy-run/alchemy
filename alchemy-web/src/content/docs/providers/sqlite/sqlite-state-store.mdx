@@ -11,7 +11,6 @@ SQLiteStateStore automatically detects available SQLite engines in this order:
 
 1. **Bun SQLite** (`bun:sqlite`) - Built into Bun runtime
 2. **libSQL** (`@libsql/client`) - Turso-compatible SQLite
-3. **better-sqlite3** - Node.js native SQLite binding
 
 ## Explicit Engine Selection
 
@@ -34,17 +33,6 @@ Force a specific SQLite engine:
       stateStore: (scope) => new SQLiteStateStore(scope, {
         engine: "libsql",
         url: "file:.alchemy/state.sqlite"
-      })
-    });
-    ```
-  </TabItem>
-  <TabItem label="better-sqlite3">
-    ```typescript
-    const app = await alchemy("my-app", {
-      stateStore: (scope) => new SQLiteStateStore(scope, {
-        engine: "better-sqlite3",
-        filename: ".alchemy/state.sqlite",
-        verbose: console.log // Enable SQL logging
       })
     });
     ```
@@ -79,19 +67,6 @@ const app = await alchemy("my-app", {
 });
 ```
 
-## Retain Database
-
-Keep the database file after the state store is destroyed:
-
-```typescript
-const app = await alchemy("my-app", {
-  stateStore: (scope) => new SQLiteStateStore(scope, {
-    retain: true, // Database persists after destruction
-    filename: "./persistent-state.db"
-  })
-});
-```
-
 ## Engine-Specific Options
 
 Configure engine-specific options:
@@ -122,19 +97,6 @@ Configure engine-specific options:
     });
     ```
   </TabItem>
-  <TabItem label="better-sqlite3">
-    ```typescript
-    const app = await alchemy("my-app", {
-      stateStore: (scope) => new SQLiteStateStore(scope, {
-        engine: "better-sqlite3",
-        readonly: false,
-        fileMustExist: false,
-        timeout: 5000,
-        verbose: console.log
-      })
-    });
-    ```
-  </TabItem>
 </Tabs>
 
 ## Development vs Production
@@ -149,7 +111,6 @@ const app = await alchemy("my-app", {
     filename: isDev 
       ? ".alchemy/dev-state.sqlite"
       : "/var/lib/myapp/prod-state.sqlite",
-    retain: !isDev // Only retain in production
   })
 });
 ```
@@ -165,7 +126,6 @@ const app = await alchemy("my-app", {
   stage,
   stateStore: (scope) => new SQLiteStateStore(scope, {
     filename: `.alchemy/state-${stage}.sqlite`,
-    retain: stage === "prod"
   })
 });
 ```
@@ -203,39 +163,22 @@ const app = await alchemy("my-app", {
 ## Engine Performance
 
 - **Bun SQLite**: Fastest for Bun runtime, zero additional dependencies
-- **better-sqlite3**: Best Node.js performance, synchronous API
 - **libSQL**: Best for remote/distributed scenarios, async API
 
-## Database Optimization
+## Peer Dependencies
 
-```typescript
-const app = await alchemy("my-app", {
-  stateStore: (scope) => new SQLiteStateStore(scope, {
-    engine: "better-sqlite3",
-    // Optimize for performance
-    timeout: 10000,
-    verbose: undefined, // Disable logging in production
-    pragma: {
-      journal_mode: "WAL",
-      synchronous: "NORMAL",
-      cache_size: -64000 // 64MB cache
-    }
-  })
-});
-```
-
-## Missing Dependencies
+The SQLiteStateStore requires `drizzle-orm` as a peer dependency. Additionally, if you are using the `libsql` engine (default for Node.js), you will need to install `@libsql/client` as a peer dependency.
 
 If you see dependency errors:
 
 ```
-[SQLiteStateStore] Missing peer dependencies: drizzle-orm, better-sqlite3
+[SQLiteStateStore] Missing `@libsql/client` peer dependency. Please `npm install @libsql/client`.
 ```
 
 Install the required packages:
 
 ```sh
-bun add drizzle-orm better-sqlite3
+npm install drizzle-orm @libsql/client
 ```
 
 ## Permission Errors
