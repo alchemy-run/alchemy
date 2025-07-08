@@ -1,3 +1,13 @@
+## v0.44.4
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Update workers.dev URL when adopting a Worker &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/611 [<samp>(f95ab)</samp>](https://github.com/sam-goodwin/alchemy/commit/f95ab4f0)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.44.3...v0.44.4)
+
+---
+
 ## v0.44.3
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

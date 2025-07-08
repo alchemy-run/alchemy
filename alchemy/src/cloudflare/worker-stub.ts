@@ -109,8 +109,11 @@ export const WorkerStub = Resource("cloudflare::WorkerStub", async function <
   }
 
   // Configure URL if requested (defaults to true)
-  const enableUrl = props.url ?? true;
-  const workerUrl = await configureURL(this, api, props.name, enableUrl);
+  const workerUrl = await configureURL(this, api, {
+    ...props,
+    workerName: props.name!,
+    url: props.url ?? true,
+  });
 
   // Return the worker stub info
   return this({
