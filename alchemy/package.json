@@ -183,7 +183,6 @@
     "@asteasolutions/zod-to-openapi": "^7.3.0",
     "@aws-sdk/client-resource-groups-tagging-api": "^3.830.0",
     "@aws-sdk/client-s3": "3.726.1",
-    "@biomejs/biome": "^1.9.4",
     "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "^0.0.13",
     "@cloudflare/puppeteer": "^1.0.2",
@@ -222,13 +221,5 @@
     "vitepress": "^1.6.3",
     "wrangler": "^3.114.0",
     "yaml": "^2.7.1"
-  },
-  "peerDependenciesMeta": {
-    "better-sqlite3": {
-      "optional": true
-    },
-    "@libsql/client": {
-      "optional": true
-    }
   }
 }
