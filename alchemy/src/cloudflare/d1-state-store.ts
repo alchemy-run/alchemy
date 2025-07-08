@@ -5,8 +5,8 @@ import type { Scope } from "../scope.ts";
 import {
   BaseSQLiteStateStore,
   resolveMigrationsPath,
-} from "../sqlite/internal/base-sqlite-state-store.ts";
-import * as schema from "../sqlite/internal/schema.ts";
+} from "../sqlite/base-sqlite-state-store.ts";
+import * as schema from "../sqlite/schema.ts";
 import { memoize } from "../util/memoize.ts";
 import type { CloudflareApi, CloudflareApiOptions } from "./api.ts";
 

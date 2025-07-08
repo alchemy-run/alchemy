@@ -8,8 +8,8 @@ import { memoize } from "../util/memoize.ts";
 import {
   BaseSQLiteStateStore,
   resolveMigrationsPath,
-} from "./internal/base-sqlite-state-store.ts";
-import * as schema from "./internal/schema.ts";
+} from "./base-sqlite-state-store.ts";
+import * as schema from "./schema.ts";
 
 type BunSQLiteOptions = ConstructorParameters<typeof Database>[1];
 
