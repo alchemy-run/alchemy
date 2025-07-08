@@ -61,7 +61,7 @@ export function getPackageManagerCommands(pm: PackageManager) {
       create: "yarn create",
       x: "yarn dlx",
     },
-  };
+  } as const;
 
   return commands[pm];
 }

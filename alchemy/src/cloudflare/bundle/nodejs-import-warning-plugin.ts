@@ -16,7 +16,6 @@ const NODE_REGEX = new RegExp(
  * - node:async_hooks is imported without nodejs_compat or nodejs_als flags
  */
 export function nodeJsImportWarningPlugin(mode: "als" | null): Plugin {
-  console.log("nodeJsImportWarningPlugin", mode);
   return {
     name: "nodejs-import-warning",
     setup(build: PluginBuild) {

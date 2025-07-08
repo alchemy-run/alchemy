@@ -12,6 +12,5 @@ export const dependencyVersionMap = {
       ? `file:${path.resolve(PKG_ROOT)}`
       : getPackageVersion(),
 } as const;
-console.log({ dependencyVersionMap });
 
 export type DependencyVersionMap = keyof typeof dependencyVersionMap;

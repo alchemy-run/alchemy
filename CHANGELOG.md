@@ -1,3 +1,33 @@
+## v0.44.3
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**: Setup postinstall script before installing vibe-rules &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(31643)</samp>](https://github.com/sam-goodwin/alchemy/commit/31643384)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.44.2...v0.44.3)
+
+---
+
+## v0.44.2
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **core**: Warning if pendingDeletions has corrupted resources &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/589 [<samp>(018b6)</samp>](https://github.com/sam-goodwin/alchemy/commit/018b6340)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **alchemy-web**:
+  - Remove bad posthog domain &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/591 [<samp>(4c9fb)</samp>](https://github.com/sam-goodwin/alchemy/commit/4c9fbce1)
+- **cli**:
+  - Install vibe-rules dependency in project templates &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(44d9e)</samp>](https://github.com/sam-goodwin/alchemy/commit/44d9e520)
+- **core**:
+  - Remove redundant state.set &nbsp;-&nbsp; by **Sam Goodwin** and **sam** in https://github.com/sam-goodwin/alchemy/issues/600 [<samp>(63b7d)</samp>](https://github.com/sam-goodwin/alchemy/commit/63b7d6e2)
+  - Prevent telemetry failures from causing system failures &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/602 [<samp>(4caf6)</samp>](https://github.com/sam-goodwin/alchemy/commit/4caf6ab8)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.44.1...v0.44.2)
+
+---
+
 ## v0.44.1
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
