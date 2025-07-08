@@ -1,6 +1,5 @@
 import type { Config as LibSQLConfig } from "@libsql/client";
 import type { Options as BetterSQLite3Options } from "better-sqlite3";
-import type { Database } from "bun:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import type { Scope } from "../scope.ts";
@@ -10,8 +9,6 @@ import {
   resolveMigrationsPath,
 } from "./base-sqlite-state-store.ts";
 import * as schema from "./schema.ts";
-
-type BunSQLiteOptions = ConstructorParameters<typeof Database>[1];
 
 interface BaseSQLiteStateStoreOptions {
   /**
@@ -24,18 +21,28 @@ interface BaseSQLiteStateStoreOptions {
 interface BunSQLiteStateStoreOptions extends BaseSQLiteStateStoreOptions {
   engine: "bun";
   filename?: string;
-  options?: BunSQLiteOptions;
+
+  // Options are copied from Bun instead of inherited because Bun's type is not exported,
+  // and the constructor type isn't an interface so inheritance doesn't work.
+
+  readonly?: boolean;
+  create?: boolean;
+  readwrite?: boolean;
+  safeIntegers?: boolean;
+  strict?: boolean;
 }
 
-interface BetterSQLite3StateStoreOptions extends BaseSQLiteStateStoreOptions {
+interface BetterSQLite3StateStoreOptions
+  extends BaseSQLiteStateStoreOptions,
+    BetterSQLite3Options {
   engine: "better-sqlite3";
   filename?: string;
-  options?: BetterSQLite3Options;
 }
 
-interface LibSQLStateStoreOptions extends BaseSQLiteStateStoreOptions {
+interface LibSQLStateStoreOptions
+  extends BaseSQLiteStateStoreOptions,
+    LibSQLConfig {
   engine: "libsql";
-  options?: LibSQLConfig;
 }
 
 type SQLiteStateStoreOptions =
@@ -56,19 +63,13 @@ const createDatabase = memoize(
     let result;
     switch (options?.engine) {
       case "bun":
-        result = await createBunSQLiteDatabase(
-          options.filename,
-          options.options,
-        );
+        result = await createBunSQLiteDatabase(options);
         break;
       case "better-sqlite3":
-        result = await createBetterSQLite3Database(
-          options.filename,
-          options.options,
-        );
+        result = await createBetterSQLite3Database(options);
         break;
       case "libsql":
-        result = await createLibSQLDatabase(options.options);
+        result = await createLibSQLDatabase(options);
         break;
       default: {
         result = await createDefaultDatabase();
@@ -112,16 +113,27 @@ async function createDefaultDatabase() {
   );
 }
 
-async function createBunSQLiteDatabase(
-  filename: string = process.env.ALCHEMY_STATE_FILE ?? ".alchemy/state.sqlite",
-  options?: BunSQLiteOptions,
-) {
+async function createBunSQLiteDatabase(options?: BunSQLiteStateStoreOptions) {
   await assertPeers(["drizzle-orm", "bun:sqlite"]);
+
+  const filename =
+    options?.filename ??
+    process.env.ALCHEMY_STATE_FILE ??
+    ".alchemy/state.sqlite";
   ensureDirectory(filename);
   const { Database } = await import("bun:sqlite");
   const { drizzle } = await import("drizzle-orm/bun-sqlite");
   const { migrate } = await import("drizzle-orm/bun-sqlite/migrator");
-  const db = drizzle(new Database(filename, options), {
+  // Bun's constructor throws if we pass in an empty object or if extraneous
+  // options are passed in, so here's some ugly destructuring!
+  const {
+    engine: _engine,
+    filename: _filename,
+    retain: _retain,
+    ...rest
+  } = options ?? {};
+  const bunOptions = Object.keys(rest).length > 0 ? rest : undefined;
+  const db = drizzle(new Database(filename, bunOptions), {
     schema,
   });
   migrate(db, { migrationsFolder: resolveMigrationsPath() });
@@ -132,10 +144,13 @@ async function createBunSQLiteDatabase(
 }
 
 async function createBetterSQLite3Database(
-  filename: string = process.env.ALCHEMY_STATE_FILE ?? ".alchemy/state.sqlite",
-  options?: BetterSQLite3Options,
+  options?: BetterSQLite3StateStoreOptions,
 ) {
   await assertPeers(["drizzle-orm", "better-sqlite3"]);
+  const filename =
+    options?.filename ??
+    process.env.ALCHEMY_STATE_FILE ??
+    ".alchemy/state.sqlite";
   ensureDirectory(filename);
   const { default: Client } = await import("better-sqlite3");
   const { drizzle } = await import("drizzle-orm/better-sqlite3");
@@ -150,7 +165,7 @@ async function createBetterSQLite3Database(
   };
 }
 
-async function createLibSQLDatabase(options?: LibSQLConfig) {
+async function createLibSQLDatabase(options?: LibSQLStateStoreOptions) {
   await assertPeers(["drizzle-orm", "@libsql/client"]);
   const url =
     options?.url ??
