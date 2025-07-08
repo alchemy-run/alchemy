@@ -1190,6 +1190,7 @@ export const _Worker = Resource(
                         assetConfig: props.assets,
                       }
                     : undefined,
+                  unstable_cacheWorkerSettings: true,
                 });
                 logger.task("", {
                   message: "updated",
@@ -1814,6 +1815,7 @@ type PutWorkerOptions = WorkerProps & {
         assetConfig?: AssetsConfig;
       }
     | undefined;
+  unstable_cacheWorkerSettings?: boolean;
 };
 
 async function prepareWorkerUpload(
@@ -2015,7 +2017,7 @@ async function getScriptMetadata(
   scriptName: string,
 ): Promise<WorkerScriptMetadata | undefined> {
   const res = await api.get(
-    `/accounts/${api.accountId}/workers/scripts/${scriptName}`,
+    `/accounts/${api.accountId}/workers/services/${scriptName}`,
   );
   if (res.status === 404) {
     return;

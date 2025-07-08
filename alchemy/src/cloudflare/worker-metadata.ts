@@ -210,9 +210,12 @@ export async function prepareWorkerMetadata(
       keepAssets?: boolean;
       assetConfig?: AssetsConfig;
     };
+    unstable_cacheWorkerSettings?: boolean;
   },
 ): Promise<WorkerMetadata> {
-  const oldSettings = await getWorkerSettings(api, props.workerName);
+  const oldSettings = await (props.unstable_cacheWorkerSettings
+    ? getWorkerSettingsWithCache
+    : getWorkerSettings)(api, props.workerName);
   const oldTags: string[] | undefined = Array.from(
     new Set([
       ...(oldSettings?.default_environment?.script?.tags ?? []),
@@ -640,54 +643,56 @@ interface WorkerSettings {
   [key: string]: any;
 }
 
-const getWorkerSettings = memoize(
-  async function getWorkerSettings(
-    api: CloudflareApi,
-    workerName: string,
-  ): Promise<WorkerSettings | undefined> {
-    // Fetch the bindings for a worker by calling the Cloudflare API endpoint:
-    // GET /accounts/:account_id/workers/scripts/:script_name/bindings
-    // See: https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/script_and_version_settings/methods/get/
-    const response = await api.get(
-      `/accounts/${api.accountId}/workers/scripts/${workerName}/settings`,
-    );
-    if (response.status === 404) {
-      return undefined;
-    }
-    if (!response.ok) {
-      throw new Error(
-        `Error getting worker bindings: ${response.status} ${response.statusText}`,
-      );
-    }
-    // The result is an object with a "result" property containing the bindings array
-    const { result, success, errors } = (await response.json()) as {
-      result: {
-        bindings: WorkerBindingSpec[];
-        compatibility_date: string;
-        compatibility_flags: string[];
-        migrations: SingleStepMigration | MultiStepMigration;
-        [key: string]: any;
-      };
-      success: boolean;
-      errors: Array<{
-        code: number;
-        message: string;
-        documentation_url: string;
-        [key: string]: any;
-      }>;
-      messages: Array<{
-        code: number;
-        message: string;
-        documentation_url: string;
-        [key: string]: any;
-      }>;
-    };
-    if (!success) {
-      throw new Error(
-        `Error getting worker bindings: ${response.status} ${response.statusText}\nErrors:\n${errors.map((e) => `- [${e.code}] ${e.message} (${e.documentation_url})`).join("\n")}`,
-      );
-    }
-    return result;
-  },
+const getWorkerSettingsWithCache = memoize(
+  getWorkerSettings,
   (api, workerName) => `${api.accountId}:${workerName}`,
 );
+
+async function getWorkerSettings(
+  api: CloudflareApi,
+  workerName: string,
+): Promise<WorkerSettings | undefined> {
+  // Fetch the bindings for a worker by calling the Cloudflare API endpoint:
+  // GET /accounts/:account_id/workers/scripts/:script_name/bindings
+  // See: https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/script_and_version_settings/methods/get/
+  const response = await api.get(
+    `/accounts/${api.accountId}/workers/scripts/${workerName}/settings`,
+  );
+  if (response.status === 404) {
+    return undefined;
+  }
+  if (!response.ok) {
+    throw new Error(
+      `Error getting worker bindings: ${response.status} ${response.statusText}`,
+    );
+  }
+  // The result is an object with a "result" property containing the bindings array
+  const { result, success, errors } = (await response.json()) as {
+    result: {
+      bindings: WorkerBindingSpec[];
+      compatibility_date: string;
+      compatibility_flags: string[];
+      migrations: SingleStepMigration | MultiStepMigration;
+      [key: string]: any;
+    };
+    success: boolean;
+    errors: Array<{
+      code: number;
+      message: string;
+      documentation_url: string;
+      [key: string]: any;
+    }>;
+    messages: Array<{
+      code: number;
+      message: string;
+      documentation_url: string;
+      [key: string]: any;
+    }>;
+  };
+  if (!success) {
+    throw new Error(
+      `Error getting worker bindings: ${response.status} ${response.statusText}\nErrors:\n${errors.map((e) => `- [${e.code}] ${e.message} (${e.documentation_url})`).join("\n")}`,
+    );
+  }
+  return result;
+}
