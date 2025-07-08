@@ -1,6 +1,11 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
+import {
+  createCloudflareApi,
+  type CloudflareApi,
+  type CloudflareApiOptions,
+} from "./api.ts";
+import type { CloudflareApiResponse } from "./types.ts";
 import { getAccountSubdomain } from "./worker/shared.ts";
 
 interface WorkerSubdomainProps extends CloudflareApiOptions {
@@ -40,22 +45,19 @@ export const WorkerSubdomain = Resource(
     const api = await createCloudflareApi(props);
     if (this.phase === "delete") {
       if (!props.retain) {
-        await api.post(
-          `/accounts/${api.accountId}/workers/scripts/${props.scriptName}/subdomain`,
-          { enabled: false },
-          {
-            headers: { "Content-Type": "application/json" },
-          },
-        );
+        await disableWorkerSubdomain(api, props.scriptName);
       }
       return this.destroy();
     }
-    await api.post(
-      `/accounts/${api.accountId}/workers/scripts/${props.scriptName}/subdomain`,
-      { enabled: true, previews_enabled: true },
-      {
-        headers: { "Content-Type": "application/json" },
-      },
+    await wrapFetch<SubdomainResponse>(
+      `enable subdomain for "${props.scriptName}"`,
+      api.post(
+        `/accounts/${api.accountId}/workers/scripts/${props.scriptName}/subdomain`,
+        { enabled: true, previews_enabled: true },
+        {
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
     );
     const subdomain = await getAccountSubdomain(api);
     const base = `${subdomain}.workers.dev`;
@@ -70,3 +72,42 @@ export const WorkerSubdomain = Resource(
     });
   },
 );
+
+export async function disableWorkerSubdomain(
+  api: CloudflareApi,
+  scriptName: string,
+) {
+  await wrapFetch<SubdomainResponse>(
+    `disable subdomain for "${scriptName}"`,
+    api.post(
+      `/accounts/${api.accountId}/workers/scripts/${scriptName}/subdomain`,
+      { enabled: false },
+    ),
+  );
+}
+
+interface SubdomainResponse {
+  enabled: boolean;
+  previews_enabled: boolean;
+}
+
+async function wrapFetch<T>(
+  label: string,
+  promise: Promise<Response>,
+): Promise<T> {
+  const response = await promise.catch(() => {
+    throw new Error(`Failed to ${label}: Failed to fetch`);
+  });
+  const json = (await response.json().catch(() => {
+    throw new Error(
+      `Failed to ${label} (${response.status}): The API returned an invalid response`,
+    );
+  })) as CloudflareApiResponse<T>;
+  if (json.success) {
+    return json.result;
+  } else {
+    throw new Error(
+      `Failed to ${label} (${response.status}): ${json.errors.map((e) => `${e.code}: ${e.message}`).join(", ")}`,
+    );
+  }
+}

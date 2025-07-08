@@ -80,7 +80,7 @@ import {
   prepareWorkerMetadata,
 } from "./worker-metadata.ts";
 import { WorkerStub, isWorkerStub } from "./worker-stub.ts";
-import { WorkerSubdomain } from "./worker-subdomain.ts";
+import { WorkerSubdomain, disableWorkerSubdomain } from "./worker-subdomain.ts";
 import { createTail } from "./worker/tail.ts";
 import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 
@@ -1066,15 +1066,7 @@ export const _Worker = Resource(
       } as unknown as Worker<B>);
     }
 
-    // Create Cloudflare API client with automatic account discovery
-    const apiOptions: CloudflareApiOptions = {
-      accountId: props.accountId,
-      apiKey: props.apiKey,
-      apiToken: props.apiToken,
-      baseUrl: props.baseUrl,
-      email: props.email,
-    };
-    const api = await createCloudflareApi(apiOptions);
+    const api = await createCloudflareApi(props);
 
     if (this.phase === "delete") {
       await bundle?.delete?.();
@@ -1251,11 +1243,10 @@ export const _Worker = Resource(
       tasks.push(
         getVersionMetadata(api, workerName, putWorkerResult.deployment_id).then(
           (versionMetadata) =>
-            provisionContainers({
+            provisionContainers(api, {
               scriptName: workerName,
               containers: containersBindings,
               bindings: versionMetadata.resources.bindings,
-              apiOptions,
             }),
         ),
       );
@@ -1271,33 +1262,34 @@ export const _Worker = Resource(
     }
 
     tasks.push(
-      provisionEventSources({
+      provisionEventSources(api, {
         scriptName: workerName,
         eventSources: props.eventSources,
-        apiOptions,
       }),
     );
 
     const [domains, routes, subdomain] = await Promise.all([
       // TODO: can you provision domains and routes in parallel, or is there a dependency?
-      provisionDomains({
+      provisionDomains(api, {
         scriptName: workerName,
         adopt: props.adopt,
         domains: props.domains,
-        apiOptions,
       }),
-      provisionRoutes({
+      provisionRoutes(api, {
         scriptName: workerName,
         adopt: props.adopt,
         routes: props.routes,
-        apiOptions,
       }),
-      provisionSubdomain({
+      provisionSubdomain(api, {
         scriptName: workerName,
         enable: props.url ?? dispatchNamespace === undefined,
-        isVersion: !!props.version,
-        putWorkerResult,
-        apiOptions,
+        previewVersionId:
+          props.version && putWorkerResult.metadata.has_preview
+            ? putWorkerResult.id
+            : undefined,
+        retain: !!props.version,
+        forceDelete:
+          this.phase === "create" && !!props.adopt && props.url === false,
       }),
       ...tasks,
     ]);
@@ -1444,12 +1436,22 @@ const normalizeExportBindings = (
   );
 };
 
-async function provisionContainers(props: {
-  scriptName: string;
-  containers?: Container[];
-  bindings: WorkerBindingSpec[];
-  apiOptions: CloudflareApiOptions;
-}): Promise<ContainerApplication[] | undefined> {
+const normalizeApiOptions = (api: CloudflareApi): CloudflareApiOptions => ({
+  accountId: api.accountId,
+  apiKey: api.apiKey,
+  apiToken: api.apiToken,
+  email: api.email,
+  baseUrl: api.baseUrl,
+});
+
+async function provisionContainers(
+  api: CloudflareApi,
+  props: {
+    scriptName: string;
+    containers?: Container[];
+    bindings: WorkerBindingSpec[];
+  },
+): Promise<ContainerApplication[] | undefined> {
   if (!props.containers?.length) {
     return;
   }
@@ -1472,17 +1474,19 @@ async function provisionContainers(props: {
           namespaceId,
         },
         schedulingPolicy: container.schedulingPolicy,
-        ...props.apiOptions,
+        ...normalizeApiOptions(api),
       });
     }),
   );
 }
 
-async function provisionEventSources(props: {
-  scriptName: string;
-  eventSources?: EventSource[];
-  apiOptions: CloudflareApiOptions;
-}): Promise<QueueConsumer[] | undefined> {
+async function provisionEventSources(
+  api: CloudflareApi,
+  props: {
+    scriptName: string;
+    eventSources?: EventSource[];
+  },
+): Promise<QueueConsumer[] | undefined> {
   if (!props.eventSources?.length) {
     return;
   }
@@ -1495,7 +1499,7 @@ async function provisionEventSources(props: {
           settings: eventSource.dlq
             ? { deadLetterQueue: eventSource.dlq }
             : undefined,
-          ...props.apiOptions,
+          ...normalizeApiOptions(api),
         });
       }
       if (isQueueEventSource(eventSource)) {
@@ -1503,7 +1507,7 @@ async function provisionEventSources(props: {
           queue: eventSource.queue,
           scriptName: props.scriptName,
           settings: eventSource.settings,
-          ...props.apiOptions,
+          ...normalizeApiOptions(api),
         });
       }
       throw new Error(`Unsupported event source: ${eventSource}`);
@@ -1511,12 +1515,14 @@ async function provisionEventSources(props: {
   );
 }
 
-async function provisionDomains(props: {
-  scriptName: string;
-  adopt?: boolean;
-  domains?: WorkerProps["domains"];
-  apiOptions: CloudflareApiOptions;
-}): Promise<CustomDomain[] | undefined> {
+async function provisionDomains(
+  api: CloudflareApi,
+  props: {
+    scriptName: string;
+    adopt?: boolean;
+    domains?: WorkerProps["domains"];
+  },
+): Promise<CustomDomain[] | undefined> {
   if (!props.domains?.length) {
     return;
   }
@@ -1542,18 +1548,20 @@ async function provisionDomains(props: {
         name: domain.name,
         zoneId: domain.zoneId,
         adopt: domain.adopt,
-        ...props.apiOptions,
+        ...normalizeApiOptions(api),
       });
     }),
   );
 }
 
-async function provisionRoutes(props: {
-  scriptName: string;
-  adopt?: boolean;
-  routes?: WorkerProps["routes"];
-  apiOptions: CloudflareApiOptions;
-}): Promise<Route[] | undefined> {
+async function provisionRoutes(
+  api: CloudflareApi,
+  props: {
+    scriptName: string;
+    adopt?: boolean;
+    routes?: WorkerProps["routes"];
+  },
+): Promise<Route[] | undefined> {
   if (!props.routes?.length) {
     return;
   }
@@ -1578,29 +1586,32 @@ async function provisionRoutes(props: {
         script: props.scriptName,
         zoneId: route.zoneId,
         adopt: route.adopt,
-        ...props.apiOptions,
+        ...normalizeApiOptions(api),
       });
     }),
   );
 }
 
-async function provisionSubdomain(props: {
-  scriptName: string;
-  enable: boolean;
-  isVersion: boolean;
-  putWorkerResult: PutWorkerResult;
-  apiOptions: CloudflareApiOptions;
-}): Promise<WorkerSubdomain | undefined> {
+async function provisionSubdomain(
+  api: CloudflareApi,
+  props: {
+    scriptName: string;
+    enable: boolean;
+    previewVersionId: string | undefined;
+    retain: boolean;
+    forceDelete: boolean;
+  },
+): Promise<WorkerSubdomain | undefined> {
   if (props.enable) {
     return await WorkerSubdomain("url", {
       scriptName: props.scriptName,
-      previewVersionId:
-        props.isVersion && props.putWorkerResult.metadata.has_preview
-          ? props.putWorkerResult.id
-          : undefined,
-      retain: props.isVersion,
-      ...props.apiOptions,
+      previewVersionId: props.previewVersionId,
+      retain: props.retain,
+      ...normalizeApiOptions(api),
     });
+  }
+  if (props.forceDelete) {
+    await disableWorkerSubdomain(api, props.scriptName);
   }
 }
 

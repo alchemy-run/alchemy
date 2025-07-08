@@ -1674,42 +1674,158 @@ describe("Worker Resource", () => {
         url: false, // Explicitly disable workers.dev URL
       });
 
-      expect(worker.id).toBeTruthy();
-      expect(worker.name).toEqual(workerName);
-      expect(worker.format).toEqual("esm");
       expect(worker.url).toBeUndefined(); // No URL should be provided
 
       // Query Cloudflare API to verify subdomain is not enabled
-      const subdomainResponse = await api.get(
-        `/accounts/${api.accountId}/workers/scripts/${workerName}/subdomain`,
-      );
-
-      // The subdomain endpoint should either return 404 or indicate it's disabled
-      if (subdomainResponse.status === 200) {
-        const subdomainData: any = await subdomainResponse.json();
-        expect(subdomainData.result?.enabled).toBeFalsy();
-      } else {
-        // If 404, that also indicates no subdomain is configured
-        expect(subdomainResponse.status).toEqual(404);
-      }
-
-      // Try to access the worker via workers.dev subdomain - should fail
-      try {
-        const workerSubdomainUrl = `https://${workerName}.${api.accountId.substring(0, 32)}.workers.dev`;
-        const subdomainTestResponse = await fetch(workerSubdomainUrl);
-
-        // If the fetch succeeds, the subdomain shouldn't be working
-        // Workers.dev subdomains that are disabled typically return 404 or 503
-        expect(subdomainTestResponse.status).toBeGreaterThanOrEqual(400);
-      } catch (error) {
-        // Network errors are also expected when subdomain is disabled
-        expect(error).toBeDefined();
-      }
+      await assertWorkersDevDisabled(workerName);
     } finally {
       await destroy(scope);
       await assertWorkerDoesNotExist(api, workerName);
     }
   });
+
+  test("switch worker from url true to url false and verify subdomain is disabled", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-url-switch`;
+
+    let worker: Worker | undefined;
+    try {
+      // First create a worker with url: true (enable workers.dev subdomain)
+      worker = await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from worker with subdomain!', { status: 200 });
+            }
+          };
+        `,
+        format: "esm",
+        url: true, // Enable workers.dev URL
+      });
+
+      expect(worker.url).toBeTruthy(); // URL should be provided
+
+      await assertWorkersDevEnabled(workerName);
+
+      // Test that the worker is accessible via the workers.dev subdomain
+      const enabledResponse = await fetchAndExpectOK(worker.url!);
+      const enabledText = await enabledResponse.text();
+      expect(enabledText).toEqual("Hello from worker with subdomain!");
+
+      // Now update the worker with url: false (disable workers.dev subdomain)
+      worker = await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from worker without subdomain!', { status: 200 });
+            }
+          };
+        `,
+        format: "esm",
+        url: false, // Explicitly disable workers.dev URL
+      });
+
+      expect(worker.url).toBeUndefined(); // No URL should be provided after disabling
+
+      // Query Cloudflare API to verify subdomain is now disabled
+      await assertWorkersDevDisabled(workerName);
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(api, workerName);
+    }
+  });
+
+  test("adopt worker without subdomain and enable url true", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-adopt-enable-url`;
+
+    const script = `
+      export default {
+        async fetch(request, env, ctx) {
+          return new Response('Hello from adopted worker with subdomain!', { status: 200 });
+        }
+      };
+    `;
+
+    try {
+      // First create a worker with url: false (no subdomain)
+      await Worker("initial-worker", {
+        name: workerName,
+        adopt: true,
+        script,
+        url: false, // Explicitly disable workers.dev URL
+      });
+
+      // Verify no subdomain is initially configured
+      await assertWorkersDevDisabled(workerName);
+
+      // Now adopt the worker with url: true to enable workers.dev subdomain
+      const worker = await Worker("adopted-worker", {
+        name: workerName,
+        adopt: true,
+        script,
+        url: true, // Enable workers.dev URL during adoption
+      });
+
+      expect(worker.url).toBeTruthy(); // URL should now be provided
+
+      await assertWorkersDevEnabled(workerName);
+
+      // Test that the worker is accessible via the workers.dev subdomain
+      const response = await fetchAndExpectOK(worker.url!);
+      const text = await response.text();
+      expect(text).toEqual("Hello from adopted worker with subdomain!");
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(api, workerName);
+    }
+  });
+
+  async function assertWorkersDevEnabled(workerName: string) {
+    // Verify that the subdomain is now enabled via API
+    const subdomainResponse = await api.get(
+      `/accounts/${api.accountId}/workers/scripts/${workerName}/subdomain`,
+    );
+    expect(subdomainResponse.status).toEqual(200);
+
+    const subdomainData: any = await subdomainResponse.json();
+    expect(subdomainData.result?.enabled).toBeTruthy();
+  }
+
+  /**
+   * Helper function to assert that a worker's workers.dev subdomain is disabled
+   */
+  async function assertWorkersDevDisabled(workerName: string) {
+    // Query Cloudflare API to verify subdomain is disabled
+    const subdomainResponse = await api.get(
+      `/accounts/${api.accountId}/workers/scripts/${workerName}/subdomain`,
+    );
+
+    const subdomainData: any = await subdomainResponse.json();
+
+    if (subdomainResponse.status === 200) {
+      expect(subdomainData.result?.enabled).toBeFalsy();
+    } else {
+      // If 404, that also indicates no subdomain is configured
+      expect(subdomainResponse.status).toEqual(404);
+    }
+
+    // Also check if we can construct the workers.dev URL and verify it's inaccessible
+    try {
+      const workerSubdomainUrl = `https://${workerName}.${api.accountId.substring(0, 32)}.workers.dev`;
+
+      const subdomainTestResponse = await fetch(workerSubdomainUrl);
+
+      // If the fetch succeeds, the subdomain shouldn't be working
+      // Workers.dev subdomains that are disabled typically return 404 or 503
+      expect(subdomainTestResponse.status).toBeGreaterThanOrEqual(400);
+    } catch (error) {
+      // Network errors are also expected when subdomain is disabled
+      expect(error).toBeDefined();
+    }
+  }
 
   test("destroy versioned worker does not delete base worker", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-version-preserve-base`;
