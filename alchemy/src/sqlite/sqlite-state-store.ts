@@ -41,8 +41,9 @@ interface BetterSQLite3StateStoreOptions
 
 interface LibSQLStateStoreOptions
   extends BaseSQLiteStateStoreOptions,
-    LibSQLConfig {
+    Omit<LibSQLConfig, "url"> {
   engine: "libsql";
+  url?: string;
 }
 
 type SQLiteStateStoreOptions =

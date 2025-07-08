@@ -1,4 +1,4 @@
-import { and, eq, getTableColumns, inArray, notExists } from "drizzle-orm";
+import { and, eq, getTableColumns, inArray } from "drizzle-orm";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import path from "node:path";
 import type { Scope } from "../scope.ts";
@@ -36,26 +36,8 @@ export class BaseSQLiteStateStore<T extends Database = Database>
     return this.scope.chain;
   }
 
-  private async createWithScope() {
-    const { db, destroy } = await this.create();
-    const parent = this.chain.length > 1 ? this.chain.slice(0, -1) : null;
-    // Alchemy doesn't always initialize the app scope before creating the stage scope
-    // so we create it here to avoid a foreign key constraint error.
-    if (parent?.length === 1) {
-      await db
-        .insert(schema.scopes)
-        .values({ chain: parent })
-        .onConflictDoNothing();
-    }
-    await db
-      .insert(schema.scopes)
-      .values({ chain: this.chain, parent })
-      .onConflictDoNothing();
-    return { db, destroy };
-  }
-
   private async db() {
-    this.dbPromise ??= this.createWithScope();
+    this.dbPromise ??= this.create();
     const { db } = await this.dbPromise;
     return db;
   }
@@ -69,31 +51,9 @@ export class BaseSQLiteStateStore<T extends Database = Database>
       return;
     }
     const { db, destroy } = await this.dbPromise;
-    await db.delete(schema.scopes).where(eq(schema.scopes.chain, this.chain));
-    if (this.chain.length === 2) {
-      // When deinitializing the stage scope, we also delete the app scope
-      // if it has no other stages attached.
-      const root = [this.chain[0]] as string[];
-      await db
-        .delete(schema.scopes)
-        .where(
-          and(
-            eq(schema.scopes.chain, root),
-            notExists(
-              db
-                .select()
-                .from(schema.scopes)
-                .where(eq(schema.scopes.parent, root)),
-            ),
-          ),
-        );
-    }
     if (destroy) {
-      const [scopeCount, resourceCount] = await Promise.all([
-        db.$count(schema.scopes),
-        db.$count(schema.resources),
-      ]);
-      if (scopeCount === 0 && resourceCount === 0) {
+      const resourceCount = await db.$count(schema.resources);
+      if (resourceCount === 0) {
         await destroy();
       }
     }

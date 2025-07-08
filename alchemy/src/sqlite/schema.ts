@@ -9,20 +9,11 @@ import type {
   ResourceProps,
 } from "../resource.ts";
 
-export const scopes = sqliteTable("scopes", {
-  chain: text("chain", { mode: "json" }).primaryKey().$type<string[]>(),
-  parent: text("parent", { mode: "json" }).$type<string[]>(),
-});
-export type Scope = typeof scopes.$inferSelect;
-
 export const resources = sqliteTable(
   "resources",
   {
     id: text("id").notNull(),
-    scope: text("scope", { mode: "json" })
-      .$type<string[]>()
-      .notNull()
-      .references(() => scopes.chain),
+    scope: text("scope", { mode: "json" }).$type<string[]>().notNull(),
     status: text("status", {
       enum: [
         "creating",
