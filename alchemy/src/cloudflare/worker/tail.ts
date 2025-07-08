@@ -99,14 +99,17 @@ class TailClient {
     });
     ws.on("message", (message) => {
       const data: TailEventMessage = JSON.parse(message.toString());
-      const event = data.event as TailEventMessage.RequestEvent; // TODO: handle other event types
-      const url = new URL(event.request.url);
-      const status = event.response?.status ?? 500;
       const prefix = kleur.blue(`[${this.id}]`);
-      // TODO: make this look nicer
-      logger.log(
-        `${prefix} ${kleur.gray(event.request.method)} ${url.pathname} ${kleur.dim(">")} ${status >= 200 && status < 300 ? kleur.green(status) : kleur.red(status)} ${kleur.gray(`(cpu: ${Math.round(data.cpuTime)}ms, wall: ${Math.round(data.wallTime)}ms)`)}`,
-      );
+      if (data.event && "request" in data.event) {
+        // TODO: handle other event types
+        const event = data.event;
+        const url = new URL(event.request.url);
+        const status = event.response?.status ?? 500;
+        // TODO: make this look nicer
+        logger.log(
+          `${prefix} ${kleur.gray(event.request.method)} ${url.pathname} ${kleur.dim(">")} ${status >= 200 && status < 300 ? kleur.green(status) : kleur.red(status)} ${kleur.gray(`(cpu: ${Math.round(data.cpuTime)}ms, wall: ${Math.round(data.wallTime)}ms)`)}`,
+        );
+      }
       for (const log of data.logs) {
         logger.log(
           `${prefix} ${kleur.gray(log.level)} ${log.message.join(" ")}`,
