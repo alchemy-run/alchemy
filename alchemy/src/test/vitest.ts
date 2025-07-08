@@ -137,9 +137,7 @@ export function test(
         return new D1StateStore(scope);
       default:
         return new SQLiteStateStore(scope, {
-          engine: "libsql",
-          url: `file:.alchemy/${path.relative(process.cwd(), meta.filename)}.sqlite`,
-          retain: true,
+          filename: `.alchemy/${path.relative(process.cwd(), meta.filename)}.sqlite`,
         });
     }
   };

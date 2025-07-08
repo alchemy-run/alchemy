@@ -1,5 +1,4 @@
 import type { Config as LibSQLConfig } from "@libsql/client";
-import type { Options as BetterSQLite3Options } from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import type { Scope } from "../scope.ts";
@@ -10,16 +9,16 @@ import {
 } from "./base-sqlite-state-store.ts";
 import * as schema from "./schema.ts";
 
-interface BaseSQLiteStateStoreOptions {
+interface BunSQLiteStateStoreOptions {
   /**
-   * Whether to retain the database file after the state store is destroyed.
-   * @default false
+   * Use `bun:sqlite` to connect to the SQLite database.
+   * Requires Bun.
    */
-  retain?: boolean;
-}
-
-interface BunSQLiteStateStoreOptions extends BaseSQLiteStateStoreOptions {
   engine: "bun";
+  /**
+   * The filename to use for the SQLite database.
+   * @default process.env.ALCHEMY_STATE_FILE if set, otherwise ".alchemy/state.sqlite"
+   */
   filename?: string;
 
   // Options are copied from Bun instead of inherited because Bun's type is not exported,
@@ -32,24 +31,47 @@ interface BunSQLiteStateStoreOptions extends BaseSQLiteStateStoreOptions {
   strict?: boolean;
 }
 
-interface BetterSQLite3StateStoreOptions
-  extends BaseSQLiteStateStoreOptions,
-    BetterSQLite3Options {
-  engine: "better-sqlite3";
+interface LibSQLStateStoreOptions extends Omit<LibSQLConfig, "url"> {
+  /**
+   * Use the `@libsql/client` library to connect to the SQLite database.
+   * Supported on Node.js and Bun.
+   */
+  engine: "libsql";
+  /**
+   * The filename to use for the SQLite database.
+   * @default process.env.ALCHEMY_STATE_FILE if set, otherwise ".alchemy/state.sqlite"
+   * @note If the `url` option is specified, this option is ignored.
+   */
   filename?: string;
+  /**
+   * The database URL. Overrides the `filename` option.
+   *
+   * The client supports `libsql:`, `http:`/`https:`, `ws:`/`wss:` and `file:` URL. For more infomation,
+   * please refer to the project README:
+   *
+   * https://github.com/libsql/libsql-client-ts#supported-urls
+   */
+  url?: string;
 }
 
-interface LibSQLStateStoreOptions
-  extends BaseSQLiteStateStoreOptions,
-    Omit<LibSQLConfig, "url"> {
-  engine: "libsql";
-  url?: string;
+interface AutoSQLiteStateStoreOptions {
+  /**
+   * Automatically choose the best SQLite engine based on your environment.
+   * @default "auto" - Uses `bun:sqlite` if available, otherwise uses `@libsql/client`.
+   */
+  engine?: "auto";
+
+  /**
+   * The filename to use for the SQLite database.
+   * @default ".alchemy/state.sqlite"
+   */
+  filename?: string;
 }
 
 type SQLiteStateStoreOptions =
   | BunSQLiteStateStoreOptions
-  | BetterSQLite3StateStoreOptions
-  | LibSQLStateStoreOptions;
+  | LibSQLStateStoreOptions
+  | AutoSQLiteStateStoreOptions;
 
 export class SQLiteStateStore extends BaseSQLiteStateStore {
   constructor(scope: Scope, options?: SQLiteStateStoreOptions) {
@@ -61,61 +83,33 @@ export class SQLiteStateStore extends BaseSQLiteStateStore {
 
 const createDatabase = memoize(
   async (options: SQLiteStateStoreOptions | undefined) => {
-    let result;
     switch (options?.engine) {
       case "bun":
-        result = await createBunSQLiteDatabase(options);
-        break;
-      case "better-sqlite3":
-        result = await createBetterSQLite3Database(options);
-        break;
+        return await createBunSQLiteDatabase(options);
       case "libsql":
-        result = await createLibSQLDatabase(options);
-        break;
+        return await createLibSQLDatabase(options);
       default: {
-        result = await createDefaultDatabase();
-        break;
+        return await createDefaultDatabase(options?.filename);
       }
     }
-    if (options?.retain) {
-      return { db: result.db };
-    }
-    return result;
   },
 );
 
-const isPeerInstalled = (name: string) =>
-  import(name).then(() => true).catch(() => false);
-
-const assertPeers = async (names: string[]) => {
-  const missing = await Promise.all(
-    names.filter((name) => !isPeerInstalled(name)),
-  );
-  if (missing.length > 0) {
-    throw new Error(
-      `[SQLiteStateStore] Missing peer dependencies: ${missing.join(", ")}`,
-    );
+async function createDefaultDatabase(filename: string | undefined) {
+  if ("Bun" in globalThis) {
+    return createBunSQLiteDatabase({ engine: "bun", filename });
   }
-};
-
-async function createDefaultDatabase() {
-  if (await isPeerInstalled("bun:sqlite")) {
-    return createBunSQLiteDatabase();
-  }
-  if (await isPeerInstalled("@libsql/client")) {
-    return createLibSQLDatabase();
-  }
-  if (await isPeerInstalled("better-sqlite3")) {
-    return createBetterSQLite3Database();
-  }
-  const hasDrizzle = await isPeerInstalled("drizzle-orm");
-  throw new Error(
-    `No supported SQLite engine found for SQLiteStateStore. Please install ${hasDrizzle ? "" : "`drizzle-orm` and "} \`@libsql/client\` or \`better-sqlite3\`.`,
-  );
+  return createLibSQLDatabase({ engine: "libsql", filename });
 }
 
-async function createBunSQLiteDatabase(options?: BunSQLiteStateStoreOptions) {
-  await assertPeers(["drizzle-orm", "bun:sqlite"]);
+async function createBunSQLiteDatabase(
+  options: BunSQLiteStateStoreOptions | undefined,
+) {
+  if (!("Bun" in globalThis)) {
+    throw new Error(
+      "[SQLiteStateStore] The `engine: 'bun'` option is only available in Bun. Please use `engine: 'libsql'` instead.",
+    );
+  }
 
   const filename =
     options?.filename ??
@@ -123,77 +117,54 @@ async function createBunSQLiteDatabase(options?: BunSQLiteStateStoreOptions) {
     ".alchemy/state.sqlite";
   ensureDirectory(filename);
   const { Database } = await import("bun:sqlite");
-  const { drizzle } = await import("drizzle-orm/bun-sqlite");
+  const { drizzle } = await import("drizzle-orm/bun-sqlite").catch(() => {
+    throw new Error(
+      "[SQLiteStateStore] Missing `drizzle-orm` peer dependency. Please `bun install drizzle-orm`.",
+    );
+  });
   const { migrate } = await import("drizzle-orm/bun-sqlite/migrator");
   // Bun's constructor throws if we pass in an empty object or if extraneous
   // options are passed in, so here's some ugly destructuring!
-  const {
-    engine: _engine,
-    filename: _filename,
-    retain: _retain,
-    ...rest
-  } = options ?? {};
+  const { engine: _engine, filename: _filename, ...rest } = options ?? {};
   const bunOptions = Object.keys(rest).length > 0 ? rest : undefined;
-  const db = drizzle(new Database(filename, bunOptions), {
+  const client = new Database(filename, bunOptions);
+  client.exec("PRAGMA journal_mode = WAL;");
+  const db = drizzle(client, {
     schema,
   });
   migrate(db, { migrationsFolder: resolveMigrationsPath() });
-  return {
-    db,
-    destroy: createDestroy(filename),
-  };
+  return db;
 }
 
-async function createBetterSQLite3Database(
-  options?: BetterSQLite3StateStoreOptions,
+async function createLibSQLDatabase(
+  options: LibSQLStateStoreOptions | undefined,
 ) {
-  await assertPeers(["drizzle-orm", "better-sqlite3"]);
-  const filename =
-    options?.filename ??
-    process.env.ALCHEMY_STATE_FILE ??
-    ".alchemy/state.sqlite";
-  ensureDirectory(filename);
-  const { default: Client } = await import("better-sqlite3");
-  const { drizzle } = await import("drizzle-orm/better-sqlite3");
-  const { migrate } = await import("drizzle-orm/better-sqlite3/migrator");
-  const db = drizzle(new Client(filename, options), {
-    schema,
-  });
-  migrate(db, { migrationsFolder: resolveMigrationsPath() });
-  return {
-    db,
-    destroy: createDestroy(filename),
-  };
-}
-
-async function createLibSQLDatabase(options?: LibSQLStateStoreOptions) {
-  await assertPeers(["drizzle-orm", "@libsql/client"]);
   const url =
     options?.url ??
-    `file:${process.env.ALCHEMY_STATE_FILE ?? ".alchemy/state.sqlite"}`;
+    `file:${options?.filename ?? process.env.ALCHEMY_STATE_FILE ?? ".alchemy/state.sqlite"}`;
   const filename = url.startsWith("file:") ? url.slice(5) : undefined;
   if (filename) {
     ensureDirectory(filename);
   }
-  const { createClient } = await import("@libsql/client");
-  const { drizzle } = await import("drizzle-orm/libsql");
+  const { createClient } = await import("@libsql/client").catch(() => {
+    throw new Error(
+      "[SQLiteStateStore] Missing `@libsql/client` peer dependency. Please `npm install @libsql/client`.",
+    );
+  });
+  const { drizzle } = await import("drizzle-orm/libsql").catch(() => {
+    throw new Error(
+      "[SQLiteStateStore] Missing `drizzle-orm` peer dependency. Please `npm install drizzle-orm`.",
+    );
+  });
   const { migrate } = await import("drizzle-orm/libsql/migrator");
-  const db = drizzle(createClient({ url, ...options }), {
+  const client = createClient({ url, ...options });
+  await client.execute("PRAGMA journal_mode = WAL;");
+  const db = drizzle(client, {
     schema,
   });
   await migrate(db, { migrationsFolder: resolveMigrationsPath() });
-  return {
-    db,
-    destroy: createDestroy(filename),
-  };
+  return db;
 }
-
-const createDestroy = (filename: string | undefined) => {
-  if (filename) {
-    return () => fs.promises.unlink(filename).catch(() => {});
-  }
-  return undefined;
-};
 
 const ensureDirectory = (filename: string) => {
   const dir = path.dirname(filename);

@@ -51,9 +51,7 @@ export const createTestOptions = (storeType: string, namespace: string) =>
           return new D1StateStore(scope);
         default:
           return new SQLiteStateStore(scope, {
-            engine: "libsql",
-            url: `file:.alchemy/${namespace}.sqlite`,
-            retain: true,
+            filename: `.alchemy/${namespace}.sqlite`,
           });
       }
     },

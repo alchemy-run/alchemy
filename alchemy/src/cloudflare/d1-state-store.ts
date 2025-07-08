@@ -63,11 +63,9 @@ const createDatabaseClient = memoize(async (options: D1StateStoreOptions) => {
       rows: Object.values(result.results.rows),
     };
   };
-  return {
-    db: drizzle(remoteCallback, {
-      schema,
-    }),
-  };
+  return drizzle(remoteCallback, {
+    schema,
+  });
 });
 
 const upsertDatabase = async (api: CloudflareApi, databaseName: string) => {
