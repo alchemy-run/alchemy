@@ -404,7 +404,7 @@ export class Scope {
       });
     }
 
-    await this.rootTelemetryClient?.finalize().catch((error) => {
+    await this.rootTelemetryClient?.finalize()?.catch((error) => {
       this.logger.warn("Telemetry finalization failed:", error);
     });
   }
