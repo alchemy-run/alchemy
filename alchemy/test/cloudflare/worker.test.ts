@@ -1554,11 +1554,11 @@ describe("Worker Resource", () => {
   });
 
   test("adopt worker with existing migration tag", async (scope) => {
-    const workerName = `${BRANCH_PREFIX}-test-worker-adopt-migration`;
+    const scriptName = `${BRANCH_PREFIX}-test-worker-adopt-migration`;
 
     try {
       await deleteWorker(api, {
-        workerName,
+        scriptName,
       });
 
       const formData = new FormData();
@@ -1604,13 +1604,13 @@ describe("Worker Resource", () => {
 
       // Put the worker with migration tag v1
       await api.post(
-        `/accounts/${api.accountId}/workers/scripts/${workerName}/versions`,
+        `/accounts/${api.accountId}/workers/scripts/${scriptName}/versions`,
         formData,
       );
 
       // Now adopt the worker using the Worker resource
-      await Worker(workerName, {
-        name: workerName,
+      await Worker(scriptName, {
+        name: scriptName,
         adopt: true,
         script: `
           export class MyDO2 {}
@@ -1624,13 +1624,13 @@ describe("Worker Resource", () => {
         bindings: {
           MY_DO: new DurableObjectNamespace("test-counter-migration", {
             className: "MyDO2",
-            scriptName: workerName,
+            scriptName: scriptName,
           }),
         },
       });
 
-      await Worker(workerName, {
-        name: workerName,
+      await Worker(scriptName, {
+        name: scriptName,
         adopt: true,
         script: `
           export class MyDO3 {}
@@ -1644,13 +1644,13 @@ describe("Worker Resource", () => {
         bindings: {
           MY_DO: new DurableObjectNamespace("test-counter-migration", {
             className: "MyDO3",
-            scriptName: workerName,
+            scriptName: scriptName,
           }),
         },
       });
     } finally {
       await destroy(scope);
-      await assertWorkerDoesNotExist(api, workerName);
+      await assertWorkerDoesNotExist(api, scriptName);
     }
   });
 

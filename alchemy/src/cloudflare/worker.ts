@@ -1074,7 +1074,10 @@ export const _Worker = Resource(
       await bundle.delete?.();
       if (!props.version) {
         await deleteQueueConsumers(api, workerName);
-        await deleteWorker(api, workerName, dispatchNamespace);
+        await deleteWorker(api, {
+          scriptName: workerName,
+          dispatchNamespace,
+        });
       }
       return this.destroy();
     }
@@ -2035,21 +2038,28 @@ async function deleteQueueConsumers(api: CloudflareApi, scriptName: string) {
   );
 }
 
-async function deleteWorker(
+export async function deleteWorker(
   api: CloudflareApi,
-  scriptName: string,
-  dispatchNamespace: string | undefined,
+  props: {
+    scriptName: string;
+    dispatchNamespace?: string;
+  },
 ) {
   await withExponentialBackoff(
     async () => {
       const deleteResponse = await api.delete(
-        dispatchNamespace
-          ? `/accounts/${api.accountId}/workers/dispatch/namespaces/${dispatchNamespace}/scripts/${scriptName}?force=true`
-          : `/accounts/${api.accountId}/workers/scripts/${scriptName}?force=true`,
+        props.dispatchNamespace
+          ? `/accounts/${api.accountId}/workers/dispatch/namespaces/${props.dispatchNamespace}/scripts/${props.scriptName}?force=true`
+          : `/accounts/${api.accountId}/workers/scripts/${props.scriptName}?force=true`,
       );
 
       if (!deleteResponse.ok && deleteResponse.status !== 404) {
-        await handleApiError(deleteResponse, "delete", "worker", scriptName);
+        await handleApiError(
+          deleteResponse,
+          "delete",
+          "worker",
+          props.scriptName,
+        );
       }
     },
     (err) =>
