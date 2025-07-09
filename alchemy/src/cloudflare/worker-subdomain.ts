@@ -83,7 +83,12 @@ export async function disableWorkerSubdomain(
       `/accounts/${api.accountId}/workers/scripts/${scriptName}/subdomain`,
       { enabled: false },
     ),
-  );
+  ).catch((error) => {
+    if (error.status === 404) {
+      return;
+    }
+    throw error;
+  });
 }
 
 interface SubdomainResponse {
@@ -106,8 +111,12 @@ async function wrapFetch<T>(
   if (json.success) {
     return json.result;
   } else {
-    throw new Error(
+    const error = new Error(
       `Failed to ${label} (${response.status}): ${json.errors.map((e) => `${e.code}: ${e.message}`).join(", ")}`,
     );
+    Object.assign(error, {
+      status: response.status,
+    });
+    throw error;
   }
 }
