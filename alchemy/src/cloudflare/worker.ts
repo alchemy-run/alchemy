@@ -991,7 +991,7 @@ export const _Worker = Resource(
     const dispatchNamespace =
       typeof props.namespace === "string"
         ? props.namespace
-        : props.namespace?.namespaceId;
+        : props.namespace?.namespaceName;
 
     const dev = normalizeDev(this, props.dev);
 
