@@ -9,46 +9,159 @@ import {
   createCloudflareApi,
 } from "./api.ts";
 
+/**
+ * Properties for creating a Container binding or ContainerApplication
+ *
+ * Extends ImageProps for Docker image configuration and CloudflareApiOptions
+ * for Cloudflare API authentication.
+ */
 export interface ContainerProps
   extends Omit<ImageProps, "registry" | "skipPush">,
     Partial<CloudflareApiOptions> {
+  /**
+   * The class name for the container binding.
+   * This is used to identify the container class in Worker bindings.
+   */
   className: string;
+
+  /**
+   * Maximum number of container instances that can be running.
+   * Controls horizontal scaling limits.
+   *
+   * @default 10
+   */
   maxInstances?: number;
+
+  /**
+   * Optional name for the Worker script that will use this container.
+   * Used for organizing and identifying container deployments.
+   */
   scriptName?: string;
+
+  /**
+   * The instance type determines the compute resources allocated to the container.
+   * Different types offer different CPU, memory, and pricing characteristics.
+   *
+   * @default "dev"
+   */
   instanceType?: InstanceType;
+
+  /**
+   * Configuration for observability features like logging and monitoring.
+   * Controls what telemetry data is collected from the container.
+   */
   observability?: DeploymentObservability;
+
+  /**
+   * Scheduling policy controls where and how containers are deployed.
+   * Affects placement, resource allocation, and geographic distribution.
+   *
+   * @default "default"
+   */
   schedulingPolicy?: SchedulingPolicy;
+
+  /**
+   * Whether to adopt an existing container application with the same name.
+   *
+   * If `true`, the resource will attempt to adopt an existing container application
+   * instead of failing when one already exists with the same name.
+   *
+   * @default false
+   */
+  adopt?: boolean;
+
+  /**
+   * Development-specific configuration options.
+   */
   dev?: {
+    /**
+     * Whether to use remote container deployment even in development mode.
+     * When false, containers run locally using Miniflare.
+     * When true, containers are deployed to Cloudflare's edge even in dev mode.
+     *
+     * @default false
+     */
     remote?: boolean;
   };
 }
 
 /**
+ * Instance types for Cloudflare Container deployments.
+ *
+ * Each type offers different compute resources and pricing:
+ * - `dev`: Development instances with minimal resources, suitable for testing
+ * - `basic`: Basic production instances with standard resources
+ * - `standard`: Standard production instances with enhanced resources
+ *
  * @see https://developers.cloudflare.com/containers/pricing/
  */
 export type InstanceType = "dev" | "basic" | "standard" | (string & {});
 
+/**
+ * Type guard to check if a binding is a Container binding.
+ *
+ * @param binding - The binding to check
+ * @returns True if the binding is a Container binding
+ */
 export function isContainer(binding: any): binding is Container {
   return binding.type === "container";
 }
 
+/**
+ * A Container binding that can be used in Cloudflare Workers.
+ *
+ * Container bindings allow Workers to communicate with containerized applications
+ * running on Cloudflare's global network. The container can be called from the
+ * Worker using the binding name.
+ *
+ * @template T - Type parameter for additional container-specific properties
+ */
 export type Container<T = any> = {
+  /** Identifies this as a container binding type */
   type: "container";
+
+  /** Unique identifier for the container */
   id: string;
+
+  /** Optional human-readable name for the container */
   name?: string;
+
+  /** Class name used to identify the container in Worker bindings */
   className: string;
+
+  /** Docker image configuration for the container */
   image: Image;
+
+  /** Maximum number of container instances that can be running */
   maxInstances?: number;
+
+  /** Optional name for the Worker script that will use this container */
   scriptName?: string;
+
+  /** Whether SQLite is enabled for the container (always true for containers) */
   sqlite?: true;
+
+  /** The instance type determining compute resources */
   instanceType?: InstanceType;
+
+  /** Observability configuration for logging and monitoring */
   observability?: DeploymentObservability;
+
+  /** Scheduling policy for container placement */
   schedulingPolicy?: SchedulingPolicy;
+
+  /** Whether this container was adopted from an existing deployment */
+  adopt?: boolean;
+
+  /** Development-specific configuration */
   dev?: {
+    /** Whether to use remote deployment in development mode */
     remote?: boolean;
   };
+
   /**
    * @internal
+   * Phantom type parameter for additional type safety
    */
   __phantom?: T;
 };
@@ -75,6 +188,7 @@ export async function Container<T>(
     schedulingPolicy: props.schedulingPolicy,
     sqlite: true,
     dev: props.dev,
+    adopt: props.adopt,
   };
 
   if (Scope.current.dev && !props.dev?.remote) {
@@ -110,45 +224,137 @@ export async function Container<T>(
   };
 }
 
+/**
+ * Configuration for progressive rollout strategy when updating container applications.
+ *
+ * Rollouts allow you to gradually deploy new container configurations, reducing
+ * risk by updating instances incrementally rather than all at once.
+ */
 export interface ContainerApplicationRollout {
+  /**
+   * The rollout strategy to use.
+   * Currently only "rolling" strategy is supported, which updates instances gradually.
+   */
   strategy: "rolling";
+
+  /**
+   * The rollout automation level.
+   * "full_auto" means the rollout proceeds automatically without manual intervention.
+   *
+   * @default "full_auto"
+   */
   kind?: "full_auto";
+
+  /**
+   * Percentage of instances to update in each step of the rollout.
+   * For example, 25 means 25% of instances are updated in each step.
+   *
+   * @minimum 1
+   * @maximum 100
+   */
   stepPercentage: number;
+
+  /**
+   * The target configuration that instances will be updated to.
+   * This defines the final state after the rollout completes.
+   */
   targetConfiguration: {
+    /** The container image to deploy */
     image: string;
+
+    /** The instance type for the new deployment */
     instance_type?: InstanceType;
+
+    /** Observability configuration for the new deployment */
     observability: {
+      /** Logging configuration */
       logs: {
+        /** Whether logging is enabled */
         enabled: boolean;
       };
     };
   };
 }
 
+/**
+ * Properties for creating a ContainerApplication resource.
+ *
+ * ContainerApplication represents a managed container deployment that runs your
+ * Docker images with automatic scaling, scheduling, and integration with
+ * Cloudflare's services.
+ */
 export interface ContainerApplicationProps extends CloudflareApiOptions {
+  /**
+   * The name of the container application.
+   * Must be unique within your Cloudflare account.
+   */
   name: string;
+
+  /**
+   * Scheduling policy that controls where and how containers are deployed.
+   * Affects placement, resource allocation, and geographic distribution.
+   *
+   * @default "default"
+   */
   schedulingPolicy?: SchedulingPolicy;
+
+  /**
+   * The initial number of container instances to deploy.
+   * Can be scaled up or down after deployment.
+   *
+   * @default 1
+   */
   instances?: number;
+
   /**
    * The instance type to be used for the deployment.
+   * Determines the compute resources (CPU, memory) allocated to each instance.
    *
    * @default "dev"
    */
   instanceType?: InstanceType;
+
   /**
    * The observability configuration for the deployment.
+   * Controls logging, monitoring, and telemetry collection.
    */
   observability?: DeploymentObservability;
+
   /**
    * The maximum number of instances to be used for the deployment.
+   * Acts as an upper limit for auto-scaling.
+   *
+   * @default 1
    */
   maxInstances?: number;
+
+  /**
+   * The Docker image to deploy in the container application.
+   * Must be built and available in a container registry.
+   */
   image: Image;
+
+  /**
+   * Optional registry ID for custom container registries.
+   * If not specified, uses Cloudflare's default registry.
+   */
   registryId?: string;
+
+  /**
+   * Configuration for Durable Objects integration.
+   * Allows the container to interact with Cloudflare Durable Objects.
+   */
   durableObjects?: {
+    /** The namespace ID of the Durable Objects namespace to bind */
     namespaceId: string;
   };
+
+  /**
+   * Configuration for progressive rollout when updating the application.
+   * Defines how updates are deployed across instances.
+   */
   rollout?: ContainerApplicationRollout;
+
   /**
    * Whether to adopt an existing container application with the same name.
    *
@@ -160,6 +366,16 @@ export interface ContainerApplicationProps extends CloudflareApiOptions {
   adopt?: boolean;
 }
 
+/**
+ * Scheduling policies that control container placement and resource allocation.
+ *
+ * Different policies optimize for different use cases:
+ * - `moon`: Optimized for latency-sensitive applications
+ * - `gpu`: Routes to locations with GPU resources available
+ * - `regional`: Keeps containers within specific geographic regions
+ * - `fill_metals`: Optimizes for resource utilization on dedicated hardware
+ * - `default`: Uses Cloudflare's standard scheduling algorithm
+ */
 export type SchedulingPolicy =
   | "moon"
   | "gpu"
@@ -168,9 +384,18 @@ export type SchedulingPolicy =
   | "default"
   | (string & {});
 
+/**
+ * A ContainerApplication resource representing a managed container deployment.
+ *
+ * This resource manages the lifecycle of containerized applications running on
+ * Cloudflare's global network with automatic scaling and scheduling.
+ */
 export interface ContainerApplication
   extends Resource<"cloudflare::ContainerApplication"> {
+  /** Unique identifier for the container application */
   id: string;
+
+  /** Human-readable name of the container application */
   name: string;
 }
 
@@ -394,43 +619,114 @@ export const ContainerApplication = Resource(
   },
 );
 
+/**
+ * Complete data structure returned by the Cloudflare API for container applications.
+ *
+ * This interface represents the full state of a container application as stored
+ * and managed by Cloudflare's container service. It includes both user-configured
+ * properties and system-managed metadata.
+ */
 export interface ContainerApplicationData {
+  /** Human-readable name of the container application */
   name: string;
+
+  /** Scheduling policy controlling container placement and resource allocation */
   scheduling_policy: SchedulingPolicy;
+
+  /** Current number of running container instances */
   instances: number;
+
+  /** Maximum number of instances allowed for this application */
   max_instances: number;
+
+  /** Resource and placement constraints for the application */
   constraints: {
+    /** Infrastructure tier level (higher numbers indicate more resources) */
     tier: number;
+
+    /** Additional constraint properties that may be added by Cloudflare */
     [key: string]: any;
   };
+
+  /**
+   * The deployment configuration defining how containers should run.
+   * This includes image, compute resources, networking, and other runtime settings.
+   */
   configuration: {
+    /** Container image reference (tag or digest) */
     image: string;
+
+    /** Geographic location preference for deployment */
     location: string;
+
+    /** Number of virtual CPU cores allocated to each instance */
     vcpu: number;
+
+    /** Memory allocation in mebibytes (MiB) */
     memory_mib: number;
+
+    /** Disk configuration for persistent storage */
     disk: any;
+
+    /** Network configuration and policies */
     network: any;
+
+    /** Command to run when starting the container */
     command: string[];
+
+    /** Entrypoint command for the container */
     entrypoint: string[];
+
+    /** Container runtime to use (e.g., "runc") */
     runtime: string;
+
+    /** Type of deployment strategy */
     deployment_type: string;
+
+    /** Observability and monitoring configuration */
     observability: any;
+
+    /** Human-readable memory allocation (e.g., "512MB") */
     memory: string;
+
+    /** Additional configuration properties */
     [key: string]: any;
   };
+
+  /** Durable Objects integration configuration */
   durable_objects: {
+    /** ID of the Durable Objects namespace */
     namespace_id: string;
+
+    /** Additional Durable Objects properties */
     [key: string]: any;
   };
+
+  /** Unique identifier for the container application */
   id: string;
+
+  /** Cloudflare account ID that owns this application */
   account_id: string;
+
+  /** ISO 8601 timestamp when the application was created */
   created_at: string;
+
+  /** Version number of the application configuration */
   version: number;
+
+  /** Legacy field - ID of the Durable Objects namespace */
   durable_object_namespace_id: string;
+
+  /** Health status and metrics for all instances */
   health: {
+    /** Health information for individual instances */
     instances: any;
+
+    /** Additional health metrics */
     [key: string]: any;
   };
+
+  /** Additional properties that may be returned by the API */
   [key: string]: any;
 }
 

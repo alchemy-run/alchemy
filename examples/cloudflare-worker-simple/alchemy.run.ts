@@ -14,7 +14,6 @@ const app = await alchemy("cloudflare-worker-simple", {
   stateStore: (scope) =>
     new SQLiteStateStore(scope, {
       engine: "libsql",
-      retain: true,
     }),
 });
 

@@ -1477,6 +1477,7 @@ async function provisionContainers(
           namespaceId,
         },
         schedulingPolicy: container.schedulingPolicy,
+        adopt: container.adopt,
         ...normalizeApiOptions(api),
       });
     }),

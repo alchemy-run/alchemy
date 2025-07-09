@@ -9,6 +9,7 @@ const app = await alchemy("cloudflare-container");
 const container = await Container<MyContainer>("container", {
   name: `${app.name}-container-${app.stage}`,
   className: "MyContainer",
+  adopt: true,
   build: {
     context: import.meta.dirname,
     dockerfile: "Dockerfile",
