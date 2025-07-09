@@ -11,10 +11,9 @@ Bindings allow resources to connect to each other in a type-safe way. In Alchemy
 
 Bindings expose resources to your code at runtime. For example, they allow a Cloudflare Worker to access:
 
-- KV Namespaces
-- Durable Objects
-- R2 Buckets
-- Secrets and variables
+- Environment variables (non-sensitive strings)
+- Secrets (sensitive strings)
+- Resources like KV Namespaces, Durable Objects, R2 Buckets, etc.
 
 ## Using Bindings in Workers
 
@@ -36,9 +35,12 @@ const myWorker = await Worker("my-worker", {
   name: "my-worker",
   entrypoint: "./src/worker.ts",
   bindings: {
-    MY_KV: myKV,
+    // an environment variable (non-sensitive)
+    STAGE: "prod",
+    // a secret (sensitive)
     API_KEY: alchemy.secret("secret-key"),
-    DEBUG_MODE: true
+    // a resource (binds as an object with methods)
+    MY_KV: myKV,
   }
 });
 ```
@@ -46,15 +48,17 @@ const myWorker = await Worker("my-worker", {
 The worker can then access these bindings through the `env` parameter:
 
 ```typescript
+import type { myWorker } from "../alchemy.run.ts";
+
 // src/worker.ts
 export default {
-  async fetch(request: Request, env: any, ctx: any) {
+  async fetch(request: Request, env: typeof myWorker.Env, ctx: any) {
     // Access the KV namespace binding
     const value = await env.MY_KV.get("key");
     
     // Access other bindings
     const apiKey = env.API_KEY;
-    const isDebug = env.DEBUG_MODE;
+    const isDebug = env.STAGE === "prod";
     
     return new Response(`Value: ${value}`);
   }
@@ -63,7 +67,20 @@ export default {
 
 ## Type-Safe Bindings
 
-To make bindings type-safe, create an `env.ts` file:
+1. Use a type-only import to infer from your worker definition in `alchemy.run.ts`
+
+```typescript
+import type { myWorker } from "./alchemy.run";
+
+export default {
+  async fetch(request: Request, env: typeof myWorker.Env, ctx: any) {
+    env.MY_KV.get("key"); // allowed
+    env.NON_EXISTING_BINDING; // type error
+  }
+}
+```
+
+2. Augment `env` from the `cloudflare:workers` module to infer the types globally:
 
 ```typescript
 import type { myWorker } from "./alchemy.run";
