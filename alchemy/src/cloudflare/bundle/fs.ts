@@ -1,6 +1,6 @@
 import kleur from "kleur";
 import fs from "node:fs/promises";
-import path from "node:path/posix";
+import path from "pathe";
 import { logger } from "../../util/logger.ts";
 import type {
   WorkerBundle,

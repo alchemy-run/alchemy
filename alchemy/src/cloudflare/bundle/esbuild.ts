@@ -1,6 +1,6 @@
 import esbuild from "esbuild";
 import fs from "node:fs/promises";
-import path from "node:path/posix";
+import path from "pathe";
 import { esbuildPluginCompatWarning } from "./plugin-compat-warning.ts";
 import { esbuildPluginHotReload } from "./plugin-hot-reload.ts";
 import { esbuildPluginHybridNodeCompat } from "./plugin-hybrid-node-compat.ts";
