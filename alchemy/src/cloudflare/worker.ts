@@ -8,7 +8,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import path from "node:path";
+import path from "node:path/posix";
 import { isDeepStrictEqual } from "node:util";
 import { BUILD_DATE } from "../build-date.ts";
 import type { Context } from "../context.ts";
@@ -980,7 +980,7 @@ export const _Worker = Resource(
       props.cwd = props.projectRoot;
     }
 
-    const cwd = props.cwd ? path.resolve(props.cwd) : process.cwd();
+    const cwd = path.resolve(props.cwd ?? process.cwd());
     const relativeCwd =
       cwd === process.cwd() ? undefined : path.relative(process.cwd(), cwd);
 
