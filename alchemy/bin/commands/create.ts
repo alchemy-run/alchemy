@@ -47,7 +47,6 @@ async function createProjectContext(
       );
     }
     name = options.name;
-    log.info(`Using project name: ${pc.yellow(name)}`);
   } else {
     const nameResult = await text({
       message: "What is your project name?",
@@ -69,7 +68,6 @@ async function createProjectContext(
   let selectedTemplate: TemplateType;
   if (options.template) {
     selectedTemplate = options.template;
-    log.info(`Using template: ${pc.yellow(selectedTemplate)}`);
   } else {
     const templateResult = await select({
       message: "Which template would you like to use?",
@@ -102,9 +100,6 @@ async function createProjectContext(
   let shouldInstall = true;
   if (options.install !== undefined) {
     shouldInstall = options.install;
-    log.info(
-      `Dependencies installation: ${pc.yellow(shouldInstall ? "enabled" : "disabled")}`,
-    );
   } else if (!options.yes) {
     const installResult = await confirm({
       message: "Install dependencies?",
@@ -264,8 +259,8 @@ async function setupGitHubActions(context: ProjectContext): Promise<void> {
     !context.options.yes
   ) {
     const setupResult = await confirm({
-      message: "Add GitHub Actions for PR previews and production deployments?",
-      initialValue: false,
+      message: "Add GitHub Actions for PR previews?",
+      initialValue: true,
     });
 
     if (isCancel(setupResult) || !setupResult) {
@@ -282,7 +277,6 @@ async function setupGitHubActions(context: ProjectContext): Promise<void> {
   try {
     await addGitHubWorkflowToAlchemy(context);
   } catch (error) {
-    log.error("Failed to setup GitHub workflow");
     throwWithContext(error, "GitHub workflow setup failed");
   }
 }
@@ -290,11 +284,8 @@ async function setupGitHubActions(context: ProjectContext): Promise<void> {
 export async function createAlchemy(cliOptions: CreateInput): Promise<void> {
   try {
     intro(pc.cyan("🧪 Welcome to Alchemy!"));
-    log.info("Creating a new Alchemy project...");
 
     const context = await createProjectContext(cliOptions);
-
-    log.info(`Detected package manager: ${pc.green(context.packageManager)}`);
 
     await handleDirectoryOverwrite(context);
 
@@ -304,9 +295,7 @@ export async function createAlchemy(cliOptions: CreateInput): Promise<void> {
       context.options.install === false
         ? `
 ${pc.cyan("📦 Install dependencies:")}
-   cd ${context.name}
    ${context.packageManager} install
-
 `
         : "";
 
@@ -335,15 +324,10 @@ ${pc.cyan("📚 Learn more:")}
       pc.green(`✅ Project ${pc.yellow(context.name)} created successfully!`),
     );
   } catch (error) {
-    log.error("An unexpected error occurred:");
     if (error instanceof Error) {
-      log.error(`${pc.red("Error:")} ${error.message}`);
-      if (error.stack && process.env.DEBUG) {
-        log.error(`${pc.gray("Stack trace:")}\n${error.stack}`);
-      }
+      throwWithContext(error, "Project creation failed");
     } else {
-      log.error(pc.red(String(error)));
+      throwWithContext(new Error(String(error)), "Project creation failed");
     }
-    process.exit(1);
   }
 }

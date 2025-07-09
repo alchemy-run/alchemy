@@ -10,13 +10,13 @@ export async function addGitHubWorkflowToAlchemy(
   const config = {
     owner: "username",
     repo: context.name,
-    prodDomain: undefined,
+    prodDomain: "example.com",
   };
 
   const alchemyFilePath = path.join(context.path, "alchemy.run.ts");
 
   const s = spinner();
-  s.start("Adding GitHub workflow setup...");
+  s.start("Setting up GitHub Actions...");
 
   try {
     let code = await fs.readFile(alchemyFilePath, "utf-8");
@@ -93,8 +93,9 @@ This preview was built from commit \${process.env.GITHUB_SHA}
 
     await fs.writeFile(alchemyFilePath, code, "utf-8");
 
-    s.stop("GitHub workflow setup added successfully");
+    s.stop("GitHub Actions configured");
   } catch (error) {
+    s.stop("GitHub Actions setup failed");
     throwWithContext(error, "Failed to add GitHub workflow setup");
   }
 }
