@@ -1,12 +1,11 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import fs from "node:fs";
+import fs from "node:fs/promises";
 import util from "node:util";
 import type { Phase } from "./alchemy.ts";
 import { D1StateStore } from "./cloudflare/d1-state-store.ts";
 import { DOStateStore } from "./cloudflare/do-state-store/index.ts";
 import { destroy, destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
-import { SQLiteStateStore } from "./sqlite/sqlite-state-store.ts";
 import {
   ResourceFQN,
   ResourceID,
@@ -17,6 +16,7 @@ import {
   type Resource,
   type ResourceProps,
 } from "./resource.ts";
+import { SQLiteStateStore } from "./sqlite/sqlite-state-store.ts";
 import type { State, StateStore, StateStoreType } from "./state.ts";
 import {
   createDummyLogger,
@@ -106,7 +106,6 @@ export class Scope {
   public readonly scopeName: string;
   public readonly parent: Scope | undefined;
   public readonly password: string | undefined;
-  public readonly state: StateStore;
   public readonly stateStore: StateStoreType;
   public readonly quiet: boolean;
   public readonly phase: Phase;
@@ -114,6 +113,9 @@ export class Scope {
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
+
+  // @ts-expect-error - we know this will be set by init()
+  public readonly state: StateStore;
 
   private isErrored = false;
   private finalized = false;
@@ -175,7 +177,7 @@ export class Scope {
 
     this.stateStore =
       options.stateStore ?? this.parent?.stateStore ?? defaultStateStore;
-    this.state = this.stateStore(this);
+
     if (!options.telemetryClient && !this.parent?.telemetryClient) {
       throw new Error("Telemetry client is required");
     }
@@ -230,6 +232,8 @@ export class Scope {
   }
 
   public async init() {
+    // @ts-expect-error - ignore `readonly` modifier, we control the lifecycle
+    this.state = await this.stateStore(this);
     await Promise.all([
       this.state.init?.(),
       this.telemetryClient.ready.catch((error) => {
@@ -239,7 +243,7 @@ export class Scope {
   }
 
   public async deinit() {
-    await this.parent?.state.delete(this.scopeName!);
+    await this.parent?.state!.delete(this.scopeName!);
     await this.state.deinit?.();
   }
 
@@ -272,7 +276,7 @@ export class Scope {
       // 2. Pull (or lazily create) the state bucket we care about.
       const isRoot = this.parent.scopeName === this.root.scopeName;
       const state =
-        (await this.parent.state.get(this.scopeName)) ??
+        (await this.parent.state!.get(this.scopeName)) ??
         (isRoot
           ? {
               //todo(michael): should this have a different type cause its root?
@@ -296,7 +300,7 @@ export class Scope {
       if (!state) throw new RootScopeStateAttemptError();
 
       return fn(state, (updated) =>
-        this.parent!.state.set(this.scopeName!, updated),
+        this.parent!.state!.set(this.scopeName!, updated),
       );
     });
   }
@@ -499,7 +503,7 @@ export class Scope {
   }
 }
 
-const defaultStateStore: StateStoreType = (scope: Scope) => {
+const defaultStateStore: StateStoreType = async (scope: Scope) => {
   switch (process.env.ALCHEMY_STATE_STORE) {
     case "cloudflare-d1":
       return new D1StateStore(scope);
@@ -507,7 +511,7 @@ const defaultStateStore: StateStoreType = (scope: Scope) => {
       return new DOStateStore(scope);
     default:
       // Check if .alchemy folder exists
-      if (fs.existsSync(".alchemy")) {
+      if (await fs.exists(".alchemy")) {
         return new FileSystemStateStore(scope);
       } else {
         return new SQLiteStateStore(scope);

@@ -24,7 +24,7 @@ export type State<
   output: Out;
 };
 
-export type StateStoreType = (scope: Scope) => StateStore;
+export type StateStoreType = (scope: Scope) => StateStore | Promise<StateStore>;
 
 export interface StateStore {
   /** Initialize the state container if one is required */
