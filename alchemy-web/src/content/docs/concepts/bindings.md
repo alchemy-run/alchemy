@@ -67,6 +67,8 @@ export default {
 
 ## Type-Safe Bindings
 
+Alchemy does not use code-generation. Instead, the runtime types of your bindings can be inferred in two ways:
+
 1. Use a type-only import to infer from your worker definition in `alchemy.run.ts`
 
 ```typescript
