@@ -18,6 +18,10 @@ Bindings expose resources to your code at runtime. For example, they allow a Clo
 
 ## Using Bindings in Workers
 
+:::caution
+Sensitive values like API keys, passwords, and tokens must not be passed as plain strings. Always wrap them in `alchemy.secret()` to ensure they are handled securely.
+:::
+
 ```typescript
 // alchemy.run.ts
 import { Worker, KVNamespace } from "alchemy/cloudflare";
@@ -33,7 +37,7 @@ const myWorker = await Worker("my-worker", {
   entrypoint: "./src/worker.ts",
   bindings: {
     MY_KV: myKV,
-    API_KEY: "secret-key",
+    API_KEY: alchemy.secret("secret-key"),
     DEBUG_MODE: true
   }
 });
