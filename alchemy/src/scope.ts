@@ -243,7 +243,7 @@ export class Scope {
   }
 
   public async deinit() {
-    await this.parent?.state!.delete(this.scopeName!);
+    await this.parent?.state.delete(this.scopeName!);
     await this.state.deinit?.();
   }
 
@@ -276,7 +276,7 @@ export class Scope {
       // 2. Pull (or lazily create) the state bucket we care about.
       const isRoot = this.parent.scopeName === this.root.scopeName;
       const state =
-        (await this.parent.state!.get(this.scopeName)) ??
+        (await this.parent.state.get(this.scopeName)) ??
         (isRoot
           ? {
               //todo(michael): should this have a different type cause its root?
@@ -300,7 +300,7 @@ export class Scope {
       if (!state) throw new RootScopeStateAttemptError();
 
       return fn(state, (updated) =>
-        this.parent!.state!.set(this.scopeName!, updated),
+        this.parent!.state.set(this.scopeName!, updated),
       );
     });
   }
