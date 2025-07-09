@@ -33,10 +33,10 @@ export class ESBuildBundleProvider implements WorkerBundleProvider {
     this.props.cwd = path.resolve(this.props.cwd);
     this.props.entrypoint = path.isAbsolute(props.entrypoint)
       ? path.relative(this.props.cwd, props.entrypoint)
-      : props.entrypoint;
+      : path.normalize(props.entrypoint);
     this.props.outdir = path.isAbsolute(props.outdir)
       ? path.relative(this.props.cwd, props.outdir)
-      : props.outdir;
+      : path.normalize(props.outdir);
   }
 
   async create(): Promise<WorkerBundle> {
