@@ -72,8 +72,8 @@ export function esbuildPluginCompatWarning(mode: "als" | null): Plugin {
         if (alsImporters.size > 0 && !mode) {
           logger.warn(
             [
-              `Detected Node.js imports but ${kleur.red("nodejs_als")} compatibility flag is not set. `,
-              `Add ${kleur.blue("nodejs_als")} to your compatibility flags. Imported from:`,
+              `Detected import of ${kleur.yellow("node:async_hooks")} but ${kleur.red("nodejs_als")} compatibility flag is not set. `,
+              `Add ${kleur.blue("nodejs_als")} or ${kleur.blue("nodejs_compat")} to your compatibility flags. Imported from:`,
               formatImporters(
                 alsImporters,
                 build.initialOptions.absWorkingDir ?? process.cwd(),
