@@ -381,9 +381,9 @@ export interface EntrypointWorkerProps<
   /**
    * Whether to upload source maps for the worker script.
    *
-   * @default false
+   * @default true
    */
-  uploadSourceMaps?: boolean;
+  sourceMap?: boolean;
 
   /**
    * Rules for adding additional files to the bundle.

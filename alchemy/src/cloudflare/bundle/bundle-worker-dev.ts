@@ -58,6 +58,7 @@ export async function createWorkerDevContext<B extends Bindings>(
     platform: "node",
     minify: false,
     bundle: true,
+    sourcemap: props.sourceMap !== false, // Default to true, can be overridden by bundle config
     ...props.bundle,
     write: false, // We want the result in memory for hot reloading
     conditions: ["workerd", "worker", "import", "module", "browser"],

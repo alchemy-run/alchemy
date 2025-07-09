@@ -45,7 +45,7 @@ export async function bundleWorkerScript<B extends Bindings>(
             "**/*.js",
             "**/*.mjs",
             "**/*.wasm",
-            ...(props.uploadSourceMaps ? ["**/*.js.map"] : []),
+            ...(props.sourceMap !== false ? ["**/*.js.map"] : []),
           ],
         },
       ]
@@ -96,6 +96,7 @@ export async function bundleWorkerScript<B extends Bindings>(
       target: "esnext",
       platform: "node",
       minify: false,
+      sourcemap: props.sourceMap !== false, // Default to true, can be overridden by bundle config
       ...(props.bundle || {}),
       conditions: ["workerd", "worker", "import", "module", "browser"],
       mainFields: ["module", "main"],
