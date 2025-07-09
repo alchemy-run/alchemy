@@ -1,10 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import fs from "node:fs";
 import util from "node:util";
 import type { Phase } from "./alchemy.ts";
 import { D1StateStore } from "./cloudflare/d1-state-store.ts";
 import { DOStateStore } from "./cloudflare/do-state-store/index.ts";
 import { destroy, destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
+import { SQLiteStateStore } from "./sqlite/sqlite-state-store.ts";
 import {
   ResourceFQN,
   ResourceID,
@@ -504,7 +506,12 @@ const defaultStateStore: StateStoreType = (scope: Scope) => {
     case "cloudflare":
       return new DOStateStore(scope);
     default:
-      return new FileSystemStateStore(scope);
+      // Check if .alchemy folder exists
+      if (fs.existsSync(".alchemy")) {
+        return new FileSystemStateStore(scope);
+      } else {
+        return new SQLiteStateStore(scope);
+      }
   }
 };
 
