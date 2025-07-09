@@ -51,6 +51,9 @@ export const worker1 = await Worker("worker", {
     DO: doNamespace,
   },
   compatibilityFlags: ["nodejs_compat"],
+  dev: {
+    remote: true,
+  },
 });
 export const worker2 = await Worker("worker2", {
   name: `${app.name}-${app.stage}-worker2`,
@@ -61,6 +64,9 @@ export const worker2 = await Worker("worker2", {
     DO: worker1.bindings.DO,
   },
   compatibilityFlags: ["nodejs_compat"],
+  dev: {
+    remote: true,
+  },
 });
 
 console.log(`worker1.url: ${worker1.url}`);

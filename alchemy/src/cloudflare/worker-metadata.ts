@@ -1,6 +1,6 @@
-import path from "node:path";
 import { assertNever } from "../util/assert-never.ts";
 import { logger } from "../util/logger.ts";
+import { memoize } from "../util/memoize.ts";
 import type { CloudflareApi } from "./api.ts";
 import {
   Self,
@@ -13,7 +13,7 @@ import {
   isDurableObjectNamespace,
   type DurableObjectNamespace,
 } from "./durable-object-namespace.ts";
-import { createAssetConfig, type AssetUploadResult } from "./worker-assets.ts";
+import { createAssetConfig } from "./worker-assets.ts";
 import type {
   MultiStepMigration,
   SingleStepMigration,
@@ -205,10 +205,17 @@ export async function prepareWorkerMetadata(
     compatibilityFlags: string[];
     workerName: string;
     migrationTag?: string;
-    assetUploadResult?: AssetUploadResult;
+    assetUploadResult?: {
+      completionToken?: string;
+      keepAssets?: boolean;
+      assetConfig?: AssetsConfig;
+    };
+    unstable_cacheWorkerSettings?: boolean;
   },
 ): Promise<WorkerMetadata> {
-  const oldSettings = await getWorkerSettings(api, props.workerName);
+  const oldSettings = await (props.unstable_cacheWorkerSettings
+    ? getWorkerSettingsWithCache
+    : getWorkerSettings)(api, props.workerName);
   const oldTags: string[] | undefined = Array.from(
     new Set([
       ...(oldSettings?.default_environment?.script?.tags ?? []),
@@ -333,14 +340,9 @@ export async function prepareWorkerMetadata(
   if (assetUploadResult) {
     meta.assets = {
       jwt: assetUploadResult.completionToken,
+      keep_assets: assetUploadResult.keepAssets,
+      config: assetUploadResult.assetConfig,
     };
-
-    // Initialize config from assetUploadResult if it exists
-    if (assetUploadResult.assetConfig) {
-      meta.assets.config = {
-        ...assetUploadResult.assetConfig,
-      };
-    }
 
     // If there's no config from assetUploadResult but we have props.assets,
     // we need to create the config ourselves (this handles the case when no assets were uploaded)
@@ -617,21 +619,6 @@ export async function prepareWorkerMetadata(
     }
   }
 
-  // Determine if we're using ESM or service worker format
-  const isEsModule = props.format !== "cjs"; // Default to ESM unless CJS is specified
-  const scriptName = props.noBundle
-    ? path.basename(props.entrypoint!)
-    : isEsModule
-      ? "worker.js"
-      : "script";
-
-  if (isEsModule) {
-    // For ES modules format
-    meta.main_module = scriptName;
-  } else {
-    // For service worker format (CJS)
-    meta.body_part = scriptName;
-  }
   if (process.env.DEBUG) {
     logger.log(meta);
   }
@@ -655,6 +642,11 @@ interface WorkerSettings {
   migrations: SingleStepMigration | MultiStepMigration;
   [key: string]: any;
 }
+
+const getWorkerSettingsWithCache = memoize(
+  getWorkerSettings,
+  (api, workerName) => `${api.accountId}:${workerName}`,
+);
 
 async function getWorkerSettings(
   api: CloudflareApi,

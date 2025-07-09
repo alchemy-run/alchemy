@@ -391,39 +391,13 @@ describe("Worker Resource", () => {
     const envVarsWorkerScript = `
       export default {
         async fetch(request, env, ctx) {
-          const url = new URL(request.url);
-
-          // Return the value of the requested environment variable
-          if (url.pathname.startsWith('/env/')) {
-            const varName = url.pathname.split('/env/')[1];
-            const value = env[varName];
-            return new Response(value || 'undefined', {
-              status: 200,
-              headers: { 'Content-Type': 'text/plain' }
-            });
-          }
-
-          // Return all environment variables
-          if (url.pathname === '/env') {
-            const envVars = Object.entries(env)
-              .filter(([key]) => key !== 'COUNTER' && !key.includes('Durable')) // Filter out bindings
-              .map(([key, value]) => \`\${key}: \${value}\`)
-              .join('\\n');
-
-            return new Response(envVars, {
-              status: 200,
-              headers: { 'Content-Type': 'text/plain' }
-            });
-          }
-
-          return new Response('Hello with environment variables!', { status: 200 });
+          return Response.json(env);
         }
       };
     `;
-    let worker: Worker | undefined;
     try {
       // Create a worker with environment variables
-      worker = await Worker(workerName, {
+      const worker1 = await Worker(workerName, {
         name: workerName,
         script: envVarsWorkerScript,
         format: "esm",
@@ -436,31 +410,29 @@ describe("Worker Resource", () => {
         adopt: true,
       });
 
-      expect(worker.id).toBeTruthy();
-      expect(worker.name).toEqual(workerName);
-      expect(worker.env).toBeDefined();
-      expect(worker.env?.TEST_API_KEY).toEqual("test-api-key-123");
-      expect(worker.env?.NODE_ENV).toEqual("testing");
-      expect(worker.url).toBeTruthy();
+      expect(worker1.id).toBeTruthy();
+      expect(worker1.name).toEqual(workerName);
+      expect(worker1.env).toBeDefined();
+      expect(worker1.env?.TEST_API_KEY).toEqual("test-api-key-123");
+      expect(worker1.env?.NODE_ENV).toEqual("testing");
+      expect(worker1.env?.APP_DEBUG).toEqual("true");
+      expect(worker1.url).toBeTruthy();
 
-      if (worker.url) {
+      if (worker1.url) {
         // Test that the environment variables are accessible in the worker
-        const response = await fetchAndExpectOK(
-          `${worker.url}/env/TEST_API_KEY`,
-        );
-        const text = await response.text();
-        expect(text).toEqual("test-api-key-123");
-
-        // Test another environment variable
-        const nodeEnvResponse = await fetchAndExpectOK(
-          `${worker.url}/env/NODE_ENV`,
-        );
-        const nodeEnvText = await nodeEnvResponse.text();
-        expect(nodeEnvText).toEqual("testing");
+        const response = await fetchAndExpectOK(worker1.url);
+        const text = await response.json();
+        expect(text).toEqual({
+          TEST_API_KEY: "test-api-key-123",
+          NODE_ENV: "testing",
+          APP_DEBUG: "true",
+        });
+      } else {
+        throw new Error("Worker URL is undefined");
       }
 
       // Update the worker with different environment variables
-      worker = await Worker(workerName, {
+      const worker2 = await Worker(`${workerName}-2`, {
         name: workerName,
         script: envVarsWorkerScript,
         format: "esm",
@@ -475,31 +447,25 @@ describe("Worker Resource", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      expect(worker.id).toEqual(worker.id);
-      expect(worker.env?.TEST_API_KEY).toEqual("updated-key-456");
-      expect(worker.env?.NODE_ENV).toEqual("production");
-      expect(worker.env?.NEW_VAR).toEqual("new-value");
+      expect(worker2.id).toEqual(worker2.id);
+      expect(worker2.env?.TEST_API_KEY).toEqual("updated-key-456");
+      expect(worker2.env?.NODE_ENV).toEqual("production");
+      expect(worker2.env?.NEW_VAR).toEqual("new-value");
       // APP_DEBUG should no longer be present
-      expect(worker.env?.APP_DEBUG).toBeUndefined();
+      expect(worker2.env?.APP_DEBUG).toBeUndefined();
+      expect(worker2.url).toEqual(worker1.url);
 
-      // Test that the updated environment variables are accessible
-      const response = await fetchAndExpectOK(`${worker.url}/env/TEST_API_KEY`);
-      const text = await response.text();
-      expect(text).toEqual("updated-key-456");
-
-      // Test new environment variable
-      const newVarResponse = await fetchAndExpectOK(
-        `${worker.url}/env/NEW_VAR`,
-      );
-      const newVarText = await newVarResponse.text();
-      expect(newVarText).toEqual("new-value");
-
-      // Test that the removed environment variable is no longer accessible
-      const removedVarResponse = await fetchAndExpectOK(
-        `${worker.url}/env/APP_DEBUG`,
-      );
-      const removedVarText = await removedVarResponse.text();
-      expect(removedVarText).toEqual("undefined");
+      if (worker2.url) {
+        const response = await fetchAndExpectOK(worker2.url);
+        const text = await response.json();
+        expect(text).toEqual({
+          TEST_API_KEY: "updated-key-456",
+          NODE_ENV: "production",
+          NEW_VAR: "new-value",
+        });
+      } else {
+        throw new Error("Worker URL is undefined");
+      }
     } finally {
       await destroy(scope);
       // Verify the worker was deleted
@@ -1554,11 +1520,11 @@ describe("Worker Resource", () => {
   });
 
   test("adopt worker with existing migration tag", async (scope) => {
-    const workerName = `${BRANCH_PREFIX}-test-worker-adopt-migration`;
+    const scriptName = `${BRANCH_PREFIX}-test-worker-adopt-migration`;
 
     try {
       await deleteWorker(api, {
-        workerName,
+        scriptName,
       });
 
       const formData = new FormData();
@@ -1604,13 +1570,13 @@ describe("Worker Resource", () => {
 
       // Put the worker with migration tag v1
       await api.post(
-        `/accounts/${api.accountId}/workers/scripts/${workerName}/versions`,
+        `/accounts/${api.accountId}/workers/scripts/${scriptName}/versions`,
         formData,
       );
 
       // Now adopt the worker using the Worker resource
-      await Worker(workerName, {
-        name: workerName,
+      await Worker(scriptName, {
+        name: scriptName,
         adopt: true,
         script: `
           export class MyDO2 {}
@@ -1624,13 +1590,13 @@ describe("Worker Resource", () => {
         bindings: {
           MY_DO: new DurableObjectNamespace("test-counter-migration", {
             className: "MyDO2",
-            scriptName: workerName,
+            scriptName: scriptName,
           }),
         },
       });
 
-      await Worker(workerName, {
-        name: workerName,
+      await Worker(scriptName, {
+        name: scriptName,
         adopt: true,
         script: `
           export class MyDO3 {}
@@ -1644,13 +1610,13 @@ describe("Worker Resource", () => {
         bindings: {
           MY_DO: new DurableObjectNamespace("test-counter-migration", {
             className: "MyDO3",
-            scriptName: workerName,
+            scriptName: scriptName,
           }),
         },
       });
     } finally {
       await destroy(scope);
-      await assertWorkerDoesNotExist(api, workerName);
+      await assertWorkerDoesNotExist(api, scriptName);
     }
   });
 
