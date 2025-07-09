@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import util from "node:util";
 import type { Phase } from "./alchemy.ts";
 import { D1StateStore } from "./cloudflare/d1-state-store.ts";
-import { DOStateStore } from "./cloudflare/do-state-store/index.ts";
+import { DOFSStateStore } from "./cloudflare/dofs-state-store/index.ts";
 import { destroy, destroyAll } from "./destroy.ts";
 import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
 import {
@@ -502,7 +502,7 @@ const defaultStateStore: StateStoreType = (scope: Scope) => {
     case "cloudflare-d1":
       return new D1StateStore(scope);
     case "cloudflare":
-      return new DOStateStore(scope);
+      return new DOFSStateStore(scope);
     default:
       return new FileSystemStateStore(scope);
   }

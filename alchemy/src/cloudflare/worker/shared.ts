@@ -19,7 +19,7 @@ export const getAccountSubdomain = memoize(
 );
 
 export async function getWorkerTemplate(
-  name: "do-state-store" | "mixed-mode-proxy-worker",
+  name: "dofs-state-store" | "mixed-mode-proxy-worker",
 ) {
   const dir = dirname(fileURLToPath(import.meta.url));
   const path = join(dir, "..", "..", "..", "workers", `${name}.js`);

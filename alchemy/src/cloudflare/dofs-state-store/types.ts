@@ -1,6 +1,6 @@
 import type { State } from "../../state.ts";
 
-export namespace DOStateStoreAPI {
+export namespace DOFSStateStoreAPI {
   export type API = {
     validate: {
       method: "validate";

@@ -1,7 +1,7 @@
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { Fs } from "dofs";
 import { timingSafeEqual } from "node:crypto";
-import type { DOStateStoreAPI } from "../src/cloudflare/do-state-store/types.ts";
+import type { DOFSStateStoreAPI } from "../src/cloudflare/dofs-state-store/types.ts";
 import type { State } from "../src/state.ts";
 
 interface Env {
@@ -17,7 +17,7 @@ export default class extends WorkerEntrypoint<Env> {
     }
     try {
       const result = await this.handle(request);
-      const body: DOStateStoreAPI.Response = {
+      const body: DOFSStateStoreAPI.Response = {
         success: true,
         status: 200,
         result: result ?? undefined,
@@ -91,9 +91,9 @@ export default class extends WorkerEntrypoint<Env> {
     );
   }
 
-  private async parseBody(request: Request): Promise<DOStateStoreAPI.Request> {
+  private async parseBody(request: Request): Promise<DOFSStateStoreAPI.Request> {
     try {
-      return await request.json<DOStateStoreAPI.Request>();
+      return await request.json();
     } catch {
       throw new APIError("Invalid JSON", 400);
     }

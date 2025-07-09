@@ -1,14 +1,13 @@
 import { alchemy } from "../../alchemy.ts";
 import { ResourceScope } from "../../resource.ts";
 import type { Scope } from "../../scope.ts";
-import { serialize } from "../../serde.ts";
+import { deserialize, serialize } from "../../serde.ts";
 import type { State, StateStore } from "../../state.ts";
-import { deserialize } from "../../serde.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "../api.ts";
 import { getAccountSubdomain } from "../worker/shared.ts";
-import { DOStateStoreClient, upsertStateStoreWorker } from "./internal.ts";
+import { DOFSStateStoreClient, upsertStateStoreWorker } from "./internal.ts";
 
-export interface DOStateStoreOptions extends CloudflareApiOptions {
+export interface DOFSStateStoreOptions extends CloudflareApiOptions {
   /**
    * The prefix to use for state keys.
    * Each app and stage has its own state store, so this is primarily for testing.
@@ -45,13 +44,13 @@ export interface DOStateStoreOptions extends CloudflareApiOptions {
       };
 }
 
-export class DOStateStore implements StateStore {
+export class DOFSStateStore implements StateStore {
   private prefix: string;
-  private client?: Promise<DOStateStoreClient>;
+  private client?: Promise<DOFSStateStoreClient>;
 
   constructor(
     private readonly scope: Scope,
-    private readonly options: DOStateStoreOptions = {},
+    private readonly options: DOFSStateStoreOptions = {},
   ) {
     this.prefix = [options.prefix ?? "alchemy", ...scope.chain, ""].join("/");
   }
@@ -61,7 +60,7 @@ export class DOStateStore implements StateStore {
       this.options.worker?.token ??
       (await alchemy.secret.env.ALCHEMY_STATE_TOKEN).unencrypted;
     if (this.options.worker && "url" in this.options.worker) {
-      const client = new DOStateStoreClient({
+      const client = new DOFSStateStoreClient({
         app: this.scope.appName ?? "alchemy",
         stage: this.scope.stage,
         url: this.options.worker.url,
@@ -75,11 +74,11 @@ export class DOStateStore implements StateStore {
       }
       if (res.status === 401) {
         throw new Error(
-          "A worker URL was provided to DOStateStore, but the token is incorrect. Correct the token or remove the worker URL to create a new worker.",
+          "A worker URL was provided to DOFSStateStore, but the token is incorrect. Correct the token or remove the worker URL to create a new worker.",
         );
       }
       throw new Error(
-        `A worker URL was provided to DOStateStore, but the worker status is ${res.status} ${res.statusText}.`,
+        `A worker URL was provided to DOFSStateStore, but the worker status is ${res.status} ${res.statusText}.`,
       );
     }
     const workerName = this.options.worker?.name ?? "alchemy-state";
@@ -98,7 +97,7 @@ export class DOStateStore implements StateStore {
         "Failed to access state store worker because the workers.dev subdomain is not available.",
       );
     }
-    const client = new DOStateStoreClient({
+    const client = new DOFSStateStoreClient({
       app: this.scope.appName ?? "alchemy",
       stage: this.scope.stage,
       url: `https://${workerName}.${subdomain}.workers.dev`,

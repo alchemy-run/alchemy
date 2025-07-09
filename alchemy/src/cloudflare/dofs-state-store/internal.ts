@@ -4,9 +4,9 @@ import { handleApiError } from "../api-error.ts";
 import type { CloudflareApi } from "../api.ts";
 import type { WorkerMetadata } from "../worker-metadata.ts";
 import { getWorkerTemplate } from "../worker/shared.ts";
-import type { DOStateStoreAPI } from "./types.ts";
+import type { DOFSStateStoreAPI } from "./types.ts";
 
-interface DOStateStoreClientOptions {
+interface DOFSStateStoreClientOptions {
   app: string;
   stage: string;
   url: string;
@@ -22,13 +22,13 @@ class StateStoreError extends Error {
   }
 }
 
-export class DOStateStoreClient {
-  constructor(private readonly options: DOStateStoreClientOptions) {}
+export class DOFSStateStoreClient {
+  constructor(private readonly options: DOFSStateStoreClientOptions) {}
 
-  async rpc<T extends keyof DOStateStoreAPI.API>(
+  async rpc<T extends keyof DOFSStateStoreAPI.API>(
     method: T,
-    params: DOStateStoreAPI.API[T]["params"],
-  ): Promise<DOStateStoreAPI.API[T]["result"]> {
+    params: DOFSStateStoreAPI.API[T]["params"],
+  ): Promise<DOFSStateStoreAPI.API[T]["result"]> {
     return await withExponentialBackoff(
       async () => {
         const res = await this.fetch("/rpc", {
@@ -48,7 +48,7 @@ export class DOStateStoreClient {
             true,
           );
         }
-        const body = await res.json<DOStateStoreAPI.Response>();
+        const body = await res.json<DOFSStateStoreAPI.Response>();
         if (!body.success) {
           throw new StateStoreError(
             `State store "${method}" request failed with status ${res.status}: ${body.error}`,
@@ -141,7 +141,7 @@ export async function upsertStateStoreWorker(
     return;
   }
   const formData = new FormData();
-  const worker = await getWorkerTemplate("do-state-store");
+  const worker = await getWorkerTemplate("dofs-state-store");
   formData.append(worker.name, worker);
   formData.append(
     "metadata",
@@ -221,22 +221,4 @@ async function getWorkerStatus(api: CloudflareApi, workerName: string) {
     found: true,
     tag: json.result.tags.find((tag) => tag.startsWith("alchemy-state-store:")),
   };
-}
-
-export async function getAccountSubdomain(api: CloudflareApi) {
-  const key = `subdomain:${api.accountId}`;
-  const cached = cache.get(key);
-  if (cached) {
-    return cached;
-  }
-  const res = await api.get(`/accounts/${api.accountId}/workers/subdomain`);
-  if (!res.ok) {
-    throw new Error(
-      `Failed to get account subdomain: ${res.status} ${res.statusText}: ${await res.text().catch(() => "unknown error")}`,
-    );
-  }
-  const json: { result: { subdomain: string } } = await res.json();
-  const subdomain = json.result.subdomain;
-  cache.set(key, subdomain);
-  return subdomain;
 }

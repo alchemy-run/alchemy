@@ -21,7 +21,7 @@ export * from "./d1-import.ts";
 export * from "./d1-state-store.ts";
 export * from "./dispatch-namespace.ts";
 export * from "./dns-records.ts";
-export * from "./do-state-store/index.ts";
+export * from "./dofs-state-store/index.ts";
 export * from "./durable-object-namespace.ts";
 export * from "./email-address.ts";
 export * from "./email-catch-all.ts";
