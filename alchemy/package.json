@@ -27,6 +27,7 @@
   "homepage": "https://alchemy.run",
   "files": [
     "bin",
+    "drizzle",
     "lib",
     "src",
     "templates",
