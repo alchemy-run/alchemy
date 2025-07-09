@@ -1009,7 +1009,7 @@ export const _Worker = Resource(
         outdir:
           props.bundle?.outdir ??
           path.join(process.cwd(), ".alchemy", ...this.scope.chain, id),
-        sourceMap: "sourceMap" in props ? props.sourceMap : true,
+        sourceMap: "sourceMap" in props ? props.sourceMap : undefined,
       }),
     );
 
