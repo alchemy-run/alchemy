@@ -384,9 +384,9 @@ export interface EntrypointWorkerProps<
   /**
    * Whether to upload source maps for the worker script.
    *
-   * @default false
+   * @default true
    */
-  uploadSourceMaps?: boolean;
+  sourceMap?: boolean;
 
   /**
    * Rules for adding additional files to the bundle.
@@ -1009,8 +1009,7 @@ export const _Worker = Resource(
         outdir:
           props.bundle?.outdir ??
           path.join(process.cwd(), ".alchemy", ...this.scope.chain, id),
-        uploadSourceMaps:
-          "uploadSourceMaps" in props ? props.uploadSourceMaps : undefined,
+        sourceMap: "sourceMap" in props ? props.sourceMap : true,
       }),
     );
 

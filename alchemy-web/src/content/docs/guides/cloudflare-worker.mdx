@@ -120,6 +120,31 @@ And register `env.ts` in your `tsconfig.json`'s `types`.
 See [Bindings](/concepts/bindings) for more information.
 :::
 
+## Source Maps
+
+Control whether source maps are uploaded with your worker for debugging:
+
+```ts
+import { Worker } from "alchemy/cloudflare";
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
+  sourceMap: true, // Upload source maps (default: true)
+});
+
+// Disable source maps for production builds
+const prodWorker = await Worker("prod-api", {
+  name: "prod-api-worker",
+  entrypoint: "./src/api.ts",
+  sourceMap: false, // Don't upload source maps
+});
+```
+
+:::note
+Source maps are enabled by default (`sourceMap: true`) and help with debugging by mapping minified code back to your original source files in the Cloudflare dashboard.
+:::
+
 ## Static Assets
 
 Serve static files from a directory:

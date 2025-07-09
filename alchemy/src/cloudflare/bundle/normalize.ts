@@ -23,7 +23,7 @@ interface NormalizeWorkerBundleProps {
   >;
   cwd: string;
   outdir: string;
-  uploadSourceMaps: boolean | undefined;
+  sourceMap: boolean;
 }
 
 export function wrap<T>(fn: () => T): [T, null] | [null, Error] {
@@ -61,7 +61,7 @@ export function normalizeWorkerBundle(
       nodeCompat,
       cwd: props.cwd,
       globs: props.rules?.flatMap((rule) => rule.globs),
-      sourcemaps: props.uploadSourceMaps ?? false,
+      sourcemaps: props.sourceMap,
     });
   }
   return new ESBuildBundleProvider({
@@ -70,7 +70,7 @@ export function normalizeWorkerBundle(
     nodeCompat,
     cwd: props.cwd,
     outdir: props.outdir,
-    sourcemap: props.uploadSourceMaps ? "linked" : undefined,
+    sourcemap: props.sourceMap ? "linked" : undefined,
     ...props.bundle,
   });
 }
