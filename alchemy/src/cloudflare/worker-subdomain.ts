@@ -114,6 +114,7 @@ async function wrapFetch<T>(
     const error = new Error(
       `Failed to ${label} (${response.status}): ${json.errors.map((e) => `${e.code}: ${e.message}`).join(", ")}`,
     );
+    Error.captureStackTrace(error, wrapFetch);
     Object.assign(error, {
       status: response.status,
     });

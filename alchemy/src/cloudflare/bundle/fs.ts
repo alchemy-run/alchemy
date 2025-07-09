@@ -12,9 +12,9 @@ import { parseFiles } from "./shared.ts";
 
 interface FSBundleProps extends WorkerBundleBaseProps {
   entrypoint: string;
-  globs?: string[];
+  globs: string[] | undefined;
   cwd: string;
-  sourcemaps?: boolean;
+  sourcemaps: boolean;
 }
 
 export class FSBundleProvider implements WorkerBundleProvider {
@@ -24,7 +24,7 @@ export class FSBundleProvider implements WorkerBundleProvider {
   private format: "esm" | "cjs";
 
   constructor(props: FSBundleProps) {
-    const entrypoint = path.resolve(props.entrypoint, props.cwd);
+    const entrypoint = path.resolve(props.cwd, props.entrypoint);
     this.root = path.dirname(entrypoint);
     this.entrypoint = path.relative(this.root, entrypoint);
     this.globs = props.globs ?? [

@@ -1006,7 +1006,11 @@ export const _Worker = Resource(
         cwd,
         compatibilityDate,
         compatibilityFlags,
-        outdir: path.join(process.cwd(), ".alchemy", ...this.scope.chain, id),
+        outdir:
+          props.bundle?.outdir ??
+          path.join(process.cwd(), ".alchemy", ...this.scope.chain, id),
+        uploadSourceMaps:
+          "uploadSourceMaps" in props ? props.uploadSourceMaps : undefined,
       }),
     );
 

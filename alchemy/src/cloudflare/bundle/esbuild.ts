@@ -25,7 +25,19 @@ interface ESBuildBundleProps
 }
 
 export class ESBuildBundleProvider implements WorkerBundleProvider {
-  constructor(private props: ESBuildBundleProps) {}
+  constructor(private props: ESBuildBundleProps) {
+    // Normalize paths to ensure consistency between esbuild inputs and outputs:
+    // - the `cwd` is absolute
+    // - the `entrypoint` and `outdir` are relative to the `cwd`
+    // This is so we can identify the entrypoint from the metafile.
+    this.props.cwd = path.resolve(this.props.cwd);
+    this.props.entrypoint = path.isAbsolute(props.entrypoint)
+      ? path.relative(this.props.cwd, props.entrypoint)
+      : props.entrypoint;
+    this.props.outdir = path.isAbsolute(props.outdir)
+      ? path.relative(this.props.cwd, props.outdir)
+      : props.outdir;
+  }
 
   async create(): Promise<WorkerBundle> {
     const options = buildOptions(this.props);
@@ -68,7 +80,10 @@ export class ESBuildBundleProvider implements WorkerBundleProvider {
   }
 
   async delete(): Promise<void> {
-    await fs.rm(this.props.outdir, { recursive: true, force: true });
+    await fs.rm(path.join(this.props.cwd, this.props.outdir), {
+      recursive: true,
+      force: true,
+    });
   }
 }
 function buildOptions({
@@ -80,8 +95,7 @@ function buildOptions({
   return {
     ...props,
     entryPoints: [entrypoint],
-    absWorkingDir: path.resolve(cwd),
-    outdir: path.relative(cwd, props.outdir),
+    absWorkingDir: cwd,
     format: props.format,
     target: "esnext",
     platform: "node",
@@ -114,23 +128,27 @@ async function resolveOutputs(
   metafile: esbuild.Metafile,
   props: ESBuildBundleProps,
 ): Promise<WorkerBundle> {
-  const relativeEntrypoint = path.relative(props.cwd, props.entrypoint);
-  const root = path.resolve(props.outdir);
+  const outdir = path.resolve(props.cwd, props.outdir);
   const paths: string[] = [];
   let entrypoint: string | undefined;
   for (const [key, value] of Object.entries(metafile.outputs)) {
-    const name = path.relative(root, path.join(props.cwd, key));
+    const name = path.relative(outdir, path.resolve(props.cwd, key));
     paths.push(name);
-    if (value.entryPoint === relativeEntrypoint) {
+    if (value.entryPoint === props.entrypoint) {
       entrypoint = name;
     }
   }
   if (!entrypoint) {
     throw new Error(
-      `Failed to find entrypoint in metafile - expected ${relativeEntrypoint} but got ${Object.keys(metafile.outputs).join(", ")}`,
+      `Failed to find entrypoint in metafile - expected ${props.entrypoint} but found ${Object.values(
+        metafile.outputs,
+      )
+        .map((v) => v.entryPoint)
+        .filter((v) => v !== undefined)
+        .join(", ")}`,
     );
   }
-  const { files, hash } = await parseFiles(root, paths, props.format);
+  const { files, hash } = await parseFiles(outdir, paths, props.format);
   return {
     entrypoint,
     files,

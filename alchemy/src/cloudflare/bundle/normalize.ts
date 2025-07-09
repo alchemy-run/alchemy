@@ -6,21 +6,24 @@ import type { WorkerBundleProvider } from "./shared.ts";
 import { validateNodeCompat } from "./validate-node-compat.ts";
 
 interface NormalizeWorkerBundleProps {
-  script?: string;
-  entrypoint?: string;
-  noBundle?: boolean;
-  format?: "cjs" | "esm";
+  script: string | undefined;
+  entrypoint: string | undefined;
+  noBundle: boolean | undefined;
+  format: "cjs" | "esm" | undefined;
   compatibilityDate: string;
   compatibilityFlags: string[];
-  rules?: {
-    globs: string[];
-  }[];
+  rules:
+    | {
+        globs: string[];
+      }[]
+    | undefined;
   bundle?: Omit<
     esbuild.BuildOptions,
     "entryPoints" | "format" | "absWorkingDir"
   >;
   cwd: string;
   outdir: string;
+  uploadSourceMaps: boolean | undefined;
 }
 
 export function wrap<T>(fn: () => T): [T, null] | [null, Error] {
@@ -57,6 +60,8 @@ export function normalizeWorkerBundle(
       format: props.format ?? "esm",
       nodeCompat,
       cwd: props.cwd,
+      globs: props.rules?.flatMap((rule) => rule.globs),
+      sourcemaps: props.uploadSourceMaps ?? false,
     });
   }
   return new ESBuildBundleProvider({
@@ -65,6 +70,7 @@ export function normalizeWorkerBundle(
     nodeCompat,
     cwd: props.cwd,
     outdir: props.outdir,
+    sourcemap: props.uploadSourceMaps ? "linked" : undefined,
     ...props.bundle,
   });
 }
