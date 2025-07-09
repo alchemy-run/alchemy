@@ -7,13 +7,11 @@ import {
   getAccountSubdomain,
   upsertStateStoreWorker,
 } from "../../src/cloudflare/do-state-store/internal.ts";
-import {
-  assertWorkerDoesNotExist,
-  deleteWorker,
-} from "../../src/cloudflare/worker.ts";
+import { deleteWorker } from "../../src/cloudflare/worker.ts";
 import { File } from "../../src/fs/file.ts";
 import "../../src/test/vitest.ts";
 import { BRANCH_PREFIX } from "../util.ts";
+import { assertWorkerDoesNotExist } from "./test-helpers.ts";
 
 const workerName = `alchemy-state-${BRANCH_PREFIX}`;
 
@@ -31,7 +29,7 @@ const test = alchemy.test(import.meta, {
 });
 
 afterAll(async () => {
-  await deleteWorker(api, { workerName });
+  await deleteWorker(api, { scriptName: workerName });
   await assertWorkerDoesNotExist(api, workerName);
 });
 
@@ -63,7 +61,7 @@ describe("DOStateStore", () => {
     });
 
     afterAll(async () => {
-      await deleteWorker(api, { workerName: name });
+      await deleteWorker(api, { scriptName: name });
       await assertWorkerDoesNotExist(api, name);
     });
 
