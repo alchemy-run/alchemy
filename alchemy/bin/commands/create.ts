@@ -15,6 +15,7 @@ import { resolve } from "node:path";
 import pc from "picocolors";
 
 import { throwWithContext } from "../errors.ts";
+import { initializeGitRepo, isGitInstalled } from "../services/git.ts";
 import { addGitHubWorkflowToAlchemy } from "../services/github-workflow.ts";
 import {
   detectPackageManager,
@@ -102,7 +103,7 @@ async function createProjectContext(
     shouldInstall = options.install;
   } else if (!options.yes) {
     const installResult = await confirm({
-      message: "Install dependencies?",
+      message: `Install dependencies? ${pc.cyan(packageManager)}`,
       initialValue: true,
     });
 
@@ -281,6 +282,44 @@ async function setupGitHubActions(context: ProjectContext): Promise<void> {
   }
 }
 
+async function setupGit(context: ProjectContext): Promise<void> {
+  const gitAvailable = await isGitInstalled();
+
+  if (!gitAvailable) {
+    log.warn("Git is not installed. Skipping git initialisation.");
+    return;
+  }
+
+  let shouldInit = context.options.git;
+
+  if (shouldInit === undefined && !context.isTest && !context.options.yes) {
+    const initResult = await confirm({
+      message: "Initialise a git repository?",
+      initialValue: true,
+    });
+
+    if (isCancel(initResult) || !initResult) {
+      return;
+    }
+    shouldInit = initResult;
+  }
+
+  if (!shouldInit) {
+    return;
+  }
+
+  const s = spinner();
+  s.start("Initialising git repository...");
+
+  try {
+    await initializeGitRepo(context);
+    s.stop("Git repository initialised.");
+  } catch (error) {
+    s.stop(pc.red("Failed to initialise git repository"));
+    throwWithContext(error, "Git initialisation failed");
+  }
+}
+
 export async function createAlchemy(cliOptions: CreateInput): Promise<void> {
   try {
     intro(pc.cyan("🧪 Welcome to Alchemy!"));
@@ -302,6 +341,8 @@ ${pc.cyan("📦 Install dependencies:")}
     await setupVibeRules(context);
 
     await setupGitHubActions(context);
+
+    await setupGit(context);
 
     note(
       `

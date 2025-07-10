@@ -47,9 +47,8 @@ const router = t.router({
             githubActions: z
               .boolean()
               .optional()
-              .describe(
-                "Setup GitHub Actions for PR previews and production deployments",
-              ),
+              .describe("Setup GitHub Actions for PR previews"),
+            git: z.boolean().optional().describe("Initialise a git repository"),
           })
           .optional()
           .default({}),
