@@ -201,7 +201,7 @@ export interface WorkerMetadata {
 
 export async function prepareWorkerMetadata(
   api: CloudflareApi,
-  props: WorkerProps & {
+  props: Omit<WorkerProps, "entrypoint"> & {
     compatibilityDate: string;
     compatibilityFlags: string[];
     workerName: string;
@@ -211,6 +211,7 @@ export async function prepareWorkerMetadata(
       keepAssets?: boolean;
       assetConfig?: AssetsConfig;
     };
+    tags?: string[];
     unstable_cacheWorkerSettings?: boolean;
   },
 ): Promise<WorkerMetadata> {
@@ -324,6 +325,7 @@ export async function prepareWorkerMetadata(
       ),
       // encode the migraiton tag if there is one so we can avoid the failed PutWorker after adoption
       ...(newMigrationTag ? [`alchemy:migration-tag:${newMigrationTag}`] : []),
+      ...(props.tags ?? []),
     ],
     migrations: {
       old_tag: oldMigrationTag,

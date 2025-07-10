@@ -1,16 +1,16 @@
 import { alchemy } from "../alchemy.ts";
 import { BUILD_DATE } from "../build-date.ts";
-import { extractCloudflareResult } from "../cloudflare/api-response.ts";
 import type { CloudflareApiOptions } from "../cloudflare/api.ts";
 import { createCloudflareApi } from "../cloudflare/api.ts";
 import { getInternalWorkerBundle } from "../cloudflare/bundle/internal-worker-bundle.ts";
-import type { WorkerMetadata } from "../cloudflare/worker-metadata.ts";
+import { DurableObjectNamespace } from "../cloudflare/durable-object-namespace.ts";
 import { getWorkerSettings } from "../cloudflare/worker-metadata.ts";
 import {
   enableWorkerSubdomain,
   getAccountSubdomain,
   getWorkerSubdomain,
 } from "../cloudflare/worker-subdomain.ts";
+import { putWorker } from "../cloudflare/worker.ts";
 import type { Scope } from "../scope.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
@@ -89,14 +89,13 @@ export class DOStateStore extends StateStoreProxy {
 
 const provision = memoize(async (options: DOStateStoreOptions) => {
   const scriptName = options.scriptName ?? "alchemy-state-sqlite";
-  const tokenSecret =
+  const token =
     options.stateToken ??
     (await alchemy.secret.env(
       "ALCHEMY_STATE_TOKEN",
       undefined,
       "Missing token for DOStateStore. Please set ALCHEMY_STATE_TOKEN in the environment or set the `stateToken` option in the DOStateStore constructor.",
     ));
-  const token = tokenSecret.unencrypted;
 
   const api = await createCloudflareApi(options);
   const [bundle, settings, subdomain] = await Promise.all([
@@ -106,53 +105,36 @@ const provision = memoize(async (options: DOStateStoreOptions) => {
   ]);
   if (!settings || !settings.tags.includes(bundle.tag) || options.forceUpdate) {
     logger.log(`[DOStateStore] ${settings ? "Updating" : "Creating"}...`);
-    const formData = new FormData();
-    bundle.files.forEach((file) => {
-      formData.append(file.name, file);
-    });
-    const metadata: WorkerMetadata = {
-      main_module: bundle.entrypoint,
-      tags: [bundle.tag],
-      compatibility_date: BUILD_DATE,
-      observability: {
-        enabled: true,
+    await putWorker(api, {
+      workerName: scriptName,
+      compatibilityDate: BUILD_DATE,
+      format: "esm",
+      scriptBundle: bundle,
+      compatibilityFlags: [],
+      bindings: {
+        STORE: new DurableObjectNamespace(scriptName, {
+          className: "Store",
+          sqlite: true,
+        }),
+        STATE_TOKEN: token,
       },
-      bindings: [
-        {
-          name: "STORE",
-          type: "durable_object_namespace",
-          class_name: "Store",
-        },
-        {
-          name: "TOKEN",
-          type: "secret_text",
-          text: token,
-        },
-      ],
-    };
-    formData.append("metadata", new Blob([JSON.stringify(metadata)]));
-    await extractCloudflareResult(
-      `provision ${scriptName} worker`,
-      api.put(
-        `/accounts/${api.accountId}/workers/scripts/${scriptName}`,
-        formData,
-      ),
-    );
+      tags: [bundle.tag],
+    });
   }
   if (!subdomain.enabled) {
     await enableWorkerSubdomain(api, scriptName);
   }
   const url = `https://${scriptName}.${await getAccountSubdomain(api)}.workers.dev`;
-  await pollUntilReady("DOStateStore", () =>
+  await pollUntilReady(() =>
     fetch(url, {
       method: "HEAD",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token.unencrypted}` },
     }),
   );
-  return { url, token };
+  return { url, token: token.unencrypted };
 });
 
-async function pollUntilReady(label: string, fn: () => Promise<Response>) {
+async function pollUntilReady(fn: () => Promise<Response>) {
   // This ensures the token is correct and the worker is ready to use.
   let last: Response | undefined;
   let delay = 1000;
@@ -163,11 +145,11 @@ async function pollUntilReady(label: string, fn: () => Promise<Response>) {
     }
     if (res.status === 401) {
       throw new Error(
-        `[${label}] The token is invalid. Please check your ALCHEMY_STATE_TOKEN environment variable, or set "forceUpdate: true" in the ${label} constructor to overwrite the current token.`,
+        "[DOStateStore] The token is invalid. Please check your ALCHEMY_STATE_TOKEN environment variable, or set `forceUpdate: true` in the DOStateStore constructor to overwrite the current token.",
       );
     }
     if (!last) {
-      logger.log(`[${label}] Waiting for deployment...`);
+      logger.log("[DOStateStore] Waiting for deployment...");
     }
     last = res;
     // Exponential backoff with jitter
@@ -177,6 +159,6 @@ async function pollUntilReady(label: string, fn: () => Promise<Response>) {
     delay = Math.min(delay, 10000); // Cap at 10 seconds
   }
   throw new Error(
-    `[${label}] Failed to reach state store: ${last?.status} ${last?.statusText}`,
+    `[DOStateStore] Failed to reach state store: ${last?.status} ${last?.statusText}`,
   );
 }
