@@ -109,7 +109,11 @@ const provision = memoize(async (options: DOStateStoreOptions) => {
       workerName: scriptName,
       compatibilityDate: BUILD_DATE,
       format: "esm",
-      scriptBundle: bundle,
+      scriptBundle: {
+        entrypoint: bundle.file.name,
+        files: [bundle.file],
+        hash: bundle.tag,
+      },
       compatibilityFlags: [],
       bindings: {
         STORE: new DurableObjectNamespace(scriptName, {

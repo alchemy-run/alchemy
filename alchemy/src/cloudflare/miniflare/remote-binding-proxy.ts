@@ -32,14 +32,14 @@ export async function createRemoteProxyWorker(input: {
     createWorkersPreviewToken(api, {
       name: input.name,
       metadata: {
-        main_module: script.entrypoint,
+        main_module: script.file.name,
         compatibility_date: "2025-06-16",
         bindings: input.bindings,
         observability: {
           enabled: false,
         },
       },
-      files: script.files,
+      files: [script.file],
       session: {
         workers_dev: true,
         minimal_mode: true,
