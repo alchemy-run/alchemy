@@ -1,10 +1,10 @@
 import type { RemoteProxyConnectionString } from "miniflare";
-import type { CloudflareApiResponse } from "../api-response.ts";
+import { HTTPServer } from "../../util/http-server.ts";
+import { extractCloudflareResult } from "../api-response.ts";
 import { createCloudflareApi, type CloudflareApi } from "../api.ts";
 import type { WorkerBindingSpec } from "../bindings.ts";
 import { getWorkerTemplate } from "../bundle/template.ts";
 import type { WorkerMetadata } from "../worker-metadata.ts";
-import { HTTPServer } from "./http-server.ts";
 
 type WranglerSessionConfig =
   | {
@@ -27,7 +27,7 @@ export async function createRemoteProxyWorker(input: {
   bindings: WorkerBindingSpec[];
 }) {
   const api = await createCloudflareApi();
-  const script = await getWorkerTemplate("remote-proxy");
+  const script = await getWorkerTemplate("remote-binding-proxy");
   const [token, subdomain] = await Promise.all([
     createWorkersPreviewToken(api, {
       name: input.name,
@@ -47,14 +47,14 @@ export async function createRemoteProxyWorker(input: {
     }),
     import("../worker-subdomain.ts").then((m) => m.getAccountSubdomain(api)),
   ]);
-  return new RemoteProxy(
+  return new RemoteBindingProxy(
     `https://${input.name}.${subdomain}.workers.dev`,
     token,
     input.bindings,
   );
 }
 
-export class RemoteProxy {
+export class RemoteBindingProxy {
   server: HTTPServer;
 
   constructor(
@@ -121,8 +121,9 @@ async function createWorkersPreviewToken(
     formData.append(file.name, file);
   }
   formData.append("wrangler-session-config", JSON.stringify(input.session));
-  const res = await api
-    .post(
+  const res = await extractCloudflareResult<{ preview_token: string }>(
+    "create workers preview token",
+    api.post(
       `/accounts/${api.accountId}/workers/scripts/${input.name}/edge-preview`,
       formData,
       {
@@ -130,13 +131,8 @@ async function createWorkersPreviewToken(
           "cf-preview-upload-config-token": session.token,
         },
       },
-    )
-    .then((res) =>
-      parseCloudflareResponse<{ preview_token: string }>(
-        res,
-        "Failed to create workers preview token",
-      ),
-    );
+    ),
+  );
   // Fire and forget prewarm call
   // (see https://github.com/cloudflare/workers-sdk/blob/6c6afbd6072b96e78e67d3a863ed849c6aa49472/packages/wrangler/src/dev/create-worker-preview.ts#L338)
   void prewarm(session.prewarm, res.preview_token);
@@ -155,42 +151,19 @@ async function prewarm(url: string, previewToken: string) {
 }
 
 async function createWorkersPreviewSession(api: CloudflareApi) {
-  const { exchange_url } = await api
-    .get(`/accounts/${api.accountId}/workers/subdomain/edge-preview`)
-    .then((res) =>
-      parseCloudflareResponse<{
-        exchange_url: string;
-        token: string;
-      }>(res, "Failed to create workers preview session"),
-    );
-  return await fetch(exchange_url).then((res) =>
-    parseResponse<WorkersPreviewSession>(
-      res,
-      "Failed to create workers preview session",
-    ),
+  const { exchange_url } = await extractCloudflareResult<{
+    exchange_url: string;
+    token: string;
+  }>(
+    "create workers preview session",
+    api.get(`/accounts/${api.accountId}/workers/subdomain/edge-preview`),
   );
-}
-
-async function parseResponse<T>(res: Response, message: string): Promise<T> {
+  const res = await fetch(exchange_url);
   if (!res.ok) {
-    throw new Error(`${message} (${res.status} ${res.statusText})`);
-  }
-  const json: T = await res.json();
-  return json;
-}
-
-async function parseCloudflareResponse<T>(
-  res: Response,
-  message: string,
-): Promise<T> {
-  const json: CloudflareApiResponse<T> = await res.json();
-  if (!json.success) {
     throw new Error(
-      `${message} (${res.status} ${res.statusText} - ${json.errors.map((e) => `${e.code}: ${e.message}`).join(", ")})`,
+      `Failed to create workers preview session: ${res.status} ${res.statusText}`,
     );
   }
-  if (!json.result) {
-    throw new Error(`${message} (${res.status} ${res.statusText})`);
-  }
-  return json.result;
+  const json: WorkersPreviewSession = await res.json();
+  return json;
 }
