@@ -20,7 +20,7 @@ import { StateStoreProxy } from "./proxy.ts";
 export interface DOStateStoreOptions extends CloudflareApiOptions {
   /**
    * The name of the script to use for the state store.
-   * @default "alchemy-state-sqlite"
+   * @default "alchemy-state"
    */
   scriptName?: string;
   /**
