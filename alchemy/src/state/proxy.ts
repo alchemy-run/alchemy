@@ -89,7 +89,7 @@ export abstract class StateStoreProxy implements StateStore {
   }
 }
 
-export namespace StateStoreProxy {
+export declare namespace StateStoreProxy {
   export type API = {
     [K in keyof Required<StateStore>]: NonNullable<StateStore[K]> extends (
       ...args: infer Args
