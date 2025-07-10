@@ -88,7 +88,7 @@ export class DOStateStore extends StateStoreProxy {
 }
 
 const provision = memoize(async (options: DOStateStoreOptions) => {
-  const scriptName = options.scriptName ?? "alchemy-state-sqlite";
+  const scriptName = options.scriptName ?? "alchemy-state";
   const token =
     options.stateToken ??
     (await alchemy.secret.env(
