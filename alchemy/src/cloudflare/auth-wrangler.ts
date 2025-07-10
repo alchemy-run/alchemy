@@ -12,6 +12,8 @@ import { createXdgAppPaths } from "../util/xdg-paths.ts";
 
 const CLIENT_ID = "54d11594-84e4-41aa-b438-e81b8fa78ee7";
 const REDIRECT_URI = "http://localhost:8976/oauth/callback";
+const ALCHEMY_BASE_URL =
+  "https://3fbec61a-alchemy-website.alchemy-run.workers.dev"; // TODO: change to https://alchemy.run
 export const DEFAULT_SCOPES = [
   "account:read",
   "user:read",
@@ -267,7 +269,7 @@ export const wranglerLogin = (
             status_code: 400,
           }),
         );
-        return new Response("Invalid request", { status: 400 });
+        return Response.redirect(`${ALCHEMY_BASE_URL}/auth/error`);
       }
       if (!code || !state || state !== challenge.state) {
         err(
@@ -277,7 +279,7 @@ export const wranglerLogin = (
             status_code: 400,
           }),
         );
-        return new Response("Invalid request", { status: 400 });
+        return Response.redirect(`${ALCHEMY_BASE_URL}/auth/error`);
       }
       const tokens = await fetchToken({
         grant_type: "authorization_code",
@@ -288,10 +290,10 @@ export const wranglerLogin = (
       });
       if (tokens.isErr()) {
         err(tokens.error);
-        return new Response("Invalid request", { status: 400 });
+        return Response.redirect(`${ALCHEMY_BASE_URL}/auth/error`);
       }
       ok(tokens.value);
-      return new Response("OK", { status: 200 });
+      return Response.redirect(`${ALCHEMY_BASE_URL}/auth/success`);
     },
   });
   const timeout = setTimeout(
