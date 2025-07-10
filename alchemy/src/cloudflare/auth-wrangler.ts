@@ -6,7 +6,6 @@ import os from "node:os";
 import path from "node:path";
 import open from "open";
 import { HTTPServer } from "../util/http-server.ts";
-import { logger } from "../util/logger.ts";
 import { memoize, memoizeSync } from "../util/memoize.ts";
 import { detached, ensure, singleFlight } from "../util/neverthrow.ts";
 import { createXdgAppPaths } from "../util/xdg-paths.ts";
@@ -234,7 +233,7 @@ class OAuthError extends Error {
 
 export const wranglerLogin = (
   scopes: string[] = DEFAULT_SCOPES,
-  log: (message: string) => void = logger.log,
+  log: (message: string) => void = console.log, // using console.log instead of logger.log to avoid bundling hell with CLI
 ) => {
   const challenge = generateAuthorizationURL(scopes);
   log(

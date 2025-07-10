@@ -33,12 +33,10 @@ export function memoizeSync<F extends (...args: any[]) => any>(
     const key = keyFn(...args);
     const cached = cache.get(key);
     if (cached) {
-      console.log("cached", key);
       return cached;
     }
     const result = fn(...args);
     cache.set(key, result);
-    console.log("not cached", key);
     return result;
   };
 }
