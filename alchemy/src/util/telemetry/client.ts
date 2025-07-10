@@ -96,6 +96,7 @@ export class TelemetryClient implements ITelemetryClient {
     if (events.length === 0) {
       return;
     }
+    const { userId, ...data } = this.context!;
     const response = await fetch(`${POSTHOG_CLIENT_API_HOST}/batch`, {
       method: "POST",
       headers: {
@@ -104,13 +105,18 @@ export class TelemetryClient implements ITelemetryClient {
       body: JSON.stringify({
         api_key: POSTHOG_PROJECT_ID,
         historical_migration: false,
-        batch: events.map((e) => ({
-          event: e.event,
-          properties: {
-            distinct_id: this.context?.sessionId,
-          },
-          timestamp: new Date(e.timestamp).toISOString(),
-        })),
+        batch: events.map((e) => {
+          const { event, ...eventData } = e;
+          return {
+            event: event,
+            properties: {
+              distinct_id: userId,
+              ...data,
+              ...eventData,
+            },
+            timestamp: new Date(e.timestamp).toISOString(),
+          };
+        }),
       }),
     });
     if (!response.ok) {
