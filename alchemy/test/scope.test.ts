@@ -48,7 +48,7 @@ describe.concurrent("Scope", () => {
         async (scope) => {
           try {
             let observedPhase: string | undefined;
-            new Scope({
+            await Scope.create({
               parent: scope,
               scopeName: "phase-test",
               phase: "read",

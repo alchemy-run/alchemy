@@ -59,7 +59,7 @@ async function _apply<Out extends Resource>(
         );
       }
       options?.resolveInnerScope?.(
-        new Scope({
+        await Scope.create({
           parent: scope,
           scopeName: resource[ResourceID],
         }),
@@ -117,7 +117,7 @@ async function _apply<Out extends Resource>(
           });
         }
         options?.resolveInnerScope?.(
-          new Scope({
+          await Scope.create({
             parent: scope,
             scopeName: resource[ResourceID],
           }),

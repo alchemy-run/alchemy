@@ -124,7 +124,7 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
   test.skipIf = it.skipIf.bind(it);
 
   // Create local test scope based on filename
-  const scope = new Scope({
+  const scope = Scope.create({
     parent: undefined,
     scopeName: `${defaultOptions.prefix ? `${defaultOptions.prefix}-` : ""}${path.basename(meta.filename)}`,
     // parent: globalTestScope,
@@ -134,11 +134,17 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
   });
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {
-    return beforeAll(() => scope.run(() => fn(scope)));
+    return beforeAll(async () => {
+      const s = await scope;
+      return s.run(() => fn(s));
+    });
   };
 
   test.afterAll = (fn: (scope: Scope) => Promise<void>) => {
-    return afterAll(() => scope.run(() => fn(scope)));
+    return afterAll(async () => {
+      const s = await scope;
+      return s.run(() => fn(s));
+    });
   };
 
   return test as test;
@@ -180,12 +186,12 @@ export function test(meta: ImportMeta, defaultOptions?: TestOptions): test {
 
     return it(
       testName,
-      () =>
+      async () =>
         alchemy.run(
           testName,
           {
             ...options,
-            parent: scope,
+            parent: await scope,
           },
           async (scope) => {
             await scope.run(() => fn(scope));

@@ -130,7 +130,13 @@ export class Scope {
     return this.scopeName;
   }
 
-  constructor(options: ScopeOptions) {
+  public static async create(options: ScopeOptions) {
+    const scope = new Scope(options);
+    await scope.init();
+    return scope;
+  }
+
+  private constructor(options: ScopeOptions) {
     this.scopeName = options.scopeName;
     this.name = this.scopeName;
     this.parent = options.parent ?? Scope.getScope();

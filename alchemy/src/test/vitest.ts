@@ -149,7 +149,7 @@ export function test(
     return test;
   };
 
-  const scope = new Scope({
+  const scope = Scope.create({
     parent: undefined,
     scopeName: `${defaultOptions.prefix ? `${defaultOptions.prefix}-` : ""}${path.basename(meta.filename)}`,
     stateStore: defaultOptions?.stateStore,
@@ -159,11 +159,17 @@ export function test(
   });
 
   test.beforeAll = (fn: (scope: Scope) => Promise<void>) => {
-    return beforeAll(() => scope.run(() => fn(scope)));
+    return beforeAll(async () => {
+      const s = await scope;
+      return s.run(() => fn(s));
+    });
   };
 
   test.afterAll = (fn: (scope: Scope) => Promise<void>) => {
-    return afterAll(() => scope.run(() => fn(scope)));
+    return afterAll(async () => {
+      const s = await scope;
+      return s.run(() => fn(s));
+    });
   };
 
   return test as test;
@@ -203,7 +209,7 @@ export function test(
 
     return it(
       testName,
-      (ctx) => {
+      async (ctx) => {
         // Get the current describe block name from the test context
         let describeBlockName = "";
         if (ctx?.task?.suite?.name) {
@@ -214,7 +220,7 @@ export function test(
           `${describeBlockName}${testName}`,
           {
             ...options,
-            parent: scope,
+            parent: await scope,
           },
           async (scope) => {
             await scope.run(() => fn(scope));

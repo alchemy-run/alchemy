@@ -190,7 +190,7 @@ async function _alchemy(
         enabled: mergedOptions?.telemetry ?? true,
         quiet: mergedOptions?.quiet ?? false,
       });
-    const root = new Scope({
+    const root = await Scope.create({
       ...mergedOptions,
       parent: undefined,
       scopeName: appName,
@@ -199,7 +199,7 @@ async function _alchemy(
       telemetryClient,
     });
     const stageName = mergedOptions?.stage ?? DEFAULT_STAGE;
-    const stage = new Scope({
+    const stage = await Scope.create({
       ...mergedOptions,
       parent: root,
       scopeName: stageName,
@@ -449,7 +449,7 @@ async function run<T>(
       enabled: options?.telemetry ?? true,
       quiet: options?.quiet ?? false,
     });
-  const _scope = new Scope({
+  const _scope = await Scope.create({
     ...options,
     parent: options?.parent,
     scopeName: id,
@@ -476,6 +476,9 @@ async function run<T>(
         status: "created",
         output,
       } as const;
+      if (_scope.parent!.state === undefined) {
+        console.log(_scope.parent);
+      }
       const prev = await _scope.parent!.state.get(id);
       if (!prev) {
         await _scope.parent!.state.set(id, resource);

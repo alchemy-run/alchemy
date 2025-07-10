@@ -72,7 +72,7 @@ export async function destroy<Type extends string>(
   }
 
   if (instance[ResourceKind] === Scope.KIND) {
-    const scope = new Scope({
+    const scope = await Scope.create({
       parent: instance[ResourceScope],
       scopeName: instance[ResourceID],
     });
