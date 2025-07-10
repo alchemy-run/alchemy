@@ -6,8 +6,8 @@ import {
   DOFSStateStoreClient,
   upsertStateStoreWorker,
 } from "../../src/cloudflare/dofs-state-store/internal.ts";
+import { getAccountSubdomain } from "../../src/cloudflare/worker-subdomain.ts";
 import { deleteWorker } from "../../src/cloudflare/worker.ts";
-import { getAccountSubdomain } from "../../src/cloudflare/worker/shared.ts";
 import { File } from "../../src/fs/file.ts";
 import "../../src/test/vitest.ts";
 import { BRANCH_PREFIX } from "../util.ts";

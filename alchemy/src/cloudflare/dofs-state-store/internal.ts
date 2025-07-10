@@ -1,9 +1,8 @@
-import { logger } from "../../util/logger.ts";
 import { withExponentialBackoff } from "../../util/retry.ts";
 import { handleApiError } from "../api-error.ts";
 import type { CloudflareApi } from "../api.ts";
 import type { WorkerMetadata } from "../worker-metadata.ts";
-import { getWorkerTemplate } from "../worker/shared.ts";
+import { getWorkerTemplate, pollUntilReady } from "../worker/shared.ts";
 import type { DOFSStateStoreAPI } from "./types.ts";
 
 interface DOFSStateStoreClientOptions {
@@ -83,27 +82,7 @@ export class DOFSStateStoreClient {
   }
 
   async waitUntilReady(): Promise<void> {
-    // This ensures the token is correct and the worker is ready to use.
-    let last: Response | undefined;
-    let delay = 1000;
-    for (let i = 0; i < 20; i++) {
-      const res = await this.validate();
-      if (res.ok) {
-        return;
-      }
-      if (!last) {
-        logger.log("Waiting for state store deployment...");
-      }
-      last = res;
-      // Exponential backoff with jitter
-      const jitter = Math.random() * 0.1 * delay;
-      await new Promise((resolve) => setTimeout(resolve, delay + jitter));
-      delay *= 1.5; // Increase the delay for next attempt
-      delay = Math.min(delay, 10000); // Cap at 10 seconds
-    }
-    throw new Error(
-      `Failed to access state store: ${last?.status} ${last?.statusText}`,
-    );
+    await pollUntilReady("DOFSStateStore", () => this.validate());
   }
 
   async fetch(path: string, init: RequestInit = {}): Promise<Response> {
@@ -142,12 +121,14 @@ export async function upsertStateStoreWorker(
   }
   const formData = new FormData();
   const worker = await getWorkerTemplate("dofs-state-store");
-  formData.append(worker.name, worker);
+  worker.files.forEach((file) => {
+    formData.append(file.name, file);
+  });
   formData.append(
     "metadata",
     new Blob([
       JSON.stringify({
-        main_module: worker.name,
+        main_module: worker.entrypoint,
         compatibility_date: "2025-06-01",
         compatibility_flags: ["nodejs_compat"],
         bindings: [

@@ -91,7 +91,9 @@ export default class extends WorkerEntrypoint<Env> {
     );
   }
 
-  private async parseBody(request: Request): Promise<DOFSStateStoreAPI.Request> {
+  private async parseBody(
+    request: Request,
+  ): Promise<DOFSStateStoreAPI.Request> {
     try {
       return await request.json();
     } catch {
@@ -154,12 +156,12 @@ export class DOFSStateStore extends DurableObject<Env> {
   }
 
   delete(key: string): void {
-      if (this.isFile(`${key}.json`)) {
-        this.fs.unlink(`${key}.json`);
-      }
-      if (this.isDirectory(key)) {
-        this.fs.rmdir(key);
-      }
+    if (this.isFile(`${key}.json`)) {
+      this.fs.unlink(`${key}.json`);
+    }
+    if (this.isDirectory(key)) {
+      this.fs.rmdir(key);
+    }
   }
 
   async get(key: string): Promise<string | undefined> {
@@ -193,7 +195,9 @@ export class DOFSStateStore extends DurableObject<Env> {
       return [];
     }
     const files = this.fs.listDir(path);
-    return files.filter((item) => item.endsWith(".json")).map((item) => item.slice(0, -5));
+    return files
+      .filter((item) => item.endsWith(".json"))
+      .map((item) => item.slice(0, -5));
   }
 
   async set(key: string, value: State): Promise<void> {

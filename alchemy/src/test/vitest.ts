@@ -2,6 +2,7 @@ import path from "node:path";
 import { afterAll, beforeAll, it } from "vitest";
 import { alchemy } from "../alchemy.ts";
 import { D1StateStore } from "../cloudflare/d1-state-store.ts";
+import { DOStateStore } from "../cloudflare/do-state-store.ts";
 import { DOFSStateStore } from "../cloudflare/dofs-state-store/index.ts";
 import { FileSystemStateStore } from "../fs/file-system-state-store.ts";
 import { Scope } from "../scope.ts";
@@ -129,6 +130,8 @@ export function test(
   defaultOptions.stateStore ??= (scope) => {
     const storeType = process.env.ALCHEMY_STATE_STORE;
     switch (storeType) {
+      case "do":
+        return new DOStateStore(scope);
       case "dofs":
         return new DOFSStateStore(scope);
       case "fs":

@@ -1,36 +1,32 @@
-import type { RemoteCallback } from "drizzle-orm/sqlite-proxy";
-import { drizzle } from "drizzle-orm/sqlite-proxy";
+import { drizzle, type RemoteCallback } from "drizzle-orm/sqlite-proxy";
 import assert from "node:assert";
 import type { Scope } from "../scope.ts";
-import {
-  BaseSQLiteStateStore,
-  resolveMigrationsPath,
-} from "../sqlite/base-sqlite-state-store.ts";
+import { MIGRATIONS_DIRECTORY } from "../sqlite/migrations.ts";
+import { SQLiteStateStoreOperations } from "../sqlite/operations.ts";
+import { StateStoreProxy } from "../sqlite/proxy.ts";
 import * as schema from "../sqlite/schema.ts";
 import { memoize } from "../util/memoize.ts";
 import type { CloudflareApi, CloudflareApiOptions } from "./api.ts";
+import { extractCloudflareResult } from "./types.ts";
 
 export interface D1StateStoreOptions extends CloudflareApiOptions {
   databaseName?: string;
 }
 
-type D1Response =
-  | {
-      success: true;
-      result: {
-        results: { columns: string[]; rows: any[][] };
-      }[];
-    }
-  | {
-      success: false;
-      errors: { code: number; message: string }[];
-    };
+export class D1StateStore extends StateStoreProxy {
+  constructor(
+    scope: Scope,
+    private options: D1StateStoreOptions = {},
+  ) {
+    super(scope);
+  }
 
-export class D1StateStore extends BaseSQLiteStateStore {
-  constructor(scope: Scope, options: D1StateStoreOptions = {}) {
-    super(scope, {
-      create: async () => createDatabaseClient(options),
+  async provision(): Promise<StateStoreProxy.Dispatch> {
+    const db = await createDatabaseClient(this.options);
+    const operations = new SQLiteStateStoreOperations(db, {
+      chain: this.scope.chain,
     });
+    return operations.dispatch.bind(operations);
   }
 }
 
@@ -42,22 +38,22 @@ const createDatabaseClient = memoize(async (options: D1StateStoreOptions) => {
     options.databaseName ?? "alchemy-state",
   );
   const remoteCallback: RemoteCallback = async (sql, params) => {
-    const res = await api.post(
-      `/accounts/${api.accountId}/d1/database/${database.id}/raw`,
-      { sql, params },
+    const [result] = await extractCloudflareResult<
       {
-        headers: {
-          "Content-Type": "application/json",
+        results: { columns: string[]; rows: any[][] };
+      }[]
+    >(
+      "execute D1 query",
+      api.post(
+        `/accounts/${api.accountId}/d1/database/${database.id}/raw`,
+        { sql, params },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
         },
-      },
+      ),
     );
-    const data = (await res.json()) as D1Response;
-    if (!data.success) {
-      throw new Error(
-        data.errors.map((it) => `${it.code}: ${it.message}`).join("\n"),
-      );
-    }
-    const [result] = data.result;
     assert(result, "Missing result");
     return {
       rows: Object.values(result.results.rows),
@@ -73,16 +69,19 @@ const upsertDatabase = async (api: CloudflareApi, databaseName: string) => {
   const { applyMigrations, listMigrationsFiles } = await import(
     "./d1-migrations.ts"
   );
-  const databases = await listDatabases(api, databaseName);
-  if (databases[0]) {
+  const migrate = async (databaseId: string) => {
     await applyMigrations({
-      migrationsFiles: await listMigrationsFiles(resolveMigrationsPath()),
+      migrationsFiles: await listMigrationsFiles(MIGRATIONS_DIRECTORY),
       migrationsTable: "migrations",
       accountId: api.accountId,
-      databaseId: databases[0].id,
+      databaseId,
       api,
       quiet: true,
     });
+  };
+  const databases = await listDatabases(api, databaseName);
+  if (databases[0]) {
+    await migrate(databases[0].id);
     return {
       id: databases[0].id,
     };
@@ -91,14 +90,7 @@ const upsertDatabase = async (api: CloudflareApi, databaseName: string) => {
     readReplication: { mode: "disabled" },
   });
   assert(res.result.uuid, "Missing UUID for database");
-  await applyMigrations({
-    migrationsFiles: await listMigrationsFiles(resolveMigrationsPath()),
-    migrationsTable: "migrations",
-    accountId: api.accountId,
-    databaseId: res.result.uuid,
-    api,
-    quiet: true,
-  });
+  await migrate(res.result.uuid);
   return {
     id: res.result.uuid,
   };

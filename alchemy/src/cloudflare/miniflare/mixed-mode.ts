@@ -3,7 +3,7 @@ import { createCloudflareApi, type CloudflareApi } from "../api.ts";
 import type { WorkerBindingSpec } from "../bindings.ts";
 import type { CloudflareApiResponse } from "../types.ts";
 import type { WorkerMetadata } from "../worker-metadata.ts";
-import { getAccountSubdomain, getWorkerTemplate } from "../worker/shared.ts";
+import { getWorkerTemplate } from "../worker/shared.ts";
 import { HTTPServer } from "./http-server.ts";
 
 type WranglerSessionConfig =
@@ -32,20 +32,20 @@ export async function createMixedModeProxy(input: {
     createWorkersPreviewToken(api, {
       name: input.name,
       metadata: {
-        main_module: script.name,
+        main_module: script.entrypoint,
         compatibility_date: "2025-06-16",
         bindings: input.bindings,
         observability: {
           enabled: false,
         },
       },
-      files: [script],
+      files: script.files,
       session: {
         workers_dev: true,
         minimal_mode: true,
       },
     }),
-    getAccountSubdomain(api),
+    import("../worker-subdomain.ts").then((m) => m.getAccountSubdomain(api)),
   ]);
   return new MixedModeProxy(
     `https://${input.name}.${subdomain}.workers.dev`,

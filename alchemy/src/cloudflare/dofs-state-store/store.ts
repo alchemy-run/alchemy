@@ -4,7 +4,6 @@ import type { Scope } from "../../scope.ts";
 import { deserialize, serialize } from "../../serde.ts";
 import type { State, StateStore } from "../../state.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "../api.ts";
-import { getAccountSubdomain } from "../worker/shared.ts";
 import { DOFSStateStoreClient, upsertStateStoreWorker } from "./internal.ts";
 
 export interface DOFSStateStoreOptions extends CloudflareApiOptions {
@@ -84,7 +83,7 @@ export class DOFSStateStore implements StateStore {
     const workerName = this.options.worker?.name ?? "alchemy-state";
     const api = await createCloudflareApi(this.options);
     const [subdomain, _] = await Promise.all([
-      getAccountSubdomain(api),
+      import("../worker-subdomain.ts").then((m) => m.getAccountSubdomain(api)),
       upsertStateStoreWorker(
         api,
         workerName,
