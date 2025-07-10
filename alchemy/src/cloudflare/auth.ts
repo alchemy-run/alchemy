@@ -69,15 +69,15 @@ export async function getCloudflareAuthHeaders(
     };
   }
   // Wrangler OAuth Token
-  console.time("getRefreshedWranglerConfig");
   const wranglerConfig = await getRefreshedWranglerConfig();
-  console.timeEnd("getRefreshedWranglerConfig");
   if (wranglerConfig.isOk() && wranglerConfig.value) {
     return {
       Authorization: `Bearer ${wranglerConfig.value.oauth_token}`,
     };
   } else if (wranglerConfig.isErr()) {
-    throw wranglerConfig.error;
+    throw new Error(
+      `Cloudflare authentication failed: ${wranglerConfig.error.message}`,
+    );
   }
   throw new Error(
     "Cloudflare authentication required. Did you forget to login with `wrangler login` or set CLOUDFLARE_API_TOKEN, CLOUDFLARE_API_KEY?",

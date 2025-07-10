@@ -12,7 +12,7 @@ import { createXdgAppPaths } from "../util/xdg-paths.ts";
 
 const CLIENT_ID = "54d11594-84e4-41aa-b438-e81b8fa78ee7";
 const REDIRECT_URI = "http://localhost:8976/oauth/callback";
-const DEFAULT_SCOPES = [
+export const DEFAULT_SCOPES = [
   "account:read",
   "user:read",
   "workers:write",
@@ -174,7 +174,7 @@ export const getRefreshedWranglerConfig = singleFlight(
         })
         .orElse((error) => {
           if (isInteractive()) {
-            return authorize();
+            return wranglerLogin();
           }
           if (error instanceof OAuthError) {
             return err(error);
@@ -218,12 +218,11 @@ class OAuthError extends Error {
     error_hint?: string;
     status_code: number;
   }) {
-    console.error(params);
     super(params.error_description);
   }
 }
 
-const authorize = (scopes: string[] = DEFAULT_SCOPES) => {
+export const wranglerLogin = (scopes: string[] = DEFAULT_SCOPES) => {
   const challenge = generateAuthorizationURL(scopes);
   logger.log(
     [
