@@ -4,9 +4,9 @@ import { DurableObject } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import migrations from "../drizzle/durable-object/migrations.js";
-import { SQLiteStateStoreOperations } from "../src/sqlite/operations.ts";
-import type { StateStoreProxy } from "../src/sqlite/proxy.ts";
-import * as schema from "../src/sqlite/schema.ts";
+import { SQLiteStateStoreOperations } from "../src/state/operations.ts";
+import type { StateStoreProxy } from "../src/state/proxy.ts";
+import * as schema from "../src/state/schema.ts";
 
 interface Env {
   STORE: DurableObjectNamespace<Store>;

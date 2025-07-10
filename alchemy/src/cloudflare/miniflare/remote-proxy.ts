@@ -1,9 +1,9 @@
 import type { RemoteProxyConnectionString } from "miniflare";
+import type { CloudflareApiResponse } from "../api-response.ts";
 import { createCloudflareApi, type CloudflareApi } from "../api.ts";
 import type { WorkerBindingSpec } from "../bindings.ts";
-import type { CloudflareApiResponse } from "../types.ts";
+import { getWorkerTemplate } from "../bundle/template.ts";
 import type { WorkerMetadata } from "../worker-metadata.ts";
-import { getWorkerTemplate } from "../worker/shared.ts";
 import { HTTPServer } from "./http-server.ts";
 
 type WranglerSessionConfig =
@@ -22,12 +22,12 @@ interface WorkersPreviewSession {
   token: string;
 }
 
-export async function createMixedModeProxy(input: {
+export async function createRemoteProxyWorker(input: {
   name: string;
   bindings: WorkerBindingSpec[];
 }) {
   const api = await createCloudflareApi();
-  const script = await getWorkerTemplate("mixed-mode-proxy-worker");
+  const script = await getWorkerTemplate("remote-proxy");
   const [token, subdomain] = await Promise.all([
     createWorkersPreviewToken(api, {
       name: input.name,

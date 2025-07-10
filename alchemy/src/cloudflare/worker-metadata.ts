@@ -1,6 +1,7 @@
 import { assertNever } from "../util/assert-never.ts";
 import { logger } from "../util/logger.ts";
 import { memoize } from "../util/memoize.ts";
+import { extractCloudflareResult } from "./api-response.ts";
 import type { CloudflareApi } from "./api.ts";
 import {
   Self,
@@ -13,7 +14,6 @@ import {
   isDurableObjectNamespace,
   type DurableObjectNamespace,
 } from "./durable-object-namespace.ts";
-import { extractCloudflareResult } from "./types.ts";
 import { createAssetConfig } from "./worker-assets.ts";
 import type {
   MultiStepMigration,

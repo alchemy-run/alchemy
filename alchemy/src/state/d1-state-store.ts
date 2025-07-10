@@ -1,13 +1,13 @@
 import { drizzle, type RemoteCallback } from "drizzle-orm/sqlite-proxy";
 import assert from "node:assert";
+import { extractCloudflareResult } from "../cloudflare/api-response.ts";
+import type { CloudflareApi, CloudflareApiOptions } from "../cloudflare/api.ts";
 import type { Scope } from "../scope.ts";
-import { MIGRATIONS_DIRECTORY } from "../sqlite/migrations.ts";
-import { SQLiteStateStoreOperations } from "../sqlite/operations.ts";
-import { StateStoreProxy } from "../sqlite/proxy.ts";
-import * as schema from "../sqlite/schema.ts";
 import { memoize } from "../util/memoize.ts";
-import type { CloudflareApi, CloudflareApiOptions } from "./api.ts";
-import { extractCloudflareResult } from "./types.ts";
+import { MIGRATIONS_DIRECTORY } from "./migrations.ts";
+import { SQLiteStateStoreOperations } from "./operations.ts";
+import { StateStoreProxy } from "./proxy.ts";
+import * as schema from "./schema.ts";
 
 export interface D1StateStoreOptions extends CloudflareApiOptions {
   databaseName?: string;
@@ -31,7 +31,7 @@ export class D1StateStore extends StateStoreProxy {
 }
 
 const createDatabaseClient = memoize(async (options: D1StateStoreOptions) => {
-  const { createCloudflareApi } = await import("./api.ts");
+  const { createCloudflareApi } = await import("../cloudflare/api.ts");
   const api = await createCloudflareApi(options);
   const database = await upsertDatabase(
     api,
@@ -65,9 +65,11 @@ const createDatabaseClient = memoize(async (options: D1StateStoreOptions) => {
 });
 
 const upsertDatabase = async (api: CloudflareApi, databaseName: string) => {
-  const { listDatabases, createDatabase } = await import("./d1-database.ts");
+  const { listDatabases, createDatabase } = await import(
+    "../cloudflare/d1-database.ts"
+  );
   const { applyMigrations, listMigrationsFiles } = await import(
-    "./d1-migrations.ts"
+    "../cloudflare/d1-migrations.ts"
   );
   const migrate = async (databaseId: string) => {
     await applyMigrations({

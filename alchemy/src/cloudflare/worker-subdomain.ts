@@ -1,12 +1,12 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { memoize } from "../util/memoize.ts";
+import { extractCloudflareResult } from "./api-response.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
-import { extractCloudflareResult } from "./types.ts";
 
 interface WorkerSubdomainProps extends CloudflareApiOptions {
   /**

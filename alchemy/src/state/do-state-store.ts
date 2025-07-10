@@ -1,20 +1,24 @@
 import { alchemy } from "../alchemy.ts";
-import type { Scope } from "../scope.ts";
-import type { Secret } from "../secret.ts";
-import { StateStoreProxy } from "../sqlite/proxy.ts";
-import { logger } from "../util/logger.ts";
-import { memoize } from "../util/memoize.ts";
-import type { CloudflareApiOptions } from "./api.ts";
-import { createCloudflareApi } from "./api.ts";
+import { BUILD_DATE } from "../build-date.ts";
+import { extractCloudflareResult } from "../cloudflare/api-response.ts";
+import type { CloudflareApi, CloudflareApiOptions } from "../cloudflare/api.ts";
+import { createCloudflareApi } from "../cloudflare/api.ts";
+import {
+  getWorkerTemplate,
+  type WorkerTemplate,
+} from "../cloudflare/bundle/template.ts";
+import type { WorkerMetadata } from "../cloudflare/worker-metadata.ts";
+import { getWorkerSettings } from "../cloudflare/worker-metadata.ts";
 import {
   enableWorkerSubdomain,
   getAccountSubdomain,
-} from "./worker-subdomain.ts";
-import {
-  getTemplateWorkerStatus,
-  pollUntilReady,
-  provisionTemplateWorker,
-} from "./worker/shared.ts";
+  getWorkerSubdomain,
+} from "../cloudflare/worker-subdomain.ts";
+import type { Scope } from "../scope.ts";
+import type { Secret } from "../secret.ts";
+import { logger } from "../util/logger.ts";
+import { memoize } from "../util/memoize.ts";
+import { StateStoreProxy } from "./proxy.ts";
 
 export interface DOStateStoreOptions extends CloudflareApiOptions {
   /**
@@ -143,3 +147,84 @@ const provision = memoize(async (options: DOStateStoreOptions) => {
   );
   return { url, token };
 });
+
+async function getTemplateWorkerStatus(
+  api: CloudflareApi,
+  name: string,
+  template: WorkerTemplate,
+) {
+  const worker = await getWorkerTemplate(template);
+  const [settings, subdomain] = await Promise.all([
+    getWorkerSettings(api, name),
+    getWorkerSubdomain(api, name),
+  ]);
+  return {
+    created: !!settings,
+    updated: settings?.tags.includes(worker.tag) ?? false,
+    enabled: subdomain.enabled,
+  };
+}
+
+interface ProvisionTemplateWorkerProps {
+  name: string;
+  template: WorkerTemplate;
+  metadata: Partial<WorkerMetadata>;
+}
+
+async function provisionTemplateWorker(
+  api: CloudflareApi,
+  props: ProvisionTemplateWorkerProps,
+) {
+  const worker = await getWorkerTemplate(props.template);
+  const formData = new FormData();
+  worker.files.forEach((file) => {
+    formData.append(file.name, file);
+  });
+  const metadata: WorkerMetadata = {
+    ...props.metadata,
+    main_module: worker.entrypoint,
+    tags: [worker.tag],
+    compatibility_date: BUILD_DATE,
+    observability: {
+      enabled: true,
+    },
+    bindings: props.metadata.bindings ?? [],
+  };
+  formData.append("metadata", new Blob([JSON.stringify(metadata)]));
+  await extractCloudflareResult(
+    `provision ${props.template} worker ${props.name}`,
+    api.put(
+      `/accounts/${api.accountId}/workers/scripts/${props.name}`,
+      formData,
+    ),
+  );
+}
+
+async function pollUntilReady(label: string, fn: () => Promise<Response>) {
+  // This ensures the token is correct and the worker is ready to use.
+  let last: Response | undefined;
+  let delay = 1000;
+  for (let i = 0; i < 20; i++) {
+    const res = await fn();
+    if (res.ok) {
+      return;
+    }
+    if (res.status === 401) {
+      throw new Error(
+        `[${label}] The token is invalid. Please check your ALCHEMY_STATE_TOKEN environment variable, or set "forceUpdate: true" in the ${label} constructor to overwrite the current token.`,
+      );
+    }
+    if (!last) {
+      logger.log(`[${label}] Waiting for deployment...`);
+    }
+    last = res;
+    // Exponential backoff with jitter
+    const jitter = Math.random() * 0.1 * delay;
+    await new Promise((resolve) => setTimeout(resolve, delay + jitter));
+    delay *= 1.5; // Increase the delay for next attempt
+    delay = Math.min(delay, 10000); // Cap at 10 seconds
+  }
+  throw new Error(
+    `[${label}] Failed to reach state store: ${last?.status} ${last?.statusText}`,
+  );
+}

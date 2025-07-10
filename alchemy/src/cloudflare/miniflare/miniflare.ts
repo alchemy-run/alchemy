@@ -18,7 +18,10 @@ import {
   buildRemoteBindings,
   type MiniflareWorkerOptions,
 } from "./miniflare-worker-options.ts";
-import { createMixedModeProxy, type MixedModeProxy } from "./mixed-mode.ts";
+import {
+  createRemoteProxyWorker,
+  type MixedModeProxy,
+} from "./remote-proxy.ts";
 
 class MiniflareServer {
   miniflare?: Miniflare;
@@ -128,7 +131,7 @@ class MiniflareServer {
     ) {
       return existing.connectionString;
     }
-    const proxy = await createMixedModeProxy({
+    const proxy = await createRemoteProxyWorker({
       name: `mixed-mode-proxy-${crypto.randomUUID()}`,
       bindings,
     });
