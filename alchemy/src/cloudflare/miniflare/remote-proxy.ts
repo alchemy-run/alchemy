@@ -47,7 +47,7 @@ export async function createRemoteProxyWorker(input: {
     }),
     import("../worker-subdomain.ts").then((m) => m.getAccountSubdomain(api)),
   ]);
-  return new MixedModeProxy(
+  return new RemoteProxy(
     `https://${input.name}.${subdomain}.workers.dev`,
     token,
     input.bindings,
@@ -56,7 +56,7 @@ export async function createRemoteProxyWorker(input: {
 
 const DEBUG: boolean = false;
 
-export class MixedModeProxy {
+export class RemoteProxy {
   server: HTTPServer;
 
   constructor(

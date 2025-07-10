@@ -18,16 +18,13 @@ import {
   buildRemoteBindings,
   type MiniflareWorkerOptions,
 } from "./miniflare-worker-options.ts";
-import {
-  createRemoteProxyWorker,
-  type MixedModeProxy,
-} from "./remote-proxy.ts";
+import { createRemoteProxyWorker, type RemoteProxy } from "./remote-proxy.ts";
 
 class MiniflareServer {
   miniflare?: Miniflare;
   workers = new Map<string, WorkerOptions>();
   servers = new Map<string, HTTPServer>();
-  mixedModeProxies = new Map<string, MixedModeProxy>();
+  mixedModeProxies = new Map<string, RemoteProxy>();
 
   stream = new WritableStream<{
     worker: MiniflareWorkerOptions;
