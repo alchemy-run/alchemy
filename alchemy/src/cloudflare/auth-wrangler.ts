@@ -1,3 +1,4 @@
+import kleur from "kleur";
 import { err, ok, ResultAsync } from "neverthrow";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
@@ -211,6 +212,10 @@ const generateAuthorizationURL = (scopes: string[]) => {
 };
 
 class OAuthError extends Error {
+  readonly error: string;
+  readonly error_verbose?: string;
+  readonly error_hint?: string;
+  readonly status_code: number;
   constructor(params: {
     error: string;
     error_verbose?: string;
@@ -218,16 +223,27 @@ class OAuthError extends Error {
     error_hint?: string;
     status_code: number;
   }) {
+    console.dir(params, { depth: null });
     super(params.error_description);
+    this.error = params.error;
+    this.error_verbose = params.error_verbose;
+    this.error_hint = params.error_hint;
+    this.status_code = params.status_code;
   }
 }
 
-export const wranglerLogin = (scopes: string[] = DEFAULT_SCOPES) => {
+export const wranglerLogin = (
+  scopes: string[] = DEFAULT_SCOPES,
+  log: (message: string) => void = logger.log,
+) => {
   const challenge = generateAuthorizationURL(scopes);
-  logger.log(
+  log(
     [
       "Opening browser to authorize with Cloudflare...",
-      "If you are not automatically redirected, please open the following URL in your browser:",
+      "",
+      kleur.gray(
+        "If you are not automatically redirected, please open the following URL in your browser:",
+      ),
       challenge.url,
     ].join("\n"),
   );

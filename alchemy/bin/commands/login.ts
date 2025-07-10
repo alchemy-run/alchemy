@@ -7,22 +7,24 @@ import {
 import { throwWithContext } from "../errors.ts";
 
 export async function runLogin(input: {
-  scopes?: string[];
-  includeDefaultScopes?: boolean;
+  scopes: string[];
+  defaultScopes: boolean;
 }) {
   try {
     intro(pc.cyan("🔐 Cloudflare Login"));
 
-    const scopes = input.includeDefaultScopes
-      ? Array.from(new Set([...DEFAULT_SCOPES, ...(input.scopes ?? [])]))
-      : (input.scopes ?? []);
+    const scopes = input.defaultScopes
+      ? Array.from(new Set([...DEFAULT_SCOPES, ...input.scopes]))
+      : input.scopes;
     if (scopes.length === 0) {
       cancel(
         "No scopes provided. Please provide at least one scope or remove the --exclude-default-scopes flag.",
       );
       return;
     }
-    const result = await wranglerLogin(scopes);
+    const result = await wranglerLogin(scopes, (message) => {
+      log.step(message);
+    });
 
     if (result.isErr()) {
       throwWithContext(result.error, "Login failed");
@@ -30,7 +32,6 @@ export async function runLogin(input: {
 
     outro(pc.green("✅ Login successful!"));
   } catch (error) {
-    log.error("Login failed:");
     if (error instanceof Error) {
       log.error(`${pc.red("Error:")} ${error.message}`);
       if (error.stack && process.env.DEBUG) {

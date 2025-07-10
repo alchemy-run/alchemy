@@ -72,10 +72,10 @@ const router = t.router({
             .optional()
             .default([])
             .describe("Cloudflare OAuth scopes to authorize"),
-          excludeDefaultScopes: z
+          defaultScopes: z
             .boolean()
             .optional()
-            .default(false)
+            .default(true)
             .describe(
               "Whether to include the default Wrangler scopes when authenticating",
             ),
