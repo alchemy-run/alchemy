@@ -1,3 +1,13 @@
+## v0.45.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **sqlite**: Include drizzle folder in NPM package &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/625 [<samp>(3c059)</samp>](https://github.com/sam-goodwin/alchemy/commit/3c059619)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.45.0...v0.45.1)
+
+---
+
 ## v0.45.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
