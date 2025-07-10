@@ -4,7 +4,8 @@ import { createCli, zod as z } from "trpc-cli";
 import { createAlchemy } from "./commands/create.ts";
 import { deploy } from "./commands/deploy.ts";
 import { destroy } from "./commands/destroy.ts";
-import { shell } from "./commands/shell.ts";
+import { dev } from "./commands/dev.ts";
+import { exec } from "./commands/exec.ts";
 import { getPackageVersion } from "./services/get-package-version.ts";
 import { t } from "./trpc.ts";
 import {
@@ -63,7 +64,8 @@ const router = t.router({
     }),
   deploy,
   destroy,
-  shell,
+  dev,
+  exec,
 });
 
 export type AppRouter = typeof router;

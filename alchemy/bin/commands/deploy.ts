@@ -1,8 +1,9 @@
 import { zod as z } from "trpc-cli";
 import {
-  alchemyEntrypointArg,
+  entrypoint,
   execAlchemy,
-  execAlchemyArgs,
+  execArgs,
+  watch,
 } from "../services/execute-alchemy.ts";
 import { t } from "../trpc.ts";
 
@@ -12,17 +13,11 @@ export const deploy = t.procedure
   })
   .input(
     z.tuple([
-      alchemyEntrypointArg,
+      entrypoint,
       z
         .object({
-          ...execAlchemyArgs,
-          watch: z
-            .boolean()
-            .optional()
-            .default(false)
-            .describe(
-              "Watch for changes to infrastructure and redeploy automatically",
-            ),
+          ...execArgs,
+          watch,
         })
         .optional()
         .default({}),

@@ -6,14 +6,20 @@ import { zod as z } from "trpc-cli";
 import { exists } from "../../src/util/exists.ts";
 import { detectPackageManager } from "../services/package-manager.ts";
 
-export const alchemyEntrypointArg = z
+export const entrypoint = z
   .string()
   .optional()
   .describe(
     "Path to the entrypoint file. Defaults to ./alchemy.run.ts > ./alchemy.run.js",
   );
 
-export const execAlchemyArgs = {
+export const watch = z
+  .boolean()
+  .optional()
+  .default(false)
+  .describe("Watch for changes to infrastructure and redeploy automatically");
+
+export const execArgs = {
   cwd: z
     .string()
     .optional()
@@ -42,6 +48,7 @@ export async function execAlchemy(
     watch,
     envFile,
     read,
+    dev,
   }: {
     cwd?: string;
     quiet?: boolean;
@@ -50,6 +57,7 @@ export async function execAlchemy(
     watch?: boolean;
     envFile?: string;
     read?: boolean;
+    dev?: boolean;
   },
 ) {
   const args: string[] = [];
@@ -60,6 +68,7 @@ export async function execAlchemy(
   if (destroy) args.push("--destroy");
   if (watch) execArgs.push("--watch");
   if (envFile) execArgs.push(`--env-file ${envFile}`);
+  if (dev) args.push("--dev");
 
   // Check for alchemy.run.ts or alchemy.run.js (if not provided)
   if (!main) {

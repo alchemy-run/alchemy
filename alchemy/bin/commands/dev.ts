@@ -6,14 +6,16 @@ import {
 } from "../services/execute-alchemy.ts";
 import { t } from "../trpc.ts";
 
-export const destroy = t.procedure
+export const dev = t.procedure
   .meta({
-    description: "Deploy an Alchemy project",
+    description:
+      "Run an Alchemy program in dev-mode (local simulation & hot reloading)",
   })
   .input(z.tuple([entrypoint, z.object(execArgs).optional().default({})]))
   .mutation(async ({ input: [main, options] }) =>
     execAlchemy(main, {
       ...options,
-      destroy: true,
+      dev: true,
+      watch: true,
     }),
   );
