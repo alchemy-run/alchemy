@@ -54,13 +54,9 @@ export class TelemetryClient implements ITelemetryClient {
   }
 
   record(event: Telemetry.EventInput, timestamp = Date.now()) {
-    if (!this.context) {
-      return;
-    }
     const payload = {
       ...event,
       error: this.serializeError(event.error),
-      context: this.context,
       timestamp,
     } as Telemetry.Event;
     this.events.push(payload);

@@ -35,7 +35,6 @@ export namespace Telemetry {
 
   export interface BaseEvent {
     event: string;
-    context: Context;
     timestamp: number;
   }
 
