@@ -54,8 +54,6 @@ export async function createRemoteProxyWorker(input: {
   );
 }
 
-const DEBUG: boolean = false;
-
 export class RemoteProxy {
   server: HTTPServer;
 
@@ -99,27 +97,6 @@ export class RemoteProxy {
     const responseHeaders = new Headers(res.headers);
     responseHeaders.delete("transfer-encoding");
     responseHeaders.delete("content-encoding");
-
-    if (DEBUG) {
-      const clone = res.clone();
-      console.log({
-        request: {
-          url: url.toString(),
-          method: req.method,
-          headers,
-          body: req.body,
-        },
-        response: {
-          status: res.status,
-          headers: res.headers,
-          body: await res.text(),
-        },
-      });
-      return new Response(clone.body, {
-        status: clone.status,
-        headers: responseHeaders,
-      });
-    }
 
     return new Response(res.body, {
       status: res.status,
