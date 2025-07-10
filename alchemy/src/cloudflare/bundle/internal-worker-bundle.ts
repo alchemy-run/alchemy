@@ -2,9 +2,9 @@ import { join } from "node:path";
 import { memoize } from "../../util/memoize.ts";
 import { FSBundleProvider } from "./fs.ts";
 
-export type WorkerTemplate = "do-sqlite-state-store" | "remote-binding-proxy";
+export type InternalWorker = "do-state-store" | "remote-binding-proxy";
 
-export const getWorkerTemplate = memoize(async (name: WorkerTemplate) => {
+export const getInternalWorkerBundle = memoize(async (name: InternalWorker) => {
   const provider = new FSBundleProvider({
     cwd: join(import.meta.dirname, "..", "..", "..", "workers"),
     entrypoint: `${name}.js`,

@@ -3,7 +3,7 @@ import { HTTPServer } from "../../util/http-server.ts";
 import { extractCloudflareResult } from "../api-response.ts";
 import { createCloudflareApi, type CloudflareApi } from "../api.ts";
 import type { WorkerBindingSpec } from "../bindings.ts";
-import { getWorkerTemplate } from "../bundle/template.ts";
+import { getInternalWorkerBundle } from "../bundle/internal-worker-bundle.ts";
 import type { WorkerMetadata } from "../worker-metadata.ts";
 
 type WranglerSessionConfig =
@@ -27,7 +27,7 @@ export async function createRemoteProxyWorker(input: {
   bindings: WorkerBindingSpec[];
 }) {
   const api = await createCloudflareApi();
-  const script = await getWorkerTemplate("remote-binding-proxy");
+  const script = await getInternalWorkerBundle("remote-binding-proxy");
   const [token, subdomain] = await Promise.all([
     createWorkersPreviewToken(api, {
       name: input.name,

@@ -1,12 +1,9 @@
 import { alchemy } from "../alchemy.ts";
 import { BUILD_DATE } from "../build-date.ts";
 import { extractCloudflareResult } from "../cloudflare/api-response.ts";
-import type { CloudflareApi, CloudflareApiOptions } from "../cloudflare/api.ts";
+import type { CloudflareApiOptions } from "../cloudflare/api.ts";
 import { createCloudflareApi } from "../cloudflare/api.ts";
-import {
-  getWorkerTemplate,
-  type WorkerTemplate,
-} from "../cloudflare/bundle/template.ts";
+import { getInternalWorkerBundle } from "../cloudflare/bundle/internal-worker-bundle.ts";
 import type { WorkerMetadata } from "../cloudflare/worker-metadata.ts";
 import { getWorkerSettings } from "../cloudflare/worker-metadata.ts";
 import {
@@ -39,8 +36,6 @@ export interface DOStateStoreOptions extends CloudflareApiOptions {
    */
   stateToken?: Secret<string>;
 }
-
-const TEMPLATE_WORKER_NAME = "do-sqlite-state-store" as const;
 
 /**
  * A state store backed by a SQLite database in a Cloudflare Durable Object.
@@ -104,38 +99,47 @@ const provision = memoize(async (options: DOStateStoreOptions) => {
   const token = tokenSecret.unencrypted;
 
   const api = await createCloudflareApi(options);
-  const { created, updated, enabled } = await getTemplateWorkerStatus(
-    api,
-    scriptName,
-    TEMPLATE_WORKER_NAME,
-  );
-  if (!updated || options.forceUpdate) {
-    logger.log(`[DOStateStore] ${created ? "Updating" : "Creating"}...`);
-    await provisionTemplateWorker(api, {
-      name: scriptName,
-      template: TEMPLATE_WORKER_NAME,
-      metadata: {
-        bindings: [
-          {
-            name: "STORE",
-            type: "durable_object_namespace",
-            class_name: "Store",
-          },
-          {
-            name: "STATE_TOKEN",
-            type: "secret_text",
-            text: token,
-          },
-        ],
-        migrations: created
-          ? undefined
-          : {
-              new_sqlite_classes: ["Store"],
-            },
-      },
+  const [bundle, settings, subdomain] = await Promise.all([
+    getInternalWorkerBundle("do-state-store"),
+    getWorkerSettings(api, scriptName),
+    getWorkerSubdomain(api, scriptName),
+  ]);
+  if (!settings || !settings.tags.includes(bundle.tag) || options.forceUpdate) {
+    logger.log(`[DOStateStore] ${settings ? "Updating" : "Creating"}...`);
+    const formData = new FormData();
+    bundle.files.forEach((file) => {
+      formData.append(file.name, file);
     });
+    const metadata: WorkerMetadata = {
+      main_module: bundle.entrypoint,
+      tags: [bundle.tag],
+      compatibility_date: BUILD_DATE,
+      observability: {
+        enabled: true,
+      },
+      bindings: [
+        {
+          name: "STORE",
+          type: "durable_object_namespace",
+          class_name: "Store",
+        },
+        {
+          name: "TOKEN",
+          type: "secret_text",
+          text: token,
+        },
+      ],
+    };
+    formData.append("metadata", new Blob([JSON.stringify(metadata)]));
+    await extractCloudflareResult(
+      `provision ${scriptName} worker`,
+      api.put(
+        `/accounts/${api.accountId}/workers/scripts/${scriptName}`,
+        formData,
+      ),
+    );
   }
-  if (!enabled) {
+  if (!subdomain.enabled) {
     await enableWorkerSubdomain(api, scriptName);
   }
   const url = `https://${scriptName}.${await getAccountSubdomain(api)}.workers.dev`;
@@ -147,58 +151,6 @@ const provision = memoize(async (options: DOStateStoreOptions) => {
   );
   return { url, token };
 });
-
-async function getTemplateWorkerStatus(
-  api: CloudflareApi,
-  name: string,
-  template: WorkerTemplate,
-) {
-  const worker = await getWorkerTemplate(template);
-  const [settings, subdomain] = await Promise.all([
-    getWorkerSettings(api, name),
-    getWorkerSubdomain(api, name),
-  ]);
-  return {
-    created: !!settings,
-    updated: settings?.tags.includes(worker.tag) ?? false,
-    enabled: subdomain.enabled,
-  };
-}
-
-interface ProvisionTemplateWorkerProps {
-  name: string;
-  template: WorkerTemplate;
-  metadata: Partial<WorkerMetadata>;
-}
-
-async function provisionTemplateWorker(
-  api: CloudflareApi,
-  props: ProvisionTemplateWorkerProps,
-) {
-  const worker = await getWorkerTemplate(props.template);
-  const formData = new FormData();
-  worker.files.forEach((file) => {
-    formData.append(file.name, file);
-  });
-  const metadata: WorkerMetadata = {
-    ...props.metadata,
-    main_module: worker.entrypoint,
-    tags: [worker.tag],
-    compatibility_date: BUILD_DATE,
-    observability: {
-      enabled: true,
-    },
-    bindings: props.metadata.bindings ?? [],
-  };
-  formData.append("metadata", new Blob([JSON.stringify(metadata)]));
-  await extractCloudflareResult(
-    `provision ${props.template} worker ${props.name}`,
-    api.put(
-      `/accounts/${api.accountId}/workers/scripts/${props.name}`,
-      formData,
-    ),
-  );
-}
 
 async function pollUntilReady(label: string, fn: () => Promise<Response>) {
   // This ensures the token is correct and the worker is ready to use.
