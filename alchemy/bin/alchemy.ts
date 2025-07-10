@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 
-import { createCli, trpcServer, zod as z } from "trpc-cli";
+import { createCli, zod as z } from "trpc-cli";
 import { createAlchemy } from "./commands/create.ts";
-import { deployAlchemy } from "./commands/deploy.ts";
+import { deploy } from "./commands/deploy.ts";
+import { destroy } from "./commands/destroy.ts";
+import { shell } from "./commands/shell.ts";
 import { getPackageVersion } from "./services/get-package-version.ts";
+import { t } from "./trpc.ts";
 import {
   EditorSchema,
   PackageManagerSchema,
@@ -11,8 +14,6 @@ import {
   TemplateSchema,
   type CreateInput,
 } from "./types.ts";
-
-const t = trpcServer.initTRPC.create();
 
 const router = t.router({
   create: t.procedure
@@ -60,50 +61,9 @@ const router = t.router({
       };
       await createAlchemy(combinedInput);
     }),
-  deploy: t.procedure
-    .meta({
-      description: "Deploy an Alchemy project",
-    })
-    .input(
-      z
-        .object({
-          path: z
-            .string()
-            .optional()
-            .describe(
-              "Path to the project directory (defaults to current directory)",
-            ),
-          quiet: z
-            .boolean()
-            .optional()
-            .default(false)
-            .describe("Suppress Create/Update/Delete messages"),
-          read: z
-            .boolean()
-            .optional()
-            .default(false)
-            .describe("Read-only mode - doesn't modify resources"),
-          destroy: z
-            .boolean()
-            .optional()
-            .default(false)
-            .describe("Destroy all resources"),
-          stage: z
-            .string()
-            .optional()
-            .describe("Specify which stage/environment to target"),
-          watch: z
-            .boolean()
-            .optional()
-            .default(false)
-            .describe("Watch for file changes and redeploy automatically"),
-        })
-        .optional()
-        .default({}),
-    )
-    .mutation(async ({ input }) => {
-      await deployAlchemy(input);
-    }),
+  deploy,
+  destroy,
+  shell,
 });
 
 export type AppRouter = typeof router;
