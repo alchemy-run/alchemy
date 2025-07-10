@@ -1,13 +1,14 @@
 import path from "node:path";
 import { afterAll, beforeAll, it } from "vitest";
 import { alchemy } from "../alchemy.ts";
-import { DOFSStateStore } from "../cloudflare/dofs-state-store/index.ts";
-import { FileSystemStateStore } from "../fs/file-system-state-store.ts";
 import { Scope } from "../scope.ts";
 import type { StateStoreType } from "../state.ts";
-import { D1StateStore } from "../state/d1-state-store.ts";
-import { DOStateStore } from "../state/do-state-store.ts";
-import { SQLiteStateStore } from "../state/sqlite-state-store.ts";
+import {
+  D1StateStore,
+  DOStateStore,
+  FileSystemStateStore,
+  SQLiteStateStore,
+} from "../state/index.ts";
 import { NoopTelemetryClient } from "../util/telemetry/client.ts";
 
 /**
@@ -132,8 +133,6 @@ export function test(
     switch (storeType) {
       case "do":
         return new DOStateStore(scope);
-      case "dofs":
-        return new DOFSStateStore(scope);
       case "fs":
         return new FileSystemStateStore(scope);
       case "d1":
