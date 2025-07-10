@@ -35,7 +35,7 @@ export * from "./permission-groups.ts";
 export * from "./pipeline.ts";
 export * from "./queue-consumer.ts";
 export * from "./queue.ts";
-export * from "./r2-rest-state-store.ts";
+export * from "./state.ts";
 export * from "./react-router.ts";
 export * from "./redirect-rule.ts";
 export * from "./redwood.ts";
