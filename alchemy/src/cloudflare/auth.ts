@@ -1,85 +1,77 @@
-import type { Secret } from "../secret.ts";
-import { getRefreshedWranglerConfig } from "./auth-wrangler.ts";
-/**
- * Authentication options for Cloudflare API
- */
-export type CloudflareAuthOptions =
-  | CloudflareApiKeyAuthOptions
-  | CloudflareApiTokenAuthOptions;
+import type { CloudflareApiOptions } from "./api.ts";
+import { getRefreshedWranglerConfig } from "./oauth.ts";
+import { getUserEmailFromApiKey } from "./user.ts";
 
-export type CloudflareApiKeyAuthOptions = {
-  /**
-   * API Key to use with API Key
-   */
-  apiKey: Secret;
-  /**
-   * Email to use with API Key
-   * If not provided, will attempt to discover from Cloudflare API
-   */
-  email: string;
-
-  /**
-   * API Token to use with API Key
-   */
-  apiToken?: undefined;
-};
-
-export function isCloudflareApiKeyAuthOptions(
-  options: CloudflareAuthOptions | undefined,
-): options is CloudflareApiKeyAuthOptions {
-  return options !== undefined && options.apiKey !== undefined;
+export interface CloudflareApiTokenAuthOptions {
+  type: "api-token";
+  token: string;
 }
 
-export type CloudflareApiTokenAuthOptions = {
-  /**
-   * API Token to use with API Key
-   */
-  apiToken?: Secret;
+export interface CloudflareApiKeyAuthOptions {
+  type: "api-key";
+  key: string;
+  email: string;
+}
 
-  /**
-   * API Key to use with API Token
-   */
-  apiKey?: undefined;
+export interface CloudflareWranglerAuthOptions {
+  type: "wrangler";
+}
 
-  /**
-   * Email to use with API Token
-   */
-  email?: undefined;
-};
+export type CloudflareAuthOptions =
+  | CloudflareApiTokenAuthOptions
+  | CloudflareApiKeyAuthOptions
+  | CloudflareWranglerAuthOptions;
 
-export function isCloudflareApiTokenAuthOptions(
-  options: CloudflareAuthOptions | undefined,
-): options is CloudflareApiTokenAuthOptions {
-  return options !== undefined && options.apiToken !== undefined;
+export async function normalizeAuthOptions(
+  input?: CloudflareApiOptions,
+): Promise<CloudflareAuthOptions> {
+  const email = async (apiKey: string) =>
+    input?.email ??
+    process.env.CLOUDFLARE_EMAIL ??
+    (await getUserEmailFromApiKey(apiKey));
+
+  if (input?.apiKey) {
+    const key = input.apiKey.unencrypted;
+    return { type: "api-key", key, email: await email(key) };
+  }
+  if (input?.apiToken) {
+    return { type: "api-token", token: input.apiToken.unencrypted };
+  }
+  if (process.env.CLOUDFLARE_API_KEY) {
+    const key = process.env.CLOUDFLARE_API_KEY;
+    return { type: "api-key", key, email: await email(key) };
+  }
+  if (process.env.CLOUDFLARE_API_TOKEN) {
+    return { type: "api-token", token: process.env.CLOUDFLARE_API_TOKEN };
+  }
+  return { type: "wrangler" };
 }
 
 export async function getCloudflareAuthHeaders(
-  options: CloudflareAuthOptions | undefined,
+  authOptions: CloudflareAuthOptions,
 ): Promise<Record<string, string>> {
-  if (isCloudflareApiKeyAuthOptions(options)) {
-    // Global API Key
-    return {
-      "X-Auth-Key": options.apiKey.unencrypted,
-      "X-Auth-Email": options.email,
-    };
-  } else if (isCloudflareApiTokenAuthOptions(options)) {
-    // API Token
-    return {
-      Authorization: `Bearer ${options.apiToken?.unencrypted}`,
-    };
+  switch (authOptions.type) {
+    case "api-token":
+      return { Authorization: `Bearer ${authOptions.token}` };
+    case "api-key":
+      return {
+        "X-Auth-Key": authOptions.key,
+        "X-Auth-Email": authOptions.email,
+      };
+    case "wrangler": {
+      const wranglerConfig = await getRefreshedWranglerConfig();
+      if (wranglerConfig.isErr()) {
+        throw new Error(
+          [
+            wranglerConfig.error.message,
+            "Please run `alchemy login`, or set either CLOUDFLARE_API_TOKEN or CLOUDFLARE_API_KEY in your environment.",
+            "Learn more: https://alchemy.run/guides/cloudflare/",
+          ].join("\n"),
+        );
+      }
+      return {
+        Authorization: `Bearer ${wranglerConfig.value.oauth_token}`,
+      };
+    }
   }
-  // Wrangler OAuth Token
-  const wranglerConfig = await getRefreshedWranglerConfig();
-  if (wranglerConfig.isOk() && wranglerConfig.value) {
-    return {
-      Authorization: `Bearer ${wranglerConfig.value.oauth_token}`,
-    };
-  } else if (wranglerConfig.isErr()) {
-    throw new Error(
-      `Cloudflare authentication failed: ${wranglerConfig.error.message}`,
-    );
-  }
-  throw new Error(
-    "Cloudflare authentication required. Did you forget to login with `wrangler login` or set CLOUDFLARE_API_TOKEN, CLOUDFLARE_API_KEY?",
-  );
 }
