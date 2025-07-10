@@ -43,6 +43,12 @@ export interface DOFSStateStoreOptions extends CloudflareApiOptions {
       };
 }
 
+/**
+ * A state store backed by a {@link https://www.npmjs.com/package/dofs Durable Object File System (DOFS)}.
+ *
+ * @see {@link https://alchemy.run/guides/dofs-state-store DOFSStateStore}
+ * @deprecated Use `DOStateStore` instead.
+ */
 export class DOFSStateStore implements StateStore {
   private prefix: string;
   private client?: Promise<DOFSStateStoreClient>;

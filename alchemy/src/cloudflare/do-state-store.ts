@@ -38,6 +38,11 @@ export interface DOStateStoreOptions extends CloudflareApiOptions {
 
 const TEMPLATE_WORKER_NAME = "do-sqlite-state-store" as const;
 
+/**
+ * A state store backed by a SQLite database in a Cloudflare Durable Object.
+ *
+ * @see {@link https://alchemy.run/guides/do-state-store DOStateStore}
+ */
 export class DOStateStore extends StateStoreProxy {
   constructor(
     scope: Scope,
@@ -65,6 +70,11 @@ export class DOStateStore extends StateStoreProxy {
         },
         body: JSON.stringify(request),
       });
+      if (!response.headers.get("Content-Type")?.includes("application/json")) {
+        throw new Error(
+          `[DOStateStore] "${method}" request failed with status ${response.status}: Expected JSON response, but got ${response.headers.get("Content-Type")}`,
+        );
+      }
       const json = (await response.json()) as StateStoreProxy.Response<
         typeof method
       >;
