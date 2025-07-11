@@ -1024,7 +1024,7 @@ export const _Worker = Resource(
           createDevCommand({
             id,
             command: dev.command,
-            cwd: dev.cwd ?? process.cwd(),
+            cwd: dev.cwd ?? props.cwd ?? process.cwd(),
             env: props.env ?? {},
           });
           url = dev.url;
@@ -1794,6 +1794,7 @@ function createDevCommand(props: {
   }
   const command = props.command.split(" ");
   const proc = spawn(command[0], command.slice(1), {
+    cwd: props.cwd,
     env: {
       ...process.env,
       ...props.env,
