@@ -1024,7 +1024,7 @@ export const _Worker = Resource(
           createDevCommand({
             id,
             command: dev.command,
-            cwd: dev.cwd ?? process.cwd(),
+            cwd: dev.cwd ?? props.cwd ?? process.cwd(),
             env: props.env ?? {},
           });
           url = dev.url;
@@ -1268,6 +1268,7 @@ export const _Worker = Resource(
       provisionEventSources(api, {
         scriptName: workerName,
         eventSources: props.eventSources,
+        adopt: props.adopt,
       }),
     );
 
@@ -1489,6 +1490,7 @@ async function provisionEventSources(
   props: {
     scriptName: string;
     eventSources?: EventSource[];
+    adopt?: boolean;
   },
 ): Promise<QueueConsumer[] | undefined> {
   if (!props.eventSources?.length) {
@@ -1503,6 +1505,7 @@ async function provisionEventSources(
           settings: eventSource.dlq
             ? { deadLetterQueue: eventSource.dlq }
             : undefined,
+          adopt: props.adopt,
           ...normalizeApiOptions(api),
         });
       }
@@ -1511,6 +1514,7 @@ async function provisionEventSources(
           queue: eventSource.queue,
           scriptName: props.scriptName,
           settings: eventSource.settings,
+          adopt: props.adopt,
           ...normalizeApiOptions(api),
         });
       }
@@ -1794,6 +1798,7 @@ function createDevCommand(props: {
   }
   const command = props.command.split(" ");
   const proc = spawn(command[0], command.slice(1), {
+    cwd: props.cwd,
     env: {
       ...process.env,
       ...props.env,

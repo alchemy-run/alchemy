@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "0.45.1",
+  "version": "0.45.5",
   "type": "module",
   "module": "./lib/index.js",
   "license": "Apache-2.0",
@@ -10,9 +10,7 @@
     "directory": "alchemy"
   },
   "scripts": {
-    "build:cli": "run-script-os",
-    "build:cli:windows": "powershell -File ./scripts/bundle-cli.ps1",
-    "build:cli:default": "./scripts/bundle-cli.sh",
+    "build:cli": "bun ./scripts/bundle-cli.ts",
     "build:workers": "bun ./scripts/build-workers.ts",
     "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && bun run build:cli && bun run build:workers",
     "drizzle:generate": "bun run scripts/drizzle-generate.ts",
@@ -150,6 +148,7 @@
     "jszip": "^3.0.0",
     "kleur": "^4.1.5",
     "libsodium-wrappers": "^0.7.15",
+    "miniflare": "^4.20250617.4",
     "pathe": "^2.0.3",
     "turndown": "^7.0.0",
     "unenv": "2.0.0-rc.15",
@@ -211,7 +210,6 @@
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
     "libsodium-wrappers": "^0.7.15",
-    "miniflare": "^4.20250617.4",
     "nitro-cloudflare-dev": "^0.2.2",
     "openpgp": "^6.1.0",
     "picocolors": "^1.1.1",

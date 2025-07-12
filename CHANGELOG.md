@@ -1,3 +1,43 @@
+## v0.45.5
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Adopt Worker with Queue event source &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/646 [<samp>(75d69)</samp>](https://github.com/sam-goodwin/alchemy/commit/75d6944f)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.45.4...v0.45.5)
+
+---
+
+## v0.45.4
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Add duplex: "half" in miniflare http server &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/643 [<samp>(bfc4f)</samp>](https://github.com/sam-goodwin/alchemy/commit/bfc4f1a2)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.45.3...v0.45.4)
+
+---
+
+## v0.45.3
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Inline sourceMap for dev mode to avoid syntax error &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/639 [<samp>(4884d)</samp>](https://github.com/sam-goodwin/alchemy/commit/4884de08)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.45.2...v0.45.3)
+
+---
+
+## v0.45.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Set cwd on Worker dev command &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/638 [<samp>(31ee8)</samp>](https://github.com/sam-goodwin/alchemy/commit/31ee81ea)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.45.1...v0.45.2)
+
+---
+
 ## v0.45.1
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
