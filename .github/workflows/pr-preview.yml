@@ -36,7 +36,9 @@ jobs:
 
       - name: Deploy Website Preview
         id: deploy
-        run: bun deploy:website
+        run: |
+          bun run build
+          bun deploy:website
         env:
           ALCHEMY_PASSWORD: ${{ env.ALCHEMY_PASSWORD }}
           ALCHEMY_STATE_STORE: cloudflare
