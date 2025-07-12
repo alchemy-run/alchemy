@@ -190,6 +190,9 @@ describe.concurrent("Scope", () => {
 const Nested = Resource(
   "Nested",
   async function (this, _id: string, props: { fileName: string }) {
+    if (this.phase === "delete") {
+      return this.destroy();
+    }
     await File("file", {
       path: props.fileName,
       content: "Hello World",
