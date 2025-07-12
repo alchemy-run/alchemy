@@ -42,7 +42,9 @@ jobs:
 
       - name: Deploy Website
         id: deploy
-        run: bun deploy:website
+        run: |
+          bun run build
+          bun deploy:website --destroy
         env:
           ALCHEMY_PASSWORD: ${{ env.ALCHEMY_PASSWORD }}
           ALCHEMY_STATE_STORE: cloudflare
