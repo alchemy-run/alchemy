@@ -1,10 +1,11 @@
 import alchemy from "alchemy";
-import { DOFSStateStore, Pipeline, R2Bucket } from "alchemy/cloudflare";
+import { Pipeline, R2Bucket } from "alchemy/cloudflare";
+import { DOStateStore } from "alchemy/state";
 import env from "./env.ts";
 
 const app = await alchemy("alchemy:telemetry", {
   ...env,
-  stateStore: (scope) => new DOFSStateStore(scope),
+  stateStore: (scope) => new DOStateStore(scope),
 });
 
 const bucket = await R2Bucket("telemetry-bucket", {
