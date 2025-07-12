@@ -233,10 +233,10 @@ You can also run the dev command directly with your preferred JavaScript runtime
 
 :::
 
-## `exec`
+## `run`
 
 ```sh
-alchemy exec [script] [options]
+alchemy run [script] [options]
 ```
 
 Run an Alchemy program with read-only access to your infrastructure. No changes will be applied to your resources.
@@ -251,26 +251,26 @@ Run an Alchemy program with read-only access to your infrastructure. No changes 
 
 :::tip
 
-Here are some examples of how to use the `exec` command:
+Here are some examples of how to use the `run` command:
 
 ```sh
 # run a script in read-only mode
-alchemy exec ./scripts/my-script.ts
+alchemy run ./scripts/my-script.ts
 
 # watch for changes and re-run
-alchemy exec ./scripts/my-script.ts --watch
+alchemy run ./scripts/my-script.ts --watch
 
 # specify a stage
-alchemy exec ./scripts/my-script.ts --stage dev
+alchemy run ./scripts/my-script.ts --stage dev
 
 # use an environment file
-alchemy exec ./scripts/my-script.ts --env-file .env.prod
+alchemy run ./scripts/my-script.ts --env-file .env.prod
 ```
 :::
 
 :::note[Equivalent Runtime Commands]
 
-You can also run the exec command directly with your preferred JavaScript runtime:
+You can also run the run command directly with your preferred JavaScript runtime:
 
 <Tabs syncKey="runtime">
   <TabItem label="bun">
