@@ -21,16 +21,17 @@ describe.concurrent("Scope", () => {
       const options = createTestOptions(storeType, "scope");
 
       test(
-        "should maintain scope context and track resources",
+        `${storeType} should maintain scope context and track resources`,
         options,
         async (scope) => {
+          const fileName = `test-${storeType}-maintain-scope-context`;
           try {
             await File("file", {
-              path: "test.txt",
+              path: fileName,
               content: "Hello World",
             });
 
-            const content = await fs.readFile("test.txt", "utf-8");
+            const content = await fs.readFile(fileName, "utf-8");
             expect(content).toBe("Hello World");
 
             expect(Scope.current).toEqual(scope);
@@ -38,9 +39,16 @@ describe.concurrent("Scope", () => {
             expect(scope).toBe(scope);
           } finally {
             await destroy(scope);
+            await assertFileDoesNotExist(fileName);
           }
         },
       );
+      async function assertFileDoesNotExist(fileName: string) {
+        try {
+          await fs.access(fileName);
+          throw new Error(`File ${fileName} should not exist`);
+        } catch {}
+      }
 
       test(
         "should have phase available in stateStore callback",
@@ -65,20 +73,23 @@ describe.concurrent("Scope", () => {
       );
 
       test(
-        "serialized scope should be equal to the original scope",
+        `${storeType} serialized scope should be equal to the original scope`,
         options,
         async (scope) => {
+          const fileName = `test-${storeType}-serialized-scope-should-be-equal-to-the-original-scope`;
+          const fileName2 = `test-${storeType}-serialized-scope-should-be-equal-to-the-original-scope-2`;
+          const fileName3 = `test-${storeType}-serialized-scope-should-be-equal-to-the-original-scope-3`;
           try {
             await File("foo", {
-              path: "test2.txt",
+              path: fileName,
               content: "Hello World",
             });
             await alchemy.run("bar", async () => {
               await File("baz", {
-                path: "test3.txt",
+                path: fileName2,
                 content: "Hello World",
               });
-              await Nested("gaz");
+              await Nested("gaz", { fileName: fileName3 });
             });
 
             const serialized = await serializeScope(scope);
@@ -94,7 +105,7 @@ describe.concurrent("Scope", () => {
                   "@scope": null,
                 },
                 "Symbol(alchemy::ResourceSeq)": 0,
-                path: "test2.txt",
+                path: fileName,
                 content: "Hello World",
               },
               [`${fqn}/bar/baz`]: {
@@ -105,7 +116,7 @@ describe.concurrent("Scope", () => {
                   "@scope": null,
                 },
                 "Symbol(alchemy::ResourceSeq)": 0,
-                path: "test3.txt",
+                path: fileName2,
                 content: "Hello World",
               },
               [`${fqn}/bar/gaz`]: {
@@ -125,12 +136,15 @@ describe.concurrent("Scope", () => {
                   "@scope": null,
                 },
                 "Symbol(alchemy::ResourceSeq)": 0,
-                path: "test4.txt",
+                path: fileName3,
                 content: "Hello World",
               },
             });
           } finally {
             await destroy(scope);
+            await assertFileDoesNotExist(fileName);
+            await assertFileDoesNotExist(fileName2);
+            await assertFileDoesNotExist(fileName3);
           }
         },
       );
@@ -173,10 +187,16 @@ describe.concurrent("Scope", () => {
   }
 });
 
-const Nested = Resource("Nested", async function (this, _id: string) {
-  await File("file", {
-    path: "test4.txt",
-    content: "Hello World",
-  });
-  return this({});
-});
+const Nested = Resource(
+  "Nested",
+  async function (this, _id: string, props: { fileName: string }) {
+    if (this.phase === "delete") {
+      return this.destroy();
+    }
+    await File("file", {
+      path: props.fileName,
+      content: "Hello World",
+    });
+    return this({});
+  },
+);

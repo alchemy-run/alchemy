@@ -1471,7 +1471,7 @@ async function provisionContainers(
       }
       return ContainerApplication(container.id, {
         image: container.image,
-        name: container.id,
+        name: container.name,
         instanceType: container.instanceType,
         observability: container.observability,
         durableObjects: {
