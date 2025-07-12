@@ -8,7 +8,8 @@
     "destroy": "bun tsx --env-file ../../.env ./alchemy.run.ts --destroy",
     "dev": "react-router dev",
     "preview": "bun run build && vite preview",
-    "types": "react-router typegen"
+    "types": "react-router typegen",
+    "postinstall": "bun run types"
   },
   "dependencies": {
     "cloudflare": "^4.3.0",
