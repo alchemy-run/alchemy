@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "deploy": "bun tsx --env-file ../../.env ./index.ts",
-    "destroy": "bun tsx --env-file ../../.env ./index.ts --destroy"
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
+    "dev": "alchemy dev"
   },
   "dependencies": {
     "alchemy": "workspace:*"
