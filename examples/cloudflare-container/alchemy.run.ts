@@ -2,7 +2,7 @@
 
 import alchemy from "alchemy";
 import { Container, Worker } from "alchemy/cloudflare";
-import { SQLiteStateStore } from "alchemy/sqlite";
+import { SQLiteStateStore } from "alchemy/state";
 import type { MyContainer } from "./src/worker.ts";
 
 const app = await alchemy("cloudflare-container", {
