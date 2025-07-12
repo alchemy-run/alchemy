@@ -22,6 +22,7 @@
     "test:all": "ALL_TESTS=1 vitest run",
     "test:fast": "vitest run --exclude ./alchemy/test/create.test.ts --exclude ./alchemy/test/smoke.test.ts",
     "test:smoke": "vitest run ./alchemy/test/smoke.test.ts",
+    "test:create": "vitest run ./alchemy/test/create.test.ts",
     "bump": "bun ./scripts/bump.ts",
     "prepare": "husky"
   },

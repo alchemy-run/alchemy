@@ -161,6 +161,7 @@ class MiniflareServer {
           headers: req.headers as any,
           body: req.body as any,
           redirect: "manual",
+          duplex: "half",
         });
         return res as unknown as Response;
       } catch (error) {
