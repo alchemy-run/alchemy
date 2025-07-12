@@ -497,7 +497,6 @@ export const ContainerApplication = Resource(
   ): Promise<ContainerApplication> {
     const api = await createCloudflareApi(props);
     if (this.phase === "delete") {
-      console.log("Deleting container application", this.output?.id);
       if (this.output?.id) {
         // Delete the container application
         await deleteContainerApplication(api, this.output.id);
