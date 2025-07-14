@@ -1241,7 +1241,7 @@ export const _Worker = Resource(
         }),
       );
       putWorkerResult = await promise.value;
-      createTail(api, id, workerName)
+      await createTail(api, id, workerName)
         .then((tail) => {
           cleanups.push(() => tail.close());
         })
