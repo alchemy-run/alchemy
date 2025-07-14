@@ -42,6 +42,12 @@ export interface CloudflareApiOptions {
   email?: string;
 }
 
+/** Used to propagate normalized auth options from a parent resource to `createCloudflareApi` in a child resource */
+export type InternalCloudflareApiOptions = CloudflareAuthOptions & {
+  baseUrl?: string;
+  accountId: string;
+};
+
 /**
  * Creates a CloudflareApi instance with automatic account ID discovery if not provided
  *
@@ -49,7 +55,7 @@ export interface CloudflareApiOptions {
  * @returns Promise resolving to a CloudflareApi instance
  */
 export async function createCloudflareApi(
-  options: Partial<CloudflareApiOptions> = {},
+  options: Partial<CloudflareApiOptions> | InternalCloudflareApiOptions = {},
 ): Promise<CloudflareApi> {
   const authOptions = await normalizeAuthOptions(options);
   const accountId =
@@ -57,11 +63,6 @@ export async function createCloudflareApi(
     process.env.CLOUDFLARE_ACCOUNT_ID ??
     process.env.CF_ACCOUNT_ID ??
     (await getCloudflareAccountId(authOptions));
-  if (accountId === undefined) {
-    throw new Error(
-      "Either accountId or CLOUDFLARE_ACCOUNT_ID must be provided",
-    );
-  }
   return new CloudflareApi({
     baseUrl: options.baseUrl,
     accountId,

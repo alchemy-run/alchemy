@@ -28,6 +28,7 @@ import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   type CloudflareApi,
   type CloudflareApiOptions,
+  type InternalCloudflareApiOptions,
   createCloudflareApi,
 } from "./api.ts";
 import type { Assets } from "./assets.ts";
@@ -1467,12 +1468,12 @@ const normalizeExportBindings = (
   );
 };
 
-const normalizeApiOptions = (api: CloudflareApi): CloudflareApiOptions => ({
+const normalizeApiOptions = (
+  api: CloudflareApi,
+): InternalCloudflareApiOptions => ({
   accountId: api.accountId,
-  apiKey: api.apiKey,
-  apiToken: api.apiToken,
-  email: api.email,
   baseUrl: api.baseUrl,
+  ...api.authOptions,
 });
 
 async function provisionContainers(

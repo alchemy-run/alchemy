@@ -1,16 +1,18 @@
+import { alchemy } from "../alchemy.ts";
+import type { Secret } from "../secret.ts";
 import type { CloudflareApiOptions } from "./api.ts";
 import { getRefreshedWranglerConfig } from "./oauth.ts";
 import { getUserEmailFromApiKey } from "./user.ts";
 
 export interface CloudflareApiTokenAuthOptions {
   type: "api-token";
-  token: string;
+  apiToken: Secret<string>;
 }
 
 export interface CloudflareApiKeyAuthOptions {
   type: "api-key";
-  key: string;
-  email: string;
+  apiKey: Secret;
+  apiEmail: string;
 }
 
 export interface CloudflareWranglerAuthOptions {
@@ -22,27 +24,49 @@ export type CloudflareAuthOptions =
   | CloudflareApiKeyAuthOptions
   | CloudflareWranglerAuthOptions;
 
+export const isCloudflareAuthOptions = (
+  input?: CloudflareApiOptions | CloudflareAuthOptions,
+): input is CloudflareAuthOptions => {
+  return (
+    input !== undefined &&
+    "type" in input &&
+    (input.type === "api-token" ||
+      input.type === "api-key" ||
+      input.type === "wrangler")
+  );
+};
+
 export async function normalizeAuthOptions(
-  input?: CloudflareApiOptions,
+  input?: CloudflareApiOptions | CloudflareAuthOptions,
 ): Promise<CloudflareAuthOptions> {
-  const email = async (apiKey: string) =>
+  if (isCloudflareAuthOptions(input)) {
+    return input;
+  }
+
+  const email = async (apiKey: Secret<string>) =>
     input?.email ??
     process.env.CLOUDFLARE_EMAIL ??
-    (await getUserEmailFromApiKey(apiKey));
+    (await getUserEmailFromApiKey(apiKey.unencrypted));
 
   if (input?.apiKey) {
-    const key = input.apiKey.unencrypted;
-    return { type: "api-key", key, email: await email(key) };
+    return {
+      type: "api-key",
+      apiKey: input.apiKey,
+      apiEmail: await email(input.apiKey),
+    };
   }
   if (input?.apiToken) {
-    return { type: "api-token", token: input.apiToken.unencrypted };
+    return { type: "api-token", apiToken: input.apiToken };
   }
   if (process.env.CLOUDFLARE_API_KEY) {
-    const key = process.env.CLOUDFLARE_API_KEY;
-    return { type: "api-key", key, email: await email(key) };
+    const key = alchemy.secret(process.env.CLOUDFLARE_API_KEY);
+    return { type: "api-key", apiKey: key, apiEmail: await email(key) };
   }
   if (process.env.CLOUDFLARE_API_TOKEN) {
-    return { type: "api-token", token: process.env.CLOUDFLARE_API_TOKEN };
+    return {
+      type: "api-token",
+      apiToken: alchemy.secret(process.env.CLOUDFLARE_API_TOKEN),
+    };
   }
   return { type: "wrangler" };
 }
@@ -52,11 +76,11 @@ export async function getCloudflareAuthHeaders(
 ): Promise<Record<string, string>> {
   switch (authOptions.type) {
     case "api-token":
-      return { Authorization: `Bearer ${authOptions.token}` };
+      return { Authorization: `Bearer ${authOptions.apiToken.unencrypted}` };
     case "api-key":
       return {
-        "X-Auth-Key": authOptions.key,
-        "X-Auth-Email": authOptions.email,
+        "X-Auth-Key": authOptions.apiKey.unencrypted,
+        "X-Auth-Email": authOptions.apiEmail,
       };
     case "wrangler": {
       const wranglerConfig = await getRefreshedWranglerConfig();
