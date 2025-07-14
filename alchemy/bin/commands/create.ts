@@ -14,6 +14,7 @@ import * as fs from "fs-extra";
 import { resolve } from "node:path";
 import pc from "picocolors";
 
+import { zod as z } from "trpc-cli";
 import { detectPackageManager } from "../../src/util/detect-package-manager.ts";
 import { throwWithContext } from "../errors.ts";
 import { initializeGitRepo, isGitInstalled } from "../services/git.ts";
@@ -21,15 +22,126 @@ import { addGitHubWorkflowToAlchemy } from "../services/github-workflow.ts";
 import { installDependencies } from "../services/package-manager.ts";
 import { copyTemplate } from "../services/template-manager.ts";
 import { ensureVibeRulesPostinstall } from "../services/vibe-rules.ts";
+import { t } from "../trpc.ts";
 import type {
   CreateInput,
   EditorType,
   ProjectContext,
   TemplateType,
 } from "../types.ts";
-import { ProjectNameSchema, TEMPLATE_DEFINITIONS } from "../types.ts";
+import {
+  EditorSchema,
+  PackageManagerSchema,
+  ProjectNameSchema,
+  TEMPLATE_DEFINITIONS,
+  TemplateSchema,
+} from "../types.ts";
 
 const isTest = process.env.NODE_ENV === "test";
+
+export const create = t.procedure
+  .meta({
+    description: "Create a new Alchemy project",
+  })
+  .input(
+    z.tuple([
+      ProjectNameSchema.optional() as unknown as z.ZodOptional<z.ZodString>,
+      z
+        .object({
+          template: TemplateSchema.optional(),
+          yes: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe("Skip prompts and use defaults"),
+          overwrite: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe("Overwrite existing directory"),
+          install: z
+            .boolean()
+            .optional()
+            .describe("Install dependencies after scaffolding"),
+          pm: PackageManagerSchema.optional().describe(
+            "Package manager to use (bun, npm, pnpm, yarn)",
+          ),
+          vibeRules: EditorSchema.optional().describe(
+            "Setup vibe-rules for the specified editor (cursor, windsurf, vscode, zed, claude-code, gemini, codex, amp, clinerules, roo, unified)",
+          ),
+          githubActions: z
+            .boolean()
+            .optional()
+            .describe("Setup GitHub Actions for PR previews"),
+          git: z.boolean().optional().describe("Initialise a git repository"),
+        })
+        .optional()
+        .default({}),
+    ]),
+  )
+  .mutation(async ({ input }) => {
+    const [name, options] = input;
+    const isTest = process.env.NODE_ENV === "test";
+    const combinedInput: CreateInput = {
+      name,
+      ...options,
+      yes: isTest || options.yes,
+    };
+    await createAlchemy(combinedInput);
+  });
+
+async function createAlchemy(cliOptions: CreateInput): Promise<void> {
+  try {
+    intro(pc.cyan("🧪 Welcome to Alchemy!"));
+
+    const context = await createProjectContext(cliOptions);
+
+    await handleDirectoryOverwrite(context);
+
+    await initializeTemplate(context);
+
+    const installInstructions =
+      context.options.install === false
+        ? `
+${pc.cyan("📦 Install dependencies:")}
+   ${context.packageManager} install
+`
+        : "";
+
+    await setupVibeRules(context);
+
+    await setupGitHubActions(context);
+
+    await setupGit(context);
+
+    note(
+      `
+${pc.cyan("📁 Navigate to your project:")}
+   cd ${context.name}
+
+${installInstructions}${pc.cyan("🚀 Deploy your project:")}
+   ${context.packageManager} run deploy
+
+${pc.cyan("🧹 Destroy your project:")}
+   ${context.packageManager} run destroy
+
+${pc.cyan("📚 Learn more:")}
+   https://alchemy.run
+`,
+      "Next Steps:",
+    );
+
+    outro(
+      pc.green(`✅ Project ${pc.yellow(context.name)} created successfully!`),
+    );
+  } catch (error) {
+    if (error instanceof Error) {
+      throwWithContext(error, "Project creation failed");
+    } else {
+      throwWithContext(new Error(String(error)), "Project creation failed");
+    }
+  }
+}
 
 async function createProjectContext(
   cliOptions: CreateInput,
@@ -316,58 +428,5 @@ async function setupGit(context: ProjectContext): Promise<void> {
   } catch (error) {
     s.stop(pc.red("Failed to initialise git repository"));
     throwWithContext(error, "Git initialisation failed");
-  }
-}
-
-export async function createAlchemy(cliOptions: CreateInput): Promise<void> {
-  try {
-    intro(pc.cyan("🧪 Welcome to Alchemy!"));
-
-    const context = await createProjectContext(cliOptions);
-
-    await handleDirectoryOverwrite(context);
-
-    await initializeTemplate(context);
-
-    const installInstructions =
-      context.options.install === false
-        ? `
-${pc.cyan("📦 Install dependencies:")}
-   ${context.packageManager} install
-`
-        : "";
-
-    await setupVibeRules(context);
-
-    await setupGitHubActions(context);
-
-    await setupGit(context);
-
-    note(
-      `
-${pc.cyan("📁 Navigate to your project:")}
-   cd ${context.name}
-
-${installInstructions}${pc.cyan("🚀 Deploy your project:")}
-   ${context.packageManager} run deploy
-
-${pc.cyan("🧹 Destroy your project:")}
-   ${context.packageManager} run destroy
-
-${pc.cyan("📚 Learn more:")}
-   https://alchemy.run
-`,
-      "Next Steps:",
-    );
-
-    outro(
-      pc.green(`✅ Project ${pc.yellow(context.name)} created successfully!`),
-    );
-  } catch (error) {
-    if (error instanceof Error) {
-      throwWithContext(error, "Project creation failed");
-    } else {
-      throwWithContext(new Error(String(error)), "Project creation failed");
-    }
   }
 }
