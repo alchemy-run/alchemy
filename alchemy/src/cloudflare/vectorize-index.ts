@@ -321,7 +321,12 @@ export async function deleteIndex(
     `/accounts/${api.accountId}/vectorize/v2/indexes/${indexName}`,
   );
 
-  if (!deleteResponse.ok && deleteResponse.status !== 404) {
+  if (
+    !deleteResponse.ok &&
+    // not 404 (Not Found) or 410 (Gone)
+    deleteResponse.status !== 404 &&
+    deleteResponse.status !== 410
+  ) {
     const errorData: any = await deleteResponse.json().catch(() => ({
       errors: [{ message: deleteResponse.statusText }],
     }));
