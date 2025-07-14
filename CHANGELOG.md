@@ -1,3 +1,14 @@
+## v0.45.6
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**: Move build script to .ts &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/648 [<samp>(93ba3)</samp>](https://github.com/sam-goodwin/alchemy/commit/93ba3a2a)
+- **cloudflare**: Build cloudflare container for linux/amd64 &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/651 [<samp>(dd947)</samp>](https://github.com/sam-goodwin/alchemy/commit/dd9479b0)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.45.5...v0.45.6)
+
+---
+
 ## v0.45.5
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

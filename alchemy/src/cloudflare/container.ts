@@ -124,7 +124,7 @@ export type Container<T = any> = {
   id: string;
 
   /** Optional human-readable name for the container */
-  name?: string;
+  name: string;
 
   /** Class name used to identify the container in Worker bindings */
   className: string;
@@ -191,7 +191,8 @@ export async function Container<T>(
     adopt: props.adopt,
   };
 
-  if (Scope.current.dev && !props.dev?.remote) {
+  const isDev = Scope.current.dev && !props.dev?.remote;
+  if (isDev) {
     const image = await Image(id, {
       name: `cloudflare-dev/${name}`, // prefix used by Miniflare
       tag,
@@ -210,7 +211,10 @@ export async function Container<T>(
   const image = await Image(id, {
     name: `${api.accountId}/${name}`,
     tag,
-    build: props.build,
+    build: {
+      platform: props.build?.platform ?? "linux/amd64",
+      ...props.build,
+    },
     registry: {
       server: "registry.cloudflare.com",
       username: credentials.username || credentials.user!,

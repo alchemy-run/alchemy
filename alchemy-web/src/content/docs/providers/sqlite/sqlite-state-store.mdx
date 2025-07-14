@@ -12,7 +12,7 @@ SQLiteStateStore automatically detects available SQLite engines in this order:
 1. **Bun SQLite** (`bun:sqlite`) - Built into Bun runtime
 2. **libSQL** (`@libsql/client`) - Turso-compatible SQLite
 
-## Explicit Engine Selection
+## Select and Configure an Engine
 
 Force a specific SQLite engine:
 
@@ -39,17 +39,6 @@ Force a specific SQLite engine:
   </TabItem>
 </Tabs>
 
-## Custom Database Location
-
-Change the database file location:
-
-```typescript
-const app = await alchemy("my-app", {
-  stateStore: (scope) => new SQLiteStateStore(scope, {
-    filename: "./data/my-app-state.db"
-  })
-});
-```
 
 ## Environment Variable Configuration
 

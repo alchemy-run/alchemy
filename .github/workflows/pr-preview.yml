@@ -71,7 +71,7 @@ jobs:
       - name: Cleanup Website Preview
         run: |
           bun run build
-          bun deploy:website --destroy --stage dev
+          bun deploy:website --destroy
         env:
           ALCHEMY_PASSWORD: ${{ env.ALCHEMY_PASSWORD }}
           ALCHEMY_STATE_STORE: cloudflare
