@@ -12,8 +12,7 @@ import { createXdgAppPaths } from "../util/xdg-paths.ts";
 
 const CLIENT_ID = "54d11594-84e4-41aa-b438-e81b8fa78ee7";
 const REDIRECT_URI = "http://localhost:8976/oauth/callback";
-const ALCHEMY_BASE_URL =
-  "https://3fbec61a-alchemy-website.alchemy-run.workers.dev"; // TODO: change to https://alchemy.run
+const ALCHEMY_BASE_URL = "https://alchemy.run";
 export const DEFAULT_SCOPES = [
   "account:read",
   "user:read",
