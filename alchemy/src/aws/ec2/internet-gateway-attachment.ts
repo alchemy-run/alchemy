@@ -109,7 +109,7 @@ export interface InternetGatewayAttachment
  *
  * // Create public subnet and route table for internet access
  * const publicSubnet = await Subnet("public-subnet", {
- *   vpc,
+ *   vpc: vpc,
  *   cidrBlock: "10.0.1.0/24",
  *   availabilityZone: "us-east-1a"
  * });

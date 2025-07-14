@@ -236,7 +236,7 @@ async function waitForRouteTableAssociationDeleted(
  *   publicSubnets.map((subnet, index) =>
  *     RouteTableAssociation(`public-association-${index}`, {
  *       routeTable: publicRouteTable,
- *       subnet
+ *       subnet: subnet
  *     })
  *   )
  * );
