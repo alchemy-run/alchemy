@@ -223,9 +223,7 @@ export const Role = Resource(
     _id: string,
     props: RoleProps,
   ): Promise<Role> {
-    const client = new IAMClient({
-      endpoint: process.env.AWS_ENDPOINT,
-    });
+    const client = new IAMClient({});
 
     if (this.phase === "delete") {
       try {

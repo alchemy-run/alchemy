@@ -48,6 +48,10 @@ import {
   normalizeWorkerBundle,
 } from "./bundle/index.ts";
 import { wrap } from "./bundle/normalize.ts";
+import {
+  type CompatibilityPreset,
+  unionCompatibilityFlags,
+} from "./compatibility-presets.ts";
 import { type Container, ContainerApplication } from "./container.ts";
 import { CustomDomain } from "./custom-domain.ts";
 import { isD1Database } from "./d1-database.ts";
@@ -214,6 +218,15 @@ export interface BaseWorkerProps<
    * The compatibility flags for the worker
    */
   compatibilityFlags?: string[];
+
+  /**
+   * Compatibility preset to automatically include common compatibility flags
+   *
+   * - "node": Includes nodejs_compat flag for Node.js compatibility
+   *
+   * @default undefined (no preset)
+   */
+  compatibility?: CompatibilityPreset;
 
   /**
    * Configuration for static assets
@@ -618,8 +631,8 @@ export function WorkerRef<
  * @example
  * // Create a real-time chat worker using Durable Objects
  * // for state management:
- * const chatRooms = new DurableObjectNamespace("chat-rooms");
- * const userStore = new DurableObjectNamespace("user-store");
+ * const chatRooms = DurableObjectNamespace("chat-rooms");
+ * const userStore = DurableObjectNamespace("user-store");
  *
  * const chat = await Worker("chat", {
  *   name: "chat-worker",
@@ -693,7 +706,7 @@ export function WorkerRef<
  *   entrypoint: "./src/data.ts",
  *   bindings: {
  *     // Bind to its own durable object
- *     STORAGE: new DurableObjectNamespace("storage", {
+ *     STORAGE: DurableObjectNamespace("storage", {
  *       className: "DataStorage"
  *     })
  *   }
@@ -834,7 +847,13 @@ export function Worker<const B extends Bindings>(
         ...(props as any),
         url: true,
         compatibilityFlags: Array.from(
-          new Set(["nodejs_compat", ...(props.compatibilityFlags ?? [])]),
+          new Set([
+            "nodejs_compat",
+            ...unionCompatibilityFlags(
+              props.compatibility,
+              props.compatibilityFlags,
+            ),
+          ]),
         ),
         entrypoint: meta!.filename,
         name: workerName,
@@ -987,7 +1006,10 @@ export const _Worker = Resource(
     const workerName = props.name ?? id;
     const compatibilityDate =
       props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
-    const compatibilityFlags = props.compatibilityFlags ?? [];
+    const compatibilityFlags = unionCompatibilityFlags(
+      props.compatibility,
+      props.compatibilityFlags,
+    );
     const dispatchNamespace =
       typeof props.namespace === "string"
         ? props.namespace
@@ -1239,8 +1261,13 @@ export const _Worker = Resource(
         }),
       );
       putWorkerResult = await promise.value;
-      const tail = await createTail(api, id, workerName);
-      cleanups.push(() => tail.close());
+      await createTail(api, id, workerName)
+        .then((tail) => {
+          cleanups.push(() => tail.close());
+        })
+        .catch((error) => {
+          logger.error(`Failed to create tail for ${workerName}`, error);
+        });
     } else {
       putWorkerResult = await putWorkerWithAssets(props, await bundle.create());
     }
@@ -1444,13 +1471,13 @@ const normalizeExportBindings = (
     Object.entries(bindings).map(([bindingName, binding]) => [
       bindingName,
       isDurableObjectNamespace(binding) && binding.scriptName === undefined
-        ? new DurableObjectNamespace(binding.id, {
+        ? DurableObjectNamespace(binding.id, {
             ...binding,
             // re-export this binding mapping to the host worker (this worker)
             scriptName,
           })
         : isWorkflow(binding) && binding.scriptName === undefined
-          ? new Workflow(binding.id, {
+          ? Workflow(binding.id, {
               ...binding,
               // re-export this binding mapping to the host worker (this worker)
               scriptName,

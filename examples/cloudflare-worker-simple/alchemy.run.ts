@@ -32,7 +32,7 @@ const [d1, kv, r2] = await Promise.all([
     adopt: true,
   }),
 ]);
-const doNamespace = new DurableObjectNamespace("DO", {
+const doNamespace = DurableObjectNamespace("DO", {
   className: "DO",
   sqlite: true,
 });

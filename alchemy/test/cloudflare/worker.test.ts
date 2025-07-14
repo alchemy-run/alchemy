@@ -218,12 +218,12 @@ describe("Worker Resource", () => {
 
     try {
       // Test 1: Duplicate DurableObjectNamespace IDs
-      const namespace1 = new DurableObjectNamespace("duplicate-id", {
+      const namespace1 = DurableObjectNamespace("duplicate-id", {
         className: "Counter1",
         scriptName: workerName,
       });
 
-      const namespace2 = new DurableObjectNamespace("duplicate-id", {
+      const namespace2 = DurableObjectNamespace("duplicate-id", {
         className: "Counter2",
         scriptName: workerName,
       });
@@ -330,13 +330,10 @@ describe("Worker Resource", () => {
 `;
 
     // Create a Durable Object namespace
-    const counterNamespace = new DurableObjectNamespace(
-      "test-counter-namespace",
-      {
-        className: "Counter",
-        scriptName: workerName,
-      },
-    );
+    const counterNamespace = DurableObjectNamespace("test-counter-namespace", {
+      className: "Counter",
+      scriptName: workerName,
+    });
 
     // Create a KV namespace
     const testKv = await KVNamespace("test-kv-namespace", {
@@ -1260,7 +1257,7 @@ describe("Worker Resource", () => {
 
     try {
       // Create an Analytics Engine dataset
-      dataset = new AnalyticsEngineDataset("test-analytics-dataset", {
+      dataset = AnalyticsEngineDataset("test-analytics-dataset", {
         dataset: `${BRANCH_PREFIX}-test-analytics-dataset`,
       });
 
@@ -1590,7 +1587,7 @@ describe("Worker Resource", () => {
         `,
         format: "esm",
         bindings: {
-          MY_DO: new DurableObjectNamespace("test-counter-migration", {
+          MY_DO: DurableObjectNamespace("test-counter-migration", {
             className: "MyDO2",
             scriptName: scriptName,
           }),
@@ -1610,7 +1607,7 @@ describe("Worker Resource", () => {
         `,
         format: "esm",
         bindings: {
-          MY_DO: new DurableObjectNamespace("test-counter-migration", {
+          MY_DO: DurableObjectNamespace("test-counter-migration", {
             className: "MyDO3",
             scriptName: scriptName,
           }),
@@ -1877,6 +1874,68 @@ describe("Worker Resource", () => {
       // (Note: The version URL may still respond but it's effectively "deleted" from a management perspective)
     } finally {
       // Clean up the remaining base worker
+      await destroy(scope);
+      await assertWorkerDoesNotExist(api, workerName);
+    }
+  });
+
+  test("create worker with compatibility preset", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-compatibility-preset`;
+
+    let worker: Worker | undefined;
+    try {
+      // Create a worker with the "node" compatibility preset
+      worker = await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from Node.js compatible worker!', {
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            }
+          };
+        `,
+        format: "esm",
+        url: true,
+        compatibility: "node", // Use the "node" preset
+      });
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.url).toBeTruthy();
+
+      // Verify that the "node" preset automatically includes nodejs_compat flag
+      expect(worker.compatibilityFlags).toContain("nodejs_compat");
+
+      // Test that preset flags are combined with user-provided flags
+      worker = await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          import crypto from 'node:crypto';
+
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from Node.js compatible worker with additional flags!', {
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            }
+          };
+        `,
+        format: "esm",
+        url: true,
+        compatibility: "node",
+        compatibilityFlags: ["nodejs_als"], // Add valid compatibility flag in addition to preset
+      });
+
+      // Verify that both preset flags and user-provided flags are present
+      expect(worker.compatibilityFlags).toContain("nodejs_compat"); // From preset
+      expect(worker.compatibilityFlags).toContain("nodejs_als"); // From user
+    } finally {
       await destroy(scope);
       await assertWorkerDoesNotExist(api, workerName);
     }

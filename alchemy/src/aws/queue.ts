@@ -143,9 +143,7 @@ export const Queue = Resource(
     _id: string,
     props: QueueProps,
   ): Promise<Queue> {
-    const client = new SQSClient({
-      endpoint: process.env.AWS_ENDPOINT,
-    });
+    const client = new SQSClient({});
     // Don't automatically add .fifo suffix - user must include it in queueName
     const queueName = props.queueName;
 

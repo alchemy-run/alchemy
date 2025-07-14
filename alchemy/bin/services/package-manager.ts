@@ -1,5 +1,5 @@
-import { log } from "@clack/prompts";
 import { execa } from "execa";
+import { throwWithContext } from "../errors.ts";
 import type { ProjectContext } from "../types.ts";
 
 export const PackageManager = {
@@ -91,7 +91,6 @@ export async function installDependencies(
       });
     }
   } catch (error) {
-    log.error("Failed to install dependencies");
-    throw error;
+    throwWithContext(error, "Failed to install dependencies");
   }
 }

@@ -116,7 +116,7 @@ const provision = memoize(async (options: DOStateStoreOptions) => {
       },
       compatibilityFlags: [],
       bindings: {
-        STORE: new DurableObjectNamespace(scriptName, {
+        STORE: DurableObjectNamespace(scriptName, {
           className: "Store",
           sqlite: true,
         }),
