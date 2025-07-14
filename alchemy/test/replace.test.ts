@@ -7,12 +7,113 @@ import type { Scope } from "../src/scope.js";
 import "../src/test/vitest.js";
 import { BRANCH_PREFIX, createTestOptions } from "./util.js";
 
+const storeTypes = ["fs", "dofs", "sqlite", "d1", "do"] as const;
+
+describe.sequential("Replace-Sequential", () => {
+  for (const storeType of storeTypes) {
+    describe.sequential(storeType, () => {
+      const options = createTestOptions(storeType, "replace");
+      const deleted: string[] = [];
+      const failed = new Set();
+
+      interface Replacable extends Resource<`Replacable-sequential-${string}`> {
+        name: string;
+      }
+
+      const Replacable = Resource(
+        `Replacable-sequential-${storeType}`,
+        async function (
+          this: Context<Replacable>,
+          _id: string,
+          props: {
+            name: string;
+            fail?: boolean;
+            child?: boolean;
+            replaceOnCreate?: boolean;
+          },
+        ) {
+          if (props.replaceOnCreate && this.phase === "create") {
+            this.replace();
+          }
+          if (this.phase === "delete") {
+            if (props.fail) {
+              if (!failed.has(props.name)) {
+                failed.add(props.name);
+                throw new Error(`Failed to delete ${props.name}`);
+              }
+            }
+            deleted.push(props.name);
+            return this.destroy();
+          }
+          if (this.phase === "update") {
+            if (props.name !== this.output.name) {
+              this.replace();
+            }
+          }
+          if (props.child) {
+            await Replacable("child", {
+              name: "child",
+            });
+          }
+          return this({
+            name: props.name,
+          });
+        },
+      );
+
+      vitestTest.sequential(
+        "replace should not trigger deletion of entire stage scope",
+        async () => {
+          let app: Scope;
+          try {
+            app = await alchemy(
+              "replace should not trigger deletion of entire stage scope",
+              {
+                ...options,
+                quiet: true,
+              },
+            );
+
+            await Replacable("foo-6", {
+              name: "foo-6",
+            });
+            await Replacable("bar-6", {
+              name: "bar-6",
+            });
+            await Replacable("bar-6", {
+              name: "baz-6",
+            });
+
+            expect(deleted).not.toContain("foo-6");
+            expect(deleted).not.toContain("bar-6");
+            expect(deleted).not.toContain("baz-6");
+
+            await app.finalize();
+
+            expect(deleted).not.toContain("foo-6");
+            expect(deleted).toContain("bar-6");
+            expect(deleted).not.toContain("baz-6");
+          } finally {
+            await destroy(app!);
+
+            expect(deleted).toContain("foo-6");
+            expect(deleted).toContain("bar-6");
+            expect(deleted).toContain("baz-6");
+
+            globalThis.__ALCHEMY_STORAGE__?.disable();
+          }
+        },
+      );
+    });
+  }
+});
+
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
 describe.concurrent("Replace", () => {
-  for (const storeType of ["fs", "dofs", "sqlite", "d1"]) {
+  for (const storeType of storeTypes) {
     describe(storeType, () => {
       const options = createTestOptions(storeType, "replace");
       const deleted: string[] = [];
@@ -324,45 +425,6 @@ describe.concurrent("Replace", () => {
             ).rejects.toThrow("cannot be replaced in create phase.");
           } finally {
             await destroy(scope);
-          }
-        },
-      );
-
-      vitestTest(
-        "replace should not trigger deletion of entire stage scope",
-        async () => {
-          let app: Scope;
-          try {
-            app = await alchemy("Replace-Testing", {
-              stage: "dev",
-              quiet: true,
-            });
-
-            await Replacable("foo-6", {
-              name: "foo-6",
-            });
-            await Replacable("bar-6", {
-              name: "bar-6",
-            });
-            await Replacable("bar-6", {
-              name: "baz-6",
-            });
-
-            expect(deleted).not.toContain("foo-6");
-            expect(deleted).not.toContain("bar-6");
-            expect(deleted).not.toContain("baz-6");
-
-            await app.finalize();
-
-            expect(deleted).not.toContain("foo-6");
-            expect(deleted).toContain("bar-6");
-            expect(deleted).not.toContain("baz-6");
-          } finally {
-            await destroy(app!);
-
-            expect(deleted).toContain("foo-6");
-            expect(deleted).toContain("bar-6");
-            expect(deleted).toContain("baz-6");
           }
         },
       );

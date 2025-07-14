@@ -169,7 +169,7 @@ const _VectorizeIndex = Resource(
         if (
           props.adopt &&
           error instanceof CloudflareApiError &&
-          error.message.includes("already exists")
+          error.message.includes("vectorize.index.duplicate_name")
         ) {
           logger.log(`Index ${indexName} already exists, adopting it`);
           // Find the existing index
@@ -321,7 +321,12 @@ export async function deleteIndex(
     `/accounts/${api.accountId}/vectorize/v2/indexes/${indexName}`,
   );
 
-  if (!deleteResponse.ok && deleteResponse.status !== 404) {
+  if (
+    !deleteResponse.ok &&
+    // not 404 (Not Found) or 410 (Gone)
+    deleteResponse.status !== 404 &&
+    deleteResponse.status !== 410
+  ) {
     const errorData: any = await deleteResponse.json().catch(() => ({
       errors: [{ message: deleteResponse.statusText }],
     }));
