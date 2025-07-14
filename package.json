@@ -11,6 +11,7 @@
   },
   "scripts": {
     "build": "cd ./alchemy && bunx tsc -b && bunx tsc -p tsconfig.test.json && bun run --filter alchemy build",
+    "build:cli": "bun run --filter alchemy build:cli",
     "check": "bun run build && bun tsc -b && biome check",
     "fix": "biome check --write",
     "deploy:repo": "bun ./stacks/src/repo.run.ts",

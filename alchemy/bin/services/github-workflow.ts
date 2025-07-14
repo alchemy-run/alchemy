@@ -16,32 +16,6 @@ export async function addGitHubWorkflowToAlchemy(
     const workflowDir = path.join(context.path, ".github", "workflows");
     await fs.ensureDir(workflowDir);
 
-    const actionDir = path.join(
-      context.path,
-      ".github",
-      "actions",
-      "setup-alchemy",
-    );
-    await fs.ensureDir(actionDir);
-
-    const setupActionContent = `name: 'Setup Alchemy Environment'
-description: 'Sets up Bun and installs dependencies for Alchemy projects'
-
-runs:
-  using: 'composite'
-  steps:
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v1
-      with:
-        bun-version: latest
-
-    - name: Install dependencies
-      shell: bash
-      run: bun install
-`;
-
-    await fs.writeFile(path.join(actionDir, "action.yml"), setupActionContent);
-
     const prPreviewWorkflow = `name: Preview
 
 on:
@@ -63,8 +37,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Alchemy Environment
-        uses: ./.github/actions/setup-alchemy
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        shell: bash
+        run: bun install
 
       - name: Deploy Preview
         run: bun run deploy
@@ -87,8 +67,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Alchemy Environment
-        uses: ./.github/actions/setup-alchemy
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        shell: bash
+        run: bun install
 
       - name: Cleanup Preview
         run: bun run destroy
@@ -122,8 +108,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Alchemy Environment
-        uses: ./.github/actions/setup-alchemy
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        shell: bash
+        run: bun install
 
       - name: Deploy to Production
         run: bun run deploy
