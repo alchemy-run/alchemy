@@ -1,5 +1,8 @@
+import { execa } from "execa";
+import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
-import { exec } from "../os/exec.ts";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 /**
  * Options for Docker API requests
@@ -9,6 +12,16 @@ export interface DockerApiOptions {
    * Custom path to Docker binary
    */
   dockerPath?: string;
+
+  /**
+   * Optional directory that will be used as the Docker CLI configuration
+   * directory (equivalent to setting the DOCKER_CONFIG environment variable).
+   *
+   * This makes authentication actions like `docker login` operate on an
+   * isolated credentials store which avoids race-conditions when multiple
+   * processes manipulate the default global config simultaneously.
+   */
+  configDir?: string;
 }
 
 type VolumeInfo = {
@@ -27,6 +40,8 @@ type VolumeInfo = {
 export class DockerApi {
   /** Path to Docker CLI */
   readonly dockerPath: string;
+  /** Directory to use for Docker CLI config */
+  readonly configDir?: string;
 
   /**
    * Create a new Docker API client
@@ -35,6 +50,7 @@ export class DockerApi {
    */
   constructor(options: DockerApiOptions = {}) {
     this.dockerPath = options.dockerPath || "docker";
+    this.configDir = options.configDir;
   }
 
   /**
@@ -44,14 +60,45 @@ export class DockerApi {
    * @returns Result of the command
    */
   async exec(args: string[]): Promise<{ stdout: string; stderr: string }> {
-    const command = `${this.dockerPath} ${args.join(" ")}`;
-    const result = (await exec(command, {
-      captureOutput: true,
-      shell: true,
-      env: process.env,
-    })) as { stdout: string; stderr: string };
+    // If a custom config directory is provided, ensure all commands use it by
+    // setting the DOCKER_CONFIG env variable for the spawned process.
+    const env = this.configDir
+      ? { ...process.env, DOCKER_CONFIG: this.configDir }
+      : process.env;
 
-    return result;
+    // Buffers to capture output
+    let stdout = "";
+    let stderr = "";
+
+    // Create the subprocess
+    const subprocess = execa(this.dockerPath, args, {
+      env: env,
+      // Don't buffer - we'll handle streams manually
+      buffer: false,
+      encoding: "utf8",
+    });
+
+    // Stream stdout in real-time
+    subprocess.stdout?.on("data", (chunk: string) => {
+      process.stdout.write(chunk);
+      stdout += chunk;
+    });
+
+    // Stream stderr in real-time
+    subprocess.stderr?.on("data", (chunk: string) => {
+      process.stderr.write(chunk);
+      stderr += chunk;
+    });
+
+    // Wait for the process to complete
+    try {
+      await subprocess;
+    } catch (error: any) {
+      // Process failed, but we still have the output
+      throw new Error(stderr || error.message || "Command failed");
+    }
+
+    return { stdout, stderr };
   }
 
   /**
@@ -377,6 +424,27 @@ export class DockerApi {
     username: string,
     password: string,
   ): Promise<void> {
+    // If we have a custom config directory, write credentials directly to
+    // config.json to avoid race conditions with the global credential store
+    if (this.configDir) {
+      const authConfigPath = path.join(this.configDir, "config.json");
+      const authToken = Buffer.from(`${username}:${password}`).toString(
+        "base64",
+      );
+
+      const configJson = {
+        auths: {
+          [registry]: {
+            auth: authToken,
+          },
+        },
+      };
+
+      await fs.writeFile(authConfigPath, JSON.stringify(configJson));
+      return;
+    }
+
+    // Fallback to original docker login behavior for backwards compatibility
     return new Promise((resolve, reject) => {
       const args = [
         "login",
@@ -429,6 +497,19 @@ export class DockerApi {
    * @param registry Registry URL
    */
   async logout(registry: string): Promise<void> {
+    // If we have a custom config directory, we can just remove the auth entry
+    // or delete the config file entirely since it's isolated
+    if (this.configDir) {
+      try {
+        const authConfigPath = path.join(this.configDir, "config.json");
+        await fs.unlink(authConfigPath);
+      } catch {
+        // Ignore errors - file might not exist or already be deleted
+      }
+      return;
+    }
+
+    // Fallback to original docker logout behavior
     try {
       await this.exec(["logout", registry]);
     } catch (error) {

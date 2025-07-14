@@ -19,24 +19,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache VitePress cache and OG images
-        uses: actions/cache@v4
-        with:
-          path: |
-            alchemy-web/.vitepress/cache
-            alchemy-web/public/og-images
-          key: ${{ runner.os }}-vitepress-cache
-
       - name: Setup Alchemy Environment
         uses: ./.github/actions/setup-alchemy
         with:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-west-2
 
+      - name: Get Astro version
+        id: astro-version
+        run: echo "version=$(bun info astro version)" >> $GITHUB_OUTPUT
+
+      - name: Cache Astro cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            alchemy-web/node_modules/.astro
+            alchemy-web/.astro
+          key: astro-cache-${{ steps.astro-version.outputs.version }}
+
       - name: Check Types
         run: bun run check
 
-      - name: Publish docs
-        uses: ./.github/actions/run-with-alchemy-env
-        with:
-          command: bun run deploy:website
+      - name: Deploy Website
+        id: deploy
+        run: |
+          bun run build
+          bun install # to install the built `alchemy` CLI
+          bun deploy:website
+        env:
+          ALCHEMY_PASSWORD: ${{ env.ALCHEMY_PASSWORD }}
+          ALCHEMY_STATE_STORE: cloudflare
+          ALCHEMY_STATE_TOKEN: ${{ env.ALCHEMY_STATE_TOKEN }}
+          AWS_REGION: us-west-2
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_KEY: ${{ env.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ env.CLOUDFLARE_EMAIL }}
+          STAGE: prod

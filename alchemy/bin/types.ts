@@ -19,7 +19,7 @@ export const TemplateSchema = z
 export type TemplateType = z.infer<typeof TemplateSchema>;
 
 export const PackageManagerSchema = z
-  .enum(["bun", "npm", "pnpm", "yarn"])
+  .enum(["bun", "npm", "pnpm", "yarn", "deno"])
   .describe("Package manager");
 export type PackageManager = z.infer<typeof PackageManagerSchema>;
 
@@ -68,16 +68,38 @@ export interface WebsiteOptions {
 export type CreateInput = {
   name?: string;
   template?: TemplateType;
-  packageManager?: PackageManager;
-  bun?: boolean;
-  npm?: boolean;
-  pnpm?: boolean;
-  yarn?: boolean;
+  pm?: PackageManager;
   yes?: boolean;
   overwrite?: boolean;
   install?: boolean;
+  vibeRules?: EditorType;
+  githubActions?: boolean;
+  git?: boolean;
 };
 
 export type CLIInput = CreateInput & {
   projectDirectory?: string;
 };
+
+export type InstallInput = {
+  editor: EditorType;
+  packageManager?: PackageManager;
+  cwd?: string;
+};
+
+export const EditorSchema = z
+  .enum([
+    "cursor",
+    "windsurf",
+    "vscode",
+    "zed",
+    "claude-code",
+    "gemini",
+    "codex",
+    "amp",
+    "clinerules",
+    "roo",
+    "unified",
+  ])
+  .describe("Editor for vibe-rules");
+export type EditorType = z.infer<typeof EditorSchema>;

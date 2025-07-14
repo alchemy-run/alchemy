@@ -1,35 +1,23 @@
 import alchemy from "alchemy";
-import {
-  DOStateStore,
-  KVNamespace,
-  R2Bucket,
-  SvelteKit,
-} from "alchemy/cloudflare";
+import { KVNamespace, R2Bucket, SvelteKit } from "alchemy/cloudflare";
 
-const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? "";
-const app = await alchemy("cloudflare-sveltekit", {
-  stateStore:
-    process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new DOStateStore(scope)
-      : undefined,
-});
+const app = await alchemy("cloudflare-sveltekit");
 
-export const website = await SvelteKit(
-  `cloudflare-sveltekit-website${BRANCH_PREFIX}`,
-  {
-    bindings: {
-      AUTH_STORE: await KVNamespace("AUTH_STORE", {
-        title: `cloudflare-sveltekit-auth-store${BRANCH_PREFIX}`,
-        adopt: true,
-      }),
-      STORAGE: await R2Bucket(`cloudflare-sveltekit-storage${BRANCH_PREFIX}`, {
-        allowPublicAccess: false,
-        adopt: true,
-      }),
-    },
-    url: true,
+export const website = await SvelteKit("website", {
+  name: `${app.name}-${app.stage}-website`,
+  bindings: {
+    AUTH_STORE: await KVNamespace("AUTH_STORE", {
+      title: `${app.name}-${app.stage}-auth-store`,
+      adopt: true,
+    }),
+    STORAGE: await R2Bucket("storage", {
+      allowPublicAccess: false,
+      adopt: true,
+      name: `${app.name}-${app.stage}-storage`,
+    }),
   },
-);
+  url: true,
+});
 
 console.log(website.url);
 

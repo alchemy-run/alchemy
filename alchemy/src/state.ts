@@ -1,14 +1,5 @@
-import {
-  ResourceFQN,
-  ResourceID,
-  ResourceKind,
-  ResourceScope,
-  ResourceSeq,
-  type Resource,
-  type ResourceProps,
-} from "./resource.ts";
-import { Scope } from "./scope.ts";
-import { deserialize } from "./serde.ts";
+import type { Resource, ResourceProps } from "./resource.ts";
+import type { Scope } from "./scope.ts";
 
 export type State<
   Kind extends string = string,
@@ -49,35 +40,4 @@ export interface StateStore {
   all(): Promise<Record<string, State>>;
   set(key: string, value: State): Promise<void>;
   delete(key: string): Promise<void>;
-}
-
-export async function deserializeState(
-  scope: Scope,
-  content: string,
-): Promise<State> {
-  const state = (await deserialize(scope, JSON.parse(content))) as State;
-
-  if (ResourceID in state.output) {
-    // this is a new state
-    return state;
-  }
-  const output: any = state.output;
-  delete output.Kind;
-  delete output.ID;
-  delete output.FQN;
-  delete output.Scope;
-  delete output.Seq;
-  // fix this bug
-  if (state.kind === "scope") {
-    state.kind = Scope.KIND;
-  }
-  output[ResourceKind] = state.kind;
-  output[ResourceID] = state.id;
-  output[ResourceFQN] = state.fqn;
-  output[ResourceScope] = scope;
-  output[ResourceSeq] = state.seq;
-  state.output = output;
-  // re-write the state with the migrated format
-  await scope.state.set(state.id, state);
-  return state;
 }

@@ -9,8 +9,8 @@ import {
 } from "@aws-sdk/client-s3";
 import { ResourceScope } from "../resource.ts";
 import type { Scope } from "../scope.ts";
-import { serialize } from "../serde.ts";
-import { deserializeState, type State, type StateStore } from "../state.ts";
+import { serialize, deserialize } from "../serde.ts";
+import type { State, StateStore } from "../state.ts";
 import { ignore } from "../util/ignore.ts";
 import { retry } from "./retry.ts";
 
@@ -66,6 +66,7 @@ export class S3StateStore implements StateStore {
     this.bucketName = options.bucketName ?? "alchemy-state";
 
     this.client = new S3Client({
+      endpoint: process.env.AWS_ENDPOINT,
       region: options.region,
     });
   }
@@ -175,7 +176,10 @@ export class S3StateStore implements StateStore {
       const content = await response.Body.transformToString();
 
       // Parse and deserialize the state data
-      const state = await deserializeState(this.scope, content);
+      const state = (await deserialize(
+        this.scope,
+        JSON.parse(content),
+      )) as State;
 
       // Create a new state object with proper output
       return {

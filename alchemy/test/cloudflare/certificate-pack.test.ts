@@ -1,6 +1,9 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
-import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import {
+  type CloudflareApi,
+  createCloudflareApi,
+} from "../../src/cloudflare/api.ts";
 import { CertificatePack } from "../../src/cloudflare/certificate-pack.ts";
 import { Zone } from "../../src/cloudflare/zone.ts";
 import { destroy } from "../../src/destroy.ts";
@@ -14,7 +17,7 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("CertificatePack Resource", () => {
+describe.skipIf(!process.env.ALL_TESTS)("CertificatePack Resource", () => {
   // Use BRANCH_PREFIX for deterministic, non-colliding resource names
   const testDomain = `${BRANCH_PREFIX}-cert-test.dev`;
 
@@ -471,7 +474,7 @@ describe("CertificatePack Resource", () => {
  * Helper function to verify certificate pack was deleted
  */
 async function assertCertificatePackDoesNotExist(
-  api: ReturnType<typeof createCloudflareApi>,
+  api: CloudflareApi,
   zoneId: string,
   certificatePackId: string,
 ): Promise<void> {

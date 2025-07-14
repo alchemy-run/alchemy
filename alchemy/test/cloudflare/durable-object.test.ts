@@ -4,7 +4,6 @@ import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
-import { withExponentialBackoff } from "../../src/util/retry.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
 import "../../src/test/vitest.ts";
@@ -79,7 +78,7 @@ describe("Durable Object Namespace", () => {
       expect(worker.bindings).toEqual({});
 
       // Create a Durable Object namespace
-      const counterNamespace = new DurableObjectNamespace(
+      const counterNamespace = DurableObjectNamespace(
         "test-counter-namespace",
         {
           className: "Counter",
@@ -123,7 +122,7 @@ describe("Durable Object Namespace", () => {
       expect(worker.name).toEqual(workerName);
 
       // Create a Durable Object namespace
-      const counterNamespace = new DurableObjectNamespace(
+      const counterNamespace = DurableObjectNamespace(
         "test-counter-env-namespace",
         {
           className: "Counter",
@@ -291,13 +290,10 @@ describe("Durable Object Namespace", () => {
         url: true, // Enable workers.dev URL
         bindings: {
           // Create a durable object namespace for the provider worker
-          SHARED_COUNTER: new DurableObjectNamespace(
-            "provider-counter-namespace",
-            {
-              className: "SharedCounter",
-              // No scriptName means it binds to its own script
-            },
-          ), // Bind to its own durable object
+          SHARED_COUNTER: DurableObjectNamespace("provider-counter-namespace", {
+            className: "SharedCounter",
+            // No scriptName means it binds to its own script
+          }), // Bind to its own durable object
         },
       });
 
@@ -315,7 +311,7 @@ describe("Durable Object Namespace", () => {
         url: true, // Enable workers.dev URL
         bindings: {
           // Create a cross-script durable object namespace that references the first worker
-          SHARED_COUNTER: new DurableObjectNamespace(
+          SHARED_COUNTER: DurableObjectNamespace(
             "cross-script-counter-namespace",
             {
               className: "SharedCounter",
@@ -474,7 +470,7 @@ export default {
       expect(worker.name).toEqual(workerName);
 
       // Create a stable DO namespace with the original Counter class
-      const counterNamespace = new DurableObjectNamespace(
+      const counterNamespace = DurableObjectNamespace(
         "test-counter-namespace",
         {
           className: "Counter",
@@ -495,7 +491,7 @@ export default {
       expect(worker.bindings).toBeDefined();
 
       // Now update the namespace to use CounterV2 class
-      const updatedNamespace = new DurableObjectNamespace(
+      const updatedNamespace = DurableObjectNamespace(
         "test-counter-namespace",
         {
           className: "CounterV2",
@@ -642,13 +638,10 @@ export default {
         url: true, // Enable workers.dev URL
         bindings: {
           // Create a durable object namespace for the provider worker
-          SHARED_COUNTER: new DurableObjectNamespace(
-            "provider-counter-namespace",
-            {
-              className: "SharedCounter",
-              // No scriptName means it binds to its own script
-            },
-          ), // Bind to its own durable object
+          SHARED_COUNTER: DurableObjectNamespace("provider-counter-namespace", {
+            className: "SharedCounter",
+            // No scriptName means it binds to its own script
+          }), // Bind to its own durable object
         },
       });
 
@@ -688,19 +681,7 @@ export default {
 
       // Test that both workers respond to basic requests
       const url = doProviderWorker.url!;
-      const doProviderResponse = await withExponentialBackoff(
-        () =>
-          fetch(url).then((res) => {
-            if (!res.ok) {
-              throw new Error(
-                `Failed to fetch ${url}: ${res.status} ${res.statusText}`,
-              );
-            }
-            return res;
-          }),
-        () => true,
-      );
-      expect(doProviderResponse.status).toEqual(200);
+      const doProviderResponse = await fetchAndExpectOK(url);
       const doProviderText = await doProviderResponse.text();
       expect(doProviderText).toEqual("DO Provider Worker is running!");
 
@@ -774,7 +755,7 @@ export default {
           export default { fetch() {} }
         `,
         bindings: {
-          DO: new DurableObjectNamespace("DO", {
+          DO: DurableObjectNamespace("DO", {
             className: "Counter",
           }),
         },
@@ -790,7 +771,7 @@ export default {
         `,
         bindings: {
           // mapped by stable ID "DO"
-          DO_1: new DurableObjectNamespace("DO", {
+          DO_1: DurableObjectNamespace("DO", {
             // should migrate to Counter 2
             className: "Counter2",
           }),

@@ -1,16 +1,8 @@
 import alchemy from "alchemy";
-import { Queue, R2Bucket, R2RestStateStore, Worker } from "alchemy/cloudflare";
+import { Queue, R2Bucket, Worker } from "alchemy/cloudflare";
 import { type } from "arktype";
 
-const BRANCH_PREFIX = process.env.BRANCH_PREFIX ?? process.env.USER;
-
-const app = await alchemy("cloudflare-worker-bootstrap", {
-  stage: BRANCH_PREFIX,
-  stateStore:
-    process.env.ALCHEMY_STATE_STORE === "cloudflare"
-      ? (scope) => new R2RestStateStore(scope)
-      : undefined,
-});
+const app = await alchemy("cloudflare-worker-bootstrap");
 
 type Message = typeof Message.infer;
 const Message = type({
@@ -23,7 +15,7 @@ const ReceiveRequest = type({
 });
 
 const bucket = await R2Bucket("bucket", {
-  name: `cloudflare-worker-bootstrap-${BRANCH_PREFIX}`,
+  name: `${app.name}-${app.stage}-bucket`,
   accessKey: await alchemy.secret.env.R2_ACCESS_KEY_ID,
   secretAccessKey: await alchemy.secret.env.R2_SECRET_ACCESS_KEY,
   adopt: true,
@@ -31,12 +23,12 @@ const bucket = await R2Bucket("bucket", {
 });
 
 const queue = await Queue<Message>("queue", {
-  name: `cloudflare-worker-bootstrap-queue-${BRANCH_PREFIX}`,
+  name: `${app.name}-${app.stage}-queue`,
   adopt: true,
 });
 
 const worker = Worker("queue-consumer", import.meta, {
-  name: `cloudflare-worker-bootstrap-${BRANCH_PREFIX}`,
+  name: `${app.name}-${app.stage}-worker`,
   adopt: true,
   async fetch(request) {
     const url = new URL(request.url);

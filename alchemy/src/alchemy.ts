@@ -13,7 +13,7 @@ import {
   ResourceSeq,
 } from "./resource.ts";
 import { isRuntime } from "./runtime/global.ts";
-import { Scope } from "./scope.ts";
+import { DEFAULT_STAGE, Scope } from "./scope.ts";
 import { secret } from "./secret.ts";
 import type { StateStoreType } from "./state.ts";
 import type { LoggerApi } from "./util/cli.ts";
@@ -34,12 +34,14 @@ function parseCliArgs(): Partial<AlchemyOptions> {
     options.phase = "read";
   }
 
-  if (
-    args.includes("--dev") ||
+  if (args.includes("--local") || args.includes("--dev")) {
+    options.dev = "prefer-local";
+  } else if (
+    args.includes("--remote") ||
     args.includes("--watch") ||
     process.execArgv.includes("--watch")
   ) {
-    options.dev = true;
+    options.dev = "prefer-remote";
   }
 
   // Parse quiet flag
@@ -52,6 +54,7 @@ function parseCliArgs(): Partial<AlchemyOptions> {
   if (stageIndex !== -1 && stageIndex + 1 < args.length) {
     options.stage = args[stageIndex + 1];
   }
+  options.stage ??= process.env.STAGE;
 
   // Get password from environment variables
   if (process.env.ALCHEMY_PASSWORD) {
@@ -189,19 +192,18 @@ async function _alchemy(
       });
     const root = new Scope({
       ...mergedOptions,
-      appName,
+      parent: undefined,
+      scopeName: appName,
       phase,
       password: mergedOptions?.password ?? process.env.ALCHEMY_PASSWORD,
       telemetryClient,
     });
+    const stageName = mergedOptions?.stage ?? DEFAULT_STAGE;
     const stage = new Scope({
       ...mergedOptions,
-      scopeName:
-        mergedOptions?.stage ?? process.env.ALCHEMY_STAGE ?? process.env.USER,
       parent: root,
-      appName,
-      stage:
-        mergedOptions?.stage ?? process.env.ALCHEMY_STAGE ?? process.env.USER,
+      scopeName: stageName,
+      stage: stageName,
     });
     try {
       Scope.storage.enterWith(root);
@@ -346,11 +348,11 @@ export interface AlchemyOptions {
    */
   phase?: Phase;
   /**
-   * Determines whether Alchemy will run in dev mode.
+   * Determines how Alchemy will run in development mode.
    *
-   * @default - `true` if `--dev` or `--watch` is passed as a CLI argument, `false` otherwise
+   * @default - `"prefer-local"` if `--dev` or `--local` is passed as a CLI argument, `"prefer-remote"` if `--remote` or `--watch` is passed as a CLI argument, `undefined` otherwise
    */
-  dev?: boolean;
+  dev?: "prefer-local" | "prefer-remote";
   /**
    * Name to scope the resource state under (e.g. `.alchemy/{stage}/..`).
    *
@@ -449,6 +451,7 @@ async function run<T>(
     });
   const _scope = new Scope({
     ...options,
+    parent: options?.parent,
     scopeName: id,
     telemetryClient,
   });
