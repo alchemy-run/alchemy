@@ -1,5 +1,6 @@
 import alchemy from "alchemy";
-import { DOStateStore, Pipeline, R2Bucket } from "alchemy/cloudflare";
+import { Pipeline, R2Bucket } from "alchemy/cloudflare";
+import { DOStateStore } from "alchemy/state";
 import env from "./env.ts";
 
 const app = await alchemy("alchemy:telemetry", {

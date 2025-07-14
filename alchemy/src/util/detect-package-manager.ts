@@ -1,18 +1,31 @@
-import fs from "node:fs";
+import { exists } from "./exists.ts";
 
-export type PackageManager = "bun" | "pnpm" | "yarn" | "npm";
+export type PackageManager = "bun" | "pnpm" | "yarn" | "npm" | "deno";
 
-export function detectPackageManager(): PackageManager {
-  if (fs.existsSync("bun.lockb")) return "bun";
-  if (fs.existsSync("pnpm-lock.yaml")) return "pnpm";
-  if (fs.existsSync("yarn.lock")) return "yarn";
+export async function detectPackageManager(
+  path: string = process.cwd(),
+): Promise<PackageManager> {
+  if (await exists(`${path}/deno.lock`)) return "deno";
+  if (
+    (await exists(`${path}/deno.json`)) ||
+    (await exists(`${path}/deno.jsonc`))
+  )
+    return "deno";
+  if (await exists(`${path}/bun.lockb`)) return "bun";
+  if (await exists(`${path}/pnpm-lock.yaml`)) return "pnpm";
+  if (await exists(`${path}/yarn.lock`)) return "yarn";
 
   if (process.env.npm_execpath?.includes("bun")) {
     return "bun";
   }
 
+  if (process.env.DENO) {
+    return "deno";
+  }
+
   const userAgent = process.env.npm_config_user_agent;
   if (userAgent) {
+    if (userAgent.startsWith("deno")) return "deno";
     if (userAgent.startsWith("bun")) return "bun";
     if (userAgent.startsWith("pnpm")) return "pnpm";
     if (userAgent.startsWith("yarn")) return "yarn";

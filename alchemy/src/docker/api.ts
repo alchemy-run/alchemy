@@ -1,8 +1,8 @@
+import { execa } from "execa";
 import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { exec } from "../os/exec.ts";
 
 /**
  * Options for Docker API requests
@@ -66,14 +66,39 @@ export class DockerApi {
       ? { ...process.env, DOCKER_CONFIG: this.configDir }
       : process.env;
 
-    const command = `${this.dockerPath} ${args.join(" ")}`;
-    const result = (await exec(command, {
-      captureOutput: true,
-      shell: true,
-      env,
-    })) as { stdout: string; stderr: string };
+    // Buffers to capture output
+    let stdout = "";
+    let stderr = "";
 
-    return result;
+    // Create the subprocess
+    const subprocess = execa(this.dockerPath, args, {
+      env: env,
+      // Don't buffer - we'll handle streams manually
+      buffer: false,
+      encoding: "utf8",
+    });
+
+    // Stream stdout in real-time
+    subprocess.stdout?.on("data", (chunk: string) => {
+      process.stdout.write(chunk);
+      stdout += chunk;
+    });
+
+    // Stream stderr in real-time
+    subprocess.stderr?.on("data", (chunk: string) => {
+      process.stderr.write(chunk);
+      stderr += chunk;
+    });
+
+    // Wait for the process to complete
+    try {
+      await subprocess;
+    } catch (error: any) {
+      // Process failed, but we still have the output
+      throw new Error(stderr || error.message || "Command failed");
+    }
+
+    return { stdout, stderr };
   }
 
   /**

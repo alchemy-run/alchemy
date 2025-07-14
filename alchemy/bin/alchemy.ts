@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 
-import { createCli, trpcServer, zod as z } from "trpc-cli";
+import { createCli, zod as z } from "trpc-cli";
 import { createAlchemy } from "./commands/create.ts";
-import { runLogin } from "./commands/login.ts";
+import { deploy } from "./commands/deploy.ts";
+import { destroy } from "./commands/destroy.ts";
+import { dev } from "./commands/dev.ts";
+import { login } from "./commands/login.ts";
+import { run } from "./commands/run.ts";
 import { getPackageVersion } from "./services/get-package-version.ts";
+import { t } from "./trpc.ts";
 import {
   EditorSchema,
   PackageManagerSchema,
@@ -11,8 +16,6 @@ import {
   TemplateSchema,
   type CreateInput,
 } from "./types.ts";
-
-const t = trpcServer.initTRPC.create();
 
 const router = t.router({
   create: t.procedure
@@ -60,31 +63,11 @@ const router = t.router({
       };
       await createAlchemy(combinedInput);
     }),
-  login: t.procedure
-    .meta({
-      description: "Login to Cloudflare",
-    })
-    .input(
-      z.tuple([
-        z.object({
-          scopes: z
-            .array(z.string())
-            .optional()
-            .default([])
-            .describe("Cloudflare OAuth scopes to authorize"),
-          defaultScopes: z
-            .boolean()
-            .optional()
-            .default(true)
-            .describe(
-              "Whether to include the default Wrangler scopes when authenticating",
-            ),
-        }),
-      ]),
-    )
-    .mutation(async ({ input: [options] }) => {
-      await runLogin(options);
-    }),
+  login,
+  deploy,
+  destroy,
+  dev,
+  run,
 });
 
 export type AppRouter = typeof router;

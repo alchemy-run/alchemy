@@ -70,7 +70,7 @@ export function normalizeWorkerBundle(
     nodeCompat,
     cwd: props.cwd,
     outdir: props.outdir,
-    sourcemap: props.sourceMap !== false ? "linked" : undefined,
+    sourcemap: props.sourceMap !== false ? "inline" : undefined,
     ...props.bundle,
   });
 }

@@ -81,7 +81,7 @@ import {
 } from "./worker-metadata.ts";
 import { WorkerStub, isWorkerStub } from "./worker-stub.ts";
 import { WorkerSubdomain, disableWorkerSubdomain } from "./worker-subdomain.ts";
-import { createTail } from "./worker/tail.ts";
+import { createTail } from "./worker-tail.ts";
 import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 
 /**
@@ -618,8 +618,8 @@ export function WorkerRef<
  * @example
  * // Create a real-time chat worker using Durable Objects
  * // for state management:
- * const chatRooms = new DurableObjectNamespace("chat-rooms");
- * const userStore = new DurableObjectNamespace("user-store");
+ * const chatRooms = DurableObjectNamespace("chat-rooms");
+ * const userStore = DurableObjectNamespace("user-store");
  *
  * const chat = await Worker("chat", {
  *   name: "chat-worker",
@@ -693,7 +693,7 @@ export function WorkerRef<
  *   entrypoint: "./src/data.ts",
  *   bindings: {
  *     // Bind to its own durable object
- *     STORAGE: new DurableObjectNamespace("storage", {
+ *     STORAGE: DurableObjectNamespace("storage", {
  *       className: "DataStorage"
  *     })
  *   }
@@ -1024,7 +1024,7 @@ export const _Worker = Resource(
           createDevCommand({
             id,
             command: dev.command,
-            cwd: dev.cwd ?? process.cwd(),
+            cwd: dev.cwd ?? props.cwd ?? process.cwd(),
             env: props.env ?? {},
           });
           url = dev.url;
@@ -1268,6 +1268,7 @@ export const _Worker = Resource(
       provisionEventSources(api, {
         scriptName: workerName,
         eventSources: props.eventSources,
+        adopt: props.adopt,
       }),
     );
 
@@ -1423,13 +1424,13 @@ const normalizeExportBindings = (
     Object.entries(bindings).map(([bindingName, binding]) => [
       bindingName,
       isDurableObjectNamespace(binding) && binding.scriptName === undefined
-        ? new DurableObjectNamespace(binding.id, {
+        ? DurableObjectNamespace(binding.id, {
             ...binding,
             // re-export this binding mapping to the host worker (this worker)
             scriptName,
           })
         : isWorkflow(binding) && binding.scriptName === undefined
-          ? new Workflow(binding.id, {
+          ? Workflow(binding.id, {
               ...binding,
               // re-export this binding mapping to the host worker (this worker)
               scriptName,
@@ -1470,7 +1471,7 @@ async function provisionContainers(
       }
       return ContainerApplication(container.id, {
         image: container.image,
-        name: container.id,
+        name: container.name,
         instanceType: container.instanceType,
         observability: container.observability,
         durableObjects: {
@@ -1489,6 +1490,7 @@ async function provisionEventSources(
   props: {
     scriptName: string;
     eventSources?: EventSource[];
+    adopt?: boolean;
   },
 ): Promise<QueueConsumer[] | undefined> {
   if (!props.eventSources?.length) {
@@ -1503,6 +1505,7 @@ async function provisionEventSources(
           settings: eventSource.dlq
             ? { deadLetterQueue: eventSource.dlq }
             : undefined,
+          adopt: props.adopt,
           ...normalizeApiOptions(api),
         });
       }
@@ -1511,6 +1514,7 @@ async function provisionEventSources(
           queue: eventSource.queue,
           scriptName: props.scriptName,
           settings: eventSource.settings,
+          adopt: props.adopt,
           ...normalizeApiOptions(api),
         });
       }
@@ -1794,6 +1798,7 @@ function createDevCommand(props: {
   }
   const command = props.command.split(" ");
   const proc = spawn(command[0], command.slice(1), {
+    cwd: props.cwd,
     env: {
       ...process.env,
       ...props.env,
@@ -1819,21 +1824,20 @@ function createDevCommand(props: {
   }
 }
 
-type PutWorkerOptions = WorkerProps & {
+type PutWorkerOptions = Omit<WorkerProps, "entrypoint"> & {
   dispatchNamespace?: string;
   migrationTag?: string;
   workerName: string;
   scriptBundle: WorkerBundle;
-  version: string | undefined;
+  version?: string;
   compatibilityDate: string;
   compatibilityFlags: string[];
-  assetUploadResult:
-    | {
-        completionToken?: string;
-        keepAssets?: boolean;
-        assetConfig?: AssetsConfig;
-      }
-    | undefined;
+  assetUploadResult?: {
+    completionToken?: string;
+    keepAssets?: boolean;
+    assetConfig?: AssetsConfig;
+  };
+  tags?: string[];
   unstable_cacheWorkerSettings?: boolean;
 };
 

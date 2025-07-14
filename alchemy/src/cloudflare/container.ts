@@ -124,7 +124,7 @@ export type Container<T = any> = {
   id: string;
 
   /** Optional human-readable name for the container */
-  name?: string;
+  name: string;
 
   /** Class name used to identify the container in Worker bindings */
   className: string;
@@ -191,7 +191,8 @@ export async function Container<T>(
     adopt: props.adopt,
   };
 
-  if (Scope.current.dev && !props.dev?.remote) {
+  const isDev = Scope.current.dev && !props.dev?.remote;
+  if (isDev) {
     const image = await Image(id, {
       name: `cloudflare-dev/${name}`, // prefix used by Miniflare
       tag,
@@ -210,7 +211,10 @@ export async function Container<T>(
   const image = await Image(id, {
     name: `${api.accountId}/${name}`,
     tag,
-    build: props.build,
+    build: {
+      platform: props.build?.platform ?? "linux/amd64",
+      ...props.build,
+    },
     registry: {
       server: "registry.cloudflare.com",
       username: credentials.username || credentials.user!,
@@ -541,7 +545,7 @@ export const ContainerApplication = Resource(
       let application: ContainerApplicationData;
 
       try {
-        application = await createContainerApplication(api, {
+        application = await createContainerApplication(api, props.adopt, {
           name: props.name,
           scheduling_policy: props.schedulingPolicy ?? "default",
           instances: props.instances ?? 1,
@@ -730,6 +734,23 @@ export interface ContainerApplicationData {
   [key: string]: any;
 }
 
+export async function getContainerApplication(
+  api: CloudflareApi,
+  applicationId: string,
+) {
+  const response = await api.get(
+    `/accounts/${api.accountId}/containers/applications/${applicationId}`,
+  );
+
+  const result = (await response.json()) as {
+    result: ContainerApplicationData;
+    errors: { message: string }[];
+  };
+  if (response.ok) {
+    return result.result;
+  }
+}
+
 export async function listContainerApplications(
   api: CloudflareApi,
 ): Promise<ContainerApplicationData[]> {
@@ -766,11 +787,15 @@ export interface CreateContainerApplicationBody {
   instances?: number;
   scheduling_policy?: string;
   constraints?: { tier: number };
+  affinities?: {
+    colocation?: "datacenter";
+  };
   [key: string]: any;
 }
 
 export async function createContainerApplication(
   api: CloudflareApi,
+  adopt: boolean | undefined,
   body: CreateContainerApplicationBody,
 ) {
   const response = await api.post(
@@ -779,17 +804,63 @@ export async function createContainerApplication(
   );
   const result = (await response.json()) as {
     result: ContainerApplicationData;
-    errors: { message: string }[];
+    errors: { message: string; code: number }[];
   };
   if (response.ok) {
     return result.result;
+  }
+
+  const error = result.errors.find((e) => e.code === 1000);
+  if (error) {
+    // WEIRD: json-encoded error message - might change when they release an official API
+    const errorMessage = JSON.parse(error.message) as {
+      error: "DURABLE_OBJECT_ALREADY_HAS_APPLICATION" | (string & {});
+      details: {
+        name: string;
+        id: string;
+      };
+    };
+
+    if (errorMessage.error === "DURABLE_OBJECT_ALREADY_HAS_APPLICATION") {
+      if (!adopt) {
+        throw new Error(
+          `Durable Object namespace ${body.durable_objects?.namespace_id} already has an application with id ${errorMessage.details.id}. Use adopt: true to adopt it.`,
+        );
+      }
+      const application = await getContainerApplication(
+        api,
+        errorMessage.details.id,
+      );
+      if (application) {
+        const currentId = application.durable_objects.namespace_id;
+        const desiredId = body.durable_objects?.namespace_id;
+        if (currentId === desiredId) {
+          await updateContainerApplication(api, application.id, {
+            configuration: body.configuration,
+            instances: body.instances,
+            constraints: body.constraints,
+            scheduling_policy: body.scheduling_policy,
+            max_instances: body.max_instances,
+            affinities: body.affinities,
+            // TODO(sam): API does not accepet this as input, we may need to repace
+            // durable_objects: body.durable_objects,
+          });
+          // it's the same application, so we can just adpt it
+          return application;
+        } else {
+          // TODO(sam): not sure what to do in this case
+          throw new Error(
+            "Cannot adopt an existing Container Application that is bound to a different Durable Object",
+          );
+        }
+      }
+    }
   }
 
   throw Error(
     `Failed to create container application: ${result.errors?.map((e: { message: string }) => e.message).join(", ") ?? "Unknown error"}`,
   );
 }
-
 type Region =
   | "AFR"
   | "APAC"
