@@ -3,8 +3,9 @@ import { execa } from "execa";
 import { resolve } from "node:path";
 import pc from "picocolors";
 import { zod as z } from "trpc-cli";
+import { detectRuntime } from "../../src/util/detect-node-runtime.ts";
+import { detectPackageManager } from "../../src/util/detect-package-manager.ts";
 import { exists } from "../../src/util/exists.ts";
-import { detectPackageManager } from "../services/package-manager.ts";
 
 export const entrypoint = z
   .string()
@@ -93,7 +94,9 @@ export async function execAlchemy(
   }
 
   // Detect package manager
-  const packageManager = detectPackageManager(cwd);
+  const packageManager = await detectPackageManager(cwd);
+  const runtime = detectRuntime();
+  console.log({ packageManager, runtime });
 
   const argsString = args.join(" ");
   const execArgsString = execArgs.join(" ");
@@ -119,13 +122,23 @@ export async function execAlchemy(
         : `yarn node ${execArgsString} ${main} ${argsString}`;
       break;
     default:
-      command = isTypeScript
-        ? `npx tsx ${execArgsString} ${main} ${argsString}`
-        : `node ${execArgsString} ${main} ${argsString}`;
-      break;
+      switch (runtime) {
+        case "bun":
+          command = `bun ${execArgsString} ${main} ${argsString}`;
+          break;
+        case "deno":
+          command = `deno run -A ${execArgsString} ${main} ${argsString}`;
+          break;
+        case "node":
+          command = isTypeScript
+            ? `npx tsx ${execArgsString} ${main} ${argsString}`
+            : `node ${execArgsString} ${main} ${argsString}`;
+          break;
+      }
   }
 
   try {
+    console.log(command);
     await execa(command, {
       cwd,
       shell: true,

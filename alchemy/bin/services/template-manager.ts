@@ -9,10 +9,7 @@ import { PKG_ROOT } from "../constants.ts";
 import { throwWithContext } from "../errors.ts";
 import type { ProjectContext } from "../types.ts";
 import { addPackageDependencies } from "./dependencies.ts";
-import {
-  getPackageManagerCommands,
-  installDependencies,
-} from "./package-manager.ts";
+import { installDependencies, PackageManager } from "./package-manager.ts";
 
 export async function copyTemplate(
   templateName: string,
@@ -117,7 +114,7 @@ async function handleRwsdkPostInstall(context: ProjectContext): Promise<void> {
     const migrationsDir = join(context.path, "migrations");
     await fs.ensureDir(migrationsDir);
 
-    const commands = getPackageManagerCommands(context.packageManager);
+    const commands = PackageManager[context.packageManager];
     const devInitCommand = `${commands.run} dev:init`;
 
     if (context.options.install !== false) {
