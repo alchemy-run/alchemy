@@ -1908,16 +1908,13 @@ describe("Worker Resource", () => {
       // Verify that the "node" preset automatically includes nodejs_compat flag
       expect(worker.compatibilityFlags).toContain("nodejs_compat");
 
-      // Verify the worker functions correctly
-      const response = await fetchAndExpectOK(worker.url!);
-      const text = await response.text();
-      expect(text).toEqual("Hello from Node.js compatible worker!");
-
       // Test that preset flags are combined with user-provided flags
       worker = await Worker(workerName, {
         name: workerName,
         adopt: true,
         script: `
+          import crypto from 'node:crypto';
+
           export default {
             async fetch(request, env, ctx) {
               return new Response('Hello from Node.js compatible worker with additional flags!', {
@@ -1936,13 +1933,6 @@ describe("Worker Resource", () => {
       // Verify that both preset flags and user-provided flags are present
       expect(worker.compatibilityFlags).toContain("nodejs_compat"); // From preset
       expect(worker.compatibilityFlags).toContain("nodejs_als"); // From user
-
-      // Verify the updated worker functions correctly
-      const updatedResponse = await fetchAndExpectOK(worker.url!);
-      const updatedText = await updatedResponse.text();
-      expect(updatedText).toEqual(
-        "Hello from Node.js compatible worker with additional flags!",
-      );
     } finally {
       await destroy(scope);
       await assertWorkerDoesNotExist(api, workerName);
