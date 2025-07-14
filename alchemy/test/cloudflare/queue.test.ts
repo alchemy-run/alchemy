@@ -338,6 +338,103 @@ describe("Cloudflare Queue Resource", async () => {
       await destroy(scope);
     }
   }, 120000); // Increased timeout for Queue operations
+
+  test("adopt workers with same name but different IDs with queue event sources", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-adopt-eventsources`;
+    const queueName = `${BRANCH_PREFIX}-test-queue-eventsources`;
+    const firstWorkerId = `${BRANCH_PREFIX}-worker-first`;
+    const secondWorkerId = `${BRANCH_PREFIX}-worker-second`;
+
+    let firstWorker: Worker | undefined;
+    let secondWorker: Worker | undefined;
+    let queue: Queue | undefined;
+
+    try {
+      // Create a Queue first
+      queue = await Queue(queueName, {
+        name: queueName,
+        settings: {
+          deliveryDelay: 0,
+          deliveryPaused: false,
+        },
+        adopt: true,
+      });
+
+      expect(queue.id).toBeTruthy();
+      expect(queue.name).toEqual(queueName);
+
+      // Create first worker with queue as event source
+      firstWorker = await Worker(firstWorkerId, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('First Worker with Queue Event Source', {
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            },
+            async queue(batch, env, ctx) {
+              // Handle queue messages
+              for (const message of batch.messages) {
+                console.log('Processing message:', message.body);
+              }
+            }
+          };
+        `,
+        format: "esm",
+        url: true,
+        eventSources: [queue],
+      });
+
+      expect(firstWorker.id).toBeTruthy();
+      expect(firstWorker.name).toEqual(workerName);
+      expect(firstWorker.eventSources).toBeDefined();
+      expect(firstWorker.eventSources).toContain(queue);
+
+      // Create second worker with same name but different ID, should adopt the first worker
+      secondWorker = await Worker(secondWorkerId, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Second Worker with Queue Event Source (Updated)', {
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            },
+            async queue(batch, env, ctx) {
+              // Handle queue messages - updated logic
+              for (const message of batch.messages) {
+                console.log('Updated processing message:', message.body);
+              }
+            }
+          };
+        `,
+        format: "esm",
+        url: true,
+        eventSources: [queue],
+      });
+
+      // Second worker should adopt the first worker's ID and update its configuration
+      expect(secondWorker.name).toEqual(workerName);
+      expect(secondWorker.eventSources).toBeDefined();
+      expect(secondWorker.eventSources).toContain(queue);
+
+      // Verify that the worker was updated by checking the response
+      if (secondWorker.url) {
+        const response = await fetchAndExpectOK(secondWorker.url);
+        const responseText = await response.text();
+        expect(responseText).toContain(
+          "Second Worker with Queue Event Source (Updated)",
+        );
+      }
+    } finally {
+      await destroy(scope);
+    }
+  }, 120000);
 });
 
 async function assertQueueDeleted(queue: Queue) {

@@ -161,6 +161,56 @@ describe("Vectorize Index Resource", async () => {
       await alchemy.destroy(scope);
     }
   });
+
+  test("adopts existing index when using different IDs with same name", async (scope) => {
+    const adoptIndexName = `${testId}-adopt`;
+    const firstId = `${adoptIndexName}-id1`;
+    const secondId = `${adoptIndexName}-id2`;
+
+    try {
+      // Create first index with specific ID and name
+      const firstIndex = await VectorizeIndex(firstId, {
+        name: adoptIndexName,
+        dimensions: 768,
+        metric: "cosine",
+        adopt: true,
+      });
+
+      expect(firstIndex).toMatchObject({
+        name: adoptIndexName,
+        dimensions: 768,
+        metric: "cosine",
+        id: expect.any(String),
+      });
+
+      // Create second index with different ID but same name
+      // This should adopt the existing index
+      const secondIndex = await VectorizeIndex(secondId, {
+        name: adoptIndexName,
+        dimensions: 768,
+        metric: "cosine",
+        adopt: true,
+      });
+
+      // Both indexes should have the same name and Cloudflare index ID
+      expect(secondIndex).toMatchObject({
+        name: adoptIndexName,
+        id: firstIndex.id, // Same Cloudflare index ID
+        dimensions: 768,
+        metric: "cosine",
+      });
+
+      // Verify only one index exists with this name
+      const indexes = await listIndexes(api);
+      const matchingIndexes = indexes.filter(
+        (idx) => idx.name === adoptIndexName,
+      );
+      expect(matchingIndexes.length).toEqual(1);
+      expect(matchingIndexes[0].name).toEqual(adoptIndexName);
+    } finally {
+      await alchemy.destroy(scope);
+    }
+  });
 });
 
 async function assertIndexDeleted(index: VectorizeIndex) {

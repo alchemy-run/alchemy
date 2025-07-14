@@ -1,7 +1,7 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { Readable } from "node:stream";
-import { promiseWithResolvers } from "../../util/promise-with-resolvers.ts";
+import { promiseWithResolvers } from "./promise-with-resolvers.ts";
 
 export class HTTPServer {
   server: http.Server;
@@ -59,6 +59,9 @@ function toWebRequest(request: http.IncomingMessage): Request {
       ["GET", "HEAD", "OPTIONS"].includes(method) || !request.readable
         ? undefined
         : (Readable.toWeb(request) as unknown as BodyInit),
+    // TODO: why is Cloudflare's request type showing up here?
+    // @ts-expect-error - `duplex` not present on Cloudflare Workers request type, but valid for Node
+    duplex: "half",
   });
 }
 
