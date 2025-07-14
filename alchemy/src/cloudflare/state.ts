@@ -8,7 +8,7 @@ export const R2RestStateStore = state.R2RestStateStore;
 /**
  * @deprecated Use `DOStateStore` from `alchemy/state` instead.
  */
-export const DOStateStore = state.DOStateStore;
+export const DOStateStore = state.CloudflareStateStore;
 
 /**
  * @deprecated Use `D1StateStore` from `alchemy/state` instead.

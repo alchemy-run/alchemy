@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { memoize } from "../../util/memoize.ts";
 
-export type InternalWorker = "do-state-store" | "remote-binding-proxy";
+export type InternalWorker = "cloudflare-state-store" | "remote-binding-proxy";
 
 export const getInternalWorkerBundle = memoize(async (name: InternalWorker) => {
   const content = await fs.readFile(

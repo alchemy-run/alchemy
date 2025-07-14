@@ -1,7 +1,7 @@
 import alchemy from "alchemy";
 import { Website, Worker } from "alchemy/cloudflare";
 import { GitHubComment } from "alchemy/github";
-import { DOStateStore } from "alchemy/state";
+import { CloudflareStateStore } from "alchemy/state";
 
 const POSTHOG_DESTINATION_HOST =
   process.env.POSTHOG_DESTINATION_HOST ?? "us.i.posthog.com";
@@ -17,7 +17,7 @@ const POSTHOG_PROXY_HOST = `ph.${ZONE}`;
 const stage = process.env.STAGE ?? process.env.PULL_REQUEST ?? "dev";
 
 const app = await alchemy("alchemy:website", {
-  stateStore: (scope) => new DOStateStore(scope),
+  stateStore: (scope) => new CloudflareStateStore(scope),
   stage,
 });
 

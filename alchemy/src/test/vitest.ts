@@ -4,8 +4,8 @@ import { alchemy } from "../alchemy.ts";
 import { Scope } from "../scope.ts";
 import type { StateStoreType } from "../state.ts";
 import {
+  CloudflareStateStore,
   D1StateStore,
-  DOStateStore,
   FileSystemStateStore,
   SQLiteStateStore,
 } from "../state/index.ts";
@@ -132,7 +132,7 @@ export function test(
     const storeType = process.env.ALCHEMY_STATE_STORE;
     switch (storeType) {
       case "do":
-        return new DOStateStore(scope);
+        return new CloudflareStateStore(scope);
       case "fs":
         return new FileSystemStateStore(scope);
       case "d1":
