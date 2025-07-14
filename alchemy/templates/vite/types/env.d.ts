@@ -1,5 +1,5 @@
 // This file infers types for the cloudflare:workers environment from your Alchemy Worker.
-// @see https://alchemy.run/docs/concepts/bindings.html#type-safe-bindings
+// @see https://alchemy.run/concepts/bindings/#type-safe-bindings
 
 import type { worker } from "../alchemy.run.ts";
 

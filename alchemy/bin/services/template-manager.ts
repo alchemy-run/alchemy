@@ -9,10 +9,7 @@ import { PKG_ROOT } from "../constants.ts";
 import { throwWithContext } from "../errors.ts";
 import type { ProjectContext } from "../types.ts";
 import { addPackageDependencies } from "./dependencies.ts";
-import {
-  getPackageManagerCommands,
-  installDependencies,
-} from "./package-manager.ts";
+import { installDependencies, PackageManager } from "./package-manager.ts";
 
 export async function copyTemplate(
   templateName: string,
@@ -103,14 +100,10 @@ async function updateTemplatePackageJson(
 
   packageJson.name = context.name;
 
-  const deployCommand =
-    context.packageManager === "bun"
-      ? "bun --env-file=./.env ./alchemy.run.ts"
-      : "tsx --env-file=./.env ./alchemy.run.ts";
-
   if (packageJson.scripts) {
-    packageJson.scripts.deploy = deployCommand;
-    packageJson.scripts.destroy = `${deployCommand} --destroy`;
+    packageJson.scripts.deploy = "alchemy deploy";
+    packageJson.scripts.destroy = "alchemy destroy";
+    packageJson.scripts.dev = "alchemy dev";
   }
 
   await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
@@ -121,7 +114,7 @@ async function handleRwsdkPostInstall(context: ProjectContext): Promise<void> {
     const migrationsDir = join(context.path, "migrations");
     await fs.ensureDir(migrationsDir);
 
-    const commands = getPackageManagerCommands(context.packageManager);
+    const commands = PackageManager[context.packageManager];
     const devInitCommand = `${commands.run} dev:init`;
 
     if (context.options.install !== false) {

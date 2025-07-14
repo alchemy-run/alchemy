@@ -1,8 +1,5 @@
-import { execa } from "execa";
 import * as fs from "fs-extra";
 import { join } from "node:path";
-import type { InstallInput } from "../types.ts";
-import { getPackageManagerCommands } from "./package-manager.ts";
 
 export async function ensureVibeRulesPostinstall(
   cwd: string,
@@ -30,18 +27,4 @@ export async function ensureVibeRulesPostinstall(
 
     await fs.writeJson(packageJsonPath, packageJson, { spaces: 2 });
   } catch (_err) {}
-}
-
-export async function installAlchemyRules(input: InstallInput): Promise<void> {
-  const packageManager = input.packageManager || "bun";
-  const commands = getPackageManagerCommands(packageManager);
-
-  const args = ["vibe-rules", "install", input.editor];
-
-  await execa(commands.x, args, {
-    stdio: "pipe",
-    cwd: input.cwd,
-  });
-
-  await ensureVibeRulesPostinstall(input.cwd ?? process.cwd(), input.editor);
 }

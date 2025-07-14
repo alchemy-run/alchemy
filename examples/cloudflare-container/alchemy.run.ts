@@ -2,13 +2,17 @@
 
 import alchemy from "alchemy";
 import { Container, Worker } from "alchemy/cloudflare";
+import { SQLiteStateStore } from "alchemy/state";
 import type { MyContainer } from "./src/worker.ts";
 
-const app = await alchemy("cloudflare-container");
+const app = await alchemy("cloudflare-container", {
+  stateStore: (scope) => new SQLiteStateStore(scope),
+});
 
 const container = await Container<MyContainer>("container", {
   name: `${app.name}-container-${app.stage}`,
   className: "MyContainer",
+  adopt: true,
   build: {
     context: import.meta.dirname,
     dockerfile: "Dockerfile",

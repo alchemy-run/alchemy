@@ -1,9 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import util from "node:util";
 import type { Phase } from "./alchemy.ts";
-import { DOStateStore } from "./cloudflare/do-state-store/index.ts";
 import { destroy, destroyAll } from "./destroy.ts";
-import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
 import {
   ResourceFQN,
   ResourceID,
@@ -15,11 +13,14 @@ import {
   type ResourceProps,
 } from "./resource.ts";
 import type { State, StateStore, StateStoreType } from "./state.ts";
+import { D1StateStore } from "./state/d1-state-store.ts";
+import { FileSystemStateStore } from "./state/file-system-state-store.ts";
 import {
   createDummyLogger,
   createLoggerInstance,
   type LoggerApi,
 } from "./util/cli.ts";
+import { logger } from "./util/logger.ts";
 import { AsyncMutex } from "./util/mutex.ts";
 import type { ITelemetryClient } from "./util/telemetry/client.ts";
 
@@ -37,7 +38,7 @@ export interface ScopeOptions {
   stateStore?: StateStoreType;
   quiet?: boolean;
   phase?: Phase;
-  dev?: boolean;
+  dev?: "prefer-local" | "prefer-remote";
   telemetryClient?: ITelemetryClient;
   logger?: LoggerApi;
 }
@@ -106,7 +107,7 @@ export class Scope {
   public readonly stateStore: StateStoreType;
   public readonly quiet: boolean;
   public readonly phase: Phase;
-  public readonly dev?: boolean;
+  public readonly dev?: "prefer-local" | "prefer-remote";
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
@@ -161,21 +162,16 @@ export class Scope {
           options.logger,
         );
 
-    this.dev = options.dev ?? this.parent?.dev ?? false;
+    this.dev = options.dev ?? this.parent?.dev;
 
     if (this.dev) {
       this.logger.warnOnce(
-        "Local development mode is in beta. Please report any issues to https://github.com/sam-goodwin/alchemy/issues.",
+        "Development mode is in beta. Please report any issues to https://github.com/sam-goodwin/alchemy/issues.",
       );
     }
 
     this.stateStore =
-      options.stateStore ??
-      this.parent?.stateStore ??
-      ((scope) =>
-        process.env.ALCHEMY_STATE_STORE === "cloudflare"
-          ? new DOStateStore(scope)
-          : new FileSystemStateStore(scope));
+      options.stateStore ?? this.parent?.stateStore ?? defaultStateStore;
     this.state = this.stateStore(this);
     if (!options.telemetryClient && !this.parent?.telemetryClient) {
       throw new Error("Telemetry client is required");
@@ -205,11 +201,23 @@ export class Scope {
   }
 
   public get chain(): string[] {
+    // Since the root scope name is the same as the app name, this ensures
+    // the root scope chain is "<app-name>" instead of "<app-name>/<app-name>".
+    if (
+      !this.parent &&
+      this.appName &&
+      this.scopeName &&
+      this.appName === this.scopeName
+    ) {
+      return [this.appName];
+    }
+
     const thisScope = this.scopeName ? [this.scopeName] : [];
-    const app = this.appName ? [this.appName] : [];
     if (this.parent) {
       return [...this.parent.chain, ...thisScope];
     }
+
+    const app = this.appName ? [this.appName] : [];
     return [...app, ...thisScope];
   }
 
@@ -219,7 +227,12 @@ export class Scope {
   }
 
   public async init() {
-    await Promise.all([this.state.init?.(), this.telemetryClient.ready]);
+    await Promise.all([
+      this.state.init?.(),
+      this.telemetryClient.ready.catch((error) => {
+        this.logger.warn("Telemetry initialization failed:", error);
+      }),
+    ]);
   }
 
   public async deinit() {
@@ -399,7 +412,9 @@ export class Scope {
       });
     }
 
-    await this.rootTelemetryClient?.finalize();
+    await this.rootTelemetryClient?.finalize()?.catch((error) => {
+      this.logger.warn("Telemetry finalization failed:", error);
+    });
   }
 
   public async destroyPendingDeletions() {
@@ -410,11 +425,20 @@ export class Scope {
         }
         throw e;
       })) ?? [];
+    //todo(michael): remove once we deprecate doss; see: https://github.com/sam-goodwin/alchemy/issues/585
+    let hasCorruptedResources = false;
     if (pendingDeletions) {
       for (const { resource, oldProps } of pendingDeletions) {
         //todo(michael): ugly hack due to the way scope is serialized
         const realResource = this.resources.get(resource[ResourceID])!;
         resource[ResourceScope] = realResource?.[ResourceScope] ?? this;
+        if (realResource == null && resource[ResourceID] == null) {
+          logger.warn(
+            "A replaced resource pending deletion is corrupted and will NOT be deleted. This is likely a bug with the state store.",
+          );
+          hasCorruptedResources = true;
+          continue;
+        }
         await destroy(resource, {
           quiet: this.quiet,
           strategy: "sequential",
@@ -424,6 +448,16 @@ export class Scope {
           },
         });
       }
+    }
+    if (hasCorruptedResources) {
+      const newPendingDeletions =
+        (await this.get<PendingDeletions>("pendingDeletions").catch(
+          () => [],
+        )) ?? [];
+      await this.set(
+        "pendingDeletions",
+        newPendingDeletions.filter((d) => d.resource[ResourceID] != null),
+      );
     }
   }
 
@@ -461,6 +495,15 @@ export class Scope {
 )`;
   }
 }
+
+const defaultStateStore: StateStoreType = (scope: Scope) => {
+  switch (process.env.ALCHEMY_STATE_STORE) {
+    case "d1":
+      return new D1StateStore(scope);
+    default:
+      return new FileSystemStateStore(scope);
+  }
+};
 
 declare global {
   // for runtime

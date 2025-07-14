@@ -1,0 +1,180 @@
+---
+title: SQLiteStateStore
+description: Learn how to manage state with a SQLite DB.
+---
+
+import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
+
+## Automatic Engine Detection
+
+SQLiteStateStore automatically detects available SQLite engines in this order:
+
+1. **Bun SQLite** (`bun:sqlite`) - Built into Bun runtime
+2. **libSQL** (`@libsql/client`) - Turso-compatible SQLite
+
+## Select and Configure an Engine
+
+Force a specific SQLite engine:
+
+<Tabs syncKey="sqliteEngine">
+  <TabItem label="Bun SQLite">
+    ```typescript
+    const app = await alchemy("my-app", {
+      stateStore: (scope) => new SQLiteStateStore(scope, {
+        engine: "bun",
+        filename: ".alchemy/state.sqlite"
+      })
+    });
+    ```
+  </TabItem>
+  <TabItem label="libSQL">
+    ```typescript
+    const app = await alchemy("my-app", {
+      stateStore: (scope) => new SQLiteStateStore(scope, {
+        engine: "libsql",
+        url: "file:.alchemy/state.sqlite"
+      })
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+
+## Environment Variable Configuration
+
+Use environment variables for flexible configuration:
+
+```sh
+# .env
+ALCHEMY_STATE_FILE=./data/production-state.sqlite
+```
+
+```typescript
+// alchemy.run.ts - automatically uses ALCHEMY_STATE_FILE
+const app = await alchemy("my-app", {
+  stateStore: (scope) => new SQLiteStateStore(scope)
+});
+```
+
+## Engine-Specific Options
+
+Configure engine-specific options:
+
+<Tabs syncKey="sqliteEngine">
+  <TabItem label="Bun SQLite">
+    ```typescript
+    const app = await alchemy("my-app", {
+      stateStore: (scope) => new SQLiteStateStore(scope, {
+        engine: "bun",
+        readonly: false,
+        create: true,
+        safeIntegers: true,
+        strict: true
+      })
+    });
+    ```
+  </TabItem>
+  <TabItem label="libSQL">
+    ```typescript
+    const app = await alchemy("my-app", {
+      stateStore: (scope) => new SQLiteStateStore(scope, {
+        engine: "libsql",
+        url: "libsql://my-db.turso.io",
+        authToken: process.env.TURSO_AUTH_TOKEN,
+        syncUrl: "file:./local-replica.db"
+      })
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+## Development vs Production
+
+Use different configurations for different environments:
+
+```typescript
+const isDev = process.env.NODE_ENV === "development";
+
+const app = await alchemy("my-app", {
+  stateStore: (scope) => new SQLiteStateStore(scope, {
+    filename: isDev 
+      ? ".alchemy/dev-state.sqlite"
+      : "/var/lib/myapp/prod-state.sqlite",
+  })
+});
+```
+
+## Per-Stage Databases
+
+Use separate databases for different deployment stages:
+
+```typescript
+const stage = process.env.STAGE ?? "dev";
+
+const app = await alchemy("my-app", {
+  stage,
+  stateStore: (scope) => new SQLiteStateStore(scope, {
+    filename: `.alchemy/state-${stage}.sqlite`,
+  })
+});
+```
+
+## Turso Database
+
+Connect to a remote Turso database:
+
+```typescript
+const app = await alchemy("my-app", {
+  stateStore: (scope) => new SQLiteStateStore(scope, {
+    engine: "libsql",
+    url: process.env.TURSO_DATABASE_URL,
+    authToken: process.env.TURSO_AUTH_TOKEN
+  })
+});
+```
+
+## Local Replica with Sync
+
+Use a local replica that syncs with remote:
+
+```typescript
+const app = await alchemy("my-app", {
+  stateStore: (scope) => new SQLiteStateStore(scope, {
+    engine: "libsql",
+    url: process.env.TURSO_DATABASE_URL,
+    authToken: process.env.TURSO_AUTH_TOKEN,
+    syncUrl: "file:./local-replica.db",
+    syncInterval: 60 // Sync every 60 seconds
+  })
+});
+```
+
+## Engine Performance
+
+- **Bun SQLite**: Fastest for Bun runtime, zero additional dependencies
+- **libSQL**: Best for remote/distributed scenarios, async API
+
+## Peer Dependencies
+
+The SQLiteStateStore requires `drizzle-orm` as a peer dependency. Additionally, if you are using the `libsql` engine (default for Node.js), you will need to install `@libsql/client` as a peer dependency.
+
+If you see dependency errors:
+
+```
+[SQLiteStateStore] Missing `@libsql/client` peer dependency. Please `npm install @libsql/client`.
+```
+
+Install the required packages:
+
+```sh
+npm install drizzle-orm @libsql/client
+```
+
+## Permission Errors
+
+Ensure the directory is writable:
+
+```sh
+mkdir -p .alchemy
+chmod 755 .alchemy
+```

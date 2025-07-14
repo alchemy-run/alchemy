@@ -5,7 +5,7 @@ import {
   ResourceKind,
   type Resource,
 } from "./resource.ts";
-import { isScope, Scope } from "./scope.ts";
+import { isScope, type Scope } from "./scope.ts";
 import { isSecret, Secret } from "./secret.ts";
 
 import type { Type } from "arktype";
@@ -77,7 +77,7 @@ export async function serializeScope(scope: Scope): Promise<SerializedScope> {
   async function serializeScope(scope: Scope): Promise<SerializedScope> {
     await Promise.all(
       Array.from(scope.resources.values()).map(async (resource) => {
-        if (resource[ResourceKind] === Scope.KIND) {
+        if (resource[ResourceKind] === "alchemy::Scope") {
           return;
         }
         map[resource[ResourceFQN]] = await serialize(scope, await resource, {
@@ -121,7 +121,7 @@ export async function serialize(
     if (!scope.password) {
       throw new Error(
         "Cannot serialize secret without password, did you forget to set password when initializing your alchemy app?\n" +
-          "See: https://alchemy.run/docs/concepts/secret.html#encryption-password",
+          "See: https://alchemy.run/concepts/secret/#encryption-password",
       );
     }
     return {
@@ -220,7 +220,7 @@ export async function deserialize(
       if (!scope.password) {
         throw new Error(
           "Cannot deserialize secret without password, did you forget to set password when initializing your alchemy app?\n" +
-            "See: https://alchemy.run/docs/concepts/secret.html#encryption-password",
+            "See: https://alchemy.run/concepts/secret/#encryption-password",
         );
       }
       if (typeof value["@secret"] === "object") {

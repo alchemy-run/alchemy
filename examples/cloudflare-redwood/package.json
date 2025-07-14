@@ -10,7 +10,9 @@
   "private": true,
   "scripts": {
     "build": "vite build",
-    "dev": "NODE_ENV=${NODE_ENV:-development} vite dev",
+    "deploy": "alchemy deploy --env-file ../../.env",
+    "destroy": "alchemy destroy --env-file ../../.env",
+    "dev": "alchemy dev --env-file ../../.env",
     "dev:init": "rw-scripts dev-init",
     "preview": "bun run build && bun run vite preview",
     "worker:run": "rw-scripts worker-run",
@@ -22,21 +24,19 @@
     "migrate:dev": "wrangler d1 migrations apply DB --local",
     "seed": "bun run worker:run ./src/db/seed.ts",
     "check": "bun run types",
-    "types": "bun run tsc",
-    "deploy": "bun tsx --env-file ../../.env ./alchemy.run.ts",
-    "destroy": "bun tsx --env-file ../../.env ./alchemy.run.ts --destroy"
+    "types": "bun run tsc"
   },
   "dependencies": {
     "alchemy": "workspace:*",
     "dotenv": "^16.5.0",
-    "drizzle-orm": "beta",
+    "drizzle-orm": "^0.44.2",
     "rwsdk": "^0.1.10"
   },
   "devDependencies": {
     "@types/node": "^22.14.1",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
-    "drizzle-kit": "beta",
+    "drizzle-kit": "^0.31.4",
     "tsx": "^4.19.3",
     "vite": "^6.3.2",
     "wrangler": "^4.12.1"

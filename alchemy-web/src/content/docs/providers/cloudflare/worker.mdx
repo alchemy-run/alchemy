@@ -118,6 +118,31 @@ And register `env.ts` in your `tsconfig.json`'s `types`.
 See [Bindings](/concepts/bindings) for more information.
 :::
 
+## Source Maps
+
+Control whether source maps are uploaded with your worker for debugging:
+
+```ts
+import { Worker } from "alchemy/cloudflare";
+
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
+  sourceMap: true, // Upload source maps (default: true)
+});
+
+// Disable source maps for production builds
+const prodWorker = await Worker("prod-api", {
+  name: "prod-api-worker",
+  entrypoint: "./src/api.ts",
+  sourceMap: false, // Don't upload source maps
+});
+```
+
+:::note
+Source maps are enabled by default (`sourceMap: true`) and help with debugging by mapping minified code back to your original source files in the Cloudflare dashboard.
+:::
+
 ## Static Assets
 
 Serve static files from a directory:
@@ -341,6 +366,7 @@ const worker = await Worker("api", {
   name: "api-worker",
   entrypoint: "./src/api.ts",
   routes: [
+    "backend.example.com/*",
     {
       pattern: "api.example.com/*",
       zoneId: zone.id,
@@ -408,12 +434,14 @@ const router = await Worker("platform-router", {
 });
 ```
 
-In your router, you can dynamically route to tenant workers:
+In your `./src/router.ts`, you can dynamically route to tenant workers:
 
 ```ts
 // src/router.ts
+import type { router } from "./alchemy.run.ts";
+
 export default {
-  async fetch(request: Request, env: { TENANT_WORKERS: DispatchNamespace }) {
+  async fetch(request: Request, env: typeof router.Env) {
     const url = new URL(request.url);
     const tenantId = url.hostname.split(".")[0];
 

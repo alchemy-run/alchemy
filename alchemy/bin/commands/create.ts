@@ -14,16 +14,11 @@ import * as fs from "fs-extra";
 import { resolve } from "node:path";
 import pc from "picocolors";
 
+import { detectPackageManager } from "../../src/util/detect-package-manager.ts";
 import { throwWithContext } from "../errors.ts";
-import {
-  detectPackageManager,
-  installDependencies,
-} from "../services/package-manager.ts";
+import { installDependencies } from "../services/package-manager.ts";
 import { copyTemplate } from "../services/template-manager.ts";
-import {
-  ensureVibeRulesPostinstall,
-  installAlchemyRules,
-} from "../services/vibe-rules.ts";
+import { ensureVibeRulesPostinstall } from "../services/vibe-rules.ts";
 import type {
   CreateInput,
   EditorType,
@@ -37,7 +32,7 @@ const isTest = process.env.NODE_ENV === "test";
 async function createProjectContext(
   cliOptions: CreateInput,
 ): Promise<ProjectContext> {
-  const detectedPm = detectPackageManager();
+  const detectedPm = await detectPackageManager();
   const options = { yes: isTest, ...cliOptions };
 
   let name: string;
@@ -99,6 +94,7 @@ async function createProjectContext(
   }
 
   const path = resolve(process.cwd(), name);
+
   let packageManager = options.pm || detectedPm;
 
   let shouldInstall = true;
@@ -241,13 +237,11 @@ async function setupVibeRules(context: ProjectContext): Promise<void> {
   s.start("Configuring vibe-rules...");
 
   try {
-    await installAlchemyRules({
-      editor: selectedEditor,
-      packageManager: context.packageManager,
-      cwd: context.path,
-    });
-
     await ensureVibeRulesPostinstall(context.path, selectedEditor);
+
+    await installDependencies(context, {
+      devDependencies: ["vibe-rules"],
+    });
 
     // we need to install dependencies to trigger the postinstall script
     await installDependencies(context);

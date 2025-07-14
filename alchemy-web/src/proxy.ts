@@ -1,9 +1,9 @@
 // Sourced from: https://posthog.com/docs/advanced/proxy/cloudflare
 // We have modified it to use typescript and some alchemy goodies
 
-import type { posthogProxy } from "../alchemy.run.ts";
+import type { PosthogProxy } from "../alchemy.run.ts";
 
-type Env = (typeof posthogProxy)["Env"];
+type Env = PosthogProxy["Env"];
 
 async function handleRequest(
   request: Request,

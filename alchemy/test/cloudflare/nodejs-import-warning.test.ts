@@ -1,5 +1,5 @@
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, vi } from "vitest";
+import { afterEach, describe, expect, vi } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
@@ -10,15 +10,23 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-describe("NodeJS Import Warning Plugin", () => {
-  let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-  });
+describe.sequential("NodeJS Import Warning Plugin", () => {
+  const warn = vi.hoisted(() =>
+    vi.fn((...args: unknown[]) => console.warn(...args)),
+  );
+  vi.mock("../../src/util/logger.ts", () => ({
+    logger: {
+      log: vi.fn((...args: unknown[]) => console.log(...args)),
+      error: vi.fn((...args: unknown[]) => console.error(...args)),
+      warn,
+      warnOnce: vi.fn((...args: unknown[]) => console.warn(...args)),
+      task: vi.fn(() => {}),
+      exit: vi.fn(() => {}),
+    },
+  }));
 
   afterEach(() => {
-    consoleWarnSpy.mockRestore();
+    warn.mockClear();
   });
 
   test("should warn about node imports without nodejs_compat flag", async (scope) => {
@@ -31,22 +39,21 @@ describe("NodeJS Import Warning Plugin", () => {
       await Worker(`${BRANCH_PREFIX}-test-node-imports`, {
         entrypoint,
         format: "esm",
-        compatibilityDate: "2024-09-23",
-        compatibilityFlags: [], // No nodejs_compat flag
         adopt: true,
       });
     } catch (_e) {
-      // Bundling might fail, but we're testing the warning
+      // Upload should fail, but we're testing the warning
     } finally {
       await destroy(scope);
     }
 
     // Verify warning was logged
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("nodejs_compat compatibility flag is not set"),
-    );
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("node:fs, node:crypto"),
+    expect(warn).toHaveBeenCalledWith(
+      [
+        "Detected Node.js imports (node:crypto, node:fs) but nodejs_compat compatibility flag is not set. ",
+        "Add nodejs_compat to your compatibility flags and ensure compatibilityDate >= 2024-09-23. Imported from:",
+        "- alchemy/test/cloudflare/test-handlers/node-imports-handler.ts",
+      ].join("\n"),
     );
   });
 
@@ -64,20 +71,12 @@ describe("NodeJS Import Warning Plugin", () => {
         compatibilityFlags: ["nodejs_compat"], // nodejs_compat flag present
         adopt: true,
       });
-    } catch (_e) {
-      // Bundling might fail for other reasons, but we're testing no warning
     } finally {
       await destroy(scope);
     }
 
     // Verify no warning was logged about missing nodejs_compat
-    const warningCalls = consoleWarnSpy.mock.calls.flat();
-    const hasNodejsCompatWarning = warningCalls.some(
-      (call) =>
-        typeof call === "string" &&
-        call.includes("nodejs_compat compatibility flag is not set"),
-    );
-    expect(hasNodejsCompatWarning).toBe(false);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   test("should warn specifically about async_hooks without nodejs_compat or nodejs_als", async (scope) => {
@@ -90,23 +89,21 @@ describe("NodeJS Import Warning Plugin", () => {
       await Worker(`${BRANCH_PREFIX}-test-async-hooks`, {
         entrypoint,
         format: "esm",
-        compatibilityDate: "2024-09-23",
-        compatibilityFlags: [], // No nodejs_compat or nodejs_als flags
         adopt: true,
       });
     } catch (_e) {
-      // Bundling might fail, but we're testing the warning
+      // Upload should fail, but we're testing the warning
     } finally {
       await destroy(scope);
     }
 
     // Verify specific async_hooks warning was logged
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("node:async_hooks"),
-    );
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("nodejs_compat") &&
-        expect.stringContaining("nodejs_als"),
+    expect(warn).toHaveBeenCalledWith(
+      [
+        "Detected import of node:async_hooks but nodejs_als compatibility flag is not set. ",
+        "Add nodejs_als or nodejs_compat to your compatibility flags. Imported from:",
+        "- alchemy/test/cloudflare/test-handlers/async-hooks-handler.ts",
+      ].join("\n"),
     );
   });
 
@@ -131,14 +128,6 @@ describe("NodeJS Import Warning Plugin", () => {
     }
 
     // Verify no specific async_hooks warning was logged
-    const warningCalls = consoleWarnSpy.mock.calls.flat();
-    const hasAsyncHooksWarning = warningCalls.some(
-      (call) =>
-        typeof call === "string" &&
-        call.includes("node:async_hooks") &&
-        call.includes("nodejs_compat") &&
-        call.includes("nodejs_als"),
-    );
-    expect(hasAsyncHooksWarning).toBe(false);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

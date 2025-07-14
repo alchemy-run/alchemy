@@ -33,20 +33,12 @@ export default defineConfig({
       head: [
         {
           tag: "script",
-          content: 'console.log("test script 1");',
-        },
-        {
-          tag: "script",
           content: postHogScript
             .replace(
               "<POSTHOG_CLIENT_API_HOST>",
               process.env.POSTHOG_CLIENT_API_HOST,
             )
             .replace("<POSTHOG_PROJECT_ID>", process.env.POSTHOG_PROJECT_ID),
-        },
-        {
-          tag: "script",
-          content: 'console.log("test script 2");',
         },
       ],
       logo: {

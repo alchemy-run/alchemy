@@ -83,6 +83,17 @@ This will build your Dockerfile and prepare it for publishing to Cloudflare's Im
 > });
 > ```
 
+## Adopting Existing Containers
+
+By default, if a container application with the same name already exists, Alchemy will throw an error. However, you can use the `adopt` property to take over management of an existing container application:
+
+```ts
+const container = await Container<MyContainer>("my-container", {
+  className: "MyContainer",
+  adopt: true, // Will adopt existing container instead of failing
+});
+```
+
 ## Development Mode
 
 Container resources have special behavior in development mode to support local testing:

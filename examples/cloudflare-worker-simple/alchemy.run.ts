@@ -8,8 +8,11 @@ import {
   R2Bucket,
   Worker,
 } from "alchemy/cloudflare";
+import { DOStateStore } from "alchemy/state";
 
-const app = await alchemy("cloudflare-worker-simple");
+const app = await alchemy("cloudflare-worker-simple", {
+  stateStore: (scope) => new DOStateStore(scope),
+});
 
 const [d1, kv, r2] = await Promise.all([
   D1Database("d1", {
@@ -44,6 +47,9 @@ export const worker1 = await Worker("worker", {
     DO: doNamespace,
   },
   compatibilityFlags: ["nodejs_compat"],
+  dev: {
+    remote: true,
+  },
 });
 export const worker2 = await Worker("worker2", {
   name: `${app.name}-${app.stage}-worker2`,
@@ -54,6 +60,9 @@ export const worker2 = await Worker("worker2", {
     DO: worker1.bindings.DO,
   },
   compatibilityFlags: ["nodejs_compat"],
+  dev: {
+    remote: true,
+  },
 });
 
 console.log(`worker1.url: ${worker1.url}`);

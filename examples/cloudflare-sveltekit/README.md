@@ -25,7 +25,7 @@ It includes:
    ```
    You can also place these in a `.env` file in the repository root.
 
-   More information on how to get your Cloudflare API token and Account ID can be found in the [Cloudflare Auth Guide](https://alchemy.run/docs/guides/cloudflare-auth.html).
+   More information on how to get your Cloudflare API token and Account ID can be found in the [Cloudflare Auth Guide](https://alchemy.run/guides/cloudflare/).
 
 ## Running the Deployment
 

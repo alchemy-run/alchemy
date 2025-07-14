@@ -1,3 +1,125 @@
+## v0.45.6
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**: Move build script to .ts &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/648 [<samp>(93ba3)</samp>](https://github.com/sam-goodwin/alchemy/commit/93ba3a2a)
+- **cloudflare**: Build cloudflare container for linux/amd64 &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/651 [<samp>(dd947)</samp>](https://github.com/sam-goodwin/alchemy/commit/dd9479b0)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.45.5...v0.45.6)
+
+---
+
+## v0.45.5
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Adopt Worker with Queue event source &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/646 [<samp>(75d69)</samp>](https://github.com/sam-goodwin/alchemy/commit/75d6944f)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.45.4...v0.45.5)
+
+---
+
+## v0.45.4
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Add duplex: "half" in miniflare http server &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/643 [<samp>(bfc4f)</samp>](https://github.com/sam-goodwin/alchemy/commit/bfc4f1a2)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.45.3...v0.45.4)
+
+---
+
+## v0.45.3
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Inline sourceMap for dev mode to avoid syntax error &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/639 [<samp>(4884d)</samp>](https://github.com/sam-goodwin/alchemy/commit/4884de08)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.45.2...v0.45.3)
+
+---
+
+## v0.45.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Set cwd on Worker dev command &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/638 [<samp>(31ee8)</samp>](https://github.com/sam-goodwin/alchemy/commit/31ee81ea)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.45.1...v0.45.2)
+
+---
+
+## v0.45.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **sqlite**: Include drizzle folder in NPM package &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/625 [<samp>(3c059)</samp>](https://github.com/sam-goodwin/alchemy/commit/3c059619)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.45.0...v0.45.1)
+
+---
+
+## v0.45.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - Default source_map to true for Workers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/610 [<samp>(73652)</samp>](https://github.com/sam-goodwin/alchemy/commit/7365264c)
+  - Remote worker hot reload + tail &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/543 [<samp>(815f2)</samp>](https://github.com/sam-goodwin/alchemy/commit/815f2c61)
+  - Container.adopt &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/615 [<samp>(b327e)</samp>](https://github.com/sam-goodwin/alchemy/commit/b327e754)
+- **sqlite**:
+  - Sqlite state store with drizzle &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/593 [<samp>(f05e6)</samp>](https://github.com/sam-goodwin/alchemy/commit/f05e65e2)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Handle "./" in esbuild paths &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/614 [<samp>(4560f)</samp>](https://github.com/sam-goodwin/alchemy/commit/4560f904)
+  - Normalize paths on windows &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/616 [<samp>(3f354)</samp>](https://github.com/sam-goodwin/alchemy/commit/3f354b42)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.44.4...v0.45.0)
+
+---
+
+## v0.44.4
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Update workers.dev URL when adopting a Worker &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/611 [<samp>(f95ab)</samp>](https://github.com/sam-goodwin/alchemy/commit/f95ab4f0)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.44.3...v0.44.4)
+
+---
+
+## v0.44.3
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**: Setup postinstall script before installing vibe-rules &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(31643)</samp>](https://github.com/sam-goodwin/alchemy/commit/31643384)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.44.2...v0.44.3)
+
+---
+
+## v0.44.2
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **core**: Warning if pendingDeletions has corrupted resources &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/589 [<samp>(018b6)</samp>](https://github.com/sam-goodwin/alchemy/commit/018b6340)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **alchemy-web**:
+  - Remove bad posthog domain &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/591 [<samp>(4c9fb)</samp>](https://github.com/sam-goodwin/alchemy/commit/4c9fbce1)
+- **cli**:
+  - Install vibe-rules dependency in project templates &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(44d9e)</samp>](https://github.com/sam-goodwin/alchemy/commit/44d9e520)
+- **core**:
+  - Remove redundant state.set &nbsp;-&nbsp; by **Sam Goodwin** and **sam** in https://github.com/sam-goodwin/alchemy/issues/600 [<samp>(63b7d)</samp>](https://github.com/sam-goodwin/alchemy/commit/63b7d6e2)
+  - Prevent telemetry failures from causing system failures &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/602 [<samp>(4caf6)</samp>](https://github.com/sam-goodwin/alchemy/commit/4caf6ab8)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.44.1...v0.44.2)
+
+---
+
 ## v0.44.1
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

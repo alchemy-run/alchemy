@@ -1,31 +1,32 @@
 {
   "name": "alchemy",
-  "version": "0.44.1",
-  "type": "module",
-  "module": "./lib/index.js",
+  "version": "0.45.6",
   "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "homepage": "https://alchemy.run",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sam-goodwin/alchemy.git",
     "directory": "alchemy"
   },
+  "type": "module",
+  "module": "./lib/index.js",
+  "bin": {
+    "alchemy": "bin/alchemy.mjs"
+  },
   "scripts": {
-    "build:cli": "run-script-os",
-    "build:cli:windows": "powershell -File ./scripts/bundle-cli.ps1",
-    "build:cli:default": "./scripts/bundle-cli.sh",
+    "build:cli": "bun ./scripts/bundle-cli.ts",
     "build:workers": "bun ./scripts/build-workers.ts",
     "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && bun run build:cli && bun run build:workers",
+    "drizzle:generate": "bun run scripts/drizzle-generate.ts",
     "docs:gen": "rm -rf ./docs && typedoc",
     "postbuild": "cpx 'src/**/*/types.d.ts' lib && cpx 'src/**/*.txt' lib",
     "publish:npm": "cp ../README.md . && bun run build && bun run build:cli && npm publish && rm README.md"
   },
-  "bin": {
-    "alchemy": "bin/alchemy.mjs"
-  },
-  "author": "Sam Goodwin <sam@alchemy.run>",
-  "homepage": "https://alchemy.run",
+
   "files": [
     "bin",
+    "drizzle/default",
     "lib",
     "src",
     "templates",
@@ -112,6 +113,10 @@
       "bun": "./src/web/shadcn.ts",
       "import": "./lib/web/shadcn.js"
     },
+    "./state": {
+      "bun": "./src/state/index.ts",
+      "import": "./lib/state/index.js"
+    },
     "./web/astro": {
       "bun": "./src/web/astro.ts",
       "import": "./lib/web/astro.js"
@@ -144,8 +149,11 @@
     "jszip": "^3.0.0",
     "kleur": "^4.1.5",
     "libsodium-wrappers": "^0.7.15",
+    "miniflare": "^4.20250617.4",
+    "pathe": "^2.0.3",
     "turndown": "^7.0.0",
     "unenv": "2.0.0-rc.15",
+    "ws": "^8.18.3",
     "yaml": "^2.0.0"
   },
   "peerDependencies": {
@@ -161,10 +169,12 @@
     "@aws-sdk/client-sqs": "^3.0.0",
     "@aws-sdk/client-ssm": "^3.0.0",
     "@aws-sdk/client-sts": "^3.0.0",
+    "@libsql/client": "^0.15.9",
     "@octokit/rest": "^21.1.1",
     "ai": "^4.0.0",
     "arktype": "^2.0.0",
     "cloudflare": "^4.0.0",
+    "drizzle-orm": "^0.44.2",
     "hono": "^4.0.0",
     "prettier": "^3.0.0",
     "stripe": "^17.0.0",
@@ -176,7 +186,6 @@
     "@asteasolutions/zod-to-openapi": "^7.3.0",
     "@aws-sdk/client-resource-groups-tagging-api": "^3.830.0",
     "@aws-sdk/client-s3": "3.726.1",
-    "@biomejs/biome": "^1.9.4",
     "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "^0.0.13",
     "@cloudflare/puppeteer": "^1.0.2",
@@ -189,19 +198,19 @@
     "@types/libsodium-wrappers": "^0.7.14",
     "@types/node": "latest",
     "@types/turndown": "^5.0.5",
+    "@types/ws": "^8.18.1",
     "ai": "^4.1.16",
-    "alchemy": "^0.37.1",
     "arktype": "^2.1.16",
     "braintrust": "^0.0.201",
     "change-case": "^5.4.4",
     "cloudflare": "^4.2.0",
     "cpx": "^1.5.0",
     "dofs": "^0.1.0",
+    "drizzle-kit": "^0.31.4",
     "execa": "^9.6.0",
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
     "libsodium-wrappers": "^0.7.15",
-    "miniflare": "^4.20250617.4",
     "nitro-cloudflare-dev": "^0.2.2",
     "openpgp": "^6.1.0",
     "picocolors": "^1.1.1",
