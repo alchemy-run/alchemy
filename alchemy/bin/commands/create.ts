@@ -72,6 +72,7 @@ export const create = t.procedure
           githubActions: z
             .boolean()
             .optional()
+            .default(true)
             .describe("Setup GitHub Actions for PR previews"),
           git: z.boolean().optional().describe("Initialise a git repository"),
         })
