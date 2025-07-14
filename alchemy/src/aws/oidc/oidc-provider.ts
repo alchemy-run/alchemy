@@ -126,7 +126,6 @@ export const OIDCProvider = Resource(
   ) {
     // Initialize AWS SDK client
     const client = new IAMClient({
-      endpoint: process.env.AWS_ENDPOINT,
       region: props.region,
     });
 

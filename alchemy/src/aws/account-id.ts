@@ -1,8 +1,6 @@
 import { GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
 
-const sts = new STSClient({
-  endpoint: process.env.AWS_ENDPOINT,
-});
+const sts = new STSClient({});
 
 export type AccountId = string & {
   readonly __brand: "AccountId";
