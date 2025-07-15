@@ -1,4 +1,4 @@
-import { z } from "zod";
+import z from "zod";
 
 export const TEMPLATE_DEFINITIONS = [
   { name: "typescript", description: "TypeScript Worker" },

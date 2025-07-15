@@ -1,6 +1,6 @@
 import { cancel, intro, log, outro } from "@clack/prompts";
 import pc from "picocolors";
-import { zod as z } from "trpc-cli";
+import z from "zod";
 import {
   DEFAULT_SCOPES,
   wranglerLogin,

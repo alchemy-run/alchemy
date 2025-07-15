@@ -1,4 +1,4 @@
-import { zod as z } from "trpc-cli";
+import z from "zod";
 import {
   entrypoint,
   execAlchemy,
@@ -10,7 +10,7 @@ export const destroy = t.procedure
   .meta({
     description: "Deploy an Alchemy project",
   })
-  .input(z.tuple([entrypoint, z.object(execArgs).optional().default({})]))
+  .input(z.tuple([entrypoint, z.object(execArgs)]))
   .mutation(async ({ input: [main, options] }) =>
     execAlchemy(main, {
       ...options,
