@@ -51,6 +51,7 @@ const website = await Website("website", {
   env: {
     POSTHOG_CLIENT_API_HOST: `https://${POSTHOG_PROXY_HOST}`,
     POSTHOG_PROJECT_ID: POSTHOG_PROJECT_ID,
+    ENABLE_POSTHOG: stage === "prod" ? "true" : "false",
   },
 });
 

@@ -1,4 +1,4 @@
-import { zod as z } from "trpc-cli";
+import z from "zod";
 import {
   entrypoint,
   execAlchemy,
@@ -15,13 +15,10 @@ export const run = t.procedure
   .input(
     z.tuple([
       entrypoint,
-      z
-        .object({
-          ...execArgs,
-          watch,
-        })
-        .optional()
-        .default({}),
+      z.object({
+        ...execArgs,
+        watch,
+      }),
     ]),
   )
   .mutation(async ({ input: [main, options] }) =>
