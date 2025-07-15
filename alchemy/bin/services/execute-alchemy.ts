@@ -2,7 +2,7 @@ import { log } from "@clack/prompts";
 import { execa } from "execa";
 import { resolve } from "node:path";
 import pc from "picocolors";
-import { zod as z } from "trpc-cli";
+import z from "zod";
 import { detectRuntime } from "../../src/util/detect-node-runtime.ts";
 import { detectPackageManager } from "../../src/util/detect-package-manager.ts";
 import { exists } from "../../src/util/exists.ts";
