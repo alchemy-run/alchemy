@@ -5,12 +5,10 @@ import { destroy } from "../src/destroy.js";
 import { Resource, ResourceID } from "../src/resource.js";
 import type { Scope } from "../src/scope.js";
 import "../src/test/vitest.js";
-import { BRANCH_PREFIX, createTestOptions } from "./util.js";
-
-const storeTypes = ["fs", "dofs", "sqlite", "d1", "do"] as const;
+import { BRANCH_PREFIX, createTestOptions, STATE_STORE_TYPES } from "./util.js";
 
 describe.sequential("Replace-Sequential", () => {
-  for (const storeType of storeTypes) {
+  for (const storeType of STATE_STORE_TYPES) {
     describe.sequential(storeType, () => {
       const options = createTestOptions(storeType, "replace");
       const deleted: string[] = [];
@@ -113,7 +111,7 @@ const test = alchemy.test(import.meta, {
 });
 
 describe.concurrent("Replace", () => {
-  for (const storeType of storeTypes) {
+  for (const storeType of STATE_STORE_TYPES) {
     describe(storeType, () => {
       const options = createTestOptions(storeType, "replace");
       const deleted: string[] = [];

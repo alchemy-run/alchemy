@@ -5,7 +5,7 @@ import { destroy } from "../src/destroy.js";
 import { FileSystemStateStore } from "../src/fs/file-system-state-store.js";
 import { File } from "../src/fs/file.js";
 import { Scope } from "../src/scope.js";
-import { BRANCH_PREFIX, createTestOptions } from "./util.js";
+import { BRANCH_PREFIX, createTestOptions, STATE_STORE_TYPES } from "./util.js";
 
 import { Resource } from "../src/resource.js";
 import { serializeScope } from "../src/serde.js";
@@ -16,7 +16,7 @@ const test = alchemy.test(import.meta, {
 });
 
 describe.concurrent("Scope", () => {
-  for (const storeType of ["fs", "dofs", "sqlite", "d1", "do"]) {
+  for (const storeType of STATE_STORE_TYPES) {
     describe(storeType, () => {
       const options = createTestOptions(storeType, "scope");
 
