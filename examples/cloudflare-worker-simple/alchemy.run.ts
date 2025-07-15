@@ -8,11 +8,8 @@ import {
   R2Bucket,
   Worker,
 } from "alchemy/cloudflare";
-import { DOStateStore } from "alchemy/state";
 
-const app = await alchemy("cloudflare-worker-simple", {
-  stateStore: (scope) => new DOStateStore(scope),
-});
+const app = await alchemy("cloudflare-worker-simple");
 
 const [d1, kv, r2] = await Promise.all([
   D1Database("d1", {
