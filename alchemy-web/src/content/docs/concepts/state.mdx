@@ -90,18 +90,22 @@ const app = await alchemy("my-app", {
 });
 ```
 
-### Durable Objects State Store (Recommended)
+### Cloudflare State Store
 
-For high-performance cloud state storage, use DOStateStore with Cloudflare Durable Objects.
+For persistent state storage in Cloudflare, use the `CloudflareStateStore` which store state in a Cloudflare Worker backed by a Durable Object and Sqlite.
+
+:::note
+See the [Cloudflare State Store Guide](/guides/cloudflare-state-store) for more details.
+:::
 
 ```typescript
-import { DOStateStore } from "alchemy/cloudflare";
+import { CloudflareStateStore } from "alchemy/state";
 
 // Set CLOUDFLARE_API_KEY, CLOUDFLARE_EMAIL, and ALCHEMY_STATE_TOKEN env vars
 const app = await alchemy("my-app", {
   stage: "prod",
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
-  stateStore: (scope) => new DOStateStore(scope)
+  stateStore: (scope) => new CloudflareStateStore(scope)
 });
 ```
 
@@ -112,42 +116,26 @@ Credentials can be inferred from environment variables or OAuth. See the [Cloudf
 You can also provide explicit configuration:
 
 ```typescript
-import { DOStateStore } from "alchemy/cloudflare";
+import { CloudflareStateStore } from "alchemy/cloudflare";
 
 const app = await alchemy("my-app", {
   stage: "prod", 
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
-  stateStore: (scope) => new DOStateStore(scope, {
+  stateStore: (scope) => new CloudflareStateStore(scope, {
     // Cloudflare API credentials
-    apiKey: alchemy.secret(process.env.CLOUDFLARE_API_KEY),
     email: process.env.CLOUDFLARE_EMAIL,
+    apiToken: alchemy.secret(process.env.CLOUDFLARE_API_TOKEN),
     // Optional: customize worker name (defaults to "alchemy-state")
-    worker: {
-      name: "my-app-state"
-    }
+    scriptName: "my-app-state",
+    // Overrides the default state token (ALCHEMY_STATE_TOKEN)
+    stateToken: alchemy.secret(process.env.MY_STATE_TOKEN),
+    // Optional: customize worker name (defaults to "alchemy-state")
+    scriptName: "my-app-state",
   })
 });
 ```
 
-DOStateStore automatically creates and manages a Cloudflare Worker with Durable Objects for state storage.
-
-
-### R2 Rest State Store
-
-Alchemy also supports state storage using Cloudflare R2, though DOStateStore is recommended for better performance:
-
-```typescript
-// Example with Cloudflare R2 state store
-const app = await alchemy("my-app", {
-  stage: "prod",
-  phase: process.argv.includes("--destroy") ? "destroy" : "up",
-  stateStore: (scope) => new R2RestStateStore(scope, {
-    apiKey: alchemy.secret(process.env.CLOUDFLARE_API_KEY),
-    email: process.env.CLOUDFLARE_EMAIL,
-    bucketName: process.env.CLOUDFLARE_BUCKET_NAME!,
-  })
-});
-```
+`CloudflareStateStore` automatically creates and manages a Cloudflare Worker with Durable Objects for state storage.
 
 ### S3 State Store
 
