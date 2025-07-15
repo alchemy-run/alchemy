@@ -2,7 +2,7 @@ import {
   D1StateStore as _D1StateStore,
   DOFSStateStore as _DOFSStateStore,
   R2RestStateStore as _R2RestStateStore,
-} from "alchemy/state";
+} from "../state/index.ts";
 
 /**
  * @deprecated Use `R2RestStateStore` from `alchemy/state` instead.
