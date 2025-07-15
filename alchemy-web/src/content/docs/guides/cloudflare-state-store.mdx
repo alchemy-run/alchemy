@@ -9,6 +9,10 @@ import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 
 CloudflareStateStore provides a [State Store](/concepts/state) using a Cloudflare Worker and a SQLite3 Durable Object.
 
+:::note
+See the [CloudflareStateStore documentation](/providers/cloudflare/cloudflare-state-store) for more details.
+:::
+
 <Steps>
 
 1. **Generate a state token**
@@ -44,7 +48,7 @@ CloudflareStateStore provides a [State Store](/concepts/state) using a Cloudflar
 
    ```typescript
    import alchemy from "alchemy";
-   import { CloudflareStateStore } from "alchemy/cloudflare";
+   import { CloudflareStateStore } from "alchemy/state";
 
    const app = await alchemy("my-app", {
      stateStore: (scope) => new CloudflareStateStore(scope)
