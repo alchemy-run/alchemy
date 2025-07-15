@@ -92,12 +92,12 @@ const readWranglerConfig = () => {
       const config = toml.parse(text.replace(/\r\n/g, "\n"));
       assert(typeof config.oauth_token === "string");
       assert(typeof config.refresh_token === "string");
-      assert(config.expiration_time instanceof Date);
+      assert(!!config.expiration_time);
       assert(Array.isArray(config.scopes));
       return {
         oauth_token: config.oauth_token,
         refresh_token: config.refresh_token,
-        expiration_time: new Date(config.expiration_time),
+        expiration_time: new Date(config.expiration_time as any),
         scopes: config.scopes as string[],
       };
     }),
