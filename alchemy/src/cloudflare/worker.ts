@@ -89,6 +89,10 @@ import { WorkerSubdomain, disableWorkerSubdomain } from "./worker-subdomain.ts";
 import { createTail } from "./worker-tail.ts";
 import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 
+// Previous versions of `Worker` used the `Bundle` resource.
+// This import is here to avoid errors when destroying the `Bundle` resource.
+import "../esbuild/bundle.ts";
+
 /**
  * Configuration options for static assets
  */
