@@ -371,6 +371,24 @@ export interface BaseWorkerProps<
         url: string;
         cwd?: string;
       };
+
+  /**
+   * Smart placement configuration for the worker.
+   *
+   * Controls how Cloudflare places the worker across its network for optimal performance.
+   *
+   * When omitted, smart placement is disabled (default behavior).
+   */
+  placement?: {
+    /**
+     * The placement mode for the worker.
+     *
+     * - "smart": Automatically optimize placement based on performance metrics
+     *
+     * @default undefined (smart placement disabled)
+     */
+    mode: "smart";
+  };
 }
 
 export interface InlineWorkerProps<
@@ -565,6 +583,13 @@ export type Worker<
      * Version label for this worker deployment
      */
     version?: string;
+
+    /**
+     * Smart placement configuration for the worker
+     */
+    placement?: {
+      mode: "smart";
+    };
   };
 
 /**
@@ -1093,6 +1118,8 @@ export const _Worker = Resource(
         assets: props.assets,
         // Include cron triggers in the output
         crons: props.crons,
+        // Include placement configuration in the output
+        placement: props.placement,
         // phantom property
         Env: undefined!,
       } as unknown as Worker<B>);
@@ -1385,6 +1412,8 @@ export const _Worker = Resource(
       namespace: props.namespace,
       // Include version information in the output
       version: props.version,
+      // Include placement configuration in the output
+      placement: props.placement,
       // phantom property
       Env: undefined!,
     } as unknown as Worker<B>);
