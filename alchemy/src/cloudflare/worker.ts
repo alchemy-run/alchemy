@@ -1026,35 +1026,6 @@ export const _Worker = Resource(
         ? props.namespace
         : props.namespace?.namespaceName;
 
-    // const normalizeDev = (ctx: Context<any>, dev: WorkerProps["dev"]): Dev => {
-    //   if (!ctx.scope.dev || ctx.phase === "delete" || dev === false) {
-    //     return {
-    //       type: "none",
-    //       local: false,
-    //     };
-    //   }
-    //   const devObj = dev === true ? {} : (dev ?? {});
-    //   if ("command" in devObj) {
-    //     // Commands are always local
-    //     return {
-    //       type: "command",
-    //       ...devObj,
-    //       local: true,
-    //     };
-    //   }
-    //   if (devObj.remote === false || ctx.scope.dev === "prefer-local") {
-    //     return {
-    //       type: "miniflare",
-    //       port: devObj.port,
-    //       local: true,
-    //     };
-    //   }
-    //   return {
-    //     type: "remote",
-    //     local: false,
-    //   };
-    // };
-
     const [bundle, error] = wrap(() =>
       normalizeWorkerBundle({
         entrypoint: props.entrypoint,
@@ -1083,29 +1054,24 @@ export const _Worker = Resource(
         throw error;
       }
 
-      switch (props.dev?.command) {
-        case "command": {
-          const { url: commandUrl } = await createDevCommand({
-            id,
-            command: props.dev.command,
-            cwd: props.dev.cwd ?? props.cwd ?? process.cwd(),
-            env: props.env ?? {},
-          });
-          url = commandUrl;
-          break;
-        }
-        case "miniflare": {
-          url = await createMiniflare({
-            id,
-            workerName,
-            compatibilityDate,
-            compatibilityFlags,
-            bindings: props.bindings,
-            bundle,
-            port: props.dev?.port,
-          });
-          break;
-        }
+      if (props.dev?.command) {
+        const { url: commandUrl } = await createDevCommand({
+          id,
+          command: props.dev.command,
+          cwd: props.dev.cwd ?? props.cwd ?? process.cwd(),
+          env: props.env ?? {},
+        });
+        url = commandUrl;
+      } else {
+        url = await createMiniflare({
+          id,
+          workerName,
+          compatibilityDate,
+          compatibilityFlags,
+          bindings: props.bindings,
+          bundle,
+          port: props.dev?.port,
+        });
       }
 
       return this({
