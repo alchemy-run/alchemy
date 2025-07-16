@@ -199,6 +199,26 @@ const worker = await Worker("advanced-worker", {
 });
 ```
 
+## Smart Placement
+
+Enable smart placement to automatically optimize your worker's placement across Cloudflare's global network:
+
+```ts
+import { Worker } from "alchemy/cloudflare";
+
+const worker = await Worker("optimized-worker", {
+  name: "optimized-worker",
+  entrypoint: "./src/api.ts",
+  placement: {
+    mode: "smart", // Enable smart placement
+  },
+});
+```
+
+:::tip
+Learn more about [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement/) in the Cloudflare documentation.
+:::
+
 ## Cron Triggers
 
 Schedule recurring tasks:

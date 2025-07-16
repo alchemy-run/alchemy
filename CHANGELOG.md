@@ -1,3 +1,20 @@
+## v0.47.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Add Smart placement support to Worker &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/691 [<samp>(db5d5)</samp>](https://github.com/sam-goodwin/alchemy/commit/db5d59fe)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Deprecate WorkerProps.env &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(8ea38)</samp>](https://github.com/sam-goodwin/alchemy/commit/8ea3803a)
+  - Zones force alwaysUseHttps &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/679 [<samp>(da47b)</samp>](https://github.com/sam-goodwin/alchemy/commit/da47b1c9)
+  - Wrangler config being read from incorrect path &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/683 [<samp>(7c325)</samp>](https://github.com/sam-goodwin/alchemy/commit/7c32546f)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.46.1...v0.47.0)
+
+---
+
 ## v0.46.1
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
