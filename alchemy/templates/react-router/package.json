@@ -3,7 +3,7 @@
   "name": "@alchemy.run/react-router-template",
   "private": true,
   "scripts": {
-    "build": "vite build",
+    "build": "react-router build",
     "deploy": "alchemy deploy",
     "destroy": "alchemy destroy",
     "dev": "alchemy dev",

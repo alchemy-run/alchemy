@@ -12,7 +12,7 @@ import { getBindKey, tryGetBinding } from "../runtime/bind.ts";
 import { isRuntime } from "../runtime/global.ts";
 import { bootstrapPlugin } from "../runtime/plugin.ts";
 import { Scope } from "../scope.ts";
-import { Secret, secret } from "../secret.ts";
+import { Secret, isSecret, secret } from "../secret.ts";
 import { serializeScope } from "../serde.ts";
 import type { type } from "../type.ts";
 import { DeferredPromise } from "../util/deferred-promise.ts";
@@ -1053,8 +1053,19 @@ export const _Worker = Resource(
         const { url: commandUrl } = await createDevCommand({
           id,
           command: props.dev.command,
-          cwd: props.dev.cwd ?? props.cwd ?? process.cwd(),
-          env: props.env ?? {},
+          cwd: props.dev.cwd || props.cwd || process.cwd(),
+          env: {
+            ...props.env,
+            ...Object.fromEntries(
+              Object.entries(props.bindings ?? {}).flatMap(([key, value]) =>
+                typeof value === "string"
+                  ? [[key, value]]
+                  : isSecret(value)
+                    ? [[key, value.unencrypted]]
+                    : [],
+              ),
+            ),
+          },
         });
         url = commandUrl;
       } else {
@@ -1797,6 +1808,14 @@ async function createDevCommand(props: {
     }
   }
   const command = props.command.split(" ");
+  console.log({
+    command,
+    args: command.slice(1),
+    cwd: props.cwd,
+    env: {
+      ...props.env,
+    },
+  });
   const proc = spawn(command[0], command.slice(1), {
     cwd: props.cwd,
     env: {
@@ -1808,7 +1827,7 @@ async function createDevCommand(props: {
         "miniflare",
       ),
       // Force colors in the child process since we're piping output
-      FORCE_COLOR: "1",
+      // FORCE_COLOR: "1",
     },
     stdio: ["inherit", "pipe", "pipe"],
   });
@@ -1816,7 +1835,8 @@ async function createDevCommand(props: {
     let urlFound = false;
     let stdout = "";
     let stderr = "";
-    const urlRegex = /http:\/\/localhost:\d+/;
+    const urlRegex =
+      /http:\/\/(?:(?:localhost|0\.0\.0\.0|127\.0\.0\.1)|(?:\d{1,3}\.){3}\d{1,3}):\d+(?:\/)?/;
 
     const parseOutput = (data: string) => {
       if (!urlFound) {
@@ -1824,10 +1844,6 @@ async function createDevCommand(props: {
         if (match) {
           urlFound = true;
           resolve({ url: match[0] });
-        } else {
-          if (data.includes("http://localhost:")) {
-            console.log(data);
-          }
         }
       }
     };

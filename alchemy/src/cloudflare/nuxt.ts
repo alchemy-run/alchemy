@@ -64,5 +64,8 @@ export async function Nuxt<B extends Bindings>(
     compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
     // Enable wrangler by default, common for Nuxt/Cloudflare deployments
     wrangler: props?.wrangler ?? true,
+    dev: props?.dev ?? {
+      command: "nuxt dev",
+    },
   });
 }

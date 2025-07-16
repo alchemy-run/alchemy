@@ -41,5 +41,8 @@ export async function ReactRouter<B extends Bindings>(
             dist: props.assets.dist ?? defaultAssets,
           }
         : (props.assets ?? defaultAssets),
+    dev: props.dev ?? {
+      command: "react-router dev",
+    },
   });
 }
