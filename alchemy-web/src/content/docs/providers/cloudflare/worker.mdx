@@ -197,6 +197,81 @@ const worker = await Worker("advanced-worker", {
 });
 ```
 
+## Smart Placement
+
+Smart placement allows Cloudflare to automatically optimize your worker's placement across its global network for better performance. When enabled, Cloudflare analyzes your worker's traffic patterns and places it closer to your users or data sources.
+
+```ts
+import { Worker } from "alchemy/cloudflare";
+
+const worker = await Worker("optimized-worker", {
+  name: "optimized-worker",
+  entrypoint: "./src/api.ts",
+  placement: {
+    mode: "smart", // Enable smart placement
+  },
+});
+```
+
+### How Smart Placement Works
+
+Smart placement uses Cloudflare's global network intelligence to:
+
+- **Analyze traffic patterns**: Monitor where requests are coming from and how your worker responds
+- **Optimize placement**: Move your worker closer to users or data sources based on usage patterns
+- **Reduce latency**: Minimize the distance between your worker and its most frequent interactions
+- **Improve performance**: Automatically adjust placement as traffic patterns change over time
+
+### Enabling and Disabling Smart Placement
+
+Smart placement is disabled by default. To enable it, add the `placement` property:
+
+```ts
+import { Worker } from "alchemy/cloudflare";
+
+// Enable smart placement
+const smartWorker = await Worker("smart-worker", {
+  name: "smart-worker",
+  entrypoint: "./src/api.ts",
+  placement: {
+    mode: "smart",
+  },
+});
+
+// Disable smart placement (default behavior)
+const regularWorker = await Worker("regular-worker", {
+  name: "regular-worker",
+  entrypoint: "./src/api.ts",
+  // No placement property means smart placement is disabled
+});
+```
+
+### Smart Placement with Other Features
+
+Smart placement works seamlessly with other worker features:
+
+```ts
+import { Worker, KVNamespace } from "alchemy/cloudflare";
+
+const cache = await KVNamespace("cache", { title: "api-cache" });
+
+const worker = await Worker("api-with-smart-placement", {
+  name: "api-with-smart-placement",
+  entrypoint: "./src/api.ts",
+  placement: {
+    mode: "smart",
+  },
+  bindings: {
+    CACHE: cache,
+  },
+  routes: ["api.example.com/*"],
+});
+```
+
+:::note
+Smart placement optimization may take some time to take effect as Cloudflare analyzes your traffic patterns. The feature works best for workers with consistent traffic patterns.
+:::
+
 ## Cron Triggers
 
 Schedule recurring tasks:
