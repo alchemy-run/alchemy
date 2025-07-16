@@ -222,7 +222,7 @@ export default {
         });
       }
 
-      const isDev = scope.dev || props.dev;
+      const isDev = scope.local;
 
       if (props.command && !isDev) {
         await Exec("build", {

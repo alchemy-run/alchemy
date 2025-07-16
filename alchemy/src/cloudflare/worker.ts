@@ -353,7 +353,6 @@ export interface BaseWorkerProps<
    * the worker will be emulated locally and available at a randomly selected port.
    */
   dev?:
-    | boolean
     | {
         /**
          * Port to use for local development
@@ -365,10 +364,16 @@ export interface BaseWorkerProps<
          * @default false
          */
         remote?: boolean;
+        /** @internal */
+        command?: undefined;
       }
     | {
         command: string;
         cwd?: string;
+        /** @internal */
+        port?: undefined;
+        /** @internal */
+        remote?: undefined;
       };
 }
 
@@ -1021,7 +1026,34 @@ export const _Worker = Resource(
         ? props.namespace
         : props.namespace?.namespaceName;
 
-    const dev = normalizeDev(this, props.dev);
+    // const normalizeDev = (ctx: Context<any>, dev: WorkerProps["dev"]): Dev => {
+    //   if (!ctx.scope.dev || ctx.phase === "delete" || dev === false) {
+    //     return {
+    //       type: "none",
+    //       local: false,
+    //     };
+    //   }
+    //   const devObj = dev === true ? {} : (dev ?? {});
+    //   if ("command" in devObj) {
+    //     // Commands are always local
+    //     return {
+    //       type: "command",
+    //       ...devObj,
+    //       local: true,
+    //     };
+    //   }
+    //   if (devObj.remote === false || ctx.scope.dev === "prefer-local") {
+    //     return {
+    //       type: "miniflare",
+    //       port: devObj.port,
+    //       local: true,
+    //     };
+    //   }
+    //   return {
+    //     type: "remote",
+    //     local: false,
+    //   };
+    // };
 
     const [bundle, error] = wrap(() =>
       normalizeWorkerBundle({
@@ -1041,18 +1073,22 @@ export const _Worker = Resource(
       }),
     );
 
-    if (dev.local) {
+    // run locally if
+    const local = this.scope.local && !props.dev?.remote;
+    const watch = this.scope.watch;
+
+    if (local) {
       let url: string | undefined;
       if (error) {
         throw error;
       }
 
-      switch (dev.type) {
+      switch (props.dev?.command) {
         case "command": {
           const { url: commandUrl } = await createDevCommand({
             id,
-            command: dev.command,
-            cwd: dev.cwd ?? props.cwd ?? process.cwd(),
+            command: props.dev.command,
+            cwd: props.dev.cwd ?? props.cwd ?? process.cwd(),
             env: props.env ?? {},
           });
           url = commandUrl;
@@ -1066,7 +1102,7 @@ export const _Worker = Resource(
             compatibilityFlags,
             bindings: props.bindings,
             bundle,
-            port: dev.port,
+            port: props.dev?.port,
           });
           break;
         }
@@ -1191,7 +1227,7 @@ export const _Worker = Resource(
     }
 
     let putWorkerResult: PutWorkerResult;
-    if (dev.type === "remote") {
+    if (watch) {
       // todo(john): clean this up and add log tail
       const controller = new AbortController();
       cleanups.push(() => controller.abort());
@@ -1406,56 +1442,6 @@ process.on("SIGINT", async () => {
   }
   process.exit(0);
 });
-
-type Dev =
-  | {
-      type: "none";
-      local: false;
-    }
-  | {
-      type: "miniflare";
-      port?: number;
-      local: true;
-    }
-  | {
-      type: "command";
-      command: string;
-      cwd?: string;
-      local: true;
-    }
-  | {
-      type: "remote";
-      local: false;
-    };
-
-const normalizeDev = (ctx: Context<any>, dev: WorkerProps["dev"]): Dev => {
-  if (!ctx.scope.dev || ctx.phase === "delete" || dev === false) {
-    return {
-      type: "none",
-      local: false,
-    };
-  }
-  const devObj = dev === true ? {} : (dev ?? {});
-  if ("command" in devObj) {
-    // Commands are always local
-    return {
-      type: "command",
-      ...devObj,
-      local: true,
-    };
-  }
-  if (devObj.remote === false || ctx.scope.dev === "prefer-local") {
-    return {
-      type: "miniflare",
-      port: devObj.port,
-      local: true,
-    };
-  }
-  return {
-    type: "remote",
-    local: false,
-  };
-};
 
 const assertUnique = <T, Key extends keyof T>(
   inputs: T[],

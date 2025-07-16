@@ -21,50 +21,6 @@ import { logger } from "./util/logger.ts";
 import { TelemetryClient } from "./util/telemetry/client.ts";
 
 /**
- * Parses CLI arguments to extract alchemy options
- */
-function parseCliArgs(): Partial<AlchemyOptions> {
-  const args = process.argv.slice(2);
-  const options: Partial<AlchemyOptions> = {};
-
-  // Parse phase from CLI arguments
-  if (args.includes("--destroy")) {
-    options.phase = "destroy";
-  } else if (args.includes("--read")) {
-    options.phase = "read";
-  }
-
-  if (args.includes("--local") || args.includes("--dev")) {
-    options.dev = "prefer-local";
-  } else if (
-    args.includes("--remote") ||
-    args.includes("--watch") ||
-    process.execArgv.includes("--watch")
-  ) {
-    options.dev = "prefer-remote";
-  }
-
-  // Parse quiet flag
-  if (args.includes("--quiet")) {
-    options.quiet = true;
-  }
-
-  // Parse stage argument (--stage my-stage)
-  const stageIndex = args.indexOf("--stage");
-  if (stageIndex !== -1 && stageIndex + 1 < args.length) {
-    options.stage = args[stageIndex + 1];
-  }
-  options.stage ??= process.env.STAGE;
-
-  // Get password from environment variables
-  if (process.env.ALCHEMY_PASSWORD) {
-    options.password = process.env.ALCHEMY_PASSWORD;
-  }
-
-  return options;
-}
-
-/**
  * Type alias for semantic highlighting of `alchemy` as a type keyword
  */
 export type alchemy = Alchemy;
@@ -175,8 +131,25 @@ async function _alchemy(
   if (typeof args[0] === "string") {
     const [appName, options] = args as [string, AlchemyOptions?];
 
-    // Parse CLI arguments and merge with provided options (explicit options take precedence)
-    const cliOptions = parseCliArgs();
+    const cliArgs = process.argv.slice(2);
+    const cliOptions = {
+      phase: cliArgs.includes("--destroy")
+        ? "destroy"
+        : cliArgs.includes("--read")
+          ? "read"
+          : "up",
+      local: cliArgs.includes("--local") || cliArgs.includes("--dev"),
+      watch: cliArgs.includes("--watch"),
+      quiet: cliArgs.includes("--quiet"),
+      // Parse stage argument (--stage my-stage) functionally and inline as a property declaration
+      stage: (function parseStage() {
+        const i = cliArgs.indexOf("--stage");
+        return i !== -1 && i + 1 < cliArgs.length
+          ? cliArgs[i + 1]
+          : process.env.STAGE;
+      })(),
+      password: process.env.ALCHEMY_PASSWORD,
+    } satisfies Partial<AlchemyOptions>;
     const mergedOptions = {
       ...cliOptions,
       ...options,
@@ -348,11 +321,17 @@ export interface AlchemyOptions {
    */
   phase?: Phase;
   /**
-   * Determines how Alchemy will run in development mode.
+   * Determines if resources should be simulated locally (where possible)
    *
-   * @default - `"prefer-local"` if `--dev` or `--local` is passed as a CLI argument, `"prefer-remote"` if `--remote` or `--watch` is passed as a CLI argument, `undefined` otherwise
+   * @default - `true` if ran with `alchemy dev` or `bun ./alchemy.run.ts --dev`
    */
-  dev?: "prefer-local" | "prefer-remote";
+  local?: boolean;
+  /**
+   * Determines if local changes to resources should be reactively pushed to the local or remote environment.
+   *
+   * @default - `true` if ran with `alchemy dev`, `alchemy watch`, `bun --watch ./alchemy.run.ts`
+   */
+  watch?: boolean;
   /**
    * Name to scope the resource state under (e.g. `.alchemy/{stage}/..`).
    *

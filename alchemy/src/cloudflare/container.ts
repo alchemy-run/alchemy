@@ -191,7 +191,7 @@ export async function Container<T>(
     adopt: props.adopt,
   };
 
-  const isDev = Scope.current.dev && !props.dev?.remote;
+  const isDev = Scope.current.local && !props.dev?.remote;
   if (isDev) {
     const image = await Image(id, {
       name: `cloudflare-dev/${name}`, // prefix used by Miniflare
