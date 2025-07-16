@@ -69,7 +69,8 @@
         "noAssignInExpressions": "off",
         "noShadowRestrictedNames": "off",
         "noEmptyInterface": "off",
-        "noRedeclare": "off"
+        "noRedeclare": "off",
+        "noControlCharactersInRegex": "off"
       },
       "style": {
         "useLiteralEnumMembers": "error",

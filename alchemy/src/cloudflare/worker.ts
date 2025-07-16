@@ -1,13 +1,7 @@
 import type esbuild from "esbuild";
 import kleur from "kleur";
 import { spawn } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import fs from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import path from "pathe";
 import { BUILD_DATE } from "../build-date.ts";
@@ -92,6 +86,7 @@ import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 // Previous versions of `Worker` used the `Bundle` resource.
 // This import is here to avoid errors when destroying the `Bundle` resource.
 import "../esbuild/bundle.ts";
+import { exists } from "../util/exists.ts";
 
 /**
  * Configuration options for static assets
@@ -1780,15 +1775,15 @@ async function createMiniflare(props: {
   return await startPromise.value;
 }
 
-function createDevCommand(props: {
+async function createDevCommand(props: {
   id: string;
   command: string;
   cwd: string;
   env: Record<string, string>;
 }): Promise<{ url: string }> {
   const persistFile = path.join(process.cwd(), ".alchemy", `${props.id}.pid`);
-  if (existsSync(persistFile)) {
-    const pid = Number.parseInt(readFileSync(persistFile, "utf8"));
+  if (await exists(persistFile)) {
+    const pid = Number.parseInt(await fs.readFile(persistFile, "utf8"));
     try {
       // Actually kill the process if it's alive
       process.kill(pid, "SIGTERM");
@@ -1796,52 +1791,59 @@ function createDevCommand(props: {
       // ignore
     }
     try {
-      unlinkSync(persistFile);
+      await fs.unlink(persistFile);
     } catch {
       // ignore
     }
   }
-
-  return new Promise((resolve, reject) => {
-    const command = props.command.split(" ");
-    const proc = spawn(command[0], command.slice(1), {
-      cwd: props.cwd,
-      env: {
-        ...process.env,
-        ...props.env,
-        ALCHEMY_CLOUDFLARE_PERSIST_PATH: path.join(
-          process.cwd(),
-          ".alchemy",
-          "miniflare",
-        ),
-        // Force colors in the child process since we're piping output
-        FORCE_COLOR: "1",
-      },
-      stdio: ["inherit", "pipe", "pipe"],
-    });
-
+  const command = props.command.split(" ");
+  const proc = spawn(command[0], command.slice(1), {
+    cwd: props.cwd,
+    env: {
+      ...process.env,
+      ...props.env,
+      ALCHEMY_CLOUDFLARE_PERSIST_PATH: path.join(
+        process.cwd(),
+        ".alchemy",
+        "miniflare",
+      ),
+      // Force colors in the child process since we're piping output
+      FORCE_COLOR: "1",
+    },
+    stdio: ["inherit", "pipe", "pipe"],
+  });
+  const { url } = await new Promise<{ url: string }>((resolve, reject) => {
     let urlFound = false;
+    let stdout = "";
+    let stderr = "";
     const urlRegex = /http:\/\/localhost:\d+/;
 
-    const parseOutput = (data: Buffer) => {
+    const parseOutput = (data: string) => {
       if (!urlFound) {
-        const output = data.toString();
-        const match = output.match(urlRegex);
+        const match = data.match(urlRegex);
         if (match) {
           urlFound = true;
           resolve({ url: match[0] });
+        } else {
+          if (data.includes("http://localhost:")) {
+            console.log(data);
+          }
         }
       }
     };
 
     // Handle stdout - parse for URL and write through with colors preserved
     proc.stdout?.on("data", (data) => {
-      parseOutput(data);
+      parseOutput(
+        (stdout += data.toString().replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")),
+      );
       process.stdout.write(data);
     });
 
     proc.stderr?.on("data", (data) => {
-      parseOutput(data);
+      parseOutput(
+        (stderr += data.toString().replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")),
+      );
       process.stderr.write(data);
     });
 
@@ -1849,20 +1851,20 @@ function createDevCommand(props: {
       reject(error);
     });
 
-    cleanups.push(() => {
+    cleanups.push(async () => {
       try {
-        unlinkSync(persistFile);
+        await fs.unlink(persistFile);
       } catch {
         // ignore
       }
       proc.kill();
     });
-
-    if (proc.pid) {
-      mkdirSync(path.dirname(persistFile), { recursive: true });
-      writeFileSync(persistFile, proc.pid.toString());
-    }
   });
+  if (proc.pid) {
+    await fs.mkdir(path.dirname(persistFile), { recursive: true });
+    await fs.writeFile(persistFile, proc.pid.toString());
+  }
+  return { url };
 }
 
 type PutWorkerOptions = Omit<WorkerProps, "entrypoint"> & {
