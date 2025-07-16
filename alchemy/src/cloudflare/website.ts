@@ -4,12 +4,8 @@ import { Exec } from "../os/exec.ts";
 import { Scope } from "../scope.ts";
 import { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
-import {
-  DEFAULT_COMPATIBILITY_DATE,
-  Worker,
-  type AssetsConfig,
-  type WorkerProps,
-} from "./worker.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "./compatibility-date.gen.ts";
+import { Worker, type AssetsConfig, type WorkerProps } from "./worker.ts";
 import { WranglerJson, type WranglerJsonSpec } from "./wrangler.json.ts";
 
 export interface WebsiteProps<B extends Bindings>

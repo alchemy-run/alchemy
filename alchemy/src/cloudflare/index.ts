@@ -12,6 +12,7 @@ export * from "./bound.ts";
 export * from "./browser-rendering.ts";
 export * from "./bucket.ts";
 export * from "./certificate-pack.ts";
+export * from "./compatibility-date.gen.ts";
 export * from "./container.ts";
 export * from "./custom-domain.ts";
 export * from "./d1-clone.ts";

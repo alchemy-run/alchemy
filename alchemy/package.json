@@ -15,7 +15,7 @@
     "alchemy": "bin/alchemy.mjs"
   },
   "scripts": {
-    "build:cli": "bun ./scripts/bundle-cli.ts",
+    "build:cli": "bun ./scripts/build-cli.ts",
     "build:workers": "bun ./scripts/build-workers.ts",
     "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && bun run build:cli && bun run build:workers",
     "drizzle:generate": "bun run scripts/drizzle-generate.ts",

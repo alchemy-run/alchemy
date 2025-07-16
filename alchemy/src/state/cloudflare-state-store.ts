@@ -1,8 +1,8 @@
 import { alchemy } from "../alchemy.ts";
-import { BUILD_DATE } from "../build-date.ts";
 import type { CloudflareApiOptions } from "../cloudflare/api.ts";
 import { createCloudflareApi } from "../cloudflare/api.ts";
 import { getInternalWorkerBundle } from "../cloudflare/bundle/internal-worker-bundle.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../cloudflare/compatibility-date.gen.ts";
 import { DurableObjectNamespace } from "../cloudflare/durable-object-namespace.ts";
 import { getWorkerSettings } from "../cloudflare/worker-metadata.ts";
 import {
@@ -109,7 +109,7 @@ const provision = memoize(async (options: CloudflareStateStoreOptions) => {
     );
     await putWorker(api, {
       workerName: scriptName,
-      compatibilityDate: BUILD_DATE,
+      compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
       format: "esm",
       scriptBundle: {
         entrypoint: bundle.file.name,

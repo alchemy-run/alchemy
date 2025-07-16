@@ -1,19 +1,17 @@
-import esbuild from "esbuild";
-import path from "node:path";
+#!/usr/bin/env bun
 
-console.log(`Building CLI...`)
+import { build } from "esbuild";
 
-await esbuild.build({
+await build({
   entryPoints: ["bin/alchemy.ts"],
-  absWorkingDir: path.join(__dirname, ".."),
-  outfile: "bin/alchemy.mjs",
   bundle: true,
-  format: "esm",
   platform: "node",
   target: "node20",
+  outfile: "bin/alchemy.mjs",
+  format: "esm",
   external: ["node:*"],
+  mainFields: ["module", "main"],
   banner: {
     js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
   },
-  mainFields: ["module", "main"],
 });
