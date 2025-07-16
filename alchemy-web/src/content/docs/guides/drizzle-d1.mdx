@@ -26,7 +26,6 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
        bun init -y
        bun add alchemy drizzle-orm
        bun add -D drizzle-kit @types/node
-       bun add -g wrangler
        ```
      </TabItem>
      <TabItem label="npm">
@@ -34,7 +33,6 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
        npm init -y
        npm install alchemy drizzle-orm
        npm install -D drizzle-kit @types/node
-       npm install -g wrangler
        ```
      </TabItem>
      <TabItem label="pnpm">
@@ -42,7 +40,6 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
        pnpm init
        pnpm add alchemy drizzle-orm
        pnpm add -D drizzle-kit @types/node
-       pnpm add -g wrangler
        ```
      </TabItem>
      <TabItem label="yarn">
@@ -50,7 +47,6 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
        yarn init -y
        yarn add alchemy drizzle-orm
        yarn add -D drizzle-kit @types/node
-       yarn global add wrangler
        ```
      </TabItem>
    </Tabs>
@@ -59,9 +55,28 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
 
    Authenticate with your Cloudflare account.
 
-   ```sh
-   alchemy login
-   ```
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun alchemy login
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx alchemy login
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm alchemy login
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn alchemy login
+       ```
+     </TabItem>
+   </Tabs>
 
    :::tip
    Make sure you have a [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier works)
@@ -154,7 +169,7 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
    });
 
    // Create API worker
-   const worker = await Worker("api-worker", {
+   export const worker = await Worker("api-worker", {
      name: "api-worker",
      entrypoint: "./src/worker.ts",
      bindings: {
@@ -174,10 +189,9 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
    // src/worker.ts
    import { drizzle } from 'drizzle-orm/d1';
    import { users } from './schema';
+   import type { worker } from "../alchemy.run.ts"
 
-   export interface Env {
-     DB: D1Database;
-   }
+   type Env = typeof worker.Env
 
    export default {
      async fetch(request: Request, env: Env): Promise<Response> {
