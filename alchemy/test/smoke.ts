@@ -1,3 +1,4 @@
+import { Listr } from "listr2";
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { access, mkdir, readdir, stat, unlink } from "node:fs/promises";
@@ -165,13 +166,14 @@ const skippedExamples = [
 const examples = (await discoverExamples()).filter(
   (e) => !skippedExamples.includes(e.name),
 );
-console.log(
-  `Discovered ${examples.length} example projects:`,
-  examples.map((e) => e.name),
-);
 
 const testIndex = process.argv.findIndex((arg) => arg === "-t");
 const testName = testIndex !== -1 ? process.argv[testIndex + 1] : undefined;
+
+// Filter examples based on test name if provided
+const filteredExamples = examples.filter((e) =>
+  testName ? e.name.includes(testName) : true,
+);
 
 // Ensure smoke directory exists
 if (!noCaptureFlag) {
@@ -182,10 +184,11 @@ if (!noCaptureFlag) {
   }
 }
 
-const tests = await Promise.allSettled(
-  examples
-    .filter((e) => (testName ? e.name.includes(testName) : true))
-    .map(async (example) => {
+// Create Listr tasks
+const tasks = new Listr(
+  filteredExamples.map((example) => ({
+    title: `${example.name}`,
+    task: async (ctx, task) => {
       let devCommand: string;
       let deployCommand: string;
       let destroyCommand: string;
@@ -211,90 +214,98 @@ const tests = await Promise.allSettled(
         // Delete output file from previous run
         await deleteOutputFile(example.name);
 
-        // pre-emptively try and destroy the example if it exists
-        console.log(`[${example.name}] Destroy`);
+        // Phase 1: Cleanup (pre-emptive destroy)
+        task.title = `${example.name} - Cleanup`;
         await runCommand(destroyCommand, {
           cwd: example.path,
-          exampleName: example.name,
+          exampleName: noCaptureFlag ? undefined : example.name,
         });
 
-        console.log(`[${example.name}] Dev`);
+        // Phase 2: Dev
+        task.title = `${example.name} - Dev`;
         await runCommand(devCommand, {
           cwd: example.path,
-          exampleName: example.name,
+          exampleName: noCaptureFlag ? undefined : example.name,
           env: {
             // this is how we force alchemy to exit on finalize in CI
             ALCHEMY_TEST_KILL_ON_FINALIZE: "1",
           },
         });
 
-        // Run deploy command
-        console.log(`[${example.name}] Deploy`);
+        // Phase 3: Deploy
+        task.title = `${example.name} - Deploy`;
         await runCommand(deployCommand, {
           cwd: example.path,
-          exampleName: example.name,
+          exampleName: noCaptureFlag ? undefined : example.name,
         });
 
         // Verify state store behavior in CI
         await verifyNoLocalStateInCI(example.path);
 
-        // Run destroy command
-        console.log(`[${example.name}] Destroy`);
+        // Phase 4: Destroy
+        task.title = `${example.name} - Destroy`;
         await runCommand(destroyCommand, {
           cwd: example.path,
-          exampleName: example.name,
+          exampleName: noCaptureFlag ? undefined : example.name,
         });
 
         // Verify cleanup in CI
         await verifyNoLocalStateInCI(example.path);
+
+        // Task completed successfully
+        task.title = `${example.name} - ✅ Complete`;
       } catch (error) {
-        console.error(`[${example.name}] Failed`, error);
+        task.title = `${example.name} - ❌ Failed`;
         throw error;
       }
-    }),
+    },
+  })),
+  {
+    concurrent: true,
+    exitOnError: false,
+  },
 );
 
-const failedTests = tests.filter((t) => t.status === "rejected");
+try {
+  const context = await tasks.run();
 
-// Print summary
-const totalTests = tests.length;
-const passedTests = tests.filter((t) => t.status === "fulfilled");
-const passedCount = passedTests.length;
-const failedCount = failedTests.length;
+  // Print summary
+  const totalTests = filteredExamples.length;
+  const failedTasks = tasks.tasks.filter((task) => task.hasFailed());
+  const passedCount = totalTests - failedTasks.length;
+  const failedCount = failedTasks.length;
 
-console.log(`\n${"=".repeat(50)}`);
-console.log("SMOKE TEST SUMMARY");
-console.log("=".repeat(50));
-console.log(`Total tests: ${totalTests}`);
-console.log(`Passed: ${passedCount}`);
-console.log(`Failed: ${failedCount}`);
+  console.log(`\n${"=".repeat(50)}`);
+  console.log("SMOKE TEST SUMMARY");
+  console.log("=".repeat(50));
+  console.log(`Total tests: ${totalTests}`);
+  console.log(`Passed: ${passedCount}`);
+  console.log(`Failed: ${failedCount}`);
 
-if (passedCount > 0) {
-  console.log(`\nPassed tests (${passedCount}):`);
-  passedTests.forEach((_, index) => {
-    const exampleName = examples.filter((e) =>
-      testName ? e.name.includes(testName) : true,
-    )[index]?.name;
-    if (exampleName) {
-      console.log(`  ✅ ${exampleName}`);
-    }
-  });
-}
+  if (passedCount > 0) {
+    console.log(`\n✅ Passed tests (${passedCount}):`);
+    tasks.tasks
+      .filter((task) => !task.hasFailed())
+      .forEach((task) => {
+        const taskTitle = task.title ? String(task.title) : "Unknown";
+        const exampleName = taskTitle.split(" - ")[0];
+        console.log(`  ✅ ${exampleName}`);
+      });
+  }
 
-if (failedCount > 0) {
-  console.log(`\nFailed tests (${failedCount}):`);
-  failedTests.forEach((_test, index) => {
-    const exampleName = examples.filter((e) =>
-      testName ? e.name.includes(testName) : true,
-    )[index]?.name;
-    if (exampleName) {
+  if (failedCount > 0) {
+    console.log(`\n❌ Failed tests (${failedCount}):`);
+    failedTasks.forEach((task) => {
+      const taskTitle = task.title ? String(task.title) : "Unknown";
+      const exampleName = taskTitle.split(" - ")[0];
       console.log(`  ❌ ${exampleName}`);
-    }
-  });
+    });
 
-  console.log("\nError details:");
-  console.log(failedTests.map((t) => t.reason).join("\n"));
+    process.exit(1);
+  } else {
+    console.log("\n🎉 All tests passed!");
+  }
+} catch (error) {
+  console.error("Failed to run smoke tests:", error);
   process.exit(1);
-} else {
-  console.log("\n🎉 All tests passed!");
 }
