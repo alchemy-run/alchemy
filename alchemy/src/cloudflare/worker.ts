@@ -181,6 +181,8 @@ export interface BaseWorkerProps<
    * Environment variables to attach to the worker
    *
    * These will be converted to plain_text bindings
+   *
+   * @deprecated - use `bindings` instead
    */
   env?: {
     [key: string]: string;

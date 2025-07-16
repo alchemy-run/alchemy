@@ -5,19 +5,22 @@ description: Learn how to create, query, and manage Cloudflare D1 Databases usin
 
 The D1Database component lets you add [Cloudflare D1 Databases](https://developers.cloudflare.com/d1/) to your app.
 
-## Minimal Example
-
-Create a basic D1 database with default settings.
-
 ```ts
 import { D1Database } from "alchemy/cloudflare";
 
 const db = await D1Database("my-db", {
   name: "my-db",
 });
+
+const worker = await Worker("my-worker", {
+  entrypoint: "./worker.ts",
+  bindings: {
+    DB: db,
+  },
+});
 ```
 
-## With Migrations
+## Migrations
 
 Create a database with SQL migrations.
 
@@ -27,7 +30,6 @@ import { D1Database } from "alchemy/cloudflare";
 const db = await D1Database("users-db", {
   name: "users-db",
   migrationsDir: "./migrations",
-  migrationsTable: "schema_migrations", // Custom table name for tracking migrations
 });
 ```
 
@@ -89,7 +91,7 @@ const clonedDb = await D1Database("clone-db", {
 });
 ```
 
-### Clone by Database Name
+## Clone by Database Name
 
 ```ts
 import { D1Database } from "alchemy/cloudflare";
@@ -100,7 +102,7 @@ const clonedDb = await D1Database("clone-db", {
 });
 ```
 
-### Clone from an Existing D1Database
+## Clone from `D1Database`
 
 ```ts
 import { D1Database } from "alchemy/cloudflare";
