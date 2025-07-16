@@ -342,9 +342,7 @@ export async function prepareWorkerMetadata(
       transferred_classes: [],
       new_sqlite_classes: [],
     },
-    ...(props.placement?.mode === "smart"
-      ? { placement: props.placement }
-      : {}),
+    placement: props.placement,
   };
 
   const assetUploadResult = props.assetUploadResult;
