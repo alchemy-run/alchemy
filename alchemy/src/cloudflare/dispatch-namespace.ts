@@ -279,3 +279,31 @@ export async function deleteDispatchNamespace(
     );
   }
 }
+
+export async function listWorkersInNamespace(
+  api: CloudflareApi,
+  namespace: string,
+): Promise<Array<{ id: string; created_on: string; modified_on: string }>> {
+  const response = await api.get(
+    `/accounts/${api.accountId}/workers/dispatch/namespaces/${namespace}/scripts`,
+  );
+
+  if (!response.ok) {
+    await handleApiError(
+      response,
+      "list workers in",
+      "dispatch_namespace",
+      namespace,
+    );
+  }
+
+  const data = (await response.json()) as {
+    result: Array<{
+      id: string;
+      created_on: string;
+      modified_on: string;
+    }>;
+  };
+
+  return data.result || [];
+}

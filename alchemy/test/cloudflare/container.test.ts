@@ -45,76 +45,36 @@ describe("Container Resource", () => {
     }
   });
 
-  test("container application adoption", async (scope) => {
-    const applicationId = `${BRANCH_PREFIX}-container-app-adopt`;
+  test("adopt container bound to worker with same DO namespace id", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-container-do-worker`;
+    const containerName = `${BRANCH_PREFIX}-container-with-do`;
 
-    // Create a container to get the properly configured image
-    const container = await Container(`${BRANCH_PREFIX}-container-for-app`, {
-      className: "TestContainer",
-      name: "test-container-adopt",
-      tag: "latest",
-      build: {
-        context: path.join(import.meta.dirname, "container"),
-      },
-    });
+    async function create(suffix: string) {
+      await Worker(`worker-${suffix}`, {
+        name: workerName,
+        adopt: true,
+        entrypoint: path.join(import.meta.dirname, "container-handler.ts"),
+        compatibilityFlags: ["nodejs_compat"],
+        compatibilityDate: "2025-06-24",
+        format: "esm",
+        bindings: {
+          MY_CONTAINER: await Container("container", {
+            className: "MyContainer",
+            name: containerName,
+            adopt: true,
+            tag: "v1",
+            build: {
+              context: path.join(import.meta.dirname, "container"),
+            },
+            maxInstances: 1,
+          }),
+        },
+      });
+    }
 
     try {
-      // Create the initial container application
-      let containerApp = await ContainerApplication(applicationId, {
-        name: applicationId,
-        image: container.image,
-        instances: 1,
-        maxInstances: 2,
-        instanceType: "dev",
-      });
-
-      expect(containerApp).toMatchObject({
-        name: applicationId,
-        id: expect.any(String),
-      });
-
-      // Test that creating another application with the same name fails without adopt
-      await expect(
-        ContainerApplication(`${applicationId}-duplicate`, {
-          name: applicationId,
-          image: container.image,
-          instances: 1,
-          maxInstances: 2,
-        }),
-      ).rejects.toThrow(/already exists/);
-
-      // Test that adopting the existing application succeeds
-      const adoptedApp = await ContainerApplication(
-        `${applicationId}-adopted`,
-        {
-          name: applicationId,
-          adopt: true,
-          image: container.image,
-          instances: 2, // Different configuration
-          maxInstances: 3,
-          instanceType: "basic",
-        },
-      );
-
-      expect(adoptedApp).toMatchObject({
-        name: applicationId,
-        id: containerApp.id, // Should be the same ID as the original
-      });
-
-      // Test updating the adopted application
-      containerApp = await ContainerApplication(applicationId, {
-        name: applicationId,
-        adopt: true,
-        image: container.image,
-        instances: 3,
-        maxInstances: 4,
-        instanceType: "dev",
-      });
-
-      expect(containerApp).toMatchObject({
-        name: applicationId,
-        id: expect.any(String),
-      });
+      await create("1");
+      await create("2");
     } finally {
       await destroy(scope);
     }

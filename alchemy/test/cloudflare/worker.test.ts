@@ -24,7 +24,13 @@ import {
 import { assertWorkerDoesNotExist } from "./test-helpers.ts";
 
 import { Container } from "../../src/cloudflare/container.ts";
+import { listWorkersInNamespace } from "../../src/cloudflare/dispatch-namespace.ts";
+import { DispatchNamespace } from "../../src/cloudflare/index.ts";
 import "../../src/test/vitest.ts";
+
+const ENABLE_WFP_TESTS = process.env.CLOUDFLARE_ACCOUNT_ENABLE_WFP !== "false";
+const ENABLE_PAID_TESTS =
+  process.env.CLOUDFLARE_ACCOUNT_ENABLE_PAID !== "false";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -211,25 +217,27 @@ describe("Worker Resource", () => {
     }
   });
 
-  test("fails when creating worker with duplicate binding IDs", async (scope) => {
-    const workerName = `${BRANCH_PREFIX}-test-worker-duplicate-binding-ids`;
+  test.skipIf(!ENABLE_PAID_TESTS)(
+    "fails when creating worker with duplicate binding IDs",
+    async (scope) => {
+      const workerName = `${BRANCH_PREFIX}-test-worker-duplicate-binding-ids`;
 
-    try {
-      // Test 1: Duplicate DurableObjectNamespace IDs
-      const namespace1 = new DurableObjectNamespace("duplicate-id", {
-        className: "Counter1",
-        scriptName: workerName,
-      });
+      try {
+        // Test 1: Duplicate DurableObjectNamespace IDs
+        const namespace1 = DurableObjectNamespace("duplicate-id", {
+          className: "Counter1",
+          scriptName: workerName,
+        });
 
-      const namespace2 = new DurableObjectNamespace("duplicate-id", {
-        className: "Counter2",
-        scriptName: workerName,
-      });
+        const namespace2 = DurableObjectNamespace("duplicate-id", {
+          className: "Counter2",
+          scriptName: workerName,
+        });
 
-      // Try to create a worker with duplicate binding IDs
-      const duplicateBindingsWorker = Worker(workerName, {
-        name: workerName,
-        script: `
+        // Try to create a worker with duplicate binding IDs
+        const duplicateBindingsWorker = Worker(workerName, {
+          name: workerName,
+          script: `
           export class Counter1 {}
           export class Counter2 {}
           export default {
@@ -238,29 +246,29 @@ describe("Worker Resource", () => {
             }
           };
         `,
-        format: "esm",
-        bindings: {
-          NAMESPACE1: namespace1,
-          NAMESPACE2: namespace2, // Same ID as namespace1
-        },
-      });
+          format: "esm",
+          bindings: {
+            NAMESPACE1: namespace1,
+            NAMESPACE2: namespace2, // Same ID as namespace1
+          },
+        });
 
-      await expect(duplicateBindingsWorker).rejects.toThrow(
-        "Duplicate binding ID 'duplicate-id' found for bindings 'NAMESPACE1' and 'NAMESPACE2'. Container and DurableObjectNamespace bindings must have unique IDs.",
-      );
+        await expect(duplicateBindingsWorker).rejects.toThrow(
+          "Duplicate binding ID 'duplicate-id' found for bindings 'NAMESPACE1' and 'NAMESPACE2'. Container and DurableObjectNamespace bindings must have unique IDs.",
+        );
 
-      const container = await Container("duplicate-id", {
-        className: "ContainerClass",
-        scriptName: workerName,
-        build: {
-          dockerfile: "Dockerfile",
-          context: path.join(import.meta.dirname, "container"),
-        },
-      });
+        const container = await Container("duplicate-id", {
+          className: "ContainerClass",
+          scriptName: workerName,
+          build: {
+            dockerfile: "Dockerfile",
+            context: path.join(import.meta.dirname, "container"),
+          },
+        });
 
-      const mixedDuplicateWorker = Worker(workerName, {
-        name: workerName,
-        script: `
+        const mixedDuplicateWorker = Worker(workerName, {
+          name: workerName,
+          script: `
           export class Counter1 {}
           export class ContainerClass {}
           export default {
@@ -269,26 +277,29 @@ describe("Worker Resource", () => {
             }
           };
         `,
-        format: "esm",
-        bindings: {
-          NAMESPACE1: namespace1,
-          CONTAINER: container, // Same ID as namespace1
-        },
-      });
+          format: "esm",
+          bindings: {
+            NAMESPACE1: namespace1,
+            CONTAINER: container, // Same ID as namespace1
+          },
+        });
 
-      await expect(mixedDuplicateWorker).rejects.toThrow(
-        "Duplicate binding ID 'duplicate-id' found for bindings 'NAMESPACE1' and 'CONTAINER'. Container and DurableObjectNamespace bindings must have unique IDs.",
-      );
-    } finally {
-      await destroy(scope);
-    }
-  });
+        await expect(mixedDuplicateWorker).rejects.toThrow(
+          "Duplicate binding ID 'duplicate-id' found for bindings 'NAMESPACE1' and 'CONTAINER'. Container and DurableObjectNamespace bindings must have unique IDs.",
+        );
+      } finally {
+        await destroy(scope);
+      }
+    },
+  );
 
-  test("create and delete worker with multiple bindings", async (scope) => {
-    const workerName = `${BRANCH_PREFIX}-test-worker-multi-bindings-multi-1`;
+  test.skipIf(!ENABLE_PAID_TESTS)(
+    "create and delete worker with multiple bindings",
+    async (scope) => {
+      const workerName = `${BRANCH_PREFIX}-test-worker-multi-bindings-multi-1`;
 
-    // Sample ESM worker script with multiple bindings
-    const multiBindingsWorkerScript = `
+      // Sample ESM worker script with multiple bindings
+      const multiBindingsWorkerScript = `
   export class Counter {
     constructor(state, env) {
       this.state = state;
@@ -327,62 +338,63 @@ describe("Worker Resource", () => {
   };
 `;
 
-    // Create a Durable Object namespace
-    const counterNamespace = new DurableObjectNamespace(
-      "test-counter-namespace",
-      {
-        className: "Counter",
-        scriptName: workerName,
-      },
-    );
-
-    // Create a KV namespace
-    const testKv = await KVNamespace("test-kv-namespace", {
-      title: `${BRANCH_PREFIX} Test KV Namespace 1`,
-      adopt: true,
-      values: [
+      // Create a Durable Object namespace
+      const counterNamespace = DurableObjectNamespace(
+        "test-counter-namespace",
         {
-          key: "testKey",
-          value: "initial-value",
+          className: "Counter",
+          scriptName: workerName,
         },
-      ],
-    });
+      );
 
-    let worker: Worker | undefined;
-
-    try {
-      // First create the worker without bindings
-      worker = await Worker(workerName, {
-        name: workerName,
-        script: multiBindingsWorkerScript,
-        format: "esm",
+      // Create a KV namespace
+      const testKv = await KVNamespace("test-kv-namespace", {
+        title: `${BRANCH_PREFIX} Test KV Namespace 1`,
         adopt: true,
+        values: [
+          {
+            key: "testKey",
+            value: "initial-value",
+          },
+        ],
       });
 
-      expect(worker.id).toBeTruthy();
-      expect(worker.name).toEqual(workerName);
+      let worker: Worker | undefined;
 
-      // Update the worker with all bindings
-      worker = await Worker(workerName, {
-        name: workerName,
-        script: multiBindingsWorkerScript,
-        format: "esm",
-        bindings: {
-          COUNTER: counterNamespace,
-          TEST_KV: testKv,
-          API_KEY: "test-api-key-value",
-        },
-        adopt: true,
-      });
+      try {
+        // First create the worker without bindings
+        worker = await Worker(workerName, {
+          name: workerName,
+          script: multiBindingsWorkerScript,
+          format: "esm",
+          adopt: true,
+        });
 
-      expect(worker.id).toBeTruthy();
-      expect(worker.name).toEqual(workerName);
-      expect(worker.bindings).toBeDefined();
-    } finally {
-      await destroy(scope);
-      await assertWorkerDoesNotExist(api, workerName);
-    }
-  });
+        expect(worker.id).toBeTruthy();
+        expect(worker.name).toEqual(workerName);
+
+        // Update the worker with all bindings
+        worker = await Worker(workerName, {
+          name: workerName,
+          script: multiBindingsWorkerScript,
+          format: "esm",
+          bindings: {
+            COUNTER: counterNamespace,
+            TEST_KV: testKv,
+            API_KEY: "test-api-key-value",
+          },
+          adopt: true,
+        });
+
+        expect(worker.id).toBeTruthy();
+        expect(worker.name).toEqual(workerName);
+        expect(worker.bindings).toBeDefined();
+      } finally {
+        await destroy(scope);
+        await assertWorkerDoesNotExist(api, workerName);
+      }
+    },
+  );
 
   // Add a new test for environment variables
   test("create and test worker with environment variables", async (scope) => {
@@ -1258,7 +1270,7 @@ describe("Worker Resource", () => {
 
     try {
       // Create an Analytics Engine dataset
-      dataset = new AnalyticsEngineDataset("test-analytics-dataset", {
+      dataset = AnalyticsEngineDataset("test-analytics-dataset", {
         dataset: `${BRANCH_PREFIX}-test-analytics-dataset`,
       });
 
@@ -1370,7 +1382,7 @@ describe("Worker Resource", () => {
         adopt: true,
       });
 
-      const worker2 = await Worker("worker1", {
+      const worker2 = await Worker("worker2", {
         name: workerName2,
         bindings: {
           TARGET_WORKER: WorkerRef<{
@@ -1519,18 +1531,20 @@ describe("Worker Resource", () => {
     }
   });
 
-  test("adopt worker with existing migration tag", async (scope) => {
-    const scriptName = `${BRANCH_PREFIX}-test-worker-adopt-migration`;
+  test.skipIf(!ENABLE_PAID_TESTS)(
+    "adopt worker with existing migration tag",
+    async (scope) => {
+      const scriptName = `${BRANCH_PREFIX}-test-worker-adopt-migration`;
 
-    try {
-      await deleteWorker(api, {
-        scriptName,
-      });
+      try {
+        await deleteWorker(api, {
+          scriptName,
+        });
 
-      const formData = new FormData();
-      formData.append(
-        "worker.js",
-        `
+        const formData = new FormData();
+        formData.append(
+          "worker.js",
+          `
           export class MyDO {}
           export default {
             async fetch(request, env, ctx) {
@@ -1538,47 +1552,47 @@ describe("Worker Resource", () => {
             }
           };
         `,
-      );
-      formData.append(
-        "metadata",
-        new Blob([
-          JSON.stringify({
-            compatibility_date: "2025-05-18",
-            bindings: [
-              {
-                type: "durable_object_namespace",
-                class_name: "MyDO",
-                name: "MY_DO",
+        );
+        formData.append(
+          "metadata",
+          new Blob([
+            JSON.stringify({
+              compatibility_date: "2025-05-18",
+              bindings: [
+                {
+                  type: "durable_object_namespace",
+                  class_name: "MyDO",
+                  name: "MY_DO",
+                },
+              ],
+              observability: {
+                enabled: true,
               },
-            ],
-            observability: {
-              enabled: true,
-            },
-            main_module: "worker.js",
-            migrations: {
-              new_tag: "v1",
-              old_tag: undefined,
-              new_classes: ["MyDO"],
-              deleted_classes: [],
-              renamed_classes: [],
-              transferred_classes: [],
-              new_sqlite_classes: [],
-            } satisfies SingleStepMigration,
-          }),
-        ]),
-      );
+              main_module: "worker.js",
+              migrations: {
+                new_tag: "v1",
+                old_tag: undefined,
+                new_classes: ["MyDO"],
+                deleted_classes: [],
+                renamed_classes: [],
+                transferred_classes: [],
+                new_sqlite_classes: [],
+              } satisfies SingleStepMigration,
+            }),
+          ]),
+        );
 
-      // Put the worker with migration tag v1
-      await api.post(
-        `/accounts/${api.accountId}/workers/scripts/${scriptName}/versions`,
-        formData,
-      );
+        // Put the worker with migration tag v1
+        await api.post(
+          `/accounts/${api.accountId}/workers/scripts/${scriptName}/versions`,
+          formData,
+        );
 
-      // Now adopt the worker using the Worker resource
-      await Worker(scriptName, {
-        name: scriptName,
-        adopt: true,
-        script: `
+        // Now adopt the worker using the Worker resource
+        await Worker(scriptName, {
+          name: scriptName,
+          adopt: true,
+          script: `
           export class MyDO2 {}
           export default {
             async fetch(request, env, ctx) {
@@ -1586,19 +1600,19 @@ describe("Worker Resource", () => {
             }
           };
         `,
-        format: "esm",
-        bindings: {
-          MY_DO: new DurableObjectNamespace("test-counter-migration", {
-            className: "MyDO2",
-            scriptName: scriptName,
-          }),
-        },
-      });
+          format: "esm",
+          bindings: {
+            MY_DO: DurableObjectNamespace("test-counter-migration", {
+              className: "MyDO2",
+              scriptName: scriptName,
+            }),
+          },
+        });
 
-      await Worker(scriptName, {
-        name: scriptName,
-        adopt: true,
-        script: `
+        await Worker(scriptName, {
+          name: scriptName,
+          adopt: true,
+          script: `
           export class MyDO3 {}
           export default {
             async fetch(request, env, ctx) {
@@ -1606,19 +1620,20 @@ describe("Worker Resource", () => {
             }
           };
         `,
-        format: "esm",
-        bindings: {
-          MY_DO: new DurableObjectNamespace("test-counter-migration", {
-            className: "MyDO3",
-            scriptName: scriptName,
-          }),
-        },
-      });
-    } finally {
-      await destroy(scope);
-      await assertWorkerDoesNotExist(api, scriptName);
-    }
-  });
+          format: "esm",
+          bindings: {
+            MY_DO: DurableObjectNamespace("test-counter-migration", {
+              className: "MyDO3",
+              scriptName: scriptName,
+            }),
+          },
+        });
+      } finally {
+        await destroy(scope);
+        await assertWorkerDoesNotExist(api, scriptName);
+      }
+    },
+  );
 
   test("create worker with url false and verify no workers.dev subdomain", async (scope) => {
     const workerName = `${BRANCH_PREFIX}-test-worker-no-url`;
@@ -1877,6 +1892,216 @@ describe("Worker Resource", () => {
       // Clean up the remaining base worker
       await destroy(scope);
       await assertWorkerDoesNotExist(api, workerName);
+    }
+  });
+
+  test("create worker with compatibility preset", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-compatibility-preset`;
+
+    let worker: Worker | undefined;
+    try {
+      // Create a worker with the "node" compatibility preset
+      worker = await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from Node.js compatible worker!', {
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            }
+          };
+        `,
+        format: "esm",
+        url: true,
+        compatibility: "node", // Use the "node" preset
+      });
+
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.url).toBeTruthy();
+
+      // Verify that the "node" preset automatically includes nodejs_compat flag
+      expect(worker.compatibilityFlags).toContain("nodejs_compat");
+
+      // Test that preset flags are combined with user-provided flags
+      worker = await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          import crypto from 'node:crypto';
+
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello from Node.js compatible worker with additional flags!', {
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' }
+              });
+            }
+          };
+        `,
+        format: "esm",
+        url: true,
+        compatibility: "node",
+        compatibilityFlags: ["nodejs_als"], // Add valid compatibility flag in addition to preset
+      });
+
+      // Verify that both preset flags and user-provided flags are present
+      expect(worker.compatibilityFlags).toContain("nodejs_compat"); // From preset
+      expect(worker.compatibilityFlags).toContain("nodejs_als"); // From user
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(api, workerName);
+    }
+  });
+
+  test("rename worker", async (scope) => {
+    const originalWorkerName = `${BRANCH_PREFIX}-test-worker-rename-1`;
+    const newWorkerName = `${BRANCH_PREFIX}-test-worker-rename-2`;
+    try {
+      await Worker("rename-worker", {
+        name: originalWorkerName,
+        script: `
+				export default {
+					async fetch(request, env, ctx) {
+						return new Response('Hello ESM world!', { status: 200 });
+					}
+				};
+			`,
+      });
+
+      await scope.finalize();
+
+      // Verify the worker exists via API
+      const originalWorkerExists = await api.get(
+        `/accounts/${api.accountId}/workers/scripts/${originalWorkerName}`,
+      );
+      expect(originalWorkerExists.status).toEqual(200);
+
+      await Worker("rename-worker", {
+        name: newWorkerName,
+        script: `
+				export default {
+					async fetch(request, env, ctx) {
+						return new Response('Hello ESM world!', { status: 200 });
+					}
+				};
+			`,
+      });
+
+      await scope.finalize();
+
+      // Verify the worker exists via API
+      const newWorkerExists = await api.get(
+        `/accounts/${api.accountId}/workers/scripts/${newWorkerName}`,
+      );
+      expect(newWorkerExists.status).toEqual(200);
+
+      // Verify the worker exists via API
+      const oldWorker = await api.get(
+        `/accounts/${api.accountId}/workers/scripts/${originalWorkerName}`,
+      );
+      expect(oldWorker.status).toEqual(404);
+    } finally {
+      await destroy(scope);
+    }
+  });
+
+  /**
+   * Helper function to assert that a WFP worker exists
+   */
+  async function assertWorkerExistsInNamespace(
+    api: any,
+    namespaceName: string,
+    workerName: string,
+  ) {
+    const response = await api.get(
+      `/accounts/${api.accountId}/workers/dispatch/namespaces/${namespaceName}/scripts/${workerName}`,
+    );
+    expect(response.status).toEqual(200);
+
+    const worker = (await listWorkersInNamespace(api, namespaceName)).find(
+      (worker) => worker.id === workerName,
+    );
+    expect(worker).toBeDefined();
+  }
+
+  /**
+   * Helper function to assert that a WFP worker does not exist
+   */
+  async function assertWorkerNotExistsInNamespace(
+    api: any,
+    namespaceName: string,
+    workerName: string,
+  ) {
+    // If we've exhausted retries and worker still exists, fail the test
+    expect(
+      (await listWorkersInNamespace(api, namespaceName)).some(
+        (worker) => worker.id === workerName,
+      ),
+    ).toBeFalsy();
+  }
+
+  test.skipIf(!ENABLE_WFP_TESTS)("rename wfp worker", async (scope) => {
+    const originalWorkerName = `${BRANCH_PREFIX}-test-wfp-worker-rename-1`;
+    const newWorkerName = `${BRANCH_PREFIX}-test-wfp-worker-rename-2`;
+    const namespaceName = `${BRANCH_PREFIX}-rename-wfp-worker`;
+
+    try {
+      const dispatchNamespace = await DispatchNamespace(
+        "test-dispatch-namespace",
+        {
+          namespace: namespaceName,
+          adopt: true,
+        },
+      );
+
+      await Worker("rename-worker", {
+        name: originalWorkerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello ESM world!', { status: 200 });
+            }
+          };
+        `,
+        namespace: dispatchNamespace,
+      });
+
+      // Verify the worker exists via API
+      await assertWorkerExistsInNamespace(
+        api,
+        namespaceName,
+        originalWorkerName,
+      );
+
+      await Worker("rename-worker", {
+        name: newWorkerName,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello ESM world!', { status: 200 });
+            }
+          };
+        `,
+        namespace: dispatchNamespace,
+      });
+
+      await scope.finalize();
+
+      // Verify the new worker exists via API
+      await assertWorkerExistsInNamespace(api, namespaceName, newWorkerName);
+
+      // Verify the old worker does not exist via API
+      await assertWorkerNotExistsInNamespace(
+        api,
+        namespaceName,
+        originalWorkerName,
+      );
+    } finally {
+      // await destroy(scope);
     }
   });
 });

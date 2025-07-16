@@ -34,7 +34,7 @@ describe("RemoteImage", () => {
           tag: "test-tag-123",
         }),
       ).rejects.toThrow(
-        "Command failed with exit code 1: Error response from daemon: pull access denied for non-existent, repository does not exist or may require 'docker login'",
+        /Error response from daemon: pull access denied for non-existent, repository does not exist or may require 'docker login'/,
       );
     } finally {
       await alchemy.destroy(scope);

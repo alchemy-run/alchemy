@@ -226,7 +226,7 @@ describe("WranglerJson Resource", () => {
           format: "esm",
           entrypoint,
           bindings: {
-            AI: new Ai(),
+            AI: Ai(),
           },
           adopt: true,
         });
@@ -261,13 +261,13 @@ describe("WranglerJson Resource", () => {
         await fs.writeFile(entrypoint, doWorkerScript);
 
         // Create durable object namespaces
-        const counterNamespace = new DurableObjectNamespace("counter", {
+        const counterNamespace = DurableObjectNamespace("counter", {
           className: "Counter",
           scriptName: name,
           sqlite: false,
         });
 
-        const sqliteCounterNamespace = new DurableObjectNamespace(
+        const sqliteCounterNamespace = DurableObjectNamespace(
           "sqlite-counter",
           {
             className: "SqliteCounter",
@@ -346,7 +346,7 @@ describe("WranglerJson Resource", () => {
         await fs.writeFile(entrypoint, wfWorkerScript);
 
         // Create durable object namespaces
-        const workflow = new Workflow("test-workflow", {
+        const workflow = Workflow("test-workflow", {
           className: "TestWorkflow",
           workflowName: "test-workflow",
           scriptName: "other-script",
@@ -594,10 +594,10 @@ describe("WranglerJson Resource", () => {
         format: "esm",
         entrypoint,
         bindings: {
-          AI: new Ai(),
-          BROWSER: new BrowserRendering(),
+          AI: Ai(),
+          BROWSER: BrowserRendering(),
           DISPATCH: await DispatchNamespace("dispatch"),
-          IMAGES: new Images(),
+          IMAGES: Images(),
           VECTORIZE: await VectorizeIndex("vector", {
             name: "vector",
             dimensions: 768,
@@ -643,18 +643,21 @@ describe("WranglerJson Resource", () => {
       const worker = await Worker(name, {
         format: "esm",
         entrypoint,
+        adopt: true,
         bindings: {
-          D1: await D1Database("test-d1-db-dev-remote", {
+          D1: await D1Database(`${BRANCH_PREFIX}-test-d1-db-dev-remote`, {
+            adopt: true,
             dev: { remote: true },
           }),
-          KV: await KVNamespace("test-kv-ns-dev-remote", {
+          KV: await KVNamespace(`${BRANCH_PREFIX}-test-kv-ns-dev-remote`, {
+            adopt: true,
             dev: { remote: true },
           }),
-          R2: await R2Bucket("test-r2-bucket-dev-remote", {
+          R2: await R2Bucket(`${BRANCH_PREFIX}-test-r2-bucket-dev-remote`, {
+            adopt: true,
             dev: { remote: true },
           }),
         },
-        adopt: true,
       });
 
       const { spec } = await WranglerJson(
