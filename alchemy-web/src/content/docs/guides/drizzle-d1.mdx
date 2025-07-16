@@ -59,28 +59,9 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
 
    Authenticate with your Cloudflare account.
 
-   <Tabs syncKey="pkgManager">
-     <TabItem label="bun">
-       ```sh
-       bun wrangler login
-       ```
-     </TabItem>
-     <TabItem label="npm">
-       ```sh
-       npx wrangler login
-       ```
-     </TabItem>
-     <TabItem label="pnpm">
-       ```sh
-       pnpm wrangler login
-       ```
-     </TabItem>
-     <TabItem label="yarn">
-       ```sh
-       yarn wrangler login
-       ```
-     </TabItem>
-   </Tabs>
+   ```sh
+   alchemy login
+   ```
 
    :::tip
    Make sure you have a [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier works)
@@ -170,7 +151,6 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
    const database = await D1Database("app-db", {
      name: "app-db",
      migrationsDir: "./migrations",
-     migrationsTable: "drizzle_migrations", // Compatible with Drizzle
    });
 
    // Create API worker
@@ -188,12 +168,12 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
 
 7. **Create your worker with Drizzle**
 
-   Create `src/worker.ts` with Drizzle ORM integration:
+   Create `src/worker.ts` with basic Drizzle ORM integration:
 
    ```typescript
    // src/worker.ts
    import { drizzle } from 'drizzle-orm/d1';
-   import { users, posts } from './schema';
+   import { users } from './schema';
 
    export interface Env {
      DB: D1Database;
@@ -202,61 +182,24 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
    export default {
      async fetch(request: Request, env: Env): Promise<Response> {
        const db = drizzle(env.DB);
-       const url = new URL(request.url);
-
-       // Handle CORS
-       const headers = {
-         'Access-Control-Allow-Origin': '*',
-         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-         'Access-Control-Allow-Headers': 'Content-Type',
-         'Content-Type': 'application/json',
-       };
-
-       if (request.method === 'OPTIONS') {
-         return new Response(null, { headers });
-       }
-
-       try {
-         if (url.pathname === '/api/users' && request.method === 'GET') {
-           const allUsers = await db.select().from(users);
-           return new Response(JSON.stringify(allUsers), { headers });
-         }
-
-         if (url.pathname === '/api/users' && request.method === 'POST') {
-           const { name, email } = await request.json();
-           const newUser = await db.insert(users).values({
-             name,
-             email,
-             createdAt: new Date(),
-           }).returning();
-           
-           return new Response(JSON.stringify(newUser[0]), { headers });
-         }
-
-         if (url.pathname === '/api/posts' && request.method === 'GET') {
-           const allPosts = await db.select().from(posts);
-           return new Response(JSON.stringify(allPosts), { headers });
-         }
-
-         if (url.pathname === '/api/posts' && request.method === 'POST') {
-           const { title, content, authorId } = await request.json();
-           const newPost = await db.insert(posts).values({
-             title,
-             content,
-             authorId,
-             createdAt: new Date(),
-           }).returning();
-           
-           return new Response(JSON.stringify(newPost[0]), { headers });
-         }
-
-         return new Response('Not found', { status: 404, headers });
-       } catch (error) {
-         return new Response(JSON.stringify({ error: error.message }), { 
-           status: 500, 
-           headers 
-         });
-       }
+       
+       // Create a sample user
+       const newUser = await db.insert(users).values({
+         name: 'John Doe',
+         email: 'john@example.com',
+         createdAt: new Date(),
+       }).returning();
+       
+       // Query all users
+       const allUsers = await db.select().from(users);
+       
+       return new Response(JSON.stringify({
+         message: 'Drizzle D1 working!',
+         newUser: newUser[0],
+         allUsers
+       }), {
+         headers: { 'Content-Type': 'application/json' }
+       });
      },
    };
    ```
@@ -291,139 +234,11 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
    Your API will be available at the displayed URL. Test it with:
 
    ```sh
-   # Create a user
-   curl -X POST https://api-worker.your-account.workers.dev/api/users \
-     -H "Content-Type: application/json" \
-     -d '{"name": "John Doe", "email": "john@example.com"}'
-
-   # Get all users
-   curl https://api-worker.your-account.workers.dev/api/users
+   # Test the Drizzle D1 integration
+   curl https://api-worker.your-account.workers.dev
    ```
 
-9. **Add a web interface**
-
-   Create a simple HTML interface to interact with your API:
-
-   ```html
-   <!-- src/index.html -->
-   <!DOCTYPE html>
-   <html lang="en">
-   <head>
-     <meta charset="UTF-8">
-     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-     <title>Drizzle D1 App</title>
-     <style>
-       body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-       .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
-       input, textarea { width: 100%; padding: 8px; margin: 5px 0; }
-       button { padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-       button:hover { background: #0056b3; }
-       .user, .post { margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 4px; }
-     </style>
-   </head>
-   <body>
-     <h1>Drizzle D1 App</h1>
-     
-     <div class="section">
-       <h2>Add User</h2>
-       <input type="text" id="userName" placeholder="Name" />
-       <input type="email" id="userEmail" placeholder="Email" />
-       <button onclick="addUser()">Add User</button>
-     </div>
-
-     <div class="section">
-       <h2>Users</h2>
-       <button onclick="loadUsers()">Load Users</button>
-       <div id="users"></div>
-     </div>
-
-     <div class="section">
-       <h2>Add Post</h2>
-       <input type="text" id="postTitle" placeholder="Title" />
-       <textarea id="postContent" placeholder="Content"></textarea>
-       <input type="number" id="postAuthorId" placeholder="Author ID" />
-       <button onclick="addPost()">Add Post</button>
-     </div>
-
-     <div class="section">
-       <h2>Posts</h2>
-       <button onclick="loadPosts()">Load Posts</button>
-       <div id="posts"></div>
-     </div>
-
-     <script>
-       const API_BASE = 'https://api-worker.your-account.workers.dev';
-
-       async function addUser() {
-         const name = document.getElementById('userName').value;
-         const email = document.getElementById('userEmail').value;
-         
-         const response = await fetch(`${API_BASE}/api/users`, {
-           method: 'POST',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({ name, email })
-         });
-         
-         if (response.ok) {
-           document.getElementById('userName').value = '';
-           document.getElementById('userEmail').value = '';
-           loadUsers();
-         }
-       }
-
-       async function loadUsers() {
-         const response = await fetch(`${API_BASE}/api/users`);
-         const users = await response.json();
-         
-         document.getElementById('users').innerHTML = users.map(user => 
-           `<div class="user">
-             <strong>${user.name}</strong> (${user.email})
-             <br><small>ID: ${user.id}, Created: ${new Date(user.createdAt).toLocaleString()}</small>
-           </div>`
-         ).join('');
-       }
-
-       async function addPost() {
-         const title = document.getElementById('postTitle').value;
-         const content = document.getElementById('postContent').value;
-         const authorId = parseInt(document.getElementById('postAuthorId').value);
-         
-         const response = await fetch(`${API_BASE}/api/posts`, {
-           method: 'POST',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({ title, content, authorId })
-         });
-         
-         if (response.ok) {
-           document.getElementById('postTitle').value = '';
-           document.getElementById('postContent').value = '';
-           document.getElementById('postAuthorId').value = '';
-           loadPosts();
-         }
-       }
-
-       async function loadPosts() {
-         const response = await fetch(`${API_BASE}/api/posts`);
-         const posts = await response.json();
-         
-         document.getElementById('posts').innerHTML = posts.map(post => 
-           `<div class="post">
-             <strong>${post.title}</strong>
-             <p>${post.content}</p>
-             <small>Author ID: ${post.authorId}, Created: ${new Date(post.createdAt).toLocaleString()}</small>
-           </div>`
-         ).join('');
-       }
-     </script>
-   </body>
-   </html>
-   ```
-
-   :::tip
-   Replace `your-account` with your actual Cloudflare account ID in the HTML file.
-   :::
-
-10. **(Optional) Tear down**
+9. **(Optional) Tear down**
 
     Clean up all resources when you're done:
 
