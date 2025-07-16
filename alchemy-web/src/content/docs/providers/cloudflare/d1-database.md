@@ -27,7 +27,6 @@ import { D1Database } from "alchemy/cloudflare";
 const db = await D1Database("users-db", {
   name: "users-db",
   migrationsDir: "./migrations",
-  migrationsTable: "schema_migrations", // Custom table name for tracking migrations
 });
 ```
 
