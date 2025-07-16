@@ -38,7 +38,6 @@ export async function Vite<B extends Bindings>(
         : (props.assets ?? defaultAssets),
     dev: props.dev ?? {
       command: devCommand,
-      url: "http://localhost:5173",
     },
   });
 }

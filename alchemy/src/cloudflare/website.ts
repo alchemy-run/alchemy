@@ -123,12 +123,13 @@ export interface WebsiteProps<B extends Bindings>
   };
 }
 
-const packageManager = detectPackageManager();
+const packageManager = await detectPackageManager();
 const devCommand = {
   npm: "npx vite dev",
   bun: "bun vite dev",
   pnpm: "pnpm vite dev",
   yarn: "yarn vite dev",
+  deno: "deno task dev",
 }[packageManager];
 
 export type Website<B extends Bindings> = B extends { ASSETS: any }
