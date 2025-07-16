@@ -53,6 +53,7 @@
         "turndown": "^7.0.0",
         "unenv": "2.0.0-rc.15",
         "ws": "^8.18.3",
+        "xdg-app-paths": "^8.3.0",
         "yaml": "^2.0.0",
       },
       "devDependencies": {
