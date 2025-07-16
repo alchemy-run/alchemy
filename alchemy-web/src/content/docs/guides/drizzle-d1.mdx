@@ -118,7 +118,6 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
      schema: './src/schema.ts',
      out: './migrations',
      dialect: 'sqlite',
-     driver: 'd1-http',
    });
    ```
 
@@ -191,6 +190,7 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
    import { users } from './schema';
    import type { worker } from "../alchemy.run.ts"
 
+   // infer the types
    type Env = typeof worker.Env
 
    export default {
@@ -280,20 +280,3 @@ Build a full-stack application with Drizzle ORM and Cloudflare D1 Database. This
     </Tabs>
 
 </Steps>
-
-## Next Steps
-
-You now have a fully functional Drizzle ORM application with Cloudflare D1! Here are some ways to extend it:
-
-- **Add authentication**: Implement user authentication with Cloudflare Access
-- **Add more complex queries**: Use Drizzle's query builder for joins and complex operations
-- **Add validation**: Use Zod or similar for request validation
-- **Add pagination**: Implement pagination for large datasets
-- **Add real-time updates**: Use Cloudflare Durable Objects for real-time features
-
-## Learn More
-
-- [Drizzle ORM Documentation](https://orm.drizzle.team/) - Complete ORM documentation
-- [Cloudflare D1 Database](/providers/cloudflare/d1-database) - Alchemy D1 resource reference
-- [Cloudflare Workers](/guides/cloudflare-worker) - Advanced worker patterns
-- [Cloudflare D1 Documentation](https://developers.cloudflare.com/d1/) - Official D1 documentation
