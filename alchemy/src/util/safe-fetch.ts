@@ -20,6 +20,7 @@ export async function safeFetch(
         err?.code === "UND_ERR_SOCKET" ||
         err?.code === "ECONNRESET" ||
         err?.code === "UND_ERR_CONNECT_TIMEOUT" ||
+        err?.code === "EPIPE" ||
         err?.name === "FetchError";
 
       if (!shouldRetry || attempt === retries) {
