@@ -220,12 +220,11 @@ Learn more about [Smart Placement](https://developers.cloudflare.com/workers/con
 :::
 
 
-## CPU Time Limits
+## CPU Time Limit
 
 Set the maximum CPU time in milliseconds that the worker can use:
 
 ```ts
-
 const worker = await Worker("api", {
   name: "api-worker",
   entrypoint: "./src/api.ts",
