@@ -19,6 +19,7 @@ export async function TanStackStart<B extends Bindings>(
     ...props,
     command: props?.command ?? "vite build",
     commandEnv: {
+      // TODO(sam): should probably be set for all Websites, or at least all Vite Websites
       // needs to be set or else jsxDev is included in the bundle and breaks in production
       NODE_ENV: process.env.NODE_ENV ?? "production",
     },
