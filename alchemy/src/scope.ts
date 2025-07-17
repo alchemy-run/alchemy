@@ -125,6 +125,7 @@ export class Scope {
   public readonly dataMutex: AsyncMutex;
 
   private isErrored = false;
+  private isSkipped = false;
   private finalized = false;
   private startedAt = performance.now();
 
@@ -194,6 +195,17 @@ export class Scope {
     this.dataMutex = new AsyncMutex();
   }
 
+  /**
+   * @internal
+   */
+  public clear() {
+    for (const child of this.children.values()) {
+      child.clear();
+    }
+    this.resources.clear();
+    this.children.clear();
+  }
+
   public get root(): Scope {
     let root: Scope = this;
     while (root.parent) {
@@ -237,6 +249,10 @@ export class Scope {
   public fail() {
     this.logger.error("Scope failed", this.chain.join("/"));
     this.isErrored = true;
+  }
+
+  public skip() {
+    this.isSkipped = true;
   }
 
   public async init() {
@@ -378,7 +394,7 @@ export class Scope {
     this.finalized = true;
     // trigger and await all deferred promises
     await Promise.all(this.deferred.map((fn) => fn()));
-    if (!this.isErrored) {
+    if (!this.isErrored && !this.isSkipped) {
       // TODO: need to detect if it is in error
       const resourceIds = await this.state.list();
       const aliveIds = new Set(this.resources.keys());
