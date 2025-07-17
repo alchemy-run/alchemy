@@ -17,10 +17,13 @@ export async function TanStackStart<B extends Bindings>(
 ): Promise<TanStackStart<B>> {
   return Website(id, {
     ...props,
-    command: props?.command ?? "NODE_ENV=production vite build",
+    command: props?.command ?? "vite build",
     noBundle: true,
     dev: props?.dev ?? {
       command: "vite dev",
+    },
+    env: {
+      NODE_ENV: process.env.NODE_ENV ?? "production",
     },
     wrangler: props?.wrangler ?? true,
     main: props?.main ?? ".output/server/index.mjs",
