@@ -449,16 +449,20 @@ export interface WranglerJsonSpec {
   }[];
 
   /**
-   * Rate limit bindings
+   * Unsafe bindings section for experimental features
    */
-  rate_limit?: {
-    binding: string;
-    namespace_id: number;
-    simple: {
-      limit: number;
-      period: number;
-    };
-  }[];
+  unsafe?: {
+    bindings: {
+      name: string;
+      type: string;
+      namespace_id?: number;
+      simple?: {
+        limit: number;
+        period: number;
+      };
+      [key: string]: any;
+    }[];
+  };
 }
 
 /**
@@ -546,13 +550,15 @@ function processBindings(
     namespace: string;
     experimental_remote?: boolean;
   }[] = [];
-  const rateLimits: {
-    binding: string;
-    namespace_id: number;
-    simple: {
+  const unsafeBindings: {
+    name: string;
+    type: string;
+    namespace_id?: number;
+    simple?: {
       limit: number;
       period: number;
     };
+    [key: string]: any;
   }[] = [];
   const containers: {
     class_name: string;
@@ -742,8 +748,9 @@ function processBindings(
         experimental_remote: true,
       });
     } else if (binding.type === "rate_limit") {
-      rateLimits.push({
-        binding: bindingName,
+      unsafeBindings.push({
+        name: bindingName,
+        type: "ratelimit",
         namespace_id: binding.namespace_id,
         simple: binding.simple,
       });
@@ -829,7 +836,9 @@ function processBindings(
     spec.dispatch_namespaces = dispatchNamespaces;
   }
 
-  if (rateLimits.length > 0) {
-    spec.rate_limit = rateLimits;
+  if (unsafeBindings.length > 0) {
+    spec.unsafe = {
+      bindings: unsafeBindings,
+    };
   }
 }
