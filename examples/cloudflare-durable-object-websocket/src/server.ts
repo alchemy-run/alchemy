@@ -3,6 +3,10 @@ import type { server } from "../alchemy.run.ts";
 
 export default {
   fetch: (req, env) => {
+    const url = new URL(req.url);
+    if (url.pathname !== "/websocket") {
+      return new Response("Not found", { status: 404 });
+    }
     const stub = env.WS_SERVER.get(env.WS_SERVER.idFromName("default"));
     return stub.fetch(req);
   },

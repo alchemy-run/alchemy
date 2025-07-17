@@ -80,9 +80,10 @@
             }
             
             updateStatus('connecting', 'Connecting...');
-            addMessage('Attempting to connect to %VITE_WEBSOCKET_URL%');
+            const url = new URL('/websocket', '%VITE_WEBSOCKET_URL%').toString();
+            addMessage('Attempting to connect to ' + url);
             try {
-                socket = new WebSocket('%VITE_WEBSOCKET_URL%');
+                socket = new WebSocket(url);
                 
                 socket.onopen = function(event) {
                     updateStatus('connected', 'Connected');
