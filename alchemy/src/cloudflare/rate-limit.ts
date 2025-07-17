@@ -32,7 +32,7 @@ export function RateLimit(options: {
   namespace_id: number;
   simple: {
     limit: number;
-    period: number;
+    period: 60 | 10;
   };
 }): RateLimit {
   return {
@@ -47,6 +47,6 @@ export type RateLimit = {
   namespace_id: number;
   simple: {
     limit: number;
-    period: number;
+    period: 60 | 10;
   };
 };

@@ -302,7 +302,7 @@ export interface WorkerBindingRateLimit {
     /** Maximum number of requests */
     limit: number;
     /** Time period in seconds */
-    period: number;
+    period: 60 | 10;
   };
 }
 
