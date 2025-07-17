@@ -1,8 +1,8 @@
 import { json } from "@tanstack/react-start";
-import { createAPIFileRoute } from "@tanstack/react-start/api";
+import { createServerFileRoute } from "@tanstack/react-start/server";
 import type { User } from "../../utils/users.js";
 
-export const APIRoute = createAPIFileRoute("/api/users/$id")({
+export const ServerRoute = createServerFileRoute("/api/users/$id").methods({
   GET: async ({ request, params }) => {
     console.info(`Fetching users by id=${params.id}... @`, request.url);
     try {
