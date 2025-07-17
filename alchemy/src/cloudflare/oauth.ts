@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import open from "open";
 import xdgAppPaths from "xdg-app-paths";
-import { HTTPServer } from "../util/http-server.ts";
+import { HTTPServer } from "../util/http.ts";
 import { memoize } from "../util/memoize.ts";
 import {
   detached,
@@ -145,7 +145,6 @@ export const wranglerLogin = (
     return Response.redirect(`${ALCHEMY_BASE_URL}/auth/${type}`);
   };
   const server = new HTTPServer({
-    port: 8976,
     fetch: async (request) => {
       const url = new URL(request.url);
       if (url.pathname !== "/oauth/callback") {
@@ -190,6 +189,7 @@ export const wranglerLogin = (
       return renderResponse("success");
     },
   });
+  server.listen(8976);
   const timeout = setTimeout(
     () => {
       err(
@@ -204,7 +204,7 @@ export const wranglerLogin = (
   );
   return ensure(result, () => {
     clearTimeout(timeout);
-    void server.stop();
+    void server.close();
   });
 };
 

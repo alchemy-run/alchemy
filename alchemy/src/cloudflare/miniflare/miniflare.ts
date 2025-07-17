@@ -7,7 +7,6 @@ import {
 } from "miniflare";
 import path from "node:path";
 import { findOpenPort } from "../../util/find-open-port.ts";
-import { HTTPServer } from "../../util/http-server.ts";
 import { logger } from "../../util/logger.ts";
 import {
   promiseWithResolvers,
@@ -18,6 +17,7 @@ import {
   buildRemoteBindings,
   type MiniflareWorkerOptions,
 } from "./miniflare-worker-options.ts";
+import { MiniflareWorkerProxy } from "./miniflare-worker-proxy.ts";
 import {
   createRemoteProxyWorker,
   type RemoteBindingProxy,
@@ -26,12 +26,12 @@ import {
 class MiniflareServer {
   miniflare?: Miniflare;
   workers = new Map<string, WorkerOptions>();
-  servers = new Map<string, HTTPServer>();
+  workerProxies = new Map<string, MiniflareWorkerProxy>();
   remoteBindingProxies = new Map<string, RemoteBindingProxy>();
 
   stream = new WritableStream<{
     worker: MiniflareWorkerOptions;
-    promise: PromiseWithResolvers<HTTPServer>;
+    promise: PromiseWithResolvers<MiniflareWorkerProxy>;
   }>({
     write: async ({ worker, promise }) => {
       try {
@@ -48,7 +48,7 @@ class MiniflareServer {
   writer = this.stream.getWriter();
 
   async push(worker: MiniflareWorkerOptions) {
-    const promise = promiseWithResolvers<HTTPServer>();
+    const promise = promiseWithResolvers<MiniflareWorkerProxy>();
     const [, server] = await Promise.all([
       this.writer.write({ worker, promise }),
       promise.promise,
@@ -62,11 +62,10 @@ class MiniflareServer {
 
   private async set(worker: MiniflareWorkerOptions) {
     this.workers.set(
-      worker.name as string,
+      worker.name,
       await buildMiniflareWorkerOptions({
         ...worker,
-        remoteProxyConnectionString:
-          await this.maybeCreateMixedModeProxy(worker),
+        remoteProxyConnectionString: await this.maybeCreateRemoteProxy(worker),
       }),
     );
     if (this.miniflare) {
@@ -90,33 +89,41 @@ class MiniflareServer {
       this.miniflare = new Miniflare(await this.miniflareOptions());
       await withErrorRewrite(this.miniflare.ready);
     }
-    const existing = this.servers.get(worker.name);
+    const existing = this.workerProxies.get(worker.name);
     if (existing) {
       return existing;
     }
-    const server = new HTTPServer({
-      port: worker.port ?? (await findOpenPort()),
-      fetch: this.createRequestHandler(worker.name as string),
+    const server = new MiniflareWorkerProxy({
+      getDirectURL: async () => {
+        const url = await this.miniflare?.unsafeGetDirectURL(worker.name);
+        if (!url) {
+          throw new Error(`Worker "${worker.name}" is not running`);
+        }
+        return url;
+      },
+      fetch: this.createRequestHandler(worker.name),
     });
-    this.servers.set(worker.name, server);
-    await server.ready;
+    this.workerProxies.set(worker.name, server);
+    await server.listen(worker.port ?? (await findOpenPort()));
     return server;
   }
 
   private async dispose() {
     await Promise.all([
       this.miniflare?.dispose(),
-      ...Array.from(this.servers.values()).map((server) => server.stop()),
+      ...Array.from(this.workerProxies.values()).map((server) =>
+        server.close(),
+      ),
       ...Array.from(this.remoteBindingProxies.values()).map((proxy) =>
-        proxy.server.stop(),
+        proxy.server.close(),
       ),
     ]);
     this.miniflare = undefined;
     this.workers.clear();
-    this.servers.clear();
+    this.workerProxies.clear();
   }
 
-  private async maybeCreateMixedModeProxy(
+  private async maybeCreateRemoteProxy(
     worker: MiniflareWorkerOptions,
   ): Promise<RemoteProxyConnectionString | undefined> {
     const bindings = buildRemoteBindings(worker);
@@ -130,6 +137,8 @@ class MiniflareServer {
       )
     ) {
       return existing.connectionString;
+    } else if (existing) {
+      await existing.server.close();
     }
     const proxy = await createRemoteProxyWorker({
       name: `mixed-mode-proxy-${crypto.randomUUID()}`,
@@ -150,8 +159,8 @@ class MiniflareServer {
             },
           );
         }
-        const miniflare = await this.miniflare?.getWorker(name);
-        if (!miniflare) {
+        const worker = await this.miniflare?.getWorker(name);
+        if (!worker) {
           return new Response(
             `[Alchemy] Cannot find worker "${name}". Please try again.`,
             {
@@ -159,12 +168,12 @@ class MiniflareServer {
             },
           );
         }
-        const res = await miniflare.fetch(req.url, {
+        const res = await worker.fetch(req.url, {
           method: req.method,
           headers: req.headers as any,
           body: req.body as any,
-          redirect: "manual",
           duplex: "half",
+          redirect: "manual",
         });
         return res as unknown as Response;
       } catch (error) {

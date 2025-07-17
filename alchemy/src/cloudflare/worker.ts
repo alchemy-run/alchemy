@@ -1102,6 +1102,7 @@ export const _Worker = Resource(
           bindings: props.bindings,
           bundle,
           port: props.dev?.port,
+          assets: props.assets,
         });
       }
 
@@ -1671,6 +1672,7 @@ async function createMiniflare(props: {
   bindings: Bindings | undefined;
   port: number | undefined;
   bundle: WorkerBundleProvider;
+  assets: AssetsConfig | undefined;
 }) {
   const sharedOptions: Omit<MiniflareWorkerOptions, "bundle"> = {
     name: props.workerName,
@@ -1678,6 +1680,7 @@ async function createMiniflare(props: {
     compatibilityFlags: props.compatibilityFlags,
     bindings: props.bindings,
     port: props.port,
+    assets: props.assets,
   };
 
   const startPromise = new DeferredPromise<string>();
@@ -1837,14 +1840,6 @@ async function createDevCommand(props: {
     }
   }
   const command = props.command.split(" ");
-  console.log({
-    command,
-    args: command.slice(1),
-    cwd: props.cwd,
-    env: {
-      ...props.env,
-    },
-  });
   const proc = spawn(command[0], command.slice(1), {
     cwd: props.cwd,
     env: {

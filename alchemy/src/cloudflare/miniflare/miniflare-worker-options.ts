@@ -17,6 +17,7 @@ export type MiniflareWorkerOptions = Pick<
   | "compatibilityDate"
   | "compatibilityFlags"
   | "format"
+  | "assets"
 > & {
   name: string;
   bundle: WorkerBundle;
@@ -209,6 +210,7 @@ function buildRemoteBinding(
 
 export async function buildMiniflareWorkerOptions({
   name: workerName,
+  assets,
   bundle,
   bindings,
   format,
@@ -232,7 +234,9 @@ export async function buildMiniflareWorkerOptions({
     ),
     compatibilityDate,
     compatibilityFlags,
-    unsafeDirectSockets: [{ entrypoint: undefined, proxy: true }],
+    // This was true for compatibility with the dev registry, but that doesn't work anyway,
+    // and if we don't set it to false, websocket connections fail. I'm confused.
+    unsafeDirectSockets: [{ proxy: false }],
     containerEngine: {
       localDocker: {
         socketPath:
@@ -291,6 +295,14 @@ export async function buildMiniflareWorkerOptions({
         options.assets = {
           binding: name,
           directory: binding.path,
+          routerConfig: {
+            invoke_user_worker_ahead_of_assets:
+              assets?.run_worker_first === true,
+          },
+          assetConfig: {
+            html_handling: assets?.html_handling,
+            not_found_handling: assets?.not_found_handling,
+          },
         };
         break;
       }
