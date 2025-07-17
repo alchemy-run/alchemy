@@ -2104,4 +2104,54 @@ describe("Worker Resource", () => {
       // await destroy(scope);
     }
   });
+
+  test("create worker with smart placement", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-placement`;
+
+    let worker: Worker | undefined;
+    try {
+      // Create a worker with smart placement
+      worker = await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello smart placement!', { status: 200 });
+            }
+          };
+        `,
+        placement: {
+          mode: "smart",
+        },
+      });
+
+      // Verify the worker was created successfully
+      expect(worker.id).toBeTruthy();
+      expect(worker.name).toEqual(workerName);
+      expect(worker.placement).toEqual({
+        mode: "smart",
+      });
+
+      // Update the worker to disable smart placement by omitting placement
+      worker = await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello placement disabled!', { status: 200 });
+            }
+          };
+        `,
+        // No placement property means smart placement is disabled
+      });
+
+      // Verify the placement was disabled (undefined)
+      expect(worker.placement).toBeUndefined();
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(api, workerName);
+    }
+  });
 });

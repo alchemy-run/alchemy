@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "0.46.1",
+  "version": "0.48.0",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
   "homepage": "https://alchemy.run",
@@ -15,7 +15,7 @@
     "alchemy": "bin/alchemy.mjs"
   },
   "scripts": {
-    "build:cli": "bun ./scripts/bundle-cli.ts",
+    "build:cli": "bun ./scripts/build-cli.ts",
     "build:workers": "bun ./scripts/build-workers.ts",
     "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && bun run build:cli && bun run build:workers",
     "drizzle:generate": "bun run scripts/drizzle-generate.ts",
@@ -213,14 +213,15 @@
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
     "libsodium-wrappers": "^0.7.15",
+    "listr2": "^8.0.0",
     "nitro-cloudflare-dev": "^0.2.2",
     "openpgp": "^6.1.0",
     "picocolors": "^1.1.1",
     "prettier": "^3.5.3",
     "trpc-cli": "^0.10.0",
     "turndown": "^7.2.0",
-    "typedoc": "^0.28.1",
     "typedoc-plugin-markdown": "^4.6.0",
+    "typedoc": "^0.28.1",
     "typescript": "^5.8.3",
     "vite": "^6.0.7",
     "vitepress": "^1.6.3",

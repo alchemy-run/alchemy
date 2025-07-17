@@ -38,7 +38,18 @@ export interface ScopeOptions {
   stateStore?: StateStoreType;
   quiet?: boolean;
   phase?: Phase;
-  dev?: "prefer-local" | "prefer-remote";
+  /**
+   * Determines if resources should be simulated locally (where possible)
+   *
+   * @default - `true` if ran with `alchemy dev` or `bun ./alchemy.run.ts --dev`
+   */
+  local?: boolean;
+  /**
+   * Determines if local changes to resources should be reactively pushed to the local or remote environment.
+   *
+   * @default - `true` if ran with `alchemy dev`, `alchemy watch`, `bun --watch ./alchemy.run.ts`
+   */
+  watch?: boolean;
   telemetryClient?: ITelemetryClient;
   logger?: LoggerApi;
 }
@@ -107,7 +118,8 @@ export class Scope {
   public readonly stateStore: StateStoreType;
   public readonly quiet: boolean;
   public readonly phase: Phase;
-  public readonly dev?: "prefer-local" | "prefer-remote";
+  public readonly local: boolean;
+  public readonly watch: boolean;
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
@@ -162,9 +174,10 @@ export class Scope {
           options.logger,
         );
 
-    this.dev = options.dev ?? this.parent?.dev;
+    this.local = options.local ?? this.parent?.local ?? false;
+    this.watch = options.watch ?? this.parent?.watch ?? false;
 
-    if (this.dev) {
+    if (this.local) {
       this.logger.warnOnce(
         "Development mode is in beta. Please report any issues to https://github.com/sam-goodwin/alchemy/issues.",
       );
@@ -415,6 +428,10 @@ export class Scope {
     await this.rootTelemetryClient?.finalize()?.catch((error) => {
       this.logger.warn("Telemetry finalization failed:", error);
     });
+
+    if (!this.parent && process.env.ALCHEMY_TEST_KILL_ON_FINALIZE) {
+      process.exit(0);
+    }
   }
 
   public async destroyPendingDeletions() {

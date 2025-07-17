@@ -197,6 +197,9 @@ export interface WorkerMetadata {
     suspended: boolean;
   }[];
   containers?: { class_name: string }[];
+  placement?: {
+    mode: "smart";
+  };
 }
 
 export async function prepareWorkerMetadata(
@@ -213,6 +216,9 @@ export async function prepareWorkerMetadata(
     };
     tags?: string[];
     unstable_cacheWorkerSettings?: boolean;
+    placement?: {
+      mode: "smart";
+    };
   },
 ): Promise<WorkerMetadata> {
   const oldSettings = await (props.unstable_cacheWorkerSettings
@@ -336,6 +342,7 @@ export async function prepareWorkerMetadata(
       transferred_classes: [],
       new_sqlite_classes: [],
     },
+    placement: props.placement,
   };
 
   const assetUploadResult = props.assetUploadResult;

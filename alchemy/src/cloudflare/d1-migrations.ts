@@ -319,9 +319,6 @@ export async function applyMigrations(
 
     if (applied.has(migrationName)) continue;
 
-    // Run the migration SQL
-    await executeD1SQL(options, migration.sql);
-
     // Generate a migration id: prefer sequential zero-padded numeric ids (e.g. 00014)
     // to keep consistency with legacy/imported data. If we cannot produce a numeric id
     // (e.g. existing IDs are not numeric), fall back to a unique timestamp-based ID.
@@ -334,25 +331,15 @@ export async function applyMigrations(
         Date.now().toString() + Math.random().toString(36).substr(2, 9);
     }
 
-    const insertSQL = `INSERT INTO ${options.migrationsTable} (id, name, applied_at) VALUES (?, ?, datetime('now'));`;
-
-    // Use parameterised query to record the migration
-    const response = await options.api.post(
-      `/accounts/${options.accountId}/d1/database/${options.databaseId}/query`,
-      {
-        sql: insertSQL,
-        params: [migrationId, migrationName],
-      },
+    // Run and record the migration in a single request.
+    // D1 over HTTP doesn't support transactions, so this is the next best thing.
+    await executeD1SQL(
+      options,
+      [
+        migration.sql,
+        `INSERT INTO ${options.migrationsTable} (id, name, applied_at) VALUES ('${migrationId}', '${migrationName}', datetime('now'));`,
+      ].join("\n"),
     );
-
-    if (!response.ok) {
-      await handleApiError(
-        response,
-        "inserting migration record",
-        "D1 database",
-        options.databaseId,
-      );
-    }
 
     if (!options.quiet) {
       logger.log(`Applied migration: ${migrationName}`);

@@ -14,6 +14,7 @@
       "./alchemy/bin/**/*.ts",
       "./alchemy/src/**/*.ts",
       "./alchemy/workers/**/*.ts",
+      "./alchemy/scripts/**/*.ts",
       "./alchemy/src/**/*.tsx",
       "./alchemy/src/**/*.js",
       "./alchemy/test/**/*.ts",
@@ -71,7 +72,8 @@
         "noAssignInExpressions": "off",
         "noShadowRestrictedNames": "off",
         "noEmptyInterface": "off",
-        "noRedeclare": "off"
+        "noRedeclare": "off",
+        "noControlCharactersInRegex": "off"
       },
       "style": {
         "useLiteralEnumMembers": "error",

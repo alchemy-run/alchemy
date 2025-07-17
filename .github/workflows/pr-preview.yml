@@ -73,7 +73,7 @@ jobs:
         run: |
           bun run build
           bun install # to install the built `alchemy` CLI
-          bun deploy:website --destroy
+          bun destroy:website
         env:
           ALCHEMY_PASSWORD: ${{ env.ALCHEMY_PASSWORD }}
           ALCHEMY_STATE_STORE: cloudflare
