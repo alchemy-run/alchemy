@@ -18,12 +18,13 @@ export async function TanStackStart<B extends Bindings>(
   return Website(id, {
     ...props,
     command: props?.command ?? "vite build",
+    commandEnv: {
+      // needs to be set or else jsxDev is included in the bundle and breaks in production
+      NODE_ENV: process.env.NODE_ENV ?? "production",
+    },
     noBundle: true,
     dev: props?.dev ?? {
       command: "vite dev",
-    },
-    env: {
-      NODE_ENV: process.env.NODE_ENV ?? "production",
     },
     wrangler: props?.wrangler ?? true,
     main: props?.main ?? ".output/server/index.mjs",
