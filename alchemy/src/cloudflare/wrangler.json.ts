@@ -552,13 +552,12 @@ function processBindings(
   }[] = [];
   const unsafeBindings: {
     name: string;
-    type: string;
-    namespace_id?: number;
-    simple?: {
+    type: "rate_limit";
+    namespace_id: number;
+    simple: {
       limit: number;
       period: number;
     };
-    [key: string]: any;
   }[] = [];
   const containers: {
     class_name: string;
@@ -747,10 +746,10 @@ function processBindings(
         namespace: binding.namespaceName,
         experimental_remote: true,
       });
-    } else if (binding.type === "rate_limit") {
+    } else if (binding.type === "ratelimit") {
       unsafeBindings.push({
         name: bindingName,
-        type: "ratelimit",
+        type: "rate_limit",
         namespace_id: binding.namespace_id,
         simple: binding.simple,
       });
