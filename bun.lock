@@ -376,6 +376,7 @@
         "@types/react": "^19.1.2",
         "@types/react-dom": "^19.0.4",
         "@vitejs/plugin-react": "^4.3.4",
+        "alchemy": "workspace:",
         "typescript": "^5.8.3",
         "vite": "^6.3.4",
         "wrangler": "^4.14.4",
