@@ -18,12 +18,13 @@ export async function Vite<B extends Bindings>(
   props: ViteProps<B>,
 ): Promise<Vite<B>> {
   const defaultAssets = path.join("dist", "client");
-  const packageManager = detectPackageManager();
+  const packageManager = await detectPackageManager();
   const devCommand = {
     npm: "npx vite dev",
     bun: "bun vite dev",
     pnpm: "pnpm vite dev",
     yarn: "yarn vite dev",
+    deno: "deno vite dev",
   }[packageManager];
   return Website(id, {
     ...props,
@@ -37,7 +38,6 @@ export async function Vite<B extends Bindings>(
         : (props.assets ?? defaultAssets),
     dev: props.dev ?? {
       command: devCommand,
-      url: "http://localhost:5173",
     },
   });
 }

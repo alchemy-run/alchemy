@@ -3,10 +3,10 @@
   "name": "@alchemy.run/react-router-template",
   "private": true,
   "scripts": {
-    "build": "vite build",
-    "deploy": "bun --env-file=./.env ./alchemy.run.ts",
-    "destroy": "bun --env-file=./.env ./alchemy.run.ts --destroy",
-    "dev": "react-router dev",
+    "build": "react-router build",
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
+    "dev": "alchemy dev",
     "preview": "bun run build && vite preview",
     "typecheck": "react-router typegen && tsc -b"
   },

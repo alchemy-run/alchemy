@@ -1,10 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import util from "node:util";
 import type { Phase } from "./alchemy.ts";
-import { D1StateStore } from "./cloudflare/d1-state-store.ts";
-import { DOStateStore } from "./cloudflare/do-state-store/index.ts";
 import { destroy, destroyAll } from "./destroy.ts";
-import { FileSystemStateStore } from "./fs/file-system-state-store.ts";
 import {
   ResourceFQN,
   ResourceID,
@@ -16,6 +13,8 @@ import {
   type ResourceProps,
 } from "./resource.ts";
 import type { State, StateStore, StateStoreType } from "./state.ts";
+import { D1StateStore } from "./state/d1-state-store.ts";
+import { FileSystemStateStore } from "./state/file-system-state-store.ts";
 import { StateStoreWrapper } from "./state/state-store-wrapper.ts";
 import {
   createDummyLogger,
@@ -40,7 +39,18 @@ export interface ScopeOptions {
   stateStore?: StateStoreType;
   quiet?: boolean;
   phase?: Phase;
-  dev?: "prefer-local" | "prefer-remote";
+  /**
+   * Determines if resources should be simulated locally (where possible)
+   *
+   * @default - `true` if ran with `alchemy dev` or `bun ./alchemy.run.ts --dev`
+   */
+  local?: boolean;
+  /**
+   * Determines if local changes to resources should be reactively pushed to the local or remote environment.
+   *
+   * @default - `true` if ran with `alchemy dev`, `alchemy watch`, `bun --watch ./alchemy.run.ts`
+   */
+  watch?: boolean;
   telemetryClient?: ITelemetryClient;
   logger?: LoggerApi;
 }
@@ -109,12 +119,14 @@ export class Scope {
   public readonly stateStore: StateStoreType;
   public readonly quiet: boolean;
   public readonly phase: Phase;
-  public readonly dev?: "prefer-local" | "prefer-remote";
+  public readonly local: boolean;
+  public readonly watch: boolean;
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
 
   private isErrored = false;
+  private isSkipped = false;
   private finalized = false;
   private startedAt = performance.now();
 
@@ -164,9 +176,10 @@ export class Scope {
           options.logger,
         );
 
-    this.dev = options.dev ?? this.parent?.dev;
+    this.local = options.local ?? this.parent?.local ?? false;
+    this.watch = options.watch ?? this.parent?.watch ?? false;
 
-    if (this.dev) {
+    if (this.local) {
       this.logger.warnOnce(
         "Development mode is in beta. Please report any issues to https://github.com/sam-goodwin/alchemy/issues.",
       );
@@ -184,6 +197,17 @@ export class Scope {
       throw new Error("Telemetry client is required");
     }
     this.dataMutex = new AsyncMutex();
+  }
+
+  /**
+   * @internal
+   */
+  public clear() {
+    for (const child of this.children.values()) {
+      child.clear();
+    }
+    this.resources.clear();
+    this.children.clear();
   }
 
   public get root(): Scope {
@@ -229,6 +253,10 @@ export class Scope {
   public fail() {
     this.logger.error("Scope failed", this.chain.join("/"));
     this.isErrored = true;
+  }
+
+  public skip() {
+    this.isSkipped = true;
   }
 
   public async init() {
@@ -370,7 +398,7 @@ export class Scope {
     this.finalized = true;
     // trigger and await all deferred promises
     await Promise.all(this.deferred.map((fn) => fn()));
-    if (!this.isErrored) {
+    if (!this.isErrored && !this.isSkipped) {
       // TODO: need to detect if it is in error
       const resourceIds = await this.state.list();
       const aliveIds = new Set(this.resources.keys());
@@ -420,6 +448,10 @@ export class Scope {
     await this.rootTelemetryClient?.finalize()?.catch((error) => {
       this.logger.warn("Telemetry finalization failed:", error);
     });
+
+    if (!this.parent && process.env.ALCHEMY_TEST_KILL_ON_FINALIZE) {
+      process.exit(0);
+    }
   }
 
   public async destroyPendingDeletions() {
@@ -503,10 +535,8 @@ export class Scope {
 
 const defaultStateStore: StateStoreType = (scope: Scope) => {
   switch (process.env.ALCHEMY_STATE_STORE) {
-    case "cloudflare-d1":
+    case "d1":
       return new D1StateStore(scope);
-    case "cloudflare":
-      return new DOStateStore(scope);
     default:
       return new FileSystemStateStore(scope);
   }

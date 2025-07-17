@@ -1,33 +1,31 @@
 {
   "name": "alchemy",
-  "version": "0.45.1",
-  "type": "module",
-  "module": "./lib/index.js",
+  "version": "0.48.2",
   "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "homepage": "https://alchemy.run",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sam-goodwin/alchemy.git",
     "directory": "alchemy"
   },
+  "type": "module",
+  "module": "./lib/index.js",
+  "bin": {
+    "alchemy": "bin/alchemy.mjs"
+  },
   "scripts": {
-    "build:cli": "run-script-os",
-    "build:cli:windows": "powershell -File ./scripts/bundle-cli.ps1",
-    "build:cli:default": "./scripts/bundle-cli.sh",
+    "build:cli": "bun ./scripts/build-cli.ts",
     "build:workers": "bun ./scripts/build-workers.ts",
     "build": "rm -rf ./*.tsbuildinfo && rm -rf ./lib && tsc -b && bun run build:cli && bun run build:workers",
-    "db:generate": "drizzle-kit generate",
+    "drizzle:generate": "bun run scripts/drizzle-generate.ts",
     "docs:gen": "rm -rf ./docs && typedoc",
     "postbuild": "cpx 'src/**/*/types.d.ts' lib && cpx 'src/**/*.txt' lib",
     "publish:npm": "cp ../README.md . && bun run build && bun run build:cli && npm publish && rm README.md"
   },
-  "bin": {
-    "alchemy": "bin/alchemy.mjs"
-  },
-  "author": "Sam Goodwin <sam@alchemy.run>",
-  "homepage": "https://alchemy.run",
   "files": [
     "bin",
-    "drizzle",
+    "drizzle/default",
     "lib",
     "src",
     "templates",
@@ -114,9 +112,9 @@
       "bun": "./src/web/shadcn.ts",
       "import": "./lib/web/shadcn.js"
     },
-    "./sqlite": {
-      "bun": "./src/sqlite/index.ts",
-      "import": "./lib/sqlite/index.js"
+    "./state": {
+      "bun": "./src/state/index.ts",
+      "import": "./lib/state/index.js"
     },
     "./web/astro": {
       "bun": "./src/web/astro.ts",
@@ -150,10 +148,14 @@
     "jszip": "^3.0.0",
     "kleur": "^4.1.5",
     "libsodium-wrappers": "^0.7.15",
+    "miniflare": "^4.20250712.0",
+    "neverthrow": "^8.2.0",
+    "open": "^10.1.2",
     "pathe": "^2.0.3",
     "turndown": "^7.0.0",
     "unenv": "2.0.0-rc.15",
     "ws": "^8.18.3",
+    "xdg-app-paths": "^8.3.0",
     "yaml": "^2.0.0"
   },
   "peerDependencies": {
@@ -175,10 +177,11 @@
     "arktype": "^2.0.0",
     "cloudflare": "^4.0.0",
     "drizzle-orm": "^0.44.2",
+    "execa": "^9.6.0",
     "hono": "^4.0.0",
     "prettier": "^3.0.0",
     "stripe": "^17.0.0",
-    "zod": "^3.0.0"
+    "zod": "^4.0.5"
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^1.1.6",
@@ -207,19 +210,18 @@
     "cpx": "^1.5.0",
     "dofs": "^0.1.0",
     "drizzle-kit": "^0.31.4",
-    "execa": "^9.6.0",
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
     "libsodium-wrappers": "^0.7.15",
-    "miniflare": "^4.20250617.4",
+    "listr2": "^8.0.0",
     "nitro-cloudflare-dev": "^0.2.2",
     "openpgp": "^6.1.0",
     "picocolors": "^1.1.1",
     "prettier": "^3.5.3",
-    "trpc-cli": "^0.9.2",
+    "trpc-cli": "^0.10.0",
     "turndown": "^7.2.0",
-    "typedoc": "^0.28.1",
     "typedoc-plugin-markdown": "^4.6.0",
+    "typedoc": "^0.28.1",
     "typescript": "^5.8.3",
     "vite": "^6.0.7",
     "vitepress": "^1.6.3",

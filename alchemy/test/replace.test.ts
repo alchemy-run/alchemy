@@ -5,25 +5,21 @@ import { destroy } from "../src/destroy.js";
 import { Resource, ResourceID } from "../src/resource.js";
 import type { Scope } from "../src/scope.js";
 import "../src/test/vitest.js";
-import { BRANCH_PREFIX, createTestOptions } from "./util.js";
+import { BRANCH_PREFIX, createTestOptions, STATE_STORE_TYPES } from "./util.js";
 
-const test = alchemy.test(import.meta, {
-  prefix: BRANCH_PREFIX,
-});
-
-describe.concurrent("Replace", () => {
-  for (const storeType of ["fs", "dofs", "sqlite", "d1"]) {
-    describe(storeType, () => {
+describe.sequential("Replace-Sequential", () => {
+  for (const storeType of STATE_STORE_TYPES) {
+    describe.sequential(storeType, () => {
       const options = createTestOptions(storeType, "replace");
       const deleted: string[] = [];
       const failed = new Set();
 
-      interface Replacable extends Resource<`Replacable-${string}`> {
+      interface Replacable extends Resource<`Replacable-sequential-${string}`> {
         name: string;
       }
 
       const Replacable = Resource(
-        `Replacable-${storeType}`,
+        `Replacable-sequential-${storeType}`,
         async function (
           this: Context<Replacable>,
           _id: string,
@@ -49,7 +45,111 @@ describe.concurrent("Replace", () => {
           }
           if (this.phase === "update") {
             if (props.name !== this.output.name) {
-              this.replace();
+              await this.replace();
+            }
+          }
+          if (props.child) {
+            await Replacable("child", {
+              name: "child",
+            });
+          }
+          return this({
+            name: props.name,
+          });
+        },
+      );
+
+      vitestTest.sequential(
+        "replace should not trigger deletion of entire stage scope",
+        async () => {
+          let app: Scope;
+          try {
+            app = await alchemy(
+              "replace should not trigger deletion of entire stage scope",
+              {
+                ...options,
+                quiet: true,
+              },
+            );
+
+            await Replacable("foo-6", {
+              name: "foo-6",
+            });
+            await Replacable("bar-6", {
+              name: "bar-6",
+            });
+            await Replacable("bar-6", {
+              name: "baz-6",
+            });
+
+            expect(deleted).not.toContain("foo-6");
+            expect(deleted).not.toContain("bar-6");
+            expect(deleted).not.toContain("baz-6");
+
+            await app.finalize();
+
+            expect(deleted).not.toContain("foo-6");
+            expect(deleted).toContain("bar-6");
+            expect(deleted).not.toContain("baz-6");
+          } finally {
+            await destroy(app!);
+
+            expect(deleted).toContain("foo-6");
+            expect(deleted).toContain("bar-6");
+            expect(deleted).toContain("baz-6");
+
+            globalThis.__ALCHEMY_STORAGE__?.disable();
+          }
+        },
+      );
+    });
+  }
+});
+
+const test = alchemy.test(import.meta, {
+  prefix: BRANCH_PREFIX,
+});
+
+describe.concurrent("Replace", () => {
+  for (const storeType of STATE_STORE_TYPES) {
+    describe(storeType, () => {
+      const options = createTestOptions(storeType, "replace");
+      const deleted: string[] = [];
+      const failed = new Set();
+
+      interface Replacable extends Resource<`Replacable-${string}`> {
+        name: string;
+      }
+
+      const Replacable = Resource(
+        `Replacable-${storeType}`,
+        async function (
+          this: Context<Replacable>,
+          _id: string,
+          props: {
+            name: string;
+            fail?: boolean;
+            child?: boolean;
+            replaceOnCreate?: boolean;
+            force?: boolean;
+          },
+        ) {
+          if (props.replaceOnCreate && this.phase === "create") {
+            await this.replace(props.force);
+          }
+          if (this.phase === "delete") {
+            if (props.fail) {
+              if (!failed.has(props.name)) {
+                failed.add(props.name);
+                throw new Error(`Failed to delete ${props.name}`);
+              }
+            }
+            deleted.push(props.name);
+            return this.destroy();
+          }
+          if (this.phase === "update") {
+            if (props.name !== this.output.name) {
+              await this.replace(props.force);
             }
           }
           if (props.child) {
@@ -328,45 +428,6 @@ describe.concurrent("Replace", () => {
         },
       );
 
-      vitestTest(
-        "replace should not trigger deletion of entire stage scope",
-        async () => {
-          let app: Scope;
-          try {
-            app = await alchemy("Replace-Testing", {
-              stage: "dev",
-              quiet: true,
-            });
-
-            await Replacable("foo-6", {
-              name: "foo-6",
-            });
-            await Replacable("bar-6", {
-              name: "bar-6",
-            });
-            await Replacable("bar-6", {
-              name: "baz-6",
-            });
-
-            expect(deleted).not.toContain("foo-6");
-            expect(deleted).not.toContain("bar-6");
-            expect(deleted).not.toContain("baz-6");
-
-            await app.finalize();
-
-            expect(deleted).not.toContain("foo-6");
-            expect(deleted).toContain("bar-6");
-            expect(deleted).not.toContain("baz-6");
-          } finally {
-            await destroy(app!);
-
-            expect(deleted).toContain("foo-6");
-            expect(deleted).toContain("bar-6");
-            expect(deleted).toContain("baz-6");
-          }
-        },
-      );
-
       test(
         "replace is able to recover from corrupted DoStateStore",
         options,
@@ -411,6 +472,32 @@ describe.concurrent("Replace", () => {
           } finally {
             await destroy(scope);
             expect(deleted).toContain("bar-7");
+          }
+        },
+      );
+
+      test(
+        "replace should be able to force a deletion immediately",
+        options,
+        async (scope) => {
+          try {
+            let resource = await Replacable("replaceable", {
+              name: "foo-8",
+            });
+            expect(deleted).not.toContain("foo-8");
+            expect(resource.name).toBe("foo-8");
+            resource = await Replacable("replaceable", {
+              name: "bar-8",
+              force: true,
+            });
+            // the output should have changed
+            expect(resource.name).toBe("bar-8");
+            // but the resource should not have been deleted
+            expect(deleted).toContain("foo-8");
+            expect(deleted).not.toContain("bar-8");
+          } finally {
+            await destroy(scope);
+            expect(deleted).toContain("bar-8");
           }
         },
       );

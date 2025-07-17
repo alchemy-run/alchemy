@@ -36,7 +36,10 @@ jobs:
 
       - name: Deploy Website Preview
         id: deploy
-        run: bun deploy:website
+        run: |
+          bun run build
+          bun install # to install the built `alchemy` CLI
+          bun deploy:website
         env:
           ALCHEMY_PASSWORD: ${{ env.ALCHEMY_PASSWORD }}
           ALCHEMY_STATE_STORE: cloudflare
@@ -67,7 +70,10 @@ jobs:
           aws-region: us-west-2
 
       - name: Cleanup Website Preview
-        run: bun deploy:website --destroy
+        run: |
+          bun run build
+          bun install # to install the built `alchemy` CLI
+          bun destroy:website
         env:
           ALCHEMY_PASSWORD: ${{ env.ALCHEMY_PASSWORD }}
           ALCHEMY_STATE_STORE: cloudflare

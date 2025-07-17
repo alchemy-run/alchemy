@@ -6,12 +6,15 @@
     "useIgnoreFile": true
   },
   "files": {
+    "ignoreUnknown": true,
     "includes": [
       "./src/**/*.ts",
       "./**/package.json",
       "./**/biome.json",
       "./alchemy/bin/**/*.ts",
       "./alchemy/src/**/*.ts",
+      "./alchemy/workers/**/*.ts",
+      "./alchemy/scripts/**/*.ts",
       "./alchemy/src/**/*.tsx",
       "./alchemy/src/**/*.js",
       "./alchemy/test/**/*.ts",
@@ -27,9 +30,10 @@
       "!examples/cloudflare-redwood/worker-configuration.d.ts",
       "!./alchemy/src/aws/control/types.d.ts",
       "!examples/cloudflare-tanstack-start/.output/**",
-      "!examples/cloudflare-nuxt-pipeline/.output/**"
+      "!examples/cloudflare-nuxt-pipeline/.output/**",
+      "!./alchemy/lib/**"
     ],
-    "maxSize": 10000000
+    "experimentalScannerIgnores": ["!**/node_modules", "./alchemy/lib/**"]
   },
   "assist": {
     "actions": {
@@ -68,7 +72,8 @@
         "noAssignInExpressions": "off",
         "noShadowRestrictedNames": "off",
         "noEmptyInterface": "off",
-        "noRedeclare": "off"
+        "noRedeclare": "off",
+        "noControlCharactersInRegex": "off"
       },
       "style": {
         "useLiteralEnumMembers": "error",

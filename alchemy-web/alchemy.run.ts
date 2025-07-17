@@ -1,6 +1,7 @@
 import alchemy from "alchemy";
-import { DOStateStore, Website, Worker } from "alchemy/cloudflare";
+import { Website, Worker, Zone } from "alchemy/cloudflare";
 import { GitHubComment } from "alchemy/github";
+import { CloudflareStateStore } from "alchemy/state";
 
 const POSTHOG_DESTINATION_HOST =
   process.env.POSTHOG_DESTINATION_HOST ?? "us.i.posthog.com";
@@ -16,7 +17,7 @@ const POSTHOG_PROXY_HOST = `ph.${ZONE}`;
 const stage = process.env.STAGE ?? process.env.PULL_REQUEST ?? "dev";
 
 const app = await alchemy("alchemy:website", {
-  stateStore: (scope) => new DOStateStore(scope),
+  stateStore: (scope) => new CloudflareStateStore(scope),
   stage,
 });
 
@@ -30,6 +31,10 @@ const proxyBindings = {
 export type PosthogProxy = Worker<typeof proxyBindings>;
 
 if (stage === "prod") {
+  await Zone("alchemy-run", {
+    name: "alchemy.run",
+  });
+
   await Worker("posthog-proxy", {
     adopt: true,
     name: "alchemy-posthog-proxy",
@@ -50,6 +55,7 @@ const website = await Website("website", {
   env: {
     POSTHOG_CLIENT_API_HOST: `https://${POSTHOG_PROXY_HOST}`,
     POSTHOG_PROJECT_ID: POSTHOG_PROJECT_ID,
+    ENABLE_POSTHOG: stage === "prod" ? "true" : "false",
   },
 });
 

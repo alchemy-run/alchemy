@@ -1,6 +1,7 @@
 import { assertNever } from "../util/assert-never.ts";
 import { logger } from "../util/logger.ts";
 import { memoize } from "../util/memoize.ts";
+import { extractCloudflareResult } from "./api-response.ts";
 import type { CloudflareApi } from "./api.ts";
 import {
   Self,
@@ -196,11 +197,14 @@ export interface WorkerMetadata {
     suspended: boolean;
   }[];
   containers?: { class_name: string }[];
+  placement?: {
+    mode: "smart";
+  };
 }
 
 export async function prepareWorkerMetadata(
   api: CloudflareApi,
-  props: WorkerProps & {
+  props: Omit<WorkerProps, "entrypoint"> & {
     compatibilityDate: string;
     compatibilityFlags: string[];
     workerName: string;
@@ -210,7 +214,11 @@ export async function prepareWorkerMetadata(
       keepAssets?: boolean;
       assetConfig?: AssetsConfig;
     };
+    tags?: string[];
     unstable_cacheWorkerSettings?: boolean;
+    placement?: {
+      mode: "smart";
+    };
   },
 ): Promise<WorkerMetadata> {
   const oldSettings = await (props.unstable_cacheWorkerSettings
@@ -226,7 +234,7 @@ export async function prepareWorkerMetadata(
   // we use Cloudflare Worker tags to store a mapping between Alchemy's stable identifier and the binding name
   // e.g.
   // {
-  //   BINDING_NAME: new DurableObjectNamespace("stable-id")
+  //   BINDING_NAME: DurableObjectNamespace("stable-id")
   // }
   // will be stored as alchemy:do:stable-id:BINDING_NAME
   // TODO(sam): should we base64 encode to ensure no `:` collision risk?
@@ -323,6 +331,7 @@ export async function prepareWorkerMetadata(
       ),
       // encode the migraiton tag if there is one so we can avoid the failed PutWorker after adoption
       ...(newMigrationTag ? [`alchemy:migration-tag:${newMigrationTag}`] : []),
+      ...(props.tags ?? []),
     ],
     migrations: {
       old_tag: oldMigrationTag,
@@ -333,6 +342,7 @@ export async function prepareWorkerMetadata(
       transferred_classes: [],
       new_sqlite_classes: [],
     },
+    placement: props.placement,
   };
 
   const assetUploadResult = props.assetUploadResult;
@@ -640,6 +650,7 @@ interface WorkerSettings {
   compatibility_date: string;
   compatibility_flags: string[];
   migrations: SingleStepMigration | MultiStepMigration;
+  tags: string[];
   [key: string]: any;
 }
 
@@ -648,51 +659,22 @@ const getWorkerSettingsWithCache = memoize(
   (api, workerName) => `${api.accountId}:${workerName}`,
 );
 
-async function getWorkerSettings(
+export async function getWorkerSettings(
   api: CloudflareApi,
   workerName: string,
 ): Promise<WorkerSettings | undefined> {
   // Fetch the bindings for a worker by calling the Cloudflare API endpoint:
   // GET /accounts/:account_id/workers/scripts/:script_name/bindings
   // See: https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/script_and_version_settings/methods/get/
-  const response = await api.get(
-    `/accounts/${api.accountId}/workers/scripts/${workerName}/settings`,
-  );
-  if (response.status === 404) {
-    return undefined;
-  }
-  if (!response.ok) {
-    throw new Error(
-      `Error getting worker bindings: ${response.status} ${response.statusText}`,
-    );
-  }
-  // The result is an object with a "result" property containing the bindings array
-  const { result, success, errors } = (await response.json()) as {
-    result: {
-      bindings: WorkerBindingSpec[];
-      compatibility_date: string;
-      compatibility_flags: string[];
-      migrations: SingleStepMigration | MultiStepMigration;
-      [key: string]: any;
-    };
-    success: boolean;
-    errors: Array<{
-      code: number;
-      message: string;
-      documentation_url: string;
-      [key: string]: any;
-    }>;
-    messages: Array<{
-      code: number;
-      message: string;
-      documentation_url: string;
-      [key: string]: any;
-    }>;
-  };
-  if (!success) {
-    throw new Error(
-      `Error getting worker bindings: ${response.status} ${response.statusText}\nErrors:\n${errors.map((e) => `- [${e.code}] ${e.message} (${e.documentation_url})`).join("\n")}`,
-    );
-  }
-  return result;
+  return await extractCloudflareResult<WorkerSettings>(
+    `get worker settings for ${workerName}`,
+    api.get(
+      `/accounts/${api.accountId}/workers/scripts/${workerName}/settings`,
+    ),
+  ).catch((error) => {
+    if (error.status === 404) {
+      return undefined;
+    }
+    throw error;
+  });
 }

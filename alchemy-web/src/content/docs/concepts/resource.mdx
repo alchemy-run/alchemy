@@ -166,7 +166,7 @@ return this.create({/* updated properties */});
 ```
 :::
 
-# Adoption
+## Adoption
 
 When creating a resource, Alchemy will fail if a resource with the same name already exists. Resource adoption allows you to opt in to using the pre-existing resource instead.
 
@@ -187,16 +187,23 @@ During the **create phase**, if a resource already exists:
 - **Without adoption** (default): Throws an "already exists" error
 - **With adoption**: Finds and adopts the existing resource
 
-# Replacement
+## Replacement
 
-Sometimes it's impossible to UPDATE a resource (e.g., you cannot rename an R2 Bucket). In these cases, you need to perform a REPLACE operation to create a new version and delete the old one.
+Sometimes it's impossible to UPDATE a resource (e.g., you cannot rename an R2 Bucket). In these cases, you need to perform a REPLACE operation to:
+
+1. create a new version of the Resource and update references
+2. delete the old version of the Resource (or leave it orphaned)
+
+## Trigger Replacement
+
+During the **update phase**, you can trigger a replacement by calling `await this.replace()`:
 
 ```typescript
-// Trigger replacement during update phase
+// Implementation pattern
 if (this.phase === "update") {
   if (this.output.name !== props.name) {
-    // Trigger replace and terminate this "update" phase
-    this.replace();
+    // trigger replace and terminate this "update" phase
+    await this.replace();
     // (unreachable code)
   } else {
     return updateResource();
@@ -204,7 +211,62 @@ if (this.phase === "update") {
 }
 ```
 
-After calling `this.replace()`, the "update" phase terminates and re-invokes with "create" to create the new resource. The old resource is deleted when you call `app.finalize()`.
+### Create new
+
+After you call `await this.replace()`, the "update" phase will terminate and be re-invoked with "create" (to create the new resource).
+
+```ts
+if (this.phase === "create") {
+  return createNewResource();
+}
+```
+
+### Delete old
+
+After all downstream dependencies have been updated and you finally call `app.finalize()`, Alchemy will then invoke the "delete" phase on the old resource.
+
+```ts
+const app = await alchemy("app");
+
+// ... create resources
+
+await app.finalize(); // finalize scopes by deleting "orphaned" and "replaced" resources
+```
+
+### Immediate replacement
+
+It is sometimes required to destory the old resource before creating the one, e.g. when updating a resource that requires a unique name.
+
+To address this you can trigger a replacement immediately by calling `await this.replace(true)`. This will destroy the old resource before creating the new one.
+
+```ts
+await this.replace(true);
+```
+
+:::tip
+`await this.replace(true)` can cause downtime since a resource is deleted before the new one is created. Downtime can be avoided by appending a random string to the end of the resource name on the handler level, this creates different resource names and avoids the need to destroy the old resource prior to creating the new one.
+
+```ts
+async function (this, _id, props) {
+	const nameSlug = this.isReplacement
+		? generateSlug()
+		: (this.output?.nameSlug ?? generateSlug());
+	const name = `${props.name}-${nameSlug}`;
+
+	if (this.phase === "update") {
+		if (this.output?.name === name) {
+			await this.replace();
+		}
+	}
+
+	return this({
+			nameSlug,
+			...props,
+			name,
+	})
+}
+```
+:::
 
 ## Testing
 

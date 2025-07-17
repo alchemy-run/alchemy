@@ -85,5 +85,8 @@ export async function Astro<B extends Bindings>(
       run_worker_first: false,
     },
     wrangler,
+    dev: props.dev ?? {
+      command: "astro dev",
+    },
   });
 }
