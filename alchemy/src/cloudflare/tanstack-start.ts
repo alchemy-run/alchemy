@@ -17,14 +17,14 @@ export async function TanStackStart<B extends Bindings>(
 ): Promise<TanStackStart<B>> {
   return Website(id, {
     ...props,
-    command: props?.command ?? "vite build",
-    wrangler: props?.wrangler ?? true,
-    main: props?.main ?? ".output/server/index.mjs",
-    compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
-    assets: props?.assets ?? ".output/public",
+    command: props?.command ?? "NODE_ENV=production vite build",
     noBundle: true,
     dev: props?.dev ?? {
       command: "vite dev",
     },
+    wrangler: props?.wrangler ?? true,
+    main: props?.main ?? ".output/server/index.mjs",
+    compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
+    assets: props?.assets ?? ".output/public",
   });
 }
