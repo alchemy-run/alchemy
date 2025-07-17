@@ -46,6 +46,12 @@
     "rules": {
       "recommended": true,
       "correctness": {
+        "useImportExtensions": {
+          "level": "error",
+          "options": {
+            "forceJsExtensions": false
+          }
+        },
         "noUnsafeFinally": "off",
         "noChildrenProp": "off"
       },
