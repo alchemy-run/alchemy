@@ -565,6 +565,13 @@ export async function prepareWorkerMetadata(
         configureClassMigration(bindingName, binding);
       }
       (meta.containers ??= []).push({ class_name: binding.className });
+    } else if (binding.type === "ratelimit") {
+      meta.bindings.push({
+        type: "ratelimit",
+        name: bindingName,
+        namespace_id: binding.namespace_id.toString(),
+        simple: binding.simple,
+      });
     } else {
       assertNever(
         binding,

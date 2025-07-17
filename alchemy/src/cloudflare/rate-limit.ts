@@ -36,14 +36,14 @@ export function RateLimit(options: {
   };
 }): RateLimit {
   return {
-    type: "rate_limit",
+    type: "ratelimit",
     namespace_id: options.namespace_id,
     simple: options.simple,
   };
 }
 
 export type RateLimit = {
-  type: "rate_limit";
+  type: "ratelimit";
   namespace_id: number;
   simple: {
     limit: number;

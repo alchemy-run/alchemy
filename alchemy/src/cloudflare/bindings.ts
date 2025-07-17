@@ -294,9 +294,9 @@ export interface WorkerBindingRateLimit {
   /** The name of the binding */
   name: string;
   /** Type identifier for Rate Limit binding */
-  type: "rate_limit";
+  type: "ratelimit";
   /** Namespace ID for the rate limit */
-  namespace_id: number;
+  namespace_id: string;
   /** Simple rate limiting configuration */
   simple: {
     /** Maximum number of requests */
