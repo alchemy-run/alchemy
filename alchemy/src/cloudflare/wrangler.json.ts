@@ -149,6 +149,8 @@ export const WranglerJson = Resource(
             binding: props.assets.binding,
           }
         : undefined,
+      placement: worker.placement,
+      limits: worker.limits,
     };
 
     // Process bindings if they exist
@@ -217,6 +219,20 @@ export interface WranglerJsonSpec {
    * A list of flags that enable features from upcoming Workers runtime
    */
   compatibility_flags?: string[];
+
+  /**
+   * The placement mode for the worker
+   */
+  placement?: {
+    mode: "smart";
+  };
+
+  /**
+   * The CPU time limit for the worker
+   */
+  limits?: {
+    cpu_ms?: number;
+  };
 
   /**
    * Whether to enable a workers.dev URL for this worker

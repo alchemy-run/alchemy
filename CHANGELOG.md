@@ -1,3 +1,13 @@
+## v0.48.3
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Support cpu_ms limit on Worker &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/707 [<samp>(090e4)</samp>](https://github.com/sam-goodwin/alchemy/commit/090e4a2)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.48.2...v0.48.3)
+
+---
+
 ## v0.48.2
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

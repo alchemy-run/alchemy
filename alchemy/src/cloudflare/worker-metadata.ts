@@ -200,6 +200,9 @@ export interface WorkerMetadata {
   placement?: {
     mode: "smart";
   };
+  limits?: {
+    cpu_ms?: number;
+  };
 }
 
 export async function prepareWorkerMetadata(
@@ -343,6 +346,7 @@ export async function prepareWorkerMetadata(
       new_sqlite_classes: [],
     },
     placement: props.placement,
+    limits: props.limits,
   };
 
   const assetUploadResult = props.assetUploadResult;

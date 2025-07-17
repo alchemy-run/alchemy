@@ -388,6 +388,16 @@ export interface BaseWorkerProps<
      */
     mode: "smart";
   };
+
+  limits?: {
+    /**
+     * The maximum CPU time in milliseconds that the worker can use.
+     *
+     * @see https://developers.cloudflare.com/workers/platform/limits/#cpu-time
+     * @default 30_000 (30 seconds)
+     */
+    cpu_ms?: number;
+  };
 }
 
 export interface InlineWorkerProps<
@@ -1127,6 +1137,8 @@ export const _Worker = Resource(
         crons: props.crons,
         // Include placement configuration in the output
         placement: props.placement,
+        // Include limits configuration in the output
+        limits: props.limits,
         // phantom property
         Env: undefined!,
       } as unknown as Worker<B>);
@@ -1421,6 +1433,8 @@ export const _Worker = Resource(
       version: props.version,
       // Include placement configuration in the output
       placement: props.placement,
+      // Include limits configuration in the output
+      limits: props.limits,
       // phantom property
       Env: undefined!,
     } as unknown as Worker<B>);
