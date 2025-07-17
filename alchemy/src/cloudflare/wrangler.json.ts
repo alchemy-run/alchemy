@@ -447,6 +447,18 @@ export interface WranglerJsonSpec {
     namespace: string;
     experimental_remote?: boolean;
   }[];
+
+  /**
+   * Rate limit bindings
+   */
+  rate_limit?: {
+    binding: string;
+    namespace_id: number;
+    simple: {
+      limit: number;
+      period: number;
+    };
+  }[];
 }
 
 /**
@@ -533,6 +545,14 @@ function processBindings(
     binding: string;
     namespace: string;
     experimental_remote?: boolean;
+  }[] = [];
+  const rateLimits: {
+    binding: string;
+    namespace_id: number;
+    simple: {
+      limit: number;
+      period: number;
+    };
   }[] = [];
   const containers: {
     class_name: string;
@@ -721,6 +741,12 @@ function processBindings(
         namespace: binding.namespaceName,
         experimental_remote: true,
       });
+    } else if (binding.type === "rate_limit") {
+      rateLimits.push({
+        binding: bindingName,
+        namespace_id: binding.namespace_id,
+        simple: binding.simple,
+      });
     } else if (binding.type === "secret_key") {
       // no-op
     } else if (binding.type === "container") {
@@ -801,5 +827,9 @@ function processBindings(
 
   if (dispatchNamespaces.length > 0) {
     spec.dispatch_namespaces = dispatchNamespaces;
+  }
+
+  if (rateLimits.length > 0) {
+    spec.rate_limit = rateLimits;
   }
 }

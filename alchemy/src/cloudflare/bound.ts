@@ -15,6 +15,7 @@ import type { HyperdriveResource as _Hyperdrive } from "./hyperdrive.ts";
 import type { Images as _Images } from "./images.ts";
 import type { PipelineResource as _Pipeline } from "./pipeline.ts";
 import type { QueueResource as _Queue } from "./queue.ts";
+import type { RateLimit } from "./rate-limit.ts";
 import type { SecretKey } from "./secret-key.ts";
 import type { Secret as CloudflareSecret } from "./secret.ts";
 import type { VectorizeIndexResource as _VectorizeIndex } from "./vectorize-index.ts";
@@ -74,25 +75,31 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
                                     ? AnalyticsEngineDataset
                                     : T extends _Pipeline<infer R>
                                       ? Pipeline<R>
-                                      : T extends string
-                                        ? string
-                                        : T extends BrowserRendering
-                                          ? Fetcher
-                                          : T extends _Ai<infer M>
-                                            ? Ai<M>
-                                            : T extends _Images
-                                              ? ImagesBinding
-                                              : T extends _VersionMetadata
-                                                ? WorkerVersionMetadata
-                                                : T extends Self
-                                                  ? Service
-                                                  : T extends Json<infer T>
-                                                    ? T
-                                                    : T extends _Container<
-                                                          infer Obj
-                                                        >
-                                                      ? DurableObjectNamespace<
-                                                          Obj &
-                                                            Rpc.DurableObjectBranded
-                                                        >
-                                                      : Service;
+                                      : T extends RateLimit
+                                        ? {
+                                            limit(options: {
+                                              key: string;
+                                            }): Promise<{ success: boolean }>;
+                                          }
+                                        : T extends string
+                                          ? string
+                                          : T extends BrowserRendering
+                                            ? Fetcher
+                                            : T extends _Ai<infer M>
+                                              ? Ai<M>
+                                              : T extends _Images
+                                                ? ImagesBinding
+                                                : T extends _VersionMetadata
+                                                  ? WorkerVersionMetadata
+                                                  : T extends Self
+                                                    ? Service
+                                                    : T extends Json<infer T>
+                                                      ? T
+                                                      : T extends _Container<
+                                                            infer Obj
+                                                          >
+                                                        ? DurableObjectNamespace<
+                                                            Obj &
+                                                              Rpc.DurableObjectBranded
+                                                          >
+                                                        : Service;
