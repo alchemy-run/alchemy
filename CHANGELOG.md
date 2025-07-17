@@ -1,3 +1,13 @@
+## v0.48.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **core**: Do not delete nested resources of a skipped resource &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/704 [<samp>(b25c7)</samp>](https://github.com/sam-goodwin/alchemy/commit/b25c739b)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.48.1...v0.48.2)
+
+---
+
 ## v0.48.1
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

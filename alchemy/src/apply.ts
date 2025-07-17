@@ -115,6 +115,7 @@ async function _apply<Out extends Resource>(
         JSON.stringify(oldProps) === JSON.stringify(newProps) &&
         alwaysUpdate !== true
       ) {
+        scope.skip();
         if (!quiet) {
           logger.task(resource[ResourceFQN], {
             prefix: "skipped",
