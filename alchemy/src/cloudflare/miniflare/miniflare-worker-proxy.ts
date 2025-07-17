@@ -80,9 +80,7 @@ export class MiniflareWorkerProxy extends HTTPServer {
       client.close(code, reason);
     });
     client.on("message", (data, binary) => {
-      if (server.readyState === WebSocket.OPEN) {
-        server.send(data, { binary });
-      }
+      server.send(data, { binary });
     });
     client.on("close", (code, reason) => {
       this.wsReconnectAttempts.delete(id);
