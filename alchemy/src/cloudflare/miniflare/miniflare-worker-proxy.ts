@@ -4,6 +4,7 @@ import http from "node:http";
 import type Stream from "node:stream";
 import { Readable } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
+import { logger } from "../../util/logger.ts";
 
 interface MiniflareWorkerProxyOptions {
   name: string;
@@ -23,6 +24,13 @@ export class MiniflareWorkerProxy {
       await this.handleRequest(req, res);
     });
     this.server.listen(this.options.port);
+  }
+
+  get ready() {
+    if (!this.server.listening) {
+      return once(this.server, "listening");
+    }
+    return Promise.resolve();
   }
 
   get url() {
@@ -68,9 +76,13 @@ export class MiniflareWorkerProxy {
       this.options.name,
     );
     if (!target) {
+      logger.error(
+        `[Alchemy] Websocket connection failed: The worker "${this.options.name}" is not running.`,
+      );
       return null;
     }
     const url = new URL(req.url ?? "/", target);
+    url.protocol = url.protocol.replace("http", "ws");
     const protocols = req.headers["sec-websocket-protocol"]
       ?.split(",")
       .map((p) => p.trim());
@@ -78,7 +90,13 @@ export class MiniflareWorkerProxy {
     const controller = new AbortController();
     return await Promise.race([
       once(server, "open", { signal: controller.signal }).then(() => server),
-      once(server, "close", { signal: controller.signal }).then(() => null),
+      once(server, "close", { signal: controller.signal }).then((args) => {
+        const [code, reason] = args as [number, string];
+        logger.error(
+          `[Alchemy] Websocket connection failed for worker "${this.options.name}": ${code} ${reason}`,
+        );
+        return null;
+      }),
     ]).finally(() => controller.abort());
   }
 

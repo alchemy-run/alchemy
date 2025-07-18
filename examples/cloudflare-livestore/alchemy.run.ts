@@ -16,6 +16,7 @@ export const server = await Worker("server", {
   bindings: {
     DB: await D1Database("db", {
       name: `${app.name}-${app.stage}-livestore-sync-cf-demo`,
+      adopt: true,
     }),
     WEBSOCKET_SERVER: DurableObjectNamespace("websocket-server", {
       className: "WebSocketServer",

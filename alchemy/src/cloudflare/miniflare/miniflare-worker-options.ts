@@ -234,7 +234,9 @@ export async function buildMiniflareWorkerOptions({
     ),
     compatibilityDate,
     compatibilityFlags,
-    unsafeDirectSockets: [{ proxy: true }],
+    // TODO: Setting `proxy: true` here causes the following error when connecting via a websocket:
+    // workerd/io/worker.c++:2164: info: uncaught exception; source = Uncaught (in promise); stack = TypeError: Invalid URL string.
+    unsafeDirectSockets: [{ proxy: false }],
     containerEngine: {
       localDocker: {
         socketPath:
