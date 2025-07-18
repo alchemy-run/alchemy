@@ -92,7 +92,10 @@ export interface Alchemy {
    *   password: process.env.SECRET_PASSPHRASE
    * });
    */
-  (appName: string, options?: Omit<AlchemyOptions, "appName">): Promise<Scope>;
+  (
+    appName: string,
+    options?: Omit<AlchemyOptionsWithMetadata, "appName">,
+  ): Promise<Scope>;
   /**
    * Template literal tag that supports file interpolation for documentation.
    * Automatically formats the content and appends file contents as code blocks.
@@ -126,10 +129,10 @@ _alchemy.isRuntime = isRuntime;
 async function _alchemy(
   ...args:
     | [template: TemplateStringsArray, ...values: any[]]
-    | [appName: string, options?: Omit<AlchemyOptions, "appName">]
+    | [appName: string, options?: Omit<AlchemyOptionsWithMetadata, "appName">]
 ): Promise<Scope | string | never> {
   if (typeof args[0] === "string") {
-    const [appName, options] = args as [string, AlchemyOptions?];
+    const [appName, options] = args as [string, AlchemyOptionsWithMetadata?];
 
     const cliArgs = process.argv.slice(2);
     const cliOptions = {
@@ -164,8 +167,16 @@ async function _alchemy(
         enabled: mergedOptions?.telemetry ?? true,
         quiet: mergedOptions?.quiet ?? false,
       });
+    // Extract alchemy-specific options that shouldn't be passed to Scope
+    const {
+      telemetry,
+      destroyOrphans,
+      appName: _,
+      ...scopeOptions
+    } = mergedOptions || {};
+
     const root = new Scope({
-      ...mergedOptions,
+      ...scopeOptions,
       parent: undefined,
       scopeName: appName,
       phase,
@@ -174,7 +185,7 @@ async function _alchemy(
     });
     const stageName = mergedOptions?.stage ?? DEFAULT_STAGE;
     const stage = new Scope({
-      ...mergedOptions,
+      ...scopeOptions,
       parent: root,
       scopeName: stageName,
       stage: stageName,
@@ -390,6 +401,8 @@ export interface AlchemyOptions {
   logger?: LoggerApi;
 }
 
+export type AlchemyOptionsWithMetadata = AlchemyOptions & Record<string, any>;
+
 export interface ScopeOptions extends AlchemyOptions {
   enter: boolean;
 }
@@ -401,6 +414,8 @@ export interface RunOptions extends AlchemyOptions {
   // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
   isResource?: boolean;
 }
+
+export type RunOptionsWithMetadata = RunOptions & Record<string, any>;
 
 /**
  * Run a function in a new scope asynchronously.
@@ -422,7 +437,7 @@ async function run<T>(
     | [id: string, fn: (this: Scope, scope: Scope) => Promise<T>]
     | [
         id: string,
-        options: RunOptions,
+        options: RunOptionsWithMetadata,
         fn: (this: Scope, scope: Scope) => Promise<T>,
       ]
 ): Promise<T> {
