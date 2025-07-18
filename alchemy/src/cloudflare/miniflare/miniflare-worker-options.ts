@@ -234,9 +234,7 @@ export async function buildMiniflareWorkerOptions({
     ),
     compatibilityDate,
     compatibilityFlags,
-    // This was true for compatibility with the dev registry, but that doesn't work anyway,
-    // and if we don't set it to false, websocket connections fail. I'm confused.
-    unsafeDirectSockets: [{ proxy: false }],
+    unsafeDirectSockets: [{ proxy: true }],
     containerEngine: {
       localDocker: {
         socketPath:

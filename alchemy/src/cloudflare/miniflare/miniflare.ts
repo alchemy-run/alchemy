@@ -7,7 +7,6 @@ import {
 } from "miniflare";
 import path from "node:path";
 import { findOpenPort } from "../../util/find-open-port.ts";
-import { logger } from "../../util/logger.ts";
 import {
   promiseWithResolvers,
   type PromiseWithResolvers,
@@ -31,7 +30,7 @@ class MiniflareServer {
 
   stream = new WritableStream<{
     worker: MiniflareWorkerOptions;
-    promise: PromiseWithResolvers<MiniflareWorkerProxy>;
+    promise: PromiseWithResolvers<{ url: string }>;
   }>({
     write: async ({ worker, promise }) => {
       try {
@@ -48,7 +47,7 @@ class MiniflareServer {
   writer = this.stream.getWriter();
 
   async push(worker: MiniflareWorkerOptions) {
-    const promise = promiseWithResolvers<MiniflareWorkerProxy>();
+    const promise = promiseWithResolvers<{ url: string }>();
     const [, server] = await Promise.all([
       this.writer.write({ worker, promise }),
       promise.promise,
@@ -89,23 +88,17 @@ class MiniflareServer {
       this.miniflare = new Miniflare(await this.miniflareOptions());
       await withErrorRewrite(this.miniflare.ready);
     }
-    const existing = this.workerProxies.get(worker.name);
-    if (existing) {
-      return existing;
+    const existingProxy = this.workerProxies.get(worker.name);
+    if (existingProxy) {
+      return existingProxy;
     }
-    const server = new MiniflareWorkerProxy({
-      getDirectURL: async () => {
-        const url = await this.miniflare?.unsafeGetDirectURL(worker.name);
-        if (!url) {
-          throw new Error(`Worker "${worker.name}" is not running`);
-        }
-        return url;
-      },
-      fetch: this.createRequestHandler(worker.name),
+    const newProxy = new MiniflareWorkerProxy({
+      name: worker.name,
+      port: worker.port ?? (await findOpenPort()),
+      miniflare: this.miniflare,
     });
-    this.workerProxies.set(worker.name, server);
-    await server.listen(worker.port ?? (await findOpenPort()));
-    return server;
+    this.workerProxies.set(worker.name, newProxy);
+    return newProxy;
   }
 
   private async dispose() {
@@ -146,46 +139,6 @@ class MiniflareServer {
     });
     this.remoteBindingProxies.set(worker.name, proxy);
     return proxy.connectionString;
-  }
-
-  private createRequestHandler(name: string) {
-    return async (req: Request) => {
-      try {
-        if (!this.miniflare) {
-          return new Response(
-            "[Alchemy] Miniflare is not initialized. Please try again.",
-            {
-              status: 503,
-            },
-          );
-        }
-        const worker = await this.miniflare?.getWorker(name);
-        if (!worker) {
-          return new Response(
-            `[Alchemy] Cannot find worker "${name}". Please try again.`,
-            {
-              status: 503,
-            },
-          );
-        }
-        const res = await worker.fetch(req.url, {
-          method: req.method,
-          headers: req.headers as any,
-          body: req.body as any,
-          duplex: "half",
-          redirect: "manual",
-        });
-        return res as unknown as Response;
-      } catch (error) {
-        logger.error(error);
-        return new Response(
-          `[Alchemy] Internal server error: ${String(error)}`,
-          {
-            status: 500,
-          },
-        );
-      }
-    };
   }
 
   private async miniflareOptions(): Promise<MiniflareOptions> {
