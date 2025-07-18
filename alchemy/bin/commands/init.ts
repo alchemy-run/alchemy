@@ -16,15 +16,11 @@ import { PKG_ROOT } from "../constants.ts";
 import { throwWithContext } from "../errors.ts";
 import { addPackageDependencies } from "../services/dependencies.ts";
 import { t } from "../trpc.ts";
-import { TemplateSchema, type TemplateType } from "../types.ts";
-
-interface InitContext {
-  cwd: string;
-  framework: TemplateType;
-  useTypeScript: boolean;
-  projectName: string;
-  hasPackageJson: boolean;
-}
+import {
+  TemplateSchema,
+  type InitContext,
+  type TemplateType,
+} from "../types.ts";
 
 export const init = t.procedure
   .meta({
@@ -202,7 +198,7 @@ async function detectFrameworkFromPackageJson(
   }
 }
 
-async function checkExistingAlchemyFiles(context: InitContext): Promise<void> {
+async function checkExistingAlchemyFiles(context: InitContext) {
   const alchemyRunTs = resolve(context.cwd, "alchemy.run.ts");
   const alchemyRunJs = resolve(context.cwd, "alchemy.run.js");
 
@@ -228,7 +224,7 @@ async function checkExistingAlchemyFiles(context: InitContext): Promise<void> {
   }
 }
 
-async function copyAlchemyRunFile(context: InitContext): Promise<void> {
+async function copyAlchemyRunFile(context: InitContext) {
   try {
     const templatePath = resolve(
       PKG_ROOT,
@@ -263,7 +259,7 @@ async function copyAlchemyRunFile(context: InitContext): Promise<void> {
   }
 }
 
-async function updatePackageJson(context: InitContext): Promise<void> {
+async function updatePackageJson(context: InitContext) {
   try {
     await addPackageDependencies({
       devDependencies: ["alchemy"],

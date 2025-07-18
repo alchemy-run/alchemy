@@ -103,3 +103,11 @@ export const EditorSchema = z
   ])
   .describe("Editor for vibe-rules");
 export type EditorType = z.infer<typeof EditorSchema>;
+
+export type InitContext = {
+  cwd: string;
+  framework: TemplateType;
+  useTypeScript: boolean;
+  projectName: string;
+  hasPackageJson: boolean;
+};
