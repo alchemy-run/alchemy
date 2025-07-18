@@ -1,21 +1,7 @@
 /**
- * Configuration for rate limiting simple mode.
- */
-export interface RateLimitSimple {
-  /**
-   * The limit (number of requests or API calls) to be applied. This is incremented when you call the limit() function in your Worker.
-   */
-  limit: number;
-  /**
-   * The period, in seconds, to measure increments to the limit over. Must be either 10 or 60.
-   */
-  period: 60 | 10;
-}
-
-/**
  * Base interface for rate limiting configuration.
  */
-export interface RateLimitBase {
+export interface RateLimitProps {
   /**
    * A positive integer that uniquely defines this rate limiting configuration (e.g., namespace_id = 999).
    */
@@ -23,18 +9,22 @@ export interface RateLimitBase {
   /**
    * Simple rate limiting configuration.
    */
-  simple: RateLimitSimple;
+  simple: {
+    /**
+     * The limit (number of requests or API calls) to be applied. This is incremented when you call the limit() function in your Worker.
+     */
+    limit: number;
+    /**
+     * The period, in seconds, to measure increments to the limit over. Must be either 10 or 60.
+     */
+    period: 60 | 10;
+  };
 }
-
-/**
- * Props for creating a RateLimit binding.
- */
-export interface RateLimitProps extends RateLimitBase {}
 
 /**
  * RateLimit binding for Cloudflare Workers.
  */
-export interface RateLimit extends RateLimitBase {
+export interface RateLimit extends RateLimitProps {
   type: "ratelimit";
 }
 
