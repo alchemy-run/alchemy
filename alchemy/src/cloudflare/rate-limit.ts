@@ -4,10 +4,6 @@
  * The RateLimit binding provides access to Cloudflare's rate limiting functionality,
  * allowing you to implement rate limiting directly in your Workers without needing
  * to rely on external services.
- * @param options Configuration options for the rate limit binding.
- * @param options.namespace_id A positive integer that uniquely defines this rate limiting configuration (e.g., namespace_id = 999).
- * @param options.simple.limit The limit (number of requests or API calls) to be applied. This is incremented when you call the limit() function in your Worker.
- * @param options.simple.period The period, in seconds, to measure increments to the limit over. Must be either 10 or 60.
  *
  * @example
  * ```ts
@@ -32,12 +28,22 @@
  *
  * @see https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/
  *
+ * Creates a rate limiting binding for Cloudflare Workers.
  * @returns A RateLimit binding object.
  */
 export function RateLimit(options: {
+  /**
+   * A positive integer that uniquely defines this rate limiting configuration (e.g., namespace_id = 999).
+   */
   namespace_id: number;
   simple: {
+    /**
+     * The limit (number of requests or API calls) to be applied. This is incremented when you call the limit() function in your Worker.
+     */
     limit: number;
+    /**
+     * The period, in seconds, to measure increments to the limit over. Must be either 10 or 60.
+     */
     period: 60 | 10;
   };
 }): RateLimit {
