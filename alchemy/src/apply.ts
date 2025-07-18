@@ -113,7 +113,8 @@ async function _apply<Out extends Resource>(
       });
       if (
         JSON.stringify(oldProps) === JSON.stringify(newProps) &&
-        alwaysUpdate !== true
+        alwaysUpdate !== true &&
+        !scope.force
       ) {
         scope.skip();
         if (!quiet) {

@@ -225,6 +225,35 @@ describe.concurrent("Scope", () => {
         },
       );
     });
+    test(
+      "force should apply updates even if there are no changes",
+      {
+        force: true,
+      },
+      async (scope) => {
+        let updates = 0;
+        const MyResource = Resource(
+          `${storeType}-MyResource`,
+          async function (this, _id: string, props: { name: string }) {
+            if (this.phase === "delete") {
+              return this.destroy();
+            }
+            updates++;
+            return this(props);
+          },
+        );
+        try {
+          await MyResource("outer", { name: "outer" });
+          expect(updates).toBe(1);
+          await MyResource("outer", { name: "outer" });
+          expect(updates).toBe(2);
+          await MyResource("outer", { name: "outer" });
+          expect(updates).toBe(3);
+        } finally {
+          await destroy(scope);
+        }
+      },
+    );
   }
 });
 

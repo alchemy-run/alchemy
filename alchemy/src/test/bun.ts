@@ -46,6 +46,12 @@ export interface TestOptions {
    * Prefix to use for the scope to isolate tests and environments.
    */
   prefix?: string;
+
+  /**
+   * Apply updates to resources even if there are no changes.
+   * @default false
+   */
+  force?: boolean;
 }
 
 /**

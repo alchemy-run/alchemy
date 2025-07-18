@@ -50,6 +50,12 @@ export interface ScopeOptions {
    * @default - `true` if ran with `alchemy dev`, `alchemy watch`, `bun --watch ./alchemy.run.ts`
    */
   watch?: boolean;
+  /**
+   * Apply updates to resources even if there are no changes.
+   *
+   * @default false
+   */
+  force?: boolean;
   telemetryClient?: ITelemetryClient;
   logger?: LoggerApi;
 }
@@ -120,6 +126,7 @@ export class Scope {
   public readonly phase: Phase;
   public readonly local: boolean;
   public readonly watch: boolean;
+  public readonly force: boolean;
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
@@ -177,6 +184,7 @@ export class Scope {
 
     this.local = options.local ?? this.parent?.local ?? false;
     this.watch = options.watch ?? this.parent?.watch ?? false;
+    this.force = options.force ?? this.parent?.force ?? false;
 
     if (this.local) {
       this.logger.warnOnce(

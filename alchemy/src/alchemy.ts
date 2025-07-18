@@ -141,6 +141,7 @@ async function _alchemy(
       local: cliArgs.includes("--local") || cliArgs.includes("--dev"),
       watch: cliArgs.includes("--watch"),
       quiet: cliArgs.includes("--quiet"),
+      force: cliArgs.includes("--force"),
       // Parse stage argument (--stage my-stage) functionally and inline as a property declaration
       stage: (function parseStage() {
         const i = cliArgs.indexOf("--stage");
@@ -332,6 +333,12 @@ export interface AlchemyOptions {
    * @default - `true` if ran with `alchemy dev`, `alchemy watch`, `bun --watch ./alchemy.run.ts`
    */
   watch?: boolean;
+  /**
+   * Apply updates to resources even if there are no changes.
+   *
+   * @default false
+   */
+  force?: boolean;
   /**
    * Name to scope the resource state under (e.g. `.alchemy/{stage}/..`).
    *
