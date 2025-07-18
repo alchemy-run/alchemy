@@ -1,4 +1,44 @@
 /**
+ * Configuration for rate limiting simple mode.
+ */
+export interface RateLimitSimple {
+  /**
+   * The limit (number of requests or API calls) to be applied. This is incremented when you call the limit() function in your Worker.
+   */
+  limit: number;
+  /**
+   * The period, in seconds, to measure increments to the limit over. Must be either 10 or 60.
+   */
+  period: 60 | 10;
+}
+
+/**
+ * Base interface for rate limiting configuration.
+ */
+export interface RateLimitBase {
+  /**
+   * A positive integer that uniquely defines this rate limiting configuration (e.g., namespace_id = 999).
+   */
+  namespace_id: number;
+  /**
+   * Simple rate limiting configuration.
+   */
+  simple: RateLimitSimple;
+}
+
+/**
+ * Props for creating a RateLimit binding.
+ */
+export interface RateLimitProps extends RateLimitBase {}
+
+/**
+ * RateLimit binding for Cloudflare Workers.
+ */
+export interface RateLimit extends RateLimitBase {
+  type: "ratelimit";
+}
+
+/**
  * Rate limiting binding for Cloudflare Workers.
  *
  * The RateLimit binding provides access to Cloudflare's rate limiting functionality,
@@ -31,34 +71,10 @@
  * Creates a rate limiting binding for Cloudflare Workers.
  * @returns A RateLimit binding object.
  */
-export function RateLimit(options: {
-  /**
-   * A positive integer that uniquely defines this rate limiting configuration (e.g., namespace_id = 999).
-   */
-  namespace_id: number;
-  simple: {
-    /**
-     * The limit (number of requests or API calls) to be applied. This is incremented when you call the limit() function in your Worker.
-     */
-    limit: number;
-    /**
-     * The period, in seconds, to measure increments to the limit over. Must be either 10 or 60.
-     */
-    period: 60 | 10;
-  };
-}): RateLimit {
+export function RateLimit(options: RateLimitProps): RateLimit {
   return {
     type: "ratelimit",
     namespace_id: options.namespace_id,
     simple: options.simple,
   };
 }
-
-export type RateLimit = {
-  type: "ratelimit";
-  namespace_id: number;
-  simple: {
-    limit: number;
-    period: 60 | 10;
-  };
-};
