@@ -8,6 +8,8 @@ import {
   type TimeoutConfig,
   waitForResourceState,
 } from "../../util/timeout.ts";
+import type { AwsClientProps } from "../client-props.ts";
+import { resolveAwsCredentials } from "../credentials.ts";
 import type { InternetGateway } from "./internet-gateway.ts";
 import { callEC2Api, createEC2Client } from "./utils.ts";
 import type { Vpc } from "./vpc.ts";
@@ -15,7 +17,7 @@ import type { Vpc } from "./vpc.ts";
 /**
  * Properties for creating or updating an Internet Gateway Attachment
  */
-export interface InternetGatewayAttachmentProps {
+export interface InternetGatewayAttachmentProps extends AwsClientProps {
   /**
    * The Internet Gateway to attach
    */
@@ -67,6 +69,9 @@ export interface InternetGatewayAttachment
  * allowing traffic to flow between the VPC and the internet when combined with proper
  * routing configuration.
  *
+ * Supports AWS credential overrides at the resource level, allowing you to deploy Internet Gateway Attachments
+ * to different AWS accounts or regions than the default scope configuration.
+ *
  * @example
  * // Basic Internet Gateway attachment for internet connectivity
  * const vpc = await Vpc("main-vpc", {
@@ -78,6 +83,36 @@ export interface InternetGatewayAttachment
  * const attachment = await InternetGatewayAttachment("main-igw-attachment", {
  *   internetGateway: igw,
  *   vpc: vpc
+ * });
+ *
+ * @example
+ * // Internet Gateway Attachment with AWS credential overrides
+ * const crossAccountAttachment = await InternetGatewayAttachment("cross-account-attachment", {
+ *   internetGateway: igw,
+ *   vpc: vpc,
+ *   // Override AWS credentials for this specific resource
+ *   region: "us-east-1",
+ *   profile: "production-account",
+ * });
+ *
+ * @example
+ * // Internet Gateway Attachment in different region with role assumption
+ * const multiRegionAttachment = await InternetGatewayAttachment("multi-region-attachment", {
+ *   internetGateway: euIgw,
+ *   vpc: euVpc,
+ *   region: "eu-west-1",
+ *   roleArn: "arn:aws:iam::123456789012:role/CrossRegionRole",
+ *   roleSessionName: "igw-attachment-deployment",
+ * });
+ *
+ * @example
+ * // Internet Gateway Attachment with explicit credentials
+ * const explicitCredsAttachment = await InternetGatewayAttachment("explicit-creds-attachment", {
+ *   internetGateway: testIgw,
+ *   vpc: testVpc,
+ *   accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+ *   secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+ *   region: "us-west-2",
  * });
  *
  * @example
@@ -121,7 +156,27 @@ export interface InternetGatewayAttachment
  * const internetRoute = await Route("internet-route", {
  *   routeTable: publicRouteTable,
  *   destinationCidrBlock: "0.0.0.0/0",
- *   gateway: igw
+ *   target: { internetGateway: igw }
+ * });
+ *
+ * @example
+ * // Multi-account deployment with scope-level and resource-level overrides
+ * await alchemy.run("production", {
+ *   aws: { region: "us-west-2", profile: "main-account" }
+ * }, async () => {
+ *   // This Internet Gateway Attachment uses scope credentials (main-account, us-west-2)
+ *   const mainAttachment = await InternetGatewayAttachment("main-attachment", {
+ *     internetGateway: mainIgw,
+ *     vpc: mainVpc
+ *   });
+ *
+ *   // This Internet Gateway Attachment overrides to use different account
+ *   const crossAccountAttachment = await InternetGatewayAttachment("cross-account-attachment", {
+ *     internetGateway: crossIgw,
+ *     vpc: crossVpc,
+ *     profile: "secondary-account",
+ *     region: "us-east-1", // Also override region
+ *   });
  * });
  */
 export const InternetGatewayAttachment = Resource(
@@ -131,7 +186,9 @@ export const InternetGatewayAttachment = Resource(
     _id: string,
     props: InternetGatewayAttachmentProps,
   ): Promise<InternetGatewayAttachment> {
-    const client = await createEC2Client();
+    // Resolve AWS credentials from global, scope, and resource levels
+    const credentials = resolveAwsCredentials(props);
+    const client = await createEC2Client(credentials);
     const timeoutConfig = mergeTimeoutConfig(
       INTERNET_GATEWAY_ATTACHMENT_TIMEOUT,
       props.timeout,

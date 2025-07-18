@@ -1,0 +1,16 @@
+{
+  "name": "aws-credential-overrides",
+  "version": "1.0.0",
+  "description": "Example demonstrating AWS credential overrides for multi-account deployments",
+  "main": "alchemy.run.ts",
+  "type": "module",
+  "scripts": {
+    "start": "bun run alchemy.run.ts"
+  },
+  "dependencies": {
+    "alchemy": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

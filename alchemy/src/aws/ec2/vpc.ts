@@ -9,12 +9,14 @@ import {
   type TimeoutConfig,
   waitForResourceState,
 } from "../../util/timeout.ts";
+import type { AwsClientProps } from "../client-props.ts";
+import { resolveAwsCredentials } from "../credentials.ts";
 import { callEC2Api, createEC2Client } from "./utils.ts";
 
 /**
  * Properties for creating or updating a VPC
  */
-export interface VpcProps {
+export interface VpcProps extends AwsClientProps {
   /**
    * The IPv4 network range for the VPC, in CIDR notation
    * @example "10.0.0.0/16"
@@ -148,7 +150,8 @@ export interface Vpc extends Resource<"aws::Vpc">, VpcProps {
  * AWS VPC (Virtual Private Cloud) Resource
  *
  * Creates and manages Amazon VPC instances with configurable CIDR blocks,
- * DNS settings, and instance tenancy options.
+ * DNS settings, and instance tenancy options. Supports AWS credential overrides
+ * for multi-account and cross-region deployments.
  *
  * @example
  * // Create a basic VPC with default settings
@@ -188,6 +191,50 @@ export interface Vpc extends Resource<"aws::Vpc">, VpcProps {
  *     Type: "isolated"
  *   }
  * });
+ *
+ * @example
+ * // Create a VPC with AWS credential overrides for cross-account deployment
+ * const crossAccountVpc = await Vpc("cross-account-vpc", {
+ *   cidrBlock: "10.1.0.0/16",
+ *   region: "us-east-1",
+ *   profile: "production-account",
+ *   tags: {
+ *     Name: "cross-account-vpc",
+ *     Account: "production"
+ *   }
+ * });
+ *
+ * @example
+ * // Create a VPC in a different region with explicit credentials
+ * const multiRegionVpc = await Vpc("multi-region-vpc", {
+ *   cidrBlock: "10.2.0.0/16",
+ *   region: "eu-west-1",
+ *   accessKeyId: "AKIA...",
+ *   secretAccessKey: "...",
+ *   tags: {
+ *     Name: "eu-vpc",
+ *     Region: "europe"
+ *   }
+ * });
+ *
+ * @example
+ * // Using scope-level credentials with resource-level overrides
+ * await alchemy.run("multi-account", {
+ *   awsRegion: "us-west-2",
+ *   awsProfile: "staging"
+ * }, async () => {
+ *   // This VPC uses staging credentials from scope
+ *   const stagingVpc = await Vpc("staging-vpc", {
+ *     cidrBlock: "10.0.0.0/16"
+ *   });
+ *
+ *   // This VPC overrides to use production credentials
+ *   const prodVpc = await Vpc("prod-vpc", {
+ *     cidrBlock: "10.1.0.0/16",
+ *     profile: "production",
+ *     region: "us-east-1"
+ *   });
+ * });
  */
 export const Vpc = Resource(
   "aws::Vpc",
@@ -196,7 +243,9 @@ export const Vpc = Resource(
     _id: string,
     props: VpcProps,
   ): Promise<Vpc> {
-    const client = await createEC2Client();
+    // Resolve AWS credentials from global, scope, and resource levels
+    const credentials = resolveAwsCredentials(props);
+    const client = await createEC2Client(credentials);
     const timeoutConfig = mergeTimeoutConfig(VPC_TIMEOUT, props.timeout);
 
     if (this.phase === "delete") {

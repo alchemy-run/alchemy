@@ -57,4 +57,99 @@ describe("SecurityGroup", () => {
       await destroy(scope);
     }
   });
+
+  test("create security group with credential overrides", async (scope) => {
+    const vpcName = `${BRANCH_PREFIX}-alchemy-test-sg-creds-vpc`;
+    const sgName = `${BRANCH_PREFIX}-alchemy-test-sg-creds`;
+    let vpc: Awaited<ReturnType<typeof Vpc>>;
+    let securityGroup: Awaited<ReturnType<typeof SecurityGroup>>;
+
+    try {
+      // First create a VPC with region override
+      vpc = await Vpc(vpcName, {
+        cidrBlock: "10.0.0.0/16",
+        region: "us-west-2", // Override region
+        tags: { Name: vpcName },
+      });
+
+      // Create Security Group with explicit region override
+      securityGroup = await SecurityGroup(sgName, {
+        vpc,
+        groupName: sgName,
+        description: "Test security group with credential overrides",
+        region: "us-west-2", // Override region
+        tags: {
+          Name: sgName,
+          Environment: "test",
+          CredentialTest: "true",
+        },
+      });
+
+      expect(securityGroup.groupId).toBeTruthy();
+      expect(securityGroup.vpcId).toBe(vpc.vpcId);
+      expect(securityGroup.groupName).toBe(sgName);
+
+      // Verify security group exists in the specified region
+      const regionalEc2 = new EC2Client({ region: "us-west-2" });
+      const describeResponse = await regionalEc2.send(
+        new DescribeSecurityGroupsCommand({
+          GroupIds: [securityGroup.groupId],
+        }),
+      );
+      const sg = describeResponse.SecurityGroups?.[0];
+      expect(sg?.GroupName).toBe(sgName);
+      expect(sg?.VpcId).toBe(vpc.vpcId);
+    } finally {
+      // Always clean up, even if test fails
+      await destroy(scope);
+    }
+  });
+
+  test("create security group with profile override", async (scope) => {
+    const vpcName = `${BRANCH_PREFIX}-alchemy-test-sg-profile-vpc`;
+    const sgName = `${BRANCH_PREFIX}-alchemy-test-sg-profile`;
+    let vpc: Awaited<ReturnType<typeof Vpc>>;
+    let securityGroup: Awaited<ReturnType<typeof SecurityGroup>>;
+
+    try {
+      // First create a VPC with profile override
+      vpc = await Vpc(vpcName, {
+        cidrBlock: "10.0.0.0/16",
+        profile: "test9-374080338393", // Override profile
+        region: "us-west-2",
+        tags: { Name: vpcName },
+      });
+
+      // Create Security Group with profile override
+      securityGroup = await SecurityGroup(sgName, {
+        vpc,
+        groupName: sgName,
+        description: "Test security group with profile override",
+        profile: "test9-374080338393", // Override profile
+        region: "us-west-2",
+        tags: {
+          Name: sgName,
+          Environment: "test",
+          ProfileTest: "true",
+        },
+      });
+
+      expect(securityGroup.groupId).toBeTruthy();
+      expect(securityGroup.vpcId).toBe(vpc.vpcId);
+      expect(securityGroup.groupName).toBe(sgName);
+
+      // Verify security group exists
+      const describeResponse = await ec2.send(
+        new DescribeSecurityGroupsCommand({
+          GroupIds: [securityGroup.groupId],
+        }),
+      );
+      const sg = describeResponse.SecurityGroups?.[0];
+      expect(sg?.GroupName).toBe(sgName);
+      expect(sg?.VpcId).toBe(vpc.vpcId);
+    } finally {
+      // Always clean up, even if test fails
+      await destroy(scope);
+    }
+  });
 });

@@ -67,6 +67,8 @@ export interface ScopeOptions {
   logger?: LoggerApi;
 }
 
+export type ScopeOptionsWithMetadata = ScopeOptions & Record<string, any>;
+
 export type PendingDeletions = Array<{
   resource: Resource<string>;
   oldProps?: ResourceProps;
@@ -138,6 +140,7 @@ export class Scope {
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
+  public readonly metadata: Record<string, any>;
 
   private isErrored = false;
   private isSkipped = false;
@@ -152,10 +155,26 @@ export class Scope {
     return this.scopeName;
   }
 
-  constructor(options: ScopeOptions) {
-    this.scopeName = options.scopeName;
+  constructor(options: ScopeOptionsWithMetadata) {
+    // Extract known properties and store remaining properties as metadata
+    const {
+      scopeName,
+      parent,
+      stage,
+      password,
+      stateStore,
+      quiet,
+      phase,
+      dev,
+      telemetryClient,
+      logger,
+      ...metadata
+    } = options;
+
+    this.scopeName = scopeName;
     this.name = this.scopeName;
-    this.parent = options.parent ?? Scope.getScope();
+    this.parent = parent ?? Scope.getScope();
+    this.metadata = metadata;
 
     const isChild = this.parent !== undefined;
     if (this.scopeName?.includes(":") && isChild) {
@@ -165,18 +184,18 @@ export class Scope {
       );
     }
 
-    this.stage = options?.stage ?? this.parent?.stage ?? DEFAULT_STAGE;
+    this.stage = stage ?? this.parent?.stage ?? DEFAULT_STAGE;
     this.parent?.children.set(this.scopeName!, this);
-    this.quiet = options.quiet ?? this.parent?.quiet ?? false;
+    this.quiet = quiet ?? this.parent?.quiet ?? false;
     if (this.parent && !this.scopeName) {
       throw new Error("Scope name is required when creating a child scope");
     }
-    this.password = options.password ?? this.parent?.password;
-    const phase = options.phase ?? this.parent?.phase;
-    if (phase === undefined) {
+    this.password = password ?? this.parent?.password;
+    const resolvedPhase = phase ?? this.parent?.phase;
+    if (resolvedPhase === undefined) {
       throw new Error("Phase is required");
     }
-    this.phase = phase;
+    this.phase = resolvedPhase;
 
     this.logger = this.quiet
       ? createDummyLogger()
@@ -186,7 +205,7 @@ export class Scope {
             stage: this.stage,
             appName: this.appName ?? "",
           },
-          options.logger,
+          logger,
         );
 
     this.local = options.local ?? this.parent?.local ?? false;

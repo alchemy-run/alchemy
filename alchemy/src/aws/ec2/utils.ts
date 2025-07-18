@@ -2,6 +2,7 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { AwsClient } from "aws4fetch";
 import { logger } from "../../util/logger.ts";
 import { flattenParams } from "../../util/params.ts";
+import type { AwsClientProps } from "../client-props.ts";
 import { getRegion } from "../utils.ts";
 
 /**
@@ -9,11 +10,54 @@ import { getRegion } from "../utils.ts";
  */
 
 /**
- * Create an AWS EC2 client
+ * Create an AWS EC2 client with optional credential overrides
  */
-export async function createEC2Client(): Promise<AwsClient> {
-  const credentials = await fromNodeProviderChain()();
-  const region = await getRegion();
+export async function createEC2Client(
+  credentialOverrides?: AwsClientProps,
+): Promise<AwsClient> {
+  let credentials: any;
+  let region: string;
+
+  if (
+    credentialOverrides &&
+    (credentialOverrides.accessKeyId || credentialOverrides.secretAccessKey)
+  ) {
+    // Use provided credentials directly
+    credentials = {
+      accessKeyId: credentialOverrides.accessKeyId,
+      secretAccessKey: credentialOverrides.secretAccessKey,
+      sessionToken: credentialOverrides.sessionToken,
+    };
+  } else if (credentialOverrides?.profile) {
+    // Use profile-based credentials if profile is specified
+    try {
+      const profileCredentials = await fromNodeProviderChain({
+        profile: credentialOverrides.profile,
+      })();
+      credentials = {
+        accessKeyId: profileCredentials.accessKeyId,
+        secretAccessKey: profileCredentials.secretAccessKey,
+        sessionToken: profileCredentials.sessionToken,
+      };
+    } catch (error) {
+      logger.log(
+        `Error loading credentials from profile ${credentialOverrides.profile}:`,
+        error,
+      );
+      // Fall back to default credentials
+      credentials = await fromNodeProviderChain()();
+    }
+  } else {
+    // Fall back to AWS SDK credential chain
+    credentials = await fromNodeProviderChain()();
+  }
+
+  // Use region from overrides or fall back to getRegion()
+  if (credentialOverrides?.region) {
+    region = credentialOverrides.region;
+  } else {
+    region = await getRegion();
+  }
 
   return new AwsClient({
     ...credentials,
@@ -34,8 +78,8 @@ export async function callEC2Api<T>(
   // Try the API call, and retry once with fresh credentials on auth failure
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const region = await getRegion();
-      const url = `https://ec2.${region}.amazonaws.com/`;
+      // Use the client's region instead of the global region
+      const url = `https://ec2.${client.region}.amazonaws.com/`;
 
       const body = new URLSearchParams({
         Action: action,

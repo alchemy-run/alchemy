@@ -53,4 +53,93 @@ describe("RouteTable", () => {
       await destroy(scope);
     }
   });
+
+  test("create route table with credential overrides", async (scope) => {
+    const vpcName = `${BRANCH_PREFIX}-alchemy-test-rt-creds-vpc`;
+    const rtName = `${BRANCH_PREFIX}-alchemy-test-rt-creds`;
+    let vpc: Awaited<ReturnType<typeof Vpc>>;
+    let routeTable: Awaited<ReturnType<typeof RouteTable>>;
+
+    try {
+      // First create a VPC with region override
+      vpc = await Vpc(vpcName, {
+        cidrBlock: "10.0.0.0/16",
+        region: "us-west-2", // Override region
+        tags: { Name: vpcName },
+      });
+
+      // Create Route Table with explicit region override
+      routeTable = await RouteTable(rtName, {
+        vpc,
+        region: "us-west-2", // Override region
+        tags: {
+          Name: rtName,
+          Environment: "test",
+          CredentialTest: "true",
+        },
+      });
+
+      expect(routeTable.routeTableId).toBeTruthy();
+      expect(routeTable.vpcId).toBe(vpc.vpcId);
+
+      // Verify route table exists in the specified region
+      const regionalEc2 = new EC2Client({ region: "us-west-2" });
+      const describeResponse = await regionalEc2.send(
+        new DescribeRouteTablesCommand({
+          RouteTableIds: [routeTable.routeTableId],
+        }),
+      );
+      const rt = describeResponse.RouteTables?.[0];
+      expect(rt?.RouteTableId).toBe(routeTable.routeTableId);
+      expect(rt?.VpcId).toBe(vpc.vpcId);
+    } finally {
+      // Always clean up, even if test fails
+      await destroy(scope);
+    }
+  });
+
+  test("create route table with profile override", async (scope) => {
+    const vpcName = `${BRANCH_PREFIX}-alchemy-test-rt-profile-vpc`;
+    const rtName = `${BRANCH_PREFIX}-alchemy-test-rt-profile`;
+    let vpc: Awaited<ReturnType<typeof Vpc>>;
+    let routeTable: Awaited<ReturnType<typeof RouteTable>>;
+
+    try {
+      // First create a VPC with profile override
+      vpc = await Vpc(vpcName, {
+        cidrBlock: "10.0.0.0/16",
+        profile: "test9-374080338393", // Override profile
+        region: "us-west-2",
+        tags: { Name: vpcName },
+      });
+
+      // Create Route Table with profile override
+      routeTable = await RouteTable(rtName, {
+        vpc,
+        profile: "test9-374080338393", // Override profile
+        region: "us-west-2",
+        tags: {
+          Name: rtName,
+          Environment: "test",
+          ProfileTest: "true",
+        },
+      });
+
+      expect(routeTable.routeTableId).toBeTruthy();
+      expect(routeTable.vpcId).toBe(vpc.vpcId);
+
+      // Verify route table exists
+      const describeResponse = await ec2.send(
+        new DescribeRouteTablesCommand({
+          RouteTableIds: [routeTable.routeTableId],
+        }),
+      );
+      const rt = describeResponse.RouteTables?.[0];
+      expect(rt?.RouteTableId).toBe(routeTable.routeTableId);
+      expect(rt?.VpcId).toBe(vpc.vpcId);
+    } finally {
+      // Always clean up, even if test fails
+      await destroy(scope);
+    }
+  });
 });

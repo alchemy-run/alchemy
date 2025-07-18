@@ -8,13 +8,15 @@ import {
   type TimeoutConfig,
   waitForResourceState,
 } from "../../util/timeout.ts";
+import type { AwsClientProps } from "../client-props.ts";
+import { resolveAwsCredentials } from "../credentials.ts";
 import type { Subnet } from "./subnet.ts";
 import { callEC2Api, createEC2Client } from "./utils.ts";
 
 /**
  * Properties for creating or updating a NAT Gateway
  */
-export interface NatGatewayProps {
+export interface NatGatewayProps extends AwsClientProps {
   /**
    * The subnet to create the NAT Gateway in (must be a public subnet)
    */
@@ -99,39 +101,94 @@ export interface NatGateway
  * if one is not provided. NAT Gateways are slow resources that can take
  * up to 10 minutes to become available.
  *
+ * Supports AWS credential overrides at the resource level, allowing you to deploy NAT Gateways
+ * to different AWS accounts or regions than the default scope configuration.
+ *
  * @example
+ * ```typescript
  * // Create a NAT Gateway with automatic Elastic IP allocation
  * const natGateway = await NatGateway("main-nat", {
- * subnet: publicSubnet,
- * tags: {
- * Name: "main-nat-gateway",
- * Environment: "production"
- * }
+ *   subnet: publicSubnet,
+ *   tags: {
+ *     Name: "main-nat-gateway",
+ *     Environment: "production"
+ *   }
  * });
+ * ```
  *
  * @example
+ * ```typescript
+ * // Create NAT Gateway with AWS credential overrides
+ * const crossAccountNat = await NatGateway("cross-account-nat", {
+ *   subnet: publicSubnet,
+ *   // Override AWS credentials for this specific resource
+ *   region: "us-east-1",
+ *   profile: "production-account",
+ *   tags: {
+ *     Name: "cross-account-nat-gateway",
+ *     Environment: "production"
+ *   }
+ * });
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Create NAT Gateway in different region with role assumption
+ * const multiRegionNat = await NatGateway("multi-region-nat", {
+ *   subnet: euPublicSubnet,
+ *   region: "eu-west-1",
+ *   roleArn: "arn:aws:iam::123456789012:role/CrossRegionRole",
+ *   roleSessionName: "nat-gateway-deployment",
+ *   tags: {
+ *     Name: "eu-nat-gateway",
+ *     Region: "europe"
+ *   }
+ * });
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Create NAT Gateway with explicit credentials
+ * const explicitCredsNat = await NatGateway("explicit-creds-nat", {
+ *   subnet: testPublicSubnet,
+ *   accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+ *   secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+ *   region: "us-west-2",
+ *   tags: {
+ *     Name: "explicit-credentials-nat",
+ *     Purpose: "testing"
+ *   }
+ * });
+ * ```
+ *
+ * @example
+ * ```typescript
  * // Create a NAT Gateway with existing Elastic IP
  * const natGateway = await NatGateway("custom-nat", {
- * subnet: "subnet-12345678",
- * allocationId: "eipalloc-12345678",
- * connectivityType: "public",
- * tags: {
- * Name: "custom-nat-gateway"
- * }
+ *   subnet: "subnet-12345678",
+ *   allocationId: "eipalloc-12345678",
+ *   connectivityType: "public",
+ *   tags: {
+ *     Name: "custom-nat-gateway"
+ *   }
  * });
+ * ```
  *
  * @example
+ * ```typescript
  * // Create a private NAT Gateway (for VPC-to-VPC communication)
  * const privateNat = await NatGateway("private-nat", {
- * subnet: privateSubnet,
- * connectivityType: "private",
- * tags: {
- * Name: "private-nat-gateway",
- * Type: "internal"
- * }
+ *   subnet: privateSubnet,
+ *   connectivityType: "private",
+ *   tags: {
+ *     Name: "private-nat-gateway",
+ *     Type: "internal"
+ *   }
  * });
+ * ```
  *
  * @example
+ * ```typescript
  * // Create a NAT Gateway with custom timeout configuration
  * const slowNat = await NatGateway("slow-nat", {
  *   subnet: publicSubnet,
@@ -143,8 +200,32 @@ export interface NatGateway
  *     Name: "slow-nat-gateway"
  *   }
  * });
+ * ```
  *
  * @example
+ * ```typescript
+ * // Multi-account deployment with scope-level and resource-level overrides
+ * await alchemy.run("production", {
+ *   aws: { region: "us-west-2", profile: "main-account" }
+ * }, async () => {
+ *   // This NAT Gateway uses scope credentials (main-account, us-west-2)
+ *   const mainNat = await NatGateway("main-nat", {
+ *     subnet: mainPublicSubnet,
+ *     tags: { Name: "main-account-nat" }
+ *   });
+ *
+ *   // This NAT Gateway overrides to use different account
+ *   const crossAccountNat = await NatGateway("cross-account-nat", {
+ *     subnet: crossPublicSubnet,
+ *     profile: "secondary-account",
+ *     region: "us-east-1", // Also override region
+ *     tags: { Name: "secondary-account-nat" }
+ *   });
+ * });
+ * ```
+ *
+ * @example
+ * ```typescript
  * // Use NAT Gateway in route table for private subnet internet access
  * const privateRoute = await Route("private-internet", {
  *   routeTable: privateRouteTable,
@@ -154,6 +235,7 @@ export interface NatGateway
  *     Name: "private-to-internet"
  *   }
  * });
+ * ```
  */
 export const NatGateway = Resource(
   "aws::NatGateway",
@@ -162,6 +244,9 @@ export const NatGateway = Resource(
     _id: string,
     props: NatGatewayProps,
   ): Promise<NatGateway> {
+    // Resolve AWS credentials from global, scope, and resource levels
+    const credentials = resolveAwsCredentials(props);
+    const client = await createEC2Client(credentials);
     const subnetId =
       typeof props.subnet === "string" ? props.subnet : props.subnet.subnetId;
     const timeoutConfig = mergeTimeoutConfig(
@@ -174,7 +259,6 @@ export const NatGateway = Resource(
         logger.log(`🗑️ Deleting NAT Gateway: ${this.output.natGatewayId}`);
         // Delete NAT Gateway if it exists
         await ignore("InvalidNatGatewayID.NotFound", async () => {
-          const client = await createEC2Client();
           await callEC2Api(
             client,
             "DeleteNatGateway",
@@ -192,6 +276,7 @@ export const NatGateway = Resource(
         await waitForNatGatewayFullyDeleted(
           this.output.natGatewayId,
           timeoutConfig,
+          credentials,
         );
 
         logger.log(
@@ -204,9 +289,8 @@ export const NatGateway = Resource(
           await ignore(
             ["InvalidAllocationID.NotFound", "InvalidAddress.NotFound"],
             async () => {
-              const eipClient = await createEC2Client();
               await callEC2Api(
-                eipClient,
+                client,
                 "ReleaseAddress",
                 parseNatGatewayXmlResponse,
                 convertReleaseAddressParamsToAwsFormat({
@@ -216,7 +300,11 @@ export const NatGateway = Resource(
             },
           );
           // Wait for the EIP to be fully released
-          await waitForEipReleased(this.output.allocationId, timeoutConfig);
+          await waitForEipReleased(
+            this.output.allocationId,
+            timeoutConfig,
+            credentials,
+          );
           logger.log(
             `  ✅ Elastic IP ${this.output.allocationId} released successfully`,
           );
@@ -232,7 +320,6 @@ export const NatGateway = Resource(
 
     if (this.phase === "update" && this.output?.natGatewayId) {
       // Get existing NAT Gateway
-      const client = await createEC2Client();
       const response = await callEC2Api<DescribeNatGatewaysResponse>(
         client,
         "DescribeNatGateways",
@@ -270,7 +357,6 @@ export const NatGateway = Resource(
           ];
         }
 
-        const client = await createEC2Client();
         const eipResponse = await callEC2Api<AllocateAddressResponse>(
           client,
           "AllocateAddress",
@@ -287,7 +373,6 @@ export const NatGateway = Resource(
         createdElasticIp = true;
       } else {
         // Get public IP of existing allocation
-        const client = await createEC2Client();
         const addressResponse = await callEC2Api<DescribeAddressesResponse>(
           client,
           "DescribeAddresses",
@@ -319,9 +404,8 @@ export const NatGateway = Resource(
         ];
       }
 
-      const natClient = await createEC2Client();
       const response = await callEC2Api<CreateNatGatewayResponse>(
-        natClient,
+        client,
         "CreateNatGateway",
         parseNatGatewayXmlResponse,
         convertCreateNatGatewayParamsToAwsFormat(createParams),
@@ -334,7 +418,11 @@ export const NatGateway = Resource(
       natGateway = response.NatGateway;
 
       // Wait for NAT Gateway to be available
-      await waitForNatGatewayAvailable(natGateway.NatGatewayId!, timeoutConfig);
+      await waitForNatGatewayAvailable(
+        natGateway.NatGatewayId!,
+        timeoutConfig,
+        credentials,
+      );
     }
 
     const result = this({
@@ -359,9 +447,10 @@ export const NatGateway = Resource(
 async function waitForNatGatewayAvailable(
   natGatewayId: string,
   timeoutConfig: TimeoutConfig,
+  credentials?: AwsClientProps,
 ): Promise<void> {
   const checkFunction = async () => {
-    const client = await createEC2Client();
+    const client = await createEC2Client(credentials);
     const response = await callEC2Api<DescribeNatGatewaysResponse>(
       client,
       "DescribeNatGateways",
@@ -398,10 +487,11 @@ async function waitForNatGatewayAvailable(
 async function waitForNatGatewayDeleted(
   natGatewayId: string,
   timeoutConfig: TimeoutConfig,
+  credentials?: AwsClientProps,
 ): Promise<void> {
   const checkFunction = async () => {
     try {
-      const client = await createEC2Client();
+      const client = await createEC2Client(credentials);
       const response = await callEC2Api<DescribeNatGatewaysResponse>(
         client,
         "DescribeNatGateways",
@@ -481,10 +571,11 @@ function parseDescribeNetworkInterfacesResponse(
 async function waitForEipReleased(
   allocationId: string,
   timeoutConfig: TimeoutConfig,
+  credentials?: AwsClientProps,
 ): Promise<void> {
   const checkFunction = async () => {
     try {
-      const eipClient = await createEC2Client();
+      const eipClient = await createEC2Client(credentials);
       const addressResponse = await callEC2Api<DescribeAddressesResponse>(
         eipClient,
         "DescribeAddresses",
@@ -525,14 +616,15 @@ async function waitForEipReleased(
 async function waitForNatGatewayFullyDeleted(
   natGatewayId: string,
   timeoutConfig: TimeoutConfig,
+  credentials?: AwsClientProps,
 ): Promise<void> {
   // First wait for the NAT Gateway itself to be deleted
-  await waitForNatGatewayDeleted(natGatewayId, timeoutConfig);
+  await waitForNatGatewayDeleted(natGatewayId, timeoutConfig, credentials);
 
   // Then wait for network interfaces to be cleaned up
   const checkNetworkInterfaces = async () => {
     try {
-      const client = await createEC2Client();
+      const client = await createEC2Client(credentials);
       const response = await callEC2Api<DescribeNetworkInterfacesResponse>(
         client,
         "DescribeNetworkInterfaces",
