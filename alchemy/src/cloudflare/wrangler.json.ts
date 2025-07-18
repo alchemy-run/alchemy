@@ -4,12 +4,20 @@ import type { Context } from "../context.ts";
 import { formatJson } from "../fs/static-json-file.ts";
 import { Resource } from "../resource.ts";
 import { assertNever } from "../util/assert-never.ts";
-import { Self, type Bindings } from "./bindings.ts";
+import {
+  Self,
+  type Bindings,
+  type WorkerBindingRateLimit,
+} from "./bindings.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
 import type { EventSource } from "./event-source.ts";
 import { isQueueEventSource } from "./event-source.ts";
 import { isQueue } from "./queue.ts";
 import type { Worker, WorkerProps } from "./worker.ts";
+
+type WranglerJsonRateLimit = Omit<WorkerBindingRateLimit, "type"> & {
+  type: "rate_limit";
+};
 
 /**
  * Properties for wrangler.json configuration file
@@ -452,16 +460,7 @@ export interface WranglerJsonSpec {
    * Unsafe bindings section for experimental features
    */
   unsafe?: {
-    bindings: {
-      name: string;
-      type: string;
-      namespace_id?: number;
-      simple?: {
-        limit: number;
-        period: number;
-      };
-      [key: string]: any;
-    }[];
+    bindings: WranglerJsonRateLimit[];
   };
 }
 
@@ -550,15 +549,7 @@ function processBindings(
     namespace: string;
     experimental_remote?: boolean;
   }[] = [];
-  const unsafeBindings: {
-    name: string;
-    type: "rate_limit";
-    namespace_id: number;
-    simple: {
-      limit: number;
-      period: number;
-    };
-  }[] = [];
+  const unsafeBindings: WranglerJsonRateLimit[] = [];
   const containers: {
     class_name: string;
   }[] = [];
@@ -750,7 +741,7 @@ function processBindings(
       unsafeBindings.push({
         name: bindingName,
         type: "rate_limit",
-        namespace_id: binding.namespace_id,
+        namespace_id: binding.namespace_id.toString(),
         simple: binding.simple,
       });
     } else if (binding.type === "secret_key") {
