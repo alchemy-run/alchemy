@@ -2,6 +2,7 @@ import path from "node:path";
 import { alchemy } from "../alchemy.ts";
 import { Exec } from "../os/exec.ts";
 import { Scope } from "../scope.ts";
+import { isSecret } from "../secret.ts";
 import { detectPackageManager } from "../util/detect-package-manager.ts";
 import { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
@@ -17,6 +18,11 @@ export interface WebsiteProps<B extends Bindings>
    * If one is not provided, the build is assumed to have already happened.
    */
   command?: string;
+
+  /**
+   * Additional environment variables to set when running the command
+   */
+  commandEnv?: Record<string, string>;
 
   /**
    * Whether to memoize the command (only re-run if the command changes)
@@ -224,7 +230,20 @@ export default {
         await Exec("build", {
           cwd,
           command: props.command,
-          env: props.env,
+          env: {
+            ...(props.env ?? {}),
+            ...(props.commandEnv ?? {}),
+            ...Object.fromEntries(
+              Object.entries(props.bindings ?? {}).flatMap(([key, value]) => {
+                if (isSecret(value)) {
+                  return [[key, value.unencrypted]];
+                } else if (typeof value === "string") {
+                  return [[key, value]];
+                }
+                return [];
+              }),
+            ),
+          },
           memoize: props.memoize,
         });
       }

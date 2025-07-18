@@ -432,7 +432,7 @@ export class Scope {
         event: "app.success",
         elapsed: performance.now() - this.startedAt,
       });
-    } else {
+    } else if (this.isErrored) {
       this.logger.warn("Scope is in error, skipping finalize");
       this.rootTelemetryClient?.record({
         event: "app.error",

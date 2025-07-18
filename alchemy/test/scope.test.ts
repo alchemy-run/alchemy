@@ -219,7 +219,6 @@ describe.concurrent("Scope", () => {
             await outer[ResourceScope].finalize();
             expect(isDeleted).toBe(false);
           } finally {
-            console.log("destroy");
             await destroy(scope);
             // expect(isDeleted).toBe(true);
           }

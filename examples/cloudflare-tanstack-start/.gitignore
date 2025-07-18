@@ -22,3 +22,5 @@ yarn.lock
 /playwright/.cache/
 
 wrangler.jsonc
+.tanstack
+.nitro

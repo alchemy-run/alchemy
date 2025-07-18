@@ -196,14 +196,14 @@ Sometimes it's impossible to UPDATE a resource (e.g., you cannot rename an R2 Bu
 
 #### Trigger Replacement
 
-During the **update phase**, you can trigger a replacement by calling `await this.replace()`:
+During the **update phase**, you can trigger a replacement by calling `this.replace()`:
 
 ```typescript
 // Implementation pattern
 if (this.phase === "update") {
   if (this.output.name !== props.name) {
     // trigger replace and terminate this "update" phase
-    await this.replace();
+    this.replace();
     // (unreachable code)
   } else {
     return updateResource();
@@ -213,7 +213,7 @@ if (this.phase === "update") {
 
 #### Create new
 
-After you call `await this.replace()`, the "update" phase will terminate and be re-invoked with "create" (to create the new resource).
+After you call `this.replace()`, the "update" phase will terminate and be re-invoked with "create" (to create the new resource).
 
 ```ts
 if (this.phase === "create") {
@@ -237,21 +237,21 @@ await app.finalize(); // finalize scopes by deleting "orphaned" and "replaced" r
 
 It is sometimes required to destory the old resource before creating the one, e.g. when updating a resource that requires a unique name.
 
-To address this you can trigger a replacement immediately by calling `await this.replace(true)`. This will destroy the old resource before creating the new one.
+To address this you can trigger a replacement immediately by calling `this.replace(true)`. This will destroy the old resource before creating the new one.
 
 ```ts
-await this.replace(true);
+this.replace(true);
 ```
 
 :::caution
-`await this.replace(true)` can cause downtime since a resource is deleted before the new one is created. Downtime can be avoided by appending a random string to the end of the resource name on the handler level, this creates different resource names and avoids the need to destroy the old resource prior to creating the new one.
+`this.replace(true)` can cause downtime since a resource is deleted before the new one is created. Downtime can be avoided by appending a random string to the end of the resource name on the handler level, this creates different resource names and avoids the need to destroy the old resource prior to creating the new one.
 
 ```ts
 const name = `${props.name}-${this.output?.slug ?? generateSlug()}`;
 
 if (this.phase === "update") {
   if (this.output?.name === name) {
-    await this.replace(); // don't need `true` here because name is unique
+    this.replace(); // don't need `true` here because name is unique
   }
 }
 

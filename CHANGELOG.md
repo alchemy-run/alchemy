@@ -1,3 +1,14 @@
+## v0.48.4
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Fix tanstack build and dev command &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/702 [<samp>(77d6c)</samp>](https://github.com/sam-goodwin/alchemy/commit/77d6cf0d)
+- **core**: Don't log if scope skipped &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(5d103)</samp>](https://github.com/sam-goodwin/alchemy/commit/5d103b18)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.48.3...v0.48.4)
+
+---
+
 ## v0.48.3
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

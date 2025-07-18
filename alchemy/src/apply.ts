@@ -174,7 +174,7 @@ async function _apply<Out extends Resource>(
       props: state.oldProps,
       state,
       isReplacement: false,
-      replace: async (force?: boolean) => {
+      replace: (force?: boolean) => {
         if (phase === "create") {
           throw new Error(
             `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} cannot be replaced in create phase.`,
@@ -184,17 +184,6 @@ async function _apply<Out extends Resource>(
           logger.warn(
             `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} is already marked as REPLACE`,
           );
-        }
-
-        if (force) {
-          await destroy(resource, {
-            quiet: scope.quiet,
-            strategy: "sequential",
-            replace: {
-              props: state.oldProps,
-              output: resource,
-            },
-          });
         }
 
         isReplaced = true;
@@ -221,6 +210,17 @@ async function _apply<Out extends Resource>(
           throw new Error(
             `Resource ${resource[ResourceFQN]} has children and cannot be replaced.`,
           );
+        }
+
+        if (error.force) {
+          await destroy(resource, {
+            quiet: scope.quiet,
+            strategy: "sequential",
+            replace: {
+              props: state.oldProps,
+              output: resource,
+            },
+          });
         }
 
         output = await alchemy.run(
