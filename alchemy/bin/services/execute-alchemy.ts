@@ -20,6 +20,12 @@ export const watch = z
   .default(false)
   .describe("Watch for changes to infrastructure and redeploy automatically");
 
+export const force = z
+  .boolean()
+  .optional()
+  .default(false)
+  .describe("Apply updates to resources even if there are no changes");
+
 export const execArgs = {
   cwd: z
     .string()
@@ -30,11 +36,6 @@ export const execArgs = {
     .optional()
     .default(false)
     .describe("Suppress Create/Update/Delete messages"),
-  force: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe("Apply updates to resources even if there are no changes"),
   stage: z
     .string()
     .optional()
