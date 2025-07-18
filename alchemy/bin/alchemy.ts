@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { createCli } from "trpc-cli";
 import { create } from "./commands/create.ts";
 import { deploy } from "./commands/deploy.ts";

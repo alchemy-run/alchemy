@@ -7,7 +7,6 @@ import {
   note,
   outro,
   select,
-  spinner,
 } from "@clack/prompts";
 import * as fs from "fs-extra";
 import { resolve } from "node:path";
