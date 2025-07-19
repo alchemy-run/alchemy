@@ -26,13 +26,14 @@ const zoneId = (await findZoneForHostname(api, ZONE_NAME)).zoneId;
 describe.sequential("Schema", () => {
   test("create and update schema with inline YAML", async (scope) => {
     let schema: Schema<string> | Schema<OpenAPIV3.Document> | undefined;
+    let initialSchemaId: string | undefined;
 
     try {
       // Create schema with inline YAML using existing zone
       schema = await Schema(`${BRANCH_PREFIX}-yaml-schema`, {
         zone: ZONE_NAME,
         name: "test-api-schema",
-        validate: true,
+        enabled: true,
         schema: `
 openapi: 3.0.0
 info:
@@ -77,12 +78,13 @@ paths:
           description: User deleted
 `,
       });
+      initialSchemaId = schema.id;
 
       expect(schema.id).toBeTruthy();
       expect(schema).toMatchObject({
         name: "test-api-schema",
         kind: "openapi_v3",
-        validationEnabled: true,
+        enabled: true,
         content: {
           info: {
             title: "Test API",
@@ -91,35 +93,26 @@ paths:
       });
 
       // Verify schema exists in Cloudflare
-      const cloudflareSchema = await getSchema(api, zoneId, schema.id);
-      expect(cloudflareSchema).toBeTruthy();
-      expect(cloudflareSchema).toMatchObject({
-        name: "test-api-schema",
-        validationEnabled: true,
-      });
+      await assertSchemaExists(schema.id, true);
 
       // Update schema validation setting (disable validation)
-      const updatedSchema = await Schema(`${BRANCH_PREFIX}-yaml-schema`, {
+      schema = await Schema(`${BRANCH_PREFIX}-yaml-schema`, {
         zone: ZONE_NAME,
         schema: schema.content, // Use parsed content
         name: "test-api-schema", // Keep the same name
-        validate: false,
+        enabled: false,
       });
 
-      expect(updatedSchema).toMatchObject({
-        validationEnabled: false,
+      expect(schema).toMatchObject({
+        enabled: false,
         name: "test-api-schema",
       });
 
-      // Store the updated schema for verification
-      schema = updatedSchema;
+      await assertSchemaExists(schema.id, false);
     } finally {
-      // await destroy(scope);
-      // // Verify schema was deleted
-      // if (schema?.id) {
-      //   const deletedSchema = await getSchema(api, zoneId, schema.id);
-      //   expect(deletedSchema).toBe(null);
-      // }
+      await destroy(scope);
+      await assertSchemaDeleted(initialSchemaId!);
+      await assertSchemaDeleted(schema!.id);
     }
   });
 
@@ -159,14 +152,14 @@ paths:
       schema = await Schema(`${BRANCH_PREFIX}-file-schema`, {
         zone: ZONE_NAME,
         name: "file-based-schema",
-        validate: false,
+        enabled: false,
         schema: fileUrl,
       });
 
       expect(schema.id).toBeTruthy();
       expect(schema).toMatchObject({
         name: "file-based-schema",
-        validationEnabled: false,
+        enabled: false,
         content: {
           info: {
             title: "File Test API",
@@ -257,14 +250,14 @@ paths:
         name: "typed-api-schema",
         kind: "openapi_v3",
         schema: apiSchema,
-        validate: true,
+        enabled: true,
       });
 
       expect(schema.id).toBeTruthy();
       expect(schema).toMatchObject({
         name: "typed-api-schema",
         kind: "openapi_v3",
-        validationEnabled: true,
+        enabled: true,
         content: apiSchema,
       });
     } finally {
@@ -315,13 +308,13 @@ paths:
           zone: ZONE_NAME,
           schema: schemaUrl,
           name: "url-based-schema",
-          validate: true,
+          enabled: true,
         });
 
         expect(schema.id).toBeTruthy();
         expect(schema).toMatchObject({
           name: "url-based-schema",
-          validationEnabled: true,
+          enabled: true,
           content: {
             info: {
               title: "URL Test API",
@@ -360,3 +353,14 @@ paths:
     }
   });
 });
+
+async function assertSchemaExists(id: string, enabled: boolean) {
+  const cloudflareSchema = await getSchema(api, zoneId, id);
+  expect(cloudflareSchema).toBeTruthy();
+  expect(cloudflareSchema?.validationEnabled).toBe(enabled);
+}
+
+async function assertSchemaDeleted(id: string) {
+  const cloudflareSchema = await getSchema(api, zoneId, id);
+  expect(cloudflareSchema).toBe(null);
+}

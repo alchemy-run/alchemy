@@ -69,7 +69,7 @@ export interface SchemaProps<Schema extends ApiSchema>
    *
    * @default true
    */
-  validate?: boolean;
+  enabled?: boolean;
 }
 
 /**
@@ -105,7 +105,7 @@ export interface Schema<SchemaType extends ApiSchema>
   /**
    * Whether validation is enabled
    */
-  validationEnabled: boolean;
+  enabled: boolean;
 
   /**
    * When the schema was created
@@ -191,7 +191,6 @@ export const Schema = Resource("cloudflare::Schema", async function <
       : props.zone.id;
 
   if (this.phase === "delete") {
-    console.log({ delete: this.output?.id });
     if (this.output?.id) {
       await deleteSchema(api, zoneId, this.output.id);
     }
@@ -209,7 +208,7 @@ export const Schema = Resource("cloudflare::Schema", async function <
     const needsReplace =
       props.name !== this.output.name ||
       JSON.stringify(parsedSchema) !== JSON.stringify(this.output.content) ||
-      (this.output.validationEnabled === true && props.validate === false);
+      (this.output.enabled === true && props.enabled === false);
 
     if (needsReplace) {
       // Name, schema content changed, or trying to disable validation - need to replace
@@ -218,7 +217,7 @@ export const Schema = Resource("cloudflare::Schema", async function <
 
     // Update existing schema (can only update validation_enabled)
     schemaDetails = await updateSchema(api, zoneId, this.output.id, {
-      validation_enabled: props.validate !== false,
+      validation_enabled: props.enabled !== false,
     });
   } else {
     // Create new schema
@@ -226,10 +225,9 @@ export const Schema = Resource("cloudflare::Schema", async function <
       file: schemaContent,
       name: props.name || id,
       kind: props.kind || "openapi_v3",
-      validation_enabled: props.validate !== false,
+      validation_enabled: props.enabled !== false,
     });
   }
-  console.log({ schemaId: schemaDetails.id });
 
   return this({
     id: schemaDetails.id,
@@ -237,7 +235,7 @@ export const Schema = Resource("cloudflare::Schema", async function <
     schema: parsedSchema as any,
     kind: schemaDetails.kind,
     source: schemaDetails.source,
-    validationEnabled: schemaDetails.validationEnabled,
+    enabled: schemaDetails.validationEnabled,
     createdAt: schemaDetails.createdAt,
     content: parsedSchema,
   });

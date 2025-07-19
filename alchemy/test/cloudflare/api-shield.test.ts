@@ -72,7 +72,7 @@ paths:
           description: User deleted
 `,
         name: "test-api-schema",
-        validate: true,
+        enabled: true,
       });
 
       // Create schema validation using the schema
@@ -193,7 +193,7 @@ paths:
         zone: zone.id, // Test using zone ID string
         schema: fileUrl,
         name: "file-based-schema",
-        validate: false, // Start disabled
+        enabled: false, // Start disabled
       });
 
       // Create schema validation from the schema
@@ -295,7 +295,7 @@ paths:
         zone,
         schema: apiSchema,
         name: "typed-api-schema",
-        validate: true,
+        enabled: true,
       });
 
       // Create schema validation with typed object
@@ -383,7 +383,7 @@ paths:
           description: Success
 `,
         name: "default-action-schema",
-        validate: true,
+        enabled: true,
       });
 
       // Create schema validation using only default action
@@ -467,7 +467,7 @@ paths:
           description: Success
 `,
         name: "partial-routes-schema",
-        validate: true,
+        enabled: true,
       });
 
       // Create schema validation with mixed action configuration
@@ -559,7 +559,7 @@ paths:
           description: Success
 `,
         name: "all-routes-schema",
-        validate: true,
+        enabled: true,
       });
 
       // Create schema validation with all routes explicitly specified
@@ -653,7 +653,7 @@ paths:
           description: Success
 `,
         name: "initial-schema",
-        validate: true,
+        enabled: true,
       });
 
       // Create initial validation
@@ -708,7 +708,7 @@ paths:
           description: Success
 `,
         name: "updated-schema",
-        validate: true,
+        enabled: true,
       });
 
       // Update validation with the new schema
