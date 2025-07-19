@@ -2,49 +2,19 @@ import type { OpenAPIV3 } from "openapi-types";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { handleApiError } from "./api-error.ts";
-import { ApiGatewayOperation } from "./api-gateway-operation.ts";
+import {
+  ApiGatewayOperation,
+  type HTTPMethod,
+  type Mitigation,
+} from "./api-gateway-operation.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
-import type { ApiSchema, HTTPMethod, Schema } from "./schema.ts";
+import type { ApiSchema, Schema } from "./schema.ts";
 import type { Zone } from "./zone.ts";
-
-/**
- * Validation action to take when requests don't match the schema
- */
-export type ValidationAction = "none" | "log" | "block";
-
-/**
- * Operation validation setting
- */
-export interface OperationValidation {
-  /**
-   * The operation ID from the schema
-   */
-  operationId: string;
-
-  /**
-   * The HTTP method (GET, POST, etc.)
-   */
-  method: string;
-
-  /**
-   * The host
-   */
-  host: string;
-
-  /**
-   * The endpoint path
-   */
-  endpoint: string;
-
-  /**
-   * Validation action for this operation
-   */
-  action: ValidationAction;
-}
+import { findZoneForHostname } from "./zone.ts";
 
 /**
  * Properties for creating or updating Schema Validation
@@ -84,15 +54,9 @@ export interface ApiShieldProps extends CloudflareApiOptions {
   schema: Schema<ApiSchema>;
 
   /**
-   * Default validation action for all operations
-   * @default "none"
-   */
-  defaultAction?: ValidationAction;
-
-  /**
    * Per-operation validation overrides using OpenAPI-style path structure
    *
-   * Can specify actions per HTTP method or a blanket action for all methods on a path:
+   * Can specify mitigations per HTTP method or a blanket action for all methods on a path:
    *
    * @example
    * // Per-method configuration
@@ -114,16 +78,22 @@ export interface ApiShieldProps extends CloudflareApiOptions {
    *   "/admin": "block"
    * }
    */
-  actions?: Record<
+  mitigations?: Record<
     string,
-    ValidationAction | Partial<Record<HTTPMethod, ValidationAction>>
+    Mitigation | Partial<Record<HTTPMethod, Mitigation>>
   >;
+
+  /**
+   * Default validation action for all operations
+   * @default "none"
+   */
+  defaultMitigation?: Mitigation;
 
   /**
    * Action for requests that don't match any operation
    * @default "none"
    */
-  unknownOperationAction?: ValidationAction;
+  unknownOperationMitigation?: Mitigation;
 }
 
 /**
@@ -133,12 +103,12 @@ export interface ValidationSettings {
   /**
    * Default mitigation action
    */
-  defaultMitigationAction: ValidationAction;
+  defaultMitigation: Mitigation;
 
   /**
    * Override mitigation action for specific operations
    */
-  overrideMitigationAction?: ValidationAction;
+  overrideMitigation?: Mitigation;
 }
 
 /**
@@ -151,111 +121,9 @@ export interface ApiShield extends Resource<"cloudflare::ApiShield"> {
   zoneId: string;
 
   /**
-   * Zone name
+   * The API Schema's API Gateway Operations (and their respective mitigation actions)
    */
-  zoneName: string;
-
-  /**
-   * The schema resource used for validation
-   */
-  schema: Schema<ApiSchema>;
-
-  /**
-   * Global validation settings
-   */
-  settings: ValidationSettings;
-
-  /**
-   * Per-operation validation settings
-   */
-  operations: OperationValidation[];
-}
-
-/**
- * Extract operations from an OpenAPI schema
- */
-export function parseSchemaOperations(schema: OpenAPIV3.Document): Array<{
-  method: string;
-  endpoint: string;
-  operationId?: string;
-  host: string;
-}> {
-  const operations: Array<{
-    method: string;
-    endpoint: string;
-    operationId?: string;
-    host: string;
-  }> = [];
-
-  if (!schema?.paths) {
-    return operations;
-  }
-
-  // Determine the host from servers
-  const defaultHost = extractHostFromSchema(schema);
-
-  // Extract operations from each path
-  for (const [path, pathItem] of Object.entries(schema.paths)) {
-    if (!pathItem || typeof pathItem !== "object") continue;
-
-    // Check each HTTP method
-    for (const method of [
-      "get",
-      "post",
-      "put",
-      "patch",
-      "delete",
-      "head",
-      "options",
-      "trace",
-    ]) {
-      const operation = pathItem[method as keyof typeof pathItem];
-      if (
-        operation &&
-        typeof operation === "object" &&
-        !Array.isArray(operation)
-      ) {
-        // Determine host for this operation (operation-level servers override global)
-        const operationHost = (operation as any).servers?.[0]?.url
-          ? extractHostFromUrl((operation as any).servers[0].url)
-          : defaultHost;
-
-        operations.push({
-          method: method.toUpperCase(),
-          endpoint: path,
-          operationId: (operation as any).operationId,
-          host: operationHost,
-        });
-      }
-    }
-  }
-
-  return operations;
-}
-
-/**
- * Extract host from OpenAPI schema servers
- */
-function extractHostFromSchema(schema: OpenAPIV3.Document): string {
-  if (schema.servers && schema.servers.length > 0) {
-    return extractHostFromUrl(schema.servers[0].url);
-  }
-
-  // Fallback to a default host
-  return "api.example.com";
-}
-
-/**
- * Extract hostname from a URL
- */
-function extractHostFromUrl(url: string): string {
-  try {
-    const urlObj = new URL(url);
-    return urlObj.hostname;
-  } catch {
-    // If URL parsing fails, return the URL as-is (might be relative)
-    return url;
-  }
+  operations: ApiGatewayOperation[];
 }
 
 /**
@@ -372,9 +240,9 @@ function extractHostFromUrl(url: string): string {
  *   zone: "example.com",
  *   schema: schema,
  *   defaultAction: "none",
- *   actions: {
+ *   mitigations: {
  *     "/users": {
- *       get: "none",        // No action for read operations
+ *       get: "none",        // No mitigation for read operations
  *       post: "log",        // Log violations for writes (requires paid plan)
  *     },
  *     "/users/{id}": {
@@ -417,9 +285,9 @@ function extractHostFromUrl(url: string): string {
  * });
  *
  * @example
- * ## Protect critical endpoints with blanket actions
+ * ## Protect critical endpoints with blanket mitigations
  *
- * Apply actions to entire paths or specific methods (requires paid plan)
+ * Apply mitigations to entire paths or specific methods (requires paid plan)
  *
  * const schema = await Schema("my-schema", {
  *   zone: myZone,
@@ -430,7 +298,7 @@ function extractHostFromUrl(url: string): string {
  *   zone: myZone,
  *   schema: schema,
  *   defaultAction: "log",
- *   actions: {
+ *   mitigations: {
  *     "/admin": "block",              // Block all methods on admin endpoints
  *     "/payments": {
  *       post: "block",                // Block payment creation
@@ -448,6 +316,10 @@ function extractHostFromUrl(url: string): string {
  */
 export const ApiShield = Resource(
   "cloudflare::ApiShield",
+  {
+    // delete the api gateway operations in parallel
+    destroyStrategy: "parallel",
+  },
   async function (
     this: Context<ApiShield>,
     id: string,
@@ -455,10 +327,11 @@ export const ApiShield = Resource(
   ): Promise<ApiShield> {
     const api = await createCloudflareApi(props);
 
-    // Resolve zone ID
-    const zoneId = typeof props.zone === "string" ? props.zone : props.zone.id;
-    const zoneName =
-      typeof props.zone === "string" ? props.zone : props.zone.name;
+    // Resolve zone ID and name
+    const zoneId =
+      typeof props.zone === "string"
+        ? (await findZoneForHostname(api, props.zone)).zoneId
+        : props.zone.id;
 
     if (this.phase === "delete") {
       // Reset settings to default
@@ -474,75 +347,44 @@ export const ApiShield = Resource(
     }
 
     // Update global settings
-    const defaultAction = props.defaultAction || "none";
+    const defaultAction = props.defaultMitigation || "none";
     await updateGlobalSettings(api, zoneId, {
       validation_default_mitigation_action: defaultAction,
-      validation_override_mitigation_action: props.unknownOperationAction,
+      validation_override_mitigation_action: props.unknownOperationMitigation,
     });
-
-    // Get current settings
-    const settings = await getGlobalSettings(api, zoneId);
-
-    // Parse operations from the schema
-    const parsedOperations = parseSchemaOperations(props.schema.content);
-
-    // Create ApiGatewayOperation resources for each operation found in the schema
-    const createdOperations: OperationValidation[] = [];
-
-    for (const parsedOp of parsedOperations) {
-      // Create a deterministic ID for the operation
-      const operationResourceId = `${id}-${parsedOp.method.toLowerCase()}-${parsedOp.endpoint.replace(/[^a-z0-9]/gi, "-")}`;
-
-      const apiOperation = await ApiGatewayOperation(operationResourceId, {
-        zone: zoneId,
-        endpoint: parsedOp.endpoint,
-        host: parsedOp.host,
-        method: parsedOp.method,
-      });
-
-      // Determine the action for this operation
-      let operationAction = defaultAction;
-      if (props.actions) {
-        const pathActions = props.actions[parsedOp.endpoint];
-        if (typeof pathActions === "string") {
-          // Blanket action for all methods on this path
-          operationAction = pathActions;
-        } else if (pathActions && typeof pathActions === "object") {
-          // Per-method configuration
-          const methodAction =
-            pathActions[parsedOp.method.toLowerCase() as HTTPMethod];
-          if (methodAction) {
-            operationAction = methodAction;
-          }
-        }
-      }
-
-      // Apply validation settings to the operation if needed
-      if (operationAction !== defaultAction) {
-        await updateOperationSettings(api, zoneId, apiOperation.operationId, {
-          mitigation_action: operationAction,
-        });
-      }
-
-      createdOperations.push({
-        operationId: apiOperation.operationId,
-        method: apiOperation.method,
-        host: apiOperation.host,
-        endpoint: apiOperation.endpoint,
-        action: operationAction,
-      });
-    }
 
     return this({
       zoneId,
-      zoneName,
-      schema: props.schema,
-      settings: {
-        defaultMitigationAction: settings.validation_default_mitigation_action,
-        overrideMitigationAction:
-          settings.validation_override_mitigation_action,
-      },
-      operations: createdOperations,
+      operations: await Promise.all(
+        parseSchemaOperations(props.schema.content).map(async (parsedOp) => {
+          let operationAction = defaultAction;
+          if (props.mitigations) {
+            const pathActions = props.mitigations[parsedOp.endpoint];
+            if (typeof pathActions === "string") {
+              // Blanket action for all methods on this path
+              operationAction = pathActions;
+            } else if (pathActions && typeof pathActions === "object") {
+              // Per-method configuration
+              const methodAction =
+                pathActions[parsedOp.method.toLowerCase() as HTTPMethod];
+              if (methodAction) {
+                operationAction = methodAction;
+              }
+            }
+          }
+          return ApiGatewayOperation(
+            // Create a deterministic ID for the operation
+            `${id}-${parsedOp.method.toLowerCase()}-${parsedOp.endpoint.replace(/[^a-z0-9]/gi, "-")}`,
+            {
+              zone: zoneId,
+              endpoint: parsedOp.endpoint,
+              host: parsedOp.host,
+              method: parsedOp.method,
+              action: operationAction,
+            },
+          );
+        }),
+      ),
     });
   },
 );
@@ -580,55 +422,6 @@ async function updateGlobalSettings(
   }
 }
 
-async function getOperations(
-  api: CloudflareApi,
-  zoneId: string,
-): Promise<CloudflareOperation[]> {
-  const response = await api.get(`/zones/${zoneId}/api_gateway/operations`);
-
-  if (!response.ok) {
-    await handleApiError(response, "getting", "operations");
-  }
-
-  const data = (await response.json()) as { result: CloudflareOperation[] };
-  return data.result;
-}
-
-async function updateOperationSettings(
-  api: CloudflareApi,
-  zoneId: string,
-  operationId: string,
-  params: {
-    mitigation_action: ValidationAction;
-  },
-): Promise<void> {
-  const response = await api.put(
-    `/zones/${zoneId}/api_gateway/operations/${operationId}/schema_validation`,
-    params,
-  );
-
-  if (!response.ok) {
-    await handleApiError(
-      response,
-      "updating",
-      "operation settings",
-      operationId,
-    );
-  }
-}
-
-// Exported API functions for testing
-
-/**
- * Get operations for a zone
- */
-export async function getOperationsForZone(
-  api: CloudflareApi,
-  zoneId: string,
-): Promise<CloudflareOperation[]> {
-  return getOperations(api, zoneId);
-}
-
 /**
  * Get global schema validation settings for a zone
  */
@@ -642,14 +435,93 @@ export async function getGlobalSettingsForZone(
 // Cloudflare API response types
 
 export interface CloudflareGlobalSettings {
-  validation_default_mitigation_action: ValidationAction;
-  validation_override_mitigation_action?: ValidationAction;
+  validation_default_mitigation_action: Mitigation;
+  validation_override_mitigation_action?: Mitigation;
 }
 
-export interface CloudflareOperation {
-  operation_id: string;
+/**
+ * Extract operations from an OpenAPI schema
+ */
+export function parseSchemaOperations(schema: OpenAPIV3.Document): Array<{
   method: string;
-  host: string;
   endpoint: string;
-  mitigation_action: ValidationAction;
+  operationId?: string;
+  host: string;
+}> {
+  const operations: Array<{
+    method: string;
+    endpoint: string;
+    operationId?: string;
+    host: string;
+  }> = [];
+
+  if (!schema?.paths) {
+    return operations;
+  }
+
+  // Determine the host from servers
+  const defaultHost = extractHostFromSchema(schema);
+
+  // Extract operations from each path
+  for (const [path, pathItem] of Object.entries(schema.paths)) {
+    if (!pathItem || typeof pathItem !== "object") continue;
+
+    // Check each HTTP method
+    for (const method of [
+      "get",
+      "post",
+      "put",
+      "patch",
+      "delete",
+      "head",
+      "options",
+      "trace",
+    ]) {
+      const operation = pathItem[method as keyof typeof pathItem];
+      if (
+        operation &&
+        typeof operation === "object" &&
+        !Array.isArray(operation)
+      ) {
+        // Determine host for this operation (operation-level servers override global)
+        const operationHost = (operation as any).servers?.[0]?.url
+          ? extractHostFromUrl((operation as any).servers[0].url)
+          : defaultHost;
+
+        operations.push({
+          method: method.toUpperCase(),
+          endpoint: path,
+          operationId: (operation as any).operationId,
+          host: operationHost,
+        });
+      }
+    }
+  }
+
+  return operations;
+}
+
+/**
+ * Extract host from OpenAPI schema servers
+ */
+function extractHostFromSchema(schema: OpenAPIV3.Document): string {
+  if (schema.servers && schema.servers.length > 0) {
+    return extractHostFromUrl(schema.servers[0].url);
+  }
+
+  // Fallback to a default host
+  return "api.example.com";
+}
+
+/**
+ * Extract hostname from a URL
+ */
+function extractHostFromUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.hostname;
+  } catch {
+    // If URL parsing fails, return the URL as-is (might be relative)
+    return url;
+  }
 }

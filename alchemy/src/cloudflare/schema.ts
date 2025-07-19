@@ -17,19 +17,6 @@ import { findZoneForHostname } from "./zone.ts";
  */
 export type SchemaKind = "openapi_v3";
 
-/**
- * HTTP methods supported by OpenAPI
- */
-export type HTTPMethod =
-  | "get"
-  | "post"
-  | "put"
-  | "patch"
-  | "delete"
-  | "head"
-  | "options"
-  | "trace";
-
 export type ApiSchema = URL | string | OpenAPIV3.Document;
 
 /**
@@ -126,6 +113,7 @@ export interface Schema<SchemaType extends ApiSchema>
  *
  * const apiSchema = await Schema("my-api-schema", {
  *   zone: myZone,
+ *   name: "my-api-v1"
  *   schema: `
  *     openapi: 3.0.0
  *     info:
@@ -141,7 +129,6 @@ export interface Schema<SchemaType extends ApiSchema>
  *             '200':
  *               description: Success
  *   `,
- *   name: "my-api-v1"
  * });
  *
  * @example
@@ -151,7 +138,7 @@ export interface Schema<SchemaType extends ApiSchema>
  *   zone: "example.com",
  *   schemaFile: "./openapi.yaml",
  *   name: "production-api-v2",
- *   enableValidation: false  // Upload but don't enable validation yet
+ *   enabled: false  // Upload but don't enable validation yet
  * });
  *
  * @example
