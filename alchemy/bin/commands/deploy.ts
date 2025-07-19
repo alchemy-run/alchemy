@@ -3,6 +3,7 @@ import {
   entrypoint,
   execAlchemy,
   execArgs,
+  force,
   watch,
 } from "../services/execute-alchemy.ts";
 import { t } from "../trpc.ts";
@@ -16,6 +17,7 @@ export const deploy = t.procedure
       entrypoint,
       z.object({
         ...execArgs,
+        force,
         watch,
       }),
     ]),

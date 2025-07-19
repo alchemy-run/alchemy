@@ -676,4 +676,47 @@ describe("WranglerJson Resource", () => {
       await destroy(scope);
     }
   });
+
+  test("with smart placement and cpu_ms limit", async (scope) => {
+    const name = `${BRANCH_PREFIX}-test-worker-placement-limits`;
+    const tempDir = path.join(".out", "alchemy-placement-limits-test");
+    const entrypoint = path.join(tempDir, "worker.ts");
+
+    try {
+      // Create a temporary directory for the entrypoint file
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(tempDir, { recursive: true });
+      await fs.writeFile(entrypoint, esmWorkerScript);
+
+      const { spec } = await WranglerJson(
+        `${BRANCH_PREFIX}-test-wrangler-json-placement-limits`,
+        {
+          worker: {
+            name,
+            format: "esm",
+            entrypoint,
+            placement: {
+              mode: "smart",
+            },
+            limits: {
+              cpu_ms: 60000,
+            },
+          },
+        },
+      );
+
+      expect(spec).toMatchObject({
+        name,
+        placement: {
+          mode: "smart",
+        },
+        limits: {
+          cpu_ms: 60000,
+        },
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await destroy(scope);
+    }
+  });
 });

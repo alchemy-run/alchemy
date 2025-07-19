@@ -20,6 +20,7 @@ import type { Images } from "./images.ts";
 import type { KVNamespaceResource } from "./kv-namespace.ts";
 import type { PipelineResource } from "./pipeline.ts";
 import type { QueueResource } from "./queue.ts";
+import type { RateLimit } from "./rate-limit.ts";
 import type { SecretKey } from "./secret-key.ts";
 import type { Secret as CloudflareSecret } from "./secret.ts";
 import type { VectorizeIndexResource } from "./vectorize-index.ts";
@@ -56,6 +57,7 @@ export type Binding =
   | KVNamespaceResource
   | PipelineResource
   | QueueResource
+  | RateLimit
   | R2BucketResource
   | {
       type: "kv_namespace";
@@ -108,6 +110,7 @@ export type WorkerBindingSpec =
   | WorkerBindingPipeline
   | WorkerBindingPlainText
   | WorkerBindingQueue
+  | WorkerBindingRateLimit
   | WorkerBindingR2Bucket
   | WorkerBindingSecretKey
   | WorkerBindingSecretText
@@ -282,6 +285,25 @@ export interface WorkerBindingQueue {
   type: "queue";
   /** Queue name */
   queue_name: string;
+}
+
+/**
+ * Rate Limit binding type
+ */
+export interface WorkerBindingRateLimit {
+  /** The name of the binding */
+  name: string;
+  /** Type identifier for Rate Limit binding */
+  type: "ratelimit";
+  /** Namespace ID for the rate limit */
+  namespace_id: string;
+  /** Simple rate limiting configuration */
+  simple: {
+    /** Maximum number of requests */
+    limit: number;
+    /** Time period in seconds */
+    period: 60 | 10;
+  };
 }
 
 /**

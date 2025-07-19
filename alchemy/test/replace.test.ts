@@ -45,7 +45,7 @@ describe.sequential("Replace-Sequential", () => {
           }
           if (this.phase === "update") {
             if (props.name !== this.output.name) {
-              await this.replace();
+              this.replace();
             }
           }
           if (props.child) {
@@ -135,7 +135,7 @@ describe.concurrent("Replace", () => {
           },
         ) {
           if (props.replaceOnCreate && this.phase === "create") {
-            await this.replace(props.force);
+            this.replace(props.force);
           }
           if (this.phase === "delete") {
             if (props.fail) {
@@ -149,7 +149,7 @@ describe.concurrent("Replace", () => {
           }
           if (this.phase === "update") {
             if (props.name !== this.output.name) {
-              await this.replace(props.force);
+              this.replace(props.force);
             }
           }
           if (props.child) {

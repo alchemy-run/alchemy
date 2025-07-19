@@ -50,6 +50,12 @@ export interface ScopeOptions {
    * @default - `true` if ran with `alchemy dev`, `alchemy watch`, `bun --watch ./alchemy.run.ts`
    */
   watch?: boolean;
+  /**
+   * Apply updates to resources even if there are no changes.
+   *
+   * @default false
+   */
+  force?: boolean;
   telemetryClient?: ITelemetryClient;
   logger?: LoggerApi;
 }
@@ -120,11 +126,13 @@ export class Scope {
   public readonly phase: Phase;
   public readonly local: boolean;
   public readonly watch: boolean;
+  public readonly force: boolean;
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
 
   private isErrored = false;
+  private isSkipped = false;
   private finalized = false;
   private startedAt = performance.now();
 
@@ -176,6 +184,7 @@ export class Scope {
 
     this.local = options.local ?? this.parent?.local ?? false;
     this.watch = options.watch ?? this.parent?.watch ?? false;
+    this.force = options.force ?? this.parent?.force ?? false;
 
     if (this.local) {
       this.logger.warnOnce(
@@ -192,6 +201,17 @@ export class Scope {
     this.telemetryClient =
       options.telemetryClient ?? this.parent?.telemetryClient!;
     this.dataMutex = new AsyncMutex();
+  }
+
+  /**
+   * @internal
+   */
+  public clear() {
+    for (const child of this.children.values()) {
+      child.clear();
+    }
+    this.resources.clear();
+    this.children.clear();
   }
 
   public get root(): Scope {
@@ -237,6 +257,10 @@ export class Scope {
   public fail() {
     this.logger.error("Scope failed", this.chain.join("/"));
     this.isErrored = true;
+  }
+
+  public skip() {
+    this.isSkipped = true;
   }
 
   public async init() {
@@ -378,7 +402,7 @@ export class Scope {
     this.finalized = true;
     // trigger and await all deferred promises
     await Promise.all(this.deferred.map((fn) => fn()));
-    if (!this.isErrored) {
+    if (!this.isErrored && !this.isSkipped) {
       // TODO: need to detect if it is in error
       const resourceIds = await this.state.list();
       const aliveIds = new Set(this.resources.keys());
@@ -416,7 +440,7 @@ export class Scope {
         event: "app.success",
         elapsed: performance.now() - this.startedAt,
       });
-    } else {
+    } else if (this.isErrored) {
       this.logger.warn("Scope is in error, skipping finalize");
       this.rootTelemetryClient?.record({
         event: "app.error",

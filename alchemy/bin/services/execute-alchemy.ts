@@ -20,6 +20,12 @@ export const watch = z
   .default(false)
   .describe("Watch for changes to infrastructure and redeploy automatically");
 
+export const force = z
+  .boolean()
+  .optional()
+  .default(false)
+  .describe("Apply updates to resources even if there are no changes");
+
 export const execArgs = {
   cwd: z
     .string()
@@ -44,6 +50,7 @@ export async function execAlchemy(
   {
     cwd = process.cwd(),
     quiet,
+    force,
     stage,
     destroy,
     watch,
@@ -53,6 +60,7 @@ export async function execAlchemy(
   }: {
     cwd?: string;
     quiet?: boolean;
+    force?: boolean;
     stage?: string;
     destroy?: boolean;
     watch?: boolean;
@@ -65,6 +73,7 @@ export async function execAlchemy(
   const execArgs: string[] = [];
   if (quiet) args.push("--quiet");
   if (read) args.push("--read");
+  if (force) args.push("--force");
   if (stage) args.push(`--stage ${stage}`);
   if (destroy) args.push("--destroy");
   if (watch) execArgs.push("--watch");

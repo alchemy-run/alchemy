@@ -1,3 +1,68 @@
+## v0.49.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: RateLimit binding for Cloudflare Workers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/709 [<samp>(f0cf6)</samp>](https://github.com/sam-goodwin/alchemy/commit/f0cf654)
+- **core**: Force updates &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/713 [<samp>(7013f)</samp>](https://github.com/sam-goodwin/alchemy/commit/7013fc6)
+- **replace**: Replace no longer requires await &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/712 [<samp>(38e20)</samp>](https://github.com/sam-goodwin/alchemy/commit/38e20a2)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Fix tanstack build and dev command &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/702 [<samp>(77d6c)</samp>](https://github.com/sam-goodwin/alchemy/commit/77d6cf0)
+- **core**: Don't log if scope skipped &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(5d103)</samp>](https://github.com/sam-goodwin/alchemy/commit/5d103b1)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.48.3...v0.49.0)
+
+---
+
+## v0.48.4
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Fix tanstack build and dev command &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/702 [<samp>(77d6c)</samp>](https://github.com/sam-goodwin/alchemy/commit/77d6cf0d)
+- **core**: Don't log if scope skipped &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(5d103)</samp>](https://github.com/sam-goodwin/alchemy/commit/5d103b18)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.48.3...v0.48.4)
+
+---
+
+## v0.48.3
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Support cpu_ms limit on Worker &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/707 [<samp>(090e4)</samp>](https://github.com/sam-goodwin/alchemy/commit/090e4a2)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.48.2...v0.48.3)
+
+---
+
+## v0.48.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **core**: Do not delete nested resources of a skipped resource &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/704 [<samp>(b25c7)</samp>](https://github.com/sam-goodwin/alchemy/commit/b25c739b)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.48.1...v0.48.2)
+
+---
+
+## v0.48.1
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Support durable object websockets in miniflare &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/697 [<samp>(4ddd1)</samp>](https://github.com/sam-goodwin/alchemy/commit/4ddd1b75)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Improve atomicity of d1 migrations &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/694 [<samp>(d3a74)</samp>](https://github.com/sam-goodwin/alchemy/commit/d3a7466f)
+  - Correct workers compatibility date &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/693 [<samp>(0bbe3)</samp>](https://github.com/sam-goodwin/alchemy/commit/0bbe341d)
+  - Miniflare websocket requests don't include url path &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/701 [<samp>(6959f)</samp>](https://github.com/sam-goodwin/alchemy/commit/6959faad)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.48.0...v0.48.1)
+
+---
+
 ## v0.48.0
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

@@ -4,20 +4,19 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "build": "vinxi build",
+    "build": "vite build",
     "deploy": "alchemy deploy --env-file ../../.env",
     "destroy": "alchemy destroy --env-file ../../.env",
     "dev": "alchemy dev --env-file ../../.env",
-    "start": "vinxi start"
+    "start": "vite start"
   },
   "dependencies": {
-    "@tanstack/react-router": "1.116.0",
-    "@tanstack/react-router-devtools": "1.116.0",
-    "@tanstack/react-start": "1.116.1",
+    "@tanstack/react-router": "^1.128.3",
+    "@tanstack/react-router-devtools": "^1.128.3",
+    "@tanstack/react-start": "^1.128.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^2.6.0",
-    "vinxi": "0.5.3"
+    "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
     "@types/node": "^22.5.4",

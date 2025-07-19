@@ -7,7 +7,7 @@ import { File } from "../src/fs/file.js";
 import { Scope } from "../src/scope.js";
 import { BRANCH_PREFIX, createTestOptions, STATE_STORE_TYPES } from "./util.js";
 
-import { Resource } from "../src/resource.js";
+import { Resource, ResourceScope } from "../src/resource.js";
 import { serializeScope } from "../src/serde.js";
 import "../src/test/vitest.js";
 
@@ -183,7 +183,77 @@ describe.concurrent("Scope", () => {
           }
         },
       );
+      test(
+        "a skipped resource should not delete nested resources",
+        options,
+        async (scope) => {
+          const Outer = Resource(
+            `${storeType}-Outer`,
+            async function (this, _id: string) {
+              if (this.phase === "delete") {
+                return this.destroy();
+              }
+              await Inner("inner", { fileName: "test-inner" });
+              return this({});
+            },
+          );
+
+          let isDeleted = false;
+          const Inner = Resource(
+            `${storeType}-Inner`,
+            async function (this, _id: string) {
+              if (this.phase === "delete") {
+                isDeleted = true;
+                return this.destroy();
+              }
+              return this({});
+            },
+          );
+          try {
+            await Outer("outer");
+            expect(isDeleted).toBe(false);
+            // emulate a new process (destroy in memory scope)
+            scope.clear();
+            const outer = await Outer("outer");
+            // finalizing a scoped that was skipped should not delete nested resources
+            await outer[ResourceScope].finalize();
+            expect(isDeleted).toBe(false);
+          } finally {
+            await destroy(scope);
+            // expect(isDeleted).toBe(true);
+          }
+        },
+      );
     });
+    test(
+      "force should apply updates even if there are no changes",
+      {
+        force: true,
+      },
+      async (scope) => {
+        let updates = 0;
+        const MyResource = Resource(
+          `${storeType}-MyResource`,
+          async function (this, _id: string, props: { name: string }) {
+            if (this.phase === "delete") {
+              return this.destroy();
+            }
+            updates++;
+            return this(props);
+          },
+        );
+        try {
+          await MyResource("outer", { name: "outer" });
+          expect(updates).toBe(1);
+          await MyResource("outer", { name: "outer" });
+          expect(updates).toBe(2);
+          await MyResource("outer", { name: "outer" });
+          expect(updates).toBe(3);
+        } finally {
+          await destroy(scope);
+        }
+      },
+    );
   }
 });
 
