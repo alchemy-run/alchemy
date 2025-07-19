@@ -11,12 +11,11 @@ export const TEMPLATE_DEFINITIONS = [
   { name: "nuxt", description: "Nuxt.js" },
 ] as const;
 
-const templateNames = TEMPLATE_DEFINITIONS.map((t) => t.name);
+export type TemplateType = (typeof TEMPLATE_DEFINITIONS)[number]["name"];
 
-export const TemplateSchema = z
-  .enum(templateNames as [string, ...string[]])
-  .describe("Project template type");
-export type TemplateType = z.infer<typeof TemplateSchema>;
+export const TemplateSchema = z.enum(
+  TEMPLATE_DEFINITIONS.map((t) => t.name) as [TemplateType, ...TemplateType[]],
+);
 
 export const PackageManagerSchema = z
   .enum(["bun", "npm", "pnpm", "yarn", "deno"])
