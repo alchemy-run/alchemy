@@ -1,6 +1,6 @@
 import { alchemy } from "./alchemy.ts";
 import { context } from "./context.ts";
-import { destroy } from "./destroy.ts";
+import { destroy, DestroyStrategy } from "./destroy.ts";
 import {
   PROVIDERS,
   ResourceFQN,
@@ -92,6 +92,7 @@ async function _apply<Out extends Resource>(
           [ResourceKind]: resource[ResourceKind],
           [ResourceScope]: scope,
           [ResourceSeq]: resource[ResourceSeq],
+          [DestroyStrategy]: provider.options?.destroyStrategy ?? "sequential",
         },
         // deps: [...deps],
         props,
@@ -199,6 +200,7 @@ async function _apply<Out extends Resource>(
         {
           isResource: true,
           parent: scope,
+          destroyStrategy: provider.options?.destroyStrategy ?? "sequential",
         },
         async (scope) => {
           options?.resolveInnerScope?.(scope);
@@ -216,7 +218,7 @@ async function _apply<Out extends Resource>(
         if (error.force) {
           await destroy(resource, {
             quiet: scope.quiet,
-            strategy: "sequential",
+            strategy: resource[DestroyStrategy] ?? "sequential",
             replace: {
               props: state.oldProps,
               output: resource,
