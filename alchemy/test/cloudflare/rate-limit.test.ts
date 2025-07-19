@@ -1,6 +1,5 @@
 import { describe } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
-import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { RateLimit } from "../../src/cloudflare/rate-limit.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { BRANCH_PREFIX } from "../util.ts";
@@ -12,8 +11,6 @@ import "../../src/test/vitest.ts";
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
-
-const api = await createCloudflareApi();
 
 describe("RateLimit", () => {
   test("end-to-end rate limiting with worker binding", async (scope) => {
