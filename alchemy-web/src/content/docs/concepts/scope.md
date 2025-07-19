@@ -180,3 +180,25 @@ describe("Worker Resource", () => {
 ```
 
 For more details on testing with Alchemy, see [Testing in Alchemy](/concepts/testing).
+
+## Destroy Strategy
+
+By default, Alchemy will destroy scopes in a sequential order. You can change this behavior by passing the `destroyStrategy` option to the Scope constructor.
+
+```typescript
+const app = await alchemy("my-app", {
+  destroyStrategy: "parallel"
+});
+```
+
+You can also set the `destroyStrategy` option on the `alchemy.run` function.
+
+```typescript
+await alchemy.run("my-app", {
+  destroyStrategy: "parallel"
+}, async (scope) => {
+  // resources will be deleted in parallel during scope deletion/finalization
+  await Resource("resource1", {});
+  await Resource("resource2", {});
+});
+```

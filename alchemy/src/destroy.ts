@@ -16,9 +16,13 @@ import { logger } from "./util/logger.ts";
 
 export class DestroyedSignal extends Error {}
 
+export type DestroyStrategy = "sequential" | "parallel";
+
+export const DestroyStrategy = Symbol.for("alchemy::DestroyStrategy");
+
 export interface DestroyOptions {
   quiet?: boolean;
-  strategy?: "sequential" | "parallel";
+  strategy?: DestroyStrategy;
   replace?: {
     props?: ResourceProps | undefined;
     output?: Resource<string>;
@@ -40,7 +44,7 @@ export async function destroy<Type extends string>(
   if (isScopeArgs(args)) {
     const [scope] = args;
     const options = {
-      strategy: "sequential",
+      strategy: scope.destroyStrategy ?? "sequential",
       ...(args[1] ?? {}),
     } satisfies DestroyOptions;
 
@@ -147,6 +151,7 @@ export async function destroy<Type extends string>(
           // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
           isResource: instance[ResourceKind] !== "alchemy::Scope",
           parent: scope,
+          destroyStrategy: instance[DestroyStrategy] ?? "sequential",
         },
         async (scope) => {
           nestedScope = options?.replace?.props == null ? scope : undefined;
@@ -164,13 +169,17 @@ export async function destroy<Type extends string>(
       }
     }
 
+    const destroyOptions = {
+      ...options,
+      strategy: instance[DestroyStrategy] ?? "sequential",
+    };
     if (nestedScope) {
-      await destroy(nestedScope, options);
+      await destroy(nestedScope, destroyOptions);
     }
 
     if (options?.replace == null) {
       if (nestedScope) {
-        await destroy(nestedScope, options);
+        await destroy(nestedScope, destroyOptions);
       }
       await scope.deleteResource(instance[ResourceID]);
     } else {

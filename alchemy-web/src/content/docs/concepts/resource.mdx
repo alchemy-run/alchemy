@@ -166,6 +166,29 @@ return this.create({/* updated properties */});
 ```
 :::
 
+## Destroy Strategy
+
+By default, Alchemy will destroy resources in a sequential order. You can change this behavior for a Resource by passing the `destroyStrategy` option to the Resource constructor.
+
+```ts
+const Database = Resource(
+  "neon::Database",
+  { destroyStrategy: "parallel" },
+  async function(this: Context<Database>, id: string, props: DatabaseProps): Promise<Database> {
+    if (this.phase === "delete") {
+      return this.destroy();
+    }
+    // these sub-resources will be deleted in parallel during the Database resource deletion
+    await SubResource("sub-resource", {});
+    await OtherResource("other-resource", {});
+  }
+);
+```
+
+:::tip
+You can also set the `destroyStrategy` option globally or within a Scope using `alchemy.run`. See [Scope](/concepts/scope#destroy-strategy) for more details.
+:::
+
 ## Adoption
 
 When creating a resource, Alchemy will fail if a resource with the same name already exists. Resource adoption allows you to opt in to using the pre-existing resource instead.

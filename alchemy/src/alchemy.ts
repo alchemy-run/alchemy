@@ -2,15 +2,15 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { ReplacedSignal } from "./apply.ts";
-import { DestroyedSignal, destroy } from "./destroy.ts";
+import { DestroyStrategy, DestroyedSignal, destroy } from "./destroy.ts";
 import { env } from "./env.ts";
 import {
-  type PendingResource,
   ResourceFQN,
   ResourceID,
   ResourceKind,
   ResourceScope,
   ResourceSeq,
+  type PendingResource,
 } from "./resource.ts";
 import { isRuntime } from "./runtime/global.ts";
 import { DEFAULT_STAGE, Scope } from "./scope.ts";
@@ -360,6 +360,12 @@ export interface AlchemyOptions {
    */
   parent?: Scope;
   /**
+   * The strategy to use when destroying resources.
+   *
+   * @default "sequential"
+   */
+  destroyStrategy?: DestroyStrategy;
+  /**
    * If true, will not print any Create/Update/Delete messages.
    *
    * @default false
@@ -451,6 +457,7 @@ async function run<T>(
         [ResourceKind]: Scope.KIND,
         [ResourceScope]: _scope,
         [ResourceSeq]: seq,
+        [DestroyStrategy]: options?.destroyStrategy ?? "sequential",
       } as const;
       const resource = {
         kind: Scope.KIND,

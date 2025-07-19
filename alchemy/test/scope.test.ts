@@ -254,6 +254,46 @@ describe.concurrent("Scope", () => {
         }
       },
     );
+    test(
+      "Scope.destroyStrategy should be respected",
+      {
+        destroyStrategy: "parallel",
+      },
+      async (scope) => {
+        const queued = new Set<string>();
+        const finished = new Set<string>();
+
+        const MyResource = Resource(
+          `${storeType}-MyResource-Parallel`,
+          async function (this, id: string) {
+            if (this.phase === "delete") {
+              queued.add(id);
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+              finished.add(id);
+              return this.destroy();
+            }
+            return this({});
+          },
+        );
+        try {
+          await MyResource("a");
+          await MyResource("b");
+          await MyResource("c");
+        } finally {
+          const promise = destroy(scope);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          expect(queued).toContain("a");
+          expect(queued).toContain("b");
+          expect(queued).toContain("c");
+          expect(finished.size).toBe(0);
+          await promise;
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          expect(finished).toContain("a");
+          expect(finished).toContain("b");
+          expect(finished).toContain("c");
+        }
+      },
+    );
   }
 });
 

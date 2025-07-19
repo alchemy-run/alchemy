@@ -1,3 +1,4 @@
+import type { DestroyStrategy } from "../destroy.ts";
 import type { StateStoreType } from "../state.ts";
 
 /**
@@ -31,4 +32,11 @@ export interface TestOptions {
    * Prefix to use for the scope to isolate tests and environments.
    */
   prefix?: string;
+
+  /**
+   * The strategy to use when destroying resources.
+   *
+   * @default "sequential"
+   */
+  destroyStrategy?: DestroyStrategy;
 }
