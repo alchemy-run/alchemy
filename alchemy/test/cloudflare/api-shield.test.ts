@@ -18,7 +18,7 @@ import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
-  quiet: true,
+  quiet: false,
 });
 
 const api = await createCloudflareApi({});
@@ -286,8 +286,10 @@ paths:
 
     try {
       // Create initial schema with multiple operations
-      schema = await Schema(`${BRANCH_PREFIX}-change-schema`, {
+      schema = await Schema("schema", {
+        name: `${BRANCH_PREFIX}-change-schema`,
         zone: ZONE_NAME,
+        enabled: true,
         schema: `
 openapi: 3.0.0
 info:
@@ -325,12 +327,10 @@ paths:
         '200':
           description: Success
 `,
-        name: "change-schema",
-        enabled: true,
       });
 
       // Create initial validation
-      shield = await ApiShield(`${BRANCH_PREFIX}-change-validation`, {
+      shield = await ApiShield("shield", {
         zone: ZONE_NAME,
         schema,
         defaultMitigation: "none",
@@ -371,8 +371,10 @@ paths:
       ]);
 
       // Create updated schema with reduced operations (remove /legacy endpoint)
-      updatedSchema = await Schema(`${BRANCH_PREFIX}-updated-change-schema`, {
+      updatedSchema = await Schema("schema", {
+        name: `${BRANCH_PREFIX}-change-schema`,
         zone: ZONE_NAME,
+        enabled: true,
         schema: `
 openapi: 3.0.0
 info:
@@ -404,12 +406,10 @@ paths:
         '204':
           description: Success
 `,
-        name: "updated-change-schema",
-        enabled: true,
       });
 
       // Update validation with the new schema
-      shield = await ApiShield(`${BRANCH_PREFIX}-change-validation`, {
+      shield = await ApiShield("shield", {
         zone: ZONE_NAME,
         schema: updatedSchema,
         defaultMitigation: "none",
