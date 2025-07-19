@@ -1,13 +1,13 @@
 {
-  "name": "livestore-example-standalone-web-todomvc-sync-cf",
+  "name": "example-cloudflare-livestore",
   "version": "0.0.0",
   "type": "module",
   "private": true,
   "scripts": {
     "build": "vite build",
-    "dev": "VITE_LIVESTORE_SYNC_URL=http://localhost:8787 vite --force",
-    "preview": "vite preview",
-    "wrangler:deploy": "wrangler deploy"
+    "dev": "alchemy dev --env-file ../../.env",
+    "deploy": "alchemy deploy --env-file ../../.env",
+    "destroy": "alchemy destroy --env-file ../../.env"
   },
   "dependencies": {
     "@livestore/adapter-web": "0.3.1",
@@ -28,8 +28,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "alchemy": "workspace:*",
     "typescript": "^5.8.3",
-    "vite": "^6.3.4",
-    "wrangler": "^4.14.4"
+    "vite": "^6.3.4"
   },
   "engines": {
     "node": ">=23.0.0"
