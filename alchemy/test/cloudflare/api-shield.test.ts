@@ -1,12 +1,14 @@
+import { unlink, writeFile } from "node:fs/promises";
 import type { OpenAPIV3 } from "openapi-types";
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
-import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import {
-  SchemaValidation,
+  ApiShield,
   getGlobalSettingsForZone,
   getOperationsForZone,
-} from "../../src/cloudflare/schema-validation.ts";
+} from "../../src/cloudflare/api-shield.ts";
+import { createCloudflareApi } from "../../src/cloudflare/api.ts";
+import { Schema } from "../../src/cloudflare/schema.ts";
 import { Zone } from "../../src/cloudflare/zone.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
@@ -20,11 +22,12 @@ const test = alchemy.test(import.meta, {
 
 const api = await createCloudflareApi({});
 
-describe("SchemaValidation", () => {
+describe("ApiShield", () => {
   test("create and update schema validation with inline schema", async (scope) => {
     const zoneName = `${BRANCH_PREFIX}-schema-val-2.com`;
     let zone: Zone;
-    let validation: SchemaValidation;
+    let schema: Schema<string>;
+    let validation: ApiShield;
 
     try {
       // Create a test zone
@@ -34,8 +37,8 @@ describe("SchemaValidation", () => {
         delete: true,
       });
 
-      // Create schema validation with inline schema
-      validation = await SchemaValidation(`${BRANCH_PREFIX}-validation`, {
+      // Create schema first
+      schema = await Schema(`${BRANCH_PREFIX}-schema`, {
         zone,
         schema: `
 openapi: 3.0.0
@@ -69,14 +72,21 @@ paths:
           description: User deleted
 `,
         name: "test-api-schema",
+        validate: true,
+      });
+
+      // Create schema validation using the schema
+      validation = await ApiShield(`${BRANCH_PREFIX}-validation`, {
+        zone,
+        schema,
         defaultAction: "none",
-        enableValidation: true,
       });
 
       expect(validation).toMatchObject({
         zoneId: zone.id,
         zoneName: zone.name,
         schema: {
+          id: schema.id,
           name: "test-api-schema",
           kind: "openapi_v3",
           validationEnabled: true,
@@ -94,15 +104,14 @@ paths:
         { method: "post", endpoint: "/users", action: "none" },
       ]);
 
-      // // Also verify that operations exist in Cloudflare
-
+      // Also verify that operations exist in Cloudflare
       const cloudflareOperations = await getOperationsForZone(api, zone.id);
       expect(cloudflareOperations.length).toBeGreaterThanOrEqual(4);
 
-      // // Update with operation overrides using path-based configuration
-      validation = await SchemaValidation(`${BRANCH_PREFIX}-validation`, {
+      // Update with operation overrides using path-based configuration
+      validation = await ApiShield(`${BRANCH_PREFIX}-validation`, {
         zone,
-        schema: validation.schema.id, // Reuse existing schema
+        schema,
         defaultAction: "none",
         actions: {
           "/users": {
@@ -140,7 +149,8 @@ paths:
   test("create schema validation from file", async (scope) => {
     const zoneName = `${BRANCH_PREFIX}-schema-file.com`;
     let zone: Zone;
-    let validation: SchemaValidation;
+    let schema: Schema<URL>;
+    let validation: ApiShield;
 
     try {
       // Create a test zone
@@ -151,7 +161,6 @@ paths:
       });
 
       // Create a temporary schema file
-      const { writeFile, unlink } = await import("node:fs/promises");
       const schemaPath = `/tmp/${BRANCH_PREFIX}-test-schema.yaml`;
       await writeFile(
         schemaPath,
@@ -178,18 +187,26 @@ paths:
 `,
       );
 
-      // Create schema validation from file
-      validation = await SchemaValidation(`${BRANCH_PREFIX}-file-validation`, {
+      // Create schema from file URL
+      const fileUrl = new URL(`file://${schemaPath}`);
+      schema = await Schema(`${BRANCH_PREFIX}-file-schema`, {
         zone: zone.id, // Test using zone ID string
-        schemaFile: schemaPath,
+        schema: fileUrl,
         name: "file-based-schema",
+        validate: false, // Start disabled
+      });
+
+      // Create schema validation from the schema
+      validation = await ApiShield(`${BRANCH_PREFIX}-file-validation`, {
+        zone: zone.id,
+        schema,
         defaultAction: "none",
-        enableValidation: false, // Start disabled
       });
 
       expect(validation).toMatchObject({
         zoneId: zone.id,
         schema: {
+          id: schema.id,
           name: "file-based-schema",
           validationEnabled: false,
         },
@@ -204,11 +221,10 @@ paths:
         { method: "post", endpoint: "/orders", action: "none" },
       ]);
 
-      // Enable validation
-      validation = await SchemaValidation(`${BRANCH_PREFIX}-file-validation`, {
+      // Update validation with action overrides
+      validation = await ApiShield(`${BRANCH_PREFIX}-file-validation`, {
         zone: zone.id,
-        schemaFile: schemaPath,
-        enableValidation: true,
+        schema,
         defaultAction: "none",
         actions: {
           "/orders": "none",
@@ -216,10 +232,9 @@ paths:
         },
       });
 
-      expect(validation.schema.validationEnabled).toBe(true);
       expect(validation.settings.defaultMitigationAction).toBe("none");
 
-      // Verify operations still correct after enabling validation
+      // Verify operations still correct after updating validation
       expectOperations(validation.operations, [
         { method: "get", endpoint: "/products", action: "none" },
         { method: "post", endpoint: "/orders", action: "none" },
@@ -235,7 +250,8 @@ paths:
   test("create schema validation with typed OpenAPI object", async (scope) => {
     const zoneName = `${BRANCH_PREFIX}-typed-api.com`;
     let zone: Zone;
-    let validation: SchemaValidation;
+    let schema: Schema<OpenAPIV3.Document>;
+    let validation: ApiShield;
 
     try {
       zone = await Zone(`${BRANCH_PREFIX}-typed-zone`, {
@@ -274,19 +290,26 @@ paths:
         },
       };
 
-      // Create schema validation with typed object
-      validation = await SchemaValidation(`${BRANCH_PREFIX}-typed-validation`, {
+      // Create schema with typed object
+      schema = await Schema(`${BRANCH_PREFIX}-typed-schema`, {
         zone,
         schema: apiSchema,
         name: "typed-api-schema",
+        validate: true,
+      });
+
+      // Create schema validation with typed object
+      validation = await ApiShield(`${BRANCH_PREFIX}-typed-validation`, {
+        zone,
+        schema,
         defaultAction: "none",
-        enableValidation: true,
       });
 
       expect(validation).toMatchObject({
         zoneId: zone.id,
         zoneName: zone.name,
         schema: {
+          id: schema.id,
           name: "typed-api-schema",
           kind: "openapi_v3",
           validationEnabled: true,
@@ -309,7 +332,8 @@ paths:
   test("default action only - all operations use default", async (scope) => {
     const zoneName = `${BRANCH_PREFIX}-default-only.com`;
     let zone: Zone;
-    let validation: SchemaValidation;
+    let schema: Schema<string>;
+    let validation: ApiShield;
 
     try {
       zone = await Zone(`${BRANCH_PREFIX}-default-zone`, {
@@ -318,12 +342,10 @@ paths:
         delete: true,
       });
 
-      // Create schema with multiple operations using only default action
-      validation = await SchemaValidation(
-        `${BRANCH_PREFIX}-default-validation`,
-        {
-          zone,
-          schema: `
+      // Create schema with multiple operations
+      schema = await Schema(`${BRANCH_PREFIX}-default-schema`, {
+        zone,
+        schema: `
 openapi: 3.0.0
 info:
   title: Default Action API
@@ -360,10 +382,16 @@ paths:
         '204':
           description: Success
 `,
-          defaultAction: "none", // Only specify default action
-          enableValidation: true,
-        },
-      );
+        name: "default-action-schema",
+        validate: true,
+      });
+
+      // Create schema validation using only default action
+      validation = await ApiShield(`${BRANCH_PREFIX}-default-validation`, {
+        zone,
+        schema,
+        defaultAction: "none", // Only specify default action
+      });
 
       // Verify all operations use the default action
       expectOperations(validation.operations, [
@@ -383,7 +411,8 @@ paths:
   test("default action with partial per-route overrides", async (scope) => {
     const zoneName = `${BRANCH_PREFIX}-partial-routes.com`;
     let zone: Zone;
-    let validation: SchemaValidation;
+    let schema: Schema<string>;
+    let validation: ApiShield;
 
     try {
       zone = await Zone(`${BRANCH_PREFIX}-partial-zone`, {
@@ -392,12 +421,10 @@ paths:
         delete: true,
       });
 
-      // Create schema with mixed action configuration
-      validation = await SchemaValidation(
-        `${BRANCH_PREFIX}-partial-validation`,
-        {
-          zone,
-          schema: `
+      // Create schema with mixed operations
+      schema = await Schema(`${BRANCH_PREFIX}-partial-schema`, {
+        zone,
+        schema: `
 openapi: 3.0.0
 info:
   title: Partial Routes API
@@ -439,19 +466,25 @@ paths:
         '204':
           description: Success
 `,
-          defaultAction: "none", // Default action
-          actions: {
-            // Override specific routes/methods
-            "/users": "none", // Blanket action for all methods on /users
-            "/orders": {
-              post: "block", // Block order creation
-              delete: "none", // Log order deletion
-            },
-            // /products will use default action "none"
+        name: "partial-routes-schema",
+        validate: true,
+      });
+
+      // Create schema validation with mixed action configuration
+      validation = await ApiShield(`${BRANCH_PREFIX}-partial-validation`, {
+        zone,
+        schema,
+        defaultAction: "none", // Default action
+        actions: {
+          // Override specific routes/methods
+          "/users": "none", // Blanket action for all methods on /users
+          "/orders": {
+            post: "block", // Block order creation
+            delete: "none", // Log order deletion
           },
-          enableValidation: true,
+          // /products will use default action "none"
         },
-      );
+      });
 
       // Verify mixed actions:
       // - /users/* should be "none" (blanket override)
@@ -475,7 +508,8 @@ paths:
   test("all routes explicitly specified", async (scope) => {
     const zoneName = `${BRANCH_PREFIX}-all-routes.com`;
     let zone: Zone;
-    let validation: SchemaValidation;
+    let schema: Schema<string>;
+    let validation: ApiShield;
 
     try {
       zone = await Zone(`${BRANCH_PREFIX}-all-routes-zone`, {
@@ -484,12 +518,10 @@ paths:
         delete: true,
       });
 
-      // Create schema with all routes explicitly specified
-      validation = await SchemaValidation(
-        `${BRANCH_PREFIX}-all-routes-validation`,
-        {
-          zone,
-          schema: `
+      // Create schema with all routes
+      schema = await Schema(`${BRANCH_PREFIX}-all-routes-schema`, {
+        zone,
+        schema: `
 openapi: 3.0.0
 info:
   title: All Routes API
@@ -526,18 +558,24 @@ paths:
         '200':
           description: Success
 `,
-          defaultAction: "none", // This should be overridden for all operations
-          actions: {
-            "/users": {
-              get: "none",
-              post: "block",
-            },
-            "/products": "none",
-            "/admin": "block", // Block all admin operations
+        name: "all-routes-schema",
+        validate: true,
+      });
+
+      // Create schema validation with all routes explicitly specified
+      validation = await ApiShield(`${BRANCH_PREFIX}-all-routes-validation`, {
+        zone,
+        schema,
+        defaultAction: "none", // This should be overridden for all operations
+        actions: {
+          "/users": {
+            get: "none",
+            post: "block",
           },
-          enableValidation: true,
+          "/products": "none",
+          "/admin": "block", // Block all admin operations
         },
-      );
+      });
 
       // Verify all operations have their specified actions
       expectOperations(validation.operations, [
@@ -557,7 +595,9 @@ paths:
   test("schema change with operation removal", async (scope) => {
     const zoneName = `${BRANCH_PREFIX}-schema-change.com`;
     let zone: Zone;
-    let validation: SchemaValidation;
+    let schema: Schema<string>;
+    let updatedSchema: Schema<string>;
+    let validation: ApiShield;
 
     try {
       zone = await Zone(`${BRANCH_PREFIX}-change-zone`, {
@@ -567,11 +607,9 @@ paths:
       });
 
       // Create initial schema with multiple operations
-      validation = await SchemaValidation(
-        `${BRANCH_PREFIX}-change-validation`,
-        {
-          zone,
-          schema: `
+      schema = await Schema(`${BRANCH_PREFIX}-initial-schema`, {
+        zone,
+        schema: `
 openapi: 3.0.0
 info:
   title: Initial API
@@ -614,10 +652,16 @@ paths:
         '200':
           description: Success
 `,
-          defaultAction: "none",
-          enableValidation: true,
-        },
-      );
+        name: "initial-schema",
+        validate: true,
+      });
+
+      // Create initial validation
+      validation = await ApiShield(`${BRANCH_PREFIX}-change-validation`, {
+        zone,
+        schema,
+        defaultAction: "none",
+      });
 
       // Verify all initial operations are created
       expectOperations(validation.operations, [
@@ -629,12 +673,10 @@ paths:
         { method: "post", endpoint: "/users", action: "none" },
       ]);
 
-      // Update with a reduced schema (remove /legacy and /orders endpoints)
-      validation = await SchemaValidation(
-        `${BRANCH_PREFIX}-change-validation`,
-        {
-          zone,
-          schema: `
+      // Create updated schema with reduced operations (remove /legacy and /orders endpoints)
+      updatedSchema = await Schema(`${BRANCH_PREFIX}-updated-schema`, {
+        zone,
+        schema: `
 openapi: 3.0.0
 info:
   title: Updated API
@@ -665,15 +707,21 @@ paths:
         '204':
           description: Success
 `,
-          defaultAction: "none", // Also change default action
-          actions: {
-            "/products": {
-              delete: "block", // Override delete action
-            },
+        name: "updated-schema",
+        validate: true,
+      });
+
+      // Update validation with the new schema
+      validation = await ApiShield(`${BRANCH_PREFIX}-change-validation`, {
+        zone,
+        schema: updatedSchema,
+        defaultAction: "none", // Also change default action
+        actions: {
+          "/products": {
+            delete: "block", // Override delete action
           },
-          enableValidation: true,
         },
-      );
+      });
 
       // Verify only the remaining operations exist with updated actions
       expectOperations(validation.operations, [
@@ -685,7 +733,7 @@ paths:
 
       expect(validation.settings.defaultMitigationAction).toBe("none");
 
-      // Verify that the API no longer contains the removed operations
+      // Verify that the API no longer contains the old operations from the previous schema
       const cloudflareOperations = await getOperationsForZone(api, zone.id);
 
       // The operations should only contain the ones from our updated schema

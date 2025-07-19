@@ -1,22 +1,22 @@
 ---
-title: SchemaValidation
-description: Learn how to protect your APIs by validating incoming requests against OpenAPI schemas using Cloudflare API Shield Schema Validation.
+title: ApiShield
+description: Learn how to protect your APIs by validating incoming requests against OpenAPI schemas using Cloudflare API Shield API Shield.
 ---
 
-[Cloudflare Schema Validation](https://developers.cloudflare.com/api-shield/security/schema-validation/) validates incoming API requests against an OpenAPI v3 schema, helping prevent malformed requests and potential security issues.
+[Cloudflare API Shield](https://developers.cloudflare.com/api-shield/security/schema-validation/) validates incoming API requests against an OpenAPI v3 schema, helping prevent malformed requests and potential security issues.
 
 ## Minimal Example
 
 Upload an OpenAPI schema and enable validation with default settings:
 
 ```ts
-import { SchemaValidation, Zone } from "alchemy/cloudflare";
+import { ApiShield, Zone } from "alchemy/cloudflare";
 
 const zone = await Zone("my-zone", {
   name: "api.example.com",
 });
 
-const validation = await SchemaValidation("api-validation", {
+const shield = await ApiShield("shield", {
   zone,
   schema: `
 openapi: 3.0.0
@@ -87,7 +87,7 @@ const apiSchema: OpenAPIV3.Document = {
   }
 };
 
-const validation = await SchemaValidation("api-validation", {
+const shield = await ApiShield("shield", {
   zone,
   schema: apiSchema,  // Alchemy automatically converts to YAML
   defaultAction: "none",
@@ -103,7 +103,7 @@ Cloudflare only supports OpenAPI v3.0.x, not OpenAPI v3.1.
 Load an OpenAPI schema from an external file:
 
 ```ts
-const validation = await SchemaValidation("api-validation", {
+const shield = await ApiShield("shield", {
   zone: "api.example.com",
   schemaFile: "./openapi.yaml",
   name: "production-api-v2",
@@ -113,13 +113,13 @@ const validation = await SchemaValidation("api-validation", {
 
 ## Understanding Validation Actions
 
-Schema Validation supports three mitigation actions:
+API Shield supports three mitigation actions:
 
 ### `none` - Monitor Only (Free)
 The default action that takes no action on non-compliant requests. Perfect for understanding your API traffic patterns without affecting users.
 
 ```ts
-const validation = await SchemaValidation("monitor-only", {
+const shield = await ApiShield("monitor-only", {
   zone,
   schemaFile: "./openapi.yaml",
   defaultAction: "none",  // Monitor without blocking
@@ -144,7 +144,7 @@ Start with `defaultAction: "none"` to understand your traffic patterns. Then use
 Set different validation actions for specific API paths and methods. Use the exact path patterns from your OpenAPI schema:
 
 ```ts
-const validation = await SchemaValidation("api-validation", {
+const shield = await ApiShield("shield", {
   zone,
   schemaFile: "./openapi.yaml",
   defaultAction: "none",
@@ -173,7 +173,7 @@ You can configure validation actions in two ways:
 Apply the same action to all HTTP methods on a path:
 
 ```ts
-const validation = await SchemaValidation("blanket-actions", {
+const shield = await ApiShield("blanket-actions", {
   zone,
   schemaFile: "./openapi.yaml",
   defaultAction: "none",
@@ -189,7 +189,7 @@ const validation = await SchemaValidation("blanket-actions", {
 Fine-tune actions for specific HTTP methods:
 
 ```ts
-const validation = await SchemaValidation("granular-actions", {
+const shield = await ApiShield("granular-actions", {
   zone,
   schemaFile: "./openapi.yaml",
   defaultAction: "none",
@@ -212,7 +212,7 @@ const validation = await SchemaValidation("granular-actions", {
 You can combine both approaches in the same configuration:
 
 ```ts
-const validation = await SchemaValidation("mixed-actions", {
+const shield = await ApiShield("mixed-actions", {
   zone,
   schemaFile: "./openapi.yaml",
   defaultAction: "none",
@@ -233,7 +233,7 @@ const validation = await SchemaValidation("mixed-actions", {
 Use validation in monitoring mode to understand your API traffic:
 
 ```ts
-const monitoring = await SchemaValidation("api-monitoring", {
+const monitoring = await ApiShield("api-monitoring", {
   zone,
   schemaFile: "./api-schema.json",
   defaultAction: "none",
@@ -246,7 +246,7 @@ const monitoring = await SchemaValidation("api-monitoring", {
 Track non-compliant requests in your logs without blocking them:
 
 ```ts
-const withLogging = await SchemaValidation("api-logging", {
+const withLogging = await ApiShield("api-logging", {
   zone,
   schemaFile: "./api-schema.json",
   defaultAction: "log",  // Requires paid plan
@@ -262,7 +262,7 @@ Use Cloudflare's log analytics to identify patterns in schema violations before 
 Apply stricter validation to sensitive operations while monitoring others:
 
 ```ts
-const criticalProtection = await SchemaValidation("api-protection", {
+const criticalProtection = await ApiShield("api-protection", {
   zone,
   schemaFile: "./api-schema.json",
   defaultAction: "log",
@@ -291,7 +291,7 @@ const criticalProtection = await SchemaValidation("api-protection", {
 Enable complete schema enforcement for production APIs:
 
 ```ts
-const fullProtection = await SchemaValidation("api-enforcement", {
+const fullProtection = await ApiShield("api-enforcement", {
   zone,
   schemaFile: "./api-schema.json",
   defaultAction: "block",              // Block non-compliant requests
@@ -304,7 +304,7 @@ const fullProtection = await SchemaValidation("api-enforcement", {
 Temporarily disable validation during deployments or troubleshooting:
 
 ```ts
-const validation = await SchemaValidation("api-validation", {
+const shield = await ApiShield("shield", {
   zone,
   schemaFile: "./openapi.yaml",
   enableValidation: false, // Schema uploaded but validation disabled
@@ -366,7 +366,7 @@ Cloudflare currently only validates `application/json` request bodies. Other con
 For APIs using multiple content types:
 
 ```ts
-const validation = await SchemaValidation("mixed-content-api", {
+const shield = await ApiShield("mixed-content-api", {
   zone,
   schema: apiSchema,
   defaultAction: "none",  // Won't block non-JSON requests

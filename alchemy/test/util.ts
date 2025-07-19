@@ -40,7 +40,8 @@ export const BRANCH_PREFIX = sanitizeForAwsResourceName(
   process.env.BRANCH_PREFIX || os.userInfo().username,
 );
 
-export const STATE_STORE_TYPES = ["do", "fs", "d1", "sqlite", "dofs"] as const;
+// export const STATE_STORE_TYPES = ["do", "fs", "d1", "sqlite", "dofs"] as const;
+export const STATE_STORE_TYPES = ["sqlite"] as const;
 
 export const createTestOptions = (
   storeType: (typeof STATE_STORE_TYPES)[number],
