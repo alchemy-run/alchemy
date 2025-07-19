@@ -15,13 +15,10 @@ export async function safeFetch(
         dispatcher: await dispatcher(),
       } as RequestInit);
     } catch (err: any) {
+      console.log("err", err);
       latestErr = err;
       const shouldRetry =
-        err?.code === "UND_ERR_SOCKET" ||
-        err?.code === "ECONNRESET" ||
-        err?.code === "UND_ERR_CONNECT_TIMEOUT" ||
-        err?.code === "EPIPE" ||
-        err?.name === "FetchError";
+        isTransientNetworkError(err) || isTransientNetworkError(err.cause);
 
       if (!shouldRetry || attempt === retries) {
         throw err;
@@ -32,6 +29,16 @@ export async function safeFetch(
     }
   }
   throw latestErr;
+}
+
+function isTransientNetworkError(err: any) {
+  return (
+    err?.code === "UND_ERR_SOCKET" ||
+    err?.code === "ECONNRESET" ||
+    err?.code === "UND_ERR_CONNECT_TIMEOUT" ||
+    err?.code === "EPIPE" ||
+    err?.name === "FetchError"
+  );
 }
 
 let agent:

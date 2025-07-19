@@ -438,18 +438,11 @@ describe("Pipeline Resource", () => {
         );
 
         const responseData: any = await sendResponse.json();
-        console.log(responseData);
 
         expect(sendResponse.status).toEqual(200);
         expect(responseData.success).toEqual(true);
         expect(responseData.message).toEqual("Records sent to pipeline");
         expect(responseData.count).toEqual(2);
-
-        // Note: We can't easily verify the records were written to R2 in a test
-        // because it might take time for the batching and delivery to complete.
-        // In a real application, you'd have monitoring or a way to query the destination.
-
-        console.log("Records sent to pipeline:", responseData);
       }
     } finally {
       // wait 10s for pipeline to flush
