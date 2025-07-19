@@ -1,8 +1,6 @@
-/* eslint-disable unicorn/no-process-exit */
-
 import { livestoreDevtoolsPlugin } from "@livestore/devtools-vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
 
 export default defineConfig({
   server: {
@@ -11,6 +9,8 @@ export default defineConfig({
   worker: { format: "es" },
   plugins: [
     react(),
-    livestoreDevtoolsPlugin({ schemaPath: "./src/livestore/schema.ts" }),
+    livestoreDevtoolsPlugin({
+      schemaPath: "./src/livestore/schema.ts",
+    }) as PluginOption,
   ],
 });
