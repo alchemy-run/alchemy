@@ -118,7 +118,20 @@ export async function destroy<Type extends string>(
       fqn: instance[ResourceFQN],
       seq: instance[ResourceSeq],
       props: options?.replace?.props ?? state.props,
-      state,
+      state: options?.replace?.output
+        ? {
+            output: options.replace.output,
+            status: "deleting",
+            oldProps: options.replace.props,
+            data: {},
+            kind: instance[ResourceKind],
+            id: instance[ResourceID],
+            fqn: instance[ResourceFQN],
+            seq: instance[ResourceSeq],
+            props: options.replace.props,
+          }
+        : state,
+      // TODO(sam|michael): should this always be false or !!options?.replace
       isReplacement: false,
       replace: () => {
         throw new Error("Cannot replace a resource that is being deleted");
