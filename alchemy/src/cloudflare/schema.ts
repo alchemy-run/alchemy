@@ -192,12 +192,11 @@ export const Schema = Resource("cloudflare::Schema", async function <
 
   if (this.phase === "update" && this.output?.id) {
     // Check if we need to replace due to name, schema content change, or disabling validation
-    const needsReplace =
+    if (
       props.name !== this.output.name ||
       JSON.stringify(parsedSchema) !== JSON.stringify(this.output.content) ||
-      (this.output.enabled === true && props.enabled === false);
-
-    if (needsReplace) {
+      (this.output.enabled === true && props.enabled === false)
+    ) {
       // Name, schema content changed, or trying to disable validation - need to replace
       this.replace();
     }

@@ -79,6 +79,11 @@ async function _apply<Out extends Resource>(
       return state.output as Awaited<Out>;
     }
     if (state === undefined) {
+      console.log(
+        `${resource[ResourceID]}`,
+        "undefined in",
+        `"${scope.scopeName}"`,
+      );
       state = {
         kind: resource[ResourceKind],
         id: resource[ResourceID],
@@ -165,6 +170,10 @@ async function _apply<Out extends Resource>(
     await scope.state.set(resource[ResourceID], state);
 
     let isReplaced = false;
+
+    if (state.kind === "cloudflare::Schema") {
+      // console.log(state);
+    }
 
     const ctx = context({
       scope,

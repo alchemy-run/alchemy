@@ -498,6 +498,9 @@ export function parseSchemaOperations(schema: OpenAPIV3.Document): Array<{
     }
   }
 
+  console.log({
+    operations: operations.map((o) => `${o.method} ${o.endpoint}`),
+  });
   return operations;
 }
 

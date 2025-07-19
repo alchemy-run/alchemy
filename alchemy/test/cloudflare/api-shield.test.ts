@@ -1,6 +1,9 @@
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
-import { getOperations } from "../../src/cloudflare/api-gateway-operation.ts";
+import {
+  getOperations,
+  getOperationSchemaValidationSetting,
+} from "../../src/cloudflare/api-gateway-operation.ts";
 import {
   ApiShield,
   getGlobalSettingsForZone,
@@ -15,7 +18,7 @@ import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
-  quiet: false,
+  quiet: true,
 });
 
 const api = await createCloudflareApi({});
@@ -76,63 +79,30 @@ paths:
         defaultMitigation: "none",
       });
 
-      // expect(shield).toMatchObject({
-      //   zoneId: zoneId,
-      //   operations: expect.arrayContaining([
-      //     expect.objectContaining({
-      //       method: "delete",
-      //       endpoint: "/users/{id}",
-      //       mitigation: "none",
-      //     }),
-      //     expect.objectContaining({
-      //       method: "get",
-      //       endpoint: "/users",
-      //       mitigation: "none",
-      //     }),
-      //     expect.objectContaining({
-      //       method: "get",
-      //       endpoint: "/users/{id}",
-      //       mitigation: "none",
-      //     }),
-      //     expect.objectContaining({
-      //       method: "post",
-      //       endpoint: "/users",
-      //       mitigation: "none",
-      //     }),
-      //   ]),
-      // });
-
       // Verify that operations were created correctly from the schema
       await expectOperations(shield, [
-        { method: "delete", endpoint: "/users/{id}", mitigation: "none" },
-        { method: "get", endpoint: "/users", mitigation: "none" },
-        { method: "get", endpoint: "/users/{id}", mitigation: "none" },
-        { method: "post", endpoint: "/users", mitigation: "none" },
-      ]);
-
-      await assertZoneOperations(zoneId, [
         {
-          method: "GET",
+          method: "delete",
+          host: "alchemy-test.us",
+          endpoint: "/users/{id}",
+          mitigation: "none",
+        },
+        {
+          method: "get",
           host: "alchemy-test.us",
           endpoint: "/users",
           mitigation: "none",
         },
         {
-          method: "POST",
+          method: "get",
+          host: "alchemy-test.us",
+          endpoint: "/users/{id}",
+          mitigation: "none",
+        },
+        {
+          method: "post",
           host: "alchemy-test.us",
           endpoint: "/users",
-          mitigation: "none",
-        },
-        {
-          method: "DELETE",
-          host: "alchemy-test.us",
-          endpoint: "/users/{var1}",
-          mitigation: "none",
-        },
-        {
-          method: "GET",
-          host: "alchemy-test.us",
-          endpoint: "/users/{var1}",
           mitigation: "none",
         },
       ]);
@@ -156,10 +126,30 @@ paths:
       });
 
       await expectOperations(shield, [
-        { method: "delete", endpoint: "/users/{id}", mitigation: "block" },
-        { method: "get", endpoint: "/users", mitigation: "none" },
-        { method: "get", endpoint: "/users/{id}", mitigation: "none" },
-        { method: "post", endpoint: "/users", mitigation: "block" },
+        {
+          method: "delete",
+          host: "alchemy-test.us",
+          endpoint: "/users/{id}",
+          mitigation: "block",
+        },
+        {
+          method: "get",
+          host: "alchemy-test.us",
+          endpoint: "/users",
+          mitigation: "none",
+        },
+        {
+          method: "get",
+          host: "alchemy-test.us",
+          endpoint: "/users/{id}",
+          mitigation: "none",
+        },
+        {
+          method: "post",
+          host: "alchemy-test.us",
+          endpoint: "/users",
+          mitigation: "block",
+        },
       ]);
 
       // Verify global settings
@@ -247,12 +237,42 @@ paths:
       // - /admin/* should be "block" (blanket override)
       // - /products/get should be "none", /products/post should be "block" (per-method)
       await expectOperations(shield, [
-        { method: "get", endpoint: "/admin", mitigation: "block" }, // Blanket admin block
-        { method: "get", endpoint: "/products", mitigation: "none" }, // Per-method override
-        { method: "get", endpoint: "/users", mitigation: "none" }, // Blanket override
-        { method: "post", endpoint: "/admin", mitigation: "block" }, // Blanket admin block
-        { method: "post", endpoint: "/products", mitigation: "block" }, // Per-method override
-        { method: "post", endpoint: "/users", mitigation: "none" }, // Blanket override
+        {
+          method: "get",
+          host: "alchemy-test.us",
+          endpoint: "/admin",
+          mitigation: "block",
+        }, // Blanket admin block
+        {
+          method: "get",
+          host: "alchemy-test.us",
+          endpoint: "/products",
+          mitigation: "none",
+        }, // Per-method override
+        {
+          method: "get",
+          host: "alchemy-test.us",
+          endpoint: "/users",
+          mitigation: "none",
+        }, // Blanket override
+        {
+          method: "post",
+          host: "alchemy-test.us",
+          endpoint: "/admin",
+          mitigation: "block",
+        }, // Blanket admin block
+        {
+          method: "post",
+          host: "alchemy-test.us",
+          endpoint: "/products",
+          mitigation: "block",
+        }, // Per-method override
+        {
+          method: "post",
+          host: "alchemy-test.us",
+          endpoint: "/users",
+          mitigation: "none",
+        }, // Blanket override
       ]);
     } finally {
       await destroy(scope);
@@ -318,11 +338,36 @@ paths:
 
       // Verify all initial operations are created
       await expectOperations(shield, [
-        { method: "delete", endpoint: "/products", mitigation: "none" },
-        { method: "get", endpoint: "/legacy", mitigation: "none" },
-        { method: "get", endpoint: "/products", mitigation: "none" },
-        { method: "get", endpoint: "/users", mitigation: "none" },
-        { method: "post", endpoint: "/users", mitigation: "none" },
+        {
+          method: "delete",
+          host: "alchemy-test.us",
+          endpoint: "/products",
+          mitigation: "none",
+        },
+        {
+          method: "get",
+          host: "alchemy-test.us",
+          endpoint: "/legacy",
+          mitigation: "none",
+        },
+        {
+          method: "get",
+          host: "alchemy-test.us",
+          endpoint: "/products",
+          mitigation: "none",
+        },
+        {
+          method: "get",
+          host: "alchemy-test.us",
+          endpoint: "/users",
+          mitigation: "none",
+        },
+        {
+          method: "post",
+          host: "alchemy-test.us",
+          endpoint: "/users",
+          mitigation: "none",
+        },
       ]);
 
       // Create updated schema with reduced operations (remove /legacy endpoint)
@@ -377,10 +422,30 @@ paths:
 
       // Verify only the remaining operations exist with updated actions
       await expectOperations(shield, [
-        { method: "delete", endpoint: "/products", mitigation: "block" }, // Overridden action
-        { method: "get", endpoint: "/products", mitigation: "none" }, // Default action
-        { method: "get", endpoint: "/users", mitigation: "none" }, // Default action
-        { method: "post", endpoint: "/users", mitigation: "none" }, // Default action
+        {
+          method: "delete",
+          host: "alchemy-test.us",
+          endpoint: "/products",
+          mitigation: "block",
+        }, // Overridden action
+        {
+          method: "get",
+          host: "alchemy-test.us",
+          endpoint: "/products",
+          mitigation: "none",
+        }, // Default action
+        {
+          method: "get",
+          host: "alchemy-test.us",
+          endpoint: "/users",
+          mitigation: "none",
+        }, // Default action
+        {
+          method: "post",
+          host: "alchemy-test.us",
+          endpoint: "/users",
+          mitigation: "none",
+        }, // Default action
       ]);
     } finally {
       await destroy(scope);
@@ -391,13 +456,14 @@ paths:
 // Helper function for clean operation testing
 async function expectOperations(
   shield: ApiShield,
-  expected: Array<{ method: string; endpoint: string; mitigation: string }>,
+  expected: Array<{
+    method: string;
+    host: string;
+    endpoint: string;
+    mitigation: string;
+  }>,
 ) {
   const operations = await getOperations(api, shield.zoneId);
-  // console.log({
-  //   actual: operations,
-  //   expected,
-  // });
   // Sort operations for consistent comparison
   const sorted = operations.sort((a, b) => {
     const aKey = `${a.endpoint}-${a.method}`;
@@ -419,29 +485,15 @@ async function expectOperations(
     const exp = sortedExpected[i];
 
     expect(actual.method.toLowerCase()).toBe(exp.method.toLowerCase());
-    expect(actual.endpoint).toBe(exp.endpoint);
+    // stupid Cloudflare changes the {id} to {var1} in the endpoint
+    expect(actual.endpoint).toBe(exp.endpoint.replace("{id}", "{var1}"));
+    expect(actual.host).toBe(exp.host);
 
-    expect(actual.mitigation_action).toBe(exp.mitigation);
-    expect(actual.operation_id).toBeTruthy();
+    const { mitigation_action } = await getOperationSchemaValidationSetting(
+      api,
+      shield.zoneId,
+      actual.operation_id,
+    );
+    expect(mitigation_action).toBe(exp.mitigation);
   }
-}
-
-async function assertZoneOperations(zoneId: string, operations: any[]) {
-  let startTime = Date.now();
-  // Also verify that operations exist in Cloudflare
-  let cloudflareOperations = await getOperations(api, zoneId);
-  while (cloudflareOperations.length !== operations.length) {
-    // loop for eventual consistency
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    cloudflareOperations = await getOperations(api, zoneId);
-    if (Date.now() - startTime > 30000) {
-      throw new Error("Timeout waiting for operations to be created");
-    }
-  }
-  cloudflareOperations.sort((a, b) => {
-    const endpointCompare = a.endpoint.localeCompare(b.endpoint);
-    if (endpointCompare !== 0) return endpointCompare;
-    return a.method.localeCompare(b.method);
-  });
-  expect(cloudflareOperations).toMatchObject(operations);
 }

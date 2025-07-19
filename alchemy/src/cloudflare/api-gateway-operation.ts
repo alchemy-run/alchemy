@@ -305,7 +305,6 @@ export interface CloudflareOperation {
   method: string;
   host: string;
   endpoint: string;
-  mitigation_action: Mitigation;
 }
 
 export async function getOperations(
@@ -318,6 +317,33 @@ export async function getOperations(
     await handleApiError(response, "getting", "operations");
   }
 
-  const data = (await response.json()) as { result: CloudflareOperation[] };
+  return ((await response.json()) as { result: CloudflareOperation[] }).result;
+}
+
+export async function getOperationSchemaValidationSetting(
+  api: CloudflareApi,
+  zoneId: string,
+  operationId: string,
+) {
+  const response = await api.get(
+    `/zones/${zoneId}/schema_validation/settings/operations/${operationId}`,
+  );
+
+  if (!response.ok) {
+    await handleApiError(
+      response,
+      "getting",
+      "operation mitigation status",
+      operationId,
+    );
+  }
+
+  const data = (await response.json()) as {
+    result: {
+      mitigation_action: Mitigation;
+      operation_id: string;
+    };
+  };
+
   return data.result;
 }
