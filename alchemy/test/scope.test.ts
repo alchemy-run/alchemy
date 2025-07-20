@@ -215,6 +215,8 @@ describe.concurrent("Scope", () => {
             // emulate a new process (destroy in memory scope)
             scope.clear();
             const outer = await Outer("outer");
+            // @ts-expect-error - internal access to make sure we don't skip the outer scope
+            expect(scope.isSkipped).toBe(false);
             // finalizing a scoped that was skipped should not delete nested resources
             await outer[ResourceScope].finalize();
             expect(isDeleted).toBe(false);

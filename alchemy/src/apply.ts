@@ -117,7 +117,11 @@ async function _apply<Out extends Resource>(
         alwaysUpdate !== true &&
         !scope.force
       ) {
-        scope.skip();
+        const innerScope = new Scope({
+          parent: scope,
+          scopeName: resource[ResourceID],
+        });
+        innerScope.skip();
         if (!quiet) {
           logger.task(resource[ResourceFQN], {
             prefix: "skipped",
@@ -127,12 +131,7 @@ async function _apply<Out extends Resource>(
             status: "success",
           });
         }
-        options?.resolveInnerScope?.(
-          new Scope({
-            parent: scope,
-            scopeName: resource[ResourceID],
-          }),
-        );
+        options?.resolveInnerScope?.(innerScope);
         scope.telemetryClient.record({
           event: "resource.skip",
           resource: resource[ResourceKind],
