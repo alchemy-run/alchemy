@@ -335,13 +335,9 @@ export const ApiShield = Resource(
 
     if (this.phase === "delete") {
       // Reset settings to default
-      try {
-        await updateGlobalSettings(api, zoneId, {
-          validation_default_mitigation_action: "none",
-        });
-      } catch (error) {
-        console.error("Error resetting global settings:", error);
-      }
+      await updateGlobalSettings(api, zoneId, {
+        validation_default_mitigation_action: "none",
+      });
 
       return this.destroy();
     }
@@ -497,10 +493,6 @@ export function parseSchemaOperations(schema: OpenAPIV3.Document): Array<{
       }
     }
   }
-
-  console.log({
-    operations: operations.map((o) => `${o.method} ${o.endpoint}`),
-  });
   return operations;
 }
 
