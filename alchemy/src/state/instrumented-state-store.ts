@@ -3,7 +3,9 @@ import type { ITelemetryClient } from "../util/telemetry/client.ts";
 import type { Telemetry } from "../util/telemetry/types.ts";
 
 //todo(michael): we should also handle serde here
-export class StateStoreWrapper implements StateStore {
+export class InstrumentedStateStore<T extends StateStore>
+  implements StateStore
+{
   private readonly stateStore: StateStore;
   private readonly telemetryClient: ITelemetryClient;
   private readonly stateStoreClass: string;

@@ -15,7 +15,7 @@ import {
 import type { State, StateStore, StateStoreType } from "./state.ts";
 import { D1StateStore } from "./state/d1-state-store.ts";
 import { FileSystemStateStore } from "./state/file-system-state-store.ts";
-import { StateStoreWrapper } from "./state/state-store-wrapper.ts";
+import { InstrumentedStateStore } from "./state/instrumented-state-store.ts";
 import {
   createDummyLogger,
   createLoggerInstance,
@@ -205,7 +205,7 @@ export class Scope {
       options.stateStore ?? this.parent?.stateStore ?? defaultStateStore;
     this.telemetryClient =
       options.telemetryClient ?? this.parent?.telemetryClient!;
-    this.state = new StateStoreWrapper(
+    this.state = new InstrumentedStateStore(
       this.stateStore(this),
       this.telemetryClient,
     );
