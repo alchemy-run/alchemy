@@ -18,7 +18,6 @@ import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
-  quiet: false,
 });
 
 const api = await createCloudflareApi({});
@@ -157,7 +156,6 @@ paths:
       expect(globalSettings.validation_default_mitigation_action).toBe("none");
       expect(globalSettings.validation_override_mitigation_action).toBe("none");
     } finally {
-      console.log("destroying scope");
       await destroy(scope);
     }
   });
