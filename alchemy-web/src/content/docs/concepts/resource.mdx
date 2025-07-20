@@ -166,6 +166,29 @@ return this.create({/* updated properties */});
 ```
 :::
 
+## Destroy Strategy
+
+By default, Alchemy will destroy resources in a sequential order. You can change this behavior for a Resource by passing the `destroyStrategy` option to the Resource constructor.
+
+```ts
+const Database = Resource(
+  "neon::Database",
+  { destroyStrategy: "parallel" },
+  async function(this: Context<Database>, id: string, props: DatabaseProps): Promise<Database> {
+    if (this.phase === "delete") {
+      return this.destroy();
+    }
+    // these sub-resources will be deleted in parallel during the Database resource deletion
+    await SubResource("sub-resource", {});
+    await OtherResource("other-resource", {});
+  }
+);
+```
+
+:::tip
+You can also set the `destroyStrategy` option globally or within a Scope using `alchemy.run`. See [Scope](/concepts/scope#destroy-strategy) for more details.
+:::
+
 ## Adoption
 
 When creating a resource, Alchemy will fail if a resource with the same name already exists. Resource adoption allows you to opt in to using the pre-existing resource instead.
@@ -194,16 +217,16 @@ Sometimes it's impossible to UPDATE a resource (e.g., you cannot rename an R2 Bu
 1. create a new version of the Resource and update references
 2. delete the old version of the Resource (or leave it orphaned)
 
-## Trigger Replacement
+#### Trigger Replacement
 
-During the **update phase**, you can trigger a replacement by calling `await this.replace()`:
+During the **update phase**, you can trigger a replacement by calling `this.replace()`:
 
 ```typescript
 // Implementation pattern
 if (this.phase === "update") {
   if (this.output.name !== props.name) {
     // trigger replace and terminate this "update" phase
-    await this.replace();
+    this.replace();
     // (unreachable code)
   } else {
     return updateResource();
@@ -211,9 +234,9 @@ if (this.phase === "update") {
 }
 ```
 
-### Create new
+#### Create new
 
-After you call `await this.replace()`, the "update" phase will terminate and be re-invoked with "create" (to create the new resource).
+After you call `this.replace()`, the "update" phase will terminate and be re-invoked with "create" (to create the new resource).
 
 ```ts
 if (this.phase === "create") {
@@ -221,7 +244,7 @@ if (this.phase === "create") {
 }
 ```
 
-### Delete old
+#### Delete old
 
 After all downstream dependencies have been updated and you finally call `app.finalize()`, Alchemy will then invoke the "delete" phase on the old resource.
 
@@ -233,40 +256,34 @@ const app = await alchemy("app");
 await app.finalize(); // finalize scopes by deleting "orphaned" and "replaced" resources
 ```
 
-### Immediate replacement
+#### Immediate replacement
 
 It is sometimes required to destory the old resource before creating the one, e.g. when updating a resource that requires a unique name.
 
-To address this you can trigger a replacement immediately by calling `await this.replace(true)`. This will destroy the old resource before creating the new one.
+To address this you can trigger a replacement immediately by calling `this.replace(true)`. This will destroy the old resource before creating the new one.
 
 ```ts
-await this.replace(true);
+this.replace(true);
 ```
 
-:::tip
-`await this.replace(true)` can cause downtime since a resource is deleted before the new one is created. Downtime can be avoided by appending a random string to the end of the resource name on the handler level, this creates different resource names and avoids the need to destroy the old resource prior to creating the new one.
+:::caution
+`this.replace(true)` can cause downtime since a resource is deleted before the new one is created. Downtime can be avoided by appending a random string to the end of the resource name on the handler level, this creates different resource names and avoids the need to destroy the old resource prior to creating the new one.
 
 ```ts
-async function (this, _id, props) {
-	const nameSlug = this.isReplacement
-		? generateSlug()
-		: (this.output?.nameSlug ?? generateSlug());
-	const name = `${props.name}-${nameSlug}`;
+const name = `${props.name}-${this.output?.slug ?? generateSlug()}`;
 
-	if (this.phase === "update") {
-		if (this.output?.name === name) {
-			await this.replace();
-		}
-	}
-
-	return this({
-			nameSlug,
-			...props,
-			name,
-	})
+if (this.phase === "update") {
+  if (this.output?.name === name) {
+    this.replace(); // don't need `true` here because name is unique
+  }
 }
+
+return this({
+  ...props,
+  name,
+});
 ```
-:::
+::: 
 
 ## Testing
 

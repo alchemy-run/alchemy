@@ -109,7 +109,6 @@ async function createProjectContext(
 
   const name = await getProjectName(options);
   const selectedTemplate = await getSelectedTemplate(options);
-  const templateDefinition = getTemplateDefinition(selectedTemplate);
   const packageManager = options.pm || detectedPm;
   const shouldInstall = await getInstallPreference(options, packageManager);
 
@@ -182,20 +181,6 @@ async function getSelectedTemplate(
   }
 
   return templateResult;
-}
-
-function getTemplateDefinition(selectedTemplate: TemplateType) {
-  const templateDefinition = TEMPLATE_DEFINITIONS.find(
-    (t) => t.name === selectedTemplate,
-  );
-
-  if (!templateDefinition) {
-    throw new Error(
-      `Template '${pc.yellow(selectedTemplate)}' not found. Available templates: ${TEMPLATE_DEFINITIONS.map((t) => pc.cyan(t.name)).join(", ")}`,
-    );
-  }
-
-  return templateDefinition;
 }
 
 async function getInstallPreference(

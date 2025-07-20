@@ -1,5 +1,6 @@
 import { apply } from "./apply.ts";
 import type { Context } from "./context.ts";
+import { DestroyStrategy } from "./destroy.ts";
 import { Scope as _Scope, type Scope } from "./scope.ts";
 
 declare global {
@@ -59,6 +60,13 @@ export interface ProviderOptions {
    * If true, the resource will be updated even if the inputs have not changed.
    */
   alwaysUpdate: boolean;
+
+  /**
+   * The strategy to use when destroying the resource.
+   *
+   * @default "sequential"
+   */
+  destroyStrategy?: DestroyStrategy;
 }
 
 export type ResourceProps = {
@@ -81,6 +89,7 @@ export interface PendingResource<Out = unknown> extends Promise<Out> {
   [ResourceFQN]: ResourceFQN;
   [ResourceScope]: Scope;
   [ResourceSeq]: number;
+  [DestroyStrategy]: DestroyStrategy;
   [InnerResourceScope]: Promise<Scope>;
 }
 
@@ -90,6 +99,7 @@ export interface Resource<Kind extends ResourceKind = ResourceKind> {
   [ResourceFQN]: ResourceFQN;
   [ResourceScope]: Scope;
   [ResourceSeq]: number;
+  [DestroyStrategy]: DestroyStrategy;
 }
 
 // helper for semantic syntax highlighting (color as a type/class instead of function/value)
@@ -167,6 +177,7 @@ export function Resource<
       [ResourceFQN]: scope.fqn(resourceID),
       [ResourceSeq]: seq,
       [ResourceScope]: scope,
+      [DestroyStrategy]: options?.destroyStrategy ?? "sequential",
       [InnerResourceScope]: new Promise<Scope>((resolve) => {
         resolveInnerScope = resolve;
       }),

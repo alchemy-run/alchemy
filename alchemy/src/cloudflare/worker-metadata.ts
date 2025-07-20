@@ -200,6 +200,9 @@ export interface WorkerMetadata {
   placement?: {
     mode: "smart";
   };
+  limits?: {
+    cpu_ms?: number;
+  };
 }
 
 export async function prepareWorkerMetadata(
@@ -343,6 +346,7 @@ export async function prepareWorkerMetadata(
       new_sqlite_classes: [],
     },
     placement: props.placement,
+    limits: props.limits,
   };
 
   const assetUploadResult = props.assetUploadResult;
@@ -561,6 +565,13 @@ export async function prepareWorkerMetadata(
         configureClassMigration(bindingName, binding);
       }
       (meta.containers ??= []).push({ class_name: binding.className });
+    } else if (binding.type === "ratelimit") {
+      meta.bindings.push({
+        type: "ratelimit",
+        name: bindingName,
+        namespace_id: binding.namespace_id.toString(),
+        simple: binding.simple,
+      });
     } else {
       assertNever(
         binding,

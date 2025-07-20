@@ -215,8 +215,27 @@ const worker = await Worker("optimized-worker", {
 });
 ```
 
-:::tip
+:::note
 Learn more about [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement/) in the Cloudflare documentation.
+:::
+
+
+## CPU Time Limit
+
+Set the maximum CPU time in milliseconds that the worker can use:
+
+```ts
+const worker = await Worker("api", {
+  name: "api-worker",
+  entrypoint: "./src/api.ts",
+  limits: {
+    cpu_ms: 300_000,
+  },
+});
+```
+
+:::tip
+Learn more about [CPU Time Limits](https://developers.cloudflare.com/workers/platform/limits/#cpu-time) in the Cloudflare documentation.
 :::
 
 ## Cron Triggers

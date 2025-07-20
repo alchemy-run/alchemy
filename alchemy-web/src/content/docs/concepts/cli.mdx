@@ -34,6 +34,7 @@ Deploy an Alchemy project by running `alchemy deploy`.
 - `--stage` - Specify which stage/environment to target. Defaults to your username (`$USER`, or `$USERNAME` on Windows)
 - `--env-file` - Path to environment file to load
 - `--watch` - Watch for changes to infrastructure and redeploy automatically (default: false)
+- `--force` - Apply updates to resources even if there are no changes (default: false)
 - `-h, --help` - Display help for command
 
 :::tip
@@ -55,6 +56,9 @@ alchemy deploy --env-file .env.prod
 
 # watch and deploy changes to the cloud
 alchemy deploy --watch 
+
+# force update all resources even without changes
+alchemy deploy --force 
 ```
 :::
 
@@ -178,6 +182,7 @@ Run an Alchemy program in dev-mode with local simulation and hot reloading.
 - `--quiet` - Suppress Create/Update/Delete messages (default: `false`) 
 - `--stage` - Specify which stage/environment to target. Defaults to your username (`$USER`, or `$USERNAME` on Windows)
 - `--env-file` - Path to environment file to load
+- `--force` - Apply updates to resources even if there are no changes (default: false)
 - `-h, --help` - Display help for command
 
 :::tip
@@ -196,6 +201,9 @@ alchemy dev ./my-infra.ts
 
 # use an environment file
 alchemy dev --env-file .env.dev
+
+# force update all resources even without changes
+alchemy dev --force
 ```
 :::
 

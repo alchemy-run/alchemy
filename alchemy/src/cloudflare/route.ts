@@ -282,6 +282,10 @@ async function updateRoute(
     },
   );
 
+  if (updateResponse.status === 404) {
+    return await createRoute(api, zoneId, pattern, script);
+  }
+
   if (!updateResponse.ok) {
     return await handleApiError(updateResponse, "updating", "Route", pattern);
   }

@@ -563,6 +563,10 @@ export async function buildMiniflareWorkerOptions({
         }
         break;
       }
+      case "ratelimit": {
+        (options.ratelimits ??= {})[name] = binding;
+        break;
+      }
       default: {
         assertNever(binding);
       }

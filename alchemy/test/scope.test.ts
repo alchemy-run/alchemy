@@ -215,17 +215,87 @@ describe.concurrent("Scope", () => {
             // emulate a new process (destroy in memory scope)
             scope.clear();
             const outer = await Outer("outer");
+            // @ts-expect-error - internal access to make sure we don't skip the outer scope
+            expect(scope.isSkipped).toBe(false);
             // finalizing a scoped that was skipped should not delete nested resources
             await outer[ResourceScope].finalize();
             expect(isDeleted).toBe(false);
           } finally {
-            console.log("destroy");
             await destroy(scope);
             // expect(isDeleted).toBe(true);
           }
         },
       );
     });
+    test(
+      "force should apply updates even if there are no changes",
+      {
+        force: true,
+      },
+      async (scope) => {
+        let updates = 0;
+        const MyResource = Resource(
+          `${storeType}-MyResource`,
+          async function (this, _id: string, props: { name: string }) {
+            if (this.phase === "delete") {
+              return this.destroy();
+            }
+            updates++;
+            return this(props);
+          },
+        );
+        try {
+          await MyResource("outer", { name: "outer" });
+          expect(updates).toBe(1);
+          await MyResource("outer", { name: "outer" });
+          expect(updates).toBe(2);
+          await MyResource("outer", { name: "outer" });
+          expect(updates).toBe(3);
+        } finally {
+          await destroy(scope);
+        }
+      },
+    );
+    test(
+      "Scope.destroyStrategy should be respected",
+      {
+        destroyStrategy: "parallel",
+      },
+      async (scope) => {
+        const queued = new Set<string>();
+        const finished = new Set<string>();
+
+        const MyResource = Resource(
+          `${storeType}-MyResource-Parallel`,
+          async function (this, id: string) {
+            if (this.phase === "delete") {
+              queued.add(id);
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+              finished.add(id);
+              return this.destroy();
+            }
+            return this({});
+          },
+        );
+        try {
+          await MyResource("a");
+          await MyResource("b");
+          await MyResource("c");
+        } finally {
+          const promise = destroy(scope);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          expect(queued).toContain("a");
+          expect(queued).toContain("b");
+          expect(queued).toContain("c");
+          expect(finished.size).toBe(0);
+          await promise;
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          expect(finished).toContain("a");
+          expect(finished).toContain("b");
+          expect(finished).toContain("c");
+        }
+      },
+    );
   }
 });
 

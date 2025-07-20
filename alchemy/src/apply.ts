@@ -1,6 +1,6 @@
 import { alchemy } from "./alchemy.ts";
 import { context } from "./context.ts";
-import { destroy } from "./destroy.ts";
+import { destroy, DestroyStrategy } from "./destroy.ts";
 import {
   PROVIDERS,
   ResourceFQN,
@@ -92,6 +92,7 @@ async function _apply<Out extends Resource>(
           [ResourceKind]: resource[ResourceKind],
           [ResourceScope]: scope,
           [ResourceSeq]: resource[ResourceSeq],
+          [DestroyStrategy]: provider.options?.destroyStrategy ?? "sequential",
         },
         // deps: [...deps],
         props,
@@ -113,9 +114,14 @@ async function _apply<Out extends Resource>(
       });
       if (
         JSON.stringify(oldProps) === JSON.stringify(newProps) &&
-        alwaysUpdate !== true
+        alwaysUpdate !== true &&
+        !scope.force
       ) {
-        scope.skip();
+        const innerScope = new Scope({
+          parent: scope,
+          scopeName: resource[ResourceID],
+        });
+        innerScope.skip();
         if (!quiet) {
           logger.task(resource[ResourceFQN], {
             prefix: "skipped",
@@ -125,12 +131,7 @@ async function _apply<Out extends Resource>(
             status: "success",
           });
         }
-        options?.resolveInnerScope?.(
-          new Scope({
-            parent: scope,
-            scopeName: resource[ResourceID],
-          }),
-        );
+        options?.resolveInnerScope?.(innerScope);
         scope.telemetryClient.record({
           event: "resource.skip",
           resource: resource[ResourceKind],
@@ -174,7 +175,7 @@ async function _apply<Out extends Resource>(
       props: state.oldProps,
       state,
       isReplacement: false,
-      replace: async (force?: boolean) => {
+      replace: (force?: boolean) => {
         if (phase === "create") {
           throw new Error(
             `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} cannot be replaced in create phase.`,
@@ -184,17 +185,6 @@ async function _apply<Out extends Resource>(
           logger.warn(
             `Resource ${resource[ResourceKind]} ${resource[ResourceFQN]} is already marked as REPLACE`,
           );
-        }
-
-        if (force) {
-          await destroy(resource, {
-            quiet: scope.quiet,
-            strategy: "sequential",
-            replace: {
-              props: state.oldProps,
-              output: resource,
-            },
-          });
         }
 
         isReplaced = true;
@@ -209,6 +199,7 @@ async function _apply<Out extends Resource>(
         {
           isResource: true,
           parent: scope,
+          destroyStrategy: provider.options?.destroyStrategy ?? "sequential",
         },
         async (scope) => {
           options?.resolveInnerScope?.(scope);
@@ -221,6 +212,17 @@ async function _apply<Out extends Resource>(
           throw new Error(
             `Resource ${resource[ResourceFQN]} has children and cannot be replaced.`,
           );
+        }
+
+        if (error.force) {
+          await destroy(resource, {
+            quiet: scope.quiet,
+            strategy: resource[DestroyStrategy] ?? "sequential",
+            replace: {
+              props: state.oldProps,
+              output: resource,
+            },
+          });
         }
 
         output = await alchemy.run(

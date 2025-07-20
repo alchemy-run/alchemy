@@ -2154,4 +2154,52 @@ describe("Worker Resource", () => {
       await assertWorkerDoesNotExist(api, workerName);
     }
   });
+
+  test("create worker with cpu_ms limit", async (scope) => {
+    const workerName = `${BRANCH_PREFIX}-test-worker-cpu-ms`;
+
+    let worker: Worker | undefined;
+    try {
+      // Create a worker with smart placement
+      worker = await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello smart placement!', { status: 200 });
+            }
+          };
+        `,
+        limits: {
+          cpu_ms: 300_000,
+        },
+      });
+
+      // Verify the worker was created successfully
+      expect(worker.limits).toEqual({
+        cpu_ms: 300_000,
+      });
+
+      // Update the worker to disable smart placement by omitting placement
+      worker = await Worker(workerName, {
+        name: workerName,
+        adopt: true,
+        script: `
+          export default {
+            async fetch(request, env, ctx) {
+              return new Response('Hello placement disabled!', { status: 200 });
+            }
+          };
+        `,
+        // No placement property means smart placement is disabled
+      });
+
+      // Verify the limits were disabled (undefined)
+      expect(worker.limits).toBeUndefined();
+    } finally {
+      await destroy(scope);
+      await assertWorkerDoesNotExist(api, workerName);
+    }
+  });
 });

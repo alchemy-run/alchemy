@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import util from "node:util";
 import type { Phase } from "./alchemy.ts";
-import { destroy, destroyAll } from "./destroy.ts";
+import { destroy, destroyAll, DestroyStrategy } from "./destroy.ts";
 import {
   ResourceFQN,
   ResourceID,
@@ -51,6 +51,18 @@ export interface ScopeOptions {
    * @default - `true` if ran with `alchemy dev`, `alchemy watch`, `bun --watch ./alchemy.run.ts`
    */
   watch?: boolean;
+  /**
+   * Apply updates to resources even if there are no changes.
+   *
+   * @default false
+   */
+  force?: boolean;
+  /**
+   * The strategy to use when destroying resources.
+   *
+   * @default "sequential"
+   */
+  destroyStrategy?: DestroyStrategy;
   telemetryClient?: ITelemetryClient;
   logger?: LoggerApi;
 }
@@ -121,6 +133,8 @@ export class Scope {
   public readonly phase: Phase;
   public readonly local: boolean;
   public readonly watch: boolean;
+  public readonly force: boolean;
+  public readonly destroyStrategy: DestroyStrategy;
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
@@ -178,7 +192,9 @@ export class Scope {
 
     this.local = options.local ?? this.parent?.local ?? false;
     this.watch = options.watch ?? this.parent?.watch ?? false;
-
+    this.force = options.force ?? this.parent?.force ?? false;
+    this.destroyStrategy =
+      options.destroyStrategy ?? this.parent?.destroyStrategy ?? "sequential";
     if (this.local) {
       this.logger.warnOnce(
         "Development mode is in beta. Please report any issues to https://github.com/sam-goodwin/alchemy/issues.",
@@ -318,6 +334,7 @@ export class Scope {
                 [ResourceKind]: "alchemy::Scope",
                 [ResourceScope]: this,
                 [ResourceSeq]: this.seq(),
+                [DestroyStrategy]: this.destroyStrategy,
               },
               props: {},
             }
@@ -429,14 +446,14 @@ export class Scope {
       );
       await destroyAll(orphans, {
         quiet: this.quiet,
-        strategy: "sequential",
+        strategy: this.destroyStrategy,
         force: shouldForce,
       });
       this.rootTelemetryClient?.record({
         event: "app.success",
         elapsed: performance.now() - this.startedAt,
       });
-    } else {
+    } else if (this.isErrored) {
       this.logger.warn("Scope is in error, skipping finalize");
       this.rootTelemetryClient?.record({
         event: "app.error",
