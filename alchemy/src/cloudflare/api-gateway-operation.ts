@@ -1,3 +1,4 @@
+import type { OpenAPIV3 } from "openapi-types";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { handleApiError } from "./api-error.ts";
@@ -17,6 +18,14 @@ import type { Zone } from "./zone.ts";
  * - `null`: Clear any mitigation action.
  */
 export type Mitigation = "none" | "log" | "block" | null;
+
+export type Mitigations<S extends OpenAPIV3.Document> = {
+  [path in keyof S["paths"]]?:
+    | Mitigation
+    | {
+        [method in keyof S["paths"][path]]?: Mitigation;
+      };
+};
 
 /**
  * HTTP methods supported by API Gateway
@@ -56,10 +65,10 @@ export interface ApiGatewayOperationProps extends CloudflareApiOptions {
   method: string;
 
   /**
-   * Validation action for this operation
+   * Mitigation action for this operation
    * @default "none"
    */
-  action?: Mitigation;
+  mitigation?: Mitigation;
 }
 
 /**
@@ -193,10 +202,10 @@ export const ApiGatewayOperation = Resource(
         // delete and then re-create (cloudflare doesn't allow updating these properties)
         this.replace(true);
       }
-      if (props.action !== this.output?.action) {
+      if (props.mitigation !== this.output?.action) {
         // we can update the mitigation action
         await updateOperationSettings(api, zoneId, this.output.operationId, {
-          mitigation_action: props.action ?? null,
+          mitigation_action: props.mitigation ?? null,
         });
       }
       operationId = this.output.operationId;
@@ -204,9 +213,9 @@ export const ApiGatewayOperation = Resource(
       const operation = await createOperation(api, zoneId, props);
       operationId = operation.operation_id;
 
-      if (props.action) {
+      if (props.mitigation) {
         await updateOperationSettings(api, zoneId, operationId, {
-          mitigation_action: props.action ?? "none",
+          mitigation_action: props.mitigation ?? "none",
         });
       }
     }
@@ -218,7 +227,7 @@ export const ApiGatewayOperation = Resource(
       endpoint: props.endpoint,
       host: props.host,
       method: props.method.toUpperCase(),
-      action: props.action ?? null,
+      action: props.mitigation ?? null,
     });
   },
 );

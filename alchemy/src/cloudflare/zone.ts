@@ -611,7 +611,7 @@ export interface CloudflareZone {
   activated_on: string | null;
 }
 
-export /**
+/**
  * Helper function to find zone ID from a hostname
  * Searches for the zone that matches the hostname or its parent domains
  *
@@ -619,7 +619,7 @@ export /**
  * @param hostname The hostname to find the zone for
  * @returns Promise resolving to the zone ID and zone name
  */
-async function findZoneForHostname(
+export async function findZoneForHostname(
   api: CloudflareApi,
   hostname: string,
 ): Promise<{ zoneId: string; zoneName: string }> {

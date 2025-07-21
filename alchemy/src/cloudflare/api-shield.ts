@@ -1,35 +1,87 @@
+import { readFile } from "node:fs/promises";
 import type { OpenAPIV3 } from "openapi-types";
+import * as yaml from "yaml";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { handleApiError } from "./api-error.ts";
 import {
   ApiGatewayOperation,
-  type HTTPMethod,
   type Mitigation,
+  type Mitigations,
 } from "./api-gateway-operation.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
-import type { ApiSchema, Schema } from "./schema.ts";
+import { Schema } from "./schema.ts";
 import type { Zone } from "./zone.ts";
 import { findZoneForHostname } from "./zone.ts";
 
 /**
  * Properties for creating or updating Schema Validation
  */
-export interface ApiShieldProps extends CloudflareApiOptions {
+export interface ApiShieldProps<S extends string | URL | OpenAPIV3.Document>
+  extends CloudflareApiOptions {
   /**
    * The zone to configure schema validation for
    */
   zone: string | Zone;
 
   /**
+   * The name of the schema validation
+   *
+   * @default id
+   */
+  name?: string;
+
+  /**
    * The schema resource to use for validation
    *
+   * Can be one of:
+   * 1. a string containing OpenAPI v3 schema
+   * 2. a string path to a file containing OpenAPI v3 schema
+   * 3. a file://, http:// or https:// URL pointing to an OpenAPI v3 schema
+   * 4. a literal OpenAPI v3 schema object
+   *
    * @example
-   * const apiSchema = await Schema("my-schema", {
+   * await ApiShield("my-validation", {
+   *   zone: myZone,
+   *   schema: "path/to/openapi.yaml",
+   * });
+   *
+   * @example
+   * await ApiShield("my-validation", {
+   *   zone: myZone,
+   *   schema: new URL("file:///path/to/openapi.yaml"),
+   * });
+   *
+   * @example
+   * await ApiShield("my-validation", {
+   *   zone: myZone,
+   *   schema: new URL("https://api.example.com/openapi.yaml"),
+   * });
+   *
+   * @example
+   * await ApiShield("my-validation", {
+   *   zone: myZone,
+   *   schema: `
+   *     openapi: 3.0.0
+   *     info:
+   *       title: My API
+   *       version: 1.0.0
+   *     paths:
+   *       /users:
+   *         get:
+   *           operationId: getUsers
+   *           responses:
+   *             '200':
+   *               description: Success
+   *   `,
+   * });
+   *
+   * @example
+   * await ApiShield("my-validation", {
    *   zone: myZone,
    *   schema: `
    *     openapi: 3.0.0
@@ -45,13 +97,15 @@ export interface ApiShieldProps extends CloudflareApiOptions {
    *               description: Success
    *   `
    * });
-   *
-   * await ApiShield("my-validation", {
-   *   zone: myZone,
-   *   schema: apiSchema
-   * });
    */
-  schema: Schema<ApiSchema>;
+  schema: S;
+
+  /**
+   * Whether to enable the schema validation
+   *
+   * @default true
+   */
+  enabled?: boolean;
 
   /**
    * Per-operation validation overrides using OpenAPI-style path structure
@@ -78,10 +132,7 @@ export interface ApiShieldProps extends CloudflareApiOptions {
    *   "/admin": "block"
    * }
    */
-  mitigations?: Record<
-    string,
-    Mitigation | Partial<Record<HTTPMethod, Mitigation>>
-  >;
+  mitigations?: Mitigations<S extends string | URL ? OpenAPIV3.Document : S>;
 
   /**
    * Default validation action for all operations
@@ -114,7 +165,13 @@ export interface ValidationSettings {
 /**
  * Schema Validation output
  */
-export interface ApiShield extends Resource<"cloudflare::ApiShield"> {
+export interface ApiShield<S extends OpenAPIV3.Document = OpenAPIV3.Document>
+  extends Resource<"cloudflare::ApiShield"> {
+  /**
+   * The schema resource
+   */
+  schema: Schema<S>;
+
   /**
    * Zone ID
    */
@@ -314,17 +371,29 @@ export interface ApiShield extends Resource<"cloudflare::ApiShield"> {
  *
  * @see https://developers.cloudflare.com/api-shield/security/schema-validation/
  */
-export const ApiShield = Resource(
+export async function ApiShield<S extends string | URL | OpenAPIV3.Document>(
+  id: string,
+  props: ApiShieldProps<S>,
+): Promise<ApiShield<S extends string | URL ? OpenAPIV3.Document : S>> {
+  return (await _ApiShield(id, {
+    ...props,
+    // resolve file URLs to documents prior to passing input to the resource
+    // so that updates to the schema trigger changes to the resource
+    schema: await loadSchemaContent(props.schema),
+  })) as ApiShield<S extends string | URL ? OpenAPIV3.Document : S>;
+}
+
+const _ApiShield = Resource(
   "cloudflare::ApiShield",
   {
     // delete the api gateway operations in parallel
     destroyStrategy: "parallel",
   },
-  async function (
-    this: Context<ApiShield>,
+  async function <const S extends OpenAPIV3.Document>(
+    this: Context<ApiShield<S>>,
     id: string,
-    props: ApiShieldProps,
-  ): Promise<ApiShield> {
+    props: Omit<ApiShieldProps<S>, "schema"> & { schema: S },
+  ): Promise<ApiShield<S>> {
     const api = await createCloudflareApi(props);
 
     // Resolve zone ID and name
@@ -349,11 +418,19 @@ export const ApiShield = Resource(
       validation_override_mitigation_action: props.unknownOperationMitigation,
     });
 
+    const schema = await Schema("schema", {
+      ...props,
+      name: props.name ?? id,
+      kind: "openapi_v3",
+    });
+
     return this({
       zoneId,
+      schema,
       operations: await Promise.all(
-        parseSchemaOperations(props.schema.content).map(async (parsedOp) => {
+        parseSchemaOperations(schema.schema).map(async (parsedOp) => {
           let operationAction = defaultAction;
+          const method = parsedOp.method.toLowerCase();
           if (props.mitigations) {
             const pathActions = props.mitigations[parsedOp.endpoint];
             if (typeof pathActions === "string") {
@@ -362,7 +439,7 @@ export const ApiShield = Resource(
             } else if (pathActions && typeof pathActions === "object") {
               // Per-method configuration
               const methodAction =
-                pathActions[parsedOp.method.toLowerCase() as HTTPMethod];
+                pathActions[method as keyof typeof pathActions];
               if (methodAction) {
                 operationAction = methodAction;
               }
@@ -370,13 +447,13 @@ export const ApiShield = Resource(
           }
           return ApiGatewayOperation(
             // Create a deterministic ID for the operation
-            `${id}-${parsedOp.method.toLowerCase()}-${parsedOp.endpoint.replace(/[^a-z0-9]/gi, "-")}`,
+            `${id}-${method}-${parsedOp.endpoint.replace(/[^a-z0-9]/gi, "-")}`,
             {
               zone: zoneId,
               endpoint: parsedOp.endpoint,
               host: parsedOp.host,
               method: parsedOp.method,
-              action: operationAction,
+              mitigation: operationAction,
             },
           );
         }),
@@ -518,5 +595,50 @@ function extractHostFromUrl(url: string): string {
   } catch {
     // If URL parsing fails, return the URL as-is (might be relative)
     return url;
+  }
+}
+
+/**
+ * Helper function to load schema content from various sources
+ */
+async function loadSchemaContent(
+  schema: string | URL | OpenAPIV3.Document,
+): Promise<OpenAPIV3.Document> {
+  // Handle string content (YAML/JSON)
+  if (typeof schema === "string") {
+    if (!schema.includes("\n")) {
+      return yaml.parse(await readFile(schema, "utf-8"));
+    }
+    try {
+      return yaml.parse(schema);
+    } catch {
+      return JSON.parse(schema);
+    }
+  } else if (schema instanceof URL) {
+    return yaml.parse(await fetchUrl(schema));
+  } else if (typeof schema === "object") {
+    return schema as OpenAPIV3.Document;
+  } else {
+    throw new Error(`Unsupported schema: ${schema}`);
+  }
+}
+
+async function fetchUrl(url: URL): Promise<string> {
+  if (url.protocol === "file:") {
+    // Read from local filesystem for file:// URLs
+    return await readFile(url.pathname, "utf-8");
+  } else if (url.protocol === "http:" || url.protocol === "https:") {
+    // Fetch from remote for http/https URLs
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch schema from URL: ${response.statusText}`,
+      );
+    }
+    return await response.text();
+  } else {
+    throw new Error(
+      `Unsupported URL protocol: ${url.protocol}. Only http:, https:, and file: are supported.`,
+    );
   }
 }

@@ -235,6 +235,7 @@ export class Scope {
     this.resources.delete(resourceID);
   }
 
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: it's obviously wrong
   private _seq = 0;
 
   public seq() {
@@ -475,6 +476,12 @@ export class Scope {
         }
         throw e;
       })) ?? [];
+    console.log(
+      "destroyPendingDeletions",
+      this.chain.join("/"),
+      pendingDeletions,
+    );
+
     //todo(michael): remove once we deprecate doss; see: https://github.com/sam-goodwin/alchemy/issues/585
     let hasCorruptedResources = false;
     if (pendingDeletions) {

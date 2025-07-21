@@ -105,7 +105,7 @@ Load an OpenAPI schema from an external file:
 ```ts
 const shield = await ApiShield("shield", {
   zone: "api.example.com",
-  schemaFile: "./openapi.yaml",
+  schema: "./openapi.yaml",
   name: "production-api-v2",
   defaultAction: "none",
 });
@@ -121,7 +121,7 @@ The default action that takes no action on non-compliant requests. Perfect for u
 ```ts
 const shield = await ApiShield("monitor-only", {
   zone,
-  schemaFile: "./openapi.yaml",
+  schema: "./openapi.yaml",
   defaultAction: "none",  // Monitor without blocking
 });
 ```
@@ -146,7 +146,7 @@ Set different validation actions for specific API paths and methods. Use the exa
 ```ts
 const shield = await ApiShield("shield", {
   zone,
-  schemaFile: "./openapi.yaml",
+  schema: "./openapi.yaml",
   defaultAction: "none",
   actions: {
     "/users": {
@@ -175,7 +175,7 @@ Apply the same action to all HTTP methods on a path:
 ```ts
 const shield = await ApiShield("blanket-actions", {
   zone,
-  schemaFile: "./openapi.yaml",
+  schema: "./openapi.yaml",
   defaultAction: "none",
   actions: {
     "/admin": "block",       // Block ALL methods (GET, POST, PUT, DELETE, etc.)
@@ -191,7 +191,7 @@ Fine-tune actions for specific HTTP methods:
 ```ts
 const shield = await ApiShield("granular-actions", {
   zone,
-  schemaFile: "./openapi.yaml",
+  schema: "./openapi.yaml",
   defaultAction: "none",
   actions: {
     "/users": {
@@ -214,7 +214,7 @@ You can combine both approaches in the same configuration:
 ```ts
 const shield = await ApiShield("mixed-actions", {
   zone,
-  schemaFile: "./openapi.yaml",
+  schema: "./openapi.yaml",
   defaultAction: "none",
   actions: {
     "/admin": "block",       // Blanket block for admin
@@ -235,7 +235,7 @@ Use validation in monitoring mode to understand your API traffic:
 ```ts
 const monitoring = await ApiShield("api-monitoring", {
   zone,
-  schemaFile: "./api-schema.json",
+  schema: "./api-schema.json",
   defaultAction: "none",
   enableValidation: true,
 });
@@ -248,7 +248,7 @@ Track non-compliant requests in your logs without blocking them:
 ```ts
 const withLogging = await ApiShield("api-logging", {
   zone,
-  schemaFile: "./api-schema.json",
+  schema: "./api-schema.json",
   defaultAction: "log",  // Requires paid plan
 });
 ```
@@ -264,7 +264,7 @@ Apply stricter validation to sensitive operations while monitoring others:
 ```ts
 const criticalProtection = await ApiShield("api-protection", {
   zone,
-  schemaFile: "./api-schema.json",
+  schema: "./api-schema.json",
   defaultAction: "log",
   actions: {
     // Financial operations require strict validation - block all methods
@@ -293,7 +293,7 @@ Enable complete schema enforcement for production APIs:
 ```ts
 const fullProtection = await ApiShield("api-enforcement", {
   zone,
-  schemaFile: "./api-schema.json",
+  schema: "./api-schema.json",
   defaultAction: "block",              // Block non-compliant requests
   unknownOperationAction: "block",     // Block undefined endpoints
 });
@@ -306,7 +306,7 @@ Temporarily disable validation during deployments or troubleshooting:
 ```ts
 const shield = await ApiShield("shield", {
   zone,
-  schemaFile: "./openapi.yaml",
+  schema: "./openapi.yaml",
   enableValidation: false, // Schema uploaded but validation disabled
   defaultAction: "none",
 });

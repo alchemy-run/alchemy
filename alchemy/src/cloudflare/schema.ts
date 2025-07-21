@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import type { OpenAPIV3 } from "openapi-types";
 import * as yaml from "yaml";
 import type { Context } from "../context.ts";
@@ -17,12 +16,10 @@ import { findZoneForHostname } from "./zone.ts";
  */
 export type SchemaKind = "openapi_v3";
 
-export type ApiSchema = URL | string | OpenAPIV3.Document;
-
 /**
  * Properties for creating or updating a Schema
  */
-export interface SchemaProps<Schema extends ApiSchema>
+export interface SchemaProps<S extends OpenAPIV3.Document>
   extends CloudflareApiOptions {
   /**
    * The zone to upload the schema to
@@ -35,7 +32,7 @@ export interface SchemaProps<Schema extends ApiSchema>
    *
    * Note: Cloudflare only supports OpenAPI v3.0.x, not v3.1
    */
-  schema: Schema;
+  schema: S;
 
   /**
    * Name for the schema
@@ -62,7 +59,7 @@ export interface SchemaProps<Schema extends ApiSchema>
 /**
  * Schema output
  */
-export interface Schema<SchemaType extends ApiSchema>
+export interface Schema<S extends OpenAPIV3.Document = OpenAPIV3.Document>
   extends Resource<"cloudflare::Schema"> {
   /**
    * Schema ID
@@ -77,7 +74,7 @@ export interface Schema<SchemaType extends ApiSchema>
   /**
    * The API Schema
    */
-  schema: SchemaType extends OpenAPIV3.Document ? SchemaType : undefined;
+  schema: S;
 
   /**
    * Schema kind/format
@@ -93,16 +90,6 @@ export interface Schema<SchemaType extends ApiSchema>
    * Whether validation is enabled
    */
   enabled: boolean;
-
-  /**
-   * When the schema was created
-   */
-  createdAt: string;
-
-  /**
-   * Parsed schema content
-   */
-  content: OpenAPIV3.Document;
 }
 
 /**
@@ -165,9 +152,9 @@ export interface Schema<SchemaType extends ApiSchema>
  * });
  */
 export const Schema = Resource("cloudflare::Schema", async function <
-  SchemaType extends ApiSchema,
->(this: Context<Schema<SchemaType>>, id: string, props: SchemaProps<SchemaType>): Promise<
-  Schema<SchemaType>
+  S extends OpenAPIV3.Document,
+>(this: Context<Schema<S>>, id: string, props: SchemaProps<S>): Promise<
+  Schema<S>
 > {
   const api = await createCloudflareApi(props);
 
@@ -185,8 +172,7 @@ export const Schema = Resource("cloudflare::Schema", async function <
   }
 
   // Load schema content
-  const { content: schemaContent, parsed: parsedSchema } =
-    await loadSchemaContent(props);
+  const parsedSchema = props.schema;
 
   let schemaDetails: CloudflareSchemaDetails;
 
@@ -194,7 +180,7 @@ export const Schema = Resource("cloudflare::Schema", async function <
     // Check if we need to replace due to name, schema content change, or disabling validation
     if (
       props.name !== this.output.name ||
-      JSON.stringify(parsedSchema) !== JSON.stringify(this.output.content) ||
+      JSON.stringify(parsedSchema) !== JSON.stringify(this.output.schema) ||
       (this.output.enabled === true && props.enabled === false)
     ) {
       // Name, schema content changed, or trying to disable validation - need to replace
@@ -208,7 +194,7 @@ export const Schema = Resource("cloudflare::Schema", async function <
   } else {
     // Create new schema
     schemaDetails = await uploadSchema(api, zoneId, {
-      file: schemaContent,
+      file: yaml.stringify(parsedSchema),
       name: props.name || id,
       kind: props.kind || "openapi_v3",
       validation_enabled: props.enabled !== false,
@@ -222,8 +208,6 @@ export const Schema = Resource("cloudflare::Schema", async function <
     kind: schemaDetails.kind,
     source: schemaDetails.source,
     enabled: schemaDetails.validationEnabled,
-    createdAt: schemaDetails.createdAt,
-    content: parsedSchema,
   });
 });
 
@@ -278,6 +262,7 @@ async function uploadSchema(
   const data = (await response.json()) as {
     result: CloudflareSchema;
   };
+  console.log("create schema", data.result.schema_id);
   return {
     id: data.result.schema_id,
     name: data.result.name,
@@ -296,6 +281,7 @@ async function updateSchema(
     validation_enabled: boolean;
   },
 ): Promise<CloudflareSchemaDetails> {
+  console.log("update", schemaId);
   const response = await api.patch(
     `/zones/${zoneId}/schema_validation/schemas/${schemaId}`,
     params,
@@ -321,6 +307,7 @@ async function deleteSchema(
   zoneId: string,
   schemaId: string,
 ): Promise<void> {
+  console.log("delete", schemaId);
   const response = await api.delete(
     `/zones/${zoneId}/schema_validation/schemas/${schemaId}`,
   );
@@ -331,6 +318,7 @@ async function deleteSchema(
       message: string;
     }[];
   };
+  console.log("deleteSchema response", response.status, data);
 
   if (!response.ok && response.status !== 404) {
     await handleApiError(response, "deleting", "schema", schemaId);
@@ -368,50 +356,4 @@ export async function getSchema(
     validationEnabled: data.result.validation_enabled,
     createdAt: data.result.created_at,
   };
-}
-
-/**
- * Helper function to load schema content from various sources
- */
-async function loadSchemaContent<SchemaType extends ApiSchema>(
-  props: SchemaProps<SchemaType>,
-): Promise<{ content: string; parsed: OpenAPIV3.Document }> {
-  // Handle string content (YAML/JSON)
-  if (typeof props.schema === "string") {
-    const schemaContent = props.schema;
-    const parsedSchema = yaml.parse(props.schema);
-    return { content: schemaContent, parsed: parsedSchema };
-  } else if (props.schema instanceof URL) {
-    const schemaContent = await fetchUrl(props.schema);
-    const parsedSchema = yaml.parse(schemaContent);
-    return { content: schemaContent, parsed: parsedSchema };
-  } else if (typeof props.schema === "object") {
-    const schemaContent = yaml.stringify(props.schema);
-    return {
-      content: schemaContent,
-      parsed: props.schema as OpenAPIV3.Document,
-    };
-  } else {
-    throw new Error(`Unsupported schema: ${props.schema}`);
-  }
-}
-
-async function fetchUrl(url: URL): Promise<string> {
-  if (url.protocol === "file:") {
-    // Read from local filesystem for file:// URLs
-    return await readFile(url.pathname, "utf-8");
-  } else if (url.protocol === "http:" || url.protocol === "https:") {
-    // Fetch from remote for http/https URLs
-    const response = await fetch(url.toString());
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch schema from URL: ${response.statusText}`,
-      );
-    }
-    return await response.text();
-  } else {
-    throw new Error(
-      `Unsupported URL protocol: ${url.protocol}. Only http:, https:, and file: are supported.`,
-    );
-  }
 }

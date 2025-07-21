@@ -215,6 +215,7 @@ async function _apply<Out extends Resource>(
         }
 
         if (error.force) {
+          console.log("destroy now", resource[ResourceID]);
           await destroy(resource, {
             quiet: scope.quiet,
             strategy: resource[DestroyStrategy] ?? "sequential",
@@ -250,6 +251,7 @@ async function _apply<Out extends Resource>(
         );
 
         if (!error.force) {
+          console.log("pending", resource[ResourceID]);
           const pendingDeletions =
             (await scope.get<PendingDeletions>("pendingDeletions")) ?? [];
           pendingDeletions.push({
