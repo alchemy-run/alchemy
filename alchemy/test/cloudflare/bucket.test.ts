@@ -1,8 +1,8 @@
+import { AwsClient } from "aws4fetch";
 import { describe, expect } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import {
-  createR2Client,
   getBucket,
   listBuckets,
   listObjects,
@@ -12,9 +12,9 @@ import {
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
+import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 import "../../src/test/vitest.ts";
-import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -43,7 +43,7 @@ describe("R2 Bucket Resource", async () => {
 
       // Check if bucket exists by getting it explicitly
       const gotBucket = await getBucket(api, testId);
-      expect(gotBucket.result.name).toEqual(testId);
+      expect(gotBucket.name).toEqual(testId);
 
       // Update the bucket to enable public access
       bucket = await R2Bucket(testId, {
@@ -84,7 +84,7 @@ describe("R2 Bucket Resource", async () => {
       const gotBucket = await getBucket(api, euBucketName, {
         jurisdiction: "eu",
       });
-      expect(gotBucket.result.name).toEqual(euBucketName);
+      expect(gotBucket.name).toEqual(euBucketName);
 
       // Note: S3 API doesn't expose jurisdiction info, so we can't verify that aspect
     } finally {
@@ -109,7 +109,7 @@ describe("R2 Bucket Resource", async () => {
       expect(bucket.name).toEqual(bucketName);
 
       // Get R2 client
-      const r2Client = await createR2Client();
+      const r2Client = createR2Client();
 
       // Upload a test file to the bucket
       const testContent = "This is test file content";
@@ -119,10 +119,9 @@ describe("R2 Bucket Resource", async () => {
       const putUrl = new URL(
         `https://${r2Client.accountId}.r2.cloudflarestorage.com/${bucketName}/${testKey}`,
       );
-      const putHeaders = withJurisdiction(
-        { "Content-Type": "text/plain" },
-        bucket.jurisdiction,
-      );
+      const putHeaders = withJurisdiction(bucket, {
+        "Content-Type": "text/plain",
+      });
       const putResponse = await r2Client.fetch(putUrl.toString(), {
         method: "PUT",
         body: testContent,
@@ -131,20 +130,15 @@ describe("R2 Bucket Resource", async () => {
       expect(putResponse.status).toEqual(200);
 
       // Verify the file exists in the bucket
-      const { objects } = await listObjects(
-        r2Client,
-        bucketName,
-        undefined,
-        bucket.jurisdiction,
-      );
-      expect(objects.length).toBeGreaterThan(0);
-      expect(objects.some((obj) => obj.Key === testKey)).toBe(true);
+      const keys = await Array.fromAsync(listObjects(api, bucketName, bucket));
+      expect(keys.length).toBeGreaterThan(0);
+      expect(keys).toContain(testKey);
 
       // For extra verification, directly fetch the file content
       const getUrl = new URL(
         `https://${r2Client.accountId}.r2.cloudflarestorage.com/${bucketName}/${testKey}`,
       );
-      const getHeaders = withJurisdiction({}, bucket.jurisdiction);
+      const getHeaders = withJurisdiction(bucket, {});
       const getResponse = await r2Client.fetch(getUrl.toString(), {
         headers: getHeaders,
       });
@@ -249,6 +243,39 @@ describe("R2 Bucket Resource", async () => {
   });
 });
 
+/**
+ * Creates an aws4fetch client configured for Cloudflare R2.
+ * This is no longer used in the actual resource, but is kept here
+ * to verify the new implementation.
+ *
+ * @see https://developers.cloudflare.com/r2/examples/aws/aws-sdk-js-v3/
+ */
+function createR2Client() {
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+
+  if (!accountId) {
+    throw new Error("CLOUDFLARE_ACCOUNT_ID environment variable is required");
+  }
+
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error(
+      "R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY environment variables are required",
+    );
+  }
+
+  // Create aws4fetch client with Cloudflare R2 endpoint
+  const client = new AwsClient({
+    accessKeyId,
+    secretAccessKey,
+    service: "s3",
+    region: "auto",
+  });
+  Object.assign(client, { accountId });
+  return client as typeof client & { accountId: string };
+}
+
 async function assertBucketDeleted(bucket: R2Bucket, attempt = 0) {
   const api = await createCloudflareApi();
   try {
@@ -260,7 +287,7 @@ async function assertBucketDeleted(bucket: R2Bucket, attempt = 0) {
     const buckets = await listBuckets(api, {
       jurisdiction: bucket.jurisdiction,
     });
-    const foundBucket = buckets.find((b) => b.Name === bucket.name);
+    const foundBucket = buckets.find((b) => b.name === bucket.name);
 
     if (foundBucket) {
       if (attempt > 30) {
