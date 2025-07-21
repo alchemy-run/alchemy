@@ -344,8 +344,6 @@ describe("Pipeline Resource", () => {
       // Create an R2 bucket
       bucket = await R2Bucket("worker-bucket", {
         name: bucketName,
-        accessKey: accessKeyId,
-        secretAccessKey: secretAccessKey,
         adopt: true,
         delete: true,
         empty: true,
