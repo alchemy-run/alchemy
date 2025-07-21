@@ -1,8 +1,9 @@
+import { isDeepStrictEqual } from "node:util";
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
 import { bind } from "../runtime/bind.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
-import { CloudflareApiError, handleApiError } from "./api-error.ts";
+import { CloudflareApiError } from "./api-error.ts";
 import {
   extractCloudflareError,
   extractCloudflareResult,
@@ -71,6 +72,11 @@ export interface BucketProps extends CloudflareApiOptions {
   adopt?: boolean;
 
   /**
+   * CORS rules for the bucket
+   */
+  cors?: R2BucketCORSRule[];
+
+  /**
    * Whether to emulate the bucket locally when Alchemy is running in watch mode.
    */
   dev?: {
@@ -80,6 +86,43 @@ export interface BucketProps extends CloudflareApiOptions {
      */
     remote?: boolean;
   };
+}
+
+interface R2BucketCORSRule {
+  /**
+   * Identifier for this rule.
+   */
+  id?: string;
+
+  /**
+   * Object specifying allowed origins, methods and headers for this CORS rule.
+   */
+  allowed: {
+    /**
+     * Specifies the value for the Access-Control-Allow-Methods header R2 sets when requesting objects in a bucket from a browser.
+     */
+    methods: ("GET" | "PUT" | "POST" | "DELETE" | "HEAD")[];
+
+    /**
+     * Specifies the value for the Access-Control-Allow-Origin header R2 sets when requesting objects in a bucket from a browser.
+     */
+    origins: string[];
+
+    /**
+     * Specifies the value for the Access-Control-Allow-Headers header R2 sets when requesting objects in this bucket from a browser. Cross-origin requests that include custom headers (e.g. x-user-id) should specify these headers as AllowedHeaders.
+     */
+    headers?: string[];
+  };
+
+  /**
+   * Specifies the headers that can be exposed back, and accessed by, the JavaScript making the cross-origin request. If you need to access headers beyond the safelisted response headers, such as Content-Encoding or cf-cache-status, you must specify it here.
+   */
+  exposeHeaders?: string[];
+
+  /**
+   * Specifies the amount of time (in seconds) browsers are allowed to cache CORS preflight responses. Browsers may limit this to 2 hours or less, even if the maximum value (86400) is specified.
+   */
+  maxAgeSeconds?: number;
 }
 
 /**
@@ -106,6 +149,11 @@ export type R2BucketResource = Resource<"cloudflare::R2Bucket"> &
      * Time at which the bucket was created
      */
     creationDate: Date;
+
+    /**
+     * The `r2.dev` subdomain for the bucket, if `allowPublicAccess` is true
+     */
+    domain: string | undefined;
   };
 
 export function isBucket(resource: Resource): resource is R2BucketResource {
@@ -201,20 +249,25 @@ const R2BucketResource = Resource(
             throw err;
           },
         );
-        await updatePublicAccess(
+        const domain = await putManagedDomain(
           api,
           bucketName,
           allowPublicAccess,
           props.jurisdiction,
         );
+        if (props.cors?.length) {
+          await putBucketCORS(api, bucketName, props);
+        }
         return this({
           name: bucketName,
           location: bucket.location,
           creationDate: new Date(bucket.creation_date),
           jurisdiction: bucket.jurisdiction,
           allowPublicAccess,
+          domain,
           type: "r2_bucket",
           accountId: api.accountId,
+          cors: props.cors,
           dev: props.dev,
         });
       }
@@ -224,18 +277,24 @@ const R2BucketResource = Resource(
             `Cannot update R2Bucket name after creation. Bucket name is immutable. Before: ${this.output.name}, After: ${bucketName}`,
           );
         }
-        if (allowPublicAccess !== this.output.allowPublicAccess) {
-          await updatePublicAccess(
+        let domain = this.output.domain;
+        if (!!domain !== allowPublicAccess) {
+          domain = await putManagedDomain(
             api,
             bucketName,
             allowPublicAccess,
             props.jurisdiction,
           );
         }
+        if (!isDeepStrictEqual(this.output.cors ?? [], props.cors ?? [])) {
+          await putBucketCORS(api, bucketName, props);
+        }
         return this({
           ...this.output,
           allowPublicAccess,
           dev: props.dev,
+          cors: props.cors,
+          domain,
         });
       }
       case "delete": {
@@ -255,7 +314,7 @@ const R2BucketResource = Resource(
  * The bucket information returned from the Cloudflare REST API
  * @see https://developers.cloudflare.com/api/node/resources/r2/subresources/buckets/models/bucket/#(schema)
  */
-interface CloudflareBucket {
+interface R2BucketResult {
   creation_date: string;
   location: "apac" | "eeur" | "enam" | "weur" | "wnam" | "oc";
   name: string;
@@ -288,8 +347,8 @@ export async function getBucket(
   api: CloudflareApi,
   bucketName: string,
   props: BucketProps = {},
-): Promise<CloudflareBucket> {
-  return await extractCloudflareResult<CloudflareBucket>(
+): Promise<R2BucketResult> {
+  return await extractCloudflareResult<R2BucketResult>(
     `get R2 bucket "${bucketName}"`,
     api.get(`/accounts/${api.accountId}/r2/buckets/${bucketName}`, {
       headers: withJurisdiction(props),
@@ -304,8 +363,8 @@ export async function createBucket(
   api: CloudflareApi,
   bucketName: string,
   props: BucketProps = {},
-): Promise<CloudflareBucket> {
-  return await extractCloudflareResult<CloudflareBucket>(
+): Promise<R2BucketResult> {
+  return await extractCloudflareResult<R2BucketResult>(
     `create R2 bucket "${bucketName}"`,
     api.post(
       `/accounts/${api.accountId}/r2/buckets`,
@@ -345,32 +404,29 @@ export async function deleteBucket(
 }
 
 /**
- * Update the public access setting for a bucket
+ * Update the managed domain setting for a bucket
  */
-export async function updatePublicAccess(
+export async function putManagedDomain(
   api: CloudflareApi,
   bucketName: string,
-  allowPublicAccess: boolean,
+  enabled: boolean,
   jurisdiction?: string,
-): Promise<void> {
-  await withExponentialBackoff(
+) {
+  return await withExponentialBackoff(
     async () => {
-      const response = await api.put(
-        `/accounts/${api.accountId}/r2/buckets/${bucketName}/domains/managed`,
-        {
-          enabled: allowPublicAccess,
-        },
-        { headers: withJurisdiction({ jurisdiction }) },
+      const result = await extractCloudflareResult<{
+        bucketId: string;
+        domain: string;
+        enabled: boolean;
+      }>(
+        `put R2 bucket managed domain for "${bucketName}"`,
+        api.put(
+          `/accounts/${api.accountId}/r2/buckets/${bucketName}/domains/managed`,
+          { enabled },
+          { headers: withJurisdiction({ jurisdiction }) },
+        ),
       );
-
-      if (!response.ok) {
-        await handleApiError(
-          response,
-          "updating public access for",
-          "R2 bucket",
-          bucketName,
-        );
-      }
+      return result.enabled ? result.domain : undefined;
     },
     (err) => err.status === 404,
     10,
@@ -496,4 +552,33 @@ export async function listBuckets(
     }),
   );
   return result.buckets;
+}
+
+export async function putBucketCORS(
+  api: CloudflareApi,
+  bucketName: string,
+  props: BucketProps,
+) {
+  let request: RequestInit;
+  if (props.cors?.length) {
+    request = {
+      method: "PUT",
+      body: JSON.stringify({ rules: props.cors }),
+      headers: withJurisdiction(props, {
+        "Content-Type": "application/json",
+      }),
+    };
+  } else {
+    request = {
+      method: "DELETE",
+      headers: withJurisdiction(props),
+    };
+  }
+  await extractCloudflareResult(
+    `${request.method} R2 bucket CORS rules for "${bucketName}"`,
+    api.fetch(
+      `/accounts/${api.accountId}/r2/buckets/${bucketName}/cors`,
+      request,
+    ),
+  );
 }
