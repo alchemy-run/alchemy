@@ -42,6 +42,30 @@ const publicBucket = await R2Bucket("public-assets", {
   name: "public-assets",
   allowPublicAccess: true,
 });
+console.log(publicBucket.domain); // [random-id].r2.dev
+```
+
+This enables the `r2.dev` domain for the bucket. This URL is rate-limited and not recommended for production use.
+
+## With CORS
+
+Create a bucket with CORS rules:
+
+```ts
+import { R2Bucket } from "alchemy/cloudflare";
+
+const corsBucket = await R2Bucket("cors-bucket", {
+  name: "cors-bucket",
+  cors: [
+    {
+      allowed: {
+        origins: ["https://example.com"],
+        methods: ["GET", "POST", "PUT", "DELETE", "HEAD"],
+        headers: ["*"],
+      },
+    },
+  ],
+});
 ```
 
 ## With Auto-Emptying
