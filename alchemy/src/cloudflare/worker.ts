@@ -1088,6 +1088,7 @@ export const _Worker = Resource(
           command: props.dev.command,
           cwd: props.dev.cwd || props.cwd || process.cwd(),
           env: {
+            ...(process.env ?? {}),
             ...props.env,
             ...Object.fromEntries(
               Object.entries(props.bindings ?? {}).flatMap(([key, value]) =>
@@ -1834,7 +1835,7 @@ async function createDevCommand(props: {
   id: string;
   command: string;
   cwd: string;
-  env: Record<string, string>;
+  env: Record<string, string | undefined>;
 }): Promise<{ url: string }> {
   const persistFile = path.join(process.cwd(), ".alchemy", `${props.id}.pid`);
   if (await exists(persistFile)) {

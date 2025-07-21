@@ -43,7 +43,12 @@ export async function Redwood<B extends Bindings>(
 ): Promise<Redwood<B>> {
   return Website(id, {
     ...props,
-    command: props?.command ?? "bun run clean && RWSDK_DEPLOY=1 bun run build",
+    command:
+      props?.command ??
+      "rm -rf ./node_modules/.vite && RWSDK_DEPLOY=1 vite build",
+    dev: props?.dev ?? {
+      command: "vite dev",
+    },
     noBundle: props?.noBundle ?? true,
     wrangler:
       props?.wrangler === false
