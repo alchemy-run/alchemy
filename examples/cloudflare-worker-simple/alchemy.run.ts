@@ -15,6 +15,7 @@ const [d1, kv, r2] = await Promise.all([
   D1Database("d1", {
     name: `${app.name}-${app.stage}-d1`,
     adopt: true,
+    migrationsDir: "migrations",
   }),
   KVNamespace("kv", {
     title: `${app.name}-${app.stage}-kv`,

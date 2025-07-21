@@ -9,6 +9,7 @@ import {
   type CloudflareApiOptions,
 } from "./api.ts";
 import { cloneD1Database } from "./d1-clone.ts";
+import { applyLocalD1Migrations } from "./d1-local-migrations.ts";
 import { applyMigrations, listMigrationsFiles } from "./d1-migrations.ts";
 
 /**
@@ -356,6 +357,13 @@ const D1DatabaseResource = Resource(
 
         if (!databaseId) {
           throw new Error("Database ID not found for migrations");
+        }
+        if (this.scope.local && !props.dev?.remote) {
+          await applyLocalD1Migrations({
+            databaseId,
+            migrationsTable,
+            migrations: props.migrationsFiles,
+          });
         }
 
         await applyMigrations({
