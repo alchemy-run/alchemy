@@ -19,7 +19,6 @@ export default defineConfig({
       projects: ["./tsconfig.json"],
     }),
     tanstackStart({
-      customViteReactPlugin: true,
       target: "cloudflare-module",
       tsr: {
         routeTreeFileHeader: [
