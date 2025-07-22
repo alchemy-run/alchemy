@@ -24,7 +24,7 @@ describe("R2RestStateStore", async () => {
       const defaultBucketName = "alchemy-state";
       const bucket = await getBucket(api, defaultBucketName);
 
-      expect(bucket.result.name).toEqual(defaultBucketName);
+      expect(bucket.name).toEqual(defaultBucketName);
     } finally {
       await destroy(scope);
     }

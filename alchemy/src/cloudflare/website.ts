@@ -231,6 +231,7 @@ export default {
           cwd,
           command: props.command,
           env: {
+            ...(process.env ?? {}),
             ...(props.env ?? {}),
             ...(props.commandEnv ?? {}),
             ...Object.fromEntries(

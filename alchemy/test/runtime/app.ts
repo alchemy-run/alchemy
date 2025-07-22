@@ -11,8 +11,6 @@ const app = await alchemy("my-bootstrap-ap", {
 });
 
 const bucket = await R2Bucket("my-bootstrap-bucket", {
-  accessKey: await alchemy.secret.env.R2_ACCESS_KEY_ID,
-  secretAccessKey: await alchemy.secret.env.R2_SECRET_ACCESS_KEY,
   empty: true,
 });
 
