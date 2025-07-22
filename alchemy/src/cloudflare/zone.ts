@@ -626,23 +626,46 @@ export async function findZoneForHostname(
   // Remove wildcard prefix if present
   const cleanHostname = hostname.replace(/^\*\./, "");
 
-  // Get all zones and find the best match
-  const response = await api.get("/zones");
-
-  if (!response.ok) {
-    throw new Error(`Failed to list zones: ${response.statusText}`);
-  }
-
-  const zonesData = (await response.json()) as {
-    result: Array<{ id: string; name: string }>;
+  // Helper to fetch a page of zones
+  const fetchZonePage = async (pageNum: number) => {
+    const response = await api.get(`/zones?per_page=50&page=${pageNum}`);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to list zones (page ${pageNum}): ${response.statusText}`,
+      );
+    }
+    return response.json() as Promise<{
+      result: Array<{ id: string; name: string }>;
+      result_info?: {
+        count?: number;
+        page?: number;
+        per_page?: number;
+        total_count?: number;
+        total_pages?: number;
+      };
+    }>;
   };
+
+  // Fetch the first page to get total_pages
+  const firstPageData = await fetchZonePage(1);
+  const totalPages = firstPageData.result_info?.total_pages ?? 1;
+
+  // Fetch remaining pages concurrently if needed
+  const allZones = totalPages > 1
+    ? await Promise.all([
+        Promise.resolve(firstPageData.result),
+        ...Array.from({ length: totalPages - 1 }, (_, i) =>
+          fetchZonePage(i + 2).then(data => data.result)
+        ),
+      ]).then(results => results.flat())
+    : firstPageData.result;
 
   // Find the zone that best matches the hostname
   // We look for the longest matching zone name (most specific)
   let bestMatch: { zoneId: string; zoneName: string } | null = null;
   let longestMatch = 0;
 
-  for (const zone of zonesData.result) {
+  for (const zone of allZones) {
     if (
       cleanHostname === zone.name ||
       cleanHostname.endsWith(`.${zone.name}`)
@@ -656,7 +679,7 @@ export async function findZoneForHostname(
 
   if (!bestMatch) {
     throw new Error(
-      `Could not find zone for hostname '${hostname}'. Available zones: ${zonesData.result.map((z) => z.name).join(", ")}`,
+      `Could not find zone for hostname '${hostname}'. Available zones: ${allZones.map((z) => z.name).join(", ")}`,
     );
   }
 
