@@ -8,7 +8,7 @@ import {
   getOperationSchemaValidationSetting,
 } from "../../src/cloudflare/api-gateway-operation.ts";
 import {
-  ApiShield,
+  APIShield,
   getGlobalSettingsForZone,
 } from "../../src/cloudflare/api-shield.ts";
 import { createCloudflareApi } from "../../src/cloudflare/api.ts";
@@ -16,17 +16,12 @@ import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
 import fs from "node:fs/promises";
-import {
-  deleteSchema,
-  getSchema,
-  listSchemas,
-} from "../../src/cloudflare/schema.ts";
+import { getSchema } from "../../src/cloudflare/api-schema.ts";
 import { findZoneForHostname } from "../../src/cloudflare/zone.ts";
 import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
-  // quiet: false,
 });
 
 const api = await createCloudflareApi({});
@@ -36,7 +31,7 @@ const ZONE_NAME = "alchemy-test.us";
 
 const zoneId = (await findZoneForHostname(api, ZONE_NAME)).zoneId;
 
-describe.sequential("ApiShield", () => {
+describe.sequential("APIShield", () => {
   test("create and update schema validation with typed OpenAPI object", async (scope) => {
     let oldSchemaId: string | undefined;
     let newSchemaId: string | undefined;
@@ -190,7 +185,7 @@ describe.sequential("ApiShield", () => {
       } as const satisfies OpenAPIV3.Document;
 
       // Create schema validation using the typed object
-      let shield = await ApiShield(`${BRANCH_PREFIX}-typed-validation`, {
+      let shield = await APIShield(`${BRANCH_PREFIX}-typed-validation`, {
         zone: ZONE_NAME,
         enabled: true,
         defaultMitigation: "none",
@@ -239,7 +234,7 @@ describe.sequential("ApiShield", () => {
       ]);
 
       // Update with operation overrides using path-based configuration
-      shield = await ApiShield(`${BRANCH_PREFIX}-typed-validation`, {
+      shield = await APIShield(`${BRANCH_PREFIX}-typed-validation`, {
         zone: ZONE_NAME,
         schema: apiSchema,
         defaultMitigation: "none",
@@ -345,7 +340,7 @@ paths:
           description: User deleted
 `;
       // Create schema validation using the schema
-      let shield = await ApiShield(`${BRANCH_PREFIX}-validation`, {
+      let shield = await APIShield(`${BRANCH_PREFIX}-validation`, {
         zone: ZONE_NAME,
         name: "api-shield-test-schema",
         enabled: true,
@@ -382,7 +377,7 @@ paths:
       ]);
 
       // Update with operation overrides using path-based configuration
-      shield = await ApiShield(`${BRANCH_PREFIX}-validation`, {
+      shield = await APIShield(`${BRANCH_PREFIX}-validation`, {
         zone: ZONE_NAME,
         schema,
         defaultMitigation: "none",
@@ -438,7 +433,7 @@ paths:
   test("mixed action configuration with partial route overrides", async (scope) => {
     try {
       // Create schema validation with mixed action configuration
-      const shield = await ApiShield(`${BRANCH_PREFIX}-mixed-validation`, {
+      const shield = await APIShield(`${BRANCH_PREFIX}-mixed-validation`, {
         name: "mixed-actions-schema",
         zone: ZONE_NAME,
         schema: `
@@ -550,7 +545,7 @@ paths:
       // Create initial schema with multiple operations
 
       // Create initial validation
-      let shield = await ApiShield("shield", {
+      let shield = await APIShield("shield", {
         name: `${BRANCH_PREFIX}-change-schema`,
         zone: ZONE_NAME,
         enabled: true,
@@ -629,7 +624,7 @@ paths:
       ]);
 
       // Update validation with the new schema
-      shield = await ApiShield("shield", {
+      shield = await APIShield("shield", {
         zone: ZONE_NAME,
         schema: `
 openapi: 3.0.0
@@ -744,8 +739,8 @@ paths:
 
       await fs.writeFile(schemaPath, initialSchema, "utf-8");
 
-      // Create ApiShield with file path
-      let shield = await ApiShield(`${BRANCH_PREFIX}-file-validation`, {
+      // Create APIShield with file path
+      let shield = await APIShield(`${BRANCH_PREFIX}-file-validation`, {
         zone: ZONE_NAME,
         name: "file-based-test",
         enabled: true,
@@ -821,8 +816,8 @@ paths:
 
       await fs.writeFile(schemaPath, updatedSchema, "utf-8");
 
-      // Re-apply ApiShield with updated file and custom mitigations
-      shield = await ApiShield(`${BRANCH_PREFIX}-file-validation`, {
+      // Re-apply APIShield with updated file and custom mitigations
+      shield = await APIShield(`${BRANCH_PREFIX}-file-validation`, {
         zone: ZONE_NAME,
         schema: schemaPath,
         defaultMitigation: "none",
@@ -887,7 +882,7 @@ paths:
 
 // Helper function for clean operation testing
 async function expectOperations(
-  shield: ApiShield,
+  shield: APIShield,
   expected: Array<{
     method: string;
     host: string;
@@ -938,20 +933,4 @@ async function assertSchemaDeleted(id: string | undefined) {
   }
   const cloudflareSchema = await getSchema(api, zoneId, id);
   expect(!cloudflareSchema).toBe(true);
-}
-
-async function deleteAllSchemas(zoneName: string) {
-  // Get the zoneId for the given zoneName
-  const zone = await findZoneForHostname(api, zoneName);
-  if (!zone) {
-    throw new Error(`Zone not found: ${zoneName}`);
-  }
-
-  // Get all schemas for the zone
-  const schemas = await listSchemas(api, zone.zoneId);
-
-  // Delete each schema
-  await Promise.all(
-    schemas.map((schema) => deleteSchema(api, zone.zoneId, schema.id)),
-  );
 }

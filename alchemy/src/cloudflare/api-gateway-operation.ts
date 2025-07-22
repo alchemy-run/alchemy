@@ -43,7 +43,7 @@ export type HTTPMethod =
 /**
  * Properties for creating or updating an API Operation
  */
-export interface ApiGatewayOperationProps extends CloudflareApiOptions {
+export interface APIGatewayOperationProps extends CloudflareApiOptions {
   /**
    * The zone this operation belongs to
    */
@@ -74,8 +74,8 @@ export interface ApiGatewayOperationProps extends CloudflareApiOptions {
 /**
  * API Operation output
  */
-export interface ApiGatewayOperation
-  extends Resource<"cloudflare::ApiGatewayOperation"> {
+export interface APIGatewayOperation
+  extends Resource<"cloudflare::APIGatewayOperation"> {
   /**
    * Zone ID
    */
@@ -124,7 +124,7 @@ export interface ApiGatewayOperation
  *
  * Create a simple GET endpoint for user retrieval
  *
- * const getUserOp = await ApiGatewayOperation("get-users", {
+ * const getUserOp = await APIGatewayOperation("get-users", {
  *   zone: myZone,
  *   endpoint: "/users",
  *   host: "api.example.com",
@@ -136,7 +136,7 @@ export interface ApiGatewayOperation
  *
  * Create an operation that includes path variables
  *
- * const getUserByIdOp = await ApiGatewayOperation("get-user-by-id", {
+ * const getUserByIdOp = await APIGatewayOperation("get-user-by-id", {
  *   zone: "api.example.com",
  *   endpoint: "/users/{id}",
  *   host: "api.example.com",
@@ -148,21 +148,21 @@ export interface ApiGatewayOperation
  *
  * Create a complete set of CRUD operations for a resource
  *
- * const createUserOp = await ApiGatewayOperation("create-user", {
+ * const createUserOp = await APIGatewayOperation("create-user", {
  *   zone: myZone,
  *   endpoint: "/users",
  *   host: "api.example.com",
  *   method: "POST"
  * });
  *
- * const updateUserOp = await ApiGatewayOperation("update-user", {
+ * const updateUserOp = await APIGatewayOperation("update-user", {
  *   zone: myZone,
  *   endpoint: "/users/{id}",
  *   host: "api.example.com",
  *   method: "PUT"
  * });
  *
- * const deleteUserOp = await ApiGatewayOperation("delete-user", {
+ * const deleteUserOp = await APIGatewayOperation("delete-user", {
  *   zone: myZone,
  *   endpoint: "/users/{id}",
  *   host: "api.example.com",
@@ -172,13 +172,13 @@ export interface ApiGatewayOperation
  * @see https://developers.cloudflare.com/api/resources/api_gateway/subresources/operations/
  * @see https://developers.cloudflare.com/api-shield/management-and-monitoring/endpoint-management/
  */
-export const ApiGatewayOperation = Resource(
-  "cloudflare::ApiGatewayOperation",
+export const APIGatewayOperation = Resource(
+  "cloudflare::APIGatewayOperation",
   async function (
-    this: Context<ApiGatewayOperation>,
+    this: Context<APIGatewayOperation>,
     _id: string,
-    props: ApiGatewayOperationProps,
-  ): Promise<ApiGatewayOperation> {
+    props: APIGatewayOperationProps,
+  ): Promise<APIGatewayOperation> {
     const api = await createCloudflareApi(props);
 
     // Resolve zone ID and name
@@ -235,7 +235,7 @@ export const ApiGatewayOperation = Resource(
 async function createOperation(
   api: CloudflareApi,
   zoneId: string,
-  props: ApiGatewayOperationProps,
+  props: APIGatewayOperationProps,
 ) {
   // Create the operation
   const response = await api.post(

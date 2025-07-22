@@ -5,23 +5,23 @@ import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { handleApiError } from "./api-error.ts";
 import {
-  ApiGatewayOperation,
+  APIGatewayOperation,
   type Mitigation,
   type Mitigations,
 } from "./api-gateway-operation.ts";
+import { APISchema } from "./api-schema.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
-import { Schema } from "./schema.ts";
 import type { Zone } from "./zone.ts";
 import { findZoneForHostname } from "./zone.ts";
 
 /**
  * Properties for creating or updating Schema Validation
  */
-export interface ApiShieldProps<S extends string | URL | OpenAPIV3.Document>
+export interface APIShieldProps<S extends string | URL | OpenAPIV3.Document>
   extends CloudflareApiOptions {
   /**
    * The zone to configure schema validation for
@@ -45,25 +45,25 @@ export interface ApiShieldProps<S extends string | URL | OpenAPIV3.Document>
    * 4. a literal OpenAPI v3 schema object
    *
    * @example
-   * await ApiShield("my-validation", {
+   * await APIShield("my-validation", {
    *   zone: myZone,
    *   schema: "path/to/openapi.yaml",
    * });
    *
    * @example
-   * await ApiShield("my-validation", {
+   * await APIShield("my-validation", {
    *   zone: myZone,
    *   schema: new URL("file:///path/to/openapi.yaml"),
    * });
    *
    * @example
-   * await ApiShield("my-validation", {
+   * await APIShield("my-validation", {
    *   zone: myZone,
    *   schema: new URL("https://api.example.com/openapi.yaml"),
    * });
    *
    * @example
-   * await ApiShield("my-validation", {
+   * await APIShield("my-validation", {
    *   zone: myZone,
    *   schema: `
    *     openapi: 3.0.0
@@ -81,7 +81,7 @@ export interface ApiShieldProps<S extends string | URL | OpenAPIV3.Document>
    * });
    *
    * @example
-   * await ApiShield("my-validation", {
+   * await APIShield("my-validation", {
    *   zone: myZone,
    *   schema: `
    *     openapi: 3.0.0
@@ -136,6 +136,7 @@ export interface ApiShieldProps<S extends string | URL | OpenAPIV3.Document>
 
   /**
    * Default validation action for all operations
+   *
    * @default "none"
    */
   defaultMitigation?: Mitigation;
@@ -165,12 +166,12 @@ export interface ValidationSettings {
 /**
  * Schema Validation output
  */
-export interface ApiShield<S extends OpenAPIV3.Document = OpenAPIV3.Document>
-  extends Resource<"cloudflare::ApiShield"> {
+export interface APIShield<S extends OpenAPIV3.Document = OpenAPIV3.Document>
+  extends Resource<"cloudflare::APIShield"> {
   /**
    * The schema resource
    */
-  schema: Schema<S>;
+  schema: APISchema<S>;
 
   /**
    * Zone ID
@@ -180,7 +181,7 @@ export interface ApiShield<S extends OpenAPIV3.Document = OpenAPIV3.Document>
   /**
    * The API Schema's API Gateway Operations (and their respective mitigation actions)
    */
-  operations: ApiGatewayOperation[];
+  operations: APIGatewayOperation[];
 }
 
 /**
@@ -193,7 +194,7 @@ export interface ApiShield<S extends OpenAPIV3.Document = OpenAPIV3.Document>
  *
  * Enable schema validation with a simple OpenAPI schema as YAML string
  *
- * const apiSchema = await Schema("my-schema", {
+ * const apiSchema = await APISchema("my-schema", {
  *   zone: myZone,
  *   schema: `
  *     openapi: 3.0.0
@@ -221,7 +222,7 @@ export interface ApiShield<S extends OpenAPIV3.Document = OpenAPIV3.Document>
  *   `,
  * });
  *
- * const shield = await ApiShield("api-validation", {
+ * const shield = await APIShield("api-validation", {
  *   zone: myZone,
  *   schema: apiSchema,
  *   defaultAction: "none"
@@ -271,12 +272,12 @@ export interface ApiShield<S extends OpenAPIV3.Document = OpenAPIV3.Document>
  *   }
  * };
  *
- * const schema = await Schema("my-schema", {
+ * const schema = await APISchema("my-schema", {
  *   zone: myZone,
  *   schema: apiSchema,
  * });
  *
- * const shield = await ApiShield("api-validation", {
+ * const shield = await APIShield("api-validation", {
  *   zone: myZone,
  *   schema: schema,
  *   defaultAction: "none"
@@ -287,13 +288,13 @@ export interface ApiShield<S extends OpenAPIV3.Document = OpenAPIV3.Document>
  *
  * Load schema from an external file with custom settings
  *
- * const schema = await Schema("my-schema", {
+ * const schema = await APISchema("my-schema", {
  *   zone: "example.com",
  *   schema: new URL("file:///path/to/openapi.yaml"),
  *   name: "production-api-v2",
  * });
  *
- * const shield = await ApiShield("api-validation", {
+ * const shield = await APIShield("api-validation", {
  *   zone: "example.com",
  *   schema: schema,
  *   defaultAction: "none",
@@ -314,12 +315,12 @@ export interface ApiShield<S extends OpenAPIV3.Document = OpenAPIV3.Document>
  *
  * Use validation in monitoring mode to understand traffic patterns
  *
- * const schema = await Schema("my-schema", {
+ * const schema = await APISchema("my-schema", {
  *   zone: myZone,
  *   schema: new URL("file:///path/to/api-schema.json"),
  * });
  *
- * const monitoring = await ApiShield("api-monitoring", {
+ * const monitoring = await APIShield("api-monitoring", {
  *   zone: myZone,
  *   schema: schema,
  *   defaultAction: "none"
@@ -330,12 +331,12 @@ export interface ApiShield<S extends OpenAPIV3.Document = OpenAPIV3.Document>
  *
  * Track non-compliant requests without blocking (requires paid plan)
  *
- * const schema = await Schema("my-schema", {
+ * const schema = await APISchema("my-schema", {
  *   zone: myZone,
  *   schema: new URL("file:///path/to/api-schema.json"),
  * });
  *
- * const withLogging = await ApiShield("api-logging", {
+ * const withLogging = await APIShield("api-logging", {
  *   zone: myZone,
  *   schema: schema,
  *   defaultAction: "log"
@@ -346,12 +347,12 @@ export interface ApiShield<S extends OpenAPIV3.Document = OpenAPIV3.Document>
  *
  * Apply mitigations to entire paths or specific methods (requires paid plan)
  *
- * const schema = await Schema("my-schema", {
+ * const schema = await APISchema("my-schema", {
  *   zone: myZone,
  *   schema: new URL("file:///path/to/api-schema.json"),
  * });
  *
- * const protection = await ApiShield("api-protection", {
+ * const protection = await APIShield("api-protection", {
  *   zone: myZone,
  *   schema: schema,
  *   defaultAction: "log",
@@ -371,29 +372,29 @@ export interface ApiShield<S extends OpenAPIV3.Document = OpenAPIV3.Document>
  *
  * @see https://developers.cloudflare.com/api-shield/security/schema-validation/
  */
-export async function ApiShield<S extends string | URL | OpenAPIV3.Document>(
+export async function APIShield<S extends string | URL | OpenAPIV3.Document>(
   id: string,
-  props: ApiShieldProps<S>,
-): Promise<ApiShield<S extends string | URL ? OpenAPIV3.Document : S>> {
-  return (await _ApiShield(id, {
+  props: APIShieldProps<S>,
+): Promise<APIShield<S extends string | URL ? OpenAPIV3.Document : S>> {
+  return (await _APIShield(id, {
     ...props,
     // resolve file URLs to documents prior to passing input to the resource
     // so that updates to the schema trigger changes to the resource
     schema: await loadSchemaContent(props.schema),
-  })) as ApiShield<S extends string | URL ? OpenAPIV3.Document : S>;
+  })) as APIShield<S extends string | URL ? OpenAPIV3.Document : S>;
 }
 
-const _ApiShield = Resource(
-  "cloudflare::ApiShield",
+const _APIShield = Resource(
+  "cloudflare::APIShield",
   {
     // delete the api gateway operations in parallel
     destroyStrategy: "parallel",
   },
   async function <const S extends OpenAPIV3.Document>(
-    this: Context<ApiShield<S>>,
+    this: Context<APIShield<S>>,
     id: string,
-    props: Omit<ApiShieldProps<S>, "schema"> & { schema: S },
-  ): Promise<ApiShield<S>> {
+    props: Omit<APIShieldProps<S>, "schema"> & { schema: S },
+  ): Promise<APIShield<S>> {
     const api = await createCloudflareApi(props);
 
     // Resolve zone ID and name
@@ -418,11 +419,10 @@ const _ApiShield = Resource(
       validation_override_mitigation_action: props.unknownOperationMitigation,
     });
 
-    const schema = await Schema("schema", {
+    const schema = await APISchema("schema", {
       schema: props.schema,
       zone: props.zone,
       name: props.name ?? id,
-      kind: "openapi_v3",
       enabled: props.enabled,
       accountId: props.accountId,
       apiKey: props.apiKey,
@@ -452,7 +452,7 @@ const _ApiShield = Resource(
               }
             }
           }
-          return ApiGatewayOperation(
+          return APIGatewayOperation(
             // Create a deterministic ID for the operation
             `${id}-${method}-${parsedOp.endpoint.replace(/[^a-z0-9]/gi, "-")}`,
             {
@@ -614,7 +614,9 @@ async function loadSchemaContent(
   // Handle string content (YAML/JSON)
   try {
     if (typeof schema === "string") {
-      if (schema.includes("\n")) {
+      if (schema.startsWith("http://") || schema.startsWith("https://")) {
+        return loadSchemaContent(new URL(schema));
+      } else if (schema.includes("\n")) {
         // json or YAML
         return tryParse(schema);
       } else {

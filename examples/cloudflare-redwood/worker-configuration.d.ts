@@ -4851,7 +4851,7 @@ type IncomingRequestCfProperties<HostMetadata = unknown> =
     IncomingRequestCfPropertiesBotManagementEnterprise &
     IncomingRequestCfPropertiesCloudflareForSaaSEnterprise<HostMetadata> &
     IncomingRequestCfPropertiesGeographicInformation &
-    IncomingRequestCfPropertiesCloudflareAccessOrApiShield;
+    IncomingRequestCfPropertiesCloudflareAccessOrAPIShield;
 interface IncomingRequestCfPropertiesBase extends Record<string, unknown> {
   /**
    * [ASN](https://www.iana.org/assignments/as-numbers/as-numbers.xhtml) of the incoming request.
@@ -4991,7 +4991,7 @@ interface IncomingRequestCfPropertiesCloudflareForSaaSEnterprise<HostMetadata> {
    */
   hostMetadata: HostMetadata;
 }
-interface IncomingRequestCfPropertiesCloudflareAccessOrApiShield {
+interface IncomingRequestCfPropertiesCloudflareAccessOrAPIShield {
   /**
    * Information about the client certificate presented to Cloudflare.
    *

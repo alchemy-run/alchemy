@@ -1,24 +1,21 @@
 ---
-title: ApiShield
-description: Learn how to protect your APIs by validating incoming requests against OpenAPI schemas using Cloudflare API Shield API Shield.
+title: APIShield
+description: Protect your API endpoints with OpenAPI and API Shield
 ---
 
-[Cloudflare API Shield](https://developers.cloudflare.com/api-shield/security/schema-validation/) validates incoming API requests against an OpenAPI v3 schema, helping prevent malformed requests and potential security issues.
+Cloudflare's API Shield protects your API endpoints by validating incoming requests against an OpenAPI v3 schema. It can monitor, log, or block requests that don't match your schema definition, helping prevent malformed requests and potential security issues.
 
-## Minimal Example
+:::note
+See Cloudflare's official [API Shield documentation](https://developers.cloudflare.com/api-shield/) for more information.
+:::
 
-Upload an OpenAPI schema and enable validation with default settings:
+## Schema Validation
 
-```ts
-import { ApiShield, Zone } from "alchemy/cloudflare";
+Construct an APIShield from an OpenAPI v3 schema. The schema can be provided as a string, a file path, a URL, or a typed OpenAPI object.
 
-const zone = await Zone("my-zone", {
-  name: "api.example.com",
-});
+For example, given the following `schema.yaml` file:
 
-const shield = await ApiShield("shield", {
-  zone,
-  schema: `
+```yaml
 openapi: 3.0.0
 info:
   title: My API
@@ -31,351 +28,180 @@ paths:
       operationId: getUsers
       responses:
         '200':
-          description: List of users
+          description: Success
+  /users/{id}:
+    get:
+      operationId: getUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User details
+```
+
+You can construct and configure an `APIShield` for your Cloudflare [`Zone`](/providers/cloudflare/zone) with the following code:
+
+```typescript
+import { APIShield, Zone } from "alchemy/cloudflare";
+
+const zone = await Zone("example.com");
+
+const apiShield = await APIShield("api-validation", {
+  zone,
+  // or by domain name:
+  // zone: "example.com",
+  schema: "./schema.yaml",
+});
+```
+
+:::caution
+The schema must be valid OpenAPI `v3.0.x` format. Cloudflare does not support `v3.1+` yet.
+:::
+
+
+### From a File
+
+```ts
+const apiShield = await APIShield("api-validation", {
+  zone,
+  schema: "./schema.yaml",
+});
+```
+
+### From a URL
+
+```ts
+const apiShield = await APIShield("api-validation", {
+  zone,
+  schema: "https://api.example.com/openapi.yaml",
+  // or:
+  // schema: new URL("https://api.example.com/openapi.yaml"),
+});
+```
+
+### From a YAML String
+
+```ts
+const apiShield = await APIShield("api-validation", {
+  zone,
+  schema: `
+    openapi: 3.0.0
+    info:
+      title: My API
+      version: 1.0.0
+    paths:
+      # ... etc.
   `,
 });
 ```
 
-:::tip
-Remember to include the `servers` array in your OpenAPI schema! Cloudflare requires either a global `servers` definition or per-operation servers to construct endpoint URLs.
-:::
-
-## Using Typed OpenAPI Objects
-
-Get full TypeScript support by using typed OpenAPI objects instead of YAML strings:
+### From a JSON String
 
 ```ts
-import type { OpenAPIV3 } from "openapi-types";
-
-const apiSchema: OpenAPIV3.Document = {
-  openapi: "3.0.0",
-  info: {
-    title: "My API",
-    version: "1.0.0",
-  },
-  servers: [{ url: "https://api.example.com" }],
-  paths: {
-    "/products": {
-      get: {
-        operationId: "listProducts",
-        responses: {
-          "200": {
-            description: "Success",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "array",
-                  items: { $ref: "#/components/schemas/Product" }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  },
-  components: {
-    schemas: {
-      Product: {
-        type: "object",
-        properties: {
-          id: { type: "string" },
-          name: { type: "string" }
-        }
-      }
-    }
-  }
-};
-
-const shield = await ApiShield("shield", {
+const apiShield = await APIShield("api-validation", {
   zone,
-  schema: apiSchema,  // Alchemy automatically converts to YAML
-  defaultAction: "none",
+  schema: `
+    {
+      "openapi": "3.0.0",
+      "info": {
+        "title": "My API",
+        "version": "1.0.0"
+      },
+      "paths": {
+        // ... etc.
+      }
+    }
+  `,
 });
 ```
 
-:::note
-Cloudflare only supports OpenAPI v3.0.x, not OpenAPI v3.1.
-:::
-
-## Schema from File
-
-Load an OpenAPI schema from an external file:
+### From an Object
 
 ```ts
-const shield = await ApiShield("shield", {
-  zone: "api.example.com",
-  schema: "./openapi.yaml",
-  name: "production-api-v2",
-  defaultAction: "none",
+const apiShield = await APIShield("api-validation", {
+  zone,
+  schema: {
+    openapi: "3.0.0",
+    info: {
+      title: "My API",
+      version: "1.0.0",
+    },
+    paths: {
+      "/users": {
+        get: {
+          operationId: "getUsers",
+        },
+      },
+    },
+  },
 });
 ```
 
-## Understanding Validation Actions
+## Mitigation Actions
 
 API Shield supports three mitigation actions:
 
-### `none` - Monitor Only (Free)
-The default action that takes no action on non-compliant requests. Perfect for understanding your API traffic patterns without affecting users.
+- `none`: Monitor and analyze API traffic without impact
+- `log`: Track non-compliant requests for analysis
+- `block`: Actively protect endpoints by blocking invalid requests
+
+## Default Mitigation
+
+Each API Endpoint in the schema (path + HTTP method) will be configured with a default mitigation action of `"none"`, but you can override this with the `defaultMitigation` option.
 
 ```ts
-const shield = await ApiShield("monitor-only", {
+const apiShield = await APIShield("api-validation", {
   zone,
-  schema: "./openapi.yaml",
-  defaultAction: "none",  // Monitor without blocking
+  schema: "./schema.yaml",
+  defaultMitigation: "log" // Log violations (requires paid plan)
 });
 ```
 
-### `log` - Log Violations (Requires Paid Plan)
-Records details about non-compliant requests in your Cloudflare logs while still allowing them through. Great for debugging and gradual rollout.
+## Unknown Operation Mitigation
 
-### `block` - Enforce Schema (Requires Paid Plan)  
-Rejects non-compliant requests with a 400 error. Use this for production APIs where schema compliance is critical.
-
-:::tip[Progressive Rollout]
-Start with `defaultAction: "none"` to understand your traffic patterns. Then use path-specific actions to gradually increase protection:
-1. Begin with `"none"` for all endpoints to monitor traffic
-2. Add `"log"` for critical paths to track violations
-3. Finally use `"block"` for sensitive operations once you're confident in your schema
-:::
-
-## Path-Level Controls
-
-Set different validation actions for specific API paths and methods. Use the exact path patterns from your OpenAPI schema:
+Use the `unknownOperationMitigation` option to configure the action for requests that don't match any operation in the schema:
 
 ```ts
-const shield = await ApiShield("shield", {
+const apiShield = await APIShield("api-validation", {
   zone,
-  schema: "./openapi.yaml",
-  defaultAction: "none",
-  actions: {
-    "/users": {
-      get: "none",           // No action for read operations
-      post: "log",           // Log violations for writes (paid plan)
-      delete: "block",       // Block destructive operations (paid plan)
-    },
-    "/admin": "block",       // Block all methods on admin endpoints
-    "/public": "none",       // Allow all methods on public endpoints
-  },
-  unknownOperationAction: "block", // Block unrecognized endpoints
+  schema: "./schema.yaml",
+  unknownOperationMitigation: "log" // Log requests to undefined endpoints
 });
 ```
 
-:::tip[Path Matching]
-The paths in the `actions` object must exactly match the paths defined in your OpenAPI schema. For example, if your schema defines `/users/{id}`, use that exact pattern including the `{id}` parameter placeholder.
-:::
+## Endpoint Mitigations
 
-## Blanket Actions vs Per-Method Actions
-
-You can configure validation actions in two ways:
-
-### Blanket Actions
-Apply the same action to all HTTP methods on a path:
+Use the `mitigations` option to configure different actions for specific endpoints and methods:
 
 ```ts
-const shield = await ApiShield("blanket-actions", {
+const apiShield = await APIShield("api-validation", {
   zone,
-  schema: "./openapi.yaml",
-  defaultAction: "none",
-  actions: {
-    "/admin": "block",       // Block ALL methods (GET, POST, PUT, DELETE, etc.)
-    "/public": "none",       // Allow ALL methods
-    "/internal": "log",      // Log ALL methods
-  },
-});
-```
-
-### Per-Method Actions
-Fine-tune actions for specific HTTP methods:
-
-```ts
-const shield = await ApiShield("granular-actions", {
-  zone,
-  schema: "./openapi.yaml",
-  defaultAction: "none",
-  actions: {
-    "/users": {
-      get: "none",           // Allow reading users
-      post: "log",           // Log user creation
-      put: "log",            // Log user updates
-      delete: "block",       // Block user deletion
-    },
-    "/users/{id}/profile": {
-      get: "none",
-      patch: "log",
-    },
-  },
-});
-```
-
-### Mixed Configuration
-You can combine both approaches in the same configuration:
-
-```ts
-const shield = await ApiShield("mixed-actions", {
-  zone,
-  schema: "./openapi.yaml",
-  defaultAction: "none",
-  actions: {
-    "/admin": "block",       // Blanket block for admin
-    "/public": "none",       // Blanket allow for public
-    "/api/v1/users": {       // Granular control for users
-      get: "none",
-      post: "log",
-      delete: "block",
-    },
-  },
-});
-```
-
-## Monitoring Without Impact
-
-Use validation in monitoring mode to understand your API traffic:
-
-```ts
-const monitoring = await ApiShield("api-monitoring", {
-  zone,
-  schema: "./api-schema.json",
-  defaultAction: "none",
-  enableValidation: true,
-});
-```
-
-## Logging Violations
-
-Track non-compliant requests in your logs without blocking them:
-
-```ts
-const withLogging = await ApiShield("api-logging", {
-  zone,
-  schema: "./api-schema.json",
-  defaultAction: "log",  // Requires paid plan
-});
-```
-
-:::tip
-Use Cloudflare's log analytics to identify patterns in schema violations before enabling blocking.
-:::
-
-## Protecting Critical Endpoints
-
-Apply stricter validation to sensitive operations while monitoring others:
-
-```ts
-const criticalProtection = await ApiShield("api-protection", {
-  zone,
-  schema: "./api-schema.json",
-  defaultAction: "log",
-  actions: {
-    // Financial operations require strict validation - block all methods
-    "/payments": "block",
-    "/refunds": "block",
-    
-    // User management endpoints - selective protection
+  schema: "./schema.yaml",
+  mitigations: {
+    // apply to all methods on the /users path
+    "/users": "log",
     "/users/{id}": {
-      delete: "block",       // Block user deletion
-      put: "block",          // Block user updates
-      get: "none",           // Allow user retrieval
-    },
-    "/users/{id}/role": "block", // Block all role operations
-    
-    // Public endpoints can be more lenient
-    "/users": "none",        // Allow all user listing operations
-    "/products": "none",     // Allow all product operations
-  },
-});
-```
-
-## Full API Protection
-
-Enable complete schema enforcement for production APIs:
-
-```ts
-const fullProtection = await ApiShield("api-enforcement", {
-  zone,
-  schema: "./api-schema.json",
-  defaultAction: "block",              // Block non-compliant requests
-  unknownOperationAction: "block",     // Block undefined endpoints
-});
-```
-
-## Handling Maintenance Windows
-
-Temporarily disable validation during deployments or troubleshooting:
-
-```ts
-const shield = await ApiShield("shield", {
-  zone,
-  schema: "./openapi.yaml",
-  enableValidation: false, // Schema uploaded but validation disabled
-  defaultAction: "none",
-});
-```
-
-:::note
-The schema remains uploaded even when validation is disabled, making it easy to re-enable without re-uploading.
-:::
-
-## Working with External References
-
-While Cloudflare doesn't support external `$ref` files, you can still organize your schemas:
-
-```ts
-// Build your schema programmatically
-const userSchema = {
-  type: "object",
-  properties: {
-    id: { type: "string" },
-    name: { type: "string" }
-  }
-};
-
-const apiSchema: OpenAPIV3.Document = {
-  openapi: "3.0.0",
-  info: { title: "My API", version: "1.0.0" },
-  servers: [{ url: "https://api.example.com" }],
-  paths: {
-    "/users": {
-      get: {
-        operationId: "getUsers",
-        responses: {
-          "200": {
-            description: "Success",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "array",
-                  items: userSchema  // Reuse schema objects
-                }
-              }
-            }
-          }
-        }
-      }
+      // block invalid POST requests to /users/{id}
+      post: "block",
+      // log invalid GET requests to /users/{id}
+      get: "log"
     }
   }
-};
+});
 ```
 
-## Content Type Support
+## Disable Validation
 
-:::important
-Cloudflare currently only validates `application/json` request bodies. Other content types like `multipart/form-data` or `application/xml` are not validated.
-:::
-
-For APIs using multiple content types:
+Use the `enabled` option to disable validation for the APIShield:
 
 ```ts
-const shield = await ApiShield("mixed-content-api", {
+const apiShield = await APIShield("api-validation", {
   zone,
-  schema: apiSchema,
-  defaultAction: "none",  // Won't block non-JSON requests
-  actions: {
-    // Only JSON endpoints will be validated
-    "/users": {
-      post: "block",            // JSON endpoint for user creation
-    },
-    "/files/upload": "none",    // Multipart endpoint - won't be validated
-  }
+  schema: "./schema.yaml",
+  enabled: false, // Disable validation
 });
 ```
