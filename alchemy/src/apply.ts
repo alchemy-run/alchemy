@@ -223,8 +223,7 @@ async function _apply<Out extends Resource>(
               output: resource,
             },
           });
-        }
-        if (!error.force) {
+        } else {
           const pendingDeletions =
             (await scope.get<PendingDeletions>("pendingDeletions")) ?? [];
           pendingDeletions.push({
@@ -232,7 +231,6 @@ async function _apply<Out extends Resource>(
             oldProps: state.oldProps,
           });
           await scope.set("pendingDeletions", pendingDeletions);
-          await scope.get("pendingDeletions");
         }
 
         output = await alchemy.run(

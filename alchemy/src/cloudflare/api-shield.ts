@@ -4,11 +4,8 @@ import * as yaml from "yaml";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { handleApiError } from "./api-error.ts";
-import {
-  APIGatewayOperation,
-  type Mitigation,
-  type Mitigations,
-} from "./api-gateway-operation.ts";
+import { APIGatewayOperation } from "./api-gateway-operation.ts";
+import type { APIMitigation, APIMitigations } from "./api-mitigation.ts";
 import { APISchema } from "./api-schema.ts";
 import {
   createCloudflareApi,
@@ -132,20 +129,20 @@ export interface APIShieldProps<S extends string | URL | OpenAPIV3.Document>
    *   "/admin": "block"
    * }
    */
-  mitigations?: Mitigations<S extends string | URL ? OpenAPIV3.Document : S>;
+  mitigations?: APIMitigations<S extends string | URL ? OpenAPIV3.Document : S>;
 
   /**
    * Default validation action for all operations
    *
    * @default "none"
    */
-  defaultMitigation?: Mitigation;
+  defaultMitigation?: APIMitigation;
 
   /**
    * Action for requests that don't match any operation
    * @default "none"
    */
-  unknownOperationMitigation?: Mitigation;
+  unknownOperationMitigation?: APIMitigation;
 }
 
 /**
@@ -155,12 +152,12 @@ export interface ValidationSettings {
   /**
    * Default mitigation action
    */
-  defaultMitigation: Mitigation;
+  defaultMitigation: APIMitigation;
 
   /**
    * Override mitigation action for specific operations
    */
-  overrideMitigation?: Mitigation;
+  overrideMitigation?: APIMitigation;
 }
 
 /**
@@ -515,8 +512,8 @@ export async function getGlobalSettingsForZone(
 // Cloudflare API response types
 
 export interface CloudflareGlobalSettings {
-  validation_default_mitigation_action: Mitigation;
-  validation_override_mitigation_action?: Mitigation;
+  validation_default_mitigation_action: APIMitigation;
+  validation_override_mitigation_action?: APIMitigation;
 }
 
 /**

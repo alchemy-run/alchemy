@@ -1,31 +1,13 @@
-import type { OpenAPIV3 } from "openapi-types";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { handleApiError } from "./api-error.ts";
+import type { APIMitigation } from "./api-mitigation.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
 import type { Zone } from "./zone.ts";
-
-/**
- * Specifies the mitigation action to apply when a request does not conform to
- * the schema for this operation:
- * - `"log"`: Log the request.
- * - `"block"`: Deny access to the site.
- * - `"none"`: Skip mitigation for this operation.
- * - `null`: Clear any mitigation action.
- */
-export type Mitigation = "none" | "log" | "block" | null;
-
-export type Mitigations<S extends OpenAPIV3.Document> = {
-  [path in keyof S["paths"]]?:
-    | Mitigation
-    | {
-        [method in keyof S["paths"][path]]?: Mitigation;
-      };
-};
 
 /**
  * HTTP methods supported by API Gateway
@@ -68,7 +50,7 @@ export interface APIGatewayOperationProps extends CloudflareApiOptions {
    * Mitigation action for this operation
    * @default "none"
    */
-  mitigation?: Mitigation;
+  mitigation?: APIMitigation;
 }
 
 /**
@@ -109,7 +91,7 @@ export interface APIGatewayOperation
   /**
    * The mitigation action for this operation
    */
-  action: Mitigation;
+  action: APIMitigation;
 }
 
 /**
@@ -291,7 +273,7 @@ async function updateOperationSettings(
   zoneId: string,
   operationId: string,
   params: {
-    mitigation_action: Mitigation;
+    mitigation_action: APIMitigation;
   },
 ): Promise<void> {
   const response = await api.put(
@@ -349,7 +331,7 @@ export async function getOperationSchemaValidationSetting(
 
   const data = (await response.json()) as {
     result: {
-      mitigation_action: Mitigation;
+      mitigation_action: APIMitigation;
       operation_id: string;
     };
   };
