@@ -11,6 +11,7 @@ import {
   ResourceSeq,
 } from "./resource.ts";
 import { isScope, type PendingDeletions, Scope } from "./scope.ts";
+import type { State } from "./state.ts";
 import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
 
@@ -108,12 +109,29 @@ export async function destroy<Type extends string>(
       });
     }
 
-    const state = await scope.state.get(instance[ResourceID]);
-
-    if (state === undefined) {
-      return;
+    let state: State;
+    let props: ResourceProps | undefined;
+    if (options?.replace) {
+      props = options.replace.props;
+      state = {
+        output: options.replace.output!,
+        status: "deleting",
+        oldProps: options.replace.props,
+        data: {},
+        kind: instance[ResourceKind],
+        id: instance[ResourceID],
+        fqn: instance[ResourceFQN],
+        seq: instance[ResourceSeq],
+        props,
+      };
+    } else {
+      const _state = await scope.state.get(instance[ResourceID]);
+      if (_state === undefined) {
+        return;
+      }
+      state = _state;
+      props = state.props;
     }
-
     const ctx = context({
       scope,
       phase: "delete",
@@ -121,20 +139,8 @@ export async function destroy<Type extends string>(
       id: instance[ResourceID],
       fqn: instance[ResourceFQN],
       seq: instance[ResourceSeq],
-      props: options?.replace?.props ?? state.props,
-      state: options?.replace?.output
-        ? {
-            output: options.replace.output,
-            status: "deleting",
-            oldProps: options.replace.props,
-            data: {},
-            kind: instance[ResourceKind],
-            id: instance[ResourceID],
-            fqn: instance[ResourceFQN],
-            seq: instance[ResourceSeq],
-            props: options.replace.props,
-          }
-        : state,
+      props,
+      state,
       // TODO(sam|michael): should this always be false or !!options?.replace
       isReplacement: false,
       replace: () => {
@@ -157,7 +163,7 @@ export async function destroy<Type extends string>(
           nestedScope = options?.replace?.props == null ? scope : undefined;
           return await Provider.handler.bind(ctx)(
             instance[ResourceID],
-            options?.replace?.props ?? state.props!,
+            ctx.props,
           );
         },
       );

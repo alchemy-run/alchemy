@@ -262,7 +262,6 @@ async function uploadSchema(
   const data = (await response.json()) as {
     result: CloudflareSchema;
   };
-  console.log("create schema", data.result.schema_id);
   return {
     id: data.result.schema_id,
     name: data.result.name,
@@ -281,7 +280,6 @@ async function updateSchema(
     validation_enabled: boolean;
   },
 ): Promise<CloudflareSchemaDetails> {
-  console.log("update", schemaId);
   const response = await api.patch(
     `/zones/${zoneId}/schema_validation/schemas/${schemaId}`,
     params,
@@ -302,12 +300,11 @@ async function updateSchema(
   };
 }
 
-async function deleteSchema(
+export async function deleteSchema(
   api: CloudflareApi,
   zoneId: string,
   schemaId: string,
 ): Promise<void> {
-  console.log("delete", schemaId);
   const response = await api.delete(
     `/zones/${zoneId}/schema_validation/schemas/${schemaId}`,
   );
@@ -318,9 +315,14 @@ async function deleteSchema(
       message: string;
     }[];
   };
-  console.log("deleteSchema response", response.status, data);
+  if (response.status === 404) {
+    return;
+  } else if (response.status === 400 && data.errors[0].code === 19400) {
+    // Bad request: schema with this ID does not exist
+    return;
+  }
 
-  if (!response.ok && response.status !== 404) {
+  if (!response.ok) {
     await handleApiError(response, "deleting", "schema", schemaId);
   } else if (!data.success) {
     throw new CloudflareApiError(data.errors[0].message, response);
@@ -356,4 +358,31 @@ export async function getSchema(
     validationEnabled: data.result.validation_enabled,
     createdAt: data.result.created_at,
   };
+}
+
+/**
+ * List all schemas in a zone
+ */
+export async function listSchemas(
+  api: CloudflareApi,
+  zoneId: string,
+): Promise<CloudflareSchemaDetails[]> {
+  const response = await api.get(`/zones/${zoneId}/schema_validation/schemas`);
+
+  if (!response.ok) {
+    await handleApiError(response, "listing", "schemas", zoneId);
+  }
+
+  const data = (await response.json()) as {
+    result: CloudflareSchema[];
+  };
+
+  return data.result.map((schema) => ({
+    id: schema.schema_id,
+    name: schema.name,
+    kind: schema.kind as SchemaKind,
+    source: schema.source,
+    validationEnabled: schema.validation_enabled,
+    createdAt: schema.created_at,
+  }));
 }

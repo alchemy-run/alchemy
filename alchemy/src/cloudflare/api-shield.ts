@@ -419,9 +419,16 @@ const _ApiShield = Resource(
     });
 
     const schema = await Schema("schema", {
-      ...props,
+      schema: props.schema,
+      zone: props.zone,
       name: props.name ?? id,
       kind: "openapi_v3",
+      enabled: props.enabled,
+      accountId: props.accountId,
+      apiKey: props.apiKey,
+      apiToken: props.apiToken,
+      baseUrl: props.baseUrl,
+      email: props.email,
     });
 
     return this({
@@ -607,10 +614,16 @@ async function loadSchemaContent(
   // Handle string content (YAML/JSON)
   try {
     if (typeof schema === "string") {
-      try {
+      if (schema.includes("\n")) {
+        // json or YAML
         return tryParse(schema);
-      } catch {
-        return tryParse(await fs.readFile(schema, "utf-8"));
+      } else {
+        try {
+          return tryParse(await fs.readFile(schema, "utf-8"));
+        } catch {
+          // maybe minified JSON
+          return tryParse(schema);
+        }
       }
     } else if (schema instanceof URL) {
       return yaml.parse(await fetchUrl(schema));

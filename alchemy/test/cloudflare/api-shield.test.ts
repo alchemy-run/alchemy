@@ -16,6 +16,11 @@ import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 
 import fs from "node:fs/promises";
+import {
+  deleteSchema,
+  getSchema,
+  listSchemas,
+} from "../../src/cloudflare/schema.ts";
 import { findZoneForHostname } from "../../src/cloudflare/zone.ts";
 import "../../src/test/vitest.ts";
 
@@ -33,6 +38,8 @@ const zoneId = (await findZoneForHostname(api, ZONE_NAME)).zoneId;
 
 describe.sequential("ApiShield", () => {
   test("create and update schema validation with typed OpenAPI object", async (scope) => {
+    let oldSchemaId: string | undefined;
+    let newSchemaId: string | undefined;
     try {
       // Define a typed OpenAPI schema as an object
       const apiSchema = {
@@ -185,11 +192,11 @@ describe.sequential("ApiShield", () => {
       // Create schema validation using the typed object
       let shield = await ApiShield(`${BRANCH_PREFIX}-typed-validation`, {
         zone: ZONE_NAME,
-        name: "typed-api-shield-test",
         enabled: true,
         defaultMitigation: "none",
         schema: apiSchema,
       });
+      oldSchemaId = shield.schema.id;
 
       // Verify that operations were created correctly from the object schema
       await expectOperations(shield, [
@@ -237,6 +244,7 @@ describe.sequential("ApiShield", () => {
         schema: apiSchema,
         defaultMitigation: "none",
         unknownOperationMitigation: "none",
+        enabled: true,
         mitigations: {
           "/api/users": {
             get: "none",
@@ -250,6 +258,7 @@ describe.sequential("ApiShield", () => {
           "/api/health": "none", // Blanket allow for health check
         },
       });
+      newSchemaId = shield.schema.id;
 
       await expectOperations(shield, [
         {
@@ -295,7 +304,10 @@ describe.sequential("ApiShield", () => {
       expect(globalSettings.validation_default_mitigation_action).toBe("none");
       expect(globalSettings.validation_override_mitigation_action).toBe("none");
     } finally {
+      await scope.finalize();
       await destroy(scope);
+      await assertSchemaDeleted(oldSchemaId);
+      await assertSchemaDeleted(newSchemaId);
     }
   });
 
@@ -532,6 +544,8 @@ paths:
   });
 
   test("schema change with operation removal", async (scope) => {
+    let oldSchemaId: string | undefined;
+    let newSchemaId: string | undefined;
     try {
       // Create initial schema with multiple operations
 
@@ -579,7 +593,7 @@ paths:
           description: Success
 `,
       });
-
+      oldSchemaId = shield.schema.id;
       // Verify all initial operations are created
       await expectOperations(shield, [
         {
@@ -655,7 +669,7 @@ paths:
           },
         },
       });
-
+      newSchemaId = shield.schema.id;
       // Verify only the remaining operations exist with updated actions
       await expectOperations(shield, [
         {
@@ -685,6 +699,8 @@ paths:
       ]);
     } finally {
       await destroy(scope);
+      await assertSchemaDeleted(oldSchemaId);
+      await assertSchemaDeleted(newSchemaId);
     }
   });
 
@@ -914,4 +930,28 @@ async function expectOperations(
     );
     expect(mitigation_action).toBe(exp.mitigation);
   }
+}
+
+async function assertSchemaDeleted(id: string | undefined) {
+  if (id === undefined) {
+    return;
+  }
+  const cloudflareSchema = await getSchema(api, zoneId, id);
+  expect(!cloudflareSchema).toBe(true);
+}
+
+async function deleteAllSchemas(zoneName: string) {
+  // Get the zoneId for the given zoneName
+  const zone = await findZoneForHostname(api, zoneName);
+  if (!zone) {
+    throw new Error(`Zone not found: ${zoneName}`);
+  }
+
+  // Get all schemas for the zone
+  const schemas = await listSchemas(api, zone.zoneId);
+
+  // Delete each schema
+  await Promise.all(
+    schemas.map((schema) => deleteSchema(api, zone.zoneId, schema.id)),
+  );
 }
