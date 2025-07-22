@@ -31,7 +31,8 @@
       "!./alchemy/src/aws/control/types.ts",
       "!examples/cloudflare-tanstack-start/.output/**",
       "!examples/cloudflare-nuxt-pipeline/.output/**",
-      "!./alchemy/lib/**"
+      "!./alchemy/lib/**",
+      "!**/*.gen.ts"
     ],
     "experimentalScannerIgnores": ["!**/node_modules", "./alchemy/lib/**"]
   },
