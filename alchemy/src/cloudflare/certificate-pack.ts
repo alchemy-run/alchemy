@@ -298,8 +298,18 @@ export const CertificatePack = Resource(
         const deleteResponse = await api.delete(
           `/zones/${zoneId}/ssl/certificate_packs/${this.output.id}`,
         );
+        const deleteResponseJson = (await deleteResponse.json()) as {
+          errors: Array<{ code: number }>;
+        };
+        const isCurrentlyDeleting =
+          deleteResponse.status === 400 &&
+          deleteResponseJson.errors[0].code === 1406;
 
-        if (!deleteResponse.ok && deleteResponse.status !== 404) {
+        if (
+          !deleteResponse.ok &&
+          deleteResponse.status !== 404 &&
+          !isCurrentlyDeleting
+        ) {
           await handleApiError(
             deleteResponse,
             "delete",
@@ -314,96 +324,7 @@ export const CertificatePack = Resource(
     }
 
     if (this.phase === "update" && this.output?.id) {
-      // Validate immutable properties
-      const currentPack = this.output;
-
-      if (props.certificateAuthority !== currentPack.certificateAuthority) {
-        throw new Error(
-          `Cannot change certificateAuthority from '${currentPack.certificateAuthority}' to '${props.certificateAuthority}'. Certificate Authority is immutable after creation. You must delete and recreate the certificate pack.`,
-        );
-      }
-
-      if (
-        JSON.stringify(props.hosts.sort()) !==
-        JSON.stringify(currentPack.hosts.sort())
-      ) {
-        throw new Error(
-          `Cannot change hosts from [${currentPack.hosts.join(", ")}] to [${props.hosts.join(", ")}]. Hosts are immutable after creation. You must delete and recreate the certificate pack.`,
-        );
-      }
-
-      if (props.validationMethod !== currentPack.validationMethod) {
-        throw new Error(
-          `Cannot change validationMethod from '${currentPack.validationMethod}' to '${props.validationMethod}'. Validation method is immutable after creation. You must delete and recreate the certificate pack.`,
-        );
-      }
-
-      if (props.validityDays !== currentPack.validityDays) {
-        throw new Error(
-          `Cannot change validityDays from ${currentPack.validityDays} to ${props.validityDays}. Validity period is immutable after creation. You must delete and recreate the certificate pack.`,
-        );
-      }
-
-      const type = props.type || "advanced";
-      if (type !== currentPack.type) {
-        throw new Error(
-          `Cannot change type from '${currentPack.type}' to '${type}'. Type is immutable after creation. You must delete and recreate the certificate pack.`,
-        );
-      }
-
-      // Only cloudflareBranding can be updated
-      if (props.cloudflareBranding !== currentPack.cloudflareBranding) {
-        logger.log(
-          `Updating certificate pack cloudflare branding from ${currentPack.cloudflareBranding} to ${props.cloudflareBranding}`,
-        );
-
-        const updateResponse = await api.patch(
-          `/zones/${zoneId}/ssl/certificate_packs/${this.output.id}`,
-          {
-            cloudflare_branding: props.cloudflareBranding || false,
-          },
-        );
-
-        if (!updateResponse.ok) {
-          await handleApiError(
-            updateResponse,
-            "update",
-            "certificate pack",
-            this.output.id,
-          );
-        }
-      }
-
-      // Get updated certificate pack details
-      const response = await api.get(
-        `/zones/${zoneId}/ssl/certificate_packs/${this.output.id}`,
-      );
-
-      if (!response.ok) {
-        await handleApiError(
-          response,
-          "get",
-          "certificate pack",
-          this.output.id,
-        );
-      }
-
-      const updatedPack = (
-        (await response.json()) as { result: CloudflareCertificatePack }
-      ).result;
-
-      return this({
-        id: updatedPack.id,
-        certificateAuthority: updatedPack.certificate_authority,
-        cloudflareBranding: updatedPack.cloudflare_branding,
-        hosts: updatedPack.hosts,
-        status: updatedPack.status,
-        type: updatedPack.type,
-        validationMethod: updatedPack.validation_method,
-        validityDays: updatedPack.validity_days,
-        zoneId: updatedPack.zone_id,
-        zoneName: zoneName,
-      });
+      this.replace();
     }
 
     // Create new certificate pack
@@ -438,13 +359,13 @@ export const CertificatePack = Resource(
       return this({
         id: existingPack.id,
         certificateAuthority: existingPack.certificate_authority,
-        cloudflareBranding: existingPack.cloudflare_branding,
+        cloudflareBranding: props.cloudflareBranding ?? false,
         hosts: existingPack.hosts,
         status: existingPack.status,
         type: existingPack.type,
         validationMethod: existingPack.validation_method,
         validityDays: existingPack.validity_days,
-        zoneId: existingPack.zone_id,
+        zoneId,
         zoneName: zoneName,
       });
     }
@@ -498,13 +419,13 @@ export const CertificatePack = Resource(
     return this({
       id: createdPack.id,
       certificateAuthority: createdPack.certificate_authority,
-      cloudflareBranding: createdPack.cloudflare_branding,
+      cloudflareBranding: props.cloudflareBranding ?? false,
       hosts: createdPack.hosts,
       status: createdPack.status,
       type: createdPack.type,
       validationMethod: createdPack.validation_method,
       validityDays: createdPack.validity_days,
-      zoneId: createdPack.zone_id,
+      zoneId,
       zoneName: zoneName,
     });
   },
@@ -516,13 +437,11 @@ export const CertificatePack = Resource(
 interface CloudflareCertificatePack {
   id: string;
   certificate_authority: CertificateAuthority;
-  cloudflare_branding: boolean;
   hosts: string[];
   status: CertificatePackStatus;
   type: "advanced";
   validation_method: ValidationMethod;
   validity_days: ValidityDays;
-  zone_id: string;
 }
 
 /**
@@ -605,7 +524,9 @@ async function findMatchingCertificatePack(
   zoneId: string,
   props: CertificatePackProps,
 ): Promise<CloudflareCertificatePack | null> {
-  const response = await api.get(`/zones/${zoneId}/ssl/certificate_packs`);
+  const response = await api.get(
+    `/zones/${zoneId}/ssl/certificate_packs?status=all`,
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to list certificate packs: ${response.statusText}`);
@@ -634,6 +555,13 @@ async function findMatchingCertificatePack(
       const allHostsCovered = props.hosts.every((host) => packHosts.has(host));
 
       if (allHostsCovered) {
+        // If Cloudflare branding is enabled, ensure that the cert pack is cloudflare branded`
+        if (
+          props.cloudflareBranding &&
+          !pack.hosts.some((host) => host.endsWith("sni.cloudflaressl.com"))
+        ) {
+          continue;
+        }
         logger.log(
           `Found existing certificate pack ${pack.id} that covers all requested hosts`,
         );
