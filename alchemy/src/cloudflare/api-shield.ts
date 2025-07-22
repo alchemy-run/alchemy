@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import fs from "node:fs/promises";
 import type { OpenAPIV3 } from "openapi-types";
 import * as yaml from "yaml";
 import type { Context } from "../context.ts";
@@ -605,28 +605,48 @@ async function loadSchemaContent(
   schema: string | URL | OpenAPIV3.Document,
 ): Promise<OpenAPIV3.Document> {
   // Handle string content (YAML/JSON)
-  if (typeof schema === "string") {
-    if (!schema.includes("\n")) {
-      return yaml.parse(await readFile(schema, "utf-8"));
+  try {
+    if (typeof schema === "string") {
+      try {
+        return tryParse(schema);
+      } catch {
+        return tryParse(await fs.readFile(schema, "utf-8"));
+      }
+    } else if (schema instanceof URL) {
+      return yaml.parse(await fetchUrl(schema));
+    } else if (typeof schema === "object") {
+      return schema as OpenAPIV3.Document;
+    } else {
+      // should be unreachable
+      throw SchemaError(new Error(`Unsupported schema type: ${typeof schema}`));
     }
-    try {
-      return yaml.parse(schema);
-    } catch {
-      return JSON.parse(schema);
-    }
-  } else if (schema instanceof URL) {
-    return yaml.parse(await fetchUrl(schema));
-  } else if (typeof schema === "object") {
-    return schema as OpenAPIV3.Document;
-  } else {
-    throw new Error(`Unsupported schema: ${schema}`);
+  } catch (err) {
+    throw SchemaError(err);
+  }
+}
+
+const SchemaError = (cause?: any) =>
+  new Error(
+    `Invalid OpenAPI schema. Please provide a:
+1. a string containing OpenAPI v3.0 schema (in YAML or JSON format)
+2. a string path to a file containing OpenAPI v3.0 schema (in YAML or JSON format)
+3. a file://, http:// or https:// URL pointing to an OpenAPI v3.0 schema (in YAML or JSON format)
+4. a literal OpenAPI v3.0 schema object`,
+    { cause },
+  );
+
+function tryParse(schema: string): OpenAPIV3.Document {
+  try {
+    return yaml.parse(schema);
+  } catch {
+    return JSON.parse(schema);
   }
 }
 
 async function fetchUrl(url: URL): Promise<string> {
   if (url.protocol === "file:") {
     // Read from local filesystem for file:// URLs
-    return await readFile(url.pathname, "utf-8");
+    return await fs.readFile(url.pathname, "utf-8");
   } else if (url.protocol === "http:" || url.protocol === "https:") {
     // Fetch from remote for http/https URLs
     const response = await fetch(url.toString());
