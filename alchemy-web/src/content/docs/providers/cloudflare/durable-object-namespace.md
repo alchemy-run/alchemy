@@ -64,30 +64,87 @@ await Worker("my-worker", {
 });
 ```
 
-## Cross-Script Durable Object Binding
+## Rename Class Name
 
-Share durable objects between workers by defining them in one worker and accessing them from another:
+Alchemy takes care of migrations automatically when you rename the class name.
+
+```diff lang='ts'
+ import { DurableObjectNamespace } from "alchemy/cloudflare";
+
+ const counter = DurableObjectNamespace("counter", {
+-  className: "Counter",
++  className: "MyCounter",
+   sqlite: true,
+ });
+```
+
+:::caution
+You cannot rename the `"counter"` ID in `DurableObjectNamespace("counter")` - we call this the "stable identifier" for the Durable Object and it is immutable for the lifetime of the application.
+:::
+
+## Cross-Script Binding
+
+You can share Durable Objects across multiple Workers, allowing one Worker to access Durable Object instances defined in another Worker.
+
+### Method 1: Using re-exported syntax
+
+You can directly reference the Durable Object binding from the provider Worker:
 
 ```ts
 import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";
 
-// Worker that defines and owns the durable object
-const dataWorker = await Worker("data-worker", {
-  entrypoint: "./src/data.ts",
+// Create the provider Worker with the Durable Object
+const host = await Worker("Host", {
+  entrypoint: "./do-provider.ts",
   bindings: {
-    // Bind to its own durable object
-    STORAGE: DurableObjectNamespace("storage", {
-      className: "DataStorage",
+    SHARED_COUNTER: DurableObjectNamespace("shared-counter", {
+      className: "SharedCounter",
+      sqlite: true,
     }),
   },
 });
 
-// Worker that accesses the durable object from another worker
-const apiWorker = await Worker("api-worker", {
-  entrypoint: "./src/api.ts",
+// Create the client Worker using the provider's Durable Object binding directly
+const client = await Worker("client", {
+  entrypoint: "./client-worker.ts",
   bindings: {
-    // Cross-script binding to the data worker's durable object
-    SHARED_STORAGE: dataWorker.bindings.STORAGE,
+    // Re-use the exact same Durable Object binding from the provider worker
+    SHARED_COUNTER: host.bindings.SHARED_COUNTER,
+  },
+});
+```
+
+### Method 2: Using `scriptName` directly
+
+Alternatively, when creating a Durable Object binding in a client Worker, you can reference a Durable Object defined in another Worker by specifying the `scriptName`:
+
+```ts
+import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";
+
+const hostWorkerName = "host";
+
+const durableObject = DurableObjectNamespace("shared-counter", {
+  className: "SharedCounter",
+  scriptName: hostWorkerName,
+  sqlite: true,
+});
+
+// First, create the Worker that defines the Durable Object
+const host = await Worker("host", {
+  entrypoint: "./do-provider.ts",
+  name: hostWorkerName,
+  bindings: {
+    // Define the Durable Object in this worker
+    SHARED_COUNTER: durableObject,
+  },
+});
+
+// Then, create a client Worker that uses the cross-script Durable Object
+const client = await Worker("client", {
+  entrypoint: "./client-worker.ts",
+  bindings: {
+    // Reference the same Durable Object but specify which script it comes from
+    SHARED_COUNTER: durableObject,
   },
 });
 ```

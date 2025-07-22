@@ -1,6 +1,6 @@
 ---
 title: Resource
-description: Learn about Resources, the core building blocks of Alchemy. Understand how to create, update, and manage infrastructure with async functions in TypeScript.
+description: Learn about Resources, the core building blocks of Alchemy.
 sidebar:
   order: 3
 ---
@@ -24,7 +24,7 @@ await MyResource("id")
 
 This ID is what Alchemy uses to track the state of the resource and trigger the appropriate create/update/delete phase.
 
-## Resource Props
+## Input Props
 
 Each Resource has an interface for its "input properties"
 
@@ -37,7 +37,7 @@ export interface DatabaseProps {
 }
 ```
 
-## Resource Instance
+## Output Attributes
 
 Each Resource has an interface for its "output attributes":
 
@@ -53,7 +53,7 @@ export interface Database extends Resource<"neon::Database">, DatabaseProps {
 This interface must extend `Resource<..>`
 :::
 
-## Resource Provider
+## Provider
 
 Each Resource exports a "Provider" function with a globally unique name and an implementation of the lifecycle handler logic.
 
@@ -84,7 +84,7 @@ By Convention, the name of this exported `const` should match the name of your R
 
 Let's break this down a bit futher, since it may seem confusing at first.
 
-## Resource FQN
+## Fully Qualified Name (FQN)
 
 Each Resource has a globally unique name (aka. fully qualified name), e.g `"neon:Database"`:
 
@@ -133,16 +133,7 @@ if (this.phase === "delete") {
 }
 ```
 
-## `this.destroy()`
-
-When a resource is being deleted, you must return `this.destroy()` to signal that the resource deletion process is complete.
-
-
-:::tip
-This also enables type inference since `this.destroy()` returns `never`, so the type of the resource can be inferred from the return type of the function.
-:::
-
-## `this({..})`
+## Create
 
 To construct the resource (including your properites and Alchemy's intrinsic properties), call `this(props)` with your output properties:
 
@@ -164,6 +155,14 @@ If this syntax freaks you out too much, it is also aliased as `this.create`:
 ```ts
 return this.create({/* updated properties */});
 ```
+:::
+
+## Destroy
+
+When a resource is being deleted, you must return `this.destroy()` to signal that the resource deletion process is complete.
+
+:::tip
+This also enables type inference since `this.destroy()` returns `never`, so the type of the resource can be inferred from the return type of the function.
 :::
 
 ## Destroy Strategy
