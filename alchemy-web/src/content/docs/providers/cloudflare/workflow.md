@@ -61,7 +61,6 @@ Alchemy takes care of migrations automatically when you rename the class name.
  import { Workflow } from "alchemy/cloudflare";
 
  const workflow = Workflow("my-workflow", {
-   workflowName: "my-workflow",
 -  className: "MyWorkflow",
 +  className: "MyWorkflowV2",
  });

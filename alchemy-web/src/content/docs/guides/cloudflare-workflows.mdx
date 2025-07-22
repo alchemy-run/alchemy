@@ -9,10 +9,6 @@ import { Steps } from '@astrojs/starlight/components';
 
 This guide explains how to create, bind and use Cloudflare Workflows within your Worker scripts.
 
-:::tip
-We assume you're familiar with Cloudflare Workflows already. If not, read [Cloudflare Workflows](https://developers.cloudflare.com/workflows/) first.
-:::
-
 <Steps>
 
 1. **Create a Workflow**
@@ -108,8 +104,6 @@ We assume you're familiar with Cloudflare Workflows already. If not, read [Cloud
     const orderProcessor = Workflow("orderProcessor", {
    -  className: "OrderProcessor",
    +  className: "OrderProcessorV2",
-     // defaults to the resource ID ("orderProcessor") if not specified
-     // workflowName: "order-processing-workflow",
     });
    ```
 

@@ -29,7 +29,7 @@ const worker = await Worker("api", {
 await app.finalize();
 ```
 
-You then "deploy" your infrastructure by running the script with `alchemy deploy` or manually with `bun` or `node`:
+Then "deploy" your infrastructure by running the script with `alchemy deploy` or manually with `bun` or `node`:
 
 ```bash
 alchemy deploy                      # deploy to cloud
@@ -313,12 +313,6 @@ test("create worker", async (scope) => {
 :::tip
 See the [Testing](/concepts/testing) documentation for comprehensive test setup and best practices.
 :::
-
-## Available Providers
-
-- **Cloudflare**: Worker, KV, R2, D1, Queue, Durable Objects
-- **AWS**: S3, DynamoDB, Lambda, ECS, VPC
-- **Others**: Docker, GitHub, Stripe, Vercel, Neon, PlanetScale
 
 ## Next Steps
 
