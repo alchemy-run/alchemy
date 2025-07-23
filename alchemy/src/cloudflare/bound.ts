@@ -1,4 +1,24 @@
-import type { KVNamespace } from "@cloudflare/workers-types";
+import type {
+  Ai,
+  AiGateway,
+  AnalyticsEngineDataset,
+  D1Database,
+  DispatchNamespace,
+  DurableObjectNamespace,
+  Fetcher,
+  Hyperdrive,
+  ImagesBinding,
+  KVNamespace,
+  Queue,
+  R2Bucket,
+  RateLimit,
+  Rpc,
+  SecretsStoreSecret,
+  Service,
+  VectorizeIndex,
+  WorkerVersionMetadata,
+  Workflow,
+} from "@cloudflare/workers-types";
 import type { Pipeline } from "cloudflare:pipelines";
 import type { Secret } from "../secret.ts";
 import type { AiGatewayResource as _AiGateway } from "./ai-gateway.ts";
@@ -16,7 +36,7 @@ import type { HyperdriveResource as _Hyperdrive } from "./hyperdrive.ts";
 import type { Images as _Images } from "./images.ts";
 import type { PipelineResource as _Pipeline } from "./pipeline.ts";
 import type { QueueResource as _Queue } from "./queue.ts";
-import type { RateLimit } from "./rate-limit.ts";
+import type { RateLimit as _RateLimit } from "./rate-limit.ts";
 import type { SecretKey } from "./secret-key.ts";
 import type { Secret as CloudflareSecret } from "./secret.ts";
 import type { VectorizeIndexResource as _VectorizeIndex } from "./vectorize-index.ts";
@@ -67,7 +87,7 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
                           : T extends D1DatabaseResource
                             ? D1Database
                             : T extends DispatchNamespaceResource
-                              ? { get(name: string): Fetcher }
+                              ? DispatchNamespace
                               : T extends _VectorizeIndex
                                 ? VectorizeIndex
                                 : T extends _Queue<infer Body>
@@ -76,12 +96,8 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
                                     ? AnalyticsEngineDataset
                                     : T extends _Pipeline<infer R>
                                       ? Pipeline<R>
-                                      : T extends RateLimit
-                                        ? {
-                                            limit(options: {
-                                              key: string;
-                                            }): Promise<{ success: boolean }>;
-                                          }
+                                      : T extends _RateLimit
+                                        ? RateLimit
                                         : T extends string
                                           ? string
                                           : T extends BrowserRendering
