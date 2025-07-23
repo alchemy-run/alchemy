@@ -23,28 +23,24 @@ Alchemy is a simple TypeScript script that you run to deploy infrastructure. All
        ```sh
        bun init -y
        bun add alchemy
-       bun add -g alchemy wrangler
        ```
      </TabItem>
      <TabItem label="npm">
        ```sh
        npm init -y
        npm install alchemy
-       npm install -g alchemy wrangler
        ```
      </TabItem>
      <TabItem label="pnpm">
        ```sh
        pnpm init
        pnpm add alchemy
-       pnpm add -g alchemy wrangler
        ```
      </TabItem>
      <TabItem label="yarn">
        ```sh
        yarn init -y
        yarn add alchemy
-       yarn global add alchemy wrangler
        ```
      </TabItem>
    </Tabs>
@@ -56,22 +52,22 @@ Alchemy is a simple TypeScript script that you run to deploy infrastructure. All
    <Tabs syncKey="pkgManager">
      <TabItem label="bun">
        ```sh
-       bun wrangler login
+       bun alchemy login
        ```
      </TabItem>
      <TabItem label="npm">
        ```sh
-       npx wrangler login
+       npx alchemy login
        ```
      </TabItem>
      <TabItem label="pnpm">
        ```sh
-       pnpm wrangler login
+       pnpm alchemy login
        ```
      </TabItem>
      <TabItem label="yarn">
        ```sh
-       yarn wrangler login
+       yarn alchemy login
        ```
      </TabItem>
    </Tabs>

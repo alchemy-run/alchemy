@@ -16,8 +16,6 @@ const ReceiveRequest = type({
 
 const bucket = await R2Bucket("bucket", {
   name: `${app.name}-${app.stage}-bucket`,
-  accessKey: await alchemy.secret.env.R2_ACCESS_KEY_ID,
-  secretAccessKey: await alchemy.secret.env.R2_SECRET_ACCESS_KEY,
   adopt: true,
   empty: true,
 });

@@ -4,7 +4,6 @@ import type { AlchemyOptions } from "../src/alchemy.ts";
 import { CloudflareStateStore } from "../src/state/cloudflare-state-store.ts";
 import { D1StateStore } from "../src/state/d1-state-store.ts";
 import { FileSystemStateStore } from "../src/state/file-system-state-store.ts";
-import { DOFSStateStore } from "../src/state/index.ts";
 import { SQLiteStateStore } from "../src/state/sqlite-state-store.ts";
 
 /**
@@ -40,7 +39,7 @@ export const BRANCH_PREFIX = sanitizeForAwsResourceName(
   process.env.BRANCH_PREFIX || os.userInfo().username,
 );
 
-export const STATE_STORE_TYPES = ["do", "fs", "d1", "sqlite", "dofs"] as const;
+export const STATE_STORE_TYPES = ["do", "fs", "d1", "sqlite"] as const;
 
 export const createTestOptions = (
   storeType: (typeof STATE_STORE_TYPES)[number],
@@ -51,8 +50,6 @@ export const createTestOptions = (
       switch (storeType) {
         case "do":
           return new CloudflareStateStore(scope);
-        case "dofs":
-          return new DOFSStateStore(scope);
         case "fs":
           return new FileSystemStateStore(scope);
         case "d1":

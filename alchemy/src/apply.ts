@@ -1,6 +1,6 @@
 import { alchemy } from "./alchemy.ts";
 import { context } from "./context.ts";
-import { destroy } from "./destroy.ts";
+import { destroy, DestroyStrategy } from "./destroy.ts";
 import {
   PROVIDERS,
   ResourceFQN,
@@ -92,6 +92,7 @@ async function _apply<Out extends Resource>(
           [ResourceKind]: resource[ResourceKind],
           [ResourceScope]: scope,
           [ResourceSeq]: resource[ResourceSeq],
+          [DestroyStrategy]: provider.options?.destroyStrategy ?? "sequential",
         },
         // deps: [...deps],
         props,
@@ -116,7 +117,11 @@ async function _apply<Out extends Resource>(
         alwaysUpdate !== true &&
         !scope.force
       ) {
-        scope.skip();
+        const innerScope = new Scope({
+          parent: scope,
+          scopeName: resource[ResourceID],
+        });
+        innerScope.skip();
         if (!quiet) {
           logger.task(resource[ResourceFQN], {
             prefix: "skipped",
@@ -126,12 +131,7 @@ async function _apply<Out extends Resource>(
             status: "success",
           });
         }
-        options?.resolveInnerScope?.(
-          new Scope({
-            parent: scope,
-            scopeName: resource[ResourceID],
-          }),
-        );
+        options?.resolveInnerScope?.(innerScope);
         scope.telemetryClient.record({
           event: "resource.skip",
           resource: resource[ResourceKind],
@@ -199,6 +199,7 @@ async function _apply<Out extends Resource>(
         {
           isResource: true,
           parent: scope,
+          destroyStrategy: provider.options?.destroyStrategy ?? "sequential",
         },
         async (scope) => {
           options?.resolveInnerScope?.(scope);
@@ -216,12 +217,20 @@ async function _apply<Out extends Resource>(
         if (error.force) {
           await destroy(resource, {
             quiet: scope.quiet,
-            strategy: "sequential",
+            strategy: resource[DestroyStrategy] ?? "sequential",
             replace: {
               props: state.oldProps,
               output: resource,
             },
           });
+        } else {
+          const pendingDeletions =
+            (await scope.get<PendingDeletions>("pendingDeletions")) ?? [];
+          pendingDeletions.push({
+            resource: oldOutput,
+            oldProps: state.oldProps,
+          });
+          await scope.set("pendingDeletions", pendingDeletions);
         }
 
         output = await alchemy.run(
@@ -236,8 +245,8 @@ async function _apply<Out extends Resource>(
                 id: resource[ResourceID],
                 fqn: resource[ResourceFQN],
                 seq: resource[ResourceSeq],
-                props: state.props,
-                state,
+                props: state!.props,
+                state: state!,
                 isReplacement: true,
                 replace: () => {
                   throw new Error(
@@ -247,16 +256,6 @@ async function _apply<Out extends Resource>(
               }),
             )(resource[ResourceID], props),
         );
-
-        if (!error.force) {
-          const pendingDeletions =
-            (await scope.get<PendingDeletions>("pendingDeletions")) ?? [];
-          pendingDeletions.push({
-            resource: oldOutput,
-            oldProps: state.oldProps,
-          });
-          await scope.set("pendingDeletions", pendingDeletions);
-        }
       } else {
         throw error;
       }
@@ -281,6 +280,7 @@ async function _apply<Out extends Resource>(
       replaced: isReplaced,
     });
 
+    state = (await scope.state.get(resource[ResourceID]))!;
     await scope.state.set(resource[ResourceID], {
       kind: resource[ResourceKind],
       id: resource[ResourceID],

@@ -501,6 +501,49 @@ describe.concurrent("Replace", () => {
           }
         },
       );
+
+      test(
+        "replace should use the old props and output of the replaced resource",
+        options,
+        async (scope) => {
+          const deleted: { input: string; output: string }[] = [];
+          type MyResource = Resource<`MyResource-${string}`> & {
+            name: string;
+          };
+          const MyResource = Resource(
+            `MyResource-${storeType}`,
+            async function (
+              this: Context<MyResource>,
+              _id: string,
+              props: {
+                name: string;
+              },
+            ) {
+              if (this.phase === "delete") {
+                deleted.push({ input: props.name, output: this.output.name });
+                return this.destroy();
+              }
+              if (this.phase === "update") {
+                this.replace();
+              }
+              return this({ name: `output-${props.name}` });
+            },
+          );
+          try {
+            await MyResource("foo", { name: "foo" });
+            expect(deleted).toEqual([]);
+            await MyResource("foo", { name: "bar" });
+            await scope.finalize();
+            expect(deleted).toEqual([{ input: "foo", output: "output-foo" }]);
+          } finally {
+            await destroy(scope);
+            expect(deleted).toEqual([
+              { input: "foo", output: "output-foo" },
+              { input: "bar", output: "output-bar" },
+            ]);
+          }
+        },
+      );
     });
   }
 });

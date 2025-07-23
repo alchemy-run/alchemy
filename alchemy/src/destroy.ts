@@ -11,14 +11,19 @@ import {
   ResourceSeq,
 } from "./resource.ts";
 import { isScope, type PendingDeletions, Scope } from "./scope.ts";
+import type { State } from "./state.ts";
 import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
 
 export class DestroyedSignal extends Error {}
 
+export type DestroyStrategy = "sequential" | "parallel";
+
+export const DestroyStrategy = Symbol.for("alchemy::DestroyStrategy");
+
 export interface DestroyOptions {
   quiet?: boolean;
-  strategy?: "sequential" | "parallel";
+  strategy?: DestroyStrategy;
   replace?: {
     props?: ResourceProps | undefined;
     output?: Resource<string>;
@@ -40,7 +45,7 @@ export async function destroy<Type extends string>(
   if (isScopeArgs(args)) {
     const [scope] = args;
     const options = {
-      strategy: "sequential",
+      strategy: scope.destroyStrategy ?? "sequential",
       ...(args[1] ?? {}),
     } satisfies DestroyOptions;
 
@@ -104,12 +109,29 @@ export async function destroy<Type extends string>(
       });
     }
 
-    const state = await scope.state.get(instance[ResourceID]);
-
-    if (state === undefined) {
-      return;
+    let state: State;
+    let props: ResourceProps | undefined;
+    if (options?.replace) {
+      props = options.replace.props;
+      state = {
+        output: options.replace.output!,
+        status: "deleting",
+        oldProps: options.replace.props,
+        data: {},
+        kind: instance[ResourceKind],
+        id: instance[ResourceID],
+        fqn: instance[ResourceFQN],
+        seq: instance[ResourceSeq],
+        props,
+      };
+    } else {
+      const _state = await scope.state.get(instance[ResourceID]);
+      if (_state === undefined) {
+        return;
+      }
+      state = _state;
+      props = state.props;
     }
-
     const ctx = context({
       scope,
       phase: "delete",
@@ -117,8 +139,9 @@ export async function destroy<Type extends string>(
       id: instance[ResourceID],
       fqn: instance[ResourceFQN],
       seq: instance[ResourceSeq],
-      props: options?.replace?.props ?? state.props,
+      props,
       state,
+      // TODO(sam|michael): should this always be false or !!options?.replace
       isReplacement: false,
       replace: () => {
         throw new Error("Cannot replace a resource that is being deleted");
@@ -134,12 +157,13 @@ export async function destroy<Type extends string>(
           // TODO(sam): this is an awful hack to differentiate between naked scopes and resources
           isResource: instance[ResourceKind] !== "alchemy::Scope",
           parent: scope,
+          destroyStrategy: instance[DestroyStrategy] ?? "sequential",
         },
         async (scope) => {
           nestedScope = options?.replace?.props == null ? scope : undefined;
           return await Provider.handler.bind(ctx)(
             instance[ResourceID],
-            options?.replace?.props ?? state.props!,
+            ctx.props,
           );
         },
       );
@@ -151,13 +175,17 @@ export async function destroy<Type extends string>(
       }
     }
 
+    const destroyOptions = {
+      ...options,
+      strategy: instance[DestroyStrategy] ?? "sequential",
+    };
     if (nestedScope) {
-      await destroy(nestedScope, options);
+      await destroy(nestedScope, destroyOptions);
     }
 
     if (options?.replace == null) {
       if (nestedScope) {
-        await destroy(nestedScope, options);
+        await destroy(nestedScope, destroyOptions);
       }
       await scope.deleteResource(instance[ResourceID]);
     } else {
