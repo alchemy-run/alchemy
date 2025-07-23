@@ -43,11 +43,20 @@ export interface CloudflareStateStoreOptions extends CloudflareApiOptions {
  * @see {@link https://alchemy.run/guides/do-state-store DOStateStore}
  */
 export class CloudflareStateStore extends StateStoreProxy {
-  constructor(
-    scope: Scope,
-    private readonly options: CloudflareStateStoreOptions = {},
-  ) {
+  options: CloudflareStateStoreOptions & { stateToken: Secret<string> };
+  constructor(scope: Scope, options: CloudflareStateStoreOptions = {}) {
     super(scope);
+    const stateToken =
+      options.stateToken ?? alchemy.secret(process.env.ALCHEMY_STATE_TOKEN);
+    if (!stateToken) {
+      throw new Error(
+        "Missing token for DOStateStore. Please set ALCHEMY_STATE_TOKEN in the environment or set the `stateToken` option in the DOStateStore constructor.",
+      );
+    }
+    this.options = {
+      ...options,
+      stateToken: stateToken,
+    };
   }
 
   async provision(): Promise<StateStoreProxy.Dispatch> {
@@ -87,58 +96,68 @@ export class CloudflareStateStore extends StateStoreProxy {
   }
 }
 
-const provision = memoize(async (options: CloudflareStateStoreOptions) => {
-  const scriptName = options.scriptName ?? "alchemy-state-service";
-  const token =
-    options.stateToken ??
-    (await alchemy.secret.env(
-      "ALCHEMY_STATE_TOKEN",
-      undefined,
-      "Missing token for DOStateStore. Please set ALCHEMY_STATE_TOKEN in the environment or set the `stateToken` option in the DOStateStore constructor.",
-    ));
+const provision = memoize(
+  async (
+    options: CloudflareStateStoreOptions & {
+      stateToken: Secret<string>;
+    },
+  ) => {
+    const scriptName = options.scriptName ?? "alchemy-state-service";
+    const token =
+      options.stateToken ??
+      (await alchemy.secret.env(
+        "ALCHEMY_STATE_TOKEN",
+        undefined,
+        "Missing token for DOStateStore. Please set ALCHEMY_STATE_TOKEN in the environment or set the `stateToken` option in the DOStateStore constructor.",
+      ));
 
-  const api = await createCloudflareApi(options);
-  const [bundle, settings, subdomain] = await Promise.all([
-    getInternalWorkerBundle("cloudflare-state-store"),
-    getWorkerSettings(api, scriptName),
-    getWorkerSubdomain(api, scriptName),
-  ]);
-  if (!settings || !settings.tags.includes(bundle.tag) || options.forceUpdate) {
-    logger.log(
-      `[CloudflareStateStore] ${settings ? "Updating" : "Creating"}...`,
+    const api = await createCloudflareApi(options);
+    const [bundle, settings, subdomain] = await Promise.all([
+      getInternalWorkerBundle("cloudflare-state-store"),
+      getWorkerSettings(api, scriptName),
+      getWorkerSubdomain(api, scriptName),
+    ]);
+    if (
+      !settings ||
+      !settings.tags.includes(bundle.tag) ||
+      options.forceUpdate
+    ) {
+      logger.log(
+        `[CloudflareStateStore] ${settings ? "Updating" : "Creating"}...`,
+      );
+      await putWorker(api, {
+        workerName: scriptName,
+        compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+        format: "esm",
+        scriptBundle: {
+          entrypoint: bundle.file.name,
+          files: [bundle.file],
+          hash: bundle.tag,
+        },
+        compatibilityFlags: [],
+        bindings: {
+          STORE: DurableObjectNamespace(scriptName, {
+            className: "Store",
+            sqlite: true,
+          }),
+          STATE_TOKEN: token,
+        },
+        tags: [bundle.tag],
+      });
+    }
+    if (!subdomain.enabled) {
+      await enableWorkerSubdomain(api, scriptName);
+    }
+    const url = `https://${scriptName}.${await getAccountSubdomain(api)}.workers.dev`;
+    await pollUntilReady(() =>
+      fetch(url, {
+        method: "HEAD",
+        headers: { Authorization: `Bearer ${token.unencrypted}` },
+      }),
     );
-    await putWorker(api, {
-      workerName: scriptName,
-      compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
-      format: "esm",
-      scriptBundle: {
-        entrypoint: bundle.file.name,
-        files: [bundle.file],
-        hash: bundle.tag,
-      },
-      compatibilityFlags: [],
-      bindings: {
-        STORE: DurableObjectNamespace(scriptName, {
-          className: "Store",
-          sqlite: true,
-        }),
-        STATE_TOKEN: token,
-      },
-      tags: [bundle.tag],
-    });
-  }
-  if (!subdomain.enabled) {
-    await enableWorkerSubdomain(api, scriptName);
-  }
-  const url = `https://${scriptName}.${await getAccountSubdomain(api)}.workers.dev`;
-  await pollUntilReady(() =>
-    fetch(url, {
-      method: "HEAD",
-      headers: { Authorization: `Bearer ${token.unencrypted}` },
-    }),
-  );
-  return { url, token: token.unencrypted };
-});
+    return { url, token: token.unencrypted };
+  },
+);
 
 async function pollUntilReady(fn: () => Promise<Response>) {
   // This ensures the token is correct and the worker is ready to use.
