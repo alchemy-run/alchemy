@@ -220,7 +220,7 @@ async function _apply<Out extends Resource>(
             strategy: resource[DestroyStrategy] ?? "sequential",
             replace: {
               props: state.oldProps,
-              output: resource,
+              output: oldOutput,
             },
           });
         } else {
