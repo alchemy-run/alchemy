@@ -272,116 +272,114 @@ const _D1Database = Resource(
         type: "d1",
         id: this.output?.id ?? id,
         name: databaseName,
-        readReplication: props.readReplication ?? {
-          mode: "auto",
-        },
+        readReplication: props.readReplication,
         primaryLocationHint: props.primaryLocationHint,
         migrationsDir: props.migrationsDir,
         migrationsTable: props.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE,
       });
-    } else {
-      if (this.phase === "create") {
-        logger.log("Creating D1 database:", databaseName);
-        try {
-          dbData = await createDatabase(api, databaseName, props);
+    } else if (this.phase === "create") {
+      logger.log("Creating D1 database:", databaseName);
+      try {
+        dbData = await createDatabase(api, databaseName, props);
 
-          // Read replication cannot be set during creation, so update it after creation
-          if (props.readReplication && dbData.result.uuid) {
-            dbData = await updateDatabase(api, dbData.result.uuid, props);
-          }
-
-          // If clone property is provided, perform cloning after database creation
-          if (props.clone && dbData.result.uuid) {
-            await cloneDb(api, props.clone, dbData.result.uuid);
-          }
-        } catch (error) {
-          // Check if this is a "database already exists" error and adopt is enabled
-          if (
-            props.adopt &&
-            error instanceof CloudflareApiError &&
-            error.message.includes("already exists")
-          ) {
-            logger.log(`Database ${databaseName} already exists, adopting it`);
-            // Find the existing database by name
-            const databases = await listDatabases(api, databaseName);
-            const existingDb = databases.find((db) => db.name === databaseName);
-
-            if (!existingDb) {
-              throw new Error(
-                `Failed to find existing database '${databaseName}' for adoption`,
-              );
-            }
-
-            // Get the database details using its ID
-            dbData = await getDatabase(api, existingDb.id);
-
-            // Update the database with the provided properties
-            if (props.readReplication) {
-              logger.log(
-                `Updating adopted database ${databaseName} with new properties`,
-              );
-              dbData = await updateDatabase(api, existingDb.id, props);
-            }
-          } else {
-            // Re-throw the error if adopt is false or it's not a "database already exists" error
-            throw error;
-          }
+        // Read replication cannot be set during creation, so update it after creation
+        if (props.readReplication && dbData.result.uuid) {
+          dbData = await updateDatabase(api, dbData.result.uuid, props);
         }
-      } else {
-        // Update operation
-        if (this.output?.id) {
-          // Only read_replication can be modified in update
-          if (
-            props.primaryLocationHint &&
-            props.primaryLocationHint !== this.output?.primaryLocationHint
-          ) {
+
+        // If clone property is provided, perform cloning after database creation
+        if (props.clone && dbData.result.uuid) {
+          await cloneDb(api, props.clone, dbData.result.uuid);
+        }
+      } catch (error) {
+        // Check if this is a "database already exists" error and adopt is enabled
+        if (
+          props.adopt &&
+          error instanceof CloudflareApiError &&
+          error.message.includes("already exists")
+        ) {
+          logger.log(`Database ${databaseName} already exists, adopting it`);
+          // Find the existing database by name
+          const databases = await listDatabases(api, databaseName);
+          const existingDb = databases.find((db) => db.name === databaseName);
+
+          if (!existingDb) {
             throw new Error(
-              `Cannot update primaryLocationHint from '${this.output.primaryLocationHint}' to '${props.primaryLocationHint}' after database creation.`,
+              `Failed to find existing database '${databaseName}' for adoption`,
             );
           }
-          logger.log("Updating D1 database:", databaseName);
-          // Update the database with new properties
-          dbData = await updateDatabase(api, this.output.id, props);
-        } else {
-          // If no ID exists, fall back to creating a new database
-          logger.log(
-            "No existing database ID found, creating new D1 database:",
-            databaseName,
-          );
-          dbData = await createDatabase(api, databaseName, props);
-        }
-      }
-      // Run migrations if provided
-      if (props.migrationsFiles && props.migrationsFiles.length > 0) {
-        try {
-          const migrationsTable =
-            props.migrationsTable || DEFAULT_MIGRATIONS_TABLE;
-          const databaseId = dbData.result.uuid || this.output?.id;
 
-          if (!databaseId) {
-            throw new Error("Database ID not found for migrations");
+          // Get the database details using its ID
+          dbData = await getDatabase(api, existingDb.id);
+
+          // Update the database with the provided properties
+          if (props.readReplication) {
+            logger.log(
+              `Updating adopted database ${databaseName} with new properties`,
+            );
+            dbData = await updateDatabase(api, existingDb.id, props);
           }
-
-          await applyMigrations({
-            migrationsFiles: props.migrationsFiles,
-            migrationsTable,
-            accountId: api.accountId,
-            databaseId,
-            api,
-          });
-        } catch (migrationErr) {
-          logger.error("Failed to apply D1 migrations:", migrationErr);
-          throw migrationErr;
+        } else {
+          // Re-throw the error if adopt is false or it's not a "database already exists" error
+          throw error;
         }
       }
-      return this({
-        type: "d1",
-        id: dbData.result.uuid || "",
-        name: databaseName,
-        readReplication: dbData.result.read_replication,
-        primaryLocationHint: props.primaryLocationHint,
-      });
+    } else if (this.output?.id) {
+      // Only read_replication can be modified in update
+      if (
+        props.primaryLocationHint &&
+        props.primaryLocationHint !== this.output?.primaryLocationHint
+      ) {
+        throw new Error(
+          `Cannot update primaryLocationHint from '${this.output.primaryLocationHint}' to '${props.primaryLocationHint}' after database creation.`,
+        );
+      }
+      logger.log("Updating D1 database:", databaseName);
+      // Update the database with new properties
+      dbData = await updateDatabase(api, this.output.id, props);
+    } else {
+      // If no ID exists, fall back to creating a new database
+      logger.log(
+        "No existing database ID found, creating new D1 database:",
+        databaseName,
+      );
+      dbData = await createDatabase(api, databaseName, props);
     }
+
+    // Run migrations if provided
+    if (props.migrationsFiles && props.migrationsFiles.length > 0) {
+      try {
+        const migrationsTable =
+          props.migrationsTable || DEFAULT_MIGRATIONS_TABLE;
+        const databaseId = dbData.result.uuid || this.output?.id;
+
+        if (!databaseId) {
+          throw new Error("Database ID not found for migrations");
+        }
+
+        await applyMigrations({
+          migrationsFiles: props.migrationsFiles,
+          migrationsTable,
+          accountId: api.accountId,
+          databaseId,
+          api,
+        });
+      } catch (migrationErr) {
+        logger.error("Failed to apply D1 migrations:", migrationErr);
+        throw migrationErr;
+      }
+    }
+    if (!dbData.result.uuid) {
+      // TODO(sam): why would this ever happen?
+      throw new Error("Database ID not found");
+    }
+    return this({
+      type: "d1",
+      id: dbData.result.uuid!,
+      name: databaseName,
+      readReplication: dbData.result.read_replication,
+      primaryLocationHint: props.primaryLocationHint,
+    });
   },
 );
 
