@@ -645,7 +645,6 @@ function processBindings(
         script_name: binding.scriptName,
       });
     } else if (binding.type === "d1") {
-      console.log("binding.dev", binding.dev);
       d1Databases.push({
         binding: bindingName,
         database_id: binding.id,
