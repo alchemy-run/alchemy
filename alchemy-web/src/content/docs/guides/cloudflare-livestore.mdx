@@ -87,7 +87,7 @@ For deeper details see the official [LiveStore Cloudflare guide](https://docs.li
    Learn more about **data modelling** in the [LiveStore docs](https://docs.livestore.dev/reference/state/sqlite-schema)
    :::
 
-3. **Client-side worker** – `src/livestore.worker.ts`
+3. **Client-side worker** – `src/livestore/client.ts`
 
    ```ts
    import { makeWorker } from "@livestore/adapter-web/worker";
@@ -104,7 +104,7 @@ For deeper details see the official [LiveStore Cloudflare guide](https://docs.li
    });
    ```
 
-4. **Cloudflare sync backend** – `src/cf-worker/index.ts`
+4. **Cloudflare sync backend** – `src/livestore/server.ts`
 
    ```ts
    import { makeDurableObject, makeWorker } from "@livestore/sync-cf/cf-worker";
@@ -131,7 +131,8 @@ For deeper details see the official [LiveStore Cloudflare guide](https://docs.li
 
    // Cloudflare Worker hosting the sync backend
    const server = await Worker("server", {
-     entrypoint: "src/cf-worker/index.ts",
+     entrypoint: "src/livestore.server.ts",
+     compatibility: "node",
      bindings: {
        DB: await D1Database("db", { 
          name: `${app.name}-${app.stage}-livestore`, 
@@ -141,19 +142,14 @@ For deeper details see the official [LiveStore Cloudflare guide](https://docs.li
          className: "WebSocketServer" 
        }),
      },
-     compatibilityFlags: ["nodejs_compat"],
-     compatibilityDate: "2025-05-08",
    });
 
    // Vite site serving your React app
    await Vite("client", {
      assets: "dist",
-     command: "bun vite build",
-     dev: { command: "bun vite --force" },
      env: {
        VITE_LIVESTORE_SYNC_URL: server.url!,
      },
-     wrangler: false,
    });
 
    await app.finalize();
