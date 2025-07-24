@@ -1,137 +1,109 @@
-import { fromPromise } from 'neverthrow';
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { createVercelApi, VercelApi } from "./api";
+import { createVercelApi } from "./api";
+import type { StorageProject, StorageProjectMetadata, StorageType } from "./storage.types.ts";
+import { createProjectsConnection, createStorage, deleteProjectsConnection, deleteStorage, projectPropsChanged, readStorage } from './storage.utils.ts';
+import type { VercelRegions, VercelTeam } from "./vercel.types.ts";
 
-type StorageType = "blob";
 
-interface StorageProject {
-  projectId: string;
-  envVarEnvironments: ["production" | "preview" | "development"];
-  envVarPrefix?: string;
-}
-
-/**
- * Properties for creating or updating a Storage
- */
 export interface StorageProps {
   /**
-   * The desired name for the storage
+   * The name of the storage
    */
-  name: string;
+  name?: string;
 
   /**
-   * The region where the storage will be deployed
+   * The region of the storage
    */
-  region: string;
+  region: VercelRegions;
 
   /**
-   * The team ID that the storage belongs to
+   * The team of the storage
    */
-  teamId: string;
+  team: string | VercelTeam;
 
   /**
-   * The type of storage
+   * The type of the storage
    */
   type: StorageType;
 
   /**
    * The projects that the storage belongs to
    */
-  projects: StorageProject[];
+  projects?: StorageProject[];
 }
 
-/**
- * Output returned after Storage creation/update
- */
 export interface Storage extends Resource<"vercel::Storage">, StorageProps {
+  /**
+   * The billing state of the storage
+   */
+  billingState: string;
+
+  /**
+   * The number of connections to the storage
+   */
+  count: number;
+
+  /**
+   * The creation time of the storage
+   */
+  createdAt: number;
+
   /**
    * The ID of the storage
    */
   id: string;
 
   /**
-   * The storage store information
+   * The name of the storage
    */
-  store: {
-    /**
-     * The billing state of the storage
-     */
-    billingState: string;
+  name: string;
 
-    /**
-     * The count of items in the storage
-     */
-    count: number;
+  /**
+   * The owner ID of the storage
+   */
+  ownerId: string;
 
-    /**
-     * The time at which the storage was created
-     */
-    createdAt: number;
+  /**
+   * The projects metadata of the storage
+   */
+  projectsMetadata: StorageProjectMetadata[];
 
-    /**
-     * The ID of the store
-     */
-    id: string;
+  /**
+   * The region of the storage
+   */
+  region: VercelRegions;
 
-    /**
-     * The name of the store
-     */
-    name: string;
+  /**
+   * The size of the storage
+   */
+  size: number;
 
-    /**
-     * The ID of the owner
-     */
-    ownerId: string;
+  /**
+   * The status of the storage
+   */
+  status: string;
 
-    /**
-     * The projects metadata
-     */
-    projectsMetadata: {
-      environments: StorageProject["envVarEnvironments"];
-      environmentVariables: string[];
-      envVarPrefix: StorageProject["envVarPrefix"];
-      framework: string;
-      id: string;
-      name: string;
-      projectId: string;
-    }[];
+  /**
+   * The type of the storage
+   */
+  type: StorageType;
 
-    /**
-     * The region where the storage is deployed
-     */
-    region: string;
+  /**
+   * The update time of the storage
+   */
+  updatedAt: number;
 
-    /**
-     * The size of the storage
-     */
-    size: number;
-
-    /**
-     * The status of the storage
-     */
-    status: string;
-
-    /**
-     * The type of storage
-     */
-    type: StorageType;
-
-    /**
-     * The time at which the storage was last updated
-     */
-    updatedAt: number;
-
-    /**
-     * Whether the usage quota has been exceeded
-     */
-    usageQuotaExceeded: boolean;
-  },
+  /**
+   * Whether the usage quota has been exceeded
+   */
+  usageQuotaExceeded: boolean;
 }
 
 /**
- * Create and manage Vercel storage.
+ * Create and manage Vercel storage resources.
+ * Blob Storage support only for now.
  *
  * @example
  * // With accessToken
@@ -139,17 +111,24 @@ export interface Storage extends Resource<"vercel::Storage">, StorageProps {
  *   accessToken: alchemy.secret(process.env.VERCEL_ACCESS_TOKEN),
  *   name: "my-storage",
  *   region: "iad1",
- *   teamId: "team_123",
- *   type: "blob",
+ *   team: "my-team",
+ *   type: "blob"
  * });
  *
  * @example
- * // Basic storage creation
+ * // Connect Projects to the Storage
  * const storage = await Storage("my-storage", {
  *   name: "my-storage",
- *   region: "iad1",
- *   teamId: "team_123",
- *   type: "blob",
+ *   projects: [
+ *     {
+ *       projectId: "project_123",
+ *       envVarEnvironments: ["production"],
+ *       envVarPrefix: "MY_STORAGE_",
+ *     },
+ *   ],
+ *   region: "cdg1",
+ *   team: "my-team",
+ *   type: "blob"
  * });
  */
 export const Storage = Resource(
@@ -167,42 +146,72 @@ export const Storage = Resource(
       case "create": {
         const storage = await createStorage(api, props);
 
-        const output = { ...props, ...storage, id: storage.store.id } as Storage;
+        let output = { ...props, ...storage.store };
 
-        if (props.projects.length > 0) {
+        if (!output.name) {
+          output.name = id;
+        }
+
+        if (props.projects && props.projects.length > 0) {
           await createProjectsConnection(api, output, props.projects);
           const updatedStorage = await readStorage(api, output);
-          output.store = updatedStorage.store;
+          output = { ...props, ...updatedStorage.store };
         }
 
         return this(output);
       }
 
       case "update": {
-        if (props.name !== this.output.name) {
-          return this.replace()
+        if (
+          props.name !== this.output.name
+          || props.region !== this.output.region
+          || props.team !== this.output.team
+          || props.type !== this.output.type
+        ) {
+          // if the storage is being replaced, we need to delete the old storage
+          // name can be a conflict and we can't change the remaining properties
+          return this.replace(true)
         }
 
-        const projectsMetadata = this.output.store.projectsMetadata ?? [];
-        const projects = props.projects ?? [];
+        const newProjects = props.projects ?? [];
+        const newProjectsMap = new Map(newProjects.map((p) => [p.projectId, p]));
 
-        const currentProjectIds = new Set(
-          projectsMetadata.map((p) => p.projectId)
-        );
-        
-        const newProjectIds = new Set(
-          projects.map((p) => p.projectId)
-        );
+        const currentProjects = this.output.projects ?? [];
+        const currentProjectsMap = new Map(currentProjects.map((p) => [p.projectId, p]));
 
-        const toDelete = projectsMetadata
-          .filter((p) => !newProjectIds.has(p.projectId))
+        const projectsMetadata = this.output.projectsMetadata ?? [];
+
+        // determine which projects to create and which to delete
+        const toCreate: typeof newProjects = [];
+        const toDelete: typeof currentProjects = [];
+
+        // find new or changed projects to create or re-create
+        for (const newProject of newProjects) {
+          const existing = currentProjectsMap.get(newProject.projectId);
+          if (!existing) {
+            toCreate.push(newProject);
+          } else if (projectPropsChanged(newProject, existing)) {
+            toDelete.push(existing);
+            toCreate.push(newProject);
+          }
+        }
+
+        // find removed projects to delete
+        for (const currentProject of currentProjects) {
+          if (!newProjectsMap.has(currentProject.projectId)) {
+            toDelete.push(currentProject);
+          }
+        }
+
+        const toDeleteMetadata: typeof projectsMetadata = [];
+        for (const delProject of toDelete) {
+          const metas = projectsMetadata.filter(meta => meta.projectId === delProject.projectId);
+          toDeleteMetadata.push(...metas);
+        }
 
         if (toDelete.length > 0) {
-          await deleteProjectsConnection(api, this.output, toDelete);
+          await deleteProjectsConnection(api, this.output, toDeleteMetadata);
         }
-
-        const toCreate = projects
-          .filter((project) => !currentProjectIds.has(project.projectId));
 
         if (toCreate.length > 0) {
           await createProjectsConnection(api, this.output, toCreate);
@@ -210,7 +219,7 @@ export const Storage = Resource(
 
         if (toDelete.length > 0 || toCreate.length > 0) {
           const updatedStorage = await readStorage(api, this.output);
-          this.output.store = updatedStorage.store;
+          this.output = updatedStorage.store;
         }
 
         return this({ ...this.output, ...props });
@@ -223,80 +232,3 @@ export const Storage = Resource(
     }
   },
 );
-
-async function readStorage(api: VercelApi, output: Storage) {
-  const response = await fromPromise(api.get(`/storage/stores/${output.id}?teamId=${output.teamId}`), (err) => err as Error);
-
-  if (response.isErr()) {
-    throw response.error;
-  }
-
-  return response.value.json() as Promise<{ store: Storage["store"] }>;
-}
-
-/**
- * Create a new storage instance
- */
-async function createStorage(api: VercelApi, props: StorageProps) {
-  const response = await fromPromise(api.post(`/storage/stores/${props.type}?teamId=${props.teamId}`, {
-    name: props.name,
-    region: props.region,
-  }), (err) => err as Error);
-
-  if (response.isErr()) {
-    throw response.error;
-  }
-
-  return response.value.json() as Promise<{ store: Storage["store"] }>;
-}
-
-/**
- * Delete a storage instance
- */
-async function deleteStorage(api: VercelApi, output: Storage) {
-  const connections = await fromPromise(api.delete(`/storage/stores/${output.id}/connections?teamId=${output.teamId}`), (err) => err as Error);
-
-  if (connections.isErr()) {  
-    throw connections.error;
-  }
-
-  const storage = await fromPromise(api.delete(`/storage/stores/${output.type}/${output.id}?teamId=${output.teamId}`), (err) => err as Error);
-
-  if (storage.isErr()) {
-    throw storage.error;
-  }
-}
-
-async function createProjectsConnection(api: VercelApi, output: Storage, projects: StorageProject[]) {
-  // Promise.all didn't worked well with the API, so we're using a for loop instead
-  for (const project of projects) {
-    await connectProject(api, output, project);
-  }
-}
-
-async function deleteProjectsConnection(api: VercelApi, output: Storage, projectsMetadata: Storage["store"]["projectsMetadata"]) {
-  // Promise.all didn't worked well with the API, so we're using a for loop instead
-  for (const metadata of projectsMetadata) {
-    await disconnectProject(api, output, metadata);
-  }
-}
-
-async function connectProject(api: VercelApi, output: Storage, project: StorageProject) {
-  const response = await fromPromise(api.post(`/storage/stores/${output.id}/connections?teamId=${output.teamId}`, {
-    envVarEnvironments: project.envVarEnvironments,
-    envVarPrefix: project.envVarPrefix,
-    projectId: project.projectId,
-  }), (err) => err as Error);
-
-  if (response.isErr()) {
-    throw response.error;
-  }
-}
-
-async function disconnectProject(api: VercelApi, output: Storage, metadata: Storage["store"]["projectsMetadata"][number]) {
-  const response = await fromPromise(api.delete(`/storage/stores/${output.id}/connections/${metadata.id}?teamId=${output.teamId}`), (err) => err as Error);
-
-  if (response.isErr()) {
-    throw response.error;
-  }
-}
