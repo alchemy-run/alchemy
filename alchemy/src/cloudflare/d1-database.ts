@@ -259,8 +259,7 @@ const _D1Database = Resource(
     }
     let dbData: CloudflareD1Response;
 
-    const isLocal = this.scope.local && !props.dev?.remote;
-    if (isLocal) {
+    if (this.scope.local && !props.dev?.remote) {
       if (props.migrationsFiles && props.migrationsFiles.length > 0) {
         await applyLocalD1Migrations({
           databaseId: this.output?.id ?? id,
@@ -276,6 +275,7 @@ const _D1Database = Resource(
         primaryLocationHint: props.primaryLocationHint,
         migrationsDir: props.migrationsDir,
         migrationsTable: props.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE,
+        dev: props.dev,
       });
     } else if (this.phase === "create") {
       logger.log("Creating D1 database:", databaseName);
@@ -379,6 +379,9 @@ const _D1Database = Resource(
       name: databaseName,
       readReplication: dbData.result.read_replication,
       primaryLocationHint: props.primaryLocationHint,
+      dev: props.dev,
+      migrationsDir: props.migrationsDir,
+      migrationsTable: props.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE,
     });
   },
 );
