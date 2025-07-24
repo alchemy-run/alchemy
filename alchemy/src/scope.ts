@@ -15,6 +15,7 @@ import {
 import type { State, StateStore, StateStoreType } from "./state.ts";
 import { D1StateStore } from "./state/d1-state-store.ts";
 import { FileSystemStateStore } from "./state/file-system-state-store.ts";
+import { InstrumentedStateStore } from "./state/instrumented-state-store.ts";
 import {
   createDummyLogger,
   createLoggerInstance,
@@ -142,7 +143,6 @@ export class Scope {
   private isSkipped = false;
   private finalized = false;
   private startedAt = performance.now();
-
   private deferred: (() => Promise<any>)[] = [];
 
   public get appName(): string {
@@ -202,12 +202,15 @@ export class Scope {
 
     this.stateStore =
       options.stateStore ?? this.parent?.stateStore ?? defaultStateStore;
-    this.state = this.stateStore(this);
+    this.telemetryClient =
+      options.telemetryClient ?? this.parent?.telemetryClient!;
+    this.state = new InstrumentedStateStore(
+      this.stateStore(this),
+      this.telemetryClient,
+    );
     if (!options.telemetryClient && !this.parent?.telemetryClient) {
       throw new Error("Telemetry client is required");
     }
-    this.telemetryClient =
-      options.telemetryClient ?? this.parent?.telemetryClient!;
     this.dataMutex = new AsyncMutex();
   }
 
@@ -345,13 +348,13 @@ export class Scope {
   }
 
   public async set<T>(key: string, value: T): Promise<void> {
-    return this.withScopeState<void>(async (state, persist) => {
+    await this.withScopeState<void>(async (state, persist) => {
       state.data[key] = value;
       await persist(state); // only one line to save!
     });
   }
 
-  public async get<T>(key: string): Promise<T> {
+  public get<T>(key: string): Promise<T> {
     return this.withScopeState<T>(async (state) => state.data[key]);
   }
 
@@ -475,6 +478,7 @@ export class Scope {
         }
         throw e;
       })) ?? [];
+
     //todo(michael): remove once we deprecate doss; see: https://github.com/sam-goodwin/alchemy/issues/585
     let hasCorruptedResources = false;
     if (pendingDeletions) {

@@ -17,6 +17,21 @@ const queue = await Queue("my-queue", {
 });
 ```
 
+## Typed Queue
+
+Create a queue with TypeScript type safety for message payloads.
+
+```ts
+import { Queue } from "alchemy/cloudflare";
+
+// Define the message payload type
+export const queue = await Queue<{
+  name: string;
+  email: string;
+  userId: number;
+}>("typed-queue");
+```
+
 ## Queue with Custom Settings
 
 Configure queue behavior with delivery delay and message retention.
@@ -71,6 +86,21 @@ const queue = await Queue("main-queue", {
   name: "main-queue",
   dlq: dlq, // or dlq: "failed-messages-dlq"
 });
+
+// Complete setup with DLQ in consumer settings
+export const worker = await Worker("processor", {
+  entrypoint: "./src/worker.ts",
+  bindings: {
+    QUEUE: queue,
+  },
+  eventSources: [{
+    queue,
+    settings: {
+      maxRetries: 3,
+      deadLetterQueue: dlq, // Send failed messages to dead letter queue
+    }
+  }]
+});
 ```
 
 ## Configure Queue Consumer
@@ -110,3 +140,30 @@ await Worker("processor", {
 | `maxWaitTimeMs` | `number` | 500 | Maximum time in milliseconds to wait for batch to fill |
 | `retryDelay` | `number` | 30 | Time in seconds to delay retry after a failure |
 | `deadLetterQueue` | `string \| Queue` | - | Dead letter queue for messages that exceed max retries |
+
+## Type-safe Message Processing
+
+Use typed queues for better development experience and type safety.
+
+```ts
+// alchemy.run.ts
+export const queue = await Queue<{
+  name: string;
+  email: string;
+}>("typed-queue");
+
+// src/worker.ts
+import type { queue, worker } from "../alchemy.run";
+
+export default {
+  // Type-safe queue handler
+  async queue(batch: typeof queue.Batch, env: typeof worker.Env) {
+    for (const message of batch.messages) {
+      // message.body is automatically typed as { name: string; email: string; }
+      console.log(`Processing ${message.body.name} - ${message.body.email}`);
+      message.ack();
+    }
+  },
+};
+```
+

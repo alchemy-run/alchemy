@@ -220,9 +220,17 @@ async function _apply<Out extends Resource>(
             strategy: resource[DestroyStrategy] ?? "sequential",
             replace: {
               props: state.oldProps,
-              output: resource,
+              output: oldOutput,
             },
           });
+        } else {
+          const pendingDeletions =
+            (await scope.get<PendingDeletions>("pendingDeletions")) ?? [];
+          pendingDeletions.push({
+            resource: oldOutput,
+            oldProps: state.oldProps,
+          });
+          await scope.set("pendingDeletions", pendingDeletions);
         }
 
         output = await alchemy.run(
@@ -237,8 +245,8 @@ async function _apply<Out extends Resource>(
                 id: resource[ResourceID],
                 fqn: resource[ResourceFQN],
                 seq: resource[ResourceSeq],
-                props: state.props,
-                state,
+                props: state!.props,
+                state: state!,
                 isReplacement: true,
                 replace: () => {
                   throw new Error(
@@ -248,16 +256,6 @@ async function _apply<Out extends Resource>(
               }),
             )(resource[ResourceID], props),
         );
-
-        if (!error.force) {
-          const pendingDeletions =
-            (await scope.get<PendingDeletions>("pendingDeletions")) ?? [];
-          pendingDeletions.push({
-            resource: oldOutput,
-            oldProps: state.oldProps,
-          });
-          await scope.set("pendingDeletions", pendingDeletions);
-        }
       } else {
         throw error;
       }
@@ -282,6 +280,7 @@ async function _apply<Out extends Resource>(
       replaced: isReplaced,
     });
 
+    state = (await scope.state.get(resource[ResourceID]))!;
     await scope.state.set(resource[ResourceID], {
       kind: resource[ResourceKind],
       id: resource[ResourceID],

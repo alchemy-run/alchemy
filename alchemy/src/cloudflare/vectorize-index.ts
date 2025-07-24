@@ -1,6 +1,5 @@
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
-import { bind } from "../runtime/bind.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
@@ -8,7 +7,6 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
-import type { Bound } from "./bound.ts";
 
 /**
  * Properties for creating or updating a Vectorize Index
@@ -53,14 +51,14 @@ export interface VectorizeIndexProps extends CloudflareApiOptions {
 
 export function isVectorizeIndex(
   resource: Resource,
-): resource is VectorizeIndexResource {
+): resource is VectorizeIndex {
   return resource[ResourceKind] === "cloudflare::VectorizeIndex";
 }
 
 /**
  * Output returned after Vectorize Index creation/update
  */
-export interface VectorizeIndexResource
+export interface VectorizeIndex
   extends Resource<"cloudflare::VectorizeIndex">,
     VectorizeIndexProps {
   type: "vectorize";
@@ -75,9 +73,6 @@ export interface VectorizeIndexResource
    */
   createdAt?: number;
 }
-
-export type VectorizeIndex = VectorizeIndexResource &
-  Bound<VectorizeIndexResource>;
 
 /**
  * Creates and manages Cloudflare Vectorize Indexes.
@@ -118,30 +113,13 @@ export type VectorizeIndex = VectorizeIndexResource &
  *
  * @see https://developers.cloudflare.com/vectorize/
  */
-export async function VectorizeIndex(
-  name: string,
-  props: VectorizeIndexProps,
-): Promise<VectorizeIndex> {
-  const index = await _VectorizeIndex(name, props);
-  const binding = await bind(index);
-  return {
-    ...index,
-    describe: binding.describe,
-    query: binding.query,
-    insert: binding.insert,
-    upsert: binding.upsert,
-    deleteByIds: binding.deleteByIds,
-    getByIds: binding.getByIds,
-  };
-}
-
-const _VectorizeIndex = Resource(
+export const VectorizeIndex = Resource(
   "cloudflare::VectorizeIndex",
   async function (
-    this: Context<VectorizeIndexResource>,
+    this: Context<VectorizeIndex>,
     id: string,
     props: VectorizeIndexProps,
-  ): Promise<VectorizeIndexResource> {
+  ): Promise<VectorizeIndex> {
     const api = await createCloudflareApi(props);
     const indexName = props.name || id;
 

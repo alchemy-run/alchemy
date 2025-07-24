@@ -1,3 +1,61 @@
+## v0.51.3
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **core**: Include oldOutput in destroy when eagerly replacing &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/734 [<samp>(ac365)</samp>](https://github.com/sam-goodwin/alchemy/commit/ac3654f5)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.51.2...v0.51.3)
+
+---
+
+## v0.51.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Dev mode supports livestore &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/700 [<samp>(abf32)</samp>](https://github.com/sam-goodwin/alchemy/commit/abf32e0d)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.51.1...v0.51.2)
+
+---
+
+## v0.51.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Fetch all zones in findZoneForHostname &nbsp;-&nbsp; by **Andrew Jefferson** in https://github.com/sam-goodwin/alchemy/issues/729 [<samp>(ede6e)</samp>](https://github.com/sam-goodwin/alchemy/commit/ede6e53c)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.51.0...v0.51.1)
+
+---
+
+## v0.51.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: API Shield, Schema and API Gateway Operation &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/719 [<samp>(e963b)</samp>](https://github.com/sam-goodwin/alchemy/commit/e963b975)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Remove customViteReactPlugin from tanstack template &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/727 [<samp>(3bc50)</samp>](https://github.com/sam-goodwin/alchemy/commit/3bc50a37)
+  - Certificate pack no longer returns undefined properties and can be replaced &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/714 [<samp>(a2170)</samp>](https://github.com/sam-goodwin/alchemy/commit/a2170b32)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.50.0...v0.51.0)
+
+---
+
+## v0.50.0
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Inherit process.env when executing build &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/726 [<samp>(4dcbe)</samp>](https://github.com/sam-goodwin/alchemy/commit/4dcbe346)
+  - Don't require r2 access credentials to auto-empty bucket &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/725 [<samp>(63f6a)</samp>](https://github.com/sam-goodwin/alchemy/commit/63f6a6d3)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.49.1...v0.50.0)
+
+---
+
 ## v0.49.1
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

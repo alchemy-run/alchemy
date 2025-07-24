@@ -1,10 +1,10 @@
 import type { QueueConsumerSettings } from "./queue-consumer.ts";
-import type { QueueResource } from "./queue.ts";
+import type { Queue } from "./queue.ts";
 
 /**
  * Base interface for event sources that can be bound to a Worker
  */
-export type EventSource = QueueEventSource | QueueResource;
+export type EventSource = QueueEventSource | Queue;
 
 /**
  * Configuration for a Queue as an event source for a Worker
@@ -13,7 +13,7 @@ export interface QueueEventSource {
   /**
    * The queue to consume messages from
    */
-  readonly queue: QueueResource;
+  readonly queue: Queue;
 
   /**
    * Optional settings for configuring how the Worker consumes the queue

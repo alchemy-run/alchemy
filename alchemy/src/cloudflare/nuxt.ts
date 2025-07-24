@@ -55,7 +55,7 @@ export async function Nuxt<B extends Bindings>(
     ...props,
     noBundle: props?.noBundle ?? true,
     // Default build command, can be overridden by props.command
-    command: props?.command ?? "bun run build",
+    command: props?.command ?? "nuxt build",
     // Default entry point for cloudflare-module preset
     main: props?.main ?? "./.output/server/index.mjs",
     // Default static assets directory for cloudflare-module preset

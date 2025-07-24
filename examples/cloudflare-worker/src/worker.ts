@@ -16,7 +16,7 @@ export default {
       // @ts-expect-error - foo doesn't exist on the HelloWorldDO class
       await obj.foo();
     }
-    await obj.fetch(new Request("https://example.com"));
+    await obj.fetch("https://example.com");
 
     await env.RPC.hello("John Doe");
 

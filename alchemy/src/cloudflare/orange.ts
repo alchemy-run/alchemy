@@ -40,7 +40,10 @@ export async function Orange<B extends Bindings>(
 ): Promise<Orange<B>> {
   return Website(id, {
     ...props,
-    command: props?.command ?? "bun run build",
+    command: props?.command ?? "vite build",
+    dev: props?.dev ?? {
+      command: "vite dev",
+    },
     // The entrypoint and the Wrangler main must differ for the Cloudflare vite plugin
     // to bundle the application correctly, and alchemy must run our bundler on the Vite
     // output since we don't resolve vite imports.
