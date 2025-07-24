@@ -109,4 +109,5 @@ export type InitContext = {
   useTypeScript: boolean;
   projectName: string;
   hasPackageJson: boolean;
+  packageManager: PackageManager;
 };

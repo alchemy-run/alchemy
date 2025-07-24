@@ -7,6 +7,7 @@ export default defineConfig({
   shims: true,
   outDir: "bin",
   outputOptions: {
+    inlineDynamicImports: true,
     banner: "#!/usr/bin/env node",
   },
 });
