@@ -48,9 +48,6 @@ describe("D1 Database Resource", async () => {
 
       expect(database.name).toEqual(testId);
       expect(database.id).toBeTruthy();
-      expect(database.fileSize).toBeTypeOf("number");
-      expect(database.numTables).toBeTypeOf("number");
-      expect(database.version).toBeTruthy();
 
       // Check if database exists by listing databases
       const databases = await listDatabases(api);
