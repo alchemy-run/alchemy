@@ -133,7 +133,10 @@ async function runCommand(
       if (code === 0) {
         resolve(undefined);
       } else {
-        reject(new Error(`Command failed with code ${code}`));
+        const errorPrefix = options.exampleName
+          ? `${options.exampleName} - `
+          : "";
+        reject(new Error(`${errorPrefix}Command failed with code ${code}`));
       }
     });
   });

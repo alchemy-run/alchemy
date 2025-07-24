@@ -269,6 +269,8 @@ const _D1Database = Resource(
       }
       return this({
         type: "d1",
+        // we may not have an ID yet if we're creating a new database locally first
+        // so set it to the resource ID which we can later use to detect that a DB needs to be created during an `update`
         id: this.output?.id ?? id,
         name: databaseName,
         readReplication: props.readReplication,
@@ -277,7 +279,13 @@ const _D1Database = Resource(
         migrationsTable: props.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE,
         dev: props.dev,
       });
-    } else if (this.phase === "create") {
+    } else if (
+      this.phase === "create" ||
+      // this is true IFF the database was created locally before any live deployment
+      // in that case, we should still go through the create flow for "update"
+      // after that, the ID will remain the UUID for the lifetime of the database
+      this.output.id === id
+    ) {
       logger.log("Creating D1 database:", databaseName);
       try {
         dbData = await createDatabase(api, databaseName, props);
