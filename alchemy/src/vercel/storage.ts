@@ -1,9 +1,16 @@
+import { fromPromise } from 'neverthrow';
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
 import { createVercelApi, VercelApi } from "./api";
 
 type StorageType = "blob";
+
+interface StorageProject {
+  projectId: string;
+  envVarEnvironments: ["production" | "preview" | "development"];
+  envVarPrefix?: string;
+}
 
 /**
  * Properties for creating or updating a Storage
@@ -28,6 +35,11 @@ export interface StorageProps {
    * The type of storage
    */
   type: StorageType;
+
+  /**
+   * The projects that the storage belongs to
+   */
+  projects: StorageProject[];
 }
 
 /**
@@ -76,7 +88,15 @@ export interface Storage extends Resource<"vercel::Storage">, StorageProps {
     /**
      * The projects metadata
      */
-    projectsMetadata: {}[];
+    projectsMetadata: {
+      environments: StorageProject["envVarEnvironments"];
+      environmentVariables: string[];
+      envVarPrefix: StorageProject["envVarPrefix"];
+      framework: string;
+      id: string;
+      name: string;
+      projectId: string;
+    }[];
 
     /**
      * The region where the storage is deployed
@@ -146,14 +166,54 @@ export const Storage = Resource(
     switch (this.phase) {
       case "create": {
         const storage = await createStorage(api, props);
-        return this({ ...props, ...storage, id: storage.store.id });
+
+        const output = { ...props, ...storage, id: storage.store.id } as Storage;
+
+        if (props.projects.length > 0) {
+          await createProjectsConnection(api, output, props.projects);
+          const updatedStorage = await readStorage(api, output);
+          output.store = updatedStorage.store;
+        }
+
+        return this(output);
       }
 
       case "update": {
         if (props.name !== this.output.name) {
           return this.replace()
         }
-        return this({ ...props, ...this.output });
+
+        const projectsMetadata = this.output.store.projectsMetadata ?? [];
+        const projects = props.projects ?? [];
+
+        const currentProjectIds = new Set(
+          projectsMetadata.map((p) => p.projectId)
+        );
+        
+        const newProjectIds = new Set(
+          projects.map((p) => p.projectId)
+        );
+
+        const toDelete = projectsMetadata
+          .filter((p) => !newProjectIds.has(p.projectId))
+
+        if (toDelete.length > 0) {
+          await deleteProjectsConnection(api, this.output, toDelete);
+        }
+
+        const toCreate = projects
+          .filter((project) => !currentProjectIds.has(project.projectId));
+
+        if (toCreate.length > 0) {
+          await createProjectsConnection(api, this.output, toCreate);
+        }
+
+        if (toDelete.length > 0 || toCreate.length > 0) {
+          const updatedStorage = await readStorage(api, this.output);
+          this.output.store = updatedStorage.store;
+        }
+
+        return this({ ...this.output, ...props });
       }
 
       case "delete": {
@@ -164,21 +224,79 @@ export const Storage = Resource(
   },
 );
 
+async function readStorage(api: VercelApi, output: Storage) {
+  const response = await fromPromise(api.get(`/storage/stores/${output.id}?teamId=${output.teamId}`), (err) => err as Error);
+
+  if (response.isErr()) {
+    throw response.error;
+  }
+
+  return response.value.json() as Promise<{ store: Storage["store"] }>;
+}
+
 /**
  * Create a new storage instance
  */
 async function createStorage(api: VercelApi, props: StorageProps) {
-  const response = await api.post(`/storage/stores/${props.type}?teamId=${props.teamId}`, {
+  const response = await fromPromise(api.post(`/storage/stores/${props.type}?teamId=${props.teamId}`, {
     name: props.name,
     region: props.region,
-  });
-  return response.json() as Promise<{ store: Storage["store"] }>;
+  }), (err) => err as Error);
+
+  if (response.isErr()) {
+    throw response.error;
+  }
+
+  return response.value.json() as Promise<{ store: Storage["store"] }>;
 }
 
 /**
  * Delete a storage instance
  */
 async function deleteStorage(api: VercelApi, output: Storage) {
-  await api.delete(`/storage/stores/${output.id}/connections?teamId=${output.teamId}`);
-  await api.delete(`/storage/stores/${output.type}/${output.id}?teamId=${output.teamId}`);
+  const connections = await fromPromise(api.delete(`/storage/stores/${output.id}/connections?teamId=${output.teamId}`), (err) => err as Error);
+
+  if (connections.isErr()) {  
+    throw connections.error;
+  }
+
+  const storage = await fromPromise(api.delete(`/storage/stores/${output.type}/${output.id}?teamId=${output.teamId}`), (err) => err as Error);
+
+  if (storage.isErr()) {
+    throw storage.error;
+  }
+}
+
+async function createProjectsConnection(api: VercelApi, output: Storage, projects: StorageProject[]) {
+  // Promise.all didn't worked well with the API, so we're using a for loop instead
+  for (const project of projects) {
+    await connectProject(api, output, project);
+  }
+}
+
+async function deleteProjectsConnection(api: VercelApi, output: Storage, projectsMetadata: Storage["store"]["projectsMetadata"]) {
+  // Promise.all didn't worked well with the API, so we're using a for loop instead
+  for (const metadata of projectsMetadata) {
+    await disconnectProject(api, output, metadata);
+  }
+}
+
+async function connectProject(api: VercelApi, output: Storage, project: StorageProject) {
+  const response = await fromPromise(api.post(`/storage/stores/${output.id}/connections?teamId=${output.teamId}`, {
+    envVarEnvironments: project.envVarEnvironments,
+    envVarPrefix: project.envVarPrefix,
+    projectId: project.projectId,
+  }), (err) => err as Error);
+
+  if (response.isErr()) {
+    throw response.error;
+  }
+}
+
+async function disconnectProject(api: VercelApi, output: Storage, metadata: Storage["store"]["projectsMetadata"][number]) {
+  const response = await fromPromise(api.delete(`/storage/stores/${output.id}/connections/${metadata.id}?teamId=${output.teamId}`), (err) => err as Error);
+
+  if (response.isErr()) {
+    throw response.error;
+  }
 }
