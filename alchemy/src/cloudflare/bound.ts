@@ -27,22 +27,22 @@ import type { AnalyticsEngineDataset as _AnalyticsEngineDataset } from "./analyt
 import type { Assets } from "./assets.ts";
 import type { Binding, Json, Self } from "./bindings.ts";
 import type { BrowserRendering } from "./browser-rendering.ts";
-import type { R2BucketResource as _R2Bucket } from "./bucket.ts";
+import type { R2Bucket as _R2Bucket } from "./bucket.ts";
 import type { Container as _Container } from "./container.ts";
-import type { D1DatabaseResource } from "./d1-database.ts";
-import type { DispatchNamespaceResource } from "./dispatch-namespace.ts";
+import type { D1Database as _D1Database } from "./d1-database.ts";
 import type { DurableObjectNamespace as _DurableObjectNamespace } from "./durable-object-namespace.ts";
-import type { HyperdriveResource as _Hyperdrive } from "./hyperdrive.ts";
+import type { Hyperdrive as _Hyperdrive } from "./hyperdrive.ts";
 import type { Images as _Images } from "./images.ts";
-import type { PipelineResource as _Pipeline } from "./pipeline.ts";
-import type { QueueResource as _Queue } from "./queue.ts";
+import type { Pipeline as _Pipeline } from "./pipeline.ts";
+import type { Queue as _Queue } from "./queue.ts";
 import type { RateLimit as _RateLimit } from "./rate-limit.ts";
 import type { SecretKey } from "./secret-key.ts";
 import type { Secret as CloudflareSecret } from "./secret.ts";
-import type { VectorizeIndexResource as _VectorizeIndex } from "./vectorize-index.ts";
+import type { VectorizeIndex as _VectorizeIndex } from "./vectorize-index.ts";
 import type { VersionMetadata as _VersionMetadata } from "./version-metadata.ts";
+import type { WorkerRef } from "./worker-ref.ts";
 import type { WorkerStub } from "./worker-stub.ts";
-import type { Worker as _Worker, WorkerRef } from "./worker.ts";
+import type { Worker as _Worker } from "./worker.ts";
 import type { Workflow as _Workflow } from "./workflow.ts";
 
 type BoundWorker<
@@ -84,9 +84,9 @@ export type Bound<T extends Binding> = T extends _DurableObjectNamespace<
                         ? Service
                         : T extends _Workflow<infer P>
                           ? Workflow<P>
-                          : T extends D1DatabaseResource
+                          : T extends _D1Database
                             ? D1Database
-                            : T extends DispatchNamespaceResource
+                            : T extends DispatchNamespace
                               ? DispatchNamespace
                               : T extends _VectorizeIndex
                                 ? VectorizeIndex

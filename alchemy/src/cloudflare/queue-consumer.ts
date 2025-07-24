@@ -7,7 +7,7 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
-import type { Queue, QueueResource } from "./queue.ts";
+import type { Queue } from "./queue.ts";
 
 /**
  * Settings for configuring a Queue Consumer
@@ -55,9 +55,9 @@ export interface QueueConsumerSettings {
  */
 export interface QueueConsumerProps extends CloudflareApiOptions {
   /**
-   * The {@link QueueResource} or Queue ID to consume
+   * The {@link Queue} or Queue ID to consume
    */
-  queue: string | QueueResource;
+  queue: string | Queue;
 
   /**
    * Name of the worker script that will consume the queue

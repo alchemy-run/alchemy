@@ -1,6 +1,5 @@
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
-import { bind, type Bound } from "../runtime/bind.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
@@ -105,16 +104,14 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
   };
 }
 
-export function isD1Database(
-  resource: Resource,
-): resource is D1DatabaseResource {
+export function isD1Database(resource: Resource): resource is D1Database {
   return resource[ResourceKind] === "cloudflare::D1Database";
 }
 
 /**
  * Output returned after D1 Database creation/update
  */
-export type D1DatabaseResource = Resource<"cloudflare::D1Database"> &
+export type D1Database = Resource<"cloudflare::D1Database"> &
   D1DatabaseProps & {
     type: "d1";
     /**
@@ -153,8 +150,6 @@ export type D1DatabaseResource = Resource<"cloudflare::D1Database"> &
     };
   };
 
-export type D1Database = D1DatabaseResource & Bound<D1DatabaseResource>;
-
 export async function D1Database(
   id: string,
   props: Omit<D1DatabaseProps, "migrationsFiles"> = {},
@@ -163,22 +158,10 @@ export async function D1Database(
     ? await listMigrationsFiles(props.migrationsDir)
     : [];
 
-  const db = await D1DatabaseResource(id, {
+  return _D1Database(id, {
     ...props,
     migrationsFiles,
   });
-  const binding = await bind(db);
-  return {
-    ...db,
-    batch: binding.batch,
-    exec: binding.exec,
-    prepare: binding.prepare,
-    withSession: binding.withSession,
-    /**
-     * @deprecated
-     */
-    dump: binding.dump,
-  };
 }
 
 /**
@@ -257,13 +240,13 @@ export async function D1Database(
  *
  * @see https://developers.cloudflare.com/d1/
  */
-const D1DatabaseResource = Resource(
+const _D1Database = Resource(
   "cloudflare::D1Database",
   async function (
-    this: Context<D1DatabaseResource>,
+    this: Context<D1Database>,
     id: string,
     props: D1DatabaseProps = {},
-  ): Promise<D1DatabaseResource> {
+  ): Promise<D1Database> {
     const api = await createCloudflareApi(props);
     const databaseName = props.name ?? id;
 

@@ -6,13 +6,8 @@ import { isDeepStrictEqual } from "node:util";
 import path from "pathe";
 import type { Context } from "../context.ts";
 import type { BundleProps } from "../esbuild/bundle.ts";
-import { InnerResourceScope, Resource, ResourceKind } from "../resource.ts";
-import { getBindKey, tryGetBinding } from "../runtime/bind.ts";
-import { isRuntime } from "../runtime/global.ts";
-import { bootstrapPlugin } from "../runtime/plugin.ts";
-import { Scope } from "../scope.ts";
-import { Secret, isSecret, secret } from "../secret.ts";
-import { serializeScope } from "../serde.ts";
+import { Resource, ResourceKind } from "../resource.ts";
+import { isSecret } from "../secret.ts";
 import type { type } from "../type.ts";
 import { DeferredPromise } from "../util/deferred-promise.ts";
 import { logger } from "../util/logger.ts";
@@ -25,16 +20,12 @@ import {
   createCloudflareApi,
 } from "./api.ts";
 import type { Assets } from "./assets.ts";
-import {
-  type Binding,
-  type Bindings,
-  Json,
-  type WorkerBindingDurableObjectNamespace,
-  type WorkerBindingService,
-  type WorkerBindingSpec,
+import type {
+  Bindings,
+  WorkerBindingDurableObjectNamespace,
+  WorkerBindingSpec,
 } from "./bindings.ts";
 import type { Bound } from "./bound.ts";
-import { isBucket } from "./bucket.ts";
 import {
   type WorkerBundle,
   type WorkerBundleChunk,
@@ -49,36 +40,27 @@ import {
 } from "./compatibility-presets.ts";
 import { type Container, ContainerApplication } from "./container.ts";
 import { CustomDomain } from "./custom-domain.ts";
-import { isD1Database } from "./d1-database.ts";
-import type { DispatchNamespaceResource } from "./dispatch-namespace.ts";
+import type { DispatchNamespace } from "./dispatch-namespace.ts";
 import {
   DurableObjectNamespace,
   isDurableObjectNamespace,
 } from "./durable-object-namespace.ts";
-import {
-  type EventSource,
-  type QueueEventSource,
-  isQueueEventSource,
-} from "./event-source.ts";
-import { isKVNamespace } from "./kv-namespace.ts";
+import { type EventSource, isQueueEventSource } from "./event-source.ts";
 import type { MiniflareWorkerOptions } from "./miniflare/miniflare-worker-options.ts";
 import { miniflareServer } from "./miniflare/miniflare.ts";
-import { isPipeline } from "./pipeline.ts";
 import {
   QueueConsumer,
   deleteQueueConsumer,
   listQueueConsumersForWorker,
 } from "./queue-consumer.ts";
-import { type QueueResource, isQueue } from "./queue.ts";
+import { isQueue } from "./queue.ts";
 import { Route } from "./route.ts";
-import { isVectorizeIndex } from "./vectorize-index.ts";
 import { uploadAssets } from "./worker-assets.ts";
 import {
   type WorkerScriptMetadata,
   bumpMigrationTagVersion,
   prepareWorkerMetadata,
 } from "./worker-metadata.ts";
-import { WorkerStub, isWorkerStub } from "./worker-stub.ts";
 import { WorkerSubdomain, disableWorkerSubdomain } from "./worker-subdomain.ts";
 import { createTail } from "./worker-tail.ts";
 import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
@@ -330,7 +312,7 @@ export interface BaseWorkerProps<
    *
    * This allows workers to be routed to via dispatch namespace routing rules
    */
-  namespace?: string | DispatchNamespaceResource;
+  namespace?: string | DispatchNamespace;
 
   /**
    * Version label for this worker deployment
@@ -455,45 +437,6 @@ export type WorkerProps<
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
 > = InlineWorkerProps<B, RPC> | EntrypointWorkerProps<B, RPC>;
 
-export type FetchWorkerProps<
-  B extends Bindings = Bindings,
-  E extends EventSource[] = EventSource[],
-> = Omit<WorkerProps<B>, "entrypoint" | "eventSources"> & {
-  /**
-   * A function that will be used to fetch the worker script.
-   *
-   * This is only used when using the fetch property.
-   */
-  fetch?(
-    request: Request,
-    env: Bindings.Runtime<B>,
-    ctx: ExecutionContext,
-  ): Promise<Response>;
-  /**
-   * Event sources that this worker will consume.
-   *
-   * Can include queues, streams, or other event sources.
-   */
-  eventSources?: E;
-
-  /**
-   * A function that will be used to queue the worker script.
-   *
-   * This is only used when using the queue property.
-   */
-  queue?(
-    batch: QueueBatch<E>,
-    env: Bindings.Runtime<B>,
-    ctx: ExecutionContext,
-  ): Promise<void>;
-};
-
-type QueueBatch<E extends EventSource[]> = E[number] extends QueueEventSource
-  ? any
-  : E[number] extends QueueResource<infer Body>
-    ? MessageBatch<Body>
-    : MessageBatch<unknown>;
-
 export function isWorker(resource: Resource): resource is Worker<any> {
   return resource[ResourceKind] === "cloudflare::Worker";
 }
@@ -505,8 +448,7 @@ export type Worker<
   B extends Bindings | undefined = Bindings | undefined,
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
 > = Resource<"cloudflare::Worker"> &
-  Omit<WorkerProps<B>, "url" | "script" | "routes" | "domains"> &
-  globalThis.Service & {
+  Omit<WorkerProps<B>, "url" | "script" | "routes" | "domains"> & {
     /** @internal phantom property */
     __rpc__?: RPC;
 
@@ -586,7 +528,7 @@ export type Worker<
     /**
      * The dispatch namespace this worker is deployed to
      */
-    namespace?: string | DispatchNamespaceResource;
+    namespace?: string | DispatchNamespace;
 
     /**
      * Version label for this worker deployment
@@ -600,56 +542,6 @@ export type Worker<
       mode: "smart";
     };
   };
-
-/**
- * Represents a reference to a Cloudflare Worker service.
- *
- * @template RPC - The type of the worker's RPC entrypoint, defaults to Rpc.WorkerEntrypointBranded.
- *
- * This interface extends all properties of WorkerBindingService except for "name".
- * It also includes an optional __rpc__ property for type branding.
- */
-export type WorkerRef<
-  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
-> = Omit<WorkerBindingService, "name"> & {
-  /**
-   * Optional type branding for the worker's RPC entrypoint.
-   */
-  __rpc__?: RPC;
-};
-
-/**
- * Creates a reference to a Cloudflare Worker service.
- *
- * @example
- * // Create a reference to a Cloudflare Worker service:
- * const ref = WorkerRef({
- *   service: "my-worker",
- *   environment: "production",
- *   namespace: "main"
- * });
- *
- * // Optionally, you can specify only the service:
- * const ref2 = WorkerRef({ service: "my-worker" });
- *
- * // You can also specify the RPC type for stronger typing:
- * interface MyWorkerRPC extends Rpc.WorkerEntrypointBranded {
- *   myMethod(arg: string): Promise<number>;
- * }
- * const typedRef = WorkerRef<MyWorkerRPC>({ service: "my-worker" });
- */
-export function WorkerRef<
-  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
->(options?: {
-  service: string;
-  environment?: string;
-  namespace?: string;
-}): WorkerRef<RPC> {
-  return {
-    ...options,
-    type: "service",
-  } as WorkerRef<RPC>;
-}
 
 /**
  * A Cloudflare Worker is a serverless function that can be deployed to the Cloudflare network.
@@ -807,220 +699,12 @@ export function Worker<
   const B extends Bindings,
   RPC extends Rpc.WorkerEntrypointBranded,
 >(id: string, props: WorkerProps<B, RPC>): Promise<Worker<B, RPC>>;
-export function Worker<const B extends Bindings, const E extends EventSource[]>(
-  id: string,
-  meta: ImportMeta,
-  props: FetchWorkerProps<B, E>,
-): Promise<Worker<B>> & globalThis.Service;
+
 export function Worker<const B extends Bindings>(
-  ...args:
-    | [id: string, props: WorkerProps<B>]
-    | [id: string, meta: ImportMeta, props: FetchWorkerProps<B>]
+  id: string,
+  props: WorkerProps<B>,
 ): Promise<Worker<B>> {
-  const [id, meta, props] =
-    args.length === 2 ? [args[0], undefined, args[1]] : args;
-
-  if (("fetch" in props && props.fetch) || ("queue" in props && props.queue)) {
-    const scope = Scope.current;
-
-    const workerName = props.name ?? id;
-
-    // we need to make sure the worker exists
-    const stub = WorkerStub(`${id}/stub`, {
-      name: workerName,
-      accountId: props.accountId,
-      apiKey: props.apiKey,
-      apiToken: props.apiToken,
-      baseUrl: props.baseUrl,
-      email: props.email,
-    });
-
-    async function collectResources(
-      scope: Scope | undefined,
-    ): Promise<Resource[]> {
-      if (!scope) {
-        return [];
-      }
-      return (
-        await Promise.all(
-          Array.from(scope.resources.values()).map(async (resource) => [
-            (await resource) as Resource,
-            ...(await collectResources(await resource[InnerResourceScope])),
-          ]),
-        )
-      ).flat();
-    }
-
-    const deferred = scope.defer(async () => {
-      const autoBindings: Record<string, Binding> = {};
-      for (const resource of await collectResources(Scope.root)) {
-        if (
-          isQueue(resource) ||
-          isWorkerStub(resource) ||
-          isWorker(resource) ||
-          isD1Database(resource) ||
-          isBucket(resource) ||
-          isPipeline(resource) ||
-          isVectorizeIndex(resource) ||
-          isKVNamespace(resource)
-        ) {
-          // TODO(sam): make this generic/pluggable
-          autoBindings[getBindKey(resource)] = resource;
-        }
-      }
-
-      // TODO(sam): prune to only needed secrets
-      for (const secret of Secret.all()) {
-        autoBindings[secret.name] = secret;
-      }
-
-      const bindings = {
-        ...props.bindings,
-        __ALCHEMY_WORKER_NAME__: workerName,
-        __ALCHEMY_SERIALIZED_SCOPE__: Json(await serializeScope(scope)),
-        ALCHEMY_STAGE: scope.stage,
-        ALCHEMY_PASSWORD: secret(scope.password),
-        // TODO(sam): prune un-needed bindings
-        ...autoBindings,
-      };
-
-      return _Worker(id, {
-        ...(props as any),
-        url: true,
-        compatibilityFlags: Array.from(
-          new Set([
-            "nodejs_compat",
-            ...unionCompatibilityFlags(
-              props.compatibility,
-              props.compatibilityFlags,
-            ),
-          ]),
-        ),
-        entrypoint: meta!.filename,
-        name: workerName,
-        // adopt because the stub guarnatees that the worker exists
-        adopt: true,
-        bindings,
-        bundle: {
-          ...props.bundle,
-          plugins: [bootstrapPlugin],
-          external: [
-            // for alchemy
-            "libsodium*",
-            "@swc/*",
-            "esbuild",
-            // TODO(sam): this is for fetch, why is it a package?
-            "undici",
-            "miniflare",
-            "@iarna/toml",
-            "cli-*",
-            "react*",
-          ],
-          banner: {
-            js: "var __ALCHEMY_RUNTIME__ = true;",
-          },
-          inject: [
-            ...(props.bundle?.inject ?? []),
-            path.resolve(import.meta.dirname, "..", "runtime", "shims.js"),
-          ],
-        },
-      });
-    }) as Promise<Worker<B>>;
-
-    // defer construction of this worker until the app is about to finaloze
-    // this ensures that the Worker's dependencies are instantiated before we bundle
-    // it is then safe to bundle and import the Worker to detect which resources need to be auto-bound
-    const promise = Promise.all([deferred, stub]).then(
-      ([worker]) => worker,
-    ) as Promise<Worker<B>> & {
-      fetch?: (...args: any[]) => Promise<Response>;
-      queue?: (
-        batch: QueueBatch<any>,
-        env: Bindings.Runtime<B>,
-        ctx: ExecutionContext,
-      ) => Promise<void>;
-    };
-
-    if (isRuntime) {
-      if (props.fetch) {
-        promise.fetch = async (
-          request: Request,
-          env: Bindings.Runtime<B>,
-          ctx: ExecutionContext,
-        ) => {
-          try {
-            return await props.fetch!(request, env as any, ctx);
-          } catch (err: any) {
-            return new Response(err.message + err.stack, {
-              status: 500,
-            });
-          }
-        };
-      }
-      if (props.queue) {
-        promise.queue = async (
-          batch: QueueBatch<any>,
-          env: Bindings.Runtime<B>,
-          ctx: ExecutionContext,
-        ) => {
-          return await props.queue!(batch, env, ctx);
-        };
-      }
-    } else {
-      promise.fetch = async (
-        request: string | URL | Request,
-        init?: RequestInit,
-      ) => {
-        const worker = await promise;
-        if (!worker.url) {
-          throw new Error("Worker URL is not available in runtime");
-        }
-        if (request instanceof Request) {
-          const origin = new URL(worker.url);
-          const incoming = request.url.startsWith("/")
-            ? new URL(`${worker.url}${request.url}`)
-            : new URL(request.url);
-          logger.log(incoming);
-          const proxyURL = new URL(
-            `${incoming.pathname}${incoming.search}${incoming.hash}`,
-            origin,
-          );
-
-          const headers = new Headers(request.headers);
-          headers.set("host", origin.host);
-
-          try {
-            return await fetch(
-              new Request(proxyURL, {
-                method: request.method,
-                body: request.body,
-                headers,
-                // TODO(sam): do we need this? GPT added it ...
-                // redirect: "manual",
-              }),
-            );
-          } catch (err: any) {
-            return new Response(err.message ?? "proxy error", { status: 500 });
-          }
-        } else {
-          if (typeof request === "string" && request.startsWith("/")) {
-            request = new URL(`${worker.url}${request}`);
-          }
-          return await fetch(request, init);
-        }
-      };
-    }
-    return promise;
-  }
-  return _Worker(id, props as WorkerProps<B>).then(async (worker) => {
-    const binding = await tryGetBinding(worker);
-    if (binding) {
-      worker.fetch = (request: Request) => binding.fetch(request);
-      worker.connect = (address: SocketAddress, options: SocketOptions) =>
-        binding.connect(address, options);
-    }
-    return worker;
-  });
+  return _Worker(id, props as WorkerProps<B>);
 }
 
 export const _Worker = Resource(

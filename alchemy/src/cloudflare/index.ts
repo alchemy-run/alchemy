@@ -55,6 +55,7 @@ export * from "./vectorize-metadata-index.ts";
 export * from "./version-metadata.ts";
 export * from "./vite.ts";
 export * from "./website.ts";
+export * from "./worker-ref.ts";
 export * from "./worker-stub.ts";
 export * from "./worker-subdomain.ts";
 export * from "./worker.ts";
