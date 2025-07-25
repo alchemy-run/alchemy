@@ -3,6 +3,7 @@
 import alchemy from "alchemy";
 import { D1Database, Worker } from "alchemy/cloudflare";
 import { Exec } from "alchemy/os";
+import assert from "node:assert";
 
 const app = await alchemy("cloudflare-prisma");
 
@@ -28,5 +29,16 @@ export const worker = await Worker("worker", {
 });
 
 console.log(`worker.url: ${worker.url}`);
+
+if (process.env.NODE_ENV === "test") {
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  const res1 = await fetch(worker.url!);
+  assert.deepStrictEqual(await res1.json(), []);
+  const res2 = await fetch(`${worker.url}/create`);
+  assert.deepStrictEqual(await res2.text(), "Created");
+  const res3 = await fetch(worker.url!);
+  assert.equal((await res3.json()).length, 1);
+  console.log("test passed");
+}
 
 await app.finalize();
