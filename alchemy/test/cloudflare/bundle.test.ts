@@ -131,7 +131,7 @@ describe("Bundle Worker Test", () => {
       expect(text).toEqual("Hello World!");
     } finally {
       // Clean up the worker
-      // await destroy(scope);
+      await destroy(scope);
     }
   }, 120000); // Increased timeout for bundling and deployment
 });
