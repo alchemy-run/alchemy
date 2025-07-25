@@ -1,4 +1,3 @@
-import type esbuild from "esbuild";
 import kleur from "kleur";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
@@ -26,13 +25,6 @@ import type {
   WorkerBindingSpec,
 } from "./bindings.ts";
 import type { Bound } from "./bound.ts";
-import {
-  type WorkerBundle,
-  type WorkerBundleChunk,
-  type WorkerBundleProvider,
-  normalizeWorkerBundle,
-} from "./bundle/index.ts";
-import { wrap } from "./bundle/normalize.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "./compatibility-date.gen.ts";
 import {
   type CompatibilityPreset,
@@ -56,6 +48,11 @@ import {
 import { isQueue } from "./queue.ts";
 import { Route } from "./route.ts";
 import { uploadAssets } from "./worker-assets.ts";
+import {
+  WorkerBundle,
+  type WorkerBundleSource,
+  normalizeWorkerBundle,
+} from "./worker-bundle.ts";
 import {
   type WorkerScriptMetadata,
   bumpMigrationTagVersion,
@@ -738,23 +735,21 @@ export const _Worker = Resource(
         ? props.namespace
         : props.namespace?.namespaceName;
 
-    const [bundle, error] = wrap(() =>
-      normalizeWorkerBundle({
-        entrypoint: props.entrypoint,
-        script: props.script,
-        format: props.format,
-        noBundle: props.noBundle,
-        rules: "rules" in props ? props.rules : undefined,
-        bundle: props.bundle,
-        cwd,
-        compatibilityDate,
-        compatibilityFlags,
-        outdir:
-          props.bundle?.outdir ??
-          path.join(process.cwd(), ".alchemy", ...this.scope.chain, id),
-        sourceMap: "sourceMap" in props ? props.sourceMap : undefined,
-      }),
-    );
+    const bundleSourceResult = normalizeWorkerBundle({
+      entrypoint: props.entrypoint,
+      script: props.script,
+      format: props.format,
+      noBundle: props.noBundle,
+      rules: "rules" in props ? props.rules : undefined,
+      bundle: props.bundle,
+      cwd,
+      compatibilityDate,
+      compatibilityFlags,
+      outdir:
+        props.bundle?.outdir ??
+        path.join(process.cwd(), ".alchemy", ...this.scope.chain, id),
+      sourceMap: "sourceMap" in props ? props.sourceMap : undefined,
+    });
 
     // run locally if
     const local = this.scope.local && !props.dev?.remote;
@@ -762,8 +757,8 @@ export const _Worker = Resource(
 
     if (local) {
       let url: string | undefined;
-      if (error) {
-        throw error;
+      if (bundleSourceResult.isErr()) {
+        throw bundleSourceResult.error;
       }
 
       if (props.dev?.command) {
@@ -793,7 +788,7 @@ export const _Worker = Resource(
           compatibilityDate,
           compatibilityFlags,
           bindings: props.bindings,
-          bundle,
+          bundle: bundleSourceResult.value,
           port: props.dev?.port,
           assets: props.assets,
         });
@@ -832,7 +827,9 @@ export const _Worker = Resource(
     const api = await createCloudflareApi(props);
 
     if (this.phase === "delete") {
-      await bundle?.delete?.();
+      if (bundleSourceResult.isOk()) {
+        await bundleSourceResult.value.delete?.();
+      }
       if (!props.version) {
         await deleteQueueConsumers(api, workerName);
         await deleteWorker(api, {
@@ -841,9 +838,11 @@ export const _Worker = Resource(
         });
       }
       return this.destroy();
-    } else if (error) {
-      throw error;
+    } else if (bundleSourceResult.isErr()) {
+      throw new Error(bundleSourceResult.error);
     }
+
+    const bundleSource = bundleSourceResult.value;
 
     if (this.phase === "update") {
       const oldName = this.output.name ?? this.output.id;
@@ -913,7 +912,10 @@ export const _Worker = Resource(
         if (!(await workerExists(api, workerName))) {
           // Create the base worker first if it doesn't exist
           const baseWorkerProps = { ...props, version: undefined };
-          await putWorkerWithAssets(baseWorkerProps, await bundle.create());
+          await putWorkerWithAssets(
+            baseWorkerProps,
+            await bundleSource.create(),
+          );
         }
         // We always "adopt" when publishing versions
       } else if (!props.adopt) {
@@ -923,81 +925,54 @@ export const _Worker = Resource(
 
     let putWorkerResult: PutWorkerResult;
     if (watch) {
-      // todo(john): clean this up and add log tail
       const controller = new AbortController();
       cleanups.push(() => controller.abort());
-      const watcher = await bundle.watch(controller.signal);
       const promise = new DeferredPromise<PutWorkerResult>();
-      void watcher.pipeTo(
-        new WritableStream({
-          async write(chunk) {
-            switch (chunk.type) {
-              case "start":
-                logger.task("", {
-                  message: "start",
-                  status: "pending",
-                  resource: id,
-                  prefix: "build",
-                  prefixColor: "cyanBright",
-                });
-                break;
-              case "end": {
-                if (promise.status === "pending") {
-                  await putWorkerWithAssets(props, chunk.result)
-                    .then((result) => promise.resolve(result))
-                    .catch((error) => {
-                      controller.abort();
-                      promise.reject(error);
-                    });
-                  return;
-                }
+      const runWatch = async () => {
+        for await (const bundle of bundleSource.watch(controller.signal)) {
+          if (promise.status === "pending") {
+            await putWorkerWithAssets(props, bundle)
+              .then((result) => promise.resolve(result))
+              .catch((error) => {
+                controller.abort();
+                promise.reject(error);
+              });
+            continue;
+          }
 
-                logger.task("", {
-                  message: "reload",
-                  status: "success",
-                  resource: id,
-                  prefix: "build",
-                  prefixColor: "cyanBright",
-                });
-                await putWorker(api, {
-                  ...props,
-                  workerName,
-                  scriptBundle: chunk.result,
-                  dispatchNamespace,
-                  version: props.version,
-                  compatibilityDate,
-                  compatibilityFlags,
-                  assetUploadResult: assetsBinding
-                    ? {
-                        keepAssets: true,
-                        assetConfig: props.assets,
-                      }
-                    : undefined,
-                  unstable_cacheWorkerSettings: true,
-                });
-                logger.task("", {
-                  message: "updated",
-                  status: "success",
-                  resource: id,
-                  prefix: "build",
-                  prefixColor: "greenBright",
-                });
-                break;
-              }
-              case "error":
-                logger.task("", {
-                  message: "error",
-                  status: "failure",
-                  resource: id,
-                  prefix: "build",
-                  prefixColor: "redBright",
-                });
-                logger.error(chunk.errors);
-                break;
-            }
-          },
-        }),
-      );
+          logger.task("", {
+            message: "reload",
+            status: "success",
+            resource: id,
+            prefix: "build",
+            prefixColor: "cyanBright",
+          });
+          await putWorker(api, {
+            ...props,
+            workerName,
+            scriptBundle: bundle,
+            dispatchNamespace,
+            version: props.version,
+            compatibilityDate,
+            compatibilityFlags,
+            assetUploadResult: assetsBinding
+              ? {
+                  keepAssets: true,
+                  assetConfig: props.assets,
+                }
+              : undefined,
+            unstable_cacheWorkerSettings: true,
+          });
+          logger.task("", {
+            message: "updated",
+            status: "success",
+            resource: id,
+            prefix: "build",
+            prefixColor: "greenBright",
+          });
+        }
+      };
+      void runWatch(); // this is not awaited because it's an ongoing process
       putWorkerResult = await promise.value;
       await createTail(api, id, workerName)
         .then((tail) => {
@@ -1007,7 +982,8 @@ export const _Worker = Resource(
           logger.error(`Failed to create tail for ${workerName}`, error);
         });
     } else {
-      putWorkerResult = await putWorkerWithAssets(props, await bundle.create());
+      const scriptBundle = await bundleSource.create();
+      putWorkerResult = await putWorkerWithAssets(props, scriptBundle);
     }
 
     const tasks: Promise<unknown>[] = [];
@@ -1368,7 +1344,7 @@ async function createMiniflare(props: {
   compatibilityFlags: string[];
   bindings: Bindings | undefined;
   port: number | undefined;
-  bundle: WorkerBundleProvider;
+  bundle: WorkerBundleSource;
   assets: AssetsConfig | undefined;
 }) {
   const sharedOptions: Omit<MiniflareWorkerOptions, "bundle"> = {
@@ -1381,137 +1357,27 @@ async function createMiniflare(props: {
   };
 
   const startPromise = new DeferredPromise<string>();
-  // todo(john): streamline and share logging logic with remote dev
-  type Events =
-    | {
-        type: "build-start" | "build-end";
-      }
-    | {
-        type: "build-error";
-        errors: esbuild.Message[];
-      }
-    | {
-        type: "miniflare-ready";
-        url: string;
-      }
-    | {
-        type: "miniflare-error";
-        error: Error;
-      };
   const controller = new AbortController();
   cleanups.push(() => controller.abort());
-  (await props.bundle.watch(controller.signal))
-    .pipeThrough(
-      new TransformStream<WorkerBundleChunk, Events>({
-        async transform(chunk, controller) {
-          switch (chunk.type) {
-            case "start": {
-              controller.enqueue({ type: "build-start" });
-              break;
-            }
-            case "end": {
-              controller.enqueue({ type: "build-end" });
-              try {
-                const server = await miniflareServer.push({
-                  ...sharedOptions,
-                  bundle: chunk.result,
-                });
-                controller.enqueue({
-                  type: "miniflare-ready",
-                  url: server.url,
-                });
-              } catch (error) {
-                controller.enqueue({
-                  type: "miniflare-error",
-                  error: error as Error,
-                });
-              }
-              break;
-            }
-            case "error": {
-              controller.enqueue({
-                type: "build-error",
-                errors: chunk.errors,
-              });
-              break;
-            }
-          }
-        },
-      }),
-    )
-    .pipeTo(
-      new WritableStream({
-        write: async (chunk) => {
-          switch (chunk.type) {
-            case "build-start": {
-              logger.task("", {
-                message: "start",
-                status: "pending",
-                resource: props.id,
-                prefix: "build",
-                prefixColor: "cyanBright",
-              });
-              break;
-            }
-            case "build-end": {
-              logger.task("", {
-                message: startPromise.status === "pending" ? "load" : "reload",
-                status: "success",
-                resource: props.id,
-                prefix: "build",
-                prefixColor: "greenBright",
-              });
-              break;
-            }
-            case "build-error": {
-              logger.task("", {
-                message: "error",
-                status: "failure",
-                resource: props.id,
-                prefix: "build",
-                prefixColor: "redBright",
-              });
-              if (startPromise.status === "pending") {
-                controller.abort();
-                startPromise.reject(chunk.errors);
-              } else {
-                logger.error(chunk.errors);
-              }
-              break;
-            }
-            case "miniflare-ready": {
-              logger.task("", {
-                message: `ready at ${chunk.url}`,
-                status: "success",
-                resource: props.id,
-                prefix: "miniflare",
-                prefixColor: "greenBright",
-              });
-              if (startPromise.status === "pending") {
-                startPromise.resolve(chunk.url);
-              }
-              break;
-            }
-            case "miniflare-error": {
-              logger.task("", {
-                message: "error",
-                status: "failure",
-                resource: props.id,
-                prefix: "miniflare",
-                prefixColor: "redBright",
-              });
-              if (startPromise.status === "pending") {
-                startPromise.reject(chunk.error);
-              } else {
-                logger.error(chunk.error);
-              }
-              break;
-            }
-          }
-        },
-      }),
-    );
-
+  const run = async () => {
+    for await (const bundle of props.bundle.watch(controller.signal)) {
+      const server = await miniflareServer.push({
+        ...sharedOptions,
+        bundle,
+      });
+      if (startPromise.status === "pending") {
+        startPromise.resolve(server.url);
+      }
+      logger.task("", {
+        message: `ready at ${server.url}`,
+        status: "success",
+        resource: props.id,
+        prefix: "miniflare",
+        prefixColor: "greenBright",
+      });
+    }
+  };
+  void run();
   return await startPromise.value;
 }
 
@@ -1632,12 +1498,7 @@ async function prepareWorkerUpload(
   } else {
     scriptMetadata.main_module = props.scriptBundle.entrypoint;
   }
-  const body = new FormData();
-
-  for await (const file of props.scriptBundle.files) {
-    body.append(file.name, file);
-  }
-
+  const body = await WorkerBundle.toFormData(props.scriptBundle);
   // Prepare metadata - add version annotations if this is a version
   const finalMetadata = props.version
     ? {

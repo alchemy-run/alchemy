@@ -1,3 +1,4 @@
+import { err, ok, type Result } from "neverthrow";
 import { logger } from "../../util/logger.ts";
 
 interface ValidateNodeCompatProps {
@@ -22,7 +23,7 @@ export function validateNodeCompat({
   compatibilityDate,
   compatibilityFlags,
   noBundle,
-}: ValidateNodeCompatProps) {
+}: ValidateNodeCompatProps): Result<"v2" | "als" | null, string> {
   const {
     hasNodejsAlsFlag,
     hasNodejsCompatFlag,
@@ -45,13 +46,13 @@ export function validateNodeCompat({
     mode = "als";
   }
   if (hasExperimentalNodejsCompatV2Flag) {
-    throw new Error(
+    return err(
       "The `experimental:` prefix on `nodejs_compat_v2` is no longer valid. Please remove it and try again.",
     );
   }
 
   if (hasNodejsCompatFlag && hasNodejsCompatV2Flag) {
-    throw new Error(
+    return err(
       "The `nodejs_compat` and `nodejs_compat_v2` compatibility flags cannot be used in together. Please select just one.",
     );
   }
@@ -63,12 +64,12 @@ export function validateNodeCompat({
   }
 
   if (mode === "v1") {
-    throw new Error(
+    return err(
       "You must set your compatibilty date >= 2024-09-23 when using 'nodejs_compat' compatibility flag",
     );
   }
 
-  return mode;
+  return ok(mode);
 }
 
 function parseNodeCompatibilityFlags(compatibilityFlags: string[]) {
