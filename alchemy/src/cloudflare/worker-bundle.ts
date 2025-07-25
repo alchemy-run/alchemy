@@ -298,19 +298,26 @@ export namespace WorkerBundleSource {
     }
 
     private buildOptions(additionalPlugins: esbuild.Plugin[]) {
-      const { entrypoint, nodeCompat, cwd, ...props } = this.props;
+      const { entrypoint, nodeCompat, cwd, format, ...props } = this.props;
       return {
-        ...props,
         entryPoints: [entrypoint],
         absWorkingDir: cwd,
-        format: props.format,
+        format,
         target: "esnext",
         platform: "node",
+        ...props,
         metafile: true,
         write: true,
         bundle: true,
-        conditions: ["workerd", "worker", "import", "module", "browser"],
-        mainFields: ["module", "main"],
+        conditions: [
+          "workerd",
+          "worker",
+          "import",
+          "module",
+          "browser",
+          ...(props.conditions ?? []),
+        ],
+        mainFields: ["module", "main", ...(props.mainFields ?? [])],
         loader: {
           ".sql": "text",
           ".json": "json",
