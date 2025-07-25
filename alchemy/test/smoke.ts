@@ -1,3 +1,4 @@
+import { dim } from "kleur/colors";
 import { Listr } from "listr2";
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
@@ -159,11 +160,7 @@ async function verifyNoLocalStateInCI(examplePath: string): Promise<void> {
   }
 }
 
-const skippedExamples = [
-  "aws-app",
-  "cloudflare-worker-bootstrap",
-  "cloudflare-tanstack-start",
-];
+const skippedExamples = ["aws-app", "cloudflare-tanstack-start"];
 
 // Discover examples and generate tests
 const examples = (await discoverExamples()).filter(
@@ -213,47 +210,55 @@ const tasks = new Listr(
         destroyCommand = "bun ./index.ts --destroy";
       }
 
-      try {
-        // Delete output file from previous run
-        await deleteOutputFile(example.name);
-
-        // Phase 1: Cleanup (pre-emptive destroy)
-        task.title = `${example.name} - Cleanup`;
-        await runCommand(destroyCommand, {
-          cwd: example.path,
-          exampleName: noCaptureFlag ? undefined : example.name,
-        });
-
-        // Phase 2: Dev
-        task.title = `${example.name} - Dev`;
-        await runCommand(devCommand, {
-          cwd: example.path,
-          exampleName: noCaptureFlag ? undefined : example.name,
+      const phases = [
+        {
+          title: "Cleanup",
+          command: destroyCommand,
+        },
+        {
+          title: "Dev",
+          command: devCommand,
           env: {
             // this is how we force alchemy to exit on finalize in CI
             ALCHEMY_TEST_KILL_ON_FINALIZE: "1",
           },
-        });
+        },
+        {
+          title: "Destroy",
+          command: destroyCommand,
+        },
+        {
+          title: "Dev",
+          command: devCommand,
+          env: {
+            // this is how we force alchemy to exit on finalize in CI
+            ALCHEMY_TEST_KILL_ON_FINALIZE: "1",
+          },
+        },
+        {
+          title: "Deploy",
+          command: deployCommand,
+        },
+        {
+          title: "Destroy",
+          command: destroyCommand,
+        },
+      ];
 
-        // Phase 3: Deploy
-        task.title = `${example.name} - Deploy`;
-        await runCommand(deployCommand, {
-          cwd: example.path,
-          exampleName: noCaptureFlag ? undefined : example.name,
-        });
+      try {
+        // Delete output file from previous run
+        await deleteOutputFile(example.name);
 
-        // Verify state store behavior in CI
-        await verifyNoLocalStateInCI(example.path);
-
-        // Phase 4: Destroy
-        task.title = `${example.name} - Destroy`;
-        await runCommand(destroyCommand, {
-          cwd: example.path,
-          exampleName: noCaptureFlag ? undefined : example.name,
-        });
-
-        // Verify cleanup in CI
-        await verifyNoLocalStateInCI(example.path);
+        for (let i = 0; i < phases.length; i++) {
+          const phase = phases[i];
+          task.title = `${example.name} - ${phase.title} ${dim(`(${i}/${phases.length - 1})`)}`;
+          await runCommand(phase.command, {
+            cwd: example.path,
+            exampleName: noCaptureFlag ? undefined : example.name,
+            env: phase.env,
+          });
+          await verifyNoLocalStateInCI(example.path);
+        }
 
         // Task completed successfully
         task.title = `${example.name} - ✅ Complete`;
