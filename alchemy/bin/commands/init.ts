@@ -13,9 +13,9 @@ import { resolve } from "node:path";
 import pc from "picocolors";
 import z from "zod";
 import { detectPackageManager } from "../../src/util/detect-package-manager.ts";
+import type { DependencyVersionMap } from "../constants.ts";
 import { throwWithContext } from "../errors.ts";
 import { Project, IndentationText, QuoteKind, Node } from "ts-morph";
-
 import { addPackageDependencies } from "../services/dependencies.ts";
 import { t } from "../trpc.ts";
 import {
@@ -235,7 +235,23 @@ await app.finalize();
     sveltekit: "",
     "tanstack-start": "",
     rwsdk: "",
-    nuxt: "",
+    nuxt: `/// <reference types="@types/node" />
+
+import alchemy from "alchemy";
+import { Nuxt } from "alchemy/cloudflare";
+
+const app = await alchemy("${context.projectName}");
+
+export const worker = await Nuxt("website", {
+  command: "bun run build",
+});
+
+console.log({
+  url: worker.url,
+});
+
+await app.finalize();
+`,
   };
 
   return templates[context.framework];
@@ -256,8 +272,12 @@ async function createAlchemyRunFile(context: InitContext) {
 
 async function updatePackageJson(context: InitContext) {
   try {
+    const devDependencies: DependencyVersionMap[] = ["alchemy"];
+    if (context.framework === "nuxt") {
+      devDependencies.push("nitro-cloudflare-dev");
+    }
     await addPackageDependencies({
-      devDependencies: ["alchemy"],
+      devDependencies,
       projectDir: context.cwd,
     });
 
@@ -293,6 +313,10 @@ async function updateTsConfig(context: InitContext) {
   }
   if (context.framework === "react-router") {
     await updateReactRouterProject(context);
+    return;
+  }
+  if (context.framework === "nuxt") {
+    await updateNuxtProject(context);
     return;
   }
 
@@ -353,9 +377,9 @@ async function updateTsConfig(context: InitContext) {
   }
 }
 
-async function updateAstroProject(context: InitContext) {
-  const tsConfigPath = resolve(context.cwd, "tsconfig.json");
-  if (await fs.pathExists(tsConfigPath)) {
+async function updateNuxtProject(context: InitContext) {
+  const nuxtConfigPath = resolve(context.cwd, "nuxt.config.ts");
+  if (await fs.pathExists(nuxtConfigPath)) {
     try {
       const project = new Project({
         manipulationSettings: {
@@ -363,9 +387,110 @@ async function updateAstroProject(context: InitContext) {
           quoteKind: QuoteKind.Double,
         },
       });
-      const sourceFile = project.addSourceFileAtPath(tsConfigPath);
+      project.addSourceFileAtPath(nuxtConfigPath);
+      const sourceFile = project.getSourceFileOrThrow(nuxtConfigPath);
 
-      const tsConfig = JSON.parse(sourceFile.getText());
+      const exportAssignment = sourceFile.getExportAssignment(
+        (d) => !d.isExportEquals(),
+      );
+      if (exportAssignment) {
+        const defineConfigCall = exportAssignment.getExpression();
+        if (
+          Node.isCallExpression(defineConfigCall) &&
+          defineConfigCall.getExpression().getText() === "defineNuxtConfig"
+        ) {
+          let configObject = defineConfigCall.getArguments()[0];
+
+          if (!configObject) {
+            configObject = defineConfigCall.addArgument("{}");
+          }
+
+          if (Node.isObjectLiteralExpression(configObject)) {
+            // Add nitro property
+            if (!configObject.getProperty("nitro")) {
+              configObject.addPropertyAssignment({
+                name: "nitro",
+                initializer: `{
+    preset: "cloudflare_module",
+    cloudflare: {
+      deployConfig: true,
+      nodeCompat: true
+    }
+  }`,
+              });
+            }
+
+            // Add modules property
+            const modulesProperty = configObject.getProperty("modules");
+            if (modulesProperty && Node.isPropertyAssignment(modulesProperty)) {
+              const initializer = modulesProperty.getInitializer();
+              if (Node.isArrayLiteralExpression(initializer)) {
+                const hasModule = initializer
+                  .getElements()
+                  .some(
+                    (el) =>
+                      el.getText() === '"nitro-cloudflare-dev"' ||
+                      el.getText() === "'nitro-cloudflare-dev'",
+                  );
+                if (!hasModule) {
+                  initializer.addElement('"nitro-cloudflare-dev"');
+                }
+              }
+            } else if (!modulesProperty) {
+              configObject.addPropertyAssignment({
+                name: "modules",
+                initializer: '["nitro-cloudflare-dev"]',
+              });
+            }
+          }
+        }
+      }
+
+      await project.save();
+    } catch (error) {
+      console.warn(`Failed to update ${nuxtConfigPath}:`, error);
+    }
+  }
+
+  const tsConfigPath = resolve(context.cwd, "tsconfig.json");
+  if (await fs.pathExists(tsConfigPath)) {
+    try {
+      const readJsonc = async (path: string) => {
+        const content = await fs.readFile(path, "utf-8");
+        // Regular expression to strip comments and trailing commas
+        const jsonc = content
+          .replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, "")
+          .replace(/,(\s*[}\]])/g, "$1");
+        return JSON.parse(jsonc);
+      };
+      const tsConfig = await readJsonc(tsConfigPath);
+
+      if (!tsConfig.include) {
+        tsConfig.include = [];
+      }
+      if (!tsConfig.include.includes("alchemy.run.ts")) {
+        tsConfig.include.push("alchemy.run.ts");
+      }
+
+      await fs.writeJson(tsConfigPath, tsConfig, { spaces: 2 });
+    } catch (error) {
+      console.warn(`Failed to update ${tsConfigPath}:`, error);
+    }
+  }
+}
+
+async function updateAstroProject(context: InitContext) {
+  const tsConfigPath = resolve(context.cwd, "tsconfig.json");
+  if (await fs.pathExists(tsConfigPath)) {
+    try {
+      const readJsonc = async (path: string) => {
+        const content = await fs.readFile(path, "utf-8");
+        const jsonc = content
+          .replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, "")
+          .replace(/,(\s*[}\]])/g, "$1");
+        return JSON.parse(jsonc);
+      };
+      const tsConfig = await readJsonc(tsConfigPath);
 
       if (!tsConfig.include) tsConfig.include = [];
       if (!tsConfig.include.includes("alchemy.run.ts")) {
@@ -386,8 +511,7 @@ async function updateAstroProject(context: InitContext) {
         tsConfig.compilerOptions.types.push("./types/env.d.ts");
       }
 
-      sourceFile.replaceWithText(JSON.stringify(tsConfig, null, 2));
-      await project.save();
+      await fs.writeJson(tsConfigPath, tsConfig, { spaces: 2 });
     } catch (error) {
       console.warn(`Failed to update ${tsConfigPath}:`, error);
     }
@@ -453,15 +577,14 @@ async function updateReactRouterProject(context: InitContext) {
   const tsConfigNodePath = resolve(context.cwd, "tsconfig.json");
   if (await fs.pathExists(tsConfigNodePath)) {
     try {
-      const project = new Project({
-        manipulationSettings: {
-          indentationText: IndentationText.TwoSpaces,
-          quoteKind: QuoteKind.Double,
-        },
-      });
-      const sourceFile = project.addSourceFileAtPath(tsConfigNodePath);
-
-      const tsConfig = JSON.parse(sourceFile.getText());
+      const readJsonc = async (path: string) => {
+        const content = await fs.readFile(path, "utf-8");
+        const jsonc = content
+          .replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, "")
+          .replace(/,(\s*[}\]])/g, "$1");
+        return JSON.parse(jsonc);
+      };
+      const tsConfig = await readJsonc(tsConfigNodePath);
 
       if (!tsConfig.include) tsConfig.include = [];
       if (!tsConfig.include.includes("alchemy.run.ts")) {
@@ -482,8 +605,7 @@ async function updateReactRouterProject(context: InitContext) {
         tsConfig.compilerOptions.types.push("./types/env.d.ts");
       }
 
-      sourceFile.replaceWithText(JSON.stringify(tsConfig, null, 2));
-      await project.save();
+      await fs.writeJson(tsConfigNodePath, tsConfig, { spaces: 2 });
     } catch (error) {
       console.warn(`Failed to update ${tsConfigNodePath}:`, error);
     }
