@@ -2,8 +2,14 @@
 
 import alchemy from "alchemy";
 import { D1Database, Worker } from "alchemy/cloudflare";
+import { Exec } from "alchemy/os";
 
 const app = await alchemy("cloudflare-prisma");
+
+await Exec("prisma-generate", {
+  command: "prisma generate",
+  memoize: { patterns: ["prisma/schema.prisma"] },
+});
 
 const d1 = await D1Database("d1", {
   name: `${app.name}-${app.stage}-d1`,
