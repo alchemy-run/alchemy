@@ -251,7 +251,7 @@ const _D1Database = Resource(
     const databaseName = props.name ?? id;
 
     if (this.phase === "delete") {
-      if (props.delete !== false) {
+      if (props.delete !== false && this.output?.id !== id) {
         await deleteDatabase(api, this.output?.id);
       }
       // Return void (a deleted database has no content)
