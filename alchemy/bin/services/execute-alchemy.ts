@@ -156,6 +156,7 @@ export async function execAlchemy(
         FORCE_COLOR: "1",
       },
     });
+    process.exit(0);
   } catch (error: any) {
     log.error(pc.red(`Deploy failed: ${error.message}`));
     if (error.stdout) {
