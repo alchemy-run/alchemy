@@ -261,10 +261,12 @@ export namespace WorkerBundleSource {
       const wasmPlugin = createWasmPlugin();
       const options = this.buildOptions([wasmPlugin.plugin]);
       const result = await esbuild.build(options);
-      const { entrypoint, modules } = this.resolveBuildOutput(result.metafile);
+      const { entrypoint, root, modules } = this.resolveBuildOutput(
+        result.metafile,
+      );
       return {
         entrypoint,
-        root: this.props.outdir,
+        root,
         modules: [...modules, ...wasmPlugin.modules.values()],
       };
     }
@@ -279,12 +281,12 @@ export namespace WorkerBundleSource {
       await context.watch();
 
       for await (const result of hotReload.iterator) {
-        const { entrypoint, modules } = this.resolveBuildOutput(
+        const { entrypoint, root, modules } = this.resolveBuildOutput(
           result.metafile!,
         );
         yield {
           entrypoint,
-          root: this.props.outdir,
+          root,
           modules: [...modules, ...wasm.modules.values()],
         };
       }
