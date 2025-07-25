@@ -1,6 +1,7 @@
 import { handleApiError } from "../../cloudflare/api-error.ts";
 import type { CloudflareApi } from "../../cloudflare/api.ts";
 import { getInternalWorkerBundle } from "../../cloudflare/bundle/internal-worker-bundle.ts";
+import { WorkerBundle } from "../../cloudflare/worker-bundle.ts";
 import type { WorkerMetadata } from "../../cloudflare/worker-metadata.ts";
 import { logger } from "../../util/logger.ts";
 import { withExponentialBackoff } from "../../util/retry.ts";
@@ -140,14 +141,13 @@ export async function upsertStateStoreWorker(
     cache.set(key, TAG);
     return;
   }
-  const formData = new FormData();
-  const { file } = await getInternalWorkerBundle("dofs-state-store");
-  formData.append(file.name, file);
+  const { bundle } = await getInternalWorkerBundle("dofs-state-store");
+  const formData = await WorkerBundle.toFormData(bundle);
   formData.append(
     "metadata",
     new Blob([
       JSON.stringify({
-        main_module: file.name,
+        main_module: bundle.entrypoint,
         compatibility_date: "2025-06-01",
         compatibility_flags: ["nodejs_compat"],
         bindings: [

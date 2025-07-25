@@ -129,11 +129,7 @@ const provision = memoize(
         workerName: scriptName,
         compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
         format: "esm",
-        scriptBundle: {
-          entrypoint: bundle.file.name,
-          files: [bundle.file],
-          hash: bundle.tag,
-        },
+        scriptBundle: bundle.bundle,
         compatibilityFlags: [],
         bindings: {
           STORE: DurableObjectNamespace(scriptName, {
