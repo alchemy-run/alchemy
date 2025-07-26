@@ -214,6 +214,7 @@
     "drizzle-kit": "^0.31.4",
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
+    "jsonc-parse": "^1.5.5",
     "libsodium-wrappers": "^0.7.15",
     "listr2": "^8.0.0",
     "nitro-cloudflare-dev": "^0.2.2",
