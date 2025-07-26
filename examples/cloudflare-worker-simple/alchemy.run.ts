@@ -15,6 +15,7 @@ const [d1, kv, r2] = await Promise.all([
   D1Database("d1", {
     name: `${app.name}-${app.stage}-d1`,
     adopt: true,
+    migrationsDir: "migrations",
   }),
   KVNamespace("kv", {
     title: `${app.name}-${app.stage}-kv`,
@@ -44,9 +45,6 @@ export const worker1 = await Worker("worker", {
     DO: doNamespace,
   },
   compatibilityFlags: ["nodejs_compat"],
-  dev: {
-    remote: true,
-  },
 });
 export const worker2 = await Worker("worker2", {
   name: `${app.name}-${app.stage}-worker2`,
@@ -57,9 +55,6 @@ export const worker2 = await Worker("worker2", {
     DO: worker1.bindings.DO,
   },
   compatibilityFlags: ["nodejs_compat"],
-  dev: {
-    remote: true,
-  },
 });
 
 console.log(`worker1.url: ${worker1.url}`);

@@ -1,3 +1,57 @@
+## v0.53.0
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Use queue name instead of queue id for queue consumers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/740 [<samp>(3b7ba)</samp>](https://github.com/sam-goodwin/alchemy/commit/3b7ba776)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.52.0...v0.53.0)
+
+---
+
+## v0.52.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Local d1 migrations and do not create DB in dev &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/722 [<samp>(5fc11)</samp>](https://github.com/sam-goodwin/alchemy/commit/5fc1150a)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Explicit usage of workers-types &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/736 [<samp>(08a09)</samp>](https://github.com/sam-goodwin/alchemy/commit/08a09bc8)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.51.3...v0.52.0)
+
+---
+
+## v0.51.3
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **core**: Include oldOutput in destroy when eagerly replacing &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/734 [<samp>(ac365)</samp>](https://github.com/sam-goodwin/alchemy/commit/ac3654f5)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.51.2...v0.51.3)
+
+---
+
+## v0.51.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Dev mode supports livestore &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/700 [<samp>(abf32)</samp>](https://github.com/sam-goodwin/alchemy/commit/abf32e0d)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.51.1...v0.51.2)
+
+---
+
+## v0.51.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Fetch all zones in findZoneForHostname &nbsp;-&nbsp; by **Andrew Jefferson** in https://github.com/sam-goodwin/alchemy/issues/729 [<samp>(ede6e)</samp>](https://github.com/sam-goodwin/alchemy/commit/ede6e53c)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.51.0...v0.51.1)
+
+---
+
 ## v0.51.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

@@ -1,0 +1,438 @@
+---
+title: Prisma D1
+description: Build a full-stack application with Prisma ORM and Cloudflare D1 using Alchemy.
+sidebar:
+  order: 16
+---
+
+import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
+
+Build a full-stack application with Prisma ORM and Cloudflare D1 Database. This guide shows you how to set up a type-safe database layer with automated migrations and a web interface using Prisma's schema and client generation.
+
+<Steps>
+
+1. **Create your project**
+
+   Start by creating a new project and installing dependencies.
+
+   ```sh
+   mkdir prisma-d1-app
+   cd prisma-d1-app
+   ```
+
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun init -y
+       bun add alchemy @prisma/client @prisma/adapter-d1
+       bun add -D prisma @types/node @cloudflare/workers-types typescript
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npm init -y
+       npm install alchemy @prisma/client @prisma/adapter-d1
+       npm install -D prisma @types/node @cloudflare/workers-types typescript
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm init
+       pnpm add alchemy @prisma/client @prisma/adapter-d1
+       pnpm add -D prisma @types/node @cloudflare/workers-types typescript
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn init -y
+       yarn add alchemy @prisma/client @prisma/adapter-d1
+       yarn add -D prisma @types/node @cloudflare/workers-types typescript
+       ```
+     </TabItem>
+   </Tabs>
+
+2. **Login to Cloudflare**
+
+   Authenticate with your Cloudflare account.
+
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun alchemy login
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx alchemy login
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm dlx alchemy login
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn alchemy login
+       ```
+     </TabItem>
+   </Tabs>
+
+   :::tip
+   Make sure you have a [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier works)
+   :::
+
+3. **Initialize Prisma**
+
+   Set up Prisma in your project:
+
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun prisma init
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx prisma init
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm prisma init
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn prisma init
+       ```
+     </TabItem>
+   </Tabs>
+
+4. **Configure Prisma schema**
+
+   Update `prisma/schema.prisma` for Cloudflare D1:
+
+   ```prisma
+   // prisma/schema.prisma
+   generator client {
+     provider        = "prisma-client"
+     output          = "../src/generated/prisma"
+     previewFeatures = ["driverAdapters"]
+     runtime         = "cloudflare"
+     moduleFormat    = "esm"
+   }
+
+   // This datasource isn't used at runtime but Prisma requires it
+   datasource db {
+     provider = "sqlite"
+     url      = "file:./dev.db"
+   }
+
+   model User {
+     id        Int      @id @default(autoincrement())
+     email     String   @unique
+     name      String?
+     createdAt DateTime @default(now())
+     posts     Post[]
+   }
+
+   model Post {
+     id        Int      @id @default(autoincrement())
+     title     String
+     content   String?
+     published Boolean  @default(false)
+     authorId  Int
+     author    User     @relation(fields: [authorId], references: [id])
+     createdAt DateTime @default(now())
+   }
+   ```
+
+5. **Create TypeScript config**
+
+   Create `tsconfig.json`:
+
+   ```json
+   {
+     "compilerOptions": {
+       "target": "es2021",
+       "lib": ["es2021"],
+       "module": "es2022",
+       "moduleResolution": "bundler",
+       "strict": true,
+       "esModuleInterop": true,
+       "skipLibCheck": true,
+       "forceConsistentCasingInFileNames": true,
+       "types": ["@cloudflare/workers-types", "@types/node"]
+     },
+     "include": ["src/**/*", "alchemy.run.ts"],
+     "exclude": ["node_modules"]
+   }
+   ```
+
+6. **Create your infrastructure**
+
+   Create `alchemy.run.ts` with D1 database and Worker:
+
+   ```typescript
+   // alchemy.run.ts
+   /// <reference types="@types/node" />
+
+   import alchemy from "alchemy";
+   import { D1Database, Worker } from "alchemy/cloudflare";
+   import { Exec } from "alchemy/os";
+
+   const app = await alchemy("prisma-d1-app");
+
+   // Generate Prisma client before deployment
+   await Exec("prisma-generate", {
+     command: "prisma generate",
+     memoize: { patterns: ["prisma/schema.prisma"] },
+   });
+
+   // Create D1 database with Prisma migrations
+   const database = await D1Database("app-db", {
+     name: `${app.name}-${app.stage}-db`,
+     adopt: true,
+     migrationsDir: "prisma/migrations",
+   });
+
+   // Create API worker
+   export const worker = await Worker("api-worker", {
+     name: `${app.name}-${app.stage}-worker`,
+     entrypoint: "src/worker.ts",
+     adopt: true,
+     bindings: {
+       D1: database,
+     },
+     compatibilityFlags: ["nodejs_compat"],
+   });
+
+   console.log(`API available at: ${worker.url}`);
+   await app.finalize();
+   ```
+
+7. **Create environment types**
+
+   Create `types/env.d.ts` for type safety:
+
+   ```typescript
+   // types/env.d.ts
+   import type { worker } from "../alchemy.run.ts";
+
+   export type CloudflareEnv = typeof worker.Env;
+
+   declare global {
+     type Env = CloudflareEnv;
+   }
+
+   declare module "cloudflare:workers" {
+     namespace Cloudflare {
+       export interface Env extends CloudflareEnv {}
+     }
+   }
+   ```
+
+8. **Create your worker with Prisma**
+
+   Create `src/worker.ts` with Prisma ORM integration:
+
+   ```typescript
+   // src/worker.ts
+   import { PrismaD1 } from "@prisma/adapter-d1";
+   import { PrismaClient } from "./generated/prisma/client.ts";
+
+   export default {
+     async fetch(request: Request, env: Env): Promise<Response> {
+       const adapter = new PrismaD1(env.D1);
+       const prisma = new PrismaClient({ adapter });
+
+       const url = new URL(request.url);
+       
+       try {
+         if (url.pathname === "/users" && request.method === "POST") {
+           // Create a new user
+           const body = await request.json() as { email: string; name?: string };
+           const user = await prisma.user.create({
+             data: {
+               email: body.email,
+               name: body.name,
+             },
+           });
+           return new Response(JSON.stringify(user), {
+             headers: { "Content-Type": "application/json" },
+           });
+         }
+
+         if (url.pathname === "/users" && request.method === "GET") {
+           // Get all users with their posts
+           const users = await prisma.user.findMany({
+             include: {
+               posts: true,
+             },
+           });
+           return new Response(JSON.stringify(users), {
+             headers: { "Content-Type": "application/json" },
+           });
+         }
+
+         if (url.pathname === "/posts" && request.method === "POST") {
+           // Create a new post
+           const body = await request.json() as { 
+             title: string; 
+             content?: string; 
+             authorId: number 
+           };
+           const post = await prisma.post.create({
+             data: {
+               title: body.title,
+               content: body.content,
+               authorId: body.authorId,
+             },
+             include: {
+               author: true,
+             },
+           });
+           return new Response(JSON.stringify(post), {
+             headers: { "Content-Type": "application/json" },
+           });
+         }
+
+         // Default: return API info
+         return new Response(JSON.stringify({
+           message: "Prisma D1 API",
+           endpoints: {
+             "GET /users": "Get all users with posts",
+             "POST /users": "Create a user (body: { email, name? })",
+             "POST /posts": "Create a post (body: { title, content?, authorId })"
+           }
+         }), {
+           headers: { "Content-Type": "application/json" },
+         });
+
+       } catch (error) {
+         return new Response(JSON.stringify({ 
+           error: error instanceof Error ? error.message : "Unknown error" 
+         }), {
+           status: 500,
+           headers: { "Content-Type": "application/json" },
+         });
+       }
+     },
+   } satisfies ExportedHandler<Env>;
+   ```
+
+9. **Generate Prisma client and migrations**
+
+   Generate the Prisma client and create your first migration:
+
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun prisma generate
+       bun prisma migrate dev --name init
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx prisma generate
+       npx prisma migrate dev --name init
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm prisma generate
+       pnpm prisma migrate dev --name init
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn prisma generate
+       yarn prisma migrate dev --name init
+       ```
+     </TabItem>
+   </Tabs>
+
+10. **Deploy your application**
+
+    Deploy your D1 database and worker:
+
+    <Tabs syncKey="pkgManager">
+      <TabItem label="bun">
+        ```sh
+        bun alchemy deploy
+        ```
+      </TabItem>
+      <TabItem label="npm">
+        ```sh
+        npx alchemy deploy
+        ```
+      </TabItem>
+      <TabItem label="pnpm">
+        ```sh
+        pnpm alchemy deploy
+        ```
+      </TabItem>
+      <TabItem label="yarn">
+        ```sh
+        yarn alchemy deploy
+        ```
+      </TabItem>
+    </Tabs>
+
+    Your API will be available at the displayed URL. Test it with:
+
+    ```sh
+    # Get API info
+    curl https://api-worker.your-account.workers.dev
+
+    # Create a user
+    curl -X POST https://api-worker.your-account.workers.dev/users \
+      -H "Content-Type: application/json" \
+      -d '{"email":"john@example.com","name":"John Doe"}'
+
+    # Get all users
+    curl https://api-worker.your-account.workers.dev/users
+
+    # Create a post
+    curl -X POST https://api-worker.your-account.workers.dev/posts \
+      -H "Content-Type: application/json" \
+      -d '{"title":"My First Post","content":"Hello World!","authorId":1}'
+    ```
+
+11. **(Optional) Tear down**
+
+    Clean up all resources when you're done:
+
+    <Tabs syncKey="pkgManager">
+      <TabItem label="bun">
+        ```sh
+        bun alchemy destroy
+        ```
+      </TabItem>
+      <TabItem label="npm">
+        ```sh
+        npx alchemy destroy
+        ```
+      </TabItem>
+      <TabItem label="pnpm">
+        ```sh
+        pnpm alchemy destroy
+        ```
+      </TabItem>
+      <TabItem label="yarn">
+        ```sh
+        yarn alchemy destroy
+        ```
+      </TabItem>
+    </Tabs>
+
+</Steps>
+
+
+## Next Steps
+
+- Explore [Prisma's query API](https://www.prisma.io/docs/concepts/components/prisma-client/crud) for more advanced operations
+- Add authentication and authorization to your API
+- Set up a frontend application to consume your API
+- Learn about [Prisma migrations](https://www.prisma.io/docs/concepts/components/prisma-migrate) for schema management

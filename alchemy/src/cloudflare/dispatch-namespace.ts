@@ -1,6 +1,5 @@
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
-import { bind } from "../runtime/bind.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
@@ -37,14 +36,14 @@ export interface DispatchNamespaceProps extends CloudflareApiOptions {
 
 export function isDispatchNamespace(
   resource: Resource,
-): resource is DispatchNamespaceResource {
+): resource is DispatchNamespace {
   return resource[ResourceKind] === "cloudflare::DispatchNamespace";
 }
 
 /**
  * Output returned after Dispatch Namespace creation/update
  */
-export interface DispatchNamespaceResource
+export interface DispatchNamespace
   extends Resource<"cloudflare::DispatchNamespace">,
     Omit<DispatchNamespaceProps, "delete"> {
   type: "dispatch_namespace";
@@ -73,10 +72,6 @@ export interface DispatchNamespaceResource
    */
   modifiedAt: number;
 }
-
-export type DispatchNamespace = DispatchNamespaceResource & {
-  get(name: string): Fetcher;
-};
 
 /**
  * A Cloudflare Dispatch Namespace enables routing worker requests to different scripts based on patterns.
@@ -107,27 +102,13 @@ export type DispatchNamespace = DispatchNamespaceResource & {
  *   delete: false
  * });
  */
-
-export async function DispatchNamespace(
-  name: string,
-  props: DispatchNamespaceProps = {},
-): Promise<DispatchNamespace> {
-  const dispatchNamespace = await _DispatchNamespace(name, props);
-  const binding = await bind(dispatchNamespace);
-  return {
-    ...dispatchNamespace,
-    // Add runtime methods that dispatch namespaces have
-    get: binding.get,
-  };
-}
-
-const _DispatchNamespace = Resource(
+export const DispatchNamespace = Resource(
   "cloudflare::DispatchNamespace",
   async function (
-    this: Context<DispatchNamespaceResource>,
+    this: Context<DispatchNamespace>,
     id: string,
-    props: DispatchNamespaceProps,
-  ): Promise<DispatchNamespaceResource> {
+    props: DispatchNamespaceProps = {},
+  ): Promise<DispatchNamespace> {
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
 

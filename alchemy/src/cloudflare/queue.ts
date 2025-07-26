@@ -1,13 +1,11 @@
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
-import { bind } from "../runtime/bind.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
-import type { Bound } from "./bound.ts";
 
 /**
  * Settings for a Cloudflare Queue
@@ -95,7 +93,7 @@ export function isQueue(eventSource: any): eventSource is Queue {
 /**
  * Output returned after Cloudflare Queue creation/update
  */
-export interface QueueResource<Body = unknown>
+export interface Queue<Body = unknown>
   extends Resource<"cloudflare::Queue">,
     QueueProps {
   /**
@@ -130,9 +128,6 @@ export interface QueueResource<Body = unknown>
 
   Batch: MessageBatch<Body>;
 }
-
-export type Queue<Body = unknown> = QueueResource<Body> &
-  Bound<QueueResource<Body>>;
 
 /**
  * Creates and manages Cloudflare Queues.
@@ -213,23 +208,10 @@ export type Queue<Body = unknown> = QueueResource<Body> &
  *
  * @see https://developers.cloudflare.com/queues/
  */
-export async function Queue<Body = unknown>(
-  name: string,
-  props: QueueProps = {},
-): Promise<Queue<Body>> {
-  const queue = await QueueResource<Body>(name, props);
-  const binding = await bind(queue);
-  return {
-    ...queue,
-    send: binding.send,
-    sendBatch: binding.sendBatch,
-  } as Queue<Body>;
-}
-
-const QueueResource = Resource("cloudflare::Queue", async function <
+export const Queue = Resource("cloudflare::Queue", async function <
   T = unknown,
->(this: Context<QueueResource<T>>, id: string, props: QueueProps = {}): Promise<
-  QueueResource<T>
+>(this: Context<Queue<T>>, id: string, props: QueueProps = {}): Promise<
+  Queue<T>
 > {
   const api = await createCloudflareApi(props);
   const queueName = props.name ?? id;

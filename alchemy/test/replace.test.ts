@@ -1,11 +1,11 @@
 import { describe, expect, test as vitestTest } from "vitest";
-import { alchemy } from "../src/alchemy.js";
-import type { Context } from "../src/context.js";
-import { destroy } from "../src/destroy.js";
-import { Resource, ResourceID } from "../src/resource.js";
-import type { Scope } from "../src/scope.js";
-import "../src/test/vitest.js";
-import { BRANCH_PREFIX, createTestOptions, STATE_STORE_TYPES } from "./util.js";
+import { alchemy } from "../src/alchemy.ts";
+import type { Context } from "../src/context.ts";
+import { destroy } from "../src/destroy.ts";
+import { Resource, ResourceID } from "../src/resource.ts";
+import type { Scope } from "../src/scope.ts";
+import "../src/test/vitest.ts";
+import { BRANCH_PREFIX, createTestOptions, STATE_STORE_TYPES } from "./util.ts";
 
 describe.sequential("Replace-Sequential", () => {
   for (const storeType of STATE_STORE_TYPES) {
@@ -541,6 +541,47 @@ describe.concurrent("Replace", () => {
               { input: "foo", output: "output-foo" },
               { input: "bar", output: "output-bar" },
             ]);
+          }
+        },
+      );
+      test(
+        "this.output should not be undefined on this.replace(true)",
+        options,
+        async (scope) => {
+          const deleted: string[] = [];
+          interface Replacable extends Resource<`Replacable-${string}`> {
+            name: string;
+          }
+          const Replacable = Resource(
+            `Replacable-${storeType}-eager`,
+            async function (
+              this: Context<Replacable>,
+              _id: string,
+              props: {
+                name: string;
+              },
+            ): Promise<Replacable> {
+              if (this.phase === "delete") {
+                deleted.push(this.output.name);
+                return this.destroy();
+              } else if (this.phase === "update") {
+                this.replace(true);
+              }
+              return this({ name: props.name });
+            },
+          );
+          try {
+            await Replacable("replaceable", {
+              name: "foo-9",
+            });
+            expect(deleted).toEqual([]);
+            await Replacable("replaceable", {
+              name: "bar-9",
+            });
+            expect(deleted).toEqual(["foo-9"]);
+          } finally {
+            await destroy(scope);
+            expect(deleted).toEqual(["foo-9", "bar-9"]);
           }
         },
       );

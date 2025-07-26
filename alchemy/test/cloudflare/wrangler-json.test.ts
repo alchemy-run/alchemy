@@ -16,6 +16,7 @@ import { Assets } from "../../src/cloudflare/assets.ts";
 import { BrowserRendering } from "../../src/cloudflare/browser-rendering.ts";
 import { DispatchNamespace } from "../../src/cloudflare/dispatch-namespace.ts";
 import { Images } from "../../src/cloudflare/images.ts";
+import { Queue } from "../../src/cloudflare/queue.ts";
 import { VectorizeIndex } from "../../src/cloudflare/vectorize-index.ts";
 import { Workflow } from "../../src/cloudflare/workflow.ts";
 import "../../src/test/vitest.ts";
@@ -28,6 +29,19 @@ const esmWorkerScript = `
   export default {
     async fetch(request, env, ctx) {
       return new Response('Hello ESM world!', { status: 200 });
+    }
+  };
+`;
+
+const queueWorkerScript = `
+  export default {
+    async fetch(request, env, ctx) {
+      return new Response('Hello Queue world!', { status: 200 });
+    },
+    async queue(batch, env, ctx) {
+      for (const message of batch.messages) {
+        console.log('Processing message:', message.body);
+      }
     }
   };
 `;
@@ -713,6 +727,100 @@ describe("WranglerJson Resource", () => {
         limits: {
           cpu_ms: 60000,
         },
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await destroy(scope);
+    }
+  });
+
+  test("with queue event source - uses queue name instead of ID", async (scope) => {
+    const name = `${BRANCH_PREFIX}-test-worker-queue-event-source`;
+    const tempDir = path.join(".out", "alchemy-queue-event-source-test");
+    const entrypoint = path.join(tempDir, "worker.ts");
+
+    try {
+      // Create a temporary directory for the entrypoint file
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(tempDir, { recursive: true });
+      await fs.writeFile(entrypoint, queueWorkerScript);
+
+      // Create a queue
+      const queue = await Queue(`${BRANCH_PREFIX}-test-queue-es`, {
+        name: "test-queue-event-source",
+        adopt: true,
+      });
+
+      const worker = await Worker(name, {
+        format: "esm",
+        entrypoint,
+        eventSources: [
+          {
+            queue: queue,
+            settings: {
+              batchSize: 25,
+              maxConcurrency: 5,
+              maxRetries: 3,
+              maxWaitTimeMs: 1500,
+              retryDelay: 45,
+            },
+          },
+        ],
+        adopt: true,
+      });
+
+      const { spec } = await WranglerJson(
+        `${BRANCH_PREFIX}-test-wrangler-json-queue-event-source`,
+        { worker },
+      );
+
+      expect(spec.queues?.consumers).toHaveLength(1);
+      expect(spec.queues?.consumers[0]).toMatchObject({
+        queue: queue.name, // Should use queue name, not ID
+        max_batch_size: 25,
+        max_concurrency: 5,
+        max_retries: 3,
+        max_wait_time_ms: 1500,
+        retry_delay: 45,
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await destroy(scope);
+    }
+  });
+
+  test("with direct queue as event source - uses queue name instead of ID", async (scope) => {
+    const name = `${BRANCH_PREFIX}-test-worker-direct-queue`;
+    const tempDir = path.join(".out", "alchemy-direct-queue-test");
+    const entrypoint = path.join(tempDir, "worker.ts");
+
+    try {
+      // Create a temporary directory for the entrypoint file
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(tempDir, { recursive: true });
+      await fs.writeFile(entrypoint, queueWorkerScript);
+
+      // Create a queue
+      const queue = await Queue(`${BRANCH_PREFIX}-test-queue-direct`, {
+        name: "test-queue-direct",
+        adopt: true,
+      });
+
+      const worker = await Worker(name, {
+        format: "esm",
+        entrypoint,
+        eventSources: [queue], // Direct queue as event source
+        adopt: true,
+      });
+
+      const { spec } = await WranglerJson(
+        `${BRANCH_PREFIX}-test-wrangler-json-direct-queue`,
+        { worker },
+      );
+
+      expect(spec.queues?.consumers).toHaveLength(1);
+      expect(spec.queues?.consumers[0]).toMatchObject({
+        queue: queue.name, // Should use queue name, not ID
       });
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });

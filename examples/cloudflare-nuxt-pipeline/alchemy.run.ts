@@ -6,6 +6,7 @@ const app = await alchemy("cloudflare-nuxt-pipeline");
 const bucket = await R2Bucket("bucket", {
   name: `${app.name}-${app.stage}-bucket`,
   adopt: true,
+  empty: true,
 });
 
 const pipeline = await Pipeline("pipeline", {
