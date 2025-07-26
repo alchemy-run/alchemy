@@ -179,7 +179,21 @@ async function checkExistingAlchemyFiles(context: InitContext) {
 
 function getAlchemyRunContent(context: InitContext): string {
   const templates: Record<TemplateType, string> = {
-    typescript: "",
+    typescript: `/// <reference types="@types/node" />
+
+import alchemy from "alchemy";
+import { Worker } from "alchemy/cloudflare";
+
+const app = await alchemy("${context.projectName}");
+
+export const worker = await Worker("worker", {
+  name: "${context.projectName}",
+  entrypoint: "src/worker.ts",
+});
+
+console.log(worker.url);
+await app.finalize();
+`,
     vite: `import alchemy from "alchemy";
 import { Vite } from "alchemy/cloudflare";
 
@@ -413,7 +427,6 @@ async function updateSvelteKitProject(context: InitContext) {
       project.addSourceFileAtPath(svelteConfigPath);
       const sourceFile = project.getSourceFileOrThrow(svelteConfigPath);
 
-      // Update the import statement
       const importDeclarations = sourceFile.getImportDeclarations();
       const adapterImport = importDeclarations.find((imp) =>
         imp.getModuleSpecifierValue().includes("@sveltejs/adapter"),
@@ -489,7 +502,6 @@ async function updateNuxtProject(context: InitContext) {
           }
 
           if (Node.isObjectLiteralExpression(configObject)) {
-            // Add nitro property
             if (!configObject.getProperty("nitro")) {
               configObject.addPropertyAssignment({
                 name: "nitro",
@@ -704,8 +716,8 @@ function displaySuccessMessage(context: InitContext): void {
 
 ${pc.cyan("🚀 Next steps:")}
    Edit ${runFile} to configure your infrastructure
-   Run ${pc.yellow("npm run deploy")} to deploy
-   Run ${pc.yellow("npm run destroy")} to clean up
+   Run ${pc.yellow(`${context.packageManager} run deploy`)} to deploy
+   Run ${pc.yellow(`${context.packageManager} run destroy`)} to clean up
 
 ${pc.cyan("📚 Learn more:")}
    https://alchemy.run`);
