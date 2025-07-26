@@ -244,7 +244,7 @@ import { Worker } from "alchemy/cloudflare";
 const app = await alchemy("${context.projectName}");
 
 export const worker = await Worker("worker", {
-  name: "\${app.name}-\${app.stage}",
+  name: \`\${app.name}-\${app.stage}\`,
   entrypoint: "src/worker.ts",
 });
 
@@ -360,12 +360,12 @@ import { D1Database, DurableObjectNamespace, Redwood } from "alchemy/cloudflare"
 const app = await alchemy("${context.projectName}");
 
 const database = await D1Database("database", {
-  name: "\${app.name}-\${app.stage}-db",
+  name: \`\${app.name}-\${app.stage}-db\`,
   migrationsDir: "migrations",
 });
 
 export const worker = await Redwood("website", {
-  name: "\${app.name}-\${app.stage}-website",
+  name: \`\${app.name}-\${app.stage}-website\`,
   bindings: {
     AUTH_SECRET_KEY: alchemy.secret(process.env.AUTH_SECRET_KEY),
     DB: database,
