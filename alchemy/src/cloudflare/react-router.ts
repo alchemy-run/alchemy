@@ -4,7 +4,12 @@ import type { Bindings } from "./bindings.js";
 import { Website, type WebsiteProps } from "./website.js";
 import type { Worker } from "./worker.js";
 
-export interface ReactRouterProps<B extends Bindings> extends WebsiteProps<B> {}
+export interface ReactRouterProps<B extends Bindings> extends WebsiteProps<B> {
+  /**
+   * @default workers/app.ts
+   */
+  main?: string;
+}
 
 // don't allow the ASSETS to be overriden
 export type ReactRouter<B extends Bindings> = B extends { ASSETS: any }
