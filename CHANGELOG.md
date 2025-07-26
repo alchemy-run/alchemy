@@ -1,3 +1,13 @@
+## v0.53.0
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Use queue name instead of queue id for queue consumers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/740 [<samp>(3b7ba)</samp>](https://github.com/sam-goodwin/alchemy/commit/3b7ba776)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.52.0...v0.53.0)
+
+---
+
 ## v0.52.0
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
