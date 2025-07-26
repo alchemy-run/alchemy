@@ -258,6 +258,12 @@ import { Vite } from "alchemy/cloudflare";
 const app = await alchemy("${context.projectName}");
 
 export const worker = await Vite("${context.projectName}", {
+  name: \`\${app.name}-\${app.stage}-website\`,
+  // replace if different from default:
+  //
+  // main: "./.output/server/index.mjs",
+  // command: "vite build",
+  // dev: { command: "vite dev" },
   assets: "dist",
   wrangler: false,
 });
@@ -276,7 +282,14 @@ import { Astro } from "alchemy/cloudflare";
 
 const app = await alchemy("${context.projectName}");
 
-export const worker = await Astro("website");
+export const worker = await Astro("website", {
+  name: \`\${app.name}-\${app.stage}-website\`,
+  // replace if different from default:
+  //
+  // main: "./.output/server/index.mjs",
+  // command: "astro build",
+  // dev: { command: "astro dev" },
+});
 
 console.log({
   url: worker.url,
@@ -293,6 +306,7 @@ import { ReactRouter } from "alchemy/cloudflare";
 const app = await alchemy("${context.projectName}");
 
 export const worker = await ReactRouter("website", {
+  name: \`\${app.name}-\${app.stage}-website\`,
   // replace if different from default:
   //
   // main: "build/server/index.js",
@@ -316,6 +330,7 @@ import { SvelteKit } from "alchemy/cloudflare";
 const app = await alchemy("${context.projectName}");
 
 export const worker = await SvelteKit("website", {
+  name: \`\${app.name}-\${app.stage}-website\`,
   // replace if different from default:
   //
   // main: "./.output/server/index.mjs",
@@ -338,6 +353,7 @@ import { TanStackStart } from "alchemy/cloudflare";
 const app = await alchemy("${context.projectName}");
 
 export const worker = await TanStackStart("website", {
+  name: \`\${app.name}-\${app.stage}-website\`,
   // replace if different from default:
   //
   // main: "./.output/server/index.mjs",
@@ -395,6 +411,7 @@ import { Nuxt } from "alchemy/cloudflare";
 const app = await alchemy("${context.projectName}");
 
 export const website = await Nuxt("website", {
+  name: \`\${app.name}-\${app.stage}-website\`,
   // replace if different from default:
   //
   // main: "./.output/server/index.mjs",
