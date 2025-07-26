@@ -322,7 +322,23 @@ console.log({
 await app.finalize();
 `,
 
-  "tanstack-start": () => "",
+  "tanstack-start": (context) => `/// <reference types="@types/node" />
+
+import alchemy from "alchemy";
+import { TanStackStart } from "alchemy/cloudflare";
+
+const app = await alchemy("${context.projectName}");
+
+export const worker = await TanStackStart("website", {
+  command: "${context.packageManager} run build",
+});
+
+console.log({
+  url: worker.url,
+});
+
+await app.finalize();
+`,
 
   rwsdk: (context) => `/// <reference types="@types/node" />
 
@@ -479,7 +495,7 @@ async function updateProjectConfiguration(context: InitContext): Promise<void> {
     astro: () => updateAstroProject(context),
     "react-router": () => updateReactRouterProject(context),
     sveltekit: () => updateSvelteKitProject(context),
-    "tanstack-start": () => Promise.resolve(),
+    "tanstack-start": () => updateTanStackStartProject(context),
     rwsdk: () => updateRwsdkProject(context),
     nuxt: () => updateNuxtProject(context),
   };
@@ -560,6 +576,11 @@ async function updateReactRouterProject(context: InitContext): Promise<void> {
   // });
 }
 
+async function updateTanStackStartProject(context: InitContext): Promise<void> {
+  await updateTanStackViteConfig(context);
+  await updateEnvFile(context);
+}
+
 async function updateSvelteConfig(context: InitContext): Promise<void> {
   const svelteConfigPath = resolve(context.cwd, "svelte.config.js");
   if (!(await fs.pathExists(svelteConfigPath))) return;
@@ -599,10 +620,10 @@ async function updateEnvFile(context: InitContext): Promise<void> {
   const envPath = resolve(context.cwd, ".env");
   await fs.ensureFile(envPath);
 
-  const envVars = [
-    "AUTH_SECRET_KEY=your-development-secret-key",
-    "ALCHEMY_PASSWORD=change-me",
-  ];
+  const envVars = ["ALCHEMY_PASSWORD=change-me"];
+  if (context.framework === "rwsdk") {
+    envVars.push("AUTH_SECRET_KEY=your-development-secret-key");
+  }
 
   let envContent = "";
   if (await fs.pathExists(envPath)) {
@@ -764,6 +785,122 @@ async function updateAstroConfig(context: InitContext): Promise<void> {
     await project.save();
   } catch (error) {
     console.warn("Failed to update astro.config.mjs:", error);
+  }
+}
+
+async function updateTanStackViteConfig(context: InitContext): Promise<void> {
+  const viteConfigPath = resolve(context.cwd, "vite.config.ts");
+  if (!(await fs.pathExists(viteConfigPath))) return;
+
+  try {
+    const project = new Project({
+      manipulationSettings: {
+        indentationText: IndentationText.TwoSpaces,
+        quoteKind: QuoteKind.Double,
+      },
+    });
+
+    project.addSourceFileAtPath(viteConfigPath);
+    const sourceFile = project.getSourceFileOrThrow(viteConfigPath);
+
+    const alchemyImport = sourceFile.getImportDeclaration("alchemy/cloudflare");
+    if (!alchemyImport) {
+      sourceFile.addImportDeclaration({
+        moduleSpecifier: "alchemy/cloudflare",
+        namedImports: ["cloudflareWorkersDevEnvironmentShim"],
+      });
+    } else {
+      const hasShim = alchemyImport
+        .getNamedImports()
+        .some((ni) => ni.getName() === "cloudflareWorkersDevEnvironmentShim");
+      if (!hasShim) {
+        alchemyImport.addNamedImport("cloudflareWorkersDevEnvironmentShim");
+      }
+    }
+
+    const exportAssignment = sourceFile.getExportAssignment(
+      (d) => !d.isExportEquals(),
+    );
+    if (!exportAssignment) return;
+
+    const defineConfigCall = exportAssignment.getExpression();
+    if (
+      !Node.isCallExpression(defineConfigCall) ||
+      defineConfigCall.getExpression().getText() !== "defineConfig"
+    )
+      return;
+
+    let configObject = defineConfigCall.getArguments()[0];
+    if (!configObject) {
+      configObject = defineConfigCall.addArgument("{}");
+    }
+
+    if (Node.isObjectLiteralExpression(configObject)) {
+      // Add build configuration
+      if (!configObject.getProperty("build")) {
+        configObject.addPropertyAssignment({
+          name: "build",
+          initializer: `{
+    target: "esnext",
+    rollupOptions: {
+      external: ["node:async_hooks", "cloudflare:workers"],
+    },
+  }`,
+        });
+      }
+
+      const pluginsProperty = configObject.getProperty("plugins");
+      if (pluginsProperty && Node.isPropertyAssignment(pluginsProperty)) {
+        const initializer = pluginsProperty.getInitializer();
+        if (Node.isArrayLiteralExpression(initializer)) {
+          const hasShim = initializer
+            .getElements()
+            .some((el) =>
+              el.getText().includes("cloudflareWorkersDevEnvironmentShim"),
+            );
+          if (!hasShim) {
+            initializer.addElement("cloudflareWorkersDevEnvironmentShim()");
+          }
+
+          const tanstackElements = initializer
+            .getElements()
+            .filter((el) => el.getText().includes("tanstackStart"));
+
+          tanstackElements.forEach((element) => {
+            if (Node.isCallExpression(element)) {
+              const args = element.getArguments();
+              if (args.length === 0) {
+                element.addArgument(`{
+      target: "cloudflare-module",
+      customViteReactPlugin: true,
+    }`);
+              } else if (
+                args.length === 1 &&
+                Node.isObjectLiteralExpression(args[0])
+              ) {
+                const configObj = args[0];
+                if (!configObj.getProperty("target")) {
+                  configObj.addPropertyAssignment({
+                    name: "target",
+                    initializer: '"cloudflare-module"',
+                  });
+                }
+                if (!configObj.getProperty("customViteReactPlugin")) {
+                  configObj.addPropertyAssignment({
+                    name: "customViteReactPlugin",
+                    initializer: "true",
+                  });
+                }
+              }
+            }
+          });
+        }
+      }
+    }
+
+    await project.save();
+  } catch (error) {
+    console.warn("Failed to update vite.config.ts:", error);
   }
 }
 
