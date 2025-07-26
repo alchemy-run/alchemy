@@ -232,7 +232,23 @@ console.log({
 
 await app.finalize();
 `,
-    sveltekit: "",
+    sveltekit: `/// <reference types="@types/node" />
+
+import alchemy from "alchemy";
+import { SvelteKit } from "alchemy/cloudflare";
+
+const app = await alchemy("${context.projectName}");
+
+export const worker = await SvelteKit("website", {
+  command: "bun run build",
+});
+
+console.log({
+  url: worker.url,
+});
+
+await app.finalize();
+`,
     "tanstack-start": "",
     rwsdk: "",
     nuxt: `/// <reference types="@types/node" />
@@ -276,6 +292,9 @@ async function updatePackageJson(context: InitContext) {
     if (context.framework === "nuxt") {
       devDependencies.push("nitro-cloudflare-dev");
     }
+    if (context.framework === "sveltekit") {
+      devDependencies.push("@sveltejs/adapter-cloudflare");
+    }
     await addPackageDependencies({
       devDependencies,
       projectDir: context.cwd,
@@ -317,6 +336,10 @@ async function updateTsConfig(context: InitContext) {
   }
   if (context.framework === "nuxt") {
     await updateNuxtProject(context);
+    return;
+  }
+  if (context.framework === "sveltekit") {
+    await updateSvelteKitProject(context);
     return;
   }
 
@@ -373,6 +396,66 @@ async function updateTsConfig(context: InitContext) {
       await fs.writeJson(tsConfigNodePath, tsConfigNode, { spaces: 2 });
     } catch (error) {
       console.warn(`Failed to update ${tsConfigNodePath}:`, error);
+    }
+  }
+}
+
+async function updateSvelteKitProject(context: InitContext) {
+  const svelteConfigPath = resolve(context.cwd, "svelte.config.js");
+  if (await fs.pathExists(svelteConfigPath)) {
+    try {
+      const project = new Project({
+        manipulationSettings: {
+          indentationText: IndentationText.TwoSpaces,
+          quoteKind: QuoteKind.Single,
+        },
+      });
+      project.addSourceFileAtPath(svelteConfigPath);
+      const sourceFile = project.getSourceFileOrThrow(svelteConfigPath);
+
+      // Update the import statement
+      const importDeclarations = sourceFile.getImportDeclarations();
+      const adapterImport = importDeclarations.find((imp) =>
+        imp.getModuleSpecifierValue().includes("@sveltejs/adapter"),
+      );
+
+      if (adapterImport) {
+        adapterImport.setModuleSpecifier("@sveltejs/adapter-cloudflare");
+      } else {
+        sourceFile.insertImportDeclaration(0, {
+          moduleSpecifier: "@sveltejs/adapter-cloudflare",
+          defaultImport: "adapter",
+        });
+      }
+
+      await project.save();
+    } catch (error) {
+      console.warn(`Failed to update ${svelteConfigPath}:`, error);
+    }
+  }
+
+  const tsConfigPath = resolve(context.cwd, "tsconfig.json");
+  if (await fs.pathExists(tsConfigPath)) {
+    try {
+      const readJsonc = async (path: string) => {
+        const content = await fs.readFile(path, "utf-8");
+        const jsonc = content
+          .replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, "")
+          .replace(/,(\s*[}\]])/g, "$1");
+        return JSON.parse(jsonc);
+      };
+      const tsConfig = await readJsonc(tsConfigPath);
+
+      if (!tsConfig.include) {
+        tsConfig.include = [];
+      }
+      if (!tsConfig.include.includes("alchemy.run.ts")) {
+        tsConfig.include.push("alchemy.run.ts");
+      }
+
+      await fs.writeJson(tsConfigPath, tsConfig, { spaces: 2 });
+    } catch (error) {
+      console.warn(`Failed to update ${tsConfigPath}:`, error);
     }
   }
 }
