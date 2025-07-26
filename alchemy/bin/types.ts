@@ -110,4 +110,5 @@ export type InitContext = {
   projectName: string;
   hasPackageJson: boolean;
   packageManager: PackageManager;
+  main?: string;
 };

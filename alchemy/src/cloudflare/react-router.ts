@@ -16,8 +16,14 @@ export async function ReactRouter<B extends Bindings>(
   props: ReactRouterProps<B>,
 ): Promise<ReactRouter<B>> {
   const defaultAssets = path.join("build", "client");
+  const main = props.main ?? path.join("workers", "app.ts");
   return Website(id, {
     ...props,
+    command: props.command ?? "react-router typegen && react-router build",
+    dev: props.dev ?? {
+      command: "react-router typegen && react-router dev",
+    },
+    compatibility: "node",
     // Alchemy should bundle the result of `vite build`, not the user's main
     // TODO: we probably need bundling to properly handle WASM/rules
     main: path.join(props.cwd ?? process.cwd(), "build", "server", "index.js"),
@@ -25,8 +31,8 @@ export async function ReactRouter<B extends Bindings>(
       // wrangler should point to the user's main (e.g. `worker.ts`), unless overridden
       main:
         typeof props.wrangler === "object"
-          ? (props.wrangler.main ?? props.main)
-          : props.main,
+          ? (props.wrangler.main ?? main)
+          : main,
       // write to wrangler.json by default but respect overrides
       path:
         typeof props.wrangler === "string"
@@ -41,8 +47,5 @@ export async function ReactRouter<B extends Bindings>(
             dist: props.assets.dist ?? defaultAssets,
           }
         : (props.assets ?? defaultAssets),
-    dev: props.dev ?? {
-      command: "react-router dev",
-    },
   });
 }

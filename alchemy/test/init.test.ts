@@ -1,9 +1,9 @@
-import "../src/test/vitest.ts";
 import { execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import url from "node:url";
 import { describe, expect, test } from "vitest";
+import "../src/test/vitest.ts";
 
 const __filename = url.fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -144,7 +144,7 @@ describe("Init CLI End-to-End Tests", { concurrent: false }, () => {
         console.error(`Failed processing ${variantName}:`, error);
         throw error;
       } finally {
-        await cleanupProject(projectPath);
+        // await cleanupProject(projectPath);
       }
     }, 600000); // 10 minutes timeout per test
   }
