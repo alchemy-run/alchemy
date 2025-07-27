@@ -159,28 +159,29 @@ async function migrateLegacySchema(
 export async function listMigrationsFiles(
   migrationsDir: string,
 ): Promise<Array<{ id: string; sql: string }>> {
-  const entries = await fs.readdir(migrationsDir);
+  const entries = await Array.fromAsync(
+    fs.glob("**/*.sql", {
+      cwd: migrationsDir,
+    }),
+  );
 
-  const sqlFiles = entries
-    .filter((f: string) => f.endsWith(".sql"))
-    .sort((a: string, b: string) => {
-      const aNum = getPrefix(a);
-      const bNum = getPrefix(b);
+  const sqlFiles = entries.sort((a: string, b: string) => {
+    const aNum = getPrefix(a);
+    const bNum = getPrefix(b);
 
-      if (aNum !== null && bNum !== null) return aNum - bNum;
-      if (aNum !== null) return -1;
-      if (bNum !== null) return 1;
+    if (aNum !== null && bNum !== null) return aNum - bNum;
+    if (aNum !== null) return -1;
+    if (bNum !== null) return 1;
 
-      return a.localeCompare(b);
-    });
+    return a.localeCompare(b);
+  });
 
-  const files: Array<{ id: string; sql: string }> = [];
-  for (const file of sqlFiles) {
-    const sql = await readMigrationFile(path.join(migrationsDir, file));
-    files.push({ id: file, sql });
-  }
-
-  return files;
+  return await Promise.all(
+    sqlFiles.map(async (file) => ({
+      id: file,
+      sql: await readMigrationFile(path.join(migrationsDir, file)),
+    })),
+  );
 }
 
 /**

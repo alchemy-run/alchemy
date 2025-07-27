@@ -7,7 +7,7 @@ import assert from "node:assert";
 import { assertNever } from "../../util/assert-never.ts";
 import { logger } from "../../util/logger.ts";
 import { Self, type Binding, type WorkerBindingSpec } from "../bindings.ts";
-import type { WorkerBundle } from "../bundle/index.ts";
+import type { WorkerBundle } from "../worker-bundle.ts";
 import type { WorkerProps } from "../worker.ts";
 
 export type MiniflareWorkerOptions = Pick<
@@ -208,30 +208,44 @@ function buildRemoteBinding(
   }
 }
 
-export async function buildMiniflareWorkerOptions({
+const moduleTypes = {
+  esm: "ESModule",
+  cjs: "CommonJS",
+  text: "Text",
+  data: "Data",
+  wasm: "CompiledWasm",
+  sourcemap: "Text",
+} as const;
+
+function parseModules(bundle: WorkerBundle) {
+  const modules = bundle.modules.map((module) => ({
+    type: moduleTypes[module.type],
+    path: module.path,
+    contents: module.content,
+  }));
+  const entry = modules.find((module) => module.path === bundle.entrypoint);
+  if (!entry) {
+    throw new Error(`Entrypoint "${bundle.entrypoint}" not found in bundle.`);
+  }
+  return [entry, ...modules.filter((module) => module.path !== entry.path)];
+}
+
+export function buildMiniflareWorkerOptions({
   name: workerName,
   assets,
   bundle,
   bindings,
-  format,
   eventSources,
   compatibilityDate,
   compatibilityFlags,
   remoteProxyConnectionString,
 }: MiniflareWorkerOptions & {
   remoteProxyConnectionString: RemoteProxyConnectionString | undefined;
-}): Promise<WorkerOptions> {
+}): WorkerOptions {
   const options: WorkerOptions = {
     name: workerName,
-    modules: await Promise.all(
-      bundle.files.map(async (file) => ({
-        type: (format === "cjs" ? "CommonJS" : "ESModule") as
-          | "CommonJS"
-          | "ESModule",
-        path: file.name,
-        contents: await file.text(),
-      })),
-    ),
+    modules: parseModules(bundle),
+    rootPath: bundle.root,
     compatibilityDate,
     compatibilityFlags,
     // TODO: Setting `proxy: true` here causes the following error when connecting via a websocket:

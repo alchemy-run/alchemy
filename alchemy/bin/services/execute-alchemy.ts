@@ -42,7 +42,11 @@ export const execArgs = {
     .describe(
       "Specify which stage/environment to target. Defaults to your username ($USER, or $USERNAME on windows)",
     ),
-  envFile: z.string().optional().describe("Path to environment file to load"),
+  envFile: z
+    .string()
+    .optional()
+    .default(".env")
+    .describe("Path to environment file to load"),
 } as const;
 
 export async function execAlchemy(
@@ -121,7 +125,7 @@ export async function execAlchemy(
       break;
     case "pnpm":
       command = isTypeScript
-        ? `pnpm tsx ${execArgsString} ${main} ${argsString}`
+        ? `pnpm dlx tsx ${execArgsString} ${main} ${argsString}`
         : `pnpm node ${execArgsString} ${main} ${argsString}`;
       break;
     case "yarn":
@@ -156,6 +160,7 @@ export async function execAlchemy(
         FORCE_COLOR: "1",
       },
     });
+    process.exit(0);
   } catch (error: any) {
     log.error(pc.red(`Deploy failed: ${error.message}`));
     if (error.stdout) {

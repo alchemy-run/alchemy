@@ -4,6 +4,7 @@ import { extractCloudflareResult } from "../api-response.ts";
 import { createCloudflareApi, type CloudflareApi } from "../api.ts";
 import type { WorkerBindingSpec } from "../bindings.ts";
 import { getInternalWorkerBundle } from "../bundle/internal-worker-bundle.ts";
+import { WorkerBundle } from "../worker-bundle.ts";
 import type { WorkerMetadata } from "../worker-metadata.ts";
 
 type WranglerSessionConfig =
@@ -38,14 +39,14 @@ export async function createRemoteProxyWorker(input: {
     createWorkersPreviewToken(api, {
       name: input.name,
       metadata: {
-        main_module: script.file.name,
+        main_module: script.bundle.entrypoint,
         compatibility_date: "2025-06-16",
         bindings: input.bindings,
         observability: {
           enabled: false,
         },
       },
-      files: [script.file],
+      bundle: script.bundle,
       session: {
         workers_dev: true,
         minimal_mode: true,
@@ -98,16 +99,13 @@ async function createWorkersPreviewToken(
   input: {
     name: string;
     metadata: WorkerMetadata;
-    files: File[];
+    bundle: WorkerBundle;
     session: WranglerSessionConfig;
   },
 ) {
   const session = await createWorkersPreviewSession(api);
-  const formData = new FormData();
+  const formData = await WorkerBundle.toFormData(input.bundle);
   formData.append("metadata", JSON.stringify(input.metadata));
-  for (const file of input.files) {
-    formData.append(file.name, file);
-  }
   formData.append("wrangler-session-config", JSON.stringify(input.session));
   const res = await extractCloudflareResult<{ preview_token: string }>(
     "create workers preview token",
