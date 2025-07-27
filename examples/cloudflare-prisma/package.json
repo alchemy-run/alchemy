@@ -4,7 +4,7 @@
   "description": "Alchemy Typescript Project",
   "type": "module",
   "scripts": {
-    "build": "tsc -b",
+    "build": "prisma generate && tsc -b",
     "deploy": "alchemy deploy --env-file ../../.env",
     "destroy": "alchemy destroy --env-file ../../.env",
     "dev": "alchemy dev --env-file ../../.env"

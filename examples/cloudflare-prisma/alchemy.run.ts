@@ -37,7 +37,7 @@ if (process.env.NODE_ENV === "test") {
   const res2 = await fetch(`${worker.url}/create`);
   assert.deepStrictEqual(await res2.text(), "Created");
   const res3 = await fetch(worker.url!);
-  assert.equal((await res3.json()).length, 1);
+  assert.equal(((await res3.json()) as any).length, 1);
   console.log("test passed");
 }
 

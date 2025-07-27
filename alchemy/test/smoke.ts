@@ -216,6 +216,10 @@ const tasks = new Listr(
           command: destroyCommand,
         },
         {
+          title: "Check",
+          command: "bun run build",
+        },
+        {
           title: "Dev",
           command: devCommand,
           env: {
