@@ -13,6 +13,9 @@ export interface D1StateStoreOptions extends CloudflareApiOptions {
   databaseName?: string;
 }
 
+/**
+ * @deprecated Use `CloudflareStateStore` from `alchemy/state` instead.
+ */
 export class D1StateStore extends StateStoreProxy {
   constructor(
     scope: Scope,

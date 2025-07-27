@@ -159,28 +159,29 @@ async function migrateLegacySchema(
 export async function listMigrationsFiles(
   migrationsDir: string,
 ): Promise<Array<{ id: string; sql: string }>> {
-  const entries = await fs.readdir(migrationsDir);
+  const entries = await Array.fromAsync(
+    fs.glob("**/*.sql", {
+      cwd: migrationsDir,
+    }),
+  );
 
-  const sqlFiles = entries
-    .filter((f: string) => f.endsWith(".sql"))
-    .sort((a: string, b: string) => {
-      const aNum = getPrefix(a);
-      const bNum = getPrefix(b);
+  const sqlFiles = entries.sort((a: string, b: string) => {
+    const aNum = getPrefix(a);
+    const bNum = getPrefix(b);
 
-      if (aNum !== null && bNum !== null) return aNum - bNum;
-      if (aNum !== null) return -1;
-      if (bNum !== null) return 1;
+    if (aNum !== null && bNum !== null) return aNum - bNum;
+    if (aNum !== null) return -1;
+    if (bNum !== null) return 1;
 
-      return a.localeCompare(b);
-    });
+    return a.localeCompare(b);
+  });
 
-  const files: Array<{ id: string; sql: string }> = [];
-  for (const file of sqlFiles) {
-    const sql = await readMigrationFile(path.join(migrationsDir, file));
-    files.push({ id: file, sql });
-  }
-
-  return files;
+  return await Promise.all(
+    sqlFiles.map(async (file) => ({
+      id: file,
+      sql: await readMigrationFile(path.join(migrationsDir, file)),
+    })),
+  );
 }
 
 /**
@@ -319,9 +320,6 @@ export async function applyMigrations(
 
     if (applied.has(migrationName)) continue;
 
-    // Run the migration SQL
-    await executeD1SQL(options, migration.sql);
-
     // Generate a migration id: prefer sequential zero-padded numeric ids (e.g. 00014)
     // to keep consistency with legacy/imported data. If we cannot produce a numeric id
     // (e.g. existing IDs are not numeric), fall back to a unique timestamp-based ID.
@@ -334,25 +332,15 @@ export async function applyMigrations(
         Date.now().toString() + Math.random().toString(36).substr(2, 9);
     }
 
-    const insertSQL = `INSERT INTO ${options.migrationsTable} (id, name, applied_at) VALUES (?, ?, datetime('now'));`;
-
-    // Use parameterised query to record the migration
-    const response = await options.api.post(
-      `/accounts/${options.accountId}/d1/database/${options.databaseId}/query`,
-      {
-        sql: insertSQL,
-        params: [migrationId, migrationName],
-      },
+    // Run and record the migration in a single request.
+    // D1 over HTTP doesn't support transactions, so this is the next best thing.
+    await executeD1SQL(
+      options,
+      [
+        migration.sql,
+        `INSERT INTO ${options.migrationsTable} (id, name, applied_at) VALUES ('${migrationId}', '${migrationName}', datetime('now'));`,
+      ].join("\n"),
     );
-
-    if (!response.ok) {
-      await handleApiError(
-        response,
-        "inserting migration record",
-        "D1 database",
-        options.databaseId,
-      );
-    }
 
     if (!options.quiet) {
       logger.log(`Applied migration: ${migrationName}`);

@@ -2,14 +2,12 @@ import path from "node:path";
 import { alchemy } from "../alchemy.ts";
 import { Exec } from "../os/exec.ts";
 import { Scope } from "../scope.ts";
+import { isSecret } from "../secret.ts";
+import { detectPackageManager } from "../util/detect-package-manager.ts";
 import { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
-import {
-  DEFAULT_COMPATIBILITY_DATE,
-  Worker,
-  type AssetsConfig,
-  type WorkerProps,
-} from "./worker.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "./compatibility-date.gen.ts";
+import { Worker, type AssetsConfig, type WorkerProps } from "./worker.ts";
 import { WranglerJson, type WranglerJsonSpec } from "./wrangler.json.ts";
 
 export interface WebsiteProps<B extends Bindings>
@@ -20,6 +18,11 @@ export interface WebsiteProps<B extends Bindings>
    * If one is not provided, the build is assumed to have already happened.
    */
   command?: string;
+
+  /**
+   * Additional environment variables to set when running the command
+   */
+  commandEnv?: Record<string, string>;
 
   /**
    * Whether to memoize the command (only re-run if the command changes)
@@ -100,7 +103,6 @@ export interface WebsiteProps<B extends Bindings>
    */
   dev?: {
     command: string;
-    url: string;
   };
 
   /**
@@ -122,6 +124,15 @@ export interface WebsiteProps<B extends Bindings>
     ) => WranglerJsonSpec | Promise<WranglerJsonSpec>;
   };
 }
+
+const packageManager = await detectPackageManager();
+const devCommand = {
+  npm: "npx vite dev",
+  bun: "bun vite dev",
+  pnpm: "pnpm vite dev",
+  yarn: "yarn vite dev",
+  deno: "deno task dev",
+}[packageManager];
 
 export type Website<B extends Bindings> = B extends { ASSETS: any }
   ? never
@@ -189,12 +200,9 @@ export default {
 };`,
         url: props.url ?? true,
         adopt: props.adopt ?? true,
-        dev: props.dev
-          ? {
-              command: props.dev.command,
-              url: props.dev.url,
-            }
-          : undefined,
+        dev: {
+          command: props.dev?.command ?? devCommand,
+        },
       } as WorkerProps<any> & { name: string };
 
       if (wrangler) {
@@ -216,13 +224,27 @@ export default {
         });
       }
 
-      const isDev = scope.dev && !!props.dev;
+      const isDev = scope.local;
 
       if (props.command && !isDev) {
         await Exec("build", {
           cwd,
           command: props.command,
-          env: props.env,
+          env: {
+            ...(process.env ?? {}),
+            ...(props.env ?? {}),
+            ...(props.commandEnv ?? {}),
+            ...Object.fromEntries(
+              Object.entries(props.bindings ?? {}).flatMap(([key, value]) => {
+                if (isSecret(value)) {
+                  return [[key, value.unencrypted]];
+                } else if (typeof value === "string") {
+                  return [[key, value]];
+                }
+                return [];
+              }),
+            ),
+          },
           memoize: props.memoize,
         });
       }

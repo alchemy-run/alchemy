@@ -1,6 +1,6 @@
-import { createXdgAppPaths } from "../xdg-paths.js";
+import xdgAppPaths from "xdg-app-paths";
 
-const xdg = createXdgAppPaths("alchemy");
+const xdg = xdgAppPaths("alchemy");
 
 export const CONFIG_DIR = xdg.config();
 

@@ -30,6 +30,8 @@ export interface CloudflareR2StateStoreOptions extends CloudflareApiOptions {
 /**
  * State store implementation using Cloudflare R2 API
  * Uses R2 for immediate consistency compared to KV's eventual consistency
+ *
+ * @deprecated Use `CloudflareStateStore` from `alchemy/state` instead.
  */
 export class R2RestStateStore implements StateStore {
   private api: CloudflareApi;

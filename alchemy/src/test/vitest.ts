@@ -2,14 +2,14 @@ import path from "node:path";
 import { afterAll, beforeAll, it } from "vitest";
 import { alchemy } from "../alchemy.ts";
 import { Scope } from "../scope.ts";
-import type { StateStoreType } from "../state.ts";
 import {
+  CloudflareStateStore,
   D1StateStore,
-  DOStateStore,
   FileSystemStateStore,
   SQLiteStateStore,
 } from "../state/index.ts";
 import { NoopTelemetryClient } from "../util/telemetry/client.ts";
+import type { TestOptions } from "./options.ts";
 
 /**
  * Extend the Alchemy interface to include test functionality
@@ -24,33 +24,6 @@ declare module "../alchemy.ts" {
  * Add test functionality to alchemy instance
  */
 alchemy.test = test;
-
-/**
- * Options for configuring test behavior
- */
-export interface TestOptions {
-  /**
-   * Whether to suppress logging output.
-   * @default false.
-   */
-  quiet?: boolean;
-
-  /**
-   * Password to use for test resources.
-   * @default "test-password".
-   */
-  password?: string;
-
-  /**
-   * Override the default state store for the test.
-   */
-  stateStore?: StateStoreType;
-
-  /**
-   * Prefix to use for the scope to isolate tests and environments.
-   */
-  prefix?: string;
-}
 
 /**
  * Test function type definition with overloads
@@ -132,7 +105,7 @@ export function test(
     const storeType = process.env.ALCHEMY_STATE_STORE;
     switch (storeType) {
       case "do":
-        return new DOStateStore(scope);
+        return new CloudflareStateStore(scope);
       case "fs":
         return new FileSystemStateStore(scope);
       case "d1":

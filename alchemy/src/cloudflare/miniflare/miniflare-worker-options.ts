@@ -7,7 +7,7 @@ import assert from "node:assert";
 import { assertNever } from "../../util/assert-never.ts";
 import { logger } from "../../util/logger.ts";
 import { Self, type Binding, type WorkerBindingSpec } from "../bindings.ts";
-import type { WorkerBundle } from "../bundle/index.ts";
+import type { WorkerBundle } from "../worker-bundle.ts";
 import type { WorkerProps } from "../worker.ts";
 
 export type MiniflareWorkerOptions = Pick<
@@ -17,6 +17,7 @@ export type MiniflareWorkerOptions = Pick<
   | "compatibilityDate"
   | "compatibilityFlags"
   | "format"
+  | "assets"
 > & {
   name: string;
   bundle: WorkerBundle;
@@ -207,32 +208,49 @@ function buildRemoteBinding(
   }
 }
 
-export async function buildMiniflareWorkerOptions({
+const moduleTypes = {
+  esm: "ESModule",
+  cjs: "CommonJS",
+  text: "Text",
+  data: "Data",
+  wasm: "CompiledWasm",
+  sourcemap: "Text",
+} as const;
+
+function parseModules(bundle: WorkerBundle) {
+  const modules = bundle.modules.map((module) => ({
+    type: moduleTypes[module.type],
+    path: module.path,
+    contents: module.content,
+  }));
+  const entry = modules.find((module) => module.path === bundle.entrypoint);
+  if (!entry) {
+    throw new Error(`Entrypoint "${bundle.entrypoint}" not found in bundle.`);
+  }
+  return [entry, ...modules.filter((module) => module.path !== entry.path)];
+}
+
+export function buildMiniflareWorkerOptions({
   name: workerName,
+  assets,
   bundle,
   bindings,
-  format,
   eventSources,
   compatibilityDate,
   compatibilityFlags,
   remoteProxyConnectionString,
 }: MiniflareWorkerOptions & {
   remoteProxyConnectionString: RemoteProxyConnectionString | undefined;
-}): Promise<WorkerOptions> {
+}): WorkerOptions {
   const options: WorkerOptions = {
     name: workerName,
-    modules: await Promise.all(
-      bundle.files.map(async (file) => ({
-        type: (format === "cjs" ? "CommonJS" : "ESModule") as
-          | "CommonJS"
-          | "ESModule",
-        path: file.name,
-        contents: await file.text(),
-      })),
-    ),
+    modules: parseModules(bundle),
+    rootPath: bundle.root,
     compatibilityDate,
     compatibilityFlags,
-    unsafeDirectSockets: [{ entrypoint: undefined, proxy: true }],
+    // TODO: Setting `proxy: true` here causes the following error when connecting via a websocket:
+    // workerd/io/worker.c++:2164: info: uncaught exception; source = Uncaught (in promise); stack = TypeError: Invalid URL string.
+    unsafeDirectSockets: [{ proxy: false }],
     containerEngine: {
       localDocker: {
         socketPath:
@@ -291,6 +309,14 @@ export async function buildMiniflareWorkerOptions({
         options.assets = {
           binding: name,
           directory: binding.path,
+          routerConfig: {
+            invoke_user_worker_ahead_of_assets:
+              assets?.run_worker_first === true,
+          },
+          assetConfig: {
+            html_handling: assets?.html_handling,
+            not_found_handling: assets?.not_found_handling,
+          },
         };
         break;
       }
@@ -549,6 +575,10 @@ export async function buildMiniflareWorkerOptions({
             proxy: true,
           });
         }
+        break;
+      }
+      case "ratelimit": {
+        (options.ratelimits ??= {})[name] = binding;
         break;
       }
       default: {

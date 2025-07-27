@@ -21,7 +21,6 @@ export const [authStore, storage] = await Promise.all([
 export const website = await Vite("website", {
   name: `${app.name}-${app.stage}-website`,
   main: "./src/index.ts",
-  command: "bun run build",
   bindings: {
     STORAGE: storage,
     AUTH_STORE: authStore,

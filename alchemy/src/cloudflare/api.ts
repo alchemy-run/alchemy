@@ -1,12 +1,12 @@
-import { alchemy } from "../alchemy.ts";
 import type { Secret } from "../secret.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { safeFetch } from "../util/safe-fetch.ts";
 import {
   getCloudflareAuthHeaders,
+  normalizeAuthOptions,
   type CloudflareAuthOptions,
 } from "./auth.ts";
-import { getCloudflareAccounts, getUserEmailFromApiKey } from "./user.ts";
+import { getCloudflareAccountId } from "./user.ts";
 
 /**
  * Options for Cloudflare API requests
@@ -42,6 +42,12 @@ export interface CloudflareApiOptions {
   email?: string;
 }
 
+/** Used to propagate normalized auth options from a parent resource to `createCloudflareApi` in a child resource */
+export type InternalCloudflareApiOptions = CloudflareAuthOptions & {
+  baseUrl?: string;
+  accountId: string;
+};
+
 /**
  * Creates a CloudflareApi instance with automatic account ID discovery if not provided
  *
@@ -49,44 +55,18 @@ export interface CloudflareApiOptions {
  * @returns Promise resolving to a CloudflareApi instance
  */
 export async function createCloudflareApi(
-  options: Partial<CloudflareApiOptions> = {},
+  options: Partial<CloudflareApiOptions> | InternalCloudflareApiOptions = {},
 ): Promise<CloudflareApi> {
-  const apiKey =
-    options.apiKey ??
-    (process.env.CLOUDFLARE_API_KEY
-      ? alchemy.secret(process.env.CLOUDFLARE_API_KEY)
-      : undefined);
-  const apiToken =
-    options.apiToken ??
-    (process.env.CLOUDFLARE_API_TOKEN
-      ? alchemy.secret(process.env.CLOUDFLARE_API_TOKEN)
-      : undefined);
-  let email = options.email ?? process.env.CLOUDFLARE_EMAIL;
-  if (apiKey && !email) {
-    email = await getUserEmailFromApiKey(apiKey.unencrypted);
-  }
+  const authOptions = await normalizeAuthOptions(options);
   const accountId =
     options.accountId ??
     process.env.CLOUDFLARE_ACCOUNT_ID ??
     process.env.CF_ACCOUNT_ID ??
-    (
-      await getCloudflareAccounts({
-        apiKey,
-        apiToken,
-        email,
-      } as CloudflareAuthOptions)
-    )[0]?.id;
-  if (accountId === undefined) {
-    throw new Error(
-      "Either accountId or CLOUDFLARE_ACCOUNT_ID must be provided",
-    );
-  }
+    (await getCloudflareAccountId(authOptions));
   return new CloudflareApi({
     baseUrl: options.baseUrl,
     accountId,
-    email,
-    apiKey,
-    apiToken,
+    authOptions,
   });
 }
 
@@ -96,9 +76,6 @@ export async function createCloudflareApi(
 export class CloudflareApi {
   public readonly accountId: string;
   public readonly baseUrl: string;
-  public readonly apiKey: Secret | undefined;
-  public readonly apiToken: Secret | undefined;
-  public readonly email: string | undefined;
   public readonly authOptions: CloudflareAuthOptions;
 
   /**
@@ -108,30 +85,14 @@ export class CloudflareApi {
    *
    * @param options API options
    */
-  constructor(
-    options: CloudflareApiOptions & {
-      accountId: string;
-    },
-  ) {
+  constructor(options: {
+    baseUrl?: string;
+    accountId: string;
+    authOptions: CloudflareAuthOptions;
+  }) {
     this.accountId = options.accountId;
     this.baseUrl = options.baseUrl ?? "https://api.cloudflare.com/client/v4";
-    this.apiKey = options.apiKey;
-    this.apiToken = options.apiToken;
-    this.email = options.email;
-
-    if (this.apiKey && this.apiToken) {
-      throw new Error("'apiKey' and 'apiToken' cannot both be provided");
-    } else if (this.apiKey && !this.email) {
-      throw new Error("'email' must be provided if 'apiKey' is provided");
-    }
-    this.authOptions = this.apiKey
-      ? {
-          apiKey: this.apiKey,
-          email: this.email!,
-        }
-      : {
-          apiToken: this.apiToken,
-        };
+    this.authOptions = options.authOptions;
   }
 
   /**

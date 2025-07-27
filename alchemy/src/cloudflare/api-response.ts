@@ -1,3 +1,5 @@
+import { CloudflareApiError } from "./api-error.ts";
+
 /**
  * Cloudflare API response format
  */
@@ -15,7 +17,7 @@ export interface CloudflareApiResponse<T> {
   /**
    * Error details if success is false
    */
-  errors: CloudflareApiError[];
+  errors: CloudflareApiErrorPayload[];
 
   /**
    * Response messages
@@ -37,7 +39,7 @@ export interface CloudflareApiResponse<T> {
 /**
  * Cloudflare API error format
  */
-export interface CloudflareApiError {
+export interface CloudflareApiErrorPayload {
   /**
    * Error code
    */
@@ -89,8 +91,10 @@ export async function extractCloudflareResult<T>(
   if (json.success) {
     return json.result;
   } else {
-    const error = new Error(
+    const error = new CloudflareApiError(
       `Failed to ${label} (${response.status} ${response.statusText}):\n${json.errors.map((e) => `- [${e.code}] ${e.message}${e.documentation_url ? ` (${e.documentation_url})` : ""}`).join("\n")}`,
+      response,
+      json.errors,
     );
     Error.captureStackTrace(error, extractCloudflareResult);
     Object.assign(error, {

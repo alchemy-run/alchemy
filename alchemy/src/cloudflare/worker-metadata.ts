@@ -197,6 +197,12 @@ export interface WorkerMetadata {
     suspended: boolean;
   }[];
   containers?: { class_name: string }[];
+  placement?: {
+    mode: "smart";
+  };
+  limits?: {
+    cpu_ms?: number;
+  };
 }
 
 export async function prepareWorkerMetadata(
@@ -213,6 +219,9 @@ export async function prepareWorkerMetadata(
     };
     tags?: string[];
     unstable_cacheWorkerSettings?: boolean;
+    placement?: {
+      mode: "smart";
+    };
   },
 ): Promise<WorkerMetadata> {
   const oldSettings = await (props.unstable_cacheWorkerSettings
@@ -228,7 +237,7 @@ export async function prepareWorkerMetadata(
   // we use Cloudflare Worker tags to store a mapping between Alchemy's stable identifier and the binding name
   // e.g.
   // {
-  //   BINDING_NAME: new DurableObjectNamespace("stable-id")
+  //   BINDING_NAME: DurableObjectNamespace("stable-id")
   // }
   // will be stored as alchemy:do:stable-id:BINDING_NAME
   // TODO(sam): should we base64 encode to ensure no `:` collision risk?
@@ -336,6 +345,8 @@ export async function prepareWorkerMetadata(
       transferred_classes: [],
       new_sqlite_classes: [],
     },
+    placement: props.placement,
+    limits: props.limits,
   };
 
   const assetUploadResult = props.assetUploadResult;
@@ -554,6 +565,13 @@ export async function prepareWorkerMetadata(
         configureClassMigration(bindingName, binding);
       }
       (meta.containers ??= []).push({ class_name: binding.className });
+    } else if (binding.type === "ratelimit") {
+      meta.bindings.push({
+        type: "ratelimit",
+        name: bindingName,
+        namespace_id: binding.namespace_id.toString(),
+        simple: binding.simple,
+      });
     } else {
       assertNever(
         binding,

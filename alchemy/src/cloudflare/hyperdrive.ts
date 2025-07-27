@@ -1,14 +1,12 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import { tryGetBinding } from "../runtime/bind.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
-import type { Bound } from "./bound.ts";
 
 /**
- * Origin configuration for a PostgreSQL database connection
+ * Origin configuration for a PostgreSQL or MySQL database connection
  */
 export interface HyperdriveOrigin {
   /**
@@ -29,7 +27,7 @@ export interface HyperdriveOrigin {
 
   /**
    * Database port
-   * @default 5432
+   * @default 5432 for postgres, 3306 for mysql
    */
   port?: number;
 
@@ -37,7 +35,7 @@ export interface HyperdriveOrigin {
    * Connection scheme
    * @default "postgres"
    */
-  scheme?: "postgres";
+  scheme?: "postgres" | "mysql";
 
   /**
    * Database user
@@ -72,7 +70,7 @@ export interface HyperdriveOriginWithAccess {
 
   /**
    * Database port
-   * @default 5432
+   * @default 5432 for postgres, 3306 for mysql
    */
   port?: number;
 
@@ -80,7 +78,7 @@ export interface HyperdriveOriginWithAccess {
    * Connection scheme
    * @default "postgres"
    */
-  scheme?: "postgres";
+  scheme?: "postgres" | "mysql";
 
   /**
    * Database user
@@ -156,7 +154,7 @@ export interface HyperdriveProps extends CloudflareApiOptions {
  * Output returned after Cloudflare Hyperdrive creation/update.
  * IMPORTANT: The interface name MUST match the exported resource name.
  */
-export interface HyperdriveResource
+export interface Hyperdrive
   extends Resource<"cloudflare::Hyperdrive">,
     Omit<HyperdriveProps, "origin"> {
   /**
@@ -181,8 +179,6 @@ export interface HyperdriveResource
   type: "hyperdrive";
 }
 
-export type Hyperdrive = HyperdriveResource & Bound<HyperdriveResource>;
-
 /**
  * Represents a Cloudflare Hyperdrive configuration.
  *
@@ -196,6 +192,20 @@ export type Hyperdrive = HyperdriveResource & Bound<HyperdriveResource>;
  *     password: alchemy.secret("your-password"),
  *     port: 5432,
  *     user: "postgres"
+ *   }
+ * });
+ *
+ * @example
+ * // Create a basic Hyperdrive connection to a MySQL database
+ * const mysqlHyperdrive = await Hyperdrive("my-mysql-db", {
+ *   name: "my-mysql-db",
+ *   origin: {
+ *     database: "mydb",
+ *     host: "mysql.example.com",
+ *     password: alchemy.secret("your-password"),
+ *     port: 3306,
+ *     scheme: "mysql",
+ *     user: "mysql_user"
  *   }
  * });
  *
@@ -247,24 +257,13 @@ export type Hyperdrive = HyperdriveResource & Bound<HyperdriveResource>;
  *   }
  * });
  */
-export async function Hyperdrive(
-  name: string,
-  props: HyperdriveProps,
-): Promise<Hyperdrive> {
-  const resource = await HyperdriveResource(name, props);
-  return {
-    ...resource,
-    ...tryGetBinding(resource),
-  } as Hyperdrive;
-}
-
-const HyperdriveResource = Resource(
+export const Hyperdrive = Resource(
   "cloudflare::Hyperdrive",
   async function (
-    this: Context<HyperdriveResource>,
+    this: Context<Hyperdrive>,
     id: string,
     props: HyperdriveProps,
-  ): Promise<HyperdriveResource> {
+  ): Promise<Hyperdrive> {
     const api = await createCloudflareApi(props);
     const configsPath = `/accounts/${api.accountId}/hyperdrive/configs`;
 

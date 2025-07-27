@@ -65,3 +65,4 @@ coverage
 
 .wrangler
 wrangler.jsonc
+wrangler-configuration.d.ts

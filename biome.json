@@ -6,6 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
+    "ignoreUnknown": true,
     "includes": [
       "./src/**/*.ts",
       "./**/package.json",
@@ -13,6 +14,7 @@
       "./alchemy/bin/**/*.ts",
       "./alchemy/src/**/*.ts",
       "./alchemy/workers/**/*.ts",
+      "./alchemy/scripts/**/*.ts",
       "./alchemy/src/**/*.tsx",
       "./alchemy/src/**/*.js",
       "./alchemy/test/**/*.ts",
@@ -26,11 +28,13 @@
       "!**/node_modules",
       "!examples/cloudflare-tanstack-start/src/routeTree.gen.ts",
       "!examples/cloudflare-redwood/worker-configuration.d.ts",
-      "!./alchemy/src/aws/control/types.d.ts",
+      "!./alchemy/src/aws/control/types.ts",
       "!examples/cloudflare-tanstack-start/.output/**",
-      "!examples/cloudflare-nuxt-pipeline/.output/**"
+      "!examples/cloudflare-nuxt-pipeline/.output/**",
+      "!./alchemy/lib/**",
+      "!**/*.gen.ts"
     ],
-    "maxSize": 10000000
+    "experimentalScannerIgnores": ["!**/node_modules", "./alchemy/lib/**"]
   },
   "assist": {
     "actions": {
@@ -69,7 +73,9 @@
         "noAssignInExpressions": "off",
         "noShadowRestrictedNames": "off",
         "noEmptyInterface": "off",
-        "noRedeclare": "off"
+        "noRedeclare": "off",
+        "noControlCharactersInRegex": "off",
+        "noConfusingVoidType": "off"
       },
       "style": {
         "useLiteralEnumMembers": "error",

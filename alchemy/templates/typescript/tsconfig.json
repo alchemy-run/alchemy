@@ -8,9 +8,9 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
+    "noEmit": true,
     "types": [
-      "@cloudflare/workers-types",
-      "@types/node"
+      "@cloudflare/workers-types"
     ]
   },
   "include": [

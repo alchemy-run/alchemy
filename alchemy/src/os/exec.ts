@@ -48,7 +48,7 @@ export interface ExecProps {
   /**
    * Environment variables to set
    */
-  env?: Record<string, string | Secret<string>>;
+  env?: Record<string, string | Secret<string> | undefined>;
 
   /**
    * Whether to inherit stdio from parent process
@@ -218,7 +218,7 @@ export const Exec = Resource(
         for (const [key, value] of Object.entries(props.env)) {
           if (typeof value === "string") {
             processedEnv[key] = value;
-          } else {
+          } else if (value) {
             // Handle Secret objects
             processedEnv[key] = value.unencrypted;
           }

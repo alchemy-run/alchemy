@@ -10,22 +10,24 @@ import type { AnalyticsEngineDataset } from "./analytics-engine.ts";
 import type { Assets } from "./assets.ts";
 import type { Bound } from "./bound.ts";
 import type { BrowserRendering } from "./browser-rendering.ts";
-import type { R2BucketResource } from "./bucket.ts";
+import type { R2Bucket } from "./bucket.ts";
 import type { Container } from "./container.ts";
-import type { D1DatabaseResource } from "./d1-database.ts";
-import type { DispatchNamespaceResource } from "./dispatch-namespace.ts";
+import type { D1Database } from "./d1-database.ts";
+import type { DispatchNamespace } from "./dispatch-namespace.ts";
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
-import type { HyperdriveResource } from "./hyperdrive.ts";
+import type { Hyperdrive } from "./hyperdrive.ts";
 import type { Images } from "./images.ts";
-import type { KVNamespaceResource } from "./kv-namespace.ts";
-import type { PipelineResource } from "./pipeline.ts";
-import type { QueueResource } from "./queue.ts";
+import type { KVNamespace } from "./kv-namespace.ts";
+import type { Pipeline } from "./pipeline.ts";
+import type { Queue } from "./queue.ts";
+import type { RateLimit } from "./rate-limit.ts";
 import type { SecretKey } from "./secret-key.ts";
 import type { Secret as CloudflareSecret } from "./secret.ts";
-import type { VectorizeIndexResource } from "./vectorize-index.ts";
+import type { VectorizeIndex } from "./vectorize-index.ts";
 import type { VersionMetadata } from "./version-metadata.ts";
+import type { WorkerRef } from "./worker-ref.ts";
 import type { WorkerStub } from "./worker-stub.ts";
-import type { Worker, WorkerRef } from "./worker.ts";
+import type { Worker } from "./worker.ts";
 import type { Workflow } from "./workflow.ts";
 
 export type Bindings = {
@@ -47,16 +49,17 @@ export type Binding =
   | Assets
   | Container
   | CloudflareSecret
-  | D1DatabaseResource
-  | DispatchNamespaceResource
+  | D1Database
+  | DispatchNamespace
   | AnalyticsEngineDataset
   | DurableObjectNamespace<any>
-  | HyperdriveResource
+  | Hyperdrive
   | Images
-  | KVNamespaceResource
-  | PipelineResource
-  | QueueResource
-  | R2BucketResource
+  | KVNamespace
+  | Pipeline
+  | Queue
+  | RateLimit
+  | R2Bucket
   | {
       type: "kv_namespace";
       id: string;
@@ -64,7 +67,7 @@ export type Binding =
   | Secret
   | SecretKey
   | string
-  | VectorizeIndexResource
+  | VectorizeIndex
   | Worker
   | WorkerStub
   | WorkerRef
@@ -108,6 +111,7 @@ export type WorkerBindingSpec =
   | WorkerBindingPipeline
   | WorkerBindingPlainText
   | WorkerBindingQueue
+  | WorkerBindingRateLimit
   | WorkerBindingR2Bucket
   | WorkerBindingSecretKey
   | WorkerBindingSecretText
@@ -282,6 +286,25 @@ export interface WorkerBindingQueue {
   type: "queue";
   /** Queue name */
   queue_name: string;
+}
+
+/**
+ * Rate Limit binding type
+ */
+export interface WorkerBindingRateLimit {
+  /** The name of the binding */
+  name: string;
+  /** Type identifier for Rate Limit binding */
+  type: "ratelimit";
+  /** Namespace ID for the rate limit */
+  namespace_id: string;
+  /** Simple rate limiting configuration */
+  simple: {
+    /** Maximum number of requests */
+    limit: number;
+    /** Time period in seconds */
+    period: 60 | 10;
+  };
 }
 
 /**

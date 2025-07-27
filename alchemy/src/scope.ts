@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import util from "node:util";
 import type { Phase } from "./alchemy.ts";
-import { destroy, destroyAll } from "./destroy.ts";
+import { destroy, destroyAll, DestroyStrategy } from "./destroy.ts";
 import {
   ResourceFQN,
   ResourceID,
@@ -15,6 +15,7 @@ import {
 import type { State, StateStore, StateStoreType } from "./state.ts";
 import { D1StateStore } from "./state/d1-state-store.ts";
 import { FileSystemStateStore } from "./state/file-system-state-store.ts";
+import { InstrumentedStateStore } from "./state/instrumented-state-store.ts";
 import {
   createDummyLogger,
   createLoggerInstance,
@@ -38,7 +39,30 @@ export interface ScopeOptions {
   stateStore?: StateStoreType;
   quiet?: boolean;
   phase?: Phase;
-  dev?: "prefer-local" | "prefer-remote";
+  /**
+   * Determines if resources should be simulated locally (where possible)
+   *
+   * @default - `true` if ran with `alchemy dev` or `bun ./alchemy.run.ts --dev`
+   */
+  local?: boolean;
+  /**
+   * Determines if local changes to resources should be reactively pushed to the local or remote environment.
+   *
+   * @default - `true` if ran with `alchemy dev`, `alchemy watch`, `bun --watch ./alchemy.run.ts`
+   */
+  watch?: boolean;
+  /**
+   * Apply updates to resources even if there are no changes.
+   *
+   * @default false
+   */
+  force?: boolean;
+  /**
+   * The strategy to use when destroying resources.
+   *
+   * @default "sequential"
+   */
+  destroyStrategy?: DestroyStrategy;
   telemetryClient?: ITelemetryClient;
   logger?: LoggerApi;
 }
@@ -107,15 +131,18 @@ export class Scope {
   public readonly stateStore: StateStoreType;
   public readonly quiet: boolean;
   public readonly phase: Phase;
-  public readonly dev?: "prefer-local" | "prefer-remote";
+  public readonly local: boolean;
+  public readonly watch: boolean;
+  public readonly force: boolean;
+  public readonly destroyStrategy: DestroyStrategy;
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
 
   private isErrored = false;
+  private isSkipped = false;
   private finalized = false;
   private startedAt = performance.now();
-
   private deferred: (() => Promise<any>)[] = [];
 
   public get appName(): string {
@@ -162,9 +189,12 @@ export class Scope {
           options.logger,
         );
 
-    this.dev = options.dev ?? this.parent?.dev;
-
-    if (this.dev) {
+    this.local = options.local ?? this.parent?.local ?? false;
+    this.watch = options.watch ?? this.parent?.watch ?? false;
+    this.force = options.force ?? this.parent?.force ?? false;
+    this.destroyStrategy =
+      options.destroyStrategy ?? this.parent?.destroyStrategy ?? "sequential";
+    if (this.local) {
       this.logger.warnOnce(
         "Development mode is in beta. Please report any issues to https://github.com/sam-goodwin/alchemy/issues.",
       );
@@ -172,13 +202,27 @@ export class Scope {
 
     this.stateStore =
       options.stateStore ?? this.parent?.stateStore ?? defaultStateStore;
-    this.state = this.stateStore(this);
+    this.telemetryClient =
+      options.telemetryClient ?? this.parent?.telemetryClient!;
+    this.state = new InstrumentedStateStore(
+      this.stateStore(this),
+      this.telemetryClient,
+    );
     if (!options.telemetryClient && !this.parent?.telemetryClient) {
       throw new Error("Telemetry client is required");
     }
-    this.telemetryClient =
-      options.telemetryClient ?? this.parent?.telemetryClient!;
     this.dataMutex = new AsyncMutex();
+  }
+
+  /**
+   * @internal
+   */
+  public clear() {
+    for (const child of this.children.values()) {
+      child.clear();
+    }
+    this.resources.clear();
+    this.children.clear();
   }
 
   public get root(): Scope {
@@ -224,6 +268,10 @@ export class Scope {
   public fail() {
     this.logger.error("Scope failed", this.chain.join("/"));
     this.isErrored = true;
+  }
+
+  public skip() {
+    this.isSkipped = true;
   }
 
   public async init() {
@@ -285,6 +333,7 @@ export class Scope {
                 [ResourceKind]: "alchemy::Scope",
                 [ResourceScope]: this,
                 [ResourceSeq]: this.seq(),
+                [DestroyStrategy]: this.destroyStrategy,
               },
               props: {},
             }
@@ -299,13 +348,13 @@ export class Scope {
   }
 
   public async set<T>(key: string, value: T): Promise<void> {
-    return this.withScopeState<void>(async (state, persist) => {
+    await this.withScopeState<void>(async (state, persist) => {
       state.data[key] = value;
       await persist(state); // only one line to save!
     });
   }
 
-  public async get<T>(key: string): Promise<T> {
+  public get<T>(key: string): Promise<T> {
     return this.withScopeState<T>(async (state) => state.data[key]);
   }
 
@@ -365,7 +414,7 @@ export class Scope {
     this.finalized = true;
     // trigger and await all deferred promises
     await Promise.all(this.deferred.map((fn) => fn()));
-    if (!this.isErrored) {
+    if (!this.isErrored && !this.isSkipped) {
       // TODO: need to detect if it is in error
       const resourceIds = await this.state.list();
       const aliveIds = new Set(this.resources.keys());
@@ -396,14 +445,14 @@ export class Scope {
       );
       await destroyAll(orphans, {
         quiet: this.quiet,
-        strategy: "sequential",
+        strategy: this.destroyStrategy,
         force: shouldForce,
       });
       this.rootTelemetryClient?.record({
         event: "app.success",
         elapsed: performance.now() - this.startedAt,
       });
-    } else {
+    } else if (this.isErrored) {
       this.logger.warn("Scope is in error, skipping finalize");
       this.rootTelemetryClient?.record({
         event: "app.error",
@@ -415,6 +464,10 @@ export class Scope {
     await this.rootTelemetryClient?.finalize()?.catch((error) => {
       this.logger.warn("Telemetry finalization failed:", error);
     });
+
+    if (!this.parent && process.env.ALCHEMY_TEST_KILL_ON_FINALIZE) {
+      process.exit(0);
+    }
   }
 
   public async destroyPendingDeletions() {
@@ -425,6 +478,7 @@ export class Scope {
         }
         throw e;
       })) ?? [];
+
     //todo(michael): remove once we deprecate doss; see: https://github.com/sam-goodwin/alchemy/issues/585
     let hasCorruptedResources = false;
     if (pendingDeletions) {

@@ -1,16 +1,14 @@
 import { describe, expect, test as vitestTest } from "vitest";
-import { alchemy } from "../src/alchemy.js";
-import type { Context } from "../src/context.js";
-import { destroy } from "../src/destroy.js";
-import { Resource, ResourceID } from "../src/resource.js";
-import type { Scope } from "../src/scope.js";
-import "../src/test/vitest.js";
-import { BRANCH_PREFIX, createTestOptions } from "./util.js";
-
-const storeTypes = ["fs", "dofs", "sqlite", "d1", "do"] as const;
+import { alchemy } from "../src/alchemy.ts";
+import type { Context } from "../src/context.ts";
+import { destroy } from "../src/destroy.ts";
+import { Resource, ResourceID } from "../src/resource.ts";
+import type { Scope } from "../src/scope.ts";
+import "../src/test/vitest.ts";
+import { BRANCH_PREFIX, createTestOptions, STATE_STORE_TYPES } from "./util.ts";
 
 describe.sequential("Replace-Sequential", () => {
-  for (const storeType of storeTypes) {
+  for (const storeType of STATE_STORE_TYPES) {
     describe.sequential(storeType, () => {
       const options = createTestOptions(storeType, "replace");
       const deleted: string[] = [];
@@ -113,7 +111,7 @@ const test = alchemy.test(import.meta, {
 });
 
 describe.concurrent("Replace", () => {
-  for (const storeType of storeTypes) {
+  for (const storeType of STATE_STORE_TYPES) {
     describe(storeType, () => {
       const options = createTestOptions(storeType, "replace");
       const deleted: string[] = [];
@@ -133,10 +131,11 @@ describe.concurrent("Replace", () => {
             fail?: boolean;
             child?: boolean;
             replaceOnCreate?: boolean;
+            force?: boolean;
           },
         ) {
           if (props.replaceOnCreate && this.phase === "create") {
-            this.replace();
+            this.replace(props.force);
           }
           if (this.phase === "delete") {
             if (props.fail) {
@@ -150,7 +149,7 @@ describe.concurrent("Replace", () => {
           }
           if (this.phase === "update") {
             if (props.name !== this.output.name) {
-              this.replace();
+              this.replace(props.force);
             }
           }
           if (props.child) {
@@ -473,6 +472,116 @@ describe.concurrent("Replace", () => {
           } finally {
             await destroy(scope);
             expect(deleted).toContain("bar-7");
+          }
+        },
+      );
+
+      test(
+        "replace should be able to force a deletion immediately",
+        options,
+        async (scope) => {
+          try {
+            let resource = await Replacable("replaceable", {
+              name: "foo-8",
+            });
+            expect(deleted).not.toContain("foo-8");
+            expect(resource.name).toBe("foo-8");
+            resource = await Replacable("replaceable", {
+              name: "bar-8",
+              force: true,
+            });
+            // the output should have changed
+            expect(resource.name).toBe("bar-8");
+            // but the resource should not have been deleted
+            expect(deleted).toContain("foo-8");
+            expect(deleted).not.toContain("bar-8");
+          } finally {
+            await destroy(scope);
+            expect(deleted).toContain("bar-8");
+          }
+        },
+      );
+
+      test(
+        "replace should use the old props and output of the replaced resource",
+        options,
+        async (scope) => {
+          const deleted: { input: string; output: string }[] = [];
+          type MyResource = Resource<`MyResource-${string}`> & {
+            name: string;
+          };
+          const MyResource = Resource(
+            `MyResource-${storeType}`,
+            async function (
+              this: Context<MyResource>,
+              _id: string,
+              props: {
+                name: string;
+              },
+            ) {
+              if (this.phase === "delete") {
+                deleted.push({ input: props.name, output: this.output.name });
+                return this.destroy();
+              }
+              if (this.phase === "update") {
+                this.replace();
+              }
+              return this({ name: `output-${props.name}` });
+            },
+          );
+          try {
+            await MyResource("foo", { name: "foo" });
+            expect(deleted).toEqual([]);
+            await MyResource("foo", { name: "bar" });
+            await scope.finalize();
+            expect(deleted).toEqual([{ input: "foo", output: "output-foo" }]);
+          } finally {
+            await destroy(scope);
+            expect(deleted).toEqual([
+              { input: "foo", output: "output-foo" },
+              { input: "bar", output: "output-bar" },
+            ]);
+          }
+        },
+      );
+      test(
+        "this.output should not be undefined on this.replace(true)",
+        options,
+        async (scope) => {
+          const deleted: string[] = [];
+          interface Replacable extends Resource<`Replacable-${string}`> {
+            name: string;
+          }
+          const Replacable = Resource(
+            `Replacable-${storeType}-eager`,
+            async function (
+              this: Context<Replacable>,
+              _id: string,
+              props: {
+                name: string;
+              },
+            ): Promise<Replacable> {
+              if (this.phase === "delete") {
+                deleted.push(this.output.name);
+                return this.destroy();
+              } else if (this.phase === "update") {
+                this.replace(true);
+              }
+              return this({ name: props.name });
+            },
+          );
+          try {
+            await Replacable("replaceable", {
+              name: "foo-9",
+            });
+            expect(deleted).toEqual([]);
+            await Replacable("replaceable", {
+              name: "bar-9",
+            });
+            expect(deleted).toEqual(["foo-9"]);
+          } finally {
+            await destroy(scope);
+            expect(deleted).toEqual(["foo-9", "bar-9"]);
           }
         },
       );

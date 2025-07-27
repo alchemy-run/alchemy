@@ -835,7 +835,6 @@ const isPathValid = (path: string): boolean =>
 const setupWindows = (): void => {
   /* eslint no-control-regex: "off" */
   const makePosix = (str: string): string =>
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: adapted from node-ignore
     /^\\\\\?\\/.test(str) || /["<>|\u0000-\u001F]+/u.test(str)
       ? str
       : str.replace(/\\/g, "/");

@@ -1,25 +1,12 @@
-import type esbuild from "esbuild";
 import kleur from "kleur";
 import { spawn } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import fs from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import path from "pathe";
-import { BUILD_DATE } from "../build-date.ts";
 import type { Context } from "../context.ts";
 import type { BundleProps } from "../esbuild/bundle.ts";
-import { InnerResourceScope, Resource, ResourceKind } from "../resource.ts";
-import { getBindKey, tryGetBinding } from "../runtime/bind.ts";
-import { isRuntime } from "../runtime/global.ts";
-import { bootstrapPlugin } from "../runtime/plugin.ts";
-import { Scope } from "../scope.ts";
-import { Secret, secret } from "../secret.ts";
-import { serializeScope } from "../serde.ts";
+import { Resource, ResourceKind } from "../resource.ts";
+import { isSecret } from "../secret.ts";
 import type { type } from "../type.ts";
 import { DeferredPromise } from "../util/deferred-promise.ts";
 import { logger } from "../util/logger.ts";
@@ -28,61 +15,57 @@ import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   type CloudflareApi,
   type CloudflareApiOptions,
+  type InternalCloudflareApiOptions,
   createCloudflareApi,
 } from "./api.ts";
 import type { Assets } from "./assets.ts";
-import {
-  type Binding,
-  type Bindings,
-  Json,
-  type WorkerBindingDurableObjectNamespace,
-  type WorkerBindingService,
-  type WorkerBindingSpec,
+import type {
+  Bindings,
+  WorkerBindingDurableObjectNamespace,
+  WorkerBindingSpec,
 } from "./bindings.ts";
 import type { Bound } from "./bound.ts";
-import { isBucket } from "./bucket.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "./compatibility-date.gen.ts";
 import {
-  type WorkerBundle,
-  type WorkerBundleChunk,
-  type WorkerBundleProvider,
-  normalizeWorkerBundle,
-} from "./bundle/index.ts";
-import { wrap } from "./bundle/normalize.ts";
+  type CompatibilityPreset,
+  unionCompatibilityFlags,
+} from "./compatibility-presets.ts";
 import { type Container, ContainerApplication } from "./container.ts";
 import { CustomDomain } from "./custom-domain.ts";
-import { isD1Database } from "./d1-database.ts";
-import type { DispatchNamespaceResource } from "./dispatch-namespace.ts";
+import type { DispatchNamespace } from "./dispatch-namespace.ts";
 import {
   DurableObjectNamespace,
   isDurableObjectNamespace,
 } from "./durable-object-namespace.ts";
-import {
-  type EventSource,
-  type QueueEventSource,
-  isQueueEventSource,
-} from "./event-source.ts";
-import { isKVNamespace } from "./kv-namespace.ts";
+import { type EventSource, isQueueEventSource } from "./event-source.ts";
 import type { MiniflareWorkerOptions } from "./miniflare/miniflare-worker-options.ts";
 import { miniflareServer } from "./miniflare/miniflare.ts";
-import { isPipeline } from "./pipeline.ts";
 import {
   QueueConsumer,
   deleteQueueConsumer,
   listQueueConsumersForWorker,
 } from "./queue-consumer.ts";
-import { type QueueResource, isQueue } from "./queue.ts";
+import { isQueue } from "./queue.ts";
 import { Route } from "./route.ts";
-import { isVectorizeIndex } from "./vectorize-index.ts";
 import { uploadAssets } from "./worker-assets.ts";
+import {
+  WorkerBundle,
+  type WorkerBundleSource,
+  normalizeWorkerBundle,
+} from "./worker-bundle.ts";
 import {
   type WorkerScriptMetadata,
   bumpMigrationTagVersion,
   prepareWorkerMetadata,
 } from "./worker-metadata.ts";
-import { WorkerStub, isWorkerStub } from "./worker-stub.ts";
 import { WorkerSubdomain, disableWorkerSubdomain } from "./worker-subdomain.ts";
 import { createTail } from "./worker-tail.ts";
 import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
+
+// Previous versions of `Worker` used the `Bundle` resource.
+// This import is here to avoid errors when destroying the `Bundle` resource.
+import "../esbuild/bundle.ts";
+import { exists } from "../util/exists.ts";
 
 /**
  * Configuration options for static assets
@@ -172,6 +155,8 @@ export interface BaseWorkerProps<
    * Environment variables to attach to the worker
    *
    * These will be converted to plain_text bindings
+   *
+   * @deprecated - use `bindings` instead
    */
   env?: {
     [key: string]: string;
@@ -206,7 +191,7 @@ export interface BaseWorkerProps<
 
   /**
    * The compatibility date for the worker
-   * @default BUILD_DATE - automatically pinned to the package build date
+   * @default DEFAULT_WORKER_COMPATIBILITY_DATE - automatically pinned to the latest Workers release
    */
   compatibilityDate?: string;
 
@@ -214,6 +199,15 @@ export interface BaseWorkerProps<
    * The compatibility flags for the worker
    */
   compatibilityFlags?: string[];
+
+  /**
+   * Compatibility preset to automatically include common compatibility flags
+   *
+   * - "node": Includes nodejs_compat flag for Node.js compatibility
+   *
+   * @default undefined (no preset)
+   */
+  compatibility?: CompatibilityPreset;
 
   /**
    * Configuration for static assets
@@ -315,7 +309,7 @@ export interface BaseWorkerProps<
    *
    * This allows workers to be routed to via dispatch namespace routing rules
    */
-  namespace?: string | DispatchNamespaceResource;
+  namespace?: string | DispatchNamespace;
 
   /**
    * Version label for this worker deployment
@@ -333,7 +327,6 @@ export interface BaseWorkerProps<
    * the worker will be emulated locally and available at a randomly selected port.
    */
   dev?:
-    | boolean
     | {
         /**
          * Port to use for local development
@@ -345,12 +338,45 @@ export interface BaseWorkerProps<
          * @default false
          */
         remote?: boolean;
+        /** @internal */
+        command?: undefined;
       }
     | {
         command: string;
-        url: string;
         cwd?: string;
+        /** @internal */
+        port?: undefined;
+        /** @internal */
+        remote?: undefined;
       };
+
+  /**
+   * Smart placement configuration for the worker.
+   *
+   * Controls how Cloudflare places the worker across its network for optimal performance.
+   *
+   * When omitted, smart placement is disabled (default behavior).
+   */
+  placement?: {
+    /**
+     * The placement mode for the worker.
+     *
+     * - "smart": Automatically optimize placement based on performance metrics
+     *
+     * @default undefined (smart placement disabled)
+     */
+    mode: "smart";
+  };
+
+  limits?: {
+    /**
+     * The maximum CPU time in milliseconds that the worker can use.
+     *
+     * @see https://developers.cloudflare.com/workers/platform/limits/#cpu-time
+     * @default 30_000 (30 seconds)
+     */
+    cpu_ms?: number;
+  };
 }
 
 export interface InlineWorkerProps<
@@ -408,45 +434,6 @@ export type WorkerProps<
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
 > = InlineWorkerProps<B, RPC> | EntrypointWorkerProps<B, RPC>;
 
-export type FetchWorkerProps<
-  B extends Bindings = Bindings,
-  E extends EventSource[] = EventSource[],
-> = Omit<WorkerProps<B>, "entrypoint" | "eventSources"> & {
-  /**
-   * A function that will be used to fetch the worker script.
-   *
-   * This is only used when using the fetch property.
-   */
-  fetch?(
-    request: Request,
-    env: Bindings.Runtime<B>,
-    ctx: ExecutionContext,
-  ): Promise<Response>;
-  /**
-   * Event sources that this worker will consume.
-   *
-   * Can include queues, streams, or other event sources.
-   */
-  eventSources?: E;
-
-  /**
-   * A function that will be used to queue the worker script.
-   *
-   * This is only used when using the queue property.
-   */
-  queue?(
-    batch: QueueBatch<E>,
-    env: Bindings.Runtime<B>,
-    ctx: ExecutionContext,
-  ): Promise<void>;
-};
-
-type QueueBatch<E extends EventSource[]> = E[number] extends QueueEventSource
-  ? any
-  : E[number] extends QueueResource<infer Body>
-    ? MessageBatch<Body>
-    : MessageBatch<unknown>;
-
 export function isWorker(resource: Resource): resource is Worker<any> {
   return resource[ResourceKind] === "cloudflare::Worker";
 }
@@ -458,8 +445,7 @@ export type Worker<
   B extends Bindings | undefined = Bindings | undefined,
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
 > = Resource<"cloudflare::Worker"> &
-  Omit<WorkerProps<B>, "url" | "script" | "routes" | "domains"> &
-  globalThis.Service & {
+  Omit<WorkerProps<B>, "url" | "script" | "routes" | "domains"> & {
     /** @internal phantom property */
     __rpc__?: RPC;
 
@@ -539,63 +525,20 @@ export type Worker<
     /**
      * The dispatch namespace this worker is deployed to
      */
-    namespace?: string | DispatchNamespaceResource;
+    namespace?: string | DispatchNamespace;
 
     /**
      * Version label for this worker deployment
      */
     version?: string;
+
+    /**
+     * Smart placement configuration for the worker
+     */
+    placement?: {
+      mode: "smart";
+    };
   };
-
-/**
- * Represents a reference to a Cloudflare Worker service.
- *
- * @template RPC - The type of the worker's RPC entrypoint, defaults to Rpc.WorkerEntrypointBranded.
- *
- * This interface extends all properties of WorkerBindingService except for "name".
- * It also includes an optional __rpc__ property for type branding.
- */
-export type WorkerRef<
-  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
-> = Omit<WorkerBindingService, "name"> & {
-  /**
-   * Optional type branding for the worker's RPC entrypoint.
-   */
-  __rpc__?: RPC;
-};
-
-/**
- * Creates a reference to a Cloudflare Worker service.
- *
- * @example
- * // Create a reference to a Cloudflare Worker service:
- * const ref = WorkerRef({
- *   service: "my-worker",
- *   environment: "production",
- *   namespace: "main"
- * });
- *
- * // Optionally, you can specify only the service:
- * const ref2 = WorkerRef({ service: "my-worker" });
- *
- * // You can also specify the RPC type for stronger typing:
- * interface MyWorkerRPC extends Rpc.WorkerEntrypointBranded {
- *   myMethod(arg: string): Promise<number>;
- * }
- * const typedRef = WorkerRef<MyWorkerRPC>({ service: "my-worker" });
- */
-export function WorkerRef<
-  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
->(options?: {
-  service: string;
-  environment?: string;
-  namespace?: string;
-}): WorkerRef<RPC> {
-  return {
-    ...options,
-    type: "service",
-  } as WorkerRef<RPC>;
-}
 
 /**
  * A Cloudflare Worker is a serverless function that can be deployed to the Cloudflare network.
@@ -618,8 +561,8 @@ export function WorkerRef<
  * @example
  * // Create a real-time chat worker using Durable Objects
  * // for state management:
- * const chatRooms = new DurableObjectNamespace("chat-rooms");
- * const userStore = new DurableObjectNamespace("user-store");
+ * const chatRooms = DurableObjectNamespace("chat-rooms");
+ * const userStore = DurableObjectNamespace("user-store");
  *
  * const chat = await Worker("chat", {
  *   name: "chat-worker",
@@ -693,7 +636,7 @@ export function WorkerRef<
  *   entrypoint: "./src/data.ts",
  *   bindings: {
  *     // Bind to its own durable object
- *     STORAGE: new DurableObjectNamespace("storage", {
+ *     STORAGE: DurableObjectNamespace("storage", {
  *       className: "DataStorage"
  *     })
  *   }
@@ -753,217 +696,13 @@ export function Worker<
   const B extends Bindings,
   RPC extends Rpc.WorkerEntrypointBranded,
 >(id: string, props: WorkerProps<B, RPC>): Promise<Worker<B, RPC>>;
-export function Worker<const B extends Bindings, const E extends EventSource[]>(
-  id: string,
-  meta: ImportMeta,
-  props: FetchWorkerProps<B, E>,
-): Promise<Worker<B>> & globalThis.Service;
+
 export function Worker<const B extends Bindings>(
-  ...args:
-    | [id: string, props: WorkerProps<B>]
-    | [id: string, meta: ImportMeta, props: FetchWorkerProps<B>]
+  id: string,
+  props: WorkerProps<B>,
 ): Promise<Worker<B>> {
-  const [id, meta, props] =
-    args.length === 2 ? [args[0], undefined, args[1]] : args;
-
-  if (("fetch" in props && props.fetch) || ("queue" in props && props.queue)) {
-    const scope = Scope.current;
-
-    const workerName = props.name ?? id;
-
-    // we need to make sure the worker exists
-    const stub = WorkerStub(`${id}/stub`, {
-      name: workerName,
-      accountId: props.accountId,
-      apiKey: props.apiKey,
-      apiToken: props.apiToken,
-      baseUrl: props.baseUrl,
-      email: props.email,
-    });
-
-    async function collectResources(
-      scope: Scope | undefined,
-    ): Promise<Resource[]> {
-      if (!scope) {
-        return [];
-      }
-      return (
-        await Promise.all(
-          Array.from(scope.resources.values()).map(async (resource) => [
-            (await resource) as Resource,
-            ...(await collectResources(await resource[InnerResourceScope])),
-          ]),
-        )
-      ).flat();
-    }
-
-    const deferred = scope.defer(async () => {
-      const autoBindings: Record<string, Binding> = {};
-      for (const resource of await collectResources(Scope.root)) {
-        if (
-          isQueue(resource) ||
-          isWorkerStub(resource) ||
-          isWorker(resource) ||
-          isD1Database(resource) ||
-          isBucket(resource) ||
-          isPipeline(resource) ||
-          isVectorizeIndex(resource) ||
-          isKVNamespace(resource)
-        ) {
-          // TODO(sam): make this generic/pluggable
-          autoBindings[getBindKey(resource)] = resource;
-        }
-      }
-
-      // TODO(sam): prune to only needed secrets
-      for (const secret of Secret.all()) {
-        autoBindings[secret.name] = secret;
-      }
-
-      const bindings = {
-        ...props.bindings,
-        __ALCHEMY_WORKER_NAME__: workerName,
-        __ALCHEMY_SERIALIZED_SCOPE__: Json(await serializeScope(scope)),
-        ALCHEMY_STAGE: scope.stage,
-        ALCHEMY_PASSWORD: secret(scope.password),
-        // TODO(sam): prune un-needed bindings
-        ...autoBindings,
-      };
-
-      return _Worker(id, {
-        ...(props as any),
-        url: true,
-        compatibilityFlags: Array.from(
-          new Set(["nodejs_compat", ...(props.compatibilityFlags ?? [])]),
-        ),
-        entrypoint: meta!.filename,
-        name: workerName,
-        // adopt because the stub guarnatees that the worker exists
-        adopt: true,
-        bindings,
-        bundle: {
-          ...props.bundle,
-          plugins: [bootstrapPlugin],
-          external: [
-            // for alchemy
-            "libsodium*",
-            "@swc/*",
-            "esbuild",
-            // TODO(sam): this is for fetch, why is it a package?
-            "undici",
-            "miniflare",
-            "@iarna/toml",
-            "cli-*",
-            "react*",
-          ],
-          banner: {
-            js: "var __ALCHEMY_RUNTIME__ = true;",
-          },
-          inject: [
-            ...(props.bundle?.inject ?? []),
-            path.resolve(import.meta.dirname, "..", "runtime", "shims.js"),
-          ],
-        },
-      });
-    }) as Promise<Worker<B>>;
-
-    // defer construction of this worker until the app is about to finaloze
-    // this ensures that the Worker's dependencies are instantiated before we bundle
-    // it is then safe to bundle and import the Worker to detect which resources need to be auto-bound
-    const promise = Promise.all([deferred, stub]).then(
-      ([worker]) => worker,
-    ) as Promise<Worker<B>> & {
-      fetch?: (...args: any[]) => Promise<Response>;
-      queue?: (
-        batch: QueueBatch<any>,
-        env: Bindings.Runtime<B>,
-        ctx: ExecutionContext,
-      ) => Promise<void>;
-    };
-
-    if (isRuntime) {
-      if (props.fetch) {
-        promise.fetch = async (
-          request: Request,
-          env: Bindings.Runtime<B>,
-          ctx: ExecutionContext,
-        ) => {
-          try {
-            return await props.fetch!(request, env as any, ctx);
-          } catch (err: any) {
-            return new Response(err.message + err.stack, {
-              status: 500,
-            });
-          }
-        };
-      }
-      if (props.queue) {
-        promise.queue = async (
-          batch: QueueBatch<any>,
-          env: Bindings.Runtime<B>,
-          ctx: ExecutionContext,
-        ) => {
-          return await props.queue!(batch, env, ctx);
-        };
-      }
-    } else {
-      promise.fetch = async (
-        request: string | URL | Request,
-        init?: RequestInit,
-      ) => {
-        const worker = await promise;
-        if (!worker.url) {
-          throw new Error("Worker URL is not available in runtime");
-        }
-        if (request instanceof Request) {
-          const origin = new URL(worker.url);
-          const incoming = request.url.startsWith("/")
-            ? new URL(`${worker.url}${request.url}`)
-            : new URL(request.url);
-          logger.log(incoming);
-          const proxyURL = new URL(
-            `${incoming.pathname}${incoming.search}${incoming.hash}`,
-            origin,
-          );
-
-          const headers = new Headers(request.headers);
-          headers.set("host", origin.host);
-
-          try {
-            return await fetch(
-              new Request(proxyURL, {
-                method: request.method,
-                body: request.body,
-                headers,
-                // TODO(sam): do we need this? GPT added it ...
-                // redirect: "manual",
-              }),
-            );
-          } catch (err: any) {
-            return new Response(err.message ?? "proxy error", { status: 500 });
-          }
-        } else {
-          if (typeof request === "string" && request.startsWith("/")) {
-            request = new URL(`${worker.url}${request}`);
-          }
-          return await fetch(request, init);
-        }
-      };
-    }
-    return promise;
-  }
-  return _Worker(id, props as WorkerProps<B>).then(async (worker) => {
-    const binding = await tryGetBinding(worker);
-    if (binding) {
-      worker.fetch = (request: Request) => binding.fetch(request);
-      worker.connect = (address: SocketAddress, options: SocketOptions) =>
-        binding.connect(address, options);
-    }
-    return worker;
-  });
+  return _Worker(id, props as WorkerProps<B>);
 }
-
-export const DEFAULT_COMPATIBILITY_DATE = BUILD_DATE;
 
 export const _Worker = Resource(
   "cloudflare::Worker",
@@ -987,60 +726,72 @@ export const _Worker = Resource(
     const workerName = props.name ?? id;
     const compatibilityDate =
       props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
-    const compatibilityFlags = props.compatibilityFlags ?? [];
+    const compatibilityFlags = unionCompatibilityFlags(
+      props.compatibility,
+      props.compatibilityFlags,
+    );
     const dispatchNamespace =
       typeof props.namespace === "string"
         ? props.namespace
         : props.namespace?.namespaceName;
 
-    const dev = normalizeDev(this, props.dev);
+    const bundleSourceResult = normalizeWorkerBundle({
+      entrypoint: props.entrypoint,
+      script: props.script,
+      format: props.format,
+      noBundle: props.noBundle,
+      rules: "rules" in props ? props.rules : undefined,
+      bundle: props.bundle,
+      cwd,
+      compatibilityDate,
+      compatibilityFlags,
+      outdir:
+        props.bundle?.outdir ??
+        path.join(cwd, ".alchemy", ...this.scope.chain, id),
+      sourceMap: "sourceMap" in props ? props.sourceMap : undefined,
+    });
 
-    const [bundle, error] = wrap(() =>
-      normalizeWorkerBundle({
-        entrypoint: props.entrypoint,
-        script: props.script,
-        format: props.format,
-        noBundle: props.noBundle,
-        rules: "rules" in props ? props.rules : undefined,
-        bundle: props.bundle,
-        cwd,
-        compatibilityDate,
-        compatibilityFlags,
-        outdir:
-          props.bundle?.outdir ??
-          path.join(process.cwd(), ".alchemy", ...this.scope.chain, id),
-        sourceMap: "sourceMap" in props ? props.sourceMap : undefined,
-      }),
-    );
+    // run locally if
+    const local = this.scope.local && !props.dev?.remote;
+    const watch = this.scope.watch;
 
-    if (dev.local) {
+    if (local) {
       let url: string | undefined;
-      if (error) {
-        throw error;
+      if (bundleSourceResult.isErr()) {
+        throw bundleSourceResult.error;
       }
 
-      switch (dev.type) {
-        case "command":
-          createDevCommand({
-            id,
-            command: dev.command,
-            cwd: dev.cwd ?? props.cwd ?? process.cwd(),
-            env: props.env ?? {},
-          });
-          url = dev.url;
-          break;
-        case "miniflare": {
-          url = await createMiniflare({
-            id,
-            workerName,
-            compatibilityDate,
-            compatibilityFlags,
-            bindings: props.bindings,
-            bundle,
-            port: dev.port,
-          });
-          break;
-        }
+      if (props.dev?.command) {
+        const { url: commandUrl } = await createDevCommand({
+          id,
+          command: props.dev.command,
+          cwd: props.dev.cwd || props.cwd || process.cwd(),
+          env: {
+            ...(process.env ?? {}),
+            ...props.env,
+            ...Object.fromEntries(
+              Object.entries(props.bindings ?? {}).flatMap(([key, value]) =>
+                typeof value === "string"
+                  ? [[key, value]]
+                  : isSecret(value)
+                    ? [[key, value.unencrypted]]
+                    : [],
+              ),
+            ),
+          },
+        });
+        url = commandUrl;
+      } else {
+        url = await createMiniflare({
+          id,
+          workerName,
+          compatibilityDate,
+          compatibilityFlags,
+          bindings: props.bindings,
+          bundle: bundleSourceResult.value,
+          port: props.dev?.port,
+          assets: props.assets,
+        });
       }
 
       return this({
@@ -1064,6 +815,10 @@ export const _Worker = Resource(
         assets: props.assets,
         // Include cron triggers in the output
         crons: props.crons,
+        // Include placement configuration in the output
+        placement: props.placement,
+        // Include limits configuration in the output
+        limits: props.limits,
         // phantom property
         Env: undefined!,
       } as unknown as Worker<B>);
@@ -1072,7 +827,9 @@ export const _Worker = Resource(
     const api = await createCloudflareApi(props);
 
     if (this.phase === "delete") {
-      await bundle?.delete?.();
+      if (bundleSourceResult.isOk()) {
+        await bundleSourceResult.value.delete?.();
+      }
       if (!props.version) {
         await deleteQueueConsumers(api, workerName);
         await deleteWorker(api, {
@@ -1081,8 +838,30 @@ export const _Worker = Resource(
         });
       }
       return this.destroy();
-    } else if (error) {
-      throw error;
+    } else if (bundleSourceResult.isErr()) {
+      throw new Error(bundleSourceResult.error);
+    }
+
+    const bundleSource = bundleSourceResult.value;
+
+    if (this.phase === "update") {
+      const oldName = this.output.name ?? this.output.id;
+      const newName = workerName;
+
+      if (oldName !== newName) {
+        if (dispatchNamespace) {
+          this.replace(true);
+        } else {
+          const renameResponse = await api.patch(
+            `/accounts/${api.accountId}/workers/services/${oldName}`,
+            { id: newName },
+          );
+
+          if (!renameResponse.ok) {
+            await handleApiError(renameResponse, "rename", "worker", oldName);
+          }
+        }
+      }
     }
 
     let assetsBinding: Assets | undefined;
@@ -1133,7 +912,10 @@ export const _Worker = Resource(
         if (!(await workerExists(api, workerName))) {
           // Create the base worker first if it doesn't exist
           const baseWorkerProps = { ...props, version: undefined };
-          await putWorkerWithAssets(baseWorkerProps, await bundle.create());
+          await putWorkerWithAssets(
+            baseWorkerProps,
+            await bundleSource.create(),
+          );
         }
         // We always "adopt" when publishing versions
       } else if (!props.adopt) {
@@ -1142,87 +924,66 @@ export const _Worker = Resource(
     }
 
     let putWorkerResult: PutWorkerResult;
-    if (dev.type === "remote") {
-      // todo(john): clean this up and add log tail
+    if (watch) {
       const controller = new AbortController();
       cleanups.push(() => controller.abort());
-      const watcher = await bundle.watch(controller.signal);
       const promise = new DeferredPromise<PutWorkerResult>();
-      void watcher.pipeTo(
-        new WritableStream({
-          async write(chunk) {
-            switch (chunk.type) {
-              case "start":
-                logger.task("", {
-                  message: "start",
-                  status: "pending",
-                  resource: id,
-                  prefix: "build",
-                  prefixColor: "cyanBright",
-                });
-                break;
-              case "end": {
-                if (promise.status === "pending") {
-                  await putWorkerWithAssets(props, chunk.result)
-                    .then((result) => promise.resolve(result))
-                    .catch((error) => {
-                      controller.abort();
-                      promise.reject(error);
-                    });
-                  return;
-                }
+      const runWatch = async () => {
+        for await (const bundle of bundleSource.watch(controller.signal)) {
+          if (promise.status === "pending") {
+            await putWorkerWithAssets(props, bundle)
+              .then((result) => promise.resolve(result))
+              .catch((error) => {
+                controller.abort();
+                promise.reject(error);
+              });
+            continue;
+          }
 
-                logger.task("", {
-                  message: "reload",
-                  status: "success",
-                  resource: id,
-                  prefix: "build",
-                  prefixColor: "cyanBright",
-                });
-                await putWorker(api, {
-                  ...props,
-                  workerName,
-                  scriptBundle: chunk.result,
-                  dispatchNamespace,
-                  version: props.version,
-                  compatibilityDate,
-                  compatibilityFlags,
-                  assetUploadResult: assetsBinding
-                    ? {
-                        keepAssets: true,
-                        assetConfig: props.assets,
-                      }
-                    : undefined,
-                  unstable_cacheWorkerSettings: true,
-                });
-                logger.task("", {
-                  message: "updated",
-                  status: "success",
-                  resource: id,
-                  prefix: "build",
-                  prefixColor: "greenBright",
-                });
-                break;
-              }
-              case "error":
-                logger.task("", {
-                  message: "error",
-                  status: "failure",
-                  resource: id,
-                  prefix: "build",
-                  prefixColor: "redBright",
-                });
-                logger.error(chunk.errors);
-                break;
-            }
-          },
-        }),
-      );
+          logger.task("", {
+            message: "reload",
+            status: "success",
+            resource: id,
+            prefix: "build",
+            prefixColor: "cyanBright",
+          });
+          await putWorker(api, {
+            ...props,
+            workerName,
+            scriptBundle: bundle,
+            dispatchNamespace,
+            version: props.version,
+            compatibilityDate,
+            compatibilityFlags,
+            assetUploadResult: assetsBinding
+              ? {
+                  keepAssets: true,
+                  assetConfig: props.assets,
+                }
+              : undefined,
+            unstable_cacheWorkerSettings: true,
+          });
+          logger.task("", {
+            message: "updated",
+            status: "success",
+            resource: id,
+            prefix: "build",
+            prefixColor: "greenBright",
+          });
+        }
+      };
+      void runWatch(); // this is not awaited because it's an ongoing process
       putWorkerResult = await promise.value;
-      const tail = await createTail(api, id, workerName);
-      cleanups.push(() => tail.close());
+      await createTail(api, id, workerName)
+        .then((tail) => {
+          cleanups.push(() => tail.close());
+        })
+        .catch((error) => {
+          logger.error(`Failed to create tail for ${workerName}`, error);
+        });
     } else {
-      putWorkerResult = await putWorkerWithAssets(props, await bundle.create());
+      const scriptBundle = await bundleSource.create();
+      putWorkerResult = await putWorkerWithAssets(props, scriptBundle);
     }
 
     const tasks: Promise<unknown>[] = [];
@@ -1331,6 +1092,10 @@ export const _Worker = Resource(
       namespace: props.namespace,
       // Include version information in the output
       version: props.version,
+      // Include placement configuration in the output
+      placement: props.placement,
+      // Include limits configuration in the output
+      limits: props.limits,
       // phantom property
       Env: undefined!,
     } as unknown as Worker<B>);
@@ -1353,57 +1118,6 @@ process.on("SIGINT", async () => {
   process.exit(0);
 });
 
-type Dev =
-  | {
-      type: "none";
-      local: false;
-    }
-  | {
-      type: "miniflare";
-      port?: number;
-      local: true;
-    }
-  | {
-      type: "command";
-      command: string;
-      url: string;
-      cwd?: string;
-      local: true;
-    }
-  | {
-      type: "remote";
-      local: false;
-    };
-
-const normalizeDev = (ctx: Context<any>, dev: WorkerProps["dev"]): Dev => {
-  if (!ctx.scope.dev || ctx.phase === "delete" || dev === false) {
-    return {
-      type: "none",
-      local: false,
-    };
-  }
-  const devObj = dev === true ? {} : (dev ?? {});
-  if ("command" in devObj) {
-    // Commands are always local
-    return {
-      type: "command",
-      ...devObj,
-      local: true,
-    };
-  }
-  if (devObj.remote === false || ctx.scope.dev === "prefer-local") {
-    return {
-      type: "miniflare",
-      port: devObj.port,
-      local: true,
-    };
-  }
-  return {
-    type: "remote",
-    local: false,
-  };
-};
-
 const assertUnique = <T, Key extends keyof T>(
   inputs: T[],
   key: Key,
@@ -1424,13 +1138,13 @@ const normalizeExportBindings = (
     Object.entries(bindings).map(([bindingName, binding]) => [
       bindingName,
       isDurableObjectNamespace(binding) && binding.scriptName === undefined
-        ? new DurableObjectNamespace(binding.id, {
+        ? DurableObjectNamespace(binding.id, {
             ...binding,
             // re-export this binding mapping to the host worker (this worker)
             scriptName,
           })
         : isWorkflow(binding) && binding.scriptName === undefined
-          ? new Workflow(binding.id, {
+          ? Workflow(binding.id, {
               ...binding,
               // re-export this binding mapping to the host worker (this worker)
               scriptName,
@@ -1440,12 +1154,12 @@ const normalizeExportBindings = (
   );
 };
 
-const normalizeApiOptions = (api: CloudflareApi): CloudflareApiOptions => ({
+const normalizeApiOptions = (
+  api: CloudflareApi,
+): InternalCloudflareApiOptions => ({
   accountId: api.accountId,
-  apiKey: api.apiKey,
-  apiToken: api.apiToken,
-  email: api.email,
   baseUrl: api.baseUrl,
+  ...api.authOptions,
 });
 
 async function provisionContainers(
@@ -1630,7 +1344,8 @@ async function createMiniflare(props: {
   compatibilityFlags: string[];
   bindings: Bindings | undefined;
   port: number | undefined;
-  bundle: WorkerBundleProvider;
+  bundle: WorkerBundleSource;
+  assets: AssetsConfig | undefined;
 }) {
   const sharedOptions: Omit<MiniflareWorkerOptions, "bundle"> = {
     name: props.workerName,
@@ -1638,152 +1353,43 @@ async function createMiniflare(props: {
     compatibilityFlags: props.compatibilityFlags,
     bindings: props.bindings,
     port: props.port,
+    assets: props.assets,
   };
 
   const startPromise = new DeferredPromise<string>();
-  // todo(john): streamline and share logging logic with remote dev
-  type Events =
-    | {
-        type: "build-start" | "build-end";
-      }
-    | {
-        type: "build-error";
-        errors: esbuild.Message[];
-      }
-    | {
-        type: "miniflare-ready";
-        url: string;
-      }
-    | {
-        type: "miniflare-error";
-        error: Error;
-      };
   const controller = new AbortController();
   cleanups.push(() => controller.abort());
-  (await props.bundle.watch(controller.signal))
-    .pipeThrough(
-      new TransformStream<WorkerBundleChunk, Events>({
-        async transform(chunk, controller) {
-          switch (chunk.type) {
-            case "start": {
-              controller.enqueue({ type: "build-start" });
-              break;
-            }
-            case "end": {
-              controller.enqueue({ type: "build-end" });
-              try {
-                const server = await miniflareServer.push({
-                  ...sharedOptions,
-                  bundle: chunk.result,
-                });
-                controller.enqueue({
-                  type: "miniflare-ready",
-                  url: server.url,
-                });
-              } catch (error) {
-                controller.enqueue({
-                  type: "miniflare-error",
-                  error: error as Error,
-                });
-              }
-              break;
-            }
-            case "error": {
-              controller.enqueue({
-                type: "build-error",
-                errors: chunk.errors,
-              });
-              break;
-            }
-          }
-        },
-      }),
-    )
-    .pipeTo(
-      new WritableStream({
-        write: async (chunk) => {
-          switch (chunk.type) {
-            case "build-start": {
-              logger.task("", {
-                message: "start",
-                status: "pending",
-                resource: props.id,
-                prefix: "build",
-                prefixColor: "cyanBright",
-              });
-              break;
-            }
-            case "build-end": {
-              logger.task("", {
-                message: startPromise.status === "pending" ? "load" : "reload",
-                status: "success",
-                resource: props.id,
-                prefix: "build",
-                prefixColor: "greenBright",
-              });
-              break;
-            }
-            case "build-error": {
-              logger.task("", {
-                message: "error",
-                status: "failure",
-                resource: props.id,
-                prefix: "build",
-                prefixColor: "redBright",
-              });
-              if (startPromise.status === "pending") {
-                controller.abort();
-                startPromise.reject(chunk.errors);
-              } else {
-                logger.error(chunk.errors);
-              }
-              break;
-            }
-            case "miniflare-ready": {
-              logger.task("", {
-                message: `ready at ${chunk.url}`,
-                status: "success",
-                resource: props.id,
-                prefix: "miniflare",
-                prefixColor: "greenBright",
-              });
-              if (startPromise.status === "pending") {
-                startPromise.resolve(chunk.url);
-              }
-              break;
-            }
-            case "miniflare-error": {
-              logger.task("", {
-                message: "error",
-                status: "failure",
-                resource: props.id,
-                prefix: "miniflare",
-                prefixColor: "redBright",
-              });
-              if (startPromise.status === "pending") {
-                startPromise.reject(chunk.error);
-              } else {
-                logger.error(chunk.error);
-              }
-              break;
-            }
-          }
-        },
-      }),
-    );
-
+  const run = async () => {
+    for await (const bundle of props.bundle.watch(controller.signal)) {
+      const server = await miniflareServer.push({
+        ...sharedOptions,
+        bundle,
+      });
+      if (startPromise.status === "pending") {
+        startPromise.resolve(server.url);
+      }
+      logger.task("", {
+        message: `ready at ${server.url}`,
+        status: "success",
+        resource: props.id,
+        prefix: "miniflare",
+        prefixColor: "greenBright",
+      });
+    }
+  };
+  void run();
   return await startPromise.value;
 }
 
-function createDevCommand(props: {
+async function createDevCommand(props: {
   id: string;
   command: string;
   cwd: string;
-  env: Record<string, string>;
-}) {
+  env: Record<string, string | undefined>;
+}): Promise<{ url: string }> {
   const persistFile = path.join(process.cwd(), ".alchemy", `${props.id}.pid`);
-  if (existsSync(persistFile)) {
-    const pid = Number.parseInt(readFileSync(persistFile, "utf8"));
+  if (await exists(persistFile)) {
+    const pid = Number.parseInt(await fs.readFile(persistFile, "utf8"));
     try {
       // Actually kill the process if it's alive
       process.kill(pid, "SIGTERM");
@@ -1791,14 +1397,16 @@ function createDevCommand(props: {
       // ignore
     }
     try {
-      unlinkSync(persistFile);
+      await fs.unlink(persistFile);
     } catch {
       // ignore
     }
   }
   const command = props.command.split(" ");
-  const proc = spawn(command[0], command.slice(1), {
+  const [cmd, ...args] = command;
+  const proc = spawn(cmd, args, {
     cwd: props.cwd,
+    shell: true,
     env: {
       ...process.env,
       ...props.env,
@@ -1807,21 +1415,61 @@ function createDevCommand(props: {
         ".alchemy",
         "miniflare",
       ),
+      // Force colors in the child process since we're piping output
+      // FORCE_COLOR: "1",
     },
-    stdio: ["inherit", "inherit", "inherit"],
+    stdio: ["inherit", "pipe", "pipe"],
   });
-  cleanups.push(() => {
-    try {
-      unlinkSync(persistFile);
-    } catch {
-      // ignore
-    }
-    proc.kill();
+  const { url } = await new Promise<{ url: string }>((resolve, reject) => {
+    let urlFound = false;
+    let stdout = "";
+    let stderr = "";
+    const urlRegex =
+      /http:\/\/(?:(?:localhost|0\.0\.0\.0|127\.0\.0\.1)|(?:\d{1,3}\.){3}\d{1,3}):\d+(?:\/)?/;
+
+    const parseOutput = (data: string) => {
+      if (!urlFound) {
+        const match = data.match(urlRegex);
+        if (match) {
+          urlFound = true;
+          resolve({ url: match[0] });
+        }
+      }
+    };
+
+    // Handle stdout - parse for URL and write through with colors preserved
+    proc.stdout?.on("data", (data) => {
+      parseOutput(
+        (stdout += data.toString().replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")),
+      );
+      process.stdout.write(data);
+    });
+
+    proc.stderr?.on("data", (data) => {
+      parseOutput(
+        (stderr += data.toString().replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")),
+      );
+      process.stderr.write(data);
+    });
+
+    proc.on("error", (error) => {
+      reject(error);
+    });
+
+    cleanups.push(async () => {
+      try {
+        await fs.unlink(persistFile);
+      } catch {
+        // ignore
+      }
+      proc.kill();
+    });
   });
   if (proc.pid) {
-    mkdirSync(path.dirname(persistFile), { recursive: true });
-    writeFileSync(persistFile, proc.pid.toString());
+    await fs.mkdir(path.dirname(persistFile), { recursive: true });
+    await fs.writeFile(persistFile, proc.pid.toString());
   }
+  return { url };
 }
 
 type PutWorkerOptions = Omit<WorkerProps, "entrypoint"> & {
@@ -1852,12 +1500,7 @@ async function prepareWorkerUpload(
   } else {
     scriptMetadata.main_module = props.scriptBundle.entrypoint;
   }
-  const body = new FormData();
-
-  for await (const file of props.scriptBundle.files) {
-    body.append(file.name, file);
-  }
-
+  const body = await WorkerBundle.toFormData(props.scriptBundle);
   // Prepare metadata - add version annotations if this is a version
   const finalMetadata = props.version
     ? {

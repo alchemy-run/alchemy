@@ -20,6 +20,6 @@
     },
     "noImplicitAny": false,
     "types": ["@cloudflare/workers-types"],
-    "noEmit": true
+    "noEmit": true,
   }
 }

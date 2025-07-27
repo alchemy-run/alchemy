@@ -6,9 +6,9 @@ import { Document } from "src/Document";
 import { setCommonHeaders } from "src/headers";
 import { Home } from "src/pages/Home";
 
-export interface Env {
-  DB: D1Database;
-}
+import type { website } from "../alchemy.run.ts";
+
+export type Env = typeof website.Env;
 
 export type AppContext = {
   db: ReturnType<typeof drizzle>;

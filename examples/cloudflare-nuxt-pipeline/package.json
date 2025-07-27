@@ -4,18 +4,18 @@
   "type": "module",
   "scripts": {
     "build": "nuxt build",
-    "dev": "nuxt dev",
+    "deploy": "alchemy deploy --env-file ../../.env",
+    "destroy": "alchemy destroy --env-file ../../.env",
+    "dev": "alchemy dev --env-file ../../.env",
     "generate": "nuxt generate",
-    "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "deploy": "bun tsx --env-file ../../.env ./alchemy.run.ts",
-    "destroy": "bun tsx --env-file ../../.env ./alchemy.run.ts --destroy"
+    "preview": "nuxt preview"
   },
   "dependencies": {
     "@cloudflare/workers-types": "^4.20250421.0",
     "alchemy": "workspace:*",
     "cloudflare": "^4.2.0",
-    "nuxt": "^3.17.5",
+    "nuxt": "^4.0.1",
     "vite": "^6.0.0",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
