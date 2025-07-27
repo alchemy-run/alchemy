@@ -8,9 +8,10 @@
       "skipLibCheck": true,
       "allowImportingTsExtensions": true,
       "rewriteRelativeImportExtensions": true,
-      "types": ["@cloudflare/workers-types", "@types/node"]
+      "types": ["@cloudflare/workers-types", "./types/cf.d.ts"],
+      "noEmit": true
     },
-    "include": ["src", "alchemy.run.ts"],
+    "include": ["alchemy.run.ts", "src", "types"],
     "references": [
       {
         "path": "../../alchemy/tsconfig.json"

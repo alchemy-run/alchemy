@@ -2,18 +2,21 @@ import { DurableObject } from "cloudflare:workers";
 import type { server } from "../alchemy.run.ts";
 
 export default {
-  fetch: (req, env) => {
+  fetch: (req: Request, env: typeof server.Env) => {
     const url = new URL(req.url);
     if (url.pathname !== "/websocket") {
       return new Response("Not found", { status: 404 });
     }
     const stub = env.WS_SERVER.get(env.WS_SERVER.idFromName("default"));
+    // @ts-expect-error - TODO(sam): fix this
     return stub.fetch(req);
   },
-} satisfies ExportedHandler<typeof server.Env>;
+};
 
 export class WebSocketServer extends DurableObject {
-  async fetch(req: Request) {
+  declare env: typeof server.Env;
+
+  async fetch(req: Request): Promise<Response> {
     if (req.headers.get("upgrade") !== "websocket") {
       return new Response("Not a websocket request", { status: 400 });
     }
