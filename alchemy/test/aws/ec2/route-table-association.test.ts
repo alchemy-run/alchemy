@@ -47,7 +47,9 @@ describe("RouteTableAssociation", () => {
       subnet = await Subnet(subnetName, {
         vpc,
         cidrBlock: "10.0.1.0/24",
-        availabilityZone: `${process.env.AWS_REGION}a` || "us-east-1a",
+        availabilityZone: process.env.AWS_REGION
+          ? `${process.env.AWS_REGION}a`
+          : "us-east-1a",
         tags: { Name: subnetName },
       });
 

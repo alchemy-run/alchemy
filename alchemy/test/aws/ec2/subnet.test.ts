@@ -38,7 +38,9 @@ describe("Subnet", () => {
         subnet = await Subnet(subnetName, {
           vpc,
           cidrBlock: "10.0.1.0/24",
-          availabilityZone: `${process.env.AWS_REGION}a` || "us-east-1a",
+          availabilityZone: process.env.AWS_REGION
+            ? `${process.env.AWS_REGION}a`
+            : "us-east-1a",
           mapPublicIpOnLaunch: true,
           tags: {
             Name: subnetName,
@@ -50,7 +52,7 @@ describe("Subnet", () => {
         expect(subnet.vpcId).toBe(vpc.vpcId);
         expect(subnet.cidrBlock).toBe("10.0.1.0/24");
         expect(subnet.availabilityZone).toBe(
-          `${process.env.AWS_REGION}a` || "us-east-1a",
+          process.env.AWS_REGION ? `${process.env.AWS_REGION}a` : "us-east-1a",
         );
         expect(subnet.mapPublicIpOnLaunch).toBe(true);
 
@@ -87,7 +89,9 @@ describe("Subnet", () => {
         const subnet = await Subnet(subnetName, {
           vpc,
           cidrBlock: "10.0.1.0/24",
-          availabilityZone: `${process.env.AWS_REGION}a` || "us-east-1a",
+          availabilityZone: process.env.AWS_REGION
+            ? `${process.env.AWS_REGION}a`
+            : "us-east-1a",
           tags: { Name: subnetName },
           timeout: {
             maxAttempts: 50, // Override default 30
@@ -126,7 +130,9 @@ describe("Subnet", () => {
         const subnet = await Subnet(subnetName, {
           vpc,
           cidrBlock: "10.0.1.0/24",
-          availabilityZone: `${process.env.AWS_REGION}a` || "us-east-1a",
+          availabilityZone: process.env.AWS_REGION
+            ? `${process.env.AWS_REGION}a`
+            : "us-east-1a",
           tags: { Name: subnetName },
           timeout: {
             maxAttempts: 40, // Override only maxAttempts, delayMs should use default
@@ -162,7 +168,9 @@ describe("Subnet", () => {
         Subnet(subnetName, {
           vpc,
           cidrBlock: "10.0.1.0/24",
-          availabilityZone: `${process.env.AWS_REGION}a` || "us-east-1a",
+          availabilityZone: process.env.AWS_REGION
+            ? `${process.env.AWS_REGION}a`
+            : "us-east-1a",
           tags: { Name: subnetName },
           timeout: {
             maxAttempts: 0, // Invalid: must be > 0
