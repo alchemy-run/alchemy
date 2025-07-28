@@ -16,7 +16,7 @@ export interface TelemetryClientOptions {
 }
 
 export interface ITelemetryClient {
-  ready: Promise<void>;
+  ready: Promise<unknown>;
   record(event: Telemetry.EventInput): void;
   finalize(): Promise<void>;
 }
@@ -30,27 +30,21 @@ export class NoopTelemetryClient implements ITelemetryClient {
 }
 
 export class TelemetryClient implements ITelemetryClient {
-  ready: Promise<void>;
-
+  private context: Promise<Telemetry.Context>;
   private events: Telemetry.Event[] = [];
-  private context?: Telemetry.Context;
 
   constructor(readonly options: TelemetryClientOptions) {
-    this.ready = this.init();
-  }
-
-  private async init() {
-    const now = Date.now();
-    this.context = await context({
+    this.context = context({
       sessionId: this.options.sessionId,
       phase: this.options.phase,
     });
-    this.record(
-      {
-        event: "app.start",
-      },
-      now,
-    );
+    this.record({
+      event: "app.start",
+    });
+  }
+
+  get ready() {
+    return this.context;
   }
 
   record(event: Telemetry.EventInput, timestamp = Date.now()) {
@@ -89,10 +83,10 @@ export class TelemetryClient implements ITelemetryClient {
   }
 
   private async send(events: Telemetry.Event[]) {
-    if (events.length === 0 || this.context) {
+    if (events.length === 0) {
       return;
     }
-    const { userId, ...data } = this.context!;
+    const { userId, ...data } = await this.context;
     const response = await fetch(`${POSTHOG_CLIENT_API_HOST}/batch`, {
       method: "POST",
       headers: {
