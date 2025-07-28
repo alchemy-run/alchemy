@@ -61,6 +61,10 @@
       "bun": "./src/cloudflare/index.ts",
       "import": "./lib/cloudflare/index.js"
     },
+    "./cloudflare/vite-plugin": {
+      "bun": "./src/cloudflare/vite-plugin.ts",
+      "import": "./lib/cloudflare/vite-plugin.js"
+    },
     "./dns": {
       "bun": "./src/dns/index.ts",
       "import": "./lib/dns/index.js"
@@ -175,6 +179,7 @@
     "@aws-sdk/client-sqs": "^3.0.0",
     "@aws-sdk/client-ssm": "^3.0.0",
     "@aws-sdk/client-sts": "^3.0.0",
+    "@cloudflare/vite-plugin": "^1.10.1",
     "@libsql/client": "^0.15.9",
     "@octokit/rest": "^21.1.1",
     "ai": "^4.0.0",

@@ -27,7 +27,9 @@ export async function TanStackStart<B extends Bindings>(
     dev: props?.dev ?? {
       command: "vite dev",
     },
-    wrangler: props?.wrangler ?? true,
+    wrangler: props?.wrangler ?? {
+      secrets: true,
+    },
     main: props?.main ?? ".output/server/index.mjs",
     compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
     assets: props?.assets ?? ".output/public",

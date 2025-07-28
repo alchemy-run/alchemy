@@ -22,6 +22,28 @@ export async function ReactRouter<B extends Bindings>(
 ): Promise<ReactRouter<B>> {
   const defaultAssets = path.join("build", "client");
   const main = props.main ?? path.join("workers", "app.ts");
+  function normalizeWrangler():
+    | {
+        path?: string;
+        main?: string;
+        secrets?: boolean;
+      }
+    | false {
+    if (props.wrangler === false) return false;
+    if (typeof props.wrangler === "undefined" || props.wrangler === true) {
+      return { main, secrets: true };
+    }
+    if (typeof props.wrangler === "string") {
+      // respect overrides for wrangler.json path
+      return { main, path: props.wrangler };
+    }
+    return {
+      // wrangler should point to the user's main (e.g. `worker.ts`), unless overridden
+      path: props.wrangler.path,
+      main: props.wrangler.main ?? main,
+      secrets: props.wrangler.secrets ?? true,
+    };
+  }
   return Website(id, {
     ...props,
     command: props.command ?? "react-router typegen && react-router build",
@@ -32,20 +54,7 @@ export async function ReactRouter<B extends Bindings>(
     // Alchemy should bundle the result of `vite build`, not the user's main
     // TODO: we probably need bundling to properly handle WASM/rules
     main: path.join(props.cwd ?? process.cwd(), "build", "server", "index.js"),
-    wrangler: {
-      // wrangler should point to the user's main (e.g. `worker.ts`), unless overridden
-      main:
-        typeof props.wrangler === "object"
-          ? (props.wrangler.main ?? main)
-          : main,
-      // write to wrangler.json by default but respect overrides
-      path:
-        typeof props.wrangler === "string"
-          ? props.wrangler
-          : typeof props.wrangler === "object"
-            ? props.wrangler.path
-            : undefined,
-    },
+    wrangler: normalizeWrangler(),
     assets:
       typeof props.assets === "object"
         ? {

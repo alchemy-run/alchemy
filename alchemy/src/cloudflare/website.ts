@@ -89,6 +89,7 @@ export interface WebsiteProps<B extends Bindings>
         path?: string;
         // override main
         main?: string;
+        secrets?: boolean;
       };
 
   /**
@@ -172,7 +173,9 @@ export async function Website<B extends Bindings>(
           ? "wrangler.jsonc"
           : typeof wrangler === "string"
             ? wrangler
-            : (wrangler?.path ?? "wrangler.jsonc"),
+            : wrangler.secrets
+              ? ".alchemy/local/wrangler.jsonc"
+              : (wrangler?.path ?? "wrangler.jsonc"),
       );
 
       const workerName = props.name ?? id;
@@ -209,6 +212,14 @@ export default {
         const wranglerPath = path.relative(cwd, wranglerJsonPath);
         const wranglerDir = path.dirname(wranglerPath);
 
+        // if cwd is not the same as process.cwd(), add a symlink in cwd/.alchemy/miniflare
+        if (cwd !== process.cwd()) {
+          await Exec("ln", {
+            cwd,
+            command: `-s ${path.relative(cwd, process.cwd())}/.alchemy/miniflare .alchemy/miniflare`,
+          });
+        }
+
         await WranglerJson("wrangler.jsonc", {
           path: wranglerPath,
           worker: workerProps,
@@ -220,7 +231,31 @@ export default {
             // path must be relative to the wrangler.jsonc file
             directory: path.relative(wranglerDir, assetsDirPath),
           },
-          transform: props.transform,
+          transform:
+            // if wrangler.secrets is true, add secrets to wrangler.json
+            typeof wrangler === "object" && wrangler.secrets
+              ? {
+                  wrangler(spec) {
+                    spec = {
+                      ...spec,
+                      vars: {
+                        ...spec.vars,
+                        ...Object.fromEntries(
+                          Object.entries(props?.bindings ?? {}).flatMap(
+                            ([key, value]) =>
+                              typeof value === "string"
+                                ? [[key, value]]
+                                : isSecret(value)
+                                  ? [[key, value.unencrypted]]
+                                  : [],
+                          ),
+                        ),
+                      },
+                    };
+                    return props?.transform?.wrangler?.(spec) ?? spec;
+                  },
+                }
+              : props.transform,
         });
       }
 
