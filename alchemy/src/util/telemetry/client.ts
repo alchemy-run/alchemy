@@ -66,9 +66,8 @@ export class TelemetryClient implements ITelemetryClient {
       return {
         ...error, // include additional properties from error object
         name: error.name,
-        message: error.message,
-        // TODO: maybe redact more of the stack trace?
-        stack: error.stack?.replaceAll(os.homedir(), "~"), // redact home directory
+        message: error.message?.replaceAll(os.homedir(), "~"), // redact home directory
+        stack: error.stack?.replaceAll(os.homedir(), "~"),
       };
     }
     return error;
@@ -86,7 +85,7 @@ export class TelemetryClient implements ITelemetryClient {
     if (events.length === 0) {
       return;
     }
-    const { userId, ...data } = await this.context;
+    const { userId, ...context } = await this.context;
     const response = await fetch(`${POSTHOG_CLIENT_API_HOST}/batch`, {
       method: "POST",
       headers: {
@@ -95,18 +94,15 @@ export class TelemetryClient implements ITelemetryClient {
       body: JSON.stringify({
         api_key: POSTHOG_PROJECT_ID,
         historical_migration: false,
-        batch: events.map((e) => {
-          const { event, ...eventData } = e;
-          return {
-            event: event,
-            properties: {
-              distinct_id: userId,
-              ...data,
-              ...eventData,
-            },
-            timestamp: new Date(e.timestamp).toISOString(),
-          };
-        }),
+        batch: events.map(({ event, timestamp, ...properties }) => ({
+          event,
+          properties: {
+            distinct_id: userId,
+            ...context,
+            ...properties,
+          },
+          timestamp: new Date(timestamp).toISOString(),
+        })),
       }),
     });
     if (!response.ok) {

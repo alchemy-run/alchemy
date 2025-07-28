@@ -90,9 +90,9 @@ export namespace Telemetry {
 
   export type Event = AppEvent | ResourceEvent | StateStoreEvent;
   export type EventInput = (
-    | Omit<AppEvent, "context" | "timestamp" | "error">
-    | Omit<ResourceEvent, "context" | "timestamp" | "error">
-    | Omit<StateStoreEvent, "context" | "timestamp" | "error">
+    | Omit<AppEvent, "timestamp" | "error">
+    | Omit<ResourceEvent, "timestamp" | "error">
+    | Omit<StateStoreEvent, "timestamp" | "error">
   ) & {
     error?: ErrorInput;
   };
