@@ -1,14 +1,8 @@
 import { Hono } from "hono";
+import type { CloudflareEnv } from "./env.ts";
 
-// TODO: looks like openauth imports node:fs ...
-// import { issuer } from "./auth/issuer";
+export const api = new Hono<{ Bindings: CloudflareEnv }>();
 
-export const api = new Hono();
+api.get("/hello", (c) => c.text(c.env.ALCHEMY_TEST_VALUE));
 
-api.get("/hello", (c) => c.text("Hello World"));
-
-export default {
-  async fetch(request: Request): Promise<Response> {
-    return api.fetch(request);
-  },
-};
+export default api;

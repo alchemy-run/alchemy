@@ -24,6 +24,7 @@ export const website = await Vite("website", {
   bindings: {
     STORAGE: storage,
     AUTH_STORE: authStore,
+    ALCHEMY_TEST_VALUE: alchemy.secret("Hello from Alchemy!"),
   },
 });
 

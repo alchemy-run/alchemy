@@ -31,5 +31,8 @@ export async function Vite<B extends Bindings>(
     dev: props.dev ?? {
       command: "vite dev",
     },
+    wrangler: {
+      secrets: true,
+    },
   });
 }
