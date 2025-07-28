@@ -3,6 +3,7 @@ import { err, ok, type Result } from "neverthrow";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { external, external_als } from "./bundle/externals.ts";
+import { esbuildPluginAlias } from "./bundle/plugin-alias.ts";
 import { esbuildPluginCompatWarning } from "./bundle/plugin-compat-warning.ts";
 import { createHotReloadPlugin } from "./bundle/plugin-hot-reload.ts";
 import { esbuildPluginHybridNodeCompat } from "./bundle/plugin-hybrid-node-compat.ts";
@@ -319,13 +320,13 @@ export namespace WorkerBundleSource {
           ...props.loader,
         },
         plugins: [
+          esbuildPluginAlias(props.alias ?? {}, this.props.cwd),
           nodeCompat === "v2"
             ? esbuildPluginHybridNodeCompat()
             : esbuildPluginCompatWarning(nodeCompat ?? null),
           ...(props.plugins ?? []),
           ...additionalPlugins,
         ],
-        alias: props.alias,
         external: [
           ...(nodeCompat === "als" ? external_als : external),
           ...(props.external ?? []),
