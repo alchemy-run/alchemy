@@ -71,7 +71,7 @@ export function normalizeWorkerBundle(props: {
             nodeCompat,
             cwd: props.cwd,
             outdir: props.outdir,
-            sourcemap: props.sourceMap !== false ? "linked" : undefined,
+            sourcemap: props.sourceMap !== false ? true : undefined,
             ...props.bundle,
           }),
     );
@@ -305,20 +305,27 @@ export namespace WorkerBundleSource {
       return {
         entryPoints: [entrypoint],
         absWorkingDir: cwd,
+        target: "es2022",
+        loader: {
+          ".js": "jsx",
+          ".mjs": "jsx",
+          ".cjs": "jsx",
+        },
         format,
-        target: "esnext",
+        sourceRoot: this.props.outdir,
+        jsxFactory: "React.createElement",
+        jsxFragment: "React.Fragment",
+        keepNames: true,
         ...props,
         metafile: true,
         write: true,
         bundle: true,
-        conditions: props.conditions ?? ["workerd", "worker", "browser"],
-        mainFields: props.mainFields,
-        loader: {
-          ".sql": "text",
-          ".json": "json",
-          ".wasm": "binary",
-          ...props.loader,
+        define: {
+          "navigator.userAgent": '"Cloudflare-Workers"',
+          "process.env.NODE_ENV": '"undefined"',
+          ...props.define,
         },
+        conditions: props.conditions ?? ["workerd", "worker", "browser"],
         plugins: [
           esbuildPluginAlias(props.alias ?? {}, this.props.cwd),
           nodeCompat === "v2"
