@@ -1,9 +1,11 @@
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { alchemy } from "../alchemy.ts";
 import { Exec } from "../os/exec.ts";
 import { Scope } from "../scope.ts";
 import { isSecret } from "../secret.ts";
 import { detectPackageManager } from "../util/detect-package-manager.ts";
+import { exists } from "../util/exists.ts";
 import { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "./compatibility-date.gen.ts";
@@ -214,6 +216,10 @@ export default {
 
         // if cwd is not the same as process.cwd(), add a symlink in cwd/.alchemy/miniflare
         if (cwd !== process.cwd()) {
+          const alchemyDir = path.resolve(cwd, ".alchemy");
+          if (!(await exists(alchemyDir))) {
+            await mkdir(alchemyDir, { recursive: true });
+          }
           await Exec("miniflare-symlink", {
             cwd,
             command: `ln -s ${path.relative(cwd, process.cwd())}/.alchemy/miniflare .alchemy/miniflare`,
