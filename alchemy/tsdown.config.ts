@@ -10,4 +10,5 @@ export default defineConfig({
     inlineDynamicImports: true,
     banner: "#!/usr/bin/env node",
   },
+  noExternal: ["execa", "open", "xdg-app-paths"]
 });
