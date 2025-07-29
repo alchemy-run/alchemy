@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { alchemy } from "../alchemy.ts";
 import { Exec } from "../os/exec.ts";
@@ -216,15 +216,7 @@ export default {
 
         // if cwd is not the same as process.cwd(), add a symlink in cwd/.alchemy/miniflare
         if (cwd !== process.cwd()) {
-          const alchemyDir = path.resolve(cwd, ".alchemy");
-          if (!(await exists(alchemyDir))) {
-            await mkdir(alchemyDir, { recursive: true });
-          }
-          await Exec("miniflare-symlink", {
-            cwd,
-            command: `ln -s ${path.relative(cwd, process.cwd())}/.alchemy/miniflare .alchemy/miniflare`,
-            memoize: true,
-          });
+          await ensureMiniflarePersistSymlink(cwd);
         }
 
         await WranglerJson("wrangler.jsonc", {
@@ -307,4 +299,19 @@ export default {
       } as WorkerProps<any> & { name: string })) as Website<B>;
     },
   );
+}
+
+async function ensureMiniflarePersistSymlink(cwd: string) {
+  const alchemyDir = path.resolve(cwd, ".alchemy");
+  if (!(await exists(alchemyDir))) {
+    await fs.mkdir(alchemyDir, { recursive: true });
+  }
+  const symlinkPath = path.resolve(alchemyDir, "miniflare");
+  await fs
+    .symlink(path.resolve(".alchemy/miniflare"), symlinkPath)
+    .catch((e) => {
+      if (e.code !== "EEXIST") {
+        throw e;
+      }
+    });
 }
