@@ -5,7 +5,6 @@ import { Exec } from "../os/exec.ts";
 import { Scope } from "../scope.ts";
 import { isSecret } from "../secret.ts";
 import { detectPackageManager } from "../util/detect-package-manager.ts";
-import { exists } from "../util/exists.ts";
 import { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "./compatibility-date.gen.ts";
@@ -302,13 +301,12 @@ export default {
 }
 
 async function ensureMiniflarePersistSymlink(cwd: string) {
-  const alchemyDir = path.resolve(cwd, ".alchemy");
-  if (!(await exists(alchemyDir))) {
-    await fs.mkdir(alchemyDir, { recursive: true });
-  }
-  const symlinkPath = path.resolve(alchemyDir, "miniflare");
+  const target = path.resolve(".alchemy/miniflare");
+  await fs.mkdir(target, { recursive: true });
+
+  await fs.mkdir(path.resolve(cwd, ".alchemy"), { recursive: true });
   await fs
-    .symlink(path.resolve(".alchemy/miniflare"), symlinkPath)
+    .symlink(target, path.resolve(cwd, ".alchemy/miniflare"))
     .catch((e) => {
       if (e.code !== "EEXIST") {
         throw e;
