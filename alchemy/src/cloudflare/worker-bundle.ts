@@ -262,7 +262,7 @@ export namespace WorkerBundleSource {
       const wasmPlugin = createWasmPlugin();
       const options = this.buildOptions([wasmPlugin.plugin]);
       const result = await esbuild.build(options);
-      const { entrypoint, root, modules } = this.resolveBuildOutput(
+      const { entrypoint, root, modules } = await this.formatBuildOutput(
         result.metafile,
       );
       return {
@@ -282,7 +282,7 @@ export namespace WorkerBundleSource {
       await context.watch();
 
       for await (const result of hotReload.iterator) {
-        const { entrypoint, root, modules } = this.resolveBuildOutput(
+        const { entrypoint, root, modules } = await this.formatBuildOutput(
           result.metafile!,
         );
         yield {
@@ -334,8 +334,14 @@ export namespace WorkerBundleSource {
       } satisfies esbuild.BuildOptions;
     }
 
-    private resolveBuildOutput(metafile: esbuild.Metafile): WorkerBundle {
+    private async formatBuildOutput(
+      metafile: esbuild.Metafile,
+    ): Promise<WorkerBundle> {
       const outdir = path.resolve(this.props.cwd, this.props.outdir);
+      await fs.writeFile(
+        path.join(outdir, "metafile.json"),
+        JSON.stringify(metafile, null, 2),
+      );
       const paths: string[] = [];
       let entrypoint: string | undefined;
       for (const [key, value] of Object.entries(metafile.outputs)) {
