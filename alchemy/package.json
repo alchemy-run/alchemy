@@ -144,6 +144,7 @@
     "aws4fetch": "^1.0.20",
     "diff": "^8.0.2",
     "esbuild": "^0.25.1",
+    "execa": "^9.6.0",
     "fast-json-patch": "^3.1.1",
     "fast-xml-parser": "^5.2.5",
     "glob": "^10.0.0",
@@ -181,7 +182,7 @@
     "arktype": "^2.0.0",
     "cloudflare": "^4.0.0",
     "drizzle-orm": "^0.44.2",
-    "execa": "^9.6.0",
+
     "hono": "^4.0.0",
     "prettier": "^3.0.0",
     "stripe": "^17.0.0"
