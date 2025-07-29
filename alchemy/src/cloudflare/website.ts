@@ -214,9 +214,10 @@ export default {
 
         // if cwd is not the same as process.cwd(), add a symlink in cwd/.alchemy/miniflare
         if (cwd !== process.cwd()) {
-          await Exec("ln", {
+          await Exec("miniflare-symlink", {
             cwd,
-            command: `-s ${path.relative(cwd, process.cwd())}/.alchemy/miniflare .alchemy/miniflare`,
+            command: `ln -s ${path.relative(cwd, process.cwd())}/.alchemy/miniflare .alchemy/miniflare`,
+            memoize: true,
           });
         }
 
