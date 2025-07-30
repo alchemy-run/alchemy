@@ -68,22 +68,13 @@ export interface BaseContext<Out extends Resource> {
    */
   destroy(): never;
   /**
-   * Register a cleanup function that will be called when the scope is finalized.
-   * The provided function should spawn/create resources and return a cleanup function.
-   *
-   * @param fn - An async function that creates resources and returns a cleanup function
-   * @returns The result of the provided function
+   * Register a cleanup function that will be called when the process exits.
    *
    * @example
-   * const { process, cleanup } = await this.spawn(async () => {
-   *   const proc = spawn('my-command', ['arg1', 'arg2']);
-   *   return {
-   *     process: proc,
-   *     cleanup: async () => {
-   *       proc.kill();
-   *       await waitForExit(proc);
-   *     }
-   *   };
+   * const proc = spawn('my-command', ['arg1', 'arg2']);
+   * this.onCleanup(async () => {
+   *   proc.kill();
+   *   await waitForExit(proc);
    * });
    */
   onCleanup(fn: () => void | Promise<void>): void;
@@ -174,6 +165,7 @@ export function context<
       throw new DestroyedSignal();
     },
     onCleanup: (fn: () => void | Promise<void>) => {
+      // make the function idempotent so repeated calls don't cause the process to hang
       let promise: Promise<void> | undefined;
       scope.root.onCleanup(async () => {
         promise ??= Promise.resolve(fn());

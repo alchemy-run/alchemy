@@ -542,12 +542,20 @@ export class Scope {
     return promise;
   }
 
+  /**
+   * Run all cleanup functions registered with `onCleanup`.
+   * This should only be called on the root scope.
+   */
   public async cleanup() {
     if (this.parent) return;
     this.logger.log(kleur.gray("Exiting..."));
     await Promise.allSettled(this.cleanups.map((cleanup) => cleanup()));
   }
 
+  /**
+   * Register a cleanup function that will be called when the process exits.
+   * This should only be called on the root scope.
+   */
   public onCleanup(fn: () => Promise<void>) {
     if (this.parent) {
       this.root.onCleanup(fn);
