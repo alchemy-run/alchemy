@@ -68,6 +68,7 @@ export function normalizeWorkerBundle(props: {
             sourcemaps: props.sourceMap !== false,
           })
         : new WorkerBundleSource.ESBuild({
+            id: props.id,
             entrypoint: props.entrypoint,
             format: props.format ?? "esm",
             nodeCompat,
