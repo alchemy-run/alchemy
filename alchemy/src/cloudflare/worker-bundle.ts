@@ -298,6 +298,7 @@ export namespace WorkerBundleSource {
       await context.watch();
 
       for await (const result of hotReload.iterator) {
+        count++;
         const { entrypoint, root, modules } = await this.formatBuildOutput(
           result.metafile!,
         );
