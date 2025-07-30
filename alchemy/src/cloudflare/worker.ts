@@ -729,6 +729,7 @@ const _Worker = Resource(
         : props.namespace?.namespaceName;
 
     const bundleSourceResult = normalizeWorkerBundle({
+      id,
       entrypoint: props.entrypoint,
       script: props.script,
       format: props.format,
@@ -781,6 +782,7 @@ const _Worker = Resource(
         );
         const controller = MiniflareController.singleton;
         url = await controller.add({
+          id,
           name: workerName,
           compatibilityDate,
           compatibilityFlags,
@@ -789,13 +791,6 @@ const _Worker = Resource(
           assets: props.assets,
           bundle: bundleSourceResult.value,
           port: props.dev?.port,
-        });
-        logger.task(this.fqn, {
-          message: `ready at ${url}`,
-          status: "success",
-          resource: id,
-          prefix: "miniflare",
-          prefixColor: "greenBright",
         });
         this.onCleanup(() => controller.dispose());
       }

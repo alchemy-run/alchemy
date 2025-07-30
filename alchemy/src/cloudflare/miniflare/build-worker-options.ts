@@ -14,6 +14,7 @@ import type { AssetsConfig } from "../worker.ts";
 import { createRemoteProxyWorker } from "./remote-binding-proxy.ts";
 
 export interface MiniflareWorkerInput {
+  id: string;
   name: string;
   compatibilityDate: string | undefined;
   compatibilityFlags: string[] | undefined;

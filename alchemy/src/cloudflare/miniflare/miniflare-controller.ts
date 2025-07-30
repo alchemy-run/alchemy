@@ -3,6 +3,7 @@ import assert from "node:assert";
 import path from "node:path";
 import { findOpenPort } from "../../util/find-open-port.ts";
 import type { HTTPServer } from "../../util/http.ts";
+import { logger } from "../../util/logger.ts";
 import { AsyncMutex } from "../../util/mutex.ts";
 import {
   buildWorkerOptions,
@@ -38,22 +39,36 @@ export class MiniflareController {
     this.options.set(input.name, first.value);
     const miniflare = await this.update();
     const proxy = new MiniflareWorkerProxy({
-      name: input.name,
+      name: input.id,
       port: input.port ?? (await findOpenPort()),
       miniflare,
     });
     this.localProxies.set(input.name, proxy);
-    void this.watch(input.name, watcher);
+    void this.watch(input.id, watcher);
+    logger.task(input.id, {
+      message: `Ready at ${proxy.url}`,
+      status: "success",
+      resource: input.id,
+      prefix: "dev",
+      prefixColor: "cyanBright",
+    });
     return proxy.url;
   }
 
   private async watch(
-    name: string,
+    id: string,
     watcher: AsyncGenerator<miniflare.WorkerOptions>,
   ) {
     for await (const options of watcher) {
-      this.options.set(name, options);
+      this.options.set(options.name!, options);
       await this.update();
+      logger.task(id, {
+        message: "Updated",
+        status: "success",
+        resource: id,
+        prefix: "dev",
+        prefixColor: "cyanBright",
+      });
     }
   }
 

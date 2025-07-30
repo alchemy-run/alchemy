@@ -3,11 +3,9 @@ import assert from "node:assert";
 
 export interface HotReloadPluginProps {
   onBuildStart?: () => void | Promise<void>;
-  onBuildEnd?: (result: esbuild.BuildResult) => void | Promise<void>;
-  onBuildError?: (errors: esbuild.Message[]) => void | Promise<void>;
 }
 
-export function createHotReloadPlugin(): {
+export function createHotReloadPlugin(props?: HotReloadPluginProps): {
   plugin: esbuild.Plugin;
   iterator: AsyncIterable<esbuild.BuildResult>;
 } {
@@ -22,6 +20,9 @@ export function createHotReloadPlugin(): {
   const plugin: esbuild.Plugin = {
     name: "alchemy-hot-reload",
     setup(build) {
+      if (props?.onBuildStart) {
+        build.onStart(props.onBuildStart);
+      }
       build.onEnd(async (result) => {
         assert(_controller);
         _controller.enqueue(result);
