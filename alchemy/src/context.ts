@@ -68,6 +68,17 @@ export interface BaseContext<Out extends Resource> {
    */
   destroy(): never;
   /**
+   * Register a cleanup function that will be called when the process exits.
+   *
+   * @example
+   * const proc = spawn('my-command', ['arg1', 'arg2']);
+   * this.onCleanup(async () => {
+   *   proc.kill();
+   *   await waitForExit(proc);
+   * });
+   */
+  onCleanup(fn: () => void | Promise<void>): void;
+  /**
    * Create the Resource envelope (with Alchemy + User properties)
    */
   create(props: Omit<Out, keyof Resource>): Out;
@@ -152,6 +163,14 @@ export function context<
     quiet: scope.quiet,
     destroy: () => {
       throw new DestroyedSignal();
+    },
+    onCleanup: (fn: () => void | Promise<void>) => {
+      // make the function idempotent so repeated calls don't cause the process to hang
+      let promise: Promise<void> | undefined;
+      scope.root.onCleanup(async () => {
+        promise ??= Promise.resolve(fn());
+        await promise;
+      });
     },
     create,
   }) as unknown as Context<Out>;

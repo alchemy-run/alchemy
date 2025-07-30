@@ -1,3 +1,14 @@
+## v0.55.3
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**: Bundle execa in alchemy CLI &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/759 [<samp>(0b90a)</samp>](https://github.com/sam-goodwin/alchemy/commit/0b90a18)
+- **cloudflare**: Add back esbuild alias plugin &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/753 [<samp>(fad6a)</samp>](https://github.com/sam-goodwin/alchemy/commit/fad6a9c)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.55.2...v0.55.3)
+
+---
+
 ## v0.55.2
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

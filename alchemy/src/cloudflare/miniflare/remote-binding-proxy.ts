@@ -32,7 +32,7 @@ export interface RemoteBindingProxy {
 export async function createRemoteProxyWorker(input: {
   name: string;
   bindings: WorkerBindingSpec[];
-}) {
+}): Promise<RemoteBindingProxy> {
   const api = await createCloudflareApi();
   const script = await getInternalWorkerBundle("remote-binding-proxy");
   const [token, subdomain] = await Promise.all([
@@ -42,9 +42,7 @@ export async function createRemoteProxyWorker(input: {
         main_module: script.bundle.entrypoint,
         compatibility_date: "2025-06-16",
         bindings: input.bindings,
-        observability: {
-          enabled: false,
-        },
+        observability: { enabled: false },
       },
       bundle: script.bundle,
       session: {
@@ -55,27 +53,24 @@ export async function createRemoteProxyWorker(input: {
     import("../worker-subdomain.ts").then((m) => m.getAccountSubdomain(api)),
   ]);
 
-  const proxyURL = new URL(`https://${input.name}.${subdomain}.workers.dev`);
+  const proxyURL = `https://${input.name}.${subdomain}.workers.dev`;
   const server = new HTTPServer({
     fetch: async (req) => {
-      const origin = new URL(req.url);
-      const url = new URL(origin.pathname, proxyURL.toString());
-      url.search = origin.search;
-      url.hash = origin.hash;
+      const url = new URL(req.url);
+      const targetUrl = new URL(url.pathname + url.search, proxyURL);
 
-      const requestHeaders = new Headers(req.headers);
-      requestHeaders.set("cf-workers-preview-token", token);
-      requestHeaders.set("host", proxyURL.hostname);
-      requestHeaders.delete("cf-connecting-ip");
+      const headers = new Headers(req.headers);
+      headers.set("cf-workers-preview-token", token);
+      headers.set("host", new URL(proxyURL).hostname);
+      headers.delete("cf-connecting-ip");
 
-      const res = await fetch(url, {
+      const res = await fetch(targetUrl, {
         method: req.method,
-        headers: requestHeaders,
+        headers,
         body: req.body,
         redirect: "manual",
       });
 
-      // Remove headers that are not supported by miniflare
       const responseHeaders = new Headers(res.headers);
       responseHeaders.delete("transfer-encoding");
       responseHeaders.delete("content-encoding");
@@ -86,6 +81,7 @@ export async function createRemoteProxyWorker(input: {
       });
     },
   });
+
   await server.listen();
   return {
     server,
@@ -126,13 +122,12 @@ async function createWorkersPreviewToken(
 }
 
 async function prewarm(url: string, previewToken: string) {
-  const res = await fetch(url, {
-    headers: {
-      "cf-workers-preview-token": previewToken,
-    },
-  });
-  if (!res.ok) {
-    console.error(`Failed to prewarm worker: ${res.status} ${res.statusText}`);
+  try {
+    await fetch(url, {
+      headers: { "cf-workers-preview-token": previewToken },
+    });
+  } catch {
+    // Ignore prewarm errors
   }
 }
 

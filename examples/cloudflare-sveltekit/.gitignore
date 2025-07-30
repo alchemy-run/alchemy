@@ -21,3 +21,6 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# committed so that our smoke tests can run `build` as part of checking
+!wrangler.jsonc

@@ -97,6 +97,7 @@ async function runCommand(
       env: {
         ...process.env,
         ...options.env,
+        DO_NOT_TRACK: "true",
       },
     });
 

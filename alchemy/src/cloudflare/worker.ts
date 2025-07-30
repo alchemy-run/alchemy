@@ -1,4 +1,3 @@
-import kleur from "kleur";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
@@ -9,6 +8,7 @@ import { Resource, ResourceKind } from "../resource.ts";
 import { isSecret } from "../secret.ts";
 import type { type } from "../type.ts";
 import { DeferredPromise } from "../util/deferred-promise.ts";
+import { exists } from "../util/exists.ts";
 import { logger } from "../util/logger.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
@@ -38,8 +38,6 @@ import {
   isDurableObjectNamespace,
 } from "./durable-object-namespace.ts";
 import { type EventSource, isQueueEventSource } from "./event-source.ts";
-import type { MiniflareWorkerOptions } from "./miniflare/miniflare-worker-options.ts";
-import { miniflareServer } from "./miniflare/miniflare.ts";
 import {
   QueueConsumer,
   deleteQueueConsumer,
@@ -48,11 +46,7 @@ import {
 import { isQueue } from "./queue.ts";
 import { Route } from "./route.ts";
 import { uploadAssets } from "./worker-assets.ts";
-import {
-  WorkerBundle,
-  type WorkerBundleSource,
-  normalizeWorkerBundle,
-} from "./worker-bundle.ts";
+import { WorkerBundle, normalizeWorkerBundle } from "./worker-bundle.ts";
 import {
   type WorkerScriptMetadata,
   bumpMigrationTagVersion,
@@ -65,7 +59,6 @@ import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 // Previous versions of `Worker` used the `Bundle` resource.
 // This import is here to avoid errors when destroying the `Bundle` resource.
 import "../esbuild/bundle.ts";
-import { exists } from "../util/exists.ts";
 
 /**
  * Configuration options for static assets
@@ -736,6 +729,7 @@ const _Worker = Resource(
         : props.namespace?.namespaceName;
 
     const bundleSourceResult = normalizeWorkerBundle({
+      id,
       entrypoint: props.entrypoint,
       script: props.script,
       format: props.format,
@@ -762,7 +756,7 @@ const _Worker = Resource(
       }
 
       if (props.dev?.command) {
-        const { url: commandUrl } = await createDevCommand({
+        const result = await createDevCommand({
           id,
           command: props.dev.command,
           cwd: props.dev.cwd || props.cwd || process.cwd(),
@@ -780,18 +774,25 @@ const _Worker = Resource(
             ),
           },
         });
-        url = commandUrl;
+        url = result.url;
+        this.onCleanup(() => result.cleanup());
       } else {
-        url = await createMiniflare({
+        const { MiniflareController } = await import(
+          "./miniflare/miniflare-controller.ts"
+        );
+        const controller = MiniflareController.singleton;
+        url = await controller.add({
           id,
-          workerName,
+          name: workerName,
           compatibilityDate,
           compatibilityFlags,
           bindings: props.bindings,
+          eventSources: props.eventSources,
+          assets: props.assets,
           bundle: bundleSourceResult.value,
           port: props.dev?.port,
-          assets: props.assets,
         });
+        this.onCleanup(() => controller.dispose());
       }
 
       return this({
@@ -926,7 +927,6 @@ const _Worker = Resource(
     let putWorkerResult: PutWorkerResult;
     if (watch) {
       const controller = new AbortController();
-      cleanups.push(() => controller.abort());
       const promise = new DeferredPromise<PutWorkerResult>();
       const runWatch = async () => {
         for await (const bundle of bundleSource.watch(controller.signal)) {
@@ -973,14 +973,12 @@ const _Worker = Resource(
         }
       };
       void runWatch(); // this is not awaited because it's an ongoing process
+      this.onCleanup(() => controller.abort());
       putWorkerResult = await promise.value;
-      await createTail(api, id, workerName)
-        .then((tail) => {
-          cleanups.push(() => tail.close());
-        })
-        .catch((error) => {
-          logger.error(`Failed to create tail for ${workerName}`, error);
-        });
+      const tail = await createTail(api, id, workerName).catch((error) => {
+        logger.error(`Failed to create tail for ${workerName}`, error);
+      });
+      this.onCleanup(() => tail?.close());
     } else {
       const scriptBundle = await bundleSource.create();
       putWorkerResult = await putWorkerWithAssets(props, scriptBundle);
@@ -1101,22 +1099,6 @@ const _Worker = Resource(
     } as unknown as Worker<B>);
   },
 );
-
-const cleanups: (() => any)[] = [];
-let exiting = false;
-
-process.on("SIGINT", async () => {
-  if (cleanups.length > 0) {
-    if (!exiting) {
-      exiting = true;
-      logger.log(`\n${kleur.gray("Exiting...")}`);
-    }
-    // TODO: for some reason this runs twice...
-    // and this whole thing feels hacky anyway
-    await Promise.allSettled(cleanups.map((cleanup) => cleanup()));
-  }
-  process.exit(0);
-});
 
 const assertUnique = <T, Key extends keyof T>(
   inputs: T[],
@@ -1337,56 +1319,12 @@ async function provisionSubdomain(
   }
 }
 
-async function createMiniflare(props: {
-  id: string;
-  workerName: string;
-  compatibilityDate: string;
-  compatibilityFlags: string[];
-  bindings: Bindings | undefined;
-  port: number | undefined;
-  bundle: WorkerBundleSource;
-  assets: AssetsConfig | undefined;
-}) {
-  const sharedOptions: Omit<MiniflareWorkerOptions, "bundle"> = {
-    name: props.workerName,
-    compatibilityDate: props.compatibilityDate,
-    compatibilityFlags: props.compatibilityFlags,
-    bindings: props.bindings,
-    port: props.port,
-    assets: props.assets,
-  };
-
-  const startPromise = new DeferredPromise<string>();
-  const controller = new AbortController();
-  cleanups.push(() => controller.abort());
-  const run = async () => {
-    for await (const bundle of props.bundle.watch(controller.signal)) {
-      const server = await miniflareServer.push({
-        ...sharedOptions,
-        bundle,
-      });
-      if (startPromise.status === "pending") {
-        startPromise.resolve(server.url);
-      }
-      logger.task("", {
-        message: `ready at ${server.url}`,
-        status: "success",
-        resource: props.id,
-        prefix: "miniflare",
-        prefixColor: "greenBright",
-      });
-    }
-  };
-  void run();
-  return await startPromise.value;
-}
-
 async function createDevCommand(props: {
   id: string;
   command: string;
   cwd: string;
   env: Record<string, string | undefined>;
-}): Promise<{ url: string }> {
+}) {
   const persistFile = path.join(process.cwd(), ".alchemy", `${props.id}.pid`);
   if (await exists(persistFile)) {
     const pid = Number.parseInt(await fs.readFile(persistFile, "utf8"));
@@ -1404,7 +1342,9 @@ async function createDevCommand(props: {
   }
   const command = props.command.split(" ");
   const [cmd, ...args] = command;
-  const proc = spawn(cmd, args, {
+
+  const promise = new DeferredPromise<string>();
+  const childProcess = spawn(cmd, args, {
     cwd: props.cwd,
     shell: true,
     env: {
@@ -1420,56 +1360,81 @@ async function createDevCommand(props: {
     },
     stdio: ["inherit", "pipe", "pipe"],
   });
-  const { url } = await new Promise<{ url: string }>((resolve, reject) => {
-    let urlFound = false;
-    let stdout = "";
-    let stderr = "";
-    const urlRegex =
-      /http:\/\/(?:(?:localhost|0\.0\.0\.0|127\.0\.0\.1)|(?:\d{1,3}\.){3}\d{1,3}):\d+(?:\/)?/;
 
-    const parseOutput = (data: string) => {
-      if (!urlFound) {
-        const match = data.match(urlRegex);
-        if (match) {
-          urlFound = true;
-          resolve({ url: match[0] });
-        }
+  // Clean up the pid file when the process exits
+  childProcess.once("exit", async () => {
+    try {
+      await fs.unlink(persistFile);
+    } catch {
+      // ignore
+    }
+  });
+
+  let urlFound = false;
+  let stdout = "";
+  let stderr = "";
+  const urlRegex =
+    /http:\/\/(?:(?:localhost|0\.0\.0\.0|127\.0\.0\.1)|(?:\d{1,3}\.){3}\d{1,3}):\d+(?:\/)?/;
+
+  const parseOutput = (data: string) => {
+    if (!urlFound) {
+      const match = data.match(urlRegex);
+      if (match) {
+        urlFound = true;
+        promise.resolve(match[0]);
       }
-    };
+    }
+  };
 
-    // Handle stdout - parse for URL and write through with colors preserved
-    proc.stdout?.on("data", (data) => {
-      parseOutput(
-        (stdout += data.toString().replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")),
-      );
-      process.stdout.write(data);
-    });
+  // Handle stdout - parse for URL and write through with colors preserved
+  childProcess.stdout?.on("data", (data) => {
+    parseOutput(
+      (stdout += data.toString().replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")),
+    );
+    process.stdout.write(data);
+  });
 
-    proc.stderr?.on("data", (data) => {
-      parseOutput(
-        (stderr += data.toString().replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")),
-      );
-      process.stderr.write(data);
-    });
+  childProcess.stderr?.on("data", (data) => {
+    parseOutput(
+      (stderr += data.toString().replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")),
+    );
+    process.stderr.write(data);
+  });
 
-    proc.on("error", (error) => {
-      reject(error);
-    });
-
-    cleanups.push(async () => {
+  childProcess.on("error", (error) => {
+    promise.reject(error);
+  });
+  if (childProcess.pid) {
+    await fs.mkdir(path.dirname(persistFile), { recursive: true });
+    await fs.writeFile(persistFile, childProcess.pid.toString());
+  }
+  return {
+    url: await promise.value,
+    cleanup: async () => {
       try {
         await fs.unlink(persistFile);
       } catch {
         // ignore
       }
-      proc.kill();
-    });
-  });
-  if (proc.pid) {
-    await fs.mkdir(path.dirname(persistFile), { recursive: true });
-    await fs.writeFile(persistFile, proc.pid.toString());
-  }
-  return { url };
+      if (!childProcess.killed) {
+        childProcess.kill("SIGTERM");
+        // Give it time to exit gracefully
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => {
+            if (!childProcess.killed) {
+              childProcess.kill("SIGKILL");
+            }
+            resolve();
+          }, 5000);
+
+          childProcess.once("exit", () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        });
+      }
+    },
+  };
 }
 
 type PutWorkerOptions = Omit<WorkerProps, "entrypoint"> & {

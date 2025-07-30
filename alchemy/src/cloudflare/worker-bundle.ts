@@ -2,7 +2,9 @@ import esbuild from "esbuild";
 import { err, ok, type Result } from "neverthrow";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { logger } from "../util/logger.ts";
 import { external, external_als } from "./bundle/externals.ts";
+import { esbuildPluginAlias } from "./bundle/plugin-alias.ts";
 import { esbuildPluginCompatWarning } from "./bundle/plugin-compat-warning.ts";
 import { createHotReloadPlugin } from "./bundle/plugin-hot-reload.ts";
 import { esbuildPluginHybridNodeCompat } from "./bundle/plugin-hybrid-node-compat.ts";
@@ -16,6 +18,7 @@ export interface WorkerBundle {
 }
 
 export function normalizeWorkerBundle(props: {
+  id: string;
   script: string | undefined;
   entrypoint: string | undefined;
   noBundle: boolean | undefined;
@@ -65,6 +68,7 @@ export function normalizeWorkerBundle(props: {
             sourcemaps: props.sourceMap !== false,
           })
         : new WorkerBundleSource.ESBuild({
+            id: props.id,
             entrypoint: props.entrypoint,
             format: props.format ?? "esm",
             nodeCompat,
@@ -237,6 +241,7 @@ export namespace WorkerBundleSource {
         esbuild.BuildOptions,
         "entryPoints" | "format" | "absWorkingDir" | "outdir"
       > {
+    id: string;
     entrypoint: string;
     cwd: string;
     outdir: string;
@@ -273,7 +278,20 @@ export namespace WorkerBundleSource {
 
     async *watch(signal: AbortSignal): AsyncIterable<WorkerBundle> {
       const wasm = createWasmPlugin();
-      const hotReload = createHotReloadPlugin();
+      let count = 0;
+      const hotReload = createHotReloadPlugin({
+        onBuildStart: () => {
+          if (count > 0) {
+            logger.task(this.props.id, {
+              message: "Rebuilding",
+              status: "pending",
+              resource: this.props.id,
+              prefix: "dev",
+              prefixColor: "cyanBright",
+            });
+          }
+        },
+      });
       const options = this.buildOptions([wasm.plugin, hotReload.plugin]);
 
       const context = await esbuild.context(options);
@@ -281,6 +299,7 @@ export namespace WorkerBundleSource {
       await context.watch();
 
       for await (const result of hotReload.iterator) {
+        count++;
         const { entrypoint, root, modules } = this.resolveBuildOutput(
           result.metafile!,
         );
@@ -300,7 +319,14 @@ export namespace WorkerBundleSource {
     }
 
     private buildOptions(additionalPlugins: esbuild.Plugin[]) {
-      const { entrypoint, nodeCompat, cwd, format, ...props } = this.props;
+      const {
+        id: _,
+        entrypoint,
+        nodeCompat,
+        cwd,
+        format,
+        ...props
+      } = this.props;
       return {
         entryPoints: [entrypoint],
         absWorkingDir: cwd,
@@ -319,13 +345,13 @@ export namespace WorkerBundleSource {
           ...props.loader,
         },
         plugins: [
+          esbuildPluginAlias(props.alias ?? {}, this.props.cwd),
           nodeCompat === "v2"
             ? esbuildPluginHybridNodeCompat()
             : esbuildPluginCompatWarning(nodeCompat ?? null),
           ...(props.plugins ?? []),
           ...additionalPlugins,
         ],
-        alias: props.alias,
         external: [
           ...(nodeCompat === "als" ? external_als : external),
           ...(props.external ?? []),

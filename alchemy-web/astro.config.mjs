@@ -113,6 +113,10 @@ export default defineConfig({
         theme({
           nav: [
             {
+              label: "Docs",
+              href: "/getting-started",
+            },
+            {
               label: "Blog",
               href: "/blog",
             },
