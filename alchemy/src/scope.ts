@@ -1,3 +1,4 @@
+import kleur from "kleur";
 import { AsyncLocalStorage } from "node:async_hooks";
 import util from "node:util";
 import { onExit } from "signal-exit";
@@ -554,13 +555,11 @@ export class Scope {
    */
   private installExitHandlers() {
     if (this.parent) return;
-    onExit((code, signal) => {
+    onExit((code) => {
       if (this.cleanups.length === 0) return;
-      this.logger.log(
-        `Received ${signal}, running ${this.cleanups.length} cleanup functions... (code: ${code})`,
-      );
+      this.logger.log(kleur.gray("Exiting..."));
       Promise.allSettled(this.cleanups.map((cleanup) => cleanup())).then(() => {
-        console.log("Exiting with code:", code);
+        console.log("Exiting with code:", code); // this never gets logged, thanks Miniflare
         process.exit(code);
       });
       return true;
