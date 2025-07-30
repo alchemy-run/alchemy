@@ -8,6 +8,7 @@ import { Resource, ResourceKind } from "../resource.ts";
 import { isSecret } from "../secret.ts";
 import type { type } from "../type.ts";
 import { DeferredPromise } from "../util/deferred-promise.ts";
+import { exists } from "../util/exists.ts";
 import { logger } from "../util/logger.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
@@ -58,8 +59,6 @@ import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 // Previous versions of `Worker` used the `Bundle` resource.
 // This import is here to avoid errors when destroying the `Bundle` resource.
 import "../esbuild/bundle.ts";
-import { exists } from "../util/exists.ts";
-import { getMiniflareSingleton } from "./miniflare/index.ts";
 
 /**
  * Configuration options for static assets
@@ -756,51 +755,49 @@ const _Worker = Resource(
       }
 
       if (props.dev?.command) {
-        const dev = props.dev;
-        const result = await this.spawn(async () => {
-          return await createDevCommand({
-            id,
-            command: dev.command,
-            cwd: dev.cwd || props.cwd || process.cwd(),
-            env: {
-              ...(process.env ?? {}),
-              ...props.env,
-              ...Object.fromEntries(
-                Object.entries(props.bindings ?? {}).flatMap(([key, value]) =>
-                  typeof value === "string"
-                    ? [[key, value]]
-                    : isSecret(value)
-                      ? [[key, value.unencrypted]]
-                      : [],
-                ),
+        const result = await createDevCommand({
+          id,
+          command: props.dev.command,
+          cwd: props.dev.cwd || props.cwd || process.cwd(),
+          env: {
+            ...(process.env ?? {}),
+            ...props.env,
+            ...Object.fromEntries(
+              Object.entries(props.bindings ?? {}).flatMap(([key, value]) =>
+                typeof value === "string"
+                  ? [[key, value]]
+                  : isSecret(value)
+                    ? [[key, value.unencrypted]]
+                    : [],
               ),
-            },
-          });
+            ),
+          },
         });
         url = result.url;
+        this.onCleanup(() => result.cleanup());
       } else {
-        const result = await this.spawn(async () => {
-          const controller = await getMiniflareSingleton();
-          const url = await controller.add({
-            name: workerName,
-            compatibilityDate,
-            compatibilityFlags,
-            bindings: props.bindings,
-            eventSources: props.eventSources,
-            assets: props.assets,
-            bundle: bundleSourceResult.value,
-            port: props.dev?.port,
-          });
-          logger.task(this.fqn, {
-            message: `ready at ${url}`,
-            status: "success",
-            resource: id,
-            prefix: "miniflare",
-            prefixColor: "greenBright",
-          });
-          return { url, cleanup: () => controller.dispose() };
+        const { MiniflareController } = await import(
+          "./miniflare/miniflare-controller.ts"
+        );
+        const controller = MiniflareController.singleton;
+        url = await controller.add({
+          name: workerName,
+          compatibilityDate,
+          compatibilityFlags,
+          bindings: props.bindings,
+          eventSources: props.eventSources,
+          assets: props.assets,
+          bundle: bundleSourceResult.value,
+          port: props.dev?.port,
         });
-        url = result.url;
+        logger.task(this.fqn, {
+          message: `ready at ${url}`,
+          status: "success",
+          resource: id,
+          prefix: "miniflare",
+          prefixColor: "greenBright",
+        });
+        this.onCleanup(() => controller.dispose());
       }
 
       return this({
@@ -934,68 +931,59 @@ const _Worker = Resource(
 
     let putWorkerResult: PutWorkerResult;
     if (watch) {
-      const result = await this.spawn(async () => {
-        const controller = new AbortController();
-        const promise = new DeferredPromise<PutWorkerResult>();
-        const runWatch = async () => {
-          for await (const bundle of bundleSource.watch(controller.signal)) {
-            if (promise.status === "pending") {
-              await putWorkerWithAssets(props, bundle)
-                .then((result) => promise.resolve(result))
-                .catch((error) => {
-                  controller.abort();
-                  promise.reject(error);
-                });
-              continue;
-            }
-
-            logger.task("", {
-              message: "reload",
-              status: "success",
-              resource: id,
-              prefix: "build",
-              prefixColor: "cyanBright",
-            });
-            await putWorker(api, {
-              ...props,
-              workerName,
-              scriptBundle: bundle,
-              dispatchNamespace,
-              version: props.version,
-              compatibilityDate,
-              compatibilityFlags,
-              assetUploadResult: assetsBinding
-                ? {
-                    keepAssets: true,
-                    assetConfig: props.assets,
-                  }
-                : undefined,
-              unstable_cacheWorkerSettings: true,
-            });
-            logger.task("", {
-              message: "updated",
-              status: "success",
-              resource: id,
-              prefix: "build",
-              prefixColor: "greenBright",
-            });
+      const controller = new AbortController();
+      const promise = new DeferredPromise<PutWorkerResult>();
+      const runWatch = async () => {
+        for await (const bundle of bundleSource.watch(controller.signal)) {
+          if (promise.status === "pending") {
+            await putWorkerWithAssets(props, bundle)
+              .then((result) => promise.resolve(result))
+              .catch((error) => {
+                controller.abort();
+                promise.reject(error);
+              });
+            continue;
           }
-        };
-        void runWatch(); // this is not awaited because it's an ongoing process
-        return {
-          putWorkerResult: await promise.value,
-          cleanup: async () => {
-            controller.abort();
-          },
-        };
+
+          logger.task("", {
+            message: "reload",
+            status: "success",
+            resource: id,
+            prefix: "build",
+            prefixColor: "cyanBright",
+          });
+          await putWorker(api, {
+            ...props,
+            workerName,
+            scriptBundle: bundle,
+            dispatchNamespace,
+            version: props.version,
+            compatibilityDate,
+            compatibilityFlags,
+            assetUploadResult: assetsBinding
+              ? {
+                  keepAssets: true,
+                  assetConfig: props.assets,
+                }
+              : undefined,
+            unstable_cacheWorkerSettings: true,
+          });
+          logger.task("", {
+            message: "updated",
+            status: "success",
+            resource: id,
+            prefix: "build",
+            prefixColor: "greenBright",
+          });
+        }
+      };
+      void runWatch(); // this is not awaited because it's an ongoing process
+      this.onCleanup(() => controller.abort());
+      putWorkerResult = await promise.value;
+      const tail = await createTail(api, id, workerName).catch((error) => {
+        logger.error(`Failed to create tail for ${workerName}`, error);
       });
-      putWorkerResult = result.putWorkerResult;
-      await this.spawn(async () => {
-        const tail = await createTail(api, id, workerName);
-        return {
-          cleanup: () => tail.close(),
-        };
-      });
+      this.onCleanup(() => tail?.close());
     } else {
       const scriptBundle = await bundleSource.create();
       putWorkerResult = await putWorkerWithAssets(props, scriptBundle);

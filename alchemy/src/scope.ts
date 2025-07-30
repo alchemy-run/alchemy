@@ -1,7 +1,6 @@
 import kleur from "kleur";
 import { AsyncLocalStorage } from "node:async_hooks";
 import util from "node:util";
-import { onExit } from "signal-exit";
 import type { Phase } from "./alchemy.ts";
 import { destroy, destroyAll, DestroyStrategy } from "./destroy.ts";
 import {
@@ -182,12 +181,6 @@ export class Scope {
       throw new Error("Phase is required");
     }
     this.phase = phase;
-
-    // Install exit handlers on first root scope creation
-    if (!this.parent && !Scope.exitHandlerInstalled) {
-      Scope.exitHandlerInstalled = true;
-      this.installExitHandlers();
-    }
 
     this.logger = this.quiet
       ? createDummyLogger()
@@ -477,8 +470,7 @@ export class Scope {
     });
 
     if (!this.parent && process.env.ALCHEMY_TEST_KILL_ON_FINALIZE) {
-      this.logger.log("[debug] Killing on finalize");
-      await Promise.allSettled(this.cleanups.map((cleanup) => cleanup()));
+      await this.cleanup();
       process.exit(0);
     }
   }
@@ -550,47 +542,18 @@ export class Scope {
     return promise;
   }
 
-  /**
-   * Install global process exit handlers to ensure cleanup
-   */
-  private installExitHandlers() {
+  public async cleanup() {
     if (this.parent) return;
-    onExit((code) => {
-      if (this.cleanups.length === 0) return;
-      this.logger.log(kleur.gray("Exiting..."));
-      Promise.allSettled(this.cleanups.map((cleanup) => cleanup())).then(() => {
-        console.log("Exiting with code:", code); // this never gets logged, thanks Miniflare
-        process.exit(code);
-      });
-      return true;
-    });
+    this.logger.log(kleur.gray("Exiting..."));
+    await Promise.allSettled(this.cleanups.map((cleanup) => cleanup()));
   }
 
-  /**
-   * Register a cleanup function that will be called when the scope is finalized.
-   * The provided function should create resources and return an object with a cleanup function.
-   * This should only be called on the root scope to ensure proper cleanup.
-   */
-  public async spawn<T extends { cleanup: () => Promise<void> }>(
-    fn: () => Promise<T> | T,
-  ): Promise<T> {
-    // If not root scope, delegate to root
-    if (this.parent !== undefined) {
-      return this.root.spawn(fn);
+  public onCleanup(fn: () => Promise<void>) {
+    if (this.parent) {
+      this.root.onCleanup(fn);
+      return;
     }
-
-    // Execute the function to get the resource and cleanup
-    const result = await fn();
-
-    // Register the cleanup function
-    let cleanupPromise: Promise<void> | undefined;
-    const once = async () => {
-      cleanupPromise ??= result.cleanup();
-      await cleanupPromise;
-    };
-    this.cleanups.push(once);
-
-    return result;
+    this.cleanups.push(fn);
   }
 
   /**

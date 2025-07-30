@@ -10,6 +10,10 @@ import {
 } from "./build-worker-options.ts";
 import { MiniflareWorkerProxy } from "./miniflare-worker-proxy.ts";
 
+declare global {
+  var ALCHEMY_MINIFLARE_CONTROLLER: MiniflareController | undefined;
+}
+
 export class MiniflareController {
   abort = new AbortController();
   miniflare: miniflare.Miniflare | undefined;
@@ -17,6 +21,11 @@ export class MiniflareController {
   localProxies = new Map<string, MiniflareWorkerProxy>();
   remoteProxies = new Map<string, HTTPServer>();
   mutex = new AsyncMutex();
+
+  static get singleton() {
+    globalThis.ALCHEMY_MINIFLARE_CONTROLLER ??= new MiniflareController();
+    return globalThis.ALCHEMY_MINIFLARE_CONTROLLER;
+  }
 
   async add(input: MiniflareWorkerInput) {
     const { watch, remoteProxy } = await buildWorkerOptions(input);

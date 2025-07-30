@@ -86,9 +86,7 @@ export interface BaseContext<Out extends Resource> {
    *   };
    * });
    */
-  spawn<T extends { cleanup: () => void | Promise<void> }>(
-    fn: () => Promise<T> | T,
-  ): Promise<T>;
+  onCleanup(fn: () => void | Promise<void>): void;
   /**
    * Create the Resource envelope (with Alchemy + User properties)
    */
@@ -175,10 +173,12 @@ export function context<
     destroy: () => {
       throw new DestroyedSignal();
     },
-    spawn: async <T extends { cleanup: () => Promise<void> }>(
-      fn: () => Promise<T> | T,
-    ) => {
-      return scope.root.spawn(fn);
+    onCleanup: (fn: () => void | Promise<void>) => {
+      let promise: Promise<void> | undefined;
+      scope.root.onCleanup(async () => {
+        promise ??= Promise.resolve(fn());
+        await promise;
+      });
     },
     create,
   }) as unknown as Context<Out>;
