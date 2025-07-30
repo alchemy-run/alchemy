@@ -55,18 +55,10 @@ export class MiniflareWorkerProxy {
       return;
     }
     this.wss.handleUpgrade(req, socket, head, (client) => {
-      client.on("message", (event, binary) => {
-        server.send(event, { binary });
-      });
-      client.on("close", (code, reason) => {
-        server.close(code, reason);
-      });
-      server.on("message", (event, binary) => {
-        client.send(event, { binary });
-      });
-      server.on("close", (code, reason) => {
-        client.close(code, reason);
-      });
+      client.on("message", (event, binary) => server.send(event, { binary }));
+      client.on("close", (code, reason) => server.close(code, reason));
+      server.on("message", (event, binary) => client.send(event, { binary }));
+      server.on("close", (code, reason) => client.close(code, reason));
       this.wss.emit("connection", client, req);
     });
   }
@@ -157,9 +149,8 @@ const writeMiniflareResponseToNode = (
   out: http.ServerResponse,
 ) => {
   out.statusCode = res.status;
-  res.headers.forEach((value, key) => {
-    out.setHeader(key, value);
-  });
+  res.headers.forEach((value, key) => out.setHeader(key, value));
+
   if (res.body) {
     Readable.fromWeb(res.body).pipe(out, { end: true });
   } else {
