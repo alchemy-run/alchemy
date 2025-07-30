@@ -108,10 +108,6 @@ As part of this guide, we'll:
 
    Update your `alchemy.run.ts` to support multiple stages, use the [CloudflareStateStore](/guides/cloudflare-state-store) and add a [GithubComment](/providers/github/comment) to the PR with the preview URL:
 
-   :::tip
-   Make sure you set up your `ALCHEMY_STATE_TOKEN` by following the [Cloudflare State Store Guide](/guides/cloudflare-state-store)
-   :::
-
    ```diff lang='ts'
    import alchemy from "alchemy";
    import { Worker, Vite } from "alchemy/cloudflare";
