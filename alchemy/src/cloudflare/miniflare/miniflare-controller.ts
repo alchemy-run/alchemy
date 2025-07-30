@@ -39,7 +39,7 @@ export class MiniflareController {
     this.options.set(input.name, first.value);
     const miniflare = await this.update();
     const proxy = new MiniflareWorkerProxy({
-      name: input.id,
+      name: input.name,
       port: input.port ?? (await findOpenPort()),
       miniflare,
     });
