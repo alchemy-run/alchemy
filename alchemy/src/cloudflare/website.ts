@@ -117,12 +117,14 @@ export async function Website<B extends Bindings>(
     },
   } as const;
 
+  const secrets = props.wrangler?.secrets ?? !props.wrangler?.path;
+
   const textBindings = Object.fromEntries(
     Object.entries(props.bindings ?? {}).flatMap(([key, value]) => {
       if (typeof value === "string") {
         return [[key, value]];
       }
-      if (isSecret(value) && props.wrangler?.secrets !== false) {
+      if (isSecret(value) && secrets) {
         return [[key, value.unencrypted]];
       }
       return [];
@@ -165,14 +167,14 @@ export async function Website<B extends Bindings>(
     }
     await ensureMiniflarePersistSymlink(paths.cwd);
     await WranglerJson("wrangler.jsonc", {
-      path: path.relative(process.cwd(), paths.wrangler),
+      path: path.relative(paths.cwd, paths.wrangler),
       worker,
       assets: {
         binding: "ASSETS",
         directory: path.relative(paths.cwd, paths.assets),
       },
       main: path.relative(paths.cwd, paths.main),
-      secrets: props.wrangler?.secrets ?? true,
+      secrets,
       transform: {
         wrangler: (spec) => {
           const modified = {

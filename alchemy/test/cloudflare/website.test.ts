@@ -159,7 +159,63 @@ describe("Website Resource", () => {
     }
   });
 
-  test("places wrangler.jsonc in project root when no cwd specified", async (scope) => {
+  test("respects cwd property with custom wrangler path", async (scope) => {
+    const name = `${BRANCH_PREFIX}-test-website-cwd-custom`;
+    const tempDir = path.resolve(".out", "alchemy-website-cwd-custom-test");
+    const subDir = path.join(tempDir, "myproject");
+    const distDir = path.join(subDir, "dist");
+    const entrypoint = path.join(subDir, "worker.ts");
+
+    try {
+      // Create temporary directory structure
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.mkdir(subDir, { recursive: true });
+      await fs.mkdir(distDir, { recursive: true });
+
+      // Create a simple index.html in the dist directory
+      await fs.writeFile(
+        path.join(distDir, "index.html"),
+        "<html><body>Hello Custom Website!</body></html>",
+      );
+
+      // Create a simple worker entrypoint
+      await fs.writeFile(
+        entrypoint,
+        `export default {
+          async fetch(request, env) {
+            return new Response("Hello from custom worker!");
+          }
+        };`,
+      );
+
+      // Create website with cwd and custom wrangler filename
+      const website = await Website(name, {
+        cwd: subDir,
+        entrypoint,
+        assets: path.resolve(distDir), // Use absolute path for assets
+        wrangler: {
+          path: "custom-wrangler.json",
+        },
+        adopt: true,
+      });
+
+      // Verify the website was created successfully
+      expect(website.name).toBe(name);
+
+      // Verify custom wrangler file was created in the correct location (subDir)
+      const wranglerPath = path.join(subDir, "custom-wrangler.json");
+      await expect(fs.access(wranglerPath)).resolves.toBeUndefined();
+
+      // Verify custom wrangler file was NOT created in the root tempDir
+      const rootWranglerPath = path.join(tempDir, "custom-wrangler.json");
+      await expect(fs.access(rootWranglerPath)).rejects.toThrow();
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await destroy(scope);
+    }
+  });
+
+  test("places wrangler.jsonc in .alchemy/local when no cwd specified", async (scope) => {
     const name = `${BRANCH_PREFIX}-test-website-default-cwd`;
     const tempDir = path.join(".out", "alchemy-website-default-test");
     const distDir = path.join(tempDir, "dist");
