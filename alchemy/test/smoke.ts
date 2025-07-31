@@ -97,6 +97,7 @@ async function runCommand(
       env: {
         ...process.env,
         ...options.env,
+        ALCHEMY_E2E: "1",
         DO_NOT_TRACK: "true",
       },
     });

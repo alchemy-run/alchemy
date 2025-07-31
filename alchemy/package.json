@@ -61,9 +61,9 @@
       "bun": "./src/cloudflare/index.ts",
       "import": "./lib/cloudflare/index.js"
     },
-    "./cloudflare/vite-plugin": {
-      "bun": "./src/cloudflare/vite-plugin.ts",
-      "import": "./lib/cloudflare/vite-plugin.js"
+    "./cloudflare/runtime": {
+      "bun": "./src/cloudflare/runtime/index.ts",
+      "import": "./lib/cloudflare/runtime/index.js"
     },
     "./dns": {
       "bun": "./src/dns/index.ts",
@@ -188,7 +188,6 @@
     "arktype": "^2.0.0",
     "cloudflare": "^4.0.0",
     "drizzle-orm": "^0.44.2",
-
     "hono": "^4.0.0",
     "prettier": "^3.0.0",
     "stripe": "^17.0.0"
@@ -239,7 +238,7 @@
     "typescript": "^5.8.3",
     "vite": "^6.0.7",
     "vitepress": "^1.6.3",
-    "wrangler": "^3.114.0",
+    "wrangler": "^4.27.0",
     "yaml": "^2.7.1",
     "zod": "^4.0.10"
   }

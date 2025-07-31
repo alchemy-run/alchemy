@@ -1,4 +1,5 @@
 import path from "node:path";
+import { getPackageManagerRunner } from "../util/detect-package-manager.ts";
 import type { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
 import { Website, type WebsiteProps } from "./website.ts";
@@ -50,22 +51,16 @@ export async function Nuxt<B extends Bindings>(
   id: string,
   props?: Partial<NuxtProps<B>>,
 ): Promise<Nuxt<B>> {
-  // Call the underlying Website resource with Nuxt defaults
-  return Website(id, {
+  const runner = await getPackageManagerRunner();
+  return await Website(id, {
     ...props,
     noBundle: props?.noBundle ?? true,
-    // Default build command, can be overridden by props.command
-    command: props?.command ?? "nuxt build",
+    build: props?.build ?? `${runner} nuxt build`,
+    dev: props?.dev ?? `${runner} nuxt dev`,
+    compatibility: "node",
     // Default entry point for cloudflare-module preset
-    main: props?.main ?? "./.output/server/index.mjs",
+    entrypoint: props?.entrypoint ?? "./.output/server/index.mjs",
     // Default static assets directory for cloudflare-module preset
     assets: props?.assets ?? path.join(".output", "public"),
-    // Ensure nodejs_compat flag is included for Nuxt compatibility
-    compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
-    // Enable wrangler by default, common for Nuxt/Cloudflare deployments
-    wrangler: props?.wrangler ?? true,
-    dev: props?.dev ?? {
-      command: "nuxt dev",
-    },
   });
 }

@@ -32,7 +32,6 @@ export * from "./email-rule.ts";
 export * from "./hyperdrive.ts";
 export * from "./images.ts";
 export * from "./kv-namespace.ts";
-export * from "./local-dev-cloudflare-shim.ts";
 export * from "./nuxt.ts";
 export * from "./orange.ts";
 export * from "./permission-groups.ts";

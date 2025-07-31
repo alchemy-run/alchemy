@@ -1,8 +1,7 @@
-import path from "node:path";
+import { getPackageManagerRunner } from "../util/detect-package-manager.ts";
 import type { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
-import type { WebsiteProps } from "./website.ts";
-import { Website } from "./website.ts";
+import { Website, type WebsiteProps } from "./website.ts";
 import type { Worker } from "./worker.ts";
 
 /**
@@ -65,29 +64,12 @@ export async function Astro<B extends Bindings>(
   id: string,
   props: AstroProps<B> = {},
 ): Promise<Astro<B>> {
-  if (props?.bindings?.ASSETS) {
-    throw new Error("ASSETS binding is reserved for internal use");
-  }
-  const wrangler = props?.wrangler ?? true;
-  const main = props?.main ?? path.join("dist", "_worker.js/index.js");
-  const assetsDir =
-    typeof props?.assets === "string"
-      ? props?.assets
-      : (props?.assets?.dist ?? "dist");
-
-  return Website(id, {
+  const runner = await getPackageManagerRunner();
+  return await Website(id, {
     ...props,
-    command: props.command ?? "astro build",
-    dev: props.dev ?? {
-      command: "astro dev",
-    },
-    noBundle: props.noBundle ?? true,
-    main,
-    assets: {
-      dist: assetsDir,
-      not_found_handling: "none",
-      run_worker_first: false,
-    },
-    wrangler,
+    build: props.build ?? `${runner} astro build`,
+    dev: props.dev ?? `${runner} astro dev`,
+    entrypoint: props.entrypoint ?? "dist/_worker.js/index.js",
+    assets: props.assets ?? "dist",
   });
 }
