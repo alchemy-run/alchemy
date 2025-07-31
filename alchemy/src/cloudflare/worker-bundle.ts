@@ -1,7 +1,7 @@
 import esbuild from "esbuild";
 import { err, ok, type Result } from "neverthrow";
 import fs from "node:fs/promises";
-import path from "node:path";
+import path from "pathe";
 import { logger } from "../util/logger.ts";
 import { external, external_als } from "./bundle/externals.ts";
 import { esbuildPluginAlias } from "./bundle/plugin-alias.ts";
