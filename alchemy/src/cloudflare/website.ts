@@ -18,24 +18,84 @@ import { WranglerJson, type WranglerJsonSpec } from "./wrangler.json.ts";
 
 export interface WebsiteProps<B extends Bindings>
   extends Omit<WorkerProps<B>, "assets" | "dev"> {
+  /**
+   * Configuration for the build command
+   *
+   * If not provided, the build is assumed to have already happened.
+   */
   build?:
     | string
     | {
+        /**
+         * The command to run to build the site
+         */
         command: string;
+        /**
+         * Additional environment variables to set when running the build command
+         */
         env?: Record<string, string>;
+        /**
+         * Whether to memoize the command (only re-run if the command changes)
+         *
+         * When set to `true`, the command will only be re-executed if the command string changes.
+         *
+         * When set to an object with `patterns`, the command will be re-executed if either:
+         * 1. The command string changes, or
+         * 2. The contents of any files matching the glob patterns change
+         *
+         * ⚠️ **Important Note**: When using memoization with build commands, the build outputs
+         * will not be produced if the command is memoized. This is because the command is not
+         * actually executed when memoized. Consider disabling memoization in CI environments:
+         *
+         * @example
+         * // Disable memoization in CI to ensure build outputs are always produced
+         * await Website("my-website", {
+         *   command: "vite build",
+         *   memoize: process.env.CI ? false : {
+         *     patterns: ["./src/**"]
+         *   }
+         * });
+         *
+         * @default false
+         */
         memoize?: boolean | { patterns: string[] };
       };
+  /**
+   * Configuration for the dev command
+   */
   dev?:
     | string
     | {
+        /**
+         * The command to run to start the dev server
+         */
         command: string;
+        /**
+         * Additional environment variables to set when running the dev command
+         */
         env?: Record<string, string>;
-        url?: string | undefined;
       };
+  /**
+   * The directory containing static assets
+   *
+   * @default dist
+   */
   assets?: string | ({ directory?: string } & AssetsConfig);
-  cwd?: string;
+  /**
+   * Configures default routing to support client-side routing for Single Page Applications (SPA)
+   *
+   * @default false
+   */
   spa?: boolean;
+  /**
+   * Configuration for the wrangler.json file
+   */
   wrangler?: {
+    /**
+     * Path to the wrangler.json file
+     *
+     * @default .alchemy/local/wrangler.jsonc
+     */
     path?: string;
     /**
      * The main entry point for the worker
@@ -56,6 +116,11 @@ export interface WebsiteProps<B extends Bindings>
     transform?: (
       spec: WranglerJsonSpec,
     ) => WranglerJsonSpec | Promise<WranglerJsonSpec>;
+    /**
+     * Whether to include secrets in the wrangler.json file
+     *
+     * @default true if no path is specified, false otherwise
+     */
     secrets?: boolean;
   };
 }
@@ -83,76 +148,64 @@ export async function Website<B extends Bindings>(
     "ASSETS binding is reserved for internal use",
   );
 
-  const paths = {
-    cwd: props.cwd ?? process.cwd(),
-    get assets() {
-      return path.resolve(
-        this.cwd,
+  const paths = (() => {
+    const cwd = props.cwd ?? process.cwd();
+    return {
+      cwd,
+      assets: path.resolve(
+        cwd,
         typeof assets === "string" ? assets : (assets?.directory ?? "dist"),
-      );
-    },
-    get local() {
-      return path.resolve(this.cwd, ".alchemy/local");
-    },
-    get entrypoint() {
-      return path.resolve(
-        this.cwd,
+      ),
+      local: path.resolve(cwd, ".alchemy/local"),
+      entrypoint: path.resolve(
+        cwd,
         props.entrypoint ?? ".alchemy/local/worker.js",
-      );
-    },
-    get wrangler() {
-      return path.resolve(
-        this.cwd,
-        props.wrangler?.path ?? ".alchemy/local/wrangler.jsonc",
-      );
-    },
-    get main() {
-      if (props.wrangler?.main) {
-        return path.resolve(this.cwd, props.wrangler.main);
-      }
-      return this.entrypoint;
-    },
-    get miniflare() {
-      return path.resolve(this.cwd, ".alchemy/miniflare");
-    },
-  } as const;
-
+      ),
+      get wrangler() {
+        return {
+          path: path.resolve(
+            cwd,
+            props.wrangler?.path ?? ".alchemy/local/wrangler.jsonc",
+          ),
+          main: props.wrangler?.main
+            ? path.resolve(cwd, props.wrangler.main)
+            : this.entrypoint,
+        };
+      },
+    };
+  })();
   const secrets = props.wrangler?.secrets ?? !props.wrangler?.path;
-
-  const textBindings = Object.fromEntries(
-    Object.entries(props.bindings ?? {}).flatMap(([key, value]) => {
-      if (typeof value === "string") {
-        return [[key, value]];
-      }
-      if (isSecret(value) && secrets) {
-        return [[key, value.unencrypted]];
-      }
-      return [];
-    }),
-  );
   const env = {
     ...(process.env ?? {}),
     ...(props.env ?? {}),
-    ...(typeof build === "object" ? build.env : {}),
-    ...textBindings,
+    ...Object.fromEntries(
+      Object.entries(props.bindings ?? {}).flatMap(([key, value]) => {
+        if (typeof value === "string") {
+          return [[key, value]];
+        }
+        if (isSecret(value) && secrets) {
+          return [[key, value.unencrypted]];
+        }
+        return [];
+      }),
+    ),
   };
+  const worker = {
+    ...workerProps,
+    name,
+    cwd: path.relative(process.cwd(), paths.cwd),
+    compatibilityDate:
+      workerProps.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
+    assets: {
+      html_handling: "auto-trailing-slash",
+      not_found_handling: spa ? "single-page-application" : "none",
+      run_worker_first: false,
+      ...(typeof props.assets === "string" ? {} : props.assets),
+    },
+    entrypoint: path.relative(paths.cwd, paths.entrypoint),
+  } as WorkerProps<B> & { name: string };
 
   return await alchemy.run(id, { parent: Scope.current }, async (scope) => {
-    const worker = {
-      ...workerProps,
-      name,
-      cwd: path.relative(process.cwd(), paths.cwd),
-      compatibilityDate:
-        workerProps.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
-      assets: {
-        html_handling: "auto-trailing-slash",
-        not_found_handling: spa ? "single-page-application" : "none",
-        run_worker_first: false,
-        ...(typeof props.assets === "string" ? {} : props.assets),
-      },
-      entrypoint: path.relative(paths.cwd, paths.entrypoint),
-    } as WorkerProps<B> & { name: string };
-
     if (!workerProps.entrypoint) {
       await File("entrypoint", {
         path: path.relative(process.cwd(), paths.entrypoint),
@@ -165,27 +218,20 @@ export async function Website<B extends Bindings>(
             };`,
       });
     }
+
     await ensureMiniflarePersistSymlink(paths.cwd);
+
     await WranglerJson("wrangler.jsonc", {
-      path: path.relative(paths.cwd, paths.wrangler),
+      path: path.relative(paths.cwd, paths.wrangler.path),
       worker,
       assets: {
         binding: "ASSETS",
         directory: path.relative(paths.cwd, paths.assets),
       },
-      main: path.relative(paths.cwd, paths.main),
+      main: path.relative(paths.cwd, paths.wrangler.main),
       secrets,
       transform: {
-        wrangler: (spec) => {
-          const modified = {
-            ...spec,
-            vars: {
-              ...spec.vars,
-              ...textBindings,
-            },
-          };
-          return props.wrangler?.transform?.(modified) ?? modified;
-        },
+        wrangler: props.wrangler?.transform,
       },
     });
 
@@ -207,7 +253,10 @@ export async function Website<B extends Bindings>(
       url = await runDevCommand(scope, {
         id,
         command: typeof dev === "string" ? dev : dev.command,
-        env,
+        env: {
+          ...env,
+          ...(typeof dev === "object" ? dev.env : {}),
+        },
         cwd: paths.cwd,
       });
     }
@@ -224,9 +273,7 @@ export async function Website<B extends Bindings>(
             }
           : {}),
       },
-      dev: {
-        url: url ?? (typeof dev === "object" ? dev.url : undefined),
-      },
+      dev: url ? { url } : undefined,
     })) as Website<B>;
   });
 }
