@@ -67,6 +67,7 @@ export async function Astro<B extends Bindings>(
   const runner = await getPackageManagerRunner();
   return await Website(id, {
     ...props,
+    noBundle: props.noBundle ?? true,
     build: props.build ?? `${runner} astro build`,
     dev: props.dev ?? `${runner} astro dev`,
     entrypoint: props.entrypoint ?? "dist/_worker.js/index.js",
