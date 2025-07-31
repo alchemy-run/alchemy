@@ -4,7 +4,7 @@ import { once } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { alchemy } from "../alchemy.ts";
-import { File, Folder } from "../fs/index.ts";
+import { File } from "../fs/index.ts";
 import { Exec } from "../os/index.ts";
 import { Scope } from "../scope.ts";
 import { isSecret, type Secret } from "../secret.ts";
@@ -34,9 +34,9 @@ export interface WebsiteProps<B extends Bindings>
       };
   assets?: string | ({ directory?: string } & AssetsConfig);
   cwd?: string;
-  secrets?: boolean;
   spa?: boolean;
   wrangler?: {
+    path?: string;
     /**
      * The main entry point for the worker
      *
@@ -56,6 +56,7 @@ export interface WebsiteProps<B extends Bindings>
     transform?: (
       spec: WranglerJsonSpec,
     ) => WranglerJsonSpec | Promise<WranglerJsonSpec>;
+    secrets?: boolean;
   };
 }
 
@@ -72,7 +73,6 @@ export async function Website<B extends Bindings>(
     build,
     assets,
     dev,
-    secrets = true,
     script,
     spa = true,
     ...workerProps
@@ -100,12 +100,15 @@ export async function Website<B extends Bindings>(
         props.entrypoint ?? ".alchemy/local/worker.js",
       );
     },
+    get wrangler() {
+      return path.resolve(
+        this.cwd,
+        props.wrangler?.path ?? ".alchemy/local/wrangler.jsonc",
+      );
+    },
     get main() {
       if (props.wrangler?.main) {
         return path.resolve(this.cwd, props.wrangler.main);
-      }
-      if (props.entrypoint) {
-        return path.resolve(this.cwd, props.entrypoint);
       }
       return this.entrypoint;
     },
@@ -119,7 +122,7 @@ export async function Website<B extends Bindings>(
       if (typeof value === "string") {
         return [[key, value]];
       }
-      if (isSecret(value) && secrets) {
+      if (isSecret(value) && props.wrangler?.secrets !== false) {
         return [[key, value.unencrypted]];
       }
       return [];
@@ -148,10 +151,6 @@ export async function Website<B extends Bindings>(
       entrypoint: path.relative(paths.cwd, paths.entrypoint),
     } as WorkerProps<B> & { name: string };
 
-    await Folder("local", {
-      path: path.relative(process.cwd(), paths.local),
-    });
-
     if (!workerProps.entrypoint) {
       await File("entrypoint", {
         path: path.relative(process.cwd(), paths.entrypoint),
@@ -166,14 +165,14 @@ export async function Website<B extends Bindings>(
     }
     await ensureMiniflarePersistSymlink(paths.cwd);
     await WranglerJson("wrangler.jsonc", {
-      path: ".alchemy/local/wrangler.jsonc",
+      path: path.relative(process.cwd(), paths.wrangler),
       worker,
       assets: {
         binding: "ASSETS",
         directory: path.relative(paths.cwd, paths.assets),
       },
       main: path.relative(paths.cwd, paths.main),
-      secrets,
+      secrets: props.wrangler?.secrets ?? true,
       transform: {
         wrangler: (spec) => {
           const modified = {

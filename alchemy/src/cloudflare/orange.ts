@@ -45,8 +45,10 @@ export async function Orange<B extends Bindings>(
     assets: props.assets ?? "dist/client",
     compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
     wrangler: {
-      main: props?.wrangler?.main ?? "app/entry.server.ts",
-      transform: props?.wrangler?.transform,
+      path: "wrangler.jsonc",
+      main: "app/entry.server.ts",
+      secrets: false,
+      ...props.wrangler,
     },
   });
 }

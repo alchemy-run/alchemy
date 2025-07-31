@@ -750,7 +750,7 @@ const _Worker = Resource(
         url = props.dev.url;
       } else {
         const { MiniflareController } = await import(
-          "./miniflare/miniflare-controller.ts"
+          "./miniflare/miniflare-controller.js"
         );
         const controller = MiniflareController.singleton;
         url = await controller.add({
