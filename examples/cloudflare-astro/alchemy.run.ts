@@ -5,6 +5,7 @@ const app = await alchemy("cloudflare-astro");
 
 export const website = await Astro("website", {
   name: `${app.name}-${app.stage}-website`,
+  output: "server",
 });
 
 console.log({

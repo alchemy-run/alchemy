@@ -8,7 +8,10 @@ import type { Worker } from "./worker.ts";
  * Properties for creating an Astro resource.
  * Extends WebsiteProps, allowing customization of the underlying Website.
  */
-export interface AstroProps<B extends Bindings> extends WebsiteProps<B> {}
+export interface AstroProps<B extends Bindings>
+  extends Omit<WebsiteProps<B>, "spa"> {
+  output: "server" | "static";
+}
 
 /**
  * Represents the output of an Astro resource deployment.
@@ -62,7 +65,7 @@ export type Astro<B extends Bindings> = B extends { ASSETS: any }
  */
 export async function Astro<B extends Bindings>(
   id: string,
-  props: AstroProps<B> = {},
+  props: AstroProps<B>,
 ): Promise<Astro<B>> {
   const runner = await getPackageManagerRunner();
   return await Website(id, {
@@ -70,7 +73,9 @@ export async function Astro<B extends Bindings>(
     noBundle: props.noBundle ?? true,
     build: props.build ?? `${runner} astro build`,
     dev: props.dev ?? `${runner} astro dev`,
-    entrypoint: props.entrypoint ?? "dist/_worker.js/index.js",
+    entrypoint:
+      props.entrypoint ??
+      (props.output === "server" ? "dist/_worker.js/index.js" : undefined),
     assets: props.assets ?? "dist",
   });
 }
