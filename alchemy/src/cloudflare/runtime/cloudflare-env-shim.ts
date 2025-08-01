@@ -18,8 +18,8 @@ export function cloudflareWorkersDevEnvironmentShim() {
     load(id: string) {
       if (id === "cloudflare:workers") {
         return dedent`
-          import { getAlchemyEnv } from "alchemy/cloudflare/runtime";
-          export const env = await getAlchemyEnv();
+          import { getCloudflareEnvProxy } from "alchemy/cloudflare/runtime";
+          export const env = await getCloudflareEnvProxy();
         `;
       }
     },

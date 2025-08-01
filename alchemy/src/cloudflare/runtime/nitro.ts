@@ -1,4 +1,4 @@
-import { resolveRuntimePaths } from "./resolve-runtime-paths.ts";
+import { validateConfigPath, validatePersistPath } from "./paths.ts";
 
 export interface NitroCloudflareDevOptions {
   configPath?: string;
@@ -10,10 +10,9 @@ export interface NitroCloudflareDevOptions {
 export const nitroCloudflareDev = (
   options: Partial<NitroCloudflareDevOptions> = {},
 ): NitroCloudflareDevOptions => {
-  const paths = resolveRuntimePaths();
   return {
-    configPath: paths.config,
-    persistDir: paths.persist,
+    configPath: validateConfigPath(options.configPath),
+    persistDir: validatePersistPath(options.persistDir),
     ...options,
   };
 };

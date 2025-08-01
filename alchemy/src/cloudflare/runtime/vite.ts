@@ -1,5 +1,5 @@
 import { cloudflare, type PluginConfig } from "@cloudflare/vite-plugin";
-import { getPlatformProxyOptions } from "./get-alchemy-env.ts";
+import { getPlatformProxyOptions } from "./cloudflare-env-proxy.ts";
 
 export const alchemyVitePlugin = (config?: PluginConfig) => {
   const resolvedConfig = {
