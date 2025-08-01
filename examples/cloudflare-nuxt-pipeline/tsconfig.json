@@ -1,9 +1,9 @@
-
 {
-  "extends": "@nuxtjs/module-builder/tsconfig.json",
-  "include": ["**/*", "alchemy.run.ts"],
-  "exclude": ["dist"],
+  // https://nuxt.com/docs/guide/concepts/typescript
+  "extends": "../../alchemy/tsconfig.json",
   "compilerOptions": {
-    "types": ["@cloudflare/workers-types", "./env.d.ts"]
-  }
+    "types": ["@cloudflare/workers-types", "./env.d.ts"],
+    "jsx": "react-jsx",
+    "noEmit": true
+  },
 }
