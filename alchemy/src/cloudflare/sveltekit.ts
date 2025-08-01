@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
-import { Vite, type ViteProps } from "./vite.ts";
+import { Vite, type ViteProps } from "./vite/vite.ts";
 import type { Worker } from "./worker.ts";
 
 export interface SvelteKitProps<B extends Bindings> extends ViteProps<B> {}

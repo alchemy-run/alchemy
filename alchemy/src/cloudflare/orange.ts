@@ -1,6 +1,6 @@
 import type { Assets } from "./assets.js";
 import type { Bindings } from "./bindings.js";
-import { Vite, type ViteProps } from "./vite.ts";
+import { Vite, type ViteProps } from "./vite/vite.ts";
 import type { Worker } from "./worker.ts";
 
 export interface OrangeProps<B extends Bindings> extends ViteProps<B> {}

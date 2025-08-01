@@ -1,8 +1,8 @@
-import { getPackageManagerRunner } from "../util/detect-package-manager.ts";
-import type { Assets } from "./assets.ts";
-import type { Bindings } from "./bindings.ts";
-import { Vite, type ViteProps } from "./vite.ts";
-import type { Worker } from "./worker.ts";
+import { getPackageManagerRunner } from "../../util/detect-package-manager.ts";
+import type { Assets } from "../assets.ts";
+import type { Bindings } from "../bindings.ts";
+import { Vite, type ViteProps } from "../vite/vite.ts";
+import type { Worker } from "../worker.ts";
 
 export interface ReactRouterProps<B extends Bindings> extends ViteProps<B> {
   /**

@@ -1,8 +1,8 @@
-import { getPackageManagerRunner } from "../util/detect-package-manager.ts";
-import type { Assets } from "./assets.ts";
-import type { Bindings } from "./bindings.ts";
-import { Website, type WebsiteProps } from "./website.ts";
-import type { Worker } from "./worker.ts";
+import { getPackageManagerRunner } from "../../util/detect-package-manager.ts";
+import type { Assets } from "../assets.ts";
+import type { Bindings } from "../bindings.ts";
+import { Website, type WebsiteProps } from "../website.ts";
+import type { Worker } from "../worker.ts";
 
 /**
  * Properties for creating an Astro resource.
