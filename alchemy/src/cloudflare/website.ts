@@ -8,6 +8,7 @@ import { File } from "../fs/index.ts";
 import { Exec } from "../os/index.ts";
 import { Scope } from "../scope.ts";
 import { isSecret, type Secret } from "../secret.ts";
+import { dedent } from "../util/dedent.ts";
 import { DeferredPromise } from "../util/deferred-promise.ts";
 import { exists } from "../util/exists.ts";
 import { Assets } from "./assets.ts";
@@ -15,7 +16,6 @@ import type { Bindings } from "./bindings.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "./compatibility-date.gen.ts";
 import { type AssetsConfig, Worker, type WorkerProps } from "./worker.ts";
 import { WranglerJson, type WranglerJsonSpec } from "./wrangler.json.ts";
-import { dedent } from "../util/dedent.ts";
 
 export interface WebsiteProps<B extends Bindings>
   extends Omit<WorkerProps<B>, "assets" | "dev"> {
@@ -212,7 +212,8 @@ export async function Website<B extends Bindings>(
         path: path.relative(process.cwd(), paths.entrypoint),
         content:
           script ??
-          dedent`export default {
+          dedent`
+            export default {
                 async fetch(request, env) {
                     return new Response("Not Found", { status: 404 });
                 },
