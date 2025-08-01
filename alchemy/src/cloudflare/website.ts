@@ -4,7 +4,6 @@ import { once } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { alchemy } from "../alchemy.ts";
-import { File } from "../fs/index.ts";
 import { Exec } from "../os/index.ts";
 import { Scope } from "../scope.ts";
 import { isSecret, type Secret } from "../secret.ts";
@@ -208,20 +207,19 @@ export async function Website<B extends Bindings>(
 
   return await alchemy.run(id, { parent: Scope.current }, async (scope) => {
     if (!workerProps.entrypoint) {
-      await File("entrypoint", {
-        path: path.relative(process.cwd(), paths.entrypoint),
-        content:
-          script ??
-          dedent`
-            export default {
-                async fetch(request, env) {
-                    return new Response("Not Found", { status: 404 });
-                },
-            };`,
-      });
+      await fs.mkdir(path.dirname(paths.entrypoint), { recursive: true });
+      const content =
+        script ??
+        dedent`
+        export default {
+            async fetch(request, env) {
+                return new Response("Not Found", { status: 404 });
+            },
+        };`;
+      await fs.writeFile(paths.entrypoint, content);
     }
 
-    await ensureMiniflarePersistSymlink(paths.cwd);
+    await writeMiniflareSymlink(paths.cwd);
 
     await WranglerJson("wrangler.jsonc", {
       path: path.relative(paths.cwd, paths.wrangler.path),
@@ -280,7 +278,7 @@ export async function Website<B extends Bindings>(
   });
 }
 
-async function ensureMiniflarePersistSymlink(cwd: string) {
+async function writeMiniflareSymlink(cwd: string) {
   const target = path.resolve(".alchemy/miniflare");
   await fs.mkdir(target, { recursive: true });
 
