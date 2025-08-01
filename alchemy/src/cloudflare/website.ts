@@ -15,6 +15,7 @@ import type { Bindings } from "./bindings.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "./compatibility-date.gen.ts";
 import { type AssetsConfig, Worker, type WorkerProps } from "./worker.ts";
 import { WranglerJson, type WranglerJsonSpec } from "./wrangler.json.ts";
+import { dedent } from "../util/dedent.ts";
 
 export interface WebsiteProps<B extends Bindings>
   extends Omit<WorkerProps<B>, "assets" | "dev"> {
@@ -211,7 +212,7 @@ export async function Website<B extends Bindings>(
         path: path.relative(process.cwd(), paths.entrypoint),
         content:
           script ??
-          `export default {
+          dedent`export default {
                 async fetch(request, env) {
                     return new Response("Not Found", { status: 404 });
                 },
