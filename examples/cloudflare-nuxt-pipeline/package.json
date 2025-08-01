@@ -8,6 +8,7 @@
     "destroy": "alchemy destroy --env-file ../../.env",
     "dev": "alchemy dev --env-file ../../.env",
     "generate": "nuxt generate",
+    "postinstall": "nuxt prepare",
     "preview": "nuxt preview"
   },
   "dependencies": {
