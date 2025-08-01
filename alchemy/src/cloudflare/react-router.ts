@@ -18,7 +18,7 @@ export type ReactRouter<B extends Bindings> = B extends { ASSETS: any }
 
 export async function ReactRouter<B extends Bindings>(
   id: string,
-  props: ReactRouterProps<B>,
+  props: ReactRouterProps<B> = {},
 ): Promise<ReactRouter<B>> {
   const runner = await getPackageManagerRunner();
   return await Vite(id, {
