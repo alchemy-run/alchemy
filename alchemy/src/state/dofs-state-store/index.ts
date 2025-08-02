@@ -66,7 +66,7 @@ export class DOFSStateStore implements StateStore {
   private async createClient() {
     const token =
       this.options.worker?.token ??
-      (await alchemy.secret.env.ALCHEMY_STATE_TOKEN).unencrypted;
+      alchemy.secret.env.ALCHEMY_STATE_TOKEN.unencrypted;
     if (this.options.worker && "url" in this.options.worker) {
       const client = new DOFSStateStoreClient({
         app: this.scope.appName ?? "alchemy",

@@ -26,10 +26,8 @@ export interface VercelApiOptions {
 export async function createVercelApi(
   options: VercelApiOptions,
 ): Promise<VercelApi> {
-  const {
-    accessToken = await alchemy.secret.env.VERCEL_ACCESS_TOKEN,
-    baseUrl,
-  } = options;
+  const { accessToken = alchemy.secret.env.VERCEL_ACCESS_TOKEN, baseUrl } =
+    options;
 
   return new VercelApi({
     baseUrl,

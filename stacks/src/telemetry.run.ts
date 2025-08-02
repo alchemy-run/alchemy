@@ -22,8 +22,8 @@ const pipeline = await Pipeline("telemetry-pipeline", {
       bucket: bucket.name,
     },
     credentials: {
-      accessKeyId: await alchemy.secret.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: await alchemy.secret.env.R2_SECRET_ACCESS_KEY,
+      accessKeyId: alchemy.secret.env.R2_ACCESS_KEY_ID,
+      secretAccessKey: alchemy.secret.env.R2_SECRET_ACCESS_KEY,
     },
   },
 });
