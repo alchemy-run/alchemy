@@ -93,6 +93,10 @@
       "bun": "./src/planetscale/index.ts",
       "import": "./lib/planetscale/index.js"
     },
+    "./random": {
+      "bun": "./src/random/index.ts",
+      "import": "./lib/random/index.js"
+    },
     "./sentry": {
       "bun": "./src/sentry/index.ts",
       "import": "./lib/sentry/index.js"
