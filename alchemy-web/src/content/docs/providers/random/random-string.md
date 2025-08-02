@@ -3,7 +3,7 @@ title: RandomString
 description: Learn how to generate cryptographically secure random strings for API keys, tokens, and passwords using Alchemy.
 ---
 
-The RandomString resource generates cryptographically secure random strings that can be used for API keys, tokens, passwords, or other security-sensitive values. The generated values are automatically wrapped as secrets to prevent accidental exposure in logs or console output.
+The RandomString resource generates cryptographically secure random strings that can be used for API keys, tokens, passwords, or other security-sensitive values. 
 
 ## Minimal Example
 

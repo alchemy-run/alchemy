@@ -1,10 +1,10 @@
 import { describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy";
-import { destroy } from "../../src/destroy";
-import { RandomString } from "../../src/random/random-string";
-import { BRANCH_PREFIX } from "../util";
+import { alchemy } from "../../src/alchemy.ts";
+import { destroy } from "../../src/destroy.ts";
+import { RandomString } from "../../src/random/random-string.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
-import "../../src/test/vitest";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
