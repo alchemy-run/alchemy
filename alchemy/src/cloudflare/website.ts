@@ -206,11 +206,11 @@ export default {
       } as WorkerProps<any> & { name: string };
 
       if (wrangler) {
-        const wranglerPath = path.relative(cwd, wranglerJsonPath);
-        const wranglerDir = path.dirname(wranglerPath);
+        const wranglerAbsPath = path.resolve(cwd, wranglerJsonPath);
+        const wranglerAbsDir = path.dirname(wranglerAbsPath);
 
         await WranglerJson("wrangler.jsonc", {
-          path: wranglerPath,
+          path: path.relative(cwd, wranglerJsonPath),
           worker: workerProps,
           // @ts-expect-error - props.wrangler can be string | object, this is fine
           main: props.wrangler?.main ?? props.main,
@@ -218,7 +218,7 @@ export default {
           assets: {
             binding: "ASSETS",
             // path must be relative to the wrangler.jsonc file
-            directory: path.relative(wranglerDir, assetsDirPath),
+            directory: path.relative(wranglerAbsDir, assetsDirPath),
           },
           transform: props.transform,
         });
