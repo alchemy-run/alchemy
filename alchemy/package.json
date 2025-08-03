@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "0.55.3",
+  "version": "0.56.0",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
   "homepage": "https://alchemy.run",
@@ -120,6 +120,10 @@
     "./planetscale": {
       "bun": "./src/planetscale/index.ts",
       "import": "./lib/planetscale/index.js"
+    },
+    "./random": {
+      "bun": "./src/random/index.ts",
+      "import": "./lib/random/index.js"
     },
     "./sentry": {
       "bun": "./src/sentry/index.ts",

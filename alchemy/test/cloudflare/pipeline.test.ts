@@ -45,8 +45,8 @@ async function assertWorkerDoesNotExist(workerName: string) {
   }
 }
 
-const accessKeyId = await alchemy.secret.env("R2_ACCESS_KEY_ID");
-const secretAccessKey = await alchemy.secret.env("R2_SECRET_ACCESS_KEY");
+const accessKeyId = alchemy.secret.env("R2_ACCESS_KEY_ID");
+const secretAccessKey = alchemy.secret.env("R2_SECRET_ACCESS_KEY");
 
 describe("Pipeline Resource", () => {
   // Create mock secrets for testing - reuse these across tests

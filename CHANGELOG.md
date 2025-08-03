@@ -1,3 +1,24 @@
+## v0.56.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Add nodejs_compat_populate_process_env to node preset &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/762 [<samp>(b487a)</samp>](https://github.com/sam-goodwin/alchemy/commit/b487af8b)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Add process.env to cloudflare:workers shim &nbsp;-&nbsp; by **Eric Clemmons** in https://github.com/sam-goodwin/alchemy/issues/742 [<samp>(807a5)</samp>](https://github.com/sam-goodwin/alchemy/commit/807a50e4)
+  - Correct miniflare worker name in proxy &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/777 [<samp>(68546)</samp>](https://github.com/sam-goodwin/alchemy/commit/6854651e)
+  - Worker bundling no longer fails on windows &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/780 [<samp>(44946)</samp>](https://github.com/sam-goodwin/alchemy/commit/44946012)
+  - Resolve wrangler main and assets relative to cwd &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/783 [<samp>(916b6)</samp>](https://github.com/sam-goodwin/alchemy/commit/916b6573)
+- **core**:
+  - Move execa from peer to dep &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/771 [<samp>(277da)</samp>](https://github.com/sam-goodwin/alchemy/commit/277da985)
+  - Handle dangling processes &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/770 [<samp>(e765f)</samp>](https://github.com/sam-goodwin/alchemy/commit/e765f2d4)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.55.3...v0.56.0)
+
+---
+
 ## v0.55.3
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

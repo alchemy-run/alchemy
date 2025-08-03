@@ -123,8 +123,8 @@ export function secret<S = string>(
 
 export namespace secret {
   export interface Env {
-    [key: string]: Promise<Secret>;
-    (name: string, value?: string, error?: string): Promise<Secret>;
+    [key: string]: Secret;
+    (name: string, value?: string, error?: string): Secret;
   }
 
   export const env = new Proxy(_env, {
@@ -132,12 +132,8 @@ export namespace secret {
     apply: (_, __, args: [string, any?, string?]) => _env(...args),
   }) as Env;
 
-  async function _env(
-    name: string,
-    value?: string,
-    error?: string,
-  ): Promise<Secret> {
-    const result = await alchemy.env(name, value, error);
+  function _env(name: string, value?: string, error?: string): Secret {
+    const result = alchemy.env(name, value, error);
     if (typeof result === "string") {
       return secret(result, name);
     }
