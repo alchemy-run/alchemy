@@ -10,6 +10,7 @@ import { isSecret, type Secret } from "../secret.ts";
 import { dedent } from "../util/dedent.ts";
 import { DeferredPromise } from "../util/deferred-promise.ts";
 import { exists } from "../util/exists.ts";
+import { logger } from "../util/logger.ts";
 import { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "./compatibility-date.gen.ts";
@@ -123,6 +124,22 @@ export interface WebsiteProps<B extends Bindings>
      */
     secrets?: boolean;
   };
+
+  /**
+   * The command to run to build the site.
+   * @deprecated Use `build` or `build.command` instead
+   */
+  command?: string;
+  /**
+   * Additional environment variables to set when running the build command.
+   * @deprecated Use `build.env` instead
+   */
+  commandEnv?: Record<string, string>;
+  /**
+   * Whether to memoize the command (only re-run if the command changes)
+   * @deprecated Use `build.memoize` instead
+   */
+  memoize?: boolean | { patterns: string[] };
 }
 
 export type Website<B extends Bindings> = B extends { ASSETS: any }
@@ -135,11 +152,14 @@ export async function Website<B extends Bindings>(
 ) {
   const {
     name = id,
-    build,
+    build: buildProps,
     assets,
     dev,
     script,
     spa = true,
+    command,
+    commandEnv,
+    memoize,
     ...workerProps
   } = props;
 
@@ -147,7 +167,38 @@ export async function Website<B extends Bindings>(
     !workerProps.bindings?.ASSETS,
     "ASSETS binding is reserved for internal use",
   );
+  if (command) {
+    logger.warnOnce(
+      "[website] The `command` prop is deprecated. Use `build.command` instead.",
+    );
+  }
+  if (commandEnv) {
+    logger.warnOnce(
+      "[website] The `commandEnv` prop is deprecated. Use `build.env` instead.",
+    );
+  }
+  if (memoize) {
+    logger.warnOnce(
+      "[website] The `memoize` prop is deprecated. Use `build.memoize` instead.",
+    );
+  }
 
+  const build = (() => {
+    if (typeof buildProps === "string") {
+      return { command: buildProps, env: commandEnv, memoize };
+    }
+    if (buildProps) {
+      return buildProps;
+    }
+    if (command) {
+      return {
+        command,
+        env: commandEnv,
+        memoize,
+      };
+    }
+    return undefined;
+  })();
   const paths = (() => {
     const cwd = props.cwd ?? process.cwd();
     return {
@@ -235,7 +286,7 @@ export async function Website<B extends Bindings>(
     if (build && !scope.local) {
       await Exec("build", {
         cwd: path.relative(process.cwd(), paths.cwd),
-        command: typeof build === "string" ? build : build.command,
+        command: build.command,
         env: {
           ...env,
           ...(typeof build === "object" ? build.env : {}),
