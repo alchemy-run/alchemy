@@ -14,6 +14,7 @@ import { logger } from "../util/logger.ts";
 import { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "./compatibility-date.gen.ts";
+import { DEFAULT_PERSIST_PATH } from "./miniflare/paths.ts";
 import { type AssetsConfig, Worker, type WorkerProps } from "./worker.ts";
 import { WranglerJson, type WranglerJsonSpec } from "./wrangler.json.ts";
 
@@ -327,12 +328,16 @@ export async function Website<B extends Bindings>(
 }
 
 async function writeMiniflareSymlink(cwd: string) {
-  const target = path.resolve(".alchemy/miniflare");
+  const target = path.resolve(DEFAULT_PERSIST_PATH);
   await fs.mkdir(target, { recursive: true });
+
+  if (cwd === process.cwd()) {
+    return;
+  }
 
   await fs.mkdir(path.resolve(cwd, ".alchemy"), { recursive: true });
   await fs
-    .symlink(target, path.resolve(cwd, ".alchemy/miniflare"))
+    .symlink(target, path.resolve(cwd, DEFAULT_PERSIST_PATH))
     .catch((e) => {
       if (e.code !== "EEXIST") {
         throw e;

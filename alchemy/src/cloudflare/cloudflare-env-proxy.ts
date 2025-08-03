@@ -4,7 +4,7 @@ import {
   DEFAULT_PERSIST_PATH,
   validateConfigPath,
   validatePersistPath,
-} from "./paths.ts";
+} from "./miniflare/paths.ts";
 
 export const getCloudflareEnvProxy = async <E>(
   options: GetPlatformProxyOptions = {},

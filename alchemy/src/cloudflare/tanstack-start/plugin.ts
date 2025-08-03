@@ -18,7 +18,7 @@ export default function alchemyDevEnvironmentShim() {
     load(id: string) {
       if (id === "cloudflare:workers") {
         return dedent`
-          import { getCloudflareEnvProxy } from "alchemy/cloudflare/runtime";
+          import { getCloudflareEnvProxy } from "alchemy/cloudflare";
           export const env = await getCloudflareEnvProxy();
         `;
       }

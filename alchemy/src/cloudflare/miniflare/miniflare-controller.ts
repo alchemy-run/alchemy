@@ -10,6 +10,7 @@ import {
   type MiniflareWorkerInput,
 } from "./build-worker-options.ts";
 import { MiniflareWorkerProxy } from "./miniflare-worker-proxy.ts";
+import { DEFAULT_PERSIST_PATH } from "./paths.ts";
 
 declare global {
   var ALCHEMY_MINIFLARE_CONTROLLER: MiniflareController | undefined;
@@ -76,7 +77,7 @@ export class MiniflareController {
     return await this.mutex.lock(async () => {
       const options: miniflare.MiniflareOptions = {
         workers: Array.from(this.options.values()),
-        defaultPersistRoot: path.join(process.cwd(), ".alchemy/miniflare/v3"), // vite plugin forces /v3 suffix
+        defaultPersistRoot: path.resolve(DEFAULT_PERSIST_PATH),
         unsafeDevRegistryPath: miniflare.getDefaultDevRegistryPath(),
         analyticsEngineDatasetsPersist: true,
         cachePersist: true,

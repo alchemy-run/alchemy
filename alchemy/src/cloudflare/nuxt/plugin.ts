@@ -1,5 +1,5 @@
 import type { CloudflareOptions } from "nitropack/presets/cloudflare/types";
-import { validateConfigPath, validatePersistPath } from "../runtime/paths.ts";
+import { validateConfigPath, validatePersistPath } from "../miniflare/paths.ts";
 
 const alchemyCloudflare = (
   options: Partial<CloudflareOptions> = {},

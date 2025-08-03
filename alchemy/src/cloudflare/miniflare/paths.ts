@@ -1,7 +1,7 @@
 import { existsSync, readlinkSync, statSync } from "node:fs";
 
 export const DEFAULT_CONFIG_PATH = ".alchemy/local/wrangler.jsonc";
-export const DEFAULT_PERSIST_PATH = ".alchemy/miniflare";
+export const DEFAULT_PERSIST_PATH = ".alchemy/miniflare/v3";
 
 export const validateConfigPath = (
   path = DEFAULT_CONFIG_PATH,

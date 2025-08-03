@@ -1,5 +1,5 @@
 import { redwood, type RedwoodPluginOptions } from "rwsdk/vite";
-import { DEFAULT_CONFIG_PATH } from "../runtime/paths.ts";
+import { DEFAULT_CONFIG_PATH } from "../miniflare/paths.ts";
 import alchemyVite from "../vite/plugin.ts";
 
 const alchemyRedwood = (options?: RedwoodPluginOptions) => {
