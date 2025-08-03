@@ -200,7 +200,24 @@ export const WranglerJson = Resource(
       : spec;
 
     await fs.mkdir(dirname, { recursive: true });
-    await fs.writeFile(filePath, await formatJson(finalSpec));
+    if (props.secrets) {
+      // If secrets are enabled, decrypt them in the wrangler.json file,
+      // but do not modify `finalSpec` so that way secrets aren't written to state unencrypted.
+      const withSecretsUnwrapped = {
+        ...finalSpec,
+        vars: {
+          ...finalSpec.vars,
+          ...Object.fromEntries(
+            Object.entries(finalSpec.vars ?? {}).map(([key, value]) =>
+              isSecret(value) ? [key, value.unencrypted] : [key, value],
+            ),
+          ),
+        },
+      };
+      await fs.writeFile(filePath, await formatJson(withSecretsUnwrapped));
+    } else {
+      await fs.writeFile(filePath, await formatJson(finalSpec));
+    }
 
     // Return the resource
     return this({
