@@ -1,3 +1,4 @@
+import { join, resolve } from "node:path";
 import { getPackageManagerRunner } from "../../util/detect-package-manager.ts";
 import type { Assets } from "../assets.ts";
 import type { Bindings } from "../bindings.ts";
@@ -10,7 +11,7 @@ import type { Worker } from "../worker.ts";
  */
 export interface AstroProps<B extends Bindings>
   extends Omit<WebsiteProps<B>, "spa"> {
-  output: "server" | "static";
+  output?: "server" | "static";
 }
 
 /**
@@ -67,6 +68,8 @@ export async function Astro<B extends Bindings>(
   id: string,
   props: AstroProps<B>,
 ): Promise<Astro<B>> {
+  const cwd = resolve(props.cwd ?? process.cwd());
+  const output = props.output ?? (await resolveOutputType(cwd));
   const runner = await getPackageManagerRunner();
   return await Website(id, {
     ...props,
@@ -75,7 +78,33 @@ export async function Astro<B extends Bindings>(
     dev: props.dev ?? `${runner} astro dev`,
     entrypoint:
       props.entrypoint ??
-      (props.output === "server" ? "dist/_worker.js/index.js" : undefined),
+      (output === "server" ? "dist/_worker.js/index.js" : undefined),
     assets: props.assets ?? "dist",
   });
+}
+
+async function resolveOutputType(cwd: string): Promise<"server" | "static"> {
+  const candidates = [
+    "astro.config.mjs",
+    "astro.config.js",
+    "astro.config.ts",
+    "astro.config.mts",
+  ];
+  for (const candidate of candidates) {
+    try {
+      const config = await import(join(cwd, candidate));
+      if (
+        typeof config.default === "object" &&
+        config.default &&
+        "output" in config.default &&
+        typeof config.default.output === "string"
+      ) {
+        return config.default.output;
+      }
+      return "static";
+    } catch {
+      // ignore
+    }
+  }
+  return "static";
 }

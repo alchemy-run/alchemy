@@ -47,7 +47,6 @@ if (stage === "prod") {
 const website = await Astro("website", {
   name: "alchemy-website",
   adopt: true,
-  output: "static",
   version: stage === "prod" ? undefined : stage,
   domains: domain ? [domain] : undefined,
   env: {
