@@ -1,12 +1,6 @@
-import { alchemyVitePlugin } from "alchemy/cloudflare/runtime";
-import { redwood } from "rwsdk/vite";
+import alchemyRedwood from "alchemy/cloudflare/redwood";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [
-    redwood({
-      configPath: ".alchemy/local/wrangler.jsonc",
-    }),
-    alchemyVitePlugin(),
-  ],
+  plugins: [alchemyRedwood()],
 });

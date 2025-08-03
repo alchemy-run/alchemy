@@ -5,9 +5,7 @@ import { Astro } from "alchemy/cloudflare";
 
 const app = await alchemy("my-alchemy-app");
 
-export const worker = await Astro("website", {
-  output: "server",
-});
+export const worker = await Astro("website");
 
 console.log({
   url: worker.url,

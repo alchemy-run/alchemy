@@ -1,24 +1,4 @@
-import {
-  tanstackStart,
-  type TanStackStartInputConfig,
-  type WithReactPlugin,
-} from "@tanstack/react-start/plugin/vite";
 import { dedent } from "../../util/dedent.ts";
-
-const alchemyTanStackStart = (
-  options?: TanStackStartInputConfig & WithReactPlugin,
-) => {
-  return [
-    cloudflareWorkersDevEnvironmentShim(),
-    tanstackStart({
-      target: "cloudflare-module",
-      customViteReactPlugin: true,
-      ...options,
-    }),
-  ];
-};
-
-export default alchemyTanStackStart;
 
 /**
  * TanStackStart server functions and middleware run in Node.js intead of Miniflare when using `vite dev`.
@@ -27,7 +7,7 @@ export default alchemyTanStackStart;
  *
  * @see https://developers.cloudflare.com/workers/framework-guides/web-apps/tanstack/#using-cloudflare-bindings
  */
-export function cloudflareWorkersDevEnvironmentShim() {
+export default function alchemyDevEnvironmentShim() {
   return {
     name: "cloudflare-workers-dev-shim",
     apply: "serve", // dev‑only

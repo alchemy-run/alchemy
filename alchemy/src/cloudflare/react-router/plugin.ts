@@ -1,7 +1,7 @@
 import type { PluginConfig } from "@cloudflare/vite-plugin";
 import alchemyVite from "../vite/plugin.ts";
 
-const alchemyReactRouter = (config?: PluginConfig) => {
+const alchemyCloudflare = (config?: PluginConfig) => {
   return alchemyVite({
     ...config,
     viteEnvironment: {
@@ -10,4 +10,4 @@ const alchemyReactRouter = (config?: PluginConfig) => {
   });
 };
 
-export default alchemyReactRouter;
+export default alchemyCloudflare;

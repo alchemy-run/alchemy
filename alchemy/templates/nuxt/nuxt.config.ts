@@ -1,4 +1,4 @@
-import { nitroCloudflareDev } from "alchemy/cloudflare/runtime";
+import alchemyCloudflare from "alchemy/cloudflare/nuxt";
 import { defineNuxtConfig } from "nuxt/config";
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
@@ -7,7 +7,7 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   nitro: {
     preset: "cloudflare_module",
-    cloudflareDev: nitroCloudflareDev(),
+    cloudflare: alchemyCloudflare(),
   },
   modules: ["nitro-cloudflare-dev"],
 });

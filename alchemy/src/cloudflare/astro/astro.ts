@@ -66,7 +66,7 @@ export type Astro<B extends Bindings> = B extends { ASSETS: any }
  */
 export async function Astro<B extends Bindings>(
   id: string,
-  props: AstroProps<B>,
+  props: AstroProps<B> = {},
 ): Promise<Astro<B>> {
   const cwd = resolve(props.cwd ?? process.cwd());
   const output = props.output ?? (await resolveOutputType(cwd));
