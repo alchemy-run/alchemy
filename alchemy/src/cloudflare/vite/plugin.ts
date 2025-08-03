@@ -1,7 +1,7 @@
 import { cloudflare, type PluginConfig } from "@cloudflare/vite-plugin";
 import { getPlatformProxyOptions } from "../runtime/cloudflare-env-proxy.ts";
 
-const alchemyVite = (config?: PluginConfig) => {
+const alchemyCloudflare = (config?: PluginConfig) => {
   const resolvedConfig = {
     ...getPlatformProxyOptions(),
     ...config,
@@ -9,4 +9,4 @@ const alchemyVite = (config?: PluginConfig) => {
   return cloudflare(resolvedConfig);
 };
 
-export default alchemyVite;
+export default alchemyCloudflare;

@@ -1,8 +1,8 @@
 import { join } from "node:path";
-import type { Assets } from "./assets.ts";
-import type { Bindings } from "./bindings.ts";
-import { Vite, type ViteProps } from "./vite/vite.ts";
-import type { Worker } from "./worker.ts";
+import type { Assets } from "../assets.ts";
+import type { Bindings } from "../bindings.ts";
+import { Vite, type ViteProps } from "../vite/vite.ts";
+import type { Worker } from "../worker.ts";
 
 export interface SvelteKitProps<B extends Bindings> extends ViteProps<B> {}
 
@@ -68,5 +68,6 @@ export async function SvelteKit<B extends Bindings>(
     assets: props?.assets ?? join(".svelte-kit", "cloudflare"),
     compatibilityFlags: ["nodejs_compat", ...(props?.compatibilityFlags ?? [])],
     compatibilityDate: props?.compatibilityDate,
+    wrangler: { secrets: true },
   });
 }
