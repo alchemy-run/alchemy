@@ -335,7 +335,7 @@ async function writeMiniflareSymlink(cwd: string) {
     return;
   }
 
-  const persistPath = path.resolve(cwd, ".alchemy", "miniflare");
+  const persistPath = path.resolve(cwd, DEFAULT_PERSIST_PATH);
   await fs.mkdir(path.dirname(persistPath), { recursive: true });
   await fs.symlink(target, persistPath).catch((e) => {
     if (e.code !== "EEXIST") {

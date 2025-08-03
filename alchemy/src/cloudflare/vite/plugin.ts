@@ -1,4 +1,5 @@
 import { cloudflare, type PluginConfig } from "@cloudflare/vite-plugin";
+import path from "node:path";
 import {
   DEFAULT_PERSIST_PATH,
   validateConfigPath,
@@ -10,10 +11,12 @@ const alchemyCloudflare = (config?: PluginConfig) => {
     path: validatePersistPath(
       typeof config?.persistState === "object"
         ? config.persistState.path
-        : // the vite plugin appends the "v3" suffix, so we need to remove it
-          DEFAULT_PERSIST_PATH.replace("/v3", ""),
+        : DEFAULT_PERSIST_PATH,
     ),
   };
+  if (typeof persistState === "object" && persistState.path.endsWith("v3")) {
+    persistState.path = path.dirname(persistState.path);
+  }
   return cloudflare({
     ...config,
     configPath: validateConfigPath(config?.configPath),
