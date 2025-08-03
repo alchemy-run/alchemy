@@ -180,11 +180,8 @@ export async function Website<B extends Bindings>(
     ...(props.env ?? {}),
     ...Object.fromEntries(
       Object.entries(props.bindings ?? {}).flatMap(([key, value]) => {
-        if (typeof value === "string") {
+        if (typeof value === "string" || (isSecret(value) && secrets)) {
           return [[key, value]];
-        }
-        if (isSecret(value) && secrets) {
-          return [[key, value.unencrypted]];
         }
         return [];
       }),
@@ -326,14 +323,14 @@ async function runDevCommand(
       FORCE_COLOR: "1",
       ...process.env,
       ...Object.fromEntries(
-        Object.entries(props.env ?? {}).map(([key, value]) => {
-          if (value === undefined) {
-            return [];
-          }
+        Object.entries(props.env ?? {}).flatMap(([key, value]) => {
           if (isSecret(value)) {
-            return [key, value.unencrypted];
+            return [[key, value.unencrypted]];
           }
-          return [key, value];
+          if (typeof value === "string") {
+            return [[key, value]];
+          }
+          return [];
         }),
       ),
     },
