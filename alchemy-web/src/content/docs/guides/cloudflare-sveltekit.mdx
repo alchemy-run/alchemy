@@ -232,3 +232,28 @@ The `alchemy.run.ts` script will be run by `node` but still needs to infer the [
   }
 }
 ``` 
+
+## `svelte.config.js`
+
+Use the `alchemyCloudflare()` adapter to configure SvelteKit for local development and deployment to Cloudflare Workers:
+
+```ts
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import adapter from 'alchemy/cloudflare/sveltekit';
+
+/** @type {import('@sveltejs/kit').Config} */
+const config = {
+	// Consult https://svelte.dev/docs/kit/integrations
+	// for more information about preprocessors
+	preprocess: vitePreprocess(),
+
+	kit: {
+		// Using Cloudflare adapter for deployment to Cloudflare Workers
+		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
+		adapter: adapter()
+	}
+};
+
+export default config;
+
+```

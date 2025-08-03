@@ -234,7 +234,7 @@ The CLI updated the `tsconfig.json` to include `alchemy.run.ts` and register `@c
 Use the `cloudflare-module` preset and `nitro-cloudflare-dev` module to build for Cloudflare in production and development:
 
 ```typescript
-import { nitroCloudflareDev } from "alchemy/cloudflare/runtime";
+import alchemyCloudflare from "alchemy/cloudflare/nuxt";
 import { defineNuxtConfig } from "nuxt/config";
 
 export default defineNuxtConfig({
@@ -242,7 +242,7 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   nitro: {
     preset: "cloudflare-module",
-    cloudflareDev: nitroCloudflareDev(),
+    cloudflare: alchemyCloudflare(),
     prerender: {
       routes: ["/"],
       autoSubfolderIndex: false,
@@ -253,7 +253,7 @@ export default defineNuxtConfig({
 ``` 
 
 :::tip
-The `nitroCloudflareDev()` function from `alchemy/cloudflare/runtime` is used to configure bindings for local development.
+The `alchemyCloudflare()` function from `alchemy/cloudflare/nuxt` is used to configure Nuxt for local development.
 :::
 
 :::warning

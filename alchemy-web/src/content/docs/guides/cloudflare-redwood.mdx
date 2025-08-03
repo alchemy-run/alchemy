@@ -253,3 +253,16 @@ The `alchemy.run.ts` script will be run by `node` but still needs to infer the [
   "include": ["types/**/*.ts", "alchemy.run.ts", "src/**/*.ts"]
 }
 ``` 
+
+## `vite.config.mts`
+
+Use the `alchemyRedwood()` plugin to configure Redwood with Alchemy:
+
+```ts
+import alchemyRedwood from "alchemy/cloudflare/redwood";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [alchemyRedwood()],
+});
+```

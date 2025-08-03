@@ -242,24 +242,21 @@ The `alchemy.run.ts` script will be run by `node` but still needs to infer the [
 
 ### `astro.config.mjs`
 
-Use the `@astrojs/cloudflare` plugin to build for Cloudflare Workers:
+Use the `alchemyCloudflare()` function to develop and deploy for Cloudflare Workers:
 
 ```ts
-import cloudflare from '@astrojs/cloudflare';
-import { getPlatformProxyOptions } from 'alchemy/cloudflare/runtime';
+import alchemyCloudflare from 'alchemy/cloudflare/astro';
 import { defineConfig } from 'astro/config';
 
 // https://astro.build/config
 export default defineConfig({
   output: 'server',
-  adapter: cloudflare({
-    platformProxy: getPlatformProxyOptions(),
-  }),
+  adapter: alchemyCloudflare(),
 });
 ``` 
 
 :::tip
-The `getPlatformProxyOptions()` function from `alchemy/cloudflare/runtime` is used to configure Alchemy bindings for local development.
+The `alchemyCloudflare()` function from `alchemy/cloudflare/astro` is used to configure Astro for both local development and deployment.
 :::
 
 :::warning

@@ -239,3 +239,17 @@ The `alchemy.run.ts` script will be run by `node` but still needs to infer the [
   }
 }
 ``` 
+
+## `vite.config.ts`
+
+Use the `alchemyCloudflare()` plugin to configure Vite for local development with Alchemy:
+
+```ts
+import react from "@vitejs/plugin-react";
+import alchemyCloudflare from "alchemy/cloudflare/vite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [react(), alchemyCloudflare()],
+});
+```
