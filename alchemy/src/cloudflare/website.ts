@@ -335,14 +335,13 @@ async function writeMiniflareSymlink(cwd: string) {
     return;
   }
 
-  await fs.mkdir(path.resolve(cwd, ".alchemy"), { recursive: true });
-  await fs
-    .symlink(target, path.resolve(cwd, DEFAULT_PERSIST_PATH))
-    .catch((e) => {
-      if (e.code !== "EEXIST") {
-        throw e;
-      }
-    });
+  const persistPath = path.resolve(cwd, ".alchemy", "miniflare");
+  await fs.mkdir(path.dirname(persistPath), { recursive: true });
+  await fs.symlink(target, persistPath).catch((e) => {
+    if (e.code !== "EEXIST") {
+      throw e;
+    }
+  });
 }
 
 async function runDevCommand(
