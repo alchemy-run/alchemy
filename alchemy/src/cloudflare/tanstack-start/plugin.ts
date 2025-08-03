@@ -1,3 +1,4 @@
+import type { GetPlatformProxyOptions } from "wrangler";
 import { dedent } from "../../util/dedent.ts";
 
 /**
@@ -7,7 +8,7 @@ import { dedent } from "../../util/dedent.ts";
  *
  * @see https://developers.cloudflare.com/workers/framework-guides/web-apps/tanstack/#using-cloudflare-bindings
  */
-export default function alchemyDevEnvironmentShim() {
+export default function alchemy(options: GetPlatformProxyOptions = {}) {
   return {
     name: "cloudflare-workers-dev-shim",
     apply: "serve", // dev‑only
@@ -19,7 +20,9 @@ export default function alchemyDevEnvironmentShim() {
       if (id === "cloudflare:workers") {
         return dedent`
           import { getCloudflareEnvProxy } from "alchemy/cloudflare";
-          export const env = await getCloudflareEnvProxy();
+          export const env = await getCloudflareEnvProxy(${JSON.stringify(
+            options,
+          )});
         `;
       }
     },

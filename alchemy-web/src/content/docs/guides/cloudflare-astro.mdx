@@ -239,13 +239,13 @@ The `alchemy.run.ts` script will be run by `node` but still needs to infer the [
 Use the `alchemyCloudflare()` function to develop and deploy for Cloudflare Workers:
 
 ```ts
-import alchemyCloudflare from 'alchemy/cloudflare/astro';
+import alchemy from 'alchemy/cloudflare/astro';
 import { defineConfig } from 'astro/config';
 
 // https://astro.build/config
 export default defineConfig({
   output: 'server',
-  adapter: alchemyCloudflare(),
+  adapter: alchemy(),
 });
 ``` 
 

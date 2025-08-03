@@ -6,7 +6,7 @@ import {
   validatePersistPath,
 } from "../miniflare/paths.ts";
 
-const alchemyCloudflare = (config?: PluginConfig) => {
+const alchemy = (config?: PluginConfig) => {
   const persistState = config?.persistState ?? {
     path: validatePersistPath(
       typeof config?.persistState === "object"
@@ -27,4 +27,4 @@ const alchemyCloudflare = (config?: PluginConfig) => {
   });
 };
 
-export default alchemyCloudflare;
+export default alchemy;

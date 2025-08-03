@@ -1,6 +1,6 @@
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
-import alchemyDevEnvironmentShim from "alchemy/cloudflare/tanstack-start";
+import alchemy from "alchemy/cloudflare/tanstack-start";
 import { defineConfig } from "vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 
@@ -12,7 +12,7 @@ export default defineConfig({
     },
   },
   plugins: [
-    alchemyDevEnvironmentShim(),
+    alchemy(),
     tsConfigPaths({
       projects: ["./tsconfig.json"],
     }),

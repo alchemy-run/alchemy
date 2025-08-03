@@ -1,7 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
-import alchemyDevEnvironmentShim from "alchemy/cloudflare/tanstack-start";
+import alchemy from "alchemy/cloudflare/tanstack-start";
 import { defineConfig, PluginOption } from "vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 
@@ -17,7 +17,7 @@ export default defineConfig({
   },
   plugins: [
     tailwindcss() as PluginOption,
-    alchemyDevEnvironmentShim(),
+    alchemy(),
     tsConfigPaths({
       projects: ["./tsconfig.json"],
     }),

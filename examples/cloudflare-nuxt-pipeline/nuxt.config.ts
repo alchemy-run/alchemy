@@ -1,6 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 
-import alchemyCloudflare from "alchemy/cloudflare/nuxt";
+import alchemy from "alchemy/cloudflare/nuxt";
 import { defineNuxtConfig } from "nuxt/config";
 
 export default defineNuxtConfig({
@@ -8,7 +8,7 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   nitro: {
     preset: "cloudflare-module",
-    cloudflare: alchemyCloudflare(),
+    cloudflare: alchemy(),
     prerender: {
       routes: ["/"],
       autoSubfolderIndex: false,

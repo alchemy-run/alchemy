@@ -1,10 +1,11 @@
 import type { CloudflareOptions } from "nitropack/presets/cloudflare/types";
 import { validateConfigPath, validatePersistPath } from "../miniflare/paths.ts";
 
-const alchemyCloudflare = (
+const alchemy = (
   options: Partial<CloudflareOptions> = {},
 ): CloudflareOptions => {
   return {
+    nodeCompat: true,
     dev: {
       configPath: validateConfigPath(options.dev?.configPath),
       persistDir: validatePersistPath(options.dev?.persistDir),
@@ -14,4 +15,4 @@ const alchemyCloudflare = (
   };
 };
 
-export default alchemyCloudflare;
+export default alchemy;
