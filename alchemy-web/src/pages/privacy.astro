@@ -52,7 +52,7 @@ export const prerender = true; // generate at build time
 
   <h3>2.1.&nbsp;Identifiers</h3>
   <ul>
-    <li><strong>User&nbsp;ID&nbsp;(UUID)</strong>&nbsp;- generated once per machine and stored locally under your XDG&nbsp;config directory (e.g. <code>~/Library/Preferences/alchemy</code>). <em>Not collected when running in Continuous Integration (CI) environments.</em></li>
+    <li><strong>User&nbsp;ID&nbsp;(UUID)</strong>&nbsp;- generated once per machine and stored locally on your system. <em>Not collected when running in Continuous Integration (CI) environments.</em></li>
     <li><strong>Session&nbsp;ID&nbsp;(UUID)</strong>&nbsp;- generated for each invocation of Alchemy to correlate events within a single run.</li>
     <li><strong>Project&nbsp;ID</strong>&nbsp;- the root Git commit hash of the repository in which you run Alchemy. This provides a stable, anonymous identifier for a project without exposing its contents.</li>
   </ul>
