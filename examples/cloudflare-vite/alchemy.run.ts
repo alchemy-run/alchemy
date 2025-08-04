@@ -7,11 +7,13 @@ const app = await alchemy("cloudflare-vite");
 
 export const kv = await KVNamespace("kv", {
   title: `${app.name}-${app.stage}-kv`,
+  adopt: true,
 });
 
 export const website = await Vite("website", {
   entrypoint: "src/index.ts",
   noBundle: false,
+  adopt: true,
   bindings: {
     KV: kv,
     ALCHEMY_TEST_VALUE: alchemy.secret("Hello from Alchemy!"),
