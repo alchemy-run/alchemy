@@ -70,7 +70,7 @@ export const getRefreshedWranglerConfig = singleFlight(() =>
 );
 
 const getWranglerConfigPath = memoize(async () => {
-  const xdgConfigDir = envPaths("wrangler", { suffix: "" }).config;
+  const xdgConfigDir = envPaths(".wrangler", { suffix: "" }).config;
   const legacyConfigDir = path.join(os.homedir(), ".wrangler");
   const configDir = (await fs
     .stat(legacyConfigDir)
