@@ -281,6 +281,11 @@ Alchemy integrates with popular web frameworks, so you can use them with Alchemy
     ```
   </TabItem>
   <TabItem label="Vite">
+    :::caution
+    - If you are using React Router or TanStack Start, you must use the `alchemy/cloudflare/react-router` or `alchemy/cloudflare/tanstack-start` plugin instead of `alchemy/cloudflare/vite`.
+    - If you are using SvelteKit or Nuxt, you will need to modify a different configuration file. See the SvelteKit and Nuxt guides for more information.
+    :::
+
     First, use the `Vite` resource in your `alchemy.run.ts` script:
 
     ```ts title="alchemy.run.ts"
@@ -298,11 +303,6 @@ Alchemy integrates with popular web frameworks, so you can use them with Alchemy
       plugins: [alchemy()],
     });
     ```
-
-    :::warning
-    - If you are using React Router or TanStack Start, you must use the `alchemy/cloudflare/react-router` or `alchemy/cloudflare/tanstack-start` plugin instead of `alchemy/cloudflare/vite`.
-    - If you are using SvelteKit or Nuxt, you will need to modify a different configuration file. See the SvelteKit and Nuxt guides for more information.
-    :::
   </TabItem>
   <TabItem label="SvelteKit">
     First, use the `SvelteKit` resource in your `alchemy.run.ts` script:
