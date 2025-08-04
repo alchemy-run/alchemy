@@ -12,6 +12,7 @@ const alchemyRedwood = (options?: RedwoodPluginOptions) => {
     }),
     alchemyVite({
       configPath,
+      viteEnvironment: { name: "worker" },
     }),
   ];
 };
