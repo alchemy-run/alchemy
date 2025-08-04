@@ -8,6 +8,7 @@ const alchemyRedwood = (options?: RedwoodPluginOptions) => {
     redwood({
       ...options,
       configPath,
+      includeCloudflarePlugin: false,
     }),
     alchemyVite({
       configPath,
