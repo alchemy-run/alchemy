@@ -22,6 +22,7 @@ interface ExampleProject {
   hasEnvFile: boolean;
   hasAlchemyRunFile: boolean;
   hasIndexFile: boolean;
+  hasCheckCommand: boolean;
 }
 
 async function discoverExamples(): Promise<ExampleProject[]> {
@@ -39,6 +40,7 @@ async function discoverExamples(): Promise<ExampleProject[]> {
         const envFilePath = join(rootDir, ".env");
         const alchemyRunPath = join(examplePath, "alchemy.run.ts");
         const indexPath = join(examplePath, "index.ts");
+        const pkgJson = await import(join(examplePath, "package.json"));
 
         const hasEnvFile = await fileExists(envFilePath);
         const hasAlchemyRunFile = await fileExists(alchemyRunPath);
@@ -50,6 +52,7 @@ async function discoverExamples(): Promise<ExampleProject[]> {
           hasEnvFile,
           hasAlchemyRunFile,
           hasIndexFile,
+          hasCheckCommand: !!pkgJson.scripts?.check,
         });
       }
     }
@@ -240,6 +243,10 @@ const tasks = new Listr(
         {
           title: "Deploy",
           command: deployCommand,
+        },
+        {
+          title: "Check",
+          command: example.hasCheckCommand ? "bun run check" : "bun run build",
         },
         {
           title: "Destroy",

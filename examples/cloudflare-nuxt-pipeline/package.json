@@ -8,7 +8,8 @@
     "destroy": "alchemy destroy --env-file ../../.env",
     "dev": "alchemy dev --env-file ../../.env",
     "generate": "nuxt generate",
-    "preview": "nuxt preview"
+    "preview": "nuxt preview",
+    "check": "nuxt prepare && nuxt build"
   },
   "dependencies": {
     "@cloudflare/workers-types": "^4.20250421.0",
