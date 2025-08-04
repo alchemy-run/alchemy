@@ -139,7 +139,7 @@ console.log(worker.url); // http://localhost:3000
 
 ## Bindings
 
-Most Cloudflare bindings are automatically emulated in development mode, such as [`D1Database`](/providers/cloudflare/d1-database), [`KVNamespace`](/providers/cloudflare/kv-namespace), and [`R2Bucket`](/providers/cloudflare/r2):
+Most Cloudflare bindings are automatically emulated in development mode, such as [`D1Database`](/providers/cloudflare/d1-database/), [`KVNamespace`](/providers/cloudflare/kv-namespace/), and [`R2Bucket`](/providers/cloudflare/bucket/):
 
 ```ts
 const d1 = await D1Database("my-d1");
@@ -188,7 +188,7 @@ const worker = await Worker("my-worker", {
 ```
 
 :::note
-Some resources, such as [`AIGateway`](/providers/cloudflare/ai-gateway), cannot be emulated locally. These do not support the `dev.remote` option because they are always run remotely.
+Some resources, such as [`AIGateway`](/providers/cloudflare/ai-gateway/), cannot be emulated locally. These do not support the `dev.remote` option because they are always run remotely.
 :::
 
 :::caution
@@ -298,7 +298,7 @@ Alchemy integrates with popular web frameworks, so you can use them with Alchemy
       plugins: [alchemy()],
     });
     ```
-    
+
     :::warning
     - If you are using React Router or TanStack Start, you must use the `alchemy/cloudflare/react-router` or `alchemy/cloudflare/tanstack-start` plugin instead of `alchemy/cloudflare/vite`.
     - If you are using SvelteKit or Nuxt, you will need to modify a different configuration file. See the SvelteKit and Nuxt guides for more information.
@@ -358,7 +358,15 @@ Alchemy integrates with popular web frameworks, so you can use them with Alchemy
   </TabItem>
 </Tabs>
 
-
 :::tip
 If you initialize a new project using the `alchemy create` command, the framework's configuration will be automatically updated with the relevant Alchemy adapter or plugin.
+:::
+
+## Limitations
+
+:::caution
+- Local Workers can push to remote queues, but cannot consume from them.
+- Hyperdrive support is experimental. Hyperdrive configurations that use Cloudflare Access are not supported, and only configurations provisioned in the same alchemy.run.ts file will work. This is a limitation from Cloudflare that is actively being worked on.
+- Container bindings with dev: { remote: true } cannot be used as local bindings in development mode.
+- You may see “Connection refused” errors in the console when containers are starting up - these can be safely ignored.
 :::
