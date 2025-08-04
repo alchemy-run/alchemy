@@ -128,7 +128,8 @@ export namespace WorkerBundle {
           (await fs.readFile(path.join(bundle.root!, module.path)));
         form.append(
           module.path,
-          new Blob([content], {
+          // TODO(sam): tsc -b geting a weird error about SharedArrayBuffer
+          new Blob([content as any as BlobPart], {
             type: types[module.type],
           }),
           module.path,
