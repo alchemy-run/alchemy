@@ -367,6 +367,6 @@ If you initialize a new project using the `alchemy create` command, the framewor
 :::caution
 - Local Workers can push to remote queues, but cannot consume from them.
 - Hyperdrive support is experimental. Hyperdrive configurations that use Cloudflare Access are not supported, and only configurations provisioned in the same alchemy.run.ts file will work. This is a limitation from Cloudflare that is actively being worked on.
-- Container bindings with dev: { remote: true } cannot be used as local bindings in development mode.
+- Container bindings with `dev: { remote: true }` cannot be used as local bindings in development mode.
 - You may see “Connection refused” errors in the console when containers are starting up - these can be safely ignored.
 :::
