@@ -229,7 +229,7 @@
     "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "^0.0.13",
     "@cloudflare/puppeteer": "^1.0.2",
-    "@cloudflare/workers-types": "^4.20250620.0",
+    "@cloudflare/workers-types": "latest",
     "@iarna/toml": "^2.2.5",
     "@octokit/rest": "^21.1.1",
     "@react-router/dev": "^7.7.1",
