@@ -5,7 +5,7 @@ date: 2025-08-05
 author: Sam Goodwin
 ---
 
-Alchemy now has its own plugins for Vite, Astro, SvelteKit, Redwood, and Tanstack Start that is a drop-in replacement for the `cloudflare` plugin and eliminates the need for a `wrangler.json`, a `.dev.vars` file or custom Miniflare persist path for local development.
+Alchemy now ships with plugins for Vite, Astro, SvelteKit, Nuxt, and Tanstack Start that streamline local development by eliminating the need for a `.dev.vars` file, configuration of wrangler state paths, and other boilerplate.
 
 :::note
 __TLDR__: update your `vite.config.ts` file to use the `alchemy` plugin instead of the `cloudflare` plugin for a smoother experience:
@@ -34,22 +34,9 @@ await Vite("website", {
 })
 ```
 
-✅ Deploying this to Cloudflare has always worked fine:
-```sh
-alchemy deploy
-```
+👍 The `alchemy deploy` command will build and deploy your website to Cloudflare with the `SOME_SECRET` as a secure Binding, as expected.
 
-`alchemy deploy` runs `vite build`, uploads it to Cloudflare with all the right environment variables and secrets. 
-
-⛔️ Developing locally is where you run into snags:
-
-```sh
-alchemy dev
-```
-
-This will get your worker running locally in Miniflare, but it won't include any of your environment variables or secrets! 😤
-
-This is because Cloudflare's vite plugin expects secrets to be in a `.dev.vars` file and ignores all other environment variables.
+👎 The `alchemy dev` command, however, would be missing the secret because Cloudflare's Vite plugin only includes environment variables from `.dev.vars`.
 
 ## The old workaround
 
@@ -60,13 +47,11 @@ VITE_SOME_VAR=some-value
 SOME_SECRET=some-secret
 ```
 
-You already have your secrets configured in your `alchemy.run.ts` file, so why replicate them to a `.dev.vars` file? 
+But, this is redundant and inflexible. As Alchemy users, we want to maintain our configuration and environments in code.
 
 ## The new solution
 
-Alchemy's `Website` resources (and its variants like `Vite`, `Astro`, etc.) now automatically generate a temporary `wrangler.json` file in `.alchemy/local/wrangler.json`.
-
-Unlike a typical `wrangler.json` file, we also include your secrets in plain text.
+We updated the `Website` resources (and its variants like `Vite`, `Astro`, etc.) to generate a temporary `wrangler.json` file in `.alchemy/local/wrangler.json` that contains your secrets in plain text:
 
 ```diff lang='json'
 {
@@ -78,11 +63,13 @@ Unlike a typical `wrangler.json` file, we also include your secrets in plain tex
 }
 ```
 
-:::note
-This is secure because it's only used for configuring Miniflare locally. 
+`vite dev` will include these secrets when running your Worker locally, so you no longer need a `.dev.vars` file 🎉.
+
+:::caution
+Ensure that `.alchemy` is added to your `.gitignore` to avoid accidentally committing secrets to your repo.
 :::
 
-Alchemy's `alchemy` vite plugin takes care of configuring the custom `wrangler.json` file, Miniflare persistence state path, and remote bindings:
+Our new `alchemy` vite plugin takes care of configuring the annoying boilerplate: 
 
 ```diff lang='ts'
 export default defineConfig({
@@ -96,7 +83,6 @@ export default defineConfig({
 +  plugins: [alchemy()],
 });
 ```
-
 
 ## Other frameworks
 
