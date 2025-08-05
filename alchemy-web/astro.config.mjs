@@ -23,7 +23,10 @@ export default defineConfig({
   prefetch: true,
   integrations: [
     sitemap({
-      filter: (page) => !page.endsWith(".html") && !page.endsWith(".md") && !page.endsWith(".mdx"),
+      filter: (page) =>
+        !page.endsWith(".html") &&
+        !page.endsWith(".md") &&
+        !page.endsWith(".mdx"),
     }),
     // expressiveCode({
     //   themes: [{}]
@@ -55,7 +58,7 @@ export default defineConfig({
       },
       customCss: ["./src/styles/custom.css"],
       prerender: true,
-      routeMiddleware: './src/routeData.ts',
+      routeMiddleware: "./src/routeData.ts",
       social: [
         {
           icon: "github",
