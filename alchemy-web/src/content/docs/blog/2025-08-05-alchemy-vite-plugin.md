@@ -91,7 +91,7 @@ This blog mostly focused on Vite, but we also vend similar plugins for other fra
 ### Astro
 
 ```diff lang='ts'
--import { cloudflare } from '@cloudflare/astro-plugin';
+-import cloudflare from '@astrojs/cloudflare';
 +import alchemy from 'alchemy/cloudflare/astro';
 import { defineConfig } from 'astro/config';
 
