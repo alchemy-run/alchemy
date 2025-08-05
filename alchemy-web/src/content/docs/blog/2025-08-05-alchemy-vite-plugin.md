@@ -64,7 +64,7 @@ We updated the `Website` resources (and its variants like `Vite`, `Astro`, etc.)
 }
 ```
 
-`vite dev` will include these secrets when running your Worker locally, so you no longer need a `.dev.vars` file 🎉.
+`vite dev` will include the `vars` when running your Worker locally, so you no longer need a `.dev.vars` file 🎉.
 
 :::caution
 Ensure that `.alchemy` is added to your `.gitignore` to avoid accidentally committing secrets to your repo.
@@ -85,8 +85,8 @@ export default defineConfig({
 });
 ```
 
-:::note
-If you are using a Vite-based framework like React Router or TanStack Start, we recommend using the framework-specific integrations instead of the `alchemy/cloudflare/vite` plugin. These integrations work with zero additional configuration.
+:::tip
+If you are using a Vite-based framework like React Router or TanStack Start, we recommend using the framework-specific integrations instead of the `alchemy/cloudflare/vite` plugin (see below).
 :::
 
 ## Other frameworks
@@ -103,7 +103,8 @@ import { defineConfig } from 'astro/config';
 // https://astro.build/config
 export default defineConfig({
   output: 'server',
-  adapter: alchemy(),
+-  adapter: cloudflare(),
++  adapter: alchemy(),
 });
 ```
 
@@ -160,12 +161,12 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   plugins: [
--     cloudflare({
--       viteEnvironment: {
--         name: "ssr",
--       },
--     }),
-+     alchemy(),
+-    cloudflare({
+-      viteEnvironment: {
+-        name: "ssr",
+-      },
+-    }),
++    alchemy(),
     reactRouter(),
     tsconfigPaths(),
   ],
