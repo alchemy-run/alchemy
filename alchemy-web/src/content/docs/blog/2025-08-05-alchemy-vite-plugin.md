@@ -1,6 +1,5 @@
 ---
-title: Alchemy Vite Plugin
-excerpt: Bye-bye wrangler.json and .dev.vars, hello alchemy()
+title: Alchemy's Cloudflare Vite Plugin
 date: 2025-08-05
 author: Sam Goodwin
 ---
@@ -21,6 +20,8 @@ export default defineConfig({
 });
 ```
 :::
+
+<!-- excerpt -->
 
 ## What problem does it solve?
 
