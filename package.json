@@ -37,7 +37,7 @@
     "stacks"
   ],
   "devDependencies": {
-    "@biomejs/biome": "^2.1.2",
+    "@biomejs/biome": "^2.1.3",
     "@cloudflare/workers-types": "latest",
     "@redwoodjs/sdk": "^0.0.80",
     "@types/bun": "latest",
