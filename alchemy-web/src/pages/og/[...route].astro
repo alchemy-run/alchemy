@@ -27,6 +27,13 @@ export async function getStaticPaths() {
 const { entry }: { entry: CollectionEntry<"docs"> } = Astro.props;
 const { data } = entry;
 
+// Generate breadcrumb from entry path
+const pathParts = entry.id.split('/').filter(part => part !== 'index');
+const breadcrumbParts = pathParts.length > 1 ? pathParts.slice(0, -1) : (pathParts[0] ? [pathParts[0]] : []);
+const isBlogPost = entry.id.startsWith('blog/');
+const breadcrumbText = breadcrumbParts.length > 0 ? 
+  (isBlogPost ? breadcrumbParts.join(' / ') : `docs / ${breadcrumbParts.join(' / ')}`) : '';
+
 // Set response headers for HTML
 Astro.response.headers.set("Content-Type", "text/html");
 ---
@@ -36,8 +43,13 @@ Astro.response.headers.set("Content-Type", "text/html");
     <div class="logo">
       <img src="/alchemy-logo-dark.svg" alt="Alchemy" class="logo-image" />
     </div>
+    {breadcrumbText && (
+      <div class="breadcrumb">
+        {breadcrumbText}
+      </div>
+    )}
     <h1 class="title">{data.title}</h1>
-    {data.description && <p class="description">{data.description}</p>}
+    {(data.description || data.excerpt) && <p class="description">{data.description || data.excerpt}</p>}
   </div>
 
   <div class="character-container">
@@ -48,8 +60,7 @@ Astro.response.headers.set("Content-Type", "text/html");
 </div>
 
 <style>
-  @import url("https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400;1,700&display=swap");
-  @import url("https://fonts.googleapis.com/css2?family=Modern+Antiqua&family=Tinos:ital,wght@0,400;0,700;1,400;1,700&display=swap");
+  @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;700&display=swap");
 
   :root {
     --og-width: 1200px;
@@ -121,8 +132,18 @@ Astro.response.headers.set("Content-Type", "text/html");
   }
 
   .logo-image {
-    height: 60px;
+    height: 42px;
     width: auto;
+  }
+
+  .breadcrumb {
+    font-size: 16px;
+    font-weight: 400;
+    color: #a78bfa;
+    margin-bottom: 16px;
+    font-family: "IBM Plex Sans", sans-serif;
+    line-height: 1;
+    opacity: 0.8;
   }
 
   .title {
