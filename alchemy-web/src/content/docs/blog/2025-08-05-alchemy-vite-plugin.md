@@ -4,7 +4,7 @@ date: 2025-08-05
 author: Sam Goodwin
 ---
 
-Alchemy now ships with plugins for Vite, Astro, SvelteKit, Nuxt, and Tanstack Start that streamline local development by eliminating the need for a `.dev.vars` file, configuration of wrangler state paths, and other boilerplate.
+Alchemy now ships with plugins for Vite, Astro, SvelteKit, Nuxt, React Router, and TanStack Start that streamline local development by eliminating the need for a `.dev.vars` file, configuration of wrangler state paths, and other boilerplate.
 
 :::note
 __TLDR__: update your `vite.config.ts` file to use the `alchemy` plugin instead of the `cloudflare` plugin for a smoother experience:
@@ -85,14 +85,18 @@ export default defineConfig({
 });
 ```
 
+:::note
+If you are using a Vite-based framework like React Router or TanStack Start, we recommend using the framework-specific integrations instead of the `alchemy/cloudflare/vite` plugin. These integrations work with zero additional configuration.
+:::
+
 ## Other frameworks
 
 This blog mostly focused on Vite, but we also vend similar plugins for other frameworks that behave differently than Vite.
 
 ### Astro
 
-```diff lang='ts'
--import { cloudflare } from '@cloudflare/astro-plugin';
+```diff title='astro.config.mjs' lang='ts'
+-import cloudflare from '@astrojs/cloudflare';
 +import alchemy from 'alchemy/cloudflare/astro';
 import { defineConfig } from 'astro/config';
 
@@ -105,13 +109,12 @@ export default defineConfig({
 
 ### SvelteKit
 
-```diff lang='ts'
-// svelte.config.mjs
+```diff title='svelte.config.mjs' lang='ts'
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 -import adapter from '@sveltejs/adapter-cloudflare';
 +import alchemy from 'alchemy/cloudflare/sveltekit';
 
-export defaut {
+export default {
   preprocess: vitePreprocess(),
   kit: {
 -    adapter: adapter()
@@ -122,7 +125,7 @@ export defaut {
 
 ### Nuxt
 
-```diff lang='ts'
+```diff title='nuxt.config.ts' lang='ts'
 +import alchemy from "alchemy/cloudflare/nuxt";
 
 import { defineNuxtConfig } from "nuxt/config";
@@ -146,15 +149,37 @@ export default defineNuxtConfig({
 });
 ```
 
-### Tanstack Start
+### React Router
 
-```diff lang='ts'
-import tailwindcss from "@tailwindcss/vite";
+```diff title='vite.config.ts' lang='ts'
+import { reactRouter } from "@react-router/dev/vite";
+-import cloudflare from "@cloudflare/vite-plugin";
++import alchemy from "alchemy/cloudflare/react-router";
+import { defineConfig } from "vite";
+import tsconfigPaths from "vite-tsconfig-paths";
+
+export default defineConfig({
+  plugins: [
+-     cloudflare({
+-       viteEnvironment: {
+-         name: "ssr",
+-       },
+-     }),
++     alchemy(),
+    reactRouter(),
+    tsconfigPaths(),
+  ],
+});
+```
+
+### TanStack Start
+
+```diff title='vite.config.ts' lang='ts'
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 -import { cloudflareWorkersDevEnvironmentShim } from "alchemy/cloudflare";
 +import alchemy from "alchemy/cloudflare/tanstack-start";
-import { defineConfig, PluginOption } from "vite";
+import { defineConfig } from "vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
@@ -168,7 +193,6 @@ export default defineConfig({
     },
   },
   plugins: [
-    tailwindcss() as PluginOption,
 -    cloudflareWorkersDevEnvironmentShim(),
 +    alchemy(),
     tsConfigPaths({
