@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "alchemy": "workspace:*",
-    "@cloudflare/workers-types": "^4.20250620.0",
+    "@cloudflare/workers-types": "^4.20250805.0",
     "miniflare": "^4.20250617.3",
     "nitro-cloudflare-dev": "^0.2.2",
     "typescript": "^5.8.3"

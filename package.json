@@ -29,16 +29,21 @@
     "bump": "bun ./scripts/bump.ts",
     "claude:yolo": "claude --dangerously-skip-permissions"
   },
-  "workspaces": [
-    "alchemy-web",
-    "alchemy",
-    "alchemy/templates/*",
-    "examples/*",
-    "stacks"
-  ],
+  "workspaces": {
+    "catalog": {
+      "@cloudflare/workers-types": "^4.20250805.0"
+    },
+    "packages": [
+      "alchemy-web",
+      "alchemy",
+      "alchemy/templates/*",
+      "examples/*",
+      "stacks"
+    ]
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.1.3",
-    "@cloudflare/workers-types": "^4.20250613.0",
+    "@cloudflare/workers-types": "^4.20250805.0",
     "@redwoodjs/sdk": "^0.0.80",
     "@types/bun": "latest",
     "@types/node": "latest",
