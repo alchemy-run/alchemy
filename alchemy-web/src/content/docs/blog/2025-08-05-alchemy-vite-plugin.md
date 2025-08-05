@@ -109,7 +109,6 @@ export default defineConfig({
 ### SvelteKit
 
 ```diff title='svelte.config.mjs' lang='ts'
-// svelte.config.mjs
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 -import adapter from '@sveltejs/adapter-cloudflare';
 +import alchemy from 'alchemy/cloudflare/sveltekit';
