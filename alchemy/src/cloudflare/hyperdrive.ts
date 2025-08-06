@@ -1,5 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
+import { Scope } from "../scope.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
@@ -153,6 +154,14 @@ export interface HyperdriveProps extends CloudflareApiOptions {
    * Local connection string, if you want to use a local database for development
    */
   localConnectionString?: Secret;
+
+  /**
+   * Used to force the resource to be created in local mode
+   * @internal
+   */
+  dev?: {
+    force?: boolean;
+  };
 }
 
 /**
@@ -262,13 +271,38 @@ export interface Hyperdrive
  *   }
  * });
  */
-export const Hyperdrive = Resource(
+
+export const Hyperdrive: typeof _Hyperdrive = (
+  id: string,
+  props: HyperdriveProps,
+) => {
+  return _Hyperdrive(id, {
+    ...props,
+    dev: {
+      force: Scope.current.local,
+    },
+  });
+};
+
+const _Hyperdrive = Resource(
   "cloudflare::Hyperdrive",
   async function (
     this: Context<Hyperdrive>,
     id: string,
     props: HyperdriveProps,
   ): Promise<Hyperdrive> {
+    if (this.scope.local) {
+      return this({
+        id,
+        hyperdriveId: "",
+        name: props.name,
+        origin: props.origin,
+        caching: props.caching,
+        mtls: props.mtls,
+        localConnectionString: props.localConnectionString,
+        type: "hyperdrive",
+      });
+    }
     const api = await createCloudflareApi(props);
     const configsPath = `/accounts/${api.accountId}/hyperdrive/configs`;
 
