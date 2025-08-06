@@ -7,7 +7,7 @@ import { loggedProcedure, ExitSignal } from "../trpc.ts";
 
 export const login = loggedProcedure
   .meta({
-    description: "Login to Cloudflare",
+    description: "login to Cloudflare",
   })
   .input(
     z.tuple([
@@ -16,13 +16,13 @@ export const login = loggedProcedure
           .array(z.string())
           .optional()
           .default([])
-          .describe("Cloudflare OAuth scopes to authorize"),
+          .describe("cloudflare OAuth scopes to authorize"),
         defaultScopes: z
           .boolean()
           .optional()
           .default(true)
           .describe(
-            "Whether to include the default Wrangler scopes when authenticating",
+            "whether to include the default Wrangler scopes when authenticating",
           ),
       }),
     ]),

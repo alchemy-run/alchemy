@@ -9,8 +9,7 @@ import { loggedProcedure } from "../trpc.ts";
 
 export const dev = loggedProcedure
   .meta({
-    description:
-      "Run an Alchemy program in dev-mode (local simulation & hot reloading)",
+    description: "run alchemy in dev mode",
   })
   .input(
     z.tuple([
