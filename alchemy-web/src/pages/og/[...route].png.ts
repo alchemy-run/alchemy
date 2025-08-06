@@ -2,13 +2,15 @@ import type { APIRoute } from "astro";
 import { chromium } from "playwright";
 import { getCollection, type CollectionEntry } from "astro:content";
 import {
-  readFileSync,
-  writeFileSync,
-  existsSync,
-  mkdirSync,
-  unlinkSync,
-  symlinkSync,
-} from "node:fs";
+  readFile,
+  writeFile,
+  access,
+  mkdir,
+  unlink,
+  symlink,
+  constants,
+} from "node:fs/promises";
+import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 
 export const prerender = true;
@@ -103,53 +105,59 @@ interface DigestManifest {
   [path: string]: string; // path -> digest mapping
 }
 
-function loadManifest(): DigestManifest {
-  if (existsSync(MANIFEST_FILE)) {
-    try {
-      return JSON.parse(readFileSync(MANIFEST_FILE, "utf-8"));
-    } catch {
-      return {};
-    }
-  }
-  return {};
-}
-
-function ensureCacheDir() {
-  if (!existsSync(CACHE_DIR)) {
-    mkdirSync(CACHE_DIR, { recursive: true });
+async function loadManifest(): Promise<DigestManifest> {
+  try {
+    await access(MANIFEST_FILE, constants.F_OK);
+    const content = await readFile(MANIFEST_FILE, "utf-8");
+    return JSON.parse(content);
+  } catch {
+    return {};
   }
 }
 
-function ensureDistSymlink() {
+async function ensureCacheDir(): Promise<void> {
+  try {
+    await access(CACHE_DIR, constants.F_OK);
+  } catch {
+    await mkdir(CACHE_DIR, { recursive: true });
+  }
+}
+
+async function ensureDistSymlink(): Promise<void> {
   const distOgDir = join(process.cwd(), "dist", "og");
   const distDir = join(process.cwd(), "dist");
 
   // Ensure dist directory exists
-  if (!existsSync(distDir)) {
-    mkdirSync(distDir, { recursive: true });
+  try {
+    await access(distDir, constants.F_OK);
+  } catch {
+    await mkdir(distDir, { recursive: true });
   }
 
   // Remove existing dist/og if it exists (file or directory)
-  if (existsSync(distOgDir)) {
+  try {
+    await access(distOgDir, constants.F_OK);
     try {
-      unlinkSync(distOgDir);
+      await unlink(distOgDir);
     } catch {
       // If it's a directory, this will fail, but that's ok
     }
+  } catch {
+    // File doesn't exist, that's fine
   }
 
   // Create symlink from dist/og to cache directory
   try {
-    symlinkSync(CACHE_DIR, distOgDir, "dir");
+    await symlink(CACHE_DIR, distOgDir, "dir");
     console.log(`Created symlink: dist/og -> ${CACHE_DIR}`);
   } catch (e) {
     console.error(`Failed to create symlink:`, e);
   }
 }
 
-function saveManifest(manifest: DigestManifest) {
-  ensureCacheDir();
-  writeFileSync(MANIFEST_FILE, JSON.stringify(manifest, null, 2));
+async function saveManifest(manifest: DigestManifest): Promise<void> {
+  await ensureCacheDir();
+  await writeFile(MANIFEST_FILE, JSON.stringify(manifest, null, 2));
 }
 
 export async function getStaticPaths() {
@@ -174,15 +182,10 @@ export async function getStaticPaths() {
     });
   }
 
-  // Ensure cache directory exists and set up symlink
-  ensureCacheDir();
-  ensureDistSymlink();
-
-  // Clean up old cached files and update manifest
+  // Build new manifest with current paths and digests
   const currentPaths = new Set<string>();
   const newManifest: DigestManifest = {};
 
-  // Build new manifest with current paths and digests
   for (const path of paths) {
     const route = path.params.route || "index";
     const ogPath = `/og/${route}.png`;
@@ -192,34 +195,31 @@ export async function getStaticPaths() {
     newManifest[ogPath] = digest;
   }
 
-  // Load old manifest and find files to delete
-  const oldManifest = loadManifest();
-  const filesToDelete: string[] = [];
+  // Run setup and cleanup operations in parallel
+  const [oldManifest] = await Promise.all([
+    loadManifest(),
+    ensureCacheDir(),
+    ensureDistSymlink(),
+  ]);
 
-  // Find cached files that are no longer needed
+  // Find and delete outdated cached files
+  const deletePromises: Promise<void>[] = [];
   for (const oldPath in oldManifest) {
     if (!currentPaths.has(oldPath)) {
-      // Convert /og/path/to/file.png to cache/path/to/file.png
       const relativePath = oldPath.replace(/^\/og\//, "");
       const cacheFile = join(CACHE_DIR, relativePath);
-      if (existsSync(cacheFile)) {
-        filesToDelete.push(cacheFile);
-      }
+      deletePromises.push(
+        unlink(cacheFile)
+          .then(() => {
+            console.log(`Deleted outdated OG cache: ${cacheFile}`);
+          })
+          .catch(() => {}), // File doesn't exist or can't be deleted, that's ok
+      );
     }
   }
 
-  // Delete outdated cached files
-  for (const file of filesToDelete) {
-    try {
-      unlinkSync(file);
-      console.log(`Deleted outdated OG cache: ${file}`);
-    } catch (e) {
-      console.error(`Failed to delete cache file: ${file}`, e);
-    }
-  }
-
-  // Save the new manifest
-  saveManifest(newManifest);
+  // Wait for all deletions and save manifest
+  await Promise.all([...deletePromises, saveManifest(newManifest)]);
 
   return paths;
 }
@@ -235,10 +235,16 @@ export const GET: APIRoute = async ({ props, params }) => {
   const cacheFile = join(CACHE_DIR, relativePath);
 
   // Check if we have a cached version with the same digest
-  const manifest = loadManifest();
-  if (manifest[ogPath] === digest && existsSync(cacheFile)) {
+  const [manifest, cacheExists] = await Promise.all([
+    loadManifest(),
+    access(cacheFile, constants.F_OK)
+      .then(() => true)
+      .catch(() => false),
+  ]);
+
+  if (manifest[ogPath] === digest && cacheExists) {
     try {
-      const cachedImage = readFileSync(cacheFile);
+      const cachedImage = await readFile(cacheFile);
       console.log(` (using cache)`);
 
       return new Response(cachedImage, {
@@ -482,14 +488,16 @@ export const GET: APIRoute = async ({ props, params }) => {
   try {
     // Ensure the directory structure exists for when build process writes
     const cacheFileDir = dirname(cacheFile);
-    if (!existsSync(cacheFileDir)) {
-      mkdirSync(cacheFileDir, { recursive: true });
+    try {
+      await access(cacheFileDir, constants.F_OK);
+    } catch {
+      await mkdir(cacheFileDir, { recursive: true });
     }
 
     // Update manifest with new digest
-    const updatedManifest = loadManifest();
+    const updatedManifest = await loadManifest();
     updatedManifest[ogPath] = digest;
-    saveManifest(updatedManifest);
+    await saveManifest(updatedManifest);
   } catch (e) {
     console.error(`Failed to update manifest:`, e);
   }
