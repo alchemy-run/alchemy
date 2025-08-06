@@ -24,6 +24,28 @@ const db = await Hyperdrive("my-postgres-db", {
 });
 ```
 
+## With Local Connection String
+
+If you want to use a local database for development, you can set the `localConnectionString` property.
+
+This will be used by Miniflare to connect to the local database.
+
+```ts
+const db = await Hyperdrive("my-postgres-db", {
+  name: "my-postgres-db",
+  origin: {
+    database: "postgres",
+    host: "database.example.com",
+    password: alchemy.secret("your-password"),
+    port: 5432,
+    user: "postgres",
+  },
+  localConnectionString: alchemy.secret(
+    "postgres://user:password@localhost:5432/postgres",
+  ),
+});
+```
+
 ## With Caching Disabled
 
 Create a Hyperdrive connection with caching disabled.
