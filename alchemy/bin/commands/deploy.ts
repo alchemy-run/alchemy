@@ -10,7 +10,7 @@ import { loggedProcedure } from "../trpc.ts";
 
 export const deploy = loggedProcedure
   .meta({
-    description: "Deploy an Alchemy project",
+    description: "deploy an alchemy project",
   })
   .input(
     z.tuple([
