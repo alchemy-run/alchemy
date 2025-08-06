@@ -3,7 +3,7 @@ title: AccountApiToken
 description: Learn how to create and manage Cloudflare Account API Tokens using Alchemy for secure access to the Cloudflare API.
 ---
 
-Creates a [Cloudflare API Token](https://developers.cloudflare.com/api/tokens/) with specified permissions and access controls.
+Creates a [Cloudflare API Token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/) with specified permissions and access controls.
 
 ## Minimal Example
 
