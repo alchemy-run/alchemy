@@ -1,10 +1,47 @@
 import type { APIRoute } from "astro";
 import { chromium } from "playwright";
 import { getCollection, type CollectionEntry } from "astro:content";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  mkdirSync,
+  unlinkSync,
+  symlinkSync,
+} from "node:fs";
+import { join, dirname } from "node:path";
 
 export const prerender = true;
+
+// Cache directory and manifest file
+const CACHE_DIR = join(process.cwd(), ".astro", "og-cache");
+const MANIFEST_FILE = join(CACHE_DIR, "digest-manifest.json");
+
+interface DigestManifest {
+  [path: string]: string; // path -> digest mapping
+}
+
+function loadManifest(): DigestManifest {
+  if (existsSync(MANIFEST_FILE)) {
+    try {
+      return JSON.parse(readFileSync(MANIFEST_FILE, "utf-8"));
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function ensureCacheDir() {
+  if (!existsSync(CACHE_DIR)) {
+    mkdirSync(CACHE_DIR, { recursive: true });
+  }
+}
+
+function saveManifest(manifest: DigestManifest) {
+  ensureCacheDir();
+  writeFileSync(MANIFEST_FILE, JSON.stringify(manifest, null, 2));
+}
 
 export async function getStaticPaths() {
   const docs = await getCollection("docs");
@@ -23,14 +60,78 @@ export async function getStaticPaths() {
     });
   }
 
+  // Clean up old cached files and update manifest
+  const currentPaths = new Set<string>();
+  const newManifest: DigestManifest = {};
+
+  // Build new manifest with current paths and digests
+  for (const path of paths) {
+    const route = path.params.route || "index";
+    const ogPath = `/og/${route}.png`;
+    const digest = path.props.entry.digest;
+
+    currentPaths.add(ogPath);
+    newManifest[ogPath] = digest;
+  }
+
+  // Load old manifest and find files to delete
+  const oldManifest = loadManifest();
+  const filesToDelete: string[] = [];
+
+  // Find cached files that are no longer needed
+  for (const oldPath in oldManifest) {
+    if (!currentPaths.has(oldPath)) {
+      const cacheFile = join(CACHE_DIR, oldPath.replace(/\//g, "_"));
+      if (existsSync(cacheFile)) {
+        filesToDelete.push(cacheFile);
+      }
+    }
+  }
+
+  // Delete outdated cached files
+  for (const file of filesToDelete) {
+    try {
+      unlinkSync(file);
+      console.log(`Deleted outdated OG cache: ${file}`);
+    } catch (e) {
+      console.error(`Failed to delete cache file: ${file}`, e);
+    }
+  }
+
+  // Save the new manifest
+  saveManifest(newManifest);
+
   return paths;
 }
 
-export const GET: APIRoute = async ({ props }) => {
+export const GET: APIRoute = async ({ props, params }) => {
   const { entry } = props as { entry: CollectionEntry<"docs"> };
-  const { data } = entry;
+  const { data, digest } = entry;
+  const route = params.route || "index";
 
-  console.log(entry);
+  const ogPath = `/og/${route}.png`;
+  const cacheFile = join(CACHE_DIR, ogPath.replace(/\//g, "_"));
+
+  // Check if we have a cached version with the same digest
+  const manifest = loadManifest();
+  if (manifest[ogPath] === digest && existsSync(cacheFile)) {
+    try {
+      const cachedImage = readFileSync(cacheFile);
+      console.log(` (using cache)`);
+
+      return new Response(cachedImage, {
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
+    } catch (e) {
+      console.error(`Failed to read cached image: ${cacheFile}`, e);
+      // Continue to regenerate if cache read fails
+    }
+  }
+
+  console.log(` (generating)`);
 
   // Read images and convert to base64
   const publicDir = join(process.cwd(), "public");
@@ -271,6 +372,26 @@ export const GET: APIRoute = async ({ props }) => {
 
   // Close the browser
   await browser.close();
+
+  // Save to cache (which will also appear in dist/og via symlink)
+  try {
+    // Ensure the directory structure exists
+    const cacheFileDir = dirname(cacheFile);
+    if (!existsSync(cacheFileDir)) {
+      mkdirSync(cacheFileDir, { recursive: true });
+    }
+    
+    writeFileSync(cacheFile, screenshot);
+
+    // Update manifest with new digest
+    const updatedManifest = loadManifest();
+    updatedManifest[ogPath] = digest;
+    saveManifest(updatedManifest);
+
+    console.log(`Cached OG image: ${cacheFile}`);
+  } catch (e) {
+    console.error(`Failed to cache image: ${cacheFile}`, e);
+  }
 
   // Return the screenshot as the response
   return new Response(screenshot, {
