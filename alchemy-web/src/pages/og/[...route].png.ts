@@ -1,17 +1,17 @@
 import type { APIRoute } from "astro";
-import { chromium } from "playwright";
 import { getCollection, type CollectionEntry } from "astro:content";
-import {
-  readFile,
-  writeFile,
-  access,
-  mkdir,
-  unlink,
-  symlink,
-  constants,
-} from "node:fs/promises";
 import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import {
+  access,
+  constants,
+  mkdir,
+  readFile,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { chromium, type Browser } from "playwright";
 
 export const prerender = true;
 
@@ -166,7 +166,7 @@ export async function getStaticPaths() {
     return [];
   }
 
-  const docs = await getCollection("docs");
+  const docs: any[] = await getCollection("docs");
 
   const paths = docs.map((doc) => ({
     params: { route: doc.id },
