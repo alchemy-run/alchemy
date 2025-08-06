@@ -17,6 +17,38 @@ export const prerender = true;
 const CACHE_DIR = join(process.cwd(), ".astro", "og-cache");
 const MANIFEST_FILE = join(CACHE_DIR, "digest-manifest.json");
 
+// Shared browser instance
+let sharedBrowser: Browser | null = null;
+
+async function getBrowser(): Promise<Browser> {
+  if (!sharedBrowser) {
+    sharedBrowser = await chromium.launch();
+
+    // Clean up browser on process exit
+    process.on("exit", () => {
+      if (sharedBrowser) {
+        sharedBrowser.close();
+      }
+    });
+
+    process.on("SIGINT", () => {
+      if (sharedBrowser) {
+        sharedBrowser.close();
+      }
+      process.exit();
+    });
+
+    process.on("SIGTERM", () => {
+      if (sharedBrowser) {
+        sharedBrowser.close();
+      }
+      process.exit();
+    });
+  }
+
+  return sharedBrowser;
+}
+
 interface DigestManifest {
   [path: string]: string; // path -> digest mapping
 }
@@ -35,6 +67,33 @@ function loadManifest(): DigestManifest {
 function ensureCacheDir() {
   if (!existsSync(CACHE_DIR)) {
     mkdirSync(CACHE_DIR, { recursive: true });
+  }
+}
+
+function ensureDistSymlink() {
+  const distOgDir = join(process.cwd(), "dist", "og");
+  const distDir = join(process.cwd(), "dist");
+  
+  // Ensure dist directory exists
+  if (!existsSync(distDir)) {
+    mkdirSync(distDir, { recursive: true });
+  }
+  
+  // Remove existing dist/og if it exists (file or directory)
+  if (existsSync(distOgDir)) {
+    try {
+      unlinkSync(distOgDir);
+    } catch {
+      // If it's a directory, this will fail, but that's ok
+    }
+  }
+  
+  // Create symlink from dist/og to cache directory
+  try {
+    symlinkSync(CACHE_DIR, distOgDir, "dir");
+    console.log(`Created symlink: dist/og -> ${CACHE_DIR}`);
+  } catch (e) {
+    console.error(`Failed to create symlink:`, e);
   }
 }
 
@@ -60,6 +119,10 @@ export async function getStaticPaths() {
     });
   }
 
+  // Ensure cache directory exists and set up symlink
+  ensureCacheDir();
+  ensureDistSymlink();
+
   // Clean up old cached files and update manifest
   const currentPaths = new Set<string>();
   const newManifest: DigestManifest = {};
@@ -81,7 +144,9 @@ export async function getStaticPaths() {
   // Find cached files that are no longer needed
   for (const oldPath in oldManifest) {
     if (!currentPaths.has(oldPath)) {
-      const cacheFile = join(CACHE_DIR, oldPath.replace(/\//g, "_"));
+      // Convert /og/path/to/file.png to cache/path/to/file.png
+      const relativePath = oldPath.replace(/^\/og\//, "");
+      const cacheFile = join(CACHE_DIR, relativePath);
       if (existsSync(cacheFile)) {
         filesToDelete.push(cacheFile);
       }
@@ -110,7 +175,9 @@ export const GET: APIRoute = async ({ props, params }) => {
   const route = params.route || "index";
 
   const ogPath = `/og/${route}.png`;
-  const cacheFile = join(CACHE_DIR, ogPath.replace(/\//g, "_"));
+  // Convert /og/path/to/file.png to cache/path/to/file.png
+  const relativePath = ogPath.replace(/^\/og\//, "");
+  const cacheFile = join(CACHE_DIR, relativePath);
 
   // Check if we have a cached version with the same digest
   const manifest = loadManifest();
@@ -349,48 +416,47 @@ export const GET: APIRoute = async ({ props, params }) => {
 </html>
   `;
 
-  // Launch browser and render the HTML
-  const browser = await chromium.launch();
+  // Use shared browser instance
+  const browser = await getBrowser();
   const page = await browser.newPage();
+  let screenshot: Buffer;
 
-  // Set viewport to OG image size
-  await page.setViewportSize({ width: 1200, height: 630 });
-
-  // Set the HTML content
-  await page.setContent(html, {
-    waitUntil: "networkidle",
-  });
-
-  // Wait for fonts to load
-  await page.waitForTimeout(100);
-
-  // Take a screenshot
-  const screenshot = await page.screenshot({
-    type: "png",
-    fullPage: false,
-  });
-
-  // Close the browser
-  await browser.close();
-
-  // Save to cache (which will also appear in dist/og via symlink)
   try {
-    // Ensure the directory structure exists
+    // Set viewport to OG image size
+    await page.setViewportSize({ width: 1200, height: 630 });
+
+    // Set the HTML content
+    await page.setContent(html, {
+      waitUntil: "networkidle",
+    });
+
+    // Wait for fonts to load
+    await page.waitForTimeout(100);
+
+    // Take a screenshot
+    screenshot = await page.screenshot({
+      type: "png",
+      fullPage: false,
+    });
+  } finally {
+    // Always close the page to free resources
+    await page.close();
+  }
+
+  // Update manifest - the build process will write to cache via symlink
+  try {
+    // Ensure the directory structure exists for when build process writes
     const cacheFileDir = dirname(cacheFile);
     if (!existsSync(cacheFileDir)) {
       mkdirSync(cacheFileDir, { recursive: true });
     }
-    
-    writeFileSync(cacheFile, screenshot);
 
     // Update manifest with new digest
     const updatedManifest = loadManifest();
     updatedManifest[ogPath] = digest;
     saveManifest(updatedManifest);
-
-    console.log(`Cached OG image: ${cacheFile}`);
   } catch (e) {
-    console.error(`Failed to cache image: ${cacheFile}`, e);
+    console.error(`Failed to update manifest:`, e);
   }
 
   // Return the screenshot as the response
