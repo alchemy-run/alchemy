@@ -10,7 +10,7 @@ import {
   symlink,
   constants,
 } from "node:fs/promises";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 
 export const prerender = true;
@@ -151,7 +151,7 @@ async function ensureDistSymlink(): Promise<void> {
     await symlink(CACHE_DIR, distOgDir, "dir");
     console.log(`Created symlink: dist/og -> ${CACHE_DIR}`);
   } catch (e) {
-    console.error(`Failed to create symlink:`, e);
+    console.error("Failed to create symlink:", e);
   }
 }
 
@@ -245,7 +245,7 @@ export const GET: APIRoute = async ({ props, params }) => {
   if (manifest[ogPath] === digest && cacheExists) {
     try {
       const cachedImage = await readFile(cacheFile);
-      console.log(` (using cache)`);
+      console.log(" (using cache)");
 
       return new Response(cachedImage, {
         headers: {
@@ -259,7 +259,7 @@ export const GET: APIRoute = async ({ props, params }) => {
     }
   }
 
-  console.log(` (generating)`);
+  console.log(" (generating)");
 
   // Generate breadcrumb from entry path
   const pathParts = entry.id
@@ -499,7 +499,7 @@ export const GET: APIRoute = async ({ props, params }) => {
     updatedManifest[ogPath] = digest;
     await saveManifest(updatedManifest);
   } catch (e) {
-    console.error(`Failed to update manifest:`, e);
+    console.error("Failed to update manifest:", e);
   }
 
   // Return the screenshot as the response
