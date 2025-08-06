@@ -17,8 +17,9 @@ export const prerender = true;
 const CACHE_DIR = join(process.cwd(), ".astro", "og-cache");
 const MANIFEST_FILE = join(CACHE_DIR, "digest-manifest.json");
 
-// Shared browser instance
+// Shared browser instance and cached assets
 let sharedBrowser: Browser | null = null;
+const assetCache = new Map<string, string>();
 
 async function getBrowser(): Promise<Browser> {
   if (!sharedBrowser) {
@@ -49,6 +50,55 @@ async function getBrowser(): Promise<Browser> {
   return sharedBrowser;
 }
 
+function getAsset(filename: string): string {
+  // Return cached version if available
+  if (assetCache.has(filename)) {
+    return assetCache.get(filename)!;
+  }
+
+  try {
+    const publicDir = join(process.cwd(), "public");
+    const fileData = readFileSync(join(publicDir, filename));
+
+    // Determine MIME type based on file extension
+    const ext = filename.split(".").pop()?.toLowerCase();
+    let mimeType: string;
+
+    switch (ext) {
+      case "svg":
+        mimeType = "image/svg+xml";
+        break;
+      case "webp":
+        mimeType = "image/webp";
+        break;
+      case "png":
+        mimeType = "image/png";
+        break;
+      case "jpg":
+      case "jpeg":
+        mimeType = "image/jpeg";
+        break;
+      case "gif":
+        mimeType = "image/gif";
+        break;
+      default:
+        mimeType = "application/octet-stream";
+    }
+
+    const base64String = `data:${mimeType};base64,${fileData.toString("base64")}`;
+
+    // Cache the result
+    assetCache.set(filename, base64String);
+
+    return base64String;
+  } catch (e) {
+    console.error(`Failed to read asset: ${filename}`, e);
+    const fallback = "";
+    assetCache.set(filename, fallback);
+    return fallback;
+  }
+}
+
 interface DigestManifest {
   [path: string]: string; // path -> digest mapping
 }
@@ -73,12 +123,12 @@ function ensureCacheDir() {
 function ensureDistSymlink() {
   const distOgDir = join(process.cwd(), "dist", "og");
   const distDir = join(process.cwd(), "dist");
-  
+
   // Ensure dist directory exists
   if (!existsSync(distDir)) {
     mkdirSync(distDir, { recursive: true });
   }
-  
+
   // Remove existing dist/og if it exists (file or directory)
   if (existsSync(distOgDir)) {
     try {
@@ -87,7 +137,7 @@ function ensureDistSymlink() {
       // If it's a directory, this will fail, but that's ok
     }
   }
-  
+
   // Create symlink from dist/og to cache directory
   try {
     symlinkSync(CACHE_DIR, distOgDir, "dir");
@@ -199,26 +249,6 @@ export const GET: APIRoute = async ({ props, params }) => {
   }
 
   console.log(` (generating)`);
-
-  // Read images and convert to base64
-  const publicDir = join(process.cwd(), "public");
-
-  let logoBase64 = "";
-  let alchemistBase64 = "";
-
-  try {
-    const logoData = readFileSync(join(publicDir, "alchemy-logo-dark.svg"));
-    logoBase64 = `data:image/svg+xml;base64,${logoData.toString("base64")}`;
-  } catch (e) {
-    console.error("Failed to read logo:", e);
-  }
-
-  try {
-    const alchemistData = readFileSync(join(publicDir, "alchemist.webp"));
-    alchemistBase64 = `data:image/webp;base64,${alchemistData.toString("base64")}`;
-  } catch (e) {
-    console.error("Failed to read alchemist image:", e);
-  }
 
   // Generate breadcrumb from entry path
   const pathParts = entry.id
@@ -399,7 +429,7 @@ export const GET: APIRoute = async ({ props, params }) => {
   <div class="og-container">
     <div class="content">
       <div class="logo">
-        <img src="${logoBase64}" alt="Alchemy" class="logo-image" />
+        <img src="${getAsset("alchemy-logo-dark.svg")}" alt="Alchemy" class="logo-image" />
       </div>
       ${breadcrumbText ? `<div class="breadcrumb">${breadcrumbText}</div>` : ""}
       <h1 class="title">${data.title}</h1>
@@ -408,7 +438,7 @@ export const GET: APIRoute = async ({ props, params }) => {
 
     <div class="character-container">
       <div class="character-circle">
-        <img src="${alchemistBase64}" alt="Alchemist" class="character-image" />
+        <img src="${getAsset("alchemist.webp")}" alt="Alchemist" class="character-image" />
       </div>
     </div>
   </div>
@@ -425,13 +455,13 @@ export const GET: APIRoute = async ({ props, params }) => {
     // Set viewport to OG image size
     await page.setViewportSize({ width: 1200, height: 630 });
 
-    // Set the HTML content
+    // Set the HTML content (domcontentloaded is faster than networkidle)
     await page.setContent(html, {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
     });
 
     // Wait for fonts to load
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(50);
 
     // Take a screenshot
     screenshot = await page.screenshot({
