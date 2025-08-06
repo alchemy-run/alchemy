@@ -153,6 +153,11 @@ function saveManifest(manifest: DigestManifest) {
 }
 
 export async function getStaticPaths() {
+  // Check if OG image generation is enabled
+  if (!process.env.GENERATE_OG_IMAGES) {
+    return [];
+  }
+
   const docs = await getCollection("docs");
 
   const paths = docs.map((doc) => ({

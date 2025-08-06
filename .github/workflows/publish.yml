@@ -32,6 +32,9 @@ jobs:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-west-2
 
+      - name: Install Playwright Browsers
+        run: bunx playwright install --with-deps chromium
+
       - name: Get Astro version
         id: astro-version
         run: echo "version=$(bun info astro version)" >> $GITHUB_OUTPUT
@@ -61,4 +64,5 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_KEY: ${{ env.CLOUDFLARE_API_KEY }}
           CLOUDFLARE_EMAIL: ${{ env.CLOUDFLARE_EMAIL }}
+          GENERATE_OG_IMAGES: true
           STAGE: prod
