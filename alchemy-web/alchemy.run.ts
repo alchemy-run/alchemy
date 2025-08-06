@@ -46,9 +46,6 @@ if (stage === "prod") {
 
 export const website = await Astro("website", {
   name: "alchemy-website",
-  output: "static",
-  entrypoint: "src/og-worker.ts",
-  noBundle: false,
   adopt: true,
   version: stage === "prod" ? undefined : stage,
   domains: domain ? [domain] : undefined,
@@ -56,10 +53,6 @@ export const website = await Astro("website", {
     POSTHOG_CLIENT_API_HOST: `https://${POSTHOG_PROXY_HOST}`,
     POSTHOG_PROJECT_ID: POSTHOG_PROJECT_ID,
     ENABLE_POSTHOG: stage === "prod" ? "true" : "false",
-  },
-  assets: {
-    directory: "dist",
-    not_found_handling: "none",
   },
 });
 
