@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Astro, BrowserRendering, Worker, Zone } from "alchemy/cloudflare";
+import { Astro, Worker, Zone } from "alchemy/cloudflare";
 import { GitHubComment } from "alchemy/github";
 import { CloudflareStateStore } from "alchemy/state";
 
@@ -61,10 +61,6 @@ export const website = await Astro("website", {
     directory: "dist",
     not_found_handling: "none",
   },
-  bindings: {
-    BROWSER: BrowserRendering(),
-  },
-  compatibility: "node",
 });
 
 const url = domain ? `https://${domain}` : website.url;

@@ -1,4 +1,4 @@
-import puppeteer from "@cloudflare/puppeteer";
+import { ImageResponse } from "workers-og";
 import type { website } from "../alchemy.run.ts";
 
 export default {
@@ -14,24 +14,21 @@ export default {
       // Make request to alchemy.run/og/... with the same path to get HTML
       const ogHtmlUrl = `https://${url.hostname}/og${url.pathname.substring(0, url.pathname.length - ".png".length)}`;
 
-      // const response = await env.ASSETS.fetch(ogHtmlUrl);
+      const response = await env.ASSETS.fetch(ogHtmlUrl);
 
-      const browser = await puppeteer.launch(env.BROWSER);
-      const page = await browser.newPage();
-      await page.goto(ogHtmlUrl);
-      const img = await page.screenshot({
-        clip: {
-          height,
-          width,
-          x: 0,
-          y: 0,
-        },
-      });
+      if (!response.ok) {
+        return new Response(
+          JSON.stringify({
+            notFound: ogHtmlUrl,
+          }),
+          { status: 404 },
+        );
+      }
 
-      return new Response(img, {
-        headers: {
-          "Content-Type": "image/png",
-        },
+      return new ImageResponse(response.body, {
+        width,
+        height,
+        format: "png",
       });
     } else {
       return new Response("Not Found", { status: 404 });
