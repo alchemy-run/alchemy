@@ -24,4 +24,22 @@ export const onRequest = defineRouteMiddleware((context) => {
       content: `${baseImageUrl}`,
     },
   });
+
+  // Twitter Card
+  route.head.push({
+    tag: "meta",
+    attrs: {
+      name: "twitter:card",
+      content: "summary_large_image",
+    },
+  });
+
+  // Twitter image
+  route.head.push({
+    tag: "meta",
+    attrs: {
+      name: "twitter:image",
+      content: `${baseImageUrl}`,
+    },
+  });
 });
