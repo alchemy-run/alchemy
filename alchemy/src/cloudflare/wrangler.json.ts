@@ -13,6 +13,7 @@ import {
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
 import type { EventSource } from "./event-source.ts";
 import { isQueueEventSource } from "./event-source.ts";
+import { formatHyperdriveLocalConnectionString } from "./hyperdrive.ts";
 import { isQueue } from "./queue.ts";
 import type { Worker, WorkerProps } from "./worker.ts";
 
@@ -737,14 +738,10 @@ function processBindings(
         binding: bindingName,
       };
     } else if (binding.type === "hyperdrive") {
-      const password =
-        "password" in binding.origin
-          ? binding.origin.password.unencrypted
-          : binding.origin.access_client_secret.unencrypted;
       hyperdrive.push({
         binding: bindingName,
         id: binding.hyperdriveId,
-        localConnectionString: `${binding.origin.scheme || "postgres"}://${binding.origin.user}:${password}@${binding.origin.host}:${binding.origin.port || 5432}/${binding.origin.database}`,
+        localConnectionString: formatHyperdriveLocalConnectionString(binding),
       });
     } else if (binding.type === "pipeline") {
       pipelines.push({

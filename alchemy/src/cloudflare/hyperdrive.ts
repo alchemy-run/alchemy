@@ -148,6 +148,11 @@ export interface HyperdriveProps extends CloudflareApiOptions {
    * @internal
    */
   hyperdriveId?: string;
+
+  /**
+   * Local connection string, if you want to use a local database for development
+   */
+  localConnectionString?: Secret;
 }
 
 /**
@@ -356,6 +361,7 @@ export const Hyperdrive = Resource(
       origin: props.origin, // Keep the original origin with secrets
       caching: apiResource.caching,
       mtls: apiResource.mtls,
+      localConnectionString: props.localConnectionString,
       type: "hyperdrive",
     });
   },
@@ -388,3 +394,16 @@ function prepareRequestBody(props: HyperdriveProps): any {
 
   return requestBody;
 }
+
+export const formatHyperdriveLocalConnectionString = (
+  hyperdrive: Hyperdrive,
+) => {
+  if (hyperdrive.localConnectionString) {
+    return hyperdrive.localConnectionString.unencrypted;
+  }
+  const password =
+    "password" in hyperdrive.origin
+      ? hyperdrive.origin.password.unencrypted
+      : hyperdrive.origin.access_client_secret.unencrypted;
+  return `${hyperdrive.origin.scheme || "postgres"}://${hyperdrive.origin.user}:${password}@${hyperdrive.origin.host}:${hyperdrive.origin.port || 5432}/${hyperdrive.origin.database}`;
+};
