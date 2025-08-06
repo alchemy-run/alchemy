@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Astro, Worker, Zone } from "alchemy/cloudflare";
+import { Astro, BrowserRendering, Worker, Zone } from "alchemy/cloudflare";
 import { GitHubComment } from "alchemy/github";
 import { CloudflareStateStore } from "alchemy/state";
 
@@ -44,8 +44,11 @@ if (stage === "prod") {
   });
 }
 
-const website = await Astro("website", {
+export const website = await Astro("website", {
   name: "alchemy-website",
+  output: "static",
+  entrypoint: "src/og-worker.ts",
+  noBundle: false,
   adopt: true,
   version: stage === "prod" ? undefined : stage,
   domains: domain ? [domain] : undefined,
@@ -54,21 +57,19 @@ const website = await Astro("website", {
     POSTHOG_PROJECT_ID: POSTHOG_PROJECT_ID,
     ENABLE_POSTHOG: stage === "prod" ? "true" : "false",
   },
+  assets: {
+    directory: "dist",
+    not_found_handling: "none",
+  },
+  bindings: {
+    BROWSER: BrowserRendering(),
+  },
+  compatibility: "node",
 });
 
 const url = domain ? `https://${domain}` : website.url;
 
 console.log(url);
-
-export const ogWorker = await Worker("alchemy-og-worker", {
-  entrypoint: "./src/og-worker.ts",
-  compatibilityFlags: ["nodejs_compat"],
-  routes: [
-    {
-      pattern: "og.alchemy.run/*",
-    },
-  ],
-});
 
 if (process.env.PULL_REQUEST) {
   await GitHubComment("comment", {

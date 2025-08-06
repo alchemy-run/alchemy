@@ -11,7 +11,7 @@ export async function getStaticPaths() {
 
   // Add a specific path for the root `/og/` route that maps to index
   const indexDoc = docs.find(
-    (doc: CollectionEntry<"docs">) => doc.id === "index"
+    (doc: CollectionEntry<"docs">) => doc.id === "index",
   );
   if (indexDoc) {
     paths.push({
@@ -28,28 +28,36 @@ const { entry }: { entry: CollectionEntry<"docs"> } = Astro.props;
 const { data } = entry;
 
 // Generate breadcrumb from entry path
-const pathParts = entry.id.split('/').filter(part => part !== 'index');
-const breadcrumbParts = pathParts.length > 1 ? pathParts.slice(0, -1) : (pathParts[0] ? [pathParts[0]] : []);
-const isBlogPost = entry.id.startsWith('blog/');
-const breadcrumbText = breadcrumbParts.length > 0 ? 
-  (isBlogPost ? breadcrumbParts.join(' / ') : `docs / ${breadcrumbParts.join(' / ')}`) : '';
+const pathParts = entry.id.split("/").filter((part: string) => part !== "index");
+const breadcrumbParts =
+  pathParts.length > 1
+    ? pathParts.slice(0, -1)
+    : pathParts[0]
+      ? [pathParts[0]]
+      : [];
+const isBlogPost = entry.id.startsWith("blog/");
+const breadcrumbText =
+  breadcrumbParts.length > 0
+    ? isBlogPost
+      ? breadcrumbParts.join(" / ")
+      : `docs / ${breadcrumbParts.join(" / ")}`
+    : "";
 
 // Set response headers for HTML
 Astro.response.headers.set("Content-Type", "text/html");
 ---
-
 <div class="og-container">
   <div class="content">
     <div class="logo">
       <img src="/alchemy-logo-dark.svg" alt="Alchemy" class="logo-image" />
     </div>
-    {breadcrumbText && (
-      <div class="breadcrumb">
-        {breadcrumbText}
-      </div>
-    )}
+    {breadcrumbText && <div class="breadcrumb">{breadcrumbText}</div>}
     <h1 class="title">{data.title}</h1>
-    {(data.description || data.excerpt) && <p class="description">{data.description || data.excerpt}</p>}
+    {
+      (data.description || data.excerpt) && (
+        <p class="description">{data.description || data.excerpt}</p>
+      )
+    }
   </div>
 
   <div class="character-container">

@@ -1,7 +1,8 @@
-import { ImageResponse } from "workers-og";
+import puppeteer from "@cloudflare/puppeteer";
+import type { website } from "../alchemy.run.ts";
 
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: typeof website.Env): Promise<Response> {
     const url = new URL(request.url);
 
     // Static dimensions
@@ -9,22 +10,31 @@ export default {
     const height = 630;
 
     // Extract the path from the URL (everything after the domain)
-    const path = url.pathname;
+    if (url.pathname.endsWith(".png")) {
+      // Make request to alchemy.run/og/... with the same path to get HTML
+      const ogHtmlUrl = `https://${url.hostname}/og${url.pathname.substring(0, url.pathname.length - ".png".length)}`;
 
-    // Make request to alchemy.run/og/... with the same path to get HTML
-    const ogHtmlUrl = `https://alchemy.run/og${path}`;
+      // const response = await env.ASSETS.fetch(ogHtmlUrl);
 
-    const response = await fetch(ogHtmlUrl);
+      const browser = await puppeteer.launch(env.BROWSER);
+      const page = await browser.newPage();
+      await page.goto(ogHtmlUrl);
+      const img = await page.screenshot({
+        clip: {
+          height,
+          width,
+          x: 0,
+          y: 0,
+        },
+      });
 
-    if (!response.ok) {
+      return new Response(img, {
+        headers: {
+          "Content-Type": "image/png",
+        },
+      });
+    } else {
       return new Response("Not Found", { status: 404 });
     }
-
-    const html = await response.text();
-
-    return new ImageResponse(html, {
-      width,
-      height,
-    });
   },
 };

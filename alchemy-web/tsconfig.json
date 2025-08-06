@@ -3,7 +3,8 @@
   "include": ["src/**/*", "alchemy.run.ts"],
   "compilerOptions": {
     "types": ["@cloudflare/workers-types", "astro/client", "./src/env.d.ts"],
-    "noEmit": true
+    "noEmit": true,
+    "jsx": "preserve"
   },
   "references": [
     {
