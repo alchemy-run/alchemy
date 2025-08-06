@@ -14,7 +14,7 @@ export const onRequest = defineRouteMiddleware((context) => {
   }
 
   // Base OG image URL
-  const baseImageUrl = `/og/${route.id ?? "index"}`;
+  const baseImageUrl = `/og/${route.id ?? "index"}.png`;
 
   // Open Graph image (Facebook, LinkedIn, WhatsApp) - 1200x630
   route.head.push({
