@@ -205,12 +205,6 @@ async function _apply<Out extends Resource>(
       );
     } catch (error) {
       if (error instanceof ReplacedSignal) {
-        if (scope.children.get(resource[ResourceID])?.children.size! > 0) {
-          throw new Error(
-            `Resource ${resource[ResourceFQN]} has children and cannot be replaced.`,
-          );
-        }
-
         if (error.force) {
           await destroy(resource, {
             quiet: scope.quiet,
@@ -221,6 +215,11 @@ async function _apply<Out extends Resource>(
             },
           });
         } else {
+          if (scope.children.get(resource[ResourceID])?.children.size! > 0) {
+            throw new Error(
+              `Resource ${resource[ResourceFQN]} has children and cannot be replaced.`,
+            );
+          }
           const pendingDeletions =
             (await scope.get<PendingDeletions>("pendingDeletions")) ?? [];
           pendingDeletions.push({

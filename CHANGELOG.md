@@ -1,3 +1,28 @@
+## v0.58.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Tunnel &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/810 [<samp>(f7973)</samp>](https://github.com/sam-goodwin/alchemy/commit/f7973e83)
+- **core**: Eager resource replacements can delete resources with children &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/809 [<samp>(4b32f)</samp>](https://github.com/sam-goodwin/alchemy/commit/4b32ff6f)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **core**: Do not leak plain text secret in console.log or toString &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/808 [<samp>(685e9)</samp>](https://github.com/sam-goodwin/alchemy/commit/685e91d9)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.57.2...v0.58.0)
+
+---
+
+## v0.57.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Import Rpc from @cloudflare/workers-types in Worker &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/807 [<samp>(42e5d)</samp>](https://github.com/sam-goodwin/alchemy/commit/42e5d7e)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.57.1...v0.57.2)
+
+---
+
 ## v0.57.1
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

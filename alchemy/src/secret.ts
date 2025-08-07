@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { alchemy } from "./alchemy.ts";
 
 declare global {
@@ -69,6 +70,20 @@ export class Secret<T = string> {
     readonly name: string = nextName(),
   ) {
     globalSecrets[name] = this;
+  }
+
+  /**
+   * Override toString to prevent accidental exposure of secret values
+   */
+  toString(): string {
+    return `Secret(${this.name ?? ""})`;
+  }
+
+  /**
+   * Custom inspect implementation for console.log to prevent exposing secrets
+   */
+  [inspect.custom](): string {
+    return this.toString();
   }
 }
 

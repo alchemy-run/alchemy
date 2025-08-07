@@ -20,7 +20,7 @@ const ZONE_NAME = "alchemy-test.us";
 
 const zoneId = (await findZoneForHostname(api, ZONE_NAME)).zoneId;
 
-describe.sequential("Schema", () => {
+describe.skipIf(!process.env.ALL_TESTS).sequential("Schema", () => {
   test("create, update, and delete schema", async (scope) => {
     let schema: APISchema | undefined;
     let initialSchemaId: string | undefined;
