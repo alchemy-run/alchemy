@@ -35,7 +35,7 @@ const webTunnel = await Tunnel("web-app", {
       service: "http://localhost:3000",
     },
     {
-      service: "http_status:404", // catch-all rule (required)
+      service: "http_status:404", // catch-all rule (required by Cloudflare API)
     },
   ],
 });
@@ -43,6 +43,10 @@ const webTunnel = await Tunnel("web-app", {
 // A CNAME record for app.example.com → {tunnelId}.cfargotunnel.com
 // is automatically created in the appropriate zone
 ```
+
+:::caution
+The Cloudflare API requires that the last ingress rule must be a catch-all rule (without hostname or path filters). This is enforced by the API and will result in an error if omitted.
+:::
 
 ## Multiple Services
 
