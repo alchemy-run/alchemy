@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { logger } from "../util/logger.ts";
+import type { CloudflareApiResponse } from "./api-response.ts";
 import type { CloudflareApi } from "./api.ts";
 
 /**
@@ -192,20 +193,6 @@ interface ImportPollingResponse {
    * The URL to upload the SQL file to
    */
   upload_url?: string;
-}
-
-/**
- * Cloudflare API response structure
- */
-interface CloudflareApiResponse<T> {
-  result: T;
-  success: boolean;
-  errors: Array<{
-    message: string;
-  }>;
-  messages: Array<{
-    message: string;
-  }>;
 }
 
 /**
