@@ -1,7 +1,7 @@
 import { inspect } from "node:util";
 import { describe, expect, test } from "vitest";
-import { alchemy } from "../src/alchemy";
-import { Secret, secret } from "../src/secret";
+import { alchemy } from "../src/alchemy.ts";
+import { Secret, secret } from "../src/secret.ts";
 
 describe("Secret", () => {
   test("toString prevents exposing secret values", () => {
