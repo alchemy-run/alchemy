@@ -1,20 +1,20 @@
 import { describe, expect } from "vitest";
-import { alchemy } from "../../src/alchemy";
+import { alchemy } from "../../src/alchemy.ts";
 import {
   type CloudflareApi,
   createCloudflareApi,
-} from "../../src/cloudflare/api";
+} from "../../src/cloudflare/api.ts";
 import {
   Tunnel,
   getTunnel,
   getTunnelConfiguration,
   listTunnels,
-} from "../../src/cloudflare/tunnel";
-import { destroy } from "../../src/destroy";
-import { BRANCH_PREFIX } from "../util";
+} from "../../src/cloudflare/tunnel.ts";
+import { destroy } from "../../src/destroy.ts";
+import { BRANCH_PREFIX } from "../util.ts";
 // must import this or else alchemy.test won't exist
-import { Secret } from "../../src";
-import "../../src/test/vitest";
+import { Secret } from "../../src/index.ts";
+import "../../src/test/vitest.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
