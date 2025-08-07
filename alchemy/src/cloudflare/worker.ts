@@ -740,6 +740,8 @@ const _Worker = Resource(
     const local = this.scope.local && !props.dev?.remote;
     const watch = this.scope.watch;
 
+    const api = await createCloudflareApi(props);
+
     if (local) {
       let url: string | undefined;
       if (bundleSourceResult.isErr()) {
@@ -754,6 +756,7 @@ const _Worker = Resource(
         );
         const controller = MiniflareController.singleton;
         url = await controller.add({
+          api,
           id,
           name: workerName,
           compatibilityDate,
@@ -796,8 +799,6 @@ const _Worker = Resource(
         Env: undefined!,
       } as unknown as Worker<B>);
     }
-
-    const api = await createCloudflareApi(props);
 
     if (this.phase === "delete") {
       if (bundleSourceResult.isOk()) {

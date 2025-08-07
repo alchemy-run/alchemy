@@ -1,6 +1,7 @@
 import * as miniflare from "miniflare";
 import { assertNever } from "../../util/assert-never.ts";
 import type { HTTPServer } from "../../util/http.ts";
+import type { CloudflareApi } from "../api.ts";
 import {
   Self,
   type Binding,
@@ -14,6 +15,7 @@ import type { AssetsConfig } from "../worker.ts";
 import { createRemoteProxyWorker } from "./remote-binding-proxy.ts";
 
 export interface MiniflareWorkerInput {
+  api: CloudflareApi;
   id: string;
   name: string;
   compatibilityDate: string | undefined;
@@ -329,6 +331,7 @@ export const buildWorkerOptions = async (
   }
   if (remoteBindings.length > 0) {
     const remoteProxy = await createRemoteProxyWorker({
+      api: input.api,
       name: input.name,
       bindings: remoteBindings,
     });
