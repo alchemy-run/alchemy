@@ -48,6 +48,12 @@ export type InternalCloudflareApiOptions = CloudflareAuthOptions & {
   accountId: string;
 };
 
+function computeCacheKey(options: CloudflareApiOptions): string {
+  return `${options.baseUrl}|${options.accountId}|${options.apiKey?.unencrypted}|${options.apiToken?.unencrypted}|${options.email}`;
+}
+
+const cloudflareApiCache: Record<string, CloudflareApi> = {};
+
 /**
  * Creates a CloudflareApi instance with automatic account ID discovery if not provided
  *
@@ -57,17 +63,22 @@ export type InternalCloudflareApiOptions = CloudflareAuthOptions & {
 export async function createCloudflareApi(
   options: Partial<CloudflareApiOptions> | InternalCloudflareApiOptions = {},
 ): Promise<CloudflareApi> {
+  const cacheKey = computeCacheKey(options);
+  if (cloudflareApiCache[cacheKey]) {
+    return cloudflareApiCache[cacheKey];
+  }
+
   const authOptions = await normalizeAuthOptions(options);
   const accountId =
     options.accountId ??
     process.env.CLOUDFLARE_ACCOUNT_ID ??
     process.env.CF_ACCOUNT_ID ??
     (await getCloudflareAccountId(authOptions));
-  return new CloudflareApi({
+  return (cloudflareApiCache[cacheKey] = new CloudflareApi({
     baseUrl: options.baseUrl,
     accountId,
     authOptions,
-  });
+  }));
 }
 
 /**

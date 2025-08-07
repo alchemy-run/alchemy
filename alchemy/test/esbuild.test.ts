@@ -27,7 +27,7 @@ test("bundle and cleanup", async (scope) => {
 
   try {
     // Apply the bundle
-    expect(bundle.path).toBe(outputFile);
+    expect(path.resolve(bundle.path)).toBe(outputFile);
     expect(bundle.hash).toBeTruthy();
 
     // Verify the file exists and contains our code

@@ -76,21 +76,38 @@ export class MiniflareController {
   private async update() {
     return await this.mutex.lock(async () => {
       const options: miniflare.MiniflareOptions = {
-        workers: Array.from(this.options.values()),
+        workers: [],
         defaultPersistRoot: path.resolve(DEFAULT_PERSIST_PATH),
         unsafeDevRegistryPath: miniflare.getDefaultDevRegistryPath(),
-        analyticsEngineDatasetsPersist: true,
-        cachePersist: true,
-        d1Persist: true,
-        durableObjectsPersist: true,
-        kvPersist: true,
-        r2Persist: true,
-        secretsStorePersist: true,
-        workflowsPersist: true,
         log: process.env.DEBUG
           ? new miniflare.Log(miniflare.LogLevel.DEBUG)
           : undefined,
       };
+      for (const worker of this.options.values()) {
+        options.workers.push(worker);
+        // avoid creating unnecessary directories
+        if (worker.analyticsEngineDatasets) {
+          options.analyticsEngineDatasetsPersist = true;
+        }
+        if (worker.d1Databases) {
+          options.d1Persist = true;
+        }
+        if (worker.durableObjects) {
+          options.durableObjectsPersist = true;
+        }
+        if (worker.kvNamespaces) {
+          options.kvPersist = true;
+        }
+        if (worker.r2Buckets) {
+          options.r2Persist = true;
+        }
+        if (worker.secretsStoreSecrets) {
+          options.secretsStorePersist = true;
+        }
+        if (worker.workflows) {
+          options.workflowsPersist = true;
+        }
+      }
       return await this.setMiniflareOptions(options);
     });
   }

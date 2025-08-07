@@ -73,6 +73,20 @@ export class Secret<T = string> {
   }
 
   /**
+   * Ensures that a value is wrapped in a Secret.
+   */
+  static wrap<T>(value: T | Secret<T>): Secret<T> {
+    return isSecret<T>(value) ? value : new Secret(value);
+  }
+
+  /**
+   * Unwraps a Secret if it is wrapped, otherwise returns the value.
+   */
+  static unwrap<T, U = T>(value: T | Secret<U>): T | U {
+    return isSecret<U>(value) ? value.unencrypted : value;
+  }
+
+  /**
    * Override toString to prevent accidental exposure of secret values
    */
   toString(): string {
@@ -90,7 +104,7 @@ export class Secret<T = string> {
 /**
  * Type guard to check if a value is a Secret wrapper
  */
-export function isSecret(binding: any): binding is Secret {
+export function isSecret<T = string>(binding: any): binding is Secret<T> {
   return (
     binding instanceof Secret ||
     (typeof binding === "object" && binding?.type === "secret")

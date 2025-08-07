@@ -1,5 +1,6 @@
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
+import { Scope } from "../scope.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
 import {
   createCloudflareApi,
@@ -80,6 +81,12 @@ export interface QueueProps extends CloudflareApiOptions {
      * @default false
      */
     remote?: boolean;
+
+    /**
+     * Set when `Scope.local` is true to force update to the queue even if it was already deployed live.
+     * @internal
+     */
+    force?: boolean;
   };
 }
 
@@ -95,7 +102,7 @@ export function isQueue(eventSource: any): eventSource is Queue {
  */
 export interface Queue<Body = unknown>
   extends Resource<"cloudflare::Queue">,
-    QueueProps {
+    Omit<QueueProps, "dev"> {
   /**
    * Type identifier for Cloudflare Queue
    */
@@ -127,6 +134,22 @@ export interface Queue<Body = unknown>
   Body: Body;
 
   Batch: MessageBatch<Body>;
+
+  /**
+   * Development mode properties
+   * @internal
+   */
+  dev: {
+    /**
+     * The ID of the queue in development mode
+     */
+    id: string;
+
+    /**
+     * Whether the queue is running remotely
+     */
+    remote: boolean;
+  };
 }
 
 /**
@@ -208,26 +231,57 @@ export interface Queue<Body = unknown>
  *
  * @see https://developers.cloudflare.com/queues/
  */
-export const Queue = Resource("cloudflare::Queue", async function <
+export async function Queue<T = unknown>(
+  id: string,
+  props: QueueProps = {},
+): Promise<Queue<T>> {
+  return await _Queue(id, {
+    ...props,
+    dev: {
+      ...(props.dev ?? {}),
+      force: Scope.current.local,
+    },
+  });
+}
+
+const _Queue = Resource("cloudflare::Queue", async function <
   T = unknown,
 >(this: Context<Queue<T>>, id: string, props: QueueProps = {}): Promise<
   Queue<T>
 > {
-  const api = await createCloudflareApi(props);
   const queueName = props.name ?? id;
+  const dev = {
+    id: this.output?.dev?.id ?? this.output?.id ?? id,
+    remote: props.dev?.remote ?? false,
+  };
+  if (this.scope.local && !props.dev?.remote) {
+    return this({
+      type: "queue",
+      id: this.output?.id ?? "",
+      name: queueName,
+      dev,
+      createdOn: this.output?.createdOn ?? new Date().toISOString(),
+      modifiedOn: this.output?.modifiedOn ?? new Date().toISOString(),
+      Body: undefined as T,
+      Batch: undefined! as MessageBatch<T>,
+    });
+  }
+
+  const api = await createCloudflareApi(props);
 
   if (this.phase === "delete") {
-    if (props.delete !== false) {
+    if (props.delete !== false && this.output?.id) {
       // Delete Queue
-      await deleteQueue(api, this.output?.id);
+      await deleteQueue(api, this.output.id);
     }
 
     // Return void (a deleted queue has no content)
     return this.destroy();
   }
+
   let queueData: CloudflareQueueResponse;
 
-  if (this.phase === "create") {
+  if (this.phase === "create" || !this.output?.id) {
     try {
       queueData = await createQueue(api, queueName, props);
     } catch (error) {
@@ -282,7 +336,7 @@ export const Queue = Resource("cloudflare::Queue", async function <
     createdOn: queueData.result.created_on || new Date().toISOString(),
     modifiedOn: queueData.result.modified_on || new Date().toISOString(),
     accountId: api.accountId,
-    dev: props.dev,
+    dev,
     // phantom properties
     Body: undefined as T,
     Batch: undefined! as MessageBatch<T>,
@@ -372,12 +426,8 @@ export async function getQueue(
  */
 export async function deleteQueue(
   api: CloudflareApi,
-  queueId?: string,
+  queueId: string,
 ): Promise<void> {
-  if (!queueId) {
-    return;
-  }
-
   // Delete Queue
   const deleteResponse = await api.delete(
     `/accounts/${api.accountId}/queues/${queueId}`,

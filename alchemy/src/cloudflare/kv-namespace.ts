@@ -1,13 +1,18 @@
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
-import { logger } from "../util/logger.ts";
+import { Scope } from "../scope.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
-import { handleApiError } from "./api-error.ts";
+import { CloudflareApiError, handleApiError } from "./api-error.ts";
+import {
+  extractCloudflareResult,
+  type CloudflareApiErrorPayload,
+} from "./api-response.ts";
 import {
   createCloudflareApi,
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
+import { deleteMiniflareBinding } from "./miniflare/delete.ts";
 
 /**
  * Properties for creating or updating a KV Namespace
@@ -49,6 +54,12 @@ export interface KVNamespaceProps extends CloudflareApiOptions {
      * @default false
      */
     remote?: boolean;
+
+    /**
+     * Whether to force the KV namespace to be created or updated
+     * @default false
+     */
+    force?: boolean;
   };
 }
 
@@ -91,7 +102,7 @@ export function isKVNamespace(resource: Resource): resource is KVNamespace {
  */
 export interface KVNamespace
   extends Resource<"cloudflare::KVNamespace">,
-    Omit<KVNamespaceProps, "delete"> {
+    Omit<KVNamespaceProps, "delete" | "dev"> {
   type: "kv_namespace";
   /**
    * The ID of the namespace
@@ -107,6 +118,22 @@ export interface KVNamespace
    * Time at which the namespace was last modified
    */
   modifiedAt: number;
+
+  /**
+   * Development mode properties
+   * @internal
+   */
+  dev: {
+    /**
+     * The ID of the KV namespace in development mode
+     */
+    id: string;
+
+    /**
+     * Whether the KV namespace is running remotely
+     */
+    remote: boolean;
+  };
 }
 
 /**
@@ -163,84 +190,76 @@ export interface KVNamespace
  *   delete: false
  * });
  */
-export const KVNamespace = Resource(
+export async function KVNamespace(
+  id: string,
+  props: KVNamespaceProps = {},
+): Promise<KVNamespace> {
+  return await _KVNamespace(id, {
+    ...props,
+    dev: {
+      ...(props.dev ?? {}),
+      force: Scope.current.local,
+    },
+  });
+}
+
+const _KVNamespace = Resource(
   "cloudflare::KVNamespace",
   async function (
     this: Context<KVNamespace>,
     id: string,
     props: KVNamespaceProps,
   ): Promise<KVNamespace> {
-    // Create Cloudflare API client with automatic account discovery
+    const title = props.title ?? id;
+    const local = this.scope.local && !props.dev?.remote;
+    const dev = {
+      id: this.output?.dev?.id ?? this.output?.namespaceId ?? id,
+      remote: props.dev?.remote ?? false,
+    };
+
+    if (local) {
+      return this({
+        type: "kv_namespace",
+        namespaceId: this.output?.namespaceId ?? "",
+        title,
+        values: props.values,
+        dev,
+        createdAt: this.output?.createdAt ?? Date.now(),
+        modifiedAt: Date.now(),
+      });
+    }
+
     const api = await createCloudflareApi(props);
 
-    const title = props.title ?? id;
-
     if (this.phase === "delete") {
-      // For delete operations, we need to check if the namespace ID exists in the output
-      const namespaceId = this.output?.namespaceId;
-      if (namespaceId && props.delete !== false) {
-        await deleteKVNamespace(api, namespaceId);
+      if (this.output.dev?.id) {
+        await deleteMiniflareBinding("kv", this.output.dev.id);
       }
-
-      // Return minimal output for deleted state
+      if (this.output.namespaceId && props.delete !== false) {
+        await deleteKVNamespace(api, this.output.namespaceId);
+      }
       return this.destroy();
     }
-    // For create or update operations
-    // If this.phase is "update", we expect this.output to exist
-    let namespaceId =
-      this.phase === "update" ? this.output?.namespaceId || "" : "";
-    let createdAt =
-      this.phase === "update"
-        ? this.output?.createdAt || Date.now()
-        : Date.now();
 
-    if (this.phase === "update" && namespaceId) {
-      // Can't update a KV namespace title directly, just work with existing ID
+    let result: { namespaceId: string; createdAt: number };
+    if (this.phase === "create" || !this.output.namespaceId) {
+      result = await createKVNamespace(api, {
+        ...props,
+        title,
+      });
     } else {
-      try {
-        // Try to create the KV namespace
-        const { id } = await createKVNamespace(api, {
-          ...props,
-          title,
-        });
-        createdAt = Date.now();
-        namespaceId = id;
-      } catch (error) {
-        // Check if this is a "namespace already exists" error and adopt is enabled
-        if (
-          props.adopt &&
-          error instanceof Error &&
-          error.message.includes("already exists")
-        ) {
-          logger.log(`Namespace '${title}' already exists, adopting it`);
-          // Find the existing namespace by title
-          const existingNamespace = await findKVNamespaceByTitle(api, title);
-
-          if (!existingNamespace) {
-            throw new Error(
-              `Failed to find existing namespace '${title}' for adoption`,
-            );
-          }
-
-          // Use the existing namespace ID
-          namespaceId = existingNamespace.id;
-          createdAt = existingNamespace.createdAt || Date.now();
-        } else {
-          // Re-throw the error if adopt is false or it's not a "namespace already exists" error
-          throw error;
-        }
-      }
+      result = this.output;
     }
 
-    await insertKVRecords(api, namespaceId, props);
+    await insertKVRecords(api, result.namespaceId, props);
 
     return this({
       type: "kv_namespace",
-      namespaceId,
-      title: props.title,
+      namespaceId: result.namespaceId,
+      title,
       values: props.values,
-      dev: props.dev,
-      createdAt: createdAt,
+      dev,
+      createdAt: result.createdAt,
       modifiedAt: Date.now(),
     });
   },
@@ -251,19 +270,44 @@ export async function createKVNamespace(
   props: KVNamespaceProps & {
     title: string;
   },
-): Promise<{ id: string }> {
-  const createResponse = await api.post(
-    `/accounts/${api.accountId}/storage/kv/namespaces`,
-    {
-      title: props.title,
-    },
-  );
+): Promise<{ namespaceId: string; createdAt: number }> {
+  try {
+    const { id } = await extractCloudflareResult<{
+      id: string;
+      title: string;
+      beta?: boolean;
+      supports_url_encoding?: boolean;
+    }>(
+      `create kv namespace "${props.title}"`,
+      api.post(`/accounts/${api.accountId}/storage/kv/namespaces`, {
+        title: props.title,
+      }),
+    );
+    return { namespaceId: id, createdAt: Date.now() };
+  } catch (error) {
+    if (
+      error instanceof CloudflareApiError &&
+      (error.errorData as CloudflareApiErrorPayload[]).some(
+        (e) => e.code === 10014,
+      ) &&
+      props.adopt
+    ) {
+      const existingNamespace = await findKVNamespaceByTitle(api, props.title);
 
-  if (!createResponse.ok) {
-    await handleApiError(createResponse, "create", "kv_namespace", props.title);
+      if (!existingNamespace) {
+        throw new Error(
+          `Failed to find existing namespace '${props.title}' for adoption`,
+        );
+      }
+
+      return {
+        namespaceId: existingNamespace.id,
+        createdAt: existingNamespace.createdAt ?? Date.now(),
+      };
+    } else {
+      throw error;
+    }
   }
-
-  return { id: ((await createResponse.json()) as any).result.id };
 }
 
 export async function deleteKVNamespace(
