@@ -410,6 +410,67 @@ describe.concurrent("Replace", () => {
       );
 
       test(
+        "can force replace a resource that has child resources",
+        options,
+        async (scope) => {
+          const deleted: string[] = [];
+          const Child = Resource(
+            `Child-${storeType}`,
+            async function (
+              this: Context<any>,
+              _id: string,
+              props: { name: string },
+            ) {
+              if (this.phase === "delete") {
+                deleted.push(this.output.name);
+                return this.destroy();
+              }
+              return this({ name: props.name });
+            },
+          );
+
+          const Replacable = Resource(
+            `Replacable-${storeType}-with-child`,
+            async function (
+              this: Context<any>,
+              _id: string,
+              props: { name: string },
+            ) {
+              if (this.phase === "delete") {
+                deleted.push(this.output.name);
+                return this.destroy();
+              }
+              if (this.phase === "update") {
+                this.replace(true);
+              }
+              await Child("child", { name: `${props.name}-child` });
+              return this({ name: props.name });
+            },
+          );
+          try {
+            await Replacable("replaceable-with-child", {
+              name: "parent",
+            });
+            expect(deleted).not.toContain("parent");
+            expect(deleted).not.toContain("parent-child");
+
+            // Force replace should work even with children
+            await Replacable("replaceable-with-child", {
+              name: "new-parent",
+            });
+
+            // The old resource and its child should be deleted immediately due to force=true
+            expect(deleted).toContain("parent");
+            expect(deleted).toContain("parent-child");
+          } finally {
+            await destroy(scope);
+            expect(deleted).toContain("new-parent");
+            expect(deleted).toContain("new-parent-child");
+          }
+        },
+      );
+
+      test(
         "cannot replace a resource in create phase",
         options,
         async (scope) => {

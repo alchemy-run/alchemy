@@ -1,3 +1,4 @@
+import type { Rpc } from "@cloudflare/workers-types";
 import { isDeepStrictEqual } from "node:util";
 import path from "pathe";
 import type { Context } from "../context.ts";

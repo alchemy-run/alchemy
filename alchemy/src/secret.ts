@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { alchemy } from "./alchemy.ts";
 
 declare global {
@@ -83,6 +84,20 @@ export class Secret<T = string> {
    */
   static unwrap<T, U = T>(value: T | Secret<U>): T | U {
     return isSecret<U>(value) ? value.unencrypted : value;
+  }
+
+  /**
+   * Override toString to prevent accidental exposure of secret values
+   */
+  toString(): string {
+    return `Secret(${this.name ?? ""})`;
+  }
+
+  /**
+   * Custom inspect implementation for console.log to prevent exposing secrets
+   */
+  [inspect.custom](): string {
+    return this.toString();
   }
 }
 

@@ -101,6 +101,7 @@ const secrets = {
   ANTHROPIC_API_KEY: alchemy.secret.env.ANTHROPIC_API_KEY,
   PLANETSCALE_ORG_ID: alchemy.secret.env.PLANETSCALE_ORG_ID,
   PLANETSCALE_API_TOKEN: alchemy.secret.env.PLANETSCALE_API_TOKEN,
+  SENTRY_DSN: alchemy.secret.env.SENTRY_DSN,
 };
 
 await Promise.all([
