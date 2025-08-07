@@ -1,6 +1,6 @@
 ---
 title: Tunnel
-description: Learn how to create, configure, and manage Cloudflare Tunnels using Alchemy for secure connections between your origin and Cloudflare's edge.
+description: Connect private services securely to the internet without exposing your server's IP address.
 ---
 
 A [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) provides a secure connection between your origin server and Cloudflare's global network without exposing your server's IP address.
@@ -182,7 +182,8 @@ const existingTunnel = await Tunnel("existing", {
 Provide your own tunnel secret:
 
 ```ts
-import { Tunnel, alchemy } from "alchemy/cloudflare";
+import alchemy from "alchemy";
+import { Tunnel } from "alchemy/cloudflare";
 
 const tunnel = await Tunnel("custom-secret", {
   name: "custom-secret-tunnel",
@@ -209,26 +210,6 @@ cloudflared tunnel run --token <tunnel.token.unencrypted>
 
 # Or using credentials file (for locally-managed tunnels)
 cloudflared tunnel run <tunnel-name>
-```
-
-## Bind to a Worker
-
-Use a tunnel's credentials in a Worker (for custom tunnel implementations):
-
-```ts
-import { Worker, Tunnel } from "alchemy/cloudflare";
-
-const tunnel = await Tunnel("my-tunnel", {
-  name: "my-tunnel",
-});
-
-const worker = await Worker("tunnel-manager", {
-  entrypoint: "./src/worker.ts",
-  bindings: {
-    TUNNEL_TOKEN: tunnel.token,
-    TUNNEL_ID: tunnel.tunnelId,
-  },
-});
 ```
 
 ## Automatic DNS Management
@@ -284,7 +265,7 @@ const dns = await DnsRecords("tunnel-dns", {
     {
       name: "app",
       type: "CNAME",
-      value: `${tunnel.tunnelId}.cfargotunnel.com`,
+      content: `${tunnel.tunnelId}.cfargotunnel.com`,
       proxied: true,
       ttl: 1, // Auto TTL
     },
