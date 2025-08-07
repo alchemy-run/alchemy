@@ -11,7 +11,6 @@ const database = await D1Database("database", {
 
 export const worker = await Redwood("website", {
   name: "my-alchemy-app-website",
-  command: "bun run build",
   bindings: {
     AUTH_SECRET_KEY: alchemy.secret(process.env.AUTH_SECRET_KEY),
     DB: database,

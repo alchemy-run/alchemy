@@ -6,13 +6,12 @@ import z from "zod";
 import { detectRuntime } from "../../src/util/detect-node-runtime.ts";
 import { detectPackageManager } from "../../src/util/detect-package-manager.ts";
 import { exists } from "../../src/util/exists.ts";
+import { ExitSignal } from "../trpc.ts";
 
 export const entrypoint = z
   .string()
   .optional()
-  .describe(
-    "Path to the entrypoint file. Defaults to ./alchemy.run.ts > ./alchemy.run.js",
-  );
+  .describe("Path to the entrypoint file");
 
 export const watch = z
   .boolean()
@@ -42,7 +41,11 @@ export const execArgs = {
     .describe(
       "Specify which stage/environment to target. Defaults to your username ($USER, or $USERNAME on windows)",
     ),
-  envFile: z.string().optional().describe("Path to environment file to load"),
+  envFile: z
+    .string()
+    .optional()
+    .default(".env")
+    .describe("Path to environment file to load"),
 } as const;
 
 export async function execAlchemy(
@@ -99,7 +102,7 @@ export async function execAlchemy(
       ),
     );
     log.info("Create an alchemy.run.ts file to define your infrastructure.");
-    process.exit(1);
+    throw new ExitSignal(1);
   }
 
   // Detect package manager
@@ -121,7 +124,7 @@ export async function execAlchemy(
       break;
     case "pnpm":
       command = isTypeScript
-        ? `pnpm tsx ${execArgsString} ${main} ${argsString}`
+        ? `pnpm dlx tsx ${execArgsString} ${main} ${argsString}`
         : `pnpm node ${execArgsString} ${main} ${argsString}`;
       break;
     case "yarn":
@@ -164,6 +167,6 @@ export async function execAlchemy(
     if (error.stderr) {
       console.error(error.stderr);
     }
-    process.exit(1);
+    throw error;
   }
 }

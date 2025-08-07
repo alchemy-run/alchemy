@@ -9,11 +9,8 @@ import { Self } from "../../src/cloudflare/bindings.ts";
 import { DurableObjectNamespace } from "../../src/cloudflare/durable-object-namespace.ts";
 import { KVNamespace } from "../../src/cloudflare/kv-namespace.ts";
 import type { SingleStepMigration } from "../../src/cloudflare/worker-migration.ts";
-import {
-  deleteWorker,
-  Worker,
-  WorkerRef,
-} from "../../src/cloudflare/worker.ts";
+import { WorkerRef } from "../../src/cloudflare/worker-ref.ts";
+import { deleteWorker, Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
 import { BRANCH_PREFIX } from "../util.ts";
 import {

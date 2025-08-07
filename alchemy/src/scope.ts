@@ -1,3 +1,4 @@
+import kleur from "kleur";
 import { AsyncLocalStorage } from "node:async_hooks";
 import util from "node:util";
 import type { Phase } from "./alchemy.ts";
@@ -144,6 +145,7 @@ export class Scope {
   private finalized = false;
   private startedAt = performance.now();
   private deferred: (() => Promise<any>)[] = [];
+  private cleanups: (() => Promise<void>)[] = [];
 
   public get appName(): string {
     if (this.parent) {
@@ -466,6 +468,7 @@ export class Scope {
     });
 
     if (!this.parent && process.env.ALCHEMY_TEST_KILL_ON_FINALIZE) {
+      await this.cleanup();
       process.exit(0);
     }
   }
@@ -535,6 +538,28 @@ export class Scope {
       return this.run(() => fn()).then(_resolve, _reject);
     });
     return promise;
+  }
+
+  /**
+   * Run all cleanup functions registered with `onCleanup`.
+   * This should only be called on the root scope.
+   */
+  public async cleanup() {
+    if (this.parent || this.cleanups.length === 0) return;
+    this.logger.log(kleur.gray("Exiting..."));
+    await Promise.allSettled(this.cleanups.map((cleanup) => cleanup()));
+  }
+
+  /**
+   * Register a cleanup function that will be called when the process exits.
+   * This should only be called on the root scope.
+   */
+  public onCleanup(fn: () => Promise<void>) {
+    if (this.parent) {
+      this.root.onCleanup(fn);
+      return;
+    }
+    this.cleanups.push(fn);
   }
 
   /**

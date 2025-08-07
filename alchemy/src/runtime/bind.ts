@@ -10,8 +10,8 @@ import { isRuntime } from "./global.ts";
 /**
  * Get a Resource's Binding from the Environment.
  */
-export function getBinding<T extends Resource>(resource: T): Promise<Bound<T>> {
-  return env[getBindKey(resource)] as Promise<Bound<T>>;
+export function getBinding<T extends Resource>(resource: T): Bound<T> {
+  return env[getBindKey(resource)] as Bound<T>;
 }
 
 export function tryGetBinding<T extends Resource>(

@@ -16,7 +16,6 @@
     "deploy": "alchemy deploy",
     "destroy": "alchemy destroy",
     "dev": "alchemy dev",
-    "dev:init": "rw-scripts dev-init",
     "generate": "rw-scripts ensure-env && prisma generate && wrangler types",
     "migrate:dev": "prisma generate && wrangler d1 migrations apply DB --local",
     "migrate:new": "rw-scripts migrate-new",
@@ -24,7 +23,6 @@
     "prepare": "vibe-rules install cursor",
     "preview": "vite preview",
     "release": "rw-scripts ensure-deploy-env && npm run clean && prisma generate && RWSDK_DEPLOY=1 npm run build && wrangler deploy",
-    "seed": "npm run worker:run ./src/scripts/seed.ts",
     "types": "tsc",
     "worker:run": "rw-scripts worker-run"
   },
@@ -36,7 +34,7 @@
     "rwsdk": "0.0.89"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250620.0",
+    "@cloudflare/workers-types": "^4.20250805.0",
     "miniflare": "^4.20250617.3",
     "@types/node": "^22.14.0",
     "@types/react": "^19.1.2",

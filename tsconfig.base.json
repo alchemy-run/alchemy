@@ -1,7 +1,6 @@
 {
   "exclude": ["node_modules", "dist"],
   "compilerOptions": {
-    "types": ["@cloudflare/workers-types", "@types/node"],
     // Enable latest features
     "lib": ["ESNext", "DOM"],
     "target": "ESNext",

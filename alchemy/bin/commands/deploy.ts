@@ -6,11 +6,11 @@ import {
   force,
   watch,
 } from "../services/execute-alchemy.ts";
-import { t } from "../trpc.ts";
+import { loggedProcedure } from "../trpc.ts";
 
-export const deploy = t.procedure
+export const deploy = loggedProcedure
   .meta({
-    description: "Deploy an Alchemy project",
+    description: "deploy an alchemy project",
   })
   .input(
     z.tuple([

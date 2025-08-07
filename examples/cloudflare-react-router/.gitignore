@@ -11,4 +11,5 @@
 .wrangler
 .dev.vars*
 
-wrangler.json*
+# we include it because it's needed for smoke `react-router typegen`
+!wrangler.json*

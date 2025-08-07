@@ -13,7 +13,7 @@ export const COMPATIBILITY_PRESETS = {
    * Node.js compatibility preset
    * Enables Node.js APIs and runtime compatibility
    */
-  node: ["nodejs_compat"],
+  node: ["nodejs_compat", "nodejs_compat_populate_process_env"],
 } as const;
 
 export type CompatibilityPreset = keyof typeof COMPATIBILITY_PRESETS;

@@ -7,7 +7,7 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
-import type { Queue, QueueResource } from "./queue.ts";
+import type { Queue } from "./queue.ts";
 
 /**
  * Settings for configuring a Queue Consumer
@@ -55,9 +55,9 @@ export interface QueueConsumerSettings {
  */
 export interface QueueConsumerProps extends CloudflareApiOptions {
   /**
-   * The {@link QueueResource} or Queue ID to consume
+   * The {@link Queue} or Queue ID to consume
    */
-  queue: string | QueueResource;
+  queue: string | Queue;
 
   /**
    * Name of the worker script that will consume the queue
@@ -82,6 +82,15 @@ export interface QueueConsumerProps extends CloudflareApiOptions {
    * @default false
    */
   adopt?: boolean;
+
+  /**
+   * If true, the queue consumer will not be created, but will be retained if it already exists.
+   * This is used for local development.
+   *
+   * @default `false`
+   * @internal
+   */
+  dev?: boolean;
 }
 
 /**
@@ -148,15 +157,27 @@ export const QueueConsumer = Resource(
     _id: string,
     props: QueueConsumerProps,
   ): Promise<QueueConsumer> {
-    const api = await createCloudflareApi(props);
-
     // Get queueId from either props.queue or props.queueId
     const queueId =
       typeof props.queue === "string" ? props.queue : props.queue.id;
 
+    if (this.scope.local && props.dev) {
+      return this({
+        id: this.output?.id ?? "",
+        queueId,
+        queue: props.queue,
+        type: "worker",
+        scriptName: props.scriptName,
+        settings: props.settings,
+        accountId: this.output?.accountId ?? "",
+      });
+    }
+
     if (!queueId) {
       throw new Error("Either queue or queueId must be provided");
     }
+
+    const api = await createCloudflareApi(props);
 
     if (this.phase === "delete") {
       logger.log(`Deleting Queue Consumer for queue ${queueId}`);
@@ -168,9 +189,10 @@ export const QueueConsumer = Resource(
       // Return void (a deleted consumer has no content)
       return this.destroy();
     }
+
     let consumerData: CloudflareQueueConsumerResponse;
 
-    if (this.phase === "create" || this.output?.id === undefined) {
+    if (this.phase === "create" || !this.output?.id) {
       try {
         consumerData = await createQueueConsumer(api, queueId, props);
       } catch (err) {

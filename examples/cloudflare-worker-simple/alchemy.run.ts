@@ -8,6 +8,7 @@ import {
   R2Bucket,
   Worker,
 } from "alchemy/cloudflare";
+import type { DO } from "./src/worker1.ts";
 
 const app = await alchemy("cloudflare-worker-simple");
 
@@ -15,6 +16,7 @@ const [d1, kv, r2] = await Promise.all([
   D1Database("d1", {
     name: `${app.name}-${app.stage}-d1`,
     adopt: true,
+    migrationsDir: "migrations",
   }),
   KVNamespace("kv", {
     title: `${app.name}-${app.stage}-kv`,
@@ -29,7 +31,7 @@ const [d1, kv, r2] = await Promise.all([
     adopt: true,
   }),
 ]);
-const doNamespace = DurableObjectNamespace("DO", {
+const doNamespace = DurableObjectNamespace<DO>("DO", {
   className: "DO",
   sqlite: true,
 });

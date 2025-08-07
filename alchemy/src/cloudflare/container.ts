@@ -368,6 +368,15 @@ export interface ContainerApplicationProps extends CloudflareApiOptions {
    * @default false
    */
   adopt?: boolean;
+
+  /**
+   * If true, the container application will not be created, but will be retained if it already exists.
+   * This is used for local development.
+   *
+   * @default `false`
+   * @internal
+   */
+  dev?: boolean;
 }
 
 /**
@@ -495,6 +504,13 @@ export const ContainerApplication = Resource(
     _id: string,
     props: ContainerApplicationProps,
   ): Promise<ContainerApplication> {
+    if (this.scope.local && props.dev) {
+      return this({
+        id: this.output?.id ?? "",
+        name: props.name,
+      });
+    }
+
     const api = await createCloudflareApi(props);
     if (this.phase === "delete") {
       if (this.output?.id) {
@@ -503,6 +519,7 @@ export const ContainerApplication = Resource(
       }
       return this.destroy();
     }
+
     // Prefer the immutable repo digest if present. Falls back to the tag reference.
     const imageReference = props.image.repoDigest ?? props.image.imageRef;
 
@@ -518,7 +535,7 @@ export const ContainerApplication = Resource(
         },
       },
     };
-    if (this.phase === "update") {
+    if (this.phase === "update" && this.output?.id) {
       const application = await updateContainerApplication(
         api,
         this.output.id,

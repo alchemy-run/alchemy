@@ -62,6 +62,7 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ env.R2_SECRET_ACCESS_KEY }}
           SECRET_PASSPHRASE: ${{ env.SECRET_PASSPHRASE }}
           SENTRY_AUTH_TOKEN: ${{ env.SENTRY_AUTH_TOKEN }}
+          SENTRY_DSN: ${{ env.SENTRY_DSN }}
           SENTRY_ORG: ${{ env.SENTRY_ORG }}
           STRIPE_API_KEY: ${{ env.STRIPE_API_KEY }}
           UPSTASH_API_KEY: ${{ env.UPSTASH_API_KEY }}

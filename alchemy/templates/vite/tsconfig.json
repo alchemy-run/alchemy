@@ -5,6 +5,7 @@
   "include": [
     "types/**/*.ts",
     "src/**/*.ts",
+    "worker/**/*.ts",
     "alchemy.run.ts"
   ],
   "compilerOptions": {

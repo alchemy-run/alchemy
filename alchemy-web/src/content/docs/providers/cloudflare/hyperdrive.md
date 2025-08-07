@@ -14,15 +14,50 @@ import { Hyperdrive } from "alchemy/cloudflare";
 
 const db = await Hyperdrive("my-postgres-db", {
   name: "my-postgres-db",
+  origin: "postgresql://user:password@ep-example-host-1234.us-east-1.aws.neon.tech/mydb?sslmode=require",
+});
+```
+
+:::tip
+Your origin can be a string, secret, or an object containing connection parameters.
+:::
+
+## With Local Origin
+
+If you want to use a local database for development, you can set the `dev.origin` property.
+
+This will be used by Miniflare to connect to the local database.
+
+```ts
+const db = await Hyperdrive("my-postgres-db", {
+  name: "my-postgres-db",
+  origin: "postgresql://user:password@ep-example-host-1234.us-east-1.aws.neon.tech/mydb?sslmode=require",
+  dev: {
+    origin: "postgres://user:password@localhost:5432/postgres",
+  },
+});
+```
+
+## With Explicit Origin Object
+
+If you'd prefer to set parameters explicitly, you can use an object.
+
+```ts
+const db = await Hyperdrive("my-postgres-db", {
+  name: "my-postgres-db",
   origin: {
     database: "postgres",
     host: "database.example.com",
-    password: alchemy.secret("your-password"),
+    password: "password",
     port: 5432,
     user: "postgres",
   },
 });
 ```
+
+:::tip
+Your password can be a string or a secret. If you provide a string, Alchemy will convert it to a secret for you.
+:::
 
 ## With Caching Disabled
 
@@ -34,7 +69,7 @@ const noCacheDb = await Hyperdrive("no-cache-db", {
   origin: {
     database: "postgres",
     host: "database.example.com",
-    password: alchemy.secret(process.env.DB_PASSWORD),
+    password: alchemy.secret.env.DB_PASSWORD,
     port: 5432,
     user: "postgres",
   },
@@ -54,7 +89,7 @@ const secureDb = await Hyperdrive("secure-db", {
   origin: {
     database: "postgres",
     host: "database.example.com",
-    password: alchemy.secret(process.env.DB_PASSWORD),
+    password: alchemy.secret.env.DB_PASSWORD,
     port: 5432,
     user: "postgres",
   },
@@ -77,7 +112,7 @@ const accessDb = await Hyperdrive("access-db", {
     database: "postgres",
     host: "database.example.com",
     access_client_id: "client-id",
-    access_client_secret: alchemy.secret(process.env.ACCESS_CLIENT_SECRET),
+    access_client_secret: alchemy.secret.env.ACCESS_CLIENT_SECRET,
     port: 5432,
     user: "postgres",
   },

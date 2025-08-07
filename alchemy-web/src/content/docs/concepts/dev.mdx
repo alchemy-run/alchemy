@@ -17,7 +17,7 @@ Development mode is currently in beta. Some features may not work as expected.
 
 To run Alchemy in development mode, use the [`alchemy dev`](/concepts/cli#dev) command to:
 
-- Emulate Cloudflare Workers and associated resources locally using Miniflare
+- Emulate Cloudflare Workers and associated resources locally
 - Watch for and auto-apply changes to your infrastructure
 - Hot reload Workers when you make changes to your runtime code
 
@@ -114,94 +114,259 @@ To run Alchemy in development mode, use the [`alchemy dev`](/concepts/cli#dev) c
 For more CLI options and commands, see the [CLI documentation](/concepts/cli).
 :::
 
+## Workers
 
+In development mode, the [Cloudflare `Worker`](/guides/cloudflare-worker/) resource runs in Miniflare, a local environment that emulates the Cloudflare Workers runtime. By default, Workers run on the first available port beginning at `1337`:
 
-## Configuration
+```ts
+const worker = await Worker("my-worker", {
+  entrypoint: "worker.ts",
+});
+console.log(worker.url); // http://localhost:1337
+```
 
-When running in dev mode, Alchemy runs your Cloudflare Workers locally using Miniflare, and will be available on a randomly selected port. You can specify the port by setting the `port` property on the `Worker` resource:
+You can also set a custom port for the Worker:
 
-```typescript
+```ts
 const worker = await Worker("my-worker", {
   entrypoint: "worker.ts",
   dev: {
     port: 3000,
   },
 });
-
 console.log(worker.url); // http://localhost:3000
 ```
 
-## Website Development
+## Bindings
 
-When using the `Website` resource in development mode, you can specify a custom development command that Alchemy will run locally:
+Most Cloudflare bindings are automatically emulated in development mode, such as [`D1Database`](/providers/cloudflare/d1-database/), [`KVNamespace`](/providers/cloudflare/kv-namespace/), and [`R2Bucket`](/providers/cloudflare/bucket/):
 
-```typescript
-const website = await Website("my-website", {
-  dev: {
-    command: "npm run dev",
-    url: "http://localhost:5173",
+```ts
+const d1 = await D1Database("my-d1");
+const kv = await KVNamespace("my-kv");
+const r2 = await R2Bucket("my-r2");
+const queue = await Queue("my-queue");
+const worker = await Worker("my-worker", {
+  entrypoint: "worker.ts",
+  bindings: {
+    D1: d1,
+    KV: kv,
+    R2: r2,
+    QUEUE: queue,
   },
 });
 ```
 
-If no command is specified, Alchemy will automatically detect and run the appropriate dev command based on your project's configuration. For example, for a Vite project, it will run:
+Secrets and plain-text bindings are also supported with no additional configuration:
 
-```bash
-vite dev
-```
-
-## Vite Integration
-
-For projects using Vite, Alchemy integrates with the [Cloudflare Vite plugin](https://developers.cloudflare.com/workers/development-testing/vite/) to provide enhanced local development capabilities. This integration enables better support for certain binding types when running locally.
-
-To enable Vite integration, configure your `vite.config.ts` with the Cloudflare plugin:
-
-```typescript
-import { cloudflare } from "@cloudflare/vite-plugin";
-import { defineConfig } from "vite";
-
-export default defineConfig({
-  plugins: [
-    cloudflare({
-      persistState: process.env.ALCHEMY_CLOUDFLARE_PERSIST_PATH
-        ? {
-            path: process.env.ALCHEMY_CLOUDFLARE_PERSIST_PATH,
-          }
-        : undefined,
-    }),
-  ],
+```ts
+const worker = await Worker("my-worker", {
+  entrypoint: "worker.ts",
+  bindings: {
+    PLAIN_TEXT: "Hello, world!",
+    API_KEY: alchemy.secret("pk_dev_1234567890"),
+  },
 });
 ```
 
-The Vite integration provides improved support for the following binding types (marked with ✅ in the "Vite" column of the supported resources table below).
+## Remote Bindings
 
-## Bindings
+By default, development mode emulates supported resources locally. To use the real resource from Cloudflare, set the `dev.remote` option:
 
-By default, Alchemy emulates resources such as [D1 Databases](/providers/cloudflare/d1-database), [KV Namespaces](/providers/cloudflare/kv-namespace), and [R2 Buckets](/providers/cloudflare/bucket) locally.
-
-Alchemy also supports [remote bindings](https://developers.cloudflare.com/workers/development-testing/#remote-bindings) for select resources. For resources that allow either local or remote execution, you can set the `dev` property on the resource to `{ remote: true }`:
-
-```typescript
-const db = await D1Database("my-db", {
-  dev: { remote: true },
-});
-
+```ts
 const kv = await KVNamespace("my-kv", {
-  dev: { remote: true },
+  dev: {
+    remote: true,
+  },
 });
-
-const r2 = await R2Bucket("my-r2", {
-  dev: { remote: true },
+const worker = await Worker("my-worker", {
+  entrypoint: "worker.ts",
+  bindings: {
+    KV: kv,
+  },
 });
 ```
 
-Some resources only support remote execution, such as [AI Gateways](/providers/cloudflare/ai-gateway). These resources will automatically be run remotely, so usage will be billed the same as if you were running them in production.
+:::note
+Some resources, such as [`AIGateway`](/providers/cloudflare/ai-gateway/), cannot be emulated locally. These do not support the `dev.remote` option because they are always run remotely.
+:::
+
+:::caution
+When using remote bindings, you may accrue costs or incur usage limits.
+:::
+
+## Web Frameworks
+
+Alchemy integrates with popular web frameworks, so you can use them with Alchemy's development mode and access local resources. Typically, you'll need to update your framework's configuration with the relevant Alchemy adapter or plugin. For example:
+
+<Tabs syncKey="framework">
+  <TabItem label="Astro">
+    First, use the `Astro` resource in your `alchemy.run.ts` script:
+
+    ```ts title="alchemy.run.ts"
+    import { Astro } from "alchemy/cloudflare";
+
+    const astro = await Astro("my-astro-app");
+    ```
+
+    Then, update your `astro.config.mjs` file:
+    
+    ```ts title="astro.config.mjs"
+    import alchemy from "alchemy/cloudflare/astro";
+
+    export default defineConfig({
+      integrations: [alchemy()],
+    });
+    ```
+  </TabItem>
+  <TabItem label="React Router">
+    First, use the `ReactRouter` resource in your `alchemy.run.ts` script:
+
+    ```ts title="alchemy.run.ts"
+    import { ReactRouter } from "alchemy/cloudflare";
+
+    const reactRouter = await ReactRouter("my-react-router-app");
+    ```
+
+    Then, enable the `unstable_viteEnvironmentApi` flag in your `react-router.config.ts` file:
+
+    ```ts title="react-router.config.ts"
+    import type { Config } from "@react-router/dev/config";
+
+    export default {
+      ssr: true,
+      future: {
+        unstable_viteEnvironmentApi: true, // IMPORTANT: This allows Cloudflare to be used in the Vite environment.
+      },
+    } satisfies Config;
+    ```
+
+    And add the `alchemy/cloudflare/react-router` plugin to your `vite.config.ts`:
+
+    ```ts title="vite.config.ts"
+    import alchemy from "alchemy/cloudflare/react-router";
+    import { reactRouter } from "@react-router/dev/vite";
+
+    export default defineConfig({
+      plugins: [alchemy(), reactRouter()],
+    });
+    ```
+  </TabItem>
+  <TabItem label="TanStack Start">
+    First, use the `TanStackStart` resource in your `alchemy.run.ts` script:
+
+    ```ts title="alchemy.run.ts"
+    import { TanStackStart } from "alchemy/cloudflare";
+
+    const tanstackStart = await TanStackStart("my-tanstack-start-app");
+    ```
+
+    Then, add the `alchemy/cloudflare/tanstack-start` plugin to your `vite.config.ts`:
+
+    ```ts title="vite.config.ts"
+    import alchemy from "alchemy/cloudflare/tanstack-start";
+    import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+    import viteReact from "@vitejs/plugin-react";
+
+    export default defineConfig({
+      plugins: [
+        alchemy(), 
+        tanstackStart({
+          target: "cloudflare-module",
+          customViteReactPlugin: true,
+        }),
+        viteReact(),
+      ],
+    });
+    ```
+  </TabItem>
+  <TabItem label="Vite">
+    :::caution
+    - If you are using React Router or TanStack Start, you must use the `alchemy/cloudflare/react-router` or `alchemy/cloudflare/tanstack-start` plugin instead of `alchemy/cloudflare/vite`.
+    - If you are using SvelteKit or Nuxt, you will need to modify a different configuration file. See the SvelteKit and Nuxt guides for more information.
+    :::
+
+    First, use the `Vite` resource in your `alchemy.run.ts` script:
+
+    ```ts title="alchemy.run.ts"
+    import { Vite } from "alchemy/cloudflare";
+
+    const vite = await Vite("my-vite-app");
+    ```
+
+    Then, add the `alchemy/cloudflare/vite` plugin to your `vite.config.ts`:
+
+    ```ts title="vite.config.ts"
+    import alchemy from "alchemy/cloudflare/vite";
+
+    export default defineConfig({
+      plugins: [alchemy()],
+    });
+    ```
+  </TabItem>
+  <TabItem label="SvelteKit">
+    First, use the `SvelteKit` resource in your `alchemy.run.ts` script:
+
+    ```ts title="alchemy.run.ts"
+    import { SvelteKit } from "alchemy/cloudflare";
+
+    const svelteKit = await SvelteKit("my-sveltekit-app");
+    ```
+
+    Then, add the `alchemy/cloudflare/sveltekit` adapter to your `svelte.config.js` file:
+
+    ```js title="svelte.config.js"
+    import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+    import alchemy from 'alchemy/cloudflare/sveltekit';
+
+    /** @type {import('@sveltejs/kit').Config} */
+    const config = {
+      preprocess: vitePreprocess(),
+      kit: {
+        adapter: alchemy()
+      }
+    };
+
+    export default config;
+    ```
+
+    You should not need to update your `vite.config.ts` file.
+  </TabItem>
+  <TabItem label="Nuxt">
+    First, use the `Nuxt` resource in your `alchemy.run.ts` script:
+
+    ```ts title="alchemy.run.ts"
+    import { Nuxt } from "alchemy/cloudflare";
+
+    const nuxt = await Nuxt("my-nuxt-app");
+    ```
+
+    Then, add the `alchemy/cloudflare/nuxt` preset to your `nuxt.config.ts` file:
+
+    ```ts title="nuxt.config.ts"
+    import alchemy from "alchemy/cloudflare/nuxt";
+    import { defineNuxtConfig } from "nuxt/config";
+
+    export default defineNuxtConfig({
+      nitro: {
+        preset: "cloudflare_module",
+        cloudflare: alchemy(),
+      },
+      modules: ["nitro-cloudflare-dev"],
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+:::tip
+If you initialize a new project using the `alchemy create` command, the framework's configuration will be automatically updated with the relevant Alchemy adapter or plugin.
+:::
 
 ## Limitations
 
 :::caution
 - Local Workers can push to remote queues, but cannot consume from them.
-- Hyperdrive support is experimental. Hyperdrive configurations that use Cloudflare Access are not supported, and only configurations provisioned in the same `alchemy.run.ts` file will work. This is a [limitation from Cloudflare that is actively being worked on](https://developers.cloudflare.com/workers/development-testing/#unsupported-remote-bindings).
+- Hyperdrive support is experimental. Hyperdrive configurations that use Cloudflare Access are not supported, and only configurations provisioned in the same alchemy.run.ts file will work. This is a limitation from Cloudflare that is actively being worked on.
 - Container bindings with `dev: { remote: true }` cannot be used as local bindings in development mode.
-- You may see "Connection refused" errors in the console when containers are starting up - these can be safely ignored.
+- You may see “Connection refused” errors in the console when containers are starting up - these can be safely ignored.
 :::

@@ -1,4 +1,4 @@
-import type { website } from "../alchemy.run.js";
+import type { website } from "../alchemy.run.ts";
 
 export interface CloudflarePlatform {
   env: typeof website.Env;

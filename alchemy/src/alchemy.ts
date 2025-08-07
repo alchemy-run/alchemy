@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { onExit } from "signal-exit";
 import { ReplacedSignal } from "./apply.ts";
 import { DestroyStrategy, DestroyedSignal, destroy } from "./destroy.ts";
 import { env } from "./env.ts";
@@ -171,6 +172,12 @@ async function _alchemy(
       phase,
       password: mergedOptions?.password ?? process.env.ALCHEMY_PASSWORD,
       telemetryClient,
+    });
+    onExit((code) => {
+      root.cleanup().then(() => {
+        process.exit(code);
+      });
+      return true;
     });
     const stageName = mergedOptions?.stage ?? DEFAULT_STAGE;
     const stage = new Scope({

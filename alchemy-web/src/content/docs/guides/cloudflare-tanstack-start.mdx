@@ -184,9 +184,7 @@ import { TanStackStart } from "alchemy/cloudflare";
 
 const app = await alchemy("my-tanstack-app");
 
-export const worker = await TanStackStart("website", {
-  command: "bun run build",
-});
+export const worker = await TanStackStart("website");
 
 console.log({
   url: worker.url,
@@ -239,3 +237,35 @@ The `alchemy.run.ts` script will be run by `node` but still needs to infer the [
   "include": ["types/**/*.ts", "alchemy.run.ts", "src/**/*.ts"]
 }
 ``` 
+
+### `vite.config.ts`
+
+Use the `alchemyDevEnvironmentShim()` plugin to configure TanStack Start for local development:
+
+```ts
+import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import viteReact from "@vitejs/plugin-react";
+import alchemy from "alchemy/cloudflare/tanstack-start";
+import { defineConfig } from "vite";
+import tsConfigPaths from "vite-tsconfig-paths";
+
+export default defineConfig({
+  build: {
+    target: "esnext",
+    rollupOptions: {
+      external: ["node:async_hooks", "cloudflare:workers"],
+    },
+  },
+  plugins: [
+    alchemy(),
+    tsConfigPaths({
+      projects: ["./tsconfig.json"],
+    }),
+    tanstackStart({
+      target: "cloudflare-module",
+      customViteReactPlugin: true,
+    }),
+    viteReact(),
+  ],
+});
+```

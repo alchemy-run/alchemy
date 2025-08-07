@@ -43,6 +43,15 @@ export interface CustomDomainProps extends CloudflareApiOptions {
    * @default false
    */
   adopt?: boolean;
+
+  /**
+   * If true, the custom domain will not be created, but will be retained if it already exists.
+   * This is used for local development.
+   *
+   * @default `Scope.local`
+   * @internal
+   */
+  dev?: boolean;
 }
 
 /**
@@ -114,6 +123,18 @@ export const CustomDomain = Resource(
     logicalId: string, // Changed param name from id to logicalId for clarity
     props: CustomDomainProps,
   ): Promise<CustomDomain> {
+    if (this.scope.local && props.dev) {
+      const now = Date.now();
+      return this({
+        ...props,
+        id: this.output?.id ?? "noop-domain",
+        zoneId: props.zoneId ?? "noop-zone",
+        environment: props.environment ?? "production",
+        createdAt: this.output?.createdAt ?? now,
+        updatedAt: now,
+      });
+    }
+
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
 
@@ -121,6 +142,7 @@ export const CustomDomain = Resource(
       await deleteCustomDomain(this, api, logicalId, props);
       return this.destroy();
     }
+
     // Create or Update phase
     return await ensureCustomDomain(this, api, logicalId, {
       ...props,
