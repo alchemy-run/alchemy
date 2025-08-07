@@ -162,6 +162,10 @@ export interface HyperdriveProps extends CloudflareApiOptions {
   hyperdriveId?: string;
 
   dev?: {
+    /**
+     * The database connection origin configuration for local development
+     * @default origin
+     */
     origin?: HyperdriveOriginInput;
   };
 }
@@ -277,7 +281,6 @@ export interface Hyperdrive
  *   }
  * });
  */
-
 export async function Hyperdrive(
   id: string,
   props: HyperdriveProps,
@@ -296,6 +299,10 @@ export async function Hyperdrive(
   });
 }
 
+/**
+ * Internal properties for creating or updating a Cloudflare Hyperdrive config.
+ * @internal
+ */
 interface InternalHyperdriveProps extends CloudflareApiOptions {
   name: string;
   hyperdriveId?: string;
@@ -303,7 +310,14 @@ interface InternalHyperdriveProps extends CloudflareApiOptions {
   caching?: HyperdriveCaching;
   mtls?: HyperdriveMtls;
   dev: {
+    /**
+     * Connection string for local development
+     */
     origin: Secret;
+    /**
+     * Set when `Scope.local` is true to force update
+     * @internal
+     */
     force?: boolean;
   };
 }
