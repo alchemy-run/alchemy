@@ -118,9 +118,6 @@ describe("Bundle Worker Test", () => {
         compatibilityFlags: ["nodejs_compat"],
         adopt: true,
         compatibilityDate: "2025-07-20",
-        bundle: {
-          outdir: ".out",
-        },
       });
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -139,13 +136,13 @@ describe("Bundle Worker Test", () => {
     const workerName = `${BRANCH_PREFIX}-test-worker-sentry`;
 
     try {
-      const worker = await Worker(workerName, {
+      await Worker(workerName, {
         name: workerName,
         adopt: true,
         entrypoint: path.join(import.meta.dirname, "test-handlers/sentry.ts"),
         compatibilityFlags: ["nodejs_als"],
         bindings: {
-          SENTRY_DSN: await alchemy.env.SENTRY_DSN,
+          SENTRY_DSN: alchemy.env.SENTRY_DSN,
         },
       });
     } finally {

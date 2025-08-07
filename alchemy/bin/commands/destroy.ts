@@ -8,7 +8,7 @@ import { loggedProcedure } from "../trpc.ts";
 
 export const destroy = loggedProcedure
   .meta({
-    description: "Deploy an Alchemy project",
+    description: "deploy an alchemy project",
   })
   .input(z.tuple([entrypoint, z.object(execArgs)]))
   .mutation(async ({ input: [main, options] }) =>

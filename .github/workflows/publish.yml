@@ -19,11 +19,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache Astro resources
+        uses: actions/cache@v4
+        with:
+          path: |
+            alchemy-web/.astro
+          key: ${{ runner.os }}-astro-cache
+
       - name: Setup Alchemy Environment
         uses: ./.github/actions/setup-alchemy
         with:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-west-2
+
+      - name: Install Playwright Browsers
+        run: bunx playwright install --with-deps chromium
 
       - name: Get Astro version
         id: astro-version
@@ -54,4 +64,5 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_KEY: ${{ env.CLOUDFLARE_API_KEY }}
           CLOUDFLARE_EMAIL: ${{ env.CLOUDFLARE_EMAIL }}
+          GENERATE_OG_IMAGES: true
           STAGE: prod

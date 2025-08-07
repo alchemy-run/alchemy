@@ -16,7 +16,7 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250224.0",
+    "@cloudflare/workers-types": "^4.20250805.0",
     "@orange-js/cli": "0.2.1",
     "@orange-js/vite": "0.2.1",
     "@types/react": "^19.0.2",

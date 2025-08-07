@@ -1,11 +1,12 @@
 import type { RemoteProxyConnectionString } from "miniflare";
 import { HTTPServer } from "../../util/http.ts";
 import { extractCloudflareResult } from "../api-response.ts";
-import { createCloudflareApi, type CloudflareApi } from "../api.ts";
+import type { CloudflareApi } from "../api.ts";
 import type { WorkerBindingSpec } from "../bindings.ts";
 import { getInternalWorkerBundle } from "../bundle/internal-worker-bundle.ts";
 import { WorkerBundle } from "../worker-bundle.ts";
 import type { WorkerMetadata } from "../worker-metadata.ts";
+import { getAccountSubdomain } from "../worker-subdomain.ts";
 
 type WranglerSessionConfig =
   | {
@@ -30,13 +31,13 @@ export interface RemoteBindingProxy {
 }
 
 export async function createRemoteProxyWorker(input: {
+  api: CloudflareApi;
   name: string;
   bindings: WorkerBindingSpec[];
 }): Promise<RemoteBindingProxy> {
-  const api = await createCloudflareApi();
   const script = await getInternalWorkerBundle("remote-binding-proxy");
   const [token, subdomain] = await Promise.all([
-    createWorkersPreviewToken(api, {
+    createWorkersPreviewToken(input.api, {
       name: input.name,
       metadata: {
         main_module: script.bundle.entrypoint,
@@ -50,7 +51,7 @@ export async function createRemoteProxyWorker(input: {
         minimal_mode: true,
       },
     }),
-    import("../worker-subdomain.ts").then((m) => m.getAccountSubdomain(api)),
+    getAccountSubdomain(input.api),
   ]);
 
   const proxyURL = `https://${input.name}.${subdomain}.workers.dev`;

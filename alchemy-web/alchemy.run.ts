@@ -44,7 +44,7 @@ if (stage === "prod") {
   });
 }
 
-const website = await Astro("website", {
+export const website = await Astro("website", {
   name: "alchemy-website",
   adopt: true,
   version: stage === "prod" ? undefined : stage,
@@ -68,7 +68,7 @@ if (process.env.PULL_REQUEST) {
     body: `
 ## 🚀 Website Preview Deployed
 
-Your website preview is ready! 
+Your website preview is ready!
 
 **Preview URL:** ${url}
 

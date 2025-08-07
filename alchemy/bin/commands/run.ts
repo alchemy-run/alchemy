@@ -9,8 +9,7 @@ import { loggedProcedure } from "../trpc.ts";
 
 export const run = loggedProcedure
   .meta({
-    description:
-      "Run an Alchemy program with read-only access to your infrastructure (no changes will be applied)",
+    description: "run alchemy in read-only mode",
   })
   .input(
     z.tuple([

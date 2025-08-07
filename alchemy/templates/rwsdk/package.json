@@ -34,7 +34,7 @@
     "rwsdk": "0.0.89"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250620.0",
+    "@cloudflare/workers-types": "^4.20250805.0",
     "miniflare": "^4.20250617.3",
     "@types/node": "^22.14.0",
     "@types/react": "^19.1.2",

@@ -451,7 +451,11 @@ export interface WranglerJsonSpec {
   /**
    * Hyperdrive bindings
    */
-  hyperdrive?: { binding: string; id: string; localConnectionString: string }[];
+  hyperdrive?: {
+    binding: string;
+    id: string;
+    localConnectionString?: string;
+  }[];
 
   /**
    * Pipelines
@@ -565,7 +569,7 @@ function processBindings(
   const hyperdrive: {
     binding: string;
     id: string;
-    localConnectionString: string;
+    localConnectionString?: string;
   }[] = [];
   const pipelines: { binding: string; pipeline: string }[] = [];
   const secretsStoreSecrets: {
@@ -756,14 +760,12 @@ function processBindings(
         binding: bindingName,
       };
     } else if (binding.type === "hyperdrive") {
-      const password =
-        "password" in binding.origin
-          ? binding.origin.password.unencrypted
-          : binding.origin.access_client_secret.unencrypted;
       hyperdrive.push({
         binding: bindingName,
         id: binding.hyperdriveId,
-        localConnectionString: `${binding.origin.scheme || "postgres"}://${binding.origin.user}:${password}@${binding.origin.host}:${binding.origin.port || 5432}/${binding.origin.database}`,
+        localConnectionString: writeSecrets
+          ? binding.dev.origin.unencrypted
+          : undefined,
       });
     } else if (binding.type === "pipeline") {
       pipelines.push({

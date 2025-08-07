@@ -40,7 +40,7 @@ const isTest = process.env.NODE_ENV === "test";
 
 export const create = loggedProcedure
   .meta({
-    description: "Create a new Alchemy project",
+    description: "create a new alchemy project",
     negateBooleans: true,
   })
   .input(
@@ -48,26 +48,24 @@ export const create = loggedProcedure
       ProjectNameSchema.optional(),
       z.object({
         template: TemplateSchema.optional(),
-        yes: z.boolean().optional().describe("Skip prompts and use defaults"),
+        yes: z.boolean().optional().describe("skip prompts and use defaults"),
         overwrite: z
           .boolean()
           .optional()
-          .describe("Overwrite existing directory"),
+          .describe("overwrite existing directory"),
         install: z
           .boolean()
           .optional()
-          .describe("Install dependencies after scaffolding"),
-        pm: PackageManagerSchema.optional().describe(
-          "Package manager to use (bun, npm, pnpm, yarn)",
-        ),
+          .describe("install dependencies after scaffolding"),
+        pm: PackageManagerSchema.optional().describe("package manager to use"),
         vibeRules: EditorSchema.optional().describe(
-          "Setup vibe-rules for the specified editor (cursor, windsurf, vscode, zed, claude-code, gemini, codex, amp, clinerules, roo, unified)",
+          "setup vibe-rules for the specified editor",
         ),
         githubActions: z
           .boolean()
           .optional()
-          .describe("Setup GitHub Actions for PR previews"),
-        git: z.boolean().optional().describe("Initialise a git repository"),
+          .describe("setup github actions for PR previews"),
+        git: z.boolean().optional().describe("initialise a git repository"),
       }),
     ]),
   )

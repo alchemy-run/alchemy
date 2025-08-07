@@ -15,7 +15,7 @@ export const dependencyVersionMap = {
   miniflare: "^4.20250617.3",
 
   // all vite templates
-  "@cloudflare/workers-types": "^4.20250620.0",
+  "@cloudflare/workers-types": "^4.20250805.0",
   wrangler: "^4.20.5",
 
   // astro

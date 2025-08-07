@@ -12,7 +12,7 @@
     "check": "nuxt prepare && nuxt build"
   },
   "dependencies": {
-    "@cloudflare/workers-types": "^4.20250421.0",
+    "@cloudflare/workers-types": "^4.20250805.0",
     "alchemy": "workspace:*",
     "cloudflare": "^4.2.0",
     "nuxt": "^4.0.1",

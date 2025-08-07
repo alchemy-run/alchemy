@@ -27,15 +27,15 @@ import {
 
 export const init = loggedProcedure
   .meta({
-    description: "Initialize Alchemy in an existing project",
+    description: "initialize alchemy in an existing project",
   })
   .input(
     z.tuple([
       z.object({
         framework: TemplateSchema.optional().describe(
-          "Force a specific framework instead of auto-detection",
+          "force a specific framework instead of auto-detection",
         ),
-        yes: z.boolean().optional().describe("Skip prompts and use defaults"),
+        yes: z.boolean().optional().describe("skip prompts and use defaults"),
       }),
     ]),
   )

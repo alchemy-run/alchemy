@@ -528,8 +528,11 @@ export type Worker<
 
     /**
      * Whether the worker has a remote deployment
+     * @internal
      */
-    hasRemote: boolean;
+    dev?: {
+      hasRemote: boolean;
+    };
   };
 
 /**
@@ -783,7 +786,7 @@ const _Worker = Resource(
         durableObjects: options.durableObjects,
         workflows: options.workflows,
       });
-      if (!props.version && this.output?.hasRemote !== false) {
+      if (!props.version && this.output?.dev?.hasRemote !== false) {
         const api = await createCloudflareApi(props);
         await deleteQueueConsumers(api, options.name);
         await deleteWorker(api, {
@@ -798,6 +801,7 @@ const _Worker = Resource(
       throw new Error(options.bundle.error);
     }
     const bundle = options.bundle.value;
+    const api = await createCloudflareApi(props);
 
     if (this.scope.local && !props.dev?.remote) {
       let url: string | undefined;
@@ -809,6 +813,7 @@ const _Worker = Resource(
         );
         const controller = MiniflareController.singleton;
         url = await controller.add({
+          api,
           id,
           name: options.name,
           compatibilityDate: options.compatibilityDate,
@@ -842,14 +847,14 @@ const _Worker = Resource(
         url,
         routes: [],
         domains: [],
-        hasRemote: this.output?.hasRemote ?? false,
+        dev: {
+          hasRemote: this.output?.dev?.hasRemote ?? false,
+        },
         Env: undefined!,
       } as unknown as Worker<B>);
     }
 
-    const api = await createCloudflareApi(props);
-
-    if (this.phase === "create" || this.output.hasRemote === false) {
+    if (this.phase === "create" || this.output.dev?.hasRemote === false) {
       if (props.version) {
         // When version is specified, we adopt existing workers or create them if they don't exist
         if (!(await workerExists(api, options))) {
@@ -986,7 +991,6 @@ const _Worker = Resource(
       updatedAt: now,
       eventSources: props.eventSources,
       url: subdomain?.url,
-      dev: props.dev,
       assets: props.assets,
       crons: props.crons,
       routes,
@@ -995,8 +999,10 @@ const _Worker = Resource(
       version: props.version,
       placement: props.placement,
       limits: props.limits,
-      hasRemote: true,
       Env: undefined!,
+      dev: {
+        hasRemote: true,
+      },
     } as unknown as Worker<B>);
   },
 );
