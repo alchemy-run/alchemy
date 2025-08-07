@@ -91,12 +91,12 @@ export async function handleApiError(
   }
 
   // Handle general API errors
-  const errors: { message: string }[] = json?.errors || [
+  const errors: { message: string; code: number }[] = json?.errors || [
     { message: response.statusText },
   ];
   const errorMessage = `Error ${response.status} ${action} ${resourceType}${
     resourceName ? ` '${resourceName}'` : ""
-  }: ${errors.map((error) => error.message).join(", ")}`;
+  }: ${errors.map((error) => `${error.code}: ${error.message}`).join(", ")}`;
   // End of Selection
   throw new CloudflareApiError(errorMessage, response, errors);
 }

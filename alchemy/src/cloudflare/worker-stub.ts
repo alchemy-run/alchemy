@@ -1,3 +1,4 @@
+import type { Rpc } from "@cloudflare/workers-types";
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
 import type { type } from "../type.ts";

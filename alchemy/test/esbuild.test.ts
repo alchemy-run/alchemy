@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import { posix as path } from "node:path";
-import { afterAll, expect } from "vitest";
+import { expect } from "vitest";
 import { alchemy } from "../src/alchemy.ts";
 import { Bundle } from "../src/esbuild/bundle.ts";
 import { BRANCH_PREFIX, exists } from "./util.ts";
@@ -12,12 +13,8 @@ const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
 
-const out = path.join(".alchemy", ".out");
+const out = await fs.mkdtemp(path.join(os.tmpdir(), "alchemy-esbuild-test"));
 const outputFile = path.join(out, "handler.js");
-
-afterAll(async () => {
-  await fs.rmdir(out);
-});
 
 test("bundle and cleanup", async (scope) => {
   const bundle = await Bundle("bundle", {
@@ -30,7 +27,7 @@ test("bundle and cleanup", async (scope) => {
 
   try {
     // Apply the bundle
-    expect(bundle.path).toBe(outputFile);
+    expect(path.resolve(bundle.path)).toBe(outputFile);
     expect(bundle.hash).toBeTruthy();
 
     // Verify the file exists and contains our code

@@ -11,9 +11,7 @@ import { ExitSignal } from "../trpc.ts";
 export const entrypoint = z
   .string()
   .optional()
-  .describe(
-    "Path to the entrypoint file. Defaults to ./alchemy.run.ts > ./alchemy.run.js",
-  );
+  .describe("Path to the entrypoint file");
 
 export const watch = z
   .boolean()

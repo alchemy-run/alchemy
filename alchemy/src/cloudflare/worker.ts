@@ -789,6 +789,7 @@ const _Worker = Resource(
       throw new Error(options.bundle.error);
     }
     const bundle = options.bundle.value;
+    const api = await createCloudflareApi(props);
 
     if (this.scope.local && !props.dev?.remote) {
       let url: string | undefined;
@@ -800,6 +801,7 @@ const _Worker = Resource(
         );
         const controller = MiniflareController.singleton;
         url = await controller.add({
+          api,
           id,
           name: options.name,
           compatibilityDate: options.compatibilityDate,
@@ -839,8 +841,6 @@ const _Worker = Resource(
         Env: undefined!,
       } as unknown as Worker<B>);
     }
-
-    const api = await createCloudflareApi(props);
 
     if (this.phase === "create" || this.output.dev?.hasRemote === false) {
       if (props.version) {

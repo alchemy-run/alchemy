@@ -175,18 +175,14 @@ export async function destroy<Type extends string>(
       }
     }
 
-    const destroyOptions = {
-      ...options,
-      strategy: instance[DestroyStrategy] ?? "sequential",
-    };
     if (nestedScope) {
-      await destroy(nestedScope, destroyOptions);
+      await destroy(nestedScope, {
+        ...options,
+        strategy: instance[DestroyStrategy] ?? "sequential",
+      });
     }
 
     if (options?.replace == null) {
-      if (nestedScope) {
-        await destroy(nestedScope, destroyOptions);
-      }
       await scope.deleteResource(instance[ResourceID]);
     } else {
       let pendingDeletions =

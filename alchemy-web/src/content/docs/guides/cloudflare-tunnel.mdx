@@ -1,0 +1,185 @@
+---
+title: Cloudflare Tunnel
+description: Connect private services securely to the internet without exposing your server's IP address.
+sidebar:
+  order: 0.1
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+This guide walks you through setting up a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) to connect your private services to the internet without a publicly routable IP address.
+
+:::note
+For a complete API reference, see the [Tunnel Provider](/providers/cloudflare/tunnel).
+:::
+
+
+<Steps>
+
+1. **Create a Tunnel**
+
+   Add a Tunnel resource to your `alchemy.run.ts` file:
+
+   ```diff lang="ts"
+   import alchemy from "alchemy";
+   +import { Tunnel } from "alchemy/cloudflare";
+
+   const app = await alchemy("my-app");
+
+   +// Create a tunnel with ingress rules
+   +const tunnel = await Tunnel("web-app", {
+   +  name: "web-app-tunnel",
+   +  ingress: [
+   +    {
+   +      hostname: "app.example.com",
+   +      service: "http://localhost:3000",
+   +    },
+   +    {
+   +      service: "http_status:404", // catch-all rule (required)
+   +    },
+   +  ],
+   +});
+   +
+   +// Display the tunnel token
+   +console.log("Tunnel created!");
+   +console.log("Token:", tunnel.token.unencrypted);
+
+   await app.finalize();
+   ```
+
+   :::tip
+   DNS records are automatically created for hostnames in your ingress rules. Make sure your domain is already added to Cloudflare.
+   :::
+
+2. **Deploy the Tunnel configuration**
+
+   Deploy your tunnel configuration to Cloudflare:
+
+   <Tabs syncKey="pkgManager">
+     <TabItem label="bun">
+       ```sh
+       bun alchemy deploy
+       ```
+     </TabItem>
+     <TabItem label="npm">
+       ```sh
+       npx alchemy deploy
+       ```
+     </TabItem>
+     <TabItem label="pnpm">
+       ```sh
+       pnpm alchemy deploy
+       ```
+     </TabItem>
+     <TabItem label="yarn">
+       ```sh
+       yarn alchemy deploy
+       ```
+     </TabItem>
+   </Tabs>
+
+   Save the token that's displayed - you'll need it to run cloudflared.
+
+3. **Install cloudflared**
+
+   Install the cloudflared connector on your origin server:
+
+   <Tabs>
+     <TabItem label="macOS">
+       ```sh
+       brew install cloudflared
+       ```
+     </TabItem>
+     <TabItem label="Windows">
+       ```powershell
+       winget install --id Cloudflare.cloudflared
+       ```
+     </TabItem>
+     <TabItem label="Linux">
+       Download the latest release from the [official releases page](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
+     </TabItem>
+     <TabItem label="Docker">
+       ```sh
+       docker pull cloudflare/cloudflared:latest
+       ```
+     </TabItem>
+   </Tabs>
+
+   For detailed installation instructions for your platform, see the [official Cloudflare documentation](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
+
+4. **Run the Tunnel**
+
+   Start cloudflared with the token from step 2:
+
+   <Tabs>
+     <TabItem label="Linux/macOS">
+       ```sh
+       # Run as a service (recommended)
+       sudo cloudflared service install <TUNNEL_TOKEN>
+       
+       # Or run in foreground for testing
+       cloudflared tunnel run --token <TUNNEL_TOKEN>
+       ```
+     </TabItem>
+     <TabItem label="Windows">
+       ```powershell
+       # Run as a service (as administrator)
+       cloudflared.exe service install <TUNNEL_TOKEN>
+       
+       # Or run in foreground for testing
+       cloudflared.exe tunnel run --token <TUNNEL_TOKEN>
+       ```
+     </TabItem>
+     <TabItem label="Docker">
+       ```sh
+       docker run -d \
+         --name cloudflared-tunnel \
+         --restart unless-stopped \
+         cloudflare/cloudflared:latest \
+         tunnel --no-autoupdate run --token <TUNNEL_TOKEN>
+       ```
+     </TabItem>
+   </Tabs>
+
+5. **Start your local service**
+
+   Make sure your application is running on the port specified in the ingress rules:
+
+   ```sh
+   # Example: Start a simple HTTP server on port 3000
+   npx http-server -p 3000
+   
+   # Or run your application
+   # node app.js
+   # python -m http.server 3000
+   # etc.
+   ```
+
+6. **Test your tunnel**
+
+   Visit your configured hostname to verify the tunnel is working:
+
+   ```sh
+   curl https://app.example.com
+   ```
+
+   You should see the response from your local service!
+
+</Steps>
+
+## Next Steps
+
+Now that you have a basic tunnel running, explore these advanced features:
+
+- **Multiple services** - Route different hostnames and paths to different services
+- **Private network access** - Enable WARP routing for secure connectivity
+- **Origin configuration** - Customize timeouts, TLS settings, and more
+- **Access policies** - Add authentication and authorization to your tunnel
+
+See the [Tunnel Provider Reference](/providers/cloudflare/tunnel) for complete documentation on all available options.
+
+## Learn More
+
+- [Tunnel Provider Reference](/providers/cloudflare/tunnel) - Complete API documentation
+- [Cloudflare Tunnel Documentation](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) - Official Cloudflare docs
+- [Zero Trust Access Policies](https://developers.cloudflare.com/cloudflare-one/policies/access/) - Secure your tunnel with access controls

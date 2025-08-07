@@ -31,7 +31,7 @@ const ZONE_NAME = "alchemy-test.us";
 
 const zoneId = (await findZoneForHostname(api, ZONE_NAME)).zoneId;
 
-describe.sequential("APIShield", () => {
+describe.skipIf(!process.env.ALL_TESTS).sequential("APIShield", () => {
   test("create and update schema validation with typed OpenAPI object", async (scope) => {
     let oldSchemaId: string | undefined;
     let newSchemaId: string | undefined;

@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "0.57.0",
+  "version": "0.58.0",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
   "homepage": "https://alchemy.run",
@@ -218,7 +218,8 @@
     "drizzle-orm": "^0.44.2",
     "hono": "^4.0.0",
     "prettier": "^3.0.0",
-    "stripe": "^17.0.0"
+    "stripe": "^17.0.0",
+    "@cloudflare/workers-types": "catalog:"
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^1.1.6",
@@ -229,12 +230,11 @@
     "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "^0.0.13",
     "@cloudflare/puppeteer": "^1.0.2",
-    "@cloudflare/workers-types": "^4.20250620.0",
     "@iarna/toml": "^2.2.5",
     "@octokit/rest": "^21.1.1",
     "@react-router/dev": "^7.7.1",
-    "@sveltejs/adapter-cloudflare": "^7.1.2",
     "@sentry/cloudflare": "^9.43.0",
+    "@sveltejs/adapter-cloudflare": "^7.1.2",
     "@types/bun": "latest",
     "@types/diff": "^5.0.0",
     "@types/fs-extra": "^11.0.4",
@@ -262,7 +262,7 @@
     "picocolors": "^1.1.1",
     "prettier": "^3.5.3",
     "rwsdk": "^0.1.28",
-    "trpc-cli": "^0.10.0",
+    "trpc-cli": "^0.10.2",
     "ts-morph": "^26.0.0",
     "tsdown": "^0.13.0",
     "turndown": "^7.2.0",

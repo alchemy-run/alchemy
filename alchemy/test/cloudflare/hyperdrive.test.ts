@@ -1,7 +1,10 @@
-import { describe, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { createCloudflareApi } from "../../src/cloudflare/api.ts";
-import { Hyperdrive } from "../../src/cloudflare/hyperdrive.ts";
+import {
+  Hyperdrive,
+  normalizeHyperdriveOrigin,
+} from "../../src/cloudflare/hyperdrive.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
 import { NeonProject } from "../../src/neon/project.ts";
@@ -41,6 +44,9 @@ describe("Hyperdrive Resource", () => {
       hyperdrive = await Hyperdrive(testId, {
         name: `test-hyperdrive-${BRANCH_PREFIX}`,
         origin: project.connection_uris[0].connection_parameters,
+        dev: {
+          origin: "postgres://postgres:postgres@localhost:5432/postgres",
+        },
       });
 
       expect(hyperdrive.id).toEqual(testId);
@@ -51,7 +57,13 @@ describe("Hyperdrive Resource", () => {
       expect(hyperdrive.origin.database).toEqual(
         project.connection_uris[0].connection_parameters.database,
       );
+      expect((hyperdrive.origin as any).password.unencrypted).toEqual(
+        project.connection_uris[0].connection_parameters.password.unencrypted,
+      );
       expect(hyperdrive.hyperdriveId).toBeTruthy(); // Check that we got a hyperdriveId
+      expect(hyperdrive.dev.origin.unencrypted).toEqual(
+        "postgres://postgres:postgres@localhost:5432/postgres",
+      );
 
       // Verify hyperdrive was created by querying the API directly
       const getResponse = await api.get(
@@ -132,5 +144,109 @@ describe("Hyperdrive Resource", () => {
         expect(getDeletedResponse.status).toEqual(404);
       }
     }
+  });
+
+  describe("normalizeHyperdriveOrigin", () => {
+    it("normalizes postgres string origin", () => {
+      const origin = normalizeHyperdriveOrigin(
+        "postgresql://user:password@ep-example-host-1234.us-east-1.aws.neon.tech/mydb?sslmode=require",
+      );
+      expect(origin.scheme).toEqual("postgres");
+      expect(origin.user).toEqual("user");
+      expect((origin as any).password.unencrypted).toEqual("password");
+      expect(origin.host).toEqual(
+        "ep-example-host-1234.us-east-1.aws.neon.tech",
+      );
+      expect(origin.port).toEqual(5432);
+      expect(origin.database).toEqual("mydb");
+    });
+
+    it("normalizes mysql string origin", () => {
+      const origin = normalizeHyperdriveOrigin(
+        "mysql://user:password@aws-us-east-2.connect.psdb.cloud/mydb?sslaccept=strict",
+      );
+      expect(origin.scheme).toEqual("mysql");
+      expect(origin.user).toEqual("user");
+      expect((origin as any).password.unencrypted).toEqual("password");
+      expect(origin.host).toEqual("aws-us-east-2.connect.psdb.cloud");
+      expect(origin.port).toEqual(3306);
+      expect(origin.database).toEqual("mydb");
+    });
+
+    it("normalizes cloudflare access origin", () => {
+      const origin = normalizeHyperdriveOrigin({
+        access_client_id: "client_id",
+        access_client_secret: "client_secret",
+        host: "localhost",
+        database: "mydb",
+        user: "user",
+      });
+      expect(origin.scheme).toEqual("postgres");
+      expect(origin.user).toEqual("user");
+      expect((origin as any).access_client_id).toEqual("client_id");
+      expect((origin as any).access_client_secret.unencrypted).toEqual(
+        "client_secret",
+      );
+      expect(origin.host).toEqual("localhost");
+      expect(origin.port).toEqual(5432);
+      expect(origin.database).toEqual("mydb");
+    });
+
+    it("normalizes postgres object origin", () => {
+      const origin = normalizeHyperdriveOrigin({
+        user: "user",
+        password: "password",
+        host: "localhost",
+        database: "mydb",
+      });
+      expect(origin.scheme).toEqual("postgres");
+      expect(origin.user).toEqual("user");
+      expect((origin as any).password.unencrypted).toEqual("password");
+      expect(origin.host).toEqual("localhost");
+      expect(origin.port).toEqual(5432);
+      expect(origin.database).toEqual("mydb");
+    });
+
+    it("normalizes mysql object origin", () => {
+      const origin = normalizeHyperdriveOrigin({
+        user: "user",
+        password: "password",
+        host: "localhost",
+        database: "mydb",
+        scheme: "mysql",
+      });
+      expect(origin.scheme).toEqual("mysql");
+      expect(origin.user).toEqual("user");
+      expect((origin as any).password.unencrypted).toEqual("password");
+      expect(origin.host).toEqual("localhost");
+      expect(origin.port).toEqual(3306);
+      expect(origin.database).toEqual("mydb");
+    });
+
+    it("respects port in object origin", () => {
+      const origin = normalizeHyperdriveOrigin({
+        user: "user",
+        password: "password",
+        host: "localhost",
+        database: "mydb",
+        port: 1234,
+      });
+      expect(origin.port).toEqual(1234);
+    });
+
+    it("respects port in string origin", () => {
+      const origin = normalizeHyperdriveOrigin(
+        "mysql://user:password@localhost:1234/mydb",
+      );
+      expect(origin.port).toEqual(1234);
+    });
+
+    it("throws on invalid scheme", () => {
+      expect(() =>
+        normalizeHyperdriveOrigin("invalid://user:password@localhost/mydb"),
+      ).toThrowError(
+        'Unsupported database connection scheme "invalid" for Hyperdrive (expected "postgres" or "mysql")',
+      );
+    });
   });
 });

@@ -256,13 +256,13 @@ The `alchemy.run.ts` script will be run by `node` but still needs to infer the [
 
 ### `vite.config.mts`
 
-Use the `alchemyRedwood()` plugin to configure Redwood with Alchemy:
+Use the `alchemy()` plugin to configure Redwood with Alchemy:
 
 ```ts
-import alchemyRedwood from "alchemy/cloudflare/redwood";
+import alchemy from "alchemy/cloudflare/redwood";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [alchemyRedwood()],
+  plugins: [alchemy()],
 });
 ```
