@@ -479,7 +479,7 @@ function prepareRequestBody(props: InternalHyperdriveProps): any {
  */
 export const normalizeHyperdriveOrigin = (
   input: HyperdriveOriginInput,
-): HyperdrivePublicOrigin | HyperdriveOriginWithAccess => {
+): Required<HyperdrivePublicOrigin> | Required<HyperdriveOriginWithAccess> => {
   const origin = Secret.unwrap(input);
   if (typeof origin === "string") {
     const url = new URL(origin);
@@ -533,12 +533,14 @@ const normalizePort = (
 };
 
 const toConnectionString = (
-  origin: HyperdrivePublicOrigin | HyperdriveOriginWithAccess,
+  origin:
+    | Required<HyperdrivePublicOrigin>
+    | Required<HyperdriveOriginWithAccess>,
 ) => {
   const password = Secret.unwrap(
     "password" in origin ? origin.password : origin.access_client_secret,
   );
   return new Secret(
-    `${origin.scheme || "postgres"}://${origin.user}:${password}@${origin.host}:${origin.port || 5432}/${origin.database}`,
+    `${origin.scheme}://${origin.user}:${password}@${origin.host}:${origin.port}/${origin.database}`,
   );
 };
