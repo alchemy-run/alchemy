@@ -13,7 +13,6 @@ import {
 import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
 import type { EventSource } from "./event-source.ts";
 import { isQueueEventSource } from "./event-source.ts";
-import { formatHyperdriveLocalConnectionString } from "./hyperdrive.ts";
 import { isQueue } from "./queue.ts";
 import type { Worker, WorkerProps } from "./worker.ts";
 
@@ -564,7 +563,7 @@ function processBindings(
   const hyperdrive: {
     binding: string;
     id: string;
-    localConnectionString: string;
+    localConnectionString?: string;
   }[] = [];
   const pipelines: { binding: string; pipeline: string }[] = [];
   const secretsStoreSecrets: {
@@ -741,7 +740,9 @@ function processBindings(
       hyperdrive.push({
         binding: bindingName,
         id: binding.hyperdriveId,
-        localConnectionString: formatHyperdriveLocalConnectionString(binding),
+        localConnectionString: writeSecrets
+          ? binding.dev.origin.unencrypted
+          : undefined,
       });
     } else if (binding.type === "pipeline") {
       pipelines.push({

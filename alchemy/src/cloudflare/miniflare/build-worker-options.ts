@@ -9,7 +9,6 @@ import {
   type WorkerBindingSpec,
 } from "../bindings.ts";
 import { isQueueEventSource, type EventSource } from "../event-source.ts";
-import { formatHyperdriveLocalConnectionString } from "../hyperdrive.ts";
 import type { WorkerBundle, WorkerBundleSource } from "../worker-bundle.ts";
 import type { AssetsConfig } from "../worker.ts";
 import { createRemoteProxyWorker } from "./remote-binding-proxy.ts";
@@ -166,8 +165,7 @@ export const buildWorkerOptions = async (
         break;
       }
       case "hyperdrive": {
-        (options.hyperdrives ??= {})[key] =
-          formatHyperdriveLocalConnectionString(binding);
+        (options.hyperdrives ??= {})[key] = binding.dev.origin.unencrypted;
         break;
       }
       case "images": {
