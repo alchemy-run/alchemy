@@ -192,7 +192,14 @@ export interface Hyperdrive
    */
   origin: HyperdrivePublicOrigin | HyperdriveOriginWithAccess;
 
+  /**
+   * Local development configuration
+   * @internal
+   */
   dev: {
+    /**
+     * The connection string to use for local development
+     */
     origin: Secret;
   };
 
@@ -310,14 +317,7 @@ interface InternalHyperdriveProps extends CloudflareApiOptions {
   caching?: HyperdriveCaching;
   mtls?: HyperdriveMtls;
   dev: {
-    /**
-     * Connection string for local development
-     */
     origin: Secret;
-    /**
-     * Set when `Scope.local` is true to force update
-     * @internal
-     */
     force?: boolean;
   };
 }
