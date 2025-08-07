@@ -232,7 +232,7 @@ const _KVNamespace = Resource(
     const api = await createCloudflareApi(props);
 
     if (this.phase === "delete") {
-      if (this.output.dev.id) {
+      if (this.output.dev?.id) {
         await deleteMiniflareBinding("kv", this.output.dev.id);
       }
       if (this.output.namespaceId && props.delete !== false) {
