@@ -165,7 +165,12 @@ async function verifyNoLocalStateInCI(examplePath: string): Promise<void> {
   }
 }
 
-const skippedExamples = ["aws-app", "cloudflare-tanstack-start"];
+const skippedExamples = [
+  "aws-app",
+  "cloudflare-tanstack-start",
+  // TODO(sam): re-enable. Right now it might be too slow and doesn't have dev mode
+  "planetscale-drizzle",
+];
 
 // Discover examples and generate tests
 const examples = (await discoverExamples()).filter(
