@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "react-router build",
+    "build": "react-router typegen && react-router build",
     "deploy": "alchemy deploy --env-file ../../.env",
     "destroy": "alchemy destroy --env-file ../../.env",
     "dev": "alchemy dev --env-file ../../.env",
@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.0.12",
-    "@cloudflare/workers-types": "^4.20250529.0",
+    "@cloudflare/workers-types": "^4.20250805.0",
     "@react-router/dev": "^7.5.3",
     "@tailwindcss/vite": "^4.1.4",
     "@types/node": "^20",

@@ -1,6 +1,5 @@
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
-import { bind } from "../runtime/bind.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { CloudflareApiError, handleApiError } from "./api-error.ts";
@@ -9,7 +8,6 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
-import type { Bound } from "./bound.ts";
 
 /**
  * Settings for compression of pipeline output
@@ -229,10 +227,14 @@ export interface PipelineRecord {
   [key: string]: any;
 }
 
+export function isPipeline(resource: Resource): resource is Pipeline {
+  return resource[ResourceKind] === "cloudflare::Pipeline";
+}
+
 /**
  * Output returned after Pipeline creation/update
  */
-export interface PipelineResource<_T extends PipelineRecord = PipelineRecord>
+export interface Pipeline<_T extends PipelineRecord = PipelineRecord>
   extends Resource<"cloudflare::Pipeline">,
     PipelineProps {
   /**
@@ -260,13 +262,6 @@ export interface PipelineResource<_T extends PipelineRecord = PipelineRecord>
    */
   version: number;
 }
-
-export function isPipeline(resource: Resource): resource is PipelineResource {
-  return resource[ResourceKind] === "cloudflare::Pipeline";
-}
-
-export type Pipeline<T extends PipelineRecord = PipelineRecord> =
-  PipelineResource<T> & Bound<PipelineResource<T>>;
 
 /**
  * Creates and manages Cloudflare Pipelines.
@@ -334,24 +329,10 @@ export type Pipeline<T extends PipelineRecord = PipelineRecord> =
  *
  * @see https://developers.cloudflare.com/pipelines/
  */
-export async function Pipeline<T extends PipelineRecord = PipelineRecord>(
-  name: string,
-  props: PipelineProps,
-): Promise<Pipeline<T>> {
-  const pipeline = await PipelineResource(name, props);
-  const binding = await bind(pipeline, {
-    bindThis: false,
-  });
-  return {
-    ...pipeline,
-    send: binding.send,
-  };
-}
-
-const PipelineResource = Resource("cloudflare::Pipeline", async function <
+export const Pipeline = Resource("cloudflare::Pipeline", async function <
   T extends PipelineRecord = PipelineRecord,
->(this: Context<PipelineResource<T>>, id: string, props: PipelineProps): Promise<
-  PipelineResource<T>
+>(this: Context<Pipeline<T>>, id: string, props: PipelineProps): Promise<
+  Pipeline<T>
 > {
   const api = await createCloudflareApi(props);
   const pipelineName = props.name ?? id;

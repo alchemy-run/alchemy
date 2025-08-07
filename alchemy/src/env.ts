@@ -1,6 +1,6 @@
 export interface Env {
-  [key: string]: Promise<string>;
-  <T = string>(name: string, value?: T | undefined, error?: string): Promise<T>;
+  [key: string]: string;
+  <T = string>(name: string, value?: T | undefined, error?: string): T;
 }
 
 export const env = new Proxy(_env, {
@@ -8,22 +8,21 @@ export const env = new Proxy(_env, {
   apply: (_, __, args: [string, any?, string?]) => _env(...args),
 }) as Env;
 
-async function _env<T = string>(
+function _env<T = string>(
   name: string,
   value?: T | undefined,
   error?: string,
-): Promise<T> {
+): T {
   if (value !== undefined) {
     return value;
   }
-  const env = await resolveEnv();
-  if (name in env) {
-    return env[name] as T;
+  if (name in environment) {
+    return environment[name] as T;
   }
   throw new Error(error ?? `Environment variable ${name} is not set`);
 }
 
-async function resolveEnv(): Promise<Record<string, any>> {
+const environment = await (async (): Promise<Record<string, any>> => {
   if (typeof process !== "undefined") {
     return process.env;
   }
@@ -35,4 +34,4 @@ async function resolveEnv(): Promise<Record<string, any>> {
     return import.meta.env;
   }
   throw new Error("No environment found");
-}
+})();

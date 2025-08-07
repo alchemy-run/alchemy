@@ -10,7 +10,7 @@ import { describe, expect, test } from "vitest";
 const __filename = url.fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.join(__dirname, "..", "..");
-const cliPath = path.join(rootDir, "alchemy", "bin", "alchemy.mjs");
+const cliPath = path.join(rootDir, "alchemy", "bin", "alchemy.js");
 
 async function runCommand(
   command: string,
@@ -25,6 +25,7 @@ async function runCommand(
       env: {
         ...process.env,
         ...env,
+        DO_NOT_TRACK: "true",
       },
     });
     return { stdout: result.toString(), stderr: "" };

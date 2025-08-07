@@ -10,8 +10,7 @@
     "rewriteRelativeImportExtensions": true,
     "noEmit": true,
     "types": [
-      "@cloudflare/workers-types",
-      "@types/node"
+      "@cloudflare/workers-types"
     ]
   },
   "include": [

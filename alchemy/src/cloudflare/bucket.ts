@@ -1,7 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
-import { bind } from "../runtime/bind.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { CloudflareApiError } from "./api-error.ts";
 import {
@@ -13,7 +12,6 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
-import type { Bound } from "./bound.ts";
 
 /**
  * Properties for creating or updating an R2 Bucket
@@ -128,7 +126,7 @@ interface R2BucketCORSRule {
 /**
  * Output returned after R2 Bucket creation/update
  */
-export type R2BucketResource = Resource<"cloudflare::R2Bucket"> &
+export type R2Bucket = Resource<"cloudflare::R2Bucket"> &
   Omit<BucketProps, "delete"> & {
     /**
      * Resource type identifier
@@ -156,11 +154,9 @@ export type R2BucketResource = Resource<"cloudflare::R2Bucket"> &
     domain: string | undefined;
   };
 
-export function isBucket(resource: Resource): resource is R2BucketResource {
+export function isBucket(resource: Resource): resource is R2Bucket {
   return resource[ResourceKind] === "cloudflare::R2Bucket";
 }
-
-export type R2Bucket = R2BucketResource & Bound<R2BucketResource>;
 
 /**
  * Creates and manages Cloudflare R2 Buckets for object storage.
@@ -206,31 +202,13 @@ export type R2Bucket = R2BucketResource & Bound<R2BucketResource>;
  *
  * @see https://developers.cloudflare.com/r2/buckets/
  */
-export async function R2Bucket(
-  name: string,
-  props: BucketProps = {},
-): Promise<R2Bucket> {
-  const bucket = await R2BucketResource(name, props);
-  const binding = await bind(bucket);
-  return {
-    ...bucket,
-    createMultipartUpload: binding.createMultipartUpload,
-    delete: binding.delete,
-    get: binding.get,
-    list: binding.list,
-    put: binding.put,
-    head: binding.head,
-    resumeMultipartUpload: binding.resumeMultipartUpload,
-  };
-}
-
-const R2BucketResource = Resource(
+export const R2Bucket = Resource(
   "cloudflare::R2Bucket",
   async function (
-    this: Context<R2BucketResource>,
+    this: Context<R2Bucket>,
     _id: string,
     props: BucketProps = {},
-  ): Promise<R2BucketResource> {
+  ): Promise<R2Bucket> {
     const api = await createCloudflareApi(props);
     const bucketName = props.name || this.id;
     const allowPublicAccess = props.allowPublicAccess === true;

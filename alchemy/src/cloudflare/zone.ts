@@ -651,14 +651,15 @@ export async function findZoneForHostname(
   const totalPages = firstPageData.result_info?.total_pages ?? 1;
 
   // Fetch remaining pages concurrently if needed
-  const allZones = totalPages > 1
-    ? await Promise.all([
-        Promise.resolve(firstPageData.result),
-        ...Array.from({ length: totalPages - 1 }, (_, i) =>
-          fetchZonePage(i + 2).then(data => data.result)
-        ),
-      ]).then(results => results.flat())
-    : firstPageData.result;
+  const allZones =
+    totalPages > 1
+      ? await Promise.all([
+          Promise.resolve(firstPageData.result),
+          ...Array.from({ length: totalPages - 1 }, (_, i) =>
+            fetchZonePage(i + 2).then((data) => data.result),
+          ),
+        ]).then((results) => results.flat())
+      : firstPageData.result;
 
   // Find the zone that best matches the hostname
   // We look for the longest matching zone name (most specific)

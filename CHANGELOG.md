@@ -1,3 +1,189 @@
+## v0.58.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Tunnel &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/810 [<samp>(f7973)</samp>](https://github.com/sam-goodwin/alchemy/commit/f7973e83)
+- **core**: Eager resource replacements can delete resources with children &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/809 [<samp>(4b32f)</samp>](https://github.com/sam-goodwin/alchemy/commit/4b32ff6f)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **core**: Do not leak plain text secret in console.log or toString &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/808 [<samp>(685e9)</samp>](https://github.com/sam-goodwin/alchemy/commit/685e91d9)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.57.2...v0.58.0)
+
+---
+
+## v0.57.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Import Rpc from @cloudflare/workers-types in Worker &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/807 [<samp>(42e5d)</samp>](https://github.com/sam-goodwin/alchemy/commit/42e5d7e)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.57.1...v0.57.2)
+
+---
+
+## v0.57.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**:
+  - Shorter command description &nbsp;-&nbsp; by **Aman Varshney** in https://github.com/sam-goodwin/alchemy/issues/797 [<samp>(a5f6a)</samp>](https://github.com/sam-goodwin/alchemy/commit/a5f6ad9d)
+- **cloudflare**:
+  - Use catalog to ensure same @cloudflare/workers-types &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/795 [<samp>(943ac)</samp>](https://github.com/sam-goodwin/alchemy/commit/943ac1c6)
+  - Handle symlink directories in Worker Assets &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/798 [<samp>(be636)</samp>](https://github.com/sam-goodwin/alchemy/commit/be636dc9)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.57.0...v0.57.1)
+
+---
+
+## v0.57.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Alchemy vite plugin &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/758 [<samp>(f58bc)</samp>](https://github.com/sam-goodwin/alchemy/commit/f58bcd38)
+- **random**: Add RandomString resource and alchemy/random export &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/785 [<samp>(73bc9)</samp>](https://github.com/sam-goodwin/alchemy/commit/73bc99c7)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - From xdg-app-paths to env-paths &nbsp;-&nbsp; by **Justin Bennett** in https://github.com/sam-goodwin/alchemy/issues/779 [<samp>(86246)</samp>](https://github.com/sam-goodwin/alchemy/commit/86246832)
+  - Improve error logging when failing to create an empty worker &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/751 [<samp>(beb9a)</samp>](https://github.com/sam-goodwin/alchemy/commit/beb9ab9c)
+- **core**:
+  - Synchronous alchemy.env and alchemy.secret.env &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/786 [<samp>(a3989)</samp>](https://github.com/sam-goodwin/alchemy/commit/a398935b)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.56.0...v0.57.0)
+
+---
+
+## v0.56.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Add nodejs_compat_populate_process_env to node preset &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/762 [<samp>(b487a)</samp>](https://github.com/sam-goodwin/alchemy/commit/b487af8b)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Add process.env to cloudflare:workers shim &nbsp;-&nbsp; by **Eric Clemmons** in https://github.com/sam-goodwin/alchemy/issues/742 [<samp>(807a5)</samp>](https://github.com/sam-goodwin/alchemy/commit/807a50e4)
+  - Correct miniflare worker name in proxy &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/777 [<samp>(68546)</samp>](https://github.com/sam-goodwin/alchemy/commit/6854651e)
+  - Worker bundling no longer fails on windows &nbsp;-&nbsp; by **Michael K** in https://github.com/sam-goodwin/alchemy/issues/780 [<samp>(44946)</samp>](https://github.com/sam-goodwin/alchemy/commit/44946012)
+  - Resolve wrangler main and assets relative to cwd &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/783 [<samp>(916b6)</samp>](https://github.com/sam-goodwin/alchemy/commit/916b6573)
+- **core**:
+  - Move execa from peer to dep &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/771 [<samp>(277da)</samp>](https://github.com/sam-goodwin/alchemy/commit/277da985)
+  - Handle dangling processes &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/770 [<samp>(e765f)</samp>](https://github.com/sam-goodwin/alchemy/commit/e765f2d4)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.55.3...v0.56.0)
+
+---
+
+## v0.55.3
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**: Bundle execa in alchemy CLI &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/759 [<samp>(0b90a)</samp>](https://github.com/sam-goodwin/alchemy/commit/0b90a18)
+- **cloudflare**: Add back esbuild alias plugin &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/753 [<samp>(fad6a)</samp>](https://github.com/sam-goodwin/alchemy/commit/fad6a9c)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.55.2...v0.55.3)
+
+---
+
+## v0.55.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**:
+  - Add worker/ to vite template tsconfig.json &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(0df20)</samp>](https://github.com/sam-goodwin/alchemy/commit/0df204fc)
+  - Remove command from Vite resource in vite template &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(9fb33)</samp>](https://github.com/sam-goodwin/alchemy/commit/9fb33f2b)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.55.1...v0.55.2)
+
+---
+
+## v0.55.1
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**: Resolve zod version conflict &nbsp;-&nbsp; by **Aman Varshney** in https://github.com/sam-goodwin/alchemy/issues/750 [<samp>(f2f7a)</samp>](https://github.com/sam-goodwin/alchemy/commit/f2f7a9dd)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.55.0...v0.55.1)
+
+---
+
+## v0.55.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **aws**: EC2 networking resources (VPC, NAT, IGW, Subnet, Route) &nbsp;-&nbsp; by **yehudacohen** in https://github.com/sam-goodwin/alchemy/issues/657 [<samp>(e634a)</samp>](https://github.com/sam-goodwin/alchemy/commit/e634a953)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.54.0...v0.55.0)
+
+---
+
+## v0.54.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cli**: Add init command for existing projects &nbsp;-&nbsp; by **Aman Varshney** in https://github.com/sam-goodwin/alchemy/issues/710 [<samp>(1e443)</samp>](https://github.com/sam-goodwin/alchemy/commit/1e443051)
+- **cloudflare**: Wasm support + prisma example &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/741 [<samp>(2af8f)</samp>](https://github.com/sam-goodwin/alchemy/commit/2af8fa5f)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**:
+  - Hard exit after sub-process exits &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(77516)</samp>](https://github.com/sam-goodwin/alchemy/commit/77516791)
+- **cloudflare**:
+  - Do not try to delete local D1 database &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(e81f7)</samp>](https://github.com/sam-goodwin/alchemy/commit/e81f7a20)
+  - Align bundle platform, mainFields and conditions with wrangler &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/745 [<samp>(b683b)</samp>](https://github.com/sam-goodwin/alchemy/commit/b683b17f)
+  - Nuxt example fails in dev &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/743 [<samp>(39cf6)</samp>](https://github.com/sam-goodwin/alchemy/commit/39cf6669)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.53.0...v0.54.0)
+
+---
+
+## v0.53.0
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Use queue name instead of queue id for queue consumers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/740 [<samp>(3b7ba)</samp>](https://github.com/sam-goodwin/alchemy/commit/3b7ba776)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.52.0...v0.53.0)
+
+---
+
+## v0.52.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Local d1 migrations and do not create DB in dev &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/722 [<samp>(5fc11)</samp>](https://github.com/sam-goodwin/alchemy/commit/5fc1150a)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Explicit usage of workers-types &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/736 [<samp>(08a09)</samp>](https://github.com/sam-goodwin/alchemy/commit/08a09bc8)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.51.3...v0.52.0)
+
+---
+
+## v0.51.3
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **core**: Include oldOutput in destroy when eagerly replacing &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/734 [<samp>(ac365)</samp>](https://github.com/sam-goodwin/alchemy/commit/ac3654f5)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.51.2...v0.51.3)
+
+---
+
+## v0.51.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Dev mode supports livestore &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/700 [<samp>(abf32)</samp>](https://github.com/sam-goodwin/alchemy/commit/abf32e0d)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.51.1...v0.51.2)
+
+---
+
 ## v0.51.1
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

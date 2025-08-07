@@ -21,7 +21,7 @@ import { addGitHubWorkflowToAlchemy } from "../services/github-workflow.ts";
 import { installDependencies } from "../services/package-manager.ts";
 import { copyTemplate } from "../services/template-manager.ts";
 import { ensureVibeRulesPostinstall } from "../services/vibe-rules.ts";
-import { t } from "../trpc.ts";
+import { ExitSignal, loggedProcedure } from "../trpc.ts";
 import type {
   CreateInput,
   EditorType,
@@ -38,9 +38,9 @@ import {
 
 const isTest = process.env.NODE_ENV === "test";
 
-export const create = t.procedure
+export const create = loggedProcedure
   .meta({
-    description: "Create a new Alchemy project",
+    description: "create a new alchemy project",
     negateBooleans: true,
   })
   .input(
@@ -48,26 +48,24 @@ export const create = t.procedure
       ProjectNameSchema.optional(),
       z.object({
         template: TemplateSchema.optional(),
-        yes: z.boolean().optional().describe("Skip prompts and use defaults"),
+        yes: z.boolean().optional().describe("skip prompts and use defaults"),
         overwrite: z
           .boolean()
           .optional()
-          .describe("Overwrite existing directory"),
+          .describe("overwrite existing directory"),
         install: z
           .boolean()
           .optional()
-          .describe("Install dependencies after scaffolding"),
-        pm: PackageManagerSchema.optional().describe(
-          "Package manager to use (bun, npm, pnpm, yarn)",
-        ),
+          .describe("install dependencies after scaffolding"),
+        pm: PackageManagerSchema.optional().describe("package manager to use"),
         vibeRules: EditorSchema.optional().describe(
-          "Setup vibe-rules for the specified editor (cursor, windsurf, vscode, zed, claude-code, gemini, codex, amp, clinerules, roo, unified)",
+          "setup vibe-rules for the specified editor",
         ),
         githubActions: z
           .boolean()
           .optional()
-          .describe("Setup GitHub Actions for PR previews"),
-        git: z.boolean().optional().describe("Initialise a git repository"),
+          .describe("setup github actions for PR previews"),
+        git: z.boolean().optional().describe("initialise a git repository"),
       }),
     ]),
   )
@@ -150,7 +148,7 @@ async function getProjectName(options: CreateInput): Promise<string> {
 
   if (isCancel(nameResult)) {
     cancel(pc.red("Operation cancelled."));
-    process.exit(0);
+    throw new ExitSignal(0);
   }
 
   return nameResult;
@@ -177,7 +175,7 @@ async function getSelectedTemplate(
 
   if (isCancel(templateResult)) {
     cancel(pc.red("Operation cancelled."));
-    process.exit(0);
+    throw new ExitSignal(0);
   }
 
   return templateResult;
@@ -202,7 +200,7 @@ async function getInstallPreference(
 
   if (isCancel(installResult)) {
     cancel(pc.red("Operation cancelled."));
-    process.exit(0);
+    throw new ExitSignal(0);
   }
 
   return installResult;
@@ -219,7 +217,7 @@ async function handleDirectoryOverwrite(
 
   if (!shouldOverwrite) {
     cancel(pc.red("Operation cancelled."));
-    process.exit(0);
+    throw new ExitSignal(0);
   }
 
   await removeExistingDirectory(context);
@@ -240,7 +238,7 @@ async function getShouldOverwrite(context: ProjectContext): Promise<boolean> {
 
   if (isCancel(overwriteResult)) {
     cancel(pc.red("Operation cancelled."));
-    process.exit(0);
+    throw new ExitSignal(0);
   }
 
   return overwriteResult;

@@ -2,6 +2,7 @@
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
+import starlightBlog from "starlight-blog";
 // import theme from "starlight-nextjs-theme";
 // import theme from 'starlight-theme-flexoki';
 // import theme from 'starlight-theme-rapide';
@@ -22,7 +23,10 @@ export default defineConfig({
   prefetch: true,
   integrations: [
     sitemap({
-      filter: (page) => !page.endsWith(".html") && !page.endsWith(".md"),
+      filter: (page) =>
+        !page.endsWith(".html") &&
+        !page.endsWith(".md") &&
+        !page.endsWith(".mdx"),
     }),
     // expressiveCode({
     //   themes: [{}]
@@ -54,6 +58,7 @@ export default defineConfig({
       },
       customCss: ["./src/styles/custom.css"],
       prerender: true,
+      routeMiddleware: "./src/routeData.ts",
       social: [
         {
           icon: "github",
@@ -76,6 +81,7 @@ export default defineConfig({
       },
       components: {
         Hero: "./src/components/Hero.astro",
+        MarkdownContent: "./src/components/MarkdownContent.astro",
       },
       sidebar: [
         {
@@ -107,7 +113,21 @@ export default defineConfig({
           "github-dark-dimmed",
         ],
       },
-      plugins: [theme()],
+      plugins: [
+        theme({
+          nav: [
+            {
+              label: "Docs",
+              href: "/getting-started",
+            },
+            {
+              label: "Blog",
+              href: "/blog",
+            },
+          ],
+        }),
+        starlightBlog(),
+      ],
     }),
   ],
   trailingSlash: "ignore",

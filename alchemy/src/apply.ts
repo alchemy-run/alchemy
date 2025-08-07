@@ -15,7 +15,6 @@ import {
 } from "./resource.ts";
 import { Scope, type PendingDeletions } from "./scope.ts";
 import { serialize } from "./serde.ts";
-import type { State } from "./state.ts";
 import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
 import type { Telemetry } from "./util/telemetry/index.ts";
@@ -53,9 +52,7 @@ async function _apply<Out extends Resource>(
   try {
     const quiet = props?.quiet ?? scope.quiet;
     await scope.init();
-    let state: State | undefined = (await scope.state.get(
-      resource[ResourceID],
-    ))!;
+    let state = await scope.state.get(resource[ResourceID]);
     const provider: Provider = PROVIDERS.get(resource[ResourceKind]);
     if (provider === undefined) {
       throw new Error(`Provider "${resource[ResourceKind]}" not found`);
@@ -208,22 +205,21 @@ async function _apply<Out extends Resource>(
       );
     } catch (error) {
       if (error instanceof ReplacedSignal) {
-        if (scope.children.get(resource[ResourceID])?.children.size! > 0) {
-          throw new Error(
-            `Resource ${resource[ResourceFQN]} has children and cannot be replaced.`,
-          );
-        }
-
         if (error.force) {
           await destroy(resource, {
             quiet: scope.quiet,
             strategy: resource[DestroyStrategy] ?? "sequential",
             replace: {
               props: state.oldProps,
-              output: resource,
+              output: oldOutput,
             },
           });
         } else {
+          if (scope.children.get(resource[ResourceID])?.children.size! > 0) {
+            throw new Error(
+              `Resource ${resource[ResourceFQN]} has children and cannot be replaced.`,
+            );
+          }
           const pendingDeletions =
             (await scope.get<PendingDeletions>("pendingDeletions")) ?? [];
           pendingDeletions.push({
@@ -280,17 +276,16 @@ async function _apply<Out extends Resource>(
       replaced: isReplaced,
     });
 
-    state = (await scope.state.get(resource[ResourceID]))!;
+    state = await scope.state.get(resource[ResourceID]);
     await scope.state.set(resource[ResourceID], {
       kind: resource[ResourceKind],
       id: resource[ResourceID],
       fqn: resource[ResourceFQN],
       seq: resource[ResourceSeq],
-      data: state.data,
+      data: state?.data ?? {}, // TODO: this used to be force-unwrapped but that was crashing for me - is this change ok?
       status,
       output,
       props,
-      // deps: [...deps],
     });
     return output as any;
   } catch (error) {

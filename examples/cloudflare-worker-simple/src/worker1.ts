@@ -12,12 +12,21 @@ export default {
     switch (url.pathname) {
       case "/":
         return Response.json({
-          d1: await env.D1.exec("SELECT 1"),
+          d1: await env.D1.prepare("SELECT * FROM users")
+            .all()
+            .then((r) => r.results),
           kv: await env.KV.list(),
           r2: await env.R2.list(),
         });
       case "/upload": {
         await env.KV.put(crypto.randomUUID(), crypto.randomBytes(16));
+        return Response.json({ success: true });
+      }
+      case "/insert": {
+        const stmt = env.D1.prepare(
+          "INSERT INTO users (name, email) VALUES (?, ?)",
+        );
+        await stmt.bind(crypto.randomUUID(), crypto.randomUUID()).run();
         return Response.json({ success: true });
       }
       case "/download": {

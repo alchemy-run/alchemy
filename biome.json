@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.0.0-beta.5/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.1.3/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -24,6 +24,7 @@
       "./scripts/**/*.ts",
       "./stacks/**/*.ts",
       "./examples/*/src/**/*.ts",
+      "./examples/*/test/**/*.ts",
       "./examples/*/*.ts",
       "!**/node_modules",
       "!examples/cloudflare-tanstack-start/src/routeTree.gen.ts",
@@ -74,7 +75,8 @@
         "noShadowRestrictedNames": "off",
         "noEmptyInterface": "off",
         "noRedeclare": "off",
-        "noControlCharactersInRegex": "off"
+        "noControlCharactersInRegex": "off",
+        "noConfusingVoidType": "off"
       },
       "style": {
         "useLiteralEnumMembers": "error",

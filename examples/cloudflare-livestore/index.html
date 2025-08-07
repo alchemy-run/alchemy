@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<head>
+  <title>TodoMVC + LiveStore</title>
+  <!-- Preconnect to sync backend to speed up initial connection -->
+  <script>
+    // Dynamically insert preconnect link using window.location.hostname
+    const preconnectUrl = `https://${window.location.hostname}`;
+    const link = document.createElement('link');
+    link.rel = 'preconnect';
+    link.href = preconnectUrl;
+    document.head.appendChild(link);
+  </script>
+</head>
+<body>
+  <div id="react-app"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>

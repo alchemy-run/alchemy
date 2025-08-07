@@ -6,6 +6,8 @@ import type { Telemetry } from "../util/telemetry/types.ts";
 export class InstrumentedStateStore<T extends StateStore>
   implements StateStore
 {
+  /** @internal */
+  __phantom?: T;
   private readonly stateStore: StateStore;
   private readonly telemetryClient: ITelemetryClient;
   private readonly stateStoreClass: string;
