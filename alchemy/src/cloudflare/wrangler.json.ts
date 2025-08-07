@@ -450,7 +450,11 @@ export interface WranglerJsonSpec {
   /**
    * Hyperdrive bindings
    */
-  hyperdrive?: { binding: string; id: string; localConnectionString?: string }[];
+  hyperdrive?: {
+    binding: string;
+    id: string;
+    localConnectionString?: string;
+  }[];
 
   /**
    * Pipelines
