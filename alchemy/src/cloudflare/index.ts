@@ -45,7 +45,7 @@ export * from "./redirect-rule.ts";
 export * from "./redwood/redwood.ts";
 export * from "./route.ts";
 export * from "./ruleset.ts";
-export * from "./rulesets/rule.ts";
+export * from "./rule.ts";
 export * from "./secret-key.ts";
 export * from "./secret.ts";
 export * from "./secrets-store.ts";
