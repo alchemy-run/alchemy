@@ -32,40 +32,6 @@ const firewall = await Ruleset("custom-firewall", {
 });
 ```
 
-## Request Transforms
-
-Transform incoming requests by modifying headers, URLs, or other request properties.
-
-```ts
-const transforms = await Ruleset("header-transforms", {
-  zone: "example.com",
-  phase: "http_request_transform",
-  rules: [
-    {
-      description: "Add custom header",
-      expression: "true",
-      action: "rewrite",
-      action_parameters: {
-        headers: {
-          "X-Custom-Header": { value: "my-value" }
-        }
-      }
-    },
-    {
-      description: "Rewrite API paths",
-      expression: 'http.request.uri.path matches "^/v1/"',
-      action: "rewrite",
-      action_parameters: {
-        uri: {
-          path: {
-            expression: 'regex_replace(http.request.uri.path, "^/v1/", "/api/v1/")'
-          }
-        }
-      }
-    }
-  ]
-});
-```
 
 ## Rate Limiting
 
@@ -103,6 +69,42 @@ const advancedRateLimit = await Ruleset("advanced-rate-limit", {
   ]
 });
 ```
+
+## Request Transforms
+
+Transform incoming requests by modifying headers, URLs, or other request properties.
+
+```ts
+const transforms = await Ruleset("header-transforms", {
+  zone: "example.com",
+  phase: "http_request_transform",
+  rules: [
+    {
+      description: "Add custom header",
+      expression: "true",
+      action: "rewrite",
+      action_parameters: {
+        headers: {
+          "X-Custom-Header": { value: "my-value" }
+        }
+      }
+    },
+    {
+      description: "Rewrite API paths",
+      expression: 'http.request.uri.path matches "^/v1/"',
+      action: "rewrite",
+      action_parameters: {
+        uri: {
+          path: {
+            expression: 'regex_replace(http.request.uri.path, "^/v1/", "/api/v1/")'
+          }
+        }
+      }
+    }
+  ]
+});
+```
+
 
 ## Response Transforms
 
