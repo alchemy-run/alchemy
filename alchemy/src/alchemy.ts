@@ -156,6 +156,22 @@ async function _alchemy(
       ...cliOptions,
       ...options,
     };
+    if (
+      mergedOptions.stateStore === undefined &&
+      process.env.CI &&
+      process.env.ALCHEMY_CI_STATE_STORE_CHECK !== "false"
+    ) {
+      throw new Error(`You are running Alchemy in a CI environment with the default local state store. 
+This can lead orphaned infrastructure and is rarely what you want to do.
+Instead, you should choose a persistent state store:
+1. CloudflareStateStore (https://alchemy.run/concepts/state/#cloudflare-state-store)
+2. S3StateStore (https://alchemy.run/providers/aws/s3-state-store/)
+
+You can read more about State and State Stores here: https://alchemy.run/concepts/state/#customizing-state-storage
+
+If this is a mistake, you can disable this check by setting the ALCHEMY_CI_STATE_STORE_CHECK=false.
+`);
+    }
 
     const phase = isRuntime ? "read" : (mergedOptions?.phase ?? "up");
     const telemetryClient =
