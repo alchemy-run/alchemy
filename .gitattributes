@@ -1,0 +1,6 @@
+*.astro linguist-vendored
+*.css linguist-vendored
+*.js linguist-vendored
+*.mdx linguist-vendored
+Dockerfile linguist-vendored
+Dockerfile.* linguist-vendored
