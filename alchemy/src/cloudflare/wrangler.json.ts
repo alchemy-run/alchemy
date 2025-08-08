@@ -163,6 +163,9 @@ export const WranglerJson = Resource(
         ? {
             directory: toAbsolute(props.assets.directory),
             binding: props.assets.binding,
+            not_found_handling: props.worker.assets?.not_found_handling,
+            html_handling: props.worker.assets?.html_handling,
+            run_worker_first: props.worker.assets?.run_worker_first,
           }
         : undefined,
       placement: worker.placement,
@@ -417,6 +420,13 @@ export interface WranglerJsonSpec {
   assets?: {
     directory: string;
     binding: string;
+    not_found_handling?: "none" | "404-page" | "single-page-application";
+    html_handling?:
+      | "auto-trailing-slash"
+      | "drop-trailing-slash"
+      | "force-trailing-slash"
+      | "none";
+    run_worker_first?: boolean | string[];
   };
 
   /**
