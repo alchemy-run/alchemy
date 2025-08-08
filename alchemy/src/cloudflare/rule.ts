@@ -70,7 +70,7 @@ export type Rule =
   | JSChallengeRule
   | LogRule
   | ManagedChallengeRule
-  | RedirectRule
+  | WafRedirectRule
   | RewriteRule
   | RouteRule
   | ScoreRule
@@ -112,7 +112,7 @@ export interface LogRule extends UnknownActionRule {
 export interface ManagedChallengeRule extends UnknownActionRule {
   action: "managed_challenge";
 }
-export interface RedirectRule extends RuleBase {
+export interface WafRedirectRule extends RuleBase {
   action: "redirect";
   action_parameters?: {
     /** Serve a redirect based on a bulk list lookup */
@@ -504,12 +504,12 @@ export interface RuleBase {
     username_expression: string;
   };
   /** Rate limiting config. */
-  ratelimit?: RateLimit;
+  ratelimit?: WafRateLimit;
   /** Stable reference for the rule (defaults to rule id). */
   ref?: string; // minLength: 1
 }
 
-export interface RateLimit {
+export interface WafRateLimit {
   /** Characteristics to count on (e.g. "ip.src"). */
   characteristics: string[]; // minLength: 1
   /** Period in seconds over which the counter is incremented. */
