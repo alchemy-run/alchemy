@@ -3,11 +3,12 @@ title: Ruleset
 description: Manage Cloudflare Rulesets for WAF, rate limiting, transformations, and custom firewall rules using Alchemy.
 ---
 
-The Ruleset resource lets you manage [Cloudflare Rulesets](https://developers.cloudflare.com/ruleset-engine/) to configure rules for various phases like rate limiting, firewall protection, transforms, and more within a zone's entrypoint ruleset.
+A ruleset is an ordered set of [rules](https://developers.cloudflare.com/ruleset-engine/about/rules/) that you can apply to traffic on the Cloudflare global network. Rulesets belong to a phase and can only execute in the same phase. To deploy a ruleset to a phase, add a rule that executes the ruleset to the [phase entry point ruleset](phase entry point ruleset).
 
-:::caution
-A Ruleset will overwrite the entire entrypoint ruleset for the specified phase. All existing rules in that phase will be replaced with the rules you provide.
+:::note
+See the [Cloudflare Rulesets documentation](https://developers.cloudflare.com/ruleset-engine/about/rulesets/) for more information.
 :::
+
 
 ## Custom Firewall Rules
 
@@ -32,6 +33,9 @@ const firewall = await Ruleset("custom-firewall", {
 });
 ```
 
+:::caution
+A Ruleset will overwrite the entire entrypoint ruleset for the specified phase (e.g. `http_request_firewall_custom` in this case). All existing rules in that phase will be replaced with the rules you provide.
+:::
 
 ## Rate Limiting
 
