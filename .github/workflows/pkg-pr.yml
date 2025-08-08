@@ -23,4 +23,4 @@ jobs:
       - name: Build
         run: bun run --filter alchemy build
 
-      - run: bunx pkg-pr-new publish ./alchemy
+      - run: bunx pkg-pr-new publish --pnpm ./alchemy
