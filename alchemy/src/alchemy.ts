@@ -162,7 +162,8 @@ async function _alchemy(
       process.env.ALCHEMY_CI_STATE_STORE_CHECK !== "false"
     ) {
       throw new Error(`You are running Alchemy in a CI environment with the default local state store. 
-This can lead orphaned infrastructure and is rarely what you want to do.
+This can lead to orphaned infrastructure and is rarely what you want to do.
+
 Instead, you should choose a persistent state store:
 1. CloudflareStateStore (https://alchemy.run/concepts/state/#cloudflare-state-store)
 2. S3StateStore (https://alchemy.run/providers/aws/s3-state-store/)
