@@ -34,7 +34,12 @@ export class InstrumentedStateStore<T extends StateStore>
         event,
         stateStoreClass: this.stateStoreClass,
         elapsed: performance.now() - start,
-        error: error instanceof Error ? error : new Error(String(error)),
+        error:
+          error instanceof Error
+            ? error
+            : error
+              ? new Error(String(error))
+              : undefined,
       });
     }
   }
