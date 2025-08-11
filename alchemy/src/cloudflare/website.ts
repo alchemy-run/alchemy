@@ -14,6 +14,7 @@ import { logger } from "../util/logger.ts";
 import { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "./compatibility-date.gen.ts";
+import { unionCompatibilityFlags } from "./compatibility-presets.ts";
 import { DEFAULT_PERSIST_PATH } from "./miniflare/paths.ts";
 import { type AssetsConfig, Worker, type WorkerProps } from "./worker.ts";
 import { WranglerJson, type WranglerJsonSpec } from "./wrangler.json.ts";
@@ -243,6 +244,10 @@ export async function Website<B extends Bindings>(
     ...workerProps,
     name,
     cwd: path.relative(process.cwd(), paths.cwd),
+    compatibilityFlags: unionCompatibilityFlags(
+      workerProps.compatibility,
+      workerProps.compatibilityFlags,
+    ),
     compatibilityDate:
       workerProps.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
     assets: {
