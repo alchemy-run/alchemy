@@ -353,21 +353,71 @@ async function runDevCommand(
     cwd?: string;
   },
 ) {
-  const persistFile = path.join(process.cwd(), ".alchemy", `${props.id}.pid`);
-  if (await exists(persistFile)) {
-    const pid = Number.parseInt(await fs.readFile(persistFile, "utf8"));
-    try {
-      // Actually kill the process if it's alive
-      process.kill(pid, "SIGTERM");
-    } catch {
-      // ignore
+  // Directory storing per-process PID files: .alchemy/pids/{id}-{pid}.pid
+  const pidDir = path.join(process.cwd(), ".alchemy", "pids");
+  const pidPrefix = `${props.id}-`;
+  await fs.mkdir(pidDir, { recursive: true });
+
+  // Sweep and terminate any previously tracked dev sessions for this id
+  try {
+    const entries = await fs.readdir(pidDir);
+    for (const entry of entries) {
+      if (entry.startsWith(pidPrefix) && entry.endsWith(".pid")) {
+        const full = path.join(pidDir, entry);
+        try {
+          const text = await fs.readFile(full, "utf8");
+          const oldPid = Number.parseInt(text);
+          if (!Number.isNaN(oldPid)) {
+            // Try to kill the whole process group first, then the PID
+            try {
+              process.kill(-oldPid, "SIGTERM");
+            } catch {
+              // ignore
+            }
+            try {
+              process.kill(oldPid, "SIGTERM");
+            } catch {
+              // ignore
+            }
+          }
+        } catch {
+          // ignore read issues
+        }
+        try {
+          await fs.unlink(full);
+        } catch {
+          // ignore unlink issues
+        }
+      }
+    }
+  } catch {
+    // ignore sweep issues
+  }
+
+  // Backward-compatibility: sweep legacy single-pid file .alchemy/{id}.pid
+  const legacyPersistFile = path.join(process.cwd(), ".alchemy", `${props.id}.pid`);
+  if (await exists(legacyPersistFile)) {
+    const legacyPid = Number.parseInt(await fs.readFile(legacyPersistFile, "utf8"));
+    if (!Number.isNaN(legacyPid)) {
+      try {
+        process.kill(-legacyPid, "SIGTERM");
+      } catch {
+        // ignore
+      }
+      try {
+        process.kill(legacyPid, "SIGTERM");
+      } catch {
+        // ignore
+      }
     }
     try {
-      await fs.unlink(persistFile);
+      await fs.unlink(legacyPersistFile);
     } catch {
       // ignore
     }
   }
+
+  // Spawn new dev server in a detached process group so we can kill the whole tree
   const command = props.command.split(" ");
   const [cmd, ...args] = command;
 
@@ -390,29 +440,51 @@ async function runDevCommand(
       ),
     },
     stdio: "pipe",
+    detached: true,
   });
+
   await once(childProcess, "spawn");
+
+  // Register cleanup: kill process group, then PID, then remove pid file(s)
+  const pidFile =
+    childProcess.pid != null
+      ? path.join(pidDir, `${props.id}-${childProcess.pid}.pid`)
+      : undefined;
+
   scope.onCleanup(async () => {
-    if (childProcess.exitCode === null && !childProcess.killed) {
-      childProcess.kill("SIGTERM");
-      await Promise.any([
-        once(childProcess, "exit"),
-        new Promise((resolve) => setTimeout(resolve, 5000)),
-      ]);
-      if (!childProcess.killed) {
-        childProcess.kill("SIGKILL");
+    await killProcessTree(childProcess);
+    // Remove pid file for this run
+    if (pidFile) {
+      try {
+        await fs.unlink(pidFile);
+      } catch {
+        // ignore
       }
     }
+    // Best-effort: remove any stale pid files for this id
     try {
-      await fs.unlink(persistFile);
+      const entries = await fs.readdir(pidDir);
+      for (const entry of entries) {
+        if (entry.startsWith(pidPrefix) && entry.endsWith(".pid")) {
+          const full = path.join(pidDir, entry);
+          try {
+            await fs.unlink(full);
+          } catch {
+            // ignore
+          }
+        }
+      }
     } catch {
       // ignore
     }
   });
-  if (childProcess.pid) {
-    await fs.mkdir(path.dirname(persistFile), { recursive: true });
-    await fs.writeFile(persistFile, childProcess.pid.toString());
+
+  // Persist the new PID for tracking
+  if (pidFile) {
+    await fs.mkdir(pidDir, { recursive: true });
+    await fs.writeFile(pidFile, String(childProcess.pid));
   }
+
   const URL_REGEX =
     /http:\/\/(?:(?:localhost|0\.0\.0\.0|127\.0\.0\.1)|(?:\d{1,3}\.){3}\d{1,3}):\d+(?:\/)?/;
   const promise = new DeferredPromise<string>();
@@ -440,4 +512,37 @@ async function runDevCommand(
       );
     }),
   ]);
+  
+  async function killProcessTree(cp: ReturnType<typeof spawn>) {
+    if (cp.exitCode === null && !cp.killed && cp.pid != null) {
+      // Try process group first (Linux/Unix)
+      try {
+        process.kill(-cp.pid, "SIGTERM");
+      } catch {
+        // ignore
+      }
+      // Also signal the direct child as a fallback
+      try {
+        cp.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+      await Promise.any([
+        once(cp, "exit"),
+        new Promise((resolve) => setTimeout(resolve, 5000)),
+      ]);
+      if (!cp.killed) {
+        try {
+          process.kill(-cp.pid, "SIGKILL");
+        } catch {
+          // ignore
+        }
+        try {
+          cp.kill("SIGKILL");
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
 }
