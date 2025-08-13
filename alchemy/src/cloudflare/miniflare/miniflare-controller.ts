@@ -79,10 +79,13 @@ export class MiniflareController {
         workers: [],
         defaultPersistRoot: path.resolve(DEFAULT_PERSIST_PATH),
         unsafeDevRegistryPath: miniflare.getDefaultDevRegistryPath(),
-        unsafeDevRegistryDurableObjectProxy: true,
         log: process.env.DEBUG
           ? new miniflare.Log(miniflare.LogLevel.DEBUG)
           : undefined,
+
+        // This is required to allow websites and other separate processes
+        // to detect Alchemy-managed Durable Objects via the Wrangler dev registry.
+        unsafeDevRegistryDurableObjectProxy: true,
       };
       for (const worker of this.options.values()) {
         options.workers.push(worker);
