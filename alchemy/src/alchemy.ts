@@ -18,10 +18,6 @@ import { secret } from "./secret.ts";
 import type { StateStoreType } from "./state.ts";
 import type { LoggerApi } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
-
-// Import scope extensions to ensure module augmentation is applied
-import "./aws/scope-extensions.ts";
-import "./cloudflare/scope-extensions.ts";
 import { TelemetryClient } from "./util/telemetry/client.ts";
 
 /**

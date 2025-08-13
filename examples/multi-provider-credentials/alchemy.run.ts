@@ -6,7 +6,7 @@
  */
 
 import { alchemy } from "alchemy";
-import { Vpc } from "alchemy/aws/ec2/vpc";
+import { Vpc } from "alchemy/aws/ec2";
 import { Worker } from "alchemy/cloudflare/worker";
 
 /**

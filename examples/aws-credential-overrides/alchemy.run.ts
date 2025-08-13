@@ -6,13 +6,15 @@
  */
 
 import { alchemy } from "alchemy";
-import { InternetGateway } from "alchemy/aws/ec2/internet-gateway";
-import { InternetGatewayAttachment } from "alchemy/aws/ec2/internet-gateway-attachment";
-import { Route } from "alchemy/aws/ec2/route";
-import { RouteTable } from "alchemy/aws/ec2/route-table";
-import { SecurityGroup } from "alchemy/aws/ec2/security-group";
-import { Subnet } from "alchemy/aws/ec2/subnet";
-import { Vpc } from "alchemy/aws/ec2/vpc";
+import {
+  InternetGateway,
+  InternetGatewayAttachment,
+  Route,
+  RouteTable,
+  SecurityGroup,
+  Subnet,
+  Vpc,
+} from "alchemy/aws/ec2";
 
 /**
  * Main deployment function that creates resources across multiple AWS accounts

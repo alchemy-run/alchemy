@@ -51,7 +51,7 @@ You can also specify AWS credentials when creating the main application scope:
 
 ```typescript
 import { alchemy } from "alchemy";
-import { Vpc } from "alchemy/aws/ec2/vpc";
+import { Vpc } from "alchemy/aws/ec2";
 
 const app = await alchemy("my-app", {
   aws: {
@@ -74,7 +74,7 @@ const vpc = await Vpc("main-vpc", {
 You can override credentials for specific resources by providing credential properties directly in the resource options:
 
 ```typescript
-import { Vpc } from "alchemy/aws/ec2/vpc";
+import { Vpc } from "alchemy/aws/ec2";
 
 // Create a VPC in one account
 const mainVpc = await Vpc("main-vpc", {
@@ -98,7 +98,7 @@ const secondaryVpc = await Vpc("secondary-vpc", {
 You can assume an IAM role in another account for cross-account access:
 
 ```typescript
-import { Vpc } from "alchemy/aws/ec2/vpc";
+import { Vpc } from "alchemy/aws/ec2";
 
 // Create a VPC using role assumption
 const vpc = await Vpc("cross-account-vpc", {
@@ -118,7 +118,7 @@ You can specify AWS credentials for a specific scope using the `alchemy.run()` o
 
 ```typescript
 import { alchemy } from "alchemy";
-import { Vpc } from "alchemy/aws/ec2/vpc";
+import { Vpc } from "alchemy/aws/ec2";
 
 await alchemy.run("production", {
   // Scope-level AWS credential overrides
