@@ -1,4 +1,5 @@
 import find from "find-process";
+import assert from "node:assert";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
@@ -13,6 +14,7 @@ import path from "node:path";
 export async function idempotentSpawn({
   cmd,
   cwd,
+  env,
   stateFile = "state.json",
   overlapBytes = 0,
   resume = false,
@@ -24,6 +26,7 @@ export async function idempotentSpawn({
 }: {
   cmd: string;
   cwd?: string;
+  env?: Record<string, string>;
   log: string;
   stateFile?: string;
   overlapBytes?: number;
@@ -35,7 +38,10 @@ export async function idempotentSpawn({
    * If true, the child's stdout and stderr will not be mirrored to this process's console.
    */
   quiet?: boolean;
-}): Promise<string | undefined> {
+}): Promise<{
+  extracted: string | undefined;
+  exit: () => Promise<void>;
+}> {
   if (!processName && !isSameProcess) {
     throw new Error(
       "Either processName or isSameProcess must be provided to resume a process",
@@ -98,7 +104,7 @@ export async function idempotentSpawn({
       shell: true,
       cwd,
       stdio: ["ignore", out.fd, err.fd], // stdout/stderr -> files (OS-level)
-      env: process.env,
+      env: { ...process.env, ...env },
       detached: false,
     });
 
@@ -121,22 +127,19 @@ export async function idempotentSpawn({
       if (isSameProcess && (await isSameProcess(pid))) return pid;
       if (processName) {
         const processes = await find("pid", pid);
-        if (processes.length === 0) return false;
-        if (processes.length > 1) {
+        const matches = processes.filter((p) => p.name.startsWith(processName));
+        if (matches.length > 1) {
           console.warn(
             `Found multiple processes with PID ${pid}, using the first one`,
           );
-          return false;
         }
-        return processes[0].name.startsWith(processName);
+        if (matches[0]) return matches[0].pid;
       }
     }
     // not running, let's clear pid and state
-    await Promise.all([
-      fsp.rm(stateFile).catch(() => {}),
-      fsp.rm(log).catch(() => {}),
-    ]);
+    await removeStateFiles();
     const child = await spawnLoggedChild();
+    assert(child.pid, "Child PID should be set");
     return child.pid;
   }
 
@@ -270,9 +273,29 @@ export async function idempotentSpawn({
     };
   }
 
+  async function removeStateFiles() {
+    await Promise.allSettled([fsp.rm(stateFile), fsp.rm(log)]);
+  }
+
+  async function killPid(pid: number, signal: "SIGTERM" | "SIGKILL") {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      return true;
+    }
+    // For some reason, `isPidAlive` returns true even after the process exits.
+    // However, `find-process` returns a process with name "<defunct>", so we can use that instead.
+    // TODO: verify that this works on Windows
+    const isActive = (await find("pid", pid)).some(
+      (p) => p.name !== "<defunct>",
+    );
+    return !isActive;
+  }
+
   // ------------------------ main flow ------------------------
 
-  await ensureChildRunning();
+  const pid = await ensureChildRunning();
+  const stoppers: Array<() => Promise<void>> = [];
 
   if (!quiet) {
     const write = quiet
@@ -280,20 +303,30 @@ export async function idempotentSpawn({
       : (buf: Buffer) => process.stdout.write(buf);
 
     // Start followers (stdout/stderr) and mirror to this process
-    await followFilePersisted(outPath, {
+    const stopStdout = await followFilePersisted(outPath, {
       stateKey: `${path.resolve(outPath)}::stdout`,
       write,
     });
+    stoppers.push(stopStdout);
 
     // Only follow stderr separately if it's a different file
     if (errPath !== outPath) {
-      await followFilePersisted(errPath, {
+      const stopStderr = await followFilePersisted(errPath, {
         stateKey: `${path.resolve(errPath)}::stderr`,
         write,
       });
+      stoppers.push(stopStderr);
     }
   }
 
-  // Return a stopper for this instance's mirroring (child keeps running)
-  return extracted;
+  // Return both extracted value and cleanup function
+  return {
+    extracted: await extracted,
+    exit: async () => {
+      await Promise.all(stoppers.map((stop) => stop()));
+      if ((await killPid(pid, "SIGTERM")) || (await killPid(pid, "SIGKILL"))) {
+        await removeStateFiles();
+      }
+    },
+  };
 }

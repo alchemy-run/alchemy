@@ -256,6 +256,20 @@ export class Scope {
        */
       processName?: string;
       /**
+       * Environment variables to set when running the command.
+       */
+      env?: Record<string, string>;
+      /**
+       * The directory to run the command in.
+       */
+      cwd?: string;
+      /**
+       * Whether to close the process when the scope exits.
+       *
+       * @default false
+       */
+      closeOnExit?: boolean;
+      /**
        * Function to check if a PID is the same process as the one that was spawned.
        *
        * Used to check if a PID is a cloudflared process when the parent exits, for resumability.
@@ -269,12 +283,15 @@ export class Scope {
     const logsDir = path.join(dotAlchemy, "logs");
     const pidsDir = path.join(dotAlchemy, "pids");
 
-    const extracted = await idempotentSpawn({
+    const result = await idempotentSpawn({
       log: path.join(logsDir, `${id}.log`),
       stateFile: path.join(pidsDir, `${id}.pid.json`),
       ...options,
     });
-    return extracted as E extends undefined ? undefined : string;
+    if (options.closeOnExit) {
+      this.onCleanup(result.exit);
+    }
+    return result.extracted as E extends undefined ? undefined : string;
   }
 
   /**
