@@ -1,7 +1,6 @@
 import { log } from "@clack/prompts";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import pc from "picocolors";
 import z from "zod";
@@ -86,7 +85,7 @@ export async function execAlchemy(
     execArgs.push("--watch");
     args.push("--watch");
   }
-  if (envFile && existsSync(envFile)) {
+  if (envFile && (await exists(envFile))) {
     execArgs.push(`--env-file ${envFile}`);
   }
   if (dev) args.push("--dev");
