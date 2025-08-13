@@ -1,3 +1,6 @@
+// Import scope extensions to ensure module augmentation is applied
+import "./scope-extensions.ts";
+
 export * from "./account-id.ts";
 export * from "./bucket.ts";
 export * from "./client-props.ts";

@@ -3,6 +3,7 @@ import { AwsClient } from "aws4fetch";
 import { logger } from "../../util/logger.ts";
 import { flattenParams } from "../../util/params.ts";
 import type { AwsClientProps } from "../client-props.ts";
+import { resolveAwsCredentials } from "../credentials.ts";
 import { getRegion } from "../utils.ts";
 
 /**
@@ -10,57 +11,63 @@ import { getRegion } from "../utils.ts";
  */
 
 /**
- * Create an AWS EC2 client with optional credential overrides
+ * Create an AWS EC2 client with credential resolution from props
+ *
+ * This function handles the complete credential resolution process internally,
+ * merging global, scope, and resource-level credentials according to the
+ * established precedence hierarchy.
+ *
+ * @param props - AWS client properties that may include credential overrides
+ * @returns Promise<AwsClient> - Configured AWS client for EC2 operations
  */
 export async function createEC2Client(
-  credentialOverrides?: AwsClientProps,
+  props?: AwsClientProps,
 ): Promise<AwsClient> {
-  let credentials: any;
+  // Resolve credentials from all sources (global, scope, resource)
+  const credentials = await resolveAwsCredentials(props);
+  let awsCredentials: any;
   let region: string;
 
-  if (
-    credentialOverrides &&
-    (credentialOverrides.accessKeyId || credentialOverrides.secretAccessKey)
-  ) {
+  if (credentials && (credentials.accessKeyId || credentials.secretAccessKey)) {
     // Use provided credentials directly
-    credentials = {
-      accessKeyId: credentialOverrides.accessKeyId,
-      secretAccessKey: credentialOverrides.secretAccessKey,
-      sessionToken: credentialOverrides.sessionToken,
+    awsCredentials = {
+      accessKeyId: credentials.accessKeyId,
+      secretAccessKey: credentials.secretAccessKey,
+      sessionToken: credentials.sessionToken,
     };
-  } else if (credentialOverrides?.profile) {
+  } else if (credentials?.profile) {
     // Use profile-based credentials if profile is specified
     try {
       const profileCredentials = await fromNodeProviderChain({
-        profile: credentialOverrides.profile,
+        profile: credentials.profile,
       })();
-      credentials = {
+      awsCredentials = {
         accessKeyId: profileCredentials.accessKeyId,
         secretAccessKey: profileCredentials.secretAccessKey,
         sessionToken: profileCredentials.sessionToken,
       };
     } catch (error) {
       logger.log(
-        `Error loading credentials from profile ${credentialOverrides.profile}:`,
+        `Error loading credentials from profile ${credentials.profile}:`,
         error,
       );
       // Fall back to default credentials
-      credentials = await fromNodeProviderChain()();
+      awsCredentials = await fromNodeProviderChain()();
     }
   } else {
     // Fall back to AWS SDK credential chain
-    credentials = await fromNodeProviderChain()();
+    awsCredentials = await fromNodeProviderChain()();
   }
 
-  // Use region from overrides or fall back to getRegion()
-  if (credentialOverrides?.region) {
-    region = credentialOverrides.region;
+  // Use region from resolved credentials or fall back to getRegion()
+  if (credentials?.region) {
+    region = credentials.region;
   } else {
     region = await getRegion();
   }
 
   return new AwsClient({
-    ...credentials,
+    ...awsCredentials,
     service: "ec2",
     region,
   });

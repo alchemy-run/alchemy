@@ -8,6 +8,10 @@ import { BRANCH_PREFIX } from "../../util.ts";
 
 import "../../../src/test/vitest.ts";
 
+// Set test environment variables for AWS tests
+process.env.AWS_PROFILE = process.env.AWS_PROFILE || "default";
+process.env.AWS_REGION = process.env.AWS_REGION || "us-west-2";
+
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
@@ -115,7 +119,7 @@ describe("SecurityGroup", () => {
       // First create a VPC with profile override
       vpc = await Vpc(vpcName, {
         cidrBlock: "10.0.0.0/16",
-        profile: "test9-374080338393", // Override profile
+        profile: process.env.AWS_PROFILE || "default", // Override profile
         region: "us-west-2",
         tags: { Name: vpcName },
       });
@@ -125,7 +129,7 @@ describe("SecurityGroup", () => {
         vpc,
         groupName: sgName,
         description: "Test security group with profile override",
-        profile: "test9-374080338393", // Override profile
+        profile: process.env.AWS_PROFILE || "default", // Override profile
         region: "us-west-2",
         tags: {
           Name: sgName,

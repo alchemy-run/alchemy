@@ -14,8 +14,8 @@ import {
 } from "../../../src/util/timeout.ts";
 
 // Set test environment variables for AWS tests
-process.env.AWS_PROFILE = "test9-374080338393";
-process.env.AWS_REGION = "us-west-2";
+process.env.AWS_PROFILE = process.env.AWS_PROFILE || "default";
+process.env.AWS_REGION = process.env.AWS_REGION || "us-west-2";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
@@ -250,8 +250,10 @@ describe("Subnet", () => {
         await alchemy.run(
           "test-scope",
           {
-            awsRegion: "us-west-2",
-            awsProfile: "test9-374080338393",
+            aws: {
+              region: "us-west-2",
+              profile: process.env.AWS_PROFILE || "default",
+            },
           },
           async () => {
             // First create a VPC
@@ -311,8 +313,10 @@ describe("Subnet", () => {
         await alchemy.run(
           "test-precedence",
           {
-            awsRegion: "us-east-1", // Scope sets us-east-1
-            awsProfile: "test9-374080338393",
+            aws: {
+              region: "us-east-1", // Scope sets us-east-1
+              profile: process.env.AWS_PROFILE || "default",
+            },
           },
           async () => {
             // First create a VPC with scope credentials

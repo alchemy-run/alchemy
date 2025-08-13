@@ -10,7 +10,6 @@ import {
   waitForResourceState,
 } from "../../util/timeout.ts";
 import type { AwsClientProps } from "../client-props.ts";
-import { resolveAwsCredentials } from "../credentials.ts";
 import { retry } from "../retry.ts";
 import { callEC2Api, createEC2Client } from "./utils.ts";
 import type { Vpc } from "./vpc.ts";
@@ -270,9 +269,8 @@ export const Subnet = Resource(
     _id: string,
     props: SubnetProps,
   ): Promise<Subnet> {
-    // Resolve AWS credentials from global, scope, and resource levels
-    const credentials = resolveAwsCredentials(props);
-    const client = await createEC2Client(credentials);
+    // Create EC2 client with credential resolution handled internally
+    const client = await createEC2Client(props);
     const vpcId = typeof props.vpc === "string" ? props.vpc : props.vpc.vpcId;
 
     // Validate timeout config early, but use default for deletion if invalid

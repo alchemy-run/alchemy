@@ -1,5 +1,3 @@
-import { type } from "arktype";
-
 /**
  * AWS client properties for credential configuration.
  *
@@ -9,7 +7,7 @@ import { type } from "arktype";
  *
  * These properties can be specified at:
  * 1. Resource level - directly in resource creation parameters
- * 2. Scope level - in alchemy.run() options (using awsRegion, awsProfile, etc.)
+ * 2. Scope level - in alchemy.run() options with `aws` property
  * 3. Global level - through environment variables (AWS_REGION, AWS_PROFILE, etc.)
  *
  * The credential resolution follows a precedence order where resource-level credentials
@@ -30,9 +28,10 @@ import { type } from "arktype";
  * ```typescript
  * // Scope-level credential configuration
  * await alchemy.run("production", {
- *   // Scope-level AWS credential overrides
- *   awsRegion: "us-west-2",
- *   awsProfile: "production",
+ *   aws: {
+ *     region: "us-west-2",
+ *     profile: "production",
+ *   }
  * }, async () => {
  *   // Resources created here will use the scope credentials by default
  *   const vpc = await Vpc("main-vpc", {
@@ -137,23 +136,3 @@ export interface AwsClientProps {
    */
   roleSessionName?: string;
 }
-
-/**
- * Arktype schema for runtime validation of AWS client properties.
- * All properties are optional strings to allow flexible credential configuration.
- */
-export const AwsClientPropsSchema = type({
-  "accessKeyId?": "string",
-  "secretAccessKey?": "string",
-  "sessionToken?": "string",
-  "region?": "string",
-  "profile?": "string",
-  "roleArn?": "string",
-  "externalId?": "string",
-  "roleSessionName?": "string",
-});
-
-/**
- * Type alias for the validated AWS client properties from arktype schema.
- */
-export type ValidatedAwsClientProps = typeof AwsClientPropsSchema.infer;

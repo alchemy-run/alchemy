@@ -10,7 +10,6 @@ import {
   waitForResourceState,
 } from "../../util/timeout.ts";
 import type { AwsClientProps } from "../client-props.ts";
-import { resolveAwsCredentials } from "../credentials.ts";
 import { callEC2Api, createEC2Client } from "./utils.ts";
 
 /**
@@ -258,9 +257,8 @@ export const InternetGateway = Resource(
     _id: string,
     props: InternetGatewayProps,
   ): Promise<InternetGateway> {
-    // Resolve AWS credentials from global, scope, and resource levels
-    const credentials = resolveAwsCredentials(props);
-    const client = await createEC2Client(credentials);
+    // Create EC2 client with credential resolution handled internally
+    const client = await createEC2Client(props);
     const timeoutConfig = mergeTimeoutConfig(
       INTERNET_GATEWAY_TIMEOUT,
       props.timeout,

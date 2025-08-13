@@ -29,8 +29,10 @@ async function deploy() {
     "production",
     {
       // Scope-level AWS credential overrides
-      awsRegion: "us-west-2",
-      awsProfile: "production-account", // Replace with your production profile
+      aws: {
+        region: "us-west-2",
+        profile: "production-account", // Replace with your production profile
+      },
     },
     async () => {
       console.log("Deploying production resources...");
@@ -47,7 +49,7 @@ async function deploy() {
       });
 
       // Create production subnet
-      const prodSubnet = await Subnet("production-subnet", {
+      const _prodSubnet = await Subnet("production-subnet", {
         vpc: prodVpc,
         cidrBlock: "10.0.1.0/24",
         availabilityZone: "us-west-2a",
@@ -73,7 +75,7 @@ async function deploy() {
       });
 
       // Create production security group
-      const prodSg = await SecurityGroup("production-web-sg", {
+      const _prodSg = await SecurityGroup("production-web-sg", {
         vpc: prodVpc,
         description: "Production web security group",
         ingressRules: [
@@ -153,8 +155,10 @@ async function deploy() {
     "staging",
     {
       // Scope-level AWS credential overrides
-      awsRegion: "us-east-1",
-      awsProfile: "staging-account", // Replace with your staging profile
+      aws: {
+        region: "us-east-1",
+        profile: "staging-account", // Replace with your staging profile
+      },
     },
     async () => {
       console.log("Deploying staging resources...");
@@ -171,7 +175,7 @@ async function deploy() {
       });
 
       // Create staging subnet
-      const stagingSubnet = await Subnet("staging-subnet", {
+      const _stagingSubnet = await Subnet("staging-subnet", {
         vpc: stagingVpc,
         cidrBlock: "10.2.1.0/24",
         availabilityZone: "us-east-1a",
@@ -216,7 +220,7 @@ async function deploy() {
 
       // Create a resource in the development account from within the staging scope
       // This demonstrates cross-account deployment with role assumption
-      const devVpc = await Vpc("dev-vpc-from-staging", {
+      const _devVpc = await Vpc("dev-vpc-from-staging", {
         cidrBlock: "10.3.0.0/16",
         roleArn: "arn:aws:iam::123456789012:role/DevAccountAccess", // Replace with your role ARN
         roleSessionName: "alchemy-cross-account-deployment",

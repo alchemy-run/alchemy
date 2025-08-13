@@ -9,7 +9,6 @@ import {
   waitForResourceState,
 } from "../../util/timeout.ts";
 import type { AwsClientProps } from "../client-props.ts";
-import { resolveAwsCredentials } from "../credentials.ts";
 import type { Subnet } from "./subnet.ts";
 import { callEC2Api, createEC2Client } from "./utils.ts";
 
@@ -244,9 +243,8 @@ export const NatGateway = Resource(
     _id: string,
     props: NatGatewayProps,
   ): Promise<NatGateway> {
-    // Resolve AWS credentials from global, scope, and resource levels
-    const credentials = resolveAwsCredentials(props);
-    const client = await createEC2Client(credentials);
+    // Create EC2 client with credential resolution handled internally
+    const client = await createEC2Client(props);
     const subnetId =
       typeof props.subnet === "string" ? props.subnet : props.subnet.subnetId;
     const timeoutConfig = mergeTimeoutConfig(
@@ -276,7 +274,7 @@ export const NatGateway = Resource(
         await waitForNatGatewayFullyDeleted(
           this.output.natGatewayId,
           timeoutConfig,
-          credentials,
+          props,
         );
 
         logger.log(
@@ -303,7 +301,7 @@ export const NatGateway = Resource(
           await waitForEipReleased(
             this.output.allocationId,
             timeoutConfig,
-            credentials,
+            props,
           );
           logger.log(
             `  ✅ Elastic IP ${this.output.allocationId} released successfully`,
@@ -421,7 +419,7 @@ export const NatGateway = Resource(
       await waitForNatGatewayAvailable(
         natGateway.NatGatewayId!,
         timeoutConfig,
-        credentials,
+        props,
       );
     }
 

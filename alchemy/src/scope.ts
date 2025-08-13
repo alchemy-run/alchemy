@@ -67,7 +67,36 @@ export interface ScopeOptions {
   logger?: LoggerApi;
 }
 
-export type ScopeOptionsWithMetadata = ScopeOptions & Record<string, any>;
+/**
+ * Base interface for provider credentials that can be extended by each provider.
+ * This allows providers to add their own credential properties without modifying the core scope interface.
+ *
+ * Provider credentials cannot conflict with core ScopeOptions properties.
+ *
+ * Providers can extend this interface using module augmentation:
+ *
+ * @example
+ * ```typescript
+ * // In aws/scope-extensions.ts
+ * declare module "../scope.ts" {
+ *   interface ProviderCredentials {
+ *     aws?: AwsClientProps;
+ *   }
+ * }
+ * ```
+ */
+export interface ProviderCredentials extends Record<string, unknown> {
+  // Provider credentials should not conflict with core scope properties
+  // TypeScript will enforce this at compile time when providers extend this interface
+}
+
+/**
+ * Extended scope options that include provider credentials.
+ * This interface is automatically extended by providers using module augmentation.
+ */
+export interface ExtendedScopeOptions
+  extends ScopeOptions,
+    ProviderCredentials {}
 
 export type PendingDeletions = Array<{
   resource: Resource<string>;
@@ -140,7 +169,9 @@ export class Scope {
   public readonly logger: LoggerApi;
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
-  public readonly metadata: Record<string, any>;
+
+  // Provider credentials for scope-level credential overrides
+  public readonly providerCredentials: ProviderCredentials;
 
   private isErrored = false;
   private isSkipped = false;
@@ -155,8 +186,8 @@ export class Scope {
     return this.scopeName;
   }
 
-  constructor(options: ScopeOptionsWithMetadata) {
-    // Extract known properties and store remaining properties as metadata
+  constructor(options: ExtendedScopeOptions) {
+    // Extract core scope options and provider credentials separately
     const {
       scopeName,
       parent,
@@ -165,16 +196,21 @@ export class Scope {
       stateStore,
       quiet,
       phase,
-      dev,
+      local,
+      watch,
+      force,
+      destroyStrategy,
       telemetryClient,
       logger,
-      ...metadata
+      ...providerCredentials
     } = options;
 
     this.scopeName = scopeName;
     this.name = this.scopeName;
     this.parent = parent ?? Scope.getScope();
-    this.metadata = metadata;
+
+    // Store provider credentials (TypeScript ensures no conflicts with core options)
+    this.providerCredentials = providerCredentials as ProviderCredentials;
 
     const isChild = this.parent !== undefined;
     if (this.scopeName?.includes(":") && isChild) {
@@ -208,11 +244,11 @@ export class Scope {
           logger,
         );
 
-    this.local = options.local ?? this.parent?.local ?? false;
-    this.watch = options.watch ?? this.parent?.watch ?? false;
-    this.force = options.force ?? this.parent?.force ?? false;
+    this.local = local ?? this.parent?.local ?? false;
+    this.watch = watch ?? this.parent?.watch ?? false;
+    this.force = force ?? this.parent?.force ?? false;
     this.destroyStrategy =
-      options.destroyStrategy ?? this.parent?.destroyStrategy ?? "sequential";
+      destroyStrategy ?? this.parent?.destroyStrategy ?? "sequential";
     if (this.local) {
       this.logger.warnOnce(
         "Development mode is in beta. Please report any issues to https://github.com/sam-goodwin/alchemy/issues.",
@@ -220,14 +256,13 @@ export class Scope {
     }
 
     this.stateStore =
-      options.stateStore ?? this.parent?.stateStore ?? defaultStateStore;
-    this.telemetryClient =
-      options.telemetryClient ?? this.parent?.telemetryClient!;
+      stateStore ?? this.parent?.stateStore ?? defaultStateStore;
+    this.telemetryClient = telemetryClient ?? this.parent?.telemetryClient!;
     this.state = new InstrumentedStateStore(
       this.stateStore(this),
       this.telemetryClient,
     );
-    if (!options.telemetryClient && !this.parent?.telemetryClient) {
+    if (!telemetryClient && !this.parent?.telemetryClient) {
       throw new Error("Telemetry client is required");
     }
     this.dataMutex = new AsyncMutex();
@@ -436,6 +471,7 @@ export class Scope {
     if (!this.isErrored && !this.isSkipped) {
       // TODO: need to detect if it is in error
       const resourceIds = await this.state.list();
+
       const aliveIds = new Set(this.resources.keys());
       const orphanIds = Array.from(
         resourceIds.filter((id) => !aliveIds.has(id)),

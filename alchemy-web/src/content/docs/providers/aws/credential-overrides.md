@@ -45,27 +45,29 @@ export AWS_PROFILE=production
 
 These credentials will be used by default for all AWS resources unless overridden at the scope or resource level.
 
-### Scope Level Credentials
+### Application Level Credentials
 
-You can specify AWS credentials for a specific scope using the `alchemy.run()` options:
+You can also specify AWS credentials when creating the main application scope:
 
 ```typescript
 import { alchemy } from "alchemy";
 import { Vpc } from "alchemy/aws/ec2/vpc";
 
-await alchemy.run("production", {
-  // Scope-level AWS credential overrides
-  awsRegion: "us-east-1",
-  awsProfile: "production-account",
-}, async () => {
-  // Resources created here will use the production-account profile
-  // and us-east-1 region by default
-  const vpc = await Vpc("main-vpc", {
-    cidrBlock: "10.0.0.0/16",
-    tags: { Name: "main-vpc" }
-  });
+const app = await alchemy("my-app", {
+  aws: {
+    region: "us-west-2",
+    profile: "production",
+  },
+});
+
+// All resources will use the specified credentials by default
+const vpc = await Vpc("main-vpc", {
+  cidrBlock: "10.0.0.0/16",
+  tags: { Name: "main-vpc" }
 });
 ```
+
+
 
 ### Resource Level Credentials
 
@@ -108,28 +110,29 @@ const vpc = await Vpc("cross-account-vpc", {
 });
 ```
 
-### Credential Inheritance
 
-Resources can inherit credentials from their parent resources. For example, a security group will inherit credentials from its VPC if not explicitly specified:
+
+### Scope Level Credentials
+
+You can specify AWS credentials for a specific scope using the `alchemy.run()` options:
 
 ```typescript
+import { alchemy } from "alchemy";
 import { Vpc } from "alchemy/aws/ec2/vpc";
-import { SecurityGroup } from "alchemy/aws/ec2/security-group";
 
-// Create a VPC with specific credentials
-const vpc = await Vpc("vpc", {
-  cidrBlock: "10.0.0.0/16",
-  profile: "production",
-  region: "us-east-1",
-  tags: { Name: "production-vpc" }
-});
-
-// This security group will inherit credentials from the VPC
-const sg = await SecurityGroup("sg", {
-  vpc: vpc,
-  description: "Inherited credentials",
-  // No explicit credential properties - will use the VPC's credentials
-  tags: { Name: "production-sg" }
+await alchemy.run("production", {
+  // Scope-level AWS credential overrides
+  aws: {
+    region: "us-east-1",
+    profile: "production-account",
+  },
+}, async () => {
+  // Resources created here will use the production-account profile
+  // and us-east-1 region by default
+  const vpc = await Vpc("main-vpc", {
+    cidrBlock: "10.0.0.0/16",
+    tags: { Name: "main-vpc" }
+  });
 });
 ```
 
@@ -138,9 +141,8 @@ const sg = await SecurityGroup("sg", {
 When resolving AWS credentials, Alchemy follows this order of precedence:
 
 1. Resource-level credentials (highest priority)
-2. Parent resource credentials (for resources that reference other resources)
-3. Scope-level credentials (from `alchemy.run()` options)
-4. Global-level credentials (from environment variables)
+2. Scope-level credentials (from `alchemy.run()` options)
+3. Global-level credentials (from environment variables)
 
 ## Supported Resources
 

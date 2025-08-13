@@ -1,5 +1,34 @@
-import { Scope } from "../scope.ts";
-import { AwsClientPropsSchema, type AwsClientProps } from "./client-props.ts";
+import type { AwsClientProps } from "./client-props.ts";
+
+/**
+ * Validate AWS client properties to ensure they are strings.
+ * This follows the same pattern as Cloudflare credential validation.
+ */
+function validateAwsClientProps(props: AwsClientProps, context: string): void {
+  const validKeys = [
+    "accessKeyId",
+    "secretAccessKey",
+    "sessionToken",
+    "region",
+    "profile",
+    "roleArn",
+    "externalId",
+    "roleSessionName",
+  ];
+
+  for (const [key, value] of Object.entries(props)) {
+    if (!validKeys.includes(key)) {
+      continue; // Ignore unknown properties
+    }
+
+    if (value !== undefined && typeof value !== "string") {
+      throw new Error(
+        `Invalid AWS configuration in ${context}: Property '${key}' must be a string, got ${typeof value}. ` +
+          "Please ensure all AWS credential properties are strings.",
+      );
+    }
+  }
+}
 
 /**
  * Get global AWS configuration from environment variables.
@@ -28,7 +57,7 @@ export function getGlobalAwsConfig(): AwsClientProps {
  *
  * The resolution follows this precedence order:
  * 1. Resource-level credentials (highest priority)
- * 2. Scope-level credentials from metadata
+ * 2. Scope-level credentials (medium priority)
  * 3. Global environment variables (lowest priority)
  *
  * Supported credential properties include:
@@ -42,10 +71,9 @@ export function getGlobalAwsConfig(): AwsClientProps {
  * - `externalId`: External ID when assuming a role
  *
  * @param resourceProps - Resource-level AWS credential properties (optional)
- * @param scope - Current scope for accessing metadata (optional, defaults to current scope)
  * @returns Resolved AWS client properties with validation
  *
- * @throws {Error} When scope metadata contains invalid AWS configuration
+ * @throws {Error} When scope contains invalid AWS configuration
  * @throws {Error} When resource properties contain invalid AWS configuration
  *
  * @example
@@ -55,18 +83,16 @@ export function getGlobalAwsConfig(): AwsClientProps {
  *   region: "us-west-2",
  *   profile: "production"
  * });
- *
- * // Create EC2 client with resolved credentials
- * const ec2Client = await createEC2Client(credentials);
  * ```
  *
  * @example
  * ```typescript
- * // Usage with scope metadata
- * const app = await alchemy.run("my-app", {
- *   // Scope-level AWS credential overrides
- *   awsRegion: "eu-west-1",
- *   awsProfile: "staging"
+ * // Usage with scope-level credentials
+ * await alchemy.run("my-app", {
+ *   aws: {
+ *     region: "eu-west-1",
+ *     profile: "staging"
+ *   }
  * }, async () => {
  *   // Resources created here will use the scope credentials by default
  *   const vpc = await Vpc("main-vpc", {
@@ -81,99 +107,33 @@ export function getGlobalAwsConfig(): AwsClientProps {
  *   });
  * });
  * ```
- *
- * @example
- * ```typescript
- * // Multi-account deployment example
- * await alchemy.run("production", {
- *   awsRegion: "us-west-2",
- *   awsProfile: "main-account"
- * }, async () => {
- *   // This resource uses scope credentials (main-account)
- *   const mainVpc = await Vpc("main-vpc", {
- *     cidrBlock: "10.0.0.0/16"
- *   });
- *
- *   // This resource overrides to use a different account
- *   const secondaryVpc = await Vpc("secondary-vpc", {
- *     cidrBlock: "10.1.0.0/16",
- *     profile: "secondary-account",
- *     region: "us-east-1"
- *   });
- * });
- * ```
- *
- * @example
- * ```typescript
- * // Using explicit credentials
- * const credentials = resolveAwsCredentials({
- *   accessKeyId: "AKIAIOSFODNN7EXAMPLE",
- *   secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
- *   region: "us-west-2"
- * });
- * ```
  */
-export function resolveAwsCredentials(
+export async function resolveAwsCredentials(
   resourceProps?: AwsClientProps,
-  scope?: Scope,
-): AwsClientProps {
-  // Get the current scope if not provided
-  const currentScope = scope || Scope.getScope();
-
+): Promise<AwsClientProps> {
   // 1. Start with global environment variables (lowest priority)
   const globalConfig = getGlobalAwsConfig();
 
-  // 2. Layer in scope-level credentials from metadata (medium priority)
+  // 2. Layer in scope-level credentials (medium priority)
   let scopeConfig: AwsClientProps = {};
-  if (currentScope?.metadata) {
-    // Extract AWS-related properties from scope metadata
-    const potentialAwsConfig = {
-      accessKeyId:
-        currentScope.metadata.awsAccessKeyId ||
-        currentScope.metadata.accessKeyId,
-      secretAccessKey:
-        currentScope.metadata.awsSecretAccessKey ||
-        currentScope.metadata.secretAccessKey,
-      sessionToken:
-        currentScope.metadata.awsSessionToken ||
-        currentScope.metadata.sessionToken,
-      region: currentScope.metadata.awsRegion || currentScope.metadata.region,
-      profile:
-        currentScope.metadata.awsProfile || currentScope.metadata.profile,
-      roleArn:
-        currentScope.metadata.awsRoleArn || currentScope.metadata.roleArn,
-      externalId:
-        currentScope.metadata.awsExternalId || currentScope.metadata.externalId,
-      roleSessionName:
-        currentScope.metadata.awsRoleSessionName ||
-        currentScope.metadata.roleSessionName,
-    };
+  try {
+    // Import Scope dynamically to avoid circular dependency
+    const { Scope } = await import("../scope.ts");
+    const currentScope = Scope.getScope();
+    if (currentScope?.providerCredentials?.aws) {
+      scopeConfig = currentScope.providerCredentials.aws;
 
-    // Filter out undefined values
-    scopeConfig = Object.fromEntries(
-      Object.entries(potentialAwsConfig).filter(
-        ([_, value]) => value !== undefined,
-      ),
-    ) as AwsClientProps;
-
-    // Validate scope metadata if it contains AWS configuration
-    if (Object.keys(scopeConfig).length > 0) {
-      const validationResult = AwsClientPropsSchema(scopeConfig);
-
-      // Check if validation failed (arktype v2 returns array-like errors on failure)
-      if (Array.isArray(validationResult)) {
-        const errorMessages = validationResult
-          .map((error) => error.message || error.toString())
-          .join(", ");
-
-        throw new Error(
-          `Invalid AWS configuration in scope metadata: ${errorMessages}. ` +
-            "Please ensure all AWS credential properties are strings.",
-        );
-      }
-
-      // Validation succeeded, use the validated result
-      scopeConfig = validationResult as AwsClientProps;
+      // Validate scope-level credentials if provided
+      validateAwsClientProps(scopeConfig, "scope");
+    }
+  } catch (error) {
+    // If we can't access scope (e.g., not running in scope context), just continue
+    // with empty scope config unless it's a validation error
+    if (
+      error instanceof Error &&
+      error.message.includes("Invalid AWS configuration")
+    ) {
+      throw error;
     }
   }
 
@@ -182,19 +142,7 @@ export function resolveAwsCredentials(
 
   // Validate resource-level credentials if provided
   if (resourceProps && Object.keys(resourceProps).length > 0) {
-    const validationResult = AwsClientPropsSchema(resourceProps);
-
-    // Check if validation failed (arktype v2 returns array-like errors on failure)
-    if (Array.isArray(validationResult)) {
-      const errorMessages = validationResult
-        .map((error) => error.message || error.toString())
-        .join(", ");
-
-      throw new Error(
-        `Invalid AWS configuration in resource properties: ${errorMessages}. ` +
-          "Please ensure all AWS credential properties are strings.",
-      );
-    }
+    validateAwsClientProps(resourceProps, "resource properties");
   }
 
   // Merge configurations with proper precedence (later properties override earlier ones)

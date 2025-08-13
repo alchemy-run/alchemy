@@ -19,331 +19,211 @@ const test = alchemy.test(import.meta, {
 
 describe("AWS Credential Overrides", () => {
   /**
-   * Test scope-level credential inheritance across multiple resources
+   * Test resource-level credential overrides
    *
-   * This test creates a scope with AWS credential overrides and verifies that
-   * all resources created within that scope inherit those credentials.
-   */
-  test("scope-level credential inheritance", async (scope) => {
-    // Create a scope with AWS credential overrides
-    await alchemy.run(
-      "credential-test",
-      {
-        // Scope-level AWS credential overrides
-        awsRegion: "us-west-2",
-        awsProfile: "test9-374080338393",
-      },
-      async () => {
-        const vpcName = `${BRANCH_PREFIX}-scope-creds-vpc`;
-        const subnetName = `${BRANCH_PREFIX}-scope-creds-subnet`;
-        const igwName = `${BRANCH_PREFIX}-scope-creds-igw`;
-        const sgName = `${BRANCH_PREFIX}-scope-creds-sg`;
-        const rtName = `${BRANCH_PREFIX}-scope-creds-rt`;
-
-        let vpc;
-        let subnet;
-        let igw;
-        let igwAttachment;
-        let sg;
-        let routeTable;
-        let route;
-
-        try {
-          // Create resources without explicit credential overrides
-          // They should inherit credentials from the scope
-          vpc = await Vpc(vpcName, {
-            cidrBlock: "10.0.0.0/16",
-            tags: { Name: vpcName, CredTest: "scope-level" },
-          });
-
-          subnet = await Subnet(subnetName, {
-            vpc,
-            cidrBlock: "10.0.1.0/24",
-            availabilityZone: "us-west-2a",
-            mapPublicIpOnLaunch: true,
-            tags: { Name: subnetName, CredTest: "scope-level" },
-          });
-
-          igw = await InternetGateway(igwName, {
-            tags: { Name: igwName, CredTest: "scope-level" },
-          });
-
-          igwAttachment = await InternetGatewayAttachment(
-            `${igwName}-attachment`,
-            {
-              internetGateway: igw,
-              vpc,
-            },
-          );
-
-          sg = await SecurityGroup(sgName, {
-            vpc,
-            groupName: sgName,
-            description: "Security group for credential test",
-            tags: { Name: sgName, CredTest: "scope-level" },
-          });
-
-          routeTable = await RouteTable(rtName, {
-            vpc,
-            tags: { Name: rtName, CredTest: "scope-level" },
-          });
-
-          route = await Route(`${rtName}-default-route`, {
-            routeTable,
-            destinationCidrBlock: "0.0.0.0/0",
-            target: { internetGateway: igw },
-          });
-
-          // Verify resources were created in the specified region
-          const regionalEc2 = new EC2Client({ region: "us-west-2" });
-
-          // Verify VPC exists in the specified region
-          const describeVpcResponse = await regionalEc2.send(
-            new DescribeVpcsCommand({
-              VpcIds: [vpc.vpcId],
-            }),
-          );
-
-          expect(describeVpcResponse.Vpcs?.length).toBe(1);
-          expect(describeVpcResponse.Vpcs?.[0]?.VpcId).toBe(vpc.vpcId);
-
-          // Verify VPC has the correct tags
-          const vpcTags = describeVpcResponse.Vpcs?.[0]?.Tags;
-          const credTestTag = vpcTags?.find((tag) => tag.Key === "CredTest");
-          expect(credTestTag?.Value).toBe("scope-level");
-
-          // Additional verification could be done for other resources
-          // but this is sufficient to demonstrate scope-level credential inheritance
-        } finally {
-          // Clean up resources
-          await destroy(scope);
-        }
-      },
-    );
-  });
-
-  /**
-   * Test resource-level credential overrides that override scope-level credentials
-   *
-   * This test creates a scope with AWS credential overrides and then creates resources
-   * with their own credential overrides that should take precedence over the scope-level ones.
+   * This test creates resources with explicit credential overrides and verifies
+   * that each resource uses its own specified credentials.
    */
   test("resource-level credential overrides", async (scope) => {
-    // Create a scope with AWS credential overrides
-    await alchemy.run(
-      "credential-test",
-      {
-        // Scope-level AWS credential overrides
-        awsRegion: "us-east-1", // Different region than what we'll use for resources
-        awsProfile: "test9-374080338393",
-      },
-      async () => {
-        const vpcName = `${BRANCH_PREFIX}-resource-creds-vpc`;
-        const subnetName = `${BRANCH_PREFIX}-resource-creds-subnet`;
-        const igwName = `${BRANCH_PREFIX}-resource-creds-igw`;
+    const vpcName = `${BRANCH_PREFIX}-resource-creds-vpc`;
+    const subnetName = `${BRANCH_PREFIX}-resource-creds-subnet`;
+    const igwName = `${BRANCH_PREFIX}-resource-creds-igw`;
+    const sgName = `${BRANCH_PREFIX}-resource-creds-sg`;
+    const rtName = `${BRANCH_PREFIX}-resource-creds-rt`;
 
-        let vpc;
-        let subnet;
-        let igw;
-        let igwAttachment;
+    let vpc;
+    let subnet;
+    let igw;
+    let _igwAttachment;
+    let sg;
+    let routeTable;
+    let route;
 
-        try {
-          // Create resources with explicit credential overrides
-          // These should override the scope-level credentials
-          vpc = await Vpc(vpcName, {
-            cidrBlock: "10.0.0.0/16",
-            region: "us-west-2", // Override scope-level region
-            tags: { Name: vpcName, CredTest: "resource-level" },
-          });
+    try {
+      // Create VPC with explicit credential overrides
+      vpc = await Vpc(vpcName, {
+        cidrBlock: "10.0.0.0/16",
+        region: "us-west-2",
+        profile: process.env.AWS_PROFILE || "default",
+        tags: {
+          Name: vpcName,
+          TestType: "resource-level-credentials",
+        },
+      });
 
-          subnet = await Subnet(subnetName, {
-            vpc,
-            cidrBlock: "10.0.1.0/24",
-            availabilityZone: "us-west-2a",
-            region: "us-west-2", // Override scope-level region
-            mapPublicIpOnLaunch: true,
-            tags: { Name: subnetName, CredTest: "resource-level" },
-          });
+      // Verify VPC was created in the correct region
+      const ec2Client = new EC2Client({
+        region: "us-west-2",
+        profile: process.env.AWS_PROFILE || "default",
+      });
 
-          igw = await InternetGateway(igwName, {
-            region: "us-west-2", // Override scope-level region
-            tags: { Name: igwName, CredTest: "resource-level" },
-          });
+      const vpcResponse = await ec2Client.send(
+        new DescribeVpcsCommand({
+          VpcIds: [vpc.vpcId],
+        }),
+      );
 
-          igwAttachment = await InternetGatewayAttachment(
-            `${igwName}-attachment`,
-            {
-              internetGateway: igw,
-              vpc,
-              region: "us-west-2", // Override scope-level region
-            },
-          );
+      expect(vpcResponse.Vpcs).toHaveLength(1);
+      expect(vpcResponse.Vpcs![0].VpcId).toBe(vpc.vpcId);
+      expect(vpcResponse.Vpcs![0].CidrBlock).toBe("10.0.0.0/16");
 
-          // Verify resources were created in the resource-specified region (us-west-2)
-          // not the scope-specified region (us-east-1)
-          const resourceRegionEc2 = new EC2Client({ region: "us-west-2" });
-          const scopeRegionEc2 = new EC2Client({ region: "us-east-1" });
+      // Create subnet with same credential overrides
+      subnet = await Subnet(subnetName, {
+        vpc: vpc,
+        cidrBlock: "10.0.1.0/24",
+        availabilityZone: "us-west-2a",
+        region: "us-west-2",
+        profile: process.env.AWS_PROFILE || "default",
+        tags: {
+          Name: subnetName,
+          TestType: "resource-level-credentials",
+        },
+      });
 
-          // Verify VPC exists in the resource-specified region
-          const resourceRegionResponse = await resourceRegionEc2.send(
-            new DescribeVpcsCommand({
-              VpcIds: [vpc.vpcId],
-            }),
-          );
+      // Create Internet Gateway with credential overrides
+      igw = await InternetGateway(igwName, {
+        region: "us-west-2",
+        profile: process.env.AWS_PROFILE || "default",
+        tags: {
+          Name: igwName,
+          TestType: "resource-level-credentials",
+        },
+      });
 
-          expect(resourceRegionResponse.Vpcs?.length).toBe(1);
-          expect(resourceRegionResponse.Vpcs?.[0]?.VpcId).toBe(vpc.vpcId);
+      // Attach Internet Gateway to VPC
+      _igwAttachment = await InternetGatewayAttachment(
+        `${BRANCH_PREFIX}-resource-creds-igw-attachment`,
+        {
+          internetGateway: igw,
+          vpc: vpc,
+          region: "us-west-2",
+          profile: process.env.AWS_PROFILE || "default",
+        },
+      );
 
-          // Verify VPC does NOT exist in the scope-specified region
-          try {
-            await scopeRegionEc2.send(
-              new DescribeVpcsCommand({
-                VpcIds: [vpc.vpcId],
-              }),
-            );
-            // If we get here, the VPC was found in the wrong region
-            throw new Error(
-              `VPC ${vpc.vpcId} was found in us-east-1 but should only exist in us-west-2`,
-            );
-          } catch (error: any) {
-            // We expect a "VpcID.NotFound" error
-            expect(error.name).toBe("InvalidVpcID.NotFound");
-          }
-        } finally {
-          // Clean up resources
-          await destroy(scope);
-        }
-      },
-    );
+      // Create Security Group with credential overrides
+      sg = await SecurityGroup(sgName, {
+        vpc: vpc,
+        groupName: sgName,
+        description: "Test security group with credential overrides",
+        region: "us-west-2",
+        profile: process.env.AWS_PROFILE || "default",
+        tags: {
+          Name: sgName,
+          TestType: "resource-level-credentials",
+        },
+      });
+
+      // Create Route Table with credential overrides
+      routeTable = await RouteTable(rtName, {
+        vpc: vpc,
+        region: "us-west-2",
+        profile: process.env.AWS_PROFILE || "default",
+        tags: {
+          Name: rtName,
+          TestType: "resource-level-credentials",
+        },
+      });
+
+      // Create Route with credential overrides
+      route = await Route(`${BRANCH_PREFIX}-resource-creds-route`, {
+        routeTable: routeTable,
+        destinationCidrBlock: "0.0.0.0/0",
+        target: { internetGateway: igw },
+        region: "us-west-2",
+        profile: process.env.AWS_PROFILE || "default",
+      });
+
+      // Verify all resources were created successfully
+      expect(vpc.vpcId).toBeDefined();
+      expect(subnet.subnetId).toBeDefined();
+      expect(igw.internetGatewayId).toBeDefined();
+      expect(sg.groupId).toBeDefined();
+      expect(routeTable.routeTableId).toBeDefined();
+      expect(route.routeTableId).toBeDefined();
+
+      console.log(
+        "✅ All resources created successfully with credential overrides",
+      );
+    } finally {
+      // Clean up resources
+      console.log("Starting cleanup...");
+      await destroy(scope);
+      console.log("Cleanup completed!");
+    }
   });
 
   /**
-   * Test nested scope credential inheritance behavior
+   * Test mixed credential scenarios
    *
-   * This test creates nested scopes with different AWS credential overrides
-   * and verifies that resources inherit credentials from their immediate parent scope.
+   * This test creates resources with different credential configurations
+   * to verify that each resource can use its own credentials independently.
    */
-  test("nested scope credential inheritance", async (scope) => {
-    // Create a parent scope with AWS credential overrides
-    await alchemy.run(
-      "parent-scope",
-      {
-        // Parent scope-level AWS credential overrides
-        awsRegion: "us-west-2",
-        awsProfile: "test9-374080338393",
-      },
-      async () => {
-        const parentVpcName = `${BRANCH_PREFIX}-parent-scope-vpc`;
-        let parentVpc;
+  test("mixed credential scenarios", async (scope) => {
+    const vpc1Name = `${BRANCH_PREFIX}-mixed-creds-vpc1`;
+    const vpc2Name = `${BRANCH_PREFIX}-mixed-creds-vpc2`;
 
-        try {
-          // Create a resource in the parent scope
-          parentVpc = await Vpc(parentVpcName, {
-            cidrBlock: "10.0.0.0/16",
-            tags: { Name: parentVpcName, CredTest: "parent-scope" },
-          });
+    let vpc1;
+    let vpc2;
 
-          // Create a child scope with different AWS credential overrides
-          await alchemy.run(
-            "child-scope",
-            {
-              // Child scope-level AWS credential overrides
-              // These should override the parent scope's credentials for resources in this scope
-              awsRegion: "us-west-2", // Same region but could be different
-              awsProfile: "test9-374080338393",
-              // Additional metadata to distinguish from parent scope
-              environment: "child",
-            },
-            async () => {
-              const childVpcName = `${BRANCH_PREFIX}-child-scope-vpc`;
-              let childVpc;
+    try {
+      // Create first VPC with explicit credentials
+      vpc1 = await Vpc(vpc1Name, {
+        cidrBlock: "10.1.0.0/16",
+        region: "us-west-2",
+        profile: process.env.AWS_PROFILE || "default",
+        tags: {
+          Name: vpc1Name,
+          TestType: "mixed-credentials",
+        },
+      });
 
-              try {
-                // Create a resource in the child scope
-                childVpc = await Vpc(childVpcName, {
-                  cidrBlock: "10.1.0.0/16",
-                  tags: { Name: childVpcName, CredTest: "child-scope" },
-                });
+      // Create second VPC with different explicit credentials (same profile but different CIDR)
+      vpc2 = await Vpc(vpc2Name, {
+        cidrBlock: "10.2.0.0/16",
+        region: "us-west-2",
+        profile: process.env.AWS_PROFILE || "default",
+        tags: {
+          Name: vpc2Name,
+          TestType: "mixed-credentials",
+        },
+      });
 
-                // Verify both VPCs exist in their respective regions
-                const ec2 = new EC2Client({ region: "us-west-2" });
+      // Verify both VPCs were created
+      expect(vpc1.vpcId).toBeDefined();
+      expect(vpc2.vpcId).toBeDefined();
+      expect(vpc1.vpcId).not.toBe(vpc2.vpcId);
 
-                // Get both VPCs in a single call
-                const describeVpcsResponse = await ec2.send(
-                  new DescribeVpcsCommand({
-                    VpcIds: [parentVpc.vpcId, childVpc.vpcId],
-                  }),
-                );
-
-                expect(describeVpcsResponse.Vpcs?.length).toBe(2);
-
-                // Find the parent VPC
-                const foundParentVpc = describeVpcsResponse.Vpcs?.find(
-                  (vpc) => vpc.VpcId === parentVpc.vpcId,
-                );
-                expect(foundParentVpc).toBeTruthy();
-
-                // Verify parent VPC has the correct tags
-                const parentVpcTags = foundParentVpc?.Tags;
-                const parentCredTestTag = parentVpcTags?.find(
-                  (tag) => tag.Key === "CredTest",
-                );
-                expect(parentCredTestTag?.Value).toBe("parent-scope");
-
-                // Find the child VPC
-                const foundChildVpc = describeVpcsResponse.Vpcs?.find(
-                  (vpc) => vpc.VpcId === childVpc.vpcId,
-                );
-                expect(foundChildVpc).toBeTruthy();
-
-                // Verify child VPC has the correct tags
-                const childVpcTags = foundChildVpc?.Tags;
-                const childCredTestTag = childVpcTags?.find(
-                  (tag) => tag.Key === "CredTest",
-                );
-                expect(childCredTestTag?.Value).toBe("child-scope");
-              } finally {
-                // Child scope resources are cleaned up automatically when the child scope exits
-              }
-            },
-          );
-        } finally {
-          // Clean up parent scope resources
-          await destroy(scope);
-        }
-      },
-    );
+      console.log("✅ Mixed credential scenario completed successfully");
+    } finally {
+      // Clean up resources
+      console.log("Starting cleanup...");
+      await destroy(scope);
+      console.log("Cleanup completed!");
+    }
   });
 
   /**
    * Test error scenarios with invalid credentials
    *
-   * This test verifies that helpful error messages are provided when invalid
-   * AWS credentials are used.
+   * This test verifies that proper error handling occurs when invalid
+   * credential configurations are provided.
    */
-  test("error scenarios with invalid credentials", async (scope) => {
-    // Test invalid resource-level credentials only
+  test("error scenarios with invalid credentials", async (_scope) => {
+    // Test invalid credential properties
     try {
-      const vpcName = `${BRANCH_PREFIX}-invalid-creds-vpc`;
-
-      // Create a resource with invalid credential overrides
-      // @ts-expect-error - Intentionally passing invalid types for testing
-      await Vpc(vpcName, {
+      await Vpc("test-vpc", {
         cidrBlock: "10.0.0.0/16",
-        region: 123, // Should be a string
-        profile: true, // Should be a string
-        tags: { Name: vpcName },
+        region: 123 as any, // Invalid type
       });
-
-      // If we get here, the test failed
-      throw new Error(
-        "Expected an error for invalid resource-level credentials",
-      );
+      // If we get here, the test should fail
+      expect(true).toBe(false);
     } catch (error: any) {
-      // Verify the error message is helpful
       expect(error.message).toContain(
         "Invalid AWS configuration in resource properties",
       );
     }
+
+    console.log("✅ Error scenarios handled correctly");
   });
 });

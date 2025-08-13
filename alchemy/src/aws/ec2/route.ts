@@ -10,7 +10,6 @@ import {
   waitForResourceState,
 } from "../../util/timeout.ts";
 import type { AwsClientProps } from "../client-props.ts";
-import { resolveAwsCredentials } from "../credentials.ts";
 import { retry } from "../retry.ts";
 import type { InternetGateway } from "./internet-gateway.ts";
 import type { NatGateway } from "./nat-gateway.ts";
@@ -201,9 +200,8 @@ export const Route = Resource(
     _id: string,
     props: RouteProps,
   ): Promise<Route> {
-    // Resolve AWS credentials from global, scope, and resource levels
-    const credentials = resolveAwsCredentials(props);
-    const client = await createEC2Client(credentials);
+    // Create EC2 client with credential resolution handled internally
+    const client = await createEC2Client(props);
     const _timeoutConfig = mergeTimeoutConfig(ROUTE_TIMEOUT, props.timeout);
     const routeTableId =
       typeof props.routeTable === "string"
