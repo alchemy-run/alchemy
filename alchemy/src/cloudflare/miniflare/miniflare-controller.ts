@@ -79,6 +79,7 @@ export class MiniflareController {
         workers: [],
         defaultPersistRoot: path.resolve(DEFAULT_PERSIST_PATH),
         unsafeDevRegistryPath: miniflare.getDefaultDevRegistryPath(),
+        unsafeDevRegistryDurableObjectProxy: true,
         log: process.env.DEBUG
           ? new miniflare.Log(miniflare.LogLevel.DEBUG)
           : undefined,
