@@ -86,7 +86,7 @@ export async function execAlchemy(
     execArgs.push("--watch");
     args.push("--watch");
   }
-  if (envFile && existsSync(resolve(cwd, envFile))) {
+  if (envFile && existsSync(envFile)) {
     execArgs.push(`--env-file ${envFile}`);
   }
   if (dev) args.push("--dev");
@@ -114,8 +114,8 @@ export async function execAlchemy(
   }
 
   // Detect package manager
-  const runtime = detectRuntime();
   const packageManager = await detectPackageManager(cwd);
+  const runtime = detectRuntime();
 
   const argsString = args.join(" ");
   const execArgsString = execArgs.join(" ");
