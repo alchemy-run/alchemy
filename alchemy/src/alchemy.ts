@@ -194,7 +194,6 @@ If this is a mistake, you can disable this check by setting the ALCHEMY_CI_STATE
     onExit((code) => {
       root.cleanup().then(() => {
         code = code === 130 ? 0 : (code ?? 0);
-        console.log("Exiting", code);
         process.exit(code);
       });
       return true;
