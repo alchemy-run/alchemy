@@ -1,15 +1,11 @@
 import assert from "node:assert";
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type Stream from "node:stream";
 import { alchemy } from "../alchemy.ts";
 import { Exec } from "../os/index.ts";
 import { Scope } from "../scope.ts";
-import { isSecret, type Secret } from "../secret.ts";
+import { isSecret } from "../secret.ts";
 import { dedent } from "../util/dedent.ts";
-import { DeferredPromise } from "../util/deferred-promise.ts";
 import { logger } from "../util/logger.ts";
 import { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
@@ -304,14 +300,27 @@ export async function Website<B extends Bindings>(
 
     let url: string | undefined;
     if (dev && scope.local) {
-      const result = await runDevCommand(scope, {
-        name,
-        command: typeof dev === "string" ? dev : dev.command,
+      const result = await scope.spawn(id, {
+        processName: name,
+        cmd: typeof dev === "string" ? dev : dev.command,
+        extract: (line) => extractURL(line),
         env: {
-          ...env,
+          ...Object.fromEntries(
+            Object.entries(env).flatMap(([key, value]) => {
+              if (typeof value === "string") {
+                return [[key, value]];
+              }
+              if (isSecret(value)) {
+                return [[key, value.unencrypted]];
+              }
+              return [];
+            }),
+          ),
           ...(typeof dev === "object" ? dev.env : {}),
+          NODE_ENV: "development",
         },
         cwd: paths.cwd,
+        closeOnExit: true,
       });
       url = result;
     }
@@ -350,154 +359,11 @@ async function writeMiniflareSymlink(cwd: string) {
   });
 }
 
-export async function runDevCommand(
-  scope: Scope,
-  input: {
-    name: string;
-    command: string;
-    env: Record<string, string | Secret<string> | undefined>;
-    cwd: string;
-  },
-) {
-  const paths = {
-    pid: path.resolve(`.alchemy/local/${input.name}.pid`),
-    log: path.resolve(`.alchemy/log/${input.name}.log`),
-  };
-
-  const file = await fs
-    .readFile(paths.pid, "utf-8")
-    .then(
-      (text) => JSON.parse(text) as { pid: number; url: string | undefined },
-    )
-    .catch(() => null);
-  if (file && isProcessRunning(file.pid)) {
-    if (file.url) {
-      console.log("Dev server already running at", file.url);
-      scope.onCleanup(async () => {
-        if (await killProcess(file.pid)) {
-          await fs.unlink(paths.pid);
-        }
-      });
-      return file.url;
-    } else {
-      await killProcess(file.pid);
-    }
-  }
-
-  await fs.mkdir(path.dirname(paths.pid), { recursive: true });
-  await fs.mkdir(path.dirname(paths.log), { recursive: true });
-  const log = await fs.open(paths.log, "a+");
-  const read = log.createReadStream();
-
-  const command = input.command.split(" ");
-
-  const child = spawn(command[0], command.slice(1), {
-    cwd: input.cwd,
-    env: {
-      FORCE_COLOR: "1",
-      ...process.env,
-      ...Object.fromEntries(
-        Object.entries(input.env ?? {}).flatMap(([key, value]) => {
-          if (isSecret(value)) {
-            return [[key, value.unencrypted]];
-          }
-          if (typeof value === "string") {
-            return [[key, value]];
-          }
-          return [];
-        }),
-      ),
-      // NOTE: we must set this to ensure the user does not accidentally set `NODE_ENV=production`
-      // which breaks `vite dev` (it won't, for example, re-write `process.env.TSS_APP_BASE` in the `.js` client side bundle)
-      NODE_ENV: "development",
-    },
-    stdio: ["ignore", log.fd, log.fd],
-  });
-  await once(child, "spawn");
-  scope.onCleanup(async () => {
-    if (child.exitCode !== null) {
-      child.kill("SIGTERM");
-      try {
-        await once(child, "exit", { signal: AbortSignal.timeout(5000) });
-      } catch {
-        child.kill("SIGKILL");
-        try {
-          await once(child, "exit", { signal: AbortSignal.timeout(5000) });
-        } catch {
-          return;
-        }
-      }
-      await fs.unlink(paths.pid);
-    }
-  });
-  const url = await extractURLFromStream(read);
-  await fs.writeFile(paths.pid, JSON.stringify({ pid: child.pid, url }));
-  return url;
-}
-
-const isProcessRunning = (pid: number) => {
-  return kill(pid, 0);
-};
-
-const killProcess = async (pid: number) => {
-  console.log("Killing process", pid, "with SIGTERM");
-  if (kill(pid, "SIGTERM")) {
-    return true;
-  }
-  for (let i = 0; i < 5; i++) {
-    if (isProcessRunning(pid)) {
-      await new Promise((resolve) => setTimeout(resolve, 100 * i));
-    } else {
-      return true;
-    }
-  }
-  console.log("Killing process", pid, "with SIGKILL");
-  if (kill(pid, "SIGKILL")) {
-    return true;
-  }
-  for (let i = 0; i < 10; i++) {
-    if (isProcessRunning(pid)) {
-      await new Promise((resolve) => setTimeout(resolve, 100 * i));
-    } else {
-      return true;
-    }
-  }
-  return false;
-};
-
-const kill = (pid: number, signal: string | number) => {
-  try {
-    process.kill(pid, signal);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const extractURLFromStream = async (stream: Stream.Readable) => {
-  const promise = new DeferredPromise<string>();
-  stream.on("data", (data) => {
-    if (promise.status === "pending") {
-      const url = extractURL(data.toString());
-      if (url) {
-        promise.resolve(url);
-        stream.destroy();
-      }
-    }
-  });
-  stream.on("close", () => {
-    if (promise.status === "pending") {
-      promise.reject(new Error("No URL found"));
-    }
-  });
-  return promise.value;
-};
-
 const extractURL = (data: string) => {
   const match = data
     .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")
     .match(
       /http:\/\/(?:(?:localhost|0\.0\.0\.0|127\.0\.0\.1)|(?:\d{1,3}\.){3}\d{1,3}):\d+(?:\/)?/,
     );
-  return match ? match[0] : null;
+  return match?.[0];
 };
