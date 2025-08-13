@@ -1,6 +1,7 @@
 import { log } from "@clack/prompts";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import pc from "picocolors";
 import z from "zod";
@@ -75,8 +76,6 @@ export async function execAlchemy(
 ) {
   const args: string[] = [];
   const execArgs: string[] = [];
-  const runtime = detectRuntime();
-  const packageManager = await detectPackageManager(cwd);
 
   if (quiet) args.push("--quiet");
   if (read) args.push("--read");
@@ -87,12 +86,8 @@ export async function execAlchemy(
     execArgs.push("--watch");
     args.push("--watch");
   }
-  if (envFile) {
-    if (packageManager === "bun" || runtime === "bun") {
-      execArgs.push(`--env-file ${envFile}`);
-    } else {
-      execArgs.push(`--env-file-if-exists ${envFile}`);
-    }
+  if (envFile && existsSync(resolve(cwd, envFile))) {
+    execArgs.push(`--env-file ${envFile}`);
   }
   if (dev) args.push("--dev");
 
@@ -119,6 +114,8 @@ export async function execAlchemy(
   }
 
   // Detect package manager
+  const runtime = detectRuntime();
+  const packageManager = await detectPackageManager(cwd);
 
   const argsString = args.join(" ");
   const execArgsString = execArgs.join(" ");
