@@ -157,7 +157,7 @@ export async function execAlchemy(
   }
   process.on("SIGINT", async () => {
     await exitPromise;
-    process.exit(child.exitCode ?? 0);
+    process.exit(formatExitCode(child.exitCode));
   });
 
   console.log(command);
@@ -173,5 +173,10 @@ export async function execAlchemy(
   });
   const exitPromise = once(child, "exit");
   await exitPromise.catch(() => {});
-  process.exit(child.exitCode ?? 0);
+  process.exit(formatExitCode(child.exitCode));
 }
+
+const formatExitCode = (exitCode: number | null) => {
+  if (exitCode === null || exitCode === 130) return 0;
+  return exitCode;
+};
