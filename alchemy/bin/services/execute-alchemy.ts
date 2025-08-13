@@ -76,6 +76,7 @@ export async function execAlchemy(
   const args: string[] = [];
   const execArgs: string[] = [];
   const runtime = detectRuntime();
+  const packageManager = await detectPackageManager(cwd);
 
   if (quiet) args.push("--quiet");
   if (read) args.push("--read");
@@ -86,10 +87,13 @@ export async function execAlchemy(
     execArgs.push("--watch");
     args.push("--watch");
   }
-  if (envFile)
-    execArgs.push(
-      `${runtime === "bun" ? "--env-file" : "--env-file-if-exists"} ${envFile}`,
-    );
+  if (envFile) {
+    if (packageManager === "bun" || runtime === "bun") {
+      execArgs.push(`--env-file ${envFile}`);
+    } else {
+      execArgs.push(`--env-file-if-exists ${envFile}`);
+    }
+  }
   if (dev) args.push("--dev");
 
   // Check for alchemy.run.ts or alchemy.run.js (if not provided)
@@ -115,7 +119,6 @@ export async function execAlchemy(
   }
 
   // Detect package manager
-  const packageManager = await detectPackageManager(cwd);
 
   const argsString = args.join(" ");
   const execArgsString = execArgs.join(" ");
