@@ -61,3 +61,31 @@ export const createTestOptions = (
       }
     },
   }) satisfies AlchemyOptions;
+
+/**
+ * Repeatedly invokes an async function until the predicate returns true or the timeout elapses.
+ * Useful for handling eventual consistency in external services.
+ */
+export async function waitFor<T>(
+  producer: () => Promise<T> | T,
+  predicate: (value: T) => boolean,
+  options?: {
+    timeoutMs?: number;
+    intervalMs?: number;
+  },
+): Promise<T> {
+  const timeoutMs = options?.timeoutMs ?? 10_000;
+  const intervalMs = options?.intervalMs ?? 250;
+  const deadline = Date.now() + timeoutMs;
+
+  let lastValue: T;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    // eslint-disable-next-line no-await-in-loop
+    lastValue = await producer();
+    if (predicate(lastValue)) return lastValue;
+    if (Date.now() >= deadline) return lastValue;
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}

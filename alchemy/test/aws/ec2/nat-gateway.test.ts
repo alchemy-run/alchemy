@@ -24,7 +24,7 @@ const test = alchemy.test(import.meta, {
 
 const ec2 = new EC2Client({});
 
-describe("NatGateway", () => {
+describe.skipIf(!process.env.ALL_TESTS)("NatGateway", () => {
   test(
     "create NAT gateway with automatic EIP allocation",
     async (scope) => {

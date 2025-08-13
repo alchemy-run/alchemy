@@ -12,7 +12,7 @@ import type { SingleStepMigration } from "../../src/cloudflare/worker-migration.
 import { WorkerRef } from "../../src/cloudflare/worker-ref.ts";
 import { deleteWorker, Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
-import { BRANCH_PREFIX } from "../util.ts";
+import { BRANCH_PREFIX, waitFor } from "../util.ts";
 import {
   fetchAndExpect,
   fetchAndExpectOK,
@@ -465,13 +465,23 @@ describe("Worker Resource", () => {
       expect(worker2.url).toEqual(worker1.url);
 
       if (worker2.url) {
-        const response = await fetchAndExpectOK(worker2.url);
-        const text = await response.json();
-        expect(text).toEqual({
+        // Poll for up to 10s to allow eventual consistency of env propagation
+        const expectedEnv = {
           TEST_API_KEY: "updated-key-456",
           NODE_ENV: "production",
           NEW_VAR: "new-value",
-        });
+        } as const;
+
+        const lastText: any = await waitFor(
+          async () => {
+            const response = await fetchAndExpectOK(worker2.url!);
+            return response.json();
+          },
+          (data: any) => JSON.stringify(data) === JSON.stringify(expectedEnv),
+          { timeoutMs: 10_000, intervalMs: 250 },
+        );
+
+        expect(lastText).toEqual(expectedEnv);
       } else {
         throw new Error("Worker URL is undefined");
       }

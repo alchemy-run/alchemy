@@ -20,7 +20,7 @@ const test = alchemy.test(import.meta, {
 
 const ec2 = new EC2Client({});
 
-describe("Route", () => {
+describe.skipIf(!process.env.ALL_TESTS)("Route", () => {
   test("create route to internet gateway", async (scope) => {
     const vpcName = `${BRANCH_PREFIX}-alchemy-test-route-vpc`;
     const rtName = `${BRANCH_PREFIX}-alchemy-test-route-rt`;

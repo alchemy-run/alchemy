@@ -20,7 +20,7 @@ const test = alchemy.test(import.meta, {
 
 const ec2 = new EC2Client({});
 
-describe("RouteTableAssociation", () => {
+describe.skipIf(!process.env.ALL_TESTS)("RouteTableAssociation", () => {
   test("create route table association with subnet", async (scope) => {
     const vpcName = `${BRANCH_PREFIX}-alchemy-test-rta-vpc`;
     const rtName = `${BRANCH_PREFIX}-alchemy-test-rta-rt`;

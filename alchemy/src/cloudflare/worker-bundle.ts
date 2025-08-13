@@ -1,8 +1,10 @@
 import esbuild from "esbuild";
 import { err, ok, type Result } from "neverthrow";
 import fs from "node:fs/promises";
-import path from "node:path";
+import path from "pathe";
+import { logger } from "../util/logger.ts";
 import { external, external_als } from "./bundle/externals.ts";
+import { esbuildPluginAlias } from "./bundle/plugin-alias.ts";
 import { esbuildPluginCompatWarning } from "./bundle/plugin-compat-warning.ts";
 import { createHotReloadPlugin } from "./bundle/plugin-hot-reload.ts";
 import { esbuildPluginHybridNodeCompat } from "./bundle/plugin-hybrid-node-compat.ts";
@@ -16,6 +18,7 @@ export interface WorkerBundle {
 }
 
 export function normalizeWorkerBundle(props: {
+  id: string;
   script: string | undefined;
   entrypoint: string | undefined;
   noBundle: boolean | undefined;
@@ -65,12 +68,13 @@ export function normalizeWorkerBundle(props: {
             sourcemaps: props.sourceMap !== false,
           })
         : new WorkerBundleSource.ESBuild({
+            id: props.id,
             entrypoint: props.entrypoint,
             format: props.format ?? "esm",
             nodeCompat,
             cwd: props.cwd,
             outdir: props.outdir,
-            sourcemap: props.sourceMap !== false ? "linked" : undefined,
+            sourcemap: props.sourceMap !== false ? true : undefined,
             ...props.bundle,
           }),
     );
@@ -124,7 +128,8 @@ export namespace WorkerBundle {
           (await fs.readFile(path.join(bundle.root!, module.path)));
         form.append(
           module.path,
-          new Blob([content], {
+          // TODO(sam): tsc -b geting a weird error about SharedArrayBuffer
+          new Blob([content as any as BlobPart], {
             type: types[module.type],
           }),
           module.path,
@@ -237,6 +242,7 @@ export namespace WorkerBundleSource {
         esbuild.BuildOptions,
         "entryPoints" | "format" | "absWorkingDir" | "outdir"
       > {
+    id: string;
     entrypoint: string;
     cwd: string;
     outdir: string;
@@ -261,7 +267,7 @@ export namespace WorkerBundleSource {
       const wasmPlugin = createWasmPlugin();
       const options = this.buildOptions([wasmPlugin.plugin]);
       const result = await esbuild.build(options);
-      const { entrypoint, root, modules } = this.resolveBuildOutput(
+      const { entrypoint, root, modules } = await this.formatBuildOutput(
         result.metafile,
       );
       return {
@@ -273,7 +279,20 @@ export namespace WorkerBundleSource {
 
     async *watch(signal: AbortSignal): AsyncIterable<WorkerBundle> {
       const wasm = createWasmPlugin();
-      const hotReload = createHotReloadPlugin();
+      let count = 0;
+      const hotReload = createHotReloadPlugin({
+        onBuildStart: () => {
+          if (count > 0) {
+            logger.task(this.props.id, {
+              message: "Rebuilding",
+              status: "pending",
+              resource: this.props.id,
+              prefix: "dev",
+              prefixColor: "cyanBright",
+            });
+          }
+        },
+      });
       const options = this.buildOptions([wasm.plugin, hotReload.plugin]);
 
       const context = await esbuild.context(options);
@@ -281,7 +300,8 @@ export namespace WorkerBundleSource {
       await context.watch();
 
       for await (const result of hotReload.iterator) {
-        const { entrypoint, root, modules } = this.resolveBuildOutput(
+        count++;
+        const { entrypoint, root, modules } = await this.formatBuildOutput(
           result.metafile!,
         );
         yield {
@@ -300,32 +320,46 @@ export namespace WorkerBundleSource {
     }
 
     private buildOptions(additionalPlugins: esbuild.Plugin[]) {
-      const { entrypoint, nodeCompat, cwd, format, ...props } = this.props;
+      const {
+        id: _,
+        entrypoint,
+        nodeCompat,
+        cwd,
+        format,
+        ...props
+      } = this.props;
       return {
         entryPoints: [entrypoint],
         absWorkingDir: cwd,
+        target: "es2022",
+        loader: {
+          ".js": "jsx",
+          ".mjs": "jsx",
+          ".cjs": "jsx",
+        },
         format,
-        target: "esnext",
+        sourceRoot: this.props.outdir,
+        jsxFactory: "React.createElement",
+        jsxFragment: "React.Fragment",
+        keepNames: true,
         ...props,
         metafile: true,
         write: true,
         bundle: true,
-        conditions: props.conditions ?? ["workerd", "worker", "browser"],
-        mainFields: props.mainFields,
-        loader: {
-          ".sql": "text",
-          ".json": "json",
-          ".wasm": "binary",
-          ...props.loader,
+        define: {
+          "navigator.userAgent": '"Cloudflare-Workers"',
+          "process.env.NODE_ENV": '"undefined"',
+          ...props.define,
         },
+        conditions: props.conditions ?? ["workerd", "worker", "browser"],
         plugins: [
+          esbuildPluginAlias(props.alias ?? {}, this.props.cwd),
           nodeCompat === "v2"
             ? esbuildPluginHybridNodeCompat()
             : esbuildPluginCompatWarning(nodeCompat ?? null),
           ...(props.plugins ?? []),
           ...additionalPlugins,
         ],
-        alias: props.alias,
         external: [
           ...(nodeCompat === "als" ? external_als : external),
           ...(props.external ?? []),
@@ -333,8 +367,14 @@ export namespace WorkerBundleSource {
       } satisfies esbuild.BuildOptions;
     }
 
-    private resolveBuildOutput(metafile: esbuild.Metafile): WorkerBundle {
+    private async formatBuildOutput(
+      metafile: esbuild.Metafile,
+    ): Promise<WorkerBundle> {
       const outdir = path.resolve(this.props.cwd, this.props.outdir);
+      await fs.writeFile(
+        path.join(outdir, "metafile.json"),
+        JSON.stringify(metafile, null, 2),
+      );
       const paths: string[] = [];
       let entrypoint: string | undefined;
       for (const [key, value] of Object.entries(metafile.outputs)) {

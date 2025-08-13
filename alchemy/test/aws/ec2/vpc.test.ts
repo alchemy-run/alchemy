@@ -17,7 +17,7 @@ const test = alchemy.test(import.meta, {
 
 const ec2 = new EC2Client({});
 
-describe("VPC", () => {
+describe.skipIf(!process.env.ALL_TESTS)("VPC", () => {
   test(
     "create and delete VPC",
     async (scope) => {

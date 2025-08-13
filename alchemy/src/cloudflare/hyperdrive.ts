@@ -1,6 +1,8 @@
+import { alchemy } from "../alchemy.ts";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import type { Secret } from "../secret.ts";
+import { Scope } from "../scope.ts";
+import { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
@@ -8,7 +10,7 @@ import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
 /**
  * Origin configuration for a PostgreSQL or MySQL database connection
  */
-export interface HyperdriveOrigin {
+export interface HyperdrivePublicOrigin {
   /**
    * Database name
    */
@@ -23,7 +25,7 @@ export interface HyperdriveOrigin {
    * Database password
    * Use alchemy.secret() to securely store this value
    */
-  password: Secret;
+  password: string | Secret;
 
   /**
    * Database port
@@ -56,7 +58,7 @@ export interface HyperdriveOriginWithAccess {
    * Access client secret
    * Use alchemy.secret() to securely store this value
    */
-  access_client_secret: Secret;
+  access_client_secret: string | Secret;
 
   /**
    * Database host
@@ -118,6 +120,16 @@ export interface HyperdriveMtls {
   sslmode?: "verify-ca" | "verify-full";
 }
 
+export type HyperdriveOriginInput =
+  | string
+  | Secret
+  | HyperdrivePublicOrigin
+  | HyperdriveOriginWithAccess;
+
+export type HyperdriveOrigin =
+  | HyperdrivePublicOrigin
+  | HyperdriveOriginWithAccess;
+
 /**
  * Properties for creating or updating a Cloudflare Hyperdrive.
  */
@@ -130,7 +142,7 @@ export interface HyperdriveProps extends CloudflareApiOptions {
   /**
    * Database connection origin configuration
    */
-  origin: HyperdriveOrigin | HyperdriveOriginWithAccess;
+  origin: HyperdriveOriginInput;
 
   /**
    * Caching configuration
@@ -148,6 +160,14 @@ export interface HyperdriveProps extends CloudflareApiOptions {
    * @internal
    */
   hyperdriveId?: string;
+
+  dev?: {
+    /**
+     * The database connection origin configuration for local development
+     * @default origin
+     */
+    origin?: HyperdriveOriginInput;
+  };
 }
 
 /**
@@ -156,7 +176,7 @@ export interface HyperdriveProps extends CloudflareApiOptions {
  */
 export interface Hyperdrive
   extends Resource<"cloudflare::Hyperdrive">,
-    Omit<HyperdriveProps, "origin"> {
+    Omit<HyperdriveProps, "origin" | "dev"> {
   /**
    * The ID of the resource
    */
@@ -170,7 +190,18 @@ export interface Hyperdrive
   /**
    * Database connection origin configuration
    */
-  origin: HyperdriveOrigin | HyperdriveOriginWithAccess;
+  origin: HyperdrivePublicOrigin | HyperdriveOriginWithAccess;
+
+  /**
+   * Local development configuration
+   * @internal
+   */
+  dev: {
+    /**
+     * The connection string to use for local development
+     */
+    origin: Secret;
+  };
 
   /**
    * Resource type identifier for binding.
@@ -257,19 +288,66 @@ export interface Hyperdrive
  *   }
  * });
  */
-export const Hyperdrive = Resource(
+export async function Hyperdrive(
+  id: string,
+  props: HyperdriveProps,
+): Promise<Hyperdrive> {
+  const origin = normalizeHyperdriveOrigin(props.origin);
+  const dev = {
+    origin: toConnectionString(
+      normalizeHyperdriveOrigin(props.dev?.origin ?? origin),
+    ),
+    force: Scope.current.local,
+  };
+  return await _Hyperdrive(id, {
+    ...props,
+    origin,
+    dev,
+  });
+}
+
+/**
+ * Internal properties for creating or updating a Cloudflare Hyperdrive config.
+ * @internal
+ */
+interface InternalHyperdriveProps extends CloudflareApiOptions {
+  name: string;
+  hyperdriveId?: string;
+  origin: HyperdriveOrigin;
+  caching?: HyperdriveCaching;
+  mtls?: HyperdriveMtls;
+  dev: {
+    origin: Secret;
+    force?: boolean;
+  };
+}
+
+const _Hyperdrive = Resource(
   "cloudflare::Hyperdrive",
   async function (
     this: Context<Hyperdrive>,
     id: string,
-    props: HyperdriveProps,
+    props: InternalHyperdriveProps,
   ): Promise<Hyperdrive> {
+    const hyperdriveId = props.hyperdriveId || this.output?.hyperdriveId;
+
+    if (this.scope.local) {
+      return this({
+        id,
+        hyperdriveId: hyperdriveId || "",
+        name: props.name,
+        origin: props.origin,
+        caching: props.caching,
+        mtls: props.mtls,
+        dev: props.dev,
+        type: "hyperdrive",
+      });
+    }
     const api = await createCloudflareApi(props);
     const configsPath = `/accounts/${api.accountId}/hyperdrive/configs`;
 
     // For create operations, we don't have a hyperdriveId yet
     // For update/delete operations, we need to use the hyperdriveId from props or output
-    const hyperdriveId = props.hyperdriveId || this.output?.hyperdriveId;
     const configPath = hyperdriveId
       ? `${configsPath}/${hyperdriveId}`
       : `${configsPath}`;
@@ -353,9 +431,10 @@ export const Hyperdrive = Resource(
       id,
       hyperdriveId: apiResource.id, // Store the Cloudflare-assigned UUID
       name: apiResource.name,
-      origin: props.origin, // Keep the original origin with secrets
+      origin: props.origin,
       caching: apiResource.caching,
       mtls: apiResource.mtls,
+      dev: props.dev,
       type: "hyperdrive",
     });
   },
@@ -364,7 +443,7 @@ export const Hyperdrive = Resource(
 /**
  * Prepare the request body by unwrapping secret values
  */
-function prepareRequestBody(props: HyperdriveProps): any {
+function prepareRequestBody(props: InternalHyperdriveProps): any {
   const requestBody: any = { ...props };
 
   // Remove internal props
@@ -375,16 +454,93 @@ function prepareRequestBody(props: HyperdriveProps): any {
     // Regular origin with password
     requestBody.origin = {
       ...props.origin,
-      password: props.origin.password.unencrypted,
+      password: Secret.unwrap(props.origin.password),
       scheme: props.origin.scheme ?? "postgres",
     };
   } else if ("access_client_secret" in props.origin) {
     // Origin with access client secret
     requestBody.origin = {
       ...props.origin,
-      access_client_secret: props.origin.access_client_secret.unencrypted,
+      access_client_secret: Secret.unwrap(props.origin.access_client_secret),
     };
   }
 
   return requestBody;
 }
+
+/**
+ * Converts a HyperdriveOriginInput to a HyperdriveOrigin.
+ * This includes:
+ * - parsing the origin from a string
+ * - ensuring the scheme is "postgres" or "mysql"
+ * - normalizing the port to a number with default values
+ * - wrapping secrets in a Secret object
+ * @internal - Exported for testing
+ */
+export const normalizeHyperdriveOrigin = (
+  input: HyperdriveOriginInput,
+): Required<HyperdrivePublicOrigin> | Required<HyperdriveOriginWithAccess> => {
+  const origin = Secret.unwrap(input);
+  if (typeof origin === "string") {
+    const url = new URL(origin);
+    const scheme = normalizeScheme(url.protocol.slice(0, -1));
+    return {
+      scheme,
+      user: url.username,
+      password: alchemy.secret(url.password),
+      host: url.hostname,
+      port: normalizePort(scheme, url.port),
+      database: url.pathname.slice(1),
+    };
+  }
+  const scheme = normalizeScheme(origin.scheme);
+  return {
+    ...origin,
+    ...("password" in origin && {
+      password: Secret.wrap(origin.password),
+    }),
+    ...("access_client_secret" in origin && {
+      access_client_secret: Secret.wrap(origin.access_client_secret),
+    }),
+    scheme,
+    port: normalizePort(scheme, origin.port),
+  };
+};
+
+const normalizeScheme = (scheme: string | undefined) => {
+  if (!scheme || scheme === "postgres" || scheme === "postgresql") {
+    return "postgres";
+  }
+  if (scheme === "mysql" || scheme === "mysql2") {
+    return "mysql";
+  }
+  throw new Error(
+    `Unsupported database connection scheme "${scheme}" for Hyperdrive (expected "postgres" or "mysql")`,
+  );
+};
+
+const normalizePort = (
+  scheme: "postgres" | "mysql",
+  port: string | number | undefined,
+) => {
+  if (typeof port === "number") {
+    return port;
+  }
+  if (port) {
+    return Number.parseInt(port);
+  }
+  return scheme === "postgres" ? 5432 : 3306;
+};
+
+const toConnectionString = (
+  origin:
+    | Required<HyperdrivePublicOrigin>
+    | Required<HyperdriveOriginWithAccess>,
+) => {
+  const password = Secret.unwrap(
+    "password" in origin ? origin.password : origin.access_client_secret,
+  );
+  return new Secret(
+    `${origin.scheme}://${origin.user}:${password}@${origin.host}:${origin.port}/${origin.database}`,
+  );
+};

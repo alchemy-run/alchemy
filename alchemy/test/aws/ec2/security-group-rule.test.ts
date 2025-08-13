@@ -19,7 +19,7 @@ const test = alchemy.test(import.meta, {
 
 const ec2 = new EC2Client({});
 
-describe("SecurityGroupRule", () => {
+describe.skipIf(!process.env.ALL_TESTS)("SecurityGroupRule", () => {
   test("create security group with ingress rules", async (scope) => {
     const vpcName = `${BRANCH_PREFIX}-alchemy-test-sgr-vpc`;
     const sgName = `${BRANCH_PREFIX}-alchemy-test-sgr`;

@@ -1,6 +1,8 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { memoize } from "../util/memoize.ts";
+import { withExponentialBackoff } from "../util/retry.ts";
+import { CloudflareApiError } from "./api-error.ts";
 import { extractCloudflareResult } from "./api-response.ts";
 import {
   createCloudflareApi,
@@ -25,6 +27,14 @@ interface WorkerSubdomainProps extends CloudflareApiOptions {
    * @default false
    */
   retain?: boolean;
+  /**
+   * If true, the subdomain will not be created, but will be retained if it already exists.
+   * This is used for local development.
+   *
+   * @default `false`
+   * @internal
+   */
+  dev?: boolean;
 }
 
 export interface WorkerSubdomain
@@ -42,6 +52,12 @@ export const WorkerSubdomain = Resource(
     id: string,
     props: WorkerSubdomainProps,
   ) {
+    if (this.scope.local && props.dev) {
+      return this({
+        url: this.output?.url ?? "https://unavailable.alchemy.run",
+      });
+    }
+
     const api = await createCloudflareApi(props);
     if (this.phase === "delete") {
       if (!props.retain) {
@@ -86,12 +102,18 @@ export async function enableWorkerSubdomain(
   api: CloudflareApi,
   scriptName: string,
 ) {
-  await extractCloudflareResult<SubdomainResponse>(
-    `enable subdomain for "${scriptName}"`,
-    api.post(
-      `/accounts/${api.accountId}/workers/scripts/${scriptName}/subdomain`,
-      { enabled: true, previews_enabled: true },
-    ),
+  await withExponentialBackoff(
+    () =>
+      extractCloudflareResult<SubdomainResponse>(
+        `enable subdomain for "${scriptName}"`,
+        api.post(
+          `/accounts/${api.accountId}/workers/scripts/${scriptName}/subdomain`,
+          { enabled: true, previews_enabled: true },
+        ),
+      ),
+    (error) => error instanceof CloudflareApiError && error.status === 404,
+    10,
+    1000,
   );
 }
 
@@ -105,6 +127,7 @@ export async function getWorkerSubdomain(
       `/accounts/${api.accountId}/workers/scripts/${scriptName}/subdomain`,
     ),
   ).catch((error): SubdomainResponse => {
+    console.log("error", error);
     if (error.status === 404) {
       return { enabled: false, previews_enabled: false };
     }

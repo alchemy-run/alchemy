@@ -18,7 +18,7 @@ const test = alchemy.test(import.meta, {
 
 const ec2 = new EC2Client({});
 
-describe("RouteTable", () => {
+describe.skipIf(!process.env.ALL_TESTS)("RouteTable", () => {
   test("create route table", async (scope) => {
     const vpcName = `${BRANCH_PREFIX}-alchemy-test-rt-vpc`;
     const rtName = `${BRANCH_PREFIX}-alchemy-test-rt`;

@@ -16,7 +16,7 @@ import { BRANCH_PREFIX } from "../util.ts";
 const workerName = `alchemy-state-${BRANCH_PREFIX}`;
 
 const api = await createCloudflareApi();
-const token = await alchemy.secret.env.ALCHEMY_STATE_TOKEN;
+const token = alchemy.secret.env.ALCHEMY_STATE_TOKEN;
 const subdomain = await getAccountSubdomain(api);
 
 const test = alchemy.test(import.meta, {

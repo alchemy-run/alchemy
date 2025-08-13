@@ -22,6 +22,7 @@ async function runCommand(
       env: {
         ...process.env,
         ...env,
+        DO_NOT_TRACK: "true",
       },
     });
     return { stdout: result.toString(), stderr: "" };

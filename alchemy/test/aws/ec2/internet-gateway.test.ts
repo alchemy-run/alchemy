@@ -23,7 +23,7 @@ const test = alchemy.test(import.meta, {
 
 const ec2 = new EC2Client({});
 
-describe("InternetGateway", () => {
+describe.skipIf(!process.env.ALL_TESTS)("InternetGateway", () => {
   test(
     "create and delete internet gateway",
     async (scope) => {

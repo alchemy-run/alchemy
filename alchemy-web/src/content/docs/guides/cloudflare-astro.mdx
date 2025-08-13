@@ -7,7 +7,7 @@ sidebar:
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
-This guide shows how to initialize and deploy an Astro server-side–rendered site to Cloudflare using Alchemy.
+This guide shows how to initialize and deploy an Astro server-side rendered site to Cloudflare using Alchemy.
 
 ## Init
 
@@ -47,22 +47,22 @@ Authenticate once with your Cloudflare account:
 <Tabs syncKey="pkgManager">
   <TabItem label="bun">
     ```sh
-    bun wrangler login
+    bun alchemy login
     ```
   </TabItem>
   <TabItem label="npm">
     ```sh
-    npx wrangler login
+    npx alchemy login
     ```
   </TabItem>
   <TabItem label="pnpm">
     ```sh
-    pnpm wrangler login
+    pnpm alchemy login
     ```
   </TabItem>
   <TabItem label="yarn">
     ```sh
-    yarn wrangler login
+    yarn alchemy login
     ```
   </TabItem>
 </Tabs>
@@ -184,9 +184,7 @@ import { Astro } from "alchemy/cloudflare";
 
 const app = await alchemy("my-astro-app");
 
-export const worker = await Astro("website", {
-  command: "bun run build",
-});
+export const worker = await Astro("website");
 
 console.log({
   url: worker.url,
@@ -238,15 +236,23 @@ The `alchemy.run.ts` script will be run by `node` but still needs to infer the [
 
 ### `astro.config.mjs`
 
-Use the `@astrojs/cloudflare` plugin to build for Cloudflare Workers:
+Use the `alchemy()` adapter to develop and deploy for Cloudflare Workers:
 
 ```ts
-import { defineConfig } from "astro/config";
-import cloudflare from "@astrojs/cloudflare";
+import alchemy from 'alchemy/cloudflare/astro';
+import { defineConfig } from 'astro/config';
 
 // https://astro.build/config
 export default defineConfig({
-  output: "server",
-  adapter: cloudflare(),
+  output: 'server',
+  adapter: alchemy(),
 });
 ``` 
+
+:::tip
+The `alchemy()` adapter from `alchemy/cloudflare/astro` is used to configure Astro for both local development and deployment.
+:::
+
+:::warning
+If you run `astro dev` without first running Alchemy, you will get an error from `getPlatformProxyOptions()`. This is because Alchemy needs to be run first to create the local environment. We recommend running `alchemy dev`, which runs `astro dev` automatically.
+:::

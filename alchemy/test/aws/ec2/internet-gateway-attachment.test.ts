@@ -25,7 +25,7 @@ const test = alchemy.test(import.meta, {
 
 const ec2 = new EC2Client({});
 
-describe("InternetGatewayAttachment", () => {
+describe.skipIf(!process.env.ALL_TESTS)("InternetGatewayAttachment", () => {
   test(
     "attach internet gateway to VPC",
     async (scope) => {

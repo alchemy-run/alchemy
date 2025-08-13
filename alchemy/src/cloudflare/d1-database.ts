@@ -11,6 +11,7 @@ import {
 import { cloneD1Database } from "./d1-clone.ts";
 import { applyLocalD1Migrations } from "./d1-local-migrations.ts";
 import { applyMigrations, listMigrationsFiles } from "./d1-migrations.ts";
+import { deleteMiniflareBinding } from "./miniflare/delete.ts";
 
 const DEFAULT_MIGRATIONS_TABLE = "d1_migrations";
 
@@ -126,7 +127,6 @@ export function isD1Database(resource: Resource): resource is D1Database {
 export type D1Database = Resource<"cloudflare::D1Database"> &
   Pick<
     D1DatabaseProps,
-    | "dev"
     | "migrationsDir"
     | "migrationsTable"
     | "primaryLocationHint"
@@ -142,6 +142,22 @@ export type D1Database = Resource<"cloudflare::D1Database"> &
      * The name of the database
      */
     name: string;
+
+    /**
+     * Development mode properties
+     * @internal
+     */
+    dev: {
+      /**
+       * The ID of the database in development mode
+       */
+      id: string;
+
+      /**
+       * Whether the database is running remotely
+       */
+      remote: boolean;
+    };
   };
 
 /**
@@ -247,19 +263,14 @@ const _D1Database = Resource(
     id: string,
     props: D1DatabaseProps = {},
   ): Promise<D1Database> {
-    const api = await createCloudflareApi(props);
     const databaseName = props.name ?? id;
+    const local = this.scope.local && !props.dev?.remote;
+    const dev = {
+      id: this.output?.dev?.id ?? this.output?.id ?? id,
+      remote: props.dev?.remote ?? false,
+    };
 
-    if (this.phase === "delete") {
-      if (props.delete !== false && this.output?.id !== id) {
-        await deleteDatabase(api, this.output?.id);
-      }
-      // Return void (a deleted database has no content)
-      return this.destroy();
-    }
-    let dbData: CloudflareD1Response;
-
-    if (this.scope.local && !props.dev?.remote) {
+    if (local) {
       if (props.migrationsFiles && props.migrationsFiles.length > 0) {
         await applyLocalD1Migrations({
           databaseId: this.output?.id ?? id,
@@ -269,22 +280,36 @@ const _D1Database = Resource(
       }
       return this({
         type: "d1",
-        // we may not have an ID yet if we're creating a new database locally first
-        // so set it to the resource ID which we can later use to detect that a DB needs to be created during an `update`
-        id: this.output?.id ?? id,
+        id: this.output?.id ?? "",
         name: databaseName,
         readReplication: props.readReplication,
         primaryLocationHint: props.primaryLocationHint,
         migrationsDir: props.migrationsDir,
         migrationsTable: props.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE,
-        dev: props.dev,
+        dev,
       });
-    } else if (
+    }
+
+    const api = await createCloudflareApi(props);
+
+    if (this.phase === "delete") {
+      if (this.output.dev?.id) {
+        await deleteMiniflareBinding("d1", this.output.dev.id);
+      }
+      if (props.delete !== false && this.output?.id) {
+        await deleteDatabase(api, this.output.id);
+      }
+      // Return void (a deleted database has no content)
+      return this.destroy();
+    }
+    let dbData: CloudflareD1Response;
+
+    if (
       this.phase === "create" ||
       // this is true IFF the database was created locally before any live deployment
       // in that case, we should still go through the create flow for "update"
       // after that, the ID will remain the UUID for the lifetime of the database
-      this.output.id === id
+      !this.output?.id
     ) {
       logger.log("Creating D1 database:", databaseName);
       try {
@@ -387,7 +412,7 @@ const _D1Database = Resource(
       name: databaseName,
       readReplication: dbData.result.read_replication,
       primaryLocationHint: props.primaryLocationHint,
-      dev: props.dev,
+      dev,
       migrationsDir: props.migrationsDir,
       migrationsTable: props.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE,
     });

@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "0.55.2",
+  "version": "0.60.2",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
   "homepage": "https://alchemy.run",
@@ -22,7 +22,7 @@
     "drizzle:generate": "bun run scripts/drizzle-generate.ts",
     "docs:gen": "rm -rf ./docs && typedoc",
     "postbuild": "cpx 'src/**/*/types.d.ts' lib && cpx 'src/**/*.txt' lib",
-    "publish:npm": "cp ../README.md . && bun run build && bun run build:cli && npm publish && rm README.md"
+    "publish:npm": "cp ../README.md . && bun run build && bun run build:cli && bun publish && rm README.md"
   },
   "files": [
     "bin",
@@ -61,6 +61,34 @@
       "bun": "./src/cloudflare/index.ts",
       "import": "./lib/cloudflare/index.js"
     },
+    "./cloudflare/astro": {
+      "bun": "./src/cloudflare/astro/plugin.ts",
+      "import": "./lib/cloudflare/astro/plugin.js"
+    },
+    "./cloudflare/nuxt": {
+      "bun": "./src/cloudflare/nuxt/plugin.ts",
+      "import": "./lib/cloudflare/nuxt/plugin.js"
+    },
+    "./cloudflare/redwood": {
+      "bun": "./src/cloudflare/redwood/plugin.ts",
+      "import": "./lib/cloudflare/redwood/plugin.js"
+    },
+    "./cloudflare/react-router": {
+      "bun": "./src/cloudflare/react-router/plugin.ts",
+      "import": "./lib/cloudflare/react-router/plugin.js"
+    },
+    "./cloudflare/sveltekit": {
+      "bun": "./src/cloudflare/sveltekit/plugin.ts",
+      "import": "./lib/cloudflare/sveltekit/plugin.js"
+    },
+    "./cloudflare/tanstack-start": {
+      "bun": "./src/cloudflare/tanstack-start/plugin.ts",
+      "import": "./lib/cloudflare/tanstack-start/plugin.js"
+    },
+    "./cloudflare/vite": {
+      "bun": "./src/cloudflare/vite/plugin.ts",
+      "import": "./lib/cloudflare/vite/plugin.js"
+    },
     "./dns": {
       "bun": "./src/dns/index.ts",
       "import": "./lib/dns/index.js"
@@ -92,6 +120,10 @@
     "./planetscale": {
       "bun": "./src/planetscale/index.ts",
       "import": "./lib/planetscale/index.js"
+    },
+    "./random": {
+      "bun": "./src/random/index.ts",
+      "import": "./lib/random/index.js"
     },
     "./sentry": {
       "bun": "./src/sentry/index.ts",
@@ -143,9 +175,12 @@
     "@swc/core": "^1.11.24",
     "aws4fetch": "^1.0.20",
     "diff": "^8.0.2",
+    "env-paths": "^3.0.0",
     "esbuild": "^0.25.1",
+    "execa": "^9.6.0",
     "fast-json-patch": "^3.1.1",
     "fast-xml-parser": "^5.2.5",
+    "find-process": "^2.0.0",
     "glob": "^10.0.0",
     "jszip": "^3.0.0",
     "kleur": "^4.1.5",
@@ -155,10 +190,10 @@
     "open": "^10.1.2",
     "openapi-types": "^12.1.3",
     "pathe": "^2.0.3",
+    "signal-exit": "^4.1.0",
     "turndown": "^7.0.0",
     "unenv": "2.0.0-rc.15",
     "ws": "^8.18.3",
-    "xdg-app-paths": "^8.3.0",
     "yaml": "^2.0.0"
   },
   "peerDependencies": {
@@ -175,16 +210,17 @@
     "@aws-sdk/client-sqs": "^3.0.0",
     "@aws-sdk/client-ssm": "^3.0.0",
     "@aws-sdk/client-sts": "^3.0.0",
+    "@cloudflare/vite-plugin": "^1.10.1",
     "@libsql/client": "^0.15.9",
     "@octokit/rest": "^21.1.1",
     "ai": "^4.0.0",
     "arktype": "^2.0.0",
     "cloudflare": "^4.0.0",
     "drizzle-orm": "^0.44.2",
-    "execa": "^9.6.0",
     "hono": "^4.0.0",
     "prettier": "^3.0.0",
-    "stripe": "^17.0.0"
+    "stripe": "^17.0.0",
+    "@cloudflare/workers-types": "catalog:"
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^1.1.6",
@@ -195,9 +231,11 @@
     "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "^0.0.13",
     "@cloudflare/puppeteer": "^1.0.2",
-    "@cloudflare/workers-types": "^4.20250620.0",
     "@iarna/toml": "^2.2.5",
     "@octokit/rest": "^21.1.1",
+    "@react-router/dev": "^7.7.1",
+    "@sentry/cloudflare": "^9.43.0",
+    "@sveltejs/adapter-cloudflare": "^7.1.2",
     "@types/bun": "latest",
     "@types/diff": "^5.0.0",
     "@types/fs-extra": "^11.0.4",
@@ -220,10 +258,12 @@
     "libsodium-wrappers": "^0.7.15",
     "listr2": "^8.0.0",
     "nitro-cloudflare-dev": "^0.2.2",
+    "nitropack": "^2.12.4",
     "openpgp": "^6.1.0",
     "picocolors": "^1.1.1",
     "prettier": "^3.5.3",
-    "trpc-cli": "^0.10.0",
+    "rwsdk": "^0.1.28",
+    "trpc-cli": "^0.10.2",
     "ts-morph": "^26.0.0",
     "tsdown": "^0.13.0",
     "turndown": "^7.2.0",
@@ -232,7 +272,7 @@
     "typescript": "^5.8.3",
     "vite": "^6.0.7",
     "vitepress": "^1.6.3",
-    "wrangler": "^3.114.0",
+    "wrangler": "^4.27.0",
     "yaml": "^2.7.1",
     "zod": "^4.0.10"
   }

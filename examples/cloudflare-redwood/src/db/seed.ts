@@ -3,7 +3,6 @@ import { defineScript } from "rwsdk/worker";
 import { users } from "./schema.js";
 
 export default defineScript(async ({ env }) => {
-  // @ts-expect-error - TODO(sam): fix this
   const db = drizzle(env.DB);
 
   // Insert a user

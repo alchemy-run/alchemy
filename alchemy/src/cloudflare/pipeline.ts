@@ -218,6 +218,8 @@ export interface PipelineProps extends CloudflareApiOptions {
    * @default false
    */
   adopt?: boolean;
+
+  dev?: { remote?: boolean };
 }
 
 /**
@@ -337,6 +339,20 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
   const api = await createCloudflareApi(props);
   const pipelineName = props.name ?? id;
 
+  if (this.scope.local && !props.dev?.remote) {
+    return this({
+      type: "pipeline",
+      id: this.output?.id ?? "",
+      name: this.output?.name ?? pipelineName,
+      endpoint: this.output?.endpoint ?? "",
+      version: this.output?.version ?? 0,
+      source: this.output?.source ?? [],
+      destination: props.destination,
+      compression: props.compression,
+      accountId: this.output?.accountId ?? "",
+    });
+  }
+
   if (this.phase === "delete") {
     if (props.delete !== false) {
       // Delete Pipeline
@@ -348,7 +364,7 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
   }
   let pipelineData: CloudflarePipelineResponse;
 
-  if (this.phase === "create") {
+  if (this.phase === "create" || !this.output?.id) {
     // Check if we should adopt an existing pipeline
     try {
       // Try to create pipeline first

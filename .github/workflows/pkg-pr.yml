@@ -22,5 +22,10 @@ jobs:
 
       - name: Build
         run: bun run --filter alchemy build
+    
+      # pkr.pr.new relies on pnpm-workspace.yaml for the `--pnpm` flag
+      # which we need to resolve `catalog:` dependencies prior to publishing
+      - name: Prepare Publish
+        run: bun ./scripts/generate-pnpm-workspace.yaml.ts
 
-      - run: bunx pkg-pr-new publish ./alchemy
+      - run: bun add -D pnpm && bunx pkg-pr-new publish --pnpm ./alchemy

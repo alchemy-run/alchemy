@@ -47,22 +47,22 @@ Authenticate once with your Cloudflare account:
 <Tabs syncKey="pkgManager">
   <TabItem label="bun">
     ```sh
-    bun wrangler login
+    bun alchemy login
     ```
   </TabItem>
   <TabItem label="npm">
     ```sh
-    npx wrangler login
+    npx alchemy login
     ```
   </TabItem>
   <TabItem label="pnpm">
     ```sh
-    pnpm wrangler login
+    pnpm alchemy login
     ```
   </TabItem>
   <TabItem label="yarn">
     ```sh
-    yarn wrangler login
+    yarn alchemy login
     ```
   </TabItem>
 </Tabs>
@@ -184,9 +184,7 @@ import { SvelteKit } from "alchemy/cloudflare";
 
 const app = await alchemy("my-sveltekit-app");
 
-export const worker = await SvelteKit("website", {
-  command: "bun run build",
-});
+export const worker = await SvelteKit("website");
 
 console.log({
   url: worker.url,
@@ -234,3 +232,28 @@ The `alchemy.run.ts` script will be run by `node` but still needs to infer the [
   }
 }
 ``` 
+
+### `svelte.config.js`
+
+Use the `alchemy()` adapter to configure SvelteKit for local development and deployment to Cloudflare Workers:
+
+```ts
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import alchemy from 'alchemy/cloudflare/sveltekit';
+
+/** @type {import('@sveltejs/kit').Config} */
+const config = {
+	// Consult https://svelte.dev/docs/kit/integrations
+	// for more information about preprocessors
+	preprocess: vitePreprocess(),
+
+	kit: {
+		// Using Cloudflare adapter for deployment to Cloudflare Workers
+		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
+		adapter: alchemy()
+	}
+};
+
+export default config;
+
+```

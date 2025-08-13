@@ -3,6 +3,7 @@ import path from "node:path";
 import type { Context } from "../context.ts";
 import { formatJson } from "../fs/static-json-file.ts";
 import { Resource } from "../resource.ts";
+import { isSecret } from "../secret.ts";
 import { assertNever } from "../util/assert-never.ts";
 import {
   Self,
@@ -55,6 +56,13 @@ export interface WranglerJsonProps {
     binding: string;
     directory: string;
   };
+
+  /**
+   * Whether to include secrets in the wrangler.json file
+   *
+   * @default true
+   */
+  secrets?: boolean;
 
   /**
    * Transform hooks to modify generated configuration files
@@ -155,6 +163,9 @@ export const WranglerJson = Resource(
         ? {
             directory: toAbsolute(props.assets.directory),
             binding: props.assets.binding,
+            not_found_handling: props.worker.assets?.not_found_handling,
+            html_handling: props.worker.assets?.html_handling,
+            run_worker_first: props.worker.assets?.run_worker_first,
           }
         : undefined,
       placement: worker.placement,
@@ -169,6 +180,8 @@ export const WranglerJson = Resource(
         worker.eventSources,
         worker.name,
         cwd,
+        props.secrets ?? false,
+        this.scope.local && !props.worker.dev?.remote,
       );
     }
 
@@ -191,7 +204,24 @@ export const WranglerJson = Resource(
       : spec;
 
     await fs.mkdir(dirname, { recursive: true });
-    await fs.writeFile(filePath, await formatJson(finalSpec));
+    if (props.secrets) {
+      // If secrets are enabled, decrypt them in the wrangler.json file,
+      // but do not modify `finalSpec` so that way secrets aren't written to state unencrypted.
+      const withSecretsUnwrapped = {
+        ...finalSpec,
+        vars: {
+          ...finalSpec.vars,
+          ...Object.fromEntries(
+            Object.entries(finalSpec.vars ?? {}).map(([key, value]) =>
+              isSecret(value) ? [key, value.unencrypted] : [key, value],
+            ),
+          ),
+        },
+      };
+      await fs.writeFile(filePath, await formatJson(withSecretsUnwrapped));
+    } else {
+      await fs.writeFile(filePath, await formatJson(finalSpec));
+    }
 
     // Return the resource
     return this({
@@ -390,6 +420,13 @@ export interface WranglerJsonSpec {
   assets?: {
     directory: string;
     binding: string;
+    not_found_handling?: "none" | "404-page" | "single-page-application";
+    html_handling?:
+      | "auto-trailing-slash"
+      | "drop-trailing-slash"
+      | "force-trailing-slash"
+      | "none";
+    run_worker_first?: boolean | string[];
   };
 
   /**
@@ -424,7 +461,11 @@ export interface WranglerJsonSpec {
   /**
    * Hyperdrive bindings
    */
-  hyperdrive?: { binding: string; id: string; localConnectionString: string }[];
+  hyperdrive?: {
+    binding: string;
+    id: string;
+    localConnectionString?: string;
+  }[];
 
   /**
    * Pipelines
@@ -473,6 +514,8 @@ function processBindings(
   eventSources: EventSource[] | undefined,
   workerName: string,
   workerCwd: string,
+  writeSecrets: boolean,
+  local: boolean,
 ): void {
   // Arrays to collect different binding types
   const kvNamespaces: {
@@ -536,7 +579,7 @@ function processBindings(
   const hyperdrive: {
     binding: string;
     id: string;
-    localConnectionString: string;
+    localConnectionString?: string;
   }[] = [];
   const pipelines: { binding: string; pipeline: string }[] = [];
   const secretsStoreSecrets: {
@@ -578,10 +621,11 @@ function processBindings(
     }
     if (typeof binding === "string") {
       // Plain text binding - add to vars
-      if (!spec.vars) {
-        spec.vars = {};
-      }
+      spec.vars ??= {};
       spec.vars[bindingName] = binding;
+    } else if (writeSecrets && isSecret(binding)) {
+      spec.vars ??= {};
+      spec.vars[bindingName] = binding as any;
     } else if (binding === Self) {
       // Self(service) binding
       services.push({
@@ -596,7 +640,12 @@ function processBindings(
       });
     } else if (binding.type === "kv_namespace") {
       // KV Namespace binding
-      const id = "namespaceId" in binding ? binding.namespaceId : binding.id;
+      const id =
+        "dev" in binding && !binding.dev?.remote && local
+          ? binding.dev.id
+          : "namespaceId" in binding
+            ? binding.namespaceId
+            : binding.id;
       kvNamespaces.push({
         binding: bindingName,
         id: id,
@@ -623,10 +672,14 @@ function processBindings(
         new_classes.push(doBinding.className);
       }
     } else if (binding.type === "r2_bucket") {
+      const name =
+        "dev" in binding && !binding.dev?.remote && local
+          ? binding.dev.id
+          : binding.name;
       r2Buckets.push({
         binding: bindingName,
-        bucket_name: binding.name,
-        preview_bucket_name: binding.name,
+        bucket_name: name,
+        preview_bucket_name: name,
         ...(binding.dev?.remote ? { experimental_remote: true } : {}),
       });
     } else if (binding.type === "secret") {
@@ -645,18 +698,26 @@ function processBindings(
         script_name: binding.scriptName,
       });
     } else if (binding.type === "d1") {
+      const id =
+        "dev" in binding && !binding.dev?.remote && local
+          ? binding.dev.id
+          : binding.id;
       d1Databases.push({
         binding: bindingName,
-        database_id: binding.id,
+        database_id: id,
         database_name: binding.name,
         migrations_dir: binding.migrationsDir,
-        preview_database_id: binding.id,
+        preview_database_id: id,
         ...(binding.dev?.remote ? { experimental_remote: true } : {}),
       });
     } else if (binding.type === "queue") {
+      const id =
+        "dev" in binding && !binding.dev?.remote && local
+          ? binding.dev.id
+          : binding.id;
       queues.producers.push({
         binding: bindingName,
-        queue: binding.name,
+        queue: id,
       });
     } else if (binding.type === "vectorize") {
       vectorizeIndexes.push({
@@ -709,14 +770,12 @@ function processBindings(
         binding: bindingName,
       };
     } else if (binding.type === "hyperdrive") {
-      const password =
-        "password" in binding.origin
-          ? binding.origin.password.unencrypted
-          : binding.origin.access_client_secret.unencrypted;
       hyperdrive.push({
         binding: bindingName,
         id: binding.hyperdriveId,
-        localConnectionString: `${binding.origin.scheme || "postgres"}://${binding.origin.user}:${password}@${binding.origin.host}:${binding.origin.port || 5432}/${binding.origin.database}`,
+        localConnectionString: writeSecrets
+          ? binding.dev.origin.unencrypted
+          : undefined,
       });
     } else if (binding.type === "pipeline") {
       pipelines.push({

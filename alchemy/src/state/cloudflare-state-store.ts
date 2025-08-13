@@ -105,11 +105,11 @@ const provision = memoize(
     const scriptName = options.scriptName ?? "alchemy-state-service";
     const token =
       options.stateToken ??
-      (await alchemy.secret.env(
+      alchemy.secret.env(
         "ALCHEMY_STATE_TOKEN",
         undefined,
         "Missing token for DOStateStore. Please set ALCHEMY_STATE_TOKEN in the environment or set the `stateToken` option in the DOStateStore constructor.",
-      ));
+      );
 
     const api = await createCloudflareApi(options);
     const [bundle, settings, subdomain] = await Promise.all([

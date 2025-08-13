@@ -24,16 +24,24 @@ export class InstrumentedStateStore<T extends StateStore>
   ): Promise<T> {
     const start = performance.now();
     let error: unknown;
-    return await fn()
-      .catch((err) => (error = err))
-      .finally(() => {
-        this.telemetryClient.record({
-          event,
-          stateStoreClass: this.stateStoreClass,
-          elapsed: performance.now() - start,
-          error: error instanceof Error ? error : new Error(String(error)),
-        });
+    try {
+      return await fn();
+    } catch (err) {
+      error = err;
+      throw err;
+    } finally {
+      this.telemetryClient.record({
+        event,
+        stateStoreClass: this.stateStoreClass,
+        elapsed: performance.now() - start,
+        error:
+          error instanceof Error
+            ? error
+            : error
+              ? new Error(String(error))
+              : undefined,
       });
+    }
   }
 
   async init() {

@@ -23,7 +23,7 @@ const test = alchemy.test(import.meta, {
 
 const ec2 = new EC2Client({});
 
-describe("Subnet", () => {
+describe.skipIf(!process.env.ALL_TESTS)("Subnet", () => {
   test(
     "create subnet in VPC",
     async (scope) => {

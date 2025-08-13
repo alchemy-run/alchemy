@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import type { Context } from "../context.ts";
 import { Resource, ResourceKind } from "../resource.ts";
+import { Scope } from "../scope.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { CloudflareApiError } from "./api-error.ts";
 import {
@@ -12,6 +13,7 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
+import { deleteMiniflareBinding } from "./miniflare/delete.ts";
 
 /**
  * Properties for creating or updating an R2 Bucket
@@ -83,6 +85,12 @@ export interface BucketProps extends CloudflareApiOptions {
      * @default false
      */
     remote?: boolean;
+
+    /**
+     * Set when `Scope.local` is true to force update to the bucket even if it was already deployed live.
+     * @internal
+     */
+    force?: boolean;
   };
 }
 
@@ -127,7 +135,7 @@ interface R2BucketCORSRule {
  * Output returned after R2 Bucket creation/update
  */
 export type R2Bucket = Resource<"cloudflare::R2Bucket"> &
-  Omit<BucketProps, "delete"> & {
+  Omit<BucketProps, "delete" | "dev"> & {
     /**
      * Resource type identifier
      */
@@ -152,6 +160,22 @@ export type R2Bucket = Resource<"cloudflare::R2Bucket"> &
      * The `r2.dev` subdomain for the bucket, if `allowPublicAccess` is true
      */
     domain: string | undefined;
+
+    /**
+     * Development mode properties
+     * @internal
+     */
+    dev: {
+      /**
+       * The ID of the bucket in development mode
+       */
+      id: string;
+
+      /**
+       * Whether the bucket is running remotely
+       */
+      remote: boolean;
+    };
   };
 
 export function isBucket(resource: Resource): resource is R2Bucket {
@@ -202,88 +226,122 @@ export function isBucket(resource: Resource): resource is R2Bucket {
  *
  * @see https://developers.cloudflare.com/r2/buckets/
  */
-export const R2Bucket = Resource(
+export async function R2Bucket(
+  id: string,
+  props: BucketProps = {},
+): Promise<R2Bucket> {
+  return await _R2Bucket(id, {
+    ...props,
+    dev: {
+      ...(props.dev ?? {}),
+      force: Scope.current.local,
+    },
+  });
+}
+
+const _R2Bucket = Resource(
   "cloudflare::R2Bucket",
   async function (
     this: Context<R2Bucket>,
-    _id: string,
+    id: string,
     props: BucketProps = {},
   ): Promise<R2Bucket> {
-    const api = await createCloudflareApi(props);
-    const bucketName = props.name || this.id;
+    const bucketName = props.name || id;
     const allowPublicAccess = props.allowPublicAccess === true;
+    const dev = {
+      id: this.output?.dev?.id ?? bucketName,
+      remote: props.dev?.remote ?? false,
+    };
 
-    switch (this.phase) {
-      case "create": {
-        const bucket = await createBucket(api, bucketName, props).catch(
-          async (err) => {
-            if (
-              err instanceof CloudflareApiError &&
-              err.status === 409 &&
-              props.adopt
-            ) {
-              return await getBucket(api, bucketName, props);
-            }
-            throw err;
-          },
+    if (this.scope.local && !props.dev?.remote) {
+      return this({
+        name: this.output?.name ?? "",
+        location: this.output?.location ?? "",
+        creationDate: this.output?.creationDate ?? new Date(),
+        jurisdiction: this.output?.jurisdiction ?? "default",
+        allowPublicAccess,
+        domain: this.output?.domain,
+        type: "r2_bucket",
+        accountId: this.output?.accountId ?? "",
+        cors: props.cors,
+        dev,
+      });
+    }
+
+    const api = await createCloudflareApi(props);
+
+    if (this.phase === "delete") {
+      if (props.delete !== false) {
+        if (this.output.dev?.id) {
+          await deleteMiniflareBinding("r2", this.output.dev.id);
+        }
+        if (props.empty) {
+          await emptyBucket(api, bucketName, props);
+        }
+        await deleteBucket(api, bucketName, props);
+      }
+      return this.destroy();
+    }
+
+    if (this.phase === "create" || !this.output?.name) {
+      const bucket = await createBucket(api, bucketName, props).catch(
+        async (err) => {
+          if (
+            err instanceof CloudflareApiError &&
+            err.status === 409 &&
+            props.adopt
+          ) {
+            return await getBucket(api, bucketName, props);
+          }
+          throw err;
+        },
+      );
+      const domain = await putManagedDomain(
+        api,
+        bucketName,
+        allowPublicAccess,
+        props.jurisdiction,
+      );
+      if (props.cors?.length) {
+        await putBucketCORS(api, bucketName, props);
+      }
+      return this({
+        name: bucketName,
+        location: bucket.location,
+        creationDate: new Date(bucket.creation_date),
+        jurisdiction: bucket.jurisdiction,
+        allowPublicAccess,
+        domain,
+        type: "r2_bucket",
+        accountId: api.accountId,
+        cors: props.cors,
+        dev,
+      });
+    } else {
+      if (bucketName !== this.output.name) {
+        throw new Error(
+          `Cannot update R2Bucket name after creation. Bucket name is immutable. Before: ${this.output.name}, After: ${bucketName}`,
         );
-        const domain = await putManagedDomain(
+      }
+      let domain = this.output.domain;
+      if (!!domain !== allowPublicAccess) {
+        domain = await putManagedDomain(
           api,
           bucketName,
           allowPublicAccess,
           props.jurisdiction,
         );
-        if (props.cors?.length) {
-          await putBucketCORS(api, bucketName, props);
-        }
-        return this({
-          name: bucketName,
-          location: bucket.location,
-          creationDate: new Date(bucket.creation_date),
-          jurisdiction: bucket.jurisdiction,
-          allowPublicAccess,
-          domain,
-          type: "r2_bucket",
-          accountId: api.accountId,
-          cors: props.cors,
-          dev: props.dev,
-        });
       }
-      case "update": {
-        if (bucketName !== this.output.name) {
-          throw new Error(
-            `Cannot update R2Bucket name after creation. Bucket name is immutable. Before: ${this.output.name}, After: ${bucketName}`,
-          );
-        }
-        let domain = this.output.domain;
-        if (!!domain !== allowPublicAccess) {
-          domain = await putManagedDomain(
-            api,
-            bucketName,
-            allowPublicAccess,
-            props.jurisdiction,
-          );
-        }
-        if (!isDeepStrictEqual(this.output.cors ?? [], props.cors ?? [])) {
-          await putBucketCORS(api, bucketName, props);
-        }
-        return this({
-          ...this.output,
-          allowPublicAccess,
-          dev: props.dev,
-          cors: props.cors,
-          domain,
-        });
+      if (!isDeepStrictEqual(this.output.cors ?? [], props.cors ?? [])) {
+        await putBucketCORS(api, bucketName, props);
       }
-      case "delete": {
-        if (props.delete !== false) {
-          if (props.empty) {
-            await emptyBucket(api, bucketName, props);
-          }
-          await deleteBucket(api, bucketName, props);
-        }
-        return this.destroy();
-      }
+      return this({
+        ...this.output,
+        allowPublicAccess,
+        dev,
+        cors: props.cors,
+        domain,
+      });
     }
   },
 );

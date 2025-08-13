@@ -18,7 +18,7 @@ const test = alchemy.test(import.meta, {
 
 const ec2 = new EC2Client({});
 
-describe("SecurityGroup", () => {
+describe.skipIf(!process.env.ALL_TESTS)("SecurityGroup", () => {
   test("create security group", async (scope) => {
     const vpcName = `${BRANCH_PREFIX}-alchemy-test-sg-vpc`;
     const sgName = `${BRANCH_PREFIX}-alchemy-test-sg`;

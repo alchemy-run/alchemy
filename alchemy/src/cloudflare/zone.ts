@@ -7,6 +7,10 @@ import {
   type CloudflareApi,
   type CloudflareApiOptions,
 } from "./api.ts";
+import {
+  updateBotManagement,
+  type BotManagement,
+} from "./zone-bot-management.ts";
 import type {
   AlwaysUseHTTPSValue,
   AutomaticHTTPSRewritesValue,
@@ -167,6 +171,11 @@ export interface ZoneProps extends CloudflareApiOptions {
      */
     minTlsVersion?: MinTLSVersionValue;
   };
+
+  /**
+   * Cloudflare Bot Management settings
+   */
+  botManagement?: BotManagement;
 }
 
 /**
@@ -314,7 +323,7 @@ export interface Zone extends Resource<"cloudflare::Zone">, ZoneData {}
 export const Zone = Resource(
   "cloudflare::Zone",
   async function (
-    this: Context<Zone>,
+    this: Context<Zone, ZoneProps>,
     _id: string,
     props: ZoneProps,
   ): Promise<Zone> {
@@ -407,6 +416,14 @@ export const Zone = Resource(
     // TODO(michael): do we need this?
     // https://github.com/sam-goodwin/alchemy/issues/681
     await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Update Bot Management configuration if provided
+    await updateBotManagement(
+      api,
+      zoneData.id,
+      props.botManagement,
+      this.props?.botManagement,
+    );
 
     return this({
       id: zoneData.id,

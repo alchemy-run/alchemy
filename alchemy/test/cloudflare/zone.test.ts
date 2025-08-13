@@ -46,6 +46,15 @@ describe.skipIf(!process.env.ALL_TESTS)("Zone Resource", () => {
           hotlinkProtection: "on",
           developmentMode: "off",
         },
+        botManagement: {
+          fightMode: true,
+          aiBotsProtection: "block",
+          crawlerProtection: "enabled",
+          enableJs: true,
+          isRobotsTxtManaged: true,
+          optimizeWordpress: false,
+          suppressSessionScore: false,
+        },
       });
 
       expect(zone.id).toBeTruthy();
@@ -78,6 +87,14 @@ describe.skipIf(!process.env.ALL_TESTS)("Zone Resource", () => {
 
       const responseData: any = await getResponse.json();
       expect(responseData.result.name).toEqual(testDomain);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Verify bot management settings
+      const botResponse = await api.get(`/zones/${zone.id}/bot_management`);
+      expect(botResponse.status).toEqual(200);
+      const botData: any = await botResponse.json();
+      console.log(botData);
+      expect(botData.result.fight_mode).toEqual(true);
 
       // Update the zone with different settings
       zone = await Zone(testDomain, {

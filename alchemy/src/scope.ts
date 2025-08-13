@@ -1,4 +1,6 @@
+import kleur from "kleur";
 import { AsyncLocalStorage } from "node:async_hooks";
+import path from "node:path";
 import util from "node:util";
 import type { Phase } from "./alchemy.ts";
 import { destroy, destroyAll, DestroyStrategy } from "./destroy.ts";
@@ -21,6 +23,7 @@ import {
   createLoggerInstance,
   type LoggerApi,
 } from "./util/cli.ts";
+import { idempotentSpawn } from "./util/idempotent-spawn.ts";
 import { logger } from "./util/logger.ts";
 import { AsyncMutex } from "./util/mutex.ts";
 import type { ITelemetryClient } from "./util/telemetry/client.ts";
@@ -63,8 +66,21 @@ export interface ScopeOptions {
    * @default "sequential"
    */
   destroyStrategy?: DestroyStrategy;
+  /**
+   * The telemetry client to use for the scope.
+   *
+   */
   telemetryClient?: ITelemetryClient;
+  /**
+   * The logger to use for the scope.
+   */
   logger?: LoggerApi;
+  /**
+   * The path to the .alchemy directory.
+   *
+   * @default "./.alchemy"
+   */
+  dotAlchemy?: string;
 }
 
 /**
@@ -178,6 +194,7 @@ export class Scope {
   private finalized = false;
   private startedAt = performance.now();
   private deferred: (() => Promise<any>)[] = [];
+  private cleanups: (() => Promise<void>)[] = [];
 
   public get appName(): string {
     if (this.parent) {
@@ -185,6 +202,8 @@ export class Scope {
     }
     return this.scopeName;
   }
+  
+  public readonly dotAlchemy: string;
 
   constructor(options: ExtendedScopeOptions) {
     // Extract core scope options and provider credentials separately
@@ -219,6 +238,10 @@ export class Scope {
         `Scope name "${this.scopeName}" cannot contain double colons`,
       );
     }
+    this.dotAlchemy =
+      options.dotAlchemy ??
+      this.parent?.dotAlchemy ??
+      path.join(process.cwd(), ".alchemy");
 
     this.stage = stage ?? this.parent?.stage ?? DEFAULT_STAGE;
     this.parent?.children.set(this.scopeName!, this);
@@ -266,6 +289,46 @@ export class Scope {
       throw new Error("Telemetry client is required");
     }
     this.dataMutex = new AsyncMutex();
+  }
+
+  public async spawn<
+    E extends ((line: string) => string | undefined) | undefined,
+  >(
+    // TODO(sam): validate uniqueness? Ensure a flat .logs/${id}.log dir? Or nest in scope dirs?
+    id: string,
+    options: {
+      /**
+       * The command to run (e.g. `cloudflared tunnel --url http://localhost:8080`).
+       */
+      cmd: string;
+      /**
+       * Function executed on each line of the process's output (stdout and stderr) to extract a value.
+       */
+      extract?: E;
+      /**
+       * Name of the process - used to check if a PID is a cloudflared process when the parent exits, for resumability
+       */
+      processName?: string;
+      /**
+       * Function to check if a PID is the same process as the one that was spawned.
+       *
+       * Used to check if a PID is a cloudflared process when the parent exits, for resumability.
+       *
+       * One of {@link extract} or {@link processName} must be provided.
+       */
+      isSameProcess?: (pid: number) => Promise<boolean>;
+    },
+  ) {
+    const dotAlchemy = path.join(process.cwd(), ".alchemy");
+    const logsDir = path.join(dotAlchemy, "logs");
+    const pidsDir = path.join(dotAlchemy, "pids");
+
+    const extracted = await idempotentSpawn({
+      log: path.join(logsDir, `${id}.log`),
+      stateFile: path.join(pidsDir, `${id}.pid.json`),
+      ...options,
+    });
+    return extracted as E extends undefined ? undefined : string;
   }
 
   /**
@@ -521,6 +584,7 @@ export class Scope {
     });
 
     if (!this.parent && process.env.ALCHEMY_TEST_KILL_ON_FINALIZE) {
+      await this.cleanup();
       process.exit(0);
     }
   }
@@ -590,6 +654,28 @@ export class Scope {
       return this.run(() => fn()).then(_resolve, _reject);
     });
     return promise;
+  }
+
+  /**
+   * Run all cleanup functions registered with `onCleanup`.
+   * This should only be called on the root scope.
+   */
+  public async cleanup() {
+    if (this.parent || this.cleanups.length === 0) return;
+    this.logger.log(kleur.gray("Exiting..."));
+    await Promise.allSettled(this.cleanups.map((cleanup) => cleanup()));
+  }
+
+  /**
+   * Register a cleanup function that will be called when the process exits.
+   * This should only be called on the root scope.
+   */
+  public onCleanup(fn: () => Promise<void>) {
+    if (this.parent) {
+      this.root.onCleanup(fn);
+      return;
+    }
+    this.cleanups.push(fn);
   }
 
   /**

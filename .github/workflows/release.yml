@@ -73,8 +73,11 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
         run: |
+          # Configure npm token for both npm and bun
           npm config set '//registry.npmjs.org/:_authToken' "${NODE_AUTH_TOKEN}"
           if ! npm view "alchemy@${{ steps.version.outputs.version }}" version >/dev/null 2>&1; then
+            # Bun respects NPM_CONFIG_TOKEN for auth; also pass provenance
+            export NPM_CONFIG_TOKEN="${NODE_AUTH_TOKEN}"
             bun run publish:npm
           else
             echo "Version ${{ steps.version.outputs.version }} already published to npm, skipping publish"
