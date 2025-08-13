@@ -1,3 +1,4 @@
+import { glob } from "glob";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { logger } from "../util/logger.ts";
@@ -159,11 +160,9 @@ async function migrateLegacySchema(
 export async function listMigrationsFiles(
   migrationsDir: string,
 ): Promise<Array<{ id: string; sql: string }>> {
-  const entries = await Array.fromAsync(
-    fs.glob("**/*.sql", {
-      cwd: migrationsDir,
-    }),
-  );
+  const entries = await glob("**/*.sql", {
+    cwd: migrationsDir,
+  });
 
   const sqlFiles = entries.sort((a: string, b: string) => {
     const aNum = getPrefix(a);
