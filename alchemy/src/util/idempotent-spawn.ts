@@ -13,6 +13,7 @@ import path from "node:path";
 export async function idempotentSpawn({
   cmd,
   cwd,
+  env,
   stateFile = "state.json",
   overlapBytes = 0,
   resume = false,
@@ -24,6 +25,7 @@ export async function idempotentSpawn({
 }: {
   cmd: string;
   cwd?: string;
+  env?: Record<string, string>;
   log: string;
   stateFile?: string;
   overlapBytes?: number;
@@ -37,9 +39,7 @@ export async function idempotentSpawn({
   quiet?: boolean;
 }): Promise<string | undefined> {
   if (!processName && !isSameProcess) {
-    throw new Error(
-      "Either processName or isSameProcess must be provided to resume a process",
-    );
+    processName = cmd.split(" ")[0];
   }
 
   const outPath = log;
@@ -96,7 +96,7 @@ export async function idempotentSpawn({
       shell: true,
       cwd,
       stdio: ["ignore", out.fd, out.fd], // stdout/stderr -> files (OS-level)
-      env: process.env,
+      env,
       detached: false,
     });
 

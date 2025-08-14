@@ -244,6 +244,16 @@ export class Scope {
     id: string,
     options: {
       /**
+       * The working directory to run the command in.
+       *
+       * @default process.cwd()
+       */
+      cwd?: string;
+      /**
+       * The environment variables to set for the command.
+       */
+      env?: Record<string, string>;
+      /**
        * The command to run (e.g. `cloudflared tunnel --url http://localhost:8080`).
        */
       cmd: string;
