@@ -168,7 +168,7 @@
   },
   "dependencies": {
     "@aws-sdk/credential-providers": "^3.0.0",
-    "@cloudflare/unenv-preset": "^2.4.0",
+    "@cloudflare/unenv-preset": "^2.6.1",
     "@cloudflare/workers-shared": "^0.17.5",
     "@iarna/toml": "^2.2.5",
     "@smithy/node-config-provider": "^4.0.0",
@@ -192,7 +192,7 @@
     "pathe": "^2.0.3",
     "signal-exit": "^4.1.0",
     "turndown": "^7.0.0",
-    "unenv": "2.0.0-rc.15",
+    "unenv": "2.0.0-rc.19",
     "ws": "^8.18.3",
     "yaml": "^2.0.0"
   },
