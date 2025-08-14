@@ -264,12 +264,6 @@ export class Scope {
        */
       cwd?: string;
       /**
-       * Whether to close the process when the scope exits.
-       *
-       * @default false
-       */
-      closeOnExit?: boolean;
-      /**
        * Function to check if a PID is the same process as the one that was spawned.
        *
        * Used to check if a PID is a cloudflared process when the parent exits, for resumability.
@@ -288,9 +282,7 @@ export class Scope {
       stateFile: path.join(pidsDir, `${id}.pid.json`),
       ...options,
     });
-    if (options.closeOnExit) {
-      this.onCleanup(result.exit);
-    }
+    this.onCleanup(result.exit);
     return result.extracted as E extends undefined ? undefined : string;
   }
 

@@ -320,7 +320,6 @@ export async function Website<B extends Bindings>(
           NODE_ENV: "development",
         },
         cwd: paths.cwd,
-        closeOnExit: true,
       });
       url = result;
     }
