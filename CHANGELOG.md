@@ -1,3 +1,30 @@
+## v0.61.0
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **core**: Idempotent spawn for resumable and tailable processes &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/sam-goodwin/alchemy/issues/842 [<samp>(d57e6)</samp>](https://github.com/sam-goodwin/alchemy/commit/d57e61ed)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**:
+  - Improve exit signal handling &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/839 [<samp>(fe90a)</samp>](https://github.com/sam-goodwin/alchemy/commit/fe90a00c)
+  - Use --env-file-if-exists for alchemy deploy &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/sam-goodwin/alchemy/issues/845 [<samp>(8f5f8)</samp>](https://github.com/sam-goodwin/alchemy/commit/8f5f869e)
+  - Replace `--env-file-if-exists` with file detection &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/854 [<samp>(a6adc)</samp>](https://github.com/sam-goodwin/alchemy/commit/a6adcbb5)
+  - Ensure exit code 0 for sigint &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/855 [<samp>(1955e)</samp>](https://github.com/sam-goodwin/alchemy/commit/1955e9ab)
+  - Init scripts use alchemy plugins &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(9ce92)</samp>](https://github.com/sam-goodwin/alchemy/commit/9ce929bc)
+- **cloudflare**:
+  - Use glob instead of fs.glob for node 20 compatibility &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/847 [<samp>(31bf3)</samp>](https://github.com/sam-goodwin/alchemy/commit/31bf34b3)
+  - R2 bucket destroy fails if bucket does not exist and `empty: true` &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/849 [<samp>(0c234)</samp>](https://github.com/sam-goodwin/alchemy/commit/0c2349aa)
+  - Register durable object bindings for websites &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/853 [<samp>(8fa72)</samp>](https://github.com/sam-goodwin/alchemy/commit/8fa72abc)
+  - Set wrangler config in svelte adapter &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(195ee)</samp>](https://github.com/sam-goodwin/alchemy/commit/195ee2e0)
+  - Upgrade rwsdk version in template and example to latest &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(75bca)</samp>](https://github.com/sam-goodwin/alchemy/commit/75bcaf57)
+- **core**:
+  - Restart process if PID has changed &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(25f23)</samp>](https://github.com/sam-goodwin/alchemy/commit/25f23ef4)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.60.2...v0.61.0)
+
+---
+
 ## v0.60.2
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

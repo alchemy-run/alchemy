@@ -112,8 +112,10 @@ describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
         console.error(`Failed processing ${templateName}:`, error);
         throw error;
       } finally {
-        // Always cleanup the project directory
-        await cleanupProject(projectPath);
+        if (!process.env.NO_CLEANUP) {
+          // Always cleanup the project directory
+          await cleanupProject(projectPath);
+        }
       }
     }, 600000); // 10 minutes timeout per test
   }

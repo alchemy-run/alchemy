@@ -1,12 +1,12 @@
 import adapter, { type AdapterOptions } from "@sveltejs/adapter-cloudflare";
 import { getPlatformProxyOptions } from "../cloudflare-env-proxy.ts";
 
-const alchemy = (options?: AdapterOptions) => {
-  const platformProxy = getPlatformProxyOptions(options?.platformProxy);
+export default (options?: AdapterOptions) => {
+  const { platformProxy: proxyOptions, ...config } = options ?? {};
+  const platformProxy = getPlatformProxyOptions(proxyOptions);
   return adapter({
     platformProxy,
-    ...options,
+    config: platformProxy.configPath,
+    ...config,
   });
 };
-
-export default alchemy;

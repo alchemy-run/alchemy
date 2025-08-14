@@ -1,4 +1,5 @@
 import esbuild from "esbuild";
+import { globIterate } from "glob";
 import { err, ok, type Result } from "neverthrow";
 import fs from "node:fs/promises";
 import path from "pathe";
@@ -222,7 +223,7 @@ export namespace WorkerBundleSource {
       const fileNames = new Set<string>();
       await Promise.all(
         this.globs.map(async (glob) => {
-          for await (const file of fs.glob(glob, { cwd: this.root })) {
+          for await (const file of globIterate(glob, { cwd: this.root })) {
             fileNames.add(file);
           }
         }),

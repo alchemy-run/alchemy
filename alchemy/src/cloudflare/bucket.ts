@@ -5,8 +5,8 @@ import { Scope } from "../scope.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 import { CloudflareApiError } from "./api-error.ts";
 import {
-  extractCloudflareError,
   extractCloudflareResult,
+  type CloudflareApiErrorPayload,
 } from "./api-response.ts";
 import {
   createCloudflareApi,
@@ -518,11 +518,6 @@ export async function* listObjects(
     `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects?${params.toString()}`,
     { headers: withJurisdiction(props) },
   );
-  if (!response.ok) {
-    throw new Error(
-      `Failed to list objects in bucket "${bucketName}": ${await extractCloudflareError(response)}`,
-    );
-  }
   const json: {
     result: { key: string }[];
     result_info?: {
@@ -530,7 +525,20 @@ export async function* listObjects(
       is_truncated: boolean;
       per_page: number;
     };
+    success: boolean;
+    errors: CloudflareApiErrorPayload[];
   } = await response.json();
+  if (!json.success) {
+    // 10006 indicates that the bucket does not exist, so there are no objects to list
+    if (json.errors.some((e) => e.code === 10006)) {
+      return;
+    }
+    throw new CloudflareApiError(
+      `Failed to list objects in bucket "${bucketName}": ${json.errors.map((e) => `- [${e.code}] ${e.message}${e.documentation_url ? ` (${e.documentation_url})` : ""}`).join("\n")}`,
+      response,
+      json.errors,
+    );
+  }
   for (const object of json.result) {
     yield object.key;
   }

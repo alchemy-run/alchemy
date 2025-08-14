@@ -18,7 +18,7 @@ import { detectPackageManager } from "../../src/util/detect-package-manager.ts";
 import type { DependencyVersionMap } from "../constants.ts";
 import { throwWithContext } from "../errors.ts";
 import { addPackageDependencies } from "../services/dependencies.ts";
-import { loggedProcedure, ExitSignal } from "../trpc.ts";
+import { ExitSignal, loggedProcedure } from "../trpc.ts";
 import {
   TemplateSchema,
   type InitContext,
@@ -707,12 +707,22 @@ async function updateViteConfig(context: InitContext): Promise<void> {
     const cloudflareImport = sourceFile.getImportDeclaration(
       "@cloudflare/vite-plugin",
     );
+    const alchemyPlugin =
+      {
+        "react-router": "alchemy/cloudflare/react-router",
+        "tanstack-start": "alchemy/cloudflare/tanstack-start",
+        astro: "alchemy/cloudflare/astro",
+        nuxt: "alchemy/cloudflare/nuxt",
+        sveltekit: "alchemy/cloudflare/sveltekit",
+      }[context.framework] ?? "alchemy/cloudflare/vite";
     if (!cloudflareImport) {
       // Add cloudflare import
       sourceFile.addImportDeclaration({
-        moduleSpecifier: "@cloudflare/vite-plugin",
-        namedImports: ["cloudflare"],
+        moduleSpecifier: alchemyPlugin,
+        defaultImport: "alchemy",
       });
+    } else {
+      cloudflareImport.setModuleSpecifier(alchemyPlugin);
     }
 
     // Find the defineConfig call
@@ -745,16 +755,14 @@ async function updateViteConfig(context: InitContext): Promise<void> {
 
           if (!hasCloudflarePlugin) {
             // Add cloudflare plugin
-            initializer.addElement(
-              'cloudflare({ viteEnvironment: { name: "ssr" } })',
-            );
+            initializer.addElement("alchemy()");
           }
         }
       } else if (!pluginsProperty) {
         // If no plugins property exists, create one with cloudflare plugin
         configObject.addPropertyAssignment({
           name: "plugins",
-          initializer: '[cloudflare({ viteEnvironment: { name: "ssr" } })]',
+          initializer: "[alchemy()]",
         });
       }
     }
@@ -863,23 +871,62 @@ async function updateSvelteConfig(context: InitContext): Promise<void> {
     project.addSourceFileAtPath(svelteConfigPath);
     const sourceFile = project.getSourceFileOrThrow(svelteConfigPath);
 
+    // Find and update the adapter import
     const importDeclarations = sourceFile.getImportDeclarations();
     const adapterImport = importDeclarations.find((imp) =>
       imp.getModuleSpecifierValue().includes("@sveltejs/adapter"),
     );
 
     if (adapterImport) {
-      adapterImport.setModuleSpecifier("@sveltejs/adapter-cloudflare");
+      // Change the import to alchemy
+      adapterImport.setModuleSpecifier("alchemy/cloudflare/sveltekit");
+      // Remove old default import and add new one
+      adapterImport.removeDefaultImport();
+      adapterImport.setDefaultImport("alchemy");
     } else {
+      // Add alchemy import if no adapter import exists
       sourceFile.insertImportDeclaration(0, {
-        moduleSpecifier: "@sveltejs/adapter-cloudflare",
-        defaultImport: "adapter",
+        moduleSpecifier: "alchemy/cloudflare/sveltekit",
+        defaultImport: "alchemy",
       });
+    }
+
+    // Find the config object
+    const configVariable = sourceFile.getVariableDeclaration("config");
+    if (configVariable) {
+      const initializer = configVariable.getInitializer();
+      if (Node.isObjectLiteralExpression(initializer)) {
+        updateAdapterInConfig(initializer);
+      }
     }
 
     await project.save();
   } catch (error) {
     console.warn("Failed to update svelte.config.js:", error);
+  }
+}
+
+function updateAdapterInConfig(configObject: Node): void {
+  if (!Node.isObjectLiteralExpression(configObject)) return;
+
+  const kitProperty = configObject.getProperty("kit");
+  if (kitProperty && Node.isPropertyAssignment(kitProperty)) {
+    const kitInitializer = kitProperty.getInitializer();
+    if (Node.isObjectLiteralExpression(kitInitializer)) {
+      const adapterProperty = kitInitializer.getProperty("adapter");
+      if (adapterProperty && Node.isPropertyAssignment(adapterProperty)) {
+        const initializer = adapterProperty.getInitializer();
+        if (Node.isCallExpression(initializer)) {
+          const expression = initializer.getExpression();
+          if (
+            Node.isIdentifier(expression) &&
+            expression.getText() === "adapter"
+          ) {
+            expression.replaceWithText("alchemy");
+          }
+        }
+      }
+    }
   }
 }
 
@@ -1070,19 +1117,16 @@ async function updateTanStackViteConfig(context: InitContext): Promise<void> {
     project.addSourceFileAtPath(viteConfigPath);
     const sourceFile = project.getSourceFileOrThrow(viteConfigPath);
 
-    const alchemyImport = sourceFile.getImportDeclaration("alchemy/cloudflare");
+    const alchemyImport = sourceFile.getImportDeclaration(
+      "alchemy/cloudflare/tanstack-start",
+    );
     if (!alchemyImport) {
       sourceFile.addImportDeclaration({
-        moduleSpecifier: "alchemy/cloudflare",
-        namedImports: ["cloudflareWorkersDevEnvironmentShim"],
+        moduleSpecifier: "alchemy/cloudflare/tanstack-start",
+        defaultImport: "alchemy",
       });
     } else {
-      const hasShim = alchemyImport
-        .getNamedImports()
-        .some((ni) => ni.getName() === "cloudflareWorkersDevEnvironmentShim");
-      if (!hasShim) {
-        alchemyImport.addNamedImport("cloudflareWorkersDevEnvironmentShim");
-      }
+      alchemyImport.setModuleSpecifier("alchemy/cloudflare/tanstack-start");
     }
 
     const exportAssignment = sourceFile.getExportAssignment(
@@ -1122,11 +1166,9 @@ async function updateTanStackViteConfig(context: InitContext): Promise<void> {
         if (Node.isArrayLiteralExpression(initializer)) {
           const hasShim = initializer
             .getElements()
-            .some((el) =>
-              el.getText().includes("cloudflareWorkersDevEnvironmentShim"),
-            );
+            .some((el) => el.getText().includes("alchemy"));
           if (!hasShim) {
-            initializer.addElement("cloudflareWorkersDevEnvironmentShim()");
+            initializer.addElement("alchemy()");
           }
 
           const tanstackElements = initializer
