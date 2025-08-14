@@ -123,7 +123,7 @@ describe("R2 Bucket Resource", async () => {
       expect(putResponse.status).toEqual(200);
 
       // Verify the file exists in the bucket
-      const keys = await Array.fromAsync(listObjects(api, bucketName, bucket));
+      const { keys } = await listObjects(api, bucketName, bucket);
       expect(keys.length).toBeGreaterThan(0);
       expect(keys).toContain(testKey);
 
