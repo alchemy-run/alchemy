@@ -488,7 +488,22 @@ async function updateGitignore(context: InitContext) {
 
     await fs.ensureFile(gitignorePath);
 
-    await fs.appendFile(gitignorePath, ".alchemy\n", "utf-8");
+    let gitignoreContent = "";
+    if (await fs.pathExists(gitignorePath)) {
+      gitignoreContent = await fs.readFile(gitignorePath, "utf-8");
+    }
+
+    const lines = gitignoreContent.split("\n").map((line) => line.trim());
+    const hasAlchemy = lines.some(
+      (line) => line === ".alchemy" || line === ".alchemy/",
+    );
+
+    if (!hasAlchemy) {
+      if (gitignoreContent && !gitignoreContent.endsWith("\n")) {
+        gitignoreContent += "\n";
+      }
+      await fs.appendFile(gitignorePath, ".alchemy\n", "utf-8");
+    }
   } catch (error) {
     throwWithContext(error, "Failed to update .gitignore");
   }
