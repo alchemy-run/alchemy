@@ -1,10 +1,10 @@
-import { dim } from "kleur/colors";
 import { Listr } from "listr2";
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { access, mkdir, readdir, stat, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { dim } from "picocolors";
 
 // Get the root directory of the project
 const __filename = fileURLToPath(import.meta.url);

@@ -1,7 +1,7 @@
-import kleur from "kleur";
 import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 import util from "node:util";
+import pc from "picocolors";
 import type { Phase } from "./alchemy.ts";
 import { destroy, destroyAll, DestroyStrategy } from "./destroy.ts";
 import {
@@ -607,7 +607,7 @@ export class Scope {
    */
   public async cleanup() {
     if (this.parent || this.cleanups.length === 0) return;
-    this.logger.log(kleur.gray("Exiting..."));
+    this.logger.log(pc.gray("Exiting..."));
     await Promise.allSettled(this.cleanups.map((cleanup) => cleanup()));
   }
 
