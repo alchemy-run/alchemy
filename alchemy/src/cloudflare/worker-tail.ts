@@ -1,4 +1,4 @@
-import kleur from "kleur";
+import pc from "picocolors";
 import { WebSocket } from "ws";
 import { logger } from "../util/logger.ts";
 import type { CloudflareApiResponse } from "./api-response.ts";
@@ -102,7 +102,7 @@ class TailClient {
     });
     ws.on("message", (message) => {
       const data: TailEventMessage = JSON.parse(message.toString());
-      const prefix = kleur.blue(`[${this.id}]`);
+      const prefix = pc.blue(`[${this.id}]`);
       if (data.event && "request" in data.event) {
         // TODO: handle other event types
         const event = data.event;
@@ -110,18 +110,16 @@ class TailClient {
         const status = event.response?.status ?? 500;
         // TODO: make this look nicer
         logger.log(
-          `${prefix} ${kleur.gray(event.request.method)} ${url.pathname} ${kleur.dim(">")} ${status >= 200 && status < 300 ? kleur.green(status) : kleur.red(status)} ${kleur.gray(`(cpu: ${Math.round(data.cpuTime)}ms, wall: ${Math.round(data.wallTime)}ms)`)}`,
+          `${prefix} ${pc.gray(event.request.method)} ${url.pathname} ${pc.dim(">")} ${status >= 200 && status < 300 ? pc.green(status) : pc.red(status)} ${pc.gray(`(cpu: ${Math.round(data.cpuTime)}ms, wall: ${Math.round(data.wallTime)}ms)`)}`,
         );
       }
       for (const log of data.logs) {
-        logger.log(
-          `${prefix} ${kleur.gray(log.level)} ${log.message.join(" ")}`,
-        );
+        logger.log(`${prefix} ${pc.gray(log.level)} ${log.message.join(" ")}`);
       }
       for (const exception of data.exceptions) {
-        const start = `${prefix} ${kleur.red(exception.name)}`;
+        const start = `${prefix} ${pc.red(exception.name)}`;
         logger.log(
-          `${start} ${exception.message}\n${kleur.gray(exception.stack)}`,
+          `${start} ${exception.message}\n${pc.gray(exception.stack)}`,
         );
       }
     });

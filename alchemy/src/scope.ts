@@ -1,7 +1,7 @@
-import kleur from "kleur";
 import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 import util from "node:util";
+import pc from "picocolors";
 import type { Phase } from "./alchemy.ts";
 import { destroy, destroyAll, DestroyStrategy } from "./destroy.ts";
 import {
@@ -243,6 +243,16 @@ export class Scope {
     // TODO(sam): validate uniqueness? Ensure a flat .logs/${id}.log dir? Or nest in scope dirs?
     id: string,
     options: {
+      /**
+       * The working directory to run the command in.
+       *
+       * @default process.cwd()
+       */
+      cwd?: string;
+      /**
+       * The environment variables to set for the command.
+       */
+      env?: Record<string, string>;
       /**
        * The command to run (e.g. `cloudflared tunnel --url http://localhost:8080`).
        */
@@ -607,7 +617,7 @@ export class Scope {
    */
   public async cleanup() {
     if (this.parent || this.cleanups.length === 0) return;
-    this.logger.log(kleur.gray("Exiting..."));
+    this.logger.log(pc.gray("Exiting..."));
     await Promise.allSettled(this.cleanups.map((cleanup) => cleanup()));
   }
 

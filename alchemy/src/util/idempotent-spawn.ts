@@ -1,8 +1,8 @@
-import find from "find-process";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { AsyncMutex } from "./mutex.ts";
 
 /**
  * Idempotently ensure a long-lived child is running with stdout/stderr -> files,
@@ -13,6 +13,7 @@ import path from "node:path";
 export async function idempotentSpawn({
   cmd,
   cwd,
+  env,
   stateFile = "state.json",
   overlapBytes = 0,
   resume = false,
@@ -24,6 +25,7 @@ export async function idempotentSpawn({
 }: {
   cmd: string;
   cwd?: string;
+  env?: Record<string, string>;
   log: string;
   stateFile?: string;
   overlapBytes?: number;
@@ -37,9 +39,7 @@ export async function idempotentSpawn({
   quiet?: boolean;
 }): Promise<string | undefined> {
   if (!processName && !isSameProcess) {
-    throw new Error(
-      "Either processName or isSameProcess must be provided to resume a process",
-    );
+    processName = cmd.split(" ")[0];
   }
 
   const outPath = log;
@@ -96,7 +96,7 @@ export async function idempotentSpawn({
       shell: true,
       cwd,
       stdio: ["ignore", out.fd, out.fd], // stdout/stderr -> files (OS-level)
-      env: process.env,
+      env,
       detached: false,
     });
 
@@ -117,6 +117,7 @@ export async function idempotentSpawn({
       if (isPidAlive(pid)) return pid;
       if (await isSameProcess?.(pid)) return pid;
       if (processName) {
+        const { default: find } = await import("find-process");
         const processes = await find("pid", pid);
         if (processes.length > 1) {
           console.warn(
@@ -124,7 +125,9 @@ export async function idempotentSpawn({
           );
         }
         if (processes.length > 0) {
-          return processes[0].name.startsWith(processName);
+          if (processes[0].name.startsWith(processName)) {
+            return pid;
+          }
         }
       }
     }
@@ -168,6 +171,7 @@ export async function idempotentSpawn({
         : st.size;
 
     let closed = false;
+    const drainMutex = new AsyncMutex();
 
     async function persist() {
       try {
@@ -248,7 +252,7 @@ export async function idempotentSpawn({
       } catch {
         // File might briefly disappear during rotation
       }
-      await drain();
+      await drainMutex.lock(() => drain());
     });
 
     // TODO(sam): do we need this?
