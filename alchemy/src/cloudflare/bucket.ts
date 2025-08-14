@@ -480,11 +480,12 @@ async function emptyBucket(
 ) {
   let batch: Promise<unknown>[] = [];
   for await (const key of listObjects(api, bucketName, props)) {
+    const keyPath = key.split("/").map(encodeURIComponent).join("/");
     batch.push(
       extractCloudflareResult(
         `delete R2 object "${key}"`,
         api.delete(
-          `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects/${key}`,
+          `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects/${keyPath}`,
           { headers: withJurisdiction(props) },
         ),
       ),
