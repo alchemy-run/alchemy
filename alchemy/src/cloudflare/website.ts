@@ -305,8 +305,10 @@ export async function Website<B extends Bindings>(
         cwd: paths.cwd,
         extract: (line) => {
           const URL_REGEX =
-            /http:\/\/(?:(?:localhost|0\.0\.0\.0|127\.0\.0\.1)|(?:\d{1,3}\.){3}\d{1,3}):\d+(?:\/)?/;
-          const match = line.match(URL_REGEX);
+            /http:\/\/(localhost|0\.0\.0\.0|127\.0\.0\.1|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+\/?/;
+          const match = line
+            .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")
+            .match(URL_REGEX);
           if (match) {
             return match[0];
           }
