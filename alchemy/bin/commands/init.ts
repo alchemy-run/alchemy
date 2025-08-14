@@ -59,6 +59,7 @@ export const init = loggedProcedure
         main: updatedConfig?.main,
       });
       await updatePackageJson(context);
+      await updateGitignore(context);
 
       displaySuccessMessage(context);
     } catch (_error) {
@@ -264,8 +265,7 @@ export const worker = await Vite("${context.projectName}", {
   // main: "./.output/server/index.mjs",
   // command: "vite build",
   // dev: { command: "vite dev" },
-  assets: "dist",
-  wrangler: false,
+  assets: "dist"
 });
 
 console.log({
@@ -479,6 +479,18 @@ async function updatePackageJson(context: InitContext): Promise<void> {
     });
   } catch (error) {
     throwWithContext(error, "Failed to update package.json");
+  }
+}
+
+async function updateGitignore(context: InitContext) {
+  try {
+    const gitignorePath = resolve(context.cwd, ".gitignore");
+
+    await fs.ensureFile(gitignorePath);
+
+    await fs.appendFile(gitignorePath, ".alchemy\n", "utf-8");
+  } catch (error) {
+    throwWithContext(error, "Failed to update .gitignore");
   }
 }
 
