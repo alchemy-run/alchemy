@@ -4,7 +4,7 @@ import { TelemetryClient } from "../src/util/telemetry/client.ts";
 
 // Import the scope extensions to ensure module augmentation is applied
 import "../src/aws/client-props.ts";
-import "../src/cloudflare/scope-extensions.ts";
+import "../src/cloudflare/api.ts";
 
 describe("Scope Provider Credentials", () => {
   test("should support AWS credentials at scope level", () => {

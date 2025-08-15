@@ -1,5 +1,5 @@
-// Import scope extensions to ensure module augmentation is applied
-import "./scope-extensions.ts";
+// Import api to ensure module augmentation is applied
+import "./api.ts";
 
 export * from "./account-api-token.ts";
 export * from "./account-id.ts";

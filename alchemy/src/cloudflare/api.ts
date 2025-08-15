@@ -63,6 +63,10 @@ const cloudflareApiCache: Record<string, CloudflareApi> = {};
 export async function createCloudflareApi(
   options: Partial<CloudflareApiOptions> | InternalCloudflareApiOptions = {},
 ): Promise<CloudflareApi> {
+  // TODO: Implement scope-level credential resolution similar to AWS
+  // This function should check for scope.providerCredentials.cloudflare
+  // and merge those credentials with the provided options, following
+  // the same three-tier resolution pattern: global → scope → resource
   const cacheKey = computeCacheKey(options);
   if (cloudflareApiCache[cacheKey]) {
     return cloudflareApiCache[cacheKey];
@@ -251,3 +255,22 @@ class TooManyRequestsError extends Error {
 }
 
 class ForbiddenError extends Error {}
+/**
+ * Cloudflare scope extensions - adds Cloudflare credential support to scope options.
+ * This uses TypeScript module augmentation to extend the ProviderCredentials interface.
+ * Since ScopeOptions and RunOptions both extend ProviderCredentials,
+ * they automatically inherit these properties.
+ *
+ * NOTE: These scope credentials are not currently being used by createCloudflareApi.
+ * See TODO above in createCloudflareApi function for implementation needed.
+ */
+declare module "../scope.ts" {
+  interface ProviderCredentials {
+    /**
+     * Cloudflare credentials configuration for this scope.
+     * All Cloudflare resources created within this scope will inherit these credentials
+     * unless overridden at the resource level.
+     */
+    cloudflare?: CloudflareApiOptions;
+  }
+}
