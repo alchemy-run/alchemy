@@ -56,7 +56,9 @@ Format as markdown with sections like:
 ### 🚀 Improvements
 - ...
 
-If there are no significant changes, just say "No significant changes since ${latestTag}".`;
+If there are no significant changes, just say "No significant changes since ${latestTag}".
+
+IMPORTANT: Respond ONLY with the markdown changelog content. Do not include any explanatory text, meta-commentary, or additional context. Your response should start with "## Unreleased Changes" and contain only the formatted changelog content.`;
 
     const claudeResult = await $`claude ${prompt}`.text();
     const result = { text: claudeResult.trim() };
