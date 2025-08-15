@@ -14,7 +14,6 @@ import {
   ResourceSeq,
   type PendingResource,
 } from "./resource.ts";
-import { isRuntime } from "./runtime/global.ts";
 import { DEFAULT_STAGE, Scope } from "./scope.ts";
 import { secret } from "./secret.ts";
 import type { StateStoreType } from "./state.ts";
@@ -71,10 +70,6 @@ export interface Alchemy {
    * or locally in the current scope.
    */
   secret: typeof secret;
-  /**
-   * Whether the current runtime is the Cloudflare Workers runtime.
-   */
-  isRuntime: boolean;
 
   /**
    * Creates a new application scope with the given name and options.
@@ -119,7 +114,6 @@ _alchemy.destroy = destroy;
 _alchemy.run = run;
 _alchemy.secret = secret;
 _alchemy.env = env;
-_alchemy.isRuntime = isRuntime;
 
 /**
  * Implementation of the alchemy function that handles both application scoping
@@ -175,7 +169,7 @@ If this is a mistake, you can disable this check by setting the ALCHEMY_CI_STATE
 `);
     }
 
-    const phase = isRuntime ? "read" : (mergedOptions?.phase ?? "up");
+    const phase = mergedOptions?.phase ?? "up";
     const telemetryClient =
       mergedOptions?.parent?.telemetryClient ??
       TelemetryClient.create({
@@ -463,7 +457,7 @@ async function run<T>(
   const telemetryClient =
     options?.parent?.telemetryClient ??
     TelemetryClient.create({
-      phase: isRuntime ? "read" : (options?.phase ?? "up"),
+      phase: options?.phase ?? "up",
       enabled: options?.telemetry ?? true,
       quiet: options?.quiet ?? false,
     });
