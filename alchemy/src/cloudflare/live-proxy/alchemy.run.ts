@@ -58,7 +58,7 @@ const client = await link<ProxiedHandler>({
     },
     async scheduled(event, ctx) {},
     async queue(batch: MessageBatch, ctx) {
-      console.log("batch", batch);
+      // console.log("batch", batch);
       batch.ackAll();
       // batch.messages[0].ack();
     },
@@ -67,6 +67,7 @@ const client = await link<ProxiedHandler>({
 });
 
 while (true) {
+  console.log("sending message");
   await queue.send({
     body: "Hello, world!",
   });

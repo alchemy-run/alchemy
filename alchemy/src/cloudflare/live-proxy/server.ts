@@ -36,6 +36,7 @@ export class Server extends DurableObject {
     }
 
     if (isListenRequest(request)) {
+      console.log("isListenRequest");
       // establish a WebSocket connection from the (calling) Local Worker to (this) Coordinator
       if (this.local) {
         return new Response("Already connected", { status: 409 });
@@ -69,9 +70,10 @@ export class Server extends DurableObject {
         webSocket: client,
       });
     } else if (isCallRequest(request)) {
+      console.log("isCallRequest");
       // establish a WebSocket connection from (this) Coordinator to the (calling) Remote Worker
       if (!this.local) {
-        return notConnected();
+        return notConnected("Cannot handle call request: no local worker");
       }
       const [client] = this.webSocket({
         type: "call",
@@ -115,7 +117,18 @@ export class Server extends DurableObject {
     const data = JSON.parse(
       typeof message === "string" ? message : new TextDecoder().decode(message),
     ) as RpcMessage;
-    console.log(JSON.stringify(data, null, 2));
+    console.log(
+      "webSocketMessage",
+      JSON.stringify(
+        {
+          type: data.type,
+          callId: data.callId,
+          functionId: data.functionId,
+        },
+        null,
+        2,
+      ),
+    );
 
     if (attachment.type === "call") {
       // mesage received from the Remote Worker sending a RPC call to the Local Worker

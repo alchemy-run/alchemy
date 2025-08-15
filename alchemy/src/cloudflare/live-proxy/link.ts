@@ -10,6 +10,8 @@ import {
   type ResultMessage,
 } from "./protocol.ts";
 
+const RPC_SYMBOL = "Symbol(alchemy::RPC)";
+
 /**
  * A bi-directional RPC link between two workers.
  */
@@ -65,7 +67,9 @@ export async function link<F extends Functions>({
     };
   } = {};
 
-  function send(message: CallMessage | ResultMessage | ErrorMessage) {
+  function send(
+    message: CallMessage | ResultMessage | ErrorMessage | CallbackMessage,
+  ) {
     socket.send(JSON.stringify(message));
   }
 
@@ -120,7 +124,36 @@ export async function link<F extends Functions>({
       }
 
       try {
-        return ok(await fn(...args));
+        return ok(
+          await fn(
+            ...args.map(function proxy(obj: any): any {
+              if (Array.isArray(obj)) {
+                return obj.map(proxy);
+              } else if (obj && typeof obj === "object") {
+                // this argument is a function localted on the other end, we need to proxy it
+                if (obj[RPC_SYMBOL]) {
+                  return (...args: any[]) => {
+                    // TODO(sam): do we want to set up a Promise or just assume all callbacks are synchronous and return void
+                    send({
+                      type: "callback",
+                      callId: message.callId,
+                      functionId: obj[RPC_SYMBOL],
+                      args,
+                    });
+                  };
+                } else {
+                  return Object.fromEntries(
+                    Object.entries(obj).map(([key, value]) => [
+                      key,
+                      proxy(value),
+                    ]),
+                  );
+                }
+              }
+              return obj;
+            }),
+          ),
+        );
       } catch (err: any) {
         return fail(err);
       }
@@ -179,7 +212,7 @@ export async function link<F extends Functions>({
                   const id = funcInc++;
                   call.functions[id] = obj;
                   return {
-                    "Symbol(alchemy::RPC)": id,
+                    [RPC_SYMBOL]: id,
                   };
                 } else if (Array.isArray(obj)) {
                   return obj.map(proxy);
