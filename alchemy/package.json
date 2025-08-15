@@ -213,6 +213,9 @@
     "@aws-sdk/client-sts": {
       "optional": true
     },
+    "@octokit/rest": {
+      "optional": true
+    },
     "@libsql/client": {
       "optional": true
     },

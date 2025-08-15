@@ -1,4 +1,4 @@
-import { Octokit } from "@octokit/rest";
+import type { Octokit } from "@octokit/rest";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { logger } from "../util/logger.ts";
@@ -52,6 +52,11 @@ export async function createGitHubClient(
   options: { token?: string } = {},
 ): Promise<Octokit> {
   const token = await getGitHubToken(options.token);
+  const { Octokit } = await import("@octokit/rest").catch(() => {
+    throw new Error(
+      "Octokit not found. Please add @octokit/rest to your project dependencies.",
+    );
+  });
 
   return new Octokit({
     auth: token,
