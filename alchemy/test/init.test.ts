@@ -55,28 +55,28 @@ async function cleanupProject(projectPath: string): Promise<void> {
 
 const initVariants = {
   "vite-init": {
-    scaffoldCommand: "bun create vite@latest test --template react-ts",
+    scaffoldCommand: "bun create vite@latest {projectName} --template react-ts",
   },
   "sveltekit-init": {
     scaffoldCommand:
-      "bunx sv create test --template minimal --types ts --no-add-ons --no-install",
+      "bunx sv create {projectName} --template minimal --types ts --no-add-ons --no-install",
   },
   "nuxt-init": {
     scaffoldCommand:
-      "bun create nuxt@latest test --no-install --packageManager bun --gitInit --no-modules",
+      "bun create nuxt@latest {projectName} --no-install --packageManager bun --gitInit --no-modules",
   },
   "astro-init": {
-    scaffoldCommand: "bun create astro@latest test --yes",
+    scaffoldCommand: "bun create astro@latest {projectName} --yes",
   },
   "rwsdk-init": {
-    scaffoldCommand: "bunx create-rwsdk test",
+    scaffoldCommand: "bunx create-rwsdk {projectName}",
   },
   "tanstack-start-init": {
     scaffoldCommand:
-      "bunx gitpick TanStack/router/tree/main/examples/react/start-basic test",
+      "bunx gitpick TanStack/router/tree/main/examples/react/start-basic {projectName}",
   },
   "react-router-init": {
-    scaffoldCommand: "bunx create-react-router@latest test --yes",
+    scaffoldCommand: "bunx create-react-router@latest {projectName} --yes",
   },
 };
 
@@ -84,7 +84,7 @@ describe("Init CLI End-to-End Tests", { concurrent: false }, () => {
   for (const [variantName, config] of Object.entries(initVariants)) {
     test(`${variantName} - scaffold, init, deploy, and destroy`, async () => {
       const smokeDir = path.join(rootDir, ".smoke");
-      const projectPath = path.join(smokeDir, "test");
+      const projectPath = path.join(smokeDir, variantName);
 
       console.log(`--- Processing: ${variantName} ---`);
 
@@ -97,7 +97,7 @@ describe("Init CLI End-to-End Tests", { concurrent: false }, () => {
 
         console.log(`Scaffolding ${variantName} project...`);
         const scaffoldResult = await runCommand(
-          config.scaffoldCommand,
+          config.scaffoldCommand.replace("{projectName}", variantName),
           smokeDir,
           {
             NODE_ENV: "test",

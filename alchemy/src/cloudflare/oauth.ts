@@ -1,4 +1,4 @@
-import kleur from "kleur";
+import envPaths from "env-paths";
 import { err, ok, okAsync, ResultAsync } from "neverthrow";
 import assert from "node:assert";
 import crypto from "node:crypto";
@@ -6,7 +6,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import open from "open";
-import envPaths from "env-paths";
+import pc from "picocolors";
 import { HTTPServer } from "../util/http.ts";
 import { memoize } from "../util/memoize.ts";
 import {
@@ -133,7 +133,7 @@ export const wranglerLogin = (
     [
       "Opening browser to authorize with Cloudflare...",
       "",
-      kleur.gray(
+      pc.gray(
         "If you are not automatically redirected, please open the following URL in your browser:",
       ),
       challenge.url,

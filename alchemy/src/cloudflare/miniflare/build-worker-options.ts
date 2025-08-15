@@ -69,9 +69,15 @@ export const buildWorkerOptions = async (
     name: input.name,
     compatibilityDate: input.compatibilityDate,
     compatibilityFlags: input.compatibilityFlags,
-    // TODO: Setting `proxy: true` here causes the following error when connecting via a websocket:
-    // workerd/io/worker.c++:2164: info: uncaught exception; source = Uncaught (in promise); stack = TypeError: Invalid URL string.
-    unsafeDirectSockets: [{ proxy: false }],
+    unsafeDirectSockets: [
+      // This matches the Wrangler configuration by exposing the default handler (e.g. `export default { fetch }`).
+      // However, unlike Wrangler, we set `proxy: false` to avoid the following error when connecting via a websocket:
+      // workerd/io/worker.c++:2164: info: uncaught exception; source = Uncaught (in promise); stack = TypeError: Invalid URL string.
+      {
+        entrypoint: "default",
+        proxy: false,
+      },
+    ],
     containerEngine: {
       localDocker: {
         socketPath:
@@ -164,6 +170,13 @@ export const buildWorkerOptions = async (
           scriptName: binding.scriptName,
           useSQLite: binding.sqlite,
         };
+        // This matches Wrangler configuration for exposing durable objects as an entrypoint.
+        // See https://github.com/cloudflare/workers-sdk/blob/ae0c806087c203da6a3d7da450e8fabe0d81c987/packages/wrangler/src/dev/miniflare/index.ts#L1266
+        options.unsafeDirectSockets!.push({
+          entrypoint: binding.className,
+          serviceName: binding.scriptName,
+          proxy: true,
+        });
         break;
       }
       case "hyperdrive": {

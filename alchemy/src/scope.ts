@@ -1,7 +1,7 @@
-import kleur from "kleur";
 import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 import util from "node:util";
+import pc from "picocolors";
 import type { Phase } from "./alchemy.ts";
 import { destroy, destroyAll, DestroyStrategy } from "./destroy.ts";
 import {
@@ -23,7 +23,10 @@ import {
   createLoggerInstance,
   type LoggerApi,
 } from "./util/cli.ts";
-import { idempotentSpawn } from "./util/idempotent-spawn.ts";
+import {
+  idempotentSpawn,
+  type IdempotentSpawnOptions,
+} from "./util/idempotent-spawn.ts";
 import { logger } from "./util/logger.ts";
 import { AsyncMutex } from "./util/mutex.ts";
 import type { ITelemetryClient } from "./util/telemetry/client.ts";
@@ -289,28 +292,7 @@ export class Scope {
   >(
     // TODO(sam): validate uniqueness? Ensure a flat .logs/${id}.log dir? Or nest in scope dirs?
     id: string,
-    options: {
-      /**
-       * The command to run (e.g. `cloudflared tunnel --url http://localhost:8080`).
-       */
-      cmd: string;
-      /**
-       * Function executed on each line of the process's output (stdout and stderr) to extract a value.
-       */
-      extract?: E;
-      /**
-       * Name of the process - used to check if a PID is a cloudflared process when the parent exits, for resumability
-       */
-      processName?: string;
-      /**
-       * Function to check if a PID is the same process as the one that was spawned.
-       *
-       * Used to check if a PID is a cloudflared process when the parent exits, for resumability.
-       *
-       * One of {@link extract} or {@link processName} must be provided.
-       */
-      isSameProcess?: (pid: number) => Promise<boolean>;
-    },
+    options: Omit<IdempotentSpawnOptions, "log" | "stateFile">,
   ) {
     const dotAlchemy = path.join(process.cwd(), ".alchemy");
     const logsDir = path.join(dotAlchemy, "logs");
@@ -655,7 +637,7 @@ export class Scope {
    */
   public async cleanup() {
     if (this.parent || this.cleanups.length === 0) return;
-    this.logger.log(kleur.gray("Exiting..."));
+    this.logger.log(pc.gray("Exiting..."));
     await Promise.allSettled(this.cleanups.map((cleanup) => cleanup()));
   }
 

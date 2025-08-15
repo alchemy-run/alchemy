@@ -1,4 +1,5 @@
 import esbuild from "esbuild";
+import { globIterate } from "glob";
 import { err, ok, type Result } from "neverthrow";
 import fs from "node:fs/promises";
 import path from "pathe";
@@ -92,21 +93,22 @@ export namespace WorkerBundle {
     paths: string[],
     format: "esm" | "cjs",
   ): WorkerBundle.Module[] => {
-    return paths.map((path) => {
-      const ext = path.split(".").pop();
+    return paths.map((filePath) => {
+      const normalizedPath = path.normalize(filePath);
+      const ext = normalizedPath.split(".").pop();
       switch (ext) {
         case "js":
-          return { type: format, path };
+          return { type: format, path: normalizedPath };
         case "mjs":
-          return { type: "esm", path };
+          return { type: "esm", path: normalizedPath };
         case "cjs":
-          return { type: "cjs", path };
+          return { type: "cjs", path: normalizedPath };
         case "wasm":
-          return { type: "wasm", path };
+          return { type: "wasm", path: normalizedPath };
         case "map":
-          return { type: "sourcemap", path };
+          return { type: "sourcemap", path: normalizedPath };
         default:
-          return { type: "text", path };
+          return { type: "text", path: normalizedPath };
       }
     });
   };
@@ -222,7 +224,7 @@ export namespace WorkerBundleSource {
       const fileNames = new Set<string>();
       await Promise.all(
         this.globs.map(async (glob) => {
-          for await (const file of fs.glob(glob, { cwd: this.root })) {
+          for await (const file of globIterate(glob, { cwd: this.root })) {
             fileNames.add(file);
           }
         }),

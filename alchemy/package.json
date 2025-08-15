@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "0.60.2",
+  "version": "0.61.0",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
   "homepage": "https://alchemy.run",
@@ -168,7 +168,7 @@
   },
   "dependencies": {
     "@aws-sdk/credential-providers": "^3.0.0",
-    "@cloudflare/unenv-preset": "^2.4.0",
+    "@cloudflare/unenv-preset": "^2.6.1",
     "@cloudflare/workers-shared": "^0.17.5",
     "@iarna/toml": "^2.2.5",
     "@smithy/node-config-provider": "^4.0.0",
@@ -182,8 +182,8 @@
     "fast-xml-parser": "^5.2.5",
     "find-process": "^2.0.0",
     "glob": "^10.0.0",
+    "picocolors": "^1.1.1",
     "jszip": "^3.0.0",
-    "kleur": "^4.1.5",
     "libsodium-wrappers": "^0.7.15",
     "miniflare": "^4.20250712.0",
     "neverthrow": "^8.2.0",
@@ -192,7 +192,7 @@
     "pathe": "^2.0.3",
     "signal-exit": "^4.1.0",
     "turndown": "^7.0.0",
-    "unenv": "2.0.0-rc.15",
+    "unenv": "2.0.0-rc.19",
     "ws": "^8.18.3",
     "yaml": "^2.0.0"
   },
@@ -260,7 +260,6 @@
     "nitro-cloudflare-dev": "^0.2.2",
     "nitropack": "^2.12.4",
     "openpgp": "^6.1.0",
-    "picocolors": "^1.1.1",
     "prettier": "^3.5.3",
     "rwsdk": "^0.1.28",
     "trpc-cli": "^0.10.2",

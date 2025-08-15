@@ -1,7 +1,7 @@
 import type { Plugin, PluginBuild } from "esbuild";
-import kleur from "kleur";
 import module from "node:module";
 import path from "node:path";
+import pc from "picocolors";
 import { logger } from "../../util/logger.ts";
 
 const NODE_REGEX = new RegExp(
@@ -54,13 +54,13 @@ export function esbuildPluginCompatWarning(mode: "als" | null): Plugin {
         if (packages.size > 0) {
           const formattedImports = Array.from(packages)
             .sort()
-            .map((imp) => kleur.yellow(imp))
+            .map((imp) => pc.yellow(imp))
             .join(", ");
 
           logger.warn(
             [
-              `Detected Node.js imports (${formattedImports}) but ${kleur.red("nodejs_compat")} compatibility flag is not set. `,
-              `Add ${kleur.blue("nodejs_compat")} to your compatibility flags and ensure compatibilityDate >= 2024-09-23. Imported from:`,
+              `Detected Node.js imports (${formattedImports}) but ${pc.red("nodejs_compat")} compatibility flag is not set. `,
+              `Add ${pc.blue("nodejs_compat")} to your compatibility flags and ensure compatibilityDate >= 2024-09-23. Imported from:`,
               formatImporters(
                 nodeImporters,
                 build.initialOptions.absWorkingDir ?? process.cwd(),
@@ -72,8 +72,8 @@ export function esbuildPluginCompatWarning(mode: "als" | null): Plugin {
         if (alsImporters.size > 0 && !mode) {
           logger.warn(
             [
-              `Detected import of ${kleur.yellow("node:async_hooks")} but ${kleur.red("nodejs_als")} compatibility flag is not set. `,
-              `Add ${kleur.blue("nodejs_als")} or ${kleur.blue("nodejs_compat")} to your compatibility flags. Imported from:`,
+              `Detected import of ${pc.yellow("node:async_hooks")} but ${pc.red("nodejs_als")} compatibility flag is not set. `,
+              `Add ${pc.blue("nodejs_als")} or ${pc.blue("nodejs_compat")} to your compatibility flags. Imported from:`,
               formatImporters(
                 alsImporters,
                 build.initialOptions.absWorkingDir ?? process.cwd(),
@@ -89,6 +89,6 @@ export function esbuildPluginCompatWarning(mode: "als" | null): Plugin {
 function formatImporters(importers: Set<string>, cwd: string) {
   return Array.from(importers)
     .sort()
-    .map((imp) => `- ${kleur.yellow(path.relative(cwd, imp))}`)
+    .map((imp) => `- ${pc.yellow(path.relative(cwd, imp))}`)
     .join("\n");
 }

@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import * as path from "node:path";
+import * as path from "pathe";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { getContentType } from "../util/content-type.ts";
@@ -118,11 +118,10 @@ export const Assets = Resource(
     // Create asset file objects
     const files: AssetFile[] = filesList.map((filePath) => {
       const relativePath = path.relative(props.path, filePath);
-      const normalizedPath = relativePath.split(path.sep).join("/"); // Ensure forward slashes for URLs
 
       return {
-        path: normalizedPath,
-        filePath,
+        path: path.normalize(relativePath),
+        filePath: path.normalize(filePath),
         contentType: getContentType(filePath) ?? "application/null",
       };
     });

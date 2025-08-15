@@ -1,5 +1,6 @@
 import { log } from "@clack/prompts";
-import { execa } from "execa";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { resolve } from "node:path";
 import pc from "picocolors";
 import z from "zod";
@@ -74,6 +75,7 @@ export async function execAlchemy(
 ) {
   const args: string[] = [];
   const execArgs: string[] = [];
+
   if (quiet) args.push("--quiet");
   if (read) args.push("--read");
   if (force) args.push("--force");
@@ -83,7 +85,9 @@ export async function execAlchemy(
     execArgs.push("--watch");
     args.push("--watch");
   }
-  if (envFile) execArgs.push(`--env-file ${envFile}`);
+  if (envFile && (await exists(envFile))) {
+    execArgs.push(`--env-file ${envFile}`);
+  }
   if (dev) args.push("--dev");
 
   // Check for alchemy.run.ts or alchemy.run.js (if not provided)
@@ -150,26 +154,31 @@ export async function execAlchemy(
           break;
       }
   }
+  process.on("SIGINT", async () => {
+    await exitPromise;
+    process.exit(sanitizeExitCode(child.exitCode));
+  });
 
-  try {
-    console.log(command);
-    await execa(command, {
-      cwd,
-      shell: true,
-      stdio: "inherit",
-      env: {
-        ...process.env,
-        FORCE_COLOR: "1",
-      },
-    });
-  } catch (error: any) {
-    log.error(pc.red(`Deploy failed: ${error.message}`));
-    if (error.stdout) {
-      console.log(error.stdout);
-    }
-    if (error.stderr) {
-      console.error(error.stderr);
-    }
-    throw error;
-  }
+  console.log(command);
+  const child = spawn(command, {
+    cwd,
+    shell: true,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      FORCE_COLOR: "1",
+    },
+  });
+  const exitPromise = once(child, "exit");
+  await exitPromise.catch(() => {});
+  process.exit(sanitizeExitCode(child.exitCode));
 }
+
+/**
+ * If exit code is 130 (SIGINT) or null, return 0.
+ * Otherwise, return the exit code.
+ */
+const sanitizeExitCode = (exitCode: number | null) => {
+  if (exitCode === null || exitCode === 130) return 0;
+  return exitCode;
+};

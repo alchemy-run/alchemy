@@ -1,15 +1,11 @@
 import assert from "node:assert";
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { alchemy } from "../alchemy.ts";
 import { Exec } from "../os/index.ts";
 import { Scope } from "../scope.ts";
-import { isSecret, type Secret } from "../secret.ts";
+import { isSecret } from "../secret.ts";
 import { dedent } from "../util/dedent.ts";
-import { DeferredPromise } from "../util/deferred-promise.ts";
-import { exists } from "../util/exists.ts";
 import { logger } from "../util/logger.ts";
 import { Assets } from "./assets.ts";
 import type { Bindings } from "./bindings.ts";
@@ -304,14 +300,38 @@ export async function Website<B extends Bindings>(
 
     let url: string | undefined;
     if (dev && scope.local) {
-      url = await runDevCommand(scope, {
-        id,
-        command: typeof dev === "string" ? dev : dev.command,
-        env: {
-          ...env,
-          ...(typeof dev === "object" ? dev.env : {}),
-        },
+      url = await scope.spawn(name, {
+        cmd: typeof dev === "string" ? dev : dev.command,
         cwd: paths.cwd,
+        extract: (line) => {
+          const URL_REGEX =
+            /http:\/\/(localhost|0\.0\.0\.0|127\.0\.0\.1|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+\/?/;
+          const match = line
+            .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")
+            .match(URL_REGEX);
+          if (match) {
+            return match[0];
+          }
+        },
+        env: {
+          ...Object.fromEntries(
+            Object.entries(env ?? {}).flatMap(([key, value]) => {
+              if (isSecret(value)) {
+                return [[key, value.unencrypted]];
+              }
+              if (typeof value === "string") {
+                return [[key, value]];
+              }
+              return [];
+            }),
+          ),
+          ...(typeof dev === "object" ? dev.env : {}),
+          FORCE_COLOR: "1",
+          ...process.env,
+          // NOTE: we must set this to ensure the user does not accidentally set `NODE_ENV=production`
+          // which breaks `vite dev` (it won't, for example, re-write `process.env.TSS_APP_BASE` in the `.js` client side bundle)
+          NODE_ENV: "development",
+        },
       });
     }
 
@@ -347,105 +367,4 @@ async function writeMiniflareSymlink(cwd: string) {
       throw e;
     }
   });
-}
-
-async function runDevCommand(
-  scope: Scope,
-  props: {
-    id: string;
-    command: string;
-    env: Record<string, string | Secret<string> | undefined>;
-    cwd?: string;
-  },
-) {
-  const persistFile = path.join(process.cwd(), ".alchemy", `${props.id}.pid`);
-  if (await exists(persistFile)) {
-    const pid = Number.parseInt(await fs.readFile(persistFile, "utf8"));
-    try {
-      // Actually kill the process if it's alive
-      process.kill(pid, "SIGTERM");
-    } catch {
-      // ignore
-    }
-    try {
-      await fs.unlink(persistFile);
-    } catch {
-      // ignore
-    }
-  }
-  const command = props.command.split(" ");
-  const [cmd, ...args] = command;
-
-  const childProcess = spawn(cmd, args, {
-    cwd: props.cwd,
-    shell: true,
-    env: {
-      FORCE_COLOR: "1",
-      ...process.env,
-      ...Object.fromEntries(
-        Object.entries(props.env ?? {}).flatMap(([key, value]) => {
-          if (isSecret(value)) {
-            return [[key, value.unencrypted]];
-          }
-          if (typeof value === "string") {
-            return [[key, value]];
-          }
-          return [];
-        }),
-      ),
-      // NOTE: we must set this to ensure the user does not accidentally set `NODE_ENV=production`
-      // which breaks `vite dev` (it won't, for example, re-write `process.env.TSS_APP_BASE` in the `.js` client side bundle)
-      NODE_ENV: "development",
-    },
-    stdio: "pipe",
-  });
-  await once(childProcess, "spawn");
-  scope.onCleanup(async () => {
-    if (childProcess.exitCode === null && !childProcess.killed) {
-      childProcess.kill("SIGTERM");
-      await Promise.any([
-        once(childProcess, "exit"),
-        new Promise((resolve) => setTimeout(resolve, 5000)),
-      ]);
-      if (!childProcess.killed) {
-        childProcess.kill("SIGKILL");
-      }
-    }
-    try {
-      await fs.unlink(persistFile);
-    } catch {
-      // ignore
-    }
-  });
-  if (childProcess.pid) {
-    await fs.mkdir(path.dirname(persistFile), { recursive: true });
-    await fs.writeFile(persistFile, childProcess.pid.toString());
-  }
-  const URL_REGEX =
-    /http:\/\/(?:(?:localhost|0\.0\.0\.0|127\.0\.0\.1)|(?:\d{1,3}\.){3}\d{1,3}):\d+(?:\/)?/;
-  const promise = new DeferredPromise<string>();
-  childProcess.stdout.on("data", (data) => {
-    if (promise.status === "pending") {
-      const match = data
-        .toString()
-        .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")
-        .match(URL_REGEX);
-      if (match) {
-        promise.resolve(match[0]);
-      }
-    }
-    process.stdout.write(data);
-  });
-  childProcess.stderr.on("data", (data) => {
-    process.stderr.write(data);
-  });
-
-  return await Promise.race([
-    promise.value,
-    once(childProcess, "exit").then(([code, signal]) => {
-      throw new Error(
-        `Dev command "${props.command}" for "${props.id}" failed to start (code: ${code}, signal: ${signal})`,
-      );
-    }),
-  ]);
 }

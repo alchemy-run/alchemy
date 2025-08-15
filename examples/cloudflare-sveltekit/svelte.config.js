@@ -8,7 +8,7 @@ const config = {
 	preprocess: vitePreprocess(),
 
 	kit: {
-		// Using Cloudflare adapter for deployment to Cloudflare Workers
+		// Using Alchemy adapter for deployment to Cloudflare Workers
 		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 		adapter: alchemy()
 	}

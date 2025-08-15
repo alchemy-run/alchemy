@@ -5,6 +5,7 @@ import { Scope as _Scope, type Scope } from "./scope.ts";
 
 declare global {
   var ALCHEMY_PROVIDERS: Map<ResourceKind, Provider<string, any>>;
+  var ALCHEMY_HANDLERS: Map<ResourceKind, ResourceLifecycleHandler>;
   var ALCHEMY_DYNAMIC_RESOURCE_RESOLVERS: DynamicResourceResolver[];
 }
 
@@ -15,6 +16,12 @@ export const PROVIDERS: Map<
   ResourceKind,
   Provider<string, any>
 >());
+const HANDLERS: Map<ResourceKind, ResourceLifecycleHandler> =
+  (globalThis.ALCHEMY_HANDLERS ??= new Map<
+    ResourceKind,
+    ResourceLifecycleHandler
+  >());
+
 const DYNAMIC_RESOURCE_RESOLVERS: DynamicResourceResolver[] =
   (globalThis.ALCHEMY_DYNAMIC_RESOURCE_RESOLVERS ??= []);
 
@@ -132,10 +139,20 @@ export function Resource<
   const Type extends ResourceKind,
   F extends ResourceLifecycleHandler,
 >(type: Type, ...args: [Partial<ProviderOptions>, F] | [F]): Handler<F> {
-  if (PROVIDERS.has(type)) {
-    throw new Error(`Resource ${type} already exists`);
-  }
   const [options, handler] = args.length === 2 ? args : [undefined, args[0]];
+  if (PROVIDERS.has(type)) {
+    // We want Alchemy to work in a PNPM monorepo environment unfortunately,
+    // global registries do not work because PNPM's symlinks result in multiple
+    // instances of alchemy being loaded even if the package version is the
+    // same (peers do not fix this).
+    // MITIGATION: to ensure that most cases of accidental double-registration
+    // are caught, we're going to check the handler's toString() to see if it's
+    // the same as the previous handler. if it is, we're going to overwrite it.
+    if (HANDLERS.get(type)!.toString() !== handler.toString()) {
+      throw new Error(`Resource ${type} already exists`);
+    }
+  }
+  HANDLERS.set(type, handler);
 
   type Out = Awaited<ReturnType<F>>;
 
