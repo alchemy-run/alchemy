@@ -137,25 +137,9 @@
       "bun": "./src/vercel/index.ts",
       "import": "./lib/vercel/index.js"
     },
-    "./shadcn": {
-      "bun": "./src/web/shadcn.ts",
-      "import": "./lib/web/shadcn.js"
-    },
     "./state": {
       "bun": "./src/state/index.ts",
       "import": "./lib/state/index.js"
-    },
-    "./web/astro": {
-      "bun": "./src/web/astro.ts",
-      "import": "./lib/web/astro.js"
-    },
-    "./web/tailwind": {
-      "bun": "./src/web/tailwind.ts",
-      "import": "./lib/web/tailwind.js"
-    },
-    "./web/vite": {
-      "bun": "./src/web/vite.ts",
-      "import": "./lib/web/vite.js"
     }
   },
   "dependencies": {
