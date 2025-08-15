@@ -1,13 +1,20 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import type { Secret } from "../secret.ts";
-import { withExponentialBackoff } from "../util/retry.ts";
 import { logger } from "../util/logger.ts";
+import { withExponentialBackoff } from "../util/retry.ts";
 
 export interface StripeClientOptions {
   apiKey?: Secret | string;
 }
 
-export function createStripeClient(options: StripeClientOptions = {}): Stripe {
+export async function createStripeClient(
+  options: StripeClientOptions = {},
+): Promise<Stripe> {
+  const { default: Stripe } = await import("stripe").catch(() => {
+    throw new Error(
+      "Stripe not found. Please add stripe to your project dependencies.",
+    );
+  });
   let apiKey: string;
 
   if (options.apiKey) {

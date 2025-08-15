@@ -215,6 +215,9 @@
     },
     "prettier": {
       "optional": true
+    },
+    "stripe": {
+      "optional": true
     }
   },
   "devDependencies": {
