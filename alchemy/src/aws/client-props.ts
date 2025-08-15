@@ -1,3 +1,5 @@
+import type { Secret } from "../secret.ts";
+
 /**
  * AWS client properties for credential configuration.
  *
@@ -47,7 +49,7 @@ export interface AwsClientProps {
    * This corresponds to the AWS_ACCESS_KEY_ID environment variable.
    * When provided at the resource or scope level, it overrides the environment variable.
    */
-  accessKeyId?: string;
+  accessKeyId?: Secret<string>;
 
   /**
    * AWS secret access key for authentication.
@@ -55,7 +57,7 @@ export interface AwsClientProps {
    * This corresponds to the AWS_SECRET_ACCESS_KEY environment variable.
    * When provided at the resource or scope level, it overrides the environment variable.
    */
-  secretAccessKey?: string;
+  secretAccessKey?: Secret<string>;
 
   /**
    * AWS session token for temporary credentials.
@@ -63,7 +65,7 @@ export interface AwsClientProps {
    * This corresponds to the AWS_SESSION_TOKEN environment variable.
    * Used with temporary credentials from STS or when assuming a role.
    */
-  sessionToken?: string;
+  sessionToken?: Secret<string>;
 
   /**
    * AWS region to use for API calls.
@@ -135,4 +137,20 @@ export interface AwsClientProps {
    * Helps identify who/what is using the assumed role in AWS CloudTrail logs.
    */
   roleSessionName?: string;
+}
+/**
+ * AWS scope extensions - adds AWS credential support to scope options.
+ * This uses TypeScript module augmentation to extend the ProviderCredentials interface.
+ * Since ScopeOptions and RunOptions both extend ProviderCredentials,
+ * they automatically inherit these properties.
+ */
+declare module "../scope.ts" {
+  interface ProviderCredentials {
+    /**
+     * AWS credentials configuration for this scope.
+     * All AWS resources created within this scope will inherit these credentials
+     * unless overridden at the resource level.
+     */
+    aws?: AwsClientProps;
+  }
 }

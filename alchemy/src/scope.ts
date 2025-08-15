@@ -34,7 +34,7 @@ export class RootScopeStateAttemptError extends Error {
   }
 }
 
-export interface ScopeOptions {
+export interface ScopeOptions extends ProviderCredentials {
   stage?: string;
   parent: Scope | undefined;
   scopeName: string;
@@ -105,14 +105,6 @@ export interface ProviderCredentials extends Record<string, unknown> {
   // Provider credentials should not conflict with core scope properties
   // TypeScript will enforce this at compile time when providers extend this interface
 }
-
-/**
- * Extended scope options that include provider credentials.
- * This interface is automatically extended by providers using module augmentation.
- */
-export interface ExtendedScopeOptions
-  extends ScopeOptions,
-    ProviderCredentials {}
 
 export type PendingDeletions = Array<{
   resource: Resource<string>;
@@ -202,10 +194,10 @@ export class Scope {
     }
     return this.scopeName;
   }
-  
+
   public readonly dotAlchemy: string;
 
-  constructor(options: ExtendedScopeOptions) {
+  constructor(options: ScopeOptions) {
     // Extract core scope options and provider credentials separately
     const {
       scopeName,
