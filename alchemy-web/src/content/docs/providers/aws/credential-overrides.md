@@ -27,9 +27,9 @@ The following credential properties can be specified at any level:
 | `profile` | string | AWS profile name from credentials file | `AWS_PROFILE` |
 | `roleArn` | string | ARN of IAM role to assume | `AWS_ROLE_ARN` |
 | `roleSessionName` | string | Session name for assumed role | `AWS_ROLE_SESSION_NAME` |
-| `accessKeyId` | string | AWS access key ID | `AWS_ACCESS_KEY_ID` |
-| `secretAccessKey` | string | AWS secret access key | `AWS_SECRET_ACCESS_KEY` |
-| `sessionToken` | string | AWS session token (for temporary credentials) | `AWS_SESSION_TOKEN` |
+| `accessKeyId` | Secret<string> | AWS access key ID | `AWS_ACCESS_KEY_ID` |
+| `secretAccessKey` | Secret<string> | AWS secret access key | `AWS_SECRET_ACCESS_KEY` |
+| `sessionToken` | Secret<string> | AWS session token (for temporary credentials) | `AWS_SESSION_TOKEN` |
 | `externalId` | string | External ID when assuming a role | `AWS_EXTERNAL_ID` |
 
 ## Usage Examples
@@ -110,7 +110,39 @@ const vpc = await Vpc("cross-account-vpc", {
 });
 ```
 
+### Using Sensitive Credentials
 
+When providing sensitive credentials like access keys, always use `alchemy.secret()` to ensure they are properly encrypted:
+
+```typescript
+import { alchemy } from "alchemy";
+import { Vpc } from "alchemy/aws/ec2";
+
+// Resource-level credentials with secrets
+const vpc = await Vpc("secure-vpc", {
+  cidrBlock: "10.0.0.0/16",
+  accessKeyId: alchemy.secret(process.env.AWS_ACCESS_KEY_ID!),
+  secretAccessKey: alchemy.secret(process.env.AWS_SECRET_ACCESS_KEY!),
+  sessionToken: alchemy.secret(process.env.AWS_SESSION_TOKEN!),
+  region: "us-west-2",
+  tags: { Name: "secure-vpc" }
+});
+
+// Scope-level credentials with secrets
+await alchemy.run("production", {
+  aws: {
+    accessKeyId: alchemy.secret(process.env.PROD_AWS_ACCESS_KEY_ID!),
+    secretAccessKey: alchemy.secret(process.env.PROD_AWS_SECRET_ACCESS_KEY!),
+    region: "us-west-2"
+  }
+}, async () => {
+  // All AWS resources inherit the encrypted credentials
+  const vpc = await Vpc("prod-vpc", {
+    cidrBlock: "10.0.0.0/16",
+    tags: { Name: "prod-vpc" }
+  });
+});
+```
 
 ### Scope Level Credentials
 

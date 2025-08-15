@@ -198,7 +198,7 @@ export class Scope {
   public readonly dotAlchemy: string;
 
   constructor(options: ScopeOptions) {
-    // Extract core scope options and provider credentials separately
+    // Extract core scope options first
     const {
       scopeName,
       parent,
@@ -213,6 +213,7 @@ export class Scope {
       destroyStrategy,
       telemetryClient,
       logger,
+      dotAlchemy,
       ...providerCredentials
     } = options;
 

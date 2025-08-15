@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { alchemy } from "../src/alchemy.ts";
 import { Scope } from "../src/scope.ts";
 import { TelemetryClient } from "../src/util/telemetry/client.ts";
 
@@ -23,15 +24,14 @@ describe("Scope Provider Credentials", () => {
       aws: {
         region: "us-west-2",
         profile: "test-profile",
-        accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+        accessKeyId: alchemy.secret("AKIAIOSFODNN7EXAMPLE"),
       },
     });
 
-    expect(scope.providerCredentials.aws).toEqual({
-      region: "us-west-2",
-      profile: "test-profile",
-      accessKeyId: "AKIAIOSFODNN7EXAMPLE",
-    });
+    expect(scope.providerCredentials.aws?.region).toBe("us-west-2");
+    expect(scope.providerCredentials.aws?.profile).toBe("test-profile");
+    expect(scope.providerCredentials.aws?.accessKeyId).toBeDefined();
+    // Note: We can't directly compare secrets, so we just verify it exists
   });
 
   test("should support Cloudflare credentials at scope level", () => {

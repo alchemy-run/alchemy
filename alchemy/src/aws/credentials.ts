@@ -1,3 +1,5 @@
+import { alchemy } from "../alchemy.ts";
+import { isSecret } from "../secret.ts";
 import type { AwsClientProps } from "./client-props.ts";
 
 /**
@@ -21,10 +23,10 @@ function validateAwsClientProps(props: AwsClientProps, context: string): void {
       continue; // Ignore unknown properties
     }
 
-    if (value !== undefined && typeof value !== "string") {
+    if (value !== undefined && typeof value !== "string" && !isSecret(value)) {
       throw new Error(
-        `Invalid AWS configuration in ${context}: Property '${key}' must be a string, got ${typeof value}. ` +
-          "Please ensure all AWS credential properties are strings.",
+        `Invalid AWS configuration in ${context}: Property '${key}' must be a string or Secret, got ${typeof value}. ` +
+          "Please ensure all AWS credential properties are strings or Secret objects.",
       );
     }
   }
@@ -36,9 +38,15 @@ function validateAwsClientProps(props: AwsClientProps, context: string): void {
  */
 export function getGlobalAwsConfig(): AwsClientProps {
   return {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    sessionToken: process.env.AWS_SESSION_TOKEN,
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID
+      ? alchemy.secret(process.env.AWS_ACCESS_KEY_ID)
+      : undefined,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+      ? alchemy.secret(process.env.AWS_SECRET_ACCESS_KEY)
+      : undefined,
+    sessionToken: process.env.AWS_SESSION_TOKEN
+      ? alchemy.secret(process.env.AWS_SESSION_TOKEN)
+      : undefined,
     region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION,
     profile: process.env.AWS_PROFILE,
     roleArn: process.env.AWS_ROLE_ARN,

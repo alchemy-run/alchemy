@@ -1,5 +1,7 @@
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { AwsClient } from "aws4fetch";
+import { alchemy } from "../../alchemy.ts";
+import { Secret } from "../../secret.ts";
 import { logger } from "../../util/logger.ts";
 import { flattenParams } from "../../util/params.ts";
 import type { AwsClientProps } from "../client-props.ts";
@@ -25,11 +27,11 @@ export async function createEC2Client(
 ): Promise<AwsClient> {
   // Resolve credentials from all sources (global, scope, resource)
   const credentials = await resolveAwsCredentials(props);
-  let awsCredentials: any;
+  let awsCredentials: AwsClientProps;
   let region: string;
 
   if (credentials && (credentials.accessKeyId || credentials.secretAccessKey)) {
-    // Use provided credentials directly
+    // Use provided credentials directly (unwrap secrets for AWS SDK)
     awsCredentials = {
       accessKeyId: credentials.accessKeyId,
       secretAccessKey: credentials.secretAccessKey,
@@ -42,9 +44,9 @@ export async function createEC2Client(
         profile: credentials.profile,
       })();
       awsCredentials = {
-        accessKeyId: profileCredentials.accessKeyId,
-        secretAccessKey: profileCredentials.secretAccessKey,
-        sessionToken: profileCredentials.sessionToken,
+        accessKeyId: alchemy.secret(profileCredentials.accessKeyId),
+        secretAccessKey: alchemy.secret(profileCredentials.secretAccessKey),
+        sessionToken: alchemy.secret(profileCredentials.sessionToken),
       };
     } catch (error) {
       logger.log(
@@ -52,11 +54,11 @@ export async function createEC2Client(
         error,
       );
       // Fall back to default credentials
-      awsCredentials = await fromNodeProviderChain()();
+      awsCredentials = await loadAwsPropsFromCredentialChain();
     }
   } else {
     // Fall back to AWS SDK credential chain
-    awsCredentials = await fromNodeProviderChain()();
+    awsCredentials = await loadAwsPropsFromCredentialChain();
   }
 
   // Use region from resolved credentials or fall back to getRegion()
@@ -68,9 +70,22 @@ export async function createEC2Client(
 
   return new AwsClient({
     ...awsCredentials,
+    accessKeyId: Secret.unwrap(awsCredentials.accessKeyId)!,
+    secretAccessKey: Secret.unwrap(awsCredentials.secretAccessKey)!,
+    sessionToken: Secret.unwrap(awsCredentials.sessionToken) || undefined,
     service: "ec2",
     region,
   });
+}
+
+async function loadAwsPropsFromCredentialChain(): Promise<AwsClientProps> {
+  const defaultCredentialsRaw = await fromNodeProviderChain()();
+  return {
+    ...defaultCredentialsRaw,
+    accessKeyId: alchemy.secret(defaultCredentialsRaw.accessKeyId),
+    secretAccessKey: alchemy.secret(defaultCredentialsRaw.secretAccessKey),
+    sessionToken: alchemy.secret(defaultCredentialsRaw.sessionToken),
+  };
 }
 
 /**
