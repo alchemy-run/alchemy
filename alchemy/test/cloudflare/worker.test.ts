@@ -12,12 +12,12 @@ import type { SingleStepMigration } from "../../src/cloudflare/worker-migration.
 import { WorkerRef } from "../../src/cloudflare/worker-ref.ts";
 import { deleteWorker, Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
-import { BRANCH_PREFIX, waitFor } from "../util.ts";
 import {
-  fetchAndExpect,
   fetchAndExpectOK,
   fetchAndExpectStatus,
-} from "./fetch-utils.ts";
+} from "../../src/util/safe-fetch.ts";
+import { BRANCH_PREFIX, waitFor } from "../util.ts";
+import { fetchAndExpect } from "./fetch-utils.ts";
 import { assertWorkerDoesNotExist } from "./test-helpers.ts";
 
 import { Container } from "../../src/cloudflare/container.ts";

@@ -8,7 +8,7 @@ import { BRANCH_PREFIX } from "../util.ts";
 import "@cloudflare/unenv-preset/node/process";
 
 import "../../src/test/vitest.ts";
-import { fetchAndExpectOK } from "./fetch-utils.ts";
+import { fetchAndExpectOK } from "../../src/util/safe-fetch.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

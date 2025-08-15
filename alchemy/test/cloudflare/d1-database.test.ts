@@ -22,7 +22,7 @@ import { BRANCH_PREFIX } from "../util.ts";
 
 import { destroy } from "../../src/destroy.ts";
 import "../../src/test/vitest.ts";
-import { fetchAndExpectOK } from "./fetch-utils.ts";
+import { fetchAndExpectOK } from "../../src/util/safe-fetch.ts";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
