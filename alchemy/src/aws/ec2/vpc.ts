@@ -208,8 +208,8 @@ export interface Vpc extends Resource<"aws::Vpc">, VpcProps {
  * const multiRegionVpc = await Vpc("multi-region-vpc", {
  *   cidrBlock: "10.2.0.0/16",
  *   region: "eu-west-1",
- *   accessKeyId: "AKIA...",
- *   secretAccessKey: "...",
+ *   accessKeyId: alchemy.secret("AKIA..."),
+ *   secretAccessKey: alchemy.secret("..."),
  *   tags: {
  *     Name: "eu-vpc",
  *     Region: "europe"

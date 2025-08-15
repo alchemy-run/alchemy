@@ -228,8 +228,8 @@ async function waitForSubnetDeleted(
  *   cidrBlock: "10.2.1.0/24",
  *   availabilityZone: "eu-west-1a",
  *   region: "eu-west-1",
- *   accessKeyId: "AKIA...",
- *   secretAccessKey: "...",
+ *   accessKeyId: alchemy.secret("AKIA..."),
+ *   secretAccessKey: alchemy.secret("..."),
  *   mapPublicIpOnLaunch: false,
  *   tags: {
  *     Name: "eu-subnet",

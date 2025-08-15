@@ -192,8 +192,8 @@ async function waitForInternetGatewayDeleted(
  * ```typescript
  * // Create Internet Gateway with explicit credentials
  * const explicitCredsIgw = await InternetGateway("explicit-creds-igw", {
- *   accessKeyId: "AKIAIOSFODNN7EXAMPLE",
- *   secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+ *   accessKeyId: alchemy.secret("AKIAIOSFODNN7EXAMPLE"),
+ *   secretAccessKey: alchemy.secret("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
  *   region: "us-west-2",
  *   tags: {
  *     Name: "explicit-credentials-igw",

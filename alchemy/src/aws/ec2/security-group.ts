@@ -138,8 +138,8 @@ export interface SecurityGroup
  *   vpc: testVpc,
  *   groupName: "test-security-group",
  *   description: "Security group with explicit credentials",
- *   accessKeyId: "AKIAIOSFODNN7EXAMPLE",
- *   secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+ *   accessKeyId: alchemy.secret("AKIAIOSFODNN7EXAMPLE"),
+ *   secretAccessKey: alchemy.secret("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
  *   region: "us-west-2",
  *   tags: {
  *     Name: "explicit-credentials-sg",

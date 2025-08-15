@@ -150,8 +150,8 @@ export interface NatGateway
  * // Create NAT Gateway with explicit credentials
  * const explicitCredsNat = await NatGateway("explicit-creds-nat", {
  *   subnet: testPublicSubnet,
- *   accessKeyId: "AKIAIOSFODNN7EXAMPLE",
- *   secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+ *   accessKeyId: alchemy.secret("AKIAIOSFODNN7EXAMPLE"),
+ *   secretAccessKey: alchemy.secret("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
  *   region: "us-west-2",
  *   tags: {
  *     Name: "explicit-credentials-nat",

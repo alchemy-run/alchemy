@@ -113,8 +113,8 @@ export interface RouteTable
  * // Create Route Table with explicit credentials
  * const explicitCredsRouteTable = await RouteTable("explicit-creds-rt", {
  *   vpc: testVpc,
- *   accessKeyId: "AKIAIOSFODNN7EXAMPLE",
- *   secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+ *   accessKeyId: alchemy.secret("AKIAIOSFODNN7EXAMPLE"),
+ *   secretAccessKey: alchemy.secret("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
  *   region: "us-west-2",
  *   tags: {
  *     Name: "explicit-credentials-rt",

@@ -122,8 +122,8 @@ export interface Route extends Resource<"aws::Route">, RouteProps {
  *   routeTable: testRouteTable,
  *   destinationCidrBlock: "0.0.0.0/0",
  *   target: { internetGateway: testIgw },
- *   accessKeyId: "AKIAIOSFODNN7EXAMPLE",
- *   secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+ *   accessKeyId: alchemy.secret("AKIAIOSFODNN7EXAMPLE"),
+ *   secretAccessKey: alchemy.secret("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
  *   region: "us-west-2",
  * });
  *
