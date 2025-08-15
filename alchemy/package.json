@@ -228,7 +228,6 @@
   "devDependencies": {
     "@aws-sdk/client-ec2": "^3.868.0",
     "@aws-sdk/client-iam": "^3.864.0",
-    "@aws-sdk/client-resource-groups-tagging-api": "^3.830.0",
     "@aws-sdk/client-s3": "3.726.1",
     "@aws-sdk/client-dynamodb": "^3.0.0",
     "@aws-sdk/client-lambda": "^3.0.0",
