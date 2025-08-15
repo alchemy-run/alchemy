@@ -76,7 +76,15 @@ export async function handleApiError(
   let json: any;
   try {
     json = JSON.parse(text);
+    console.log(
+      `A request to the Cloudflare API failed (status: ${response.status}; url: ${response.url})`,
+      json,
+    );
   } catch {
+    console.log(
+      `A request to the Cloudflare API failed (status: ${response.status}; url: ${response.url})`,
+      text,
+    );
     json = { errors: [{ message: text }] };
   }
 
