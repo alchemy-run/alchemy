@@ -27,7 +27,11 @@ export async function StaticJsonFile(
 }
 
 export async function formatJson(content: any) {
-  const prettier = await import("prettier");
+  const prettier = await import("prettier").catch(() => {
+    throw new Error(
+      "Prettier not found. Please add prettier to your project dependencies.",
+    );
+  });
   return prettier.format(JSON.stringify(content), {
     parser: "json",
     editor: {
