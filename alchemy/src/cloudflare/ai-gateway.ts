@@ -3,7 +3,6 @@ import { Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
-import type { Bound } from "./bound.ts";
 
 /**
  * Properties for creating or updating a Cloudflare AI Gateway.
@@ -87,7 +86,7 @@ export interface AiGatewayProps extends CloudflareApiOptions {
  * Output returned after Cloudflare AI Gateway creation/update.
  * IMPORTANT: The interface name MUST match the exported resource name.
  */
-export interface AiGatewayResource
+export interface AiGateway
   extends Resource<"cloudflare::AiGateway">,
     AiGatewayProps {
   /**
@@ -127,8 +126,6 @@ export interface AiGatewayResource
   type: "ai_gateway";
 }
 
-export type AiGateway = AiGatewayResource & Bound<AiGatewayResource>;
-
 /**
  * Represents a Cloudflare AI Gateway.
  *
@@ -156,10 +153,10 @@ export type AiGateway = AiGatewayResource & Bound<AiGatewayResource>;
 export const AiGateway = Resource(
   "cloudflare::AiGateway",
   async function (
-    this: Context<AiGatewayResource>,
+    this: Context<AiGateway>,
     id: string,
     props: AiGatewayProps = {},
-  ): Promise<AiGatewayResource> {
+  ): Promise<AiGateway> {
     const api = await createCloudflareApi(props);
     const gatewayPath = `/accounts/${api.accountId}/ai-gateway/gateways/${id}`;
     const gatewaysPath = `/accounts/${api.accountId}/ai-gateway/gateways`;
