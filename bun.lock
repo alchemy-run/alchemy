@@ -34,7 +34,6 @@
         "@cloudflare/workers-shared": "^0.17.5",
         "@iarna/toml": "^2.2.5",
         "@smithy/node-config-provider": "^4.0.0",
-        "@swc/core": "^1.11.24",
         "aws4fetch": "^1.0.20",
         "diff": "^8.0.2",
         "env-paths": "^3.0.0",

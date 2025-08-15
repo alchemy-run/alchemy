@@ -1,6 +1,5 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
-import { bind } from "../runtime/bind.ts";
 import { logger } from "../util/logger.ts";
 import { handleApiError } from "./api-error.ts";
 import { createCloudflareApi, type CloudflareApiOptions } from "./api.ts";
@@ -154,22 +153,7 @@ export type AiGateway = AiGatewayResource & Bound<AiGatewayResource>;
  *   logpushPublicKey: "mypublickey..." // Replace with actual public key
  * });
  */
-export async function AiGateway(
-  name: string,
-  props: AiGatewayProps = {},
-): Promise<AiGateway> {
-  const gateway = await AiGatewayResource(name, props);
-  const binding = await bind(gateway);
-  return {
-    ...gateway,
-    getLog: binding.getLog,
-    getUrl: binding.getUrl,
-    patchLog: binding.patchLog,
-    run: binding.run,
-  } as AiGateway;
-}
-
-const AiGatewayResource = Resource(
+export const AiGateway = Resource(
   "cloudflare::AiGateway",
   async function (
     this: Context<AiGatewayResource>,
