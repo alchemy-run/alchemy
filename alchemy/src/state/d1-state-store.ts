@@ -1,11 +1,10 @@
-import { drizzle, type RemoteCallback } from "drizzle-orm/sqlite-proxy";
+import type { RemoteCallback } from "drizzle-orm/sqlite-proxy";
 import assert from "node:assert";
 import { extractCloudflareResult } from "../cloudflare/api-response.ts";
 import type { CloudflareApi, CloudflareApiOptions } from "../cloudflare/api.ts";
 import type { Scope } from "../scope.ts";
 import { memoize } from "../util/memoize.ts";
 import { MIGRATIONS_DIRECTORY } from "./migrations.ts";
-import { SQLiteStateStoreOperations } from "./operations.ts";
 import { StateStoreProxy } from "./proxy.ts";
 import * as schema from "./schema.ts";
 
@@ -26,6 +25,7 @@ export class D1StateStore extends StateStoreProxy {
 
   async provision(): Promise<StateStoreProxy.Dispatch> {
     const db = await createDatabaseClient(this.options);
+    const { SQLiteStateStoreOperations } = await import("./operations.js");
     const operations = new SQLiteStateStoreOperations(db, {
       chain: this.scope.chain,
     });
@@ -34,7 +34,12 @@ export class D1StateStore extends StateStoreProxy {
 }
 
 const createDatabaseClient = memoize(async (options: D1StateStoreOptions) => {
-  const { createCloudflareApi } = await import("../cloudflare/api.ts");
+  const { drizzle } = await import("drizzle-orm/sqlite-proxy").catch(() => {
+    throw new Error(
+      "Drizzle not found. Please add drizzle-orm to your project dependencies.",
+    );
+  });
+  const { createCloudflareApi } = await import("../cloudflare/api.js");
   const api = await createCloudflareApi(options);
   const database = await upsertDatabase(
     api,

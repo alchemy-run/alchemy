@@ -6,7 +6,6 @@ import { memoize } from "../util/memoize.ts";
 import { MIGRATIONS_DIRECTORY } from "./migrations.ts";
 import { SQLiteStateStoreOperations } from "./operations.ts";
 import { StateStoreProxy } from "./proxy.ts";
-import * as schema from "./schema.ts";
 
 interface BunSQLiteStateStoreOptions {
   /**
@@ -131,6 +130,7 @@ async function createBunSQLiteDatabase(
     );
   });
   const { migrate } = await import("drizzle-orm/bun-sqlite/migrator");
+  const schema = await import("./schema.js");
   // Bun's constructor throws if we pass in an empty object or if extraneous
   // options are passed in, so here's some ugly destructuring!
   const { engine: _engine, filename: _filename, ...rest } = options ?? {};
@@ -165,6 +165,7 @@ async function createLibSQLDatabase(
     );
   });
   const { migrate } = await import("drizzle-orm/libsql/migrator");
+  const schema = await import("./schema.js");
   const client = createClient({ url, ...options });
   await client.execute("PRAGMA journal_mode = WAL;");
   const db = drizzle(client, {

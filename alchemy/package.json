@@ -213,6 +213,12 @@
     "@aws-sdk/client-sts": {
       "optional": true
     },
+    "@libsql/client": {
+      "optional": true
+    },
+    "drizzle-orm": {
+      "optional": true
+    },
     "prettier": {
       "optional": true
     },
