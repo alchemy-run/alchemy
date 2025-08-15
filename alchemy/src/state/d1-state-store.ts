@@ -1,7 +1,11 @@
 import type { RemoteCallback } from "drizzle-orm/sqlite-proxy";
 import assert from "node:assert";
 import { extractCloudflareResult } from "../cloudflare/api-response.ts";
-import type { CloudflareApi, CloudflareApiOptions } from "../cloudflare/api.ts";
+import {
+  createCloudflareApi,
+  type CloudflareApi,
+  type CloudflareApiOptions,
+} from "../cloudflare/api.ts";
 import type { Scope } from "../scope.ts";
 import { memoize } from "../util/memoize.ts";
 import { MIGRATIONS_DIRECTORY } from "./migrations.ts";
@@ -39,7 +43,6 @@ const createDatabaseClient = memoize(async (options: D1StateStoreOptions) => {
       "Drizzle not found. Please add drizzle-orm to your project dependencies.",
     );
   });
-  const { createCloudflareApi } = await import("../cloudflare/api.js");
   const api = await createCloudflareApi(options);
   const database = await upsertDatabase(
     api,
