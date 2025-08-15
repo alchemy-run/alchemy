@@ -8,6 +8,7 @@ import {
 } from "../cloudflare/api.ts";
 import type { Scope } from "../scope.ts";
 import { memoize } from "../util/memoize.ts";
+import { importPeer } from "../util/peer.ts";
 import { MIGRATIONS_DIRECTORY } from "./migrations.ts";
 import { StateStoreProxy } from "./proxy.ts";
 import * as schema from "./schema.ts";
@@ -38,11 +39,11 @@ export class D1StateStore extends StateStoreProxy {
 }
 
 const createDatabaseClient = memoize(async (options: D1StateStoreOptions) => {
-  const { drizzle } = await import("drizzle-orm/sqlite-proxy").catch(() => {
-    throw new Error(
-      "Drizzle not found. Please add drizzle-orm to your project dependencies.",
-    );
-  });
+  const { drizzle } = await importPeer(
+    "drizzle-orm",
+    import("drizzle-orm/sqlite-proxy"),
+    "D1StateStore",
+  );
   const api = await createCloudflareApi(options);
   const database = await upsertDatabase(
     api,

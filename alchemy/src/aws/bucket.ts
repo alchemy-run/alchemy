@@ -1,6 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
+import { importPeer } from "../util/peer.ts";
 import { retry } from "./retry.ts";
 
 /**
@@ -129,11 +130,11 @@ export const Bucket = Resource(
       NoSuchBucket,
       PutBucketTaggingCommand,
       S3Client,
-    } = await import("@aws-sdk/client-s3").catch(() => {
-      throw new Error(
-        "S3 client not found. Please add @aws-sdk/client-s3 to your project dependencies.",
-      );
-    });
+    } = await importPeer(
+      "@aws-sdk/client-s3",
+      import("@aws-sdk/client-s3"),
+      "s3::Bucket",
+    );
     const client = new S3Client({});
 
     if (this.phase === "delete") {

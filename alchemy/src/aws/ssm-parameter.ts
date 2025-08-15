@@ -4,6 +4,7 @@ import { Resource } from "../resource.ts";
 import { type Secret, isSecret } from "../secret.ts";
 import { ignore } from "../util/ignore.ts";
 import { logger } from "../util/logger.ts";
+import { importPeer } from "../util/peer.ts";
 
 /**
  * Base properties shared by all SSM Parameter types
@@ -178,11 +179,11 @@ export const SSMParameter = Resource(
       ParameterNotFound,
       PutParameterCommand,
       SSMClient,
-    } = await import("@aws-sdk/client-ssm").catch(() => {
-      throw new Error(
-        "SSM client not found. Please add @aws-sdk/client-ssm to your project dependencies.",
-      );
-    });
+    } = await importPeer(
+      "@aws-sdk/client-ssm",
+      import("@aws-sdk/client-ssm"),
+      "ssm::Parameter",
+    );
     const client = new SSMClient({});
 
     if (this.phase === "delete") {

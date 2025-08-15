@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Scope } from "../scope.ts";
 import { memoize } from "../util/memoize.ts";
+import { importPeer } from "../util/peer.ts";
 import { MIGRATIONS_DIRECTORY } from "./migrations.ts";
 import { SQLiteStateStoreOperations } from "./operations.ts";
 import { StateStoreProxy } from "./proxy.ts";
@@ -124,11 +125,11 @@ async function createBunSQLiteDatabase(
     ".alchemy/state.sqlite";
   ensureDirectory(filename);
   const { Database } = await import("bun:sqlite");
-  const { drizzle } = await import("drizzle-orm/bun-sqlite").catch(() => {
-    throw new Error(
-      "[SQLiteStateStore] Missing `drizzle-orm` peer dependency. Please `bun install drizzle-orm`.",
-    );
-  });
+  const { drizzle } = await importPeer(
+    "drizzle-orm",
+    import("drizzle-orm/bun-sqlite"),
+    "SQLiteStateStore",
+  );
   const { migrate } = await import("drizzle-orm/bun-sqlite/migrator");
   const schema = await import("./schema.js");
   // Bun's constructor throws if we pass in an empty object or if extraneous
@@ -154,16 +155,16 @@ async function createLibSQLDatabase(
   if (filename) {
     ensureDirectory(filename);
   }
-  const { createClient } = await import("@libsql/client").catch(() => {
-    throw new Error(
-      "[SQLiteStateStore] Missing `@libsql/client` peer dependency. Please `npm install @libsql/client`.",
-    );
-  });
-  const { drizzle } = await import("drizzle-orm/libsql").catch(() => {
-    throw new Error(
-      "[SQLiteStateStore] Missing `drizzle-orm` peer dependency. Please `npm install drizzle-orm`.",
-    );
-  });
+  const { drizzle } = await importPeer(
+    "drizzle-orm",
+    import("drizzle-orm/libsql"),
+    "SQLiteStateStore",
+  );
+  const { createClient } = await importPeer(
+    "@libsql/client",
+    import("@libsql/client"),
+    "SQLiteStateStore (libsql)",
+  );
   const { migrate } = await import("drizzle-orm/libsql/migrator");
   const schema = await import("./schema.js");
   const client = createClient({ url, ...options });

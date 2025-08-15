@@ -2,6 +2,7 @@ import type { KeySchemaElement } from "@aws-sdk/client-dynamodb";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
+import { importPeer } from "../util/peer.ts";
 import { retry } from "./retry.ts";
 
 /**
@@ -142,11 +143,11 @@ export const Table = Resource(
       DescribeTableCommand,
       DynamoDBClient,
       ResourceNotFoundException,
-    } = await import("@aws-sdk/client-dynamodb").catch(() => {
-      throw new Error(
-        "DynamoDB client not found. Please add @aws-sdk/client-dynamodb to your project dependencies.",
-      );
-    });
+    } = await importPeer(
+      "@aws-sdk/client-dynamodb",
+      import("@aws-sdk/client-dynamodb"),
+      "dynamo::Table",
+    );
     const client = new DynamoDBClient({});
 
     if (this.phase === "delete") {

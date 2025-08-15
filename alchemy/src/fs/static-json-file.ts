@@ -1,3 +1,4 @@
+import { importPeer } from "../util/peer.ts";
 import { File } from "./file.ts";
 
 /**
@@ -27,11 +28,11 @@ export async function StaticJsonFile(
 }
 
 export async function formatJson(content: any) {
-  const prettier = await import("prettier").catch(() => {
-    throw new Error(
-      "Prettier not found. Please add prettier to your project dependencies.",
-    );
-  });
+  const prettier = await importPeer(
+    "prettier",
+    import("prettier"),
+    "fs::StaticJsonFile",
+  );
   return prettier.format(JSON.stringify(content), {
     parser: "json",
     editor: {

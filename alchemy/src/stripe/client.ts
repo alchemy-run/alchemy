@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
+import { importPeer } from "../util/peer.ts";
 import { withExponentialBackoff } from "../util/retry.ts";
 
 export interface StripeClientOptions {
@@ -10,11 +11,11 @@ export interface StripeClientOptions {
 export async function createStripeClient(
   options: StripeClientOptions = {},
 ): Promise<Stripe> {
-  const { default: Stripe } = await import("stripe").catch(() => {
-    throw new Error(
-      "Stripe not found. Please add stripe to your project dependencies.",
-    );
-  });
+  const { default: Stripe } = await importPeer(
+    "stripe",
+    import("stripe"),
+    "Stripe resources",
+  );
   let apiKey: string;
 
   if (options.apiKey) {

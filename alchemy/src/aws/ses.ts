@@ -8,6 +8,7 @@ import type {
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
+import { importPeer } from "../util/peer.ts";
 import { retry } from "./retry.ts";
 
 /**
@@ -166,11 +167,11 @@ export const SES = Resource(
       PutConfigurationSetTrackingOptionsCommand,
       PutEmailIdentityDkimAttributesCommand,
       SESv2Client,
-    } = await import("@aws-sdk/client-sesv2").catch(() => {
-      throw new Error(
-        "SESv2 client not found. Please add @aws-sdk/client-sesv2 to your project dependencies.",
-      );
-    });
+    } = await importPeer(
+      "@aws-sdk/client-sesv2",
+      import("@aws-sdk/client-sesv2"),
+      "ses::SES",
+    );
 
     const client = new SESv2Client({});
 

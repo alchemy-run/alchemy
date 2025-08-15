@@ -1,6 +1,7 @@
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
+import { importPeer } from "../util/peer.ts";
 import { retry } from "./retry.ts";
 
 /**
@@ -142,11 +143,11 @@ export const Queue = Resource(
       QueueDeletedRecently,
       QueueDoesNotExist,
       SQSClient,
-    } = await import("@aws-sdk/client-sqs").catch(() => {
-      throw new Error(
-        "SQS client not found. Please add @aws-sdk/client-sqs to your project dependencies.",
-      );
-    });
+    } = await importPeer(
+      "@aws-sdk/client-sqs",
+      import("@aws-sdk/client-sqs"),
+      "sqs::Queue",
+    );
     const client = new SQSClient({});
     // Don't automatically add .fifo suffix - user must include it in queueName
     const queueName = props.queueName;

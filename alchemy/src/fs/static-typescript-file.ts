@@ -1,3 +1,4 @@
+import { importPeer } from "../util/peer.ts";
 import { File } from "./file.ts";
 
 /**
@@ -23,11 +24,11 @@ export async function StaticTypeScriptFile(
   ...args: [content: string] | [path: string, content: string]
 ): Promise<StaticTypeScriptFile> {
   const [path, content] = args.length === 1 ? [id, args[0]] : args;
-  const prettier = await import("prettier").catch(() => {
-    throw new Error(
-      "Prettier not found. Please add prettier to your project dependencies.",
-    );
-  });
+  const prettier = await importPeer(
+    "prettier",
+    import("prettier"),
+    "fs::StaticTypeScriptFile",
+  );
   return File(id, {
     path,
     content: await prettier.format(content, {

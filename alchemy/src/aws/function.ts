@@ -8,6 +8,7 @@ import type { Bundle } from "../esbuild/bundle.ts";
 import { Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
 import { logger } from "../util/logger.ts";
+import { importPeer } from "../util/peer.ts";
 import { retry } from "./retry.ts";
 
 /**
@@ -314,11 +315,11 @@ export const Function = Resource(
       UpdateFunctionCodeCommand,
       UpdateFunctionConfigurationCommand,
       UpdateFunctionUrlConfigCommand,
-    } = await import("@aws-sdk/client-lambda").catch(() => {
-      throw new Error(
-        "Lambda client not found. Please add @aws-sdk/client-lambda to your project dependencies.",
-      );
-    });
+    } = await importPeer(
+      "@aws-sdk/client-lambda",
+      import("@aws-sdk/client-lambda"),
+      "lambda::Function",
+    );
     const client = new LambdaClient({});
     const region = await resolveRegion(client);
 
