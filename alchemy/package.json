@@ -191,6 +191,11 @@
     "prettier": "^3.0.0",
     "stripe": "^17.0.0"
   },
+  "peerDependenciesMeta": {
+    "prettier": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@asteasolutions/zod-to-openapi": "^7.3.0",
     "@aws-sdk/client-resource-groups-tagging-api": "^3.830.0",
