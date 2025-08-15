@@ -39,7 +39,10 @@ export async function idempotentSpawn({
   extract,
   isSameProcess,
   quiet = false,
-}: IdempotentSpawnOptions): Promise<string | undefined> {
+}: IdempotentSpawnOptions): Promise<{
+  extracted: Promise<string | undefined>;
+  stop: () => Promise<void>;
+}> {
   if (!processName && !isSameProcess) {
     processName = cmd.split(" ")[0];
   }
@@ -57,7 +60,7 @@ export async function idempotentSpawn({
     resolveExtracted(undefined);
   }
 
-  await ensureChildRunning();
+  const pid = await ensureChildRunning();
 
   const write = quiet
     ? () => false
@@ -69,7 +72,10 @@ export async function idempotentSpawn({
     write,
   });
 
-  return extracted;
+  return {
+    extracted,
+    stop: async () => (pid ? await kill(pid) : undefined),
+  };
 
   function isPidAlive(pid: number) {
     if (!pid || Number.isNaN(pid)) return false;
@@ -298,6 +304,26 @@ export async function idempotentSpawn({
         }
         await persist();
       });
+    }
+  }
+
+  async function kill(pid: number) {
+    // 1. Kill with SIGTERM
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      return;
+    }
+    // 2. Detect if it's still running.
+    // The process appears to remain in the process table even after it's exited, so `isPidAlive` will return true.
+    // However, if it's in the table, `find-process` will return it with a name of "<defunct>", so we can detect that instead.
+    const { default: find } = await import("find-process");
+    const processes = await find("pid", pid);
+    if (processes.some((p) => p.name !== "<defunct>")) {
+      // 3. If it's still running, kill with SIGKILL
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {}
     }
   }
 }

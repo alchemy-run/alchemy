@@ -293,17 +293,18 @@ export class Scope {
     // TODO(sam): validate uniqueness? Ensure a flat .logs/${id}.log dir? Or nest in scope dirs?
     id: string,
     options: Omit<IdempotentSpawnOptions, "log" | "stateFile">,
-  ) {
+  ): Promise<E extends undefined ? undefined : string> {
     const dotAlchemy = path.join(process.cwd(), ".alchemy");
     const logsDir = path.join(dotAlchemy, "logs");
     const pidsDir = path.join(dotAlchemy, "pids");
 
-    const extracted = await idempotentSpawn({
+    const result = await idempotentSpawn({
       log: path.join(logsDir, `${id}.log`),
       stateFile: path.join(pidsDir, `${id}.pid.json`),
       ...options,
     });
-    return extracted as E extends undefined ? undefined : string;
+    this.onCleanup(result.stop);
+    return result.extracted as any;
   }
 
   /**
