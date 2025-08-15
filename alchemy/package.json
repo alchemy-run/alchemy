@@ -156,10 +156,6 @@
     "./web/vite": {
       "bun": "./src/web/vite.ts",
       "import": "./lib/web/vite.js"
-    },
-    "./web/vitepress": {
-      "bun": "./src/web/vitepress/index.ts",
-      "import": "./lib/web/vitepress/index.js"
     }
   },
   "dependencies": {
