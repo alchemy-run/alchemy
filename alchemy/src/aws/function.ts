@@ -1,20 +1,4 @@
-import {
-  AddPermissionCommand,
-  Architecture,
-  CreateFunctionCommand,
-  CreateFunctionUrlConfigCommand,
-  DeleteFunctionCommand,
-  DeleteFunctionUrlConfigCommand,
-  GetFunctionCommand,
-  GetFunctionConfigurationCommand,
-  GetFunctionUrlConfigCommand,
-  LambdaClient,
-  ResourceNotFoundException,
-  Runtime,
-  UpdateFunctionCodeCommand,
-  UpdateFunctionConfigurationCommand,
-  UpdateFunctionUrlConfigCommand,
-} from "@aws-sdk/client-lambda";
+import type { Architecture, Runtime } from "@aws-sdk/client-lambda";
 import type { Context } from "../context.ts";
 import type { Bundle } from "../esbuild/bundle.ts";
 import { Resource } from "../resource.ts";
@@ -310,6 +294,27 @@ export interface Function extends Resource<"lambda::Function">, FunctionProps {
 export const Function = Resource(
   "lambda::Function",
   async function (this: Context<Function>, _id: string, props: FunctionProps) {
+    const {
+      AddPermissionCommand,
+      Architecture,
+      CreateFunctionCommand,
+      CreateFunctionUrlConfigCommand,
+      DeleteFunctionCommand,
+      DeleteFunctionUrlConfigCommand,
+      GetFunctionCommand,
+      GetFunctionConfigurationCommand,
+      GetFunctionUrlConfigCommand,
+      LambdaClient,
+      ResourceNotFoundException,
+      Runtime,
+      UpdateFunctionCodeCommand,
+      UpdateFunctionConfigurationCommand,
+      UpdateFunctionUrlConfigCommand,
+    } = await import("@aws-sdk/client-lambda").catch(() => {
+      throw new Error(
+        "Lambda client not found. Please add @aws-sdk/client-lambda to your project dependencies.",
+      );
+    });
     const client = new LambdaClient({});
     const region = await resolveRegion(client);
 

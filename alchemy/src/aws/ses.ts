@@ -1,23 +1,9 @@
-import {
-  CreateConfigurationSetCommand,
-  CreateEmailIdentityCommand,
-  DeleteConfigurationSetCommand,
-  DeleteEmailIdentityCommand,
-  type DeliveryOptions,
-  GetConfigurationSetCommand,
-  GetEmailIdentityCommand,
-  NotFoundException,
-  PutConfigurationSetDeliveryOptionsCommand,
-  PutConfigurationSetReputationOptionsCommand,
-  PutConfigurationSetSendingOptionsCommand,
-  PutConfigurationSetSuppressionOptionsCommand,
-  PutConfigurationSetTrackingOptionsCommand,
-  PutEmailIdentityDkimAttributesCommand,
-  type ReputationOptions,
-  SESv2Client,
-  type SendingOptions,
-  type SuppressionOptions,
-  type TrackingOptions,
+import type {
+  DeliveryOptions,
+  ReputationOptions,
+  SendingOptions,
+  SuppressionOptions,
+  TrackingOptions,
 } from "@aws-sdk/client-sesv2";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
@@ -165,6 +151,27 @@ export const SES = Resource(
     props: SESProps,
   ): Promise<SES> {
     // Create SES client
+    const {
+      CreateConfigurationSetCommand,
+      CreateEmailIdentityCommand,
+      DeleteConfigurationSetCommand,
+      DeleteEmailIdentityCommand,
+      GetConfigurationSetCommand,
+      GetEmailIdentityCommand,
+      NotFoundException,
+      PutConfigurationSetDeliveryOptionsCommand,
+      PutConfigurationSetReputationOptionsCommand,
+      PutConfigurationSetSendingOptionsCommand,
+      PutConfigurationSetSuppressionOptionsCommand,
+      PutConfigurationSetTrackingOptionsCommand,
+      PutEmailIdentityDkimAttributesCommand,
+      SESv2Client,
+    } = await import("@aws-sdk/client-sesv2").catch(() => {
+      throw new Error(
+        "SESv2 client not found. Please add @aws-sdk/client-sesv2 to your project dependencies.",
+      );
+    });
+
     const client = new SESv2Client({});
 
     // Resource ID is either based on the configuration set name or email identity

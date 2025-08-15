@@ -1,12 +1,3 @@
-import {
-  CreateQueueCommand,
-  DeleteQueueCommand,
-  GetQueueAttributesCommand,
-  GetQueueUrlCommand,
-  QueueDeletedRecently,
-  QueueDoesNotExist,
-  SQSClient,
-} from "@aws-sdk/client-sqs";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { logger } from "../util/logger.ts";
@@ -143,6 +134,19 @@ export const Queue = Resource(
     _id: string,
     props: QueueProps,
   ): Promise<Queue> {
+    const {
+      CreateQueueCommand,
+      DeleteQueueCommand,
+      GetQueueAttributesCommand,
+      GetQueueUrlCommand,
+      QueueDeletedRecently,
+      QueueDoesNotExist,
+      SQSClient,
+    } = await import("@aws-sdk/client-sqs").catch(() => {
+      throw new Error(
+        "SQS client not found. Please add @aws-sdk/client-sqs to your project dependencies.",
+      );
+    });
     const client = new SQSClient({});
     // Don't automatically add .fifo suffix - user must include it in queueName
     const queueName = props.queueName;
@@ -326,21 +330,25 @@ export const Queue = Resource(
       }
       throw error;
     }
+
+    function isQueueDoesNotExist(
+      error: any,
+    ): error is typeof QueueDoesNotExist {
+      return (
+        error.name === "QueueDoesNotExist" ||
+        error.Code === "AWS.SimpleQueueService.NonExistentQueue" ||
+        error instanceof QueueDoesNotExist
+      );
+    }
+
+    function isQueueDeletedRecently(
+      error: any,
+    ): error is typeof QueueDeletedRecently {
+      return (
+        error instanceof QueueDeletedRecently ||
+        error.Code === "AWS.SimpleQueueService.QueueDeletedRecently" ||
+        error.name === "QueueDeletedRecently"
+      );
+    }
   },
 );
-
-function isQueueDoesNotExist(error: any): error is QueueDoesNotExist {
-  return (
-    error.name === "QueueDoesNotExist" ||
-    error.Code === "AWS.SimpleQueueService.NonExistentQueue" ||
-    error instanceof QueueDoesNotExist
-  );
-}
-
-function isQueueDeletedRecently(error: any): error is QueueDeletedRecently {
-  return (
-    error instanceof QueueDeletedRecently ||
-    error.Code === "AWS.SimpleQueueService.QueueDeletedRecently" ||
-    error.name === "QueueDeletedRecently"
-  );
-}

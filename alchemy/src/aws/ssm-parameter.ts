@@ -1,13 +1,4 @@
-import {
-  AddTagsToResourceCommand,
-  DeleteParameterCommand,
-  GetParameterCommand,
-  ParameterAlreadyExists,
-  ParameterNotFound,
-  PutParameterCommand,
-  SSMClient,
-  type Tag,
-} from "@aws-sdk/client-ssm";
+import type { Tag } from "@aws-sdk/client-ssm";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { type Secret, isSecret } from "../secret.ts";
@@ -179,6 +170,19 @@ export const SSMParameter = Resource(
     _id: string,
     props: SSMParameterProps,
   ): Promise<SSMParameter> {
+    const {
+      AddTagsToResourceCommand,
+      DeleteParameterCommand,
+      GetParameterCommand,
+      ParameterAlreadyExists,
+      ParameterNotFound,
+      PutParameterCommand,
+      SSMClient,
+    } = await import("@aws-sdk/client-ssm").catch(() => {
+      throw new Error(
+        "SSM client not found. Please add @aws-sdk/client-ssm to your project dependencies.",
+      );
+    });
     const client = new SSMClient({});
 
     if (this.phase === "delete") {

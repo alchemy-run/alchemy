@@ -1,15 +1,3 @@
-import {
-  CreateBucketCommand,
-  DeleteBucketCommand,
-  GetBucketAclCommand,
-  GetBucketLocationCommand,
-  GetBucketTaggingCommand,
-  GetBucketVersioningCommand,
-  HeadBucketCommand,
-  NoSuchBucket,
-  PutBucketTaggingCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
@@ -130,6 +118,22 @@ export interface Bucket extends Resource<"s3::Bucket">, BucketProps {
 export const Bucket = Resource(
   "s3::Bucket",
   async function (this: Context<Bucket>, _id: string, props: BucketProps) {
+    const {
+      CreateBucketCommand,
+      DeleteBucketCommand,
+      GetBucketAclCommand,
+      GetBucketLocationCommand,
+      GetBucketTaggingCommand,
+      GetBucketVersioningCommand,
+      HeadBucketCommand,
+      NoSuchBucket,
+      PutBucketTaggingCommand,
+      S3Client,
+    } = await import("@aws-sdk/client-s3").catch(() => {
+      throw new Error(
+        "S3 client not found. Please add @aws-sdk/client-s3 to your project dependencies.",
+      );
+    });
     const client = new S3Client({});
 
     if (this.phase === "delete") {

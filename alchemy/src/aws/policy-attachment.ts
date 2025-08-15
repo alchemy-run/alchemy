@@ -1,9 +1,3 @@
-import {
-  AttachRolePolicyCommand,
-  DetachRolePolicyCommand,
-  IAMClient,
-  NoSuchEntityException,
-} from "@aws-sdk/client-iam";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import { ignore } from "../util/ignore.ts";
@@ -69,6 +63,16 @@ export const PolicyAttachment = Resource(
     _id: string,
     props: PolicyAttachmentProps,
   ) {
+    const {
+      AttachRolePolicyCommand,
+      DetachRolePolicyCommand,
+      IAMClient,
+      NoSuchEntityException,
+    } = await import("@aws-sdk/client-iam").catch(() => {
+      throw new Error(
+        "IAM client not found. Please add @aws-sdk/client-iam to your project dependencies.",
+      );
+    });
     const client = new IAMClient({});
 
     if (this.phase === "delete") {

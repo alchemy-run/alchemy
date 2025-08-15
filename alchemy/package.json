@@ -173,12 +173,9 @@
   },
   "peerDependencies": {
     "@aws-sdk/client-dynamodb": "^3.0.0",
-    "@aws-sdk/client-ec2": "^3.0.0",
     "@aws-sdk/client-iam": "^3.0.0",
     "@aws-sdk/client-lambda": "^3.0.0",
     "@aws-sdk/client-s3": "^3.0.0",
-    "@aws-sdk/client-sagemaker": "^3.0.0",
-    "@aws-sdk/client-ses": "^3.0.0",
     "@aws-sdk/client-sesv2": "^3.0.0",
     "@aws-sdk/client-sqs": "^3.0.0",
     "@aws-sdk/client-ssm": "^3.0.0",
@@ -192,12 +189,38 @@
     "stripe": "^17.0.0"
   },
   "peerDependenciesMeta": {
+    "@aws-sdk/client-dynamodb": {
+      "optional": true
+    },
+    "@aws-sdk/client-iam": {
+      "optional": true
+    },
+    "@aws-sdk/client-lambda": {
+      "optional": true
+    },
+    "@aws-sdk/client-s3": {
+      "optional": true
+    },
+    "@aws-sdk/client-sesv2": {
+      "optional": true
+    },
+    "@aws-sdk/client-sqs": {
+      "optional": true
+    },
+    "@aws-sdk/client-ssm": {
+      "optional": true
+    },
+    "@aws-sdk/client-sts": {
+      "optional": true
+    },
     "prettier": {
       "optional": true
     }
   },
   "devDependencies": {
     "@asteasolutions/zod-to-openapi": "^7.3.0",
+    "@aws-sdk/client-ec2": "^3.868.0",
+    "@aws-sdk/client-iam": "^3.864.0",
     "@aws-sdk/client-resource-groups-tagging-api": "^3.830.0",
     "@aws-sdk/client-s3": "3.726.1",
     "@clack/prompts": "^0.11.0",
