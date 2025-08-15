@@ -41,10 +41,6 @@
       "bun": "./src/llms.ts",
       "import": "./lib/llms.js"
     },
-    "./ai": {
-      "bun": "./src/ai/index.ts",
-      "import": "./lib/ai/index.js"
-    },
     "./aws": {
       "bun": "./src/aws/index.ts",
       "import": "./lib/aws/index.js"
