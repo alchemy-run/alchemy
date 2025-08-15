@@ -1,6 +1,3 @@
-// Import client-props to ensure module augmentation is applied
-import "./client-props.ts";
-
 export * from "./account-id.ts";
 export * from "./bucket.ts";
 export * from "./client-props.ts";

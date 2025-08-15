@@ -1,6 +1,3 @@
-// Import api to ensure module augmentation is applied
-import "./api.ts";
-
 export * from "./account-api-token.ts";
 export * from "./account-id.ts";
 export * from "./ai-gateway.ts";
