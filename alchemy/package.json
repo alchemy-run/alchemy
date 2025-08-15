@@ -256,7 +256,6 @@
     "globby": "^14.1.0",
     "grammy": "^1.37.0",
     "jsonc-parse": "^1.5.5",
-    "libsodium-wrappers": "^0.7.15",
     "listr2": "^8.0.0",
     "nitropack": "^2.12.4",
     "prettier": "^3.5.3",
@@ -267,7 +266,6 @@
     "tsdown": "^0.13.0",
     "typescript": "^5.8.3",
     "wrangler": "^4.27.0",
-    "yaml": "^2.7.1",
     "zod": "^4.0.10"
   }
 }
