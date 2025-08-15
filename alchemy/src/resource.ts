@@ -11,10 +11,10 @@ declare global {
 
 export const PROVIDERS: Map<
   ResourceKind,
-  Provider<string, ResourceLifecycleHandler>
+  Provider<string, any>
 > = (globalThis.ALCHEMY_PROVIDERS ??= new Map<
   ResourceKind,
-  Provider<string, ResourceLifecycleHandler>
+  Provider<string, any>
 >());
 const HANDLERS: Map<ResourceKind, ResourceLifecycleHandler> =
   (globalThis.ALCHEMY_HANDLERS ??= new Map<
