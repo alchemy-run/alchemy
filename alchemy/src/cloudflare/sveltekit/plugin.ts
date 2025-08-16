@@ -2,9 +2,9 @@ import adapter, { type AdapterOptions } from "@sveltejs/adapter-cloudflare";
 import type { Adapter } from "@sveltejs/kit";
 import { getPlatformProxyOptions } from "../cloudflare-env-proxy.ts";
 
-const isSvelteLanguageServer = !!process.argv.find((arg) => arg.includes(
-  "svelte-language-server",
-));
+const isSvelteLanguageServer = !!process.argv.find((arg) =>
+  arg.includes("svelte-language-server"),
+);
 
 export default (options?: AdapterOptions): Adapter => {
   if (isSvelteLanguageServer) {
