@@ -55,10 +55,10 @@ export async function ReactRouter<B extends Bindings>(
  */
 async function detectSSREnabled(cwd: string): Promise<boolean> {
   const candidates = [
-    "react-router.config.mjs",
-    "react-router.config.js",
     "react-router.config.ts",
     "react-router.config.mts",
+    "react-router.config.mjs",
+    "react-router.config.js",
   ];
   try {
     const config = await Promise.any(
