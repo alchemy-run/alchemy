@@ -12,7 +12,12 @@ import type { Bindings } from "./bindings.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "./compatibility-date.gen.ts";
 import { unionCompatibilityFlags } from "./compatibility-presets.ts";
 import { DEFAULT_PERSIST_PATH } from "./miniflare/paths.ts";
-import { type AssetsConfig, Worker, type WorkerProps } from "./worker.ts";
+import {
+  Worker,
+  type AssetsConfig,
+  type FinalWorkerProps,
+  type WorkerProps,
+} from "./worker.ts";
 import { WranglerJson, type WranglerJsonSpec } from "./wrangler.json.ts";
 
 export interface WebsiteProps<B extends Bindings>
@@ -253,7 +258,7 @@ export async function Website<B extends Bindings>(
       ...(typeof props.assets === "string" ? {} : props.assets),
     },
     entrypoint: path.relative(paths.cwd, paths.entrypoint),
-  } as WorkerProps<B> & { name: string };
+  } as FinalWorkerProps<B> & { name: string };
 
   return await alchemy.run(id, { parent: Scope.current }, async (scope) => {
     if (!workerProps.entrypoint) {
@@ -352,7 +357,7 @@ export async function Website<B extends Bindings>(
   });
 }
 
-async function writeMiniflareSymlink(cwd: string) {
+export async function writeMiniflareSymlink(cwd: string) {
   const target = path.resolve(DEFAULT_PERSIST_PATH);
   await fs.mkdir(target, { recursive: true });
 

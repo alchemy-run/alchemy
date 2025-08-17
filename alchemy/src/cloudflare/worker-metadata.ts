@@ -207,7 +207,8 @@ export interface WorkerMetadata {
 
 export async function prepareWorkerMetadata(
   api: CloudflareApi,
-  props: Omit<WorkerProps, "entrypoint"> & {
+  props: Omit<WorkerProps, "entrypoint" | "assets"> & {
+    assets?: AssetsConfig;
     compatibilityDate: string;
     compatibilityFlags: string[];
     workerName: string;

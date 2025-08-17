@@ -14,7 +14,7 @@ import type { DurableObjectNamespace } from "./durable-object-namespace.ts";
 import type { EventSource } from "./event-source.ts";
 import { isQueueEventSource } from "./event-source.ts";
 import { isQueue } from "./queue.ts";
-import type { Worker, WorkerProps } from "./worker.ts";
+import type { FinalWorkerProps, Worker } from "./worker.ts";
 
 type WranglerJsonRateLimit = Omit<WorkerBindingRateLimit, "type"> & {
   type: "rate_limit";
@@ -30,7 +30,7 @@ export interface WranglerJsonProps {
    */
   worker:
     | Worker
-    | (WorkerProps<any> & {
+    | (FinalWorkerProps<any> & {
         name: string;
       });
   /**

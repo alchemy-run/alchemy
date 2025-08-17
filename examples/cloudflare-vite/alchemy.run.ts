@@ -1,7 +1,7 @@
 /// <reference types="node" />
 
 import alchemy from "alchemy";
-import { KVNamespace, Vite } from "alchemy/cloudflare";
+import { KVNamespace, ViteAssets, Worker } from "alchemy/cloudflare";
 
 const app = await alchemy("cloudflare-vite");
 
@@ -10,9 +10,9 @@ export const kv = await KVNamespace("kv", {
   adopt: true,
 });
 
-export const website = await Vite("website", {
-  entrypoint: "src/index.ts",
-  noBundle: false,
+export const website = await Worker("website", {
+  name: `${app.name}-${app.stage}-website`,
+  assets: ViteAssets(),
   adopt: true,
   bindings: {
     KV: kv,

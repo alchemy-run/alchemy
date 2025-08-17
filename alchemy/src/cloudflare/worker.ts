@@ -58,6 +58,7 @@ import { Workflow, isWorkflow, upsertWorkflow } from "./workflow.ts";
 // Previous versions of `Worker` used the `Bundle` resource.
 // This import is here to avoid errors when destroying the `Bundle` resource.
 import "../esbuild/bundle.ts";
+import { type WebsitePlugin, isWebsitePlugin } from "./website-plugin.ts";
 
 /**
  * Configuration options for static assets
@@ -204,7 +205,7 @@ export interface BaseWorkerProps<
   /**
    * Configuration for static assets
    */
-  assets?: AssetsConfig;
+  assets?: AssetsConfig | WebsitePlugin;
 
   /**
    * Cron expressions for the trigger.
@@ -375,6 +376,16 @@ export interface InlineWorkerProps<
   noBundle?: false;
 }
 
+export interface PluginWorkerProps<
+  B extends Bindings | undefined = Bindings,
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> extends BaseWorkerProps<B, RPC> {
+  script?: undefined;
+  entrypoint?: undefined;
+  assets: WebsitePlugin;
+  noBundle?: boolean;
+}
+
 export interface EntrypointWorkerProps<
   B extends Bindings | undefined = Bindings,
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
@@ -419,7 +430,17 @@ export interface EntrypointWorkerProps<
 export type WorkerProps<
   B extends Bindings | undefined = Bindings,
   RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
-> = InlineWorkerProps<B, RPC> | EntrypointWorkerProps<B, RPC>;
+> =
+  | InlineWorkerProps<B, RPC>
+  | EntrypointWorkerProps<B, RPC>
+  | PluginWorkerProps<B, RPC>;
+
+export type FinalWorkerProps<
+  B extends Bindings | undefined = Bindings,
+  RPC extends Rpc.WorkerEntrypointBranded = Rpc.WorkerEntrypointBranded,
+> = (InlineWorkerProps<B, RPC> | EntrypointWorkerProps<B, RPC>) & {
+  assets?: AssetsConfig;
+};
 
 export function isWorker(resource: Resource): resource is Worker<any> {
   return resource[ResourceKind] === "cloudflare::Worker";
@@ -707,8 +728,20 @@ const _Worker = Resource(
   async function <const B extends Bindings>(
     this: Context<Worker<NoInfer<B>>>,
     id: string,
-    props: WorkerProps<B>,
+    _props: WorkerProps<B>,
   ) {
+    console.log(
+      "isWebsitePlugin",
+      isWebsitePlugin(_props.assets),
+      _props.assets,
+    );
+    if (this.phase !== "delete" && isWebsitePlugin(_props.assets)) {
+      _props = (await _props.assets.apply(
+        this.scope,
+        _props,
+      )) as FinalWorkerProps<B>;
+    }
+    const props = _props as FinalWorkerProps<B>;
     const options = (() => {
       if (props.projectRoot) {
         logger.warn("projectRoot is deprecated, use cwd instead");
@@ -1229,7 +1262,7 @@ async function provisionResources<B extends Bindings>(
 
 const watchWorker = async <B extends Bindings>(
   api: CloudflareApi,
-  props: WorkerProps<B>,
+  props: FinalWorkerProps<B>,
   input: {
     id: string;
     name: string;
@@ -1302,7 +1335,7 @@ const watchWorker = async <B extends Bindings>(
   return await promise.value;
 };
 
-type PutWorkerOptions = Omit<WorkerProps, "entrypoint"> & {
+type PutWorkerOptions = Omit<FinalWorkerProps, "entrypoint"> & {
   dispatchNamespace?: string;
   migrationTag?: string;
   workerName: string;

@@ -6,7 +6,7 @@ import { getContentType } from "../util/content-type.ts";
 import { CloudflareApiError } from "./api-error.ts";
 import type { CloudflareApi } from "./api.ts";
 import type { Assets } from "./assets.ts";
-import type { AssetsConfig, WorkerProps } from "./worker.ts";
+import type { AssetsConfig } from "./worker.ts";
 
 export interface AssetUploadResult {
   completionToken: string;
@@ -66,7 +66,7 @@ export async function uploadAssets(
   }: {
     workerName: string;
     assets: Assets;
-    assetConfig?: WorkerProps["assets"];
+    assetConfig?: AssetsConfig;
     namespace?: string;
   },
 ): Promise<AssetUploadResult> {
