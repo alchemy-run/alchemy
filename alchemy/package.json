@@ -65,6 +65,11 @@
       "bun": "./src/cloudflare/astro/plugin.ts",
       "import": "./lib/cloudflare/astro/plugin.js"
     },
+    "./cloudflare/next": {
+      "bun": "./src/cloudflare/next/plugin.ts",
+      "import": "./lib/cloudflare/next/plugin.js",
+      "default": "./lib/cloudflare/next/plugin.js"
+    },
     "./cloudflare/nuxt": {
       "bun": "./src/cloudflare/nuxt/plugin.ts",
       "import": "./lib/cloudflare/nuxt/plugin.js"
@@ -215,16 +220,22 @@
     "@aws-sdk/client-ssm": "^3.0.0",
     "@aws-sdk/client-sts": "^3.0.0",
     "@cloudflare/vite-plugin": "^1.10.1",
+    "@cloudflare/workers-types": "catalog:",
     "@libsql/client": "^0.15.9",
     "@octokit/rest": "^21.1.1",
+    "@opennextjs/cloudflare": "*",
     "ai": "^4.0.0",
     "arktype": "^2.0.0",
     "cloudflare": "^4.0.0",
     "drizzle-orm": "^0.44.2",
     "hono": "^4.0.0",
     "prettier": "^3.0.0",
-    "stripe": "^17.0.0",
-    "@cloudflare/workers-types": "catalog:"
+    "stripe": "^17.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@opennextjs/cloudflare": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^1.1.6",
@@ -237,6 +248,7 @@
     "@cloudflare/puppeteer": "^1.0.2",
     "@iarna/toml": "^2.2.5",
     "@octokit/rest": "^21.1.1",
+    "@opennextjs/cloudflare": "^1.6.5",
     "@react-router/dev": "^7.7.1",
     "@sentry/cloudflare": "^9.43.0",
     "@sveltejs/adapter-cloudflare": "^7.1.2",
