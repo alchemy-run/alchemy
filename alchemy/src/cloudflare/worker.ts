@@ -779,6 +779,18 @@ const _Worker = Resource(
       };
     })();
     if (this.phase === "delete") {
+      // Heuristic: we must detect the case where this is the Worker wrapped in the old Website nested scope and not delete it
+      // we must not delete it because what we're actually doing is migrating to a flat worker
+      // we will achieve this by checking for a sibling resource with ID wrangler.jsonc and type cloudflare::WranglerJson
+      const wranglerJson = await this.scope.parent?.state.get("wrangler.jsonc");
+      if (
+        wranglerJson?.id === "wrangler.jsonc" &&
+        wranglerJson.kind === "cloudflare::WranglerJson"
+      ) {
+        // skip deletion
+        return this.destroy();
+      }
+
       if (options.bundle.isOk()) {
         await options.bundle.value.delete?.();
       }
