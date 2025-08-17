@@ -221,6 +221,7 @@ export async function addGitHubWorkflowToAlchemy(
     );
 
     let code = await fs.readFile(alchemyFilePath, "utf-8");
+    code = code.replace("{projectName}", context.name);
 
     const alchemyImportRegex = /(import alchemy from "alchemy";)/;
     const alchemyImportMatch = code.match(alchemyImportRegex);
@@ -249,24 +250,6 @@ import { CloudflareStateStore } from "alchemy/state";`;
 });`,
       );
     }
-
-    const cloudflareResourceRegex =
-      /(await (?:Worker|TanStackStart|Nuxt|Astro|Website|SvelteKit|Redwood|ReactRouter|Vite)\([^,]+,\s*{[^}]*)(}\);)/g;
-    code = code.replace(
-      cloudflareResourceRegex,
-      (match, beforeClosing, closing) => {
-        if (beforeClosing.includes("version:")) {
-          return match;
-        }
-
-        const hasTrailingComma = beforeClosing.trim().endsWith(",");
-        const versionProp = hasTrailingComma
-          ? `  version: app.stage === "prod" ? undefined : app.stage,\n`
-          : `,\n  version: app.stage === "prod" ? undefined : app.stage,\n`;
-
-        return beforeClosing + versionProp + closing;
-      },
-    );
 
     const finalizeRegex = /(await app\.finalize\(\);)/;
     const finalizeMatch = code.match(finalizeRegex);
