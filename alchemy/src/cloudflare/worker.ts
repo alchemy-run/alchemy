@@ -709,6 +709,25 @@ const _Worker = Resource(
     id: string,
     props: WorkerProps<B>,
   ) {
+    if (this.phase === "create" && !props.adopt) {
+      // it is possible that this worker already exists and was created by the old Website wrapper with a nested scope
+      // we need to detect this and set adopt=true so that the previous version will be adopted seamlessly
+
+      // HEURISTIC: `this.scope` would previously be the nested outer scope alchemy.run
+      // so, if `this.scope` has a child of `wrangler.jsonc`, then it is likely that it was created by the old Website wrapper with a nested scope
+      const wranglerJson = await this.scope.state.get("wrangler.jsonc");
+
+      if (
+        wranglerJson?.id === "wrangler.jsonc" &&
+        wranglerJson.kind === "cloudflare::WranglerJson"
+      ) {
+        logger.warn(
+          "Detected a worker that was created by the old Website wrapper with a nested scope. Adopting the previous version.",
+        );
+        props.adopt = true;
+      }
+    }
+
     const options = (() => {
       if (props.projectRoot) {
         logger.warn("projectRoot is deprecated, use cwd instead");
