@@ -17,7 +17,7 @@ export async function Nextjs<const B extends Bindings>(
     build,
     dev,
     noBundle,
-    compatibility,
+    compatibilityFlags,
     assets,
     ...props
   }: NextjsProps<B> = {},
@@ -25,10 +25,16 @@ export async function Nextjs<const B extends Bindings>(
   const runner = await getPackageManagerRunner();
   return await Website(id, {
     entrypoint: entrypoint ?? ".open-next/worker.js",
-    build: build ?? `${runner} opennextjs-cloudflare build`,
+    build:
+      build ??
+      `${runner} opennextjs-cloudflare build --config=.alchemy/local/wrangler.jsonc`,
     dev: dev ?? `${runner} next dev`,
     noBundle: noBundle ?? false,
-    compatibility: compatibility ?? "node",
+    compatibilityFlags: [
+      "nodejs_compat",
+      "global_fetch_strictly_public",
+      ...(compatibilityFlags ?? []),
+    ],
     assets: assets ?? ".open-next/assets",
     ...props,
   });

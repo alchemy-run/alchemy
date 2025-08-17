@@ -248,7 +248,7 @@
     "@cloudflare/puppeteer": "^1.0.2",
     "@iarna/toml": "^2.2.5",
     "@octokit/rest": "^21.1.1",
-    "@opennextjs/cloudflare": "^1.6.5",
+    "@opennextjs/cloudflare": "^1.3.0",
     "@react-router/dev": "^7.7.1",
     "@sentry/cloudflare": "^9.43.0",
     "@sveltejs/adapter-cloudflare": "^7.1.2",
