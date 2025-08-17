@@ -216,8 +216,29 @@ export async function addGitHubWorkflowToAlchemy(
     const alchemyImportRegex = /(import alchemy from "alchemy";)/;
     const alchemyImportMatch = code.match(alchemyImportRegex);
     if (alchemyImportMatch) {
-      const githubImport = '\nimport { GitHubComment } from "alchemy/github";';
+      const githubImport = `\nimport { GitHubComment } from "alchemy/github";
+import { CloudflareStateStore } from "alchemy/state";`;
       code = code.replace(alchemyImportRegex, `$1${githubImport}`);
+    }
+
+    const lastImportRegex = /import[^;]+from[^;]+;(\s*\n)*/g;
+    let lastImportMatch;
+    let lastImportEnd = 0;
+
+    while ((lastImportMatch = lastImportRegex.exec(code)) !== null) {
+      lastImportEnd = lastImportMatch.index + lastImportMatch[0].length;
+    }
+
+    const appCallRegex = /const app = await alchemy\("([^"]+)"\);/;
+    const appMatch = code.match(appCallRegex);
+    if (appMatch) {
+      const appName = appMatch[1];
+      code = code.replace(
+        appCallRegex,
+        `const app = await alchemy("${appName}", {
+  stateStore: (scope) => new CloudflareStateStore(scope),
+});`,
+      );
     }
 
     const cloudflareResourceRegex =
