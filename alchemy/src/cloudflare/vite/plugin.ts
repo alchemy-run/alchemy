@@ -1,13 +1,12 @@
 import { cloudflare, type PluginConfig } from "@cloudflare/vite-plugin";
 import path from "node:path";
-import type { PluginOption } from "vite";
 import {
   DEFAULT_PERSIST_PATH,
   validateConfigPath,
   validatePersistPath,
 } from "../miniflare/paths.ts";
 
-const alchemy = (config?: PluginConfig): PluginOption => {
+const alchemy = (config?: PluginConfig) => {
   const persistState = config?.persistState ?? {
     path: validatePersistPath(
       typeof config?.persistState === "object"

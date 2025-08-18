@@ -21,7 +21,6 @@
     "typescript": "^5.8.3"
   },
   "devDependencies": {
-    "@astrojs/sitemap": "^3.5.0",
     "astro-expressive-code": "^0.41.2",
     "playwright": "^1.54.2",
     "sharp": "^0.32.5",
