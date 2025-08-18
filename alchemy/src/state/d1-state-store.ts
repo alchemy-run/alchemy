@@ -11,7 +11,6 @@ import { memoize } from "../util/memoize.ts";
 import { importPeer } from "../util/peer.ts";
 import { MIGRATIONS_DIRECTORY } from "./migrations.ts";
 import { StateStoreProxy } from "./proxy.ts";
-import * as schema from "./schema.ts";
 
 export interface D1StateStoreOptions extends CloudflareApiOptions {
   databaseName?: string;
@@ -72,7 +71,7 @@ const createDatabaseClient = memoize(async (options: D1StateStoreOptions) => {
     };
   };
   return drizzle(remoteCallback, {
-    schema,
+    schema: await import("./schema.js"),
   });
 });
 
