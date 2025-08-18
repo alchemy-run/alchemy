@@ -124,6 +124,10 @@
       "bun": "./src/sentry/index.ts",
       "import": "./lib/sentry/index.js"
     },
+    "./state": {
+      "bun": "./src/state/index.ts",
+      "import": "./lib/state/index.js"
+    },
     "./stripe": {
       "bun": "./src/stripe/index.ts",
       "import": "./lib/stripe/index.js"
@@ -132,13 +136,13 @@
       "bun": "./src/upstash/index.ts",
       "import": "./lib/upstash/index.js"
     },
+    "./util": {
+      "bun": "./src/util/index.ts",
+      "import": "./lib/util/index.js"
+    },
     "./vercel": {
       "bun": "./src/vercel/index.ts",
       "import": "./lib/vercel/index.js"
-    },
-    "./state": {
-      "bun": "./src/state/index.ts",
-      "import": "./lib/state/index.js"
     }
   },
   "dependencies": {
