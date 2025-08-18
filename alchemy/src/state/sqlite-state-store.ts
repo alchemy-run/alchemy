@@ -5,7 +5,6 @@ import type { Scope } from "../scope.ts";
 import { memoize } from "../util/memoize.ts";
 import { importPeer } from "../util/peer.ts";
 import { MIGRATIONS_DIRECTORY } from "./migrations.ts";
-import { SQLiteStateStoreOperations } from "./operations.ts";
 import { StateStoreProxy } from "./proxy.ts";
 
 interface BunSQLiteStateStoreOptions {
@@ -82,6 +81,7 @@ export class SQLiteStateStore extends StateStoreProxy {
 
   async provision(): Promise<StateStoreProxy.Dispatch> {
     const db = await createDatabase(this.options);
+    const { SQLiteStateStoreOperations } = await import("./operations.js");
     const operations = new SQLiteStateStoreOperations(db, {
       chain: this.scope.chain,
     });
