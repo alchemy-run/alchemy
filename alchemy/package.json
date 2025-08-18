@@ -181,7 +181,6 @@
     "@libsql/client": "^0.15.9",
     "@octokit/rest": "^21.1.1",
     "drizzle-orm": "^0.44.2",
-    "prettier": "^3.0.0",
     "stripe": "^17.0.0"
   },
   "peerDependenciesMeta": {
@@ -216,9 +215,6 @@
       "optional": true
     },
     "drizzle-orm": {
-      "optional": true
-    },
-    "prettier": {
       "optional": true
     },
     "stripe": {
@@ -258,7 +254,6 @@
     "jsonc-parse": "^1.5.5",
     "listr2": "^8.0.0",
     "nitropack": "^2.12.4",
-    "prettier": "^3.5.3",
     "rwsdk": "^0.1.28",
     "stripe": "^17.0.0",
     "trpc-cli": "^0.10.2",

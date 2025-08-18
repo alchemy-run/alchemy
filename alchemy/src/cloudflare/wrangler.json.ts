@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "../context.ts";
-import { formatJson } from "../fs/static-json-file.ts";
 import { Resource } from "../resource.ts";
 import { isSecret } from "../secret.ts";
 import { assertNever } from "../util/assert-never.ts";
@@ -218,9 +217,9 @@ export const WranglerJson = Resource(
           ),
         },
       };
-      await fs.writeFile(filePath, await formatJson(withSecretsUnwrapped));
+      await writeJSON(filePath, withSecretsUnwrapped);
     } else {
-      await fs.writeFile(filePath, await formatJson(finalSpec));
+      await writeJSON(filePath, finalSpec);
     }
 
     // Return the resource
@@ -233,6 +232,10 @@ export const WranglerJson = Resource(
     });
   },
 );
+
+const writeJSON = async (filePath: string, content: any) => {
+  await fs.writeFile(filePath, `${JSON.stringify(content, null, 2)}\n`);
+};
 
 /**
  * Wrangler.json configuration specification based on Cloudflare's schema
