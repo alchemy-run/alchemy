@@ -7,6 +7,7 @@ const app = await alchemy("cloudflare-durable-object-websocket");
 export const server = await Worker("server", {
   name: `${app.name}-${app.stage}-server`,
   entrypoint: "src/server.ts",
+  adopt: true,
   bindings: {
     WS_SERVER: DurableObjectNamespace<WebSocketServer>("ws-server", {
       className: "WebSocketServer",
@@ -17,6 +18,7 @@ export const server = await Worker("server", {
 
 export const client = await Vite("client", {
   name: `${app.name}-${app.stage}-client`,
+  adopt: true,
   env: {
     VITE_WEBSOCKET_URL: server.url!,
   },

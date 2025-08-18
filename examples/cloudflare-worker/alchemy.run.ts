@@ -24,6 +24,7 @@ export const rpc = await Worker("rpc", {
   name: `${app.name}-${app.stage}-rpc`,
   entrypoint: "./src/rpc.ts",
   rpc: type<MyRPC>,
+  adopt: true,
 });
 
 export const worker = await Worker("worker", {
