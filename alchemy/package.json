@@ -181,7 +181,7 @@
     "@aws-sdk/client-ssm": "^3.0.0",
     "@aws-sdk/client-sts": "^3.0.0",
     "@cloudflare/vite-plugin": "^1.10.1",
-    "@cloudflare/workers-types": "catalog:",
+    "@cloudflare/workers-types": "*",
     "@libsql/client": "^0.15.9",
     "@octokit/rest": "^21.1.1",
     "drizzle-orm": "^0.44.2",
@@ -212,6 +212,12 @@
     "@aws-sdk/client-sts": {
       "optional": true
     },
+    "@cloudflare/vite-plugin": {
+      "optional": true
+    },
+    "@cloudflare/workers-types": {
+      "optional": true
+    },
     "@octokit/rest": {
       "optional": true
     },
@@ -238,6 +244,8 @@
     "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "^0.0.13",
     "@cloudflare/puppeteer": "^1.0.2",
+    "@cloudflare/vite-plugin": "^1.11.6",
+    "@cloudflare/workers-types": "catalog:",
     "@octokit/rest": "^21.1.1",
     "@sentry/cloudflare": "^9.43.0",
     "@sveltejs/adapter-cloudflare": "^7.1.2",
