@@ -23,6 +23,7 @@ export interface ApplyOptions {
   quiet?: boolean;
   alwaysUpdate?: boolean;
   resolveInnerScope?: (scope: Scope) => void;
+  noop?: boolean;
 }
 
 export function apply<Out extends Resource>(
@@ -33,7 +34,12 @@ export function apply<Out extends Resource>(
   return _apply(resource, props, options);
 }
 
+export function isReplacedSignal(error: any): error is ReplacedSignal {
+  return error instanceof Error && (error as any).kind === "ReplacedSignal";
+}
+
 export class ReplacedSignal extends Error {
+  readonly kind = "ReplacedSignal";
   public force: boolean;
 
   constructor(force?: boolean) {
@@ -198,6 +204,7 @@ async function _apply<Out extends Resource>(
           isResource: true,
           parent: scope,
           destroyStrategy: provider.options?.destroyStrategy ?? "sequential",
+          noop: options?.noop,
         },
         async (scope) => {
           options?.resolveInnerScope?.(scope);
@@ -214,6 +221,7 @@ async function _apply<Out extends Resource>(
               props: state.oldProps,
               output: oldOutput,
             },
+            noop: options?.noop,
           });
         } else {
           if (scope.children.get(resource[ResourceID])?.children.size! > 0) {
@@ -232,7 +240,11 @@ async function _apply<Out extends Resource>(
 
         output = await alchemy.run(
           resource[ResourceID],
-          { isResource: true, parent: scope },
+          {
+            isResource: true,
+            parent: scope,
+            noop: options?.noop,
+          },
           async () =>
             provider.handler.bind(
               context({

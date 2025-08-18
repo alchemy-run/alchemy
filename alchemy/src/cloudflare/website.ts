@@ -335,7 +335,7 @@ export async function Website<B extends Bindings>(
     });
   }
 
-  return (await Worker("worker", {
+  return (await Worker(id, {
     ...worker,
     bindings: {
       ...worker.bindings,
