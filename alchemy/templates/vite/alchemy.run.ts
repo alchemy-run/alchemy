@@ -3,10 +3,11 @@
 import alchemy from "alchemy";
 import { Vite } from "alchemy/cloudflare";
 
-const app = await alchemy("my-alchemy-app");
+const app = await alchemy("{projectName}");
 
 export const worker = await Vite("website", {
-  entrypoint: "worker/index.ts",
+  name: `${app.name}-${app.stage}-website`,
+  entrypoint: "src/worker.ts",
 });
 
 console.log({

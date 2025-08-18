@@ -11,8 +11,8 @@ import {
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { Zone } from "../../src/cloudflare/zone.ts";
 import { destroy } from "../../src/destroy.ts";
+import { fetchAndExpectStatus } from "../../src/util/safe-fetch.ts";
 import { BRANCH_PREFIX } from "../util.ts";
-import { fetchAndExpectStatus } from "./fetch-utils.ts";
 
 import "../../src/test/vitest.ts";
 

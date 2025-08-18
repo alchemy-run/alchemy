@@ -33,13 +33,12 @@ await app.finalize();
 
 # Features
 
-- **JS-native** - no second language, toolchains, dependencies, processes, services, etc. to lug around.
+- **JS-native** - no second language, toolchains, processes, services, etc. to lug around.
 - **Async-native** - resources are just async functions - no complex abstraction to learn.
 - **ESM-native** - built exclusively on ESM, with a slight preference for modern JS runtimes like Bun.
 - **Embeddable** - runs in any JavaScript/TypeScript environment, including the browser!
 - **Extensible** - implement your own resources with a simple function.
 - **AI-first** - alchemy actively encourages you to use LLMs to create/copy/fork/modify resources to fit your needs. No more waiting around for a provider to be implemented, just do it yourself in a few minutes.
-- **No dependencies** - the `alchemy` core package has 0 required dependencies.
 - **No service** - state files are stored locally in your project and can be easily inspected, modified, checked into your repo, etc.
 - **No strong opinions** - structure your codebase however you want, store state anywhere - we don't care!
 

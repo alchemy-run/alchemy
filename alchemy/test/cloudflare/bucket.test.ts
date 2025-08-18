@@ -11,8 +11,8 @@ import {
 } from "../../src/cloudflare/bucket.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
+import { fetchAndExpectOK } from "../../src/util/safe-fetch.ts";
 import { BRANCH_PREFIX, waitFor } from "../util.ts";
-import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 import "../../src/test/vitest.ts";
 
@@ -123,7 +123,7 @@ describe("R2 Bucket Resource", async () => {
       expect(putResponse.status).toEqual(200);
 
       // Verify the file exists in the bucket
-      const keys = await Array.fromAsync(listObjects(api, bucketName, bucket));
+      const { keys } = await listObjects(api, bucketName, bucket);
       expect(keys.length).toBeGreaterThan(0);
       expect(keys).toContain(testKey);
 

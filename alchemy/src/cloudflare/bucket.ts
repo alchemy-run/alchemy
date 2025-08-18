@@ -478,36 +478,40 @@ async function emptyBucket(
   bucketName: string,
   props: BucketProps,
 ) {
-  let batch: Promise<unknown>[] = [];
-  for await (const key of listObjects(api, bucketName, props)) {
-    batch.push(
-      extractCloudflareResult(
-        `delete R2 object "${key}"`,
+  let cursor: string | undefined;
+  while (true) {
+    const result = await listObjects(api, bucketName, props, cursor);
+    if (result.keys.length) {
+      // Another undocumented API! But it lets us delete multiple objects at once instead of one by one.
+      await extractCloudflareResult(
+        `delete ${result.keys.length} objects from bucket "${bucketName}"`,
         api.delete(
-          `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects/${key}`,
-          { headers: withJurisdiction(props) },
+          `/accounts/${api.accountId}/r2/buckets/${bucketName}/objects`,
+          {
+            headers: withJurisdiction(props),
+            method: "DELETE",
+            body: JSON.stringify(result.keys),
+          },
         ),
-      ),
-    );
-    if (batch.length >= 10) {
-      // this is an arbitary batch size, open to feedback
-      await Promise.all(batch);
-      batch = [];
+      );
+      if (result.cursor) {
+        cursor = result.cursor;
+        continue;
+      }
     }
+    break;
   }
-  await Promise.all(batch);
 }
 
 /**
- * Returns an async iterable of all object keys in a bucket,
- * handling pagination automatically.
+ * Lists objects in a bucket.
  */
-export async function* listObjects(
+export async function listObjects(
   api: CloudflareApi,
   bucketName: string,
   props: { jurisdiction?: string },
   cursor?: string,
-): AsyncGenerator<string> {
+) {
   const params = new URLSearchParams({
     per_page: "1000",
   });
@@ -531,7 +535,7 @@ export async function* listObjects(
   if (!json.success) {
     // 10006 indicates that the bucket does not exist, so there are no objects to list
     if (json.errors.some((e) => e.code === 10006)) {
-      return;
+      return { keys: [], cursor: undefined };
     }
     throw new CloudflareApiError(
       `Failed to list objects in bucket "${bucketName}": ${json.errors.map((e) => `- [${e.code}] ${e.message}${e.documentation_url ? ` (${e.documentation_url})` : ""}`).join("\n")}`,
@@ -539,12 +543,10 @@ export async function* listObjects(
       json.errors,
     );
   }
-  for (const object of json.result) {
-    yield object.key;
-  }
-  if (json.result_info?.is_truncated && json.result_info.cursor) {
-    yield* listObjects(api, bucketName, props, json.result_info.cursor);
-  }
+  return {
+    keys: json.result.map((object) => object.key),
+    cursor: json.result_info?.cursor,
+  };
 }
 
 /**

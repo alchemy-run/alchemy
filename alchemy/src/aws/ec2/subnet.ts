@@ -9,6 +9,7 @@ import {
   type TimeoutConfig,
   waitForResourceState,
 } from "../../util/timeout.ts";
+import type { AwsClientProps } from "../client-props.ts";
 import { retry } from "../retry.ts";
 import { callEC2Api, createEC2Client } from "./utils.ts";
 import type { Vpc } from "./vpc.ts";
@@ -16,7 +17,7 @@ import type { Vpc } from "./vpc.ts";
 /**
  * Properties for creating or updating a Subnet
  */
-export interface SubnetProps {
+export interface SubnetProps extends AwsClientProps {
   /**
    * The VPC to create the subnet in
    */
@@ -164,14 +165,15 @@ async function waitForSubnetDeleted(
  * AWS Subnet Resource
  *
  * Creates and manages subnets within a VPC. Subnets are used to segment
- * your VPC into smaller networks for organizing resources.
+ * your VPC into smaller networks for organizing resources. Supports AWS
+ * credential overrides for multi-account and cross-region deployments.
  *
  * @example
  * // Create a public subnet for web servers
  * const publicSubnet = await Subnet("public-subnet", {
  *   vpc: myVpc,
  *   cidrBlock: "10.0.1.0/24",
- *   availabilityZone: process.env.AWS_REGION ? `${process.env.AWS_REGION}a` : "us-east-1a",
+ *   availabilityZone: `${process.env.AWS_REGION}a` || "us-east-1a",
  *   mapPublicIpOnLaunch: true,
  *   tags: {
  *     Name: "public-subnet",
@@ -203,6 +205,62 @@ async function waitForSubnetDeleted(
  *     delayMs: 500
  *   }
  * });
+ *
+ * @example
+ * // Create a subnet with AWS credential overrides for cross-account deployment
+ * const crossAccountSubnet = await Subnet("cross-account-subnet", {
+ *   vpc: myVpc,
+ *   cidrBlock: "10.1.1.0/24",
+ *   availabilityZone: "us-east-1a",
+ *   region: "us-east-1",
+ *   profile: "production-account",
+ *   mapPublicIpOnLaunch: true,
+ *   tags: {
+ *     Name: "cross-account-subnet",
+ *     Account: "production"
+ *   }
+ * });
+ *
+ * @example
+ * // Create a subnet in a different region with explicit credentials
+ * const multiRegionSubnet = await Subnet("multi-region-subnet", {
+ *   vpc: "vpc-12345678", // VPC ID from different region
+ *   cidrBlock: "10.2.1.0/24",
+ *   availabilityZone: "eu-west-1a",
+ *   region: "eu-west-1",
+ *   accessKeyId: alchemy.secret("AKIA..."),
+ *   secretAccessKey: alchemy.secret("..."),
+ *   mapPublicIpOnLaunch: false,
+ *   tags: {
+ *     Name: "eu-subnet",
+ *     Region: "europe"
+ *   }
+ * });
+ *
+ * @example
+ * // Using scope-level credentials with resource-level overrides
+ * await alchemy.run("multi-account", {
+ *   aws: {
+ *     region: "us-west-2",
+ *     profile: "staging"
+ *   }
+ * }, async () => {
+ *   // This subnet uses staging credentials from scope
+ *   const stagingSubnet = await Subnet("staging-subnet", {
+ *     vpc: stagingVpc,
+ *     cidrBlock: "10.0.1.0/24",
+ *     availabilityZone: "us-west-2a"
+ *   });
+ *
+ *   // This subnet overrides to use production credentials
+ *   const prodSubnet = await Subnet("prod-subnet", {
+ *     vpc: prodVpc,
+ *     cidrBlock: "10.1.1.0/24",
+ *     availabilityZone: "us-east-1a",
+ *     profile: "production",
+ *     region: "us-east-1"
+ *   });
+ * });
  */
 export const Subnet = Resource(
   "aws::Subnet",
@@ -211,7 +269,8 @@ export const Subnet = Resource(
     _id: string,
     props: SubnetProps,
   ): Promise<Subnet> {
-    const client = await createEC2Client();
+    // Create EC2 client with credential resolution handled internally
+    const client = await createEC2Client(props);
     const vpcId = typeof props.vpc === "string" ? props.vpc : props.vpc.vpcId;
 
     // Validate timeout config early, but use default for deletion if invalid

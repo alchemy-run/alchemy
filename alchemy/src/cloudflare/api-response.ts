@@ -102,8 +102,8 @@ export async function extractCloudflareResult<T>(
   label: string,
   promise: Promise<Response>,
 ): Promise<T> {
-  const response = await promise.catch(() => {
-    throw new Error(`Failed to ${label}: Failed to fetch`);
+  const response = await promise.catch((cause) => {
+    throw new Error(`Failed to ${label}: Failed to fetch`, { cause });
   });
   const json = (await response.json().catch(() => {
     throw new Error(

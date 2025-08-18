@@ -9,6 +9,7 @@ import {
   type TimeoutConfig,
   waitForResourceState,
 } from "../../util/timeout.ts";
+import type { AwsClientProps } from "../client-props.ts";
 import { retry } from "../retry.ts";
 import type { InternetGateway } from "./internet-gateway.ts";
 import type { NatGateway } from "./nat-gateway.ts";
@@ -18,7 +19,7 @@ import { callEC2Api, createEC2Client } from "./utils.ts";
 /**
  * Properties for creating or updating a Route
  */
-export interface RouteProps {
+export interface RouteProps extends AwsClientProps {
   /**
    * The route table to add the route to
    */
@@ -74,6 +75,9 @@ export interface Route extends Resource<"aws::Route">, RouteProps {
  * Creates and manages individual routes within route tables, directing traffic
  * to various targets like Internet Gateways, NAT Gateways, or instances.
  *
+ * Supports AWS credential overrides at the resource level, allowing you to deploy Routes
+ * to different AWS accounts or regions than the default scope configuration.
+ *
  * @example
  * // Create a default route to Internet Gateway
  * const publicRoute = await Route("public-default-route", {
@@ -88,6 +92,39 @@ export interface Route extends Resource<"aws::Route">, RouteProps {
  *   routeTable: privateRouteTable,
  *   destinationCidrBlock: "0.0.0.0/0",
  *   target: { natGateway: mainNat }
+ * });
+ *
+ * @example
+ * // Create Route with AWS credential overrides
+ * const crossAccountRoute = await Route("cross-account-route", {
+ *   routeTable: mainRouteTable,
+ *   destinationCidrBlock: "0.0.0.0/0",
+ *   target: { internetGateway: mainIgw },
+ *   // Override AWS credentials for this specific resource
+ *   region: "us-east-1",
+ *   profile: "production-account",
+ * });
+ *
+ * @example
+ * // Create Route in different region with role assumption
+ * const multiRegionRoute = await Route("multi-region-route", {
+ *   routeTable: euRouteTable,
+ *   destinationCidrBlock: "0.0.0.0/0",
+ *   target: { internetGateway: euIgw },
+ *   region: "eu-west-1",
+ *   roleArn: "arn:aws:iam::123456789012:role/CrossRegionRole",
+ *   roleSessionName: "route-deployment",
+ * });
+ *
+ * @example
+ * // Create Route with explicit credentials
+ * const explicitCredsRoute = await Route("explicit-creds-route", {
+ *   routeTable: testRouteTable,
+ *   destinationCidrBlock: "0.0.0.0/0",
+ *   target: { internetGateway: testIgw },
+ *   accessKeyId: alchemy.secret("AKIAIOSFODNN7EXAMPLE"),
+ *   secretAccessKey: alchemy.secret("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+ *   region: "us-west-2",
  * });
  *
  * @example
@@ -133,6 +170,28 @@ export interface Route extends Resource<"aws::Route">, RouteProps {
  *     delayMs: 2000
  *   }
  * });
+ *
+ * @example
+ * // Multi-account deployment with scope-level and resource-level overrides
+ * await alchemy.run("production", {
+ *   aws: { region: "us-west-2", profile: "main-account" }
+ * }, async () => {
+ *   // This Route uses scope credentials (main-account, us-west-2)
+ *   const mainRoute = await Route("main-route", {
+ *     routeTable: mainRouteTable,
+ *     destinationCidrBlock: "0.0.0.0/0",
+ *     target: { internetGateway: mainIgw }
+ *   });
+ *
+ *   // This Route overrides to use different account
+ *   const crossAccountRoute = await Route("cross-account-route", {
+ *     routeTable: crossRouteTable,
+ *     destinationCidrBlock: "0.0.0.0/0",
+ *     target: { internetGateway: crossIgw },
+ *     profile: "secondary-account",
+ *     region: "us-east-1", // Also override region
+ *   });
+ * });
  */
 export const Route = Resource(
   "aws::Route",
@@ -141,7 +200,8 @@ export const Route = Resource(
     _id: string,
     props: RouteProps,
   ): Promise<Route> {
-    const client = await createEC2Client();
+    // Create EC2 client with credential resolution handled internally
+    const client = await createEC2Client(props);
     const _timeoutConfig = mergeTimeoutConfig(ROUTE_TIMEOUT, props.timeout);
     const routeTableId =
       typeof props.routeTable === "string"

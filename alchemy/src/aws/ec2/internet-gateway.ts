@@ -9,12 +9,13 @@ import {
   type TimeoutConfig,
   waitForResourceState,
 } from "../../util/timeout.ts";
+import type { AwsClientProps } from "../client-props.ts";
 import { callEC2Api, createEC2Client } from "./utils.ts";
 
 /**
  * Properties for creating or updating an Internet Gateway
  */
-export interface InternetGatewayProps {
+export interface InternetGatewayProps extends AwsClientProps {
   /**
    * Tags to apply to the Internet Gateway
    */
@@ -145,52 +146,11 @@ async function waitForInternetGatewayDeleted(
  * 1. Provide a target in your VPC route tables for internet-routable traffic
  * 2. Perform network address translation (NAT) for instances with public IPv4 addresses
  *
- * @example
- * ```typescript
- * // Create a basic Internet Gateway
- * const igw = new InternetGateway({
- *   tags: {
- *     Name: "my-internet-gateway",
- *     Environment: "production"
- *   }
- * });
- * ```
+ * Supports AWS credential overrides at the resource level, allowing you to deploy Internet Gateways
+ * to different AWS accounts or regions than the default scope configuration.
  *
  * @example
  * ```typescript
- * // Create Internet Gateway with custom timeout configuration
- * const igw = new InternetGateway({
- *   tags: { Name: "custom-igw" },
- *   timeoutConfig: {
- *     maxAttempts: 30,
- *     delayMs: 1000
- *   }
- * });
- * ```
- *
- * @example
- * ```typescript
- * // Create Internet Gateway and attach to VPC
- * const vpc = new VPC({ cidrBlock: "10.0.0.0/16" });
- * const igw = new InternetGateway({ tags: { Name: "vpc-igw" } });
- * const attachment = new InternetGatewayAttachment({
- *   internetGatewayId: igw.internetGatewayId,
- *   vpcId: vpc.vpcId
- * });
- * ```
- *
- * @example
- * ```typescript
- * // Access Internet Gateway properties
- * const igw = new InternetGateway({ tags: { Name: "example-igw" } });
- * logger.log(`Internet Gateway ID: ${igw.internetGatewayId}`);
- * logger.log(`State: ${igw.state}`);
- * ```
- *
- * Creates and manages Internet Gateways that provide internet access to VPCs.
- * Note: Use InternetGatewayAttachment to attach the gateway to a VPC.
- *
- * @example
  * // Create a basic Internet Gateway
  * const igw = await InternetGateway("main-igw", {
  *   tags: {
@@ -198,19 +158,53 @@ async function waitForInternetGatewayDeleted(
  *     Environment: "production"
  *   }
  * });
+ * ```
  *
  * @example
- * // Create an Internet Gateway for development environment
- * const devIgw = await InternetGateway("dev-igw", {
+ * ```typescript
+ * // Create Internet Gateway with AWS credential overrides
+ * const crossAccountIgw = await InternetGateway("cross-account-igw", {
+ *   // Override AWS credentials for this specific resource
+ *   region: "us-east-1",
+ *   profile: "production-account",
  *   tags: {
- *     Name: "dev-internet-gateway",
- *     Environment: "development",
- *     Team: "backend"
+ *     Name: "cross-account-internet-gateway",
+ *     Environment: "production"
  *   }
  * });
+ * ```
  *
  * @example
- * // Create an Internet Gateway with custom timeout configuration
+ * ```typescript
+ * // Create Internet Gateway in different region with role assumption
+ * const multiRegionIgw = await InternetGateway("multi-region-igw", {
+ *   region: "eu-west-1",
+ *   roleArn: "arn:aws:iam::123456789012:role/CrossRegionRole",
+ *   roleSessionName: "internet-gateway-deployment",
+ *   tags: {
+ *     Name: "eu-internet-gateway",
+ *     Region: "europe"
+ *   }
+ * });
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Create Internet Gateway with explicit credentials
+ * const explicitCredsIgw = await InternetGateway("explicit-creds-igw", {
+ *   accessKeyId: alchemy.secret("AKIAIOSFODNN7EXAMPLE"),
+ *   secretAccessKey: alchemy.secret("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+ *   region: "us-west-2",
+ *   tags: {
+ *     Name: "explicit-credentials-igw",
+ *     Purpose: "testing"
+ *   }
+ * });
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Create Internet Gateway with custom timeout configuration
  * const customIgw = await InternetGateway("custom-igw", {
  *   timeout: {
  *     maxAttempts: 90,
@@ -221,6 +215,40 @@ async function waitForInternetGatewayDeleted(
  *     Purpose: "high-availability"
  *   }
  * });
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Create Internet Gateway and attach to VPC
+ * const vpc = await VPC("main-vpc", { cidrBlock: "10.0.0.0/16" });
+ * const igw = await InternetGateway("vpc-igw", {
+ *   tags: { Name: "vpc-internet-gateway" }
+ * });
+ * const attachment = await InternetGatewayAttachment("igw-attachment", {
+ *   internetGatewayId: igw.internetGatewayId,
+ *   vpcId: vpc.vpcId
+ * });
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Multi-account deployment with scope-level and resource-level overrides
+ * await alchemy.run("production", {
+ *   aws: { region: "us-west-2", profile: "main-account" }
+ * }, async () => {
+ *   // This IGW uses scope credentials (main-account, us-west-2)
+ *   const mainIgw = await InternetGateway("main-igw", {
+ *     tags: { Name: "main-account-igw" }
+ *   });
+ *
+ *   // This IGW overrides to use different account
+ *   const crossAccountIgw = await InternetGateway("cross-account-igw", {
+ *     profile: "secondary-account",
+ *     region: "us-east-1", // Also override region
+ *     tags: { Name: "secondary-account-igw" }
+ *   });
+ * });
+ * ```
  */
 export const InternetGateway = Resource(
   "aws::InternetGateway",
@@ -229,7 +257,8 @@ export const InternetGateway = Resource(
     _id: string,
     props: InternetGatewayProps,
   ): Promise<InternetGateway> {
-    const client = await createEC2Client();
+    // Create EC2 client with credential resolution handled internally
+    const client = await createEC2Client(props);
     const timeoutConfig = mergeTimeoutConfig(
       INTERNET_GATEWAY_TIMEOUT,
       props.timeout,

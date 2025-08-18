@@ -1,7 +1,11 @@
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { AwsClient } from "aws4fetch";
+import { alchemy } from "../../alchemy.ts";
+import { Secret } from "../../secret.ts";
 import { logger } from "../../util/logger.ts";
 import { flattenParams } from "../../util/params.ts";
+import type { AwsClientProps } from "../client-props.ts";
+import { resolveAwsCredentials } from "../credentials.ts";
 import { getRegion } from "../utils.ts";
 
 /**
@@ -9,17 +13,79 @@ import { getRegion } from "../utils.ts";
  */
 
 /**
- * Create an AWS EC2 client
+ * Create an AWS EC2 client with credential resolution from props
+ *
+ * This function handles the complete credential resolution process internally,
+ * merging global, scope, and resource-level credentials according to the
+ * established precedence hierarchy.
+ *
+ * @param props - AWS client properties that may include credential overrides
+ * @returns Promise<AwsClient> - Configured AWS client for EC2 operations
  */
-export async function createEC2Client(): Promise<AwsClient> {
-  const credentials = await fromNodeProviderChain()();
-  const region = await getRegion();
+export async function createEC2Client(
+  props?: AwsClientProps,
+): Promise<AwsClient> {
+  // Resolve credentials from all sources (global, scope, resource)
+  const credentials = await resolveAwsCredentials(props);
+  let awsCredentials: AwsClientProps;
+  let region: string;
+
+  if (credentials && (credentials.accessKeyId || credentials.secretAccessKey)) {
+    // Use provided credentials directly (unwrap secrets for AWS SDK)
+    awsCredentials = {
+      accessKeyId: credentials.accessKeyId,
+      secretAccessKey: credentials.secretAccessKey,
+      sessionToken: credentials.sessionToken,
+    };
+  } else if (credentials?.profile) {
+    // Use profile-based credentials if profile is specified
+    try {
+      const profileCredentials = await fromNodeProviderChain({
+        profile: credentials.profile,
+      })();
+      awsCredentials = {
+        accessKeyId: alchemy.secret(profileCredentials.accessKeyId),
+        secretAccessKey: alchemy.secret(profileCredentials.secretAccessKey),
+        sessionToken: alchemy.secret(profileCredentials.sessionToken),
+      };
+    } catch (error) {
+      logger.log(
+        `Error loading credentials from profile ${credentials.profile}:`,
+        error,
+      );
+      // Fall back to default credentials
+      awsCredentials = await loadAwsPropsFromCredentialChain();
+    }
+  } else {
+    // Fall back to AWS SDK credential chain
+    awsCredentials = await loadAwsPropsFromCredentialChain();
+  }
+
+  // Use region from resolved credentials or fall back to getRegion()
+  if (credentials?.region) {
+    region = credentials.region;
+  } else {
+    region = await getRegion();
+  }
 
   return new AwsClient({
-    ...credentials,
+    ...awsCredentials,
+    accessKeyId: Secret.unwrap(awsCredentials.accessKeyId)!,
+    secretAccessKey: Secret.unwrap(awsCredentials.secretAccessKey)!,
+    sessionToken: Secret.unwrap(awsCredentials.sessionToken) || undefined,
     service: "ec2",
     region,
   });
+}
+
+async function loadAwsPropsFromCredentialChain(): Promise<AwsClientProps> {
+  const defaultCredentialsRaw = await fromNodeProviderChain()();
+  return {
+    ...defaultCredentialsRaw,
+    accessKeyId: alchemy.secret(defaultCredentialsRaw.accessKeyId),
+    secretAccessKey: alchemy.secret(defaultCredentialsRaw.secretAccessKey),
+    sessionToken: alchemy.secret(defaultCredentialsRaw.sessionToken),
+  };
 }
 
 /**
@@ -34,8 +100,8 @@ export async function callEC2Api<T>(
   // Try the API call, and retry once with fresh credentials on auth failure
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const region = await getRegion();
-      const url = `https://ec2.${region}.amazonaws.com/`;
+      // Use the client's region instead of the global region
+      const url = `https://ec2.${client.region}.amazonaws.com/`;
 
       const body = new URLSearchParams({
         Action: action,

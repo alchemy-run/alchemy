@@ -2,8 +2,8 @@ import { describe } from "vitest";
 import { alchemy } from "../../src/alchemy.ts";
 import { RateLimit } from "../../src/cloudflare/rate-limit.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
+import { fetchAndExpectStatus } from "../../src/util/safe-fetch.ts";
 import { BRANCH_PREFIX } from "../util.ts";
-import { fetchAndExpectStatus } from "./fetch-utils.ts";
 
 import { destroy } from "../../src/destroy.ts";
 import "../../src/test/vitest.ts";

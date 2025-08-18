@@ -15,6 +15,7 @@ import type { Scope } from "../scope.ts";
 import type { Secret } from "../secret.ts";
 import { logger } from "../util/logger.ts";
 import { memoize } from "../util/memoize.ts";
+import { safeFetch } from "../util/safe-fetch.ts";
 import { StateStoreProxy } from "./proxy.ts";
 
 export interface CloudflareStateStoreOptions extends CloudflareApiOptions {
@@ -70,7 +71,7 @@ export class CloudflareStateStore extends StateStoreProxy {
         params,
         context: { chain: this.scope.chain },
       };
-      const response = await fetch(url, {
+      const response = await safeFetch(url, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

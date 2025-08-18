@@ -8,8 +8,8 @@ import {
 import { Worker } from "../../src/cloudflare/worker.ts";
 import { destroy } from "../../src/destroy.ts";
 import { NeonProject } from "../../src/neon/project.ts";
+import { fetchAndExpectOK } from "../../src/util/safe-fetch.ts";
 import { BRANCH_PREFIX } from "../util.ts";
-import { fetchAndExpectOK } from "./fetch-utils.ts";
 // must import this or else alchemy.test won't exist
 import "../../src/test/vitest.ts";
 

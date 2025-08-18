@@ -6,8 +6,8 @@ import { createCloudflareApi } from "../../src/cloudflare/api.ts";
 import { Assets } from "../../src/cloudflare/assets.ts";
 import { DispatchNamespace } from "../../src/cloudflare/dispatch-namespace.ts";
 import { Worker } from "../../src/cloudflare/worker.ts";
+import { fetchAndExpectOK } from "../../src/util/safe-fetch.ts";
 import { BRANCH_PREFIX } from "../util.ts";
-import { fetchAndExpectOK } from "./fetch-utils.ts";
 
 import "../../src/test/vitest.ts";
 

@@ -22,7 +22,10 @@ import {
   createLoggerInstance,
   type LoggerApi,
 } from "./util/cli.ts";
-import { idempotentSpawn } from "./util/idempotent-spawn.ts";
+import {
+  idempotentSpawn,
+  type IdempotentSpawnOptions,
+} from "./util/idempotent-spawn.ts";
 import { logger } from "./util/logger.ts";
 import { AsyncMutex } from "./util/mutex.ts";
 import type { ITelemetryClient } from "./util/telemetry/client.ts";
@@ -33,7 +36,7 @@ export class RootScopeStateAttemptError extends Error {
   }
 }
 
-export interface ScopeOptions {
+export interface ScopeOptions extends ProviderCredentials {
   stage?: string;
   parent: Scope | undefined;
   scopeName: string;
@@ -80,6 +83,29 @@ export interface ScopeOptions {
    * @default "./.alchemy"
    */
   dotAlchemy?: string;
+}
+
+/**
+ * Base interface for provider credentials that can be extended by each provider.
+ * This allows providers to add their own credential properties without modifying the core scope interface.
+ *
+ * Provider credentials cannot conflict with core ScopeOptions properties.
+ *
+ * Providers can extend this interface using module augmentation:
+ *
+ * @example
+ * ```typescript
+ * // In aws/scope-extensions.ts
+ * declare module "../scope.ts" {
+ *   interface ProviderCredentials {
+ *     aws?: AwsClientProps;
+ *   }
+ * }
+ * ```
+ */
+export interface ProviderCredentials extends Record<string, unknown> {
+  // Provider credentials should not conflict with core scope properties
+  // TypeScript will enforce this at compile time when providers extend this interface
 }
 
 export type PendingDeletions = Array<{
@@ -154,6 +180,9 @@ export class Scope {
   public readonly telemetryClient: ITelemetryClient;
   public readonly dataMutex: AsyncMutex;
 
+  // Provider credentials for scope-level credential overrides
+  public readonly providerCredentials: ProviderCredentials;
+
   private isErrored = false;
   private isSkipped = false;
   private finalized = false;
@@ -171,9 +200,31 @@ export class Scope {
   public readonly dotAlchemy: string;
 
   constructor(options: ScopeOptions) {
-    this.scopeName = options.scopeName;
+    // Extract core scope options first
+    const {
+      scopeName,
+      parent,
+      stage,
+      password,
+      stateStore,
+      quiet,
+      phase,
+      local,
+      watch,
+      force,
+      destroyStrategy,
+      telemetryClient,
+      logger,
+      dotAlchemy,
+      ...providerCredentials
+    } = options;
+
+    this.scopeName = scopeName;
     this.name = this.scopeName;
-    this.parent = options.parent ?? Scope.getScope();
+    this.parent = parent ?? Scope.getScope();
+
+    // Store provider credentials (TypeScript ensures no conflicts with core options)
+    this.providerCredentials = providerCredentials as ProviderCredentials;
 
     const isChild = this.parent !== undefined;
     if (this.scopeName?.includes(":") && isChild) {
@@ -187,18 +238,18 @@ export class Scope {
       this.parent?.dotAlchemy ??
       path.join(process.cwd(), ".alchemy");
 
-    this.stage = options?.stage ?? this.parent?.stage ?? DEFAULT_STAGE;
+    this.stage = stage ?? this.parent?.stage ?? DEFAULT_STAGE;
     this.parent?.children.set(this.scopeName!, this);
-    this.quiet = options.quiet ?? this.parent?.quiet ?? false;
+    this.quiet = quiet ?? this.parent?.quiet ?? false;
     if (this.parent && !this.scopeName) {
       throw new Error("Scope name is required when creating a child scope");
     }
-    this.password = options.password ?? this.parent?.password;
-    const phase = options.phase ?? this.parent?.phase;
-    if (phase === undefined) {
+    this.password = password ?? this.parent?.password;
+    const resolvedPhase = phase ?? this.parent?.phase;
+    if (resolvedPhase === undefined) {
       throw new Error("Phase is required");
     }
-    this.phase = phase;
+    this.phase = resolvedPhase;
 
     this.logger = this.quiet
       ? createDummyLogger()
@@ -208,14 +259,14 @@ export class Scope {
             stage: this.stage,
             appName: this.appName ?? "",
           },
-          options.logger,
+          logger,
         );
 
-    this.local = options.local ?? this.parent?.local ?? false;
-    this.watch = options.watch ?? this.parent?.watch ?? false;
-    this.force = options.force ?? this.parent?.force ?? false;
+    this.local = local ?? this.parent?.local ?? false;
+    this.watch = watch ?? this.parent?.watch ?? false;
+    this.force = force ?? this.parent?.force ?? false;
     this.destroyStrategy =
-      options.destroyStrategy ?? this.parent?.destroyStrategy ?? "sequential";
+      destroyStrategy ?? this.parent?.destroyStrategy ?? "sequential";
     if (this.local) {
       this.logger.warnOnce(
         "Development mode is in beta. Please report any issues to https://github.com/sam-goodwin/alchemy/issues.",
@@ -223,16 +274,15 @@ export class Scope {
     }
 
     this.stateStore =
-      options.stateStore ??
+      stateStore ??
       this.parent?.stateStore ??
       ((scope) => new FileSystemStateStore(scope));
-    this.telemetryClient =
-      options.telemetryClient ?? this.parent?.telemetryClient!;
+    this.telemetryClient = telemetryClient ?? this.parent?.telemetryClient!;
     this.state = new InstrumentedStateStore(
       this.stateStore(this),
       this.telemetryClient,
     );
-    if (!options.telemetryClient && !this.parent?.telemetryClient) {
+    if (!telemetryClient && !this.parent?.telemetryClient) {
       throw new Error("Telemetry client is required");
     }
     this.dataMutex = new AsyncMutex();
@@ -243,49 +293,19 @@ export class Scope {
   >(
     // TODO(sam): validate uniqueness? Ensure a flat .logs/${id}.log dir? Or nest in scope dirs?
     id: string,
-    options: {
-      /**
-       * The working directory to run the command in.
-       *
-       * @default process.cwd()
-       */
-      cwd?: string;
-      /**
-       * The environment variables to set for the command.
-       */
-      env?: Record<string, string>;
-      /**
-       * The command to run (e.g. `cloudflared tunnel --url http://localhost:8080`).
-       */
-      cmd: string;
-      /**
-       * Function executed on each line of the process's output (stdout and stderr) to extract a value.
-       */
-      extract?: E;
-      /**
-       * Name of the process - used to check if a PID is a cloudflared process when the parent exits, for resumability
-       */
-      processName?: string;
-      /**
-       * Function to check if a PID is the same process as the one that was spawned.
-       *
-       * Used to check if a PID is a cloudflared process when the parent exits, for resumability.
-       *
-       * One of {@link extract} or {@link processName} must be provided.
-       */
-      isSameProcess?: (pid: number) => Promise<boolean>;
-    },
-  ) {
+    options: Omit<IdempotentSpawnOptions, "log" | "stateFile">,
+  ): Promise<E extends undefined ? undefined : string> {
     const dotAlchemy = path.join(process.cwd(), ".alchemy");
     const logsDir = path.join(dotAlchemy, "logs");
     const pidsDir = path.join(dotAlchemy, "pids");
 
-    const extracted = await idempotentSpawn({
+    const result = await idempotentSpawn({
       log: path.join(logsDir, `${id}.log`),
       stateFile: path.join(pidsDir, `${id}.pid.json`),
       ...options,
     });
-    return extracted as E extends undefined ? undefined : string;
+    this.onCleanup(result.stop);
+    return result.extracted as any;
   }
 
   /**
@@ -491,6 +511,7 @@ export class Scope {
     if (!this.isErrored && !this.isSkipped) {
       // TODO: need to detect if it is in error
       const resourceIds = await this.state.list();
+
       const aliveIds = new Set(this.resources.keys());
       const orphanIds = Array.from(
         resourceIds.filter((id) => !aliveIds.has(id)),

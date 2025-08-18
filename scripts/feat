@@ -1,0 +1,14 @@
+#!/bin/bash
+
+NAME=$1
+
+if [ -z "$NAME" ]; then
+  echo "Usage: $0 <name>"
+  exit 1
+fi
+
+git worktree add -b $USER/$NAME ../alchemy-$NAME
+cd ../alchemy-$NAME
+cp ../.env .
+bun i
+cursor .

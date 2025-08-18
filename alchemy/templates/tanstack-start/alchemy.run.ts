@@ -3,9 +3,11 @@
 import alchemy from "alchemy";
 import { TanStackStart } from "alchemy/cloudflare";
 
-const app = await alchemy("my-alchemy-app");
+const app = await alchemy("{projectName}");
 
-export const worker = await TanStackStart("website");
+export const worker = await TanStackStart("website", {
+  name: `${app.name}-${app.stage}-website`,
+});
 
 console.log({
   url: worker.url,

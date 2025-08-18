@@ -27,7 +27,9 @@
     "test:create": "vitest run ./alchemy/test/create.test.ts",
     "test:init": "vitest run ./alchemy/test/init.test.ts",
     "bump": "bun ./scripts/bump.ts",
-    "claude:yolo": "claude --dangerously-skip-permissions"
+    "claude:yolo": "claude --dangerously-skip-permissions",
+    "gh": "./scripts/gh",
+    "feat": "./scripts/feat"
   },
   "workspaces": {
     "catalog": {

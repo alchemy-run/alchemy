@@ -1,5 +1,7 @@
 export * from "./account-id.ts";
 export * from "./bucket.ts";
+export * from "./client-props.ts";
+export * from "./credentials.ts";
 export * from "./function.ts";
 export * from "./policy-attachment.ts";
 export * from "./policy.ts";

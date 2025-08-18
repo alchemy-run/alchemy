@@ -89,7 +89,7 @@ describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
         // Create the project using CLI - run from smoke directory
         console.log(`Creating ${templateName} project...`);
         const createResult = await runCommand(
-          `bun ${cliPath} create ${templateName} ${templateArg} --vibe-rules=cursor --no-git --yes`,
+          `bun ${cliPath} create ${templateName} ${templateArg} --vibe-rules=cursor --no-git --github-actions --yes`,
           smokeDir, // Run from smoke directory so project is created there
           {
             NODE_ENV: "test",

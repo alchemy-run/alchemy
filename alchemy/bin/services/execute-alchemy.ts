@@ -160,8 +160,7 @@ export async function execAlchemy(
   });
 
   console.log(command);
-  const [cmd, ...cmdArgs] = command.split(" ");
-  const child = spawn(cmd, cmdArgs, {
+  const child = spawn(command, {
     cwd,
     shell: true,
     stdio: "inherit",

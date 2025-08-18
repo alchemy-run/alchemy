@@ -100,41 +100,40 @@ export function isKVNamespace(resource: Resource): resource is KVNamespace {
 /**
  * Output returned after KV Namespace creation/update
  */
-export interface KVNamespace
-  extends Resource<"cloudflare::KVNamespace">,
-    Omit<KVNamespaceProps, "delete" | "dev"> {
-  type: "kv_namespace";
-  /**
-   * The ID of the namespace
-   */
-  namespaceId: string;
-
-  /**
-   * Time at which the namespace was created
-   */
-  createdAt: number;
-
-  /**
-   * Time at which the namespace was last modified
-   */
-  modifiedAt: number;
-
-  /**
-   * Development mode properties
-   * @internal
-   */
-  dev: {
+export type KVNamespace = Resource<"cloudflare::KVNamespace"> &
+  Omit<KVNamespaceProps, "delete" | "dev"> & {
+    type: "kv_namespace";
     /**
-     * The ID of the KV namespace in development mode
+     * The ID of the namespace
      */
-    id: string;
+    namespaceId: string;
 
     /**
-     * Whether the KV namespace is running remotely
+     * Time at which the namespace was created
      */
-    remote: boolean;
+    createdAt: number;
+
+    /**
+     * Time at which the namespace was last modified
+     */
+    modifiedAt: number;
+
+    /**
+     * Development mode properties
+     * @internal
+     */
+    dev: {
+      /**
+       * The ID of the KV namespace in development mode
+       */
+      id: string;
+
+      /**
+       * Whether the KV namespace is running remotely
+       */
+      remote: boolean;
+    };
   };
-}
 
 /**
  * A Cloudflare KV Namespace is a key-value store that can be used to store data for your application.

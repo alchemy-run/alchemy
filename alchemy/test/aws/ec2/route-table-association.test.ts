@@ -10,6 +10,10 @@ import { BRANCH_PREFIX } from "../../util.ts";
 
 import "../../../src/test/vitest.ts";
 
+// Set test environment variables for AWS tests
+process.env.AWS_PROFILE = "test9-374080338393";
+process.env.AWS_REGION = "us-west-2";
+
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });

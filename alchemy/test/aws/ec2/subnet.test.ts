@@ -13,6 +13,10 @@ import {
   type TimeoutConfig,
 } from "../../../src/util/timeout.ts";
 
+// Set test environment variables for AWS tests
+process.env.AWS_PROFILE = process.env.AWS_PROFILE || "default";
+process.env.AWS_REGION = process.env.AWS_REGION || "us-west-2";
+
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,
 });
@@ -182,6 +186,186 @@ describe.skipIf(!process.env.ALL_TESTS)("Subnet", () => {
       await destroy(scope);
     }
   }, 10000); // Validation test should be quick
+
+  test(
+    "create subnet with resource-level credential overrides",
+    async (scope) => {
+      const vpcName = `${BRANCH_PREFIX}-alchemy-test-subnet-override-vpc`;
+      const subnetName = `${BRANCH_PREFIX}-alchemy-test-subnet-override`;
+
+      try {
+        // First create a VPC
+        const vpc = await Vpc(vpcName, {
+          cidrBlock: "10.0.0.0/16",
+          tags: { Name: vpcName },
+        });
+
+        // Test that resource-level region override works
+        const subnet = await Subnet(subnetName, {
+          vpc,
+          cidrBlock: "10.0.1.0/24",
+          availabilityZone: "us-west-2a",
+          region: "us-west-2", // Explicit region override
+          mapPublicIpOnLaunch: true,
+          tags: {
+            Name: subnetName,
+            Environment: "test-override",
+          },
+        });
+
+        expect(subnet.subnetId).toBeTruthy();
+        expect(subnet.vpcId).toBe(vpc.vpcId);
+        expect(subnet.cidrBlock).toBe("10.0.1.0/24");
+        expect(subnet.region).toBe("us-west-2");
+        expect(subnet.availabilityZone).toBe("us-west-2a");
+        expect(subnet.mapPublicIpOnLaunch).toBe(true);
+        expect(subnet.tags).toEqual({
+          Name: subnetName,
+          Environment: "test-override",
+        });
+
+        // Verify subnet exists and is available
+        const describeResponse = await ec2.send(
+          new DescribeSubnetsCommand({
+            SubnetIds: [subnet.subnetId],
+          }),
+        );
+        expect(describeResponse.Subnets?.[0]?.State).toBe("available");
+        expect(describeResponse.Subnets?.[0]?.CidrBlock).toBe("10.0.1.0/24");
+      } finally {
+        await destroy(scope);
+      }
+    },
+    SUBNET_TIMEOUT.maxAttempts * SUBNET_TIMEOUT.delayMs + 30000,
+  );
+
+  test(
+    "create subnet with scope-level credentials",
+    async (scope) => {
+      const vpcName = `${BRANCH_PREFIX}-alchemy-test-subnet-scope-vpc`;
+      const subnetName = `${BRANCH_PREFIX}-alchemy-test-subnet-scope`;
+
+      try {
+        // Test scope-level credential inheritance
+        await alchemy.run(
+          "test-scope",
+          {
+            aws: {
+              region: "us-west-2",
+              profile: process.env.AWS_PROFILE || "default",
+            },
+          },
+          async () => {
+            // First create a VPC
+            const vpc = await Vpc(vpcName, {
+              cidrBlock: "10.0.0.0/16",
+              tags: { Name: vpcName },
+            });
+
+            const subnet = await Subnet(subnetName, {
+              vpc,
+              cidrBlock: "10.0.1.0/24",
+              availabilityZone: "us-west-2a",
+              mapPublicIpOnLaunch: false,
+              tags: {
+                Name: subnetName,
+                Environment: "test-scope",
+              },
+            });
+
+            expect(subnet.subnetId).toBeTruthy();
+            expect(subnet.vpcId).toBe(vpc.vpcId);
+            expect(subnet.cidrBlock).toBe("10.0.1.0/24");
+            expect(subnet.availabilityZone).toBe("us-west-2a");
+            expect(subnet.mapPublicIpOnLaunch).toBe(false);
+            expect(subnet.tags).toEqual({
+              Name: subnetName,
+              Environment: "test-scope",
+            });
+
+            // Verify subnet exists and is available
+            const describeResponse = await ec2.send(
+              new DescribeSubnetsCommand({
+                SubnetIds: [subnet.subnetId],
+              }),
+            );
+            expect(describeResponse.Subnets?.[0]?.State).toBe("available");
+            expect(describeResponse.Subnets?.[0]?.CidrBlock).toBe(
+              "10.0.1.0/24",
+            );
+          },
+        );
+      } finally {
+        await destroy(scope);
+      }
+    },
+    SUBNET_TIMEOUT.maxAttempts * SUBNET_TIMEOUT.delayMs + 30000,
+  );
+
+  test(
+    "resource-level overrides take precedence over scope-level",
+    async (scope) => {
+      const vpcName = `${BRANCH_PREFIX}-alchemy-test-subnet-precedence-vpc`;
+      const subnetName = `${BRANCH_PREFIX}-alchemy-test-subnet-precedence`;
+
+      try {
+        // Test that resource-level credentials override scope-level
+        await alchemy.run(
+          "test-precedence",
+          {
+            aws: {
+              region: "us-east-1", // Scope sets us-east-1
+              profile: process.env.AWS_PROFILE || "default",
+            },
+          },
+          async () => {
+            // First create a VPC with scope credentials
+            const vpc = await Vpc(vpcName, {
+              cidrBlock: "10.0.0.0/16",
+              region: "us-west-2", // Override VPC to us-west-2
+              tags: { Name: vpcName },
+            });
+
+            const subnet = await Subnet(subnetName, {
+              vpc,
+              cidrBlock: "10.0.1.0/24",
+              availabilityZone: "us-west-2a",
+              region: "us-west-2", // Resource overrides to us-west-2
+              mapPublicIpOnLaunch: true,
+              tags: {
+                Name: subnetName,
+                Environment: "test-precedence",
+              },
+            });
+
+            expect(subnet.subnetId).toBeTruthy();
+            expect(subnet.vpcId).toBe(vpc.vpcId);
+            expect(subnet.cidrBlock).toBe("10.0.1.0/24");
+            expect(subnet.region).toBe("us-west-2"); // Should use resource-level override
+            expect(subnet.availabilityZone).toBe("us-west-2a");
+            expect(subnet.tags).toEqual({
+              Name: subnetName,
+              Environment: "test-precedence",
+            });
+
+            // Verify subnet exists and is available in the correct region
+            const describeResponse = await ec2.send(
+              new DescribeSubnetsCommand({
+                SubnetIds: [subnet.subnetId],
+              }),
+            );
+            expect(describeResponse.Subnets?.[0]?.State).toBe("available");
+            expect(describeResponse.Subnets?.[0]?.CidrBlock).toBe(
+              "10.0.1.0/24",
+            );
+          },
+        );
+      } finally {
+        await destroy(scope);
+      }
+    },
+    SUBNET_TIMEOUT.maxAttempts * SUBNET_TIMEOUT.delayMs + 30000,
+  );
 });
 describe("Subnet Timeout Configuration Unit Tests", () => {
   const SUBNET_TIMEOUT_TEST: TimeoutConfig = {

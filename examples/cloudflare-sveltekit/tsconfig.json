@@ -11,6 +11,7 @@
     "sourceMap": true,
     "strict": true,
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "types": ["@cloudflare/workers-types"]
   }
   // Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias

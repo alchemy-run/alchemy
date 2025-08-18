@@ -13,10 +13,10 @@ import type { PolicyDocument } from "../../src/aws/policy.js";
 import { Role } from "../../src/aws/role.js";
 import { destroy } from "../../src/destroy.js";
 import { Bundle } from "../../src/esbuild/index.js";
+import { fetchAndExpectOK } from "../../src/util/safe-fetch.ts";
 import { BRANCH_PREFIX } from "../util.js";
 
 import "../../src/test/vitest.js";
-import { fetchAndExpectOK } from "../cloudflare/fetch-utils.js";
 
 const test = alchemy.test(import.meta, {
   prefix: BRANCH_PREFIX,

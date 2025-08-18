@@ -9,13 +9,14 @@ import {
   type TimeoutConfig,
   waitForResourceState,
 } from "../../util/timeout.ts";
+import type { AwsClientProps } from "../client-props.ts";
 import { callEC2Api, createEC2Client } from "./utils.ts";
 import type { Vpc } from "./vpc.ts";
 
 /**
  * Properties for creating or updating a Route Table
  */
-export interface RouteTableProps {
+export interface RouteTableProps extends AwsClientProps {
   /**
    * The VPC to create the route table in
    */
@@ -58,6 +59,9 @@ export interface RouteTable
  * traffic is directed. Subnet associations are managed separately using the
  * RouteTableAssociation resource.
  *
+ * Supports AWS credential overrides at the resource level, allowing you to deploy Route Tables
+ * to different AWS accounts or regions than the default scope configuration.
+ *
  * @example
  * // Create a basic route table
  * const routeTable = await RouteTable("main-route-table", {
@@ -76,6 +80,45 @@ export interface RouteTable
  *     Name: "public-route-table",
  *     Type: "public",
  *     Purpose: "internet-access"
+ *   }
+ * });
+ *
+ * @example
+ * // Create Route Table with AWS credential overrides
+ * const crossAccountRouteTable = await RouteTable("cross-account-rt", {
+ *   vpc: mainVpc,
+ *   // Override AWS credentials for this specific resource
+ *   region: "us-east-1",
+ *   profile: "production-account",
+ *   tags: {
+ *     Name: "cross-account-route-table",
+ *     Environment: "production"
+ *   }
+ * });
+ *
+ * @example
+ * // Create Route Table in different region with role assumption
+ * const multiRegionRouteTable = await RouteTable("multi-region-rt", {
+ *   vpc: euVpc,
+ *   region: "eu-west-1",
+ *   roleArn: "arn:aws:iam::123456789012:role/CrossRegionRole",
+ *   roleSessionName: "route-table-deployment",
+ *   tags: {
+ *     Name: "eu-route-table",
+ *     Region: "europe"
+ *   }
+ * });
+ *
+ * @example
+ * // Create Route Table with explicit credentials
+ * const explicitCredsRouteTable = await RouteTable("explicit-creds-rt", {
+ *   vpc: testVpc,
+ *   accessKeyId: alchemy.secret("AKIAIOSFODNN7EXAMPLE"),
+ *   secretAccessKey: alchemy.secret("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+ *   region: "us-west-2",
+ *   tags: {
+ *     Name: "explicit-credentials-rt",
+ *     Purpose: "testing"
  *   }
  * });
  *
@@ -102,6 +145,26 @@ export interface RouteTable
  *     Name: "custom-timeout-route-table"
  *   }
  * });
+ *
+ * @example
+ * // Multi-account deployment with scope-level and resource-level overrides
+ * await alchemy.run("production", {
+ *   aws: { region: "us-west-2", profile: "main-account" }
+ * }, async () => {
+ *   // This Route Table uses scope credentials (main-account, us-west-2)
+ *   const mainRouteTable = await RouteTable("main-rt", {
+ *     vpc: mainVpc,
+ *     tags: { Name: "main-account-rt" }
+ *   });
+ *
+ *   // This Route Table overrides to use different account
+ *   const crossAccountRouteTable = await RouteTable("cross-account-rt", {
+ *     vpc: crossVpc,
+ *     profile: "secondary-account",
+ *     region: "us-east-1", // Also override region
+ *     tags: { Name: "secondary-account-rt" }
+ *   });
+ * });
  */
 export const RouteTable = Resource(
   "aws::RouteTable",
@@ -110,7 +173,8 @@ export const RouteTable = Resource(
     _id: string,
     props: RouteTableProps,
   ): Promise<RouteTable> {
-    const client = await createEC2Client();
+    // Create EC2 client with credential resolution handled internally
+    const client = await createEC2Client(props);
     const timeoutConfig = mergeTimeoutConfig(
       ROUTE_TABLE_TIMEOUT,
       props.timeout,

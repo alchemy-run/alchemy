@@ -41,10 +41,10 @@ export const getPlatformProxyOptions = (
     ...input,
     configPath: validateConfigPath(input.configPath ?? DEFAULT_CONFIG_PATH),
     persist,
-    experimental: input.experimental ?? {
+    experimental: (input as any).experimental ?? {
       remoteBindings: true,
     },
-  };
+  } as any;
 };
 
 const warned = new Set<string>();
