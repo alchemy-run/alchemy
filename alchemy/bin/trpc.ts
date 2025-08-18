@@ -1,7 +1,7 @@
-import { trpcServer } from "trpc-cli";
+import { initTRPC } from "@trpc/server";
 import { TelemetryClient } from "../src/util/telemetry/client.ts";
 
-export const t = trpcServer.initTRPC.create();
+export const t = initTRPC.create();
 
 export class ExitSignal extends Error {
   constructor(public code: 0 | 1 = 0) {
