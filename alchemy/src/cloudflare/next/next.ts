@@ -31,7 +31,10 @@ export async function Nextjs<const B extends Bindings>(
         NEXTJS_ENV: "development",
       },
     }),
+
+    // OpenNext generates the files, but relies on us to bundle them.
     noBundle: props.noBundle ?? false,
+
     spa: false,
     compatibilityFlags: [
       "nodejs_compat",
