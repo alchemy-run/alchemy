@@ -12,30 +12,50 @@ export type Nextjs<B extends Bindings> = B extends { ASSETS: any }
 
 export async function Nextjs<const B extends Bindings>(
   id: string,
-  {
-    entrypoint,
-    build,
-    dev,
-    noBundle,
-    compatibilityFlags,
-    assets,
-    ...props
-  }: NextjsProps<B> = {},
+  props: NextjsProps<B> = {},
 ): Promise<Nextjs<B>> {
   const runner = await getPackageManagerRunner();
   return await Website(id, {
-    entrypoint: entrypoint ?? ".open-next/worker.js",
-    build:
-      build ??
-      `${runner} opennextjs-cloudflare build --config=.alchemy/local/wrangler.jsonc`,
-    dev: dev ?? `${runner} next dev`,
-    noBundle: noBundle ?? false,
+    ...props,
+    entrypoint: props.entrypoint ?? ".open-next/worker.js",
+    build: normalizeCommand(props.build, {
+      command: `${runner} opennextjs-cloudflare build`,
+      env: {
+        NEXTJS_ENV: "production",
+        SKIP_WRANGLER_CONFIG_CHECK: "yes",
+      },
+    }),
+    dev: normalizeCommand(props.dev, {
+      command: `${runner} next dev`,
+      env: {
+        NEXTJS_ENV: "development",
+      },
+    }),
+    noBundle: props.noBundle ?? false,
+    spa: false,
     compatibilityFlags: [
       "nodejs_compat",
       "global_fetch_strictly_public",
-      ...(compatibilityFlags ?? []),
+      ...(props.compatibilityFlags ?? []),
     ],
-    assets: assets ?? ".open-next/assets",
-    ...props,
+    assets: props.assets ?? ".open-next/assets",
   });
 }
+
+const normalizeCommand = (
+  input: WebsiteProps<any>["build"],
+  defaults: {
+    command: string;
+    env: Record<string, string>;
+  },
+): WebsiteProps<any>["build"] => {
+  return {
+    command:
+      typeof input === "string" ? input : (input?.command ?? defaults.command),
+    env: {
+      ...defaults.env,
+      ...(typeof input === "object" ? (input?.env ?? {}) : {}),
+    },
+    memoize: typeof input === "object" ? input?.memoize : undefined,
+  };
+};
