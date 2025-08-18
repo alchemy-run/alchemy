@@ -1,6 +1,5 @@
 import path from "node:path";
 import { getPackageManagerRunner } from "../../util/detect-package-manager.ts";
-import { logger } from "../../util/logger.ts";
 import type { Assets } from "../assets.ts";
 import type { Bindings } from "../bindings.ts";
 import { Vite, type ViteProps } from "../vite/vite.ts";
@@ -60,23 +59,9 @@ async function detectSSREnabled(cwd: string): Promise<boolean> {
     "react-router.config.mjs",
     "react-router.config.js",
   ];
-  try {
-    const config = await Promise.any(
-      candidates.map((candidate) => import(path.join(cwd, candidate))),
-    );
-    if (
-      typeof config.default === "object" &&
-      config.default &&
-      "ssr" in config.default &&
-      typeof config.default.ssr === "boolean"
-    ) {
-      return config.default.ssr;
-    }
-    return true;
-  } catch {
-    logger.warn(
-      "[ReactRouter] No react-router.config.{ts,js,mts,mjs} found, assuming SSR is enabled",
-    );
-    return true;
-  }
+  const configs = await Promise.allSettled(
+    candidates.map((candidate) => import(path.join(cwd, candidate))),
+  );
+  const config = configs.find((result) => result.status === "fulfilled")?.value;
+  return config?.default?.ssr !== false;
 }
