@@ -33,7 +33,7 @@
   },
   "workspaces": {
     "catalog": {
-      "@cloudflare/workers-types": "^4.20250805.0"
+      "@cloudflare/workers-types": "^4.20250816.0"
     },
     "packages": [
       "alchemy-web",
@@ -45,7 +45,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.1.3",
-    "@cloudflare/workers-types": "^4.20250805.0",
+    "@cloudflare/workers-types": "catalog:",
     "@redwoodjs/sdk": "^0.0.80",
     "@types/bun": "latest",
     "@types/node": "latest",
