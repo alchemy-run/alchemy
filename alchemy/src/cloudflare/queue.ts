@@ -40,7 +40,7 @@ export interface QueueProps extends CloudflareApiOptions {
    * Required during creation
    * Cannot be changed after creation
    *
-   * @default id
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -248,7 +248,7 @@ const _Queue = Resource("cloudflare::Queue", async function <
 >(this: Context<Queue<T>>, id: string, props: QueueProps = {}): Promise<
   Queue<T>
 > {
-  const queueName = props.name ?? id;
+  const queueName = props.name ?? this.scope.createPhysicalName(id);
   const dev = {
     id: this.output?.dev?.id ?? this.output?.id ?? id,
     remote: props.dev?.remote ?? false,

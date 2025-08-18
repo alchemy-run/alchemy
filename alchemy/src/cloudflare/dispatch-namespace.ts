@@ -14,6 +14,8 @@ import {
 export interface DispatchNamespaceProps extends CloudflareApiOptions {
   /**
    * Name of the namespace
+   *
+   * @default ${app}-${stage}-${id}
    */
   namespace?: string;
 
@@ -112,7 +114,7 @@ export const DispatchNamespace = Resource(
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
 
-    const namespace = props.namespace ?? id;
+    const namespace = props.namespace ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "delete") {
       // For delete operations, we need to check if the namespace exists in the output

@@ -49,7 +49,7 @@ export interface TunnelProps extends CloudflareApiOptions {
    * Note: Tunnel names are immutable and cannot be changed after creation.
    * When updating a tunnel, any name change will be ignored.
    *
-   * @default id
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -488,7 +488,11 @@ export const Tunnel = Resource(
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
 
-    const name = props.name ?? id;
+    const name = props.name ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output.name !== name) {
+      this.replace();
+    }
 
     if (this.phase === "delete") {
       // For delete operations, check if the tunnel ID exists in the output

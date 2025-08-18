@@ -134,7 +134,7 @@ export interface BaseWorkerProps<
   /**
    * Name for the worker
    *
-   * @default id
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -714,7 +714,7 @@ const _Worker = Resource(
         logger.warn("projectRoot is deprecated, use cwd instead");
         props.cwd = props.projectRoot;
       }
-      const name = props.name ?? id;
+      const name = props.name ?? this.scope.createPhysicalName(id);
       const cwd = path.resolve(props.cwd ?? process.cwd());
       const compatibilityDate =
         props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;

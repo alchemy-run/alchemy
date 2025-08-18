@@ -31,7 +31,7 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
   /**
    * Name of the database
    *
-   * @default id
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -263,7 +263,7 @@ const _D1Database = Resource(
     id: string,
     props: D1DatabaseProps = {},
   ): Promise<D1Database> {
-    const databaseName = props.name ?? id;
+    const databaseName = props.name ?? this.scope.createPhysicalName(id);
     const local = this.scope.local && !props.dev?.remote;
     const dev = {
       id: this.output?.dev?.id ?? this.output?.id ?? id,

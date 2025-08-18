@@ -123,8 +123,12 @@ export type Container<T = any> = {
   /** Unique identifier for the container */
   id: string;
 
-  /** Optional human-readable name for the container */
-  name: string;
+  /**
+   * Optional human-readable name for the container
+   *
+   * @default ${app.name}-${app.stage}-${id}
+   */
+  name?: string;
 
   /** Class name used to identify the container in Worker bindings */
   className: string;
@@ -170,7 +174,8 @@ export async function Container<T>(
   id: string,
   props: ContainerProps,
 ): Promise<Container<T>> {
-  const name = props.name ?? id;
+  const scope = Scope.current;
+  const name = props.name ?? scope.createPhysicalName(id);
   const tag =
     props.tag === undefined || props.tag === "latest"
       ? `latest-${Date.now()}`
@@ -191,7 +196,7 @@ export async function Container<T>(
     adopt: props.adopt,
   };
 
-  const isDev = Scope.current.local && !props.dev?.remote;
+  const isDev = scope.local && !props.dev?.remote;
   if (isDev) {
     const image = await Image(id, {
       name: `cloudflare-dev/${name}`, // prefix used by Miniflare
@@ -291,8 +296,10 @@ export interface ContainerApplicationProps extends CloudflareApiOptions {
   /**
    * The name of the container application.
    * Must be unique within your Cloudflare account.
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * Scheduling policy that controls where and how containers are deployed.
@@ -501,13 +508,15 @@ export const ContainerApplication = Resource(
   "cloudflare::ContainerApplication",
   async function (
     this: Context<ContainerApplication, ContainerApplicationProps>,
-    _id: string,
+    id: string,
     props: ContainerApplicationProps,
   ): Promise<ContainerApplication> {
+    const applicationName = props.name ?? this.scope.createPhysicalName(id);
+
     if (this.scope.local && props.dev) {
       return this({
         id: this.output?.id ?? "",
-        name: props.name,
+        name: applicationName,
       });
     }
 
@@ -563,7 +572,7 @@ export const ContainerApplication = Resource(
 
       try {
         application = await createContainerApplication(api, props.adopt, {
-          name: props.name,
+          name: applicationName,
           scheduling_policy: props.schedulingPolicy ?? "default",
           instances: props.instances ?? 1,
           max_instances: props.maxInstances ?? 1,
@@ -595,12 +604,12 @@ export const ContainerApplication = Resource(
           // Find the existing container application
           const existingApplication = await findContainerApplicationByName(
             api,
-            props.name,
+            applicationName,
           );
 
           if (!existingApplication) {
             throw new Error(
-              `Failed to find existing container application '${props.name}' for adoption`,
+              `Failed to find existing container application '${applicationName}' for adoption`,
             );
           }
 

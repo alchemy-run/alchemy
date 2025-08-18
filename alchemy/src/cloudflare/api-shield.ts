@@ -28,7 +28,7 @@ export interface APIShieldProps<S extends string | URL | OpenAPIV3.Document>
   /**
    * The name of the schema validation
    *
-   * @default id
+   * @default ${app.name}-${app.stage}-${id}
    */
   name?: string;
 
@@ -416,10 +416,12 @@ const _APIShield = Resource(
       validation_override_mitigation_action: props.unknownOperationMitigation,
     });
 
+    const schemaName = props.name ?? this.scope.createPhysicalName(id);
+
     const schema = await APISchema("schema", {
       schema: props.schema,
       zone: props.zone,
-      name: props.name ?? id,
+      name: schemaName,
       enabled: props.enabled,
       accountId: props.accountId,
       apiKey: props.apiKey,

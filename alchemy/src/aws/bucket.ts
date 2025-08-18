@@ -22,8 +22,10 @@ export interface BucketProps {
   /**
    * The name of the bucket. Must be globally unique across all AWS accounts.
    * Should be lowercase alphanumeric characters or hyphens.
+   *
+   * @default ${app}-${stage}-${id}
    */
-  bucketName: string;
+  bucketName?: string;
 
   /**
    * Optional tags to apply to the bucket for organization and cost tracking.
@@ -41,6 +43,11 @@ export interface Bucket extends Resource<"s3::Bucket">, BucketProps {
    * Format: arn:aws:s3:::bucket-name
    */
   arn: string;
+
+  /**
+   * Name of the Bucket.
+   */
+  bucketName: string;
 
   /**
    * The global domain name for the bucket
@@ -129,15 +136,21 @@ export interface Bucket extends Resource<"s3::Bucket">, BucketProps {
  */
 export const Bucket = Resource(
   "s3::Bucket",
-  async function (this: Context<Bucket>, _id: string, props: BucketProps) {
+  async function (this: Context<Bucket>, id: string, props: BucketProps) {
     const client = new S3Client({});
+
+    const bucketName = props.bucketName ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output.bucketName !== bucketName) {
+      this.replace();
+    }
 
     if (this.phase === "delete") {
       await ignore(NoSuchBucket.name, () =>
         retry(() =>
           client.send(
             new DeleteBucketCommand({
-              Bucket: props.bucketName,
+              Bucket: bucketName,
             }),
           ),
         ),
@@ -149,7 +162,7 @@ export const Bucket = Resource(
       await retry(() =>
         client.send(
           new HeadBucketCommand({
-            Bucket: props.bucketName,
+            Bucket: bucketName,
           }),
         ),
       );
@@ -159,7 +172,7 @@ export const Bucket = Resource(
         await retry(() =>
           client.send(
             new PutBucketTaggingCommand({
-              Bucket: props.bucketName,
+              Bucket: bucketName,
               Tagging: {
                 TagSet: Object.entries(props.tags!).map(([Key, Value]) => ({
                   Key,
@@ -176,7 +189,7 @@ export const Bucket = Resource(
         await retry(() =>
           client.send(
             new CreateBucketCommand({
-              Bucket: props.bucketName,
+              Bucket: bucketName,
               // Add tags during creation if specified
               ...(props.tags && {
                 Tagging: {
@@ -198,17 +211,13 @@ export const Bucket = Resource(
     const [locationResponse, versioningResponse, aclResponse] =
       await Promise.all([
         retry(() =>
-          client.send(
-            new GetBucketLocationCommand({ Bucket: props.bucketName }),
-          ),
+          client.send(new GetBucketLocationCommand({ Bucket: bucketName })),
         ),
         retry(() =>
-          client.send(
-            new GetBucketVersioningCommand({ Bucket: props.bucketName }),
-          ),
+          client.send(new GetBucketVersioningCommand({ Bucket: bucketName })),
         ),
         retry(() =>
-          client.send(new GetBucketAclCommand({ Bucket: props.bucketName })),
+          client.send(new GetBucketAclCommand({ Bucket: bucketName })),
         ),
       ]);
 
@@ -219,9 +228,7 @@ export const Bucket = Resource(
     if (!tags) {
       try {
         const taggingResponse = await retry(() =>
-          client.send(
-            new GetBucketTaggingCommand({ Bucket: props.bucketName }),
-          ),
+          client.send(new GetBucketTaggingCommand({ Bucket: bucketName })),
         );
         tags = Object.fromEntries(
           taggingResponse.TagSet?.map(({ Key, Value }) => [Key, Value]) || [],
@@ -234,10 +241,10 @@ export const Bucket = Resource(
     }
 
     return this({
-      bucketName: props.bucketName,
-      arn: `arn:aws:s3:::${props.bucketName}`,
-      bucketDomainName: `${props.bucketName}.s3.amazonaws.com`,
-      bucketRegionalDomainName: `${props.bucketName}.s3.${region}.amazonaws.com`,
+      bucketName: bucketName,
+      arn: `arn:aws:s3:::${bucketName}`,
+      bucketDomainName: `${bucketName}.s3.amazonaws.com`,
+      bucketRegionalDomainName: `${bucketName}.s3.${region}.amazonaws.com`,
       region,
       hostedZoneId: getHostedZoneId(region),
       versioningEnabled: versioningResponse.Status === "Enabled",

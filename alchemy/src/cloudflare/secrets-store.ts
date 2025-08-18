@@ -17,7 +17,7 @@ export interface SecretsStoreProps<
   /**
    * Name of the secrets store
    *
-   * @default id
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -179,7 +179,11 @@ const _SecretsStore = Resource("cloudflare::SecretsStore", async function <
 > {
   const api = await createCloudflareApi(props);
 
-  const name = props.name ?? id;
+  const name = props.name ?? this.scope.createPhysicalName(id);
+
+  if (this.phase === "update" && this.output.name !== name) {
+    this.replace();
+  }
 
   if (this.phase === "delete") {
     const storeId = this.output?.id;

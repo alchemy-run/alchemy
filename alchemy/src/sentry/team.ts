@@ -10,8 +10,10 @@ import { SentryApi } from "./api.ts";
 export interface TeamProps {
   /**
    * The name for the team
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * Uniquely identifies a team and is used for the interface
@@ -45,6 +47,11 @@ export interface Team extends Resource<"sentry::Team">, TeamProps {
    * The ID of the team
    */
   id: string;
+
+  /**
+   * Name of the Team.
+   */
+  name: string;
 
   /**
    * Time at which the team was created
@@ -127,10 +134,17 @@ export const Team = Resource(
   "sentry::Team",
   async function (
     this: Context<Team>,
-    _id: string,
+    id: string,
     props: TeamProps,
   ): Promise<Team> {
     const api = new SentryApi({ authToken: props.authToken });
+
+    const teamName = props.name ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output.name !== teamName) {
+      // TODO(sam): can we rename without destroying?
+      this.replace();
+    }
 
     if (this.phase === "delete") {
       try {
@@ -169,17 +183,17 @@ export const Team = Resource(
               error.message.includes("already exists")
             ) {
               logger.log(
-                `Team '${props.slug || props.name}' already exists, adopting it`,
+                `Team '${props.slug || teamName}' already exists, adopting it`,
               );
               // Find the existing team by slug
               const existingTeam = await findTeamBySlug(
                 api,
                 props.organization,
-                props.slug || props.name,
+                props.slug || teamName,
               );
               if (!existingTeam) {
                 throw new Error(
-                  `Failed to find existing team '${props.slug || props.name}' for adoption`,
+                  `Failed to find existing team '${props.slug || teamName}' for adoption`,
                 );
               }
               response = await api.get(
@@ -199,6 +213,7 @@ export const Team = Resource(
         return this({
           ...props,
           id: data.id,
+          name: teamName,
           dateCreated: data.dateCreated,
           isMember: data.isMember,
           teamRole: data.teamRole,

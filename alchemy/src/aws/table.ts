@@ -17,8 +17,10 @@ import { retry } from "./retry.ts";
 export interface TableProps {
   /**
    * Name of the DynamoDB table
+   *
+   * @default ${app}-${stage}-${id}
    */
-  tableName: string;
+  tableName?: string;
 
   /**
    * Primary partition key (hash key) configuration
@@ -89,6 +91,11 @@ export interface Table extends Resource<"dynamo::Table">, TableProps {
   arn: string;
 
   /**
+   * Name of the DynamoDB Table.
+   */
+  tableName: string;
+
+  /**
    * ARN of the table's stream if enabled
    * Format: arn:aws:dynamodb:region:account-id:table/table-name/stream/timestamp
    */
@@ -140,17 +147,19 @@ export const Table = Resource(
   "dynamo::Table",
   async function (
     this: Context<Table>,
-    _id: string,
+    id: string,
     props: TableProps,
   ): Promise<Table> {
     const client = new DynamoDBClient({});
+
+    const tableName = props.tableName ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "delete") {
       await retry(async () => {
         await ignore(ResourceNotFoundException.name, () =>
           client.send(
             new DeleteTableCommand({
-              TableName: props.tableName,
+              TableName: tableName,
             }),
           ),
         );
@@ -165,7 +174,7 @@ export const Table = Resource(
         try {
           await client.send(
             new DescribeTableCommand({
-              TableName: props.tableName,
+              TableName: tableName,
             }),
           );
           // If we get here, table still exists
@@ -184,7 +193,7 @@ export const Table = Resource(
 
       if (!tableDeleted) {
         throw new Error(
-          `Timed out waiting for table ${props.tableName} to be deleted`,
+          `Timed out waiting for table ${tableName} to be deleted`,
         );
       }
 
@@ -222,7 +231,7 @@ export const Table = Resource(
         // First check if table already exists
         const describeResponse = await client.send(
           new DescribeTableCommand({
-            TableName: props.tableName,
+            TableName: tableName,
           }),
         );
 
@@ -240,7 +249,7 @@ export const Table = Resource(
           // Table doesn't exist, try to create it
           await client.send(
             new CreateTableCommand({
-              TableName: props.tableName,
+              TableName: tableName,
               AttributeDefinitions: attributeDefinitions,
               KeySchema: keySchema,
               BillingMode: props.billingMode || "PAY_PER_REQUEST",
@@ -277,7 +286,7 @@ export const Table = Resource(
           async () =>
             await client.send(
               new DescribeTableCommand({
-                TableName: props.tableName,
+                TableName: tableName,
               }),
             ),
         );
@@ -302,13 +311,14 @@ export const Table = Resource(
 
     if (!tableActive) {
       throw new Error(
-        `Timed out waiting for table ${props.tableName} to become active`,
+        `Timed out waiting for table ${tableName} to become active`,
       );
     }
 
     return this({
       ...props,
       arn: tableDescription!.TableArn!,
+      tableName,
       streamArn: tableDescription!.LatestStreamArn,
       tableId: tableDescription!.TableId!,
     });

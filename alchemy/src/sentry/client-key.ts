@@ -10,6 +10,8 @@ import { SentryApi } from "./api.ts";
 export interface ClientKeyProps {
   /**
    * The name of the key
+   *
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -67,6 +69,11 @@ export interface ClientKey
    * The ID of the key
    */
   id: string;
+
+  /**
+   * Name of the Client Key.
+   */
+  name: string;
 
   /**
    * The label of the key
@@ -180,10 +187,16 @@ export const ClientKey = Resource(
   "sentry::ClientKey",
   async function (
     this: Context<ClientKey>,
-    _id: string,
+    id: string,
     props: ClientKeyProps,
   ): Promise<ClientKey> {
     const api = new SentryApi({ authToken: props.authToken });
+
+    const clientKeyName = props.name ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output.name !== clientKeyName) {
+      this.replace();
+    }
 
     if (this.phase === "delete") {
       try {
@@ -220,21 +233,21 @@ export const ClientKey = Resource(
               props.adopt &&
               error instanceof Error &&
               error.message.includes("already exists") &&
-              props.name
+              clientKeyName
             ) {
               logger.log(
-                `Client key '${props.name}' already exists, adopting it`,
+                `Client key '${clientKeyName}' already exists, adopting it`,
               );
               // Find the existing key by name
               const existingKey = await findClientKeyByName(
                 api,
                 props.organization,
                 props.project,
-                props.name,
+                clientKeyName,
               );
               if (!existingKey) {
                 throw new Error(
-                  `Failed to find existing client key '${props.name}' for adoption`,
+                  `Failed to find existing client key '${clientKeyName}' for adoption`,
                 );
               }
               response = await api.get(
@@ -257,6 +270,7 @@ export const ClientKey = Resource(
         return this({
           ...props,
           id: data.id,
+          name: clientKeyName,
           label: data.label,
           public: data.public,
           secret: data.secret,

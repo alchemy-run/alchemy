@@ -89,8 +89,10 @@ export interface PolicyDocument {
 export interface PolicyProps {
   /**
    * Name of the policy
+   *
+   * @default ${app}-${stage}-${id}
    */
-  policyName: string;
+  policyName?: string;
 
   /**
    * Policy document defining the permissions
@@ -121,6 +123,11 @@ export interface Policy extends Resource<"iam::Policy">, PolicyProps {
    * ARN of the policy
    */
   arn: string;
+
+  /**
+   * Name of the Policy.
+   */
+  policyName: string;
 
   /**
    * ID of the default policy version
@@ -230,11 +237,16 @@ export const Policy = Resource(
   "iam::Policy",
   async function (
     this: Context<Policy>,
-    _id: string,
+    id: string,
     props: PolicyProps,
   ): Promise<Policy> {
     const client = new IAMClient({});
-    const policyArn = `arn:aws:iam::${process.env.AWS_ACCOUNT_ID}:policy${props.path || "/"}${props.policyName}`;
+    const policyName = props.policyName ?? this.scope.createPhysicalName(id);
+    const policyArn = `arn:aws:iam::${process.env.AWS_ACCOUNT_ID}:policy${props.path || "/"}${policyName}`;
+
+    if (this.phase === "update" && this.output.policyName !== policyName) {
+      this.replace();
+    }
 
     if (this.phase === "delete") {
       try {
@@ -351,6 +363,7 @@ export const Policy = Resource(
       return this({
         ...props,
         arn: policy.Policy!.Arn!,
+        policyName,
         defaultVersionId: policy.Policy!.DefaultVersionId!,
         attachmentCount: policy.Policy!.AttachmentCount!,
         createDate: policy.Policy!.CreateDate!,
@@ -363,7 +376,7 @@ export const Policy = Resource(
         const newPolicy = await retry(() =>
           client.send(
             new CreatePolicyCommand({
-              PolicyName: props.policyName,
+              PolicyName: policyName,
               PolicyDocument: JSON.stringify(props.document),
               Description: props.description,
               Path: props.path,
@@ -380,6 +393,7 @@ export const Policy = Resource(
         return this({
           ...props,
           arn: newPolicy.Policy!.Arn!,
+          policyName,
           defaultVersionId: newPolicy.Policy!.DefaultVersionId!,
           attachmentCount: newPolicy.Policy!.AttachmentCount!,
           createDate: newPolicy.Policy!.CreateDate!,

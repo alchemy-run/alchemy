@@ -20,6 +20,8 @@ import { deleteMiniflareBinding } from "./miniflare/delete.ts";
 export interface KVNamespaceProps extends CloudflareApiOptions {
   /**
    * Title of the namespace
+   *
+   * @default ${app}-${stage}-${id}
    */
   title?: string;
 
@@ -209,7 +211,7 @@ const _KVNamespace = Resource(
     id: string,
     props: KVNamespaceProps,
   ): Promise<KVNamespace> {
-    const title = props.title ?? id;
+    const title = props.title ?? this.scope.createPhysicalName(id);
     const local = this.scope.local && !props.dev?.remote;
     const dev = {
       id: this.output?.dev?.id ?? this.output?.namespaceId ?? id,

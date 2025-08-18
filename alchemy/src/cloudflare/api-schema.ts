@@ -57,8 +57,10 @@ export interface APISchema<S extends OpenAPIV3.Document = OpenAPIV3.Document>
 
   /**
    * Name for the schema
+   *
+   * @default ${app.name}-${app.stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * The API Schema
@@ -160,10 +162,12 @@ export const APISchema = Resource("cloudflare::APISchema", async function <
 
   let schemaDetails: CloudflareSchemaDetails;
 
+  const schemaName = props.name ?? this.scope.createPhysicalName(id);
+
   if (this.phase === "update" && this.output?.id) {
     // Check if we need to replace due to name, schema content change, or disabling validation
     if (
-      props.name !== this.output.name ||
+      schemaName !== this.output.name ||
       JSON.stringify(parsedSchema) !== JSON.stringify(this.output.schema) ||
       (this.output.enabled === true && props.enabled === false)
     ) {
@@ -179,7 +183,7 @@ export const APISchema = Resource("cloudflare::APISchema", async function <
     // Create new schema
     schemaDetails = await uploadSchema(api, zoneId, {
       file: yaml.stringify(parsedSchema),
-      name: props.name || id,
+      name: schemaName,
       validation_enabled: props.enabled !== false,
     });
   }

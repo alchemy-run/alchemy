@@ -183,7 +183,7 @@ export interface PipelineProps extends CloudflareApiOptions {
   /**
    * Name of the pipeline
    *
-   * @default id
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -337,7 +337,7 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
   Pipeline<T>
 > {
   const api = await createCloudflareApi(props);
-  const pipelineName = props.name ?? id;
+  const pipelineName = props.name ?? this.scope.createPhysicalName(id);
 
   if (this.scope.local && !props.dev?.remote) {
     return this({
