@@ -7,7 +7,7 @@ export default {
     if (url.pathname !== "/websocket") {
       return new Response("Not found", { status: 404 });
     }
-    const stub = env.WS_SERVER.get(env.WS_SERVER.idFromName("default"));
+    const stub = env.WS_SERVER.getByName("default");
     // @ts-expect-error - TODO(sam): fix this
     return stub.fetch(req);
   },
