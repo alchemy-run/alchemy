@@ -172,15 +172,8 @@ If this is a mistake, you can disable this check by setting the ALCHEMY_CI_STATE
     scopeName: stageName,
     stage: stageName,
   });
-  try {
-    Scope.storage.enterWith(root);
-    Scope.storage.enterWith(stage);
-  } catch {
-    // we are in Cloudflare Workers, we will emulate the enterWith behavior
-    // see Scope.finalize for where we pop the global scope
-    Scope.globals.push(root);
-    Scope.globals.push(stage);
-  }
+  Scope.storage.enterWith(root);
+  Scope.storage.enterWith(stage);
   if (mergedOptions?.phase === "destroy") {
     await destroy(stage);
     return process.exit(0);
