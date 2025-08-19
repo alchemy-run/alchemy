@@ -260,4 +260,7 @@ export async function execAlchemy(
  * If exit code is 130 (SIGINT) or null, return 0.
  * Otherwise, return the exit code.
  */
-const sanitizeExitCode = (exitCode: number | null) => {};
+const sanitizeExitCode = (exitCode: number | null) => {
+  if (exitCode === null || exitCode === 130) return 0;
+  return exitCode;
+};
