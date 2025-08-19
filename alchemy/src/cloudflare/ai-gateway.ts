@@ -186,9 +186,10 @@ const AiGatewayResource = Resource(
     const gatewayName =
       props.gatewayName ??
       this.output?.gatewayName ??
+      this.output?.id ?? // name and ID are the same
       this.scope.createPhysicalName(id);
 
-    if (this.phase === "update" && this.output?.gatewayName !== gatewayName) {
+    if (this.phase === "update" && this.output?.id !== gatewayName) {
       this.replace();
     }
 
