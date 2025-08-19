@@ -52,7 +52,7 @@ export class CDPManager {
     return this.url;
   }
 
-  private handleRequest(req: any, res: any): void {
+  private handleRequest(_req: any, res: any): void {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Not found" }));
   }
