@@ -107,7 +107,8 @@ export const Volume = Resource(
     // Initialize Docker API client
     const api = new DockerApi();
 
-    const volumeName = props.name ?? this.scope.createPhysicalName(id);
+    const volumeName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     // Process labels to ensure consistent format
     const processedLabels: Record<string, string> = {};

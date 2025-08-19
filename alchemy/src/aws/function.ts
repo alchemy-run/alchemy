@@ -321,7 +321,9 @@ export const Function = Resource(
     const region = await resolveRegion(client);
 
     const functionName =
-      props.functionName ?? this.scope.createPhysicalName(id);
+      props.functionName ??
+      this.output?.functionName ??
+      this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.functionName !== functionName) {
       this.replace();

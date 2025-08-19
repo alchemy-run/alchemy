@@ -211,7 +211,13 @@ const _KVNamespace = Resource(
     id: string,
     props: KVNamespaceProps,
   ): Promise<KVNamespace> {
-    const title = props.title ?? this.scope.createPhysicalName(id);
+    const title =
+      props.title ?? this.output?.title ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output?.title !== title) {
+      this.replace();
+    }
+
     const local = this.scope.local && !props.dev?.remote;
     const dev = {
       id: this.output?.dev?.id ?? this.output?.namespaceId ?? id,

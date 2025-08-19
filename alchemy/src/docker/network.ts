@@ -83,7 +83,8 @@ export const Network = Resource(
     // Initialize Docker API client
     const api = new DockerApi();
 
-    const networkName = props.name ?? this.scope.createPhysicalName(id);
+    const networkName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.name !== networkName) {
       this.replace();

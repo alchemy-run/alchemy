@@ -11,6 +11,8 @@ import type { Bound } from "./bound.ts";
  */
 export interface AiGatewayProps extends CloudflareApiOptions {
   /**
+   * Name of the AI Gateway.
+   *
    * @default ${app.name}-${app.stage}-${id}
    */
   gatewayName?: string;
@@ -181,7 +183,15 @@ const AiGatewayResource = Resource(
     props: AiGatewayProps = {},
   ): Promise<AiGatewayResource> {
     const api = await createCloudflareApi(props);
-    const gatewayName = props.gatewayName ?? this.scope.createPhysicalName(id);
+    const gatewayName =
+      props.gatewayName ??
+      this.output?.gatewayName ??
+      this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output?.gatewayName !== gatewayName) {
+      this.replace();
+    }
+
     const gatewayPath = `/accounts/${api.accountId}/ai-gateway/gateways/${gatewayName}`;
     const gatewaysPath = `/accounts/${api.accountId}/ai-gateway/gateways`;
 
@@ -259,6 +269,7 @@ const AiGatewayResource = Resource(
     return this({
       ...mergedProps, // Start with the input props (including defaults)
       id: apiResource.id,
+      gatewayName,
       accountId: apiResource.account_id,
       accountTag: apiResource.account_tag,
       createdAt: apiResource.created_at,

@@ -154,6 +154,7 @@ export const Queue = Resource(
     // Don't automatically add .fifo suffix - user must include it in queueName
     const queueName =
       props.queueName ??
+      this.output?.queueName ??
       `${this.scope.createPhysicalName(id)}${props.fifo ? ".fifo" : ""}`;
 
     if (props.fifo && !queueName.endsWith(".fifo")) {

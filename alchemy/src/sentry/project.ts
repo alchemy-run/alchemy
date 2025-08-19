@@ -297,8 +297,12 @@ export const Project = Resource(
     const projectName = props.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.name !== projectName) {
-      // TODO(sam): can we rename without destroying?
-      this.replace();
+      await api.put(
+        `/projects/${props.organization}/${this.output.slug || this.output.id}/`,
+        {
+          name: projectName,
+        },
+      );
     }
 
     if (this.phase === "delete") {

@@ -128,7 +128,8 @@ export const VectorizeIndex = Resource(
     props: VectorizeIndexProps,
   ): Promise<VectorizeIndex> {
     const api = await createCloudflareApi(props);
-    const indexName = props.name || this.scope.createPhysicalName(id);
+    const indexName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "delete") {
       logger.log("Deleting Vectorize index:", indexName);

@@ -189,14 +189,17 @@ export const Database = Resource(
       throw new Error("PLANETSCALE_API_TOKEN environment variable is required");
     }
 
-    const databaseName = props.name ?? this.scope.createPhysicalName(id);
+    const api = new PlanetScaleApi({ apiKey });
+
+    const databaseName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.name !== databaseName) {
-      // TODO(sam): maybe we can rename the DB without destroying the data?
-      this.replace();
+      await api.patch(
+        `/organizations/${props.organizationId}/databases/${this.output.name}`,
+        { new_name: databaseName },
+      );
     }
-
-    const api = new PlanetScaleApi({ apiKey });
 
     if (this.phase === "delete") {
       try {

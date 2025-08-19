@@ -263,7 +263,13 @@ const _D1Database = Resource(
     id: string,
     props: D1DatabaseProps = {},
   ): Promise<D1Database> {
-    const databaseName = props.name ?? this.scope.createPhysicalName(id);
+    const databaseName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output?.name !== databaseName) {
+      this.replace();
+    }
+
     const local = this.scope.local && !props.dev?.remote;
     const dev = {
       id: this.output?.dev?.id ?? this.output?.id ?? id,

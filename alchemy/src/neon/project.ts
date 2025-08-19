@@ -522,7 +522,8 @@ export const NeonProject = Resource(
   ): Promise<NeonProject> {
     const api = createNeonApi(props);
     const projectId = props.existing_project_id || this.output?.id;
-    const projectName = props.name ?? this.scope.createPhysicalName(id);
+    const projectName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.name !== projectName) {
       this.replace();

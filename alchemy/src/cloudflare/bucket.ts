@@ -246,7 +246,13 @@ const _R2Bucket = Resource(
     id: string,
     props: BucketProps = {},
   ): Promise<R2Bucket> {
-    const bucketName = props.name || this.scope.createPhysicalName(id);
+    const bucketName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output?.name !== bucketName) {
+      this.replace();
+    }
+
     const allowPublicAccess = props.allowPublicAccess === true;
     const dev = {
       id: this.output?.dev?.id ?? bucketName,

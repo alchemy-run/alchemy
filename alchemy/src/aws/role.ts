@@ -232,7 +232,10 @@ export const Role = Resource(
   ): Promise<Role> {
     const client = new IAMClient({});
 
-    const roleName = props.roleName ?? this.scope.createPhysicalName(id);
+    const roleName =
+      props.roleName ??
+      this.output?.roleName ??
+      this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.roleName !== roleName) {
       this.replace();

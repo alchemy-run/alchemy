@@ -165,7 +165,8 @@ export const Branch = Resource(
 
     const api = new PlanetScaleApi({ apiKey });
 
-    const branchName = props.name ?? this.scope.createPhysicalName(id);
+    const branchName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.name !== branchName) {
       // TODO(sam): maybe we don't need to replace? just branch again? or rename?

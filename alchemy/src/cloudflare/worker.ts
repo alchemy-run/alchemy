@@ -714,7 +714,8 @@ const _Worker = Resource(
         logger.warn("projectRoot is deprecated, use cwd instead");
         props.cwd = props.projectRoot;
       }
-      const name = props.name ?? this.scope.createPhysicalName(id);
+      const name =
+        props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
       const cwd = path.resolve(props.cwd ?? process.cwd());
       const compatibilityDate =
         props.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;

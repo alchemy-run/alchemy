@@ -194,7 +194,8 @@ export const RepositoryEnvironment = Resource(
       await verifyGitHubAuth(octokit, props.owner, props.repository);
     }
 
-    const environmentName = props.name ?? this.scope.createPhysicalName(id);
+    const environmentName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.name !== environmentName) {
       this.replace();

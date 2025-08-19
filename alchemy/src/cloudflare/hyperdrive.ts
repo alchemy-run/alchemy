@@ -136,8 +136,10 @@ export type HyperdriveOrigin =
 export interface HyperdriveProps extends CloudflareApiOptions {
   /**
    * Name of the Hyperdrive configuration
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * Database connection origin configuration
@@ -181,6 +183,11 @@ export interface Hyperdrive
    * The ID of the resource
    */
   id: string;
+
+  /**
+   * Name of the Hyperdrive configuration
+   */
+  name: string;
 
   /**
    * The Cloudflare-generated UUID of the hyperdrive
@@ -311,7 +318,7 @@ export async function Hyperdrive(
  * @internal
  */
 interface InternalHyperdriveProps extends CloudflareApiOptions {
-  name: string;
+  name?: string;
   hyperdriveId?: string;
   origin: HyperdriveOrigin;
   caching?: HyperdriveCaching;
@@ -331,11 +338,14 @@ const _Hyperdrive = Resource(
   ): Promise<Hyperdrive> {
     const hyperdriveId = props.hyperdriveId || this.output?.hyperdriveId;
 
+    const name =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
     if (this.scope.local) {
       return this({
         id,
         hyperdriveId: hyperdriveId || "",
-        name: props.name,
+        name,
         origin: props.origin,
         caching: props.caching,
         mtls: props.mtls,

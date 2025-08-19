@@ -273,7 +273,7 @@ export const Password = Resource(
     const nameSlug = this.isReplacement
       ? lowercaseId()
       : (this.output?.nameSlug ?? lowercaseId());
-    const name = `${(props.name ?? this.scope.createPhysicalName(id)).toLowerCase()}-${nameSlug}`;
+    const name = `${(props.name ?? this.output?.name ?? this.scope.createPhysicalName(id)).toLowerCase()}-${nameSlug}`;
 
     const api = new PlanetScaleApi({ apiKey });
     const branchName =

@@ -188,7 +188,8 @@ export const SSMParameter = Resource(
   ): Promise<SSMParameter> {
     const client = new SSMClient({});
 
-    const parameterName = props.name ?? this.scope.createPhysicalName(id);
+    const parameterName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.name !== parameterName) {
       this.replace();

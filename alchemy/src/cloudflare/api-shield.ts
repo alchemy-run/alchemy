@@ -166,6 +166,11 @@ export interface ValidationSettings {
 export interface APIShield<S extends OpenAPIV3.Document = OpenAPIV3.Document>
   extends Resource<"cloudflare::APIShield"> {
   /**
+   * Name of the API Shield.
+   */
+  name: string;
+
+  /**
    * The schema resource
    */
   schema: APISchema<S>;
@@ -409,14 +414,19 @@ const _APIShield = Resource(
       return this.destroy();
     }
 
+    const schemaName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output?.name !== schemaName) {
+      this.replace();
+    }
+
     // Update global settings
     const defaultAction = props.defaultMitigation || "none";
     await updateGlobalSettings(api, zoneId, {
       validation_default_mitigation_action: defaultAction,
       validation_override_mitigation_action: props.unknownOperationMitigation,
     });
-
-    const schemaName = props.name ?? this.scope.createPhysicalName(id);
 
     const schema = await APISchema("schema", {
       schema: props.schema,
@@ -433,6 +443,7 @@ const _APIShield = Resource(
     return this({
       zoneId,
       schema,
+      name: schemaName,
       operations: await Promise.all(
         parseSchemaOperations(schema.schema).map(async (parsedOp) => {
           let operationAction = defaultAction;

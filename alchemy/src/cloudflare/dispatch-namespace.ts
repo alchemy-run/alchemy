@@ -114,7 +114,10 @@ export const DispatchNamespace = Resource(
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
 
-    const namespace = props.namespace ?? this.scope.createPhysicalName(id);
+    const namespace =
+      props.namespace ??
+      this.output?.namespace ??
+      this.scope.createPhysicalName(id);
 
     if (this.phase === "delete") {
       // For delete operations, we need to check if the namespace exists in the output
@@ -134,11 +137,8 @@ export const DispatchNamespace = Resource(
         : Date.now();
 
     if (this.phase === "update") {
-      // Check that the namespace name hasn't changed
-      if (this.output?.namespace && this.output.namespace !== namespace) {
-        throw new Error(
-          `Cannot update dispatch namespace name after creation. Namespace name is immutable. Before: ${this.output.namespace}, After: ${namespace}`,
-        );
+      if (this.output.namespace !== namespace) {
+        this.replace();
       }
       // For updates, just refresh metadata
     } else {

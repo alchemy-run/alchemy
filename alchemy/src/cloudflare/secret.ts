@@ -164,7 +164,8 @@ const _Secret = Resource(
   ): Promise<Secret> {
     const api = await createCloudflareApi(props);
 
-    const secretName = props.name ?? this.scope.createPhysicalName(id);
+    const secretName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.name !== secretName) {
       this.replace();

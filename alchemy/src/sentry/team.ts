@@ -143,6 +143,7 @@ export const Team = Resource(
 
     if (this.phase === "update" && this.output.name !== teamName) {
       // TODO(sam): can we rename without destroying?
+      // -> no: https://docs.sentry.io/api/teams/update-a-team/
       this.replace();
     }
 

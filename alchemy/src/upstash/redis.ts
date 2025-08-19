@@ -172,7 +172,8 @@ export const UpstashRedis = Resource(
       email: props.email,
     });
 
-    const databaseName = props.name ?? this.scope.createPhysicalName(id);
+    const databaseName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "delete") {
       await deleteRedisDatabase(api, this.output.id);

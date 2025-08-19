@@ -241,7 +241,10 @@ export const Policy = Resource(
     props: PolicyProps,
   ): Promise<Policy> {
     const client = new IAMClient({});
-    const policyName = props.policyName ?? this.scope.createPhysicalName(id);
+    const policyName =
+      props.policyName ??
+      this.output?.policyName ??
+      this.scope.createPhysicalName(id);
     const policyArn = `arn:aws:iam::${process.env.AWS_ACCOUNT_ID}:policy${props.path || "/"}${policyName}`;
 
     if (this.phase === "update" && this.output.policyName !== policyName) {

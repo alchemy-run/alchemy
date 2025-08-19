@@ -190,7 +190,8 @@ export const Container = Resource(
       typeof props.image === "string" ? props.image : props.image.imageRef;
 
     // Use provided name or generate one based on resource ID
-    const containerName = props.name || this.scope.createPhysicalName(id);
+    const containerName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.name !== containerName) {
       this.replace();

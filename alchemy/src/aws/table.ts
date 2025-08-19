@@ -152,7 +152,14 @@ export const Table = Resource(
   ): Promise<Table> {
     const client = new DynamoDBClient({});
 
-    const tableName = props.tableName ?? this.scope.createPhysicalName(id);
+    const tableName =
+      props.tableName ??
+      this.output?.tableName ??
+      this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output?.tableName !== tableName) {
+      this.replace();
+    }
 
     if (this.phase === "delete") {
       await retry(async () => {

@@ -139,7 +139,10 @@ export const Bucket = Resource(
   async function (this: Context<Bucket>, id: string, props: BucketProps) {
     const client = new S3Client({});
 
-    const bucketName = props.bucketName ?? this.scope.createPhysicalName(id);
+    const bucketName =
+      props.bucketName ??
+      this.output?.bucketName ??
+      this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.bucketName !== bucketName) {
       this.replace();

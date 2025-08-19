@@ -236,34 +236,34 @@ export function isPipeline(resource: Resource): resource is Pipeline {
 /**
  * Output returned after Pipeline creation/update
  */
-export interface Pipeline<_T extends PipelineRecord = PipelineRecord>
-  extends Resource<"cloudflare::Pipeline">,
-    PipelineProps {
-  /**
-   * Type identifier for the Pipeline resource
-   */
-  type: "pipeline";
+export type Pipeline<_T extends PipelineRecord = PipelineRecord> =
+  Resource<"cloudflare::Pipeline"> &
+    PipelineProps & {
+      /**
+       * Type identifier for the Pipeline resource
+       */
+      type: "pipeline";
 
-  /**
-   * The unique ID of the pipeline
-   */
-  id: string;
+      /**
+       * The unique ID of the pipeline
+       */
+      id: string;
 
-  /**
-   * The name of the pipeline
-   */
-  name: string;
+      /**
+       * The name of the pipeline
+       */
+      name: string;
 
-  /**
-   * HTTP endpoint URL for the pipeline
-   */
-  endpoint: string;
+      /**
+       * HTTP endpoint URL for the pipeline
+       */
+      endpoint: string;
 
-  /**
-   * Version of the pipeline
-   */
-  version: number;
-}
+      /**
+       * Version of the pipeline
+       */
+      version: number;
+    };
 
 /**
  * Creates and manages Cloudflare Pipelines.
@@ -337,7 +337,12 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
   Pipeline<T>
 > {
   const api = await createCloudflareApi(props);
-  const pipelineName = props.name ?? this.scope.createPhysicalName(id);
+  const pipelineName =
+    props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
+  if (this.phase === "update" && this.output?.name !== pipelineName) {
+    this.replace();
+  }
 
   if (this.scope.local && !props.dev?.remote) {
     return this({
