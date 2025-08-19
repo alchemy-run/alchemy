@@ -1,3 +1,13 @@
+## v0.62.2
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**: Always substitute {projectName} &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(8bb7e)</samp>](https://github.com/sam-goodwin/alchemy/commit/8bb7e695)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.62.1...v0.62.2)
+
+---
+
 ## v0.62.1
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
