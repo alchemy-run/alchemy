@@ -7,7 +7,10 @@ import z from "zod";
 import { detectRuntime } from "../../src/util/detect-node-runtime.ts";
 import { detectPackageManager } from "../../src/util/detect-package-manager.ts";
 import { exists } from "../../src/util/exists.ts";
+import { promiseWithResolvers } from "../../src/util/promise-with-resolvers.ts";
 import { ExitSignal } from "../trpc.ts";
+import { CDPProxy } from "./cdp-manager/cdp-proxy.ts";
+import { CDPManager } from "./cdp-manager/server.ts";
 
 export const entrypoint = z
   .string()
@@ -76,6 +79,8 @@ export async function execAlchemy(
   const args: string[] = [];
   const execArgs: string[] = [];
 
+  const INSPECT = true;
+
   if (quiet) args.push("--quiet");
   if (read) args.push("--read");
   if (force) args.push("--force");
@@ -89,6 +94,8 @@ export async function execAlchemy(
     execArgs.push(`--env-file ${envFile}`);
   }
   if (dev) args.push("--dev");
+  //todo(michael): support inspect-brk
+  if (INSPECT) execArgs.push("--inspect-wait");
 
   // Check for alchemy.run.ts or alchemy.run.js (if not provided)
   if (!main) {
@@ -154,21 +161,70 @@ export async function execAlchemy(
           break;
       }
   }
+
+  const { promise: inspectorUrlPromise, resolve: resolveInspectorUrl } =
+    promiseWithResolvers<string>();
+
   process.on("SIGINT", async () => {
     await exitPromise;
     process.exit(sanitizeExitCode(child.exitCode));
   });
 
-  console.log(command);
   const child = spawn(command, {
     cwd,
     shell: true,
-    stdio: "inherit",
+    stdio: "pipe",
     env: {
       ...process.env,
       FORCE_COLOR: "1",
     },
   });
+
+  if (child.stdout) {
+    // child.stdout.pipe(process.stdout);
+  }
+
+  if (child.stderr) {
+    child.stderr.on("data", (data) => {
+      const string = data.toString();
+      //* bun inspector url seems to always be on 6499
+      //todo(michael): support node and deno
+      const bunInspectorMatch = string.match(
+        /ws:\/\/localhost:6499\/[a-zA-z0-9]*/,
+      );
+      const nodeInspectorMatch = string.match(
+        /ws:\/\/127.0.0.1:9229\/[a-zA-z0-9-]*/,
+      );
+      if (bunInspectorMatch) {
+        const inspectorUrl = bunInspectorMatch[0];
+        resolveInspectorUrl(inspectorUrl);
+      } else if (nodeInspectorMatch) {
+        const inspectorUrl = nodeInspectorMatch[0];
+        resolveInspectorUrl(inspectorUrl);
+      }
+      // process.stderr.write(data);
+    });
+  }
+
+  if (child.stdin) {
+    // process.stdin.pipe(child.stdin);
+  }
+
+  if (INSPECT) {
+    const inspectorUrl = await inspectorUrlPromise;
+    //* we await to make sure bun has finished printing so we don't cut if off
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const cdpManager = new CDPManager();
+    await cdpManager.startServer();
+    const rootCDPProxy = new CDPProxy(inspectorUrl, {
+      name: "alchemy.run.ts",
+      server: cdpManager.server,
+      connect: false,
+    });
+    cdpManager.registerCDPServer(rootCDPProxy);
+    console.log("Waiting for inspector to connect....");
+  }
+
   const exitPromise = once(child, "exit");
   await exitPromise.catch(() => {});
   process.exit(sanitizeExitCode(child.exitCode));
