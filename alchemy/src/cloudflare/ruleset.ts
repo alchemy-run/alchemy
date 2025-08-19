@@ -174,7 +174,8 @@ export const Ruleset = Resource("cloudflare::Ruleset", async function <
     return this.destroy();
   }
 
-  const rulesetName = props.name ?? this.scope.createPhysicalName(id);
+  const rulesetName =
+    props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
   // Overwrite entire entrypoint with only the provided rules
   const result = await updateRuleset(api, zoneId, phase, {

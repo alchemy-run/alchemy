@@ -294,7 +294,28 @@ export const Project = Resource(
   ): Promise<Project> {
     const api = new SentryApi({ authToken: props.authToken });
 
-    const projectName = props.name ?? this.scope.createPhysicalName(id);
+    // it's possible that `this.output.name` is undefined because a previous version
+    // of alchemy had a bug where it didn't set the name on the output
+    // so, we try to find the key by ID and use the name from the API response
+    const lookupName = async () => {
+      if (!this.output) {
+        return undefined;
+      } else if (this.output.name) {
+        return this.output.name;
+      }
+      const name = await getProjectName(
+        api,
+        props.organization,
+        this.output.id,
+      );
+      if (name) {
+        this.output.name = name;
+      }
+      return name;
+    };
+
+    const projectName =
+      props.name ?? (await lookupName()) ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.name !== projectName) {
       await api.put(
@@ -437,4 +458,17 @@ async function findProjectBySlug(
   }>;
   const project = projects.find((p) => p.slug === slug);
   return project ? { id: project.id, slug: project.slug } : null;
+}
+
+async function getProjectName(
+  api: SentryApi,
+  organization: string,
+  slug: string,
+): Promise<string | undefined> {
+  const response = await api.get(`/projects/${organization}/${slug}/`);
+  if (!response.ok) {
+    throw new Error(`API error: ${response.statusText}`);
+  }
+
+  return ((await response.json()) as { name: string }).name;
 }

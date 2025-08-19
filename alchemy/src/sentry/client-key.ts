@@ -192,10 +192,38 @@ export const ClientKey = Resource(
   ): Promise<ClientKey> {
     const api = new SentryApi({ authToken: props.authToken });
 
-    const clientKeyName = props.name ?? this.scope.createPhysicalName(id);
+    // it's possible that `this.output.name` is undefined because a previous version
+    // of alchemy had a bug where it didn't set the name on the output
+    // so, we try to find the key by ID and use the name from the API response
+    const lookupName = async () => {
+      if (!this.output?.id) {
+        // not running in the update phase
+        return undefined;
+      } else if (this.output.name) {
+        return this.output.name;
+      }
+      const name = (
+        await getClientKeyName(api, {
+          organization: props.organization,
+          project: props.project,
+          keyId: this.output.id,
+        })
+      )?.name;
 
-    if (this.phase === "update" && this.output.name !== clientKeyName) {
-      this.replace();
+      if (name) {
+        this.output.name = name;
+      }
+
+      return name;
+    };
+
+    const clientKeyName =
+      props.name ?? (await lookupName()) ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update") {
+      if (this.output.name !== clientKeyName) {
+        this.replace();
+      }
     }
 
     if (this.phase === "delete") {
@@ -307,4 +335,30 @@ async function findClientKeyByName(
   const keys = (await response.json()) as Array<{ id: string; name: string }>;
   const key = keys.find((k) => k.name === name);
   return key ? { id: key.id } : null;
+}
+
+/**
+ * Find a client key by ID
+ */
+async function getClientKeyName(
+  api: SentryApi,
+  {
+    organization,
+    project,
+    keyId,
+  }: {
+    organization: string;
+    project: string;
+    keyId: string;
+  },
+): Promise<{ id: string; name: string } | null> {
+  const response = await api.get(
+    `/projects/${organization}/${project}/keys/${keyId}`,
+  );
+  if (!response.ok) {
+    throw new Error(`API error: ${response.statusText}`);
+  }
+
+  const key = (await response.json()) as { id: string; name: string };
+  return key ? { id: key.id, name: key.name } : null;
 }

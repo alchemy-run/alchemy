@@ -248,7 +248,8 @@ const _Queue = Resource("cloudflare::Queue", async function <
 >(this: Context<Queue<T>>, id: string, props: QueueProps = {}): Promise<
   Queue<T>
 > {
-  const queueName = props.name ?? this.scope.createPhysicalName(id);
+  const queueName =
+    props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
   const dev = {
     id: this.output?.dev?.id ?? this.output?.id ?? id,

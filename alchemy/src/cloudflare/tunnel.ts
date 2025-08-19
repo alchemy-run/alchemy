@@ -488,7 +488,8 @@ export const Tunnel = Resource(
     // Create Cloudflare API client with automatic account discovery
     const api = await createCloudflareApi(props);
 
-    const name = props.name ?? this.scope.createPhysicalName(id);
+    const name =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.name !== name) {
       this.replace();

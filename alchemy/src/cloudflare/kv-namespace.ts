@@ -214,10 +214,6 @@ const _KVNamespace = Resource(
     const title =
       props.title ?? this.output?.title ?? this.scope.createPhysicalName(id);
 
-    if (this.phase === "update" && this.output?.title !== title) {
-      this.replace();
-    }
-
     const local = this.scope.local && !props.dev?.remote;
     const dev = {
       id: this.output?.dev?.id ?? this.output?.namespaceId ?? id,
@@ -237,6 +233,10 @@ const _KVNamespace = Resource(
     }
 
     const api = await createCloudflareApi(props);
+
+    if (this.phase === "update" && this.output?.title !== title) {
+      await renameKVNamespace(api, this.output.namespaceId, title);
+    }
 
     if (this.phase === "delete") {
       if (this.output.dev?.id) {
@@ -463,4 +463,19 @@ export async function findKVNamespaceByTitle(
 
   // No matching namespace found
   return null;
+}
+
+export async function renameKVNamespace(
+  api: CloudflareApi,
+  namespaceId: string,
+  title: string,
+) {
+  const response = await api.put(
+    `/accounts/${api.accountId}/storage/kv/namespaces/${namespaceId}`,
+    { title },
+  );
+
+  if (!response.ok) {
+    await handleApiError(response, "update", "kv_namespace", namespaceId);
+  }
 }
