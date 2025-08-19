@@ -15,6 +15,6 @@
     "@types/node": "^24.0.1",
     "alchemy": "workspace:*",
     "hono": "^4.8.3",
-    "typescript": "^5.8.3"
+    "typescript": "catalog:"
   }
 }

@@ -13,7 +13,7 @@
     "@cloudflare/workers-types": "catalog:",
     "@types/node": "^24.0.1",
     "alchemy": "workspace:*",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vite": "catalog:"
   }
 }

@@ -27,7 +27,7 @@
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
     "alchemy": "workspace:*",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vite": "catalog:"
   },
   "engines": {
