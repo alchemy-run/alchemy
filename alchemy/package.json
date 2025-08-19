@@ -185,6 +185,7 @@
     "@cloudflare/workers-types": "*",
     "@libsql/client": "^0.15.12",
     "@octokit/rest": "^21.1.1",
+    "astro": "^5.13.2",
     "drizzle-orm": "^0.44.2",
     "rwsdk": "^0.1.36",
     "stripe": "^17.0.0"
@@ -229,6 +230,9 @@
     "@libsql/client": {
       "optional": true
     },
+    "astro": {
+      "optional": true
+    },
     "drizzle-orm": {
       "optional": true
     },
@@ -265,6 +269,7 @@
     "@types/node": "latest",
     "@types/ws": "^8.18.1",
     "arktype": "^2.1.16",
+    "astro": "^5.13.2",
     "braintrust": "^0.0.201",
     "cpx": "^1.5.0",
     "dofs": "^0.1.0",
