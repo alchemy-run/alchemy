@@ -54,7 +54,6 @@ export async function createGitHubClient(
 ): Promise<Octokit> {
   const token = await getGitHubToken(options.token);
   const { Octokit } = await importPeer(
-    "@octokit/rest",
     import("@octokit/rest"),
     "GitHub resources",
   );

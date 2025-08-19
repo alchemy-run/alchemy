@@ -167,11 +167,7 @@ export const SES = Resource(
       PutConfigurationSetTrackingOptionsCommand,
       PutEmailIdentityDkimAttributesCommand,
       SESv2Client,
-    } = await importPeer(
-      "@aws-sdk/client-sesv2",
-      import("@aws-sdk/client-sesv2"),
-      "ses::SES",
-    );
+    } = await importPeer(import("@aws-sdk/client-sesv2"), "ses::SES");
 
     const client = new SESv2Client({});
 

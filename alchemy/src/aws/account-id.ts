@@ -9,7 +9,6 @@ export type AccountId = string & {
  */
 export async function AccountId(): Promise<AccountId> {
   const { GetCallerIdentityCommand, STSClient } = await importPeer(
-    "@aws-sdk/client-sts",
     import("@aws-sdk/client-sts"),
     "aws::AccountId",
   );

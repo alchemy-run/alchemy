@@ -179,11 +179,7 @@ export const SSMParameter = Resource(
       ParameterNotFound,
       PutParameterCommand,
       SSMClient,
-    } = await importPeer(
-      "@aws-sdk/client-ssm",
-      import("@aws-sdk/client-ssm"),
-      "ssm::Parameter",
-    );
+    } = await importPeer(import("@aws-sdk/client-ssm"), "ssm::Parameter");
     const client = new SSMClient({});
 
     if (this.phase === "delete") {

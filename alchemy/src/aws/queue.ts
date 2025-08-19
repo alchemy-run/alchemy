@@ -143,11 +143,7 @@ export const Queue = Resource(
       QueueDeletedRecently,
       QueueDoesNotExist,
       SQSClient,
-    } = await importPeer(
-      "@aws-sdk/client-sqs",
-      import("@aws-sdk/client-sqs"),
-      "sqs::Queue",
-    );
+    } = await importPeer(import("@aws-sdk/client-sqs"), "sqs::Queue");
     const client = new SQSClient({});
     // Don't automatically add .fifo suffix - user must include it in queueName
     const queueName = props.queueName;

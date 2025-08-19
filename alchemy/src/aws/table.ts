@@ -143,11 +143,7 @@ export const Table = Resource(
       DescribeTableCommand,
       DynamoDBClient,
       ResourceNotFoundException,
-    } = await importPeer(
-      "@aws-sdk/client-dynamodb",
-      import("@aws-sdk/client-dynamodb"),
-      "dynamo::Table",
-    );
+    } = await importPeer(import("@aws-sdk/client-dynamodb"), "dynamo::Table");
     const client = new DynamoDBClient({});
 
     if (this.phase === "delete") {

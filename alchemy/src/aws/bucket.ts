@@ -130,11 +130,7 @@ export const Bucket = Resource(
       NoSuchBucket,
       PutBucketTaggingCommand,
       S3Client,
-    } = await importPeer(
-      "@aws-sdk/client-s3",
-      import("@aws-sdk/client-s3"),
-      "s3::Bucket",
-    );
+    } = await importPeer(import("@aws-sdk/client-s3"), "s3::Bucket");
     const client = new S3Client({});
 
     if (this.phase === "delete") {
