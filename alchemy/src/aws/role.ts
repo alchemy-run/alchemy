@@ -223,11 +223,7 @@ export const Role = Resource(
       TagRoleCommand,
       UpdateAssumeRolePolicyCommand,
       UpdateRoleCommand,
-    } = await importPeer(
-      "@aws-sdk/client-iam",
-      import("@aws-sdk/client-iam"),
-      "iam::Role",
-    );
+    } = await importPeer(import("@aws-sdk/client-iam"), "iam::Role");
     const client = new IAMClient({});
 
     if (this.phase === "delete") {

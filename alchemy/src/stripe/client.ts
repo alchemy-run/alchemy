@@ -12,7 +12,6 @@ export async function createStripeClient(
   options: StripeClientOptions = {},
 ): Promise<Stripe> {
   const { default: Stripe } = await importPeer(
-    "stripe",
     import("stripe"),
     "Stripe resources",
   );

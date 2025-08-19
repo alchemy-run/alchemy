@@ -126,7 +126,6 @@ async function createBunSQLiteDatabase(
   ensureDirectory(filename);
   const { Database } = await import("bun:sqlite");
   const { drizzle } = await importPeer(
-    "drizzle-orm",
     import("drizzle-orm/bun-sqlite"),
     "SQLiteStateStore",
   );
@@ -156,12 +155,10 @@ async function createLibSQLDatabase(
     ensureDirectory(filename);
   }
   const { drizzle } = await importPeer(
-    "drizzle-orm",
     import("drizzle-orm/libsql"),
     "SQLiteStateStore",
   );
   const { createClient } = await importPeer(
-    "@libsql/client",
     import("@libsql/client"),
     "SQLiteStateStore (libsql)",
   );

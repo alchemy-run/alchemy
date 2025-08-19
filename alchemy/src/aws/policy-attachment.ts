@@ -70,7 +70,6 @@ export const PolicyAttachment = Resource(
       IAMClient,
       NoSuchEntityException,
     } = await importPeer(
-      "@aws-sdk/client-iam",
       import("@aws-sdk/client-iam"),
       "iam::PolicyAttachment",
     );

@@ -39,7 +39,6 @@ export class D1StateStore extends StateStoreProxy {
 
 const createDatabaseClient = memoize(async (options: D1StateStoreOptions) => {
   const { drizzle } = await importPeer(
-    "drizzle-orm",
     import("drizzle-orm/sqlite-proxy"),
     "D1StateStore",
   );

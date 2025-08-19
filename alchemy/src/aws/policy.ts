@@ -233,11 +233,7 @@ export const Policy = Resource(
       IAMClient,
       ListPolicyVersionsCommand,
       NoSuchEntityException,
-    } = await importPeer(
-      "@aws-sdk/client-iam",
-      import("@aws-sdk/client-iam"),
-      "iam::Policy",
-    );
+    } = await importPeer(import("@aws-sdk/client-iam"), "iam::Policy");
     const client = new IAMClient({});
     const policyArn = `arn:aws:iam::${process.env.AWS_ACCOUNT_ID}:policy${props.path || "/"}${props.policyName}`;
 

@@ -315,11 +315,7 @@ export const Function = Resource(
       UpdateFunctionCodeCommand,
       UpdateFunctionConfigurationCommand,
       UpdateFunctionUrlConfigCommand,
-    } = await importPeer(
-      "@aws-sdk/client-lambda",
-      import("@aws-sdk/client-lambda"),
-      "lambda::Function",
-    );
+    } = await importPeer(import("@aws-sdk/client-lambda"), "lambda::Function");
     const client = new LambdaClient({});
     const region = await resolveRegion(client);
 

@@ -1,3 +1,17 @@
+## v0.62.3
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**:
+  - Incljude .wrangler/ in .gitignore &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(f7f0c)</samp>](https://github.com/sam-goodwin/alchemy/commit/f7f0cb55)
+- **cloudflare**:
+  - Use correct D1 databaseId value in phases &nbsp;-&nbsp; by **Rhayxz** in https://github.com/sam-goodwin/alchemy/issues/889 [<samp>(09aec)</samp>](https://github.com/sam-goodwin/alchemy/commit/09aecfd5)
+  - Allow overwriting `spa: true` in vite apps &nbsp;-&nbsp; by **John Royal** in https://github.com/sam-goodwin/alchemy/issues/882 [<samp>(39598)</samp>](https://github.com/sam-goodwin/alchemy/commit/39598369)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/sam-goodwin/alchemy/compare/v0.62.2...v0.62.3)
+
+---
+
 ## v0.62.2
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

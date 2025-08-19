@@ -122,7 +122,6 @@ export const DEFAULT_STAGE =
 
 declare global {
   var __ALCHEMY_STORAGE__: AsyncLocalStorage<Scope>;
-  var __ALCHEMY_GLOBALS__: Scope[];
 }
 
 const ScopeSymbol = Symbol.for("alchemy::Scope");
@@ -138,17 +137,9 @@ export class Scope {
 
   public static storage = (globalThis.__ALCHEMY_STORAGE__ ??=
     new AsyncLocalStorage<Scope>());
-  public static globals: Scope[] = (globalThis.__ALCHEMY_GLOBALS__ ??= []);
 
   public static getScope(): Scope | undefined {
-    const scope = Scope.storage.getStore();
-    if (!scope) {
-      if (Scope.globals.length > 0) {
-        return Scope.globals[Scope.globals.length - 1];
-      }
-      return undefined;
-    }
-    return scope;
+    return Scope.storage.getStore();
   }
 
   public static get root(): Scope {
@@ -496,14 +487,6 @@ export class Scope {
     }
     if (this.finalized && !shouldForce) {
       return;
-    }
-    if (this.parent === undefined && Scope.globals.length > 0) {
-      const last = Scope.globals.pop();
-      if (last !== this) {
-        throw new Error(
-          "Running in AsyncLocaStorage.enterWith emulation mode and attempted to finalize a global Scope that wasn't top of the stack",
-        );
-      }
     }
     this.finalized = true;
     // trigger and await all deferred promises

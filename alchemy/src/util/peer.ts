@@ -4,10 +4,6 @@ import {
 } from "./detect-package-manager.ts";
 
 export class PeerDependencyError extends Error {
-  public missing: string[];
-  public packageManager: PackageManager = "npm";
-  public feature?: string;
-
   constructor(input: {
     feature?: string;
     missing: string[];
@@ -22,24 +18,36 @@ export class PeerDependencyError extends Error {
         `  ${input.packageManager ?? "npm"} install ${input.missing.join(" ")}`,
       ].join("\n"),
     );
-    this.missing = input.missing;
-    this.packageManager = input.packageManager ?? "npm";
-    this.feature = input.feature;
   }
 }
 
-export async function importPeer<T>(
-  name: string,
-  promise: Promise<T>,
-  feature?: string,
-) {
+const extractPackageName = (error: unknown) => {
+  const message =
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+      ? error.message
+      : undefined;
+  const match = message?.match(/Cannot find (package|module) '([^']+)'/);
+  return match?.[2];
+};
+
+export async function importPeer<T>(promise: Promise<T>, feature?: string) {
   try {
     return await promise;
-  } catch {
-    throw new PeerDependencyError({
+  } catch (err) {
+    const name = extractPackageName(err);
+    if (!name) {
+      throw err;
+    }
+    const packageManager = await detectPackageManager();
+    const error = new PeerDependencyError({
       feature,
       missing: [name],
-      packageManager: await detectPackageManager(),
+      packageManager,
     });
+    Error.captureStackTrace(error, importPeer);
+    throw error;
   }
 }
