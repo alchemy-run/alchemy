@@ -45,6 +45,11 @@ export const execArgs = {
     .describe(
       "Specify which stage/environment to target. Defaults to your username ($USER, or $USERNAME on windows)",
     ),
+  inspect: z.boolean().optional().describe("Enable inspector"),
+  inspectBrk: z
+    .boolean()
+    .optional()
+    .describe("Enable inspector and break on start"),
   envFile: z
     .string()
     .optional()
@@ -64,6 +69,8 @@ export async function execAlchemy(
     envFile,
     read,
     dev,
+    inspect,
+    inspectBrk,
   }: {
     cwd?: string;
     quiet?: boolean;
@@ -74,12 +81,14 @@ export async function execAlchemy(
     envFile?: string;
     read?: boolean;
     dev?: boolean;
+    inspect?: boolean;
+    inspectBrk?: boolean;
   },
 ) {
   const args: string[] = [];
   const execArgs: string[] = [];
 
-  const INSPECT = true;
+  const shouldInspect = (inspect || inspectBrk) ?? false;
 
   if (quiet) args.push("--quiet");
   if (read) args.push("--read");
@@ -94,8 +103,8 @@ export async function execAlchemy(
     execArgs.push(`--env-file ${envFile}`);
   }
   if (dev) args.push("--dev");
-  //todo(michael): support inspect-brk
-  if (INSPECT) execArgs.push("--inspect-wait");
+  if (inspect) execArgs.push("--inspect-wait");
+  if (inspectBrk) execArgs.push("--inspect-brk");
 
   // Check for alchemy.run.ts or alchemy.run.js (if not provided)
   if (!main) {
@@ -204,13 +213,14 @@ export async function execAlchemy(
     });
   }
 
-  if (INSPECT) {
+  if (shouldInspect) {
     const inspectorUrl = await inspectorUrlPromise;
     //* we await to make sure bun has finished printing so we don't cut if off
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (childRuntime === "bun") {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
     const cdpManager = new CDPManager();
     await cdpManager.startServer();
-    console.log(runtime, packageManager);
     const rootCDPProxy = new CDPProxy(inspectorUrl, {
       name: "alchemy.run.ts",
       server: cdpManager.server,
@@ -250,7 +260,4 @@ export async function execAlchemy(
  * If exit code is 130 (SIGINT) or null, return 0.
  * Otherwise, return the exit code.
  */
-const sanitizeExitCode = (exitCode: number | null) => {
-  if (exitCode === null || exitCode === 130) return 0;
-  return exitCode;
-};
+const sanitizeExitCode = (exitCode: number | null) => {};
