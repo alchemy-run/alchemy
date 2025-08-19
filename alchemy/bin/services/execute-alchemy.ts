@@ -247,8 +247,12 @@ export async function execAlchemy(
               "DOMDebugger",
             ]),
     });
-    cdpManager.registerCDPServer(rootCDPProxy);
-    console.log("Waiting for inspector to connect....");
+    await cdpManager.registerCDPServer(rootCDPProxy);
+    console.log(
+      `Waiting for inspector to connect: ${cdpManager
+        .getUrl()
+        .replace("http://", "ws://")}/servers/alchemy.run.ts`,
+    );
   }
 
   const exitPromise = once(child, "exit");

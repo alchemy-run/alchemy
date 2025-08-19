@@ -4,20 +4,26 @@ import path from "pathe";
 import { WebSocketServer, type WebSocket as WsWebSocket } from "ws";
 import { findOpenPort } from "../../../src/util/find-open-port.ts";
 
+export const LOGS_DIRECTORY = path.join(process.cwd(), ".alchemy", "logs");
+const DEBUGGER_URLS_FILE = path.join(
+  process.cwd(),
+  ".alchemy",
+  ".debugger-urls",
+);
+
 export class CDPManager {
   public readonly server: Server;
-  private logDirectory: string;
   private url?: string;
   private cdpServers: Map<string, CDPServer> = new Map();
   private port?: number;
 
   constructor() {
-    this.logDirectory = path.join(process.cwd(), ".alchemy", "logs");
-
-    if (fs.existsSync(this.logDirectory)) {
-      fs.rmSync(this.logDirectory, { recursive: true, force: true });
+    if (fs.existsSync(LOGS_DIRECTORY)) {
+      fs.rmSync(LOGS_DIRECTORY, { recursive: true, force: true });
     }
-    fs.mkdirSync(this.logDirectory, { recursive: true });
+    fs.mkdirSync(LOGS_DIRECTORY, { recursive: true });
+
+    fs.writeFileSync(DEBUGGER_URLS_FILE, "");
 
     this.server = createServer((req, res) => {
       this.handleRequest(req, res);
@@ -37,6 +43,13 @@ export class CDPManager {
         resolve();
       });
     });
+  }
+
+  public getUrl(): string {
+    if (this.url == null) {
+      throw new Error("CDP manager not started");
+    }
+    return this.url;
   }
 
   private handleRequest(req: any, res: any): void {
@@ -71,10 +84,14 @@ export class CDPManager {
     }
   }
 
-  public registerCDPServer(server: CDPServer) {
+  public async registerCDPServer(server: CDPServer) {
     this.cdpServers.set(server.name, server);
     console.log(
       `[CDP-Manager] CDP server ${server.name} registered. Available servers: ${Array.from(this.cdpServers.keys()).join(", ")}`,
+    );
+    await fs.promises.appendFile(
+      DEBUGGER_URLS_FILE,
+      `ws://localhost:${this.port}/servers/${server.name}\n`,
     );
   }
 
@@ -99,8 +116,7 @@ export abstract class CDPServer {
   }) {
     this.domains = options.domains ?? new Set(["Log", "Debugger"]);
     this.logFile =
-      options.logFile ??
-      path.join(process.cwd(), ".alchemy", "logs", `${options.name}.log`);
+      options.logFile ?? path.join(LOGS_DIRECTORY, `${options.name}.log`);
     this.name = options.name;
     fs.writeFileSync(this.logFile, "");
     this.wss = new WebSocketServer({
