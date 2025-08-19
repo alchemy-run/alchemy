@@ -1,9 +1,9 @@
 import { cancel, intro, log, outro } from "@clack/prompts";
 import pc from "picocolors";
-import { zod as z } from "trpc-cli";
+import { z } from "zod";
 import { DEFAULT_SCOPES, wranglerLogin } from "../../src/cloudflare/oauth.ts";
 import { throwWithContext } from "../errors.ts";
-import { loggedProcedure, ExitSignal } from "../trpc.ts";
+import { ExitSignal, loggedProcedure } from "../trpc.ts";
 
 export const login = loggedProcedure
   .meta({
