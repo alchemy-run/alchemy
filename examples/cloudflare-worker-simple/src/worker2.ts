@@ -5,7 +5,7 @@ export default class Worker2 extends WorkerEntrypoint {
   declare env: typeof worker2.Env;
 
   async fetch(request: Request): Promise<Response> {
-    const stub = this.env.DO.get(this.env.DO.idFromName("DO"));
+    const stub = this.env.DO.getByName("DO");
     // @ts-expect-error - TODO(sam): fix this
     return await stub.fetch(request);
   }
