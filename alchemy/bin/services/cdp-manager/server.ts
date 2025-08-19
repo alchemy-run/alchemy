@@ -91,7 +91,7 @@ export class CDPManager {
     );
     await fs.promises.appendFile(
       DEBUGGER_URLS_FILE,
-      `ws://localhost:${this.port}/servers/${server.name}\n`,
+      `${server.name}=ws://localhost:${this.port}/servers/${server.name}\n`,
     );
   }
 
