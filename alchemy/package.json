@@ -172,6 +172,7 @@
     "yaml": "^2.0.0"
   },
   "peerDependencies": {
+    "@astrojs/cloudflare": "^12.6.4",
     "@aws-sdk/client-dynamodb": "^3.0.0",
     "@aws-sdk/client-iam": "^3.0.0",
     "@aws-sdk/client-lambda": "^3.0.0",
@@ -182,12 +183,16 @@
     "@aws-sdk/client-sts": "^3.0.0",
     "@cloudflare/vite-plugin": "^1.10.1",
     "@cloudflare/workers-types": "*",
-    "@libsql/client": "^0.15.9",
+    "@libsql/client": "^0.15.12",
     "@octokit/rest": "^21.1.1",
     "drizzle-orm": "^0.44.2",
+    "rwsdk": "^0.1.36",
     "stripe": "^17.0.0"
   },
   "peerDependenciesMeta": {
+    "@astrojs/cloudflare": {
+      "optional": true
+    },
     "@aws-sdk/client-dynamodb": {
       "optional": true
     },
@@ -227,16 +232,20 @@
     "drizzle-orm": {
       "optional": true
     },
+    "rwsdk": {
+      "optional": true
+    },
     "stripe": {
       "optional": true
     }
   },
   "devDependencies": {
+    "@astrojs/cloudflare": "^12.6.4",
+    "@aws-sdk/client-dynamodb": "^3.0.0",
     "@aws-sdk/client-ec2": "^3.868.0",
     "@aws-sdk/client-iam": "^3.864.0",
-    "@aws-sdk/client-s3": "3.726.1",
-    "@aws-sdk/client-dynamodb": "^3.0.0",
     "@aws-sdk/client-lambda": "^3.0.0",
+    "@aws-sdk/client-s3": "3.726.1",
     "@aws-sdk/client-sesv2": "^3.0.0",
     "@aws-sdk/client-sqs": "^3.0.0",
     "@aws-sdk/client-ssm": "^3.0.0",
@@ -246,6 +255,7 @@
     "@cloudflare/puppeteer": "^1.0.2",
     "@cloudflare/vite-plugin": "catalog:",
     "@cloudflare/workers-types": "catalog:",
+    "@libsql/client": "^0.15.12",
     "@octokit/rest": "^21.1.1",
     "@sentry/cloudflare": "^9.43.0",
     "@sveltejs/adapter-cloudflare": "^7.1.2",
@@ -258,20 +268,21 @@
     "braintrust": "^0.0.201",
     "cpx": "^1.5.0",
     "dofs": "^0.1.0",
-    "drizzle-orm": "^0.44.2",
     "drizzle-kit": "^0.31.4",
+    "drizzle-orm": "^0.44.2",
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
     "grammy": "^1.37.0",
     "jsonc-parse": "^1.5.5",
     "listr2": "^8.0.0",
     "nitropack": "^2.12.4",
-    "rwsdk": "^0.1.28",
+    "rwsdk": "^0.1.36",
     "stripe": "^17.0.0",
     "trpc-cli": "^0.10.2",
     "ts-morph": "^26.0.0",
     "tsdown": "^0.13.0",
     "typescript": "^5.8.3",
+    "undici": "^7.14.0",
     "wrangler": "^4.27.0",
     "zod": "^4.0.10"
   }

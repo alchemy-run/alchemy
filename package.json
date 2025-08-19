@@ -35,7 +35,7 @@
     "catalog": {
       "@cloudflare/workers-types": "^4.20250805.0",
       "@cloudflare/vite-plugin": "^1.11.6",
-      "vite": "^7.1.2"
+      "vite": "^6.3.5"
     },
     "packages": [
       "alchemy-web",

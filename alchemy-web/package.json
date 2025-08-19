@@ -12,6 +12,7 @@
   "dependencies": {
     "@astrojs/check": "^0.9.4",
     "@astrojs/cloudflare": "12.6.0",
+    "@astrojs/sitemap": "^3.5.0",
     "@astrojs/starlight": "^0.34.3",
     "@cloudflare/workers-types": "catalog:",
     "alchemy": "workspace:*",
