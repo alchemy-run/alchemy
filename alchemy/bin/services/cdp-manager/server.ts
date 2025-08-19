@@ -108,7 +108,6 @@ export abstract class CDPServer {
     });
 
     this.wss.on("connection", async (clientWs) => {
-      console.log("connected to cdp manager???");
       this.lastClient = clientWs;
       clientWs.on("message", async (data) => {
         await this.handleClientMessage(clientWs, data.toString());
@@ -120,7 +119,6 @@ export abstract class CDPServer {
 
   protected async handleInspectorMessage(data: string) {
     try {
-      // console.log("<--", data);
       const message = JSON.parse(data);
       const messageDomain = message.method?.split(".")?.[0];
       if (messageDomain != null && !this.domains.has(messageDomain)) {

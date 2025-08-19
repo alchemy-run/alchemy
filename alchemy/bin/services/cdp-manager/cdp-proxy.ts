@@ -59,7 +59,6 @@ export class CDPProxy extends CDPServer {
   }
 
   private async internalHandleClientMessage(data: string): Promise<void> {
-    // console.log("-->", data);
     const message = JSON.parse(data);
     const messageDomain = message.method?.split(".")?.[0];
     if (messageDomain != null && !this.domains.has(messageDomain)) {

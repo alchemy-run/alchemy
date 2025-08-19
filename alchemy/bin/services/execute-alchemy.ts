@@ -162,6 +162,8 @@ export async function execAlchemy(
       }
   }
 
+  const childRuntime = command.split(" ")[0];
+
   const { promise: inspectorUrlPromise, resolve: resolveInspectorUrl } =
     promiseWithResolvers<string>();
 
@@ -173,16 +175,12 @@ export async function execAlchemy(
   const child = spawn(command, {
     cwd,
     shell: true,
-    stdio: "pipe",
+    stdio: ["inherit", "inherit", "pipe"],
     env: {
       ...process.env,
       FORCE_COLOR: "1",
     },
   });
-
-  if (child.stdout) {
-    // child.stdout.pipe(process.stdout);
-  }
 
   if (child.stderr) {
     child.stderr.on("data", (data) => {
@@ -202,12 +200,8 @@ export async function execAlchemy(
         const inspectorUrl = nodeInspectorMatch[0];
         resolveInspectorUrl(inspectorUrl);
       }
-      // process.stderr.write(data);
+      process.stderr.write(data);
     });
-  }
-
-  if (child.stdin) {
-    // process.stdin.pipe(child.stdin);
   }
 
   if (INSPECT) {
@@ -216,10 +210,32 @@ export async function execAlchemy(
     await new Promise((resolve) => setTimeout(resolve, 100));
     const cdpManager = new CDPManager();
     await cdpManager.startServer();
+    console.log(runtime, packageManager);
     const rootCDPProxy = new CDPProxy(inspectorUrl, {
       name: "alchemy.run.ts",
       server: cdpManager.server,
       connect: false,
+      domains:
+        childRuntime === "bun"
+          ? new Set(["Inspector", "Console", "Runtime", "Debugger", "Heap"])
+          : new Set([
+              "Network",
+              "Page",
+              "Runtime",
+              "DOM",
+              "CSS",
+              "Debugger",
+              "Overlay",
+              "Animation",
+              "Autofill",
+              "Profiler",
+              "Log",
+              "Emulation",
+              "Audits",
+              "ServiceWorker",
+              "Target",
+              "DOMDebugger",
+            ]),
     });
     cdpManager.registerCDPServer(rootCDPProxy);
     console.log("Waiting for inspector to connect....");
