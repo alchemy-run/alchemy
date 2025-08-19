@@ -34,7 +34,7 @@
     "@types/react-dom": "^19.1.2",
     "drizzle-kit": "^0.31.4",
     "tsx": "^4.19.3",
-    "vite": "^6.3.2",
+    "vite": "catalog:",
     "wrangler": "^4.12.1"
   }
 }

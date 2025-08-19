@@ -1,6 +1,6 @@
 import alchemy from "alchemy/cloudflare/redwood";
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
 
 export default defineConfig({
-  plugins: [alchemy()],
+  plugins: [alchemy() as PluginOption],
 });

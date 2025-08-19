@@ -244,7 +244,7 @@
     "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "^0.0.13",
     "@cloudflare/puppeteer": "^1.0.2",
-    "@cloudflare/vite-plugin": "^1.11.6",
+    "@cloudflare/vite-plugin": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@octokit/rest": "^21.1.1",
     "@sentry/cloudflare": "^9.43.0",
