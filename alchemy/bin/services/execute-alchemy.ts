@@ -50,6 +50,10 @@ export const execArgs = {
     .boolean()
     .optional()
     .describe("Enable inspector and break on start"),
+  inspectWait: z
+    .boolean()
+    .optional()
+    .describe("Enable inspector and wait for connection"),
   envFile: z
     .string()
     .optional()
@@ -71,6 +75,7 @@ export async function execAlchemy(
     dev,
     inspect,
     inspectBrk,
+    inspectWait,
   }: {
     cwd?: string;
     quiet?: boolean;
@@ -83,12 +88,13 @@ export async function execAlchemy(
     dev?: boolean;
     inspect?: boolean;
     inspectBrk?: boolean;
+    inspectWait?: boolean;
   },
 ) {
   const args: string[] = [];
   const execArgs: string[] = [];
 
-  const shouldInspect = (inspect || inspectBrk) ?? false;
+  const shouldInspect = (inspect || inspectBrk || inspectWait) ?? false;
 
   if (quiet) args.push("--quiet");
   if (read) args.push("--read");
@@ -103,7 +109,8 @@ export async function execAlchemy(
     execArgs.push(`--env-file ${envFile}`);
   }
   if (dev) args.push("--dev");
-  if (inspect) execArgs.push("--inspect-wait");
+  if (inspect) execArgs.push("--inspect");
+  if (inspectWait) execArgs.push("--inspect-wait");
   if (inspectBrk) execArgs.push("--inspect-brk");
 
   // Check for alchemy.run.ts or alchemy.run.js (if not provided)
@@ -224,35 +231,16 @@ export async function execAlchemy(
     const rootCDPProxy = new CDPProxy(inspectorUrl, {
       name: "alchemy.run.ts",
       server: cdpManager.server,
-      connect: false,
+      connect: inspectWait || inspectBrk,
       domains:
         childRuntime === "bun"
           ? new Set(["Inspector", "Console", "Runtime", "Debugger", "Heap"])
-          : new Set([
-              "Network",
-              "Page",
-              "Runtime",
-              "DOM",
-              "CSS",
-              "Debugger",
-              "Overlay",
-              "Animation",
-              "Autofill",
-              "Profiler",
-              "Log",
-              "Emulation",
-              "Audits",
-              "ServiceWorker",
-              "Target",
-              "DOMDebugger",
-            ]),
+          : new Set(["Runtime", "Debugger", "Profiler", "Log"]),
     });
     await cdpManager.registerCDPServer(rootCDPProxy);
-    console.log(
-      `Waiting for inspector to connect: ${cdpManager
-        .getUrl()
-        .replace("http://", "ws://")}/servers/alchemy.run.ts`,
-    );
+    if (inspectWait || inspectBrk) {
+      console.log("Waiting for inspector to connect....");
+    }
   }
 
   const exitPromise = once(child, "exit");
