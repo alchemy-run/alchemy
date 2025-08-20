@@ -113,7 +113,7 @@ export interface D1DatabaseProps extends CloudflareApiOptions {
      * Set when `Scope.local` is true to force update to the database even if it was already deployed live.
      * @internal
      */
-    force?: boolean;
+    force?: boolean | number;
   };
 }
 
@@ -244,11 +244,6 @@ export async function D1Database(
     ? await listMigrationsFiles(props.migrationsDir)
     : [];
 
-  // Force resource update when migrations exist in local dev mode
-  if (migrationsFiles.length > 0 && Scope.current.local) {
-    (Scope.current as any).force = true;
-  }
-
   return _D1Database(id, {
     ...props,
     migrationsFiles,
@@ -256,7 +251,7 @@ export async function D1Database(
       ...(props.dev ?? {}),
       // force local migrations to run even if the database was already deployed live
       // this property will oscillate from true to false depending on the dev vs live deployment
-      force: Scope.current.local,
+      force: Scope.current.local ? Date.now() : false,
     },
   });
 }
