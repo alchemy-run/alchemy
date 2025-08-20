@@ -244,6 +244,11 @@ export async function D1Database(
     ? await listMigrationsFiles(props.migrationsDir)
     : [];
 
+  // Force resource update when migrations exist in local dev mode
+  if (migrationsFiles.length > 0 && Scope.current.local) {
+    (Scope.current as any).force = true;
+  }
+
   return _D1Database(id, {
     ...props,
     migrationsFiles,
