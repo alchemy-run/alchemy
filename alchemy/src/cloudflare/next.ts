@@ -21,10 +21,7 @@ export async function Nextjs<const B extends Bindings>(
   props: NextjsProps<B> = {},
 ): Promise<Nextjs<B>> {
   const runner = await getPackageManagerRunner();
-  const isIgnored = await isPathIgnored(
-    props.cwd ?? process.cwd(),
-    "wrangler.jsonc",
-  );
+  const isIgnored = await isFileIgnored("wrangler.jsonc", props.cwd);
   if (!isIgnored) {
     logger.warn(
       [
@@ -69,11 +66,18 @@ export async function Nextjs<const B extends Bindings>(
   });
 }
 
-const isPathIgnored = async (cwd: string, input: string) => {
+/**
+ * Check if a file is ignored by .gitignore.
+ *
+ * @param filename - The name of the file to check.
+ * @param cwd - The current working directory.
+ * @returns True if the file is ignored, false otherwise.
+ */
+const isFileIgnored = async (filename: string, cwd?: string) => {
   const matcher = ignore();
 
   // Read .gitignore from current directory and walk up the directory tree
-  let currentDir = path.resolve(cwd);
+  let currentDir = path.resolve(cwd ?? process.cwd());
   const gitignorePatterns: string[] = [];
 
   while (currentDir !== path.dirname(currentDir)) {
@@ -97,7 +101,7 @@ const isPathIgnored = async (cwd: string, input: string) => {
 
   matcher.add(gitignorePatterns);
 
-  return matcher.ignores(input);
+  return matcher.ignores(filename);
 };
 
 const normalizeCommand = (
