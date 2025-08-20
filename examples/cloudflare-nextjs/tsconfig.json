@@ -22,7 +22,7 @@
       "@/*": ["./src/*"]
     },
     "types": [
-        "./cloudflare-env.d.ts",
+        "./env.d.ts",
         "node"
     ]
   },
