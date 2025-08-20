@@ -60,11 +60,6 @@
       "bun": "./src/cloudflare/astro/plugin.ts",
       "import": "./lib/cloudflare/astro/plugin.js"
     },
-    "./cloudflare/next": {
-      "bun": "./src/cloudflare/next/plugin.ts",
-      "import": "./lib/cloudflare/next/plugin.js",
-      "default": "./lib/cloudflare/next/plugin.js"
-    },
     "./cloudflare/nuxt": {
       "bun": "./src/cloudflare/nuxt/plugin.ts",
       "import": "./lib/cloudflare/nuxt/plugin.js"
@@ -270,7 +265,6 @@
     "@cloudflare/workers-types": "catalog:",
     "@libsql/client": "^0.15.12",
     "@octokit/rest": "^21.1.1",
-    "@opennextjs/cloudflare": "^1.6.5",
     "@sentry/cloudflare": "^9.43.0",
     "@sveltejs/adapter-cloudflare": "^7.1.2",
     "@types/bun": "latest",
