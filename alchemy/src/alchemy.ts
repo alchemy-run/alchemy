@@ -119,6 +119,7 @@ async function _alchemy(
         : process.env.STAGE;
     })(),
     password: process.env.ALCHEMY_PASSWORD,
+    adopt: cliArgs.includes("--adopt"),
   } satisfies Partial<AlchemyOptions>;
   const mergedOptions = {
     ...cliOptions,
@@ -261,6 +262,12 @@ export interface AlchemyOptions {
    * If not provided, the default fallback logger will be used.
    */
   logger?: LoggerApi;
+  /**
+   * Whether to adopt resources if they already exist but are not yet managed by your Alchemy app.
+   *
+   * @default false
+   */
+  adopt?: boolean;
 }
 
 export interface ScopeOptions extends AlchemyOptions {

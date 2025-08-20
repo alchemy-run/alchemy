@@ -511,6 +511,8 @@ export const ContainerApplication = Resource(
       });
     }
 
+    const adopt = props.adopt ?? this.scope.adopt;
+
     const api = await createCloudflareApi(props);
     if (this.phase === "delete") {
       if (this.output?.id) {
@@ -562,7 +564,7 @@ export const ContainerApplication = Resource(
       let application: ContainerApplicationData;
 
       try {
-        application = await createContainerApplication(api, props.adopt, {
+        application = await createContainerApplication(api, adopt, {
           name: props.name,
           scheduling_policy: props.schedulingPolicy ?? "default",
           instances: props.instances ?? 1,
@@ -588,7 +590,7 @@ export const ContainerApplication = Resource(
       } catch (error) {
         // Check if this is an "already exists" error and adopt is enabled
         if (
-          props.adopt &&
+          adopt &&
           error instanceof Error &&
           error.message.includes("already exists")
         ) {

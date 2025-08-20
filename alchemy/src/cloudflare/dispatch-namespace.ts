@@ -113,6 +113,7 @@ export const DispatchNamespace = Resource(
     const api = await createCloudflareApi(props);
 
     const namespace = props.namespace ?? id;
+    const adopt = props.adopt ?? this.scope.adopt;
 
     if (this.phase === "delete") {
       // For delete operations, we need to check if the namespace exists in the output
@@ -150,7 +151,7 @@ export const DispatchNamespace = Resource(
       } catch (error) {
         // Check if this is a "namespace already exists" error and adopt is enabled
         if (
-          props.adopt &&
+          adopt &&
           error instanceof CloudflareApiError &&
           error.status === 400 &&
           (error.message.includes("already exists") ||

@@ -124,7 +124,10 @@ export const ProductFeature = Resource(
             entitlement_feature: props.entitlementFeature,
           });
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (
+            isStripeConflictError(error) &&
+            (props.adopt ?? this.scope.adopt)
+          ) {
             throw new Error(
               "ProductFeature adoption is not supported - product features cannot be uniquely identified for adoption",
             );

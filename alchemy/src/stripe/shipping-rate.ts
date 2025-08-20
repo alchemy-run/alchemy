@@ -209,6 +209,7 @@ export const ShippingRate = Resource(
     _id: string,
     props: ShippingRateProps,
   ): Promise<ShippingRate> {
+    const adopt = props.adopt ?? this.scope.adopt;
     const stripe = await createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
@@ -286,7 +287,7 @@ export const ShippingRate = Resource(
           try {
             shippingRate = await stripe.shippingRates.create(createParams);
           } catch (error) {
-            if (isStripeConflictError(error) && props.adopt) {
+            if (isStripeConflictError(error) && adopt) {
               throw new Error(
                 "ShippingRate adoption is not supported - shipping rates cannot be uniquely identified for adoption",
               );
@@ -295,7 +296,7 @@ export const ShippingRate = Resource(
             }
           }
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (isStripeConflictError(error) && adopt) {
             throw new Error(
               "ShippingRate adoption is not supported - shipping rates cannot be uniquely identified for adoption",
             );

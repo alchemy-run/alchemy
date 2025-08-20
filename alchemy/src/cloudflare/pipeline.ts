@@ -377,7 +377,7 @@ export const Pipeline = Resource("cloudflare::Pipeline", async function <
           (error.status === 400 &&
             error.message.includes("Pipeline with this name already exists")))
       ) {
-        if (props.adopt) {
+        if (props.adopt ?? this.scope.adopt) {
           console.warn(
             "Pipeline already exists, adopting existing Cloudflare Pipeline:",
             pipelineName,

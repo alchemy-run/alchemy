@@ -289,7 +289,7 @@ export async function createKVNamespace(
       (error.errorData as CloudflareApiErrorPayload[]).some(
         (e) => e.code === 10014,
       ) &&
-      props.adopt
+      (props.adopt ?? Scope.current.adopt)
     ) {
       const existingNamespace = await findKVNamespaceByTitle(api, props.title);
 

@@ -145,7 +145,7 @@ export const VectorizeIndex = Resource(
       } catch (error) {
         // Check if this is a "index already exists" error and adopt is enabled
         if (
-          props.adopt &&
+          (props.adopt ?? this.scope.adopt) &&
           error instanceof CloudflareApiError &&
           error.message.includes("vectorize.index.duplicate_name")
         ) {

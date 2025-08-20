@@ -209,7 +209,7 @@ const _SecretsStore = Resource("cloudflare::SecretsStore", async function <
     await insertSecrets(api, storeId, props);
   } else {
     // If adopt is true, first check if a store with this name already exists
-    if (props.adopt) {
+    if (props.adopt ?? this.scope.adopt) {
       const existingStore = await findSecretsStoreByName(api, name);
 
       if (existingStore) {

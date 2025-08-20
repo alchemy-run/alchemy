@@ -164,7 +164,7 @@ export const Team = Resource(
           } catch (error) {
             // Check if this is a "team already exists" error and adopt is enabled
             if (
-              props.adopt &&
+              (props.adopt ?? this.scope.adopt) &&
               error instanceof Error &&
               error.message.includes("already exists")
             ) {

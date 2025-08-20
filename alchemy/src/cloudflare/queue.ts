@@ -285,7 +285,7 @@ const _Queue = Resource("cloudflare::Queue", async function <
       queueData = await createQueue(api, queueName, props);
     } catch (error) {
       if (error instanceof CloudflareApiError && error.status === 409) {
-        if (!props.adopt) {
+        if (!(props.adopt ?? this.scope.adopt)) {
           throw error;
         }
         // Queue already exists, try to find it by name
