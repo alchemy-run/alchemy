@@ -33,7 +33,10 @@
   },
   "workspaces": {
     "catalog": {
-      "@cloudflare/workers-types": "^4.20250805.0"
+      "@cloudflare/workers-types": "^4.20250805.0",
+      "@cloudflare/vite-plugin": "^1.11.6",
+      "vite": "^6.3.5",
+      "typescript": "^5.8.3"
     },
     "packages": [
       "alchemy-web",
@@ -45,19 +48,18 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.1.3",
-    "@cloudflare/workers-types": "^4.20250805.0",
+    "@cloudflare/workers-types": "catalog:",
     "@redwoodjs/sdk": "^0.0.80",
     "@types/bun": "latest",
     "@types/node": "latest",
     "@vitest/ui": "^3.1.4",
     "alchemy": "workspace:*",
     "aws4fetch": "^1.0.20",
-    "braintrust": "*",
     "changelogithub": "^13.15.0",
     "glob": "^11.0.3",
     "jsonc-parser": "^3.3.1",
     "openai": "^4.103.0",
-    "typescript": "latest",
+    "typescript": "catalog:",
     "vite": "^6.3.5",
     "vitest": "^3.1.4",
     "yaml": "^2.7.1"

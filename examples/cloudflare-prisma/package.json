@@ -10,11 +10,11 @@
     "dev": "alchemy dev --env-file ../../.env"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250805.0",
+    "@cloudflare/workers-types": "catalog:",
     "@types/node": "^24.0.1",
     "alchemy": "workspace:*",
     "prisma": "^6.12.0",
-    "typescript": "^5.8.3"
+    "typescript": "catalog:"
   },
   "dependencies": {
     "@prisma/adapter-d1": "^6.12.0",

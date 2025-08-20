@@ -15,7 +15,6 @@ import {
   type ResourceProps,
 } from "./resource.ts";
 import type { State, StateStore, StateStoreType } from "./state.ts";
-import { D1StateStore } from "./state/d1-state-store.ts";
 import { FileSystemStateStore } from "./state/file-system-state-store.ts";
 import { InstrumentedStateStore } from "./state/instrumented-state-store.ts";
 import {
@@ -123,7 +122,6 @@ export const DEFAULT_STAGE =
 
 declare global {
   var __ALCHEMY_STORAGE__: AsyncLocalStorage<Scope>;
-  var __ALCHEMY_GLOBALS__: Scope[];
 }
 
 const ScopeSymbol = Symbol.for("alchemy::Scope");
@@ -139,17 +137,9 @@ export class Scope {
 
   public static storage = (globalThis.__ALCHEMY_STORAGE__ ??=
     new AsyncLocalStorage<Scope>());
-  public static globals: Scope[] = (globalThis.__ALCHEMY_GLOBALS__ ??= []);
 
   public static getScope(): Scope | undefined {
-    const scope = Scope.storage.getStore();
-    if (!scope) {
-      if (Scope.globals.length > 0) {
-        return Scope.globals[Scope.globals.length - 1];
-      }
-      return undefined;
-    }
-    return scope;
+    return Scope.storage.getStore();
   }
 
   public static get root(): Scope {
@@ -275,7 +265,9 @@ export class Scope {
     }
 
     this.stateStore =
-      stateStore ?? this.parent?.stateStore ?? defaultStateStore;
+      stateStore ??
+      this.parent?.stateStore ??
+      ((scope) => new FileSystemStateStore(scope));
     this.telemetryClient = telemetryClient ?? this.parent?.telemetryClient!;
     this.state = new InstrumentedStateStore(
       this.stateStore(this),
@@ -496,14 +488,6 @@ export class Scope {
     if (this.finalized && !shouldForce) {
       return;
     }
-    if (this.parent === undefined && Scope.globals.length > 0) {
-      const last = Scope.globals.pop();
-      if (last !== this) {
-        throw new Error(
-          "Running in AsyncLocaStorage.enterWith emulation mode and attempted to finalize a global Scope that wasn't top of the stack",
-        );
-      }
-    }
     this.finalized = true;
     // trigger and await all deferred promises
     await Promise.all(this.deferred.map((fn) => fn()));
@@ -666,15 +650,6 @@ export class Scope {
 )`;
   }
 }
-
-const defaultStateStore: StateStoreType = (scope: Scope) => {
-  switch (process.env.ALCHEMY_STATE_STORE) {
-    case "d1":
-      return new D1StateStore(scope);
-    default:
-      return new FileSystemStateStore(scope);
-  }
-};
 
 declare global {
   // for runtime

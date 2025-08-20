@@ -11,6 +11,6 @@ export default defineConfig({
     react(),
     livestoreDevtoolsPlugin({
       schemaPath: "./src/livestore/schema.ts",
-    }) as PluginOption,
-  ],
+    }),
+  ] as PluginOption[],
 });

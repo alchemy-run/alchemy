@@ -24,3 +24,4 @@ vite.config.ts.timestamp-*
 
 .alchemy/
 .env
+.wrangler/

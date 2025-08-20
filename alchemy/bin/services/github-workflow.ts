@@ -221,7 +221,6 @@ export async function addGitHubWorkflowToAlchemy(
     );
 
     let code = await fs.readFile(alchemyFilePath, "utf-8");
-    code = code.replace("{projectName}", context.name);
 
     const alchemyImportRegex = /(import alchemy from "alchemy";)/;
     const alchemyImportMatch = code.match(alchemyImportRegex);
@@ -233,10 +232,9 @@ import { CloudflareStateStore } from "alchemy/state";`;
 
     const lastImportRegex = /import[^;]+from[^;]+;(\s*\n)*/g;
     let lastImportMatch;
-    let lastImportEnd = 0;
 
     while ((lastImportMatch = lastImportRegex.exec(code)) !== null) {
-      lastImportEnd = lastImportMatch.index + lastImportMatch[0].length;
+      lastImportMatch.index + lastImportMatch[0].length;
     }
 
     const appCallRegex = /const app = await alchemy\("([^"]+)"\);/;
