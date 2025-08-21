@@ -28,7 +28,7 @@ export interface WranglerJsonProps {
    * The worker to generate the wrangler.json file for
    */
   worker:
-    | Worker
+    | Worker<any>
     | (WorkerProps<any> & {
         name: string;
       });
