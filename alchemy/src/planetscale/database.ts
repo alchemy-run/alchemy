@@ -88,6 +88,11 @@ export interface DatabaseProps {
   migrationTableName?: string;
 
   /**
+   * Whether the database is a MySQL or PostgreSQL database (create only)
+   */
+  kind?: "mysql" | "postgresql";
+
+  /**
    * The database cluster size (required)
    */
   clusterSize: PlanetScaleClusterSize;
@@ -303,6 +308,7 @@ export const Database = Resource(
           migration_framework: props.migrationFramework,
           migration_table_name: props.migrationTableName,
           cluster_size: props.clusterSize,
+          kind: props.kind,
         },
       );
 
