@@ -1,13 +1,20 @@
 /// <reference types="@types/node" />
 
 import alchemy from "alchemy";
-import { Worker } from "alchemy/cloudflare";
+import { KVNamespace, Worker } from "alchemy/cloudflare";
 
 const app = await alchemy("{projectName}");
+
+const kv = await KVNamespace("kv", {
+  title: "kv",
+});
 
 export const worker = await Worker("worker", {
   name: `${app.name}-${app.stage}`,
   entrypoint: "src/index.ts",
+  bindings: {
+    KV: kv,
+  },
 });
 
 console.log(worker.url);

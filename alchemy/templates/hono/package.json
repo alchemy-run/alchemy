@@ -2,7 +2,7 @@
   "name": "@alchemy.run/hono-template",
   "type": "module",
   "scripts": {
-    "build": "tsc -b",
+    "check": "tsc --noEmit",
     "dev": "alchemy dev",
     "deploy": "alchemy deploy",
     "destroy": "alchemy destroy"

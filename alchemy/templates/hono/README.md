@@ -1,21 +1,19 @@
-```txt
-npm install
-npm run dev
-```
+### Minimal Hono + Alchemy Template
 
-```txt
-npm run deploy
-```
+### Run
+- bun install
+- bun run dev
 
-[For generating/synchronizing types based on your Worker configuration run](https://developers.cloudflare.com/workers/wrangler/commands/#types):
+### Deploy
+- bun run deploy
+- bun run destroy
 
-```txt
-npm run cf-typegen
-```
+### Alchemy
+- Resource: defined in `alchemy.run.ts` (Worker + KV)
+- Binding: `KV` bound to Worker as `c.env.KV`
+- Types: inferred in `types/env.d.ts`
 
-Pass the `CloudflareBindings` as generics when instantiation `Hono`:
-
-```ts
-// src/index.ts
-const app = new Hono<{ Bindings: CloudflareBindings }>()
-```
+### References
+- Alchemy Getting Started: https://alchemy.run/getting-started
+- Alchemy CLI: https://alchemy.run/concepts/cli
+- Bindings: https://alchemy.run/concepts/bindings
