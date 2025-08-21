@@ -426,6 +426,8 @@ const _R2Bucket = Resource(
         domain,
         type: "r2_bucket",
         accountId: api.accountId,
+        lifecycle: props.lifecycle,
+        lock: props.lock,
         cors: props.cors,
         dev,
       });
@@ -756,20 +758,54 @@ export async function putBucketLifecycleRules(
   bucketName: string,
   props: BucketProps,
 ) {
+  const rulesBody = Array.isArray(props.lifecycle)
+    ? props.lifecycle.length === 0
+      ? { rules: [] }
+      : {
+          rules: props.lifecycle.map((rule) => ({
+            ...rule,
+            // Required by the API; empty prefix means all objects/uploads
+            conditions: rule.conditions ?? { prefix: "" },
+            // Required by the API
+            enabled: rule.enabled ?? true,
+          })),
+        }
+    : {};
+
   await extractCloudflareResult(
     `put R2 bucket lifecycle rules for "${bucketName}"`,
     api.put(
       `/accounts/${api.accountId}/r2/buckets/${bucketName}/lifecycle`,
-      props.lifecycle?.map((rule) => ({
-        ...rule,
-        conditions: rule.conditions ?? { prefix: "" }, // Required by the API; empty prefix means all objects/uploads
-        enabled: rule.enabled ?? true, // Required by the API
-      })) ?? [],
-      {
-        headers: withJurisdiction(props),
-      },
+      rulesBody,
+      { headers: withJurisdiction(props) },
     ),
   );
+}
+
+/**
+ * Get lifecycle rules for a bucket
+ */
+export async function getBucketLifecycleRules(
+  api: CloudflareApi,
+  bucketName: string,
+  props: BucketProps = {},
+): Promise<R2BucketLifecycleRule[]> {
+  const res = await api.get(
+    `/accounts/${api.accountId}/r2/buckets/${bucketName}/lifecycle`,
+    { headers: withJurisdiction(props) },
+  );
+  const json: any = await res.json();
+  if (!json?.success) {
+    throw new CloudflareApiError(
+      `Failed to get R2 bucket lifecycle rules for "${bucketName}": ${res.status} ${res.statusText}`,
+      res,
+      json?.errors,
+    );
+  }
+  const rules: any[] = Array.isArray(json.result)
+    ? json.result
+    : (json.result?.rules ?? []);
+  return rules as R2BucketLifecycleRule[];
 }
 
 export async function putBucketLockRules(
@@ -777,17 +813,50 @@ export async function putBucketLockRules(
   bucketName: string,
   props: BucketProps,
 ) {
+  const rulesBody = Array.isArray(props.lock)
+    ? props.lock.length === 0
+      ? { rules: [] }
+      : {
+          rules: props.lock.map((rule) => ({
+            ...rule,
+            // Required by the API
+            enabled: rule.enabled ?? true,
+          })),
+        }
+    : {};
+
   await extractCloudflareResult(
     `put R2 bucket lock rules for "${bucketName}"`,
     api.put(
       `/accounts/${api.accountId}/r2/buckets/${bucketName}/lock`,
-      props.lock?.map((rule) => ({
-        ...rule,
-        enabled: rule.enabled ?? true, // Required by the API
-      })) ?? [],
-      {
-        headers: withJurisdiction(props),
-      },
+      rulesBody,
+      { headers: withJurisdiction(props) },
     ),
   );
+}
+
+/**
+ * Get lock rules for a bucket
+ */
+export async function getBucketLockRules(
+  api: CloudflareApi,
+  bucketName: string,
+  props: BucketProps = {},
+): Promise<R2BucketLockRule[]> {
+  const res = await api.get(
+    `/accounts/${api.accountId}/r2/buckets/${bucketName}/lock`,
+    { headers: withJurisdiction(props) },
+  );
+  const json: any = await res.json();
+  if (!json?.success) {
+    throw new CloudflareApiError(
+      `Failed to get R2 bucket lock rules for "${bucketName}": ${res.status} ${res.statusText}`,
+      res,
+      json?.errors,
+    );
+  }
+  const rules: any[] = Array.isArray(json.result)
+    ? json.result
+    : (json.result?.rules ?? []);
+  return rules as R2BucketLockRule[];
 }
