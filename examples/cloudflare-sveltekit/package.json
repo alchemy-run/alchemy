@@ -22,7 +22,7 @@
     "alchemy": "workspace:*",
     "svelte": "^5.33.14",
     "svelte-check": "^4.2.1",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vite": "^6.3.5"
   }
 }
