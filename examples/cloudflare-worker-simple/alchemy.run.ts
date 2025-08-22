@@ -67,5 +67,5 @@ console.log("worker2.name", worker2.name);
 await app.finalize();
 
 // ensure the worker names are computed correctly
-assert.strictEqual(worker1.name, `${app.name}-${app.stage}-worker1`);
-assert.strictEqual(worker2.name, `${app.name}-${app.stage}-worker2`);
+assert.strictEqual(worker1.name, `${app.name}-worker1-${app.stage}`);
+assert.strictEqual(worker2.name, `${app.name}-worker2-${app.stage}`);

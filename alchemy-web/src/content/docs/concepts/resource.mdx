@@ -53,6 +53,30 @@ export interface Database extends Resource<"neon::Database">, DatabaseProps {
 This interface must extend `Resource<..>`
 :::
 
+## Physical Name
+
+Depending on the Resource provider, a Resource may have a "physical name" that is used to identify the resource in the infrastructure provider.
+
+For example, a Cloudflare Worker name must be unique within a Cloudflare account.
+
+```typescript
+const worker = await Worker("worker1", {
+  name: "worker1", // <- physical name
+});
+```
+
+If you do not provide a physical name, Alchemy will generate a unique name for you based on the Application name, Resource ID, and Stage.
+
+```typescript
+const app = await alchemy("my-app");
+
+const worker = await Worker("worker1");
+
+console.log(worker.name); // "my-app-worker1-${stage}"
+```
+
+If you run this with `alchemy deploy --stage prod`, the worker name will be `my-app-worker1-prod`.
+
 ## Provider
 
 Each Resource exports a "Provider" function with a globally unique name and an implementation of the lifecycle handler logic.
