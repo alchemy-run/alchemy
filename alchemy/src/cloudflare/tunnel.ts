@@ -275,6 +275,11 @@ export interface Tunnel
   extends Resource<"cloudflare::Tunnel">,
     Omit<TunnelProps, "delete" | "tunnelSecret"> {
   /**
+   * The name of the tunnel
+   */
+  name: string;
+
+  /**
    * The ID of the tunnel
    */
   tunnelId: string;
@@ -492,6 +497,7 @@ export const Tunnel = Resource(
       props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "update" && this.output.name !== name) {
+      console.log("replacing tunnel", this.output.name, name);
       this.replace();
     }
 
