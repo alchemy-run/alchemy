@@ -5,6 +5,7 @@ import { PlanetScaleApi } from "./api.ts";
 import {
   fixClusterSize,
   type PlanetScaleClusterSize,
+  type PlanetScaleRegion,
   waitForDatabaseReady,
 } from "./utils.ts";
 
@@ -39,7 +40,7 @@ export interface DatabaseProps {
     /**
      * The slug identifier of the region
      */
-    slug: string;
+    slug: PlanetScaleRegion;
   };
 
   /**
@@ -89,13 +90,24 @@ export interface DatabaseProps {
 
   /**
    * Whether the database is a MySQL or PostgreSQL database (create only)
+   * @default "mysql"
    */
   kind?: "mysql" | "postgresql";
 
   /**
    * The database cluster size (required)
+   * `PS_` cluster sizes use network-attached storage (NAS), which offers lower cost but lower performance.
+   * `M_` cluster sizes use PlanetScale Metal, which offers superior performance but at a higher cost.
    */
   clusterSize: PlanetScaleClusterSize;
+
+  /**
+   * The CPU architecture of the database (create only).
+   * Only available for PostgreSQL databases.
+   * ARM provides superior cost-to-performance, while x86 is more mature and provides maximum extension compatibility.
+   * @default "x86"
+   */
+  arch?: "arm" | "x86";
 }
 
 /**
@@ -209,6 +221,22 @@ export const Database = Resource(
       return this.destroy();
     }
 
+    const sanitizeClusterSize = () => {
+      // Postgres cluster sizes are formatted as `PS_<size>_<provider>_<arch>`,
+      // where <provider> is either "AWS" or "GCP", and <arch> is either "ARM" or "X86".
+      if (
+        props.kind === "postgresql" &&
+        !props.clusterSize.match(/(AWS|GCP)_(ARM|X86)$/)
+      ) {
+        // Infer the provider from the region.
+        // Not all AWS regions start with "aws-", but all GCP regions start with "gcp-".
+        const provider = props.region?.slug.startsWith("gcp") ? "GCP" : "AWS";
+        const arch = (props.arch ?? "x86").toUpperCase();
+        return `${props.clusterSize}_${provider}_${arch}`;
+      }
+      return props.clusterSize;
+    };
+
     try {
       // Check if database exists
       const getResponse = await api.get(
@@ -272,7 +300,7 @@ export const Database = Resource(
           props.organizationId,
           props.name,
           props.defaultBranch || "main",
-          props.clusterSize,
+          sanitizeClusterSize(),
           getData.ready,
         );
 
@@ -307,7 +335,7 @@ export const Database = Resource(
           production_branch_web_console: props.productionBranchWebConsole,
           migration_framework: props.migrationFramework,
           migration_table_name: props.migrationTableName,
-          cluster_size: props.clusterSize,
+          cluster_size: sanitizeClusterSize(),
           kind: props.kind,
         },
       );
@@ -350,7 +378,7 @@ export const Database = Resource(
             props.organizationId,
             props.name,
             props.defaultBranch || "main",
-            props.clusterSize,
+            sanitizeClusterSize(),
             false,
           );
 
@@ -378,6 +406,7 @@ export const Database = Resource(
             createdAt: updatedData.created_at,
             updatedAt: updatedData.updated_at,
             htmlUrl: updatedData.html_url,
+            kind: updatedData.kind ?? "mysql",
           });
         }
       }
@@ -391,6 +420,7 @@ export const Database = Resource(
         createdAt: data.created_at,
         updatedAt: data.updated_at,
         htmlUrl: data.html_url,
+        kind: data.kind ?? "mysql",
       });
     } catch (error) {
       console.error("Error managing database:", error);

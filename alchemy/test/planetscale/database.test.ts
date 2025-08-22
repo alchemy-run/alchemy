@@ -63,8 +63,8 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)("Database Resource", () => {
     }
   }, 600_000);
 
-  test("create, update, and delete database", async (scope) => {
-    const testId = `${BRANCH_PREFIX}-test-db-crud`;
+  test("create, update, and delete MySQL database", async (scope) => {
+    const testId = `${BRANCH_PREFIX}-test-db-crud-mysql`;
     let database;
     try {
       // Create test database with initial settings
@@ -90,6 +90,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)("Database Resource", () => {
         id: expect.any(String),
         name: testId,
         organizationId,
+        kind: "mysql",
         allowDataBranching: true,
         automaticMigrations: true,
         requireApprovalForDeploy: false,
@@ -111,6 +112,99 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)("Database Resource", () => {
         name: testId,
         organizationId,
         clusterSize: "PS_20", // Change cluster size
+        allowDataBranching: false,
+        automaticMigrations: false,
+        requireApprovalForDeploy: true,
+        restrictBranchRegion: false,
+        insightsRawQueries: false,
+        productionBranchWebConsole: false,
+        defaultBranch: "main",
+        migrationFramework: "django",
+        migrationTableName: "django_migrations",
+      });
+
+      expect(database).toMatchObject({
+        allowDataBranching: false,
+        automaticMigrations: false,
+        requireApprovalForDeploy: true,
+        restrictBranchRegion: false,
+        insightsRawQueries: false,
+        productionBranchWebConsole: false,
+        defaultBranch: "main",
+        migrationFramework: "django",
+        migrationTableName: "django_migrations",
+      });
+
+      // Verify main branch cluster size was updated
+      const mainBranchResponse = await api.get(
+        `/organizations/${organizationId}/databases/${testId}/branches/main`,
+      );
+      expect(mainBranchResponse.status).toEqual(200);
+      const mainBranchData = await mainBranchResponse.json<any>();
+      expect(mainBranchData.cluster_rate_name).toEqual("PS_20");
+    } catch (err) {
+      console.error("Test error:", err);
+      throw err;
+    } finally {
+      // Cleanup
+      await destroy(scope);
+
+      // Verify database was deleted by checking API directly
+      await assertDatabaseDeleted(api, organizationId, testId);
+    }
+  }, 600_000); // this test takes forever as it needs to wait on multiple resizes!
+
+  test("create, update, and delete PostgreSQL database", async (scope) => {
+    const testId = `${BRANCH_PREFIX}-test-db-crud-postgres`;
+    let database;
+    try {
+      // Create test database with initial settings
+      database = await Database(testId, {
+        name: testId,
+        organizationId,
+        region: {
+          slug: "us-east",
+        },
+        clusterSize: "PS_10",
+        kind: "postgresql",
+        allowDataBranching: true,
+        automaticMigrations: true,
+        requireApprovalForDeploy: false,
+        restrictBranchRegion: true,
+        insightsRawQueries: true,
+        productionBranchWebConsole: true,
+        defaultBranch: "main",
+        migrationFramework: "rails",
+        migrationTableName: "schema_migrations",
+      });
+
+      expect(database).toMatchObject({
+        id: expect.any(String),
+        name: testId,
+        organizationId,
+        kind: "postgresql",
+        allowDataBranching: true,
+        automaticMigrations: true,
+        requireApprovalForDeploy: false,
+        restrictBranchRegion: true,
+        insightsRawQueries: true,
+        productionBranchWebConsole: true,
+        defaultBranch: "main",
+        migrationFramework: "rails",
+        migrationTableName: "schema_migrations",
+        state: expect.any(String),
+        plan: expect.any(String),
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+        htmlUrl: expect.any(String),
+      });
+
+      // Update database settings
+      database = await Database(testId, {
+        name: testId,
+        organizationId,
+        clusterSize: "PS_20", // Change cluster size
+        kind: "postgresql",
         allowDataBranching: false,
         automaticMigrations: false,
         requireApprovalForDeploy: true,
