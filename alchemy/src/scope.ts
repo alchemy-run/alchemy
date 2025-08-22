@@ -281,7 +281,7 @@ export class Scope {
 
   public createPhysicalName(id: string, delimiter = "-"): string {
     return [...this.chain, id]
-      .map((s) => s.replaceAll(/[^a-z0-9_-]/i, delimiter))
+      .map((s) => s.replaceAll(/[^a-z0-9_-]/gi, delimiter))
       .join(delimiter);
   }
 

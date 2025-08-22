@@ -218,19 +218,16 @@ describe.concurrent("Scope", () => {
         }
       },
     );
+
+    test("createPhysicalName", async (scope) => {
+      expect(scope.createPhysicalName("foo")).toBe(
+        "samgoodwin-scope-test-ts-Scope-createPhysicalName-foo",
+      );
+      await alchemy.run("bar", async (scope) => {
+        expect(scope.createPhysicalName("foo")).toBe(
+          "samgoodwin-scope-test-ts-Scope-createPhysicalName-bar-foo",
+        );
+      });
+    });
   }
 });
-
-const Nested = Resource(
-  "Nested",
-  async function (this, _id: string, props: { fileName: string }) {
-    if (this.phase === "delete") {
-      return this.destroy();
-    }
-    await File("file", {
-      path: props.fileName,
-      content: "Hello World",
-    });
-    return this({});
-  },
-);
