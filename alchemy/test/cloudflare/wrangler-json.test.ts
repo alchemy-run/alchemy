@@ -142,6 +142,7 @@ describe("WranglerJson Resource", () => {
         await fs.writeFile(entrypoint, esmWorkerScript);
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           compatibilityFlags: ["nodejs_compat"],
@@ -170,6 +171,7 @@ describe("WranglerJson Resource", () => {
 
       try {
         const worker = await Worker(name, {
+          name,
           format: "esm",
           script: esmWorkerScript,
           adopt: true,
@@ -199,6 +201,7 @@ describe("WranglerJson Resource", () => {
         await fs.writeFile(entrypoint, esmWorkerScript);
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           bindings: {
@@ -237,6 +240,7 @@ describe("WranglerJson Resource", () => {
         await fs.writeFile(entrypoint, esmWorkerScript);
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           bindings: {
@@ -291,6 +295,7 @@ describe("WranglerJson Resource", () => {
         );
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           bindings: {
@@ -367,6 +372,7 @@ describe("WranglerJson Resource", () => {
         });
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           bindings: {
@@ -404,6 +410,7 @@ describe("WranglerJson Resource", () => {
         await fs.writeFile(entrypoint, esmWorkerScript);
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           crons: ["*/3 * * * *", "0 15 1 * *", "59 23 LW * *"],
@@ -440,6 +447,7 @@ describe("WranglerJson Resource", () => {
         });
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           bindings: {
@@ -478,6 +486,7 @@ describe("WranglerJson Resource", () => {
         const d1Database = await D1Database(`${BRANCH_PREFIX}-test-d1-db`);
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           bindings: {
@@ -515,10 +524,12 @@ describe("WranglerJson Resource", () => {
         await fs.writeFile(entrypoint, esmWorkerScript);
 
         const r2Bucket = await R2Bucket(`${BRANCH_PREFIX}-test-r2-bucket`, {
+          name: `${BRANCH_PREFIX}-test-r2-bucket`,
           adopt: true,
         });
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint,
           bindings: {
@@ -560,6 +571,7 @@ describe("WranglerJson Resource", () => {
         await fs.writeFile(indexHtml, "<html><body>Hello World</body></html>");
 
         const worker = await Worker(name, {
+          name,
           format: "esm",
           entrypoint: "src/worker.ts",
           cwd: tempDir,
@@ -605,6 +617,7 @@ describe("WranglerJson Resource", () => {
       await fs.writeFile(entrypoint, esmWorkerScript);
 
       const worker = await Worker(name, {
+        name,
         format: "esm",
         entrypoint,
         bindings: {
@@ -655,19 +668,23 @@ describe("WranglerJson Resource", () => {
       await fs.writeFile(entrypoint, esmWorkerScript);
 
       const worker = await Worker(name, {
+        name,
         format: "esm",
         entrypoint,
         adopt: true,
         bindings: {
           D1: await D1Database(`${BRANCH_PREFIX}-test-d1-db-dev-remote`, {
+            name: `${BRANCH_PREFIX}-test-d1-db-dev-remote`,
             adopt: true,
             dev: { remote: true },
           }),
           KV: await KVNamespace(`${BRANCH_PREFIX}-test-kv-ns-dev-remote`, {
+            title: `${BRANCH_PREFIX}-test-kv-ns-dev-remote`,
             adopt: true,
             dev: { remote: true },
           }),
           R2: await R2Bucket(`${BRANCH_PREFIX}-test-r2-bucket-dev-remote`, {
+            name: `${BRANCH_PREFIX}-test-r2-bucket-dev-remote`,
             adopt: true,
             dev: { remote: true },
           }),
@@ -752,6 +769,7 @@ describe("WranglerJson Resource", () => {
       });
 
       const worker = await Worker(name, {
+        name,
         format: "esm",
         entrypoint,
         eventSources: [
@@ -807,6 +825,7 @@ describe("WranglerJson Resource", () => {
       });
 
       const worker = await Worker(name, {
+        name,
         format: "esm",
         entrypoint,
         eventSources: [queue], // Direct queue as event source
