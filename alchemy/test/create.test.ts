@@ -65,6 +65,7 @@ const variants = {
   "rwsdk-template": "--template=rwsdk",
   "tanstack-start-template": "--template=tanstack-start",
   "nuxt-template": "--template=nuxt",
+  "hono-template": "--template=hono",
 };
 
 describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
