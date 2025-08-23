@@ -498,7 +498,7 @@ export const Tunnel = Resource(
 
     if (this.phase === "update" && this.output.name !== name) {
       console.log("replacing tunnel", this.output.name, name);
-      this.replace();
+      this.replace(true);
     }
 
     if (this.phase === "delete") {
