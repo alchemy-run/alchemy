@@ -9,6 +9,8 @@ export default defineConfig({
     alchemy() as PluginOption,
     tailwindcss(),
     reactRouter(),
-    tsconfigPaths(),
+    tsconfigPaths({
+      root: ".",
+    }),
   ],
 });

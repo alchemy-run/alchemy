@@ -610,7 +610,9 @@ describe("WranglerJson Resource", () => {
         bindings: {
           AI: Ai(),
           BROWSER: BrowserRendering(),
-          DISPATCH: await DispatchNamespace("dispatch"),
+          DISPATCH: await DispatchNamespace("dispatch", {
+            adopt: true,
+          }),
           IMAGES: Images(),
           VECTORIZE: await VectorizeIndex("vector", {
             name: "vector",
