@@ -3,6 +3,7 @@
 import alchemy from "alchemy";
 import {
   DurableObjectNamespace,
+  KVNamespace,
   Queue,
   R2Bucket,
   Vite,
@@ -13,18 +14,23 @@ import type { HelloWorldDO } from "./src/do.ts";
 
 const app = await alchemy("smoke-test-flatten-website");
 
-export const queue = await Queue<{
-  name: string;
-  email: string;
-}>("queue", {
+export const queue = await Queue<string>("queue", {
   name: `${app.name}-${app.stage}-queue`,
+  adopt: true,
+});
+
+const KV = await KVNamespace("kv", {
+  title: `${app.name}-${app.stage}-kv`,
   adopt: true,
 });
 
 export const worker = await Vite("worker", {
   name: `${app.name}-${app.stage}-worker`,
   entrypoint: "./src/worker.ts",
+  url: true,
+  adopt: true,
   bindings: {
+    KV,
     BUCKET: await R2Bucket("bucket", {
       name: `${app.name}-${app.stage}-bucket`,
       adopt: true,
@@ -37,17 +43,14 @@ export const worker = await Vite("worker", {
     }),
     DO: DurableObjectNamespace<HelloWorldDO>("HelloWorldDO", {
       className: "HelloWorldDO",
-      // sqlite: true,
     }),
   },
-  url: true,
   eventSources: [queue],
   bundle: {
     metafile: true,
     format: "esm",
     target: "es2020",
   },
-  adopt: true,
 });
 
 console.log(worker.url);
@@ -63,12 +66,15 @@ if ("RUN_COUNT" in process.env) {
     const { key } = await fetchJson<{ key: string | null }>("GET", "/object");
     assert(key === null, `${key} !== null`);
     await fetchJson<{ key: string | null }>("POST", "/object");
+
+    await sendMessage("key"); // will be delayed for 30 seconds
   } else {
     // on second run the data should still be there
     const { key } = await fetchJson<{ key: string | null }>("GET", "/object");
     assert(key === "value", `${key} !== "value"`);
+
+    await checkMessage("key"); // should still arrive in the new worker
   }
-  console.log("test passed");
 }
 
 async function fetchJson<T>(method: "GET" | "POST", path: string): Promise<T> {
@@ -85,3 +91,20 @@ async function fetchJson<T>(method: "GET" | "POST", path: string): Promise<T> {
   }
   return await response.json() as T;
 }
+
+async function sendMessage(key: string) {
+  await fetchJson<void>("GET", `/queue?key=${key}`);
+}
+
+async function checkMessage(key: string) {
+  let attempt = 0;
+  while (true) {
+    const { value } = await fetchJson<{ value: string }>("GET", `/check?key=${key}`);
+    if (value === "exists") {
+      break;
+    }
+    console.log(`Message ${key} not found, retrying in 1s (attempt ${attempt++})...`);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
+
