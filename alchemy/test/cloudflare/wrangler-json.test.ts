@@ -483,7 +483,9 @@ describe("WranglerJson Resource", () => {
         await fs.mkdir(tempDir, { recursive: true });
         await fs.writeFile(entrypoint, esmWorkerScript);
 
-        const d1Database = await D1Database(`${BRANCH_PREFIX}-test-d1-db`);
+        const d1Database = await D1Database(`${BRANCH_PREFIX}-test-d1-db`, {
+          adopt: true,
+        });
 
         const worker = await Worker(name, {
           name,
