@@ -31,8 +31,8 @@ async function runCommand(
     return { stdout: result.toString(), stderr: "" };
   } catch (error: any) {
     console.error(`Command failed: ${command}`);
-    console.error(error.stdout.toString());
-    console.error(error.stderr.toString());
+    console.error(error.stdout?.toString() ?? "");
+    console.error(error.stderr?.toString() ?? "");
     throw error;
   }
 }
@@ -90,7 +90,7 @@ describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
         // Create the project using CLI - run from smoke directory
         console.log(`Creating ${templateName} project...`);
         const createResult = await runCommand(
-          `bun ${cliPath} create ${templateName} ${templateArg} --vibe-rules=cursor --no-git --github-actions --yes`,
+          `bun ${cliPath} create ${templateName} ${templateArg} --vibe-rules=cursor --no-git --github-actions --no-install --yes`,
           smokeDir, // Run from smoke directory so project is created there
           {
             NODE_ENV: "test",
@@ -98,9 +98,27 @@ describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
         );
         expect(createResult).toBeDefined();
 
+        // patch the package.json to use the catalog workspaces so that we can install alchemy from the workspace
+        const packageJson = JSON.parse(
+          await fs.readFile(path.join(projectPath, "package.json"), "utf-8"),
+        );
+        packageJson.workspaces = {
+          catalog: JSON.parse(await fs.readFile("package.json", "utf-8"))
+            .workspaces.catalog,
+        };
+        await fs.writeFile(
+          path.join(projectPath, "package.json"),
+          JSON.stringify(packageJson, null, 2),
+        );
+
+        await runCommand("bun i", projectPath);
+
         // Try to deploy the project
         console.log(`Deploying ${templateName} project...`);
-        const deployResult = await runCommand("bun run deploy", projectPath);
+        const deployResult = await runCommand(
+          "bun run deploy --adopt",
+          projectPath,
+        );
         expect(deployResult).toBeDefined();
 
         // Try to destroy the project
@@ -115,7 +133,7 @@ describe("Create CLI End-to-End Tests", { concurrent: false }, () => {
       } finally {
         if (!process.env.NO_CLEANUP) {
           // Always cleanup the project directory
-          await cleanupProject(projectPath);
+          // await cleanupProject(projectPath);
         }
       }
     }, 600000); // 10 minutes timeout per test
