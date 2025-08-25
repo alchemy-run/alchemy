@@ -81,6 +81,7 @@ export async function Astro<B extends Bindings>(
       props.entrypoint ??
       (output === "server" ? "dist/_worker.js/index.js" : undefined),
     assets: props.assets ?? "dist",
+    spa: false,
   });
 }
 

@@ -709,6 +709,7 @@ const _Worker = Resource(
     id: string,
     props: WorkerProps<B>,
   ) {
+    const adopt = props.adopt ?? this.scope.adopt;
     const options = (() => {
       if (props.projectRoot) {
         logger.warn("projectRoot is deprecated, use cwd instead");
@@ -827,12 +828,18 @@ const _Worker = Resource(
         });
         this.onCleanup(() => controller.dispose());
       }
-      await provisionResources(props, {
-        name: options.name,
-        local: true,
-        dispatchNamespace: options.dispatchNamespace,
-        containers: options.containers,
-      });
+      await provisionResources(
+        {
+          ...props,
+          adopt,
+        },
+        {
+          name: options.name,
+          local: true,
+          dispatchNamespace: options.dispatchNamespace,
+          containers: options.containers,
+        },
+      );
       return this({
         ...props,
         type: "service",
@@ -879,13 +886,9 @@ const _Worker = Resource(
           });
         }
         // We always "adopt" when publishing versions
-      } else if (!props.adopt) {
+      } else if (!adopt) {
         await assertWorkerDoesNotExist(api, options.name);
-      } else if (
-        props.adopt &&
-        !options.dispatchNamespace &&
-        props.url === false
-      ) {
+      } else if (adopt && !options.dispatchNamespace && props.url === false) {
         // explicitly disable the workers.dev subdomain
         await disableWorkerSubdomain(api, options.name);
       }
@@ -965,14 +968,20 @@ const _Worker = Resource(
       ),
     );
 
-    const { domains, routes, subdomain } = await provisionResources(props, {
-      name: options.name,
-      local: false,
-      dispatchNamespace: options.dispatchNamespace,
-      containers: options.containers,
-      result,
-      api,
-    });
+    const { domains, routes, subdomain } = await provisionResources(
+      {
+        ...props,
+        adopt,
+      },
+      {
+        name: options.name,
+        local: false,
+        dispatchNamespace: options.dispatchNamespace,
+        containers: options.containers,
+        result,
+        api,
+      },
+    );
 
     const now = new Date();
     return this({
@@ -1045,7 +1054,9 @@ const assertUnique = <T, Key extends keyof T>(
 };
 
 async function provisionResources<B extends Bindings>(
-  props: WorkerProps<B>,
+  props: WorkerProps<B> & {
+    adopt: boolean;
+  },
   options:
     | {
         name: string;

@@ -183,6 +183,7 @@ export const Database = Resource(
     id: string,
     props: DatabaseProps,
   ): Promise<Database> {
+    const adopt = props.adopt ?? this.scope.adopt;
     const apiKey =
       props.apiKey?.unencrypted || process.env.PLANETSCALE_API_TOKEN;
     if (!apiKey) {
@@ -227,7 +228,7 @@ export const Database = Resource(
         `/organizations/${props.organizationId}/databases/${databaseName}`,
       );
       const getData = await getResponse.json<any>();
-      if (this.phase === "update" || (props.adopt && getResponse.ok)) {
+      if (this.phase === "update" || (adopt && getResponse.ok)) {
         if (!getResponse.ok) {
           throw new Error(`Database ${databaseName} not found`);
         }

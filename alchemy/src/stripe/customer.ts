@@ -385,7 +385,7 @@ export const Customer = Resource(
           };
         }
 
-        if (props.adopt && props.email) {
+        if ((props.adopt ?? this.scope.adopt) && props.email) {
           const existingCustomers = await stripe.customers.list({
             email: props.email,
             limit: 1,

@@ -1,5 +1,6 @@
 import z from "zod";
 import {
+  adopt,
   entrypoint,
   execAlchemy,
   execArgs,
@@ -19,6 +20,7 @@ export const deploy = loggedProcedure
         ...execArgs,
         force,
         watch,
+        adopt,
       }),
     ]),
   )

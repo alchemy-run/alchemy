@@ -211,7 +211,7 @@ export const Route = Resource(
       } catch (error) {
         // Check if this is a "route already exists" error and adopt is enabled
         if (
-          props.adopt &&
+          (props.adopt ?? this.scope.adopt) &&
           error instanceof CloudflareApiError &&
           error.status === 409
         ) {

@@ -153,6 +153,7 @@ export const File = Resource(
     _id: string,
     props: FileProps,
   ): Promise<File> {
+    const adopt = props.adopt ?? this.scope.adopt;
     const stripe = await createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
@@ -171,7 +172,7 @@ export const File = Resource(
             purpose: props.purpose,
           });
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (isStripeConflictError(error) && adopt) {
             throw new Error(
               "File adoption is not supported - files are immutable and cannot be adopted",
             );

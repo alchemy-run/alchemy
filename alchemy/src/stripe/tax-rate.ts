@@ -143,6 +143,7 @@ export const TaxRate = Resource(
     _id: string,
     props: TaxRateProps,
   ): Promise<TaxRate> {
+    const adopt = props.adopt ?? this.scope.adopt;
     const stripe = await createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
@@ -185,7 +186,7 @@ export const TaxRate = Resource(
             tax_type: props.taxType,
           });
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (isStripeConflictError(error) && adopt) {
             throw new Error(
               "TaxRate adoption is not supported - tax rates cannot be uniquely identified for adoption",
             );

@@ -1,5 +1,7 @@
+import { execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
+import path from "node:path";
 import type { AlchemyOptions } from "../src/alchemy.ts";
 import { CloudflareStateStore } from "../src/state/cloudflare-state-store.ts";
 import { D1StateStore } from "../src/state/d1-state-store.ts";
@@ -87,5 +89,53 @@ export async function waitFor<T>(
     if (Date.now() >= deadline) return lastValue;
     // eslint-disable-next-line no-await-in-loop
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}
+
+/**
+ * Our smoke tests (create.test.ts and init.test.ts) install `alchemy` via a `file:..` reference
+ * but alchemy has `catalog:` dependencies and assumes you're installed as part of a monorepo.
+ *
+ * To avoid hacking the monorepo config for these temporary pacakges (which didn't work when tried),
+ * this function just copies across the `catalog` definition from the monorepo to the temp package.
+ */
+export async function patchCatalogAndInstall(projectPath: string) {
+  const packageJson = JSON.parse(
+    await fs.readFile(path.join(projectPath, "package.json"), "utf-8"),
+  );
+  packageJson.workspaces = {
+    catalog: JSON.parse(await fs.readFile("package.json", "utf-8")).workspaces
+      .catalog,
+  };
+  await fs.writeFile(
+    path.join(projectPath, "package.json"),
+    JSON.stringify(packageJson, null, 2),
+  );
+
+  await runCommand("bun i", projectPath);
+}
+
+export async function runCommand(
+  command: string,
+  cwd: string,
+  env?: Record<string, string>,
+): Promise<{ stdout: string; stderr: string }> {
+  console.log(`Running: ${command} in ${cwd}`);
+
+  try {
+    const result = execSync(command, {
+      cwd,
+      env: {
+        ...process.env,
+        ...env,
+        DO_NOT_TRACK: "true",
+      },
+    });
+    return { stdout: result.toString(), stderr: "" };
+  } catch (error: any) {
+    console.error(`Command failed: ${command}`);
+    console.error(error.stdout?.toString() ?? "");
+    console.error(error.stderr?.toString() ?? "");
+    throw error;
   }
 }

@@ -364,6 +364,7 @@ const _R2Bucket = Resource(
       id: this.output?.dev?.id ?? bucketName,
       remote: props.dev?.remote ?? false,
     };
+    const adopt = props.adopt ?? this.scope.adopt;
 
     if (this.scope.local && !props.dev?.remote) {
       return this({
@@ -401,7 +402,7 @@ const _R2Bucket = Resource(
           if (
             err instanceof CloudflareApiError &&
             err.status === 409 &&
-            props.adopt
+            adopt
           ) {
             return await getBucket(api, bucketName, props);
           }

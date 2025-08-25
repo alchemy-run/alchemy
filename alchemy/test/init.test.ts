@@ -1,38 +1,14 @@
-import { execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import url from "node:url";
 import { describe, expect, test } from "vitest";
 import "../src/test/vitest.ts";
+import { patchCatalogAndInstall, runCommand } from "./util.ts";
 
 const __filename = url.fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.join(__dirname, "..", "..");
 const cliPath = path.join(rootDir, "alchemy", "bin", "alchemy.js");
-
-async function runCommand(
-  command: string,
-  cwd: string,
-  env?: Record<string, string>,
-): Promise<{ stdout: string; stderr: string }> {
-  console.log(`Running: ${command} in ${cwd}`);
-  try {
-    const result = execSync(command, {
-      cwd,
-      env: {
-        ...process.env,
-        ...env,
-        DO_NOT_TRACK: "true",
-      },
-    });
-    return { stdout: result.toString(), stderr: "" };
-  } catch (error: any) {
-    console.error(`Command failed: ${command}`);
-    console.error(error.stdout?.toString());
-    console.error(error.stderr?.toString());
-    throw error;
-  }
-}
 
 async function fileExists(path: string): Promise<boolean> {
   try {
@@ -129,8 +105,7 @@ describe("Init CLI End-to-End Tests", { concurrent: false }, () => {
         expect(alchemyRunTsExists || alchemyRunJsExists).toBe(true);
 
         console.log(`Installing dependencies for ${variantName} project...`);
-        const installResult = await runCommand("bun install", projectPath);
-        expect(installResult).toBeDefined();
+        await patchCatalogAndInstall(projectPath);
 
         console.log(`Deploying ${variantName} project...`);
         const deployResult = await runCommand("bun run deploy", projectPath);

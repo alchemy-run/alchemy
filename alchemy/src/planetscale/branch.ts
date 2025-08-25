@@ -157,6 +157,7 @@ export const Branch = Resource(
     id: string,
     props: BranchProps,
   ): Promise<Branch> {
+    const adopt = props.adopt ?? this.scope.adopt;
     const apiKey =
       props.apiKey?.unencrypted || process.env.PLANETSCALE_API_TOKEN;
     if (!apiKey) {
@@ -223,7 +224,7 @@ export const Branch = Resource(
 
       if (getResponse.ok) {
         // Branch exists
-        if (!props.adopt) {
+        if (!adopt) {
           throw new Error(
             `Branch ${branchName} already exists and adopt is false`,
           );

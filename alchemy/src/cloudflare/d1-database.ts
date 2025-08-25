@@ -275,6 +275,7 @@ const _D1Database = Resource(
       id: this.output?.dev?.id ?? this.output?.id ?? id,
       remote: props.dev?.remote ?? false,
     };
+    const adopt = props.adopt ?? this.scope.adopt;
 
     if (local) {
       if (props.migrationsFiles && props.migrationsFiles.length > 0) {
@@ -333,7 +334,7 @@ const _D1Database = Resource(
       } catch (error) {
         // Check if this is a "database already exists" error and adopt is enabled
         if (
-          props.adopt &&
+          adopt &&
           error instanceof CloudflareApiError &&
           error.message.includes("already exists")
         ) {
