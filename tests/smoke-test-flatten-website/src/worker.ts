@@ -10,8 +10,28 @@ export default {
       return Response.json({
         count: await env.DO.getByName("foo").increment()
       })
+    } else if (url.pathname.startsWith("/object")) {
+      if (request.method === "POST") {
+        await env.BUCKET.put("key", "value");
+        return Response.json({
+          key: await getObject()
+        });
+      } else if (request.method === "GET") {
+        return Response.json({
+          key: await getObject()
+        });
+      } else {
+        return Response.json({
+          error: "Method not allowed"
+        }, { status: 405 });
+      }
     }
+
     return new Response(null, { status: 404 });
+
+    async function getObject(): Promise<string | null> {
+      return await (await env.BUCKET.get("key"))?.text() ?? null
+    }
   },
   queue(batch) {
     batch.ackAll();
