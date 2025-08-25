@@ -43,8 +43,7 @@
       "alchemy",
       "alchemy/templates/*",
       "examples/*",
-      "stacks",
-      ".smoke/*"
+      "stacks"
     ]
   },
   "devDependencies": {
