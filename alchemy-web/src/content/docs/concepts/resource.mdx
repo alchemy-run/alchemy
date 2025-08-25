@@ -192,6 +192,8 @@ You can also set the `destroyStrategy` option globally or within a Scope using `
 
 When creating a resource, Alchemy will fail if a resource with the same name already exists. Resource adoption allows you to opt in to using the pre-existing resource instead.
 
+You can opt-in to adoption on a per-resource basis:
+
 ```typescript
 // Without adoption - fails if bucket already exists
 const bucket = await R2Bucket("my-bucket", {
@@ -203,6 +205,11 @@ const bucket = await R2Bucket("my-bucket", {
   name: "existing-bucket",
   adopt: true,
 });
+```
+
+Or set `--adopt` to adopt all resources without changing code:
+```sh
+alchemy deploy --adopt
 ```
 
 During the **create phase**, if a resource already exists:
