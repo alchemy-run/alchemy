@@ -13,7 +13,7 @@ import {
   type Resource,
   type ResourceProps,
 } from "./resource.ts";
-import { Scope, type PendingDeletions } from "./scope.ts";
+import type { PendingDeletions } from "./scope.ts";
 import { serialize } from "./serde.ts";
 import { formatFQN } from "./util/cli.ts";
 import { logger } from "./util/logger.ts";
@@ -22,7 +22,6 @@ import type { Telemetry } from "./util/telemetry/index.ts";
 export interface ApplyOptions {
   quiet?: boolean;
   alwaysUpdate?: boolean;
-  resolveInnerScope?: (scope: Scope) => void;
   noop?: boolean;
 }
 
@@ -69,12 +68,6 @@ async function _apply<Out extends Resource>(
           `Resource "${resource[ResourceFQN]}" not found and running in 'read' phase.`,
         );
       }
-      options?.resolveInnerScope?.(
-        new Scope({
-          parent: scope,
-          scopeName: resource[ResourceID],
-        }),
-      );
       scope.telemetryClient.record({
         event: "resource.read",
         resource: resource[ResourceKind],
@@ -121,11 +114,6 @@ async function _apply<Out extends Resource>(
         alwaysUpdate !== true &&
         !scope.force
       ) {
-        const innerScope = new Scope({
-          parent: scope,
-          scopeName: resource[ResourceID],
-        });
-        innerScope.skip();
         if (!quiet) {
           logger.task(resource[ResourceFQN], {
             prefix: "skipped",
@@ -135,7 +123,6 @@ async function _apply<Out extends Resource>(
             status: "success",
           });
         }
-        options?.resolveInnerScope?.(innerScope);
         scope.telemetryClient.record({
           event: "resource.skip",
           resource: resource[ResourceKind],
@@ -206,10 +193,8 @@ async function _apply<Out extends Resource>(
           destroyStrategy: provider.options?.destroyStrategy ?? "sequential",
           noop: options?.noop,
         },
-        async (scope) => {
-          options?.resolveInnerScope?.(scope);
-          return provider.handler.bind(ctx)(resource[ResourceID], props);
-        },
+        async () =>
+          await provider.handler.bind(ctx)(resource[ResourceID], props),
       );
     } catch (error) {
       if (error instanceof ReplacedSignal) {

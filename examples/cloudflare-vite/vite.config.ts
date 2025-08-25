@@ -1,8 +1,8 @@
 import react from "@vitejs/plugin-react";
 import alchemy from "alchemy/cloudflare/vite";
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [alchemy(), react()],
+  plugins: [alchemy() as PluginOption, react()],
 });

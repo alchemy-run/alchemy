@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "../context.ts";
-import { formatJson } from "../fs/static-json-file.ts";
 import { Resource } from "../resource.ts";
 import { Scope } from "../scope.ts";
 import { isSecret } from "../secret.ts";
@@ -30,7 +29,7 @@ export interface WranglerJsonProps {
    * The worker to generate the wrangler.json file for
    */
   worker:
-    | Worker
+    | Worker<any>
     | (WorkerProps<any> & {
         name: string;
       });
@@ -214,9 +213,9 @@ export async function WranglerJson(
         ),
       },
     };
-    await fs.writeFile(filePath, await formatJson(withSecretsUnwrapped));
+    await writeJSON(filePath, withSecretsUnwrapped);
   } else {
-    await fs.writeFile(filePath, await formatJson(finalSpec));
+    await writeJSON(filePath, finalSpec);
   }
 
   return {
@@ -227,6 +226,10 @@ export async function WranglerJson(
     updatedAt: Date.now(),
   };
 }
+
+const writeJSON = async (filePath: string, content: any) => {
+  await fs.writeFile(filePath, `${JSON.stringify(content, null, 2)}\n`);
+};
 
 /**
  * Wrangler.json configuration specification based on Cloudflare's schema

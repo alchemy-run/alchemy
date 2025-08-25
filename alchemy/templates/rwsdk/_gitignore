@@ -63,9 +63,8 @@ coverage
 *.tmp
 *.temp
 
-.wrangler
-
 generated/
 
 .alchemy/
 .env
+.wrangler/

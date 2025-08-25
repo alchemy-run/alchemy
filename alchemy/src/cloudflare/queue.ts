@@ -100,57 +100,56 @@ export function isQueue(eventSource: any): eventSource is Queue {
 /**
  * Output returned after Cloudflare Queue creation/update
  */
-export interface Queue<Body = unknown>
-  extends Resource<"cloudflare::Queue">,
-    Omit<QueueProps, "dev"> {
-  /**
-   * Type identifier for Cloudflare Queue
-   */
-  type: "queue";
-
-  /**
-   * The unique ID of the queue
-   */
-  id: string;
-
-  /**
-   * The name of the queue
-   */
-  name: string;
-
-  /**
-   * Time when the queue was created
-   */
-  createdOn: string;
-
-  /**
-   * Modified timestamp
-   */
-  modifiedOn: string;
-
-  /**
-   * Phantom property to allow type inference
-   */
-  Body: Body;
-
-  Batch: MessageBatch<Body>;
-
-  /**
-   * Development mode properties
-   * @internal
-   */
-  dev: {
+export type Queue<Body = unknown> = Resource<"cloudflare::Queue"> &
+  Omit<QueueProps, "dev"> & {
     /**
-     * The ID of the queue in development mode
+     * Type identifier for Cloudflare Queue
+     */
+    type: "queue";
+
+    /**
+     * The unique ID of the queue
      */
     id: string;
 
     /**
-     * Whether the queue is running remotely
+     * The name of the queue
      */
-    remote: boolean;
+    name: string;
+
+    /**
+     * Time when the queue was created
+     */
+    createdOn: string;
+
+    /**
+     * Modified timestamp
+     */
+    modifiedOn: string;
+
+    /**
+     * Phantom property to allow type inference
+     */
+    Body: Body;
+
+    Batch: MessageBatch<Body>;
+
+    /**
+     * Development mode properties
+     * @internal
+     */
+    dev: {
+      /**
+       * The ID of the queue in development mode
+       */
+      id: string;
+
+      /**
+       * Whether the queue is running remotely
+       */
+      remote: boolean;
+    };
   };
-}
 
 /**
  * Creates and manages Cloudflare Queues.

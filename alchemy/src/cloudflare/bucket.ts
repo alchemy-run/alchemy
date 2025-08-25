@@ -77,6 +77,16 @@ export interface BucketProps extends CloudflareApiOptions {
   cors?: R2BucketCORSRule[];
 
   /**
+   * Lifecycle rules for the bucket
+   */
+  lifecycle?: R2BucketLifecycleRule[];
+
+  /**
+   * Lock rules for the bucket
+   */
+  lock?: R2BucketLockRule[];
+
+  /**
    * Whether to emulate the bucket locally when Alchemy is running in watch mode.
    */
   dev?: {
@@ -92,6 +102,102 @@ export interface BucketProps extends CloudflareApiOptions {
      */
     force?: boolean;
   };
+}
+
+interface R2BucketLifecycleRule {
+  /**
+   * Unique identifier for this rule.
+   */
+  id?: string;
+
+  /**
+   * Conditions that apply to all transitions of this rule.
+   */
+  conditions?: {
+    /**
+     * Transitions will only apply to objects/uploads in the bucket that start with the given prefix, an empty prefix can be provided to scope rule to all objects/uploads.
+     */
+    prefix: string;
+  };
+
+  /**
+   * Whether or not this rule is in effect.
+   * @default true
+   */
+  enabled?: boolean;
+
+  /**
+   * Transition to abort ongoing multipart uploads.
+   */
+  abortMultipartUploadsTransition?: {
+    /**
+     * Condition for lifecycle transitions to apply after an object reaches an age in   seconds.
+     */
+    condition: {
+      /**
+       
+      /**
+       * Maximum age of the object in seconds.
+       */
+      maxAge: number;
+
+      /**
+       * Type of condition.
+       */
+      type: "Age";
+    };
+  };
+
+  /**
+   * Transition to delete objects.
+   */
+  deleteObjectsTransition?: {
+    /**
+     * Condition for lifecycle transitions to apply after an object reaches an age in seconds.
+     */
+    condition: { maxAge: number; type: "Age" } | { date: string; type: "Date" };
+  };
+
+  /**
+   * Transition to change the storage class of objects.
+   */
+  storageClassTransitions?: {
+    /**
+     * Condition for lifecycle transitions to apply after an object reaches an age in seconds.
+     */
+    condition: { maxAge: number; type: "Age" } | { date: string; type: "Date" };
+
+    /**
+     * Storage class for the bucket.
+     */
+    storageClass: "InfrequentAccess";
+  }[];
+}
+
+interface R2BucketLockRule {
+  /**
+   * Unique identifier for this rule.
+   */
+  id?: string;
+
+  /**
+   * Condition to apply a lock rule to an object for how long in seconds.
+   */
+  condition:
+    | { maxAgeSeconds: number; type: "Age" }
+    | { date: string; type: "Date" }
+    | { type: "Indefinite" };
+
+  /**
+   * Whether or not this rule is in effect.
+   * @default true
+   */
+  enabled?: boolean;
+
+  /**
+   * Rule will only apply to objects/uploads in the bucket that start with the given prefix, an empty prefix can be provided to scope rule to all objects/uploads.
+   */
+  prefix?: string;
 }
 
 interface R2BucketCORSRule {
@@ -305,6 +411,12 @@ const _R2Bucket = Resource(
       if (props.cors?.length) {
         await putBucketCORS(api, bucketName, props);
       }
+      if (props.lifecycle?.length) {
+        await putBucketLifecycleRules(api, bucketName, props);
+      }
+      if (props.lock?.length) {
+        await putBucketLockRules(api, bucketName, props);
+      }
       return this({
         name: bucketName,
         location: bucket.location,
@@ -314,6 +426,8 @@ const _R2Bucket = Resource(
         domain,
         type: "r2_bucket",
         accountId: api.accountId,
+        lifecycle: props.lifecycle,
+        lock: props.lock,
         cors: props.cors,
         dev,
       });
@@ -335,11 +449,21 @@ const _R2Bucket = Resource(
       if (!isDeepStrictEqual(this.output.cors ?? [], props.cors ?? [])) {
         await putBucketCORS(api, bucketName, props);
       }
+      if (
+        !isDeepStrictEqual(this.output.lifecycle ?? [], props.lifecycle ?? [])
+      ) {
+        await putBucketLifecycleRules(api, bucketName, props);
+      }
+      if (!isDeepStrictEqual(this.output.lock ?? [], props.lock ?? [])) {
+        await putBucketLockRules(api, bucketName, props);
+      }
       return this({
         ...this.output,
         allowPublicAccess,
         dev,
         cors: props.cors,
+        lifecycle: props.lifecycle,
+        lock: props.lock,
         domain,
       });
     }
@@ -627,4 +751,112 @@ export async function putBucketCORS(
       request,
     ),
   );
+}
+
+export async function putBucketLifecycleRules(
+  api: CloudflareApi,
+  bucketName: string,
+  props: BucketProps,
+) {
+  const rulesBody = Array.isArray(props.lifecycle)
+    ? props.lifecycle.length === 0
+      ? { rules: [] }
+      : {
+          rules: props.lifecycle.map((rule) => ({
+            ...rule,
+            // Required by the API; empty prefix means all objects/uploads
+            conditions: rule.conditions ?? { prefix: "" },
+            // Required by the API
+            enabled: rule.enabled ?? true,
+          })),
+        }
+    : {};
+
+  await extractCloudflareResult(
+    `put R2 bucket lifecycle rules for "${bucketName}"`,
+    api.put(
+      `/accounts/${api.accountId}/r2/buckets/${bucketName}/lifecycle`,
+      rulesBody,
+      { headers: withJurisdiction(props) },
+    ),
+  );
+}
+
+/**
+ * Get lifecycle rules for a bucket
+ */
+export async function getBucketLifecycleRules(
+  api: CloudflareApi,
+  bucketName: string,
+  props: BucketProps = {},
+): Promise<R2BucketLifecycleRule[]> {
+  const res = await api.get(
+    `/accounts/${api.accountId}/r2/buckets/${bucketName}/lifecycle`,
+    { headers: withJurisdiction(props) },
+  );
+  const json: any = await res.json();
+  if (!json?.success) {
+    throw new CloudflareApiError(
+      `Failed to get R2 bucket lifecycle rules for "${bucketName}": ${res.status} ${res.statusText}`,
+      res,
+      json?.errors,
+    );
+  }
+  const rules: any[] = Array.isArray(json.result)
+    ? json.result
+    : (json.result?.rules ?? []);
+  return rules as R2BucketLifecycleRule[];
+}
+
+export async function putBucketLockRules(
+  api: CloudflareApi,
+  bucketName: string,
+  props: BucketProps,
+) {
+  const rulesBody = Array.isArray(props.lock)
+    ? props.lock.length === 0
+      ? { rules: [] }
+      : {
+          rules: props.lock.map((rule) => ({
+            ...rule,
+            // Required by the API
+            enabled: rule.enabled ?? true,
+          })),
+        }
+    : {};
+
+  await extractCloudflareResult(
+    `put R2 bucket lock rules for "${bucketName}"`,
+    api.put(
+      `/accounts/${api.accountId}/r2/buckets/${bucketName}/lock`,
+      rulesBody,
+      { headers: withJurisdiction(props) },
+    ),
+  );
+}
+
+/**
+ * Get lock rules for a bucket
+ */
+export async function getBucketLockRules(
+  api: CloudflareApi,
+  bucketName: string,
+  props: BucketProps = {},
+): Promise<R2BucketLockRule[]> {
+  const res = await api.get(
+    `/accounts/${api.accountId}/r2/buckets/${bucketName}/lock`,
+    { headers: withJurisdiction(props) },
+  );
+  const json: any = await res.json();
+  if (!json?.success) {
+    throw new CloudflareApiError(
+      `Failed to get R2 bucket lock rules for "${bucketName}": ${res.status} ${res.statusText}`,
+      res,
+      json?.errors,
+    );
+  }
+  const rules: any[] = Array.isArray(json.result)
+    ? json.result
+    : (json.result?.rules ?? []);
+  return rules as R2BucketLockRule[];
 }

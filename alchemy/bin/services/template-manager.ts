@@ -36,6 +36,8 @@ export async function copyTemplate(
     const files = await globby("**/*", {
       cwd: templatePath,
       dot: true,
+      followSymbolicLinks: false,
+      gitignore: true,
     });
 
     for (const file of files) {
@@ -53,6 +55,8 @@ export async function copyTemplate(
       await fs.ensureDir(path.dirname(destPath));
       await fs.copy(srcPath, destPath);
     }
+
+    await substituteProjectName(context);
 
     await updateTemplatePackageJson(context);
 
@@ -81,6 +85,13 @@ export async function copyTemplate(
   } catch (error) {
     throwWithContext(error, `Failed to copy template '${templateName}'`);
   }
+}
+
+async function substituteProjectName(context: ProjectContext): Promise<void> {
+  const alchemyFile = join(context.path, "alchemy.run.ts");
+  const code = await fs.readFile(alchemyFile, "utf8");
+  const newCode = code.replace("{projectName}", context.name);
+  await fs.writeFile(alchemyFile, newCode);
 }
 
 async function updateTemplatePackageJson(
