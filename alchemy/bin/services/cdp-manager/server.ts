@@ -105,8 +105,16 @@ export abstract class CDPServer {
   protected domains: Set<string>;
   public readonly name: string;
   private wss: WebSocketServer;
-  //todo(michael): support multiple clients
-  private lastClient: WsWebSocket | null = null;
+  private connectedClients: Set<WsWebSocket> = new Set();
+  protected pendingMessages: Map<
+    number,
+    {
+      msg: ClientCDPMessage;
+      clientMsgId: number;
+      clientWs: WsWebSocket;
+    }
+  > = new Map();
+  protected internalMessageId: number;
 
   constructor(options: {
     name: string;
@@ -124,28 +132,44 @@ export abstract class CDPServer {
     });
 
     this.wss.on("connection", async (clientWs) => {
-      this.lastClient = clientWs;
+      this.connectedClients.add(clientWs);
       clientWs.on("message", async (data) => {
-        await this.handleClientMessage(clientWs, data.toString());
+        const json = JSON.parse(data.toString()) as ClientCDPMessage;
+        if (json.id != null) {
+          const clientMsgId = json.id;
+          json.id = ++this.internalMessageId;
+          this.pendingMessages.set(json.id, {
+            msg: json,
+            clientMsgId,
+            clientWs: clientWs,
+          });
+        }
+        await this.handleClientMessage(clientWs, json);
       });
 
       clientWs.on("close", () => {});
     });
   }
 
-  protected async handleInspectorMessage(data: string) {
+  protected async handleInspectorMessage(data: ServerCDPMessage) {
     try {
-      const message = JSON.parse(data);
-      const messageDomain = message.method?.split(".")?.[0];
-      if (messageDomain != null && !this.domains.has(messageDomain)) {
-        return;
-      }
+      const messageDomain = data.method?.split(".")?.[0];
 
-      if (message.id == null) {
+      if (data.id == null) {
+        if (messageDomain != null && !this.domains.has(messageDomain)) {
+          return;
+        }
         await fs.promises.appendFile(this.logFile, `${data}\n`);
-      }
-      if (this.lastClient != null) {
-        this.lastClient.send(data);
+        for (const client of this.connectedClients) {
+          client.send(JSON.stringify(data));
+        }
+      } else {
+        const pendingMsg = this.pendingMessages.get(data.id);
+        if (pendingMsg) {
+          data.id = pendingMsg.clientMsgId;
+          pendingMsg.clientWs.send(JSON.stringify(data));
+          this.pendingMessages.delete(data.id);
+        }
       }
     } catch (error) {
       console.error(
@@ -155,7 +179,10 @@ export abstract class CDPServer {
     }
   }
 
-  abstract handleClientMessage(ws: WsWebSocket, data: string): Promise<void>;
+  abstract handleClientMessage(
+    ws: WsWebSocket,
+    data: ClientCDPMessage,
+  ): Promise<void>;
 
   public handleUpgrade(request: any, socket: any, head: any): void {
     try {
@@ -171,3 +198,13 @@ export abstract class CDPServer {
     }
   }
 }
+
+export type ClientCDPMessage = {
+  id: number;
+  method: string;
+};
+
+export type ServerCDPMessage = {
+  id?: number;
+  method: string;
+};

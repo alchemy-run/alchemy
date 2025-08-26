@@ -1,10 +1,14 @@
 import type { WebSocket as WsWebSocket } from "ws";
-import { CDPServer } from "./server.ts";
+import {
+  CDPServer,
+  type ClientCDPMessage,
+  type ServerCDPMessage,
+} from "./server.ts";
 
 export class CDPProxy extends CDPServer {
   private inspectorUrl: string;
   private inspectorWs?: WebSocket;
-  private onStartMessageQueue: Array<string>;
+  private onStartMessageQueue: Array<ClientCDPMessage>;
 
   constructor(
     inspectorUrl: string,
@@ -31,7 +35,9 @@ export class CDPProxy extends CDPServer {
     });
 
     this.inspectorWs.onmessage = async (event) => {
-      await this.handleInspectorMessage(event.data.toString());
+      await this.handleInspectorMessage(
+        JSON.parse(event.data.toString()) as ServerCDPMessage,
+      );
     };
 
     this.inspectorWs.onclose = () => {
@@ -43,7 +49,10 @@ export class CDPProxy extends CDPServer {
     };
   }
 
-  async handleClientMessage(_ws: WsWebSocket, data: string): Promise<void> {
+  async handleClientMessage(
+    _ws: WsWebSocket,
+    data: ClientCDPMessage,
+  ): Promise<void> {
     if (
       this.inspectorWs == null ||
       this.inspectorWs.readyState !== WebSocket.OPEN
@@ -58,12 +67,13 @@ export class CDPProxy extends CDPServer {
     }
   }
 
-  private async internalHandleClientMessage(data: string): Promise<void> {
-    const message = JSON.parse(data);
-    const messageDomain = message.method?.split(".")?.[0];
+  private async internalHandleClientMessage(
+    data: ClientCDPMessage,
+  ): Promise<void> {
+    const messageDomain = data.method?.split(".")?.[0];
     if (messageDomain != null && !this.domains.has(messageDomain)) {
       return;
     }
-    this.inspectorWs!.send(data);
+    this.inspectorWs!.send(JSON.stringify(data));
   }
 }
