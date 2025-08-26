@@ -17,8 +17,8 @@ const app = await alchemy("smoke-test-flatten-website");
 
 const zone = await Zone("zone", {
   name: `${app.name}-${app.stage}.us`,
-  delete: true
-})
+  delete: true,
+});
 
 export const queue = await Queue<string>("queue", {
   name: `${app.name}-${app.stage}-queue`,
@@ -42,7 +42,7 @@ export const worker = await Vite("worker", {
     BUCKET: await R2Bucket("bucket", {
       name: `${app.name}-${app.stage}-bucket`,
       adopt: true,
-      empty: true
+      empty: true,
     }),
     QUEUE: queue,
     WORKFLOW: Workflow("OFACWorkflow", {
@@ -68,7 +68,10 @@ await app.finalize();
 if ("RUN_COUNT" in process.env) {
   const RUN_COUNT = Number(process.env.RUN_COUNT);
   const { count } = await fetchJson<{ count: number }>("GET", "/increment");
-  assert(count === RUN_COUNT, `Count is not equal to RUN_COUNT: ${count} !== ${RUN_COUNT}`);
+  assert(
+    count === RUN_COUNT,
+    `Count is not equal to RUN_COUNT: ${count} !== ${RUN_COUNT}`,
+  );
   if (RUN_COUNT === 0) {
     // on first run, the key should be null
     const { key } = await fetchJson<{ key: string | null }>("GET", "/object");
@@ -99,7 +102,7 @@ async function fetchJson<T>(method: "GET" | "POST", path: string): Promise<T> {
   if (!response.ok) {
     throw new Error(`Failed to fetch ${path}: ${response.statusText}`);
   }
-  return await response.json() as T;
+  return (await response.json()) as T;
 }
 
 async function sendMessage(key: string) {
@@ -109,12 +112,16 @@ async function sendMessage(key: string) {
 async function checkMessage(key: string) {
   let attempt = 0;
   while (true) {
-    const { value } = await fetchJson<{ value: string }>("GET", `/check?key=${key}`);
+    const { value } = await fetchJson<{ value: string }>(
+      "GET",
+      `/check?key=${key}`,
+    );
     if (value === "exists") {
       break;
     }
-    console.log(`Message ${key} not found, retrying in 1s (attempt ${attempt++})...`);
+    console.log(
+      `Message ${key} not found, retrying in 1s (attempt ${attempt++})...`,
+    );
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 }
-

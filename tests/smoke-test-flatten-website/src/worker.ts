@@ -8,53 +8,62 @@ export default {
 
     if (url.pathname.startsWith("/increment")) {
       return Response.json({
-        count: await env.DO.getByName("foo").increment()
-      })
+        count: await env.DO.getByName("foo").increment(),
+      });
     } else if (url.pathname.startsWith("/object")) {
       if (request.method === "POST") {
         await env.BUCKET.put("key", "value");
         return Response.json({
-          key: await getObject()
+          key: await getObject(),
         });
       } else if (request.method === "GET") {
         return Response.json({
-          key: await getObject()
+          key: await getObject(),
         });
       } else {
-        return Response.json({
-          error: "Method not allowed"
-        }, { status: 405 });
+        return Response.json(
+          {
+            error: "Method not allowed",
+          },
+          { status: 405 },
+        );
       }
     } else if (url.pathname.startsWith("/queue")) {
       const url = new URL(request.url);
       const key = url.searchParams.get("key");
       if (!key) {
-        return Response.json({
-          error: "Message is required"
-        }, { status: 400 });
+        return Response.json(
+          {
+            error: "Message is required",
+          },
+          { status: 400 },
+        );
       }
       await env.QUEUE.send(key, {
-        delaySeconds: 30
+        delaySeconds: 30,
       });
       return Response.json({});
     } else if (url.pathname.startsWith("/check")) {
       const url = new URL(request.url);
       const key = url.searchParams.get("key");
       if (!key) {
-        return Response.json({
-          error: "Message is required"
-        }, { status: 400 });
+        return Response.json(
+          {
+            error: "Message is required",
+          },
+          { status: 400 },
+        );
       }
       const value = await env.KV.get(key);
       return Response.json({
-        value
+        value,
       });
     }
 
     return new Response(null, { status: 404 });
 
     async function getObject(): Promise<string | null> {
-      return await (await env.BUCKET.get("key"))?.text() ?? null
+      return (await (await env.BUCKET.get("key"))?.text()) ?? null;
     }
   },
   async queue(batch, env) {
