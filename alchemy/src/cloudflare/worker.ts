@@ -710,7 +710,7 @@ const _Worker = Resource(
     props: WorkerProps<B>,
   ) {
     let adopt = props.adopt ?? this.scope.adopt;
-    const name =
+    const workerName =
       props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
     if (this.phase === "create" && !props.adopt) {
       // it is possible that this worker already exists and was created by the old Website wrapper with a nested scope
@@ -720,7 +720,7 @@ const _Worker = Resource(
       // so, if `this.scope` has a child of `wrangler.jsonc`, then it is likely that it was created by the old Website wrapper with a nested scope
       if (await this.scope.has("wrangler.jsonc", "cloudflare::WranglerJson")) {
         logger.warn(
-          `Migrating Worker '${name}' from the legacy Website wrapper.`,
+          `Migrating Worker '${workerName}' from the legacy Website wrapper.`,
         );
         props.adopt = true;
       }
