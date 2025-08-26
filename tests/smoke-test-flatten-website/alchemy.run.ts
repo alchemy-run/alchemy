@@ -8,11 +8,17 @@ import {
   R2Bucket,
   Vite,
   Workflow,
+  Zone,
 } from "alchemy/cloudflare";
 import assert from "node:assert";
 import type { HelloWorldDO } from "./src/do.ts";
 
 const app = await alchemy("smoke-test-flatten-website");
+
+const zone = await Zone("zone", {
+  name: `${app.name}-${app.stage}.us`,
+  delete: true
+})
 
 export const queue = await Queue<string>("queue", {
   name: `${app.name}-${app.stage}-queue`,
@@ -29,6 +35,8 @@ export const worker = await Vite("worker", {
   entrypoint: "./src/worker.ts",
   url: true,
   adopt: true,
+  domains: [zone.name],
+  routes: [`${zone.name}/*`],
   bindings: {
     KV,
     BUCKET: await R2Bucket("bucket", {
@@ -67,7 +75,9 @@ if ("RUN_COUNT" in process.env) {
     assert(key === null, `${key} !== null`);
     await fetchJson<{ key: string | null }>("POST", "/object");
 
-    await sendMessage("key"); // will be delayed for 30 seconds
+    if (!process.env.NO_QUEUE) {
+      await sendMessage("key"); // will be delayed for 30 seconds
+    }
   } else {
     // on second run the data should still be there
     const { key } = await fetchJson<{ key: string | null }>("GET", "/object");
