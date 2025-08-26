@@ -327,8 +327,19 @@ export async function idempotentSpawn({
   }
 }
 
-type Find = typeof import("find-process").default;
-async function find(...args: Parameters<Find>): ReturnType<Find> {
+/**
+ * The find-process package is a bit of a mess and has different behavior across runtimes (bun, tsx, node, etc.)
+ *
+ * This wrapper function defensively searches for the find function in the imported module.
+ *
+ * It confirmed to support:
+ * 1. node
+ * 2. bun
+ * 3. tsx
+ *
+ * TODO(sam): check deno?
+ */
+const find: typeof import("find-process").default = async (...args) => {
   const findProcess = await import("find-process");
   const find =
     (findProcess as any).default?.default ??
@@ -336,4 +347,4 @@ async function find(...args: Parameters<Find>): ReturnType<Find> {
     (findProcess as any).find ??
     findProcess;
   return find(...args);
-}
+};
