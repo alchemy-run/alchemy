@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.1.4/schema.json",
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -30,9 +30,9 @@
       "!examples/cloudflare-tanstack-start/src/routeTree.gen.ts",
       "!examples/cloudflare-redwood/worker-configuration.d.ts",
       "!./alchemy/src/aws/control/types.ts",
-      "!examples/cloudflare-tanstack-start/.output/**",
-      "!examples/cloudflare-nuxt-pipeline/.output/**",
-      "!./alchemy/lib/**",
+      "!examples/cloudflare-tanstack-start/.output/",
+      "!examples/cloudflare-nuxt-pipeline/.output/",
+      "!./alchemy/lib/",
       "!**/*.gen.ts"
     ],
     "experimentalScannerIgnores": ["!**/node_modules", "./alchemy/lib/**"]

@@ -515,7 +515,9 @@ class RuleManager {
 
     makeArray(
       isString(pattern) ? splitPattern(pattern) : (pattern as any),
-    ).forEach((p) => this._add(p));
+    ).forEach((p) => {
+      this._add(p);
+    });
 
     return this._added;
   }

@@ -149,7 +149,9 @@ const writeMiniflareResponseToNode = (
   out: http.ServerResponse,
 ) => {
   out.statusCode = res.status;
-  res.headers.forEach((value, key) => out.setHeader(key, value));
+  res.headers.forEach((value, key) => {
+    out.setHeader(key, value);
+  });
 
   if (res.body) {
     Readable.fromWeb(res.body).pipe(out, { end: true });

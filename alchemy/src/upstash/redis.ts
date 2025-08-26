@@ -26,8 +26,10 @@ export type UpstashRegion =
 export interface UpstashRedisProps {
   /**
    * Name of the database
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * Primary region for the database
@@ -70,6 +72,11 @@ export interface UpstashRedis
    * ID of the database
    */
   id: string;
+
+  /**
+   * Name of the database.
+   */
+  name: string;
 
   /**
    * Type of the database in terms of pricing model
@@ -157,13 +164,16 @@ export const UpstashRedis = Resource(
   "upstash::Redis",
   async function (
     this: Context<UpstashRedis>,
-    _id: string,
+    id: string,
     props: UpstashRedisProps,
   ): Promise<UpstashRedis> {
     const api = new UpstashApi({
       apiKey: props.apiKey,
       email: props.email,
     });
+
+    const databaseName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
 
     if (this.phase === "delete") {
       await deleteRedisDatabase(api, this.output.id);
@@ -177,8 +187,8 @@ export const UpstashRedis = Resource(
 
     if (this.phase === "update") {
       // Update name if changed
-      if (props.name !== this.output.name) {
-        await renameRedisDatabase(api, this.output.id, props.name);
+      if (databaseName !== this.output.name) {
+        await renameRedisDatabase(api, this.output.id, databaseName);
       }
 
       // Update read regions if changed
@@ -208,7 +218,7 @@ export const UpstashRedis = Resource(
     if (this.phase === "create") {
       database = await createRedisDatabase(api, {
         budget: props.budget,
-        name: props.name,
+        name: databaseName,
         primary_region: props.primaryRegion,
         read_regions: props.readRegions,
         region: "global",

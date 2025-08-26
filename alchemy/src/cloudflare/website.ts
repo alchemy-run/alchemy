@@ -148,7 +148,7 @@ export async function Website<B extends Bindings>(
   props: WebsiteProps<B>,
 ) {
   const {
-    name = id,
+    name = Scope.current.createPhysicalName(id),
     build: buildProps,
     assets,
     dev,

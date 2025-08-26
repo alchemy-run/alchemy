@@ -209,7 +209,9 @@ async function _apply<Out extends Resource>(
             noop: options?.noop,
           });
         } else {
-          if (scope.children.get(resource[ResourceID])?.children.size! > 0) {
+          if (
+            (scope.children.get(resource[ResourceID])?.children.size ?? 0) > 0
+          ) {
             throw new Error(
               `Resource ${resource[ResourceFQN]} has children and cannot be replaced.`,
             );

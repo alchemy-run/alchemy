@@ -28,8 +28,10 @@ export type NeonRegion =
 export interface NeonProjectProps extends NeonApiOptions {
   /**
    * Name of the project
+   *
+   * @default ${app}-${stage}-${id}
    */
-  name: string;
+  name?: string;
 
   /**
    * Region where the project will be provisioned
@@ -441,6 +443,11 @@ export interface NeonProject
   id: string;
 
   /**
+   * Name of the Project.
+   */
+  name: string;
+
+  /**
    * Time at which the project was created
    */
   created_at: string;
@@ -515,6 +522,12 @@ export const NeonProject = Resource(
   ): Promise<NeonProject> {
     const api = createNeonApi(props);
     const projectId = props.existing_project_id || this.output?.id;
+    const projectName =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output.name !== projectName) {
+      this.replace();
+    }
 
     if (this.phase === "delete") {
       try {
@@ -540,7 +553,7 @@ export const NeonProject = Resource(
         // Neon only allows updating the project name
         const projectResponse = await api.patch(`/projects/${projectId}`, {
           project: {
-            name: props.name,
+            name: projectName,
           },
         });
 
@@ -564,7 +577,7 @@ export const NeonProject = Resource(
             // Project exists, update it
             const projectResponse = await api.patch(`/projects/${projectId}`, {
               project: {
-                name: props.name,
+                name: projectName,
               },
             });
 
@@ -585,11 +598,11 @@ export const NeonProject = Resource(
             throw new Error("Failed to check if project exists");
           } else {
             // Project doesn't exist, create new
-            response = await createNewProject(api, props);
+            response = await createNewProject(api, projectName, props);
           }
         } else {
           // No output ID, create new project
-          response = await createNewProject(api, props);
+          response = await createNewProject(api, projectName, props);
         }
       }
 
@@ -640,12 +653,13 @@ export const NeonProject = Resource(
  */
 async function createNewProject(
   api: any,
+  projectName: string,
   props: NeonProjectProps,
 ): Promise<NeonApiResponse> {
   const defaultEndpoint = props.default_endpoint ?? true;
   const projectResponse = await api.post("/projects", {
     project: {
-      name: props.name,
+      name: projectName,
       region_id: props.region_id || "aws-us-east-1",
       pg_version: props.pg_version || 16,
       default_endpoint: defaultEndpoint,

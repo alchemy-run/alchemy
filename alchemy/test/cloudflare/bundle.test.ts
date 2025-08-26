@@ -20,6 +20,7 @@ describe("Bundle Worker Test", () => {
     try {
       // Create a worker using the entrypoint file
       const worker = await Worker(`${BRANCH_PREFIX}-test-bundle-worker`, {
+        name: `${BRANCH_PREFIX}-test-bundle-worker`,
         entrypoint,
         format: "esm", // Assuming bundle-handler.ts is ESM
         url: true, // Enable workers.dev URL to test the worker
@@ -43,6 +44,7 @@ describe("Bundle Worker Test", () => {
     try {
       // Create a worker using the entrypoint file
       const worker = await Worker(`${BRANCH_PREFIX}-test-bundle-worker-als`, {
+        name: `${BRANCH_PREFIX}-test-bundle-worker-als`,
         entrypoint: entrypoint_als,
         format: "esm", // Assuming bundle-handler.ts is ESM
         url: true, // Enable workers.dev URL to test the worker
@@ -67,6 +69,7 @@ describe("Bundle Worker Test", () => {
       // Create a worker using the entrypoint file
       await expect(
         Worker(`${BRANCH_PREFIX}-test-bundle-worker-legacy`, {
+          name: `${BRANCH_PREFIX}-test-bundle-worker-legacy`,
           entrypoint,
           format: "esm",
           url: true,
@@ -86,6 +89,7 @@ describe("Bundle Worker Test", () => {
   test("should return a list of imported files when noBundle is true", async (scope) => {
     try {
       const worker = await Worker(`${BRANCH_PREFIX}-test-no-bundle`, {
+        name: `${BRANCH_PREFIX}-test-no-bundle`,
         url: true,
         entrypoint: path.resolve(__dirname, "nobundle", "index.js"),
         format: "esm",
@@ -114,6 +118,7 @@ describe("Bundle Worker Test", () => {
       const worker = await Worker(
         `${BRANCH_PREFIX}-test-bundle-worker-grammy`,
         {
+          name: `${BRANCH_PREFIX}-test-bundle-worker-grammy`,
           entrypoint: entrypoint_grammy,
           format: "esm", // Assuming bundle-handler.ts is ESM
           url: true, // Enable workers.dev URL to test the worker

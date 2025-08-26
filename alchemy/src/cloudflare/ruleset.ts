@@ -32,6 +32,8 @@ export interface RulesetProps<Phase extends RulePhase>
 
   /**
    * Human-readable name for the ruleset
+   *
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -152,7 +154,7 @@ export interface Ruleset<Phase extends RulePhase>
  */
 export const Ruleset = Resource("cloudflare::Ruleset", async function <
   Phase extends RulePhase,
->(this: Context<Ruleset<Phase>>, _id: string, props: RulesetProps<Phase>): Promise<
+>(this: Context<Ruleset<Phase>>, id: string, props: RulesetProps<Phase>): Promise<
   Ruleset<Phase>
 > {
   const api = await createCloudflareApi(props);
@@ -172,10 +174,13 @@ export const Ruleset = Resource("cloudflare::Ruleset", async function <
     return this.destroy();
   }
 
+  const rulesetName =
+    props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
+
   // Overwrite entire entrypoint with only the provided rules
   const result = await updateRuleset(api, zoneId, phase, {
     rules: props.rules,
-    ...(props.name && { name: props.name }),
+    name: rulesetName,
     ...(props.description && { description: props.description }),
   });
 

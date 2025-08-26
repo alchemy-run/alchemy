@@ -130,7 +130,10 @@ export const EntitlementsFeature = Resource(
         try {
           feature = await stripe.entitlements.features.create(createParams);
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (
+            isStripeConflictError(error) &&
+            (props.adopt ?? this.scope.adopt)
+          ) {
             const existingFeatures = await stripe.entitlements.features.list({
               lookup_key: props.lookupKey,
               limit: 1,

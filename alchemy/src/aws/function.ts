@@ -17,8 +17,10 @@ import { retry } from "./retry.ts";
 export interface FunctionProps {
   /**
    * Name of the Lambda function
+   *
+   * @default ${app}-${stage}-${id}
    */
-  functionName: string;
+  functionName?: string;
 
   /**
    * Bundle for the function
@@ -139,6 +141,11 @@ export interface Function extends Resource<"lambda::Function">, FunctionProps {
    * ARN of the Lambda function
    */
   arn: string;
+
+  /**
+   * Name of the Function
+   */
+  functionName: string;
 
   /**
    * Timestamp of the last function modification
@@ -298,7 +305,7 @@ export interface Function extends Resource<"lambda::Function">, FunctionProps {
  */
 export const Function = Resource(
   "lambda::Function",
-  async function (this: Context<Function>, _id: string, props: FunctionProps) {
+  async function (this: Context<Function>, id: string, props: FunctionProps) {
     const {
       AddPermissionCommand,
       Architecture,
@@ -319,6 +326,15 @@ export const Function = Resource(
     const client = new LambdaClient({});
     const region = await resolveRegion(client);
 
+    const functionName =
+      props.functionName ??
+      this.output?.functionName ??
+      this.scope.createPhysicalName(id);
+
+    if (this.phase === "update" && this.output.functionName !== functionName) {
+      this.replace();
+    }
+
     if (this.phase === "delete") {
       // Delete function URL if it exists
       if (this.output?.url) {
@@ -326,7 +342,7 @@ export const Function = Resource(
           await retry(() =>
             client.send(
               new DeleteFunctionUrlConfigCommand({
-                FunctionName: props.functionName,
+                FunctionName: functionName,
               }),
             ),
           );
@@ -341,7 +357,7 @@ export const Function = Resource(
         retry(() =>
           client.send(
             new DeleteFunctionCommand({
-              FunctionName: props.functionName,
+              FunctionName: functionName,
             }),
           ),
         ),
@@ -358,33 +374,33 @@ export const Function = Resource(
       await retry(() =>
         client.send(
           new GetFunctionCommand({
-            FunctionName: props.functionName,
+            FunctionName: functionName,
           }),
         ),
       );
 
       if (this.phase === "update") {
         // Wait for function to stabilize
-        await waitForFunctionStabilization(client, props.functionName);
+        await waitForFunctionStabilization(client, functionName);
 
         // Update function code
         await retry(() =>
           client.send(
             new UpdateFunctionCodeCommand({
-              FunctionName: props.functionName,
+              FunctionName: functionName,
               ZipFile: code,
             }),
           ),
         );
 
         // Wait for code update to stabilize
-        await waitForFunctionStabilization(client, props.functionName);
+        await waitForFunctionStabilization(client, functionName);
 
         // Update function configuration
         await retry(() =>
           client.send(
             new UpdateFunctionConfigurationCommand({
-              FunctionName: props.functionName,
+              FunctionName: functionName,
               Handler: props.handler,
               Runtime: props.runtime,
               Role: props.roleArn,
@@ -400,7 +416,7 @@ export const Function = Resource(
         );
 
         // Wait for configuration update to stabilize
-        await waitForFunctionStabilization(client, props.functionName);
+        await waitForFunctionStabilization(client, functionName);
 
         // Handle URL configuration
         if (props.url) {
@@ -409,7 +425,7 @@ export const Function = Resource(
             const urlConfig = await retry(() =>
               client.send(
                 new GetFunctionUrlConfigCommand({
-                  FunctionName: props.functionName,
+                  FunctionName: functionName,
                 }),
               ),
             );
@@ -419,7 +435,7 @@ export const Function = Resource(
               const updateResult = await retry(() =>
                 client.send(
                   new UpdateFunctionUrlConfigCommand({
-                    FunctionName: props.functionName,
+                    FunctionName: functionName,
                     AuthType: props.url!.authType || "NONE",
                     InvokeMode: props.url!.invokeMode || "BUFFERED",
                     Cors: props.url!.cors
@@ -443,7 +459,7 @@ export const Function = Resource(
                   await retry(() =>
                     client.send(
                       new AddPermissionCommand({
-                        FunctionName: props.functionName,
+                        FunctionName: functionName,
                         StatementId: "FunctionURLAllowPublicAccess",
                         Action: "lambda:InvokeFunctionUrl",
                         Principal: "*",
@@ -462,7 +478,7 @@ export const Function = Resource(
               const createResult = await retry(() =>
                 client.send(
                   new CreateFunctionUrlConfigCommand({
-                    FunctionName: props.functionName,
+                    FunctionName: functionName,
                     AuthType: props.url!.authType || "NONE",
                     InvokeMode: props.url!.invokeMode || "BUFFERED",
                     Cors: props.url!.cors
@@ -486,7 +502,7 @@ export const Function = Resource(
                   await retry(() =>
                     client.send(
                       new AddPermissionCommand({
-                        FunctionName: props.functionName,
+                        FunctionName: functionName,
                         StatementId: "FunctionURLAllowPublicAccess",
                         Action: "lambda:InvokeFunctionUrl",
                         Principal: "*",
@@ -507,7 +523,7 @@ export const Function = Resource(
               const createResult = await retry(() =>
                 client.send(
                   new CreateFunctionUrlConfigCommand({
-                    FunctionName: props.functionName,
+                    FunctionName: functionName,
                     AuthType: props.url!.authType || "NONE",
                     InvokeMode: props.url!.invokeMode || "BUFFERED",
                     Cors: props.url!.cors
@@ -531,7 +547,7 @@ export const Function = Resource(
                   await retry(() =>
                     client.send(
                       new AddPermissionCommand({
-                        FunctionName: props.functionName,
+                        FunctionName: functionName,
                         StatementId: "FunctionURLAllowPublicAccess",
                         Action: "lambda:InvokeFunctionUrl",
                         Principal: "*",
@@ -555,7 +571,7 @@ export const Function = Resource(
             await retry(() =>
               client.send(
                 new DeleteFunctionUrlConfigCommand({
-                  FunctionName: props.functionName,
+                  FunctionName: functionName,
                 }),
               ),
             );
@@ -578,7 +594,7 @@ export const Function = Resource(
             await retry(() =>
               client.send(
                 new CreateFunctionCommand({
-                  FunctionName: props.functionName,
+                  FunctionName: functionName,
                   Code: { ZipFile: code },
                   Handler: props.handler || "index.handler",
                   Runtime: props.runtime || Runtime.nodejs20x,
@@ -623,7 +639,7 @@ export const Function = Resource(
           const config = await retry(() =>
             client.send(
               new GetFunctionConfigurationCommand({
-                FunctionName: props.functionName,
+                FunctionName: functionName,
               }),
             ),
           );
@@ -638,7 +654,7 @@ export const Function = Resource(
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
         // Verify function is fully stable and role is usable
-        await waitForFunctionStabilization(client, props.functionName);
+        await waitForFunctionStabilization(client, functionName);
 
         // Create URL configuration if needed
         if (props.url) {
@@ -646,7 +662,7 @@ export const Function = Resource(
             const createResult = await retry(() =>
               client.send(
                 new CreateFunctionUrlConfigCommand({
-                  FunctionName: props.functionName,
+                  FunctionName: functionName,
                   AuthType: props.url!.authType || "NONE",
                   InvokeMode: props.url!.invokeMode || "BUFFERED",
                   Cors: props.url!.cors
@@ -670,7 +686,7 @@ export const Function = Resource(
                 await retry(() =>
                   client.send(
                     new AddPermissionCommand({
-                      FunctionName: props.functionName,
+                      FunctionName: functionName,
                       StatementId: "FunctionURLAllowPublicAccess",
                       Action: "lambda:InvokeFunctionUrl",
                       Principal: "*",
@@ -698,14 +714,14 @@ export const Function = Resource(
       retry(() =>
         client.send(
           new GetFunctionCommand({
-            FunctionName: props.functionName,
+            FunctionName: functionName,
           }),
         ),
       ),
       retry(() =>
         client.send(
           new GetFunctionConfigurationCommand({
-            FunctionName: props.functionName,
+            FunctionName: functionName,
           }),
         ),
       ),
@@ -717,7 +733,7 @@ export const Function = Resource(
         const urlConfig = await retry(() =>
           client.send(
             new GetFunctionUrlConfigCommand({
-              FunctionName: props.functionName,
+              FunctionName: functionName,
             }),
           ),
         );
@@ -732,6 +748,7 @@ export const Function = Resource(
     return this({
       ...props,
       arn: config.FunctionArn!,
+      functionName,
       lastModified: config.LastModified!,
       version: config.Version!,
       qualifiedArn: `${config.FunctionArn}:${config.Version}`,

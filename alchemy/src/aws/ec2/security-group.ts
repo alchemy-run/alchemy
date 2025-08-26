@@ -31,8 +31,10 @@ export interface SecurityGroupProps extends AwsClientProps {
 
   /**
    * The name of the security group.
+   *
+   * @default ${app}-${stage}-${id}
    */
-  groupName: string;
+  groupName?: string;
 
   /**
    * The description of the security group.
@@ -61,6 +63,11 @@ export interface SecurityGroup
    * The ID of the security group.
    */
   groupId: string;
+
+  /**
+   * The name of the security group.
+   */
+  groupName: string;
 
   /**
    * The ID of the VPC the security group belongs to.
@@ -200,7 +207,7 @@ export const SecurityGroup = Resource(
   "aws::SecurityGroup",
   async function (
     this: Context<SecurityGroup>,
-    _id: string,
+    id: string,
     props: SecurityGroupProps,
   ): Promise<SecurityGroup> {
     // Create EC2 client with credential resolution handled internally
@@ -210,6 +217,10 @@ export const SecurityGroup = Resource(
       SECURITY_GROUP_TIMEOUT,
       props.timeout,
     );
+    const groupName = props.groupName ?? this.scope.createPhysicalName(id);
+    if (this.phase === "update" && this.output.groupName !== groupName) {
+      this.replace();
+    }
 
     if (this.phase === "delete") {
       if (this.output?.groupId) {
@@ -259,7 +270,7 @@ export const SecurityGroup = Resource(
     } else {
       // Create new security group
       const createParams: CreateSecurityGroupParams = {
-        GroupName: props.groupName,
+        GroupName: groupName,
         GroupDescription: props.description,
         VpcId: vpcId,
       };
@@ -313,6 +324,7 @@ export const SecurityGroup = Resource(
 
     return this({
       groupId: securityGroup.GroupId,
+      groupName,
       vpcId: securityGroup.VpcId,
       ownerId: securityGroup.OwnerId,
       ...props,

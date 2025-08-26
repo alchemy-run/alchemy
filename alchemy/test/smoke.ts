@@ -205,18 +205,18 @@ const tasks = new Listr(
 
       if (example.hasEnvFile) {
         // Use npm scripts if .env file exists in root
-        devCommand = "bun run dev";
-        deployCommand = "bun run deploy";
+        devCommand = "bun run dev --adopt";
+        deployCommand = "bun run deploy --adopt";
         destroyCommand = "bun run destroy";
       } else if (example.hasAlchemyRunFile) {
         // Use alchemy.run.ts if it exists
-        devCommand = "bun tsx ./alchemy.run.ts --dev";
-        deployCommand = "bun tsx ./alchemy.run.ts";
+        devCommand = "bun tsx ./alchemy.run.ts --dev --adopt";
+        deployCommand = "bun tsx ./alchemy.run.ts --adopt";
         destroyCommand = "bun tsx ./alchemy.run.ts --destroy";
       } else {
         // Fallback to index.ts
-        devCommand = "bun ./index.ts --dev";
-        deployCommand = "bun ./index.ts";
+        devCommand = "bun ./index.ts --dev --adopt";
+        deployCommand = "bun ./index.ts --adopt";
         destroyCommand = "bun ./index.ts --destroy";
       }
 

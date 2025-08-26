@@ -163,6 +163,7 @@ export const Coupon = Resource(
     _id: string,
     props: CouponProps,
   ): Promise<Coupon> {
+    const adopt = props.adopt ?? this.scope.adopt;
     const stripe = await createStripeClient({ apiKey: props.apiKey });
 
     if (this.phase === "delete") {
@@ -217,7 +218,7 @@ export const Coupon = Resource(
           try {
             coupon = await stripe.coupons.create(createParams);
           } catch (error) {
-            if (isStripeConflictError(error) && props.adopt) {
+            if (isStripeConflictError(error) && adopt) {
               if (props.id) {
                 const existingCoupon = await stripe.coupons.retrieve(props.id);
                 const updateParams: Stripe.CouponUpdateParams = {
@@ -236,7 +237,7 @@ export const Coupon = Resource(
             }
           }
         } catch (error) {
-          if (isStripeConflictError(error) && props.adopt) {
+          if (isStripeConflictError(error) && adopt) {
             if (props.id) {
               const existingCoupon = await stripe.coupons.retrieve(props.id);
               const updateParams: Stripe.CouponUpdateParams = {

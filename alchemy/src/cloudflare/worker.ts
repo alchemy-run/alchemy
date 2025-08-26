@@ -134,7 +134,7 @@ export interface BaseWorkerProps<
   /**
    * Name for the worker
    *
-   * @default id
+   * @default ${app}-${stage}-${id}
    */
   name?: string;
 
@@ -709,7 +709,9 @@ const _Worker = Resource(
     id: string,
     props: WorkerProps<B>,
   ) {
-    const workerName = props.name ?? id;
+    let adopt = props.adopt ?? this.scope.adopt;
+    const name =
+      props.name ?? this.output?.name ?? this.scope.createPhysicalName(id);
     if (this.phase === "create" && !props.adopt) {
       // it is possible that this worker already exists and was created by the old Website wrapper with a nested scope
       // we need to detect this and set adopt=true so that the previous version will be adopted seamlessly
@@ -718,11 +720,12 @@ const _Worker = Resource(
       // so, if `this.scope` has a child of `wrangler.jsonc`, then it is likely that it was created by the old Website wrapper with a nested scope
       if (await this.scope.has("wrangler.jsonc", "cloudflare::WranglerJson")) {
         logger.warn(
-          `Migrating Worker '${workerName}' from the legacy Website wrapper.`,
+          `Migrating Worker '${name}' from the legacy Website wrapper.`,
         );
         props.adopt = true;
       }
     }
+
     const options = (() => {
       if (props.projectRoot) {
         logger.warn("projectRoot is deprecated, use cwd instead");
@@ -853,12 +856,18 @@ const _Worker = Resource(
         });
         this.onCleanup(() => controller.dispose());
       }
-      await provisionResources(props, {
-        name: options.name,
-        local: true,
-        dispatchNamespace: options.dispatchNamespace,
-        containers: options.containers,
-      });
+      await provisionResources(
+        {
+          ...props,
+          adopt,
+        },
+        {
+          name: options.name,
+          local: true,
+          dispatchNamespace: options.dispatchNamespace,
+          containers: options.containers,
+        },
+      );
       return this({
         ...props,
         type: "service",
@@ -905,13 +914,9 @@ const _Worker = Resource(
           });
         }
         // We always "adopt" when publishing versions
-      } else if (!props.adopt) {
+      } else if (!adopt) {
         await assertWorkerDoesNotExist(api, options.name);
-      } else if (
-        props.adopt &&
-        !options.dispatchNamespace &&
-        props.url === false
-      ) {
+      } else if (adopt && !options.dispatchNamespace && props.url === false) {
         // explicitly disable the workers.dev subdomain
         await disableWorkerSubdomain(api, options.name);
       }
@@ -991,14 +996,20 @@ const _Worker = Resource(
       ),
     );
 
-    const { domains, routes, subdomain } = await provisionResources(props, {
-      name: options.name,
-      local: false,
-      dispatchNamespace: options.dispatchNamespace,
-      containers: options.containers,
-      result,
-      api,
-    });
+    const { domains, routes, subdomain } = await provisionResources(
+      {
+        ...props,
+        adopt,
+      },
+      {
+        name: options.name,
+        local: false,
+        dispatchNamespace: options.dispatchNamespace,
+        containers: options.containers,
+        result,
+        api,
+      },
+    );
 
     const now = new Date();
     return this({
@@ -1071,7 +1082,9 @@ const assertUnique = <T, Key extends keyof T>(
 };
 
 async function provisionResources<B extends Bindings>(
-  props: WorkerProps<B>,
+  props: WorkerProps<B> & {
+    adopt: boolean;
+  },
   options:
     | {
         name: string;
