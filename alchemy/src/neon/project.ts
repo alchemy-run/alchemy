@@ -630,15 +630,15 @@ export const NeonProject = Resource(
         default_branch_name: props.default_branch_name,
         baseUrl: props.baseUrl,
         // Add all available data
-        // @ts-ignore - api ensures they're non-empty
+        // @ts-expect-error - api ensures they're non-empty
         connection_uris: response.connection_uris,
-        // @ts-ignore
+        // @ts-expect-error
         roles: response.roles,
-        // @ts-ignore
+        // @ts-expect-error
         databases: response.databases,
-        // @ts-ignore
+        // @ts-expect-error
         branch: response.branch,
-        // @ts-ignore
+        // @ts-expect-error
         endpoints: response.endpoints,
       });
     } catch (error) {

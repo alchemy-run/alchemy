@@ -651,7 +651,7 @@ export function bumpMigrationTagVersion(tag?: string) {
     if (!tag.match(/^v\d+$/)) {
       throw new Error(`Invalid tag format: ${tag}. Expected format: v<number>`);
     }
-    return `v${Number.parseInt(tag.slice(1)) + 1}`;
+    return `v${Number.parseInt(tag.slice(1), 10) + 1}`;
   }
   return undefined;
 }

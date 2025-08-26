@@ -183,7 +183,7 @@ const examples = (await discoverExamples()).filter(
   (e) => !skippedExamples.includes(e.name),
 );
 
-const testIndex = process.argv.findIndex((arg) => arg === "-t");
+const testIndex = process.argv.indexOf("-t");
 const testName = testIndex !== -1 ? process.argv[testIndex + 1] : undefined;
 
 // Filter examples based on test name if provided

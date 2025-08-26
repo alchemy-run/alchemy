@@ -17,7 +17,7 @@ export default Sentry.withSentry(
     sendDefaultPii: true,
   }),
   {
-    async fetch(request, env, ctx) {
+    async fetch(_request, _env, _ctx) {
       return new Response("Hello World!");
     },
   },

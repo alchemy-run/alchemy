@@ -537,7 +537,7 @@ const normalizePort = (
     return port;
   }
   if (port) {
-    return Number.parseInt(port);
+    return Number.parseInt(port, 10);
   }
   return scheme === "postgres" ? 5432 : 3306;
 };

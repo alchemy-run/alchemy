@@ -182,7 +182,7 @@ export const UpstashRedis = Resource(
 
     const eviction = props.eviction ?? false;
 
-    // @ts-ignore This is overridden during update/create
+    // @ts-expect-error This is overridden during update/create
     let database: UpstashDatabaseResponse = {};
 
     if (this.phase === "update") {

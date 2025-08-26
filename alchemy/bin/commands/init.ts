@@ -576,7 +576,7 @@ async function updateTypescriptProject(context: InitContext): Promise<void> {
   }
 }
 
-async function updateViteProject(context: InitContext): Promise<void> {
+async function updateViteProject(_context: InitContext): Promise<void> {
   // const tsConfigPath = resolve(context.cwd, "tsconfig.json");
   // const tsConfigNodePath = resolve(context.cwd, "tsconfig.node.json");
   // if (await fs.pathExists(tsConfigPath)) {

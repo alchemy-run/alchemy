@@ -4,7 +4,7 @@
     "": {
       "name": "alchemy-mono",
       "devDependencies": {
-        "@biomejs/biome": "^2.1.3",
+        "@biomejs/biome": "^2.2.2",
         "@cloudflare/workers-types": "catalog:",
         "@redwoodjs/sdk": "^0.0.80",
         "@types/bun": "latest",
