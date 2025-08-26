@@ -636,7 +636,6 @@ export const NeonProject = Resource(
         roles: response.roles,
         // @ts-expect-error
         databases: response.databases,
-        // @ts-expect-error
         branch: response.branch,
         // @ts-expect-error
         endpoints: response.endpoints,
