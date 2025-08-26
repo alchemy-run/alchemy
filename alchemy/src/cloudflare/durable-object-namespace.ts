@@ -19,7 +19,6 @@ export type DurableObjectNamespace<T = any> = {
   environment?: string;
   sqlite?: boolean;
   namespaceId?: string;
-  // @ts-expect-error - phantom type
   __service__: T;
 };
 
