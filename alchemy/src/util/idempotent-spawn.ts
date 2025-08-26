@@ -135,7 +135,6 @@ export async function idempotentSpawn({
       if (await isSameProcess?.(pid)) return pid;
       if (processName) {
         const findProcess = await import("find-process");
-        console.log(findProcess);
         const find =
           (findProcess as any).default?.default ??
           (findProcess as any).default ??
