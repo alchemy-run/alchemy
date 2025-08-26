@@ -224,7 +224,9 @@ export const Team = Resource(
         }
 
         if (!response.ok) {
-          throw new Error(`API error: ${response.statusText}`);
+          throw new Error(
+            `API error: ${response.statusText} ${await response.text()}`,
+          );
         }
 
         const data = (await response.json()) as Omit<Team, keyof TeamProps>;
