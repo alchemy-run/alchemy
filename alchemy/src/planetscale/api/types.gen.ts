@@ -7112,6 +7112,58 @@ export type Invoice = {
   billing_period_end: string;
 };
 
+export type KeyspaceResizeRequest = {
+  id: string;
+  type: "KeyspaceResizeRequest";
+  state: "resizing" | "completed";
+  started_at: string;
+  completed_at: string;
+  created_at: string;
+  updated_at: string;
+  extra_replicas?: number;
+  vector_pool_allocation?: string;
+  previous_vector_pool_allocation?: string;
+  cluster_name?: string;
+  cluster_display_name?: string;
+  previous_cluster_name?: string;
+  previous_cluster_display_name?: string;
+  replicas?: number;
+  previous_replicas?: number;
+  cluster_rank?: number;
+  previous_cluster_rank?: number;
+  actor?: {
+    [key: string]: unknown;
+  };
+  cluster_rate_name?: string;
+  cluster_rate_display_name?: string;
+  previous_cluster_rate_name?: string;
+  previous_cluster_rate_display_name?: string;
+};
+
+export type PaginatedKeyspaceResizeRequest = {
+  /**
+   * The current page number
+   */
+  current_page: number;
+  /**
+   * The next page number
+   */
+  next_page: number;
+  /**
+   * The next page of results
+   */
+  next_page_url: string;
+  /**
+   * The previous page number
+   */
+  prev_page: number;
+  /**
+   * The previous page of results
+   */
+  prev_page_url: string;
+  data: Array<KeyspaceResizeRequest>;
+};
+
 export type ListOrganizationsData = {
   body?: never;
   path?: never;
@@ -12930,6 +12982,59 @@ export type GetCurrentUserResponses = {
 
 export type GetCurrentUserResponse =
   GetCurrentUserResponses[keyof GetCurrentUserResponses];
+
+export type ListKeyspaceResizesData = {
+  body?: never;
+  path: {
+    /**
+     * The name of the organization the branch belongs to
+     */
+    organization: string;
+    /**
+     * The name of the database the branch belongs to
+     */
+    database: string;
+    /**
+     * The name of the branch
+     */
+    branch: string;
+    /**
+     * The name of the keyspace
+     */
+    name: string;
+  };
+  query?: never;
+  url: "/organizations/{organization}/databases/{database}/branches/{branch}/keyspaces/{name}/resizes";
+};
+
+export type ListKeyspaceResizesErrors = {
+  /**
+   * Unauthorized
+   */
+  401: unknown;
+  /**
+   * Forbidden
+   */
+  403: unknown;
+  /**
+   * Not Found
+   */
+  404: unknown;
+  /**
+   * Internal Server Error
+   */
+  500: unknown;
+};
+
+export type ListKeyspaceResizesResponses = {
+  /**
+   * List the keyspace resize requests
+   */
+  200: PaginatedKeyspaceResizeRequest;
+};
+
+export type ListKeyspaceResizesResponse =
+  ListKeyspaceResizesResponses[keyof ListKeyspaceResizesResponses];
 
 export type ClientOptions = {
   baseUrl: "https://api.planetscale.com/v1" | (string & {});

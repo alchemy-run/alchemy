@@ -1,10 +1,10 @@
 import {
   createClient,
   defineConfig,
-  type OpenApi,
   type OpenApiOperationObject,
 } from "@hey-api/openapi-ts";
 import { $ } from "bun";
+import { patchMissingEndpoints, patchMissingProperties } from "./patch.ts";
 
 interface Endpoint {
   type: "endpoint";
@@ -19,8 +19,9 @@ interface Endpoint {
 }
 
 // 1. Fetch the OpenAPI spec from PlanetScale
-const res = await fetch("https://api.planetscale.com/v1/openapi-spec");
-const spec = (await res.json()) as OpenApi.V2_0_X;
+const spec = await fetch("https://api.planetscale.com/v1/openapi-spec")
+  .then((res) => res.json())
+  .then(patchMissingEndpoints);
 
 // 2. Generate types using hey-api
 const config = await defineConfig({
@@ -28,46 +29,7 @@ const config = await defineConfig({
   output: { path: "alchemy/src/planetscale/api" },
   plugins: [{ name: "@hey-api/typescript" }],
   parser: {
-    patch: {
-      // Add missing properties from the OpenAPI spec
-
-      operations: {
-        "PATCH /organizations/{organization}/databases/{database}/branches/{branch}/changes":
-          (operation) => {
-            // @ts-expect-error
-            operation.parameters = [
-              ...(operation.parameters ?? []),
-              {
-                name: "body",
-                in: "body",
-                required: true,
-                schema: {
-                  type: "object",
-                  properties: {
-                    cluster_size: {
-                      type: "string",
-                    },
-                  },
-                  required: ["cluster_size"],
-                },
-              },
-            ];
-          },
-      },
-      schemas: {
-        DatabaseBranch: (schema) => {
-          schema.properties = {
-            ...schema.properties,
-            cluster_architecture: {
-              type: "string",
-              description:
-                "The architecture of the cluster for Postgres databases.",
-              enum: ["x86_64", "aarch64"],
-            },
-          };
-        },
-      },
-    },
+    patch: patchMissingProperties,
   },
 });
 await createClient(config);
@@ -110,10 +72,6 @@ const output = template
   .replace(
     'import type { Secret } from "alchemy";',
     'import type { Secret } from "../../secret.ts";',
-  )
-  .replace(
-    'import alchemy from "alchemy";',
-    'import { alchemy } from "../../alchemy.ts";',
   )
   .replace("/* {IMPORTS} */", imports)
   .replace("/* {ENDPOINTS} */", apiString);

@@ -3,7 +3,6 @@
 /* {IMPORTS} */
 
 import type { Secret } from "alchemy";
-import alchemy from "alchemy";
 
 export class PlanetScaleError extends Error {
   readonly code: string;
@@ -81,16 +80,21 @@ export class PlanetScaleClient {
 
   constructor(props: PlanetScaleProps = {}) {
     this.baseUrl = props.baseUrl ?? "https://api.planetscale.com/v1";
-    const apiKey =
-      props.apiKey?.unencrypted ?? process.env.PLANETSCALE_API_TOKEN;
-    if (apiKey) {
-      this.token = apiKey;
+    if (props.apiKey) {
+      this.token = props.apiKey.unencrypted;
+    } else if (props.serviceTokenId && props.serviceToken) {
+      this.token = `${props.serviceTokenId.unencrypted}:${props.serviceToken.unencrypted}`;
+    } else if (process.env.PLANETSCALE_API_TOKEN) {
+      this.token = process.env.PLANETSCALE_API_TOKEN;
+    } else if (
+      process.env.PLANETSCALE_SERVICE_TOKEN_ID &&
+      process.env.PLANETSCALE_SERVICE_TOKEN
+    ) {
+      this.token = `${process.env.PLANETSCALE_SERVICE_TOKEN_ID}:${process.env.PLANETSCALE_SERVICE_TOKEN}`;
     } else {
-      const serviceTokenId =
-        props.serviceTokenId || alchemy.secret.env.PLANETSCALE_SERVICE_TOKEN_ID;
-      const serviceToken =
-        props.serviceToken || alchemy.secret.env.PLANETSCALE_SERVICE_TOKEN;
-      this.token = `${serviceTokenId?.unencrypted}:${serviceToken?.unencrypted}`;
+      throw new Error(
+        "No authentication token provided for PlanetScale. Please provide an API key, service token ID and secret, or set the PLANETSCALE_SERVICE_TOKEN_ID and PLANETSCALE_SERVICE_TOKEN environment variables.",
+      );
     }
   }
 
