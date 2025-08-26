@@ -134,13 +134,6 @@ export async function idempotentSpawn({
       if (isPidAlive(pid)) return pid;
       if (await isSameProcess?.(pid)) return pid;
       if (processName) {
-        const findProcess = await import("find-process");
-        const find =
-          (findProcess as any).default?.default ??
-          (findProcess as any).default ??
-          (findProcess as any).find ??
-          findProcess;
-        // const { default: { default: find } } = await import("find-process");
         const processes = await find("pid", pid);
         if (processes.length > 1) {
           console.warn(
@@ -323,7 +316,7 @@ export async function idempotentSpawn({
     // 2. Detect if it's still running.
     // The process appears to remain in the process table even after it's exited, so `isPidAlive` will return true.
     // However, if it's in the table, `find-process` will return it with a name of "<defunct>", so we can detect that instead.
-    const { default: find } = await import("find-process");
+    // const { default: find } = await import("find-process");
     const processes = await find("pid", pid);
     if (processes.some((p) => p.name !== "<defunct>")) {
       // 3. If it's still running, kill with SIGKILL
@@ -332,4 +325,15 @@ export async function idempotentSpawn({
       } catch {}
     }
   }
+}
+
+type Find = typeof import("find-process").default;
+async function find(...args: Parameters<Find>): ReturnType<Find> {
+  const findProcess = await import("find-process");
+  const find =
+    (findProcess as any).default?.default ??
+    (findProcess as any).default ??
+    (findProcess as any).find ??
+    findProcess;
+  return find(...args);
 }
