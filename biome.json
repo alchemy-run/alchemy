@@ -33,7 +33,8 @@
       "!examples/cloudflare-tanstack-start/.output/",
       "!examples/cloudflare-nuxt-pipeline/.output/",
       "!./alchemy/lib/",
-      "!**/*.gen.ts"
+      "!**/*.gen.ts",
+      "alchemy/src/planetscale/api/*.ts"
     ],
     "experimentalScannerIgnores": ["!**/node_modules", "./alchemy/lib/**"]
   },
