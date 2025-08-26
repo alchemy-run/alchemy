@@ -1,17 +1,17 @@
+import { isDeepStrictEqual } from "node:util";
 import { alchemy } from "../alchemy.ts";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
 import type { Secret } from "../secret.ts";
-import { logger } from "../util/logger.ts";
 import { lowercaseId } from "../util/nanoid.ts";
-import { PlanetScaleApi } from "./api.ts";
+import { PlanetScaleClient, type PlanetScaleProps } from "./api/client.gen.ts";
 import type { Branch } from "./branch.ts";
 import type { Database } from "./database.ts";
 
 /**
  * Properties for creating or updating a PlanetScale Branch
  */
-export interface PasswordProps {
+export interface PasswordProps extends PlanetScaleProps {
   /**
    * The name of the password
    *
@@ -21,7 +21,7 @@ export interface PasswordProps {
 
   /**
    * The organization ID where the password will be created
-   * Required when using string database name, optional when using Database resource
+   * Required when using string database name, optional when using Database or Branch resource
    */
   organizationId?: string;
 
@@ -34,14 +34,9 @@ export interface PasswordProps {
   /**
    * The branch where the password will be created
    * Can be either a branch name (string) or Branch resource
-   * Defaults to "main" if not provided
+   * @default "main"
    */
   branch?: string | Branch;
-
-  /**
-   * PlanetScale API token (overrides environment variable)
-   */
-  apiKey?: Secret;
 
   /**
    * The password
@@ -265,109 +260,115 @@ export const Password = Resource(
     id: string,
     props: PasswordProps,
   ): Promise<Password> {
-    const apiKey =
-      props.apiKey?.unencrypted || process.env.PLANETSCALE_API_TOKEN;
-    if (!apiKey) {
-      throw new Error("PLANETSCALE_API_TOKEN environment variable is required");
-    }
     const nameSlug = this.isReplacement
       ? lowercaseId()
       : (this.output?.nameSlug ?? lowercaseId());
     const name = `${(props.name ?? this.output?.name ?? this.scope.createPhysicalName(id)).toLowerCase()}-${nameSlug}`;
 
-    const api = new PlanetScaleApi({ apiKey });
-    const branchName =
-      props.branch == null
-        ? "main"
-        : typeof props.branch === "string"
-          ? props.branch
-          : props.branch.name;
-    const databaseName =
+    const api = new PlanetScaleClient(props);
+    const database =
       typeof props.database === "string" ? props.database : props.database.name;
+    const branch =
+      typeof props.branch === "string"
+        ? props.branch
+        : (props.branch?.name ?? "main");
+    const organization =
+      props.organizationId ??
+      ((typeof props.branch !== "string" && props.branch?.organizationId) ||
+        (typeof props.database !== "string" && props.database.organizationId));
+
+    if (!organization) {
+      throw new Error("Organization ID is required");
+    }
 
     if (this.phase === "delete") {
-      try {
-        if (this.output?.name) {
-          const response = await api.delete(
-            `/organizations/${props.organizationId}/databases/${databaseName}/branches/${branchName}/passwords/${this.output.id}`,
-          );
+      if (this.output?.id) {
+        const res = await api.organizations.databases.branches.passwords.delete(
+          {
+            path: {
+              organization,
+              database,
+              branch,
+              id: this.output.id,
+            },
+            result: "full",
+          },
+        );
 
-          if (!response.ok && response.status !== 404) {
-            throw new Error(
-              `Failed to delete branch: ${response.statusText} ${await response.text()}`,
-            );
-          }
+        if (res.error && res.error.status !== 404) {
+          throw new Error(`Failed to delete branch "${branch}"`, {
+            cause: res.error,
+          });
         }
-      } catch (error) {
-        logger.error("Error deleting password:", error);
-        throw error;
       }
       return this.destroy();
     }
     if (this.phase === "update") {
+      // Only name and cidrs can be updated in place; all other properties require replacement.
       if (
-        this.output?.name === name &&
-        ((this.output?.cidrs === undefined && props.cidrs === undefined) ||
-          (Array.isArray(this.output?.cidrs) &&
-            Array.isArray(props.cidrs) &&
-            this.output.cidrs.length === props.cidrs.length &&
-            this.output.cidrs.every((cidr, i) => cidr === props.cidrs![i])))
+        diff({ ...props, name }, this.output).some(
+          (prop) => prop !== "name" && prop !== "cidrs",
+        )
       ) {
         return this.replace();
       }
-      const updateResponse = await api.patch(
-        `/organizations/${props.organizationId}/databases/${databaseName}/branches/${branchName}/passwords/${this.output.id}`,
-        {
+      await api.organizations.databases.branches.passwords.patch({
+        path: {
+          organization,
+          database,
+          branch,
+          id: this.output.id,
+        },
+        body: {
           name,
           cidrs: props.cidrs,
         },
-      );
-
-      if (!updateResponse.ok) {
-        throw new Error(
-          `Failed to update password: ${updateResponse.statusText} ${await updateResponse.text()}`,
-        );
-      }
+      });
 
       return this({
         ...this.output,
         ...props,
+        name,
       });
     }
 
-    try {
-      const createResponse = await api.post(
-        `/organizations/${props.organizationId}/databases/${databaseName}/branches/${branchName}/passwords`,
-        {
-          name,
-          role: props.role,
-          replica: props.replica,
-          ttl: props.ttl,
-          cidrs: props.cidrs,
-        },
-      );
+    const data = await api.organizations.databases.branches.passwords.post({
+      path: {
+        organization,
+        database,
+        branch,
+      },
+      body: {
+        name,
+        role: props.role,
+        replica: props.replica,
+        ttl: props.ttl,
+        cidrs: props.cidrs,
+      },
+    });
 
-      if (!createResponse.ok) {
-        throw new Error(
-          `Failed to create password: ${createResponse.statusText} ${await createResponse.text()}`,
-        );
-      }
-
-      const data = await createResponse.json<any>();
-
-      return this({
-        id: data.id,
-        expiresAt: data.expires_at,
-        host: data.access_host_url,
-        username: data.username,
-        password: alchemy.secret(data.plain_text),
-        nameSlug,
-        ...props,
-        name: `${props.name}-${nameSlug}`,
-      });
-    } catch (error) {
-      logger.error("Error managing password:", error);
-      throw error;
-    }
+    return this({
+      id: data.id,
+      expiresAt: data.expires_at,
+      host: data.access_host_url,
+      username: data.username,
+      password: alchemy.secret(data.plain_text),
+      nameSlug,
+      ...props,
+      name: `${props.name}-${nameSlug}`,
+    });
   },
 );
+
+/**
+ * Returns an array of keys in `b` that are different from `a`.
+ */
+const diff = <T>(a: T, b: NoInfer<T>) => {
+  const keys: (keyof T)[] = [];
+  for (const key in a) {
+    if (!isDeepStrictEqual(a[key], b[key])) {
+      keys.push(key);
+    }
+  }
+  return keys;
+};

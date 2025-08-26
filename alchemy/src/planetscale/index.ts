@@ -1,4 +1,4 @@
-export * from "./api.ts";
+export * from "./api/client.gen.ts";
 export * from "./branch.ts";
 export * from "./database.ts";
 export * from "./password.ts";
