@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from "node:util";
 import { alchemy } from "../alchemy.ts";
 import type { Context } from "../context.ts";
 import { Resource } from "../resource.ts";
@@ -7,26 +6,24 @@ import { PlanetScaleClient, type PlanetScaleProps } from "./api/client.gen.ts";
 import type { Branch } from "./branch.ts";
 import type { Database } from "./database.ts";
 
+/**
+ * Properties for creating or updating a PlanetScale PostgreSQL Role
+ */
 export interface RoleProps extends PlanetScaleProps {
   /**
-   * The name of the password
-   */
-  name: string;
-
-  /**
-   * The organization ID where the password will be created
+   * The organization ID where the role will be created
    * Required when using string database name, optional when using Database resource
    */
   organizationId?: string;
 
   /**
-   * The database where the password will be created
+   * The database where the role will be created
    * Can be either a database name (string) or Database resource
    */
   database: string | Database;
 
   /**
-   * The branch where the password will be created
+   * The branch where the role will be created
    * Can be either a branch name (string) or Branch resource
    * @default "main"
    */
@@ -58,12 +55,17 @@ export interface RoleProps extends PlanetScaleProps {
 
 export interface Role extends Resource<"planetscale::Role">, RoleProps {
   /**
-   * The unique identifier for the password
+   * The unique identifier for the role
    */
   id: string;
 
   /**
-   * The timestamp when the password expires (ISO 8601 format)
+   * The name of the role
+   */
+  name: string;
+
+  /**
+   * The timestamp when the role expires (ISO 8601 format)
    */
   expiresAt: string;
 
@@ -106,20 +108,38 @@ export const Role = Resource(
     if (!organization) {
       throw new Error("Organization ID is required");
     }
+
     switch (this.phase) {
       case "delete": {
-        await api.organizations.databases.branches.roles.delete({
-          path: {
-            organization,
-            database,
-            branch,
-            id: this.output.id,
-          },
-        });
+        if (this.output?.id) {
+          const res = await api.organizations.databases.branches.roles.delete({
+            path: {
+              organization,
+              database,
+              branch,
+              id: this.output.id,
+            },
+            result: "full",
+          });
+          if (res.error && res.error.status !== 404) {
+            throw new Error("Failed to delete role", { cause: res.error });
+          }
+        }
         return this.destroy();
       }
       case "create": {
-        let role = await api.organizations.databases.branches.roles.post({
+        const { kind } = await api.organizations.databases.get({
+          path: {
+            organization,
+            name: database,
+          },
+        });
+        if (kind !== "postgresql") {
+          throw new Error(
+            `Cannot create a role on MySQL database "${database}". Roles are only supported on PostgreSQL databases. For MySQL databases, please use the Password resource instead.`,
+          );
+        }
+        const role = await api.organizations.databases.branches.roles.post({
           path: {
             organization,
             database,
@@ -130,19 +150,6 @@ export const Role = Resource(
             inherited_roles: props.inherited_roles,
           },
         });
-        if (props.name) {
-          role = await api.organizations.databases.branches.roles.patch({
-            path: {
-              organization,
-              database,
-              branch,
-              id: role.id,
-            },
-            body: {
-              name: props.name,
-            },
-          });
-        }
         return this({
           ...props,
           id: role.id,
@@ -154,28 +161,9 @@ export const Role = Resource(
         });
       }
       case "update": {
-        // the only property that can be updated is the name
-        const { name: _, ...currentProps } = this.props;
-        const { name, ...newProps } = props;
-        if (!isDeepStrictEqual(currentProps, newProps)) {
-          return this.replace();
-        }
-        const role = await api.organizations.databases.branches.roles.patch({
-          path: {
-            organization,
-            database,
-            branch,
-            id: this.output.id,
-          },
-          body: {
-            name,
-          },
-        });
-        return this({
-          ...this.output,
-          ...props,
-          name: role.name,
-        });
+        // According to the types, the only property that can be updated is the name.
+        // However, I was getting 500 errors when trying to update the name, so we'll just replace.
+        return this.replace();
       }
     }
   },
